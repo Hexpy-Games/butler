@@ -217,7 +217,8 @@ export function compileStructuredTurnDecision(input: {
   ) {
     throw new Error("turn_contract_project_target_mismatch");
   }
-  const decision = input.projectId?.trim() && !input.decision.target_project_id && input.decision.action !== "answer"
+  const attachesProjectTarget = !["answer", "tool_answer", "inspect"].includes(input.decision.action);
+  const decision = input.projectId?.trim() && !input.decision.target_project_id && attachesProjectTarget
     ? { ...input.decision, target_project_id: input.projectId.trim() }
     : input.decision;
   return compileTurnContract({
@@ -280,23 +281,37 @@ function obligationRequirements(input: {
   workspaceId: string;
   projectId?: string | null;
 }): Partial<Record<TurnDeliverable, EvidenceObligationSeed>> {
-  const projectId = input.decision.target_project_id ?? input.projectId ?? "active-project";
+  const projectId = input.decision.target_project_id ?? input.projectId;
   const workstreamId = input.decision.target_workstream_id ?? input.workspaceId;
   const requirements: Partial<Record<TurnDeliverable, EvidenceObligationSeed>> = {};
   for (const deliverable of input.decision.deliverables) {
-    const targetKind = deliverable === "status_report" || deliverable.startsWith("ledger_")
-      ? "project"
+    const targetKind = deliverable === "grounded_answer"
+      ? "public"
+      : deliverable === "status_report" && input.decision.inspection_scope === "workspace"
+        ? "workspace"
+        : deliverable === "status_report" || deliverable.startsWith("ledger_")
+          ? "project"
       : deliverable === "final_report" ? "report" : "workspace";
+    const targetId = targetKind === "public"
+      ? "public-web"
+      : targetKind === "project"
+        ? requiredProjectTarget(projectId)
+        : targetKind === "report" ? workstreamId : input.workspaceId;
     requirements[deliverable] = {
       deliverable,
       target_kind: targetKind,
-      target_id: targetKind === "project" ? projectId : targetKind === "report" ? workstreamId : input.workspaceId,
+      target_id: targetId,
       generation: 1,
       cardinality: 1,
       expected_item_ids: [],
     };
   }
   return requirements;
+}
+
+function requiredProjectTarget(value: string | null | undefined): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error("turn_contract_project_evidence_target_missing");
+  return value.trim();
 }
 
 function legacyObligations(record: WorkStreamRecord): EvidenceObligationSeed[] {

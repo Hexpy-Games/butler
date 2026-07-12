@@ -75,6 +75,7 @@ function inspectContract() {
       decision_id: "decision-restart",
       action: "inspect",
       target_project_id: "butler",
+      inspection_scope: "project",
       deliverables: ["status_report"],
       public_summary: "Inspect canonical status.",
     },

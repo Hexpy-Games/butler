@@ -227,14 +227,31 @@ function defaultSeed(decision: TurnContractDecision, deliverable: TurnDeliverabl
   return {
     deliverable,
     target_kind: targetKind,
-    target_id: deliverable === "grounded_answer"
-      ? "public-web"
-      : decision.target_project_id ?? decision.target_workstream_id ?? "active",
+    target_id: defaultEvidenceTarget(decision, deliverable, targetKind),
     generation: 1,
     cardinality: 1,
     expected_item_ids: [],
     ...defaultEvidencePolicy(deliverable),
   };
+}
+
+function defaultEvidenceTarget(
+  decision: TurnContractDecision,
+  deliverable: TurnDeliverable,
+  targetKind: EvidenceObligationSeed["target_kind"],
+): string {
+  if (targetKind === "public") return "public-web";
+  if (targetKind === "project") {
+    if (decision.target_project_id) return decision.target_project_id;
+    throw new Error(`turn_contract_project_evidence_target_missing:${deliverable}`);
+  }
+  if (targetKind === "report") {
+    if (decision.target_workstream_id) return decision.target_workstream_id;
+    return `turn:${decision.decision_id}:report`;
+  }
+  const target = decision.target_workstream_id ?? decision.target_project_id;
+  if (target) return target;
+  return `turn:${decision.decision_id}:workspace`;
 }
 
 function assertExecutionObligations(action: TurnContractAction, seeds: EvidenceObligationSeed[]): void {

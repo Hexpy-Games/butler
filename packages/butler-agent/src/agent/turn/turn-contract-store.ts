@@ -405,13 +405,32 @@ function normalizeObligations(contract: CompiledTurnContract): CompiledTurnContr
       obligation_id: `legacy-obligation-${createHash("sha256").update(`${contract.contract_id}\n${deliverable}\n${index}`).digest("hex").slice(0, 20)}`,
       deliverable,
       target_kind: targetKind,
-      target_id: contract.target_workstream_id ?? contract.target_project_id ?? "active",
+      target_id: legacyObligationTargetId(contract, deliverable, targetKind),
       generation: 1,
       cardinality: 1,
       expected_item_ids: [],
       ...defaultEvidencePolicy(deliverable),
     };
   });
+}
+
+function legacyObligationTargetId(
+  contract: CompiledTurnContract,
+  deliverable: CompiledTurnContract["deliverables"][number],
+  targetKind: CompiledTurnContract["required_evidence"][number]["target_kind"],
+): string {
+  if (targetKind === "public") return "public-web";
+  if (targetKind === "project") {
+    if (contract.target_project_id) return contract.target_project_id;
+    throw new Error(`turn_contract_legacy_project_target_missing:${deliverable}`);
+  }
+  if (targetKind === "report") {
+    if (contract.target_workstream_id) return contract.target_workstream_id;
+    return `contract:${contract.contract_id}:report`;
+  }
+  const target = contract.target_workstream_id ?? contract.target_project_id;
+  if (target) return target;
+  return `contract:${contract.contract_id}:workspace`;
 }
 
 function defaultEvidencePolicy(deliverable: CompiledTurnContract["deliverables"][number]): {

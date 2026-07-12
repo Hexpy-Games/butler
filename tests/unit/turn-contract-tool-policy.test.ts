@@ -9,6 +9,7 @@ test("typed turn contracts preserve structured session tool policy", () => {
       schema_version: "butler.turn-contract-decision.v1",
       decision_id: "decision-preserve-session-tools",
       action: "inspect",
+      inspection_scope: "workspace",
       deliverables: ["status_report"],
       public_summary: "Inspect the requested project state.",
     },
