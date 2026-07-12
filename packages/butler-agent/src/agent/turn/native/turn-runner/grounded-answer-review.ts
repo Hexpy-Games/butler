@@ -197,10 +197,10 @@ function groundedAnswerResponseFormat() {
       "claims", "citation_item_ids", "limitations",
     ],
     properties: {
-      schema_version: { const: GROUNDED_ANSWER_REVIEW_SCHEMA },
-      outcome: { enum: ["supported", "insufficient", "no_result"] },
+      schema_version: { type: "string", const: GROUNDED_ANSWER_REVIEW_SCHEMA },
+      outcome: { type: "string", enum: ["supported", "insufficient", "no_result"] },
       candidate_safe_to_deliver: { type: "boolean" },
-      next_action: { enum: ["accept", "gather_more_evidence", "rewrite_with_limitations"] },
+      next_action: { type: "string", enum: ["accept", "gather_more_evidence", "rewrite_with_limitations"] },
       summary: { type: "string", minLength: 1, maxLength: 800 },
       claims: {
         type: "array",
@@ -212,7 +212,7 @@ function groundedAnswerResponseFormat() {
           properties: {
             claim_id: { type: "string", minLength: 1, maxLength: 80 },
             claim_text: { type: "string", minLength: 1, maxLength: 1_200 },
-            support: { enum: ["direct", "corroborated", "unsupported"] },
+            support: { type: "string", enum: ["direct", "corroborated", "unsupported"] },
             evidence_item_ids: { type: "array", items: { type: "string" }, maxItems: 16 },
             limitations: { type: "array", items: { type: "string" }, maxItems: 8 },
           },
