@@ -1304,6 +1304,12 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(autoScroll).not.toContain("element.scrollTop = expectedScrollTop");
   expect(autoScroll).toContain("cancelScheduledScroll()");
   expect(autoScroll).toContain("distanceFromBottom < BOTTOM_LOCK_THRESHOLD");
+  expect(autoScroll).toContain("conversationBottomLockAfterScroll");
+  expect(autoScroll).toContain("recentUserScrollIntent");
+  expect(autoScroll).toContain('element.addEventListener("wheel"');
+  expect(autoScroll).toContain('element.addEventListener("touchmove"');
+  expect(autoScroll).toContain('element.addEventListener("pointerdown"');
+  expect(autoScroll).toContain('window.addEventListener("keydown"');
   expect(autoScroll).toContain(
     "const shouldPin = enteringChat || pinnedToBottomRef.current;",
   );

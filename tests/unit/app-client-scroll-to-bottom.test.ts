@@ -4,9 +4,44 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import {
+  conversationBottomLockAfterScroll,
   isConversationPinnedToBottom,
   scrollConversationToBottom,
 } from "../../packages/butler-app/client/ui/src/components/conversation/conversationScrollUtils.ts";
+
+test("layout-driven active-row growth retains bottom lock until direct user scroll intent", () => {
+  expect(
+    conversationBottomLockAfterScroll({
+      wasPinned: true,
+      distanceFromBottom: 360,
+      userScrollIntent: false,
+    }),
+  ).toBe(true);
+  expect(
+    conversationBottomLockAfterScroll({
+      wasPinned: true,
+      distanceFromBottom: 360,
+      userScrollIntent: true,
+    }),
+  ).toBe(false);
+});
+
+test("work-block measurements do not repin a conversation the user already moved upward", () => {
+  expect(
+    conversationBottomLockAfterScroll({
+      wasPinned: false,
+      distanceFromBottom: 360,
+      userScrollIntent: false,
+    }),
+  ).toBe(false);
+  expect(
+    conversationBottomLockAfterScroll({
+      wasPinned: false,
+      distanceFromBottom: 20,
+      userScrollIntent: false,
+    }),
+  ).toBe(true);
+});
 
 test("conversation scroll utility detects bottom distance and scrolls smoothly to the latest area", () => {
   const dom = new JSDOM("<!doctype html><html><body><div></div></body></html>");
