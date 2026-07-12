@@ -32,7 +32,37 @@ export function structuredToolResultModelPreview(input: {
     const output = toolPayload(input.output, ["model_visible_content", "exit_code"]);
     return output ? runCommandPreview(output) : null;
   }
+  if (input.toolName === "web_search" || input.toolName === "web_read") {
+    const output = toolPayload(input.output, ["public_web_evidence_items"]);
+    return output ? publicWebEvidencePreview(input.toolName, output) : null;
+  }
   return genericToolPreview(input.toolName, input.output);
+}
+
+function publicWebEvidencePreview(toolName: string, output: Record<string, unknown>): Record<string, unknown> {
+  const items = Array.isArray(output.public_web_evidence_items)
+    ? output.public_web_evidence_items.slice(0, 12).flatMap((value) => {
+      const item = record(value);
+      if (!item || typeof item.evidence_item_id !== "string" || typeof item.source_url !== "string") return [];
+      return [compactUndefined({
+        evidence_item_id: boundedText(item.evidence_item_id, 120),
+        source_url: boundedText(item.source_url, 500),
+        source_identity: boundedText(item.source_identity, 160),
+        published_at: boundedText(item.published_at, 80),
+        content_kind: boundedText(item.content_kind, 80),
+        bounded_content: boundedText(item.bounded_content, 1_200),
+        limitations: Array.isArray(item.limitations)
+          ? item.limitations.slice(0, 6).map((entry) => boundedText(entry, 320)).filter(Boolean)
+          : [],
+      })];
+    })
+    : [];
+  return {
+    tool_name: toolName,
+    ok: output.ok !== false,
+    evidence_items: items,
+    evidence_item_count: items.length,
+  };
 }
 
 function toolOutputArtifactPreview(output: Record<string, unknown>): Record<string, unknown> {

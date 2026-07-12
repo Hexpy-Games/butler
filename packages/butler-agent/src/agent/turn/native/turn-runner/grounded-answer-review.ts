@@ -21,8 +21,33 @@ import {
 } from "../../turn-contract.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
 import type { NativeTurnRunnerDeps } from "./turn-runner-types.ts";
+import {
+  readPublicWebEvidenceContextForContract,
+  type PublicWebEvidenceAttempt,
+} from "../../../output/evidence/public-web-evidence-store.ts";
 
 const GROUNDED_ANSWER_REVIEW_SCHEMA = "butler.grounded-answer-review.v1" as const;
+const GROUNDING_REVIEW_REPAIR_LIMIT = 1;
+
+class GroundingReviewStructuredOutputError extends Error {
+  readonly code = "grounding_review_structured_output_invalid";
+  readonly retryable = true;
+
+  constructor(readonly causeCode: string) {
+    super("The grounding reviewer repeatedly returned a structurally invalid evidence binding.");
+    this.name = "GroundingReviewStructuredOutputError";
+  }
+}
+
+class GroundingReviewStructuredTransportError extends Error {
+  readonly code = "grounding_review_structured_transport_missing";
+  readonly retryable = true;
+
+  constructor() {
+    super("The selected provider cannot return the required structured grounding review.");
+    this.name = "GroundingReviewStructuredTransportError";
+  }
+}
 
 type GroundedAnswerReview = {
   schema_version: typeof GROUNDED_ANSWER_REVIEW_SCHEMA;
@@ -64,29 +89,52 @@ export async function reviewGroundedAnswerCandidate(input: {
 }): Promise<GroundedAnswerReviewOutcome> {
   if (input.contract?.action !== "tool_answer") return { kind: "not_applicable" };
   const transport = input.turnInput.provider.capabilities.structuredDecisionTransport;
-  if (!transport) throw new Error("grounding_review_structured_transport_missing");
-  const evidence = evidenceContext(input.audit);
-  const prompt = groundingReviewPrompt({
+  if (!transport) throw new GroundingReviewStructuredTransportError();
+  const persistedEvidence = readPublicWebEvidenceContextForContract({
+      butlerData: input.deps.butlerData,
+      contractId: input.contract.contract_id,
+    });
+  const evidence = evidenceContext(input.audit, persistedEvidence.items, persistedEvidence.attempts);
+  const basePrompt = groundingReviewPrompt({
     requestText: input.prompt,
     candidateText: input.candidateText,
     evidence,
   });
   const usageAttribution = groundingUsageAttribution(input.turnId, input.turnBudget);
-  const raw = transport === "function_tool"
-    ? await runFunctionToolGroundingReview({ ...input, prompt, usageAttribution })
-    : await input.deps.promptRunner({
-      prompt,
-      model: input.turnInput.model,
-      reasoningEffort: "low",
-      instructions: "Return only the required structured grounding review.",
-      responseFormat: groundedAnswerResponseFormat(),
-      cacheScope: "session-turn",
-      signal: input.turnInput.signal,
-      butlerData: input.deps.butlerData,
-      usageAttribution,
-    });
-  const review = parseGroundedAnswerReview(raw);
-  validateGroundedAnswerReview({ review, evidence });
+  let review: GroundedAnswerReview | null = null;
+  let currentPrompt = basePrompt;
+  let lastValidationCode = "grounding_review_unknown_invalid";
+  for (let attempt = 0; attempt <= GROUNDING_REVIEW_REPAIR_LIMIT; attempt += 1) {
+    const raw = transport === "function_tool"
+      ? await runFunctionToolGroundingReview({ ...input, prompt: currentPrompt, usageAttribution })
+      : await input.deps.promptRunner({
+        prompt: currentPrompt,
+        model: input.turnInput.model,
+        reasoningEffort: "low",
+        instructions: "Return only the required structured grounding review.",
+        responseFormat: groundedAnswerResponseFormat(),
+        cacheScope: "session-turn",
+        signal: input.turnInput.signal,
+        butlerData: input.deps.butlerData,
+        usageAttribution,
+      });
+    try {
+      const parsed = parseGroundedAnswerReview(raw);
+      validateGroundedAnswerReview({ review: parsed, evidence });
+      review = parsed;
+      break;
+    } catch (error) {
+      if (!isGroundingReviewValidationError(error)) throw error;
+      lastValidationCode = error.message;
+      if (attempt >= GROUNDING_REVIEW_REPAIR_LIMIT) break;
+      currentPrompt = groundingReviewRepairPrompt({
+        basePrompt,
+        errorCode: lastValidationCode,
+        evidenceItemIds: evidence.items.map((item) => item.evidence_item_id),
+      });
+    }
+  }
+  if (!review) throw new GroundingReviewStructuredOutputError(lastValidationCode);
   const reviewReceiptId = persistGroundingReview({
     butlerData: input.deps.butlerData,
     contract: input.contract,
@@ -139,13 +187,36 @@ export async function reviewGroundedAnswerCandidate(input: {
   return { kind: "accepted", evidenceRefs: [reviewReceiptId, evidenceReceipt.receipt_id] };
 }
 
-function evidenceContext(audit: ToolAuditEntry[]): {
+function groundingReviewRepairPrompt(input: {
+  basePrompt: string;
+  errorCode: string;
+  evidenceItemIds: string[];
+}): string {
+  return [
+    input.basePrompt,
+    "",
+    "## Structural repair required",
+    `The prior grounding review was rejected with: ${input.errorCode}`,
+    `Allowed evidence_item_ids: ${input.evidenceItemIds.join(", ") || "none"}`,
+    "Submit a fresh complete review. Do not reuse nonexistent IDs, duplicate IDs, or claim corroboration from one source identity.",
+  ].join("\n");
+}
+
+function isGroundingReviewValidationError(error: unknown): error is Error {
+  return error instanceof Error && error.message.startsWith("grounding_review_");
+}
+
+function evidenceContext(
+  audit: ToolAuditEntry[],
+  persistedItems: PublicWebEvidenceItem[] = [],
+  persistedAttempts: PublicWebEvidenceAttempt[] = [],
+): {
   items: PublicWebEvidenceItem[];
   successfulSearches: number;
   searchResultCount: number;
   successfulReads: number;
 } {
-  const items = audit.flatMap((entry) => {
+  const auditItems = audit.flatMap((entry) => {
     if (!entry.ok || (entry.name !== "web_search" && entry.name !== "web_read")) return [];
     const result = recordValue(entry.result);
     return Array.isArray(result?.public_web_evidence_items)
@@ -153,14 +224,24 @@ function evidenceContext(audit: ToolAuditEntry[]): {
       : [];
   });
   const searches = audit.filter((entry) => entry.ok && entry.name === "web_search");
+  const persistedSearches = persistedAttempts.filter((attempt) => attempt.producer === "web_search");
+  const persistedReads = persistedAttempts.filter((attempt) => attempt.producer === "web_read");
   return {
-    items: [...new Map(items.map((item) => [item.evidence_item_id, item])).values()].slice(0, 16),
-    successfulSearches: searches.length,
-    searchResultCount: searches.reduce((sum, entry) => {
+    items: [...new Map(
+      [...persistedItems, ...auditItems].map((item) => [item.evidence_item_id, item]),
+    ).values()].slice(-16),
+    successfulSearches: Math.max(searches.length, persistedSearches.length),
+    searchResultCount: Math.max(
+      persistedItems.filter((item) => item.producer === "web_search").length,
+      searches.reduce((sum, entry) => {
       const result = recordValue(entry.result);
       return sum + (Array.isArray(result?.results) ? result.results.length : 0);
-    }, 0),
-    successfulReads: audit.filter((entry) => entry.ok && entry.name === "web_read").length,
+      }, 0),
+    ),
+    successfulReads: Math.max(
+      audit.filter((entry) => entry.ok && entry.name === "web_read").length,
+      persistedReads.length,
+    ),
   };
 }
 
