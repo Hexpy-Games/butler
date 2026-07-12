@@ -13,6 +13,7 @@ import {
   currentUserText,
   inboundAttachments,
   normalizeTurnPrompt,
+  promptContextDelimitedSection,
   promptContextSection,
   stableJsonForCache,
 } from "../../packages/butler-agent/src/agent/turn/native/context/turn-prompt.ts";
@@ -114,6 +115,21 @@ test("native turn context parses planned review envelopes and inbound metadata",
 
 test("native turn context keeps small helpers deterministic", () => {
   expect(promptContextSection("## A\none\n## B\ntwo", "A")).toBe("## A\none");
+  expect(promptContextDelimitedSection([
+    "## Active Persona Reminder",
+    "# Neko Servant",
+    "## Voice",
+    "End answers with 다냐.",
+    "",
+    "---",
+    "",
+    "## Personalization Profile",
+    "Address the principal as Master Wayne.",
+  ].join("\n"), "Active Persona Reminder")).toContain("## Voice\nEnd answers with 다냐.");
+  expect(promptContextDelimitedSection(
+    "## Active Persona Reminder\nHelpful.\n## Project Memory\nPrivate context.",
+    "Active Persona Reminder",
+  )).toBe("");
   expect(stableJsonForCache({ b: 2, a: 1 })).toBe("{\"a\":1,\"b\":2}");
   expect(renderRecallContext({
     cue: "project memory",

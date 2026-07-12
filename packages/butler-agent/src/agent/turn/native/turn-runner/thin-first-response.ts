@@ -2,12 +2,16 @@ import type { RuntimeTurnInput } from "../../../../test-support/harness/contract
 import { estimateContextTokens } from "../../../context/budget.ts";
 import type { PromptUsageSectionAttribution } from "../../../../integrations/providers/provider.ts";
 import { metadataPolicyValue } from "../policy/turn-metadata-policy.ts";
-import { promptContextSection } from "../context/turn-prompt.ts";
+import {
+  promptContextDelimitedSection,
+  promptContextSection,
+} from "../context/turn-prompt.ts";
 import type { PlannedReviewTurnContext } from "../context/planned-review-context.ts";
 import type { NativeStoredSessionConfig } from "./turn-runner-types.ts";
 
 const THIN_RECENT_CONVERSATION_MAX_CHARS = 6_000;
 const THIN_PERSONA_MAX_CHARS = 2_000;
+const THIN_PERSONALIZATION_PROFILE_MAX_CHARS = 1_200;
 const THIN_RUNTIME_POLICY_MAX_CHARS = 2_000;
 const THIN_WORKSTREAM_CAPSULE_MAX_CHARS = 5_000;
 
@@ -39,9 +43,15 @@ export function buildThinFirstResponsePrompt(input: {
   personaFallback?: string;
 }): ThinFirstResponsePrompt {
   const persona = takeSection(
-    promptContextSection(input.fullPrompt, "Active Persona Reminder") ||
+    promptContextDelimitedSection(input.fullPrompt, "Active Persona Reminder") ||
+      promptContextSection(input.fullPrompt, "Active Persona Reminder") ||
       ["## Active Persona Reminder", input.personaFallback?.trim() ?? ""].filter(Boolean).join("\n"),
     THIN_PERSONA_MAX_CHARS,
+  );
+  const personalizationProfile = takeSection(
+    promptContextDelimitedSection(input.fullPrompt, "Personalization Profile") ||
+      promptContextSection(input.fullPrompt, "Personalization Profile"),
+    THIN_PERSONALIZATION_PROFILE_MAX_CHARS,
   );
   const recentConversation = takeSection(
     promptContextSection(input.fullPrompt, "Recent Conversation"),
@@ -56,6 +66,7 @@ export function buildThinFirstResponsePrompt(input: {
   const parts = [
     input.decisionInstructions,
     persona,
+    personalizationProfile,
     recentConversation,
     runtimePolicy,
     workstreamCapsule,
@@ -66,6 +77,7 @@ export function buildThinFirstResponsePrompt(input: {
     promptSections: promptSections([
       ["thin_first_response_instructions", input.decisionInstructions],
       ["active_persona_reminder", persona],
+      ["personalization_profile", personalizationProfile],
       ["recent_conversation", recentConversation],
       ["runtime_policy", runtimePolicy],
       ["thin_workstream_capsule", workstreamCapsule],
