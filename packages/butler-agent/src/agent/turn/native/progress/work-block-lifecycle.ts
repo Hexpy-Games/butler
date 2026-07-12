@@ -7,6 +7,17 @@ type WorkBlockTerminalStatus = NonNullable<
   PublicWorkDecision["workBlockTerminalStatus"]
 >;
 
+export function markWorkBlockFailure(input: {
+  decisions: PublicWorkDecision[];
+  workBlockId: string;
+}): void {
+  for (const decision of input.decisions) {
+    if (decision.workBlockId === input.workBlockId) {
+      decision.workBlockHasFailure = true;
+    }
+  }
+}
+
 export function markWorkBlockTerminal(input: {
   decisions: PublicWorkDecision[];
   workBlockId: string;
@@ -42,19 +53,23 @@ export async function reconcileOpenWorkBlocks(input: {
       continue;
     }
     reconciledIds.add(workBlockId);
+    const status =
+      input.status === "completed" && decision.workBlockHasFailure
+        ? "failed"
+        : input.status;
     await emitTurnEventBestEffort(input.turnInput, {
       kind: "work.block.completed",
       payload: {
         workBlockId,
         label: decision.blockTitle ?? decision.summary,
-        status: input.status,
+        status,
         ...publicWorkDecisionPayload(decision),
       },
     });
     markWorkBlockTerminal({
       decisions: input.decisions,
       workBlockId,
-      status: input.status,
+      status,
     });
   }
 }

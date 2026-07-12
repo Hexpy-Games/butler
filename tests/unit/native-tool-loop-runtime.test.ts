@@ -1048,6 +1048,82 @@ test("native runtime terminalizes a short-executed authored tool batch before fi
     .toBeLessThan(events.findIndex((event) => event.kind === "message.final.started"));
 });
 
+test("native runtime preserves failure when reconciling a short-executed authored tool batch", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    executeButlerTool: async (call) => {
+      if (call.args.path === "b.ts") throw new Error("read failed");
+      return { ok: true };
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Inspect fallible files",
+          "summary: Read the fallible files as one bounded batch.",
+          "rationale: The next provider round needs the available file evidence and the failure outcome.",
+          "next_step: Read the available files, preserve any failure, and continue to the next round.",
+        ].join("\n"),
+        toolCalls: [
+          { name: "read_file", args: { path: "a.ts" } },
+          { name: "read_file", args: { path: "b.ts" } },
+          { name: "read_file", args: { path: "c.ts" } },
+        ],
+      });
+      for (const path of ["a.ts", "b.ts"]) {
+        await input.executeTool({
+          name: "read_file",
+          args: { path },
+          rawArguments: JSON.stringify({ path }),
+        });
+      }
+      await input.onAssistantTextBeforeTools?.({
+        text: [
+          "title: Continue after failed inspection",
+          "summary: Continue after recording the failed inspection batch.",
+          "rationale: The runtime must close the earlier block without losing its failed outcome.",
+          "next_step: Run the continuation command and synthesize the result.",
+        ].join("\n"),
+        toolCalls: [{ name: "run_command", args: { command: "true" } }],
+      });
+      await input.executeTool({
+        name: "run_command",
+        args: { command: "true" },
+        rawArguments: JSON.stringify({ command: "true" }),
+      });
+      return "Continued after the failed inspection.";
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: "butler/short-executed-failed-batch",
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+
+  await runtime.runTurn({
+    handle,
+    provider: fakeProvider,
+    model: "openai/gpt-5.5",
+    input: { text: "Inspect fallible files and continue." },
+    metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
+  });
+
+  const starts = events.filter((event) => event.kind === "work.block.started");
+  const completions = events.filter((event) => event.kind === "work.block.completed");
+  expect(starts).toHaveLength(2);
+  expect(completions).toHaveLength(2);
+  expect(completions[0]?.payload).toMatchObject({
+    workBlockId: starts[0]?.payload?.workBlockId,
+    status: "failed",
+  });
+});
+
 test("native runtime permits Ledger preflight inspection tools in ledger-tracked project turns", async () => {
   let executed = 0;
   let returnedToolResult: unknown;
