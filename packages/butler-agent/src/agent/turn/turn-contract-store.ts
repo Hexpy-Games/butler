@@ -396,14 +396,16 @@ function normalizeObligations(contract: CompiledTurnContract): CompiledTurnContr
       };
     }
     const deliverable = obligation.deliverable;
-    const targetKind = deliverable === "status_report" || deliverable.startsWith("ledger_")
+    const targetKind = deliverable === "grounded_answer"
+      ? "public" as const
+      : deliverable === "status_report" || deliverable.startsWith("ledger_")
       ? "project" as const
       : deliverable === "final_report" ? "report" as const : "workspace" as const;
     return {
       obligation_id: `legacy-obligation-${createHash("sha256").update(`${contract.contract_id}\n${deliverable}\n${index}`).digest("hex").slice(0, 20)}`,
       deliverable,
       target_kind: targetKind,
-      target_id: contract.target_workstream_id ?? contract.target_project_id ?? "active",
+      target_id: legacyObligationTargetId(contract, deliverable, targetKind),
       generation: 1,
       cardinality: 1,
       expected_item_ids: [],
@@ -412,11 +414,31 @@ function normalizeObligations(contract: CompiledTurnContract): CompiledTurnContr
   });
 }
 
+function legacyObligationTargetId(
+  contract: CompiledTurnContract,
+  deliverable: CompiledTurnContract["deliverables"][number],
+  targetKind: CompiledTurnContract["required_evidence"][number]["target_kind"],
+): string {
+  if (targetKind === "public") return "public-web";
+  if (targetKind === "project") {
+    if (contract.target_project_id) return contract.target_project_id;
+    throw new Error(`turn_contract_legacy_project_target_missing:${deliverable}`);
+  }
+  if (targetKind === "report") {
+    if (contract.target_workstream_id) return contract.target_workstream_id;
+    return `contract:${contract.contract_id}:report`;
+  }
+  const target = contract.target_workstream_id ?? contract.target_project_id;
+  if (target) return target;
+  return `contract:${contract.contract_id}:workspace`;
+}
+
 function defaultEvidencePolicy(deliverable: CompiledTurnContract["deliverables"][number]): {
   evidence_class: CompiledTurnContract["required_evidence"][number]["evidence_class"];
   allowed_producers: CompiledTurnContract["required_evidence"][number]["allowed_producers"];
 } {
   switch (deliverable) {
+    case "grounded_answer": return { evidence_class: "grounded_answer", allowed_producers: ["public_web"] };
     case "status_report": return { evidence_class: "status_snapshot", allowed_producers: ["runtime", "project_ledger"] };
     case "ledger_spec":
     case "ledger_work": return { evidence_class: "canonical_record", allowed_producers: ["project_ledger"] };

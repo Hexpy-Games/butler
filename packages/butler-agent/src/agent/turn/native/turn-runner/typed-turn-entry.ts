@@ -28,6 +28,11 @@ import {
 import type { PublicWorkDecision } from "../output/tool-types.ts";
 import type { NativeStoredSessionConfig } from "./turn-runner-types.ts";
 import type { TurnContextAtom } from "../../turn-continuation-context.ts";
+import {
+  failContractForSurfaceInconsistency,
+  isTurnContractSurfaceInconsistentError,
+  surfaceRedecisionDiagnostic,
+} from "./turn-contract-surface-invariant.ts";
 
 interface TypedTurnEntryContext {
   turnId: string;
@@ -82,8 +87,11 @@ export async function runTypedTurnEntry(input: {
     maxToolRounds?: number,
     phase?: string,
   ) => Promise<string>;
+  surfaceRedecisionAttempt?: number;
+  surfaceDiagnostic?: string;
 }): Promise<{ candidateText: string; activeTurnContract: ActiveTurnContract }> {
-  const resumed = await resumeTypedTurnEntry(input);
+  const surfaceRedecisionAttempt = input.surfaceRedecisionAttempt ?? 0;
+  const resumed = surfaceRedecisionAttempt === 0 ? await resumeTypedTurnEntry(input) : null;
   if (resumed) return resumed;
   const candidates = turnContractCandidates({
     butlerData: input.butlerData,
@@ -92,7 +100,11 @@ export async function runTypedTurnEntry(input: {
       ...input.context.resumeSelection.blockers,
     ]),
   });
-  const decisionId = stableTurnDecisionId(input.context.turnId);
+  const decisionId = stableTurnDecisionId(
+    surfaceRedecisionAttempt === 0
+      ? input.context.turnId
+      : `${input.context.turnId}:surface-redecision:${surfaceRedecisionAttempt}`,
+  );
   const candidateIds = candidates.workstreams?.map((candidate) => candidate.workstream_id) ?? [];
   const decisionInstructions = typedTurnDecisionInstructions({
     decisionId,
@@ -104,7 +116,7 @@ export async function runTypedTurnEntry(input: {
     session: input.session,
     plannedReview: input.context.plannedReview,
   });
-  const decisionPrompt = thin
+  const baseDecisionPrompt = thin
     ? buildThinFirstResponsePrompt({
       fullPrompt: input.context.prompt,
       userText: input.context.userText,
@@ -117,6 +129,12 @@ export async function runTypedTurnEntry(input: {
       prompt: [input.context.prompt, decisionInstructions].join("\n\n"),
       promptSections: input.context.promptSections,
     };
+  const decisionPrompt = input.surfaceDiagnostic
+    ? {
+      ...baseDecisionPrompt,
+      prompt: [baseDecisionPrompt.prompt, input.surfaceDiagnostic].join("\n\n"),
+    }
+    : baseDecisionPrompt;
   const responseFormat = turnDecisionResponseFormat({
     decisionId,
     projectId: input.projectId,
@@ -216,15 +234,38 @@ export async function runTypedTurnEntry(input: {
     payload: openingDecisionPayload(active),
   });
   input.pendingPublicDecisions.push(active.publicDecision);
-  const candidateText = await input.runKernelToolPrompt(
-    contractExecutionPrompt({
-      basePrompt: input.context.prompt,
-      active,
+  let candidateText: string;
+  try {
+    candidateText = await input.runKernelToolPrompt(
+      contractExecutionPrompt({
+        basePrompt: input.context.prompt,
+        active,
+        butlerData: input.butlerData,
+      }),
+      undefined,
+      input.initialPromptPhase,
+    );
+  } catch (error) {
+    if (!isTurnContractSurfaceInconsistentError(error)) throw error;
+    active.contract = failContractForSurfaceInconsistency({
       butlerData: input.butlerData,
-    }),
-    undefined,
-    input.initialPromptPhase,
-  );
+      contract: active.contract,
+      attempt: surfaceRedecisionAttempt,
+    });
+    input.pendingPublicDecisions.splice(
+      0,
+      input.pendingPublicDecisions.length,
+      ...input.pendingPublicDecisions.filter((decision) => decision.contractId !== active!.contract.contract_id),
+    );
+    input.turnContractContext.current = null;
+    const safeToRedecide = active.contract.action === "tool_answer" || active.contract.action === "inspect";
+    if (!safeToRedecide || surfaceRedecisionAttempt >= 1) throw error;
+    return await runTypedTurnEntry({
+      ...input,
+      surfaceRedecisionAttempt: surfaceRedecisionAttempt + 1,
+      surfaceDiagnostic: surfaceRedecisionDiagnostic(error),
+    });
+  }
   return { candidateText, activeTurnContract: active };
 }
 

@@ -113,6 +113,8 @@ function auditMatchesObligation(
 ): boolean {
   const capabilities = entry.evidenceCapabilityReceipts ?? [];
   switch (obligation.deliverable) {
+    case "grounded_answer":
+      return false;
     case "status_report":
       return isStatusReportEvidenceTool(entry.name) || capabilities.some((receipt) =>
         verifiedCapability(receipt, ["source_verified"], ["project_state", "workspace_inspection"]));
@@ -191,6 +193,7 @@ function verifiedCapability(
 }
 
 function producerFor(obligation: RequiredEvidenceObligation): TurnEvidenceProducer {
+  if (obligation.allowed_producers.includes("public_web")) return "public_web";
   if (obligation.allowed_producers.includes("project_ledger")) return "project_ledger";
   if (obligation.allowed_producers.includes("workspace")) return "workspace";
   if (obligation.allowed_producers.includes("validation")) return "validation";

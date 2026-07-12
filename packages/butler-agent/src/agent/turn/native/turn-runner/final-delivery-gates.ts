@@ -14,7 +14,7 @@ import {
 } from "../policy/turn-evidence-gates.ts";
 import { shouldRunGoalCompletionReview } from "../policy/turn-metadata-policy.ts";
 import type { NativeStoredSessionConfig, NativeTurnRunnerDeps } from "./turn-runner-types.ts";
-import type { PublicWorkDecision, PublicWorkObligationKind, ToolAuditEntry } from "../output/tool-types.ts";
+import type { PublicWorkDecision, ToolAuditEntry } from "../output/tool-types.ts";
 import type { ToolSurfacePromptController } from "../../tool-surface-prompt-controller.ts";
 import {
   applyPublicOutputGuards,
@@ -39,6 +39,7 @@ import {
 } from "./turn-contract-audit-evidence.ts";
 import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
 import { statusReportEvidenceGuidance } from "./turn-contract-status-evidence.ts";
+import { reviewGroundedAnswerCandidate } from "./grounded-answer-review.ts";
 
 export type FinalDeliveryOutcome =
   | { kind: "final"; text: string; evidenceRefs: string[] }
@@ -98,13 +99,43 @@ export async function reviewFinalCandidateForContinuation(
 ): Promise<FinalCandidateContinuationReviewOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
   if (explicitToolGap) return explicitToolGap;
-  const groundedText = applyGroundingIfNeeded(input, input.initialText);
+  const candidateForReview = input.turnContract?.action === "tool_answer"
+    ? repairFinalContract({ ...input, finalText: input.initialText })
+    : input.initialText;
+  const groundedText = applyGroundingIfNeeded(input, candidateForReview);
+  const groundingReview = await reviewGroundedAnswerCandidate({
+    turnInput: input.turnInput,
+    deps: input.deps,
+    turnId: input.turnId,
+    turnBudget: input.turnBudget,
+    prompt: input.prompt,
+    candidateText: groundedText,
+    audit: input.audit,
+    contract: input.turnContract,
+  });
+  if (groundingReview.kind === "gap") {
+    return {
+      kind: "completion_gap",
+      observation: {
+        kind: "grounding_review_gap",
+        summary: groundingReview.summary,
+        modelVisibleContent: groundingReview.modelVisibleContent,
+        nextMode: groundingReview.nextMode,
+        refs: groundingReview.evidenceRefs.map((id) => ({ kind: "grounding_review", id })),
+        requiredDeliverables: ["grounded_answer"],
+      },
+      evidenceRefs: groundingReview.evidenceRefs,
+    };
+  }
+  const groundingEvidenceRefs = groundingReview.kind === "accepted"
+    ? groundingReview.evidenceRefs
+    : [];
   const reviewResult = await runGoalCompletionReviews({ ...input, initialText: groundedText });
   if (reviewResult.outcome.status === "gap") {
     return {
       kind: "completion_gap",
       observation: reviewResult.outcome.observation,
-      evidenceRefs: reviewResult.outcome.evidenceRefs,
+      evidenceRefs: [...groundingEvidenceRefs, ...reviewResult.outcome.evidenceRefs],
     };
   }
   if (input.turnContract) {
@@ -171,7 +202,7 @@ export async function reviewFinalCandidateForContinuation(
   return {
     kind: "accepted",
     text: reviewResult.reviewedText,
-    evidenceRefs: reviewResult.outcome.evidenceRefs,
+    evidenceRefs: [...groundingEvidenceRefs, ...reviewResult.outcome.evidenceRefs],
   };
 }
 
@@ -243,9 +274,11 @@ function applyGroundingIfNeeded(
     useTools: boolean;
     userText: string;
     audit: ToolAuditEntry[];
+    turnContract?: CompiledTurnContract;
   },
   text: string,
 ): string {
+  if (input.turnContract?.action === "tool_answer") return text;
   const shouldApplyGrounding = input.useTools && shouldEnforceGrounding(input.turnInput);
   if (!shouldApplyGrounding) {
     return text;
@@ -305,6 +338,7 @@ async function runGoalCompletionReviews(input: {
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
+  turnContract?: CompiledTurnContract;
 }): Promise<{
   outcome: ReturnType<typeof evaluateCompletionReviewOutcome>;
   reviewedText: string;
@@ -325,15 +359,7 @@ async function runGoalCompletionReviews(input: {
   const outcome = evaluateCompletionReviewOutcome({
     requestText: input.prompt,
     candidateText: input.initialText,
-    evidenceReceipts: [
-      ...evidenceCapabilityReceiptsFromAudit(input.audit),
-      ...modelReviewedSourceEvidenceReceipts({
-        audit: input.audit,
-        requiredObligations,
-        publicDecisionContext: input.publicDecisionContext,
-        candidateText: input.initialText,
-      }),
-    ],
+    evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
     requiredObligations,
     observations: observationsFromAudit(input.audit),
   });
@@ -355,8 +381,10 @@ function shouldRunCompletionReview(
     session: NativeStoredSessionConfig;
     useTools: boolean;
     audit: ToolAuditEntry[];
+    turnContract?: CompiledTurnContract;
   },
 ): boolean {
+  if (input.turnContract?.action === "tool_answer") return false;
   if (!input.useTools || !shouldEnforceGrounding(input.turnInput)) {
     return false;
   }
@@ -375,42 +403,6 @@ function evidenceCapabilityReceiptsFromAudit(audit: ToolAuditEntry[]): unknown[]
     ...legacyEvidenceReceiptsAsCapabilityReceipts(entry),
     ...satisfiedObligationsAsCapabilityReceipts(entry),
   ]);
-}
-
-function modelReviewedSourceEvidenceReceipts(input: {
-  audit: ToolAuditEntry[];
-  requiredObligations: PublicWorkObligationKind[];
-  publicDecisionContext: PublicWorkDecision[];
-  candidateText: string;
-}): unknown[] {
-  if (!input.requiredObligations.includes("source_verified")) return [];
-  if (!input.candidateText.trim()) return [];
-  if (hasPrincipalAuthoredSourceRequirement(input.publicDecisionContext)) return [];
-  const summaries = reviewableSourceEvidenceSummaries(input.audit);
-  if (summaries.length === 0) return [];
-  return [{
-    receipt_id: `runtime:model-reviewed-source:${stableTextHash(summaries.map((summary) => summary.fingerprint).join("|"))}`,
-    schema_version: "evidence-capability.v1",
-    producer: { kind: "runtime", name: "completion-review" },
-    capability: "source_verified",
-    evidence_kind: "review_result",
-    maturity: "verified",
-    confidence: 0.75,
-    verified: true,
-    summary: "The final candidate was reviewed against bounded source evidence from observed tool results.",
-    references: summaries.slice(0, 6).map((summary) => ({ tool_call_id: summary.id })),
-    satisfies: ["source_verified"],
-    limitations: summaries.some((summary) => summary.truncated)
-      ? ["One or more source evidence previews were bounded before review."]
-      : [],
-    created_at: new Date(0).toISOString(),
-  }];
-}
-
-function hasPrincipalAuthoredSourceRequirement(decisions: PublicWorkDecision[]): boolean {
-  return decisions.some((decision) =>
-    decision.source === "principal-authored" &&
-    (decision.completionObligations ?? []).includes("source_verified"));
 }
 
 function withCompletionGapEvidenceBundle(input: {

@@ -71,6 +71,7 @@ import { modelFacingToolOutput } from "./model-facing-tool-output.ts";
 import { bindRuntimeOwnedWorkspaceArguments } from "./model-facing-tool-arguments.ts";
 import { turnContractPlanIsExplicit } from "../../turn-contract-plan-closure.ts";
 import { reconcileOpenWorkBlocks } from "../progress/work-block-lifecycle.ts";
+import { TurnContractSurfaceInconsistentError } from "./turn-contract-surface-invariant.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -233,7 +234,13 @@ export function createNativeTurnPromptRunners(input: {
           ) => {
             if (!input.turnContractContext?.current) return [...tools];
             const projected = ordinaryTools(tools);
-            if (projected.length === 0) throw new Error("turn_contract_tool_surface_empty");
+            if (projected.length === 0) {
+              const contract = input.turnContractContext.current.contract;
+              throw new TurnContractSurfaceInconsistentError(
+                contract.contract_id,
+                contract.required_evidence.map((item) => item.obligation_id),
+              );
+            }
             return [workBlockTool(projected)];
           };
           const executeTool: FunctionToolPromptOptions["executeTool"] = async (call) => {

@@ -2,8 +2,10 @@ import { existsSync } from "fs";
 import { join } from "path";
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
+import { WorkStreamClaimStore } from "../work/work-stream-claim-store.ts";
 import { TurnContractStore } from "./turn-contract-store.ts";
 import type { CompiledTurnContract } from "./turn-contract-types.ts";
+import { writeJsonFileAtomic } from "../persistence/atomic-json-store.ts";
 
 export interface TurnContractRecoveryResult {
   contractState: CompiledTurnContract["state"];
@@ -43,6 +45,10 @@ function reconcileContract(input: {
   contract: CompiledTurnContract;
 }): TurnContractRecoveryResult {
   const { contract } = input;
+  if (isLegacyPhantomProjectContract(contract)) {
+    releaseContractClaims(input.streams, input.butlerData, contract.contract_id);
+    return failContract(input, "legacy_phantom_project_target");
+  }
   if (contract.state === "continuing" && !hasDurableContinuation(input.butlerData, contract)) {
     return failContract(input, "continuation_checkpoint_missing");
   }
@@ -76,12 +82,52 @@ function failContract(
     terminalState: "failed_system",
     expectedGeneration: input.contract.generation,
   }).contract;
+  writeJsonFileAtomic(
+    join(input.store.butlerData, "turn-contract-failures", `${failed.contract_id}.json`),
+    {
+      schema_version: "butler.turn-contract-failure.v1",
+      contract_id: failed.contract_id,
+      state: "failed_system",
+      code,
+      retryable: true,
+      created_at: new Date().toISOString(),
+    },
+  );
   return {
     contractState: failed.state,
     action: failed.action,
     outcome: "failed_system",
     code,
   };
+}
+
+function isLegacyPhantomProjectContract(contract: CompiledTurnContract): boolean {
+  if (
+    contract.action !== "inspect" || contract.tracking_mode !== "none" ||
+    contract.target_project_id || contract.target_workstream_id
+  ) return false;
+  return contract.required_evidence.some((obligation) =>
+    obligation.deliverable === "status_report" &&
+    obligation.target_kind === "project" &&
+    (obligation.target_id === "active-project" || obligation.target_id === "active"));
+}
+
+function releaseContractClaims(
+  streams: WorkStreamStore,
+  butlerData: string,
+  contractId: string,
+): void {
+  const claims = new WorkStreamClaimStore(butlerData);
+  for (const summary of streams.list({ includeTerminal: true })) {
+    const record = streams.read(summary.id);
+    if (record?.active_contract_id !== contractId) continue;
+    claims.release({
+      contractId,
+      workstreamId: record.id,
+      expectedGeneration: record.record_generation ?? 1,
+      turnId: record.last_user_turn_id ?? contractId,
+    });
+  }
 }
 
 function hasDurableContinuation(butlerData: string, contract: CompiledTurnContract): boolean {
