@@ -5,6 +5,7 @@ import { relativeAge } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SessionSummary } from "@/app/types.ts";
 import { useLongPressAction } from "./useLongPressAction";
+import styles from "./SidebarProjectSessionItem.module.css";
 
 interface ProjectSessionItemProps {
   session: SessionSummary;
@@ -14,7 +15,8 @@ export function SidebarProjectSessionItem({
   session,
 }: ProjectSessionItemProps) {
   const active = useButlerStore(
-    (state) => state.view.kind === "session" && state.activeChatId === session.id,
+    (state) =>
+      state.view.kind === "session" && state.activeChatId === session.id,
   );
   const openSession = useButlerStore((state) => state.openSession);
   const runSessionAction = useButlerStore((state) => state.runSessionAction);
@@ -22,7 +24,11 @@ export function SidebarProjectSessionItem({
   const longPress = useLongPressAction(() => setMenuOpen(true));
 
   return (
-    <div data-test-class="project-session-gesture" {...longPress}>
+    <div
+      className={styles.gestureSurface}
+      data-test-class="project-session-gesture"
+      {...longPress}
+    >
       <SidebarItem
         active={active}
         badge={<time>{relativeAge(session.last_activity_at)}</time>}

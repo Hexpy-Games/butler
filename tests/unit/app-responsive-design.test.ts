@@ -255,6 +255,9 @@ describe("responsive adaptive design contracts", () => {
     const navStyles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/NavRow/NavRow.module.css",
     );
+    const itemStyles = read(
+      "packages/butler-app/client/ui/src/components/layout/SidebarProjectSessionItem.module.css",
+    );
 
     expect(item).toContain("onClick={() => openSession(session.id)}");
     expect(item).toContain('rightVisibility="hover-compact-hidden"');
@@ -265,5 +268,7 @@ describe("responsive adaptive design contracts", () => {
     expect(gesture).toContain("event.stopPropagation()");
     expect(navStyles).toContain(".compactHiddenActions");
     expect(navStyles).toContain("visibility: hidden");
+    expect(itemStyles).toContain("-webkit-touch-callout: none");
+    expect(itemStyles).toContain("user-select: none");
   });
 });
