@@ -2663,6 +2663,9 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("new-chat-start-position-high");
   expect(smoke).toContain("new-chat-moment-time-visible");
   expect(smoke).toContain("new-chat-extra-icon-gutter");
+  expect(smoke).toContain("narrow-new-chat-meta-row");
+  expect(smoke).toContain("narrow-new-chat-full-width-copy");
+  expect(smoke).toContain("narrow-readable-type-scale");
   expect(smoke).toContain("new-chat-left-radius-preserved");
   expect(smoke).toContain("browser-chrome-traffic-reserve-zero");
   expect(smoke).toContain("browser-sidebar-toggle-flush-left");
