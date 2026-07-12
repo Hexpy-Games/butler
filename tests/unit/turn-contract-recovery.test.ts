@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -66,6 +66,57 @@ test("restart fails closed when a continuing contract lost its durable checkpoin
   });
   expect(store.read(continuing.contract_id)?.state).toBe("failed_system");
   expect(reconcileNonTerminalTurnContracts({ butlerData: data })).toEqual([]);
+});
+
+test.each(["active-project", "active"])(
+  "restart quarantines legacy phantom project target %s without prompt interpretation",
+  (targetId) => {
+    const data = tempData();
+    const store = new TurnContractStore(data);
+    const base = inspectContract();
+    const phantom = {
+      ...base,
+      target_project_id: undefined,
+      tracking_mode: "none" as const,
+      required_evidence: base.required_evidence.map((obligation) => ({
+        ...obligation,
+        target_kind: "project" as const,
+        target_id: targetId,
+      })),
+    };
+    store.create(phantom);
+
+    expect(reconcileNonTerminalTurnContracts({ butlerData: data })).toEqual([{
+      contractState: "failed_system",
+      action: "inspect",
+      outcome: "failed_system",
+      code: "legacy_phantom_project_target",
+    }]);
+    expect(store.read(phantom.contract_id)?.state).toBe("failed_system");
+    expect(existsSync(join(data, "turn-contract-failures", `${phantom.contract_id}.json`))).toBe(true);
+    expect(reconcileNonTerminalTurnContracts({ butlerData: data })).toEqual([]);
+  },
+);
+
+test("restart leaves delivered legacy records immutable", () => {
+  const data = tempData();
+  const store = new TurnContractStore(data);
+  const base = inspectContract();
+  const historical = {
+    ...base,
+    target_project_id: undefined,
+    tracking_mode: "none" as const,
+    state: "delivered" as const,
+    required_evidence: base.required_evidence.map((obligation) => ({
+      ...obligation,
+      target_kind: "project" as const,
+      target_id: "active-project",
+    })),
+  };
+  store.create(historical);
+
+  expect(reconcileNonTerminalTurnContracts({ butlerData: data })).toEqual([]);
+  expect(store.read(historical.contract_id)?.state).toBe("delivered");
 });
 
 function inspectContract() {
