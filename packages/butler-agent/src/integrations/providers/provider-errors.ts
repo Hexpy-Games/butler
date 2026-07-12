@@ -140,6 +140,14 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
   if (error instanceof ModelProviderRequestError) return error.diagnostic();
   const message = errorMessage(error);
   const code = errorCode(error);
+  if (code === "turn_contract_surface_inconsistent") {
+    return {
+      code,
+      message: "Butler could not create a valid tool path for this request. Retry the turn.",
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
   if (isToolCallRepairFailure(error)) {
     return {
       code: code ?? "tool_call_repair",
