@@ -2658,6 +2658,7 @@ async function assertCanonicalSessionSnapshotOnce(
 function normalizeMarkdownForRenderedText(value: string): string {
   return value
     .replace(/`([^`]+)`/gu, "$1")
+    .replace(/\[([^\n]+?)\]\((?:https?:\/\/)?[^)\n]+\)/gu, "$1")
     .replace(/\*\*([^*]+)\*\*/gu, "$1")
     .replace(/^\s*```[^\n]*$/gmu, "")
     .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gmu, "")
