@@ -90,3 +90,42 @@ test("mixed work contracts with a status obligation retain exact status producer
   ]);
   expect(metadata.requiredNativeToolProfiles).toEqual(["workspace"]);
 });
+
+test("public tool answers receive only the fixed read-only web surface", () => {
+  const contract = compileTurnContract({
+    decision: {
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: "decision-public-tool-answer",
+      action: "tool_answer",
+      evidence_domain: "public_web",
+      deliverables: ["grounded_answer"],
+      public_summary: "Check current public evidence and answer.",
+    },
+  });
+  const metadata = turnMetadataForContract(contract, {
+    requiredNativeToolProfiles: ["workspace", "project-lifecycle"],
+  });
+  expect(metadata).toMatchObject({
+    accessMode: "read_only",
+    toolSurfaceMode: "fixed",
+    trackingMode: "none",
+    requiredNativeToolProfiles: ["public-web"],
+  });
+  expect(metadata.requiredNativeTools).toEqual([
+    "read_tool_evidence_artifact",
+    "web_read",
+    "web_search",
+  ]);
+
+  const tools = selectButlerToolsForTurn({
+    role: "butler",
+    turnMetadata: metadata,
+  }).map((tool) => tool.name);
+  expect(tools).toContain("web_search");
+  expect(tools).toContain("web_read");
+  expect(tools).not.toContain("grep_files");
+  expect(tools).not.toContain("read_file");
+  expect(tools).not.toContain("run_command");
+  expect(tools).not.toContain("project_ledger_status");
+  expect(tools).not.toContain("tool_search");
+});
