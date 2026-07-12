@@ -145,6 +145,7 @@ export interface PublicWorkDecision {
   usageCount?: number;
   usageGroupId?: string;
   providerRound?: number;
+  workBlockHasFailure?: boolean;
   workBlockTerminalStatus?: "completed" | "failed" | "cancelled";
 }
 
