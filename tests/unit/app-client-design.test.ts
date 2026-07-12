@@ -2671,6 +2671,9 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("browser-sidebar-toggle-flush-left");
   expect(smoke).toContain("narrow-right-panel-visible");
   expect(smoke).toContain("narrow-right-panel-titlebar-draggable");
+  expect(smoke).toContain("narrow-scrim-compositor-stable");
+  expect(smoke).toContain("narrow-scrim-interrupted-reversal");
+  expect(smoke).toContain("narrow-scrim-repeat-monotonic");
   expect(smoke).toContain("sidebar should collapse to 0px");
   expect(smoke).toContain("sidebar-hover-highlight");
   expect(smoke).toContain("light-theme-sidebar-tokenized");

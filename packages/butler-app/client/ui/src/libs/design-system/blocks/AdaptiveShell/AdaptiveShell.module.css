@@ -225,12 +225,22 @@
     inset: 0;
     z-index: 55;
     display: block;
+    margin: 0;
+    padding: 0;
     border: 0;
-    background: var(--dialog-overlay-bg);
+    border-radius: 0;
+    appearance: none;
+    backface-visibility: hidden;
+    background: var(--adaptive-scrim-bg);
+    contain: layout paint style;
     opacity: 0;
     pointer-events: none;
+    touch-action: manipulation;
+    transform: translateZ(0);
     transition: opacity var(--adaptive-panel-duration)
       var(--adaptive-panel-easing);
+    will-change: opacity;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .scrim[data-open="true"] {

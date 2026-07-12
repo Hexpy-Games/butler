@@ -91,4 +91,20 @@ describe("responsive adaptive design contracts", () => {
     expect(tokens).toContain("--font-size-3: 16px");
     expect(tokens).toContain("--font-size-4: 17px");
   });
+
+  test("keeps the adaptive scrim on a stable compositor layer", () => {
+    const component = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.tsx",
+    );
+    const styles = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+
+    expect(component).toContain('data-slot="adaptive-shell-scrim"');
+    expect(styles).toContain("will-change: opacity");
+    expect(styles).toContain("transform: translateZ(0)");
+    expect(styles).toContain("backface-visibility: hidden");
+    expect(styles).toContain("contain: layout paint style");
+    expect(styles).toContain("-webkit-tap-highlight-color: transparent");
+  });
 });

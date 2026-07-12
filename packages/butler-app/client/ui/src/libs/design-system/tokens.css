@@ -20,6 +20,7 @@
   --adaptive-drawer-width: min(88vw, 320px);
   --adaptive-inspector-width: min(100vw, 430px);
   --adaptive-panel-bg: var(--neutral-white);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
   --chrome-floating-toggle-top: 10px;
   --chrome-floating-toggle-left: calc(
     var(--traffic-controls-width) + var(--space-2)
@@ -453,6 +454,7 @@
   --color-focus-ring: rgba(0, 122, 255, 0.34);
   --surface: rgba(30, 31, 34, 0.9);
   --adaptive-panel-bg: var(--grayscale-11);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.34);
   --surface-raised: rgba(35, 36, 39, 0.96);
   --workspace-bg: rgba(26, 27, 30, 0.94);
   --titlebar-bg: rgba(26, 27, 30, 0.76);
@@ -545,6 +547,7 @@
 
   --surface: rgba(255, 255, 255, 0.9);
   --adaptive-panel-bg: var(--neutral-white);
+  --adaptive-scrim-bg: rgba(0, 0, 0, 0.12);
   --surface-raised: rgba(255, 255, 255, 0.96);
   --workspace-bg: rgba(255, 255, 255, 0.94);
   --titlebar-bg: rgba(255, 255, 255, 0.72);
