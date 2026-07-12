@@ -148,6 +148,17 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       cause: safeErrorText(message),
     };
   }
+  if (
+    code === "grounding_review_structured_output_invalid" ||
+    code === "grounding_review_structured_transport_missing"
+  ) {
+    return {
+      code,
+      message: "Butler could not verify the public evidence binding. Retry the turn or switch models.",
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
   if (isToolCallRepairFailure(error)) {
     return {
       code: code ?? "tool_call_repair",

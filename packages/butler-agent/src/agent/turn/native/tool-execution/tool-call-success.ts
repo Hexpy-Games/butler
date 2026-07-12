@@ -39,6 +39,7 @@ import type { InboundEnvelope } from "../../../../gateways/core/contracts.ts";
 import type { NativeAuditedToolExecutorInput, NativeToolCall } from "./audited-executor-types.ts";
 import type { PublicWorkDecision, ToolProgressSummary } from "../output/tool-types.ts";
 import { markWorkBlockTerminal } from "../progress/work-block-lifecycle.ts";
+import { persistPublicWebEvidenceForContract } from "../../../output/evidence/public-web-evidence-store.ts";
 
 export async function handleAuditedToolSuccess(input: {
   executorInput: NativeAuditedToolExecutorInput;
@@ -65,6 +66,15 @@ export async function handleAuditedToolSuccess(input: {
 }): Promise<unknown> {
   recordSuccessfulToolMetric(input);
   writeWorkerTaskOrigin(input);
+  if (input.decision.contractId) {
+    persistPublicWebEvidenceForContract({
+      butlerData: input.executorInput.butlerData,
+      contractId: input.decision.contractId,
+      toolName: input.call.name,
+      args: input.cleanArgs,
+      result: input.result,
+    });
+  }
   const bridgeAudit = bridgeAuditForSuccess(input);
   input.executorInput.audit.push({
     name: input.call.name,

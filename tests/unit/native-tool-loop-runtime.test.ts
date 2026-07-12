@@ -543,6 +543,15 @@ test("general chat tool_answer uses public evidence and a separate grounding rev
     state: "delivered",
   });
   expect(storedContract).not.toHaveProperty("target_project_id");
+  const evidenceBundle = JSON.parse(readFileSync(
+    join(tempDir, "public-web-evidence", "contracts", `${storedContract.contract_id}.json`),
+    "utf8",
+  ));
+  expect(evidenceBundle).toMatchObject({
+    contract_id: storedContract.contract_id,
+    items: [expect.objectContaining({ evidence_item_id: items[0]!.evidence_item_id })],
+    attempts: [expect.objectContaining({ producer: "web_search", outcome: "evidence" })],
+  });
 });
 
 test("native runtime gives worker sessions the execution tool loop and role-limited tool profile", async () => {

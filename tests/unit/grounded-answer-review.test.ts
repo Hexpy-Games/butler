@@ -15,6 +15,7 @@ import {
 import { reviewGroundedAnswerCandidate } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/grounded-answer-review.ts";
 import type { NativeTurnRunnerDeps } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/turn-runner-types.ts";
 import type { RuntimeTurnInput } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { persistPublicWebEvidenceForContract } from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence-store.ts";
 
 const tempDirs: string[] = [];
 afterEach(() => tempDirs.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true })));
@@ -141,6 +142,73 @@ test("search evidence can ground an answer without a mandatory web_read", async 
   });
 });
 
+test("grounding review restores contract-bound evidence after an in-memory audit restart", async () => {
+  const butlerData = tempData();
+  const activeContract = contract(butlerData);
+  const items = publicWebSearchEvidenceItems({
+    results: [{
+      title: "Event report",
+      url: "https://news.example/event",
+      snippet: "The event happened on July 12.",
+      source: "Example News",
+    }],
+  });
+  persistPublicWebEvidenceForContract({
+    butlerData,
+    contractId: activeContract.contract_id,
+    toolName: "web_search",
+    args: { query: "event date" },
+    result: { ok: true, results: [{ url: "https://news.example/event" }], public_web_evidence_items: items },
+  });
+
+  const outcome = await reviewGroundedAnswerCandidate({
+    turnInput: turnInput(),
+    deps: deps(butlerData, supportedReview([items[0]!.evidence_item_id])),
+    turnId: "turn-restarted",
+    turnBudget: createDirectTurnBudget("turn-restarted"),
+    prompt: "When did it happen?",
+    candidateText: "July 12 ([Example News](https://news.example/event)).",
+    audit: [],
+    contract: activeContract,
+  });
+
+  expect(outcome.kind).toBe("accepted");
+});
+
+test("a persisted zero-result attempt remains distinguishable from provider failure after restart", async () => {
+  const butlerData = tempData();
+  const activeContract = contract(butlerData);
+  persistPublicWebEvidenceForContract({
+    butlerData,
+    contractId: activeContract.contract_id,
+    toolName: "web_search",
+    args: { query: "missing announcement" },
+    result: { ok: true, results: [], public_web_evidence_items: [] },
+  });
+  const review = {
+    schema_version: "butler.grounded-answer-review.v1",
+    outcome: "no_result",
+    candidate_safe_to_deliver: true,
+    next_action: "accept",
+    summary: "The answer reports the observed zero-result search.",
+    claims: [],
+    citation_item_ids: [],
+    limitations: ["No matching result was returned."],
+  };
+  const outcome = await reviewGroundedAnswerCandidate({
+    turnInput: turnInput(),
+    deps: deps(butlerData, review),
+    turnId: "turn-zero-restarted",
+    turnBudget: createDirectTurnBudget("turn-zero-restarted"),
+    prompt: "Find the announcement.",
+    candidateText: "검색 결과에서 해당 공지를 찾지 못했습니다.",
+    audit: [],
+    contract: activeContract,
+  });
+
+  expect(outcome.kind).toBe("accepted");
+});
+
 test("runtime rejects reviewer citations that do not exist in tool evidence", async () => {
   const butlerData = tempData();
   const activeContract = contract(butlerData);
@@ -157,7 +225,50 @@ test("runtime rejects reviewer citations that do not exist in tool evidence", as
       public_web_evidence_items: [],
     } }],
     contract: activeContract,
-  })).rejects.toThrow("grounding_review_citation_invalid");
+  })).rejects.toMatchObject({
+    code: "grounding_review_structured_output_invalid",
+    causeCode: "grounding_review_citation_invalid",
+    retryable: true,
+  });
+});
+
+test("a structurally invalid grounding review receives one bounded repair", async () => {
+  const butlerData = tempData();
+  const activeContract = contract(butlerData);
+  const items = publicWebSearchEvidenceItems({
+    results: [{
+      title: "Event report",
+      url: "https://news.example/event",
+      snippet: "The event happened on July 12.",
+      source: "Example News",
+    }],
+  });
+  let calls = 0;
+  const repairDeps = deps(butlerData, {});
+  repairDeps.promptRunner = async (input) => {
+    calls += 1;
+    if (calls === 1) return JSON.stringify(supportedReview(["hallucinated-id"]));
+    expect(input.prompt).toContain("## Structural repair required");
+    expect(input.prompt).toContain(items[0]!.evidence_item_id);
+    return JSON.stringify(supportedReview([items[0]!.evidence_item_id]));
+  };
+  const outcome = await reviewGroundedAnswerCandidate({
+    turnInput: turnInput(),
+    deps: repairDeps,
+    turnId: "turn-review-repair",
+    turnBudget: createDirectTurnBudget("turn-review-repair"),
+    prompt: "When did it happen?",
+    candidateText: "July 12 ([Example News](https://news.example/event)).",
+    audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
+      ok: true,
+      results: [{ url: "https://news.example/event" }],
+      public_web_evidence_items: items,
+    } }],
+    contract: activeContract,
+  });
+
+  expect(outcome.kind).toBe("accepted");
+  expect(calls).toBe(2);
 });
 
 test("reviewer-declared citations must appear in the candidate answer", async () => {
@@ -321,7 +432,11 @@ test("failed retrieval cannot be reclassified as a no-result answer", async () =
     candidateText: "결과를 찾지 못했습니다.",
     audit: [{ name: "web_search", args: { query: "result" }, ok: false, error: "provider unavailable" }],
     contract: activeContract,
-  })).rejects.toThrow("grounding_review_no_result_unobserved");
+  })).rejects.toMatchObject({
+    code: "grounding_review_structured_output_invalid",
+    causeCode: "grounding_review_no_result_unobserved",
+    retryable: true,
+  });
 });
 
 test("function-tool structured providers run the same mandatory grounding review", async () => {
