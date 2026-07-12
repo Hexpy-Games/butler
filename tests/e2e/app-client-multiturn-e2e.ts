@@ -70,7 +70,8 @@ type E2eMode =
   | "live-llm-workstream-natural-external"
   | "live-llm-artifact-report"
   | "live-llm-watl-worker"
-  | "live-llm-turn-forward-progress";
+  | "live-llm-turn-forward-progress"
+  | "live-llm-general-chat-tool-answer";
 const requestedMode = process.env.BUTLER_APP_CLIENT_E2E_MODE;
 const e2eMode: E2eMode = requestedMode === "live-llm"
   ? "live-llm"
@@ -106,6 +107,8 @@ const e2eMode: E2eMode = requestedMode === "live-llm"
             ? "live-llm-watl-worker"
           : requestedMode === "live-llm-turn-forward-progress"
             ? "live-llm-turn-forward-progress"
+          : requestedMode === "live-llm-general-chat-tool-answer"
+            ? "live-llm-general-chat-tool-answer"
           : "deterministic";
 const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-btcc-opening-decision" ||
@@ -119,13 +122,15 @@ const usesLiveLlm = e2eMode === "live-llm" ||
   e2eMode === "live-llm-workstream-natural-external" ||
   e2eMode === "live-llm-artifact-report" ||
   e2eMode === "live-llm-watl-worker" ||
-  e2eMode === "live-llm-turn-forward-progress";
+  e2eMode === "live-llm-turn-forward-progress" ||
+  e2eMode === "live-llm-general-chat-tool-answer";
 const usesBtccOpeningDecisionScenario = e2eMode === "btcc-opening-decision" ||
   e2eMode === "live-llm-btcc-opening-decision";
 const usesDeterministicBtccOpeningDecisionScenario = e2eMode === "btcc-opening-decision";
 const usesDecisionContextScenario = e2eMode === "decision-context" || e2eMode === "live-llm-decision-context";
 const usesDynamicDecisionContextScenario = e2eMode === "live-llm-decision-context";
 const usesForwardProgressScenario = e2eMode === "live-llm-turn-forward-progress";
+const usesGeneralChatToolAnswerScenario = e2eMode === "live-llm-general-chat-tool-answer";
 const usesExternalButlerService = e2eMode === "live-llm-workstream-natural-external" ||
   usesForwardProgressScenario;
 const usesMemoryRecallScenario = e2eMode === "live-llm-memory-recall";
@@ -369,7 +374,9 @@ const toolchainPrompt = usesRealProjectCheckScenario
     "In the final answer, report only the outcome. Do not list tool names, tool call order, or toolchain logs.",
     `When the tools finish, include this validation token in the final answer: ${TOOLCHAIN_FINAL}`,
   ].join("\n");
-const firstPrompt = usesLiveLlm
+const firstPrompt = usesGeneralChatToolAnswerScenario
+  ? "오늘 msi 결승전 누가 이겼어?"
+  : usesLiveLlm
   ? `This is a live Butler E2E check. Do not use tools. Reply with exactly this token and no other text: ${FIRST_FINAL}`
   : "first e2e turn";
 const secondPrompt = usesLiveLlm
@@ -743,6 +750,8 @@ try {
     await runWatlWorkerBrowserScenario(cdp);
   } else if (usesBeegAutonomousScenario) {
     await runBeegAutonomousBrowserScenario(cdp);
+  } else if (usesGeneralChatToolAnswerScenario) {
+    await runGeneralChatToolAnswerBrowserScenario(cdp);
   } else if (usesToolchainScenario) {
     await runToolchainBrowserScenario(cdp);
   } else {
@@ -787,6 +796,8 @@ try {
       "electron-reload-preserved-session-state",
       ...(usesToolchainScenario
         ? ["work-blocks-visible", "final-work-collapsed", "result-isolated"]
+        : usesGeneralChatToolAnswerScenario
+        ? ["public-web-progress-visible", "grounded-final-visible"]
         : usesMemoryRecallScenario || usesBeegAutonomousScenario
         ? ["memory-recall-final-visible"]
         : ["status-only-final-activity-hidden"]),
@@ -847,6 +858,15 @@ try {
           "autonomous-recall-memory-tool-called",
           "vector-diagnostics-observed",
           "raw-private-memory-not-reported",
+        ]
+        : usesGeneralChatToolAnswerScenario
+        ? [
+          "real-llm-provider-called",
+          "exact-msi-query-used",
+          "public-web-tool-called",
+          "grep-files-not-called",
+          "tool-answer-contract-delivered",
+          "phantom-target-absent",
         ]
         : [
           "composer-two-turn-flow",
@@ -1469,6 +1489,53 @@ async function runMultiturnBrowserScenario(client: CdpClient): Promise<void> {
       "second live LLM turn did not render or preserve the first final token.",
     );
   }
+}
+
+async function runGeneralChatToolAnswerBrowserScenario(client: CdpClient): Promise<void> {
+  await sendComposerTurn(client, firstPrompt);
+  await waitForNonEmptyAssistantFinalText(client, waitForFinalTimeoutMs);
+  const finalText = await lastAssistantFinalText(client);
+  const durableToolCalls = durableTranscriptToolCalls();
+  const allToolCalls = [...observedToolCalls, ...durableToolCalls];
+  assert(finalText.trim().length > 0, "general-chat tool answer did not render a final answer.");
+  assert(
+    allToolCalls.includes("web_search") || allToolCalls.includes("web_read"),
+    `general-chat tool answer used no public web evidence tool: ${allToolCalls.join(" -> ")}`,
+  );
+  assert(!allToolCalls.includes("grep_files"), "general-chat tool answer incorrectly used grep_files.");
+  const contracts = readTurnContracts();
+  const toolAnswer = contracts.find((contract) => contract.action === "tool_answer");
+  assert(toolAnswer, `no tool_answer contract was persisted: ${JSON.stringify(contracts)}`);
+  assert(toolAnswer.evidence_domain === "public_web", "tool_answer contract lost public_web domain.");
+  assert(!toolAnswer.target_project_id, "general-chat tool_answer acquired a phantom project target.");
+  assert(
+    !JSON.stringify(toolAnswer).includes("active-project") && !JSON.stringify(toolAnswer).includes('"active"'),
+    "general-chat tool_answer persisted a legacy sentinel target.",
+  );
+  assert(toolAnswer.state === "delivered", `tool_answer contract was not delivered: ${String(toolAnswer.state)}`);
+  assert(
+    !existsSync(join(tempDir, "turn-contract-failures", `${String(toolAnswer.contract_id)}.json`)),
+    "general-chat tool_answer recorded a structural contract failure.",
+  );
+  const body = await evaluateString(client, "document.body.innerText");
+  assert(/검색|Search|읽기|Read/u.test(body), "App did not expose public Search/Read progress semantics.");
+}
+
+async function waitForNonEmptyAssistantFinalText(client: CdpClient, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await lastAssistantFinalText(client)).trim()) return;
+    await delay(250);
+  }
+  throw new Error("Timed out waiting for a non-empty assistant final answer.");
+}
+
+function readTurnContracts(): Array<Record<string, unknown>> {
+  const directory = join(tempDir, "turn-contracts");
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => JSON.parse(readFileSync(join(directory, name), "utf8")) as Record<string, unknown>);
 }
 
 async function runMemoryRecallBrowserScenario(client: CdpClient): Promise<void> {
