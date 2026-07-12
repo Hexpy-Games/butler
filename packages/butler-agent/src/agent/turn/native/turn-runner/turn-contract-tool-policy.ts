@@ -5,11 +5,12 @@ export function turnMetadataForContract(
   contract: CompiledTurnContract,
   metadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
+  const readOnlyAction = contract.action === "inspect" || contract.action === "tool_answer";
   const preservedProfiles = existingPolicyStrings(
     metadata,
     ["requiredNativeToolProfiles", "required_tool_profiles"],
   ).filter((profile) =>
-    contract.action !== "inspect" ||
+    !readOnlyAction ||
     (profile !== "workspace" && profile !== "project-lifecycle"),
   );
   const profiles = unionStrings(
@@ -21,8 +22,8 @@ export function turnMetadataForContract(
     contractTools(contract),
   );
   const trackingMode = effectiveTrackingMode(contract.tracking_mode, metadata);
-  const accessMode = contract.action === "inspect" ? "read_only" : "full";
-  const toolSurfaceMode = contract.action === "inspect" ? "fixed" : "adaptive";
+  const accessMode = readOnlyAction ? "read_only" : "full";
+  const toolSurfaceMode = readOnlyAction ? "fixed" : "adaptive";
   const policy = {
     contractId: contract.contract_id,
     contract_id: contract.contract_id,
@@ -92,6 +93,9 @@ function unionStrings(...groups: readonly string[][]): string[] {
 
 function contractProfiles(contract: CompiledTurnContract): ButlerToolProfile[] {
   const profiles = new Set<ButlerToolProfile>();
+  if (contract.action === "tool_answer" && contract.evidence_domain === "public_web") {
+    profiles.add("public-web");
+  }
   if (contract.action === "inspect" && contract.target_project_id) profiles.add("project");
   if (contract.tracking_mode === "ledger") {
     profiles.add("project");
@@ -106,6 +110,11 @@ function contractProfiles(contract: CompiledTurnContract): ButlerToolProfile[] {
 
 function contractTools(contract: CompiledTurnContract): string[] {
   const tools = new Set<string>();
+  if (contract.action === "tool_answer" && contract.evidence_domain === "public_web") {
+    tools.add("web_search");
+    tools.add("web_read");
+    tools.add("read_tool_evidence_artifact");
+  }
   if (contract.target_project_id && contract.deliverables.includes("status_report")) {
     tools.add("project_ledger_status");
     tools.add("project_ledger_show");
