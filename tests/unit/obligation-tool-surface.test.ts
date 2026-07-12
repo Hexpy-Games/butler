@@ -150,6 +150,92 @@ test("todo progress cannot satisfy workspace mutation and a completion gap focus
   expect(projected[0]?.parameters.required).toEqual(["validation_suite"]);
 });
 
+test("resumed work can close inherited workspace evidence through one canonical Ledger record", () => {
+  const resumeContract = contract({
+    contract_id: "contract-resume-canonical-evidence",
+    action: "resume_work",
+    deliverables: ["code_change", "validation", "review"],
+    required_evidence: [
+      obligation("code_change", "workspace", "durable_diff"),
+      { ...obligation("validation", "workspace", "passing_validation"), allowed_producers: ["validation"] },
+      { ...obligation("review", "workspace", "review_result"), allowed_producers: ["review"] },
+    ],
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
+  });
+  const controller = createObligationToolSurfaceController(resumeContract, { planReady: true });
+
+  expect(controller.state()).toMatchObject({ stage: "workspace_execution" });
+  expect(controller.project(tools).map((tool) => tool.name)).toContain("project_ledger_show");
+
+  controller.focusMissingDeliverables(["code_change", "validation", "review"]);
+  expect(controller.state()).toMatchObject({ stage: "workspace_validation", validationFocused: true });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "project_ledger_show",
+    "run_command",
+  ]);
+
+  const canonicalEvidence = {
+    ok: true,
+    evidence_capability_receipts: [
+      {
+        producer: { kind: "project_ledger", name: "project_ledger_show" },
+        capability: "workspace_mutated",
+        evidence_kind: "mutation_result",
+        maturity: "verified",
+        verified: true,
+      },
+      {
+        producer: { kind: "project_ledger", name: "project_ledger_show" },
+        capability: "validation_passed",
+        evidence_kind: "execution_result",
+        maturity: "verified",
+        verified: true,
+      },
+      {
+        producer: { kind: "project_ledger", name: "project_ledger_show" },
+        capability: "review_completed",
+        evidence_kind: "review_result",
+        maturity: "verified",
+        verified: true,
+      },
+    ],
+  };
+  expect(controller.authorize({ name: "project_ledger_show", args: { kind: "work", id: "W-RESUME" } }))
+    .toEqual({ allowed: true });
+  expect(controller.observe({
+    name: "project_ledger_show",
+    args: { kind: "work", id: "W-RESUME" },
+    result: canonicalEvidence,
+  })).toBeNull();
+  expect(controller.state()).toMatchObject({
+    stage: "workspace_execution",
+    workspaceMutationObserved: true,
+    validationObserved: true,
+    validationFocused: false,
+  });
+});
+
+test("resumed inherited Ledger work can inspect its canonical record without discovery first", () => {
+  const controller = createObligationToolSurfaceController(contract({
+    contract_id: "contract-resume-inherited-ledger-work",
+    action: "resume_work",
+    deliverables: ["ledger_work", "code_change"],
+    required_evidence: [
+      obligation("ledger_work", "project_ledger", "ledger_record"),
+      obligation("code_change", "workspace", "durable_diff"),
+    ],
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
+  }), { planReady: true });
+
+  expect(controller.state()).toMatchObject({ stage: "ledger", gated: true });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "project_ledger_show",
+    "project_ledger_list",
+  ]);
+});
+
 test("a missing status report exposes only status evidence producers", () => {
   const statusContract = contract({
     deliverables: ["status_report", "code_change"],
@@ -452,6 +538,32 @@ test("a resumed repeated-repair frontier stays strict and non-terminal", () => {
     workspaceActionFocused: false,
     workspaceActionRejections: 0,
   });
+});
+
+test("a strict resumed frontier keeps the canonical evidence tool while shell repair stays closed", () => {
+  const controller = createObligationToolSurfaceController(contract({
+    contract_id: "contract-resume-strict-canonical-evidence",
+    action: "resume_work",
+    deliverables: ["code_change"],
+    required_evidence: [obligation("code_change", "workspace", "durable_diff")],
+    tracking_mode: "ledger",
+    closeout_strategy: "ledger",
+  }), {
+    planReady: true,
+    workspaceInspectionCount: WORKSPACE_INSPECTION_MAX_CONSECUTIVE_READS,
+    workspaceActionFocused: true,
+    workspaceActionRejections: 2,
+  });
+
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "project_ledger_show",
+    "update_todo_list",
+    "write_file",
+  ]);
+  expect(controller.authorize({
+    name: "project_ledger_show",
+    args: { kind: "work", id: "W-RESUME" },
+  })).toEqual({ allowed: true });
 });
 
 test("verified code mutation retires the workspace action lease during later reads", () => {

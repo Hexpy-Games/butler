@@ -12,6 +12,8 @@ import {
 import { commandForProjectLedgerNativeTool } from "./command.ts";
 import { runProjectLedgerPlannedLifecycleMutation } from "./lifecycle-planner.ts";
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
+import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
+import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -253,7 +255,104 @@ function runProjectLedgerNativeTool(
     };
   }
   if (toolName === "project_ledger_list") return applyListBounds(result, args);
+  if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(result);
   return result;
+}
+
+function withCanonicalRecordEvidence(result: Record<string, unknown>): Record<string, unknown> {
+  if (result.ok !== true) return result;
+  const record = recordValue(result.data);
+  const id = safeRecordIdentity(record.id);
+  const kind = safeRecordIdentity(record.kind);
+  if (!id || !kind) return result;
+  const status = safeRecordIdentity(record.status);
+  const scope = {
+    record_id: id,
+    record_kind: kind,
+    ...(status ? { status } : {}),
+  };
+  const references = [{ label: `${kind}:${id}` }];
+  const receipts: EvidenceCapabilityReceipt[] = [createEvidenceCapabilityReceipt({
+    producer: { kind: "project_ledger", name: "project_ledger_show" },
+    capability: "source_verified",
+    evidence_kind: "project_state",
+    verified: true,
+    confidence: 0.95,
+    summary: "A canonical Project Ledger record was inspected.",
+    scope,
+    references,
+    satisfies: ["source_verified"],
+    limitations: [],
+  })];
+  const completedWork = kind === "work" && status === "done";
+  if (completedWork && hasRecordText(record.implementation) && hasCanonicalCommitEvidence(record.codeCommits)) {
+    receipts.push(createEvidenceCapabilityReceipt({
+      producer: { kind: "project_ledger", name: "project_ledger_show" },
+      capability: "workspace_mutated",
+      evidence_kind: "mutation_result",
+      verified: true,
+      confidence: 0.9,
+      summary: "The canonical work record contains implementation and commit evidence.",
+      scope: { ...scope, evidence_field: "implementation_and_code_commits" },
+      references,
+      limitations: [],
+    }));
+  }
+  if (completedWork && hasRecordText(record.validation)) {
+    receipts.push(createEvidenceCapabilityReceipt({
+      producer: { kind: "project_ledger", name: "project_ledger_show" },
+      capability: "validation_passed",
+      evidence_kind: "execution_result",
+      verified: true,
+      confidence: 0.9,
+      summary: "The canonical work record contains validation evidence.",
+      scope: { ...scope, evidence_field: "validation" },
+      references,
+      limitations: [],
+    }));
+  }
+  if (completedWork && hasRecordText(record.review)) {
+    receipts.push(createEvidenceCapabilityReceipt({
+      producer: { kind: "project_ledger", name: "project_ledger_show" },
+      capability: "review_completed",
+      evidence_kind: "review_result",
+      verified: true,
+      confidence: 0.9,
+      summary: "The canonical work record contains review evidence.",
+      scope: { ...scope, evidence_field: "review" },
+      references,
+      limitations: [],
+    }));
+  }
+  return { ...result, evidence_capability_receipts: receipts };
+}
+
+function safeRecordIdentity(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return /^[A-Za-z0-9._:-]{1,160}$/u.test(trimmed) ? trimmed : null;
+}
+
+function hasRecordText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasCanonicalCommitEvidence(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(canonicalCommitRecord);
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.some(canonicalCommitRecord);
+    return false;
+  } catch {
+    // Older canonical records may store one commit hash directly.
+  }
+  return /^[0-9a-f]{7,64}$/iu.test(value.trim());
+}
+
+function canonicalCommitRecord(value: unknown): boolean {
+  const record = recordValue(value);
+  return typeof record.hash === "string" && /^[0-9a-f]{7,64}$/iu.test(record.hash.trim());
 }
 
 function refreshedProjectLedgerIndexResult(

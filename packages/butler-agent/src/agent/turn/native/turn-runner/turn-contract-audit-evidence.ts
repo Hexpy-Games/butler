@@ -45,20 +45,26 @@ export function recordTurnContractAuditEvidence(input: {
       itemIds: [],
     }));
   }
-  const finalReport = contract.required_evidence.find((item) => item.deliverable === "final_report");
   if (
-    finalReport && input.finalCandidate.trim() &&
+    input.finalCandidate.trim() &&
     input.planClosureSatisfied !== false &&
-    !evidenceObligationSatisfied({ contract, obligation: finalReport, receipts: store.evidenceFor(contract) }) &&
     nonReportObligationsSatisfied(contract, store.evidenceFor(contract))
   ) {
-    contract = store.recordEvidence(receiptFor({
-      contract,
-      obligation: finalReport,
-      producer: "runtime",
-      sourceId: `final:${hash(input.finalCandidate).slice(0, 16)}`,
-      itemIds: [],
-    }));
+    for (const finalReport of contract.required_evidence.filter((item) =>
+      item.deliverable === "final_report")) {
+      if (evidenceObligationSatisfied({
+        contract,
+        obligation: finalReport,
+        receipts: store.evidenceFor(contract),
+      })) continue;
+      contract = store.recordEvidence(receiptFor({
+        contract,
+        obligation: finalReport,
+        producer: "runtime",
+        sourceId: `final:${hash(input.finalCandidate).slice(0, 16)}`,
+        itemIds: [],
+      }));
+    }
   }
   const recorded = store.read(contract.contract_id) ?? contract;
   recordTurnContractMetric({
@@ -87,7 +93,7 @@ function receiptsForObligation(input: {
   audit: readonly ToolAuditEntry[];
 }): TurnEvidenceReceipt[] {
   return input.audit.flatMap((entry, index) => {
-    if (!entry.ok || !auditMatchesObligation(entry, input.obligation)) return [];
+    if (!entry.ok || !auditMatchesObligation(entry, input.obligation, input.contract)) return [];
     const producer = producerFor(input.obligation);
     const itemIds = evidenceItemIds(entry, input.obligation);
     return [receiptFor({
@@ -100,7 +106,11 @@ function receiptsForObligation(input: {
   });
 }
 
-function auditMatchesObligation(entry: ToolAuditEntry, obligation: RequiredEvidenceObligation): boolean {
+function auditMatchesObligation(
+  entry: ToolAuditEntry,
+  obligation: RequiredEvidenceObligation,
+  contract: CompiledTurnContract,
+): boolean {
   const capabilities = entry.evidenceCapabilityReceipts ?? [];
   switch (obligation.deliverable) {
     case "status_report":
@@ -109,20 +119,50 @@ function auditMatchesObligation(entry: ToolAuditEntry, obligation: RequiredEvide
     case "ledger_spec":
       return ledgerMutationMatches(entry, "spec");
     case "ledger_work":
-      return ledgerMutationMatches(entry, "work");
+      return ledgerMutationMatches(entry, "work") || canonicalResumeWorkRecordMatches(entry, contract);
     case "ledger_tasks":
       return ledgerMutationMatches(entry, "task");
     case "code_change":
       return entry.name === "write_file" || capabilities.some((receipt) =>
+        executionCapabilityAllowed(receipt, contract) &&
         verifiedCapability(receipt, ["workspace_mutated", "durable_artifact"], ["mutation_result", "artifact"]));
     case "validation":
-      return capabilities.some((receipt) => verifiedCapability(receipt, ["validation_passed"], ["execution_result"]));
+      return capabilities.some((receipt) =>
+        executionCapabilityAllowed(receipt, contract) &&
+        verifiedCapability(receipt, ["validation_passed"], ["execution_result"]));
     case "review":
       return entry.name === "review_planned_task" || capabilities.some((receipt) =>
+        executionCapabilityAllowed(receipt, contract) &&
         verifiedCapability(receipt, ["review_completed"], ["review_result"]));
     case "final_report":
       return false;
   }
+}
+
+function executionCapabilityAllowed(
+  receipt: EvidenceCapabilityReceipt,
+  contract: CompiledTurnContract,
+): boolean {
+  return receipt.producer.kind !== "project_ledger" || (
+    contract.action === "resume_work" && receipt.producer.name === "project_ledger_show"
+  );
+}
+
+function canonicalResumeWorkRecordMatches(
+  entry: ToolAuditEntry,
+  contract: CompiledTurnContract,
+): boolean {
+  if (contract.action !== "resume_work" || entry.name !== "project_ledger_show") return false;
+  return (entry.evidenceCapabilityReceipts ?? []).some((receipt) =>
+    receipt.producer.kind === "project_ledger" &&
+    verifiedCapability(receipt, ["source_verified"], ["project_state"]) &&
+    recordScopeKind(receipt) === "work");
+}
+
+function recordScopeKind(receipt: EvidenceCapabilityReceipt): string | null {
+  const scope = receipt.scope;
+  if (!scope || typeof scope !== "object" || Array.isArray(scope)) return null;
+  return typeof scope.record_kind === "string" ? scope.record_kind : null;
 }
 
 function ledgerMutationMatches(entry: ToolAuditEntry, kind: "spec" | "work" | "task"): boolean {
