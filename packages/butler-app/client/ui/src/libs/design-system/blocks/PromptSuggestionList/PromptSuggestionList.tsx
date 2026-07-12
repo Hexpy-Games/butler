@@ -71,13 +71,26 @@ export function PromptSuggestionList({
         />
       ) : null}
       <header className={styles.header} data-has-title-icon={titleIconState}>
-        {moment ? (
-          <Typo.Caption
-            className={styles.moment}
-            data-slot="prompt-suggestion-moment"
-          >
-            {moment}
-          </Typo.Caption>
+        {moment || titleIcon ? (
+          <div className={styles.metaRow}>
+            {titleIcon ? (
+              <span
+                className={styles.compactTitleIcon}
+                aria-hidden="true"
+                data-slot="prompt-suggestion-compact-title-icon"
+              >
+                {titleIcon}
+              </span>
+            ) : null}
+            {moment ? (
+              <Typo.Caption
+                className={styles.moment}
+                data-slot="prompt-suggestion-moment"
+              >
+                {moment}
+              </Typo.Caption>
+            ) : null}
+          </div>
         ) : null}
         <div className={styles.titleRow} data-has-title-icon={titleIconState}>
           {titleIcon ? (

@@ -3066,19 +3066,49 @@ try {
     .locator(testClass("new-chat-empty-state"))
     .evaluate((element) => {
       const title = element.querySelector<HTMLElement>("h2");
+      const titleCopy = element.querySelector<HTMLElement>(
+        '[data-slot="prompt-suggestion-title-copy"]',
+      );
+      const compactTitleIcon = element.querySelector<HTMLElement>(
+        '[data-slot="prompt-suggestion-compact-title-icon"]',
+      );
+      const moment = element.querySelector<HTMLElement>(
+        '[data-slot="prompt-suggestion-moment"]',
+      );
       const composer = document.querySelector<HTMLElement>(
         "[data-test-class~='composer-card']",
       );
       const titleBox = title?.getBoundingClientRect();
+      const titleCopyBox = titleCopy?.getBoundingClientRect();
+      const compactTitleIconBox = compactTitleIcon?.getBoundingClientRect();
+      const momentBox = moment?.getBoundingClientRect();
       const composerBox = composer?.getBoundingClientRect();
       const rootStyle = getComputedStyle(document.documentElement);
       return {
+        bodyTypeSize: Number.parseFloat(
+          rootStyle.getPropertyValue("--typo-body-size"),
+        ),
+        captionTypeSize: Number.parseFloat(
+          rootStyle.getPropertyValue("--typo-caption-size"),
+        ),
+        compactMetaAligned:
+          compactTitleIconBox && momentBox
+            ? Math.abs(
+                compactTitleIconBox.top + compactTitleIconBox.height / 2 -
+                  (momentBox.top + momentBox.height / 2),
+              ) <= 1
+            : false,
         composerBottom: composerBox?.bottom ?? Number.NaN,
         composerLeft: composerBox?.left ?? Number.NaN,
         composerRight: composerBox?.right ?? Number.NaN,
+        pageGutter: Number.parseFloat(
+          rootStyle.getPropertyValue("--adaptive-page-gutter"),
+        ),
         safeTitleTop:
           Number.parseFloat(rootStyle.getPropertyValue("--titlebar-height")) +
           Number.parseFloat(rootStyle.getPropertyValue("--safe-area-top")),
+        titleCopyLeft: titleCopyBox?.left ?? Number.NaN,
+        titleCopyRight: titleCopyBox?.right ?? Number.NaN,
         titleTop: titleBox?.top ?? Number.NaN,
         viewportHeight: window.innerHeight,
         viewportWidth: window.innerWidth,
@@ -3086,6 +3116,12 @@ try {
     });
   assert(
     narrowNewChatState.titleTop >= narrowNewChatState.safeTitleTop &&
+      narrowNewChatState.compactMetaAligned &&
+      narrowNewChatState.bodyTypeSize === 16 &&
+      narrowNewChatState.captionTypeSize === 14 &&
+      narrowNewChatState.titleCopyLeft <= narrowNewChatState.pageGutter + 1 &&
+      narrowNewChatState.titleCopyRight >=
+        narrowNewChatState.viewportWidth - narrowNewChatState.pageGutter - 1 &&
       narrowNewChatState.composerLeft >= 11 &&
       narrowNewChatState.composerRight <= narrowNewChatState.viewportWidth - 11 &&
       narrowNewChatState.composerBottom <= narrowNewChatState.viewportHeight,
@@ -3825,6 +3861,9 @@ try {
         "new-chat-vertical-scroll-absent",
         "new-chat-start-position-high",
         "new-chat-extra-icon-gutter",
+        "narrow-new-chat-meta-row",
+        "narrow-new-chat-full-width-copy",
+        "narrow-readable-type-scale",
         "new-chat-left-radius-preserved",
         "right-toggle-hidden-when-empty",
         "right-toggle-hidden-on-draft-new-chat",
