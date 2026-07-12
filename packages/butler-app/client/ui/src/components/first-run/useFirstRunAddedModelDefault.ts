@@ -86,6 +86,16 @@ export function useFirstRunAddedModelDefault({
         model: targetModel.model_ref,
         reasoning_effort: targetModel.default_reasoning_effort,
         context_window_tokens: targetModel.context_window_tokens,
+        worker_model_rules: baseSettings.worker_model_rules.map((rule) => {
+          const preferredEffort = rule.id === "deep_work" ? "high" : "medium";
+          return {
+            ...rule,
+            model: targetModel.model_ref,
+            reasoning_effort: targetModel.reasoning_efforts.includes(preferredEffort)
+              ? preferredEffort
+              : targetModel.default_reasoning_effort,
+          };
+        }),
       };
       try {
         const result = await api<Partial<SettingsView>>("/settings", {
@@ -95,6 +105,7 @@ export function useFirstRunAddedModelDefault({
             model: fallbackSettings.model,
             reasoning_effort: fallbackSettings.reasoning_effort,
             context_window_tokens: fallbackSettings.context_window_tokens,
+            worker_model_rules: fallbackSettings.worker_model_rules,
           }),
         });
         if (cancelled) return;

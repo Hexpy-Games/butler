@@ -1559,6 +1559,7 @@ set_default_model_ref() {
     cfg.system.runtime = 'codex-api';
     cfg.system.defaultModel = modelRef;
     cfg.system.butlerModel = modelRef;
+    cfg.system.workerModel = modelRef;
     if (modelRef?.startsWith('openai/')) cfg.system.openaiModel = modelId;
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(cfg, null, 2) + '\\n');
@@ -1583,7 +1584,7 @@ register_hosted_api_key_provider() {
   fi
 
   registered_ref="$(
-    REGISTERED_MODELS_MODULE="$BUTLER_HOME/packages/butler-agent/src/integrations/providers/registered-models.ts" \
+    REGISTERED_MODELS_MODULE="$BUTLER_HOME/packages/butler-agent/src/integrations/providers/shared/registered-models.ts" \
     PROVIDER_ID="$provider_id" \
     MODEL_ID="$model_id" \
     DISPLAY_NAME="$display_name" \
@@ -1642,7 +1643,7 @@ normalize_positive_integer_or_default() {
 
 discover_local_models_json() {
   local server_url="$1" platform="$2"
-  LOCAL_MODELS_MODULE="$BUTLER_HOME/packages/butler-agent/src/integrations/providers/local-models.ts" \
+  LOCAL_MODELS_MODULE="$BUTLER_HOME/packages/butler-agent/src/integrations/providers/local/models.ts" \
   LOCAL_MODEL_SERVER_URL="$server_url" \
   LOCAL_MODEL_PLATFORM="$platform" \
   "$BUTLER_BUN" -e "
@@ -1827,7 +1828,7 @@ configure_local_model() {
 
   local registered_json model_ref
   registered_json="$(
-    LOCAL_MODELS_MODULE="$BUTLER_HOME/packages/butler-agent/src/integrations/providers/local-models.ts" \
+    LOCAL_MODELS_MODULE="$BUTLER_HOME/packages/butler-agent/src/integrations/providers/local/models.ts" \
     CFG_PATH="$CONFIG_PATH" \
     BUTLER_DATA="$BUTLER_DATA" \
     LOCAL_MODEL_SERVER_URL="$server_url" \
@@ -1864,6 +1865,7 @@ configure_local_model() {
       cfg.system.runtime = 'codex-api';
       cfg.system.defaultModel = model.model_ref;
       cfg.system.butlerModel = model.model_ref;
+      cfg.system.workerModel = model.model_ref;
       cfg.system.openaiModel = cfg.system.openaiModel || process.env.DEFAULT_OPENAI_MODEL;
       mkdirSync(dirname(path), { recursive: true });
       writeFileSync(path, JSON.stringify(cfg, null, 2) + '\\n');

@@ -638,6 +638,11 @@ test("fresh app settings honor an install-selected local model default", async (
     const settings = await getJson(`${server.url}settings`);
     expect(settings.data.model).toBe("local/gemma-install");
     expect(settings.data.context_window_tokens).toBe(32768);
+    expect(settings.data.effective_consolidation_model).toBe("local/gemma-install");
+    expect(settings.data.worker_model_rules).toEqual([
+      expect.objectContaining({ id: "deep_work", model: "local/gemma-install" }),
+      expect.objectContaining({ id: "routine_work", model: "local/gemma-install" }),
+    ]);
     const catalog = await getJson(`${server.url}model-catalog`);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
     expect(catalog.data.default_reasoning_effort).toBe("none");
@@ -3226,7 +3231,7 @@ test("settings, command palette, and project actions are route-backed and privac
       }),
       expect.objectContaining({
         id: "routine_work",
-        model: "openai/gpt-5.4-mini",
+        model: "openai/gpt-5.5",
         reasoning_effort: "medium",
         enabled: true,
       }),
@@ -3295,6 +3300,9 @@ test("settings, command palette, and project actions are route-backed and privac
       (model: { model_ref: string }) => model.model_ref,
     );
     expect(modelRefs).toContain("xai/grok-4.3");
+    expect(modelRefs).toContain("openai/gpt-5.6-sol");
+    expect(modelRefs).toContain("openai/gpt-5.6-terra");
+    expect(modelRefs).toContain("openai/gpt-5.6-luna");
     expect(modelRefs).toContain("qwen/qwen3.7-max");
     expect(modelRefs).toContain("kimi/kimi-k2.6");
     expect(modelRefs).toContain("zai/glm-5.2");
@@ -3328,15 +3336,16 @@ test("settings, command palette, and project actions are route-backed and privac
     });
     expect(
       catalog.data.models.some(
-        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.5",
+        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.6-sol",
       ),
     ).toBe(true);
     expect(
       catalog.data.models.find(
-        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.5",
+        (model: { model_ref: string }) => model.model_ref === "openai/gpt-5.6-sol",
       ),
     ).toMatchObject({
       context_window_tokens: 1_050_000,
+      reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
       runtime_supported: true,
     });
     expect(
@@ -3354,11 +3363,11 @@ test("settings, command palette, and project actions are route-backed and privac
         provider_id: "openai",
         runtime_supported: true,
         deep_work: expect.objectContaining({
-          model: "openai/gpt-5.5",
+          model: "openai/gpt-5.6-sol",
           reasoning_effort: "high",
         }),
         routine_work: expect.objectContaining({
-          model: "openai/gpt-5.4-mini",
+          model: "openai/gpt-5.6-terra",
           reasoning_effort: "medium",
         }),
       }),
@@ -3623,6 +3632,25 @@ test("settings, command palette, and project actions are route-backed and privac
       {},
     );
     expect(archived.data.project.archived).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("settings accepts GPT-5.6 max reasoning effort", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+  });
+  try {
+    const maxReasoning = await patchJson(`${server.url}settings`, {
+      model: "openai/gpt-5.6-sol",
+      reasoning_effort: "max",
+      consolidation_reasoning_effort: "max",
+    });
+    expect(maxReasoning.data.model).toBe("openai/gpt-5.6-sol");
+    expect(maxReasoning.data.reasoning_effort).toBe("max");
+    expect(maxReasoning.data.consolidation_reasoning_effort).toBe("max");
   } finally {
     server.stop();
   }

@@ -15,7 +15,7 @@ export function isSessionControlUpdateRequest(
   if ("model" in input && typeof input.model !== "string") return false;
   if (
     "reasoning_effort" in input &&
-    !["none", "low", "medium", "high", "xhigh"].includes(
+    !["none", "low", "medium", "high", "xhigh", "max"].includes(
       String(input.reasoning_effort),
     )
   )

@@ -366,10 +366,17 @@ test("first-run model setup waits for a newly added model before completion", as
         language: "ko",
         model: "openai/gpt-5.5",
         reasoning_effort: "xhigh",
-        context_window_tokens: 258000,
+        context_window_tokens: 258_000,
       },
     ),
   )).toBe(true);
+  const selectedModelPatch = rendered.settingsPatches.find((patch) =>
+    hasSettingsPatchFields(patch, { model: "openai/gpt-5.5" }),
+  ) as { worker_model_rules?: Array<{ model?: string }> } | undefined;
+  expect(selectedModelPatch?.worker_model_rules?.map((rule) => rule.model)).toEqual([
+    "openai/gpt-5.5",
+    "openai/gpt-5.5",
+  ]);
   expect(rendered.completedStates[0]?.status).toBe("complete");
 
   await act(async () => rendered.root.unmount());

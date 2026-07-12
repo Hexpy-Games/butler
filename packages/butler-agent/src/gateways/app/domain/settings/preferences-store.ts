@@ -117,6 +117,7 @@ export class AppPreferencesStore {
       worker_model_rules: normalizeWorkerModelRules(
         stored.worker_model_rules,
         registeredModels,
+        modelMetadata.model_ref,
       ),
       access_mode: stored.access_mode ?? "full_access",
       plan_mode_default: stored.plan_mode_default ?? false,

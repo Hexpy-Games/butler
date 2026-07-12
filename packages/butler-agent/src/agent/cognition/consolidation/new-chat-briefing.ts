@@ -790,7 +790,7 @@ function normalizeModelRef(value: unknown): string | null {
 }
 
 function normalizeReasoningEffort(value: unknown): ReasoningEffort | null {
-  return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh"
+  return value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max"
     ? value
     : null;
 }

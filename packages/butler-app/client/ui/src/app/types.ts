@@ -1,6 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 
-export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type AccessMode = "full_access" | "ask_first" | "read_only";
 export type ChatKind = "chat" | "project";
 export type StatusTone = "ok" | "muted" | "error";

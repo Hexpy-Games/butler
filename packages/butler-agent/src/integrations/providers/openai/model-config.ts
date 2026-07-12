@@ -105,7 +105,7 @@ export function normalizeRuntime(value: unknown): ButlerRuntime | null {
 
 
 export function normalizeReasoningEffort(value: unknown): ReasoningEffort | null {
-  if (value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh") {
+  if (value === "none" || value === "low" || value === "medium" || value === "high" || value === "xhigh" || value === "max") {
     return value;
   }
   return null;
