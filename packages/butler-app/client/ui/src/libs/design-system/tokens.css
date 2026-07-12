@@ -393,6 +393,11 @@
     --titlebar-height: 56px;
     --adaptive-page-gutter: var(--space-lg);
     --adaptive-composer-inset: var(--space-md);
+    --adaptive-drawer-width: min(78vw, 336px);
+    --sidebar-row-height: 48px;
+    --sidebar-action-size: 44px;
+    --sidebar-icon-size: 22px;
+    --sidebar-row-gap: var(--space-md);
     --typo-h1-size: 34px;
     --typo-h2-size: 26px;
     --typo-h3-size: 22px;

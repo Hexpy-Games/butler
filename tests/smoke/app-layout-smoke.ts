@@ -1535,12 +1535,36 @@ try {
   const workspaceBehindSidebar = await page
     .locator(testClass("workspace"))
     .boundingBox();
+  const firstCompactNavRow = page
+    .locator(testClass("sidebar-slot"))
+    .locator('[data-slot="clickable"]')
+    .first();
+  const firstCompactNavRowBox = await firstCompactNavRow.boundingBox();
+  const firstCompactNavMetrics = await firstCompactNavRow.evaluate((element) => {
+    const icon = element.querySelector("svg")?.getBoundingClientRect();
+    const label = element.querySelector<HTMLElement>(
+      '[data-slot="nav-row-label"]',
+    );
+    return {
+      iconHeight: icon?.height ?? 0,
+      iconWidth: icon?.width ?? 0,
+      labelFontSize: label
+        ? Number.parseFloat(getComputedStyle(label).fontSize)
+        : 0,
+    };
+  });
   assert(
     narrowSidebarBox?.width &&
       narrowSidebarBox.width >= 300 &&
       workspaceBehindSidebar?.width &&
-      workspaceBehindSidebar.width >= 389,
-    `narrow sidebar must overlay without shrinking workspace: ${JSON.stringify({ narrowSidebarBox, workspaceBehindSidebar })}`,
+      workspaceBehindSidebar.width >= 389 &&
+      workspaceBehindSidebar.x >= narrowSidebarBox.width - 1 &&
+      firstCompactNavRowBox &&
+      firstCompactNavRowBox.height >= 48 &&
+      firstCompactNavMetrics.iconWidth >= 22 &&
+      firstCompactNavMetrics.iconHeight >= 22 &&
+      firstCompactNavMetrics.labelFontSize >= 17,
+    `narrow sidebar must push the full workspace with comfortable navigation density: ${JSON.stringify({ firstCompactNavMetrics, firstCompactNavRowBox, narrowSidebarBox, workspaceBehindSidebar })}`,
   );
   screenshots.push(await screenshot(page, "narrow-sidebar.png"));
   await page.mouse.click(385, 420);
@@ -3143,6 +3167,57 @@ try {
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(240);
+  const compactComposer = page.locator(testClass("composer-card"));
+  const compactPreview = compactComposer.locator(
+    '[data-slot="composer-compact-preview"]',
+  );
+  const compactTextarea = compactComposer.locator("textarea");
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.waitForTimeout(260);
+  const idleComposerBox = await compactComposer.boundingBox();
+  await compactPreview.click();
+  await page.waitForTimeout(260);
+  const engagedComposerBox = await compactComposer.boundingBox();
+  const engagedTextareaBox = await compactTextarea.boundingBox();
+  await compactTextarea.fill(
+    "A long compact draft that should remain visible as one ellipsized line after focus leaves the composer",
+  );
+  await compactTextarea.evaluate((element) => element.blur());
+  await page.waitForTimeout(260);
+  const collapsedDraftBox = await compactComposer.boundingBox();
+  const collapsedDraftState = await compactPreview.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      expanded: element.closest("form")?.dataset.expanded,
+      overflow: style.overflow,
+      text: element.textContent,
+      textOverflow: style.textOverflow,
+      whiteSpace: style.whiteSpace,
+    };
+  });
+  assert(
+    idleComposerBox &&
+      idleComposerBox.height <= 68 &&
+      engagedComposerBox &&
+      engagedComposerBox.height >= idleComposerBox.height + 28 &&
+      engagedTextareaBox &&
+      engagedTextareaBox.height <= 64 &&
+      collapsedDraftBox &&
+      collapsedDraftBox.height <= 68 &&
+      collapsedDraftState.text?.startsWith("A long compact draft") &&
+      collapsedDraftState.overflow === "hidden" &&
+      collapsedDraftState.textOverflow === "ellipsis" &&
+      collapsedDraftState.whiteSpace === "nowrap",
+    `compact composer should morph between idle and engaged states while preserving draft: ${JSON.stringify({ collapsedDraftBox, collapsedDraftState, engagedComposerBox, engagedTextareaBox, idleComposerBox })}`,
+  );
+  await compactPreview.click();
+  await compactTextarea.fill("");
+  await compactTextarea.evaluate((element) => element.blur());
+  await page.waitForTimeout(260);
   const narrowNewChatState = await page
     .locator(testClass("new-chat-empty-state"))
     .evaluate((element) => {
@@ -3885,6 +3960,11 @@ try {
         "narrow-right-panel-left-toggle-hidden",
         "narrow-right-panel-auto-collapses-left-state",
         "narrow-titlebar-new-chat-visible",
+        "narrow-sidebar-pushes-workspace",
+        "narrow-sidebar-comfortable-density",
+        "narrow-composer-idle-one-line",
+        "narrow-composer-focus-expands",
+        "narrow-composer-draft-ellipsis",
         "narrow-scrim-compositor-stable",
         "narrow-scrim-interrupted-reversal",
         "narrow-scrim-repeat-monotonic",

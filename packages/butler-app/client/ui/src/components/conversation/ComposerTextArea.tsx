@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect } from "react";
+import { useCallback, useEffect, useLayoutEffect } from "react";
 import type { ChangeEvent } from "react";
 import { appCopy } from "@/app/copy.ts";
 import { useComposerStore } from "./composerStore";
@@ -22,8 +22,11 @@ function resizeComposerTextArea(element: HTMLTextAreaElement) {
   const maxHeight =
     lineHeight * COMPOSER_MAX_AUTO_ROWS + verticalPadding + verticalBorder;
 
-  element.style.height = "auto";
-  const nextHeight = Math.min(element.scrollHeight, maxHeight);
+  element.style.height = "0px";
+  const singleLineHeight = lineHeight + verticalPadding + verticalBorder;
+  const nextHeight = element.value
+    ? Math.min(element.scrollHeight, maxHeight)
+    : singleLineHeight;
   element.style.height = `${nextHeight}px`;
   element.style.overflowY = element.scrollHeight > maxHeight ? "auto" : "hidden";
 }
@@ -35,7 +38,7 @@ export function ComposerTextArea() {
   const handleKeyDown = useComposerStore((store) => store.handleKeyDown);
   const large = useComposerStore((store) => store.large);
   const textAreaRef = useComposerStore((store) => store.textAreaRef);
-  const minRows = large ? 3 : 2;
+  const minRows = 1;
   const handleChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
       setText(event.target.value);
@@ -47,7 +50,14 @@ export function ComposerTextArea() {
   useLayoutEffect(() => {
     const element = textAreaRef?.current;
     if (element) resizeComposerTextArea(element);
-  }, [large, text, textAreaRef]);
+  }, [text, textAreaRef]);
+  useEffect(() => {
+    const resize = () => {
+      if (textAreaRef?.current) resizeComposerTextArea(textAreaRef.current);
+    };
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [textAreaRef]);
 
   return (
     <ComposerCardTextarea

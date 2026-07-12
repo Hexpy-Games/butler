@@ -44,6 +44,7 @@ import {
   usePanelResize,
 } from "@/hooks/usePanelResize.ts";
 import { useNarrowRightPanelAutoCollapse } from "@/hooks/useNarrowRightPanelAutoCollapse.ts";
+import { useBrowserChromeThemeColor } from "@/hooks/useBrowserChromeThemeColor.ts";
 import { FirstRunSetup } from "@/components/first-run/FirstRunSetup.tsx";
 import { readFirstRunState } from "@/app/firstRunSetup.ts";
 
@@ -93,6 +94,14 @@ function AppWorkspaceShell() {
   const isSettingsView = useButlerStore(selectIsSettingsView);
   const newChatActive =
     view.kind === "session" && isDraftChatId(activeChatId);
+  const browserChromeDark =
+    settings.appearance_theme === "dark" ||
+    (settings.appearance_theme === "system" && systemPrefersDark);
+  useBrowserChromeThemeColor({
+    active: newChatActive,
+    dark: browserChromeDark,
+    enabled: chromeEnvironment() === "browser",
+  });
   const {
     beginPanelResize,
     handlePanelResizeKeyDown,

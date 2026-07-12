@@ -107,4 +107,67 @@ describe("responsive adaptive design contracts", () => {
     expect(styles).toContain("contain: layout paint style");
     expect(styles).toContain("-webkit-tap-highlight-color: transparent");
   });
+
+  test("uses one edge-to-edge compact frame and browser chrome metadata", () => {
+    const index = read("packages/butler-app/client/ui/index.html");
+    const shell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+    const prompt = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/PromptSuggestionList/PromptSuggestionList.module.css",
+    );
+
+    expect(index).toContain("viewport-fit=cover");
+    expect(index).toContain('name="theme-color"');
+    expect(shell).toContain("--app-window-radius: 0px");
+    expect(shell).toContain("border: 0");
+    expect(prompt).toContain("padding-block-start: var(--space-md)");
+  });
+
+  test("pushes the compact workspace and uses comfortable sidebar density", () => {
+    const shell = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/AdaptiveShell/AdaptiveShell.module.css",
+    );
+    const navRow = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/NavRow/NavRow.module.css",
+    );
+    const tokens = read(
+      "packages/butler-app/client/ui/src/libs/design-system/tokens.css",
+    );
+
+    expect(shell).toContain(
+      "transform: translateX(var(--adaptive-drawer-width))",
+    );
+    expect(shell).toContain(".root[data-left-open=\"true\"] .workspace");
+    expect(tokens).toContain("--sidebar-row-height: 48px");
+    expect(tokens).toContain("--sidebar-icon-size: 22px");
+    expect(navRow).toContain("var(--sidebar-icon-size, 17px)");
+    expect(navRow).toContain("font-size: var(--font-size-4)");
+  });
+
+  test("provides animated mobile composer idle and engaged states", () => {
+    const composer = read(
+      "packages/butler-app/client/ui/src/components/conversation/Composer.tsx",
+    );
+    const textArea = read(
+      "packages/butler-app/client/ui/src/components/conversation/ComposerTextArea.tsx",
+    );
+    const card = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/ComposerCard/ComposerCard.tsx",
+    );
+    const styles = read(
+      "packages/butler-app/client/ui/src/libs/design-system/blocks/ComposerCard/ComposerCard.module.css",
+    );
+
+    expect(composer).toContain("useComposerPresentation");
+    expect(composer).toContain("onFocusCapture");
+    expect(composer).toContain("onBlurCapture");
+    expect(textArea).toContain("const minRows = 1");
+    expect(card).toContain("data-expanded={expanded}");
+    expect(card).toContain("ComposerCardCompactPreview");
+    expect(card).toContain("ComposerCardExpandedBody");
+    expect(styles).toContain('.card[data-expanded="false"]');
+    expect(styles).toContain("text-overflow: ellipsis");
+    expect(styles).toContain("grid-template-rows: 0fr");
+  });
 });

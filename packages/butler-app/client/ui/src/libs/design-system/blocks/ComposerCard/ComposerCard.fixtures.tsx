@@ -3,6 +3,8 @@ import { IconButton } from "../../components/IconButton";
 import {
   ComposerCard,
   ComposerCardTextarea,
+  ComposerCardCompactPreview,
+  ComposerCardExpandedBody,
   ComposerCardToolbar,
   ComposerPlanToggle,
   ComposerSendButton,
@@ -10,10 +12,13 @@ import {
 
 export function ComposerCardFixture() {
   return (
-    <ComposerCard large onSubmit={(event) => event.preventDefault()}>
-      <ComposerCardTextarea defaultValue="Draft message with enough text to show the Butler glass composer." rows={3} />
+    <ComposerCard expanded={false} large onSubmit={(event) => event.preventDefault()}>
+      <ComposerCardExpandedBody>
+        <ComposerCardTextarea defaultValue="Draft message with enough text to show the Butler glass composer." rows={1} />
+      </ComposerCardExpandedBody>
       <ComposerCardToolbar>
         <IconButton label="Attach file"><Paperclip size={16} /></IconButton>
+        <ComposerCardCompactPreview>Draft message preview</ComposerCardCompactPreview>
         <ComposerPlanToggle checked label="Plan" onCheckedChange={() => undefined} />
         <ComposerSendButton aria-label="Send" />
       </ComposerCardToolbar>

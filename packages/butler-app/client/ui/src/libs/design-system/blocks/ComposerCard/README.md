@@ -6,6 +6,10 @@
 textarea rhythm, adjunct panel inset, toolbar row, plan toggle alignment, and
 send/stop control.
 
+On compact screens it also owns idle and engaged presentation. Idle keeps one
+line containing attachment, ellipsized draft or placeholder, and send/stop.
+Focus or protected content expands the same form without replacing draft state.
+
 ## When to use this component
 
 Use it when a chat or worker surface needs message input with Butler composer
