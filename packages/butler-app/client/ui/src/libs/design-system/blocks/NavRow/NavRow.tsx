@@ -17,7 +17,7 @@ export interface NavRowProps {
   /** Action buttons or elements to display on the right */
   actions?: ReactNode;
   /** Visibility mode for actions: always visible or only on hover */
-  actionsVisibility?: "visible" | "hover";
+  actionsVisibility?: "visible" | "hover" | "hover-compact-hidden";
   /** Additional CSS class */
   className?: string;
   /** Test identifier */
@@ -47,7 +47,7 @@ export function NavRow({
   ariaLabel,
   ariaExpanded,
 }: NavRowProps) {
-  const hasHoverActions = Boolean(actions && actionsVisibility === "hover");
+  const hasHoverActions = Boolean(actions && actionsVisibility !== "visible");
   const content = (
     <>
       <span className={styles.labelRegion}>
@@ -68,7 +68,9 @@ export function NavRow({
             <span
               className={cn(
                 styles.actions,
-                actionsVisibility === "hover" && styles.hoverActions,
+                actionsVisibility !== "visible" && styles.hoverActions,
+                actionsVisibility === "hover-compact-hidden" &&
+                  styles.compactHiddenActions,
               )}
             >
               {actions}
