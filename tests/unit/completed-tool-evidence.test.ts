@@ -283,7 +283,7 @@ test("bounded command-output rehydration is terminal and removes local artifact 
   }
 });
 
-test("request compilation keeps exact evidence pointer-first at every capacity", () => {
+test("request compilation defaults to pointer-only evidence without an admission capacity", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-inline-evidence-"));
   try {
     const packetized = toolResultPayloadForProvider({
@@ -305,6 +305,192 @@ test("request compilation keeps exact evidence pointer-first at every capacity",
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("request compilation admits a fresh provider-safe result inline when the exact request fits", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-capacity-inline-evidence-"));
+  try {
+    const packetized = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          ok: true,
+          path: "src/voice.ts",
+          content: "EXACT_CAPACITY_ADMITTED_SOURCE",
+          bytes: 31,
+          truncated: false,
+        },
+      },
+      toolName: "read_file",
+      toolCallId: "call-capacity-inline",
+      evidenceRetention: { butlerData: root, turnId: "turn-capacity-inline" },
+    });
+    const body = {
+      messages: [{ role: "tool", content: JSON.stringify(packetized) }],
+    };
+    const fullCapacity = Buffer.byteLength(JSON.stringify(body), "utf8");
+    const compiled = compileCompletedToolEvidencePointers({
+      body,
+      maxSerializedBytes: fullCapacity,
+    });
+    const content = JSON.parse((compiled.messages as Array<{ content: string }>)[0]!.content);
+
+    expect(content.output.inline_output).toMatchObject({
+      tool_name: "read_file",
+      path: "src/voice.ts",
+      content: "EXACT_CAPACITY_ADMITTED_SOURCE",
+      truncated: false,
+    });
+    expect(Buffer.byteLength(JSON.stringify(compiled), "utf8")).toBeLessThanOrEqual(fullCapacity);
+    expect(content.output.evidence_packet.rehydrate.tool).toBe("read_tool_evidence_artifact");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("request compilation keeps a non-fitting result pointer-only without losing rehydration", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-capacity-pointer-evidence-"));
+  try {
+    const packetized = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          ok: true,
+          path: "src/large.ts",
+          content: "LARGE_INLINE_RESULT".repeat(200),
+          bytes: 3_800,
+          truncated: false,
+        },
+      },
+      toolName: "read_file",
+      toolCallId: "call-capacity-pointer",
+      evidenceRetention: { butlerData: root, turnId: "turn-capacity-pointer" },
+    });
+    const body = {
+      messages: [{ role: "tool", content: JSON.stringify(packetized) }],
+    };
+    const pointer = compileCompletedToolEvidencePointers({ body });
+    const pointerCapacity = Buffer.byteLength(JSON.stringify(pointer), "utf8");
+    const compiled = compileCompletedToolEvidencePointers({
+      body,
+      maxSerializedBytes: pointerCapacity,
+    });
+    const content = JSON.parse((compiled.messages as Array<{ content: string }>)[0]!.content);
+
+    expect(content.output.inline_output).toBeUndefined();
+    expect(JSON.stringify(compiled)).not.toContain("LARGE_INLINE_RESULT");
+    expect(content.output.evidence_packet.rehydrate).toMatchObject({
+      kind: "tool_evidence_artifact",
+      tool: "read_tool_evidence_artifact",
+    });
+    expect(Buffer.byteLength(JSON.stringify(compiled), "utf8")).toBe(pointerCapacity);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("capacity admission prioritizes the newest completed result without content heuristics", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-capacity-recency-"));
+  try {
+    const result = (marker: string, callId: string) => toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          ok: true,
+          path: `src/${marker}.ts`,
+          content: marker.repeat(80),
+          bytes: marker.length * 80,
+          truncated: false,
+        },
+      },
+      toolName: "read_file",
+      toolCallId: callId,
+      evidenceRetention: { butlerData: root, turnId: "turn-capacity-recency" },
+    });
+    const older = result("OLDER_RESULT", "call-older");
+    const newer = result("NEWER_RESULT", "call-newer");
+    const body = {
+      messages: [
+        { role: "tool", content: JSON.stringify(older) },
+        { role: "tool", content: JSON.stringify(newer) },
+      ],
+    };
+    const newestOnlyBody = structuredClone(body);
+    const parsedOlder = JSON.parse(newestOnlyBody.messages[0]!.content);
+    delete parsedOlder.output.inline_output;
+    newestOnlyBody.messages[0]!.content = JSON.stringify(parsedOlder);
+    const newestOnlyCapacity = Buffer.byteLength(JSON.stringify(newestOnlyBody), "utf8");
+    const compiled = compileCompletedToolEvidencePointers({
+      body,
+      maxSerializedBytes: newestOnlyCapacity,
+    });
+    const messages = compiled.messages as Array<{ content: string }>;
+    const compiledOlder = JSON.parse(messages[0]!.content);
+    const compiledNewer = JSON.parse(messages[1]!.content);
+    const serialized = JSON.stringify(compiled);
+
+    expect(compiledOlder.output.inline_output).toBeUndefined();
+    expect(compiledNewer.output.inline_output.content).toContain("NEWER_RESULT");
+    expect(Buffer.byteLength(serialized, "utf8")).toBeLessThanOrEqual(newestOnlyCapacity);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("capacity admission never re-inlines evidence older than the newest semantic tool block", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-capacity-semantic-block-"));
+  try {
+    const messages = Array.from({ length: 7 }, (_, index) => {
+      const marker = `RESULT_${index + 1}`;
+      const packetized = toolResultPayloadForProvider({
+        payload: {
+          ok: true,
+          output: {
+            ok: true,
+            path: `src/${marker}.ts`,
+            content: marker,
+            bytes: marker.length,
+            truncated: false,
+          },
+        },
+        toolName: "read_file",
+        toolCallId: `call-${index + 1}`,
+        evidenceRetention: { butlerData: root, turnId: "turn-semantic-block" },
+      });
+      return { role: "tool", content: JSON.stringify(packetized) };
+    });
+    const body = { messages };
+    const compiled = compileCompletedToolEvidencePointers({
+      body,
+      maxSerializedBytes: Buffer.byteLength(JSON.stringify(body), "utf8"),
+    });
+    const outputs = (compiled.messages as Array<{ content: string }>)
+      .map((message) => JSON.parse(message.content).output);
+
+    expect(outputs[0].inline_output).toBeUndefined();
+    expect(outputs.slice(1).every((output) => output.inline_output !== undefined)).toBe(true);
+    expect(outputs[0].evidence_packet.rehydrate.tool).toBe("read_tool_evidence_artifact");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("capacity compilation leaves unrelated JSON text byte-stable", () => {
+  const userJson = '{  "request": "keep my whitespace", "value": 3  }';
+  const schemaLookalike = '{  "schema": "butler.completed-tool-evidence.v1", "inline_output": "user text"  }';
+  const body = {
+    messages: [
+      { role: "user", content: userJson },
+      { role: "user", content: schemaLookalike },
+    ],
+  };
+  const compiled = compileCompletedToolEvidencePointers({
+    body,
+    maxSerializedBytes: 100_000,
+  });
+
+  expect((compiled.messages as Array<{ content: string }>)[0]!.content).toBe(userJson);
+  expect((compiled.messages as Array<{ content: string }>)[1]!.content).toBe(schemaLookalike);
 });
 
 test("all registered provider tool loops use the provider-neutral evidence boundary", () => {
