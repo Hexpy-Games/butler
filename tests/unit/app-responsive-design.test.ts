@@ -208,6 +208,12 @@ describe("responsive adaptive design contracts", () => {
     expect(styles).not.toContain(
       "border-radius var(--adaptive-panel-duration)",
     );
+    const sendButtonStyles = styles.slice(
+      styles.indexOf(".sendButton {"),
+      styles.indexOf(".sendButton:disabled"),
+    );
+    expect(sendButtonStyles).not.toContain("transform:");
+    expect(sendButtonStyles).not.toContain("transform 120ms ease");
     expect(tokens).toContain("--adaptive-composer-radius: calc(");
     expect(tokens.indexOf("--adaptive-composer-radius:")).toBeLessThan(
       tokens.indexOf("@media (width <= 640px)"),
