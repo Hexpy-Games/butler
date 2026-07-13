@@ -3332,6 +3332,9 @@ try {
   const desktopIdleState = await desktopPreview.evaluate((element) => ({
     display: getComputedStyle(element).display,
     expanded: element.closest("form")?.dataset.expanded,
+    radius: Number.parseFloat(
+      getComputedStyle(element.closest("form")!).borderTopLeftRadius,
+    ),
   }));
   await desktopPreview.click();
   await page.waitForTimeout(260);
@@ -3342,6 +3345,7 @@ try {
       desktopIdleBox.height <= 68 &&
       desktopIdleState.display === "block" &&
       desktopIdleState.expanded === "false" &&
+      desktopIdleState.radius * 2 >= desktopIdleBox.height - 0.1 &&
       desktopEngagedBox &&
       desktopEngagedBox.height >= desktopIdleBox.height + 28 &&
       desktopTextareaBox &&
