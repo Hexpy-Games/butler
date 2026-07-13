@@ -30,6 +30,7 @@ import {
   readAppManagedAgentRuntimeUpdateTransaction,
   recoverAppManagedAgentRuntimeUpdateTransaction,
   resolveAppManagedGatewayCommand,
+  resolveAppManagedForegroundCommand,
   rollbackAppManagedAgentRuntimeUpdate,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
 
@@ -1046,6 +1047,38 @@ test("App-managed gateway command uses App runtime instead of standalone BUTLER_
   }
 });
 
+test("App-managed foreground command runs the full service daemon with a parent lease", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-foreground-command-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const resourceRoot = createBundledAgentResource(tempDir, { version: "3.1.0" });
+    const command = resolveAppManagedForegroundCommand({
+      butlerData,
+      env: { BUTLER_APP_BUNDLED_AGENT_DIR: resourceRoot },
+      resourcesPath: join(tempDir, "missing-resources"),
+    });
+    expect(command).not.toBeNull();
+    if (!command) throw new Error("expected App foreground command");
+    expect(command.command).toBe(join(
+      command.cwd,
+      "packages/butler-agent/resources/runtime/bin/bun",
+    ));
+    expect(command.args).toEqual([
+      "run",
+      join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
+    ]);
+    expect(command.stdio).toEqual(["pipe", "inherit", "inherit"]);
+    expect(command.detached).toBe(true);
+    expect(command.env).toMatchObject({
+      BUTLER_APP_FOREGROUND_LEASE: "1",
+      BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
+      BUTLER_DATA: butlerData,
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 function createBundledAgentResource(
   root: string,
   input: {
@@ -1073,6 +1106,13 @@ function createBundledAgentResource(
   mkdirSync(join(stageRoot, "packages", "butler-agent"), {
     recursive: true,
   });
+  mkdirSync(join(stageRoot, "packages", "butler-agent", "scripts"), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(stageRoot, "packages", "butler-agent", "scripts", "native-service-daemon.ts"),
+    "await Promise.resolve();\n",
+  );
   writeFileSync(join(stageRoot, "packages", "butler-agent", "owned-file.txt"), "owned\n");
   writeFileSync(
     join(stageRoot, "packages", "butler-agent", "resources", "runtime", "bun-version"),

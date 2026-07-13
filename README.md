@@ -31,14 +31,14 @@ workstreams.
 ## Quick Start
 
 Download Butler App from the
-[v0.0.18 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.18).
+[v0.0.19 GitHub Release](https://github.com/Hexpy-Games/butler/releases/tag/v0.0.19).
 
 | Platform | Installer |
 | --- | --- |
-| macOS Apple Silicon | `butler-app-0.0.18-darwin-arm64.pkg` |
-| Linux x64 | `butler-app-0.0.18-linux-x64.deb` |
-| Linux ARM64 | `butler-app-0.0.18-linux-arm64.deb` |
-| Arch Linux x64 | `butler-app-0.0.18-archlinux-x64.pkg.tar.zst` |
+| macOS Apple Silicon | `butler-app-0.0.19-darwin-arm64.dmg` |
+| Linux x64 | `butler-app-0.0.19-linux-x64.deb` |
+| Linux ARM64 | `butler-app-0.0.19-linux-arm64.deb` |
+| Arch Linux x64 | `butler-app-0.0.19-archlinux-x64.pkg.tar.zst` |
 
 Butler Agent is included in the app. On first launch, setup runs inside the
 Butler App in this order:
@@ -47,6 +47,10 @@ Butler App in this order:
 2. Safety notice
 3. `Butler Agent를 준비합니다`
 4. Model setup
+
+On macOS, drag `Butler.app` from the DMG into Applications. On every supported
+desktop platform, the Agent and tray run only while Butler is open; quitting
+Butler shuts the complete App-owned Agent process tree down.
 
 Use the standalone Agent only when you want the headless runtime without the
 desktop app.

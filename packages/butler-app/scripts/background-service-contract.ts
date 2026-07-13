@@ -73,11 +73,15 @@ export type AppBackgroundServiceImplementationPhase =
   | "phase-6-installer-packaging";
 
 export type AppBackgroundServiceRequiredDecision =
+  | "app-foreground-lifecycle"
   | "macos-registration-path"
   | "windows-user-security-context"
   | "linux-package-service-path";
 
 export type AppBackgroundServiceV1Path =
+  | "macos-app-foreground"
+  | "linux-app-foreground"
+  | "windows-app-foreground"
   | "macos-pkg-launch-agent"
   | "macos-first-run-launch-agent"
   | "macos-smappservice-helper"
@@ -105,64 +109,38 @@ export interface AppBackgroundServiceCapability {
 export const APP_BACKGROUND_SERVICE_CAPABILITIES: AppBackgroundServiceCapability[] = [
   {
     platform: "darwin",
-    primaryMechanism: "per-user LaunchAgent or SMAppService helper",
-    allowedMechanisms: [
-      "per-user-launch-agent",
-      "smappservice-helper",
-      "pkg-installed-launch-agent",
-    ],
-    requiredDecision: "macos-registration-path",
-    allowedV1Paths: [
-      "macos-pkg-launch-agent",
-      "macos-first-run-launch-agent",
-      "macos-smappservice-helper",
-    ],
-    selectedV1Path: null,
+    primaryMechanism: "App-owned foreground child",
+    allowedMechanisms: ["app-foreground-child"],
+    requiredDecision: "app-foreground-lifecycle",
+    allowedV1Paths: ["macos-app-foreground"],
+    selectedV1Path: "macos-app-foreground",
     blocksBeforePhase: "phase-2-service-control",
-    installerRequired: "conditional",
+    installerRequired: "no",
     userContext: "signed-in user",
     implementationStartsAfterPhase0: true,
   },
   {
     platform: "win32",
-    primaryMechanism: "deferred until user/security context decision",
-    allowedMechanisms: [
-      "per-user-agent-at-sign-in",
-      "least-privilege-user-service",
-      "split-elevated-helper",
-    ],
-    requiredDecision: "windows-user-security-context",
-    allowedV1Paths: [
-      "windows-per-user-agent-at-sign-in",
-      "windows-least-privilege-user-service",
-      "windows-split-elevated-helper",
-    ],
-    selectedV1Path: null,
+    primaryMechanism: "App-owned foreground child",
+    allowedMechanisms: ["app-foreground-child"],
+    requiredDecision: "app-foreground-lifecycle",
+    allowedV1Paths: ["windows-app-foreground"],
+    selectedV1Path: "windows-app-foreground",
     blocksBeforePhase: "phase-2-service-control",
-    installerRequired: "yes",
-    userContext: "must not default to LocalSystem for per-user Butler data",
+    installerRequired: "no",
+    userContext: "signed-in desktop user",
     implementationStartsAfterPhase0: true,
   },
   {
     platform: "linux",
-    primaryMechanism: "systemd --user service",
-    allowedMechanisms: [
-      "systemd-user-service",
-      "deb-owned-user-unit",
-      "pacman-owned-user-unit",
-      "rpm-owned-user-unit",
-    ],
-    requiredDecision: "linux-package-service-path",
-    allowedV1Paths: [
-      "linux-systemd-user-service",
-      "linux-deb-owned-user-unit",
-      "linux-pacman-owned-user-unit",
-      "linux-rpm-owned-user-unit",
-    ],
-    selectedV1Path: null,
+    primaryMechanism: "App-owned foreground child",
+    allowedMechanisms: ["app-foreground-child"],
+    requiredDecision: "app-foreground-lifecycle",
+    allowedV1Paths: ["linux-app-foreground"],
+    selectedV1Path: "linux-app-foreground",
     blocksBeforePhase: "phase-2-service-control",
-    installerRequired: "conditional",
-    userContext: "signed-in user manager",
+    installerRequired: "no",
+    userContext: "signed-in desktop user",
     implementationStartsAfterPhase0: true,
   },
 ];

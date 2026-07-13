@@ -2,10 +2,37 @@ import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { EventEmitter } from "events";
 import {
+  attachAppForegroundParentLease,
   ManagedServiceDaemon,
   defaultDaemonServiceSpecs,
 } from "../../packages/butler-agent/src/operations/service/native-service-daemon.ts";
+
+test("App foreground parent lease shuts the service daemon down on EOF", () => {
+  const stream = new EventEmitter() as EventEmitter & { resume: () => void };
+  let resumed = false;
+  let shutdowns = 0;
+  stream.resume = () => { resumed = true; };
+  expect(attachAppForegroundParentLease({
+    enabled: true,
+    stream,
+    shutdown: () => { shutdowns += 1; },
+  })).toBeTrue();
+  expect(resumed).toBeTrue();
+  stream.emit("end");
+  expect(shutdowns).toBe(1);
+});
+
+test("standalone service daemon does not attach the App parent lease", () => {
+  const stream = new EventEmitter();
+  expect(attachAppForegroundParentLease({
+    enabled: false,
+    stream,
+    shutdown: () => { throw new Error("unexpected shutdown"); },
+  })).toBeFalse();
+  expect(stream.listenerCount("end")).toBe(0);
+});
 import {
   readAppGatewayPid,
   writeAppGatewayPid,
