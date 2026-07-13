@@ -37,8 +37,8 @@ export class AppUserMessageResponderTurn {
           turnId,
           limitedDelivery,
         ),
-      markResponderNonPublicContinuation: (chatId, turnId) =>
-        this.input.markResponderNonPublicContinuation(chatId, turnId),
+      markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
+        this.input.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
       finalizeCancelledTurn: (chatId, turnId) =>
         this.input.finalizeCancelledTurn(chatId, turnId),
       hasTurnEventKind: (turnId, kind) =>

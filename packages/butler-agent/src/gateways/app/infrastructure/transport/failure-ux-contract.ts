@@ -25,6 +25,14 @@ export function appLimitedDeliveryForError(error: unknown): RecoverableLimitedDe
 
 export { isNonPublicContinuationDeliveryError };
 
+export function appNonPublicContinuationSafeErrorCode(
+  error: unknown,
+): "provider_round_timeout" | null {
+  return safeRuntimeFailure(error).code === "provider_round_timeout"
+    ? "provider_round_timeout"
+    : null;
+}
+
 export function appSafeResponderError(error: unknown): AppResponderSafeError {
   const timeout = appResponderTimeout(error);
   if (timeout) return timeout;
