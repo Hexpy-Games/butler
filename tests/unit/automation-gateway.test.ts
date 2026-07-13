@@ -1110,6 +1110,14 @@ test("queued inbound terminates raw budget exhaustion without an orchestrator ch
       turnId: "turn-budget-failure",
     },
   }, { source: "test" });
+  persistTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-budget-failure",
+    state: "continuing",
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+    reason: "prior scheduler-owned continuation",
+  });
   const app = new MockTransportAdapter({ id: "app" });
   const guard = new DeliveryGuard({ adapters: [app] });
 

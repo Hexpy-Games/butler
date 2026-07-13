@@ -153,33 +153,25 @@ test("a request that cannot fit an empty slice is never rollover eligible", () =
   expect(canRolloverDirectTurnBudget(budget, failure)).toBe(false);
 });
 
-test("the explicit lifetime request cap bounds productive slice rollover without heuristics", () => {
-  const snapshot = snapshotDirectTurnBudget(createDirectTurnBudget("turn-budget-lifetime-cap"));
+test("monotonic lifetime usage is telemetry and does not terminalize a productive slice", () => {
+  const snapshot = snapshotDirectTurnBudget(createDirectTurnBudget("turn-budget-lifetime-usage"));
   snapshot.modelRequestsUsed = 1;
   snapshot.cumulativeUsage = {
-    modelRequestsUsed: 96,
+    modelRequestsUsed: 9_600,
     promptTokens: 1_000_000,
     cachedTokens: 500_000,
     outputTokens: 10_000,
     totalTokens: 1_010_000,
   };
-  const budget = hydrateDirectTurnBudget("turn-budget-lifetime-cap", snapshot);
-  expect(directTurnBudgetState(budget).status).toBe("exhausted");
-  let failure: unknown;
-  try {
-    beforeDirectTurnModelRequest(budget, {
-      partition: "execution",
-      admittedPromptTokens: 100,
-      requestedOutputTokens: 100,
-    });
-  } catch (error) {
-    failure = error;
-  }
-  expect(failure).toMatchObject({
-    code: "prompt_usage_model_call_budget_exhausted",
-    rolloverEligible: false,
+  const budget = hydrateDirectTurnBudget("turn-budget-lifetime-usage", snapshot);
+  expect(directTurnBudgetState(budget).status).toBe("ok");
+  beforeDirectTurnModelRequest(budget, {
+    partition: "execution",
+    admittedPromptTokens: 100,
+    requestedOutputTokens: 100,
   });
-  expect(canRolloverDirectTurnBudget(budget, failure)).toBe(false);
+  expect(budget.modelRequestsUsed).toBe(2);
+  expect(budget.cumulativeUsage.modelRequestsUsed).toBe(9_601);
 });
 
 test("execution and review cannot consume the finalization reserve", () => {

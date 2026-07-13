@@ -1,9 +1,12 @@
 import {
+  EVIDENCE_PACKET_SCHEMA,
   retainToolEvidence,
   TOOL_EVIDENCE_REHYDRATION_SCHEMA,
   type EvidencePacket,
   type ToolEvidenceRetentionContext,
 } from "./tool-evidence-retention.ts";
+import { structuredToolResultModelPreview } from "../turn/tool-result-model-preview.ts";
+import { SEMANTIC_WORK_BLOCK_TOOL_LIMIT } from "../turn/tool-batch-capacity.ts";
 
 export const COMPLETED_TOOL_EVIDENCE_SCHEMA = "butler.completed-tool-evidence.v1";
 
@@ -47,6 +50,10 @@ export function toolResultPayloadForProvider(input: {
     output: input.payload.output,
     reason: "completed_tool_result_boundary",
   });
+  const inlineOutput = structuredToolResultModelPreview({
+    toolName: input.toolName,
+    output: input.payload.output,
+  });
   const completed: CompletedToolEvidence = {
     schema: COMPLETED_TOOL_EVIDENCE_SCHEMA,
     status: "complete",
@@ -55,6 +62,7 @@ export function toolResultPayloadForProvider(input: {
     subject: evidence.packet.subject,
     facts: evidence.packet.facts,
     evidence_packet: evidence.packet,
+    ...(inlineOutput === null ? {} : { inline_output: inlineOutput }),
   };
 
   return { ok: true, output: completed };
@@ -181,20 +189,145 @@ function record(value: unknown): Record<string, unknown> | null {
  */
 export function compileCompletedToolEvidencePointers(input: {
   body: Record<string, unknown>;
+  maxSerializedBytes?: number;
 }): Record<string, unknown> {
-  const compiled = JSON.parse(JSON.stringify(input.body)) as Record<string, unknown>;
-  const stripLegacyInlineOutput = (value: unknown): void => {
-    if (Array.isArray(value)) {
-      for (const item of value) stripLegacyInlineOutput(item);
-      return;
+  const source = JSON.parse(JSON.stringify(input.body)) as Record<string, unknown>;
+  const inlineCount = countCompletedToolEvidenceInlineOutputs(source);
+  const selected = new Set<number>();
+  let compiled = compileCompletedToolEvidenceSelection(source, selected);
+  const capacity = finiteSerializedByteCapacity(input.maxSerializedBytes);
+  if (capacity === null || inlineCount === 0) return compiled;
+
+  // Only the newest semantic block can contain results the model has not yet
+  // observed. Older results already crossed a provider boundary and stay as
+  // lossless evidence pointers. This structural bound also keeps compilation
+  // linear in long-lived turns instead of repeatedly rebuilding their entire
+  // history for every retained result.
+  const oldestUnobservedIndex = Math.max(
+    0,
+    inlineCount - SEMANTIC_WORK_BLOCK_TOOL_LIMIT,
+  );
+  for (let index = inlineCount - 1; index >= oldestUnobservedIndex; index -= 1) {
+    const candidateSelection = new Set(selected).add(index);
+    const candidate = compileCompletedToolEvidenceSelection(source, candidateSelection);
+    if (serializedBytes(candidate) <= capacity) {
+      selected.add(index);
+      compiled = candidate;
     }
-    const current = record(value);
-    if (!current) return;
-    if (current.schema === COMPLETED_TOOL_EVIDENCE_SCHEMA) {
-      delete current.inline_output;
-    }
-    for (const nested of Object.values(current)) stripLegacyInlineOutput(nested);
-  };
-  stripLegacyInlineOutput(compiled);
+  }
   return compiled;
+}
+
+function countCompletedToolEvidenceInlineOutputs(value: unknown): number {
+  let count = 0;
+  visitJsonValue(value, (current) => {
+    if (
+      isCompletedToolEvidenceRecord(current) &&
+      Object.prototype.hasOwnProperty.call(current, "inline_output")
+    ) count += 1;
+  });
+  return count;
+}
+
+function compileCompletedToolEvidenceSelection(
+  source: Record<string, unknown>,
+  selected: ReadonlySet<number>,
+): Record<string, unknown> {
+  let inlineIndex = 0;
+  return transformJsonValue(source, (current) => {
+    if (
+      !isCompletedToolEvidenceRecord(current) ||
+      !Object.prototype.hasOwnProperty.call(current, "inline_output")
+    ) return current;
+    const index = inlineIndex;
+    inlineIndex += 1;
+    if (!selected.has(index)) delete current.inline_output;
+    return current;
+  }) as Record<string, unknown>;
+}
+
+function visitJsonValue(
+  value: unknown,
+  visit: (current: Record<string, unknown>) => void,
+): void {
+  if (typeof value === "string") {
+    const parsed = parseJsonContainer(value);
+    if (parsed !== null) visitJsonValue(parsed, visit);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) visitJsonValue(item, visit);
+    return;
+  }
+  const current = record(value);
+  if (!current) return;
+  visit(current);
+  for (const nested of Object.values(current)) visitJsonValue(nested, visit);
+}
+
+function transformJsonValue(
+  value: unknown,
+  transform: (current: Record<string, unknown>) => Record<string, unknown>,
+): unknown {
+  if (typeof value === "string") {
+    const parsed = parseJsonContainer(value);
+    return parsed === null ? value : JSON.stringify(transformJsonValue(parsed, transform));
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => transformJsonValue(item, transform));
+  }
+  const current = record(value);
+  if (!current) return value;
+  const transformed = transform({ ...current });
+  return Object.fromEntries(
+    Object.entries(transformed).map(([key, nested]) => [
+      key,
+      transformJsonValue(nested, transform),
+    ]),
+  );
+}
+
+function parseJsonContainer(value: string): unknown | null {
+  const trimmed = value.trim();
+  if (
+    !(trimmed.startsWith("{") || trimmed.startsWith("[")) ||
+    !value.includes(`"${COMPLETED_TOOL_EVIDENCE_SCHEMA}"`)
+  ) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return containsCompletedToolEvidence(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function containsCompletedToolEvidence(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsCompletedToolEvidence);
+  const current = record(value);
+  if (!current) return false;
+  if (isCompletedToolEvidenceRecord(current)) return true;
+  return Object.values(current).some((nested) =>
+    typeof nested === "string" ? false : containsCompletedToolEvidence(nested),
+  );
+}
+
+function isCompletedToolEvidenceRecord(
+  value: Record<string, unknown>,
+): value is Record<string, unknown> & CompletedToolEvidence {
+  const packet = record(value.evidence_packet);
+  return value.schema === COMPLETED_TOOL_EVIDENCE_SCHEMA &&
+    value.status === "complete" &&
+    typeof value.tool_name === "string" &&
+    Boolean(value.tool_name.trim()) &&
+    packet?.schema === EVIDENCE_PACKET_SCHEMA;
+}
+
+function finiteSerializedByteCapacity(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.floor(value))
+    : null;
+}
+
+function serializedBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
 }

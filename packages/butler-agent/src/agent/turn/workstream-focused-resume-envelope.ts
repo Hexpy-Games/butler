@@ -4,7 +4,6 @@ import type {
   WorkStreamResumeCheckpoint,
   WorkStreamResumeSelection,
 } from "./workstream-checkpoint-resume-types.ts";
-import { DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT } from "./direct-turn-budget.ts";
 import { checkpointNeedsWorkspaceProfile } from "./workstream-resume-tool-policy.ts";
 import type { ButlerToolProfile } from "../tools/profiles.ts";
 
@@ -138,7 +137,7 @@ function renderFocusedResumeEnvelope(input: {
     lines.push(
         `Logical Turn Budget: execution_slice=${checkpoint.budgetSnapshot.executionSlice ?? 1} ` +
         `slice_model_requests=${checkpoint.budgetSnapshot.modelRequestsUsed}/${checkpoint.budgetSnapshot.maxModelCalls} ` +
-        `lifetime_model_requests=${cumulativeRequests}/${checkpoint.budgetSnapshot.maxLifetimeModelCalls ?? DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT}`,
+        `lifetime_model_requests=${cumulativeRequests}`,
     );
   }
   lines.push("Open Todo Slice:");
