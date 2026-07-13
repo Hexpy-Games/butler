@@ -1,9 +1,10 @@
-import type { OpenAIAuthOverride, OpenAIResponse, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
+import type { OpenAIAuthOverride, OpenAIResponse, PromptUsageAttribution, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
 import { getFunctionCalls, withModelApiRetry } from "../shared/runtime-support.ts";
 import { createCodexResponse } from "./codex-stream.ts";
 import { getResponsesUrl } from "./config.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveOpenAIAuth } from "./auth.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 
 
 
@@ -13,9 +14,10 @@ export async function createOpenAIResponse(
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<OpenAIResponse> {
   return await withModelApiRetry(
-    async () => await createOpenAIResponseOnce(body, signal, authOverride, onProviderStreamEvent),
+    async () => await createOpenAIResponseOnce(body, signal, authOverride, onProviderStreamEvent, budgetContext),
     signal,
   );
 }
@@ -28,14 +30,31 @@ export async function createOpenAIResponseOnce(
   signal?: AbortSignal,
   authOverride?: OpenAIAuthOverride,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<OpenAIResponse> {
   const auth = authOverride ?? await resolveOpenAIAuth();
   if (auth.mode === "codex_subscription" || auth.mode === "codex_oauth") {
-    return await createCodexResponse(body, auth.authorization, signal, onProviderStreamEvent);
+    return await createCodexResponse(body, auth.authorization, signal, onProviderStreamEvent, budgetContext);
   }
-  const { __butler_codex_stateless_input: _codexStatelessInput, ...officialBody } = body;
+  const { __butler_codex_stateless_input: _codexStatelessInput, ...rawOfficialBody } = body;
+  const officialBody: Record<string, any> = {
+    ...(budgetContext?.attribution?.requestedOutputTokens && rawOfficialBody.max_output_tokens === undefined
+      ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
+      : {}),
+    ...rawOfficialBody,
+  };
   const endpoint = safeEndpointLabel(getResponsesUrl());
   const model = typeof officialBody.model === "string" ? officialBody.model : undefined;
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: model ?? "",
+    body: officialBody,
+    requestedOutputTokens: typeof officialBody.max_output_tokens === "number"
+      ? officialBody.max_output_tokens
+      : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
+  });
 
   let response: Response;
   try {
@@ -45,7 +64,7 @@ export async function createOpenAIResponseOnce(
         Authorization: auth.authorization,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(officialBody),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
@@ -72,6 +91,7 @@ export async function createOpenAIResponseOnce(
       detail,
       endpoint,
       model,
+      admission: admittedRequest,
     });
   }
 

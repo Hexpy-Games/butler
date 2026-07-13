@@ -34,17 +34,11 @@ import {
 } from "../support/turn-forward-progress-electron-benchmark.ts";
 
 const root = process.cwd();
-const electronBin = resolve(
-  root,
-  "packages",
-  "butler-app",
-  "client",
-  "electron",
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "electron.cmd" : "electron",
-);
 const electronAppRoot = resolve(root, "packages", "butler-app", "client", "electron");
+const electronDistRoot = resolve(electronAppRoot, "node_modules", "electron", "dist");
+const electronBin = process.platform === "darwin"
+  ? resolve(electronDistRoot, "Electron.app", "Contents", "MacOS", "Electron")
+  : resolve(electronDistRoot, process.platform === "win32" ? "electron.exe" : "electron");
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
 const tempDir = mkdtempSync(join(tmpdir(), "butler-app-client-multiturn-e2e-"));
 const originalButlerData = process.env.BUTLER_DATA;
@@ -515,6 +509,7 @@ const fakeProvider: ModelProviderAdapter = {
 };
 
 const prompts: string[] = [];
+const decisionPrompts: string[] = [];
 const observedToolCalls: string[] = [];
 const observedToolSurfaces: Array<{
   count: number;
@@ -527,7 +522,12 @@ const runtime = new NativeToolLoopRuntime({
   butlerData: tempDir,
   appMessageDbPath: appDbPath,
   disableAutomaticRecall: true,
-  runPromptText: usesLiveLlm ? undefined : async (input) => {
+  runPromptText: async (input) => {
+    decisionPrompts.push(input.prompt);
+    if (usesLiveLlm) {
+      liveLlmCalls += 1;
+      return await runPromptText(input);
+    }
     const decisionId = decisionIdFromResponseFormat(input.responseFormat);
     if (usesToolchainScenario) {
       return JSON.stringify({
@@ -553,7 +553,7 @@ const runtime = new NativeToolLoopRuntime({
       target_project_id: null,
       blocker_id: null,
       deliverables: [],
-      answer_text: prompts.length === 0 ? FIRST_FINAL : SECOND_FINAL,
+      answer_text: decisionPrompts.length === 1 ? FIRST_FINAL : SECOND_FINAL,
       public_title: "요청에 답변",
       public_summary: "현재 대화 맥락으로 바로 답변합니다.",
       public_rationale: "추가 도구나 사용자 확인이 필요하지 않습니다.",
@@ -1477,7 +1477,7 @@ async function runMultiturnBrowserScenario(client: CdpClient): Promise<void> {
 
   await sendComposerTurn(client, secondPrompt);
   await waitForAnyAssistantFinalText(client, [SECOND_FINAL, MISSING_FINAL], waitForFinalTimeoutMs);
-  const secondPromptContainsFirstFinal = prompts[1]?.includes(FIRST_FINAL) ?? false;
+  const secondPromptContainsFirstFinal = (prompts[1] ?? decisionPrompts[1])?.includes(FIRST_FINAL) ?? false;
   assert(secondPromptContainsFirstFinal, liveDiagnostics("second runtime prompt did not include the first final answer."));
   assert(!(await assistantFinalTextIncludes(client, MISSING_FINAL)), liveDiagnostics("second final rendered the failure sentinel."));
   await waitForAssistantFinalText(client, SECOND_FINAL, waitForFinalTimeoutMs);

@@ -27,7 +27,10 @@ export async function runOpenAIPromptWithUsage(
     ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
     reasoning: buildReasoningConfig(resolution),
     input: openAIInputWithAttachments(options.prompt, options.attachments),
-  }, options.signal, authOverride, options.onProviderStreamEvent);
+  }, options.signal, authOverride, options.onProviderStreamEvent, {
+    attribution: options.usageAttribution,
+    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+  });
   afterAttributedModelResponse({
     attribution: options.usageAttribution,
     model,

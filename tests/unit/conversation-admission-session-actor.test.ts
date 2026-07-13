@@ -262,6 +262,34 @@ class CheckpointYieldRuntime implements AgentRuntimeAdapter {
   }
 }
 
+class CancelledRuntime implements AgentRuntimeAdapter {
+  readonly id: string = "cancelled-runtime";
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: false,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return { sessionId: input.sessionId, role: input.role, runtimeAdapterId: this.id };
+  }
+
+  async runTurn(): Promise<never> {
+    const error = new Error("cancelled by principal");
+    error.name = "AbortError";
+    throw error;
+  }
+}
+
+class FailedRuntime extends CancelledRuntime {
+  override readonly id = "failed-runtime";
+
+  override async runTurn(): Promise<never> {
+    throw new Error("runtime failed");
+  }
+}
+
 function inbound(
   id: string,
   text: string,
@@ -354,6 +382,13 @@ test("session actor admits user and final assistant while stream and progress au
   ]);
   expect(semanticTail[0]?.parts[0]?.content_json).toEqual({ text: "hello" });
   expect(semanticTail[1]?.parts[0]?.content_json).toEqual({ text: "final answer" });
+  expect(conversationStore.readTurnOutcome("turn-semantic")).toMatchObject({
+    generation: 1,
+    outcome: "delivered",
+    request_message_id: semanticTail[0]?.id,
+    public_assistant_message_id: semanticTail[1]?.id,
+    model_ref: "openai/auto:codex-latest",
+  });
   expect(readTranscript("butler/main").length).toBeGreaterThan(semanticTail.length);
 
   conversationStore.close();
@@ -606,6 +641,12 @@ test("scheduler yield keeps the conversation turn open until the resumed final",
   await expect(actor.handleInbound(inbound("checkpoint-yield", "continue durable work")))
     .rejects.toThrow("Turn scheduler yielded");
   expect(conversationStore.readTurn("turn-checkpoint-yield")?.status).toBe("running");
+  expect(conversationStore.readTurnOutcome("turn-checkpoint-yield")).toMatchObject({
+    generation: 1,
+    outcome: "recoverable",
+    safe_code: "turn_scheduler_continuation_yield",
+    continuation: { logical_turn_id: "turn-checkpoint-yield" },
+  });
   const yieldEvents = readTranscript("butler/main");
   expect(yieldEvents.some((event) =>
     event.kind === "system" && event.payload.category === "runtime_error",
@@ -623,9 +664,57 @@ test("scheduler yield keeps the conversation turn open until the resumed final",
     },
   }));
   expect(conversationStore.readTurn("turn-checkpoint-yield")?.status).toBe("complete");
+  expect(conversationStore.readTurnOutcome("turn-checkpoint-yield")).toMatchObject({
+    generation: 2,
+    outcome: "delivered",
+  });
   const session = conversationStore.getSessionByGatewayBinding("mock", "butler/main");
   expect(conversationStore.readSemanticTail(session!.id, 10).map((message) => message.role))
     .toEqual(["user", "assistant"]);
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("principal cancellation writes one terminal cancelled outcome capsule", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    runtime: new CancelledRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound("cancelled", "stop now")))
+    .rejects.toThrow("cancelled by principal");
+  expect(conversationStore.readTurn("turn-cancelled")).toMatchObject({ status: "aborted" });
+  expect(conversationStore.readTurnOutcome("turn-cancelled")).toMatchObject({
+    generation: 1,
+    outcome: "cancelled",
+    safe_code: "turn_aborted",
+  });
+
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("ordinary terminal failure writes a failed outcome capsule", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    runtime: new FailedRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound("failed", "do work"))).rejects.toThrow("runtime failed");
+  expect(conversationStore.readTurnOutcome("turn-failed")).toMatchObject({
+    generation: 1,
+    outcome: "failed",
+    safe_code: "turn_failed",
+  });
 
   conversationStore.close();
   bindingStore.close();

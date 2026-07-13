@@ -28,6 +28,7 @@ import {
 import type { PublicWorkDecision } from "../output/tool-types.ts";
 import type { NativeStoredSessionConfig } from "./turn-runner-types.ts";
 import type { TurnContextAtom } from "../../turn-continuation-context.ts";
+import type { ConversationPromptContextPlan } from "../../../context/conversation-context.ts";
 import {
   failContractForSurfaceInconsistency,
   isTurnContractSurfaceInconsistentError,
@@ -49,6 +50,14 @@ interface TypedTurnEntryContext {
   focusedResumeEnvelope?: { prompt: string } | null;
   toolSurfaceController: ToolSurfacePromptController;
   continuationAtom?: TurnContextAtom | null;
+  conversationContextPlan: ConversationPromptContextPlan;
+  normalizedPrompt: {
+    thinContext: {
+      activePersona: string;
+      personalizationProfile: string;
+      runtimePolicy: string;
+    };
+  };
 }
 
 type StructuredResponseFormat = ReturnType<typeof turnDecisionResponseFormat>;
@@ -118,9 +127,12 @@ export async function runTypedTurnEntry(input: {
   });
   const baseDecisionPrompt = thin
     ? buildThinFirstResponsePrompt({
-      fullPrompt: input.context.prompt,
       userText: input.context.userText,
       decisionInstructions,
+      conversationContextPlan: input.context.conversationContextPlan,
+      activePersona: input.context.normalizedPrompt.thinContext.activePersona,
+      personalizationProfile: input.context.normalizedPrompt.thinContext.personalizationProfile,
+      runtimePolicy: input.context.normalizedPrompt.thinContext.runtimePolicy,
       workstreamCapsule: input.context.resumeDecisionEnvelope?.prompt ??
         input.context.focusedResumeEnvelope?.prompt,
       personaFallback: input.session.init.systemPrompt,

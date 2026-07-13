@@ -67,15 +67,21 @@ test("native turn context normalizes prompt sections and structured current inpu
       runtimePolicyContext: "## Runtime Policy\nrules",
       recallContext: "## Associative Recall Context\nmemory",
       recentConversationTokenBudget: 1_000,
+      currentTurnId: "turn-current",
       butlerData,
     });
 
     expect(normalized.prompt).toContain("## Persona\nHelpful.");
     expect(normalized.prompt).not.toContain("stale prompt text");
-    expect(normalized.prompt).toContain("## Recent Conversation\nbutler: previous answer");
+    expect(normalized.prompt).toContain("turn turn-context-seed status running\nbutler: previous answer");
     expect(normalized.prompt).toContain("Message Text: structured user text");
     expect(normalized.inboundMessageChars).toBe("structured user text".length);
     expect(normalized.recentConversationChars).toBeGreaterThan(0);
+    expect(normalized.conversationContextPlan.current_request).toMatchObject({
+      id: "current_request:turn-current",
+      text: "structured user text",
+    });
+    expect(normalized.conversationContextPlan.current_request?.source_hash).toMatch(/^sha256:/u);
   } finally {
     if (previousButlerData === undefined) {
       delete process.env.BUTLER_DATA;

@@ -1,4 +1,4 @@
-export const CONVERSATION_STORE_SCHEMA_VERSION = 1;
+export const CONVERSATION_STORE_SCHEMA_VERSION = 2;
 
 export const CONVERSATION_STORE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -79,6 +79,28 @@ CREATE TABLE IF NOT EXISTS conversation_summaries (
   FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS conversation_turn_outcomes (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL UNIQUE,
+  generation INTEGER NOT NULL,
+  outcome TEXT NOT NULL,
+  source_hash TEXT NOT NULL,
+  request_message_id TEXT,
+  public_assistant_message_id TEXT,
+  provider_id TEXT,
+  model_ref TEXT,
+  evidence_refs_json TEXT NOT NULL,
+  unresolved_obligations_json TEXT NOT NULL,
+  continuation_json TEXT,
+  safe_code TEXT,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE CASCADE,
+  FOREIGN KEY (request_message_id) REFERENCES conversation_messages(id) ON DELETE SET NULL,
+  FOREIGN KEY (public_assistant_message_id) REFERENCES conversation_messages(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS conversation_projection_outbox (
   outbox_rowid INTEGER PRIMARY KEY AUTOINCREMENT,
   outbox_id TEXT NOT NULL UNIQUE,
@@ -122,4 +144,7 @@ ON conversation_bindings(gateway, external_session_id);
 
 CREATE INDEX IF NOT EXISTS conversation_summaries_session_range_idx
 ON conversation_summaries(session_id, covers_from_seq, covers_to_seq);
+
+CREATE INDEX IF NOT EXISTS conversation_turn_outcomes_session_created_idx
+ON conversation_turn_outcomes(session_id, created_at, turn_id);
 `;

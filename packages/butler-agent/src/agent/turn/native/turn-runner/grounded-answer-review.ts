@@ -5,7 +5,8 @@ import type { PromptUsageAttribution } from "../../../../integrations/providers/
 import {
   addDirectTurnUsage,
   beforeDirectTurnModelRequest,
-  directTurnBudgetState,
+  directTurnPartitionBudgetState,
+  directTurnRequestedOutputTokens,
   type createDirectTurnBudget,
 } from "../../direct-turn-budget.ts";
 import { writeJsonFileAtomic } from "../../../persistence/atomic-json-store.ts";
@@ -495,15 +496,21 @@ function groundingUsageAttribution(
   return {
     ...(turnId ? { turnId } : {}),
     phase: "grounding_review",
-    budgetState: directTurnBudgetState(budget),
-    getBudgetState: () => directTurnBudgetState(budget),
-    beforeModelRequest: () => beforeDirectTurnModelRequest(budget),
+    requestedOutputTokens: directTurnRequestedOutputTokens("review"),
+    budgetState: directTurnPartitionBudgetState(budget, "review"),
+    getBudgetState: () => directTurnPartitionBudgetState(budget, "review"),
+    beforeAdmittedModelRequest: (request) => beforeDirectTurnModelRequest(budget, {
+      partition: "review",
+      admittedPromptTokens: request.admittedPromptTokens,
+      requestedOutputTokens: request.requestedOutputTokens,
+    }),
     afterModelResponseUsage: (usage) => addDirectTurnUsage({
       budget,
       promptTokens: usage.promptTokens,
       cachedTokens: usage.cachedTokens,
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
+      partition: "review",
     }),
   };
 }

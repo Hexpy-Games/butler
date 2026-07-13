@@ -15,6 +15,7 @@ import {
   parseStructuredTurnDecision,
 } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/typed-turn-decision.ts";
 import { safeRuntimeFailure } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { emptyConversationPromptContextPlan } from "../../packages/butler-agent/src/agent/context/conversation-context.ts";
 
 const tempDirs: string[] = [];
 afterEach(() => tempDirs.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true })));
@@ -182,6 +183,14 @@ function entryInput(
       prompt: "Current user instruction:\n원래 사용자 요청",
       userText: "원래 사용자 요청",
       promptSections: [],
+      conversationContextPlan: emptyConversationPromptContextPlan("butler/general-chat", 1000),
+      normalizedPrompt: {
+        thinContext: {
+          activePersona: "",
+          personalizationProfile: "",
+          runtimePolicy: "",
+        },
+      },
       plannedReview: null,
       resumeSelection: { candidates: [], blockers: [] },
       toolSurfaceController: new ToolSurfacePromptController({

@@ -729,8 +729,11 @@ test("registered Z.AI hosted tool result compaction emits rehydratable evidence 
   const content = String(toolMessage.content);
   expect(content).not.toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
   const parsed = JSON.parse(content) as Record<string, any>;
-  const packet = parsed.output.butler_evidence_packet;
-  expect(parsed.output.butler_tool_result_compacted).toBe(true);
+  expect(parsed.output).toMatchObject({
+    schema: "butler.completed-tool-evidence.v1",
+    status: "complete",
+  });
+  const packet = parsed.output.evidence_packet;
   expect(packet).toMatchObject({
     schema: "butler.evidence-packet.v1",
     tool_name: "lookup",
@@ -747,7 +750,7 @@ test("registered Z.AI hosted tool result compaction emits rehydratable evidence 
   expect(artifact.digest).toBe(packet.digest);
 });
 
-test("registered Z.AI keeps the latest tool batch intact before compacting observed older rounds", async () => {
+test("registered Z.AI packetizes every completed tool batch before the next request", async () => {
   registerHostedModelConfig({
     providerId: "zai",
     modelId: "glm-5.2",
@@ -815,13 +818,12 @@ test("registered Z.AI keeps the latest tool batch intact before compacting obser
   expect(bodies).toHaveLength(3);
   const secondRequest = JSON.stringify(bodies[1]!.messages);
   const thirdRequest = JSON.stringify(bodies[2]!.messages);
-  expect(secondRequest).toContain("OLD_RAW_RESULT_");
-  expect((thirdRequest.match(/OLD_RAW_RESULT_/gu) ?? []).length)
-    .toBeLessThan((secondRequest.match(/OLD_RAW_RESULT_/gu) ?? []).length / 10);
-  expect(thirdRequest.length).toBeLessThan(secondRequest.length);
-  expect(thirdRequest).toContain("LATEST_RAW_RESULT");
-  expect(thirdRequest).toContain("butler_tool_result_observed_checkpoint");
-  expect(thirdRequest).toContain("evidence_ref");
+  expect(secondRequest).not.toContain("OLD_RAW_RESULT_");
+  expect(thirdRequest).not.toContain("OLD_RAW_RESULT_");
+  expect(secondRequest).toContain("butler.completed-tool-evidence.v1");
+  expect(thirdRequest).toContain("butler.completed-tool-evidence.v1");
+  expect(thirdRequest).toContain("butler.evidence-packet.v1");
+  expect(thirdRequest).toContain("Latest result");
 });
 
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {
@@ -1537,13 +1539,7 @@ test("registered local OpenAI-compatible model handles function tool continuatio
       role: "tool",
       tool_call_id: "call_1",
       name: "lookup",
-      content: JSON.stringify({
-        ok: true,
-        output: {
-          ok: true,
-          echo: "status",
-        },
-      }),
+      content: expect.stringContaining("butler.completed-tool-evidence.v1"),
     }));
     expect(seenBodies[2]!.tools).toBeUndefined();
     expect(seenBodies[2]!.messages.at(-1)).toMatchObject({
@@ -2228,13 +2224,7 @@ test("registered local OpenAI-compatible model normalizes text-only tool call ma
     expect(seenBodies[1]!.messages).toContainEqual(expect.objectContaining({
       role: "tool",
       name: "web_search",
-      content: JSON.stringify({
-        ok: true,
-        output: {
-          ok: true,
-          echo: ["status source"],
-        },
-      }),
+      content: expect.stringContaining("butler.completed-tool-evidence.v1"),
     }));
     const replayMessages = JSON.stringify(seenBodies[1]!.messages.slice(1));
     expect(replayMessages).not.toContain("<|tool_call>");
@@ -2484,7 +2474,7 @@ test("registered local function tool prompts keep interleaved public text withou
   }
 });
 
-test("local function tool prompts fall back without tools when context is exceeded", async () => {
+test("local provider overflow after admission fails as an invariant violation without a second request", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   const localServer = Bun.serve({
     port: 0,
@@ -2511,8 +2501,7 @@ test("local function tool prompts fall back without tools when context is exceed
   writeLocalModelConfig(localServer.url.toString(), "gemma-context");
 
   try {
-    const logs: string[] = [];
-    const text = await runFunctionToolPromptText({
+    const promise = runFunctionToolPromptText({
       model: "local/gemma-context",
       instructions: "Be concise.",
       prompt: "hi",
@@ -2529,27 +2518,20 @@ test("local function tool prompts fall back without tools when context is exceed
           required: ["query"],
         },
       }],
-      log: (line) => logs.push(line),
       executeTool: async () => {
-        throw new Error("fallback test must not execute tools");
+        throw new Error("invariant violation must not execute tools");
       },
     });
 
-    expect(text).toBe("answered without tools");
-    expect(logs).toEqual(["local model tool prompt exceeded context window; retrying without tool schemas"]);
-    expect(seenBodies).toHaveLength(2);
+    await expect(promise).rejects.toMatchObject({ code: "admission_invariant_violation" });
+    expect(seenBodies).toHaveLength(1);
     expect(Array.isArray(seenBodies[0]?.tools)).toBe(true);
-    expect(seenBodies[1]?.tools).toBeUndefined();
-    expect(seenBodies[1]?.messages).toContainEqual({
-      role: "system",
-      content: expect.stringContaining("Answer directly without calling tools"),
-    });
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool context fallback preserves compact web evidence tools", async () => {
+test("local provider overflow cannot authorize a tool-schema fallback request", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   const localServer = Bun.serve({
     port: 0,
@@ -2607,9 +2589,7 @@ test("local function tool context fallback preserves compact web evidence tools"
   writeLocalModelConfig(localServer.url.toString(), "gemma-search");
 
   try {
-    const logs: string[] = [];
-    const toolCalls: string[] = [];
-    const text = await runFunctionToolPromptText({
+    const promise = runFunctionToolPromptText({
       model: "local/gemma-search",
       instructions: "Be concise.",
       prompt: "오늘 문경 날씨는 어때?",
@@ -2655,31 +2635,20 @@ test("local function tool context fallback preserves compact web evidence tools"
           },
         },
       ],
-      log: (line) => logs.push(line),
-      executeTool: async (call) => {
-        toolCalls.push(call.name);
-        return {
-          ok: true,
-          source_urls: ["https://example.com/weather"],
-          results: [{ title: "weather", url: "https://example.com/weather" }],
-        };
+      executeTool: async () => {
+        throw new Error("invariant violation must not execute tools");
       },
     });
 
-    expect(text).toBe("searched with compact tools");
-    expect(logs[0]).toBe("local model tool prompt exceeded context window; retrying with compact evidence tool schemas");
-    expect(toolCalls).toEqual(["web_search"]);
-    expect(seenBodies).toHaveLength(4);
+    await expect(promise).rejects.toMatchObject({ code: "admission_invariant_violation" });
+    expect(seenBodies).toHaveLength(1);
     expect(seenBodies[0]?.tools.map((tool: any) => tool.function.name)).toEqual(["web_search", "web_read", "lookup"]);
-    expect(seenBodies[1]?.tools.map((tool: any) => tool.function.name)).toEqual(["web_search", "web_read"]);
-    expect(seenBodies[2]?.tools.map((tool: any) => tool.function.name)).toEqual(["web_search", "web_read"]);
-    expect(seenBodies[3]?.tools).toBeUndefined();
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool prompts preserve large tool results for the immediate follow-up", async () => {
+test("local admission packetizes a tool result before the immediate follow-up", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let immediateToolContent = "";
   let finalSynthesisToolContent = "";
@@ -2709,30 +2678,13 @@ test("local function tool prompts preserve large tool results for the immediate 
       }
 
       const toolContent = String(toolMessage.content || "");
-      if (immediateToolContent) {
-        finalSynthesisToolContent = toolContent;
-        return Response.json({
-          choices: [{
-            message: {
-              role: "assistant",
-              content: finalEnvelope("used raw tool evidence"),
-            },
-          }],
-        });
-      }
       immediateToolContent = toolContent;
-      if (!immediateToolContent.includes("RAW_MIDDLE_SHOULD_BE_COMPACTED")) {
-        return Response.json({
-          error: {
-            message: "expected raw local tool result on the immediate follow-up",
-          },
-        }, { status: 400 });
-      }
+      finalSynthesisToolContent = toolContent;
       return Response.json({
         choices: [{
           message: {
             role: "assistant",
-            content: "draft after raw tool evidence",
+            content: finalEnvelope("used compact tool evidence"),
           },
         }],
       });
@@ -2772,13 +2724,13 @@ test("local function tool prompts preserve large tool results for the immediate 
       }),
     });
 
-    expect(text).toBe("used raw tool evidence");
-    expect(seenBodies).toHaveLength(3);
-    expect(immediateToolContent).not.toContain("butler_tool_result_compacted");
-    expect(immediateToolContent).toContain("row-0");
+    expect(text).toBe("used compact tool evidence");
+    expect(seenBodies).toHaveLength(2);
+    expect(immediateToolContent).toContain("butler.completed-tool-evidence.v1");
+    expect(immediateToolContent).toContain("butler.evidence-packet.v1");
     expect(immediateToolContent).toContain("critical-source-at-end");
-    expect(immediateToolContent).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
-    expect(finalSynthesisToolContent).toContain("butler_tool_result_compacted");
+    expect(immediateToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(finalSynthesisToolContent).toContain("butler.completed-tool-evidence.v1");
     expect(finalSynthesisToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
     expect(seenBodies.every((body) =>
       Array.isArray(body.tools) || body.messages.some((message: any) => message.role === "tool"),
@@ -2788,7 +2740,7 @@ test("local function tool prompts preserve large tool results for the immediate 
   }
 });
 
-test("local function tool prompts compact observed large tool results for final synthesis overflow", async () => {
+test("local function tool prompts use packetized evidence without overflow retry", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let totalToolContentLength = 0;
   const localServer = Bun.serve({
@@ -2883,14 +2835,14 @@ test("local function tool prompts compact observed large tool results for final 
 
     expect(text).toBe("used cumulatively compacted evidence");
     expect(totalToolContentLength).toBeLessThanOrEqual(12_000);
-    expect(logs.some((line) => line.includes("final_synthesis_context_retry"))).toBe(true);
-    expect(seenBodies).toHaveLength(4);
+    expect(logs.some((line) => line.includes("final_synthesis_context_retry"))).toBe(false);
+    expect(seenBodies).toHaveLength(2);
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool prompts recover final synthesis context overflow with compact evidence-only synthesis", async () => {
+test("local final synthesis overflow after admission fails as an invariant violation", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let compactFinalRequestSeen = false;
   const localServer = Bun.serve({
@@ -2957,8 +2909,7 @@ test("local function tool prompts recover final synthesis context overflow with 
   writeLocalModelConfig(localServer.url.toString(), "gemma-final-overflow");
 
   try {
-    const logs: string[] = [];
-    const text = await runFunctionToolPromptText({
+    const promise = runFunctionToolPromptText({
       model: "local/gemma-final-overflow",
       instructions: "Be concise.",
       prompt: "Use the tool evidence and answer.",
@@ -2975,7 +2926,6 @@ test("local function tool prompts recover final synthesis context overflow with 
           required: ["query"],
         },
       }],
-      log: (line) => logs.push(line),
       executeTool: async () => ({
         rows: Array.from({ length: 120 }, (_, index) => ({
           id: `row-${index}`,
@@ -2985,16 +2935,15 @@ test("local function tool prompts recover final synthesis context overflow with 
       }),
     });
 
-    expect(text).toBe("answered from compact evidence-only synthesis");
-    expect(compactFinalRequestSeen).toBe(true);
-    expect(logs.some((line) => line.includes("compact evidence-only final synthesis"))).toBe(true);
-    expect(seenBodies.length).toBeGreaterThanOrEqual(4);
+    await expect(promise).rejects.toMatchObject({ code: "admission_invariant_violation" });
+    expect(compactFinalRequestSeen).toBe(false);
+    expect(seenBodies).toHaveLength(3);
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool context fallback falls back without tools when compact evidence tools still exceed context", async () => {
+test("local overflow cannot authorize compact-schema or no-tool fallback requests", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   const localServer = Bun.serve({
     port: 0,
@@ -3021,8 +2970,7 @@ test("local function tool context fallback falls back without tools when compact
   writeLocalModelConfig(localServer.url.toString(), "gemma-compact-overflow");
 
   try {
-    const logs: string[] = [];
-    const text = await runFunctionToolPromptText({
+    const promise = runFunctionToolPromptText({
       model: "local/gemma-compact-overflow",
       instructions: "Be concise.",
       prompt: "오늘 문경 날씨는 어때?",
@@ -3067,25 +3015,18 @@ test("local function tool context fallback falls back without tools when compact
           },
         },
       ],
-      log: (line) => logs.push(line),
       executeTool: async () => ({ ok: true }),
     });
 
-    expect(text).toBe("answered without tools after compact overflow");
-    expect(logs).toEqual([
-      "local model tool prompt exceeded context window; retrying with compact evidence tool schemas",
-      "local model tool prompt exceeded context window; retrying without tool schemas",
-    ]);
-    expect(seenBodies).toHaveLength(3);
+    await expect(promise).rejects.toMatchObject({ code: "admission_invariant_violation" });
+    expect(seenBodies).toHaveLength(1);
     expect(seenBodies[0]?.tools.map((tool: any) => tool.function.name)).toEqual(["web_search", "web_read", "lookup"]);
-    expect(seenBodies[1]?.tools.map((tool: any) => tool.function.name)).toEqual(["web_search", "web_read"]);
-    expect(seenBodies[2]?.tools).toBeUndefined();
   } finally {
     localServer.stop(true);
   }
 });
 
-test("local function tool context fallback honors cancellation", async () => {
+test("local function tool request honors cancellation before admission", async () => {
   const localServer = Bun.serve({
     port: 0,
     fetch: async (request) => {
@@ -3111,6 +3052,7 @@ test("local function tool context fallback honors cancellation", async () => {
 
   try {
     const controller = new AbortController();
+    controller.abort();
     const promise = runFunctionToolPromptText({
       model: "local/gemma-abort",
       prompt: "hi",
@@ -3125,7 +3067,6 @@ test("local function tool context fallback honors cancellation", async () => {
           properties: {},
         },
       }],
-      log: () => controller.abort(),
       executeTool: async () => {
         throw new Error("cancelled fallback must not execute tools");
       },
@@ -3441,13 +3382,7 @@ test("Codex subscription tool continuation is sent as stateless input without pr
     {
       type: "function_call_output",
       call_id: "call_1",
-      output: JSON.stringify({
-        ok: true,
-        output: {
-          ok: true,
-          echo: "status",
-        },
-      }),
+      output: expect.stringContaining("butler.completed-tool-evidence.v1"),
     },
   ]);
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("large-hidden-reasoning-state");
@@ -3866,10 +3801,7 @@ test("OpenAI function tool prompt refreshes promoted dynamic schemas between too
   expect(seenBodies[1]!.input).toEqual([{
     type: "function_call_output",
     call_id: "call_1",
-    output: JSON.stringify({
-      ok: true,
-      output: { ok: true, described: ["native:lookup"] },
-    }),
+    output: expect.stringContaining("butler.completed-tool-evidence.v1"),
   }]);
 });
 
@@ -3994,13 +3926,7 @@ test("function tool prompt synthesizes a final answer instead of exposing tool b
   expect(seenBodies[2]!.input).toEqual([{
     type: "function_call_output",
     call_id: "call_2",
-    output: JSON.stringify({
-      ok: true,
-      output: {
-        ok: true,
-        query: "second",
-      },
-    }),
+    output: expect.stringContaining("butler.completed-tool-evidence.v1"),
   }]);
 });
 

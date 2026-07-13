@@ -353,6 +353,29 @@ function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnB
     maxPromptTokens: finitePositiveInteger(snapshot.maxPromptTokens),
     maxOutputTokens: finitePositiveInteger(snapshot.maxOutputTokens),
     maxTotalTokens: finitePositiveInteger(snapshot.maxTotalTokens),
+    ...(snapshot.partitions
+      ? {
+          partitions: Object.fromEntries(
+            (["execution", "review", "finalization"] as const).map((name) => {
+              const partition = snapshot.partitions![name];
+              return [name, {
+                modelRequestsUsed: finiteNonNegativeInteger(partition.modelRequestsUsed),
+                promptTokens: finiteNonNegativeInteger(partition.promptTokens),
+                cachedTokens: Math.min(
+                  finiteNonNegativeInteger(partition.cachedTokens),
+                  finiteNonNegativeInteger(partition.promptTokens),
+                ),
+                outputTokens: finiteNonNegativeInteger(partition.outputTokens),
+                totalTokens: finiteNonNegativeInteger(partition.totalTokens),
+                maxModelCalls: finitePositiveInteger(partition.maxModelCalls),
+                maxPromptTokens: finitePositiveInteger(partition.maxPromptTokens),
+                maxOutputTokens: finitePositiveInteger(partition.maxOutputTokens),
+                maxTotalTokens: finitePositiveInteger(partition.maxTotalTokens),
+              }];
+            }),
+          ) as NonNullable<DirectTurnBudgetSnapshot["partitions"]>,
+        }
+      : {}),
   };
 }
 

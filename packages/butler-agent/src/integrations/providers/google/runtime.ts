@@ -10,15 +10,18 @@ import {
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
+import { toolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
 
 
 export async function createGeminiContent(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
-    async () => await createGeminiContentOnce(config, body, signal),
+    async () => await createGeminiContentOnce(config, body, signal, budgetContext),
     signal,
   );
 }
@@ -28,8 +31,35 @@ async function createGeminiContentOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(geminiGenerateContentUrl(config));
+  const requestBody = {
+    ...body,
+    ...(budgetContext?.attribution?.requestedOutputTokens
+      ? {
+          generationConfig: {
+            ...(body.generationConfig && typeof body.generationConfig === "object"
+              ? body.generationConfig as Record<string, unknown>
+              : {}),
+            maxOutputTokens: budgetContext.attribution.requestedOutputTokens,
+          },
+        }
+      : {}),
+  };
+  const generationConfig = requestBody.generationConfig && typeof requestBody.generationConfig === "object"
+    ? requestBody.generationConfig as Record<string, unknown>
+    : null;
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "google",
+    modelRef: config.modelRef,
+    body: requestBody,
+    requestedOutputTokens: typeof generationConfig?.maxOutputTokens === "number"
+      ? generationConfig.maxOutputTokens
+      : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
+  });
   let response: Response;
   try {
     response = await fetch(geminiGenerateContentUrl(config), {
@@ -38,7 +68,7 @@ async function createGeminiContentOnce(
         "x-goog-api-key": config.apiKey ?? "",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
@@ -63,6 +93,7 @@ async function createGeminiContentOnce(
       detail: parsed?.error?.message || raw || `status ${response.status}`,
       endpoint,
       model: config.modelId,
+      admission: admittedRequest,
     });
   }
   return parsed;
@@ -110,12 +141,12 @@ export async function runGeminiPromptText(
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   const response = await requests.request({
     model: config.modelRef,
-    run: async () => await createGeminiContent(config, {
+    run: async (context) => await createGeminiContent(config, {
       ...(options.instructions?.trim()
         ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
         : {}),
       contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
-    }, options.signal),
+    }, options.signal, context),
     usage: geminiUsageSample,
   });
   const text = geminiText(response);
@@ -150,14 +181,14 @@ export async function runGeminiFunctionToolPromptText(
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await requests.request({
       model: config.modelRef,
-      run: async () => await createGeminiContent(config, {
+      run: async (context) => await createGeminiContent(config, {
         systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
         contents,
         tools: geminiTools(activeTools),
         ...(options.toolChoice === "required"
           ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
           : {}),
-      }, options.signal),
+      }, options.signal, context),
       usage: geminiUsageSample,
     });
     const parts = response.candidates?.[0]?.content?.parts;
@@ -223,7 +254,15 @@ export async function runGeminiFunctionToolPromptText(
         parts: [{
           functionResponse: {
             name: call.name,
-            response: payload,
+            response: toolResultPayloadForProvider({
+              payload,
+              toolName: call.name,
+              toolCallId: call.id,
+              evidenceRetention: {
+                butlerData: options.butlerData,
+                turnId: options.usageAttribution?.turnId,
+              },
+            }),
           },
         }],
       });
@@ -240,7 +279,15 @@ export async function runGeminiFunctionToolPromptText(
         parts: [{
           functionResponse: {
             name: call.name,
-            response: { ok: false, output: blockCapacityToolOutput(observation) },
+            response: toolResultPayloadForProvider({
+              payload: { ok: false, output: blockCapacityToolOutput(observation) },
+              toolName: call.name,
+              toolCallId: call.id,
+              evidenceRetention: {
+                butlerData: options.butlerData,
+                turnId: options.usageAttribution?.turnId,
+              },
+            }),
           },
         }],
       });
@@ -252,10 +299,10 @@ export async function runGeminiFunctionToolPromptText(
   contents.push({ role: "user", parts: [{ text: finalNoToolInstructions(options.instructions) }] });
   const response = await requests.request({
     model: config.modelRef,
-    run: async () => await createGeminiContent(config, {
+    run: async (context) => await createGeminiContent(config, {
       systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
       contents,
-    }, options.signal),
+    }, options.signal, context),
     usage: geminiUsageSample,
   });
   const text = geminiText(response);

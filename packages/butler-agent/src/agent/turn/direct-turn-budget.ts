@@ -11,6 +11,39 @@ const DIRECT_TURN_TOTAL_TOKEN_BUDGET = 300_000;
 const DIRECT_TURN_BUDGET_WARNING_RATIO = 0.8;
 const COMPACT_RECENT_CONVERSATION_TOKEN_BUDGET = 2_000;
 
+export type DirectTurnBudgetPartition = "execution" | "review" | "finalization";
+
+const DIRECT_TURN_REQUEST_OUTPUT_LIMITS: Record<DirectTurnBudgetPartition, number> = {
+  execution: 4_096,
+  review: 2_048,
+  finalization: 8_192,
+};
+
+export function directTurnRequestedOutputTokens(partition: DirectTurnBudgetPartition): number {
+  return DIRECT_TURN_REQUEST_OUTPUT_LIMITS[partition];
+}
+
+interface DirectTurnPartitionBudget {
+  modelRequestsUsed: number;
+  promptTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  maxModelCalls: number;
+  maxPromptTokens: number;
+  maxOutputTokens: number;
+  maxTotalTokens: number;
+}
+
+const DIRECT_TURN_PARTITION_LIMITS: Record<DirectTurnBudgetPartition, Pick<
+  DirectTurnPartitionBudget,
+  "maxModelCalls" | "maxPromptTokens" | "maxOutputTokens" | "maxTotalTokens"
+>> = {
+  execution: { maxModelCalls: 24, maxPromptTokens: 160_000, maxOutputTokens: 50_000, maxTotalTokens: 210_000 },
+  review: { maxModelCalls: 4, maxPromptTokens: 30_000, maxOutputTokens: 10_000, maxTotalTokens: 40_000 },
+  finalization: { maxModelCalls: 4, maxPromptTokens: 30_000, maxOutputTokens: 20_000, maxTotalTokens: 50_000 },
+};
+
 export interface DirectTurnBudget {
   turnId: string;
   modelRequestsUsed: number;
@@ -22,13 +55,7 @@ export interface DirectTurnBudget {
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
-  windowStart: {
-    modelRequests: number;
-    promptTokens: number;
-    cachedTokens: number;
-    outputTokens: number;
-    totalTokens: number;
-  };
+  partitions: Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>;
 }
 
 export interface DirectTurnBudgetSnapshot {
@@ -42,6 +69,7 @@ export interface DirectTurnBudgetSnapshot {
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
+  partitions?: Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>;
 }
 
 export interface DirectTurnPromptUsageInput {
@@ -72,13 +100,7 @@ export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
     maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
-    windowStart: {
-      modelRequests: 0,
-      promptTokens: 0,
-      cachedTokens: 0,
-      outputTokens: 0,
-      totalTokens: 0,
-    },
+    partitions: createPartitionBudgets(),
   };
 }
 
@@ -94,6 +116,7 @@ export function snapshotDirectTurnBudget(budget: DirectTurnBudget): DirectTurnBu
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
+    partitions: structuredClone(budget.partitions),
   };
 }
 
@@ -115,25 +138,19 @@ export function hydrateDirectTurnBudget(
   budget.maxPromptTokens = finitePositiveInteger(snapshot.maxPromptTokens, budget.maxPromptTokens);
   budget.maxOutputTokens = finitePositiveInteger(snapshot.maxOutputTokens, budget.maxOutputTokens);
   budget.maxTotalTokens = finitePositiveInteger(snapshot.maxTotalTokens, budget.maxTotalTokens);
-  budget.windowStart = {
-    modelRequests: budget.modelRequestsUsed,
-    promptTokens: budget.promptTokens,
-    cachedTokens: budget.cachedTokens,
-    outputTokens: budget.outputTokens,
-    totalTokens: budget.totalTokens,
-  };
+  budget.partitions = hydratePartitionBudgets(snapshot.partitions, budget);
   return budget;
 }
 
 export function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudgetState {
   return {
     status: directTurnBudgetStatus(budget),
-    requestCount: windowUsage(budget.modelRequestsUsed, budget.windowStart.modelRequests),
+    requestCount: budget.modelRequestsUsed,
     maxRequests: budget.maxModelCalls,
-    promptTokens: windowUsage(budget.promptTokens, budget.windowStart.promptTokens),
-    cachedTokens: windowUsage(budget.cachedTokens, budget.windowStart.cachedTokens),
-    outputTokens: windowUsage(budget.outputTokens, budget.windowStart.outputTokens),
-    totalTokens: windowUsage(budget.totalTokens, budget.windowStart.totalTokens),
+    promptTokens: budget.promptTokens,
+    cachedTokens: budget.cachedTokens,
+    outputTokens: budget.outputTokens,
+    totalTokens: budget.totalTokens,
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
@@ -145,8 +162,48 @@ export function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudg
   };
 }
 
-export function beforeDirectTurnModelRequest(budget: DirectTurnBudget): void {
+export function beforeDirectTurnModelRequest(
+  budget: DirectTurnBudget,
+  input: {
+    partition?: DirectTurnBudgetPartition;
+    admittedPromptTokens?: number;
+    requestedOutputTokens?: number;
+    beforeCommit?: () => void;
+  } = {},
+): void {
+  const partitionName = input.partition ?? "execution";
+  const partition = budget.partitions[partitionName];
+  const projectedPromptTokens = finiteNonNegativeInteger(input.admittedPromptTokens ?? 0);
+  const projectedOutputTokens = finiteNonNegativeInteger(input.requestedOutputTokens ?? 0);
+  assertRequestFitsBudget({
+    budget,
+    partition,
+    partitionName,
+    projectedPromptTokens,
+    projectedOutputTokens,
+  });
+  input.beforeCommit?.();
   budget.modelRequestsUsed += 1;
+  partition.modelRequestsUsed += 1;
+}
+
+export function directTurnPartitionBudgetState(
+  budget: DirectTurnBudget,
+  partition: DirectTurnBudgetPartition,
+): PromptUsageBudgetState {
+  const state = budget.partitions[partition];
+  return {
+    status: partitionBudgetStatus(state),
+    requestCount: state.modelRequestsUsed,
+    maxRequests: state.maxModelCalls,
+    promptTokens: state.promptTokens,
+    cachedTokens: state.cachedTokens,
+    outputTokens: state.outputTokens,
+    totalTokens: state.totalTokens,
+    maxPromptTokens: state.maxPromptTokens,
+    maxOutputTokens: state.maxOutputTokens,
+    maxTotalTokens: state.maxTotalTokens,
+  };
 }
 
 export function hasDirectTurnModelRequestReserve(
@@ -161,8 +218,16 @@ export function directTurnModelRequestsRemaining(
 ): number {
   return Math.max(
     0,
-    budget.maxModelCalls - windowUsage(budget.modelRequestsUsed, budget.windowStart.modelRequests),
+    budget.maxModelCalls - budget.modelRequestsUsed,
   );
+}
+
+export function directTurnPartitionModelRequestsRemaining(
+  budget: DirectTurnBudget,
+  partition: DirectTurnBudgetPartition,
+): number {
+  const state = budget.partitions[partition];
+  return Math.max(0, state.maxModelCalls - state.modelRequestsUsed);
 }
 
 export function addDirectTurnUsage(input: {
@@ -171,6 +236,7 @@ export function addDirectTurnUsage(input: {
   cachedTokens: number;
   outputTokens: number;
   totalTokens: number | null;
+  partition?: DirectTurnBudgetPartition;
 }): void {
   const promptTokens = typeof input.promptTokens === "number" && Number.isFinite(input.promptTokens)
     ? Math.max(0, input.promptTokens)
@@ -186,6 +252,11 @@ export function addDirectTurnUsage(input: {
   input.budget.cachedTokens += cachedTokens;
   input.budget.outputTokens += outputTokens;
   input.budget.totalTokens += totalTokens;
+  const partition = input.budget.partitions[input.partition ?? "execution"];
+  partition.promptTokens += promptTokens;
+  partition.cachedTokens += cachedTokens;
+  partition.outputTokens += outputTokens;
+  partition.totalTokens += totalTokens;
 }
 
 export function promptUsageSectionsFromPrompt(
@@ -235,11 +306,16 @@ export function recentConversationBudgetForTurn(input: {
 }
 
 function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
-  const requests = windowUsage(budget.modelRequestsUsed, budget.windowStart.modelRequests);
-  const promptTokens = windowUsage(budget.promptTokens, budget.windowStart.promptTokens);
-  const outputTokens = windowUsage(budget.outputTokens, budget.windowStart.outputTokens);
-  const totalTokens = windowUsage(budget.totalTokens, budget.windowStart.totalTokens);
-  if (requests >= budget.maxModelCalls) {
+  const requests = budget.modelRequestsUsed;
+  const promptTokens = budget.promptTokens;
+  const outputTokens = budget.outputTokens;
+  const totalTokens = budget.totalTokens;
+  if (
+    requests >= budget.maxModelCalls ||
+    promptTokens >= budget.maxPromptTokens ||
+    outputTokens >= budget.maxOutputTokens ||
+    totalTokens >= budget.maxTotalTokens
+  ) {
     return "exhausted";
   }
   if (
@@ -253,8 +329,95 @@ function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetStat
   return "ok";
 }
 
-function windowUsage(total: number, start: number): number {
-  return Math.max(0, total - start);
+function createPartitionBudgets(): Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget> {
+  return Object.fromEntries(
+    (Object.entries(DIRECT_TURN_PARTITION_LIMITS) as Array<[
+      DirectTurnBudgetPartition,
+      typeof DIRECT_TURN_PARTITION_LIMITS[DirectTurnBudgetPartition],
+    ]>).map(([name, limits]) => [name, {
+      modelRequestsUsed: 0,
+      promptTokens: 0,
+      cachedTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      ...limits,
+    }]),
+  ) as Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>;
+}
+
+function hydratePartitionBudgets(
+  snapshot: DirectTurnBudgetSnapshot["partitions"],
+  budget: DirectTurnBudget,
+): Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget> {
+  const partitions = createPartitionBudgets();
+  if (!snapshot) {
+    partitions.execution.modelRequestsUsed = budget.modelRequestsUsed;
+    partitions.execution.promptTokens = budget.promptTokens;
+    partitions.execution.cachedTokens = budget.cachedTokens;
+    partitions.execution.outputTokens = budget.outputTokens;
+    partitions.execution.totalTokens = budget.totalTokens;
+    return partitions;
+  }
+  for (const name of Object.keys(partitions) as DirectTurnBudgetPartition[]) {
+    const source = snapshot[name];
+    if (!source) continue;
+    const target = partitions[name];
+    target.modelRequestsUsed = finiteNonNegativeInteger(source.modelRequestsUsed);
+    target.promptTokens = finiteNonNegativeInteger(source.promptTokens);
+    target.cachedTokens = Math.min(finiteNonNegativeInteger(source.cachedTokens), target.promptTokens);
+    target.outputTokens = finiteNonNegativeInteger(source.outputTokens);
+    target.totalTokens = finiteNonNegativeInteger(source.totalTokens);
+    target.maxModelCalls = finitePositiveInteger(source.maxModelCalls, target.maxModelCalls);
+    target.maxPromptTokens = finitePositiveInteger(source.maxPromptTokens, target.maxPromptTokens);
+    target.maxOutputTokens = finitePositiveInteger(source.maxOutputTokens, target.maxOutputTokens);
+    target.maxTotalTokens = finitePositiveInteger(source.maxTotalTokens, target.maxTotalTokens);
+  }
+  return partitions;
+}
+
+function partitionBudgetStatus(partition: DirectTurnPartitionBudget): PromptUsageBudgetState["status"] {
+  if (
+    partition.modelRequestsUsed >= partition.maxModelCalls ||
+    partition.promptTokens >= partition.maxPromptTokens ||
+    partition.outputTokens >= partition.maxOutputTokens ||
+    partition.totalTokens >= partition.maxTotalTokens
+  ) return "exhausted";
+  if (
+    partition.modelRequestsUsed >= Math.floor(partition.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    partition.promptTokens >= Math.floor(partition.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    partition.outputTokens >= Math.floor(partition.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
+    partition.totalTokens >= Math.floor(partition.maxTotalTokens * DIRECT_TURN_BUDGET_WARNING_RATIO)
+  ) return "warning";
+  return "ok";
+}
+
+function assertRequestFitsBudget(input: {
+  budget: DirectTurnBudget;
+  partition: DirectTurnPartitionBudget;
+  partitionName: DirectTurnBudgetPartition;
+  projectedPromptTokens: number;
+  projectedOutputTokens: number;
+}): void {
+  const projectedTotalTokens = input.projectedPromptTokens + input.projectedOutputTokens;
+  const exhausted =
+    input.budget.modelRequestsUsed + 1 > input.budget.maxModelCalls ||
+    input.budget.promptTokens + input.projectedPromptTokens > input.budget.maxPromptTokens ||
+    input.budget.outputTokens + input.projectedOutputTokens > input.budget.maxOutputTokens ||
+    input.budget.totalTokens + projectedTotalTokens > input.budget.maxTotalTokens ||
+    input.partition.modelRequestsUsed + 1 > input.partition.maxModelCalls ||
+    input.partition.promptTokens + input.projectedPromptTokens > input.partition.maxPromptTokens ||
+    input.partition.outputTokens + input.projectedOutputTokens > input.partition.maxOutputTokens ||
+    input.partition.totalTokens + projectedTotalTokens > input.partition.maxTotalTokens;
+  if (!exhausted) return;
+  const error = Object.assign(
+    new Error("Prompt usage model-call budget exhausted before provider request"),
+    {
+      code: "prompt_usage_model_call_budget_exhausted",
+      partition: input.partitionName,
+    },
+  );
+  error.name = "PromptUsageModelCallBudgetExhaustedError";
+  throw error;
 }
 
 function finiteNonNegativeInteger(value: number): number {

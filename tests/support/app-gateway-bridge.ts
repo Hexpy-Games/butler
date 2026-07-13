@@ -48,6 +48,7 @@ import type {
   DeliveryLimitationMetadata,
 } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 import { appRuntimePolicy } from "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
 const APP_SESSION_ID = "butler/app-general";
 
@@ -78,6 +79,7 @@ export class AppGatewayBridge {
   private readonly runtimePolicy?: Record<string, unknown>;
   private readonly sessionTitleGenerator: SessionTitleGenerator | false;
   private readonly store: SessionBindingStore;
+  private readonly conversationStore: AgentConversationStore;
   private readonly server: ReturnType<typeof createGatewayServer>;
   private readonly visibleDeliveries = new Map<string, string[]>();
   private readonly visibleProgress = new Map<string, NonNullable<AppMessageResponderInput["onProgress"]>>();
@@ -95,6 +97,7 @@ export class AppGatewayBridge {
     this.sessionTitleGenerator = options.sessionTitleGenerator ??
       ((titleInput) => generateSessionTitleWithProvider(this.provider, titleInput));
     this.store = new SessionBindingStore(join(this.butlerData, "runtime", "session-store.sqlite"));
+    this.conversationStore = new AgentConversationStore({ butlerData: this.butlerData });
     this.ensureAppSession();
 
     const router = new GatewayRouter({ store: this.store });
@@ -104,6 +107,8 @@ export class AppGatewayBridge {
       provider: this.provider,
       promptAssembler: new PromptAssembler({ butlerHome: this.butlerHome, butlerData: this.butlerData }),
       policyEngine: new PolicyEngine(),
+      conversationWriter: this.conversationStore,
+      conversationMetricsButlerData: this.butlerData,
       deliverIntermediate: async (delivery) => this.collectIntermediate(delivery.action, delivery.metadata),
       deliverTurnEvent: async (delivery) => this.collectTurnEvent(delivery.envelope, delivery.event),
     });
@@ -115,6 +120,7 @@ export class AppGatewayBridge {
   }
 
   close(): void {
+    this.conversationStore.close();
     this.store.close();
   }
 

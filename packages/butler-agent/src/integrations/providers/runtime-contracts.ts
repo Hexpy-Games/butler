@@ -42,11 +42,19 @@ export interface PromptUsageAttribution {
   phase?: string;
   roundIndex?: number;
   reasoningEffort?: ReasoningEffort;
+  requestedOutputTokens?: number;
   budgetState?: PromptUsageBudgetState;
   getBudgetState?: () => PromptUsageBudgetState;
   beforeModelRequest?: (input: {
     roundIndex: number;
     phase?: string;
+  }) => void;
+  beforeAdmittedModelRequest?: (input: {
+    roundIndex: number;
+    phase?: string;
+    admittedPromptTokens: number;
+    requestedOutputTokens: number;
+    requestHash: string;
   }) => void;
   afterModelResponseUsage?: (usage: PromptUsageReport & {
     outputTokens: number;

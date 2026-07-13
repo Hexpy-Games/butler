@@ -1,4 +1,4 @@
-export type ConversationIdPrefix = "cs" | "ct" | "cm" | "cp" | "csm" | "cpo";
+export type ConversationIdPrefix = "cs" | "ct" | "cm" | "cp" | "csm" | "cpo" | "cto";
 export type ConversationIdFactory = (prefix: ConversationIdPrefix) => string;
 
 export function defaultConversationIdFactory(prefix: ConversationIdPrefix): string {

@@ -1,14 +1,13 @@
+import { createHash } from "node:crypto";
+import { Buffer } from "node:buffer";
 import type {
   ConversationMessageWithParts,
   ConversationPart,
   ConversationSummary,
+  ConversationTurn,
   PromptMaterial,
+  TurnOutcomeCapsule,
 } from "../conversation/types.ts";
-import {
-  estimateContextTokens,
-  takeLinesFromEndWithinBudget,
-  trimTextToTokenBudget,
-} from "./budget.ts";
 
 export interface ConversationContextPart {
   kind: ConversationPart["kind"];
@@ -42,35 +41,145 @@ export interface PromptMaterialRenderOptions {
   maxTokens: number;
   excludeSourceRef?: string | null;
   includeSummaries?: boolean;
+  currentRequest?: {
+    id: string;
+    text: string;
+  };
+}
+
+export interface ConversationCurrentRequestAtom {
+  id: string;
+  source_hash: string;
+  serialized_tokens: number;
+  text: string;
+}
+
+export interface ConversationSemanticTurnAtom {
+  id: string;
+  turn_id: string | null;
+  status: ConversationTurn["status"] | "unknown";
+  source_hash: string;
+  first_seq: number;
+  last_seq: number;
+  serialized_tokens: number;
+  messages: ConversationContextMessage[];
+  outcome: TurnOutcomeCapsule | null;
+}
+
+export interface ConversationSummaryAtom extends ConversationContextSummary {
+  id: string;
+  serialized_tokens: number;
+}
+
+export interface ConversationPromptContextPlan {
+  session_id: string;
+  measurement: "serialized_utf8_upper_bound";
+  capacity_tokens: number;
+  current_request: ConversationCurrentRequestAtom | null;
+  required_turns: ConversationSemanticTurnAtom[];
+  optional_turns: ConversationSemanticTurnAtom[];
+  selected_optional_turns: ConversationSemanticTurnAtom[];
+  selected_summaries: ConversationSummaryAtom[];
+  selected_atom_ids: string[];
+  compiled_input_tokens: number;
+  rendered: string;
+}
+
+export function emptyConversationPromptContextPlan(
+  sessionId: string,
+  capacityTokens: number,
+): ConversationPromptContextPlan {
+  return {
+    session_id: sessionId,
+    measurement: "serialized_utf8_upper_bound",
+    capacity_tokens: Math.max(1, Math.floor(capacityTokens)),
+    current_request: null,
+    required_turns: [],
+    optional_turns: [],
+    selected_optional_turns: [],
+    selected_summaries: [],
+    selected_atom_ids: [],
+    compiled_input_tokens: 0,
+    rendered: "",
+  };
 }
 
 export function renderPromptMaterial(
   material: PromptMaterial,
   options: PromptMaterialRenderOptions,
 ): string {
-  const maxTokens = Math.max(1, Math.floor(options.maxTokens));
-  const rawSummaryLines = options.includeSummaries === false
-    ? []
-    : renderSummaryLines(material.summaries);
-  const summaryText = rawSummaryLines.join("\n");
-  const summaryTokens = estimateContextTokens(summaryText);
-  const summaryLines = summaryTokens > maxTokens
-    ? [trimTextToTokenBudget(summaryText, maxTokens, { from: "start" })].filter((line) => line.trim())
-    : rawSummaryLines;
-  const tailBudget = Math.max(0, maxTokens - estimateContextTokens(summaryLines.join("\n")));
-  const tailLines = material.semantic_tail
-    .filter((message) => !options.excludeSourceRef || message.source_ref !== options.excludeSourceRef)
-    .flatMap((message) => renderPromptMessageLines(message));
-  const selectedTail = tailBudget > 0 ? takeLinesFromEndWithinBudget(tailLines, tailBudget) : [];
-  const lines = [
-    ...summaryLines,
-    ...selectedTail,
-  ].filter((line) => line.trim());
-  if (lines.length === 0) return "";
+  return compilePromptMaterialContextPlan(material, options).rendered;
+}
+
+export function compilePromptMaterialContextPlan(
+  material: PromptMaterial,
+  options: PromptMaterialRenderOptions,
+): ConversationPromptContextPlan {
+  const capacityTokens = Math.max(1, Math.floor(options.maxTokens));
+  const currentRequest = options.currentRequest ? currentRequestAtom(options.currentRequest) : null;
+  const messages = material.semantic_tail
+    .filter((message) => !options.excludeSourceRef || message.source_ref !== options.excludeSourceRef);
+  const turns = semanticTurnAtoms(messages, material.turns ?? [], material.outcomes ?? []);
+  const requiredTurns = turns.length > 0 ? [turns.at(-1)!] : [];
+  const optionalTurns = turns.slice(0, -requiredTurns.length).reverse();
   const header = "## Recent Conversation";
-  const bodyBudget = Math.max(1, maxTokens - estimateContextTokens(header));
-  const body = trimTextToTokenBudgetStrict(lines.join("\n"), bodyBudget);
-  return [header, body].filter((line) => line.trim()).join("\n");
+  let used = serializedUpperBound(header);
+  for (const turn of requiredTurns) used += turn.serialized_tokens;
+
+  const selectedOptionalNewestFirst: ConversationSemanticTurnAtom[] = [];
+  for (const turn of optionalTurns) {
+    if (used + turn.serialized_tokens > capacityTokens) break;
+    selectedOptionalNewestFirst.push(turn);
+    used += turn.serialized_tokens;
+  }
+
+  const selectedSummariesNewestFirst: ConversationSummaryAtom[] = [];
+  if (options.includeSummaries !== false) {
+    const summaries = material.summaries.map(summaryAtom).reverse();
+    for (const summary of summaries) {
+      if (used + summary.serialized_tokens > capacityTokens) break;
+      selectedSummariesNewestFirst.push(summary);
+      used += summary.serialized_tokens;
+    }
+  }
+
+  const selectedOptionalTurns = selectedOptionalNewestFirst;
+  const selectedSummaries = selectedSummariesNewestFirst.reverse();
+  const renderedTurns = [...selectedOptionalTurns].reverse().concat(requiredTurns);
+  const body = [
+    ...selectedSummaries.map(renderSummaryAtom),
+    ...renderedTurns.flatMap(renderSemanticTurnAtom),
+  ].filter((line) => line.trim());
+  const rendered = body.length > 0 ? [header, ...body].join("\n") : "";
+  return {
+    session_id: material.session_id,
+    measurement: "serialized_utf8_upper_bound",
+    capacity_tokens: capacityTokens,
+    current_request: currentRequest,
+    required_turns: requiredTurns,
+    optional_turns: optionalTurns,
+    selected_optional_turns: selectedOptionalTurns,
+    selected_summaries: selectedSummaries,
+    selected_atom_ids: [
+      ...(currentRequest ? [currentRequest.id] : []),
+      ...selectedSummaries.map((summary) => summary.id),
+      ...renderedTurns.map((turn) => turn.id),
+    ],
+    compiled_input_tokens: rendered ? serializedUpperBound(rendered) : 0,
+    rendered,
+  };
+}
+
+function currentRequestAtom(input: {
+  id: string;
+  text: string;
+}): ConversationCurrentRequestAtom {
+  return {
+    id: `current_request:${input.id}`,
+    source_hash: stringSourceHash(input.text),
+    serialized_tokens: serializedUpperBound(input.text),
+    text: input.text,
+  };
 }
 
 export function toContextMessage(
@@ -110,17 +219,126 @@ export function textForMessage(message: ConversationMessageWithParts, includeToo
   );
 }
 
-function renderSummaryLines(summaries: ConversationSummary[]): string[] {
-  return summaries.flatMap((summary) => [
-    `summary ${summary.id} seq ${summary.covers_from_seq}-${summary.covers_to_seq}: ${summary.summary_text.trim()}`,
-  ]).filter((line) => line.trim());
+function semanticTurnAtoms(
+  messages: ConversationMessageWithParts[],
+  turns: ConversationTurn[],
+  outcomes: TurnOutcomeCapsule[],
+): ConversationSemanticTurnAtom[] {
+  const statusByTurnId = new Map(turns.map((turn) => [turn.id, turn.status]));
+  const outcomeByTurnId = new Map(outcomes.map((outcome) => [outcome.turn_id, outcome]));
+  const grouped = new Map<string, ConversationMessageWithParts[]>();
+  for (const message of messages) {
+    const key = message.turn_id ? `turn:${message.turn_id}` : `message:${message.id}`;
+    const group = grouped.get(key) ?? [];
+    group.push(message);
+    grouped.set(key, group);
+  }
+  return [...grouped.values()].map((group) => {
+    const first = group[0]!;
+    const last = group.at(-1)!;
+    const turnId = first.turn_id;
+    const id = turnId ? `conversation_turn:${turnId}` : `conversation_message:${first.id}`;
+    const contextMessages = group.map((message) => toContextMessage(message, true));
+    const outcome = turnId ? outcomeByTurnId.get(turnId) ?? null : null;
+    const rendered = renderSemanticTurnMessages({
+      id,
+      turnId,
+      status: turnId ? statusByTurnId.get(turnId) ?? "unknown" : "unknown",
+      messages: contextMessages,
+      outcome,
+    });
+    return {
+      id,
+      turn_id: turnId,
+      status: turnId ? statusByTurnId.get(turnId) ?? "unknown" : "unknown",
+      source_hash: sourceHash(group),
+      first_seq: first.seq,
+      last_seq: last.seq,
+      serialized_tokens: serializedUpperBound(rendered.join("\n")),
+      messages: contextMessages,
+      outcome,
+    };
+  });
 }
 
-function renderPromptMessageLines(message: ConversationMessageWithParts): string[] {
-  const speaker = speakerForRole(message.role);
-  const text = textForMessage(message, true);
-  if (!text.trim()) return [];
-  return [`${speaker}: ${text}`];
+function summaryAtom(summary: ConversationSummary): ConversationSummaryAtom {
+  const context = toContextSummary(summary);
+  const atom = {
+    ...context,
+    id: `conversation_summary:${summary.id}`,
+    serialized_tokens: 0,
+  };
+  atom.serialized_tokens = serializedUpperBound(renderSummaryAtom(atom));
+  return atom;
+}
+
+function renderSummaryAtom(summary: ConversationSummaryAtom): string {
+  return `summary ${summary.summary_id} seq ${summary.covers_from_seq}-${summary.covers_to_seq}: ${summary.text.trim()}`;
+}
+
+function renderSemanticTurnAtom(turn: ConversationSemanticTurnAtom): string[] {
+  return renderSemanticTurnMessages({
+    id: turn.id,
+    turnId: turn.turn_id,
+    status: turn.status,
+    messages: turn.messages,
+    outcome: turn.outcome,
+  });
+}
+
+function renderSemanticTurnMessages(input: {
+  id: string;
+  turnId: string | null;
+  status: ConversationSemanticTurnAtom["status"];
+  messages: ConversationContextMessage[];
+  outcome: TurnOutcomeCapsule | null;
+}): string[] {
+  return [
+    `turn ${input.turnId ?? input.id} status ${input.status}`,
+    ...(input.outcome ? [renderOutcomeCapsule(input.outcome)] : []),
+    ...input.messages.flatMap((message) =>
+      message.text.trim() ? [`${message.speaker}: ${message.text}`] : [],
+    ),
+  ];
+}
+
+function renderOutcomeCapsule(outcome: TurnOutcomeCapsule): string {
+  return `outcome ${outcome.outcome} generation ${outcome.generation}: ${JSON.stringify({
+    source_hash: outcome.source_hash,
+    request_message_id: outcome.request_message_id,
+    public_assistant_message_id: outcome.public_assistant_message_id,
+    evidence_refs: outcome.evidence_refs,
+    unresolved_obligations: outcome.unresolved_obligations,
+    continuation: outcome.continuation,
+    safe_code: outcome.safe_code,
+  })}`;
+}
+
+function sourceHash(messages: ConversationMessageWithParts[]): string {
+  const payload = messages.map((message) => ({
+    id: message.id,
+    turn_id: message.turn_id,
+    seq: message.seq,
+    role: message.role,
+    status: message.status,
+    parts: message.parts.map((part) => ({
+      id: part.id,
+      kind: part.kind,
+      content_json: part.content_json,
+      tool_call_id: part.tool_call_id,
+      parent_tool_call_id: part.parent_tool_call_id,
+      status: part.status,
+    })),
+  }));
+  return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
+}
+
+function stringSourceHash(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+}
+
+function serializedUpperBound(value: string): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
 function speakerForRole(role: ConversationMessageWithParts["role"]): ConversationContextMessage["speaker"] {
@@ -182,25 +400,4 @@ function objectBoolean(value: unknown, key: string): boolean | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = (value as Record<string, unknown>)[key];
   return typeof raw === "boolean" ? raw : null;
-}
-
-function trimTextToTokenBudgetStrict(text: string, maxTokens: number): string {
-  const trimmed = text.trim();
-  if (!trimmed || estimateContextTokens(trimmed) <= maxTokens) return trimmed;
-  const marker = "[...trimmed for context budget...]";
-  if (estimateContextTokens(marker) > maxTokens) return marker;
-  let low = 0;
-  let high = trimmed.length;
-  let best = marker;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const candidate = `${trimmed.slice(0, mid).trimEnd()}\n${marker}`.trim();
-    if (estimateContextTokens(candidate) <= maxTokens) {
-      best = candidate;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  return best;
 }

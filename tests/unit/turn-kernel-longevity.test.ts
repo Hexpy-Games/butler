@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/parser.ts";
@@ -42,11 +42,10 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("seventy tool rounds survive two process restarts without losing contract progress", async () => {
+test("logical-turn spend cannot reset across restart and preserves recoverable contract progress", async () => {
   const turnId = "turn-seventy-rounds";
   const sessionId = "butler/seventy-rounds";
   const events: RuntimeTurnEventInput[] = [];
-  const cumulativeBudgetBeforeRequest: number[] = [];
   const windowBudgetBeforeRequest: number[] = [];
   const prompts: string[] = [];
   let typedDecisionCalls = 0;
@@ -60,6 +59,18 @@ test("seventy tool rounds survive two process restarts without losing contract p
       butlerHome: process.cwd(),
       disableAutomaticRecall: true,
       runPromptText: async (input) => {
+        if (input.usageAttribution?.phase === "budget_exhaustion_finalization") {
+          const roundIndex = input.usageAttribution.roundIndex ?? 0;
+          input.usageAttribution.beforeModelRequest?.({ roundIndex });
+          input.usageAttribution.beforeAdmittedModelRequest?.({
+            roundIndex,
+            phase: input.usageAttribution.phase,
+            admittedPromptTokens: 100,
+            requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+            requestHash: `finalization-${roundIndex}`,
+          });
+          return "24개 증거 라운드까지 보존했지만 실행 예산이 소진되어 나머지 작업은 이어서 진행해야 합니다.";
+        }
         typedDecisionCalls += 1;
         return JSON.stringify({
           schema_version: "butler.turn-contract-decision.v1",
@@ -84,10 +95,16 @@ test("seventy tool rounds survive two process restarts without losing contract p
         while (completedRounds < segmentEnd) {
           const step = completedRounds + 1;
           const budget = input.usageAttribution?.getBudgetState?.();
-          cumulativeBudgetBeforeRequest.push(budget?.cumulativeRequestCount ?? -1);
           windowBudgetBeforeRequest.push(budget?.requestCount ?? -1);
           input.usageAttribution?.beforeModelRequest?.({
             roundIndex: step - segmentStart - 1,
+          });
+          input.usageAttribution?.beforeAdmittedModelRequest?.({
+            roundIndex: step - segmentStart - 1,
+            phase: input.usageAttribution.phase,
+            admittedPromptTokens: 100,
+            requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+            requestHash: `execution-${step}`,
           });
           const call = step === 70
             ? { name: "run_command", args: { command: "bun test longevity-proof" } }
@@ -197,7 +214,13 @@ test("seventy tool rounds survive two process restarts without losing contract p
   expect(firstAtom).toMatchObject({
     generation: 1,
     nextSemanticBlockSequence: 24,
-    budgetSnapshot: { modelRequestsUsed: 24 },
+    budgetSnapshot: {
+      modelRequestsUsed: 28,
+      partitions: {
+        execution: { modelRequestsUsed: 24 },
+        finalization: { modelRequestsUsed: 4 },
+      },
+    },
   });
   expect(firstAtom?.roundJournal).toHaveLength(24);
 
@@ -217,59 +240,33 @@ test("seventy tool rounds survive two process restarts without losing contract p
     generation: 2,
     contractId: firstAtom!.contractId,
     workStreamId: firstAtom!.workStreamId,
-    nextSemanticBlockSequence: 48,
-    budgetSnapshot: { modelRequestsUsed: 48 },
+    nextSemanticBlockSequence: 24,
+    budgetSnapshot: { modelRequestsUsed: 28 },
   });
-  expect(secondAtom?.roundJournal).toHaveLength(48);
-
-  const result = await runProcess({
-    contextAtomId: createTurnContextAtomId(sessionId, turnId),
-    checkpointId: secondAtom!.checkpointId,
-    schedulerItemId: "queue-longevity-2",
-  });
-
-  expect(result.text).toContain("완료했습니다");
-  expect(processStarts).toBe(3);
+  expect(secondAtom?.roundJournal).toHaveLength(24);
+  expect(processStarts).toBe(2);
   expect(typedDecisionCalls).toBe(1);
-  expect(completedRounds).toBe(70);
-  expect(cumulativeBudgetBeforeRequest).toEqual(
-    Array.from({ length: 70 }, (_, index) => index),
-  );
+  expect(completedRounds).toBe(24);
   expect(windowBudgetBeforeRequest.slice(0, 24)).toEqual(
     Array.from({ length: 24 }, (_, index) => index),
   );
-  expect(windowBudgetBeforeRequest.slice(24, 48)).toEqual(
-    Array.from({ length: 24 }, (_, index) => index),
-  );
-  expect(windowBudgetBeforeRequest.slice(48)).toEqual(
-    Array.from({ length: 22 }, (_, index) => index),
-  );
-  expect(prompts).toHaveLength(3);
-  expect(prompts[1]).toContain("## Resumed Typed Turn Contract");
-  expect(prompts[2]).toContain("## Resumed Typed Turn Contract");
-  expect(prompts[2]).toContain("Stable Mutation Identities:");
-  const recentJournal = prompts[2]!.split("Recent Round Journal:")[1]!
-    .split("Continuation Instruction:")[0]!;
-  expect(recentJournal).toContain('"sequence": 31');
-  expect(recentJournal).not.toContain('"sequence": 30');
-  const stableIdentities = prompts[2]!.split("Stable Mutation Identities:")[1]!
-    .split("Recent Round Journal:")[0]!;
-  expect(stableIdentities).toContain('"sequence": 30');
-  expect(stableIdentities).not.toContain('"block_title"');
+  expect(windowBudgetBeforeRequest.slice(24)).toHaveLength(5);
+  expect(windowBudgetBeforeRequest.slice(24).every((value) => value === 24)).toBe(true);
+  expect(prompts).toHaveLength(6);
+  expect(prompts.some((prompt) => prompt.includes("## Resumed Typed Turn Contract"))).toBe(true);
   expect(events.filter((event) =>
     event.kind === "assistant.decision" && event.payload?.role === "opening",
   )).toHaveLength(1);
-  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(2);
+  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(1);
   const startedSequences = events
     .filter((event) => event.kind === "work.block.started")
     .map((event) => semanticBlockSequence(event.payload?.semanticBlockId));
-  expect(startedSequences).toEqual(Array.from({ length: 70 }, (_, index) => index));
-  expect(events.filter((event) => event.kind === "work.block.completed")).toHaveLength(70);
-  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
-  expect(readOnlyContract()).toMatchObject({
-    contract_id: firstAtom!.contractId,
-    target_workstream_id: firstAtom!.workStreamId,
-    state: "delivered",
+  expect(startedSequences).toEqual(Array.from({ length: 24 }, (_, index) => index));
+  expect(events.filter((event) => event.kind === "work.block.completed")).toHaveLength(24);
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).not.toBeNull();
+  expect(secondAtom).toMatchObject({
+    contractId: firstAtom!.contractId,
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
   });
 });
 
@@ -286,11 +283,4 @@ function semanticBlockSequence(value: unknown): number {
   const match = typeof value === "string" ? value.match(/:block:(\d+)$/u) : null;
   if (!match) throw new Error(`semantic block sequence missing: ${String(value)}`);
   return Number(match[1]);
-}
-
-function readOnlyContract(): Record<string, unknown> {
-  const dir = join(data, "turn-contracts");
-  const file = readdirSync(dir).find((name) => name.endsWith(".json"));
-  if (!file) throw new Error("turn contract missing");
-  return JSON.parse(readFileSync(join(dir, file), "utf8"));
 }

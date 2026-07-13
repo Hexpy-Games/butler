@@ -10,18 +10,24 @@ import {
   textForMessage,
   toContextMessage,
   toContextSummary,
+  compilePromptMaterialContextPlan,
+  emptyConversationPromptContextPlan,
   renderPromptMaterial,
   type ConversationContextMessage,
   type ConversationContextPart,
   type ConversationContextSummary,
+  type ConversationPromptContextPlan,
   type PromptMaterialRenderOptions,
 } from "./conversation-context-format.ts";
 
 export {
   renderPromptMaterial,
+  compilePromptMaterialContextPlan,
+  emptyConversationPromptContextPlan,
   type ConversationContextMessage,
   type ConversationContextPart,
   type ConversationContextSummary,
+  type ConversationPromptContextPlan,
   type PromptMaterialRenderOptions,
 };
 

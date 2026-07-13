@@ -24,7 +24,10 @@ export interface ConversationAdmissionTurnInput {
 
 export class ConversationAdmissionTurn {
   private readonly knownToolCallIds = new Set<string>();
+  private readonly evidenceRefs = new Set<string>();
   private toolMessage: ConversationMessageWithParts | null = null;
+  private requestMessageId: string | null = null;
+  private publicAssistantMessageId: string | null = null;
 
   private constructor(
     private readonly input: ConversationAdmissionTurnInput,
@@ -89,10 +92,58 @@ export class ConversationAdmissionTurn {
   }
 
   finalize(status: ConversationTurn["status"], completedAt: string): void {
+    const existingGeneration = this.input.writer.readTurnOutcome?.(this.turn.id)?.generation ?? 0;
     this.input.writer.finalizeTurn({
       turnId: this.turn.id,
       status,
       completedAt,
+      outcomeCapsule: {
+        sessionId: this.turn.session_id,
+        turnId: this.turn.id,
+        generation: existingGeneration + 1,
+        outcome: status === "complete"
+          ? "delivered"
+          : status === "aborted"
+          ? "cancelled"
+          : "failed",
+        requestMessageId: this.requestMessageId,
+        publicAssistantMessageId: this.publicAssistantMessageId,
+        providerId: this.input.binding.modelRef.split("/", 1)[0] ?? null,
+        modelRef: this.input.binding.modelRef,
+        evidenceRefs: [...this.evidenceRefs],
+        unresolvedObligations: [],
+        safeCode: status === "complete" ? null : `turn_${status}`,
+        createdAt: completedAt,
+      },
+    });
+  }
+
+  finalizeRecoverable(completedAt: string, safeCode: string): void {
+    const existingGeneration = this.input.writer.readTurnOutcome?.(this.turn.id)?.generation ?? 0;
+    const outcomeCapsule = {
+        sessionId: this.turn.session_id,
+        turnId: this.turn.id,
+        generation: existingGeneration + 1,
+        outcome: "recoverable" as const,
+        requestMessageId: this.requestMessageId,
+        publicAssistantMessageId: this.publicAssistantMessageId,
+        providerId: this.input.binding.modelRef.split("/", 1)[0] ?? null,
+        modelRef: this.input.binding.modelRef,
+        evidenceRefs: [...this.evidenceRefs],
+        unresolvedObligations: ["resume_same_logical_turn"],
+        continuation: { logical_turn_id: this.turn.id },
+        safeCode,
+        createdAt: completedAt,
+    };
+    if (this.input.writer.writeTurnOutcome) {
+      this.input.writer.writeTurnOutcome(outcomeCapsule);
+      return;
+    }
+    this.input.writer.finalizeTurn({
+      turnId: this.turn.id,
+      status: "failed",
+      completedAt,
+      outcomeCapsule,
     });
   }
 
@@ -101,7 +152,7 @@ export class ConversationAdmissionTurn {
     if (!decision.operation) return;
     if (decision.operation.kind === "append_message") {
       if (decision.operation.role === "user") {
-        this.input.writer.appendUserMessage({
+        const message = this.input.writer.appendUserMessage({
           sessionId: this.turn.session_id,
           turnId: this.turn.id,
           text: decision.operation.text,
@@ -109,10 +160,11 @@ export class ConversationAdmissionTurn {
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
         });
+        this.requestMessageId ??= message.id;
         return;
       }
       if (decision.operation.role === "assistant") {
-        this.input.writer.appendAssistantMessage({
+        const message = this.input.writer.appendAssistantMessage({
           sessionId: this.turn.session_id,
           turnId: this.turn.id,
           text: decision.operation.text,
@@ -120,6 +172,9 @@ export class ConversationAdmissionTurn {
           sourceGateway: decision.operation.sourceGateway,
           sourceRef: decision.operation.sourceRef,
         });
+        if (decision.operation.visibility === "user" || event.kind === "outbound.final") {
+          this.publicAssistantMessageId = message.id;
+        }
       }
       return;
     }
@@ -129,6 +184,7 @@ export class ConversationAdmissionTurn {
     }
     if (decision.operation.kind === "append_tool_result") {
       if (!this.toolMessage) return;
+      collectEvidenceRefs(decision.operation.contentJson, this.evidenceRefs);
       this.input.writer.appendToolResult({
         messageId: this.toolMessage.id,
         toolCallId: decision.operation.toolCallId,
@@ -190,6 +246,20 @@ export class ConversationAdmissionTurn {
       decision,
     });
   }
+}
+
+function collectEvidenceRefs(value: unknown, refs: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectEvidenceRefs(item, refs);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  const record = value as Record<string, unknown>;
+  for (const key of ["artifact_id", "packet_id", "digest"]) {
+    const ref = record[key];
+    if (typeof ref === "string" && ref.trim()) refs.add(ref.trim());
+  }
+  for (const nested of Object.values(record)) collectEvidenceRefs(nested, refs);
 }
 
 export function conversationSessionIdForDurableSession(sessionId: string): string {

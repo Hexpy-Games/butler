@@ -2,18 +2,9 @@ import type { RuntimeTurnInput } from "../../../../test-support/harness/contract
 import { estimateContextTokens } from "../../../context/budget.ts";
 import type { PromptUsageSectionAttribution } from "../../../../integrations/providers/provider.ts";
 import { metadataPolicyValue } from "../policy/turn-metadata-policy.ts";
-import {
-  promptContextDelimitedSection,
-  promptContextSection,
-} from "../context/turn-prompt.ts";
 import type { PlannedReviewTurnContext } from "../context/planned-review-context.ts";
 import type { NativeStoredSessionConfig } from "./turn-runner-types.ts";
-
-const THIN_RECENT_CONVERSATION_MAX_CHARS = 6_000;
-const THIN_PERSONA_MAX_CHARS = 2_000;
-const THIN_PERSONALIZATION_PROFILE_MAX_CHARS = 1_200;
-const THIN_RUNTIME_POLICY_MAX_CHARS = 2_000;
-const THIN_WORKSTREAM_CAPSULE_MAX_CHARS = 5_000;
+import type { ConversationPromptContextPlan } from "../../../context/conversation-context.ts";
 
 export interface ThinFirstResponsePrompt {
   prompt: string;
@@ -36,32 +27,21 @@ export function shouldUseThinFirstResponse(input: {
 }
 
 export function buildThinFirstResponsePrompt(input: {
-  fullPrompt: string;
   userText: string;
   decisionInstructions: string;
+  conversationContextPlan: ConversationPromptContextPlan;
+  activePersona?: string;
+  personalizationProfile?: string;
+  runtimePolicy?: string;
   workstreamCapsule?: string;
   personaFallback?: string;
 }): ThinFirstResponsePrompt {
-  const persona = takeSection(
-    promptContextDelimitedSection(input.fullPrompt, "Active Persona Reminder") ||
-      promptContextSection(input.fullPrompt, "Active Persona Reminder") ||
-      ["## Active Persona Reminder", input.personaFallback?.trim() ?? ""].filter(Boolean).join("\n"),
-    THIN_PERSONA_MAX_CHARS,
-  );
-  const personalizationProfile = takeSection(
-    promptContextDelimitedSection(input.fullPrompt, "Personalization Profile") ||
-      promptContextSection(input.fullPrompt, "Personalization Profile"),
-    THIN_PERSONALIZATION_PROFILE_MAX_CHARS,
-  );
-  const recentConversation = takeSection(
-    promptContextSection(input.fullPrompt, "Recent Conversation"),
-    THIN_RECENT_CONVERSATION_MAX_CHARS,
-  );
-  const runtimePolicy = takeSection(
-    promptContextSection(input.fullPrompt, "Session Context Policy"),
-    THIN_RUNTIME_POLICY_MAX_CHARS,
-  );
-  const workstreamCapsule = takeSection(input.workstreamCapsule ?? "", THIN_WORKSTREAM_CAPSULE_MAX_CHARS);
+  const persona = input.activePersona?.trim() ||
+    ["## Active Persona Reminder", input.personaFallback?.trim() ?? ""].filter(Boolean).join("\n");
+  const personalizationProfile = input.personalizationProfile?.trim() ?? "";
+  const recentConversation = input.conversationContextPlan.rendered;
+  const runtimePolicy = input.runtimePolicy?.trim() ?? "";
+  const workstreamCapsule = input.workstreamCapsule?.trim() ?? "";
   const currentRequest = ["## Current User Request", input.userText.trim()].join("\n");
   const parts = [
     input.decisionInstructions,
@@ -84,12 +64,6 @@ export function buildThinFirstResponsePrompt(input: {
       ["inbound_message", currentRequest],
     ]),
   };
-}
-
-function takeSection(section: string, maxChars: number): string {
-  const trimmed = section.trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  return `${trimmed.slice(0, maxChars).trimEnd()}\n[...bounded for typed first response...]`;
 }
 
 function promptSections(sections: Array<[id: string, content: string]>): PromptUsageSectionAttribution[] {

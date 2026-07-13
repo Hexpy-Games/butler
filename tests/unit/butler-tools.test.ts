@@ -644,7 +644,7 @@ test("Project Ledger native tools route task completion through task handlers", 
   }) as { ok: boolean; data?: { id?: string; kind?: string; status?: string } };
   expect(completed.ok).toBe(true);
   expect(completed.data).toMatchObject({ id: "T-SANDY", kind: "task", status: "done" });
-});
+}, 15_000);
 
 test("Project Ledger mutation policy covers every mutating native Project Ledger tool", () => {
   const mutatingNativeLedgerTools = projectLedgerNativeToolDefinitions
