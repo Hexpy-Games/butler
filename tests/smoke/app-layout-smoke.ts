@@ -271,6 +271,9 @@ try {
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });
   await page
+    .locator('[data-slot="composer-compact-preview"]')
+    .click();
+  await page
     .locator(testClass("worker-composer-panel"))
     .waitFor({ state: "visible" });
   await page
@@ -1900,6 +1903,10 @@ try {
     "png attachment should not show unsupported type error",
   );
 
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
+  await page
+    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .waitFor({ state: "visible" });
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
     .click();
@@ -1975,6 +1982,7 @@ try {
     0,
     "permission popover should close on outside click",
   );
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
     .click();
@@ -2833,6 +2841,7 @@ try {
     darkSurfaces.composerBorder === "rgba(0, 0, 0, 0.08)",
     `dark composer glass should use black translucent hairline: ${darkSurfaces.composerBorder}`,
   );
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
@@ -2875,6 +2884,7 @@ try {
     `tooltip-theme-tokenized failed: ${JSON.stringify(darkTooltipSurface)}`,
   );
   await page.mouse.move(40, 40);
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
   await page.locator(testClass("model-button")).click();
   await page
     .locator(testClass("filtered-select-popover"))
@@ -3307,6 +3317,39 @@ try {
       emptyStateLayout.workspaceLeftRadiusPreserved,
     `new chat empty state should use coherent DS suggestion cards: ${JSON.stringify(emptyStateLayout)}`,
   );
+  const desktopComposer = page.locator(testClass("composer-card"));
+  const desktopPreview = desktopComposer.locator(
+    '[data-slot="composer-compact-preview"]',
+  );
+  const desktopTextarea = desktopComposer.locator("textarea");
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.waitForTimeout(260);
+  const desktopIdleBox = await desktopComposer.boundingBox();
+  const desktopIdleState = await desktopPreview.evaluate((element) => ({
+    display: getComputedStyle(element).display,
+    expanded: element.closest("form")?.dataset.expanded,
+  }));
+  await desktopPreview.click();
+  await page.waitForTimeout(260);
+  const desktopEngagedBox = await desktopComposer.boundingBox();
+  const desktopTextareaBox = await desktopTextarea.boundingBox();
+  assert(
+    desktopIdleBox &&
+      desktopIdleBox.height <= 68 &&
+      desktopIdleState.display === "block" &&
+      desktopIdleState.expanded === "false" &&
+      desktopEngagedBox &&
+      desktopEngagedBox.height >= desktopIdleBox.height + 28 &&
+      desktopTextareaBox &&
+      desktopTextareaBox.height <= 64,
+    `desktop composer should use the same idle and engaged form as mobile: ${JSON.stringify({ desktopEngagedBox, desktopIdleBox, desktopIdleState, desktopTextareaBox })}`,
+  );
+  await desktopTextarea.evaluate((element) => element.blur());
+  await page.waitForTimeout(260);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(240);
   const compactComposer = page.locator(testClass("composer-card"));
@@ -3556,6 +3599,8 @@ try {
     draftComposerBox.x + Math.min(320, draftComposerBox.width - 24),
     draftComposerBox.y + 24,
   );
+  await composerInput.waitFor({ state: "visible" });
+  await page.waitForTimeout(50);
   await page.keyboard.type("composer focus");
   const composerFocusState = await composerInput.evaluate((element) => ({
     focused: document.activeElement === element,
@@ -4141,6 +4186,8 @@ try {
         "narrow-project-session-tap-navigates",
         "narrow-project-session-long-press-menu",
         "narrow-project-session-long-press-move-cancel",
+        "desktop-composer-idle-one-line",
+        "desktop-composer-focus-expands",
         "narrow-composer-idle-one-line",
         "narrow-composer-focus-expands",
         "narrow-composer-draft-ellipsis",
