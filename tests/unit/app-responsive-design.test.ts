@@ -125,6 +125,7 @@ describe("responsive adaptive design contracts", () => {
     expect(index).toContain('name="theme-color"');
     expect(shell).toContain("--app-window-radius: 0px");
     expect(shell).toContain("border: 0");
+    expect(shell).toContain("contain: paint");
     expect(prompt).toContain("padding-block-start: var(--space-md)");
   });
 
