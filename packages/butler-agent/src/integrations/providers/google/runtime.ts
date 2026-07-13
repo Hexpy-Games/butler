@@ -11,6 +11,7 @@ import {
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
+import { toolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
 
 
 export async function createGeminiContent(
@@ -235,7 +236,15 @@ export async function runGeminiFunctionToolPromptText(
         parts: [{
           functionResponse: {
             name: call.name,
-            response: payload,
+            response: toolResultPayloadForProvider({
+              payload,
+              toolName: call.name,
+              toolCallId: call.id,
+              evidenceRetention: {
+                butlerData: options.butlerData,
+                turnId: options.usageAttribution?.turnId,
+              },
+            }),
           },
         }],
       });
@@ -252,7 +261,15 @@ export async function runGeminiFunctionToolPromptText(
         parts: [{
           functionResponse: {
             name: call.name,
-            response: { ok: false, output: blockCapacityToolOutput(observation) },
+            response: toolResultPayloadForProvider({
+              payload: { ok: false, output: blockCapacityToolOutput(observation) },
+              toolName: call.name,
+              toolCallId: call.id,
+              evidenceRetention: {
+                butlerData: options.butlerData,
+                turnId: options.usageAttribution?.turnId,
+              },
+            }),
           },
         }],
       });

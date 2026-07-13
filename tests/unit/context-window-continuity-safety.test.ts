@@ -165,7 +165,7 @@ test.failing("CWCS baseline: token overspend exhausts before another model reque
   expect(directTurnBudgetState(budget).status).toBe("exhausted");
 });
 
-test.failing("CWCS boundary: provider-neutral request admission has no compaction bypass or size thresholds", () => {
+test("CWCS boundary: provider-neutral request admission has no compaction bypass or size thresholds", () => {
   const root = join(import.meta.dir, "../..");
   const openAIToolRuntime = readFileSync(
     join(root, "packages/butler-agent/src/integrations/providers/openai/tool-runtime.ts"),

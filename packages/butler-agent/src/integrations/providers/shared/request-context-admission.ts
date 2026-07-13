@@ -6,6 +6,7 @@ import {
   modelRequestContextAdmissionMetric,
   type ModelRequestContextAdmissionMetric,
 } from "./request-context-admission-metrics.ts";
+import { compileCompletedToolEvidenceInline } from "../../../agent/context/completed-tool-evidence.ts";
 
 export type RequestContextMeasurement = "serialized_utf8_upper_bound";
 export type RequestContextAdmission = "admitted" | "reduce" | "cannot_fit_required";
@@ -120,15 +121,19 @@ export function admitSerializedProviderRequest(
   const capacity = strictModelCapacity(input);
   const requestedOutputTokens = positiveInteger(input.requestedOutputTokens) ?? capacity.maxOutputTokens;
   const providerEnvelopeTokens = Math.max(0, Math.trunc(input.providerEnvelopeTokens ?? 0));
-  const serializedRequest = JSON.stringify(input.body);
-  const serializedRequestHash = sha256(serializedRequest);
-  const compiledInputTokens = Buffer.byteLength(serializedRequest, "utf8") + providerEnvelopeTokens;
   const configuredInputCapacity = positiveInteger(input.maxInputTokens);
   const contextInputCapacity = capacity.contextWindowTokens - requestedOutputTokens;
   const inputCapacityTokens = Math.min(
     configuredInputCapacity ?? capacity.contextWindowTokens,
     contextInputCapacity,
   );
+  const compiledBody = compileCompletedToolEvidenceInline({
+    body: input.body,
+    serializedUtf8Capacity: Math.max(0, inputCapacityTokens - providerEnvelopeTokens),
+  });
+  const serializedRequest = JSON.stringify(compiledBody);
+  const serializedRequestHash = sha256(serializedRequest);
+  const compiledInputTokens = Buffer.byteLength(serializedRequest, "utf8") + providerEnvelopeTokens;
   const plan: ModelRequestContextPlan = {
     request_id: `request-${serializedRequestHash.slice(0, 24)}`,
     turn_id: input.turnId?.trim() || "unattributed",

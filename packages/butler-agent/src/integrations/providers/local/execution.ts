@@ -2,7 +2,8 @@ import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contra
 import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
-import { localToolResultMessageContent, rebudgetLocalToolMessages, runLocalCompactFinalAnswerText } from "./evidence.ts";
+import { rebudgetLocalToolMessages, runLocalCompactFinalAnswerText } from "./evidence.ts";
+import { serializeToolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import type { LocalModelConfig } from "./models.ts";
@@ -260,11 +261,14 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: localToolResultMessageContent({
+        content: serializeToolResultPayloadForProvider({
           payload,
           toolName: call.function.name,
-          config,
-          log,
+          toolCallId: call.id,
+          evidenceRetention: {
+            butlerData: options.butlerData,
+            turnId: options.usageAttribution?.turnId,
+          },
         }),
       });
     }
@@ -279,11 +283,14 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: localToolResultMessageContent({
+        content: serializeToolResultPayloadForProvider({
           payload: { ok: false, output: blockCapacityToolOutput(observation) },
           toolName: call.function.name,
-          config,
-          log,
+          toolCallId: call.id,
+          evidenceRetention: {
+            butlerData: options.butlerData,
+            turnId: options.usageAttribution?.turnId,
+          },
         }),
       });
     }

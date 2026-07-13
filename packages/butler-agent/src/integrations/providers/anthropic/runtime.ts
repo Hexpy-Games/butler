@@ -11,6 +11,7 @@ import {
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
+import { serializeToolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
 
 
 export async function createAnthropicMessage(
@@ -229,7 +230,15 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: JSON.stringify(payload),
+          content: serializeToolResultPayloadForProvider({
+            payload,
+            toolName: call.name,
+            toolCallId: call.id,
+            evidenceRetention: {
+              butlerData: options.butlerData,
+              turnId: options.usageAttribution?.turnId,
+            },
+          }),
         }],
       });
     }
@@ -245,7 +254,15 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: JSON.stringify({ ok: false, output: blockCapacityToolOutput(observation) }),
+          content: serializeToolResultPayloadForProvider({
+            payload: { ok: false, output: blockCapacityToolOutput(observation) },
+            toolName: call.name,
+            toolCallId: call.id,
+            evidenceRetention: {
+              butlerData: options.butlerData,
+              turnId: options.usageAttribution?.turnId,
+            },
+          }),
         }],
       });
     }

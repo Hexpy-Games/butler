@@ -2,10 +2,7 @@ import type { FunctionToolPromptOptions, OpenAIResponse, PromptOptions } from ".
 import type { HostedRuntimeConfig } from "./model-routing.ts";
 import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget } from "./runtime-support.ts";
 import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChatMessage, hostedChatCompletionsUrl, type HostedChatMessage, hostedChatReasoningParams, hostedChatResponseFormat, hostedChatText, hostedChatTools, hostedProviderErrorLabel, promptTextForHosted } from "./hosted-chat-client.ts";
-import {
-  compactObservedHostedToolMessages,
-  hostedToolResultContent,
-} from "./hosted-tool-result-context.ts";
+import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
@@ -105,14 +102,6 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       if (disposition.kind === "final") return disposition.text;
       messages.push({ role: "assistant", content: text });
       messages.push({ role: "user", content: disposition.observation });
-      compactObservedHostedToolMessages({
-        messages,
-        log,
-        evidenceRetention: {
-          butlerData: options.butlerData,
-          turnId: options.usageAttribution?.turnId,
-        },
-      });
       continue;
     }
     const batch = partitionSemanticToolBatch(toolCalls);
@@ -125,14 +114,6 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           args: args.parsed,
         };
       }),
-    });
-    compactObservedHostedToolMessages({
-      messages,
-      log,
-      evidenceRetention: {
-        butlerData: options.butlerData,
-        turnId: options.usageAttribution?.turnId,
-      },
     });
     messages.push({
       role: "assistant",
