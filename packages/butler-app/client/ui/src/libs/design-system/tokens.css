@@ -15,6 +15,7 @@
   --control-height-lg: 34px;
   --adaptive-page-gutter: var(--space-xl);
   --adaptive-composer-inset: 44px;
+  --adaptive-composer-radius: 30px;
   --adaptive-panel-duration: 220ms;
   --adaptive-panel-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
   --adaptive-drawer-width: min(88vw, 320px);

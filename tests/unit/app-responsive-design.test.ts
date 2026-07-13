@@ -209,6 +209,9 @@ describe("responsive adaptive design contracts", () => {
       "border-radius var(--adaptive-panel-duration)",
     );
     expect(tokens).toContain("--adaptive-composer-radius: calc(");
+    expect(tokens.indexOf("--adaptive-composer-radius:")).toBeLessThan(
+      tokens.indexOf("@media (width <= 640px)"),
+    );
     expect(tokens).toContain(
       "(var(--control-hit-target) + var(--space-md)) / 2",
     );
