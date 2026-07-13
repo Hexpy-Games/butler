@@ -113,10 +113,13 @@ export function abortDurablyCancelledPrincipalTurnExecutions(
   butlerData: string,
 ): number {
   const root = resolve(butlerData);
+  const active = [...registrations.values()].filter(
+    (registration) => registration.butlerData === root,
+  );
+  const cancelledTurnIds = durablyCancelledTurnIds(root, active);
   let aborted = 0;
-  for (const registration of registrations.values()) {
-    if (registration.butlerData !== root) continue;
-    if (!principalTurnCancellationRecorded(registration)) continue;
+  for (const registration of active) {
+    if (!cancelledTurnIds.has(registration.turnId)) continue;
     if (!registration.controller.signal.aborted) {
       registration.abortDeliveredAt = Date.now();
       abortController(registration.controller);
@@ -133,6 +136,41 @@ export function abortDurablyCancelledPrincipalTurnExecutions(
     }
   }
   return aborted;
+}
+
+function durablyCancelledTurnIds(
+  butlerData: string,
+  registrationsForRoot: RegisteredTurnController[],
+): Set<string> {
+  const turnIds = [...new Set(
+    registrationsForRoot.map((registration) => registration.turnId),
+  )];
+  const cancelled = new Set(
+    turnIds.filter((turnId) =>
+      locallyRecordedTurns.has(turnKey({ butlerData, turnId })),
+    ),
+  );
+  if (turnIds.length === 0) return cancelled;
+  const dbPath = appTurnStateDbPath(butlerData);
+  if (!existsSync(dbPath)) return cancelled;
+  let db: Database | null = null;
+  try {
+    db = new Database(dbPath, { readonly: true });
+    const placeholders = turnIds.map(() => "?").join(", ");
+    const rows = db
+      .query<{ id: string }, string[]>(`
+        SELECT id FROM turns
+        WHERE state IN ('cancelling', 'cancelled')
+          AND id IN (${placeholders})
+      `)
+      .all(...turnIds);
+    for (const row of rows) cancelled.add(row.id);
+  } catch {
+    return cancelled;
+  } finally {
+    db?.close();
+  }
+  return cancelled;
 }
 
 function markPrincipalTurnCancellationStalled(
