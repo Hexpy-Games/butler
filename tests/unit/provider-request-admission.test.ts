@@ -1,4 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { toolResultPayloadForProvider } from "../../packages/butler-agent/src/agent/context/completed-tool-evidence.ts";
 import { createAnthropicMessage } from "../../packages/butler-agent/src/integrations/providers/anthropic/runtime.ts";
 import { createGeminiContent } from "../../packages/butler-agent/src/integrations/providers/google/runtime.ts";
 import { createLocalChatCompletion } from "../../packages/butler-agent/src/integrations/providers/local/client.ts";
@@ -76,6 +80,42 @@ test("serialized admission exposes only measured spend and request identity to t
     requestHash: receipt.serialized_request_sha256,
   }]);
   expect(JSON.stringify(observations)).not.toContain("private prompt");
+});
+
+test("shared provider admission includes a capacity-fitting fresh tool observation", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-provider-inline-admission-"));
+  try {
+    const packetized = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          ok: true,
+          path: "src/capacity.ts",
+          content: "CAPACITY_FITTING_TOOL_OBSERVATION",
+          bytes: 33,
+          truncated: false,
+        },
+      },
+      toolName: "read_file",
+      toolCallId: "call-provider-inline",
+      evidenceRetention: { butlerData: root, turnId: "turn-provider-inline" },
+    });
+    const receipt = admitSerializedProviderRequest({
+      providerId: "openai",
+      modelRef: "openai/gpt-5.4-mini",
+      body: {
+        model: "gpt-5.4-mini",
+        messages: [{ role: "tool", content: JSON.stringify(packetized) }],
+      },
+      requestedOutputTokens: 1024,
+    });
+
+    expect(receipt.serialized_request).toContain("CAPACITY_FITTING_TOOL_OBSERVATION");
+    expect(receipt.serialized_request).toContain("inline_output");
+    expect(receipt.plan.compiled_input_tokens).toBeLessThanOrEqual(receipt.plan.input_capacity_tokens);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("Codex subscription transport reserves output spend without sending an unsupported field", async () => {

@@ -132,7 +132,10 @@ export function admitSerializedProviderRequest(
     configuredInputCapacity ?? capacity.contextWindowTokens,
     contextInputCapacity,
   );
-  const compiledBody = compileCompletedToolEvidencePointers({ body: input.body });
+  const compiledBody = compileCompletedToolEvidencePointers({
+    body: input.body,
+    maxSerializedBytes: Math.max(0, inputCapacityTokens - providerEnvelopeTokens),
+  });
   const serializedRequest = JSON.stringify(compiledBody);
   const serializedRequestHash = sha256(serializedRequest);
   const compiledInputTokens = Buffer.byteLength(serializedRequest, "utf8") + providerEnvelopeTokens;

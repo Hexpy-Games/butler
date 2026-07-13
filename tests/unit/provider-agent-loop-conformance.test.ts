@@ -84,7 +84,7 @@ test("every provider family preserves decisions results and usage across native 
       executeTool: async (call) => {
         const step = Number(call.args.step);
         operations.push(`tool:${step}`);
-        return { evidence: `evidence-step-${step}` };
+        return { message: `evidence-step-${step}` };
       },
     });
 
@@ -113,6 +113,8 @@ test("every provider family preserves decisions results and usage across native 
     expect(JSON.stringify(bodies[2]), harness.family).toContain("butler.completed-tool-evidence.v1");
     expect(JSON.stringify(bodies[1]), harness.family).toContain("butler.evidence-packet.v1");
     expect(JSON.stringify(bodies[2]), harness.family).toContain("butler.evidence-packet.v1");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("evidence-step-1");
+    expect(JSON.stringify(bodies[2]), harness.family).toContain("evidence-step-2");
   }
 });
 

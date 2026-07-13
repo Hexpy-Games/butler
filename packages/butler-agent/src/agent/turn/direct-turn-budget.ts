@@ -5,7 +5,6 @@ import type {
 import { estimateContextTokens } from "../context/budget.ts";
 
 const DIRECT_TURN_MODEL_CALL_BUDGET = 32;
-export const DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT = 96;
 const DIRECT_TURN_PROMPT_TOKEN_BUDGET = 220_000;
 const DIRECT_TURN_OUTPUT_TOKEN_BUDGET = 80_000;
 const DIRECT_TURN_TOTAL_TOKEN_BUDGET = 300_000;
@@ -62,7 +61,6 @@ export interface DirectTurnBudget {
   outputTokens: number;
   totalTokens: number;
   maxModelCalls: number;
-  maxLifetimeModelCalls: number;
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
@@ -79,7 +77,6 @@ export interface DirectTurnBudgetSnapshot {
   outputTokens: number;
   totalTokens: number;
   maxModelCalls: number;
-  maxLifetimeModelCalls?: number;
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
@@ -113,7 +110,6 @@ export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
     outputTokens: 0,
     totalTokens: 0,
     maxModelCalls: DIRECT_TURN_MODEL_CALL_BUDGET,
-    maxLifetimeModelCalls: DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT,
     maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
@@ -132,7 +128,6 @@ export function snapshotDirectTurnBudget(budget: DirectTurnBudget): DirectTurnBu
     outputTokens: budget.outputTokens,
     totalTokens: budget.totalTokens,
     maxModelCalls: budget.maxModelCalls,
-    maxLifetimeModelCalls: budget.maxLifetimeModelCalls,
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
@@ -204,10 +199,6 @@ export function hydrateDirectTurnBudget(
   budget.outputTokens = finiteNonNegativeInteger(snapshot.outputTokens);
   budget.totalTokens = finiteNonNegativeInteger(snapshot.totalTokens);
   budget.maxModelCalls = finitePositiveInteger(snapshot.maxModelCalls, budget.maxModelCalls);
-  budget.maxLifetimeModelCalls = finitePositiveInteger(
-    snapshot.maxLifetimeModelCalls ?? budget.maxLifetimeModelCalls,
-    budget.maxLifetimeModelCalls,
-  );
   budget.maxPromptTokens = finitePositiveInteger(snapshot.maxPromptTokens, budget.maxPromptTokens);
   budget.maxOutputTokens = finitePositiveInteger(snapshot.maxOutputTokens, budget.maxOutputTokens);
   budget.maxTotalTokens = finitePositiveInteger(snapshot.maxTotalTokens, budget.maxTotalTokens);
@@ -386,12 +377,10 @@ export function recentConversationBudgetForTurn(input: {
 
 function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
   const requests = budget.modelRequestsUsed;
-  const lifetimeRequests = budget.cumulativeUsage.modelRequestsUsed;
   const promptTokens = budget.promptTokens;
   const outputTokens = budget.outputTokens;
   const totalTokens = budget.totalTokens;
   if (
-    lifetimeRequests >= budget.maxLifetimeModelCalls ||
     requests >= budget.maxModelCalls ||
     promptTokens >= budget.maxPromptTokens ||
     outputTokens >= budget.maxOutputTokens ||
@@ -400,9 +389,6 @@ function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetStat
     return "exhausted";
   }
   if (
-    lifetimeRequests >= Math.floor(
-      budget.maxLifetimeModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO,
-    ) ||
     requests >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
     promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
     outputTokens >= Math.floor(budget.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
@@ -534,7 +520,6 @@ function assertRequestFitsBudget(input: {
 }): void {
   const projectedTotalTokens = input.projectedPromptTokens + input.projectedOutputTokens;
   const exhausted =
-    input.budget.cumulativeUsage.modelRequestsUsed + 1 > input.budget.maxLifetimeModelCalls ||
     input.budget.modelRequestsUsed + 1 > input.budget.maxModelCalls ||
     input.budget.promptTokens + input.projectedPromptTokens > input.budget.maxPromptTokens ||
     input.budget.outputTokens + input.projectedOutputTokens > input.budget.maxOutputTokens ||
@@ -579,7 +564,6 @@ function requestFitsEmptySlice(input: {
 }): boolean {
   const projectedTotalTokens = input.projectedPromptTokens + input.projectedOutputTokens;
   return 1 <= input.budget.maxModelCalls &&
-    input.budget.cumulativeUsage.modelRequestsUsed + 1 <= input.budget.maxLifetimeModelCalls &&
     input.projectedPromptTokens <= input.budget.maxPromptTokens &&
     input.projectedOutputTokens <= input.budget.maxOutputTokens &&
     projectedTotalTokens <= input.budget.maxTotalTokens &&
