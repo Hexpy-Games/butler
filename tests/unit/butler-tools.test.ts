@@ -4791,6 +4791,8 @@ test("tool output artifact reader executes bounded Butler-owned slices", async (
   }) as Record<string, any>;
 
   expect(result).toMatchObject({
+    schema_version: "butler.tool-evidence-rehydration.v1",
+    terminal_evidence_observation: true,
     ok: true,
     rawTextStored: false,
     artifact: {
@@ -4845,6 +4847,8 @@ test("tool evidence artifact reader executes bounded Butler-owned slices", async
   }) as Record<string, any>;
 
   expect(result).toMatchObject({
+    schema_version: "butler.tool-evidence-rehydration.v1",
+    terminal_evidence_observation: true,
     ok: true,
     rawTextStored: false,
     artifact: {

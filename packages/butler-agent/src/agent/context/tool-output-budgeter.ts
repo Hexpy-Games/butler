@@ -16,6 +16,7 @@ import {
   estimateContextTokens,
   trimTextToTokenBudget,
 } from "./budget.ts";
+import { TOOL_EVIDENCE_REHYDRATION_SCHEMA } from "./tool-evidence-retention.ts";
 
 export interface ShellCommandResult {
   stdout: string;
@@ -48,6 +49,8 @@ export interface ToolOutputArtifactSlice {
 }
 
 export interface FocusedToolOutputArtifactRead {
+  schema_version?: typeof TOOL_EVIDENCE_REHYDRATION_SCHEMA;
+  terminal_evidence_observation?: true;
   ok: boolean;
   error?: string;
   rawTextStored: false;
@@ -336,6 +339,8 @@ export function readToolOutputArtifactSlice(input: {
     ? Math.max(25, Math.floor(maxTokens / 2))
     : maxTokens;
   const output: FocusedToolOutputArtifactRead = {
+    schema_version: TOOL_EVIDENCE_REHYDRATION_SCHEMA,
+    terminal_evidence_observation: true,
     ok: true,
     rawTextStored: false,
     artifact: artifactMetadata(resolved.path, artifact),

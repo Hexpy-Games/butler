@@ -12,6 +12,7 @@ import { basename, isAbsolute, join, relative, resolve } from "path";
 
 export const RAW_TOOL_ARTIFACT_SCHEMA = "butler.raw-tool-artifact.v1";
 export const EVIDENCE_PACKET_SCHEMA = "butler.evidence-packet.v1";
+export const TOOL_EVIDENCE_REHYDRATION_SCHEMA = "butler.tool-evidence-rehydration.v1";
 
 export interface ToolEvidenceRetentionContext {
   butlerData?: string;
@@ -73,6 +74,8 @@ export interface ToolEvidenceArtifactSlice {
 }
 
 export interface FocusedToolEvidenceArtifactRead {
+  schema_version?: typeof TOOL_EVIDENCE_REHYDRATION_SCHEMA;
+  terminal_evidence_observation?: true;
   ok: boolean;
   error?: string;
   rawTextStored: false;
@@ -552,6 +555,8 @@ export function readToolEvidenceArtifactSlice(input: {
   const limitLines = typeof input.limitLines === "number" ? Math.max(1, Math.min(500, Math.trunc(input.limitLines))) : 80;
   const maxTokens = typeof input.maxTokens === "number" ? Math.max(50, Math.min(8_000, Math.trunc(input.maxTokens))) : 1_200;
   return {
+    schema_version: TOOL_EVIDENCE_REHYDRATION_SCHEMA,
+    terminal_evidence_observation: true,
     ok: true,
     rawTextStored: false,
     artifact: artifactMetadata(resolved.path, artifact),
