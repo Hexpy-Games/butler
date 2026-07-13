@@ -1,0 +1,10 @@
+.stoppedStatus {
+  width: fit-content;
+  margin-top: var(--space-2);
+  padding: 2px var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: var(--font-size-1);
+  line-height: 1.5;
+}
