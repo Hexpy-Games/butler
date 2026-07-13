@@ -16,7 +16,12 @@ import {
   readTurnContextAtom,
   TurnSchedulerContinuationYieldError,
 } from "../../turn-continuation-context.ts";
-import { snapshotDirectTurnBudget, type DirectTurnBudget } from "../../direct-turn-budget.ts";
+import {
+  canRolloverDirectTurnBudget,
+  snapshotDirectTurnBudget,
+  snapshotDirectTurnBudgetForRollover,
+  type DirectTurnBudget,
+} from "../../direct-turn-budget.ts";
 import { principalTurnCancellationRecorded } from "../../principal-turn-cancellation-registry.ts";
 import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
 import {
@@ -202,27 +207,11 @@ export async function runNativeToolTurn({
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
           throw error;
         }
-        let continuationError = error;
-        if (isPromptUsageModelCallBudgetError(error)) {
-          try {
-            const continuationEvidence = buildTurnContinuationEvidence({
-              audit,
-              publicDecisions: publicDecisionContext,
-            });
-            return await runTextPrompt(
-              budgetFinalizationPrompt({
-                userText: context.userText,
-                continuationEvidence: continuationEvidence.modelVisibleContent,
-              }),
-              "budget_exhaustion_finalization",
-              "finalization",
-            );
-          } catch (finalizationError) {
-            continuationError = finalizationError;
-          }
-        }
-        if (isPromptUsageModelCallBudgetError(continuationError)) {
-          throw continuationError;
+        if (
+          isPromptUsageModelCallBudgetError(error) &&
+          !canRolloverDirectTurnBudget(context.turnBudget, error)
+        ) {
+          throw error;
         }
         const checkpoint = await persistSchedulerContinuation({
           input,
@@ -234,7 +223,7 @@ export async function runNativeToolTurn({
           activeTurnContract: turnContractContext.current,
           expectedGeneration: context.continuationAtom?.generation,
           nextSemanticBlockSequenceFloor: nextSemanticBlockSequence(),
-          error: continuationError,
+          error,
           obligationFrontier: obligationToolSurfaceState(),
         });
         throw new TurnSchedulerContinuationYieldError(
@@ -259,7 +248,10 @@ export async function runNativeToolTurn({
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
           throw error;
         }
-        if (isPromptUsageModelCallBudgetError(error)) {
+        if (
+          isPromptUsageModelCallBudgetError(error) &&
+          !canRolloverDirectTurnBudget(context.turnBudget, error)
+        ) {
           throw error;
         }
         const checkpoint = await persistSchedulerContinuation({
@@ -548,20 +540,6 @@ export async function runNativeToolTurn({
   }
 }
 
-function budgetFinalizationPrompt(input: {
-  userText: string;
-  continuationEvidence: string;
-}): string {
-  return [
-    "## Protected Budget Finalization",
-    "The execution budget is exhausted. Do not request tools or claim unverified completion.",
-    "Produce the most useful bounded final response supported by the durable evidence below.",
-    "State incomplete work explicitly and preserve a clear continuation point.",
-    `Original request:\n${input.userText}`,
-    `Durable continuation evidence:\n${input.continuationEvidence}`,
-  ].join("\n\n");
-}
-
 function isRetryableProviderFailure(error: unknown): boolean {
   const failure = safeRuntimeFailure(error);
   return failure.retryable === true && failure.code.startsWith("provider_");
@@ -623,7 +601,9 @@ async function persistSchedulerContinuation(input: {
       audit: input.audit,
       publicDecisions: input.publicDecisionContext,
     }),
-    budgetSnapshot: snapshotDirectTurnBudget(input.turnBudget),
+    budgetSnapshot: isPromptUsageModelCallBudgetError(input.error)
+      ? snapshotDirectTurnBudgetForRollover(input.turnBudget)
+      : snapshotDirectTurnBudget(input.turnBudget),
     ...(input.activeTurnContract
       ? continuationContractState({
         butlerData: input.deps.butlerData,

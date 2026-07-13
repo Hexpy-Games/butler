@@ -5,6 +5,7 @@ import type {
 import { estimateContextTokens } from "../context/budget.ts";
 
 const DIRECT_TURN_MODEL_CALL_BUDGET = 32;
+export const DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT = 96;
 const DIRECT_TURN_PROMPT_TOKEN_BUDGET = 220_000;
 const DIRECT_TURN_OUTPUT_TOKEN_BUDGET = 80_000;
 const DIRECT_TURN_TOTAL_TOKEN_BUDGET = 300_000;
@@ -35,6 +36,14 @@ interface DirectTurnPartitionBudget {
   maxTotalTokens: number;
 }
 
+export interface DirectTurnCumulativeUsage {
+  modelRequestsUsed: number;
+  promptTokens: number;
+  cachedTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 const DIRECT_TURN_PARTITION_LIMITS: Record<DirectTurnBudgetPartition, Pick<
   DirectTurnPartitionBudget,
   "maxModelCalls" | "maxPromptTokens" | "maxOutputTokens" | "maxTotalTokens"
@@ -46,29 +55,35 @@ const DIRECT_TURN_PARTITION_LIMITS: Record<DirectTurnBudgetPartition, Pick<
 
 export interface DirectTurnBudget {
   turnId: string;
+  executionSlice: number;
   modelRequestsUsed: number;
   promptTokens: number;
   cachedTokens: number;
   outputTokens: number;
   totalTokens: number;
   maxModelCalls: number;
+  maxLifetimeModelCalls: number;
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
+  cumulativeUsage: DirectTurnCumulativeUsage;
   partitions: Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>;
 }
 
 export interface DirectTurnBudgetSnapshot {
   turnId: string;
+  executionSlice?: number;
   modelRequestsUsed: number;
   promptTokens: number;
   cachedTokens: number;
   outputTokens: number;
   totalTokens: number;
   maxModelCalls: number;
+  maxLifetimeModelCalls?: number;
   maxPromptTokens: number;
   maxOutputTokens: number;
   maxTotalTokens: number;
+  cumulativeUsage?: DirectTurnCumulativeUsage;
   partitions?: Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>;
 }
 
@@ -91,15 +106,18 @@ export interface DirectTurnPromptUsageInput {
 export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
   return {
     turnId,
+    executionSlice: 1,
     modelRequestsUsed: 0,
     promptTokens: 0,
     cachedTokens: 0,
     outputTokens: 0,
     totalTokens: 0,
     maxModelCalls: DIRECT_TURN_MODEL_CALL_BUDGET,
+    maxLifetimeModelCalls: DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT,
     maxPromptTokens: DIRECT_TURN_PROMPT_TOKEN_BUDGET,
     maxOutputTokens: DIRECT_TURN_OUTPUT_TOKEN_BUDGET,
     maxTotalTokens: DIRECT_TURN_TOTAL_TOKEN_BUDGET,
+    cumulativeUsage: emptyCumulativeUsage(),
     partitions: createPartitionBudgets(),
   };
 }
@@ -107,17 +125,67 @@ export function createDirectTurnBudget(turnId: string): DirectTurnBudget {
 export function snapshotDirectTurnBudget(budget: DirectTurnBudget): DirectTurnBudgetSnapshot {
   return {
     turnId: budget.turnId,
+    executionSlice: budget.executionSlice,
     modelRequestsUsed: budget.modelRequestsUsed,
     promptTokens: budget.promptTokens,
     cachedTokens: budget.cachedTokens,
     outputTokens: budget.outputTokens,
     totalTokens: budget.totalTokens,
     maxModelCalls: budget.maxModelCalls,
+    maxLifetimeModelCalls: budget.maxLifetimeModelCalls,
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
+    cumulativeUsage: structuredClone(budget.cumulativeUsage),
     partitions: structuredClone(budget.partitions),
   };
+}
+
+export function snapshotDirectTurnBudgetForRollover(
+  budget: DirectTurnBudget,
+): DirectTurnBudgetSnapshot {
+  const snapshot = snapshotDirectTurnBudget(budget);
+  return {
+    ...snapshot,
+    executionSlice: budget.executionSlice + 1,
+    modelRequestsUsed: 0,
+    promptTokens: 0,
+    cachedTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    partitions: Object.fromEntries(
+      (Object.entries(budget.partitions) as Array<[
+        DirectTurnBudgetPartition,
+        DirectTurnPartitionBudget,
+      ]>).map(([name, partition]) => [name, {
+        ...partition,
+        modelRequestsUsed: 0,
+        promptTokens: 0,
+        cachedTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      }]),
+    ) as Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>,
+  };
+}
+
+export function canRolloverDirectTurnBudget(
+  budget: DirectTurnBudget,
+  error: unknown,
+): boolean {
+  if (!sliceHasAdmittedUsage(budget)) return false;
+  const detail = budgetErrorDetail(error);
+  if (detail?.rolloverEligible === false) return false;
+  const partitionName = detail?.partition ?? "execution";
+  const partition = budget.partitions[partitionName];
+  const projectedPromptTokens = finiteNonNegativeInteger(detail?.admittedPromptTokens ?? 0);
+  const projectedOutputTokens = finiteNonNegativeInteger(detail?.requestedOutputTokens ?? 0);
+  return requestFitsEmptySlice({
+    budget,
+    partition,
+    projectedPromptTokens,
+    projectedOutputTokens,
+  });
 }
 
 export function hydrateDirectTurnBudget(
@@ -126,6 +194,7 @@ export function hydrateDirectTurnBudget(
 ): DirectTurnBudget {
   const budget = createDirectTurnBudget(turnId);
   if (!snapshot || typeof snapshot !== "object") return budget;
+  budget.executionSlice = finitePositiveInteger(snapshot.executionSlice ?? 1, 1);
   budget.modelRequestsUsed = finiteNonNegativeInteger(snapshot.modelRequestsUsed);
   budget.promptTokens = finiteNonNegativeInteger(snapshot.promptTokens);
   budget.cachedTokens = Math.min(
@@ -135,9 +204,14 @@ export function hydrateDirectTurnBudget(
   budget.outputTokens = finiteNonNegativeInteger(snapshot.outputTokens);
   budget.totalTokens = finiteNonNegativeInteger(snapshot.totalTokens);
   budget.maxModelCalls = finitePositiveInteger(snapshot.maxModelCalls, budget.maxModelCalls);
+  budget.maxLifetimeModelCalls = finitePositiveInteger(
+    snapshot.maxLifetimeModelCalls ?? budget.maxLifetimeModelCalls,
+    budget.maxLifetimeModelCalls,
+  );
   budget.maxPromptTokens = finitePositiveInteger(snapshot.maxPromptTokens, budget.maxPromptTokens);
   budget.maxOutputTokens = finitePositiveInteger(snapshot.maxOutputTokens, budget.maxOutputTokens);
   budget.maxTotalTokens = finitePositiveInteger(snapshot.maxTotalTokens, budget.maxTotalTokens);
+  budget.cumulativeUsage = hydrateCumulativeUsage(snapshot.cumulativeUsage, budget);
   budget.partitions = hydratePartitionBudgets(snapshot.partitions, budget);
   return budget;
 }
@@ -154,11 +228,11 @@ export function directTurnBudgetState(budget: DirectTurnBudget): PromptUsageBudg
     maxPromptTokens: budget.maxPromptTokens,
     maxOutputTokens: budget.maxOutputTokens,
     maxTotalTokens: budget.maxTotalTokens,
-    cumulativeRequestCount: budget.modelRequestsUsed,
-    cumulativePromptTokens: budget.promptTokens,
-    cumulativeCachedTokens: budget.cachedTokens,
-    cumulativeOutputTokens: budget.outputTokens,
-    cumulativeTotalTokens: budget.totalTokens,
+    cumulativeRequestCount: budget.cumulativeUsage.modelRequestsUsed,
+    cumulativePromptTokens: budget.cumulativeUsage.promptTokens,
+    cumulativeCachedTokens: budget.cumulativeUsage.cachedTokens,
+    cumulativeOutputTokens: budget.cumulativeUsage.outputTokens,
+    cumulativeTotalTokens: budget.cumulativeUsage.totalTokens,
   };
 }
 
@@ -184,6 +258,7 @@ export function beforeDirectTurnModelRequest(
   });
   input.beforeCommit?.();
   budget.modelRequestsUsed += 1;
+  budget.cumulativeUsage.modelRequestsUsed += 1;
   partition.modelRequestsUsed += 1;
 }
 
@@ -252,6 +327,10 @@ export function addDirectTurnUsage(input: {
   input.budget.cachedTokens += cachedTokens;
   input.budget.outputTokens += outputTokens;
   input.budget.totalTokens += totalTokens;
+  input.budget.cumulativeUsage.promptTokens += promptTokens;
+  input.budget.cumulativeUsage.cachedTokens += cachedTokens;
+  input.budget.cumulativeUsage.outputTokens += outputTokens;
+  input.budget.cumulativeUsage.totalTokens += totalTokens;
   const partition = input.budget.partitions[input.partition ?? "execution"];
   partition.promptTokens += promptTokens;
   partition.cachedTokens += cachedTokens;
@@ -307,10 +386,12 @@ export function recentConversationBudgetForTurn(input: {
 
 function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetState["status"] {
   const requests = budget.modelRequestsUsed;
+  const lifetimeRequests = budget.cumulativeUsage.modelRequestsUsed;
   const promptTokens = budget.promptTokens;
   const outputTokens = budget.outputTokens;
   const totalTokens = budget.totalTokens;
   if (
+    lifetimeRequests >= budget.maxLifetimeModelCalls ||
     requests >= budget.maxModelCalls ||
     promptTokens >= budget.maxPromptTokens ||
     outputTokens >= budget.maxOutputTokens ||
@@ -319,6 +400,9 @@ function directTurnBudgetStatus(budget: DirectTurnBudget): PromptUsageBudgetStat
     return "exhausted";
   }
   if (
+    lifetimeRequests >= Math.floor(
+      budget.maxLifetimeModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO,
+    ) ||
     requests >= Math.floor(budget.maxModelCalls * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
     promptTokens >= Math.floor(budget.maxPromptTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
     outputTokens >= Math.floor(budget.maxOutputTokens * DIRECT_TURN_BUDGET_WARNING_RATIO) ||
@@ -343,6 +427,56 @@ function createPartitionBudgets(): Record<DirectTurnBudgetPartition, DirectTurnP
       ...limits,
     }]),
   ) as Record<DirectTurnBudgetPartition, DirectTurnPartitionBudget>;
+}
+
+function emptyCumulativeUsage(): DirectTurnCumulativeUsage {
+  return {
+    modelRequestsUsed: 0,
+    promptTokens: 0,
+    cachedTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+  };
+}
+
+function hydrateCumulativeUsage(
+  snapshot: DirectTurnCumulativeUsage | undefined,
+  budget: DirectTurnBudget,
+): DirectTurnCumulativeUsage {
+  if (!snapshot) {
+    return {
+      modelRequestsUsed: budget.modelRequestsUsed,
+      promptTokens: budget.promptTokens,
+      cachedTokens: budget.cachedTokens,
+      outputTokens: budget.outputTokens,
+      totalTokens: budget.totalTokens,
+    };
+  }
+  const promptTokens = Math.max(
+    budget.promptTokens,
+    finiteNonNegativeInteger(snapshot.promptTokens),
+  );
+  const outputTokens = Math.max(
+    budget.outputTokens,
+    finiteNonNegativeInteger(snapshot.outputTokens),
+  );
+  return {
+    modelRequestsUsed: Math.max(
+      budget.modelRequestsUsed,
+      finiteNonNegativeInteger(snapshot.modelRequestsUsed),
+    ),
+    promptTokens,
+    cachedTokens: Math.min(
+      promptTokens,
+      Math.max(budget.cachedTokens, finiteNonNegativeInteger(snapshot.cachedTokens)),
+    ),
+    outputTokens,
+    totalTokens: Math.max(
+      budget.totalTokens,
+      finiteNonNegativeInteger(snapshot.totalTokens),
+      promptTokens + outputTokens,
+    ),
+  };
 }
 
 function hydratePartitionBudgets(
@@ -400,6 +534,7 @@ function assertRequestFitsBudget(input: {
 }): void {
   const projectedTotalTokens = input.projectedPromptTokens + input.projectedOutputTokens;
   const exhausted =
+    input.budget.cumulativeUsage.modelRequestsUsed + 1 > input.budget.maxLifetimeModelCalls ||
     input.budget.modelRequestsUsed + 1 > input.budget.maxModelCalls ||
     input.budget.promptTokens + input.projectedPromptTokens > input.budget.maxPromptTokens ||
     input.budget.outputTokens + input.projectedOutputTokens > input.budget.maxOutputTokens ||
@@ -409,15 +544,76 @@ function assertRequestFitsBudget(input: {
     input.partition.outputTokens + input.projectedOutputTokens > input.partition.maxOutputTokens ||
     input.partition.totalTokens + projectedTotalTokens > input.partition.maxTotalTokens;
   if (!exhausted) return;
+  const rolloverEligible = sliceHasAdmittedUsage(input.budget) && requestFitsEmptySlice({
+    budget: input.budget,
+    partition: input.partition,
+    projectedPromptTokens: input.projectedPromptTokens,
+    projectedOutputTokens: input.projectedOutputTokens,
+  });
   const error = Object.assign(
     new Error("Prompt usage model-call budget exhausted before provider request"),
     {
       code: "prompt_usage_model_call_budget_exhausted",
       partition: input.partitionName,
+      admittedPromptTokens: input.projectedPromptTokens,
+      requestedOutputTokens: input.projectedOutputTokens,
+      rolloverEligible,
     },
   );
   error.name = "PromptUsageModelCallBudgetExhaustedError";
   throw error;
+}
+
+function sliceHasAdmittedUsage(budget: DirectTurnBudget): boolean {
+  return budget.modelRequestsUsed > 0 ||
+    budget.promptTokens > 0 ||
+    budget.outputTokens > 0 ||
+    budget.totalTokens > 0;
+}
+
+function requestFitsEmptySlice(input: {
+  budget: DirectTurnBudget;
+  partition: DirectTurnPartitionBudget;
+  projectedPromptTokens: number;
+  projectedOutputTokens: number;
+}): boolean {
+  const projectedTotalTokens = input.projectedPromptTokens + input.projectedOutputTokens;
+  return 1 <= input.budget.maxModelCalls &&
+    input.budget.cumulativeUsage.modelRequestsUsed + 1 <= input.budget.maxLifetimeModelCalls &&
+    input.projectedPromptTokens <= input.budget.maxPromptTokens &&
+    input.projectedOutputTokens <= input.budget.maxOutputTokens &&
+    projectedTotalTokens <= input.budget.maxTotalTokens &&
+    1 <= input.partition.maxModelCalls &&
+    input.projectedPromptTokens <= input.partition.maxPromptTokens &&
+    input.projectedOutputTokens <= input.partition.maxOutputTokens &&
+    projectedTotalTokens <= input.partition.maxTotalTokens;
+}
+
+function budgetErrorDetail(error: unknown): {
+  partition?: DirectTurnBudgetPartition;
+  admittedPromptTokens?: number;
+  requestedOutputTokens?: number;
+  rolloverEligible?: boolean;
+} | null {
+  if (!error || typeof error !== "object") return null;
+  const record = error as Record<string, unknown>;
+  const partition = record.partition === "execution" ||
+      record.partition === "review" ||
+      record.partition === "finalization"
+    ? record.partition
+    : undefined;
+  return {
+    ...(partition ? { partition } : {}),
+    ...(typeof record.admittedPromptTokens === "number"
+      ? { admittedPromptTokens: record.admittedPromptTokens }
+      : {}),
+    ...(typeof record.requestedOutputTokens === "number"
+      ? { requestedOutputTokens: record.requestedOutputTokens }
+      : {}),
+    ...(typeof record.rolloverEligible === "boolean"
+      ? { rolloverEligible: record.rolloverEligible }
+      : {}),
+  };
 }
 
 function finiteNonNegativeInteger(value: number): number {

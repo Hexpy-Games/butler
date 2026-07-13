@@ -29,6 +29,7 @@ import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/tur
 import { normalizeTurnPrompt } from "../../packages/butler-agent/src/agent/turn/native/context/turn-prompt.ts";
 import {
   createTurnContextAtomId,
+  persistTurnContextAtom,
   readTurnContextAtom,
   TurnSchedulerContinuationYieldError,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
@@ -1371,6 +1372,14 @@ test("queued continuation enqueue failure terminates the original App turn", asy
     messageId: "continuation-enqueue-failure",
     sessionId: "butler/app-general",
   }));
+  persistTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-continuation-enqueue-failure",
+    state: "continuing",
+    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+    reason: "spent execution slice",
+  });
   const app = new MockTransportAdapter({ id: "app" });
 
   const summary = await processQueuedInboundEvents({
@@ -1417,6 +1426,11 @@ test("queued continuation enqueue failure terminates the original App turn", asy
     retryable: true,
   });
   expect(JSON.stringify(failed)).not.toContain("continuationOnly");
+  expect(readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId: "butler/app-general",
+    turnId: "turn-continuation-enqueue-failure",
+  })).toBeNull();
   store.close();
 });
 
