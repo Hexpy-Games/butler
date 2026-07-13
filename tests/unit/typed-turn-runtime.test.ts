@@ -970,6 +970,8 @@ test("principal cancellation blocks the next typed workspace tool and provider r
   const unregister = registerPrincipalTurnAbortController({
     butlerData: data,
     turnId,
+    queueId: "queue-typed-principal-cancel",
+    dispatchClaimId: "claim-typed-principal-cancel",
     controller,
   });
   let workspaceToolCalls = 0;
@@ -1070,6 +1072,8 @@ test("principal cancellation aborts an active default run_command process tree",
   const unregister = registerPrincipalTurnAbortController({
     butlerData: data,
     turnId,
+    queueId: "queue-typed-active-command-cancel",
+    dispatchClaimId: "claim-typed-active-command-cancel",
     controller,
   });
   const startedPath = join(data, "runtime-command-started.txt");

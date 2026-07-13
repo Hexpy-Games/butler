@@ -18,7 +18,7 @@ import {
   webSearchEvidenceCapabilityReceipts,
 } from "./evidence.ts";
 import { publicWebSearchEvidenceItems } from "../../../output/evidence/public-web-evidence.ts";
-type WebSearchToolCall = { args: Record<string, unknown> };
+type WebSearchToolCall = { args: Record<string, unknown>; signal?: AbortSignal };
 
 export function createWebSearchHandler(input: {
   butlerData: string;
@@ -71,6 +71,7 @@ export function createWebSearchHandler(input: {
           }),
         searchInput: {
           query,
+          signal: call.signal,
           allowed_domains: allowedDomains.length > 0 ? allowedDomains : undefined,
           blocked_domains: blockedDomains.length > 0 ? blockedDomains : undefined,
           recency_days: typeof call.args.recency_days === "number" ? Math.max(1, Math.trunc(call.args.recency_days)) : undefined,

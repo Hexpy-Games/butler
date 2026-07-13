@@ -55,6 +55,14 @@ import {
 } from "../../operations/gateway/registry.ts";
 import { QueuedInboundDispatcher } from "./queued-inbound.ts";
 import { reconcileNonTerminalTurnContracts } from "../../agent/turn/turn-contract.ts";
+import {
+  startPrincipalTurnCancellationServer,
+  type PrincipalTurnCancellationServer,
+} from "../../agent/turn/principal-turn-cancellation-control.ts";
+import {
+  abortDurablyCancelledPrincipalTurnExecutions,
+  activePrincipalTurnExecutionCount,
+} from "../../agent/turn/principal-turn-cancellation-registry.ts";
 
 interface ButlerConfig {
   system?: {
@@ -594,6 +602,7 @@ export async function runNativeButlerMain(
   let telegramPolling: Promise<void> | undefined;
   let workerResultMonitor: Promise<void> | undefined;
   let appWorkerResultMonitor: Promise<void> | undefined;
+  let cancellationServer: PrincipalTurnCancellationServer | undefined;
   const inboundDispatcher = new QueuedInboundDispatcher();
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
@@ -609,6 +618,7 @@ export async function runNativeButlerMain(
   };
 
   try {
+    cancellationServer = await startPrincipalTurnCancellationServer(butlerData);
     sessionId = resolveSessionId(store, butlerData);
     const binding = ensureButlerSession({
       store,
@@ -870,6 +880,9 @@ export async function runNativeButlerMain(
         signal: input.shutdownSignal,
         pollMs,
         onPoll: async () => {
+          if (activePrincipalTurnExecutionCount(butlerData) > 0) {
+            abortDurablyCancelledPrincipalTurnExecutions(butlerData);
+          }
           const summary = inboundDispatcher.poll({
             queue: new NativeInboundQueue(butlerData),
             server,
@@ -951,6 +964,7 @@ export async function runNativeButlerMain(
     throw error;
   } finally {
     stopTelegramPolling = true;
+    await cancellationServer?.close();
     store.close();
   }
 }

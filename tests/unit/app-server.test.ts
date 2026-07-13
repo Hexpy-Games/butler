@@ -12760,6 +12760,14 @@ test("turn cancel freezes same-turn assistant content and attachments in place",
     );
     expect(cancel.data.turn.state).toBe("cancelled");
     expect((await inFlight).status).toBe(202);
+    const duplicateCancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(duplicateCancel.data.turn).toMatchObject({
+      id: turnId,
+      state: "cancelled",
+    });
 
     const assertFrozenSnapshot = async () => {
       const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);

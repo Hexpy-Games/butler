@@ -4,7 +4,7 @@ import {
   readMcpResource,
 } from "../../../interfaces/mcp-client/client.ts";
 
-type ToolCall = { args: Record<string, unknown> };
+type ToolCall = { args: Record<string, unknown>; signal?: AbortSignal };
 
 export function createMcpToolHandlers(input: { butlerData: string }) {
   return {
@@ -13,6 +13,7 @@ export function createMcpToolHandlers(input: { butlerData: string }) {
       ...await listMcpServerCapabilities({
         butlerData: input.butlerData,
         includeDisabled: call.args.include_disabled === true,
+        signal: call.signal,
       }),
     }),
     "call_mcp_tool": async (call: ToolCall) => {
@@ -32,6 +33,7 @@ export function createMcpToolHandlers(input: { butlerData: string }) {
           serverId,
           toolName,
           args: mcpArguments,
+          signal: call.signal,
         }),
       };
     },
@@ -46,6 +48,7 @@ export function createMcpToolHandlers(input: { butlerData: string }) {
           butlerData: input.butlerData,
           serverId,
           uri,
+          signal: call.signal,
         }),
       };
     },

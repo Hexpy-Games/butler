@@ -1,13 +1,17 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { Database } from "bun:sqlite";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { cancelPersistedRuntimeTurn } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation.ts";
 import {
-  principalTurnCancellationMarkerPath,
+  sendCancelExecutionRequest,
+  startPrincipalTurnCancellationServer,
+} from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
+import {
+  abortPrincipalTurnExecution,
   principalTurnCancellationRecorded,
   recordPrincipalTurnCancellation,
-  refreshPrincipalTurnAbortSignal,
   registerPrincipalTurnAbortController,
 } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 import { throwIfRuntimeTurnAborted } from "../../packages/butler-agent/src/agent/turn/native/policy/turn-errors.ts";
@@ -490,6 +494,8 @@ test("principal cancellation tombstone aborts active and restarted turn controll
   const unregister = registerPrincipalTurnAbortController({
     butlerData,
     turnId,
+    queueId: "queue-controller-cancel",
+    dispatchClaimId: "claim-controller-cancel",
     controller: activeController,
   });
 
@@ -497,22 +503,21 @@ test("principal cancellation tombstone aborts active and restarted turn controll
 
   expect(activeController.signal.aborted).toBe(true);
   expect(principalTurnCancellationRecorded({ butlerData, turnId })).toBe(true);
-  const markerPath = principalTurnCancellationMarkerPath({ butlerData, turnId });
-  expect(markerPath).not.toContain(turnId);
-  expect(readFileSync(markerPath, "utf8")).not.toContain(turnId);
   unregister();
 
   const restartedController = new AbortController();
   const unregisterRestarted = registerPrincipalTurnAbortController({
     butlerData,
     turnId,
+    queueId: "queue-controller-restart",
+    dispatchClaimId: "claim-controller-restart",
     controller: restartedController,
   });
   expect(restartedController.signal.aborted).toBe(true);
   unregisterRestarted();
 });
 
-test("turn boundary refresh observes a cancellation written by another process", () => {
+test("exact execution identity dispatches cancellation without a watcher", () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
   tempDirs.push(butlerData);
   const turnId = "turn-external-controller-cancel";
@@ -520,50 +525,124 @@ test("turn boundary refresh observes a cancellation written by another process",
   const unregister = registerPrincipalTurnAbortController({
     butlerData,
     turnId,
+    queueId: "queue-exact",
+    dispatchClaimId: "claim-exact",
     controller,
   });
-  writeFileSync(
-    principalTurnCancellationMarkerPath({ butlerData, turnId }),
-    `${JSON.stringify({ schemaVersion: "butler.principal-turn-cancellation.v1" })}\n`,
-    "utf8",
-  );
 
-  expect(() => throwIfRuntimeTurnAborted(controller.signal)).toThrow("Runtime turn was cancelled");
-  expect(refreshPrincipalTurnAbortSignal(controller.signal)).toBe(true);
+  expect(abortPrincipalTurnExecution({
+    butlerData,
+    turnId,
+    queueId: "queue-exact",
+    dispatchClaimId: "claim-stale",
+  })).toBe("execution_identity_mismatch");
+  expect(controller.signal.aborted).toBe(false);
+  expect(abortPrincipalTurnExecution({
+    butlerData,
+    turnId,
+    queueId: "queue-exact",
+    dispatchClaimId: "claim-exact",
+  })).toBe("signal_dispatched");
   expect(controller.signal.aborted).toBe(true);
+  expect(() => throwIfRuntimeTurnAborted(controller.signal)).toThrow("Runtime turn was cancelled");
   unregister();
 });
 
-test("turn controller file watcher observes cross-process cancellation while a call is in flight", async () => {
+test("local cancel endpoint aborts only a durably cancelled exact claim", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
   tempDirs.push(butlerData);
-  const turnId = "turn-external-watcher-cancel";
+  mkdirSync(join(butlerData, "app-server"), { recursive: true });
+  const db = new Database(join(butlerData, "app-server", "butler-client.sqlite"), {
+    create: true,
+  });
+  db.exec("CREATE TABLE turns (id TEXT PRIMARY KEY, state TEXT NOT NULL)");
+  db.exec(`
+    CREATE TABLE app_turn_cancel_outbox (
+      turn_id TEXT PRIMARY KEY,
+      queue_id TEXT,
+      dispatch_claim_id TEXT,
+      state TEXT NOT NULL,
+      accepted_at TEXT,
+      completed_at TEXT
+    )
+  `);
+  db.query("INSERT INTO turns (id, state) VALUES (?, 'thinking')")
+    .run("turn-socket-cancel");
+  db.query(`
+    INSERT INTO app_turn_cancel_outbox (
+      turn_id, queue_id, dispatch_claim_id, state
+    ) VALUES (?, ?, ?, 'pending')
+  `).run(
+    "turn-socket-cancel",
+    "queue-socket-cancel",
+    "claim-socket-cancel",
+  );
+  db.close();
+
   const controller = new AbortController();
   const unregister = registerPrincipalTurnAbortController({
     butlerData,
-    turnId,
+    turnId: "turn-socket-cancel",
+    queueId: "queue-socket-cancel",
+    dispatchClaimId: "claim-socket-cancel",
     controller,
   });
-  const aborted = new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("principal cancellation watcher timed out")),
-      1_000,
+  const server = await startPrincipalTurnCancellationServer(butlerData);
+  try {
+    const decisionDb = new Database(
+      join(butlerData, "app-server", "butler-client.sqlite"),
     );
-    controller.signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      resolve();
-    }, { once: true });
-  });
+    decisionDb.query("UPDATE turns SET state = 'cancelled' WHERE id = ?")
+      .run("turn-socket-cancel");
+    decisionDb.close();
+    const stale = await sendCancelExecutionRequest(butlerData, {
+      version: 1,
+      action: "cancel_execution",
+      turn_id: "turn-socket-cancel",
+      queue_id: "queue-socket-cancel",
+      dispatch_claim_id: "claim-stale",
+    });
+    expect(stale?.outcome).toBe("execution_identity_mismatch");
+    expect(controller.signal.aborted).toBe(false);
 
-  writeFileSync(
-    principalTurnCancellationMarkerPath({ butlerData, turnId }),
-    `${JSON.stringify({ schemaVersion: "butler.principal-turn-cancellation.v1" })}\n`,
+    const exact = await sendCancelExecutionRequest(butlerData, {
+      version: 1,
+      action: "cancel_execution",
+      turn_id: "turn-socket-cancel",
+      queue_id: "queue-socket-cancel",
+      dispatch_claim_id: "claim-socket-cancel",
+    });
+    expect(exact?.outcome).toBe("signal_dispatched");
+    expect(controller.signal.aborted).toBe(true);
+    const acceptedDb = new Database(
+      join(butlerData, "app-server", "butler-client.sqlite"),
+      { readonly: true },
+    );
+    expect(
+      acceptedDb
+        .query<{ state: string; accepted_at: string | null }, []>(`
+          SELECT state, accepted_at FROM app_turn_cancel_outbox
+        `)
+        .get(),
+    ).toMatchObject({ state: "accepted", accepted_at: expect.any(String) });
+    acceptedDb.close();
+  } finally {
+    unregister();
+    await server.close();
+  }
+});
+
+test("principal cancellation registry contains no filesystem watcher", () => {
+  const source = readFileSync(
+    join(
+      process.cwd(),
+      "packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts",
+    ),
     "utf8",
   );
-  await aborted;
-
-  expect(controller.signal.aborted).toBe(true);
-  unregister();
+  expect(source).not.toContain("watchFile");
+  expect(source).not.toContain("unwatchFile");
+  expect(source).not.toContain("setInterval");
 });
 
 test("completed turn registration is removed before a later cancellation record", () => {
@@ -574,6 +653,8 @@ test("completed turn registration is removed before a later cancellation record"
   const unregister = registerPrincipalTurnAbortController({
     butlerData,
     turnId,
+    queueId: "queue-completed",
+    dispatchClaimId: "claim-completed",
     controller,
   });
 

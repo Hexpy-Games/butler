@@ -19,6 +19,7 @@ import { continuationBackoffForFailure } from "./continuation-backoff.ts";
 import {
   principalTurnCancellationRecorded,
   registerPrincipalTurnAbortController,
+  markPrincipalTurnCancellationDelivery,
 } from "../../agent/turn/principal-turn-cancellation-registry.ts";
 import { runtimeTurnAbortError } from "../../agent/turn/native/policy/turn-errors.ts";
 
@@ -405,6 +406,8 @@ async function processClaimedQueuedInboundItem(input: {
       unregisterTurnController = registerPrincipalTurnAbortController({
         butlerData: options.queue.butlerData,
         turnId,
+        queueId: item.queueId,
+        dispatchClaimId: item.processing.claimId,
         controller,
       });
     }
@@ -658,11 +661,24 @@ function completePrincipalCancelledQueueClaim(
   options: ProcessQueuedInboundOptions,
   item: ClaimedInboundEvent,
 ): boolean {
-  return completeQueueClaim(options, item, {
+  const completed = completeQueueClaim(options, item, {
     dispatchStatus: "cancelled-principal-turn",
     handled: false,
     cancelled: true,
   });
+  const turnId = item.envelope.routingHints?.turnId?.trim();
+  if (completed && turnId) {
+    markPrincipalTurnCancellationDelivery(
+      {
+        butlerData: options.queue.butlerData,
+        turnId,
+        queueId: item.queueId,
+        dispatchClaimId: item.processing.claimId,
+      },
+      "completed",
+    );
+  }
+  return completed;
 }
 
 function completeQueueClaim(
