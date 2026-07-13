@@ -2682,6 +2682,13 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: "turn-budget-attribution-0",
+      });
       captured.push({
         maxToolRounds: input.maxToolRounds,
         butlerData: input.butlerData,
@@ -2719,13 +2726,13 @@ test("native runtime attaches turn budget attribution to direct tool prompts", a
     budgetState: {
       status: "ok",
       requestCount: 0,
-      maxRequests: 32,
+      maxRequests: 24,
     },
   });
   expect(captured[0].usageAttribution?.getBudgetState?.()).toMatchObject({
     status: "ok",
     requestCount: 1,
-    maxRequests: 32,
+    maxRequests: 24,
   });
   expect(captured[0].usageAttribution?.promptSections?.some((section) =>
     section.id === "project_ledger_runtime_context" &&
@@ -2829,17 +2836,31 @@ test("native runtime reports high provider usage without stopping the next model
     butlerData: tempDir,
     runFunctionToolPromptText: async (input) => {
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: "high-usage-0",
+      });
       beforeModelRequests += 1;
       input.usageAttribution?.afterModelResponseUsage?.({
         model: "openai/auto:codex-latest",
-        promptTokens: 221_000,
+        promptTokens: 150_000,
         cachedTokens: 0,
         outputTokens: 1_000,
-        totalTokens: 222_000,
+        totalTokens: 151_000,
         roundIndex: 0,
       });
       stateAfterHighUsage = input.usageAttribution?.getBudgetState?.();
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 1,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: "high-usage-1",
+      });
       beforeModelRequests += 1;
       stateAfterSecondRequest = input.usageAttribution?.getBudgetState?.();
       return "높은 토큰 사용량을 기록하고 계속 진행했습니다.";
@@ -2865,16 +2886,16 @@ test("native runtime reports high provider usage without stopping the next model
   expect(stateAfterHighUsage).toMatchObject({
     status: "warning",
     requestCount: 1,
-    promptTokens: 221_000,
+    promptTokens: 150_000,
     outputTokens: 1_000,
-    totalTokens: 222_000,
+    totalTokens: 151_000,
   });
   expect(stateAfterSecondRequest).toMatchObject({
     status: "warning",
     requestCount: 2,
-    promptTokens: 221_000,
+    promptTokens: 150_000,
     outputTokens: 1_000,
-    totalTokens: 222_000,
+    totalTokens: 151_000,
   });
 });
 
