@@ -74,7 +74,6 @@ import {
   activeTitleForView,
   applyTimelineEventsToViewState,
   clientTurnIdFromMessageId,
-  firstCancellableWorker,
   isWorkerVisibleInComposer,
   isDraftChatId,
   freezeMessageWorkBlocks,
@@ -1365,39 +1364,26 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   cancelActiveTurn: async () => {
-    const { activeChatId, summary } = get();
-    const turnId = summary?.latest_progress?.turn_id;
-    const turnState = summary?.latest_progress?.state ?? summary?.turn_state;
-    const shouldCancelTurn = Boolean(
-      turnId && turnState && ACTIVE_TURN_STATES.has(turnState),
-    );
-    const worker = firstCancellableWorker(summary?.worker_activity);
-    if (!shouldCancelTurn && !worker) return;
+    const { activeChatId, sessionView } = get();
+    const activeTurn =
+      sessionView?.session_id === activeChatId ? sessionView.active_turn : null;
+    const turnId = activeTurn?.id;
+    if (
+      !turnId ||
+      !activeTurn.cancellable ||
+      !ACTIVE_TURN_STATES.has(activeTurn.state)
+    ) {
+      return;
+    }
     set({ status: { label: "stopping", tone: "muted" } });
     try {
-      const requests: Array<Promise<unknown>> = [];
-      if (shouldCancelTurn && turnId) {
-        requests.push(
-          api(`/turns/${encodeURIComponent(turnId)}/cancel`, {
-            method: "POST",
-            body: JSON.stringify({}),
-          }),
-        );
-      }
-      if (worker) {
-        requests.push(
-          api(
-            `/worker-activity/${encodeURIComponent(worker.worker_id)}/control`,
-            {
-              method: "POST",
-              body: JSON.stringify({ action: "cancel" }),
-            },
-          ),
-        );
-      }
-      await Promise.all(requests);
+      await api(`/turns/${encodeURIComponent(turnId)}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
       await get().reloadMessages(activeChatId);
       await get().refreshSessionSummary(activeChatId);
+      await get().refreshSessionView(activeChatId);
       set({ status: { label: "ready", tone: "ok" } });
     } catch (error) {
       notifyError(error, "Stop failed", { id: "turn-stop" });

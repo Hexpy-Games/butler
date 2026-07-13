@@ -12696,6 +12696,118 @@ test("turn cancel preserves earlier assistant work history while stopping active
   }
 });
 
+test("turn cancel freezes same-turn assistant content and attachments in place", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let server = createAppServer({
+    dbPath,
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "snapshot-first-visible-row",
+        kind: "message",
+        state: "running",
+        safe_label: "이미 공개된 진행 상황",
+        work_block_id: "first-visible-progress-snapshot",
+        work_block_label: "이미 공개된 진행 상황",
+      });
+      markStarted?.();
+      return new Promise(() => undefined);
+    },
+  });
+
+  try {
+    const inFlight = fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "general", text: "preserve partial reply" }),
+    });
+    await started;
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    const turnId = turns.data.turns[0].id as string;
+    const messageId = "msg-cancelled-snapshot";
+    const fileId = "file-cancelled-snapshot";
+    const createdAt = "2026-07-13T00:00:00.000Z";
+    const db = new Database(dbPath);
+    try {
+      db.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        ) VALUES (?, 'general', ?, 'assistant', ?, 'streaming', ?, ?, NULL, 0)
+      `).run(messageId, turnId, "정지 전까지 작성된 답변입니다.", createdAt, createdAt);
+      db.query(`
+        INSERT INTO message_files (
+          id, owner_session_id, message_id, kind, mime_type, safe_name,
+          size_bytes, sha256, storage_name, created_at
+        ) VALUES (?, 'general', ?, 'document', 'text/plain', 'evidence.txt',
+          8, 'snapshot-sha256', 'snapshot.txt', ?)
+      `).run(fileId, messageId, createdAt);
+      db.query(`
+        INSERT INTO message_attachments (message_id, file_id, position)
+        VALUES (?, ?, 0)
+      `).run(messageId, fileId);
+    } finally {
+      db.close();
+    }
+
+    const cancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(cancel.data.turn.state).toBe("cancelled");
+    expect((await inFlight).status).toBe(202);
+
+    const assertFrozenSnapshot = async () => {
+      const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+      const preserved = messages.data.messages.find(
+        (message: { id: string }) => message.id === messageId,
+      );
+      expect(preserved).toMatchObject({
+        id: messageId,
+        turn_id: turnId,
+        role: "assistant",
+        text: "정지 전까지 작성된 답변입니다.",
+        status: "cancelled",
+        created_at: createdAt,
+        attachments: [expect.objectContaining({ file_id: fileId })],
+      });
+      expect(messages.data.messages).not.toContainEqual(
+        expect.objectContaining({ turn_id: turnId, text: "Stopped." }),
+      );
+      expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
+        expect.objectContaining({
+          id: "snapshot-first-visible-row",
+          state: "cancelled",
+        }),
+      );
+    };
+
+    await assertFrozenSnapshot();
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(events.data.events).toContainEqual(
+      expect.objectContaining({
+        type: "message.updated",
+        payload: expect.objectContaining({
+          message: expect.objectContaining({ id: messageId, status: "cancelled" }),
+        }),
+      }),
+    );
+    expect(events.data.events).not.toContainEqual(
+      expect.objectContaining({ type: "message.deleted" }),
+    );
+
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    await assertFrozenSnapshot();
+  } finally {
+    server.stop();
+  }
+});
+
 test("app startup repairs cancelled turns that lost their activity carrier", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let markStarted: (() => void) | undefined;
@@ -12800,7 +12912,7 @@ test("app startup repairs cancelled turns that lost their activity carrier", asy
       expect.objectContaining({
         role: "assistant",
         status: "cancelled",
-        text: "Stopped.",
+        text: "Retrying this turn.",
         turn_id: turnId,
         work_blocks: [
           expect.objectContaining({
