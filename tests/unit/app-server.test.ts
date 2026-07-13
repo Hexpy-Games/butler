@@ -8360,7 +8360,7 @@ test("app transport internal limited final text is hidden by typed limitation co
   }
 });
 
-test("app transport internal recovery failures hide recovering_internal and needs_evidence while keeping queued turns active", async () => {
+test("app transport ownerless internal recovery failures terminate without leaking recovery internals", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -8400,39 +8400,27 @@ test("app transport internal recovery failures hide recovering_internal and need
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual(["continue after internal recovery"]);
+    ).toEqual([
+      "continue after internal recovery",
+      "Butler could not complete this turn.",
+    ]);
     expect(JSON.stringify(messages)).not.toContain("could not verify");
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
+      state: "failed",
       safe_status_label: "",
       retryable: false,
-      cancellable: true,
-      attempt: 2,
+      cancellable: false,
+      attempt: 1,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
-    const sessions = await getJson(`${server.url}sessions`);
-    expect(sessions.data.sessions[0]).toMatchObject({
-      id: "general",
-      active_turn_state: "retrying",
-    });
-    expect(sessions.data.sessions[0]).not.toHaveProperty("safe_status_label");
 
     const sessionView = await getJson(
       `${server.url}session-view?session_id=general`,
     );
-    expect(sessionView.data.active_turn).toMatchObject({
-      id: turnId,
-      state: "retrying",
-      delivery_state: "running",
-    });
-    expect(sessionView.data.active_turn).not.toHaveProperty(
-      "safe_status_label",
-    );
-    expect(sessionView.data.active_turn.progress.summary ?? "").toBe("");
-    expect(sessionView.data.active_turn.progress.delivery_state).toBe("running");
+    expect(sessionView.data.active_turn).toBeNull();
     expect(JSON.stringify(sessionView)).not.toContain("recovering_internal");
     expect(JSON.stringify(sessionView)).not.toContain("needs_evidence");
     expect(JSON.stringify(sessionView)).not.toContain("needs_tool_surface");
@@ -8446,7 +8434,7 @@ test("app transport internal recovery failures hide recovering_internal and need
       }) =>
         event.type === "turn.state_changed" &&
         event.payload?.turn?.id === turnId &&
-        event.payload?.turn?.state === "retrying",
+        event.payload?.turn?.state === "failed",
     );
     expect(stateChanged).toBeTruthy();
     const stateChangedPayload = stateChanged?.payload;
@@ -8456,10 +8444,9 @@ test("app transport internal recovery failures hide recovering_internal and need
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "retrying",
-      delivery_state: "running",
+      state: "failed",
+      delivery_state: "failed_system",
     });
-    expect(summary.data.latest_progress.summary ?? "").toBe("");
     expect(JSON.stringify(summary)).not.toContain("could not verify");
     expect(JSON.stringify(summary)).not.toContain("Continuing");
     expect(JSON.stringify(summary)).not.toContain("recovering_internal");
@@ -8471,7 +8458,7 @@ test("app transport internal recovery failures hide recovering_internal and need
   }
 });
 
-test("repeated app transport internal recovery does not requeue the same turn again", async () => {
+test("repeated app transport ownerless recovery failures remain terminal without requeue", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -8509,18 +8496,18 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const firstTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(firstTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
+      state: "failed",
       safe_status_label: "",
       retryable: false,
-      cancellable: true,
-      attempt: 2,
+      cancellable: false,
+      attempt: 1,
     });
     const firstEvents = await getJson(`${server.url}events?cursor=0`);
     const firstQueuedCount = firstEvents.data.events.filter(
       (event: { type: string; payload?: { turn_id?: string } }) =>
         event.type === "turn.queued" && event.payload?.turn_id === turnId,
     ).length;
-    expect(firstQueuedCount).toBe(2);
+    expect(firstQueuedCount).toBe(1);
 
     appendTranscriptEvent(
       createTranscriptEvent({
@@ -8548,18 +8535,23 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
+      state: "failed",
       safe_status_label: "",
       retryable: false,
-      cancellable: true,
-      attempt: 2,
+      cancellable: false,
+      attempt: 1,
     });
     expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const assistantMessages = messages.data.messages.filter(
       (message: { role: string }) => message.role === "assistant",
     );
-    expect(assistantMessages).toHaveLength(0);
+    expect(assistantMessages).toEqual([
+      expect.objectContaining({
+        text: "Butler could not complete this turn.",
+        status: "failed",
+      }),
+    ]);
     expect(JSON.stringify(messages)).not.toContain("could not verify");
     expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
 
@@ -8572,13 +8564,11 @@ test("repeated app transport internal recovery does not requeue the same turn ag
     const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(secondSummary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "retrying",
+      state: "failed",
     });
     expect(JSON.stringify(secondSummary)).not.toContain("Retry required");
-    expect(JSON.stringify(secondSummary)).not.toContain("internal_recovery_required");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
     expect(JSON.stringify(secondEvents)).not.toContain("Retry required");
-    expect(JSON.stringify(secondEvents)).not.toContain("internal_recovery_required");
     expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
     expect(
       secondEvents.data.events.some(
@@ -8592,7 +8582,7 @@ test("repeated app transport internal recovery does not requeue the same turn ag
   }
 });
 
-test("app transport continuation after retry progress requeues without fallback final text", async () => {
+test("late continuation evidence cannot resurrect an already terminal ownerless failure", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -8704,16 +8694,21 @@ test("app transport continuation after retry progress requeues without fallback 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "retrying",
+      state: "failed",
       safe_status_label: "",
       retryable: false,
-      cancellable: true,
-      attempt: 3,
+      cancellable: false,
+      attempt: 1,
     });
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.filter((message: { role: string }) => message.role === "assistant"),
-    ).toHaveLength(0);
+    ).toEqual([
+      expect.objectContaining({
+        text: "Butler could not complete this turn.",
+        status: "failed",
+      }),
+    ]);
     expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
     expect(JSON.stringify(messages)).not.toContain("could not verify");
 
@@ -8722,7 +8717,9 @@ test("app transport continuation after retry progress requeues without fallback 
       (event: { type: string; payload?: { turn_id?: string } }) =>
         event.type === "turn.queued" && event.payload?.turn_id === turnId,
     ).length;
-    expect(secondQueuedCount).toBe(firstQueuedCount + 1);
+    expect(secondQueuedCount).toBe(firstQueuedCount);
+    const sessionView = await getJson(`${server.url}session-view?session_id=general`);
+    expect(sessionView.data.active_turn).toBeNull();
     expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
   } finally {
@@ -13541,7 +13538,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
   }
 });
 
-test("goal completion incomplete gaps keep turns active instead of app failures", async () => {
+test("ownerless goal completion gaps terminate instead of leaving App turns active", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -13564,32 +13561,36 @@ test("goal completion incomplete gaps keep turns active instead of app failures"
     });
     expect(response.status).toBe(202);
 
-    const recoveringTurn = await waitForLatestTurnMatching(
+    const failedTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
+      (turn) => turn.state === "failed",
     );
-    expect(recoveringTurn).toMatchObject({
-      safe_status_label: "",
+    expect(failedTurn).toMatchObject({
+      state: "failed",
+      safe_error_code: "gateway_failed",
       retryable: false,
-      cancellable: true,
+      cancellable: false,
     });
-    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
-    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.filter(
         (message: { role: string }) => message.role === "assistant",
       ),
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        safe_error_code: "gateway_failed",
+      }),
+    ]);
     expect(JSON.stringify(messages)).not.toContain("token=secret");
   } finally {
     server.stop();
   }
 });
 
-test("goal completion obligation protocol gaps stay active without generic assistant text", async () => {
+test("ownerless completion obligation gaps fail without exposing protocol details", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -13612,24 +13613,28 @@ test("goal completion obligation protocol gaps stay active without generic assis
     });
     expect(response.status).toBe(202);
 
-    const recoveringTurn = await waitForLatestTurnMatching(
+    const failedTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
+      (turn) => turn.state === "failed",
     );
-    expect(recoveringTurn).toMatchObject({
-      safe_status_label: "",
+    expect(failedTurn).toMatchObject({
+      state: "failed",
+      safe_error_code: "gateway_failed",
       retryable: false,
-      cancellable: true,
+      cancellable: false,
     });
-    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
-    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.filter(
         (message: { role: string }) => message.role === "assistant",
       ),
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        safe_error_code: "gateway_failed",
+      }),
+    ]);
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     expect(JSON.stringify(messages)).not.toContain("could not verify");
     expect(JSON.stringify(messages)).not.toContain("durable_artifact");
@@ -13639,7 +13644,7 @@ test("goal completion obligation protocol gaps stay active without generic assis
   }
 });
 
-test("generic internal recovery responder failures stay active without assistant text", async () => {
+test("ownerless internal recovery responder failures terminate", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
@@ -13662,29 +13667,33 @@ test("generic internal recovery responder failures stay active without assistant
     });
     expect(response.status).toBe(202);
 
-    const recoveringTurn = await waitForLatestTurnMatching(
+    const failedTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "retrying" || turn.state === "waiting_for_tool",
+      (turn) => turn.state === "failed",
     );
-    expect(recoveringTurn).toMatchObject({
-      safe_status_label: "",
+    expect(failedTurn).toMatchObject({
+      state: "failed",
+      safe_error_code: "gateway_failed",
       retryable: false,
-      cancellable: true,
+      cancellable: false,
     });
-    expect(["retrying", "waiting_for_tool"]).toContain(String(recoveringTurn.state));
-    expect(recoveringTurn.safe_error_code ?? null).toBeNull();
 
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.filter(
         (message: { role: string }) => message.role === "assistant",
       ),
-    ).toEqual([]);
+    ).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        safe_error_code: "gateway_failed",
+      }),
+    ]);
     expect(JSON.stringify(messages)).not.toContain("could not verify");
 
     const events = await getJson(`${server.url}events?cursor=0`);
-    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).toContain("turn.failed");
     expect(JSON.stringify(events)).not.toContain("could not verify");
   } finally {
     server.stop();
@@ -13875,7 +13884,7 @@ test("gateway bridge keeps runtime turns alive past request timeout budgets", as
   }
 });
 
-test("deferred App messages recover a stalled provider round without capturing the next user message", async () => {
+test("direct responder App messages terminate an ownerless provider timeout without capturing the next user message", async () => {
   let providerRoundCalls = 0;
   let providerFetchCalls = 0;
   let appServerUrl = "";
@@ -13945,15 +13954,15 @@ test("deferred App messages recover a stalled provider round without capturing t
       server.url,
       "general",
       (turn) =>
-        turn.state === "waiting_for_tool" &&
+        turn.state === "failed" &&
         turn.safe_error_code === "provider_round_timeout",
     );
     expect(timedOutTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "failed",
       attempt: 1,
       safe_error_code: "provider_round_timeout",
       retryable: false,
-      cancellable: true,
+      cancellable: false,
     });
     expect(providerRoundCalls).toBe(1);
     expect(providerFetchCalls).toBe(1);
@@ -13962,7 +13971,12 @@ test("deferred App messages recover a stalled provider round without capturing t
     expect(messagesAfterTimeout.data.messages.filter(
       (message: { role: string; turn_id?: string }) =>
         message.role === "assistant" && message.turn_id === timedOutTurn.id,
-    )).toHaveLength(0);
+    )).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        safe_error_code: "provider_round_timeout",
+      }),
+    ]);
     const checkpointDir = join(tempDir, "state", "turn-kernel");
     expect(existsSync(checkpointDir) ? readdirSync(checkpointDir) : []).toEqual([]);
 
@@ -13992,7 +14006,7 @@ test("deferred App messages recover a stalled provider round without capturing t
     const finalTurns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
       id: timedOutTurn.id,
-      state: "waiting_for_tool",
+      state: "failed",
       attempt: 1,
       safe_error_code: "provider_round_timeout",
     }));

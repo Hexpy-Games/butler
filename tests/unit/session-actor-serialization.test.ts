@@ -984,7 +984,7 @@ test("non-app session actor does not emit app acknowledgement", async () => {
   store.close();
 });
 
-test("app session actor keeps acknowledgement when runtime fails", async () => {
+test("app session actor keeps acknowledgement and binding active when one turn fails", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new FailingRuntime();
   const turnEvents: string[] = [];
@@ -1046,7 +1046,7 @@ test("app session actor keeps acknowledgement when runtime fails", async () => {
   );
 
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
-  expect(store.getBySessionId("butler/main")?.lifecycleState).toBe("crashed");
+  expect(store.getBySessionId("butler/main")?.lifecycleState).toBe("active");
   const logs = developerLogStore.list({ kind: "model_turn_error" });
   expect(logs.total).toBe(1);
   expect(logs.entries[0]).toMatchObject({

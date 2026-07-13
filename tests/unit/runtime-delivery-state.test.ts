@@ -10,6 +10,16 @@ import {
 import { recoverableLimitedDeliveryForError } from "../../packages/butler-agent/src/agent/turn/recoverable-delivery.ts";
 import { progressFinalizationText } from "../../packages/butler-agent/src/agent/output/completion/progress-finalization.ts";
 
+function terminalSystemFailure() {
+  return {
+    delivery_state: "failed_system",
+    terminal: true,
+    issue_kind: "system_failure",
+    visibility: "failure_notice",
+    failure_notice: true,
+  } as const;
+}
+
 test("runtime delivery taxonomy maps normal and limited delivery as assistant output", () => {
   expect(deliveredDeliveryState()).toMatchObject({
     delivery_state: "delivered",
@@ -50,85 +60,44 @@ test("runtime delivery taxonomy maps normal and limited delivery as assistant ou
   expect(isUserFacingFailureDelivery(withContinuation)).toBe(false);
 });
 
-test("runtime delivery taxonomy keeps live completion gaps non-public without classifying tool failures as recovery", () => {
+test("ownerless live gaps fail terminally instead of impersonating continuation", () => {
   const goalError = new Error("missing public completion obligation: source_verified");
   goalError.name = "GoalCompletionIncompleteError";
   const goalGap = classifyRuntimeFailureDelivery(goalError);
-  expect(goalGap).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-    limitation_codes: [],
-  });
+  expect(goalGap).toMatchObject(terminalSystemFailure());
 
   const toolSurfaceGap = classifyRuntimeFailureDelivery({
     code: "unknown_tool",
     message: "unknown tool web_read; missing tool surface",
   });
-  expect(toolSurfaceGap).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-  });
+  expect(toolSurfaceGap).toMatchObject(terminalSystemFailure());
 
   const argumentGap = classifyRuntimeFailureDelivery({
     code: "invalid_tool_arguments",
     message: "tool arguments failed validation",
   });
-  expect(argumentGap).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-    limitation_codes: [],
-  });
+  expect(argumentGap).toMatchObject(terminalSystemFailure());
 
   const uncertainty = classifyRuntimeFailureDelivery({
     code: "internal_uncertainty",
     message: "uncertain whether the requested goal was completed",
   });
-  expect(uncertainty).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-    limitation_codes: [],
-  });
+  expect(uncertainty).toMatchObject(terminalSystemFailure());
 
   const normalizedRecovery = classifyRuntimeFailureDelivery({
     code: "internal_recovery_required",
     message: "Butler could not verify that the requested goal was completed.",
     retryable: true,
   });
-  expect(normalizedRecovery).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-    limitation_codes: [],
-  });
+  expect(normalizedRecovery).toMatchObject(terminalSystemFailure());
 });
 
-test("provider round timeout remains a non-public resumable turn state", () => {
+test("provider round timeout is terminal without a committed continuation owner", () => {
   expect(classifyRuntimeFailureDelivery({
     code: "provider_round_timeout",
     message: "Provider stopped making forward progress.",
     retryable: false,
-  })).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-    limitation_codes: [],
-  });
+  })).toMatchObject(terminalSystemFailure());
 });
 
 test("runtime delivery taxonomy does not classify live continuation from raw text", () => {
@@ -233,20 +202,13 @@ test("runtime delivery taxonomy separates user blockers from system failures", (
   });
 });
 
-test("completion_review_incomplete stays non-public and never infers user action from message text", () => {
+test("ownerless completion review failure is terminal and never infers user action from text", () => {
   const completionReviewGap = classifyRuntimeFailureDelivery({
     code: "completion_review_incomplete",
     message: "login required for the private account.",
     retryable: true,
   });
-  expect(completionReviewGap).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
-    limitation_codes: [],
-  });
+  expect(completionReviewGap).toMatchObject(terminalSystemFailure());
 });
 
 test("typed user action blocker waits for user", () => {

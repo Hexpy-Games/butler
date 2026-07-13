@@ -170,25 +170,10 @@ export function classifyRuntimeFailureDelivery(input: RuntimeDeliveryFailureInpu
       limitations: [safeLimitationText(failure.message, "User action is required before Butler can continue.")],
     });
   }
-  if (isLiveToolObservationGap(failure)) {
-    return liveKernelContinuationState();
-  }
-  if (isLiveKernelContinuationGap(failure)) {
-    return liveKernelContinuationState();
-  }
   if (isOperationalFailure(failure)) {
     return systemFailureDeliveryState(failure);
   }
   return systemFailureDeliveryState(failure);
-}
-
-function liveKernelContinuationState(): RuntimeDeliveryClassification {
-  return classification({
-    deliveryState: "running",
-    terminal: false,
-    issueKind: "none",
-    visibility: "continuation_progress",
-  });
 }
 
 function historicalRepairDeliveryState(
@@ -323,32 +308,6 @@ function isRuntimeFaultFailureInput(failure: RuntimeDeliveryFailureInput): boole
   return failure.code === "runtime_fault" ||
     failure.code === "runtime_invariant_violation" ||
     failure.name === "RuntimeFaultError";
-}
-
-function isLiveKernelContinuationGap(failure: RuntimeDeliveryFailureInput): boolean {
-  return (
-    failure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-    failure.code === "goal_completion_incomplete" ||
-    failure.code === "internal_uncertainty" ||
-    failure.code === "completion_gap" ||
-    failure.code === "completion_review_incomplete" ||
-    failure.code === "prompt_usage_model_call_budget_exhausted" ||
-    failure.code === "provider_round_timeout" ||
-    failure.code === "missing_evidence" ||
-    failure.code === "candidate_only_evidence" ||
-    failure.name === "GoalCompletionIncompleteError" ||
-    failure.name === "PromptUsageModelCallBudgetExhaustedError"
-  );
-}
-
-function isLiveToolObservationGap(failure: RuntimeDeliveryFailureInput): boolean {
-  return (
-    failure.code === "unknown_tool" ||
-    failure.code === "disabled_tool" ||
-    failure.code === "missing_tool_surface" ||
-    failure.code === "invalid_tool_arguments" ||
-    failure.code === "tool_arguments_validation_failed"
-  );
 }
 
 function recoveryStateForInternalFailure(

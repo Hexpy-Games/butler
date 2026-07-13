@@ -77,6 +77,19 @@ class PersistenceFailingInboundQueue extends NativeInboundQueue {
   }
 }
 
+class ContinuationEnqueueFailingInboundQueue extends NativeInboundQueue {
+  override enqueue(
+    envelope: InboundEnvelope,
+    metadata: Record<string, unknown> = {},
+    now = new Date(),
+  ) {
+    if (metadata.sameLogicalTurnContinuation === true) {
+      throw new Error("scheduler continuation queue unavailable");
+    }
+    return super.enqueue(envelope, metadata, now);
+  }
+}
+
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-provider",
   capabilities: {
@@ -1077,7 +1090,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
 });
 
-test("queued inbound never schedules raw budget exhaustion without an orchestrator checkpoint", async () => {
+test("queued inbound terminates raw budget exhaustion without an orchestrator checkpoint", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1119,11 +1132,14 @@ test("queued inbound never schedules raw budget exhaustion without an orchestrat
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 1,
-    delivered: 0,
-    failed: 0,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
   });
-  expect(app.sentActions).toHaveLength(0);
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    metadata: { kind: "turn_failed", turnId: "turn-budget-failure" },
+  });
   const pendingRecords = readdirSync(join(tempDir, "runtime", "inbound-events", "pending"))
     .filter((name) => name.endsWith(".json"))
     .map((name) => JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "pending", name), "utf8")));
@@ -1347,6 +1363,63 @@ test("queued rate-limit continuation is durably delayed before another provider 
   store.close();
 });
 
+test("queued continuation enqueue failure terminates the original App turn", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new ContinuationEnqueueFailingInboundQueue(tempDir);
+  queue.enqueue(appEnvelope({
+    eventId: "app:continuation-enqueue-failure",
+    messageId: "continuation-enqueue-failure",
+    sessionId: "butler/app-general",
+  }));
+  const app = new MockTransportAdapter({ id: "app" });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new TurnSchedulerContinuationYieldError(
+          "butler/app-general",
+          "turn-continuation-enqueue-failure",
+          "continuation.json",
+          "continuation.json:g1",
+          1,
+          "prompt_usage_model_call_budget_exhausted",
+        );
+      },
+    },
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [app] }),
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
+  });
+  expect(app.sentActions).toEqual([
+    expect.objectContaining({
+      metadata: expect.objectContaining({
+        kind: "turn_failed",
+        turnId: "turn-continuation-enqueue-failure",
+        safeErrorCode: "turn_scheduler_continuation_schedule_failed",
+      }),
+    }),
+  ]);
+  const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
+  expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
+  const failedDir = join(tempDir, "runtime", "inbound-events", "failed");
+  const failedFiles = readdirSync(failedDir).filter((name) => name.endsWith(".json"));
+  expect(failedFiles).toHaveLength(1);
+  const failed = JSON.parse(readFileSync(join(failedDir, failedFiles[0]!), "utf8"));
+  expect(failed.metadata.failure).toMatchObject({
+    code: "turn_scheduler_continuation_schedule_failed",
+    retryable: true,
+  });
+  expect(JSON.stringify(failed)).not.toContain("continuationOnly");
+  store.close();
+});
+
 test("queued dispatcher never enters a turn that was durably cancelled before claim", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
@@ -1515,24 +1588,22 @@ test("queued inbound consumes normalized live recovery failures without public c
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 1,
-    delivered: 0,
-    failed: 0,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
   });
-  expect(app.sentActions).toHaveLength(0);
-  const processedFiles = readdirSync(join(tempDir, "runtime", "inbound-events", "processed"));
-  const processed = JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "processed", processedFiles[0]!), "utf8"));
-  expect(processed.metadata).toMatchObject({
-    dispatchStatus: "continuing",
-    handled: true,
-    continuationOnly: true,
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    metadata: {
+      kind: "turn_failed",
+      turnId: "turn-normalized-internal-recovery",
+    },
   });
-  expect(JSON.stringify(processed)).not.toContain("turn_failed");
-  expect(JSON.stringify(processed)).not.toContain("requested goal was completed");
+  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
   store.close();
 });
 
-test("queued app prompt-budget yield resumes same logical turn from durable W3 todo context", async () => {
+test("queued app retryable provider interruption resumes same logical turn from durable W3 todo context", async () => {
   const butlerHome = join(tempDir, "home");
   mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
   mkdirSync(join(tempDir, "personas"), { recursive: true });
@@ -1591,10 +1662,13 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
           },
           rawArguments: JSON.stringify({ command: "printf 'w3 evidence\\n'" }),
         });
-        const error = new Error("Prompt usage model-call budget exhausted before provider request");
-        error.name = "PromptUsageModelCallBudgetExhaustedError";
-        Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
-        throw error;
+        throw new ModelProviderRequestError({
+          code: "provider_network_error",
+          message: "Provider connection ended before the response completed.",
+          provider: "openai",
+          api: "responses",
+          retryable: true,
+        });
       }
       resumePrompt = input.prompt;
       await input.executeTool({
@@ -1662,6 +1736,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   const queue = new NativeInboundQueue(tempDir);
   const app = new MockTransportAdapter({ id: "app" });
   const guard = new DeliveryGuard({ adapters: [app] });
+  const firstDispatchAt = new Date("2026-07-13T20:00:00.000Z");
 
   queue.enqueue(appEnvelope({
     eventId: "app:w3-budget-first",
@@ -1675,6 +1750,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
     server,
     store,
     deliveryGuard: guard,
+    now: () => firstDispatchAt,
   });
 
   expect(first).toMatchObject({
@@ -1758,6 +1834,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
     server,
     store,
     deliveryGuard: guard,
+    now: () => new Date(firstDispatchAt.getTime() + 5_001),
   });
 
   expect(second).toMatchObject({
@@ -1816,7 +1893,7 @@ test("queued app prompt-budget yield resumes same logical turn from durable W3 t
   store.close();
 });
 
-test("queued inbound goal completion incomplete delivers safe limited result", async () => {
+test("queued inbound goal completion incomplete terminates without a continuation owner", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1855,11 +1932,14 @@ test("queued inbound goal completion incomplete delivers safe limited result", a
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 1,
-    delivered: 0,
-    failed: 0,
+    handled: 0,
+    delivered: 1,
+    failed: 1,
   });
-  expect(app.sentActions).toHaveLength(0);
+  expect(app.sentActions).toHaveLength(1);
+  expect(app.sentActions[0]).toMatchObject({
+    metadata: { kind: "turn_failed", turnId: "turn-goal-incomplete" },
+  });
 });
 
 test("queued inbound reactivates hinted crashed app sessions before routing", async () => {

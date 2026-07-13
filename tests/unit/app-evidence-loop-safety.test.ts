@@ -301,9 +301,14 @@ test("App budget exhaustion stops once and the next user message starts from the
     const firstTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.id === first.data.turn.id && turn.state === "waiting_for_tool",
+      (turn) => turn.id === first.data.turn.id && turn.state === "failed",
     );
-    expect(firstTurn).toMatchObject({ state: "waiting_for_tool", attempt: 1 });
+    expect(firstTurn).toMatchObject({
+      state: "failed",
+      attempt: 1,
+      safe_error_code: "prompt_usage_model_call_budget_exhausted",
+      cancellable: false,
+    });
     expect(toolPromptCalls).toBe(1);
     expect(finalizationAttempts).toBe(1);
     expect(turnContextAtomCount(data)).toBe(0);
@@ -315,7 +320,7 @@ test("App budget exhaustion stops once and the next user message starts from the
     const stableTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(stableTurns.data.turns[0]).toMatchObject({
       id: first.data.turn.id,
-      state: "waiting_for_tool",
+      state: "failed",
       attempt: 1,
     });
     const stableFirstEvents = await getJson(`${server.url}events?cursor=0`);
