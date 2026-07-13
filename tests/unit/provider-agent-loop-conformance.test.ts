@@ -29,7 +29,7 @@ type ProviderFamily = "openai" | "hosted-chat" | "anthropic" | "google" | "local
 interface ProviderHarness {
   family: ProviderFamily;
   run(options: FunctionToolPromptOptions): Promise<string>;
-  response(round: number): Record<string, unknown>;
+  response(round: number, toolName?: string): Record<string, unknown>;
 }
 
 test("every provider family preserves decisions results and usage across native tool rounds", async () => {
@@ -188,6 +188,58 @@ test("every provider family continues a rejected final candidate in the same nat
   }
 });
 
+test("every provider family receives bounded conversation context inline on the next request", async () => {
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return Response.json(harness.response(
+        responseRound === 1 ? 1 : 3,
+        "read_conversation_context",
+      ));
+    }) as typeof fetch;
+
+    const marker = `CONVERSATION_CONTEXT_${harness.family}`;
+    const result = await harness.run({
+      prompt: "Read the bounded conversation context once and report.",
+      instructions: "Use read_conversation_context exactly once.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 2,
+      butlerData: makeTempDir(`${harness.family}-conversation-context`),
+      tools: [{
+        type: "function",
+        name: "read_conversation_context",
+        description: "Return bounded canonical conversation context.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: { query: { type: "string" } },
+        },
+      }],
+      onAssistantTextBeforeTools: async () => {},
+      executeTool: async () => ({
+        ok: true,
+        session_id: "conversation-session",
+        runtime_session_id: "private-runtime-session",
+        query: null,
+        anchor_message_id: null,
+        anchor_event_id: null,
+        direction: "around",
+        returned: 1,
+        truncated: false,
+        messages: [{ text: marker, speaker: "user", role: "user", parts: [] }],
+        summaries: [],
+      }),
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain(marker);
+    expect(JSON.stringify(bodies[1]), harness.family).not.toContain("private-runtime-session");
+  }
+});
+
 function providerHarnesses(): ProviderHarness[] {
   return [
     {
@@ -243,15 +295,15 @@ function decisionText(step: number): string {
   ].join("\n");
 }
 
-function openAIResponse(round: number): Record<string, unknown> {
+function openAIResponse(round: number, toolName = "probe"): Record<string, unknown> {
   const output = round <= 2
     ? [
       { type: "message", content: [{ type: "output_text", text: decisionText(round) }] },
       {
         type: "function_call",
         call_id: `call-${round}`,
-        name: "probe",
-        arguments: JSON.stringify({ step: round }),
+        name: toolName,
+        arguments: JSON.stringify(toolArguments(round, toolName)),
       },
     ]
     : [{
@@ -265,7 +317,7 @@ function openAIResponse(round: number): Record<string, unknown> {
   };
 }
 
-function openAICompatibleResponse(round: number): Record<string, unknown> {
+function openAICompatibleResponse(round: number, toolName = "probe"): Record<string, unknown> {
   const message = round <= 2
     ? {
       role: "assistant",
@@ -273,7 +325,7 @@ function openAICompatibleResponse(round: number): Record<string, unknown> {
       tool_calls: [{
         id: `call-${round}`,
         type: "function",
-        function: { name: "probe", arguments: JSON.stringify({ step: round }) },
+        function: { name: toolName, arguments: JSON.stringify(toolArguments(round, toolName)) },
       }],
     }
     : { role: "assistant", content: "Provider loop complete." };
@@ -283,11 +335,11 @@ function openAICompatibleResponse(round: number): Record<string, unknown> {
   };
 }
 
-function anthropicResponse(round: number): Record<string, unknown> {
+function anthropicResponse(round: number, toolName = "probe"): Record<string, unknown> {
   const content = round <= 2
     ? [
       { type: "text", text: decisionText(round) },
-      { type: "tool_use", id: `call-${round}`, name: "probe", input: { step: round } },
+      { type: "tool_use", id: `call-${round}`, name: toolName, input: toolArguments(round, toolName) },
     ]
     : [{ type: "text", text: "Provider loop complete." }];
   return {
@@ -296,11 +348,11 @@ function anthropicResponse(round: number): Record<string, unknown> {
   };
 }
 
-function geminiResponse(round: number): Record<string, unknown> {
+function geminiResponse(round: number, toolName = "probe"): Record<string, unknown> {
   const parts = round <= 2
     ? [
       { text: decisionText(round) },
-      { functionCall: { name: "probe", args: { step: round } } },
+      { functionCall: { name: toolName, args: toolArguments(round, toolName) } },
     ]
     : [{ text: "Provider loop complete." }];
   return {
@@ -314,8 +366,8 @@ function geminiResponse(round: number): Record<string, unknown> {
   };
 }
 
-function localResponse(round: number): Record<string, unknown> {
-  if (round <= 2) return openAICompatibleResponse(round);
+function localResponse(round: number, toolName = "probe"): Record<string, unknown> {
+  if (round <= 2) return openAICompatibleResponse(round, toolName);
   return {
     choices: [{
       message: {
@@ -325,6 +377,12 @@ function localResponse(round: number): Record<string, unknown> {
     }],
     usage: { prompt_tokens: 13, completion_tokens: 2, total_tokens: 15 },
   };
+}
+
+function toolArguments(round: number, toolName: string): Record<string, unknown> {
+  return toolName === "read_conversation_context"
+    ? { query: "deployment" }
+    : { step: round };
 }
 
 function prematureFinalResponse(family: ProviderFamily): Record<string, unknown> {
