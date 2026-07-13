@@ -81,6 +81,7 @@ async function createLocalChatCompletionOnce(
       detail,
       endpoint,
       model,
+      admission: admittedRequest,
     });
   }
   return parsed;
@@ -101,6 +102,7 @@ export function isLocalContextOverflowError(error: unknown): boolean {
     error.code === "model_request_context_capacity_exceeded"
   ) return true;
   if (!(error instanceof Error)) return false;
+  if (error instanceof ModelProviderRequestError && error.code === "admission_invariant_violation") return false;
   const causeMessage = error instanceof ModelProviderRequestError ? error.causeMessage : "";
   const text = [error.message, causeMessage].filter(Boolean).join("\n");
   return /(?:available context size|context (?:size|window|length)|maximum context|too many tokens|request \(\d+ tokens\) exceeds)/iu

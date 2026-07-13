@@ -76,6 +76,7 @@ async function createGeminiContentOnce(
       detail: parsed?.error?.message || raw || `status ${response.status}`,
       endpoint,
       model: config.modelId,
+      admission: admittedRequest,
     });
   }
   return parsed;

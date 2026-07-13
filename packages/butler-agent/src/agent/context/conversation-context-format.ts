@@ -6,6 +6,7 @@ import type {
   ConversationSummary,
   ConversationTurn,
   PromptMaterial,
+  TurnOutcomeCapsule,
 } from "../conversation/types.ts";
 
 export interface ConversationContextPart {
@@ -62,6 +63,7 @@ export interface ConversationSemanticTurnAtom {
   last_seq: number;
   serialized_tokens: number;
   messages: ConversationContextMessage[];
+  outcome: TurnOutcomeCapsule | null;
 }
 
 export interface ConversationSummaryAtom extends ConversationContextSummary {
@@ -117,7 +119,7 @@ export function compilePromptMaterialContextPlan(
   const currentRequest = options.currentRequest ? currentRequestAtom(options.currentRequest) : null;
   const messages = material.semantic_tail
     .filter((message) => !options.excludeSourceRef || message.source_ref !== options.excludeSourceRef);
-  const turns = semanticTurnAtoms(messages, material.turns ?? []);
+  const turns = semanticTurnAtoms(messages, material.turns ?? [], material.outcomes ?? []);
   const requiredTurns = turns.length > 0 ? [turns.at(-1)!] : [];
   const optionalTurns = turns.slice(0, -requiredTurns.length).reverse();
   const header = "## Recent Conversation";
@@ -220,8 +222,10 @@ export function textForMessage(message: ConversationMessageWithParts, includeToo
 function semanticTurnAtoms(
   messages: ConversationMessageWithParts[],
   turns: ConversationTurn[],
+  outcomes: TurnOutcomeCapsule[],
 ): ConversationSemanticTurnAtom[] {
   const statusByTurnId = new Map(turns.map((turn) => [turn.id, turn.status]));
+  const outcomeByTurnId = new Map(outcomes.map((outcome) => [outcome.turn_id, outcome]));
   const grouped = new Map<string, ConversationMessageWithParts[]>();
   for (const message of messages) {
     const key = message.turn_id ? `turn:${message.turn_id}` : `message:${message.id}`;
@@ -235,11 +239,13 @@ function semanticTurnAtoms(
     const turnId = first.turn_id;
     const id = turnId ? `conversation_turn:${turnId}` : `conversation_message:${first.id}`;
     const contextMessages = group.map((message) => toContextMessage(message, true));
+    const outcome = turnId ? outcomeByTurnId.get(turnId) ?? null : null;
     const rendered = renderSemanticTurnMessages({
       id,
       turnId,
       status: turnId ? statusByTurnId.get(turnId) ?? "unknown" : "unknown",
       messages: contextMessages,
+      outcome,
     });
     return {
       id,
@@ -250,6 +256,7 @@ function semanticTurnAtoms(
       last_seq: last.seq,
       serialized_tokens: serializedUpperBound(rendered.join("\n")),
       messages: contextMessages,
+      outcome,
     };
   });
 }
@@ -275,6 +282,7 @@ function renderSemanticTurnAtom(turn: ConversationSemanticTurnAtom): string[] {
     turnId: turn.turn_id,
     status: turn.status,
     messages: turn.messages,
+    outcome: turn.outcome,
   });
 }
 
@@ -283,13 +291,27 @@ function renderSemanticTurnMessages(input: {
   turnId: string | null;
   status: ConversationSemanticTurnAtom["status"];
   messages: ConversationContextMessage[];
+  outcome: TurnOutcomeCapsule | null;
 }): string[] {
   return [
     `turn ${input.turnId ?? input.id} status ${input.status}`,
+    ...(input.outcome ? [renderOutcomeCapsule(input.outcome)] : []),
     ...input.messages.flatMap((message) =>
       message.text.trim() ? [`${message.speaker}: ${message.text}`] : [],
     ),
   ];
+}
+
+function renderOutcomeCapsule(outcome: TurnOutcomeCapsule): string {
+  return `outcome ${outcome.outcome} generation ${outcome.generation}: ${JSON.stringify({
+    source_hash: outcome.source_hash,
+    request_message_id: outcome.request_message_id,
+    public_assistant_message_id: outcome.public_assistant_message_id,
+    evidence_refs: outcome.evidence_refs,
+    unresolved_obligations: outcome.unresolved_obligations,
+    continuation: outcome.continuation,
+    safe_code: outcome.safe_code,
+  })}`;
 }
 
 function sourceHash(messages: ConversationMessageWithParts[]): string {

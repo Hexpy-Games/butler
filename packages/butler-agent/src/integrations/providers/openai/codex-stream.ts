@@ -320,6 +320,7 @@ export async function createCodexResponse(
       detail,
       endpoint,
       model,
+      admission: admittedRequest,
     });
   }
 

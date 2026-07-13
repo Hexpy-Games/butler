@@ -155,6 +155,35 @@ test("every provider client blocks an oversized serialized request before fetch"
   expect(fetchCalls).toBe(0);
 });
 
+test("provider overflow after successful admission is a safe invariant violation", async () => {
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    error: { message: "maximum context length exceeded" },
+  }), { status: 400 })) as unknown as typeof fetch;
+
+  try {
+    await createOpenAIResponseOnce({
+      model: "gpt-5.4-mini",
+      input: [{ role: "user", content: "small admitted request" }],
+    } as any);
+    throw new Error("expected provider overflow");
+  } catch (error) {
+    const typed = error as {
+      code: string;
+      requestGeneration: number;
+      provider: string;
+      diagnostic(): Record<string, unknown>;
+    };
+    expect(typed.code).toBe("admission_invariant_violation");
+    expect(typed.requestGeneration).toBe(0);
+    expect(typed.provider).toBe("openai-codex");
+    const diagnostic = typed.diagnostic();
+    expect(diagnostic.requestHash).toMatch(/^[a-f0-9]{64}$/u);
+    expect(diagnostic.measuredInputTokens).toBeGreaterThan(0);
+    expect(diagnostic.registeredInputCapacity).toBeGreaterThan(0);
+    expect(JSON.stringify(diagnostic)).not.toContain("small admitted request");
+  }
+});
+
 test("serialized upper-bound measurements do not under-report provider usage fixtures", () => {
   const fixtures = [
     { providerId: "openai" as const, modelRef: "openai/gpt-5.5", reportedInputTokens: 19_245 },

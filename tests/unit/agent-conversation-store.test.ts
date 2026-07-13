@@ -70,13 +70,155 @@ test("conversation store creates the canonical schema and migration marker", () 
     expect(tables).toContain("conversation_messages");
     expect(tables).toContain("conversation_parts");
     expect(tables).toContain("conversation_summaries");
+    expect(tables).toContain("conversation_turn_outcomes");
     expect(tables).toContain("conversation_projection_outbox");
     expect(tables).toContain("conversation_schema_migrations");
     expect(db.query<{ version: number }, []>("SELECT version FROM conversation_schema_migrations").get()?.version)
-      .toBe(1);
+      .toBe(2);
   } finally {
     db.close();
   }
+});
+
+test("conversation store upgrades a version-one database without losing semantic rows", () => {
+  const original = createStore();
+  const turn = original.beginTurn({
+    gateway: "app",
+    externalSessionId: "chat-v1",
+    sessionId: "cs_v1",
+    actor: "user",
+  });
+  original.appendUserMessage({ sessionId: turn.session_id, turnId: turn.id, text: "v1 message" });
+  original.close();
+
+  const legacy = new Database(conversationStorePath(tempDir));
+  legacy.exec("DROP TABLE conversation_turn_outcomes");
+  legacy.query("DELETE FROM conversation_schema_migrations WHERE version = 2").run();
+  legacy.close();
+
+  const upgraded = createStore();
+  expect(upgraded.readSemanticTail("cs_v1", 10)[0]?.parts[0]?.content_json).toEqual({
+    text: "v1 message",
+  });
+  upgraded.close();
+  const verified = new Database(conversationStorePath(tempDir), { readonly: true });
+  expect(verified.query<{ version: number }, []>(`
+    SELECT MAX(version) AS version FROM conversation_schema_migrations
+  `).get()?.version).toBe(2);
+  expect(verified.query<{ name: string }, []>(`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turn_outcomes'
+  `).get()?.name).toBe("conversation_turn_outcomes");
+  verified.close();
+});
+
+test("turn finalization atomically writes an idempotent generation-ordered outcome capsule", () => {
+  const store = createStore();
+  const turn = store.beginTurn({
+    gateway: "app",
+    externalSessionId: "chat-outcome",
+    sessionId: "cs_outcome",
+    actor: "user",
+    turnId: "turn-outcome",
+  });
+  const request = store.appendUserMessage({
+    sessionId: turn.session_id,
+    turnId: turn.id,
+    text: "finish this work",
+  });
+  const assistant = store.appendAssistantMessage({
+    sessionId: turn.session_id,
+    turnId: turn.id,
+    text: "done",
+  });
+  const capsuleInput = {
+    sessionId: turn.session_id,
+    turnId: turn.id,
+    generation: 1,
+    outcome: "delivered" as const,
+    requestMessageId: request.id,
+    publicAssistantMessageId: assistant.id,
+    providerId: "openai",
+    modelRef: "openai/gpt-5.2",
+    evidenceRefs: ["evidence-1"],
+    unresolvedObligations: [],
+    createdAt: "2026-07-13T00:00:00.000Z",
+  };
+
+  store.finalizeTurn({
+    turnId: turn.id,
+    status: "complete",
+    outcomeCapsule: capsuleInput,
+  });
+  const first = store.readTurnOutcome(turn.id);
+  expect(first).toMatchObject({
+    outcome: "delivered",
+    generation: 1,
+    request_message_id: request.id,
+    public_assistant_message_id: assistant.id,
+    evidence_refs: ["evidence-1"],
+  });
+  expect(first?.source_hash).toMatch(/^[a-f0-9]{64}$/u);
+  expect(store.readProjectionBatch(null, 20).map((event) => event.kind))
+    .toContain("conversation.turn_outcome_written");
+
+  store.writeTurnOutcome(capsuleInput);
+  expect(store.readTurnOutcome(turn.id)).toEqual(first);
+  store.writeTurnOutcome({ ...capsuleInput, generation: 0, outcome: "failed" });
+  expect(store.readTurnOutcome(turn.id)).toEqual(first);
+  expect(() => store.writeTurnOutcome({
+    ...capsuleInput,
+    outcome: "failed",
+    safeCode: "different_same_generation",
+  })).toThrow("Turn outcome generation conflict");
+
+  const next = store.writeTurnOutcome({
+    ...capsuleInput,
+    generation: 2,
+    outcome: "recoverable",
+    publicAssistantMessageId: null,
+    unresolvedObligations: ["finish validation"],
+    safeCode: "admission_invariant_violation",
+  });
+  expect(next).toMatchObject({
+    generation: 2,
+    outcome: "recoverable",
+    unresolved_obligations: ["finish validation"],
+    safe_code: "admission_invariant_violation",
+  });
+  store.close();
+
+  const mutated = new Database(conversationStorePath(tempDir));
+  mutated.query("UPDATE conversation_parts SET content_json = ? WHERE message_id = ?")
+    .run(JSON.stringify({ text: "mutated request" }), request.id);
+  mutated.close();
+  const reopened = createStore();
+  expect(reopened.readTurnOutcome(turn.id)).toBeNull();
+  reopened.close();
+});
+
+test("turn finalization rolls back when outcome capsule validation fails", () => {
+  const store = createStore();
+  const turn = store.beginTurn({
+    gateway: "app",
+    externalSessionId: "chat-outcome-rollback",
+    sessionId: "cs_outcome_rollback",
+    actor: "user",
+    turnId: "turn-outcome-rollback",
+  });
+
+  expect(() => store.finalizeTurn({
+    turnId: turn.id,
+    status: "complete",
+    outcomeCapsule: {
+      sessionId: "wrong-session",
+      turnId: turn.id,
+      generation: 1,
+      outcome: "delivered",
+    },
+  })).toThrow("Turn outcome session mismatch");
+  expect(store.readTurn(turn.id)).toMatchObject({ status: "running", completed_at: null });
+  expect(store.readTurnOutcome(turn.id)).toBeNull();
+  store.close();
 });
 
 test("writer persists turns messages parts and projection outbox atomically", () => {

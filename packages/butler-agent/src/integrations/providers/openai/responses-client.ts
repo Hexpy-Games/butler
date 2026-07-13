@@ -81,6 +81,7 @@ export async function createOpenAIResponseOnce(
       detail,
       endpoint,
       model,
+      admission: admittedRequest,
     });
   }
 

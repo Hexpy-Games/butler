@@ -9,6 +9,7 @@ import type {
   ConversationSummary,
   ConversationTurn,
   PromptMaterial,
+  TurnOutcomeCapsule,
 } from "../../packages/butler-agent/src/agent/conversation/types.ts";
 import { buildThinFirstResponsePrompt } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/thin-first-response.ts";
 
@@ -60,6 +61,38 @@ test("failed adjacent turns stay required with their user request and complete t
   expect(plan.rendered).toContain("[tool_call:probe:call-1]");
   expect(plan.rendered).toContain("[tool_result:complete:call-1]");
   expect(plan.compiled_input_tokens).toBeGreaterThan(plan.capacity_tokens);
+});
+
+test("adjacent failed turn renders its durable outcome capsule without internal tool trace", () => {
+  const adjacent = semanticTurn("turn-failed-capsule", 1, "keep this exact request");
+  adjacent.turn.status = "failed";
+  const outcome: TurnOutcomeCapsule = {
+    id: "outcome-failed",
+    session_id: "session-plan",
+    turn_id: adjacent.turn.id,
+    generation: 2,
+    outcome: "recoverable",
+    source_hash: "sha256:outcome",
+    request_message_id: adjacent.messages[0]!.id,
+    public_assistant_message_id: null,
+    provider_id: "local",
+    model_ref: "local/test",
+    evidence_refs: ["evidence-safe-ref"],
+    unresolved_obligations: ["finish_current_request"],
+    continuation: { logical_turn_id: adjacent.turn.id },
+    safe_code: "admission_invariant_violation",
+    created_at: new Date(0).toISOString(),
+  };
+  const plan = compilePromptMaterialContextPlan(
+    material([adjacent], [], [outcome]),
+    { maxTokens: 1 },
+  );
+
+  expect(plan.required_turns[0]?.outcome).toEqual(outcome);
+  expect(plan.rendered).toContain("keep this exact request user");
+  expect(plan.rendered).toContain("outcome recoverable generation 2");
+  expect(plan.rendered).toContain("finish_current_request");
+  expect(plan.rendered).toContain("evidence-safe-ref");
 });
 
 test("thin and full renderers share semantic atom ids and preserve nested Markdown payloads", () => {
@@ -137,6 +170,7 @@ function atom(plan: ConversationPromptContextPlan, turnId: string) {
 function material(
   semanticTurns: Array<{ turn: ConversationTurn; messages: ConversationMessageWithParts[] }>,
   summaries: ConversationSummary[] = [],
+  outcomes: TurnOutcomeCapsule[] = [],
 ): PromptMaterial {
   return {
     session_id: "session-plan",
@@ -144,6 +178,7 @@ function material(
     semantic_tail: semanticTurns.flatMap((item) => item.messages),
     current_turn: [],
     turns: semanticTurns.map((item) => item.turn),
+    outcomes,
     token_estimate: 0,
     provenance: [],
   };
