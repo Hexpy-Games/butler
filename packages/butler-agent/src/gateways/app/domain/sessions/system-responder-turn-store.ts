@@ -1,5 +1,6 @@
 import {
   appLimitedDeliveryForError,
+  appNonPublicContinuationSafeErrorCode,
   appSafeResponderError,
   isNonPublicContinuationDeliveryError,
 } from "../../infrastructure/transport/failure-ux-contract.ts";
@@ -130,6 +131,7 @@ export class AppSystemResponderTurnStore {
       const continuation = this.input.markResponderNonPublicContinuation(
         input.chatId,
         input.turn.id,
+        appNonPublicContinuationSafeErrorCode(input.error),
       );
       this.input.touchChat(input.chatId);
       return {

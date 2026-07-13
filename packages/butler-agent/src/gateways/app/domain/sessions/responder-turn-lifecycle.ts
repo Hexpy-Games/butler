@@ -7,6 +7,7 @@ import type {
 } from "../../interface/protocol/app-protocol.ts";
 import {
   appLimitedDeliveryForError,
+  appNonPublicContinuationSafeErrorCode,
   appSafeResponderError,
   isNonPublicContinuationDeliveryError,
   type AppLimitedDelivery,
@@ -59,6 +60,7 @@ export interface CompleteResponderTurnContext<FileRecord> {
   markResponderNonPublicContinuation(
     chatId: string,
     turnId: string,
+    safeErrorCode?: "provider_round_timeout" | null,
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
   finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord;
   hasTurnEventKind(turnId: string, kind: string): boolean;
@@ -209,6 +211,7 @@ export async function completeResponderTurn<FileRecord>(
       const continuation = context.markResponderNonPublicContinuation(
         input.chatId,
         input.turnId,
+        appNonPublicContinuationSafeErrorCode(error),
       );
       context.touchChat(input.chatId);
       await context.drainQueuedSessionMessages(

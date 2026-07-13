@@ -206,8 +206,8 @@ function createSystemResponderTurns(input: {
     },
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
-    markResponderNonPublicContinuation: (chatId, turnId) =>
-      host.markResponderNonPublicContinuation(chatId, turnId),
+    markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
+      host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
     finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
     upsertAssistantTurnFailure: (chatId, turnId, safeError, options) =>
