@@ -81,6 +81,23 @@ export function createProviderRoundGuard(input: {
   };
 }
 
+export async function raceProviderRoundWithSignal<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error("Provider round aborted."));
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([operation, aborted]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
 function positiveMilliseconds(
   override: number | undefined,
   environmentValue: string | undefined,

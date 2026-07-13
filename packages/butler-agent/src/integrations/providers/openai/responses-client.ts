@@ -7,6 +7,7 @@ import { resolveOpenAIAuth } from "./auth.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import {
   createProviderRoundGuard,
+  raceProviderRoundWithSignal,
   type ProviderRoundPolicy,
 } from "../shared/provider-round-guard.ts";
 
@@ -25,14 +26,17 @@ export async function createOpenAIResponse(
   let auth = authOverride;
   try {
     auth = auth ?? await resolveOpenAIAuth();
-    return await withModelApiRetry(
-      async () => await createOpenAIResponseOnce(
-        body,
+    return await raceProviderRoundWithSignal(
+      withModelApiRetry(
+        async () => await createOpenAIResponseOnce(
+          body,
+          guard.signal,
+          auth,
+          onProviderStreamEvent,
+          budgetContext,
+          () => guard.recordProgress(),
+        ),
         guard.signal,
-        auth,
-        onProviderStreamEvent,
-        budgetContext,
-        () => guard.recordProgress(),
       ),
       guard.signal,
     );
