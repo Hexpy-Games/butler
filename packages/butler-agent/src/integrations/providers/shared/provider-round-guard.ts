@@ -11,6 +11,7 @@ export interface ProviderRoundPolicy {
 export interface ProviderRoundGuard {
   readonly signal: AbortSignal;
   readonly timeoutKind: ProviderRoundTimeoutKind | null;
+  start(): void;
   recordProgress(): void;
   dispose(): void;
 }
@@ -40,7 +41,9 @@ export function createProviderRoundGuard(input: {
   const controller = new AbortController();
   let timeoutKind: ProviderRoundTimeoutKind | null = null;
   let disposed = false;
+  let started = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let totalTimer: ReturnType<typeof setTimeout> | undefined;
 
   const abortForTimeout = (kind: ProviderRoundTimeoutKind) => {
     if (disposed || input.signal?.aborted || controller.signal.aborted) return;
@@ -51,30 +54,39 @@ export function createProviderRoundGuard(input: {
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = unrefTimer(setTimeout(() => abortForTimeout("idle"), policy.idleTimeoutMs));
   };
-  const totalTimer = unrefTimer(setTimeout(
-    () => abortForTimeout("total"),
-    policy.totalTimeoutMs,
-  ));
   const onExternalAbort = () => {
     if (!controller.signal.aborted) controller.abort(input.signal?.reason);
   };
 
   input.signal?.addEventListener("abort", onExternalAbort, { once: true });
   if (input.signal?.aborted) onExternalAbort();
-  armIdleTimer();
 
   return {
     signal: controller.signal,
     get timeoutKind() {
       return timeoutKind;
     },
+    start() {
+      if (started || disposed || controller.signal.aborted) return;
+      started = true;
+      totalTimer = unrefTimer(setTimeout(
+        () => abortForTimeout("total"),
+        policy.totalTimeoutMs,
+      ));
+      armIdleTimer();
+    },
     recordProgress() {
-      if (!disposed && !controller.signal.aborted) armIdleTimer();
+      if (disposed || controller.signal.aborted) return;
+      if (!started) {
+        this.start();
+        return;
+      }
+      armIdleTimer();
     },
     dispose() {
       if (disposed) return;
       disposed = true;
-      clearTimeout(totalTimer);
+      if (totalTimer) clearTimeout(totalTimer);
       if (idleTimer) clearTimeout(idleTimer);
       input.signal?.removeEventListener("abort", onExternalAbort);
     },

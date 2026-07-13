@@ -11,7 +11,10 @@ import type {
   OutboundAction,
   ArtifactRef,
 } from "../../test-support/harness/contracts.ts";
-import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
+import {
+  isRuntimeFaultFailure,
+  type RuntimeDeliveryClassification,
+} from "../../agent/turn/runtime-delivery-state.ts";
 import {
   TURN_ACKNOWLEDGED_EVENT_KIND,
   TURN_DECISION_EVENT_KIND,
@@ -751,9 +754,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             : undefined,
         },
       });
-      const failureState = isContinuationFailure
-        ? "active"
-        : "crashed";
+      const failureState = isRuntimeFaultFailure(error) ? "crashed" : "active";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);
       recordSessionLifecycle({
         sessionId: binding.sessionId,

@@ -42,6 +42,7 @@ test("serialized UTF-8 admission is deterministic and bound to the exact request
   expect(first.plan.compiled_input_tokens).toBe(
     Buffer.byteLength(first.serialized_request, "utf8") + 17,
   );
+  expect(first.plan.budget_input_tokens).toBeLessThan(first.plan.compiled_input_tokens);
   expect(first.plan.admission).toBe("admitted");
   expect(first.plan.tool_schema_tokens).toBeGreaterThan(0);
   expect(first.plan.turn_id).toBe("turn-admission");
@@ -70,7 +71,7 @@ test("serialized admission exposes only measured spend and request identity to t
   expect(observations).toEqual([{
     roundIndex: 3,
     phase: "review",
-    admittedPromptTokens: receipt.plan.compiled_input_tokens,
+    admittedPromptTokens: receipt.plan.budget_input_tokens,
     requestedOutputTokens: 2048,
     requestHash: receipt.serialized_request_sha256,
   }]);

@@ -283,6 +283,7 @@ export async function createCodexResponse(
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
   budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
   onProviderRoundProgress?: () => void,
+  onProviderRoundStarted?: () => void,
 ): Promise<OpenAIResponse> {
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
@@ -298,6 +299,7 @@ export async function createCodexResponse(
   });
   let response: Response;
   try {
+    onProviderRoundStarted?.();
     response = await fetch(getCodexResponsesUrl(), {
       method: "POST",
       headers: {

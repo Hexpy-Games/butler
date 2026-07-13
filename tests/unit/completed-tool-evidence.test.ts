@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
-  compileCompletedToolEvidenceInline,
+  compileCompletedToolEvidencePointers,
   toolResultPayloadForProvider,
 } from "../../packages/butler-agent/src/agent/context/completed-tool-evidence.ts";
 
@@ -99,6 +99,11 @@ test("rehydrated exact evidence is a terminal observation and creates no wrapper
     });
     expect(JSON.stringify(result)).not.toContain("butler.completed-tool-evidence.v1");
     expect(JSON.stringify(result)).not.toContain("/private/butler");
+    const compiled = compileCompletedToolEvidencePointers({
+      body: { messages: [{ role: "tool", content: result }] },
+    });
+    expect(JSON.stringify(compiled)).toContain("line 120: exact source evidence");
+    expect(JSON.stringify(compiled)).not.toContain("/private/butler");
     const repeated = toolResultPayloadForProvider({
       payload,
       toolName: "read_tool_evidence_artifact",
@@ -278,7 +283,7 @@ test("bounded command-output rehydration is terminal and removes local artifact 
   }
 });
 
-test("request compilation inlines exact evidence only when the finalized body fits", () => {
+test("request compilation keeps exact evidence pointer-first at every capacity", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-inline-evidence-"));
   try {
     const packetized = toolResultPayloadForProvider({
@@ -287,23 +292,16 @@ test("request compilation inlines exact evidence only when the finalized body fi
       evidenceRetention: { butlerData: root },
     });
     const body = { messages: [{ role: "tool", content: packetized }] };
-    const baselineBytes = Buffer.byteLength(JSON.stringify(body), "utf8");
+    ((body.messages[0].content.output as Record<string, unknown>)).inline_output = {
+      text: "LEGACY_AUTO_REHYDRATED_OUTPUT",
+    };
+    const compiled = compileCompletedToolEvidencePointers({ body });
 
-    const fits = compileCompletedToolEvidenceInline({
-      body,
-      serializedUtf8Capacity: baselineBytes + 1_000,
-    });
-    const doesNotFit = compileCompletedToolEvidenceInline({
-      body,
-      serializedUtf8Capacity: baselineBytes,
-    });
-
-    expect((fits.messages as any[])[0].content.output.inline_output).toEqual({
-      text: "EXACT_INLINE_OUTPUT",
-      value: 3,
-    });
-    expect((doesNotFit.messages as any[])[0].content.output.inline_output).toBeUndefined();
-    expect(JSON.stringify(doesNotFit)).not.toContain("EXACT_INLINE_OUTPUT");
+    expect((compiled.messages as any[])[0].content.output.inline_output).toBeUndefined();
+    expect(JSON.stringify(compiled)).not.toContain("EXACT_INLINE_OUTPUT");
+    expect(JSON.stringify(compiled)).not.toContain("LEGACY_AUTO_REHYDRATED_OUTPUT");
+    expect((compiled.messages as any[])[0].content.output.evidence_packet.rehydrate.tool)
+      .toBe("read_tool_evidence_artifact");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

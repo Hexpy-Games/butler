@@ -77,23 +77,11 @@ export function deliveryStateFromProjectedNoVisibleFinal(
 export function appLimitedDeliveryForProjectedFailure(
   safeError: ProjectedSafeTurnFailure,
 ): AppLimitedDelivery | null {
-  const classified = appLimitedDeliveryForError({
+  return appLimitedDeliveryForError({
     name: "AppTransportTurnFailure",
     code: safeError.code,
     message: safeError.message,
   });
-  if (classified) return classified;
-  if (
-    safeError.code !== INTERNAL_RECOVERY_REQUIRED_CODE &&
-    safeError.code !== "prompt_usage_model_call_budget_exhausted"
-  ) {
-    return null;
-  }
-  return {
-    text: null,
-    reason: "Internal continuation required.",
-    delivery: continuationDeliveryFromState("needs_evidence", [safeError.code]),
-  };
 }
 
 export function shouldTreatLimitedFinalAsNoVisible(
@@ -125,8 +113,7 @@ export function shouldProjectRecoverableLimitedFinalOverTerminalTurn(
     return false;
   }
   return delivery.limitation_codes.some((code) =>
-    code === "internal_recovery_required" ||
-    code === "prompt_usage_model_call_budget_exhausted",
+    code === "internal_recovery_required",
   );
 }
 
@@ -151,8 +138,7 @@ export function shouldAcceptRecoverableLimitedFinalForFailedQueue(
   }
   const delivery = deliveryLimitationMetadataFromRecord(metadata);
   return Boolean(delivery?.limitation_codes.some((code) =>
-    code === "internal_recovery_required" ||
-    code === "prompt_usage_model_call_budget_exhausted",
+    code === "internal_recovery_required",
   ));
 }
 

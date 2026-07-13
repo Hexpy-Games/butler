@@ -7,7 +7,6 @@ import {
   type RuntimeFailureDiagnostic,
 } from "../../integrations/providers/provider-errors.ts";
 import {
-  isNonPublicContinuationDeliveryError,
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
 import {
@@ -513,13 +512,24 @@ async function processClaimedQueuedInboundItem(input: {
           completePrincipalCancelledQueueClaim(options, item);
           return summary;
         }
+        const failure: RuntimeFailureDiagnostic = {
+          code: "turn_scheduler_continuation_schedule_failed",
+          message: "Butler could not commit the next continuation owner.",
+          retryable: true,
+        };
         summary.failed += 1;
-        failQueueClaim(options, item, "Unable to schedule same-logical-turn continuation.", {
+        const terminalRecorded = failQueueClaim(options, item, failure.message, {
           source: "gateway/queued-inbound.ts#scheduler-continuation",
-          failure: {
-            code: "turn_scheduler_continuation_schedule_failed",
-          },
+          failure,
         });
+        if (!terminalRecorded) return summary;
+        const delivered = await deliverFailureForOriginalInbound({
+          item,
+          deliverAction,
+          failure,
+          queueSource: "gateway/queued-inbound.ts#scheduler-continuation-failure",
+        });
+        if (delivered) summary.delivered += 1;
         return summary;
       }
       const terminalRecorded = completeQueueClaim(options, item, {
@@ -554,16 +564,6 @@ async function processClaimedQueuedInboundItem(input: {
         });
         if (delivery.ok) summary.delivered += 1;
       }
-      return summary;
-    }
-    if (isNonPublicContinuationDeliveryError(error)) {
-      const terminalRecorded = completeQueueClaim(options, item, {
-        dispatchStatus: "continuing",
-        handled: true,
-        continuationOnly: true,
-      });
-      if (!terminalRecorded) return summary;
-      summary.handled += 1;
       return summary;
     }
     summary.failed += 1;
