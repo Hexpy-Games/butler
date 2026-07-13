@@ -14,7 +14,12 @@ const acquired = withSqliteMutationLock({
   action: (lease) => {
     appendFileSync(logPath, `${JSON.stringify({ event: "enter", ownerId, fencingGeneration: lease.fencingGeneration })}\n`);
     if (holdMs > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, holdMs);
-    appendFileSync(logPath, `${JSON.stringify({ event: "exit", ownerId, fencingGeneration: lease.fencingGeneration })}\n`);
+    try {
+      appendFileSync(logPath, `${JSON.stringify({ event: "exit", ownerId, fencingGeneration: lease.fencingGeneration })}\n`);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      // The parent test may have completed and removed its private temp root.
+    }
     return true;
   },
 });
