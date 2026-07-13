@@ -113,6 +113,57 @@ test("large read previews expose the exact next source line instead of implying 
   expect(Number(preview?.preview_end_line)).toBeLessThan(300);
 });
 
+test("bounded conversation context remains a complete provider-safe observation", () => {
+  const messages = [{
+    conversation_message_id: "message-1",
+    turn_id: "turn-1",
+    seq: 4,
+    created_at: "2026-07-13T00:00:00.000Z",
+    speaker: "user",
+    role: "user",
+    text: "배포 서버는 192.168.1.18이야.",
+    parts: [],
+  }];
+  const summaries = [{
+    summary_id: "summary-1",
+    covers_from_seq: 1,
+    covers_to_seq: 3,
+    source_hash: "source-hash",
+    text: "이전 배포는 전용 SSH 키를 사용했다.",
+  }];
+  const preview = structuredToolResultModelPreview({
+    toolName: "read_conversation_context",
+    output: {
+      ok: true,
+      session_id: "conversation-session-1",
+      runtime_session_id: "private-runtime-session",
+      query: "배포 서버",
+      anchor_message_id: null,
+      anchor_event_id: null,
+      direction: "around",
+      returned: 1,
+      truncated: false,
+      messages,
+      summaries,
+    },
+  });
+
+  expect(preview).toEqual({
+    tool_name: "read_conversation_context",
+    ok: true,
+    session_id: "conversation-session-1",
+    query: "배포 서버",
+    anchor_message_id: null,
+    anchor_event_id: null,
+    direction: "around",
+    returned: 1,
+    truncated: false,
+    messages,
+    summaries,
+  });
+  expect(JSON.stringify(preview)).not.toContain("private-runtime-session");
+});
+
 test("tool output artifact previews preserve the rehydrated error text", () => {
   const preview = structuredToolResultModelPreview({
     toolName: "read_tool_output_artifact",

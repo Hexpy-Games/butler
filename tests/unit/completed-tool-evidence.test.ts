@@ -348,6 +348,57 @@ test("request compilation admits a fresh provider-safe result inline when the ex
   }
 });
 
+test("capacity admission keeps bounded conversation messages inline without evidence rehydration", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-capacity-conversation-evidence-"));
+  try {
+    const marker = "DEPLOYMENT_CONTEXT_VISIBLE_WITHOUT_REHYDRATION";
+    const packetized = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          ok: true,
+          session_id: "conversation-session-1",
+          runtime_session_id: "private-runtime-session",
+          query: "배포",
+          anchor_message_id: null,
+          anchor_event_id: null,
+          direction: "around",
+          returned: 1,
+          truncated: false,
+          messages: [{
+            conversation_message_id: "message-1",
+            turn_id: "turn-1",
+            seq: 1,
+            created_at: "2026-07-13T00:00:00.000Z",
+            speaker: "user",
+            role: "user",
+            text: marker,
+            parts: [],
+          }],
+          summaries: [],
+        },
+      },
+      toolName: "read_conversation_context",
+      toolCallId: "call-conversation-context",
+      evidenceRetention: { butlerData: root, turnId: "turn-conversation-context" },
+    });
+    const body = {
+      messages: [{ role: "tool", content: JSON.stringify(packetized) }],
+    };
+    const compiled = compileCompletedToolEvidencePointers({
+      body,
+      maxSerializedBytes: Buffer.byteLength(JSON.stringify(body), "utf8"),
+    });
+    const serialized = JSON.stringify(compiled);
+
+    expect(serialized).toContain(marker);
+    expect(serialized).toContain("inline_output");
+    expect(serialized).not.toContain("private-runtime-session");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("request compilation keeps a non-fitting result pointer-only without losing rehydration", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-capacity-pointer-evidence-"));
   try {
