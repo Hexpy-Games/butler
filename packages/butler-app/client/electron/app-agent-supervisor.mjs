@@ -204,7 +204,7 @@ export function createBundledAgentSupervisor({
       child = spawnProcess(gateway.command, gateway.args, {
         ...(gateway.cwd ? { cwd: gateway.cwd } : {}),
         env,
-        stdio,
+        stdio: gateway.stdio ?? stdio,
       });
     } catch (error) {
       rollbackGatewayActivation(gateway, error);

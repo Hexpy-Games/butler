@@ -5,6 +5,7 @@ import {
   openSync,
 } from "fs";
 import { dirname } from "path";
+import type { EventEmitter } from "events";
 import {
   NATIVE_SUPERVISOR_ID,
   appManagedNativeServiceSpecs,
@@ -39,6 +40,10 @@ export interface ManagedServiceDaemonOptions {
   spawnChild?: (spec: NativeServiceSpec, env: Record<string, string>) => DaemonChildHandle;
   killPid?: (pid: number, signal: NodeJS.Signals) => void;
   log?: (line: string) => void;
+}
+
+export interface ParentLeaseStream extends EventEmitter {
+  resume?: () => unknown;
 }
 
 interface RunningChild {
@@ -266,10 +271,35 @@ export async function runForegroundServiceDaemon(input: Partial<NativeSupervisor
   daemon.startAll();
 
   await new Promise<void>((resolve) => {
+    let shuttingDown = false;
     const shutdown = () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       void daemon.shutdownAll().finally(resolve);
     };
     process.once("SIGINT", shutdown);
     process.once("SIGTERM", shutdown);
+    attachAppForegroundParentLease({
+      enabled: process.env.BUTLER_APP_FOREGROUND_LEASE === "1",
+      stream: process.stdin,
+      shutdown,
+    });
   });
+}
+
+export function attachAppForegroundParentLease({
+  enabled,
+  stream,
+  shutdown,
+}: {
+  enabled: boolean;
+  stream: ParentLeaseStream;
+  shutdown: () => void;
+}): boolean {
+  if (!enabled) return false;
+  stream.resume?.();
+  stream.once("end", shutdown);
+  stream.once("close", shutdown);
+  stream.once("error", shutdown);
+  return true;
 }
