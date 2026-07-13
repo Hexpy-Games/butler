@@ -7,6 +7,7 @@ import {
   type ModelRequestContextAdmissionMetric,
 } from "./request-context-admission-metrics.ts";
 import { compileCompletedToolEvidenceInline } from "../../../agent/context/completed-tool-evidence.ts";
+import type { PromptUsageAttribution } from "../runtime-contracts.ts";
 
 export type RequestContextMeasurement = "serialized_utf8_upper_bound";
 export type RequestContextAdmission = "admitted" | "reduce" | "cannot_fit_required";
@@ -77,6 +78,8 @@ interface AdmitSerializedProviderRequestInput {
   requiredAtoms?: ContextAtomRef[];
   optionalAtoms?: ContextAtomRef[];
   toolSchemaTokens?: number;
+  usageAttribution?: PromptUsageAttribution;
+  roundIndex?: number;
 }
 
 function positiveInteger(value: unknown): number | null {
@@ -169,6 +172,13 @@ export function admitSerializedProviderRequest(
       plan,
     });
   }
+  input.usageAttribution?.beforeAdmittedModelRequest?.({
+    roundIndex: Math.max(0, Math.trunc(input.roundIndex ?? input.usageAttribution.roundIndex ?? 0)),
+    phase: input.usageAttribution.phase,
+    admittedPromptTokens: plan.compiled_input_tokens,
+    requestedOutputTokens: plan.requested_output_tokens,
+    requestHash: serializedRequestHash,
+  });
   return {
     serialized_request_sha256: serializedRequestHash,
     serialized_request: serializedRequest,

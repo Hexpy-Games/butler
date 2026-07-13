@@ -15,7 +15,6 @@ import type {
   PromptMaterial,
 } from "../../packages/butler-agent/src/agent/conversation/types.ts";
 
-const INCIDENT_MODEL_REQUESTS = 27;
 const INCIDENT_TOOL_PARTS = 104;
 
 test("CWCS fixture characterizes the sanitized incident without private payloads", () => {
@@ -149,11 +148,8 @@ function message(input: {
   };
 }
 
-test.failing("CWCS baseline: token overspend exhausts before another model request", () => {
+test("CWCS baseline: token overspend exhausts before another model request", () => {
   const budget = createDirectTurnBudget("turn-cwcs-incident");
-  for (let index = 0; index < INCIDENT_MODEL_REQUESTS; index += 1) {
-    beforeDirectTurnModelRequest(budget);
-  }
   addDirectTurnUsage({
     budget,
     promptTokens: 3_221_781,
@@ -163,6 +159,7 @@ test.failing("CWCS baseline: token overspend exhausts before another model reque
   });
 
   expect(directTurnBudgetState(budget).status).toBe("exhausted");
+  expect(() => beforeDirectTurnModelRequest(budget)).toThrow("budget exhausted");
 });
 
 test("CWCS boundary: provider-neutral request admission has no compaction bypass or size thresholds", () => {

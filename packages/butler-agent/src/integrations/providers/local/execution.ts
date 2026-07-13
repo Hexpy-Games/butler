@@ -394,7 +394,7 @@ function attributedLocalCompletion(
 ): Promise<Record<string, any>> {
   return requests.request({
     model: config.model_ref,
-    run: async () => await createLocalChatCompletion(config, body, options.signal),
+    run: async (context) => await createLocalChatCompletion(config, body, options.signal, context),
     usage: openAICompatibleUsageSample,
   });
 }

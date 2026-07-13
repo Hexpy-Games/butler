@@ -1,4 +1,4 @@
-import type { CodexSseAccumulator, OpenAIResponse, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
+import type { CodexSseAccumulator, OpenAIResponse, PromptUsageAttribution, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
 import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-client.ts";
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
@@ -267,11 +267,17 @@ export async function createCodexResponse(
   authorization: string,
   signal?: AbortSignal,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<OpenAIResponse> {
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
   const model = typeof body.model === "string" ? body.model : undefined;
-  const requestBody = codexRequestBody(body);
+  const requestBody = codexRequestBody({
+    ...(budgetContext?.attribution?.requestedOutputTokens && body.max_output_tokens === undefined
+      ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
+      : {}),
+    ...body,
+  });
   const admittedRequest = admitSerializedProviderRequest({
     providerId: "openai",
     modelRef: typeof requestBody.model === "string" ? requestBody.model : model ?? "",
@@ -279,6 +285,8 @@ export async function createCodexResponse(
     requestedOutputTokens: typeof requestBody.max_output_tokens === "number"
       ? requestBody.max_output_tokens
       : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
   });
   let response: Response;
   try {

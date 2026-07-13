@@ -18,9 +18,10 @@ export async function createGeminiContent(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
-    async () => await createGeminiContentOnce(config, body, signal),
+    async () => await createGeminiContentOnce(config, body, signal, budgetContext),
     signal,
   );
 }
@@ -30,18 +31,34 @@ async function createGeminiContentOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(geminiGenerateContentUrl(config));
-  const generationConfig = body.generationConfig && typeof body.generationConfig === "object"
-    ? body.generationConfig as Record<string, unknown>
+  const requestBody = {
+    ...body,
+    ...(budgetContext?.attribution?.requestedOutputTokens
+      ? {
+          generationConfig: {
+            ...(body.generationConfig && typeof body.generationConfig === "object"
+              ? body.generationConfig as Record<string, unknown>
+              : {}),
+            maxOutputTokens: budgetContext.attribution.requestedOutputTokens,
+          },
+        }
+      : {}),
+  };
+  const generationConfig = requestBody.generationConfig && typeof requestBody.generationConfig === "object"
+    ? requestBody.generationConfig as Record<string, unknown>
     : null;
   const admittedRequest = admitSerializedProviderRequest({
     providerId: "google",
     modelRef: config.modelRef,
-    body,
+    body: requestBody,
     requestedOutputTokens: typeof generationConfig?.maxOutputTokens === "number"
       ? generationConfig.maxOutputTokens
       : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
   });
   let response: Response;
   try {
@@ -124,12 +141,12 @@ export async function runGeminiPromptText(
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   const response = await requests.request({
     model: config.modelRef,
-    run: async () => await createGeminiContent(config, {
+    run: async (context) => await createGeminiContent(config, {
       ...(options.instructions?.trim()
         ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
         : {}),
       contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
-    }, options.signal),
+    }, options.signal, context),
     usage: geminiUsageSample,
   });
   const text = geminiText(response);
@@ -164,14 +181,14 @@ export async function runGeminiFunctionToolPromptText(
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await requests.request({
       model: config.modelRef,
-      run: async () => await createGeminiContent(config, {
+      run: async (context) => await createGeminiContent(config, {
         systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
         contents,
         tools: geminiTools(activeTools),
         ...(options.toolChoice === "required"
           ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
           : {}),
-      }, options.signal),
+      }, options.signal, context),
       usage: geminiUsageSample,
     });
     const parts = response.candidates?.[0]?.content?.parts;
@@ -282,10 +299,10 @@ export async function runGeminiFunctionToolPromptText(
   contents.push({ role: "user", parts: [{ text: finalNoToolInstructions(options.instructions) }] });
   const response = await requests.request({
     model: config.modelRef,
-    run: async () => await createGeminiContent(config, {
+    run: async (context) => await createGeminiContent(config, {
       systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
       contents,
-    }, options.signal),
+    }, options.signal, context),
     usage: geminiUsageSample,
   });
   const text = geminiText(response);

@@ -229,9 +229,10 @@ export async function runNativeToolTurn({
     const runKernelTextPrompt = async (
       promptText: string,
       phase: string,
+      partition: "execution" | "review" | "finalization" = "execution",
     ): Promise<string> => {
       try {
-        return await runTextPrompt(promptText, phase);
+        return await runTextPrompt(promptText, phase, partition);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
           throw error;
@@ -397,6 +398,7 @@ export async function runNativeToolTurn({
         ? await runKernelTextPrompt(
           completionGapFinalSynthesisPrompt(continuationPromptInput),
           "completion_gap_final_synthesis",
+          "finalization",
         )
         : await runKernelToolPrompt(
           completionGapContinuationPrompt(continuationPromptInput),

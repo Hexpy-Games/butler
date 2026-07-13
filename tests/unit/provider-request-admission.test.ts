@@ -53,6 +53,30 @@ test("serialized UTF-8 admission is deterministic and bound to the exact request
   });
 });
 
+test("serialized admission exposes only measured spend and request identity to the budget gate", () => {
+  const observations: Array<Record<string, unknown>> = [];
+  const receipt = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: "openai/gpt-5.4-mini",
+    body: { model: "gpt-5.4-mini", input: "private prompt must not escape" },
+    requestedOutputTokens: 2048,
+    roundIndex: 3,
+    usageAttribution: {
+      phase: "review",
+      beforeAdmittedModelRequest: (input) => observations.push(input),
+    },
+  });
+
+  expect(observations).toEqual([{
+    roundIndex: 3,
+    phase: "review",
+    admittedPromptTokens: receipt.plan.compiled_input_tokens,
+    requestedOutputTokens: 2048,
+    requestHash: receipt.serialized_request_sha256,
+  }]);
+  expect(JSON.stringify(observations)).not.toContain("private prompt");
+});
+
 test("unknown model capacity and excessive output reserve fail closed", () => {
   expect(() => admitSerializedProviderRequest({
     providerId: "openai",

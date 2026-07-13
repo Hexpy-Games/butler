@@ -115,6 +115,22 @@ export function beforeAttributedModelRequest(input: {
   });
 }
 
+export function beforeAttributedAdmittedModelRequest(input: {
+  attribution?: PromptUsageAttribution;
+  roundIndex: number;
+  admittedPromptTokens: number;
+  requestedOutputTokens: number;
+  requestHash: string;
+}): void {
+  input.attribution?.beforeAdmittedModelRequest?.({
+    roundIndex: input.roundIndex,
+    phase: input.attribution.phase,
+    admittedPromptTokens: input.admittedPromptTokens,
+    requestedOutputTokens: input.requestedOutputTokens,
+    requestHash: input.requestHash,
+  });
+}
+
 
 
 export function promptUsageModelCallBudgetExhaustedError(): Error & { code: string } {
@@ -169,7 +185,7 @@ export interface ProviderUsageSample {
 export interface ProviderRequestAttributor {
   request<T>(input: {
     model: string;
-    run: () => Promise<T>;
+    run: (context: { roundIndex: number; attribution?: PromptUsageAttribution }) => Promise<T>;
     usage?: (response: T) => ProviderUsageSample | null;
   }): Promise<T>;
 }
@@ -182,7 +198,7 @@ export function createProviderRequestAttributor(input: {
   return {
     async request<T>(requestInput: {
       model: string;
-      run: () => Promise<T>;
+      run: (context: { roundIndex: number; attribution?: PromptUsageAttribution }) => Promise<T>;
       usage?: (response: T) => ProviderUsageSample | null;
     }): Promise<T> {
       const { model, run, usage } = requestInput;
@@ -192,7 +208,7 @@ export function createProviderRequestAttributor(input: {
         attribution: input.attribution,
         roundIndex,
       });
-      const response = await run();
+      const response = await run({ roundIndex, attribution: input.attribution });
       const sample = usage?.(response) ?? null;
       if (sample) {
         input.attribution?.afterModelResponseUsage?.({

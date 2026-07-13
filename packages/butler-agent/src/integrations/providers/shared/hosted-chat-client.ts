@@ -207,9 +207,10 @@ export async function createHostedChatCompletion(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
-    async () => await createHostedChatCompletionOnce(config, body, signal),
+    async () => await createHostedChatCompletionOnce(config, body, signal, budgetContext),
     signal,
   );
 }
@@ -220,11 +221,15 @@ async function createHostedChatCompletionOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(hostedChatCompletionsUrl(config));
   const requestBody: Record<string, unknown> = {
     temperature: 0,
     model: config.modelId,
+    ...(budgetContext?.attribution?.requestedOutputTokens && body.max_tokens === undefined
+      ? { max_tokens: budgetContext.attribution.requestedOutputTokens }
+      : {}),
     ...body,
   };
   const admittedRequest = admitSerializedProviderRequest({
@@ -234,6 +239,8 @@ async function createHostedChatCompletionOnce(
     requestedOutputTokens: typeof requestBody.max_tokens === "number"
       ? requestBody.max_tokens
       : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
   });
   let response: Response;
   try {

@@ -1,4 +1,4 @@
-import type { FunctionToolDefinition } from "../runtime-contracts.ts";
+import type { FunctionToolDefinition, PromptUsageAttribution } from "../runtime-contracts.ts";
 import type { LocalModelConfig } from "./models.ts";
 import { ModelProviderRequestError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { withModelApiRetry } from "../shared/runtime-support.ts";
@@ -14,9 +14,10 @@ export async function createLocalChatCompletion(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
-    async () => await createLocalChatCompletionOnce(config, body, signal),
+    async () => await createLocalChatCompletionOnce(config, body, signal, budgetContext),
     signal,
   );
 }
@@ -26,12 +27,15 @@ async function createLocalChatCompletionOnce(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<Record<string, any>> {
   const requestBody = {
     temperature: 0,
-    ...(Number.isFinite(config.max_output_tokens) && Number(config.max_output_tokens) > 0
-      ? { max_tokens: Math.trunc(Number(config.max_output_tokens)) }
-      : {}),
+    ...(budgetContext?.attribution?.requestedOutputTokens
+      ? { max_tokens: budgetContext.attribution.requestedOutputTokens }
+      : Number.isFinite(config.max_output_tokens) && Number(config.max_output_tokens) > 0
+        ? { max_tokens: Math.trunc(Number(config.max_output_tokens)) }
+        : {}),
     ...body,
   };
   const endpoint = safeEndpointLabel(localChatUrl(config));
@@ -45,6 +49,8 @@ async function createLocalChatCompletionOnce(
     requestedOutputTokens: typeof requestBody.max_tokens === "number"
       ? requestBody.max_tokens
       : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
   });
   let response: Response;
   try {

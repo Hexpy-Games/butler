@@ -4,6 +4,7 @@ import {
   beforeDirectTurnModelRequest,
   createDirectTurnBudget,
   directTurnBudgetState,
+  directTurnPartitionBudgetState,
   hydrateDirectTurnBudget,
   promptUsageSectionsFromPrompt,
   recentConversationBudgetForTurn,
@@ -32,43 +33,46 @@ test("direct turn budget starts with the runtime request and token limits", () =
   });
 });
 
-test("direct turn budget reports warning and exhaustion from real usage mutations", () => {
+test("direct turn budget warns without authorizing a request beyond a hard token cap", () => {
   const budget = createDirectTurnBudget("turn-budget-usage");
 
-  for (let index = 0; index < 25; index += 1) {
-    beforeDirectTurnModelRequest(budget);
+  for (let index = 0; index < 19; index += 1) {
+    beforeDirectTurnModelRequest(budget, { partition: "execution" });
   }
   addDirectTurnUsage({
     budget,
-    promptTokens: 176_000,
+    partition: "execution",
+    promptTokens: 128_000,
     cachedTokens: 200_000,
     outputTokens: 10,
     totalTokens: null,
   });
 
-  expect(directTurnBudgetState(budget)).toEqual(expect.objectContaining({
+  expect(directTurnPartitionBudgetState(budget, "execution")).toEqual(expect.objectContaining({
     status: "warning",
-    requestCount: 25,
-    promptTokens: 176_000,
-    cachedTokens: 176_000,
+    requestCount: 19,
+    promptTokens: 128_000,
+    cachedTokens: 128_000,
     outputTokens: 10,
-    totalTokens: 176_010,
+    totalTokens: 128_010,
   }));
 
-  for (let index = 0; index < 7; index += 1) {
-    beforeDirectTurnModelRequest(budget);
-  }
-
-  expect(directTurnBudgetState(budget).status).toBe("exhausted");
+  expect(() => beforeDirectTurnModelRequest(budget, {
+    partition: "execution",
+    admittedPromptTokens: 32_001,
+    requestedOutputTokens: 1,
+  })).toThrow("budget exhausted");
+  expect(directTurnPartitionBudgetState(budget, "execution").requestCount).toBe(19);
 });
 
 test("direct turn budget hydrates from a continuation snapshot", () => {
   const budget = createDirectTurnBudget("turn-budget-snapshot");
   for (let index = 0; index < 3; index += 1) {
-    beforeDirectTurnModelRequest(budget);
+    beforeDirectTurnModelRequest(budget, { partition: "execution" });
   }
   addDirectTurnUsage({
     budget,
+    partition: "execution",
     promptTokens: 1000,
     cachedTokens: 800,
     outputTokens: 120,
@@ -81,11 +85,11 @@ test("direct turn budget hydrates from a continuation snapshot", () => {
   );
 
   expect(directTurnBudgetState(hydrated)).toMatchObject({
-    requestCount: 0,
-    promptTokens: 0,
-    cachedTokens: 0,
-    outputTokens: 0,
-    totalTokens: 0,
+    requestCount: 3,
+    promptTokens: 1000,
+    cachedTokens: 800,
+    outputTokens: 120,
+    totalTokens: 1120,
     maxRequests: 32,
     cumulativeRequestCount: 3,
     cumulativePromptTokens: 1000,
@@ -95,25 +99,106 @@ test("direct turn budget hydrates from a continuation snapshot", () => {
   });
 });
 
-test("continuation hydration preserves cumulative usage while opening a new safety window", () => {
+test("continuation hydration preserves cumulative spend and cannot reopen the logical-turn budget", () => {
   const budget = createDirectTurnBudget("turn-budget-resume-window");
-  for (let index = 0; index < 32; index += 1) beforeDirectTurnModelRequest(budget);
-  expect(directTurnBudgetState(budget).status).toBe("exhausted");
+  for (let index = 0; index < 24; index += 1) {
+    beforeDirectTurnModelRequest(budget, { partition: "execution" });
+  }
+  expect(directTurnPartitionBudgetState(budget, "execution").status).toBe("exhausted");
 
   const resumed = hydrateDirectTurnBudget(
     "turn-budget-resume-window",
     snapshotDirectTurnBudget(budget),
   );
-  expect(directTurnBudgetState(resumed)).toMatchObject({
+  expect(directTurnPartitionBudgetState(resumed, "execution")).toMatchObject({
+    status: "exhausted",
+    requestCount: 24,
+  });
+  expect(() => beforeDirectTurnModelRequest(resumed, { partition: "execution" }))
+    .toThrow("budget exhausted");
+  expect(snapshotDirectTurnBudget(resumed).modelRequestsUsed).toBe(24);
+});
+
+test("execution and review cannot consume the finalization reserve", () => {
+  const budget = createDirectTurnBudget("turn-budget-partitions");
+  beforeDirectTurnModelRequest(budget, {
+    partition: "execution",
+    admittedPromptTokens: 100,
+    requestedOutputTokens: 100,
+  });
+  addDirectTurnUsage({
+    budget,
+    partition: "execution",
+    promptTokens: 100,
+    cachedTokens: 0,
+    outputTokens: 50,
+    totalTokens: 150,
+  });
+  beforeDirectTurnModelRequest(budget, {
+    partition: "review",
+    admittedPromptTokens: 100,
+    requestedOutputTokens: 100,
+  });
+
+  expect(directTurnPartitionBudgetState(budget, "finalization")).toMatchObject({
     status: "ok",
     requestCount: 0,
-    cumulativeRequestCount: 32,
+    promptTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    maxRequests: 4,
+    maxPromptTokens: 30_000,
+    maxOutputTokens: 20_000,
+    maxTotalTokens: 50_000,
   });
-  beforeDirectTurnModelRequest(resumed);
-  expect(snapshotDirectTurnBudget(resumed).modelRequestsUsed).toBe(33);
-  expect(directTurnBudgetState(resumed)).toMatchObject({
-    requestCount: 1,
-    cumulativeRequestCount: 33,
+});
+
+test("projected admitted prompt and requested output reject before mutation for every partition", () => {
+  for (const partition of ["execution", "review", "finalization"] as const) {
+    const budget = createDirectTurnBudget(`turn-budget-${partition}`);
+    const state = directTurnPartitionBudgetState(budget, partition);
+    expect(() => beforeDirectTurnModelRequest(budget, {
+      partition,
+      admittedPromptTokens: state.maxPromptTokens! + 1,
+      requestedOutputTokens: 1,
+    })).toThrow("budget exhausted");
+    expect(directTurnPartitionBudgetState(budget, partition).requestCount).toBe(0);
+    expect(directTurnBudgetState(budget).requestCount).toBe(0);
+  }
+});
+
+test("phase admission and spend admission commit atomically", () => {
+  const budget = createDirectTurnBudget("turn-budget-atomic");
+  expect(() => beforeDirectTurnModelRequest(budget, {
+    partition: "review",
+    admittedPromptTokens: 100,
+    requestedOutputTokens: 100,
+    beforeCommit: () => {
+      throw new Error("phase budget exhausted");
+    },
+  })).toThrow("phase budget exhausted");
+  expect(directTurnBudgetState(budget).requestCount).toBe(0);
+  expect(directTurnPartitionBudgetState(budget, "review").requestCount).toBe(0);
+});
+
+test("legacy snapshots hydrate into execution without inventing finalization spend", () => {
+  const legacy = snapshotDirectTurnBudget(createDirectTurnBudget("turn-budget-legacy"));
+  delete legacy.partitions;
+  legacy.modelRequestsUsed = 2;
+  legacy.promptTokens = 500;
+  legacy.cachedTokens = 100;
+  legacy.outputTokens = 50;
+  legacy.totalTokens = 550;
+
+  const hydrated = hydrateDirectTurnBudget("turn-budget-legacy", legacy);
+  expect(directTurnPartitionBudgetState(hydrated, "execution")).toMatchObject({
+    requestCount: 2,
+    promptTokens: 500,
+    outputTokens: 50,
+  });
+  expect(directTurnPartitionBudgetState(hydrated, "finalization")).toMatchObject({
+    requestCount: 0,
+    totalTokens: 0,
   });
 });
 

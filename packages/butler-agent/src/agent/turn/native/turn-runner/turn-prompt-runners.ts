@@ -9,6 +9,9 @@ import {
   addDirectTurnUsage,
   beforeDirectTurnModelRequest,
   directTurnBudgetState,
+  directTurnPartitionBudgetState,
+  directTurnRequestedOutputTokens,
+  type DirectTurnBudgetPartition,
 } from "../../direct-turn-budget.ts";
 import {
   DIRECT_TOOL_CHAIN_MAX_ROUNDS,
@@ -139,25 +142,31 @@ export function createNativeTurnPromptRunners(input: {
     phase: string,
     roundIndex?: number,
     promptSections: PromptUsageSectionAttribution[] = input.promptSections,
+    partition: DirectTurnBudgetPartition = "execution",
   ): PromptUsageAttribution => ({
     turnId: input.turnId,
     phase,
+    requestedOutputTokens: directTurnRequestedOutputTokens(partition),
     ...(roundIndex === undefined ? {} : { roundIndex }),
-    budgetState: directTurnBudgetState(input.turnBudget),
-    getBudgetState: () => directTurnBudgetState(input.turnBudget),
-    beforeModelRequest: (request) => {
+    budgetState: directTurnPartitionBudgetState(input.turnBudget, partition),
+    getBudgetState: () => directTurnPartitionBudgetState(input.turnBudget, partition),
+    beforeModelRequest: () => throwIfRuntimeTurnAborted(input.turnInput.signal),
+    beforeAdmittedModelRequest: (request) => {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
-      input.phaseBudgetController?.beforeModelRequest({
-        phase,
-        roundIndex: request.roundIndex,
-        globalBudgetState: directTurnBudgetState(input.turnBudget),
+      beforeDirectTurnModelRequest(input.turnBudget, {
+        partition,
+        admittedPromptTokens: request.admittedPromptTokens,
+        requestedOutputTokens: request.requestedOutputTokens,
+        beforeCommit: () => input.phaseBudgetController?.beforeModelRequest({
+          phase,
+          roundIndex: request.roundIndex,
+          globalBudgetState: directTurnBudgetState(input.turnBudget),
+        }),
       });
-      beforeDirectTurnModelRequest(input.turnBudget);
-      const budgetState = directTurnBudgetState(input.turnBudget);
       input.latencyTracker?.recordModelRequest({
         phase,
         roundIndex: request.roundIndex,
-        budgetState,
+        budgetState: directTurnPartitionBudgetState(input.turnBudget, partition),
       });
     },
     afterModelResponseUsage: (usage) => {
@@ -167,6 +176,7 @@ export function createNativeTurnPromptRunners(input: {
         cachedTokens: usage.cachedTokens,
         outputTokens: usage.outputTokens,
         totalTokens: usage.totalTokens,
+        partition,
       });
       input.latencyTracker?.recordModelResponseUsage({
         phase,
@@ -567,7 +577,11 @@ export function createNativeTurnPromptRunners(input: {
       }
       return await input.toolSurfaceController.runWithSelectedSurface(runPromptWithSelectedSurface);
     },
-    runTextPrompt: async (promptText: string, phase = "text_prompt"): Promise<string> => {
+    runTextPrompt: async (
+      promptText: string,
+      phase = "text_prompt",
+      partition: DirectTurnBudgetPartition = "execution",
+    ): Promise<string> => {
       const projector = streamProjector(phase);
       try {
         const text = await input.deps.promptRunner({
@@ -579,7 +593,7 @@ export function createNativeTurnPromptRunners(input: {
           signal: input.turnInput.signal,
           attachments: input.attachments,
           butlerData: input.deps.butlerData,
-          usageAttribution: usageAttribution(phase, 0),
+          usageAttribution: usageAttribution(phase, 0, input.promptSections, partition),
           onProviderStreamEvent: projector.project,
         });
         if (text.trim()) {
