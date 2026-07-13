@@ -1,6 +1,9 @@
 import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
+import {
+  DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT,
+  type DirectTurnBudgetSnapshot,
+} from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
 import {
   withDurableFileLock,
@@ -342,17 +345,42 @@ function sanitizeObligationFrontier(
 }
 
 function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnBudgetSnapshot {
+  const cumulativePromptTokens = finiteNonNegativeInteger(
+    snapshot.cumulativeUsage?.promptTokens ?? snapshot.promptTokens,
+  );
   return {
     turnId: safeRefId(snapshot.turnId),
+    executionSlice: finitePositiveInteger(snapshot.executionSlice ?? 1),
     modelRequestsUsed: finiteNonNegativeInteger(snapshot.modelRequestsUsed),
     promptTokens: finiteNonNegativeInteger(snapshot.promptTokens),
     cachedTokens: finiteNonNegativeInteger(snapshot.cachedTokens),
     outputTokens: finiteNonNegativeInteger(snapshot.outputTokens),
     totalTokens: finiteNonNegativeInteger(snapshot.totalTokens),
     maxModelCalls: finitePositiveInteger(snapshot.maxModelCalls),
+    maxLifetimeModelCalls: finitePositiveInteger(
+      snapshot.maxLifetimeModelCalls ?? DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT,
+    ),
     maxPromptTokens: finitePositiveInteger(snapshot.maxPromptTokens),
     maxOutputTokens: finitePositiveInteger(snapshot.maxOutputTokens),
     maxTotalTokens: finitePositiveInteger(snapshot.maxTotalTokens),
+    cumulativeUsage: {
+      modelRequestsUsed: finiteNonNegativeInteger(
+        snapshot.cumulativeUsage?.modelRequestsUsed ?? snapshot.modelRequestsUsed,
+      ),
+      promptTokens: cumulativePromptTokens,
+      cachedTokens: Math.min(
+        cumulativePromptTokens,
+        finiteNonNegativeInteger(
+          snapshot.cumulativeUsage?.cachedTokens ?? snapshot.cachedTokens,
+        ),
+      ),
+      outputTokens: finiteNonNegativeInteger(
+        snapshot.cumulativeUsage?.outputTokens ?? snapshot.outputTokens,
+      ),
+      totalTokens: finiteNonNegativeInteger(
+        snapshot.cumulativeUsage?.totalTokens ?? snapshot.totalTokens,
+      ),
+    },
     ...(snapshot.partitions
       ? {
           partitions: Object.fromEntries(

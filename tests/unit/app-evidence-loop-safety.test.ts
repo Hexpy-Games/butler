@@ -217,7 +217,7 @@ test("App message path rehydrates exact child evidence once without recursive ar
   }
 });
 
-test("App budget exhaustion stops once and the next user message starts from the new intent", async () => {
+test("App unspent budget fault stops once and the next user message starts from the new intent", async () => {
   const dbPath = join(data, "app.sqlite");
   let firstTurnActive = true;
   let toolPromptCalls = 0;
@@ -269,6 +269,7 @@ test("App budget exhaustion stops once and the next user message starts from the
     },
     runFunctionToolPromptText: async () => {
       toolPromptCalls += 1;
+      firstTurnActive = false;
       throw promptUsageModelCallBudgetExhaustedError();
     },
   });
@@ -310,7 +311,7 @@ test("App budget exhaustion stops once and the next user message starts from the
       cancellable: false,
     });
     expect(toolPromptCalls).toBe(1);
-    expect(finalizationAttempts).toBe(1);
+    expect(finalizationAttempts).toBe(0);
     expect(turnContextAtomCount(data)).toBe(0);
 
     const firstEvents = await getJson(`${server.url}events?cursor=0`);
@@ -338,7 +339,7 @@ test("App budget exhaustion stops once and the next user message starts from the
     );
     expect(assistant.text).toBe("후속 질문의 새 의도에만 답했습니다.");
     expect(toolPromptCalls).toBe(1);
-    expect(finalizationAttempts).toBe(1);
+    expect(finalizationAttempts).toBe(0);
     expect(turnContextAtomCount(data)).toBe(0);
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
