@@ -20,6 +20,10 @@ export function structuredToolResultModelPreview(input: {
     const output = toolPayload(input.output, ["content", "path"]);
     return output ? readFilePreview(output) : null;
   }
+  if (input.toolName === "read_conversation_context") {
+    const output = toolPayload(input.output, ["messages", "summaries"]);
+    return output ? conversationContextPreview(output) : null;
+  }
   if (input.toolName === "read_tool_output_artifact") {
     const output = toolPayload(input.output, ["stdout", "stderr"]);
     return output ? toolOutputArtifactPreview(output) : null;
@@ -238,6 +242,22 @@ function readFilePreview(output: Record<string, unknown>): Record<string, unknow
     preview_end_line: content.endLine,
     next_start_line: content.nextStartLine,
     omitted_through_line: content.truncated ? finiteNumber(output.end_line) ?? undefined : undefined,
+  });
+}
+
+function conversationContextPreview(output: Record<string, unknown>): Record<string, unknown> {
+  return compactUndefined({
+    tool_name: "read_conversation_context",
+    ok: typeof output.ok === "boolean" ? output.ok : undefined,
+    session_id: output.session_id,
+    query: output.query,
+    anchor_message_id: output.anchor_message_id,
+    anchor_event_id: output.anchor_event_id,
+    direction: output.direction,
+    returned: output.returned,
+    truncated: output.truncated,
+    messages: Array.isArray(output.messages) ? output.messages : [],
+    summaries: Array.isArray(output.summaries) ? output.summaries : [],
   });
 }
 
