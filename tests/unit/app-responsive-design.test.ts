@@ -150,7 +150,7 @@ describe("responsive adaptive design contracts", () => {
     expect(navRow).toContain("font-size: var(--font-size-4)");
   });
 
-  test("provides animated mobile composer idle and engaged states", () => {
+  test("provides animated composer idle and engaged states at every width", () => {
     const composer = read(
       "packages/butler-app/client/ui/src/components/conversation/Composer.tsx",
     );
@@ -190,6 +190,17 @@ describe("responsive adaptive design contracts", () => {
     expect(styles).toContain('.card[data-expanded="false"]');
     expect(styles).toContain("text-overflow: ellipsis");
     expect(styles).toContain("grid-template-rows: 0fr");
+    const compactMediaStart = styles.indexOf("@media (width <= 640px)");
+    expect(compactMediaStart).toBeGreaterThan(-1);
+    expect(
+      styles.indexOf('.card[data-expanded="false"] .expandedBody'),
+    ).toBeLessThan(compactMediaStart);
+    expect(
+      styles.indexOf('.card[data-expanded="false"] .compactPreview'),
+    ).toBeLessThan(compactMediaStart);
+    expect(
+      styles.indexOf('.card[data-expanded="false"] .expandedControls'),
+    ).toBeLessThan(compactMediaStart);
     expect(styles).toContain("border-radius: var(--adaptive-composer-radius)");
     expect(styles).not.toContain(
       '.card[data-expanded="false"] {\n    border-radius: var(--radius-pill)',
@@ -197,7 +208,16 @@ describe("responsive adaptive design contracts", () => {
     expect(styles).not.toContain(
       "border-radius var(--adaptive-panel-duration)",
     );
+    const sendButtonStyles = styles.slice(
+      styles.indexOf(".sendButton {"),
+      styles.indexOf(".sendButton:disabled"),
+    );
+    expect(sendButtonStyles).not.toContain("transform:");
+    expect(sendButtonStyles).not.toContain("transform 120ms ease");
     expect(tokens).toContain("--adaptive-composer-radius: calc(");
+    expect(tokens.indexOf("--adaptive-composer-radius:")).toBeLessThan(
+      tokens.indexOf("@media (width <= 640px)"),
+    );
     expect(tokens).toContain(
       "(var(--control-hit-target) + var(--space-md)) / 2",
     );
