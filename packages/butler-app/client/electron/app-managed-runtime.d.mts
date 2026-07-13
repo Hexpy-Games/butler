@@ -133,3 +133,20 @@ export function resolveAppManagedGatewayCommand(input?: {
   commitActivation: () => void;
   rollbackActivation: (error?: Error) => void;
 } | null;
+
+export function resolveAppManagedForegroundCommand(input?: {
+  butlerData: string;
+  env?: Record<string, string | undefined>;
+  resourcesPath?: string;
+}): {
+  command: string;
+  args: string[];
+  cwd: string;
+  stdio: ["pipe", "inherit", "inherit"];
+  appManaged: true;
+  foregroundHost: true;
+  bundledAgentVersion: string;
+  env: Record<string, string>;
+  commitActivation: () => void;
+  rollbackActivation: (error?: Error) => void;
+} | null;
