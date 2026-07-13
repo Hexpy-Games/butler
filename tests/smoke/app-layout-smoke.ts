@@ -132,6 +132,34 @@ async function assertComposerHoverPill(
   );
 }
 
+async function assertStationaryOnHover(
+  page: Page,
+  selector: string,
+  label: string,
+): Promise<void> {
+  const locator = page.locator(selector).first();
+  const before = await locator.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x, y: box.y };
+  });
+  await locator.hover();
+  await page.waitForTimeout(160);
+  const after = await locator.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      transform: getComputedStyle(element).transform,
+      x: box.x,
+      y: box.y,
+    };
+  });
+  assert(
+    Math.abs(before.x - after.x) <= 0.1 &&
+      Math.abs(before.y - after.y) <= 0.1 &&
+      after.transform === "none",
+    `${label} should remain stationary on hover: ${JSON.stringify({ after, before })}`,
+  );
+}
+
 assert(
   existsSync(join(uiRoot, "index.html")),
   "UI dist is missing; run app UI build first.",
@@ -3340,6 +3368,13 @@ try {
   await page.waitForTimeout(260);
   const desktopEngagedBox = await desktopComposer.boundingBox();
   const desktopTextareaBox = await desktopTextarea.boundingBox();
+  await desktopTextarea.fill("Verify stationary send hover");
+  await assertStationaryOnHover(
+    page,
+    testClass("composer-send-button"),
+    "composer send/stop control",
+  );
+  await desktopTextarea.fill("");
   assert(
     desktopIdleBox &&
       desktopIdleBox.height <= 68 &&
@@ -4197,6 +4232,7 @@ try {
         "narrow-composer-draft-ellipsis",
         "narrow-composer-idle-send-hidden",
         "narrow-composer-radius-stable",
+        "composer-send-stop-hover-stationary",
         "narrow-new-chat-radius-zero",
         "narrow-scrim-compositor-stable",
         "narrow-scrim-interrupted-reversal",

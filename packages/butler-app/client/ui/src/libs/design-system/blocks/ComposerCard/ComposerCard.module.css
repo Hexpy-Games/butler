@@ -167,12 +167,7 @@
   cursor: pointer;
   transition:
     background-color 120ms ease,
-    opacity 120ms ease,
-    transform 120ms ease;
-}
-
-.sendButton:hover:not(:disabled) {
-  transform: translateY(-1px);
+    opacity 120ms ease;
 }
 
 .sendButton:disabled {
