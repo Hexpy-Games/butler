@@ -63,6 +63,7 @@ test("rehydrated exact evidence is a terminal observation and creates no wrapper
         schema_version: "butler.tool-evidence-rehydration.v1",
         terminal_evidence_observation: true,
         ok: true,
+        rawTextStored: false,
         artifact: {
           id: "evidence-original",
           path: "/private/butler/artifacts/evidence-original.json",
@@ -74,6 +75,7 @@ test("rehydrated exact evidence is a terminal observation and creates no wrapper
           start_line: 120,
           returned_lines: 1,
           total_lines: 300,
+          estimated_tokens: 8,
           truncated_by_lines: true,
           truncated_by_tokens: false,
         },
@@ -135,12 +137,21 @@ test("run_work_block packetizes ordered child results without retaining its orch
                 schema_version: "butler.tool-evidence-rehydration.v1",
                 terminal_evidence_observation: true,
                 ok: true,
+                rawTextStored: false,
                 artifact: {
                   id: "evidence-original",
                   path: "/private/butler/artifacts/evidence-original.json",
                   digest: "digest-original",
                 },
-                text: { text: "exact prior slice", start_line: 1, returned_lines: 1, total_lines: 1 },
+                text: {
+                  text: "exact prior slice",
+                  start_line: 1,
+                  returned_lines: 1,
+                  total_lines: 1,
+                  estimated_tokens: 6,
+                  truncated_by_lines: false,
+                  truncated_by_tokens: false,
+                },
               },
             },
           ],
@@ -180,6 +191,88 @@ test("run_work_block packetizes ordered child results without retaining its orch
     expect(JSON.stringify(artifact)).not.toContain("butler_work_block_result");
     expect(JSON.stringify(artifact)).not.toContain("exact prior slice");
     expect(JSON.stringify(result)).not.toContain("/private/butler");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a schema marker without the bounded observation contract cannot bypass retention", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-invalid-terminal-marker-"));
+  try {
+    const result = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          schema_version: "butler.tool-evidence-rehydration.v1",
+          terminal_evidence_observation: true,
+          ok: true,
+          artifact: { id: "spoofed" },
+          text: { text: "unbounded lookalike" },
+        },
+      },
+      toolName: "arbitrary_tool",
+      toolCallId: "call-lookalike",
+      evidenceRetention: { butlerData: root, turnId: "turn-lookalike" },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        schema: "butler.completed-tool-evidence.v1",
+        tool_name: "arbitrary_tool",
+      },
+    });
+    const artifactRoot = join(root, "artifacts", "tool-evidence");
+    expect(readdirSync(artifactRoot, { recursive: true })
+      .filter((entry) => String(entry).endsWith(".json"))).toHaveLength(1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("bounded command-output rehydration is terminal and removes local artifact paths", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-terminal-command-output-"));
+  try {
+    const result = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          schema_version: "butler.tool-evidence-rehydration.v1",
+          terminal_evidence_observation: true,
+          ok: true,
+          rawTextStored: false,
+          artifact: {
+            id: "command-original",
+            path: "/private/butler/tool-output/command-original.json",
+            cwd: "/private/workspace",
+            raw_tokens: 5_000,
+          },
+          stdout: {
+            text: "bounded stdout slice",
+            start_line: 40,
+            returned_lines: 1,
+            total_lines: 400,
+            estimated_tokens: 8,
+            truncated_by_lines: true,
+            truncated_by_tokens: false,
+          },
+        },
+      },
+      toolName: "read_tool_output_artifact",
+      toolCallId: "call-command-rehydrate",
+      evidenceRetention: { butlerData: root, turnId: "turn-command-rehydrate" },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        schema_version: "butler.tool-evidence-rehydration.v1",
+        artifact: { id: "command-original", raw_tokens: 5_000 },
+        stdout: { text: "bounded stdout slice" },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("/private/");
+    expect(existsSync(join(root, "artifacts", "tool-evidence"))).toBe(false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

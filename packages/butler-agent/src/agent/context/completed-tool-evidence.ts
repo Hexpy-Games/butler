@@ -66,8 +66,35 @@ export function toolResultPayloadForProvider(input: {
 
 function isTerminalEvidenceObservation(value: unknown): value is Record<string, unknown> {
   const output = record(value);
-  return output?.schema_version === TOOL_EVIDENCE_REHYDRATION_SCHEMA &&
-    output.terminal_evidence_observation === true;
+  if (
+    output?.schema_version !== TOOL_EVIDENCE_REHYDRATION_SCHEMA ||
+    output.terminal_evidence_observation !== true ||
+    output.ok !== true ||
+    output.rawTextStored !== false
+  ) return false;
+  const artifact = record(output.artifact);
+  if (!artifact || typeof artifact.id !== "string" || !artifact.id.trim()) return false;
+  const slices = [output.text, output.stdout, output.stderr]
+    .filter((slice) => slice !== undefined);
+  return slices.length > 0 && slices.every(isBoundedEvidenceSlice);
+}
+
+function isBoundedEvidenceSlice(value: unknown): boolean {
+  const slice = record(value);
+  return Boolean(
+    slice &&
+    typeof slice.text === "string" &&
+    finiteNonNegativeNumber(slice.start_line) &&
+    finiteNonNegativeNumber(slice.returned_lines) &&
+    finiteNonNegativeNumber(slice.total_lines) &&
+    finiteNonNegativeNumber(slice.estimated_tokens) &&
+    typeof slice.truncated_by_lines === "boolean" &&
+    typeof slice.truncated_by_tokens === "boolean",
+  );
+}
+
+function finiteNonNegativeNumber(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function terminalEvidenceObservationForProvider(
