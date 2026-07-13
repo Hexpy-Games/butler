@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import {
   addDirectTurnUsage,
   beforeDirectTurnModelRequest,
+  canRolloverDirectTurnBudget,
   createDirectTurnBudget,
   directTurnBudgetState,
   directTurnPartitionBudgetState,
@@ -9,6 +10,7 @@ import {
   promptUsageSectionsFromPrompt,
   recentConversationBudgetForTurn,
   snapshotDirectTurnBudget,
+  snapshotDirectTurnBudgetForRollover,
 } from "../../packages/butler-agent/src/agent/turn/direct-turn-budget.ts";
 
 test("direct turn budget starts with the runtime request and token limits", () => {
@@ -99,24 +101,85 @@ test("direct turn budget hydrates from a continuation snapshot", () => {
   });
 });
 
-test("continuation hydration preserves cumulative spend and cannot reopen the logical-turn budget", () => {
+test("eligible continuation hydration preserves lifetime spend and opens a fresh execution slice", () => {
   const budget = createDirectTurnBudget("turn-budget-resume-window");
   for (let index = 0; index < 24; index += 1) {
     beforeDirectTurnModelRequest(budget, { partition: "execution" });
   }
   expect(directTurnPartitionBudgetState(budget, "execution").status).toBe("exhausted");
+  const error = Object.assign(new Error("budget exhausted"), {
+    code: "prompt_usage_model_call_budget_exhausted",
+    partition: "execution",
+  });
+  expect(canRolloverDirectTurnBudget(budget, error)).toBe(true);
 
   const resumed = hydrateDirectTurnBudget(
     "turn-budget-resume-window",
-    snapshotDirectTurnBudget(budget),
+    snapshotDirectTurnBudgetForRollover(budget),
   );
   expect(directTurnPartitionBudgetState(resumed, "execution")).toMatchObject({
-    status: "exhausted",
-    requestCount: 24,
+    status: "ok",
+    requestCount: 0,
   });
-  expect(() => beforeDirectTurnModelRequest(resumed, { partition: "execution" }))
-    .toThrow("budget exhausted");
-  expect(snapshotDirectTurnBudget(resumed).modelRequestsUsed).toBe(24);
+  expect(snapshotDirectTurnBudget(resumed)).toMatchObject({
+    executionSlice: 2,
+    modelRequestsUsed: 0,
+    cumulativeUsage: { modelRequestsUsed: 24 },
+  });
+  beforeDirectTurnModelRequest(resumed, { partition: "execution" });
+  expect(directTurnBudgetState(resumed)).toMatchObject({
+    requestCount: 1,
+    cumulativeRequestCount: 25,
+  });
+});
+
+test("a request that cannot fit an empty slice is never rollover eligible", () => {
+  const budget = createDirectTurnBudget("turn-budget-oversized-request");
+  beforeDirectTurnModelRequest(budget, { partition: "execution" });
+  let failure: unknown;
+  try {
+    beforeDirectTurnModelRequest(budget, {
+      partition: "execution",
+      admittedPromptTokens: 160_001,
+      requestedOutputTokens: 1,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({
+    code: "prompt_usage_model_call_budget_exhausted",
+    rolloverEligible: false,
+  });
+  expect(canRolloverDirectTurnBudget(budget, failure)).toBe(false);
+});
+
+test("the explicit lifetime request cap bounds productive slice rollover without heuristics", () => {
+  const snapshot = snapshotDirectTurnBudget(createDirectTurnBudget("turn-budget-lifetime-cap"));
+  snapshot.modelRequestsUsed = 1;
+  snapshot.cumulativeUsage = {
+    modelRequestsUsed: 96,
+    promptTokens: 1_000_000,
+    cachedTokens: 500_000,
+    outputTokens: 10_000,
+    totalTokens: 1_010_000,
+  };
+  const budget = hydrateDirectTurnBudget("turn-budget-lifetime-cap", snapshot);
+  expect(directTurnBudgetState(budget).status).toBe("exhausted");
+  let failure: unknown;
+  try {
+    beforeDirectTurnModelRequest(budget, {
+      partition: "execution",
+      admittedPromptTokens: 100,
+      requestedOutputTokens: 100,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toMatchObject({
+    code: "prompt_usage_model_call_budget_exhausted",
+    rolloverEligible: false,
+  });
+  expect(canRolloverDirectTurnBudget(budget, failure)).toBe(false);
 });
 
 test("execution and review cannot consume the finalization reserve", () => {

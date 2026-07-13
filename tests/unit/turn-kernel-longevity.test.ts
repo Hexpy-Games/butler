@@ -42,7 +42,7 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("logical-turn spend cannot reset through automatic scheduler continuation", async () => {
+test("logical-turn lifetime spend stays monotonic across two fresh execution slices", async () => {
   const turnId = "turn-seventy-rounds";
   const sessionId = "butler/seventy-rounds";
   const events: RuntimeTurnEventInput[] = [];
@@ -203,36 +203,60 @@ test("logical-turn spend cannot reset through automatic scheduler continuation",
     });
   };
 
-  let terminalFailure: unknown;
-  try {
-    await runProcess();
-  } catch (error) {
-    terminalFailure = error;
+  let schedulerContinuation: {
+    contextAtomId: string;
+    checkpointId: string;
+    schedulerItemId: string;
+  } | undefined;
+  let result: Awaited<ReturnType<typeof runProcess>> | undefined;
+  for (let owner = 0; owner < 3; owner += 1) {
+    try {
+      result = await runProcess(schedulerContinuation);
+      break;
+    } catch (error) {
+      expect(isTurnSchedulerContinuationYieldError(error)).toBe(true);
+      const yielded = error as {
+        contextAtomId: string;
+        checkpointId: string;
+        checkpointGeneration: number;
+      };
+      expect(yielded.checkpointGeneration).toBe(owner + 1);
+      schedulerContinuation = {
+        contextAtomId: yielded.contextAtomId,
+        checkpointId: yielded.checkpointId,
+        schedulerItemId: `scheduler-owner-${owner + 1}`,
+      };
+    }
   }
-  expect(isTurnSchedulerContinuationYieldError(terminalFailure)).toBe(false);
-  expect((terminalFailure as { code?: unknown })?.code).toBe("prompt_usage_model_call_budget_exhausted");
+  expect(result?.text).toContain("70개 라운드와 최종 검증");
   expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
-  expect(processStarts).toBe(1);
+  expect(processStarts).toBe(3);
   expect(typedDecisionCalls).toBe(1);
-  expect(completedRounds).toBe(24);
+  expect(completedRounds).toBe(70);
   expect(windowBudgetBeforeRequest.slice(0, 24)).toEqual(
     Array.from({ length: 24 }, (_, index) => index),
   );
-  expect(windowBudgetBeforeRequest.slice(24)).toHaveLength(4);
-  expect(windowBudgetBeforeRequest.slice(24).every((value) => value === 24)).toBe(true);
-  expect(prompts.length).toBeGreaterThanOrEqual(1);
+  expect(windowBudgetBeforeRequest.slice(24, 48)).toEqual(
+    Array.from({ length: 24 }, (_, index) => index),
+  );
+  expect(windowBudgetBeforeRequest.slice(48)).toEqual(
+    Array.from({ length: 22 }, (_, index) => index),
+  );
+  expect(prompts).toHaveLength(3);
   expect(events.filter((event) =>
     event.kind === "assistant.decision" && event.payload?.role === "opening",
   )).toHaveLength(1);
-  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(0);
+  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(2);
+  expect(events.filter((event) => event.kind === "turn.iteration.started").at(-1)?.payload?.budget)
+    .toMatchObject({ requestCount: 0, cumulativeRequestCount: 48 });
   const startedSequences = events
     .filter((event) => event.kind === "work.block.started")
     .map((event) => semanticBlockSequence(event.payload?.semanticBlockId));
-  expect(startedSequences).toEqual(Array.from({ length: 24 }, (_, index) => index));
-  expect(events.filter((event) => event.kind === "work.block.completed")).toHaveLength(24);
+  expect(startedSequences).toEqual(Array.from({ length: 70 }, (_, index) => index));
+  expect(events.filter((event) => event.kind === "work.block.completed")).toHaveLength(70);
 });
 
-test("finalization exhaustion does not schedule the same logical turn without external resume", async () => {
+test("a budget fault before admitted slice work does not finalize or schedule", async () => {
   const turnId = "turn-finalization-terminal";
   const sessionId = "butler/finalization-terminal";
   const events: RuntimeTurnEventInput[] = [];
@@ -295,7 +319,7 @@ test("finalization exhaustion does not schedule the same logical turn without ex
 
   expect(isTurnSchedulerContinuationYieldError(failure)).toBe(false);
   expect((failure as { code?: unknown })?.code).toBe("prompt_usage_model_call_budget_exhausted");
-  expect(finalizationAttempts).toBe(1);
+  expect(finalizationAttempts).toBe(0);
   expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
   expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(0);
 });
