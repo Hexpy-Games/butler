@@ -132,6 +132,34 @@ async function assertComposerHoverPill(
   );
 }
 
+async function assertStationaryOnHover(
+  page: Page,
+  selector: string,
+  label: string,
+): Promise<void> {
+  const locator = page.locator(selector).first();
+  const before = await locator.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return { x: box.x, y: box.y };
+  });
+  await locator.hover();
+  await page.waitForTimeout(160);
+  const after = await locator.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return {
+      transform: getComputedStyle(element).transform,
+      x: box.x,
+      y: box.y,
+    };
+  });
+  assert(
+    Math.abs(before.x - after.x) <= 0.1 &&
+      Math.abs(before.y - after.y) <= 0.1 &&
+      after.transform === "none",
+    `${label} should remain stationary on hover: ${JSON.stringify({ after, before })}`,
+  );
+}
+
 assert(
   existsSync(join(uiRoot, "index.html")),
   "UI dist is missing; run app UI build first.",
@@ -270,6 +298,9 @@ try {
     waitUntil: "networkidle",
   });
   await page.locator(testClass("composer-card")).waitFor({ state: "visible" });
+  await page
+    .locator('[data-slot="composer-compact-preview"]')
+    .click();
   await page
     .locator(testClass("worker-composer-panel"))
     .waitFor({ state: "visible" });
@@ -1900,6 +1931,10 @@ try {
     "png attachment should not show unsupported type error",
   );
 
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
+  await page
+    .getByRole("button", { name: appCopy.permissions.fullAccess })
+    .waitFor({ state: "visible" });
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
     .click();
@@ -1975,6 +2010,7 @@ try {
     0,
     "permission popover should close on outside click",
   );
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
   await page
     .getByRole("button", { name: appCopy.permissions.fullAccess })
     .click();
@@ -2833,6 +2869,7 @@ try {
     darkSurfaces.composerBorder === "rgba(0, 0, 0, 0.08)",
     `dark composer glass should use black translucent hairline: ${darkSurfaces.composerBorder}`,
   );
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
   await page
     .getByRole("button", { name: appCopy.composer.contextDetails })
     .hover();
@@ -2875,6 +2912,7 @@ try {
     `tooltip-theme-tokenized failed: ${JSON.stringify(darkTooltipSurface)}`,
   );
   await page.mouse.move(40, 40);
+  await page.locator(`${testClass("composer-card")} textarea`).focus();
   await page.locator(testClass("model-button")).click();
   await page
     .locator(testClass("filtered-select-popover"))
@@ -3307,6 +3345,50 @@ try {
       emptyStateLayout.workspaceLeftRadiusPreserved,
     `new chat empty state should use coherent DS suggestion cards: ${JSON.stringify(emptyStateLayout)}`,
   );
+  const desktopComposer = page.locator(testClass("composer-card"));
+  const desktopPreview = desktopComposer.locator(
+    '[data-slot="composer-compact-preview"]',
+  );
+  const desktopTextarea = desktopComposer.locator("textarea");
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+  await page.waitForTimeout(260);
+  const desktopIdleBox = await desktopComposer.boundingBox();
+  const desktopIdleState = await desktopPreview.evaluate((element) => ({
+    display: getComputedStyle(element).display,
+    expanded: element.closest("form")?.dataset.expanded,
+    radius: Number.parseFloat(
+      getComputedStyle(element.closest("form")!).borderTopLeftRadius,
+    ),
+  }));
+  await desktopPreview.click();
+  await page.waitForTimeout(260);
+  const desktopEngagedBox = await desktopComposer.boundingBox();
+  const desktopTextareaBox = await desktopTextarea.boundingBox();
+  await desktopTextarea.fill("Verify stationary send hover");
+  await assertStationaryOnHover(
+    page,
+    testClass("composer-send-button"),
+    "composer send/stop control",
+  );
+  await desktopTextarea.fill("");
+  assert(
+    desktopIdleBox &&
+      desktopIdleBox.height <= 68 &&
+      desktopIdleState.display === "block" &&
+      desktopIdleState.expanded === "false" &&
+      desktopIdleState.radius * 2 >= desktopIdleBox.height - 0.1 &&
+      desktopEngagedBox &&
+      desktopEngagedBox.height >= desktopIdleBox.height + 28 &&
+      desktopTextareaBox &&
+      desktopTextareaBox.height <= 64,
+    `desktop composer should use the same idle and engaged form as mobile: ${JSON.stringify({ desktopEngagedBox, desktopIdleBox, desktopIdleState, desktopTextareaBox })}`,
+  );
+  await desktopTextarea.evaluate((element) => element.blur());
+  await page.waitForTimeout(260);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(240);
   const compactComposer = page.locator(testClass("composer-card"));
@@ -3556,6 +3638,8 @@ try {
     draftComposerBox.x + Math.min(320, draftComposerBox.width - 24),
     draftComposerBox.y + 24,
   );
+  await composerInput.waitFor({ state: "visible" });
+  await page.waitForTimeout(50);
   await page.keyboard.type("composer focus");
   const composerFocusState = await composerInput.evaluate((element) => ({
     focused: document.activeElement === element,
@@ -4141,11 +4225,14 @@ try {
         "narrow-project-session-tap-navigates",
         "narrow-project-session-long-press-menu",
         "narrow-project-session-long-press-move-cancel",
+        "desktop-composer-idle-one-line",
+        "desktop-composer-focus-expands",
         "narrow-composer-idle-one-line",
         "narrow-composer-focus-expands",
         "narrow-composer-draft-ellipsis",
         "narrow-composer-idle-send-hidden",
         "narrow-composer-radius-stable",
+        "composer-send-stop-hover-stationary",
         "narrow-new-chat-radius-zero",
         "narrow-scrim-compositor-stable",
         "narrow-scrim-interrupted-reversal",

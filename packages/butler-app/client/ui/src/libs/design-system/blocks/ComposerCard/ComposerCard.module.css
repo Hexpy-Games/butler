@@ -37,6 +37,7 @@
 
   display: grid;
   width: 100%;
+  border-radius: var(--adaptive-composer-radius);
   pointer-events: auto;
   transition: min-height var(--adaptive-panel-duration)
     var(--adaptive-panel-easing);
@@ -72,7 +73,10 @@
 .textarea {
   width: 100%;
   min-width: 0;
-  min-height: 72px;
+  min-height: calc(
+    1.5em + var(--composer-inner-padding-block) +
+      var(--composer-inner-padding-block)
+  );
   max-height: calc(
     8lh + var(--composer-inner-padding-block) +
       var(--composer-inner-padding-block)
@@ -163,12 +167,7 @@
   cursor: pointer;
   transition:
     background-color 120ms ease,
-    opacity 120ms ease,
-    transform 120ms ease;
-}
-
-.sendButton:hover:not(:disabled) {
-  transform: translateY(-1px);
+    opacity 120ms ease;
 }
 
 .sendButton:disabled {
@@ -179,6 +178,30 @@
 
 .stop {
   background: var(--send-stop-bg);
+}
+
+.card[data-expanded="false"] .expandedBody {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(var(--space-xs));
+}
+
+.card[data-expanded="false"] .adjunct {
+  display: none;
+}
+
+.card[data-expanded="false"] .toolbar {
+  min-height: calc(var(--control-hit-target) + var(--space-sm));
+  border-top-color: transparent;
+}
+
+.card[data-expanded="false"] .compactPreview {
+  display: block;
+}
+
+.card[data-expanded="false"] .expandedControls {
+  display: none;
 }
 
 @container composer (width <= 520px) {
@@ -211,41 +234,6 @@
 }
 
 @media (width <= 640px) {
-  .card {
-    border-radius: var(--adaptive-composer-radius);
-  }
-
-  .textarea {
-    min-height: calc(
-      1.5em + var(--composer-inner-padding-block) +
-        var(--composer-inner-padding-block)
-    );
-  }
-
-  .card[data-expanded="false"] .expandedBody {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(var(--space-xs));
-  }
-
-  .card[data-expanded="false"] .adjunct {
-    display: none;
-  }
-
-  .card[data-expanded="false"] .toolbar {
-    min-height: calc(var(--control-hit-target) + var(--space-sm));
-    border-top-color: transparent;
-  }
-
-  .card[data-expanded="false"] .compactPreview {
-    display: block;
-  }
-
-  .card[data-expanded="false"] .expandedControls {
-    display: none;
-  }
-
   .floating.large {
     bottom: calc(18px + var(--safe-area-bottom) + var(--keyboard-inset-bottom));
   }
