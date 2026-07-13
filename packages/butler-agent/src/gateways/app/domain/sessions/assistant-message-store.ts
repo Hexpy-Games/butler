@@ -183,13 +183,32 @@ export class AppAssistantMessageStore {
     chatId: string,
     turnId: string,
   ): MessageRecord | null {
-    const existingAssistant = this.input.listMessages(chatId).find(
+    const existingAssistants = this.input.listMessages(chatId).filter(
       (message) => message.role === "assistant" && message.turn_id === turnId,
     );
-    if (existingAssistant && isCancelledTurnActivityCarrier(existingAssistant)) {
+    if (
+      existingAssistants.length === 1 &&
+      isCancelledTurnActivityCarrier(existingAssistants[0]!)
+    ) {
       return null;
     }
-    if (existingAssistant) this.deleteForTurn(turnId);
+    if (existingAssistants.length > 0) {
+      let latest: MessageRecord | null = null;
+      for (const existing of existingAssistants) {
+        const cancelled = this.input.updateMessage(existing.id, {
+          status: "cancelled",
+          safeErrorCode: null,
+          retryable: false,
+        });
+        const projected = this.input.messageWithTerminalWorkBlocks(
+          cancelled,
+          turnId,
+        );
+        this.input.appendEvent("message.updated", { message: projected });
+        latest = projected;
+      }
+      return latest;
+    }
     const message = this.input.insertMessage(
       chatId,
       "assistant",

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { withTimeout } from "../../packages/butler-agent/src/interfaces/mcp-client/session.ts";
 import {
   getMcpServer,
   listMcpServers,
@@ -15,6 +16,20 @@ const root = process.cwd();
 beforeEach(() => {
   tempDir = mkdtempSync(`${tmpdir()}/butler-mcp-client-`);
   mkdirSync(tempDir, { recursive: true });
+});
+
+test("MCP timeout boundary rejects promptly on AbortSignal", async () => {
+  const controller = new AbortController();
+  const pending = withTimeout(
+    new Promise<never>(() => undefined),
+    30_000,
+    "MCP fixture timed out",
+    controller.signal,
+  );
+  const startedAt = performance.now();
+  controller.abort(Object.assign(new Error("cancelled"), { name: "AbortError" }));
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect(performance.now() - startedAt).toBeLessThan(250);
 });
 
 afterEach(() => {

@@ -18,6 +18,7 @@ const MAX_PAGES = 8;
 export async function withMcpClient<T>(
   server: McpServerConfig,
   timeoutMs: number | undefined,
+  signal: AbortSignal | undefined,
   fn: (client: Client) => Promise<T>,
 ): Promise<T> {
   const client = new Client({
@@ -30,6 +31,7 @@ export async function withMcpClient<T>(
       client.connect(transport),
       timeoutMs,
       `MCP connection timed out: ${server.id}`,
+      signal,
     );
     return await fn(client);
   } finally {
@@ -105,17 +107,33 @@ export async function withTimeout<T>(
   promise: Promise<T>,
   timeoutMs: number | undefined,
   message: string,
+  signal?: AbortSignal,
 ): Promise<T> {
   const ms = Math.max(1000, timeoutMs ?? DEFAULT_TIMEOUT_MS);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortListener: (() => void) | undefined;
   try {
+    if (signal?.aborted) throw abortError(signal);
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
         timer = setTimeout(() => reject(new Error(message)), ms);
       }),
+      new Promise<T>((_, reject) => {
+        if (!signal) return;
+        abortListener = () => reject(abortError(signal));
+        signal.addEventListener("abort", abortListener, { once: true });
+      }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
+    if (abortListener) signal?.removeEventListener("abort", abortListener);
   }
+}
+
+function abortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) return signal.reason;
+  const error = new Error("MCP operation was cancelled.");
+  error.name = "AbortError";
+  return error;
 }

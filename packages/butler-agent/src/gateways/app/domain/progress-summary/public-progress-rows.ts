@@ -68,7 +68,9 @@ export function progressRowsForTurnState(
   if (!turnState || !isTerminalProgressState(turnState)) return rows;
   const rowState = progressRowStateForTerminalTurn(turnState);
   return rows
-    .filter((row) => !isFirstVisibleProgressRow(row))
+    .filter(
+      (row) => turnState === "cancelled" || !isFirstVisibleProgressRow(row),
+    )
     .map((row) => {
       const safeDetailRows = row.safe_detail_rows?.map((detail) =>
         detail.state && !isTerminalProgressState(detail.state)

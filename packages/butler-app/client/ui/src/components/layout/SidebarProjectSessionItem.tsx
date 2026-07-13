@@ -5,7 +5,6 @@ import { relativeAge } from "@/app/utils.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { SessionSummary } from "@/app/types.ts";
 import { useLongPressAction } from "./useLongPressAction";
-import styles from "./SidebarProjectSessionItem.module.css";
 
 interface ProjectSessionItemProps {
   session: SessionSummary;
@@ -25,8 +24,8 @@ export function SidebarProjectSessionItem({
 
   return (
     <div
-      className={styles.gestureSurface}
       data-test-class="project-session-gesture"
+      style={{ WebkitTouchCallout: "none", userSelect: "none" }}
       {...longPress}
     >
       <SidebarItem

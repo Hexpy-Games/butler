@@ -280,6 +280,7 @@ export function initializeAppStoreKernel(
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??
     kernel.projectWorkspaceRoot;
   seedAppStoreDefaults(kernel.db);
+  kernel.turnActions.reconcileCancellationSettlements();
   kernel.reconcileCancelledTurnActivityMessages();
 }
 

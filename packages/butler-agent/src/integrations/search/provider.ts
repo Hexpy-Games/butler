@@ -6,6 +6,7 @@ import { accountIdFromAccessToken, resolveOpenAIAuth } from "../providers/openai
 
 export interface WebSearchInput {
   query: string;
+  signal?: AbortSignal;
   allowed_domains?: string[];
   blocked_domains?: string[];
   recency_days?: number;
@@ -297,6 +298,7 @@ export class DuckDuckGoHtmlSearchProvider implements WebSearchProvider {
     const url = new URL(this.options.apiBase || "https://html.duckduckgo.com/html/");
     url.searchParams.set("q", input.query);
     const response = await fetchSearchWithTimeout(url, {
+      signal: input.signal,
       headers: {
         Accept: "text/html,application/xhtml+xml",
         "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -418,6 +420,7 @@ export class OpenAIWebSearchProvider implements WebSearchProvider {
       };
     }
     const response = await fetchSearchWithTimeout(`${this.options.apiBase ?? "https://api.openai.com"}/v1/responses`, {
+      signal: input.signal,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -469,6 +472,7 @@ export class BraveWebSearchProvider implements WebSearchProvider {
       url.searchParams.set("freshness", input.recency_days <= 1 ? "pd" : input.recency_days <= 7 ? "pw" : "pm");
     }
     const response = await fetchSearchWithTimeout(url, {
+      signal: input.signal,
       headers: {
         Accept: "application/json",
         "X-Subscription-Token": this.options.apiKey,
@@ -523,6 +527,7 @@ export class TavilyWebSearchProvider implements WebSearchProvider {
     const start = Date.now();
     validateSearchInput(input);
     const response = await fetchSearchWithTimeout(this.options.apiBase || "https://api.tavily.com/search", {
+      signal: input.signal,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -670,6 +675,7 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
       tool.filters = { allowed_domains: input.allowed_domains };
     }
     const response = await fetchSearchWithTimeout(codexResponsesUrl(this.options.apiBase), {
+      signal: input.signal,
       method: "POST",
       headers: {
         "Content-Type": "application/json",

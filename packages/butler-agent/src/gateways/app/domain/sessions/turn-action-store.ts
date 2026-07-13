@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import type { PrincipalTurnCancellationTarget } from "../../../../agent/turn/principal-turn-cancellation-control.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import { CANCELLED_TURN_ACTIVITY_TEXT } from "./cancelled-turn-activity.ts";
 import { messageFromRow } from "./message-read-model.ts";
@@ -52,6 +53,10 @@ interface TurnActionStoreInput {
   }) => Promise<TurnActionResult>;
   cancelResponder: (turnId: string) => void;
   cancelPersistedRuntimeTurn: (turnId: string) => void;
+  signalPrincipalTurnCancellation: (turnId: string) => Promise<unknown>;
+  principalTurnCancellationTargetForTurn: (
+    turnId: string,
+  ) => PrincipalTurnCancellationTarget | null;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (
@@ -122,7 +127,7 @@ export class AppTurnActionStore {
     });
   }
 
-  cancelTurn(turnId: string): TurnActionResult {
+  async cancelTurn(turnId: string): Promise<TurnActionResult> {
     const row = this.input.getTurnRow(turnId);
     if (!row) {
       throw new AppStoreOperationError(
@@ -131,9 +136,19 @@ export class AppTurnActionStore {
         "Turn not found.",
       );
     }
+    if (row.state === "cancelled") {
+      await this.input.signalPrincipalTurnCancellation(turnId);
+      this.input.ensureCancelledTurnActivityMessage(row.chat_id, turnId);
+      return {
+        turn: this.input.getTurn(turnId),
+        replies: [],
+        next_cursor: 0,
+      };
+    }
+    const resumingCancellation = row.state === "cancelling";
     if (
-      !row.cancellable ||
-      ["cancelled", "delivered", "failed"].includes(row.state)
+      (!row.cancellable && !resumingCancellation) ||
+      ["delivered", "failed"].includes(row.state)
     ) {
       throw new AppStoreOperationError(
         409,
@@ -141,18 +156,97 @@ export class AppTurnActionStore {
         "Turn is not cancellable.",
       );
     }
+    const cancellationTarget =
+      this.input.principalTurnCancellationTargetForTurn(turnId);
+    this.recordCancellationDecision(row, cancellationTarget);
     try {
       this.input.cancelPersistedRuntimeTurn(turnId);
     } finally {
       this.input.cancelResponder(turnId);
     }
-    const cancelledTurn = this.input.finalizeCancelledTurn(row.chat_id, turnId);
-    this.input.cleanupTurnEventSequences(row.chat_id, turnId);
+    const delivery = await this.input.signalPrincipalTurnCancellation(turnId);
+    if (
+      delivery &&
+      typeof delivery === "object" &&
+      "outcome" in delivery &&
+      delivery.outcome === "signal_dispatched"
+    ) {
+      this.markCancellationAccepted(turnId);
+    }
+    const cancelledTurn = cancellationTarget
+      ? this.input.getTurn(turnId)
+      : this.input.finalizeCancelledTurn(row.chat_id, turnId);
+    if (!cancellationTarget) {
+      this.input.cleanupTurnEventSequences(row.chat_id, turnId);
+    }
     return {
       turn: cancelledTurn,
       replies: [],
       next_cursor: 0,
     };
+  }
+
+  reconcileCancellationSettlements(sessionId?: string): void {
+    const rows = this.input.db
+      .query<{ id: string; chat_id: string }, [string | null, string | null]>(`
+        SELECT turns.id, turns.chat_id
+        FROM turns
+        JOIN app_turn_cancel_outbox
+          ON app_turn_cancel_outbox.turn_id = turns.id
+        WHERE turns.state = 'cancelling'
+          AND app_turn_cancel_outbox.state = 'completed'
+          AND (? IS NULL OR turns.chat_id = ?)
+        ORDER BY turns.rowid ASC
+      `)
+      .all(sessionId ?? null, sessionId ?? null);
+    for (const row of rows) {
+      this.input.finalizeCancelledTurn(row.chat_id, row.id);
+      this.input.cleanupTurnEventSequences(row.chat_id, row.id);
+    }
+  }
+
+  private recordCancellationDecision(
+    row: TurnRow,
+    target: PrincipalTurnCancellationTarget | null,
+  ): void {
+    const now = new Date().toISOString();
+    this.input.db.transaction(() => {
+      const decision = this.input.db.query(`
+        UPDATE turns
+        SET state = 'cancelling', safe_status_label = 'Stopping',
+          safe_error_code = NULL, retryable = 0, cancellable = 0, updated_at = ?
+        WHERE id = ?
+          AND state NOT IN ('cancelled', 'delivered', 'failed', 'runtime_fault')
+      `).run(now, row.id);
+      if (decision.changes !== 1) {
+        throw new AppStoreOperationError(
+          409,
+          "turn_not_cancellable",
+          "Turn is not cancellable.",
+        );
+      }
+      if (target) {
+        this.input.db.query(`
+          INSERT INTO app_turn_cancel_outbox (
+            turn_id, queue_id, dispatch_claim_id, state, created_at
+          ) VALUES (?, ?, ?, 'pending', ?)
+          ON CONFLICT(turn_id) DO NOTHING
+        `).run(
+          row.id,
+          target.queueId,
+          target.dispatchClaimId,
+          now,
+        );
+      }
+    })();
+  }
+
+  private markCancellationAccepted(turnId: string): void {
+    this.input.db.query(`
+      UPDATE app_turn_cancel_outbox
+      SET state = 'accepted', accepted_at = ?
+      WHERE turn_id = ? AND state = 'pending'
+    `).run(new Date().toISOString(), turnId);
   }
 
   sessionHasActiveTurn(sessionId: string): boolean {

@@ -263,6 +263,7 @@ export interface FunctionToolPromptOptions {
     name: string;
     args: Record<string, unknown>;
     rawArguments: string;
+    signal?: AbortSignal;
   }) => Promise<unknown>;
   finalTextFromToolResult?: (input: {
     name: string;

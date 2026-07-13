@@ -97,6 +97,17 @@ export function migrateAppStoreSchema(db: Database): void {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS app_turn_cancel_outbox (
+      turn_id TEXT PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
+      queue_id TEXT,
+      dispatch_claim_id TEXT,
+      state TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      accepted_at TEXT,
+      completed_at TEXT,
+      safe_error_code TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
@@ -177,6 +188,9 @@ export function migrateAppStoreSchema(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS turns_chat_state_idx
     ON turns(chat_id, state);
+
+    CREATE INDEX IF NOT EXISTS app_turn_cancel_outbox_pending_idx
+    ON app_turn_cancel_outbox(state, turn_id);
 
     CREATE INDEX IF NOT EXISTS events_type_id_idx
     ON events(type, id DESC);
