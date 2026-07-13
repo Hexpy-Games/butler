@@ -5,9 +5,10 @@ import type {
 } from "../../../../test-support/harness/contracts.ts";
 import {
   canonicalConversationSessionId,
-  renderPromptMaterial,
+  compilePromptMaterialContextPlan,
   withConversationReader,
   type ConversationContextReader,
+  type ConversationPromptContextPlan,
 } from "../../../context/conversation-context.ts";
 import {
   createTurnContextAtomId,
@@ -35,6 +36,12 @@ export interface NormalizedTurnPrompt {
   inboundMessageChars: number;
   focusedResumeEnvelopeChars: number;
   resumeDecisionEnvelopeChars: number;
+  conversationContextPlan: ConversationPromptContextPlan;
+  thinContext: {
+    activePersona: string;
+    personalizationProfile: string;
+    runtimePolicy: string;
+  };
 }
 
 export function currentInboundEventId(input: RuntimeTurnInput): string | null {
@@ -108,6 +115,7 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   recentConversationTokenBudget: number;
   butlerData: string;
   conversationReader?: ConversationContextReader;
+  currentTurnId?: string;
 }): NormalizedTurnPrompt {
   const parts: string[] = [];
   const schedulerContinuationRequested = hasSchedulerContinuationMetadata(input);
@@ -142,14 +150,26 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
   const workingMemoryContext = options.workingMemoryContext?.trim() ?? "";
   if (workingMemoryContext) parts.push(workingMemoryContext);
 
-  const recentConversation = options.skipRecentConversation === true
-    ? ""
-    : buildRecentConversation(
+  const conversationContextPlan = options.skipRecentConversation === true
+    ? compilePromptMaterialContextPlan({
+        session_id: input.handle.sessionId,
+        summaries: [],
+        semantic_tail: [],
+        current_turn: [],
+        token_estimate: 0,
+        provenance: [],
+      }, {
+        maxTokens: options.recentConversationTokenBudget,
+        currentRequest: currentRequestDescriptor(input, options.currentTurnId),
+      })
+    : buildRecentConversationPlan(
         input,
         options.recentConversationTokenBudget,
         options.butlerData,
         options.conversationReader,
+        options.currentTurnId,
       );
+  const recentConversation = conversationContextPlan.rendered;
   if (recentConversation) parts.push(recentConversation);
 
   const recallContext = options.recallContext?.trim() ?? "";
@@ -197,6 +217,12 @@ export function normalizeTurnPrompt(input: RuntimeTurnInput, options: {
     inboundMessageChars,
     focusedResumeEnvelopeChars: focusedResumeEnvelope.length,
     resumeDecisionEnvelopeChars: resumeDecisionEnvelope.length,
+    conversationContextPlan,
+    thinContext: {
+      activePersona: promptContextDelimitedSection(filteredPromptContext, "Active Persona Reminder"),
+      personalizationProfile: promptContextDelimitedSection(filteredPromptContext, "Personalization Profile"),
+      runtimePolicy: runtimePolicyContext,
+    },
   };
 }
 
@@ -368,12 +394,13 @@ function renderAtomRefs(
   ].join("\n");
 }
 
-function buildRecentConversation(
+function buildRecentConversationPlan(
   input: RuntimeTurnInput,
   maxTokens: number,
   butlerData: string,
   conversationReader?: ConversationContextReader,
-): string {
+  currentTurnId?: string,
+): ConversationPromptContextPlan {
   return withConversationReader({
     butlerData,
     reader: conversationReader,
@@ -383,18 +410,26 @@ function buildRecentConversation(
         runtimeSessionId: input.handle.sessionId,
         gateway: "text" in input.input ? null : input.input.transport,
       });
-      return renderPromptMaterial(
-        reader.readPromptMaterial({
-          sessionId: canonicalSessionId,
-          tailLimit: 80,
-        }),
+      return compilePromptMaterialContextPlan(
+        reader.readPromptMaterial({ sessionId: canonicalSessionId }),
         {
           maxTokens,
           excludeSourceRef: currentInboundEventId(input),
+          currentRequest: currentRequestDescriptor(input, currentTurnId),
         },
       );
     },
   });
+}
+
+function currentRequestDescriptor(
+  input: RuntimeTurnInput,
+  currentTurnId?: string,
+): { id: string; text: string } {
+  return {
+    id: currentTurnId?.trim() || currentRuntimeTurnId(input) || "unidentified-turn",
+    text: currentUserText(input),
+  };
 }
 
 function removePromptContextSection(promptContext: string, title: string): string {

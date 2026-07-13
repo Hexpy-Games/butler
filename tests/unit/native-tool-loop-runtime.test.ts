@@ -352,6 +352,8 @@ test("native runtime uses the bounded typed first pass for direct answers withou
         "## Active Persona Reminder",
         "한국어로 간결하게 답합니다.",
         "",
+        "---",
+        "",
         "## Project Memory",
         "This heavy project memory must not be copied into the thin first response prompt.",
       ].join("\n"),

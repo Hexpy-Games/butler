@@ -340,18 +340,37 @@ export class AgentConversationStore {
 
   readPromptMaterial(input: PromptMaterialInput): PromptMaterial {
     const summaries = this.readSummaries(input.sessionId);
-    const semanticTail = this.readSemanticTail(input.sessionId, input.tailLimit ?? 20);
+    const semanticTail = input.tailLimit === undefined
+      ? this.readAllSemanticTail(input.sessionId)
+      : this.readSemanticTail(input.sessionId, input.tailLimit);
+    const turns = Array.from(new Set(
+      semanticTail.map((message) => message.turn_id).filter((turnId): turnId is string => Boolean(turnId)),
+    )).flatMap((turnId) => {
+      const turn = this.readTurn(turnId);
+      return turn ? [turn] : [];
+    });
     return {
       session_id: input.sessionId,
       summaries,
       semantic_tail: semanticTail,
       current_turn: [],
+      turns,
       token_estimate: estimatePromptTokens(semanticTail, summaries),
       provenance: [
         ...summaries.map((summary) => ({ kind: "summary" as const, id: summary.id })),
         ...semanticTail.map((message) => ({ kind: "message" as const, id: message.id })),
       ],
     };
+  }
+
+  private readAllSemanticTail(sessionId: string): ConversationMessageWithParts[] {
+    const rows = this.db.query<MessageRow, [string]>(`
+      SELECT *
+      FROM conversation_messages
+      WHERE session_id = ? AND compacted_by_summary_id IS NULL AND status != 'compacted'
+      ORDER BY seq ASC
+    `).all(sessionId);
+    return rows.map((row) => this.internals.hydrateMessage(row));
   }
 
   readProjectionBatch(afterOutboxId: string | null, limit = 100): ConversationProjectionEvent[] {

@@ -255,6 +255,28 @@ test("summary reads invalidate stale source hashes after semantic mutation", () 
   reopened.close();
 });
 
+test("prompt material reads the complete uncompacted semantic tail when no explicit limit is requested", () => {
+  const store = createStore();
+  const turn = store.beginTurn({
+    gateway: "app",
+    externalSessionId: "chat-unbounded-tail",
+    sessionId: "cs_unbounded_tail",
+    actor: "user",
+  });
+  for (let index = 0; index < 205; index += 1) {
+    store.appendAssistantMessage({
+      sessionId: "cs_unbounded_tail",
+      turnId: turn.id,
+      text: `semantic-${index}`,
+    });
+  }
+
+  expect(store.readPromptMaterial({ sessionId: "cs_unbounded_tail" }).semantic_tail).toHaveLength(205);
+  expect(store.readPromptMaterial({ sessionId: "cs_unbounded_tail", tailLimit: 80 }).semantic_tail)
+    .toHaveLength(80);
+  store.close();
+});
+
 test("summary write rolls back message compaction when the summary insert fails", () => {
   const store = createStore();
   const turn = store.beginTurn({

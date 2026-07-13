@@ -86,14 +86,15 @@ function writePromptFixture(root: string): {
 function appendLongTranscript(turns: number): void {
   const conversationStore = new AgentConversationStore({ butlerData: tempDir });
   const canonicalSessionId = conversationSessionIdForDurableSession("butler/main");
-  conversationStore.beginTurn({
-    gateway: "app",
-    externalSessionId: "butler/main",
-    sessionId: canonicalSessionId,
-    actor: "user",
-    turnId: "long-context-seed",
-  });
   for (let index = 0; index < turns; index += 1) {
+    const turnId = `long-context-seed-${index}`;
+    conversationStore.beginTurn({
+      gateway: "app",
+      externalSessionId: "butler/main",
+      sessionId: canonicalSessionId,
+      actor: "user",
+      turnId,
+    });
     const userText = `A주제 결정 ${index}: 이전 맥락을 유지해야 합니다. ${"상세 ".repeat(80)}`;
     const assistantText = `보고 ${index}: 나중에 요약과 회상으로 복구되어야 합니다. ${"응답 ".repeat(80)}`;
     appendTranscriptEvent(createTranscriptEvent({
@@ -108,7 +109,7 @@ function appendLongTranscript(turns: number): void {
     }));
     conversationStore.appendUserMessage({
       sessionId: canonicalSessionId,
-      turnId: "long-context-seed",
+      turnId,
       text: userText,
       sourceGateway: "app",
       sourceRef: `long-u-${index}`,
@@ -125,11 +126,12 @@ function appendLongTranscript(turns: number): void {
     }));
     conversationStore.appendAssistantMessage({
       sessionId: canonicalSessionId,
-      turnId: "long-context-seed",
+      turnId,
       text: assistantText,
       sourceGateway: "app",
       sourceRef: `long-a-${index}`,
     });
+    conversationStore.finalizeTurn({ turnId, status: "complete" });
   }
   conversationStore.close();
 }
@@ -192,7 +194,7 @@ test("runtime compacts long transcript and reduces recent-context prompt tokens"
       reservedOutputTokens: 50,
       reservedToolTokens: 50,
     },
-    recentConversationTokenBudget: 220,
+    recentConversationTokenBudget: 2_800,
     runFunctionToolPromptText: async (input) => {
       capturedPrompt = input.prompt;
       return "요약 기반으로 이어가겠습니다.";
@@ -218,8 +220,11 @@ test("runtime compacts long transcript and reduces recent-context prompt tokens"
 
   expect(capturedPrompt).not.toContain("## Compaction Summary");
   expect(capturedPrompt).toContain("## Recent Conversation");
-  expect(recentSection).toContain("summary ");
-  expect(newRecentTokens).toBeLessThanOrEqual(230);
+  expect(recentSection).toContain("turn long-context-seed-22 status complete");
+  expect(recentSection).toContain("turn long-context-seed-23 status complete");
+  expect(recentSection).not.toContain("long-context-seed-21");
+  expect(recentSection).not.toContain("trimmed for context budget");
+  expect(newRecentTokens).toBeLessThanOrEqual(900);
   expect(newRecentTokens).toBeLessThan(legacyRecentTokens);
   expect(promptTokens).toBeLessThan(legacyRecentTokens + 1_000);
 });

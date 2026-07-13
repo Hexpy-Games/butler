@@ -99,6 +99,7 @@ export interface PromptMaterial {
   summaries: ConversationSummary[];
   semantic_tail: ConversationMessageWithParts[];
   current_turn: ConversationMessageWithParts[];
+  turns?: ConversationTurn[];
   token_estimate: number;
   provenance: Array<{ kind: "summary" | "message"; id: string }>;
 }

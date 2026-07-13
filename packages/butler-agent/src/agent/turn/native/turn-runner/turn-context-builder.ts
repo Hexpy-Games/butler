@@ -173,6 +173,7 @@ export async function prepareNativeTurnContext(input: {
           defaultRecentConversationTokenBudget(input.turnInput.model),
         compactionContext,
       }),
+      currentTurnId: turnId,
       butlerData: input.deps.butlerData,
     }),
   );
@@ -271,6 +272,7 @@ export async function prepareNativeTurnContext(input: {
     turnBudget,
     prompt,
     normalizedPrompt,
+    conversationContextPlan: normalizedPrompt.conversationContextPlan,
     promptSections: promptUsageSectionsFromPrompt(normalizedPrompt),
     attachments,
     toolSurfaceController,
