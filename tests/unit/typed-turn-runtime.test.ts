@@ -2005,7 +2005,11 @@ test("scheduler resume restores one typed contract and retires its satisfied mut
     contractId: expect.stringContaining("contract-"),
     workStreamId: expect.stringContaining("work-contract-"),
     nextSemanticBlockSequence: 1,
-    budgetSnapshot: { modelRequestsUsed: 1 },
+    budgetSnapshot: {
+      executionSlice: 2,
+      modelRequestsUsed: 0,
+      cumulativeUsage: { modelRequestsUsed: 1 },
+    },
     roundJournal: expect.arrayContaining([
       expect.objectContaining({ tool: "write_file", observed_delta: "mutation" }),
     ]),
@@ -2035,7 +2039,7 @@ test("scheduler resume restores one typed contract and retires its satisfied mut
   expect(toolPromptCalls).toBe(2);
   expect(budgetStates).toEqual([
     expect.objectContaining({ requestCount: 0, maxRequests: 24 }),
-    expect.objectContaining({ requestCount: 1, maxRequests: 24 }),
+    expect.objectContaining({ requestCount: 0, maxRequests: 24 }),
   ]);
   expect(events.filter((event) => event.kind === "assistant.decision")).toHaveLength(1);
   expect(events.filter((event) => event.kind === "turn.first_progress")).toHaveLength(1);

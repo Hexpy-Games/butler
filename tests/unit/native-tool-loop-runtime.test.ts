@@ -11155,8 +11155,10 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
   expect(atom).toMatchObject({
     state: "continuing",
     budgetSnapshot: expect.objectContaining({
-      modelRequestsUsed: 2,
+      executionSlice: 2,
+      modelRequestsUsed: 0,
       maxModelCalls: 32,
+      cumulativeUsage: expect.objectContaining({ modelRequestsUsed: 2 }),
     }),
     unresolvedObservations: [expect.objectContaining({
       kind: "context_compacted",
@@ -11204,7 +11206,7 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
 
   expect(callCount).toBe(2);
   expect(continuationBudgetAtStart).toMatchObject({
-    requestCount: 2,
+    requestCount: 0,
     maxRequests: 24,
   });
   expect(continuationResult.text).toContain("보존된 W3 작업 상태부터 이어서 검증했습니다");
@@ -11386,7 +11388,7 @@ test("ordinary user turn with unfinished WorkStream lets the first model decide 
   expect(capturedPrompt).not.toContain("Continue this selected WorkStream before broad validation");
 });
 
-test("focused WorkStream phase exhaustion attempts protected finalization then yields durably", async () => {
+test("focused WorkStream phase exhaustion opens a fresh owned execution slice", async () => {
   const sessionId = "butler/main/focused-resume-phase-budget";
   const todoView = new TodoListStore(tempDir).update({
     listId: "focused-phase-budget",
@@ -11471,8 +11473,10 @@ test("focused WorkStream phase exhaustion attempts protected finalization then y
   expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
     state: "continuing",
     budgetSnapshot: expect.objectContaining({
-      modelRequestsUsed: 6,
+      executionSlice: 2,
+      modelRequestsUsed: 0,
       maxModelCalls: 32,
+      cumulativeUsage: expect.objectContaining({ modelRequestsUsed: 6 }),
     }),
   });
 
@@ -11567,8 +11571,10 @@ test("focused WorkStream validation repair continues unchanged gaps until the ph
   expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
     state: "continuing",
     budgetSnapshot: expect.objectContaining({
-      modelRequestsUsed: 3,
+      executionSlice: 2,
+      modelRequestsUsed: 0,
       maxModelCalls: 32,
+      cumulativeUsage: expect.objectContaining({ modelRequestsUsed: 3 }),
     }),
   });
   expect(readOperationalMetricEvents({ butlerData: tempDir })).toContainEqual(expect.objectContaining({
@@ -11775,8 +11781,10 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
   expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
     state: "continuing",
     budgetSnapshot: expect.objectContaining({
-      modelRequestsUsed: 1,
+      executionSlice: 2,
+      modelRequestsUsed: 0,
       maxModelCalls: 32,
+      cumulativeUsage: expect.objectContaining({ modelRequestsUsed: 1 }),
     }),
   });
   const metrics = readOperationalMetricEvents({ butlerData: tempDir });

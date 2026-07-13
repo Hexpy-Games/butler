@@ -10,6 +10,7 @@ import {
   recoverableLimitedDeliveryForError,
 } from "../../agent/turn/recoverable-delivery.ts";
 import {
+  clearTurnContextAtom,
   isTurnSchedulerContinuationYieldError,
 } from "../../agent/turn/turn-continuation-context.ts";
 import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
@@ -512,6 +513,11 @@ async function processClaimedQueuedInboundItem(input: {
           completePrincipalCancelledQueueClaim(options, item);
           return summary;
         }
+        clearTurnContextAtom({
+          butlerData: options.queue.butlerData,
+          sessionId,
+          turnId,
+        });
         const failure: RuntimeFailureDiagnostic = {
           code: "turn_scheduler_continuation_schedule_failed",
           message: "Butler could not commit the next continuation owner.",

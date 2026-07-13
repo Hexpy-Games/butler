@@ -100,6 +100,7 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
       }],
       budgetSnapshot: {
         turnId,
+        executionSlice: 3,
         modelRequestsUsed: 7,
         promptTokens: 1200,
         cachedTokens: 900,
@@ -109,6 +110,13 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
         maxPromptTokens: 220000,
         maxOutputTokens: 80000,
         maxTotalTokens: 300000,
+        cumulativeUsage: {
+          modelRequestsUsed: 55,
+          promptTokens: 480000,
+          cachedTokens: 320000,
+          outputTokens: 9000,
+          totalTokens: 489000,
+        },
       },
       obligationFrontier: {
         planReady: true,
@@ -154,11 +162,19 @@ test("turn context atom persists spec-minimum ref-only shape without raw request
       }],
       budgetSnapshot: {
         turnId,
+        executionSlice: 3,
         modelRequestsUsed: 7,
         promptTokens: 1200,
         cachedTokens: 900,
         outputTokens: 80,
         totalTokens: 1280,
+        cumulativeUsage: {
+          modelRequestsUsed: 55,
+          promptTokens: 480000,
+          cachedTokens: 320000,
+          outputTokens: 9000,
+          totalTokens: 489000,
+        },
       },
       obligationFrontier: {
         planReady: true,
