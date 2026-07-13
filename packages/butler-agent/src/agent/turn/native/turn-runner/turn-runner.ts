@@ -221,6 +221,9 @@ export async function runNativeToolTurn({
             continuationError = finalizationError;
           }
         }
+        if (isPromptUsageModelCallBudgetError(continuationError)) {
+          throw continuationError;
+        }
         const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
@@ -254,6 +257,9 @@ export async function runNativeToolTurn({
         return await runTextPrompt(promptText, phase, partition);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
+          throw error;
+        }
+        if (isPromptUsageModelCallBudgetError(error)) {
           throw error;
         }
         const checkpoint = await persistSchedulerContinuation({
