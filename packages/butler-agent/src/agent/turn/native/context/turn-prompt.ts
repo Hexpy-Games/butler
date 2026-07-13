@@ -78,6 +78,17 @@ export function promptContextSection(prompt: string, title: string): string {
   return section?.trim() ?? "";
 }
 
+export function promptContextDelimitedSection(prompt: string, title: string): string {
+  const trimmed = prompt.trim();
+  const delimiter = "\n\n---\n\n";
+  if (!trimmed || !trimmed.includes(delimiter)) return "";
+  const sectionHeader = `## ${title}\n`;
+  return trimmed
+    .split(delimiter)
+    .find((section) => section.startsWith(sectionHeader))
+    ?.trim() ?? "";
+}
+
 export function stableJsonForCache(value: Record<string, unknown>): string {
   return JSON.stringify(Object.fromEntries(
     Object.entries(value).sort(([a], [b]) => a.localeCompare(b)),
