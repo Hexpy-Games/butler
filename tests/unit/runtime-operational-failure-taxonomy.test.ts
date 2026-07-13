@@ -90,7 +90,7 @@ test("runtime delivery taxonomy preserves operational failures with exact safe c
   }
 });
 
-test("runtime delivery taxonomy separates tool observation gaps from completion continuation", () => {
+test("runtime delivery taxonomy fails live ownerless gaps without inferring continuation", () => {
   const cases = [
     {
       label: "disabled tool",
@@ -98,11 +98,11 @@ test("runtime delivery taxonomy separates tool observation gaps from completion 
         code: "disabled_tool",
         message: "disabled tool web_search; tool is not active in the current surface",
       },
-      state: "running",
-      terminal: false,
-      issueKind: "none",
-      visibility: "continuation_progress",
-      failureNotice: false,
+      state: "failed_system",
+      terminal: true,
+      issueKind: "system_failure",
+      visibility: "failure_notice",
+      failureNotice: true,
     },
     {
       label: "missing evidence",
@@ -110,11 +110,11 @@ test("runtime delivery taxonomy separates tool observation gaps from completion 
         code: "missing_evidence",
         message: "missing evidence receipt for source_verified",
       },
-      state: "running",
-      terminal: false,
-      issueKind: "none",
-      visibility: "continuation_progress",
-      failureNotice: false,
+      state: "failed_system",
+      terminal: true,
+      issueKind: "system_failure",
+      visibility: "failure_notice",
+      failureNotice: true,
     },
     {
       label: "disabled tool with storage-like name",
@@ -122,11 +122,11 @@ test("runtime delivery taxonomy separates tool observation gaps from completion 
         code: "disabled_tool",
         message: "disabled tool storage_search is unavailable in the current surface",
       },
-      state: "running",
-      terminal: false,
-      issueKind: "none",
-      visibility: "continuation_progress",
-      failureNotice: false,
+      state: "failed_system",
+      terminal: true,
+      issueKind: "system_failure",
+      visibility: "failure_notice",
+      failureNotice: true,
     },
     {
       label: "missing evidence with gateway-like name",
@@ -134,11 +134,11 @@ test("runtime delivery taxonomy separates tool observation gaps from completion 
         code: "missing_evidence",
         message: "missing evidence receipt for gateway_health unavailable",
       },
-      state: "running",
-      terminal: false,
-      issueKind: "none",
-      visibility: "continuation_progress",
-      failureNotice: false,
+      state: "failed_system",
+      terminal: true,
+      issueKind: "system_failure",
+      visibility: "failure_notice",
+      failureNotice: true,
     },
   ];
 
@@ -161,11 +161,11 @@ test("runtime delivery taxonomy separates tool observation gaps from completion 
     message: "Prompt usage model-call budget exhausted before provider request",
   };
   expect(classifyRuntimeFailureDelivery(promptBudget)).toMatchObject({
-    delivery_state: "running",
-    terminal: false,
-    issue_kind: "none",
-    visibility: "continuation_progress",
-    failure_notice: false,
+    delivery_state: "failed_system",
+    terminal: true,
+    issue_kind: "system_failure",
+    visibility: "failure_notice",
+    safe_error_code: "prompt_usage_model_call_budget_exhausted",
     limitation_codes: [],
     limitations: [],
   });

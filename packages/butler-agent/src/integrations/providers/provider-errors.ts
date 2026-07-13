@@ -214,6 +214,14 @@ export function safeRuntimeFailure(error: unknown): RuntimeFailureDiagnostic {
       cause: safeErrorText(message),
     };
   }
+  if (code === "prompt_usage_model_call_budget_exhausted") {
+    return {
+      code,
+      message: "Butler reached the turn execution budget before it could continue. Retry the turn.",
+      retryable: true,
+      cause: safeErrorText(message),
+    };
+  }
   if (isToolCallRepairFailure(error)) {
     return {
       code: code ?? "tool_call_repair",

@@ -1,5 +1,6 @@
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import { isRuntimeCancellationFailure } from "../../../../agent/turn/runtime-cancellation.ts";
+import { isTurnSchedulerContinuationYieldError } from "../../../../agent/turn/turn-continuation-context.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
@@ -226,7 +227,12 @@ export async function completeResponderTurn<FileRecord>(
         next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
       };
     }
-    const safeError = appSafeResponderError(error);
+    const safeError = isTurnSchedulerContinuationYieldError(error)
+      ? {
+        code: "turn_scheduler_continuation_schedule_failed",
+        message: "Butler saved the turn state but could not commit its next continuation owner.",
+      }
+      : appSafeResponderError(error);
     const failedTurn = context.updateTurnFailed(
       input.chatId,
       input.turnId,

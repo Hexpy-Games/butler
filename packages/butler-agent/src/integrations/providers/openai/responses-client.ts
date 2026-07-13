@@ -35,6 +35,7 @@ export async function createOpenAIResponse(
           onProviderStreamEvent,
           budgetContext,
           () => guard.recordProgress(),
+          () => guard.start(),
         ),
         guard.signal,
       ),
@@ -67,6 +68,7 @@ export async function createOpenAIResponseOnce(
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
   budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
   onProviderRoundProgress?: () => void,
+  onProviderRoundStarted?: () => void,
 ): Promise<OpenAIResponse> {
   const auth = authOverride ?? await resolveOpenAIAuth();
   if (auth.mode === "codex_subscription" || auth.mode === "codex_oauth") {
@@ -77,6 +79,7 @@ export async function createOpenAIResponseOnce(
       onProviderStreamEvent,
       budgetContext,
       onProviderRoundProgress,
+      onProviderRoundStarted,
     );
   }
   const { __butler_codex_stateless_input: _codexStatelessInput, ...rawOfficialBody } = body;
@@ -101,6 +104,7 @@ export async function createOpenAIResponseOnce(
 
   let response: Response;
   try {
+    onProviderRoundStarted?.();
     response = await fetch(getResponsesUrl(), {
       method: "POST",
       headers: {
