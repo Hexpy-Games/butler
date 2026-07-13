@@ -73,6 +73,7 @@
 .workspace {
   position: relative;
   display: grid;
+  contain: paint;
   min-width: 0;
   height: 100%;
   grid-template-rows: var(--titlebar-safe-area-top) minmax(0, 1fr);
