@@ -9,6 +9,7 @@ import {
   readTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
+import { publicWebSearchEvidenceItems } from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence.ts";
 import type {
   ModelProviderAdapter,
   RuntimeTurnEventInput,
@@ -295,6 +296,122 @@ test("finalization exhaustion does not schedule the same logical turn without ex
   expect(isTurnSchedulerContinuationYieldError(failure)).toBe(false);
   expect((failure as { code?: unknown })?.code).toBe("prompt_usage_model_call_budget_exhausted");
   expect(finalizationAttempts).toBe(1);
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
+  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(0);
+});
+
+test("completion-gap text finalization exhaustion also bypasses scheduler persistence", async () => {
+  const turnId = "turn-text-finalization-terminal";
+  const sessionId = "butler/text-finalization-terminal";
+  const events: RuntimeTurnEventInput[] = [];
+  const evidence = publicWebSearchEvidenceItems({
+    observedAt: new Date("2026-07-13T00:00:00.000Z"),
+    results: [{
+      title: "Bounded source",
+      url: "https://example.com/bounded-source",
+      snippet: "The bounded claim is supported.",
+      source: "Example",
+      published_at: "2026-07-13",
+    }],
+  });
+  let textFinalizationAttempts = 0;
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      if (input.usageAttribution?.phase === "completion_gap_final_synthesis") {
+        textFinalizationAttempts += 1;
+        throw promptUsageModelCallBudgetExhaustedError();
+      }
+      if (input.responseFormat?.name === "grounded_answer_review") {
+        return JSON.stringify({
+          schema_version: "butler.grounded-answer-review.v1",
+          outcome: "supported",
+          candidate_safe_to_deliver: true,
+          next_action: "accept",
+          summary: "The claim is directly supported.",
+          claims: [{
+            claim_id: "claim-bounded",
+            claim_text: "The bounded claim is supported.",
+            support: "direct",
+            evidence_item_ids: [evidence[0]!.evidence_item_id],
+            limitations: [],
+          }],
+          citation_item_ids: [evidence[0]!.evidence_item_id],
+          limitations: [],
+        });
+      }
+      return JSON.stringify({
+        schema_version: "butler.turn-contract-decision.v1",
+        decision_id: decisionIdFromFormat(input.responseFormat),
+        action: "tool_answer",
+        target_workstream_id: null,
+        target_project_id: null,
+        blocker_id: null,
+        evidence_domain: "public_web",
+        inspection_scope: null,
+        deliverables: ["grounded_answer"],
+        answer_text: null,
+        public_title: "공개 근거 확인",
+        public_summary: "공개 근거로 답변을 확인합니다.",
+        public_rationale: "구조화된 인용 검증이 필요합니다.",
+        immediate_next_step: "근거를 확인하고 답변을 작성합니다.",
+      });
+    },
+    runFunctionToolPromptText: async (input) => {
+      await input.executeTool({
+        name: "run_work_block",
+        args: {
+          decision: {
+            title: "공개 근거 검색",
+            summary: "공개 근거를 조회합니다.",
+            rationale: "답변을 검증할 근거가 필요합니다.",
+            next_step: "확인된 근거로 답변합니다.",
+            expected_effect: "구조화된 공개 근거가 남습니다.",
+          },
+          calls: [{ name: "web_search", args: { query: "bounded source" } }],
+        },
+        rawArguments: "{}",
+      });
+      return "The bounded claim is supported.";
+    },
+    executeButlerTool: async () => ({
+      ok: true,
+      query: "bounded source",
+      results: [{ url: "https://example.com/bounded-source" }],
+      public_web_evidence_items: evidence,
+    }),
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "Run the bounded text finalization test.",
+  });
+
+  let failure: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider,
+      model: "openai/gpt-5.5",
+      input: { text: "공개 근거를 확인해서 답해줘." },
+      metadata: {
+        turnId,
+        runtimePolicy: { completionReview: "disabled" },
+      },
+      emitTurnEvent: (event) => {
+        events.push(event);
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  expect(isTurnSchedulerContinuationYieldError(failure)).toBe(false);
+  expect((failure as { code?: unknown })?.code).toBe("prompt_usage_model_call_budget_exhausted");
+  expect(textFinalizationAttempts).toBe(1);
   expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
   expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(0);
 });

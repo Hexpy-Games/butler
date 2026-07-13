@@ -259,6 +259,9 @@ export async function runNativeToolTurn({
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
           throw error;
         }
+        if (isPromptUsageModelCallBudgetError(error)) {
+          throw error;
+        }
         const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
