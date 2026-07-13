@@ -16,6 +16,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { principalTurnCancellationSocketPath } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import {
@@ -2703,6 +2704,113 @@ test("native butler-main default provider generates app transport session titles
   } finally {
     clearTimeout(shutdownWatchdog);
     globalThis.fetch = originalFetch;
+    server.stop();
+  }
+});
+
+test("App Stop falls back to the existing native tick and preserves its public snapshot", async () => {
+  const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
+  mkdirSync(join(tempDir, "app-server"), { recursive: true });
+  const runtime = new AbortSettlingRuntime();
+  const shutdown = new AbortController();
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  const nativeMain = runNativeButlerMain({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    shutdownSignal: shutdown.signal,
+    shutdownPollMs: 10,
+    workerResultPollMs: 10,
+    enableTelegramPolling: false,
+  });
+
+  try {
+    await waitForCondition(() =>
+      existsSync(principalTurnCancellationSocketPath(tempDir)),
+    );
+    mkdirSync(join(tempDir, "state"), { recursive: true });
+    writeFileSync(
+      join(tempDir, "state", "butler-main-native.json"),
+      JSON.stringify({
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        runtime: "native",
+        launcher: "test",
+      }),
+    );
+    const sent = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "stop native execution",
+    });
+    const turnId = sent.data.turn.id as string;
+    await runtime.started;
+
+    const db = new Database(dbPath);
+    const messageId = "msg-native-stop-snapshot";
+    const createdAt = "2026-07-13T03:00:00.000Z";
+    try {
+      db.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        ) VALUES (?, 'general', ?, 'assistant', ?, 'streaming', ?, ?, NULL, 0)
+      `).run(
+        messageId,
+        turnId,
+        "native 실행을 중지하기 전까지 작성된 답변",
+        createdAt,
+        createdAt,
+      );
+    } finally {
+      db.close();
+    }
+
+    rmSync(principalTurnCancellationSocketPath(tempDir), { force: true });
+    const cancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(cancel.data.turn).toMatchObject({ id: turnId, state: "cancelling" });
+    await waitForCondition(() => runtime.aborted);
+    await waitForCondition(() => {
+      const stateDb = new Database(dbPath, { readonly: true });
+      try {
+        return stateDb
+          .query<{ state: string }, [string]>(`
+            SELECT state FROM app_turn_cancel_outbox WHERE turn_id = ?
+          `)
+          .get(turnId)?.state === "completed";
+      } finally {
+        stateDb.close();
+      }
+    });
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.active_turn).toBeNull();
+    expect(view.data.latest_turn).toMatchObject({ id: turnId, state: "cancelled" });
+    expect(view.data.messages).toContainEqual(
+      expect.objectContaining({
+        id: messageId,
+        turn_id: turnId,
+        text: "native 실행을 중지하기 전까지 작성된 답변",
+        status: "cancelled",
+        created_at: createdAt,
+      }),
+    );
+    expect(view.data.messages).not.toContainEqual(
+      expect.objectContaining({ turn_id: turnId, text: "Stopped." }),
+    );
+  } finally {
+    shutdown.abort();
+    await nativeMain;
     server.stop();
   }
 });
@@ -14242,6 +14350,44 @@ class HangingRuntime implements AgentRuntimeAdapter {
       this.aborted = true;
     });
     return await new Promise<never>(() => undefined);
+  }
+}
+
+class AbortSettlingRuntime implements AgentRuntimeAdapter {
+  readonly id = "app-abort-settling-runtime";
+  aborted = false;
+  private markStarted: (() => void) | undefined;
+  readonly started = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: false,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+      runtimeSessionRef: `app-abort-settling:${input.sessionId}`,
+    };
+  }
+
+  async runTurn(input: RuntimeTurnInput): Promise<never> {
+    this.markStarted?.();
+    return await new Promise<never>((_resolve, reject) => {
+      input.signal?.addEventListener(
+        "abort",
+        () => {
+          this.aborted = true;
+          reject(input.signal?.reason);
+        },
+        { once: true },
+      );
+    });
   }
 }
 

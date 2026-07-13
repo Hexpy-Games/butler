@@ -12,7 +12,10 @@ export interface PrincipalTurnExecutionIdentity {
 
 interface RegisteredTurnController extends PrincipalTurnExecutionIdentity {
   controller: AbortController;
+  abortDeliveredAt?: number;
 }
+
+const CANCELLATION_STALLED_AFTER_MS = 2_000;
 
 const registrations = new Map<string, RegisteredTurnController>();
 const registrationsBySignal = new WeakMap<AbortSignal, RegisteredTurnController>();
@@ -46,6 +49,7 @@ export function recordPrincipalTurnCancellation(input: {
   locallyRecordedTurns.add(turnKey(input));
   for (const registration of registrations.values()) {
     if (turnKey(registration) === turnKey(input)) {
+      registration.abortDeliveredAt ??= Date.now();
       abortController(registration.controller);
     }
   }
@@ -82,6 +86,7 @@ export function refreshPrincipalTurnAbortSignal(signal: AbortSignal): boolean {
   if (!registration || !principalTurnCancellationRecorded(registration)) {
     return false;
   }
+  registration.abortDeliveredAt ??= Date.now();
   abortController(registration.controller);
   return true;
 }
@@ -92,6 +97,7 @@ export function abortPrincipalTurnExecution(
   const exact = registrations.get(registryKey(input));
   if (exact) {
     if (exact.controller.signal.aborted) return "already_settled";
+    exact.abortDeliveredAt = Date.now();
     abortController(exact.controller);
     return "signal_dispatched";
   }
@@ -112,15 +118,49 @@ export function abortDurablyCancelledPrincipalTurnExecutions(
     if (registration.butlerData !== root) continue;
     if (!principalTurnCancellationRecorded(registration)) continue;
     if (!registration.controller.signal.aborted) {
+      registration.abortDeliveredAt = Date.now();
       abortController(registration.controller);
       markPrincipalTurnCancellationDelivery(
         registration,
         "accepted",
       );
       aborted += 1;
+    } else if (
+      registration.abortDeliveredAt &&
+      Date.now() - registration.abortDeliveredAt >= CANCELLATION_STALLED_AFTER_MS
+    ) {
+      markPrincipalTurnCancellationStalled(registration);
     }
   }
   return aborted;
+}
+
+function markPrincipalTurnCancellationStalled(
+  input: PrincipalTurnExecutionIdentity,
+): void {
+  const dbPath = appTurnStateDbPath(input.butlerData);
+  if (!existsSync(dbPath)) return;
+  let db: Database | null = null;
+  try {
+    db = new Database(dbPath);
+    db.transaction(() => {
+      db?.query(`
+        UPDATE app_turn_cancel_outbox
+        SET safe_error_code = 'cancellation_stalled'
+        WHERE turn_id = ? AND state != 'completed'
+      `).run(input.turnId);
+      db?.query(`
+        UPDATE turns
+        SET safe_error_code = 'cancellation_stalled',
+          safe_status_label = 'Stopping is taking longer than expected'
+        WHERE id = ? AND state = 'cancelling'
+      `).run(input.turnId);
+    })();
+  } catch {
+    // Retry on the next existing service tick.
+  } finally {
+    db?.close();
+  }
 }
 
 export function markPrincipalTurnCancellationDelivery(

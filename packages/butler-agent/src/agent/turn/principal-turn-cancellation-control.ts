@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { createConnection, createServer, type Server } from "node:net";
+import { createConnection, createServer, Socket, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -106,7 +106,7 @@ export async function sendCancelExecutionRequest(
       settled = true;
       resolveResponse(response);
     };
-    const socket = createConnection(socketPath);
+    const socket = new Socket();
     socket.setTimeout(CANCEL_REQUEST_TIMEOUT_MS, () => {
       socket.destroy();
       finish(null);
@@ -126,6 +126,7 @@ export async function sendCancelExecutionRequest(
     });
     socket.on("error", () => finish(null));
     socket.on("close", () => finish(null));
+    socket.connect(socketPath);
   });
 }
 

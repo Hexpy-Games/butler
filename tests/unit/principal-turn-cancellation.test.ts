@@ -10,6 +10,7 @@ import {
 } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
 import {
   abortPrincipalTurnExecution,
+  abortDurablyCancelledPrincipalTurnExecutions,
   principalTurnCancellationRecorded,
   recordPrincipalTurnCancellation,
   registerPrincipalTurnAbortController,
@@ -555,7 +556,14 @@ test("local cancel endpoint aborts only a durably cancelled exact claim", async 
   const db = new Database(join(butlerData, "app-server", "butler-client.sqlite"), {
     create: true,
   });
-  db.exec("CREATE TABLE turns (id TEXT PRIMARY KEY, state TEXT NOT NULL)");
+  db.exec(`
+    CREATE TABLE turns (
+      id TEXT PRIMARY KEY,
+      state TEXT NOT NULL,
+      safe_error_code TEXT,
+      safe_status_label TEXT
+    )
+  `);
   db.exec(`
     CREATE TABLE app_turn_cancel_outbox (
       turn_id TEXT PRIMARY KEY,
@@ -564,6 +572,7 @@ test("local cancel endpoint aborts only a durably cancelled exact claim", async 
       state TEXT NOT NULL,
       accepted_at TEXT,
       completed_at TEXT
+      , safe_error_code TEXT
     )
   `);
   db.query("INSERT INTO turns (id, state) VALUES (?, 'thinking')")
@@ -626,6 +635,26 @@ test("local cancel endpoint aborts only a durably cancelled exact claim", async 
         .get(),
     ).toMatchObject({ state: "accepted", accepted_at: expect.any(String) });
     acceptedDb.close();
+
+    const realDateNow = Date.now;
+    try {
+      Date.now = () => realDateNow() + 3_000;
+      abortDurablyCancelledPrincipalTurnExecutions(butlerData);
+    } finally {
+      Date.now = realDateNow;
+    }
+    const stalledDb = new Database(
+      join(butlerData, "app-server", "butler-client.sqlite"),
+      { readonly: true },
+    );
+    expect(
+      stalledDb
+        .query<{ safe_error_code: string | null }, []>(`
+          SELECT safe_error_code FROM app_turn_cancel_outbox
+        `)
+        .get()?.safe_error_code,
+    ).toBe("cancellation_stalled");
+    stalledDb.close();
   } finally {
     unregister();
     await server.close();
