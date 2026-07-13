@@ -557,6 +557,13 @@ async function processClaimedQueuedInboundItem(input: {
         handled: true,
       });
       if (!terminalRecorded) return summary;
+      if (turnId) {
+        clearTurnContextAtom({
+          butlerData: options.queue.butlerData,
+          sessionId,
+          turnId,
+        });
+      }
       summary.handled += 1;
       const action = limitedDeliveryActionForOriginalInbound({
         item,
@@ -593,6 +600,13 @@ async function processClaimedQueuedInboundItem(input: {
       },
     );
     if (!terminalRecorded) return summary;
+    if (sessionId && turnId) {
+      clearTurnContextAtom({
+        butlerData: options.queue.butlerData,
+        sessionId,
+        turnId,
+      });
+    }
     const delivered = await deliverFailureForOriginalInbound({
       item,
       deliverAction,

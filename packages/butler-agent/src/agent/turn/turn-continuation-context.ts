@@ -1,9 +1,6 @@
 import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import {
-  DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT,
-  type DirectTurnBudgetSnapshot,
-} from "./direct-turn-budget.ts";
+import type { DirectTurnBudgetSnapshot } from "./direct-turn-budget.ts";
 import { isTerminalTurnState, type TurnState } from "./turn-kernel.ts";
 import {
   withDurableFileLock,
@@ -357,9 +354,6 @@ function sanitizeBudgetSnapshot(snapshot: DirectTurnBudgetSnapshot): DirectTurnB
     outputTokens: finiteNonNegativeInteger(snapshot.outputTokens),
     totalTokens: finiteNonNegativeInteger(snapshot.totalTokens),
     maxModelCalls: finitePositiveInteger(snapshot.maxModelCalls),
-    maxLifetimeModelCalls: finitePositiveInteger(
-      snapshot.maxLifetimeModelCalls ?? DIRECT_TURN_LIFETIME_MODEL_CALL_LIMIT,
-    ),
     maxPromptTokens: finitePositiveInteger(snapshot.maxPromptTokens),
     maxOutputTokens: finitePositiveInteger(snapshot.maxOutputTokens),
     maxTotalTokens: finitePositiveInteger(snapshot.maxTotalTokens),
