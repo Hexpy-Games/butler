@@ -1,6 +1,7 @@
 export type LegacyServiceInspection = {
   required: boolean;
   plists: string[];
+  systemdUnits?: string[];
   pidFiles: string[];
   serviceStates: Array<{ path: string; processGroupId: number }>;
   detectedArtifacts: string[];
@@ -16,6 +17,7 @@ export const LEGACY_APP_SERVICE_LABELS: readonly string[];
 
 export function inspectLegacyAppService(options: {
   butlerData: string;
+  platform?: NodeJS.Platform;
   homeDir?: string;
   exists?: (path: string) => boolean;
   readJson?: (path: string) => unknown;
@@ -23,6 +25,7 @@ export function inspectLegacyAppService(options: {
 
 export function migrateLegacyAppService(options: {
   butlerData: string;
+  platform?: NodeJS.Platform;
   homeDir?: string;
   uid?: number;
   inspect?: () => LegacyServiceInspection;

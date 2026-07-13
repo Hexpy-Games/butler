@@ -48,8 +48,9 @@ Butler App in this order:
 3. `Butler Agent를 준비합니다`
 4. Model setup
 
-On macOS, drag `Butler.app` from the DMG into Applications. The Agent and tray
-menu run only while Butler is open; quitting Butler shuts the Agent down.
+On macOS, drag `Butler.app` from the DMG into Applications. On every supported
+desktop platform, the Agent and tray run only while Butler is open; quitting
+Butler shuts the complete App-owned Agent process tree down.
 
 Use the standalone Agent only when you want the headless runtime without the
 desktop app.

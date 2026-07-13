@@ -62,7 +62,9 @@ export function resolveAppLifecycleMode({
   releaseMode = null,
   env = process.env,
 } = {}) {
-  if (platform !== "darwin") return APP_FOREGROUND_LIFECYCLE_MODES.nativeService;
+  if (!["darwin", "linux", "win32"].includes(platform)) {
+    return APP_FOREGROUND_LIFECYCLE_MODES.nativeService;
+  }
   const testOverride = env.BUTLER_APP_AGENT_LIFECYCLE_MODE?.trim();
   if (testOverride) {
     if (env.BUTLER_APP_ALLOW_LIFECYCLE_TEST_OVERRIDE !== "1") {

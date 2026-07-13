@@ -103,37 +103,24 @@ test("Phase 0 platform capability matrix gates implementation by platform", () =
     .toBe(true);
 
   const macos = appBackgroundServiceCapability("darwin");
-  expect(macos.requiredDecision).toBe("macos-registration-path");
+  expect(macos.requiredDecision).toBe("app-foreground-lifecycle");
   expect(macos.blocksBeforePhase).toBe("phase-2-service-control");
-  expect(macos.selectedV1Path).toBeNull();
-  expect(macos.allowedV1Paths).toEqual([
-    "macos-pkg-launch-agent",
-    "macos-first-run-launch-agent",
-    "macos-smappservice-helper",
-  ]);
-  expect(macos.allowedMechanisms).toContain("smappservice-helper");
+  expect(macos.selectedV1Path).toBe("macos-app-foreground");
+  expect(macos.allowedV1Paths).toEqual(["macos-app-foreground"]);
+  expect(macos.allowedMechanisms).toEqual(["app-foreground-child"]);
 
   const linux = appBackgroundServiceCapability("linux");
-  expect(linux.requiredDecision).toBe("linux-package-service-path");
-  expect(linux.primaryMechanism).toContain("systemd --user");
-  expect(linux.allowedV1Paths).toEqual([
-    "linux-systemd-user-service",
-    "linux-deb-owned-user-unit",
-    "linux-pacman-owned-user-unit",
-    "linux-rpm-owned-user-unit",
-  ]);
-  expect(linux.allowedMechanisms).toContain("deb-owned-user-unit");
+  expect(linux.requiredDecision).toBe("app-foreground-lifecycle");
+  expect(linux.primaryMechanism).toContain("App-owned foreground");
+  expect(linux.allowedV1Paths).toEqual(["linux-app-foreground"]);
+  expect(linux.allowedMechanisms).toEqual(["app-foreground-child"]);
 
   const windows = appBackgroundServiceCapability("win32");
-  expect(windows.requiredDecision).toBe("windows-user-security-context");
-  expect(windows.installerRequired).toBe("yes");
-  expect(windows.allowedV1Paths).toEqual([
-    "windows-per-user-agent-at-sign-in",
-    "windows-least-privilege-user-service",
-    "windows-split-elevated-helper",
-  ]);
-  expect(windows.userContext).toContain("must not default to LocalSystem");
-  expect(windows.allowedMechanisms).toContain("split-elevated-helper");
+  expect(windows.requiredDecision).toBe("app-foreground-lifecycle");
+  expect(windows.installerRequired).toBe("no");
+  expect(windows.allowedV1Paths).toEqual(["windows-app-foreground"]);
+  expect(windows.userContext).toBe("signed-in desktop user");
+  expect(windows.allowedMechanisms).toEqual(["app-foreground-child"]);
 });
 
 test("unsupported App background service platforms fail closed", () => {

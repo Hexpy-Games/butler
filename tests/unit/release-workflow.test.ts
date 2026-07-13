@@ -132,7 +132,7 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
 });
 
-test("version tag release workflow publishes Linux app service installer packages", () => {
+test("version tag release workflow publishes no Linux app service installer packages", () => {
   const workflowPath = join(root, ".github", "workflows", "release.yml");
   expect(existsSync(workflowPath)).toBe(true);
   const workflow = readFileSync(workflowPath, "utf8");
@@ -143,34 +143,12 @@ test("version tag release workflow publishes Linux app service installer package
   const buildIndex = workflow.indexOf("linux-service-installer-package.ts");
   const publishIndex = workflow.indexOf("Publish Linux app service installer packages");
 
-  expect(installerJobIndex).toBeGreaterThan(appJobIndex);
-  expect(workflow).toContain("Build and publish Linux app service installers");
-  expect(workflow).toContain("runs-on: ubuntu-latest");
-  expect(workflow).toContain("needs: app-artifact");
-  expect(workflow).toContain(
-    "sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager rpm zstd",
-  );
-  expect(workflow).toContain("sudo mkdir -p /var/lib/pacman/local");
-  expect(workflow).toContain("sudo chmod -R a+rwx /var/lib/pacman");
-  expect(workflow).toContain("command -v dpkg-deb");
-  expect(workflow).toContain("command -v makepkg");
-  expect(workflow).toContain("command -v rpmbuild");
-  expect(workflow).toContain("command -v bsdtar");
-  expect(workflow).toContain("--pattern 'butler-app-*-linux-x64.deb'");
-  expect(workflow).toContain("--pattern app-release-manifest.json");
-  expect(workflow).toContain("missing linux-x64 App sha256");
-  expect(workflow).toContain("Linux App deb checksum mismatch");
-  expect(workflow).toContain("Expected one Linux App deb");
-  expect(workflow).toContain("dpkg-deb -x");
-  expect(workflow).toContain("opt/butler/Butler-linux-x64/resources/bundled-agent");
-  expect(workflow).toContain("--build");
-  expect(downloadIndex).toBeGreaterThan(installerJobIndex);
-  expect(buildIndex).toBeGreaterThan(downloadIndex);
-  expect(publishIndex).toBeGreaterThan(buildIndex);
-  expect(workflow).toContain("dist/release/app/butler-app-service_*_amd64.deb");
-  expect(workflow).toContain("dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst");
-  expect(workflow).toContain("dist/release/app/butler-app-service-*-1.x86_64.rpm");
-  expect(workflow).toContain("Expected 3 Linux app service installer files");
+  expect(appJobIndex).toBeGreaterThan(-1);
+  expect(installerJobIndex).toBe(-1);
+  expect(downloadIndex).toBeGreaterThan(-1);
+  expect(buildIndex).toBe(-1);
+  expect(publishIndex).toBe(-1);
+  expect(workflow).not.toContain("butler-app-service_*");
 });
 
 test("version tag release workflow publishes Arch app artifact", () => {
@@ -220,11 +198,12 @@ test("version tag release workflow publishes one consolidated checksum asset", (
   expect(workflow).toContain("Publish consolidated release checksums");
   expect(workflow).toContain("agent-artifact");
   expect(workflow).toContain("app-artifact");
-  expect(workflow).toContain("app-linux-service-installers");
+  expect(workflow).not.toContain("app-linux-service-installers");
+  expect(workflow).toContain("Expected 10 checksummed release files");
   expect(workflow).toContain("app-arch-artifact");
   expect(workflow).toContain("GH_REPO: ${{ github.repository }}");
   expect(workflow).toContain('checksum_file="dist/release/checksums/butler-${version}-SHA256SUMS"');
-  expect(workflow).toContain("Expected 12 checksummed release files");
+  expect(workflow).toContain("Expected 10 checksummed release files");
   expect(workflow).toContain("find . -type f ! -name '*SHA256SUMS'");
   expect(uploadIndex).toBeGreaterThan(checksumsJobIndex);
 });

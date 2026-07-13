@@ -11,23 +11,30 @@ export const LEGACY_APP_SERVICE_LABELS = Object.freeze([
 
 export function inspectLegacyAppService({
   butlerData,
+  platform = process.platform,
   homeDir = homedir(),
   exists = existsSync,
   readJson = defaultReadJson,
 } = {}) {
-  const plists = LEGACY_APP_SERVICE_LABELS
+  const plists = platform === "darwin" ? LEGACY_APP_SERVICE_LABELS
     .map((label) => join(homeDir, "Library", "LaunchAgents", `${label}.plist`))
-    .filter((path) => exists(path));
+    .filter((path) => exists(path)) : [];
+  const systemdUnits = platform === "linux"
+    ? [join(homeDir, ".config", "systemd", "user", "butler.service")]
+      .filter((path) => exists(path))
+    : [];
   const pidFiles = [join(butlerData, "app", "runtime", "menu-bar-helper.pid")]
     .filter((path) => exists(path));
   const serviceStates = readAppOwnedServiceStates(butlerData, { exists, readJson });
   return {
-    required: plists.length > 0 || pidFiles.length > 0 || serviceStates.length > 0,
+    required: plists.length > 0 || systemdUnits.length > 0 || pidFiles.length > 0 || serviceStates.length > 0,
     plists,
+    systemdUnits,
     pidFiles,
     serviceStates,
     detectedArtifacts: [
       ...plists.map(() => "launch_agent"),
+      ...systemdUnits.map(() => "systemd_user_service"),
       ...pidFiles.map(() => "helper_pid"),
       ...serviceStates.map(() => "app_service_state"),
     ],
@@ -36,9 +43,10 @@ export function inspectLegacyAppService({
 
 export async function migrateLegacyAppService({
   butlerData,
+  platform = process.platform,
   homeDir = homedir(),
   uid = process.getuid?.() ?? 0,
-  inspect = () => inspectLegacyAppService({ butlerData, homeDir }),
+  inspect = () => inspectLegacyAppService({ butlerData, homeDir, platform }),
   activeWorkSnapshot = async () => ({ classification: "active_work_unknown" }),
   confirm = async () => false,
   runCommand = defaultRunCommand,
@@ -70,9 +78,17 @@ export async function migrateLegacyAppService({
     }, now);
   }
   const cleanupSteps = [];
-  for (const label of LEGACY_APP_SERVICE_LABELS) {
-    await runCommand("/bin/launchctl", ["bootout", `gui/${uid}/${label}`]);
-    cleanupSteps.push({ action: "bootout", label, complete: true });
+  if (platform === "darwin") {
+    for (const label of LEGACY_APP_SERVICE_LABELS) {
+      await runCommand("/bin/launchctl", ["bootout", `gui/${uid}/${label}`]);
+      cleanupSteps.push({ action: "bootout", label, complete: true });
+    }
+  } else if (
+    platform === "linux" &&
+    ((state.systemdUnits?.length ?? 0) > 0 || state.serviceStates.length > 0)
+  ) {
+    await runCommand("systemctl", ["--user", "disable", "--now", "butler.service"]);
+    cleanupSteps.push({ action: "disable_systemd_user_service", complete: true });
   }
   for (const service of state.serviceStates) {
     if (isProcessRunning(service.processGroupId)) {
@@ -89,7 +105,11 @@ export async function migrateLegacyAppService({
     remove(service.path);
     cleanupSteps.push({ action: "stop_process_group", complete: true });
   }
-  for (const path of [...state.plists, ...state.pidFiles]) remove(path);
+  for (const path of [
+    ...state.plists,
+    ...(state.systemdUnits ?? []),
+    ...state.pidFiles,
+  ]) remove(path);
   cleanupSteps.push({ action: "remove_user_registration", complete: true });
   return writeAppForegroundMigration(butlerData, {
     status: "complete",
