@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -52,6 +52,137 @@ test("failed tool results remain unchanged structured observations", () => {
     toolName: "lookup",
     toolCallId: "call-failed",
   })).toEqual(payload);
+});
+
+test("rehydrated exact evidence is a terminal observation and creates no wrapper artifact", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-terminal-rehydration-"));
+  try {
+    const payload = {
+      ok: true,
+      output: {
+        schema_version: "butler.tool-evidence-rehydration.v1",
+        terminal_evidence_observation: true,
+        ok: true,
+        artifact: {
+          id: "evidence-original",
+          path: "/private/butler/artifacts/evidence-original.json",
+          digest: "original-digest",
+          tool_name: "read_file",
+        },
+        text: {
+          text: "line 120: exact source evidence",
+          start_line: 120,
+          returned_lines: 1,
+          total_lines: 300,
+          truncated_by_lines: true,
+          truncated_by_tokens: false,
+        },
+      },
+    };
+    const result = toolResultPayloadForProvider({
+      payload,
+      toolName: "read_tool_evidence_artifact",
+      toolCallId: "call-rehydrate",
+      evidenceRetention: { butlerData: root, turnId: "turn-rehydrate" },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        schema_version: "butler.tool-evidence-rehydration.v1",
+        terminal_evidence_observation: true,
+        artifact: { id: "evidence-original" },
+        text: { text: "line 120: exact source evidence" },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("butler.completed-tool-evidence.v1");
+    expect(JSON.stringify(result)).not.toContain("/private/butler");
+    const repeated = toolResultPayloadForProvider({
+      payload,
+      toolName: "read_tool_evidence_artifact",
+      toolCallId: "call-rehydrate-repeat",
+      evidenceRetention: { butlerData: root, turnId: "turn-rehydrate" },
+    });
+    expect(repeated).toEqual(result);
+    const artifactRoot = join(root, "artifacts", "tool-evidence");
+    expect(existsSync(artifactRoot) ? readdirSync(artifactRoot, { recursive: true }).length : 0).toBe(0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("run_work_block packetizes ordered child results without retaining its orchestration envelope", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-work-block-evidence-"));
+  try {
+    const result = toolResultPayloadForProvider({
+      payload: {
+        ok: true,
+        output: {
+          butler_work_block_result: true,
+          frontier: { stage: "workspace_execution" },
+          results: [
+            {
+              name: "read_file",
+              args: { path: "src/voice.ts" },
+              ok: true,
+              output: { path: "src/voice.ts", content: "exact source" },
+            },
+            {
+              name: "read_tool_evidence_artifact",
+              args: { artifact_id: "evidence-original" },
+              ok: true,
+              output: {
+                schema_version: "butler.tool-evidence-rehydration.v1",
+                terminal_evidence_observation: true,
+                ok: true,
+                artifact: {
+                  id: "evidence-original",
+                  path: "/private/butler/artifacts/evidence-original.json",
+                  digest: "digest-original",
+                },
+                text: { text: "exact prior slice", start_line: 1, returned_lines: 1, total_lines: 1 },
+              },
+            },
+          ],
+        },
+      },
+      toolName: "run_work_block",
+      toolCallId: "call-work-block",
+      evidenceRetention: { butlerData: root, turnId: "turn-work-block" },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        butler_work_block_result: true,
+        results: [
+          {
+            name: "read_file",
+            ok: true,
+            output: { schema: "butler.completed-tool-evidence.v1" },
+          },
+          {
+            name: "read_tool_evidence_artifact",
+            ok: true,
+            output: {
+              schema_version: "butler.tool-evidence-rehydration.v1",
+              terminal_evidence_observation: true,
+            },
+          },
+        ],
+      },
+    });
+    const files = readdirSync(join(root, "artifacts", "tool-evidence"), { recursive: true })
+      .filter((entry) => String(entry).endsWith(".json"));
+    expect(files).toHaveLength(1);
+    const artifact = JSON.parse(readFileSync(join(root, "artifacts", "tool-evidence", String(files[0])), "utf8"));
+    expect(artifact.tool_name).toBe("read_file");
+    expect(JSON.stringify(artifact)).not.toContain("butler_work_block_result");
+    expect(JSON.stringify(artifact)).not.toContain("exact prior slice");
+    expect(JSON.stringify(result)).not.toContain("/private/butler");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("request compilation inlines exact evidence only when the finalized body fits", () => {

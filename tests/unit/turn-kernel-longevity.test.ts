@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { createEvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/parser.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import {
-  createTurnContextAtomId,
   isTurnSchedulerContinuationYieldError,
   readTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
@@ -42,7 +41,7 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("logical-turn spend cannot reset across restart and preserves recoverable contract progress", async () => {
+test("logical-turn spend cannot reset through automatic scheduler continuation", async () => {
   const turnId = "turn-seventy-rounds";
   const sessionId = "butler/seventy-rounds";
   const events: RuntimeTurnEventInput[] = [];
@@ -203,71 +202,101 @@ test("logical-turn spend cannot reset across restart and preserves recoverable c
     });
   };
 
-  let firstYield: unknown;
+  let terminalFailure: unknown;
   try {
     await runProcess();
   } catch (error) {
-    firstYield = error;
+    terminalFailure = error;
   }
-  expect(isTurnSchedulerContinuationYieldError(firstYield)).toBe(true);
-  const firstAtom = readTurnContextAtom({ butlerData: data, sessionId, turnId });
-  expect(firstAtom).toMatchObject({
-    generation: 1,
-    nextSemanticBlockSequence: 24,
-    budgetSnapshot: {
-      modelRequestsUsed: 28,
-      partitions: {
-        execution: { modelRequestsUsed: 24 },
-        finalization: { modelRequestsUsed: 4 },
-      },
-    },
-  });
-  expect(firstAtom?.roundJournal).toHaveLength(24);
-
-  let secondYield: unknown;
-  try {
-    await runProcess({
-      contextAtomId: createTurnContextAtomId(sessionId, turnId),
-      checkpointId: firstAtom!.checkpointId,
-      schedulerItemId: "queue-longevity-1",
-    });
-  } catch (error) {
-    secondYield = error;
-  }
-  expect(isTurnSchedulerContinuationYieldError(secondYield)).toBe(true);
-  const secondAtom = readTurnContextAtom({ butlerData: data, sessionId, turnId });
-  expect(secondAtom).toMatchObject({
-    generation: 2,
-    contractId: firstAtom!.contractId,
-    workStreamId: firstAtom!.workStreamId,
-    nextSemanticBlockSequence: 24,
-    budgetSnapshot: { modelRequestsUsed: 28 },
-  });
-  expect(secondAtom?.roundJournal).toHaveLength(24);
-  expect(processStarts).toBe(2);
+  expect(isTurnSchedulerContinuationYieldError(terminalFailure)).toBe(false);
+  expect((terminalFailure as { code?: unknown })?.code).toBe("prompt_usage_model_call_budget_exhausted");
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
+  expect(processStarts).toBe(1);
   expect(typedDecisionCalls).toBe(1);
   expect(completedRounds).toBe(24);
   expect(windowBudgetBeforeRequest.slice(0, 24)).toEqual(
     Array.from({ length: 24 }, (_, index) => index),
   );
-  expect(windowBudgetBeforeRequest.slice(24)).toHaveLength(5);
+  expect(windowBudgetBeforeRequest.slice(24)).toHaveLength(4);
   expect(windowBudgetBeforeRequest.slice(24).every((value) => value === 24)).toBe(true);
-  expect(prompts).toHaveLength(6);
-  expect(prompts.some((prompt) => prompt.includes("## Resumed Typed Turn Contract"))).toBe(true);
+  expect(prompts.length).toBeGreaterThanOrEqual(1);
   expect(events.filter((event) =>
     event.kind === "assistant.decision" && event.payload?.role === "opening",
   )).toHaveLength(1);
-  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(1);
+  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(0);
   const startedSequences = events
     .filter((event) => event.kind === "work.block.started")
     .map((event) => semanticBlockSequence(event.payload?.semanticBlockId));
   expect(startedSequences).toEqual(Array.from({ length: 24 }, (_, index) => index));
   expect(events.filter((event) => event.kind === "work.block.completed")).toHaveLength(24);
-  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).not.toBeNull();
-  expect(secondAtom).toMatchObject({
-    contractId: firstAtom!.contractId,
-    sourceErrorCode: "prompt_usage_model_call_budget_exhausted",
+});
+
+test("finalization exhaustion does not schedule the same logical turn without external resume", async () => {
+  const turnId = "turn-finalization-terminal";
+  const sessionId = "butler/finalization-terminal";
+  const events: RuntimeTurnEventInput[] = [];
+  let finalizationAttempts = 0;
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      if (input.usageAttribution?.phase === "budget_exhaustion_finalization") {
+        finalizationAttempts += 1;
+        throw promptUsageModelCallBudgetExhaustedError();
+      }
+      return JSON.stringify({
+        schema_version: "butler.turn-contract-decision.v1",
+        decision_id: decisionIdFromFormat(input.responseFormat),
+        action: "start_work",
+        target_workstream_id: null,
+        target_project_id: "butler",
+        blocker_id: null,
+        deliverables: ["code_change"],
+        answer_text: null,
+        public_title: "예산 종결 검증",
+        public_summary: "실행 예산과 최종화 예산이 모두 소진되는 경로를 검증합니다.",
+        public_rationale: "자동 재예약 없이 외부 재개를 기다려야 합니다.",
+        immediate_next_step: "도구 실행을 시도합니다.",
+      });
+    },
+    runFunctionToolPromptText: async () => {
+      throw promptUsageModelCallBudgetExhaustedError();
+    },
+    executeButlerTool: async () => ({ ok: true }),
   });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "Run the bounded terminal budget test.",
+    metadata: { projectId: "butler" },
+  });
+
+  let failure: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider,
+      model: "openai/gpt-5.5",
+      input: { text: "예산을 초과하면 자동 반복 없이 멈춰줘." },
+      metadata: {
+        turnId,
+        runtimePolicy: { completionReview: "disabled" },
+      },
+      emitTurnEvent: (event) => {
+        events.push(event);
+      },
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  expect(isTurnSchedulerContinuationYieldError(failure)).toBe(false);
+  expect((failure as { code?: unknown })?.code).toBe("prompt_usage_model_call_budget_exhausted");
+  expect(finalizationAttempts).toBe(1);
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
+  expect(events.filter((event) => event.kind === "turn.continuation_scheduled")).toHaveLength(0);
 });
 
 function decisionIdFromFormat(format: { schema: Record<string, unknown> } | undefined): string {
