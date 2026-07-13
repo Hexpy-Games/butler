@@ -202,6 +202,25 @@ export async function runNativeToolTurn({
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
           throw error;
         }
+        let continuationError = error;
+        if (isPromptUsageModelCallBudgetError(error)) {
+          try {
+            const continuationEvidence = buildTurnContinuationEvidence({
+              audit,
+              publicDecisions: publicDecisionContext,
+            });
+            return await runTextPrompt(
+              budgetFinalizationPrompt({
+                userText: context.userText,
+                continuationEvidence: continuationEvidence.modelVisibleContent,
+              }),
+              "budget_exhaustion_finalization",
+              "finalization",
+            );
+          } catch (finalizationError) {
+            continuationError = finalizationError;
+          }
+        }
         const checkpoint = await persistSchedulerContinuation({
           input,
           deps,
@@ -212,7 +231,7 @@ export async function runNativeToolTurn({
           activeTurnContract: turnContractContext.current,
           expectedGeneration: context.continuationAtom?.generation,
           nextSemanticBlockSequenceFloor: nextSemanticBlockSequence(),
-          error,
+          error: continuationError,
           obligationFrontier: obligationToolSurfaceState(),
         });
         throw new TurnSchedulerContinuationYieldError(
@@ -521,6 +540,20 @@ export async function runNativeToolTurn({
     });
     throw error;
   }
+}
+
+function budgetFinalizationPrompt(input: {
+  userText: string;
+  continuationEvidence: string;
+}): string {
+  return [
+    "## Protected Budget Finalization",
+    "The execution budget is exhausted. Do not request tools or claim unverified completion.",
+    "Produce the most useful bounded final response supported by the durable evidence below.",
+    "State incomplete work explicitly and preserve a clear continuation point.",
+    `Original request:\n${input.userText}`,
+    `Durable continuation evidence:\n${input.continuationEvidence}`,
+  ].join("\n\n");
 }
 
 function isRetryableProviderFailure(error: unknown): boolean {

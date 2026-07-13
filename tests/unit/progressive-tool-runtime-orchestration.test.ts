@@ -111,6 +111,13 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
       grantedToolRounds = input.maxToolRounds;
       budgetAtPromptStart = input.usageAttribution?.getBudgetState?.();
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: "progressive-tool-runtime-0",
+      });
       budgetAfterModelRequest = input.usageAttribution?.getBudgetState?.();
       await authorPublicDecisionForTool(
         input,
@@ -212,9 +219,9 @@ test("native runtime executes tool_search tool_describe and tool_call in one mod
   expect(initialToolSchemaJson).not.toContain("\"web_search\"");
   expect(initialToolSchemaJson).not.toContain("Fixture source");
   expect(grantedToolRounds).toBe(60);
-  expect(budgetAtPromptStart).toMatchObject({ status: "ok", requestCount: 0, maxRequests: 32 });
-  expect(budgetAfterModelRequest).toMatchObject({ status: "ok", requestCount: 1, maxRequests: 32 });
-  expect(budgetAfterBridgeCalls).toMatchObject({ status: "ok", requestCount: 1, maxRequests: 32 });
+  expect(budgetAtPromptStart).toMatchObject({ status: "ok", requestCount: 0, maxRequests: 24 });
+  expect(budgetAfterModelRequest).toMatchObject({ status: "ok", requestCount: 1, maxRequests: 24 });
+  expect(budgetAfterBridgeCalls).toMatchObject({ status: "ok", requestCount: 1, maxRequests: 24 });
   expect(observedToolResults.search).toEqual(expect.objectContaining({
     ok: true,
     results: expect.arrayContaining([expect.objectContaining({ id: "native:web_search" })]),

@@ -37,6 +37,12 @@ test("every provider family preserves decisions results and usage across native 
     const operations: string[] = [];
     const bodies: Array<Record<string, unknown>> = [];
     const requestRounds: number[] = [];
+    const admittedRequests: Array<{
+      roundIndex: number;
+      admittedPromptTokens: number;
+      requestedOutputTokens: number;
+      requestHash: string;
+    }> = [];
     const usageReports: Array<PromptUsageReport & { outputTokens: number; roundIndex: number }> = [];
     let responseRound = 0;
     globalThis.fetch = (async (_url, init) => {
@@ -65,7 +71,9 @@ test("every provider family preserves decisions results and usage across native 
       }],
       usageAttribution: {
         turnId: `turn-conformance-${harness.family}`,
+        requestedOutputTokens: 1024,
         beforeModelRequest: ({ roundIndex }) => requestRounds.push(roundIndex),
+        beforeAdmittedModelRequest: (request) => admittedRequests.push(request),
         afterModelResponseUsage: (usage) => usageReports.push(usage),
       },
       onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
@@ -83,6 +91,12 @@ test("every provider family preserves decisions results and usage across native 
     expect(result, harness.family).toBe("Provider loop complete.");
     expect(requestRounds, harness.family).toEqual([0, 1, 2]);
     expect(usageReports.map((usage) => usage.roundIndex), harness.family).toEqual([0, 1, 2]);
+    expect(admittedRequests.map((request) => request.roundIndex), harness.family).toEqual([0, 1, 2]);
+    expect(admittedRequests.every((request) =>
+      request.admittedPromptTokens > 0 &&
+      request.requestedOutputTokens === 1024 &&
+      /^[a-f0-9]{64}$/u.test(request.requestHash),
+    ), harness.family).toBe(true);
     expect(usageReports.every((usage) =>
       (usage.promptTokens ?? 0) > 0 && usage.cachedTokens <= (usage.promptTokens ?? 0),
     ), harness.family).toBe(true);
@@ -95,8 +109,10 @@ test("every provider family preserves decisions results and usage across native 
       "tool:2",
       "model:3",
     ]);
-    expect(JSON.stringify(bodies[1]), harness.family).toContain("evidence-step-1");
-    expect(JSON.stringify(bodies[2]), harness.family).toContain("evidence-step-2");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("butler.completed-tool-evidence.v1");
+    expect(JSON.stringify(bodies[2]), harness.family).toContain("butler.completed-tool-evidence.v1");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("butler.evidence-packet.v1");
+    expect(JSON.stringify(bodies[2]), harness.family).toContain("butler.evidence-packet.v1");
   }
 });
 

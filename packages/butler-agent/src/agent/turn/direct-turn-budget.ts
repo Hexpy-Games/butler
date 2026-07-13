@@ -222,6 +222,14 @@ export function directTurnModelRequestsRemaining(
   );
 }
 
+export function directTurnPartitionModelRequestsRemaining(
+  budget: DirectTurnBudget,
+  partition: DirectTurnBudgetPartition,
+): number {
+  const state = budget.partitions[partition];
+  return Math.max(0, state.maxModelCalls - state.modelRequestsUsed);
+}
+
 export function addDirectTurnUsage(input: {
   budget: DirectTurnBudget;
   promptTokens: number | null;

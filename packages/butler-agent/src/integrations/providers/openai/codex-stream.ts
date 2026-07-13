@@ -272,19 +272,12 @@ export async function createCodexResponse(
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
   const model = typeof body.model === "string" ? body.model : undefined;
-  const requestBody = codexRequestBody({
-    ...(budgetContext?.attribution?.requestedOutputTokens && body.max_output_tokens === undefined
-      ? { max_output_tokens: budgetContext.attribution.requestedOutputTokens }
-      : {}),
-    ...body,
-  });
+  const requestBody = codexRequestBody(body);
   const admittedRequest = admitSerializedProviderRequest({
     providerId: "openai",
     modelRef: typeof requestBody.model === "string" ? requestBody.model : model ?? "",
     body: requestBody,
-    requestedOutputTokens: typeof requestBody.max_output_tokens === "number"
-      ? requestBody.max_output_tokens
-      : undefined,
+    requestedOutputTokens: budgetContext?.attribution?.requestedOutputTokens,
     usageAttribution: budgetContext?.attribution,
     roundIndex: budgetContext?.roundIndex,
   });

@@ -1870,6 +1870,9 @@ test("scheduler resume restores one typed contract and retires its satisfied mut
     butlerHome: process.cwd(),
     disableAutomaticRecall: true,
     runPromptText: async (input) => {
+      if (input.usageAttribution?.phase === "budget_exhaustion_finalization") {
+        throw new Error("fixture finalization unavailable");
+      }
       typedDecisionCalls += 1;
       return JSON.stringify({
         schema_version: "butler.turn-contract-decision.v1",
@@ -1890,6 +1893,13 @@ test("scheduler resume restores one typed contract and retires its satisfied mut
       toolPromptCalls += 1;
       budgetStates.push(input.usageAttribution?.getBudgetState?.() ?? {});
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: `typed-checkpoint-${toolPromptCalls}`,
+      });
       if (toolPromptCalls === 1) {
         await input.executeTool({
           name: "update_todo_list",
@@ -2024,8 +2034,8 @@ test("scheduler resume restores one typed contract and retires its satisfied mut
   expect(typedDecisionCalls).toBe(1);
   expect(toolPromptCalls).toBe(2);
   expect(budgetStates).toEqual([
-    expect.objectContaining({ requestCount: 0, cumulativeRequestCount: 0 }),
-    expect.objectContaining({ requestCount: 0, cumulativeRequestCount: 1 }),
+    expect.objectContaining({ requestCount: 0, maxRequests: 24 }),
+    expect.objectContaining({ requestCount: 1, maxRequests: 24 }),
   ]);
   expect(events.filter((event) => event.kind === "assistant.decision")).toHaveLength(1);
   expect(events.filter((event) => event.kind === "turn.first_progress")).toHaveLength(1);

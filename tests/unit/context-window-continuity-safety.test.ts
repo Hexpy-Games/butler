@@ -6,6 +6,7 @@ import {
   beforeDirectTurnModelRequest,
   createDirectTurnBudget,
   directTurnBudgetState,
+  directTurnPartitionBudgetState,
 } from "../../packages/butler-agent/src/agent/turn/direct-turn-budget.ts";
 import { buildThinFirstResponsePrompt } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/thin-first-response.ts";
 import { compilePromptMaterialContextPlan } from "../../packages/butler-agent/src/agent/context/conversation-context.ts";
@@ -160,6 +161,39 @@ test("CWCS baseline: token overspend exhausts before another model request", () 
 
   expect(directTurnBudgetState(budget).status).toBe("exhausted");
   expect(() => beforeDirectTurnModelRequest(budget)).toThrow("budget exhausted");
+});
+
+test("CWCS incident replay: 27 execution rounds stop before request 25 and preserve finalization", () => {
+  const budget = createDirectTurnBudget("turn-cwcs-27-rounds");
+  const attemptedRounds = 27;
+  let admittedRounds = 0;
+
+  for (let round = 0; round < attemptedRounds; round += 1) {
+    try {
+      beforeDirectTurnModelRequest(budget, {
+        partition: "execution",
+        admittedPromptTokens: 100,
+        requestedOutputTokens: 100,
+      });
+      admittedRounds += 1;
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "prompt_usage_model_call_budget_exhausted",
+        partition: "execution",
+      });
+      break;
+    }
+  }
+
+  expect(admittedRounds).toBe(24);
+  expect(directTurnPartitionBudgetState(budget, "execution").status).toBe("exhausted");
+  expect(directTurnPartitionBudgetState(budget, "finalization").requestCount).toBe(0);
+  beforeDirectTurnModelRequest(budget, {
+    partition: "finalization",
+    admittedPromptTokens: 100,
+    requestedOutputTokens: 100,
+  });
+  expect(directTurnPartitionBudgetState(budget, "finalization").requestCount).toBe(1);
 });
 
 test("CWCS boundary: provider-neutral request admission has no compaction bypass or size thresholds", () => {

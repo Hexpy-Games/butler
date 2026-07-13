@@ -10409,8 +10409,15 @@ test("native runtime delivers recoverable direct work progress when model reques
       if (promptCalls !== 1) {
         throw new Error("finalization repair must not start without model request reserve");
       }
-      for (let index = 0; index < 29; index += 1) {
+      for (let index = 0; index < 22; index += 1) {
         input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+        input.usageAttribution?.beforeAdmittedModelRequest?.({
+          roundIndex: index,
+          phase: input.usageAttribution.phase,
+          admittedPromptTokens: 100,
+          requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+          requestHash: `direct-work-reserve-${index}`,
+        });
       }
       await input.executeTool({
         name: "update_todo_list",
@@ -10486,7 +10493,7 @@ test("native runtime preserves validation limitation when direct work is deliver
     runFunctionToolPromptText: async (input) => {
       promptCalls += 1;
       if (promptCalls !== 1) {
-        throw new Error("direct work finalization should not consume another model request in this test");
+        return "검증 실패가 남아 있어 추가 진행 없이 recoverable 상태를 유지합니다.";
       }
       await input.executeTool({
         name: "update_todo_list",
@@ -10528,9 +10535,6 @@ test("native runtime preserves validation limitation when direct work is deliver
           validation_suite: "direct-validation",
         }),
       });
-      for (let index = 0; index < 29; index += 1) {
-        input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
-      }
       return "검증은 실패했고 직접 작업이 아직 남아 있습니다.";
     },
   });
@@ -10549,7 +10553,7 @@ test("native runtime preserves validation limitation when direct work is deliver
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
-  expect(promptCalls).toBe(1);
+  expect(promptCalls).toBe(2);
   expect(result.delivery?.delivery_state).toBe("delivered_with_continuation");
   expect(result.delivery?.limitation_codes).toEqual(expect.arrayContaining([
     "direct_work_continuation",
@@ -11047,7 +11051,21 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
           rawArguments: JSON.stringify({ title: "Sandy style guard validation" }),
         });
         input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+        input.usageAttribution?.beforeAdmittedModelRequest?.({
+          roundIndex: 0,
+          phase: input.usageAttribution.phase,
+          admittedPromptTokens: 100,
+          requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+          requestHash: "prompt-budget-0",
+        });
         input.usageAttribution?.beforeModelRequest?.({ roundIndex: 1 });
+        input.usageAttribution?.beforeAdmittedModelRequest?.({
+          roundIndex: 1,
+          phase: input.usageAttribution.phase,
+          admittedPromptTokens: 100,
+          requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+          requestHash: "prompt-budget-1",
+        });
         const error = new Error("Prompt usage model-call budget exhausted before provider request");
         error.name = "PromptUsageModelCallBudgetExhaustedError";
         Object.assign(error, { code: "prompt_usage_model_call_budget_exhausted" });
@@ -11165,9 +11183,8 @@ test("native runtime resumes prompt-budget interrupted WorkStreams from durable 
 
   expect(callCount).toBe(2);
   expect(continuationBudgetAtStart).toMatchObject({
-    requestCount: 0,
-    cumulativeRequestCount: 2,
-    maxRequests: 32,
+    requestCount: 2,
+    maxRequests: 24,
   });
   expect(continuationResult.text).toContain("보존된 W3 작업 상태부터 이어서 검증했습니다");
 });
@@ -11274,9 +11291,11 @@ test("focused WorkStream resume hydrates logical-turn budget from checkpoint wit
 
   expect(result.text).toContain("완료했습니다");
   expect(budgetAtStart).toMatchObject({
-    requestCount: 0,
-    cumulativeRequestCount: 5,
-    maxRequests: 32,
+    requestCount: 5,
+    promptTokens: 100,
+    outputTokens: 40,
+    totalTokens: 140,
+    maxRequests: 24,
   });
 });
 
@@ -11346,7 +11365,7 @@ test("ordinary user turn with unfinished WorkStream lets the first model decide 
   expect(capturedPrompt).not.toContain("Continue this selected WorkStream before broad validation");
 });
 
-test("focused WorkStream resume yields before consuming the global model request cap", async () => {
+test("focused WorkStream phase exhaustion attempts protected finalization then yields durably", async () => {
   const sessionId = "butler/main/focused-resume-phase-budget";
   const todoView = new TodoListStore(tempDir).update({
     listId: "focused-phase-budget",
@@ -11389,6 +11408,13 @@ test("focused WorkStream resume yields before consuming the global model request
       capturedMaxToolRounds = input.maxToolRounds ?? 0;
       for (let index = 0; index < 7; index += 1) {
         input.usageAttribution?.beforeModelRequest?.({ roundIndex: index });
+        input.usageAttribution?.beforeAdmittedModelRequest?.({
+          roundIndex: index,
+          phase: input.usageAttribution.phase,
+          admittedPromptTokens: 100,
+          requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+          requestHash: `focused-phase-${index}`,
+        });
       }
       return "phase budget should stop before this text is delivered.";
     },

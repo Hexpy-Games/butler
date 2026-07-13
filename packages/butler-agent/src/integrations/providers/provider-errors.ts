@@ -118,7 +118,8 @@ export function providerHttpError(input: {
     statusCode: status,
     endpoint: input.endpoint,
     model: input.model,
-    retryable: contextLimitExceeded || status === 429 || status >= 500,
+    retryable: code !== "admission_invariant_violation" &&
+      (contextLimitExceeded || status === 429 || status >= 500),
     cause: detail,
     requestGeneration: input.admission?.plan.generation,
     measuredInputTokens: input.admission?.plan.compiled_input_tokens,

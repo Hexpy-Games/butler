@@ -77,6 +77,56 @@ test("serialized admission exposes only measured spend and request identity to t
   expect(JSON.stringify(observations)).not.toContain("private prompt");
 });
 
+test("Codex subscription transport reserves output spend without sending an unsupported field", async () => {
+  const observations: Array<Record<string, unknown>> = [];
+  let requestBody: Record<string, unknown> = {};
+  globalThis.fetch = (async (
+    _input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    requestBody = JSON.parse(String(init?.body ?? "{}"));
+    return new Response([
+      'data: {"type":"response.output_item.done","item":{"type":"message","content":[{"type":"output_text","text":"ok"}]}}',
+      "",
+      'data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2,"input_tokens_details":{"cached_tokens":0}}}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const authorization = `Bearer ${fakeJwt({
+    "https://api.openai.com/auth": { chatgpt_account_id: "account" },
+  })}`;
+  await expect(createCodexResponse(
+    { model: "gpt-5.5", input: "hello" },
+    authorization,
+    undefined,
+    undefined,
+    {
+      roundIndex: 2,
+      attribution: {
+        phase: "finalization",
+        requestedOutputTokens: 8192,
+        beforeAdmittedModelRequest: (input) => observations.push(input),
+      },
+    },
+  )).resolves.toMatchObject({
+    output: [expect.objectContaining({
+      content: [expect.objectContaining({ text: "ok" })],
+    })],
+  });
+
+  expect(requestBody.max_output_tokens).toBeUndefined();
+  expect(observations).toEqual([
+    expect.objectContaining({
+      roundIndex: 2,
+      phase: "finalization",
+      requestedOutputTokens: 8192,
+    }),
+  ]);
+});
+
 test("unknown model capacity and excessive output reserve fail closed", () => {
   expect(() => admitSerializedProviderRequest({
     providerId: "openai",
