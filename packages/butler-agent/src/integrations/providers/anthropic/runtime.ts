@@ -10,15 +10,18 @@ import {
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
+import { serializeToolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
 
 
 export async function createAnthropicMessage(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
-    async () => await createAnthropicMessageOnce(config, body, signal),
+    async () => await createAnthropicMessageOnce(config, body, signal, budgetContext),
     signal,
   );
 }
@@ -28,8 +31,24 @@ async function createAnthropicMessageOnce(
   config: HostedRuntimeConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(anthropicMessagesUrl(config));
+  const requestBody = {
+    model: config.modelId,
+    max_tokens: budgetContext?.attribution?.requestedOutputTokens ?? 4096,
+    ...body,
+  };
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: config.providerId,
+    modelRef: config.modelRef,
+    body: requestBody,
+    requestedOutputTokens: typeof requestBody.max_tokens === "number"
+      ? requestBody.max_tokens
+      : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
+  });
   let response: Response;
   try {
     response = await fetch(anthropicMessagesUrl(config), {
@@ -39,11 +58,7 @@ async function createAnthropicMessageOnce(
         "anthropic-version": process.env.BUTLER_ANTHROPIC_VERSION?.trim() || "2023-06-01",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: config.modelId,
-        max_tokens: 4096,
-        ...body,
-      }),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
@@ -68,6 +83,7 @@ async function createAnthropicMessageOnce(
       detail: parsed?.error?.message || raw || `status ${response.status}`,
       endpoint,
       model: config.modelId,
+      admission: admittedRequest,
     });
   }
   return parsed;
@@ -115,10 +131,10 @@ export async function runAnthropicPromptText(
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   const response = await requests.request({
     model: config.modelRef,
-    run: async () => await createAnthropicMessage(config, {
+    run: async (context) => await createAnthropicMessage(config, {
       ...(options.instructions?.trim() ? { system: options.instructions.trim() } : {}),
       messages: [{ role: "user", content: promptTextForHosted(options) }],
-    }, options.signal),
+    }, options.signal, context),
     usage: anthropicUsageSample,
   });
   const text = anthropicText(response);
@@ -153,12 +169,12 @@ export async function runAnthropicFunctionToolPromptText(
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
     const response = await requests.request({
       model: config.modelRef,
-      run: async () => await createAnthropicMessage(config, {
+      run: async (context) => await createAnthropicMessage(config, {
         system: localFunctionToolInstructions(options.instructions),
         messages,
         tools: anthropicTools(activeTools),
         ...(options.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
-      }, options.signal),
+      }, options.signal, context),
       usage: anthropicUsageSample,
     });
     const content = Array.isArray(response.content) ? response.content : [];
@@ -219,7 +235,15 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: JSON.stringify(payload),
+          content: serializeToolResultPayloadForProvider({
+            payload,
+            toolName: call.name,
+            toolCallId: call.id,
+            evidenceRetention: {
+              butlerData: options.butlerData,
+              turnId: options.usageAttribution?.turnId,
+            },
+          }),
         }],
       });
     }
@@ -235,7 +259,15 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: JSON.stringify({ ok: false, output: blockCapacityToolOutput(observation) }),
+          content: serializeToolResultPayloadForProvider({
+            payload: { ok: false, output: blockCapacityToolOutput(observation) },
+            toolName: call.name,
+            toolCallId: call.id,
+            evidenceRetention: {
+              butlerData: options.butlerData,
+              turnId: options.usageAttribution?.turnId,
+            },
+          }),
         }],
       });
     }
@@ -246,10 +278,10 @@ export async function runAnthropicFunctionToolPromptText(
   messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
   const response = await requests.request({
     model: config.modelRef,
-    run: async () => await createAnthropicMessage(config, {
+    run: async (context) => await createAnthropicMessage(config, {
       system: finalNoToolInstructions(options.instructions),
       messages,
-    }, options.signal),
+    }, options.signal, context),
     usage: anthropicUsageSample,
   });
   const text = anthropicText(response);

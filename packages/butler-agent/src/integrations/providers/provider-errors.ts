@@ -5,6 +5,7 @@ import {
   isToolCallRepairFailure,
   safeInternalRecoveryMessage,
 } from "../../runtime/internal-recovery-failure.ts";
+import type { ModelRequestAdmissionReceipt } from "./shared/request-context-admission.ts";
 
 export interface RuntimeFailureDiagnostic {
   code: string;
@@ -16,6 +17,10 @@ export interface RuntimeFailureDiagnostic {
   model?: string;
   retryable?: boolean;
   cause?: string;
+  requestGeneration?: number;
+  measuredInputTokens?: number;
+  registeredInputCapacity?: number;
+  requestHash?: string;
 }
 
 export class ModelProviderRequestError extends Error {
@@ -27,6 +32,10 @@ export class ModelProviderRequestError extends Error {
   readonly model?: string;
   readonly retryable: boolean;
   readonly causeMessage?: string;
+  readonly requestGeneration?: number;
+  readonly measuredInputTokens?: number;
+  readonly registeredInputCapacity?: number;
+  readonly requestHash?: string;
 
   constructor(input: RuntimeFailureDiagnostic) {
     super(input.message);
@@ -39,6 +48,10 @@ export class ModelProviderRequestError extends Error {
     this.model = input.model;
     this.retryable = input.retryable ?? false;
     this.causeMessage = safeErrorText(input.cause);
+    this.requestGeneration = input.requestGeneration;
+    this.measuredInputTokens = input.measuredInputTokens;
+    this.registeredInputCapacity = input.registeredInputCapacity;
+    this.requestHash = input.requestHash;
   }
 
   diagnostic(): RuntimeFailureDiagnostic {
@@ -52,8 +65,16 @@ export class ModelProviderRequestError extends Error {
       model: this.model,
       retryable: this.retryable,
       cause: this.causeMessage,
+      requestGeneration: this.requestGeneration,
+      measuredInputTokens: this.measuredInputTokens,
+      registeredInputCapacity: this.registeredInputCapacity,
+      requestHash: this.requestHash,
     };
   }
+}
+
+export function isAdmissionInvariantViolation(error: unknown): error is ModelProviderRequestError {
+  return error instanceof ModelProviderRequestError && error.code === "admission_invariant_violation";
 }
 
 export function providerHttpError(input: {
@@ -63,13 +84,16 @@ export function providerHttpError(input: {
   detail?: string;
   endpoint?: string;
   model?: string;
+  admission?: ModelRequestAdmissionReceipt;
 }): ModelProviderRequestError {
   const status = input.statusCode;
   const detail = safeErrorText(input.detail);
   const contextLimitExceeded = isContextLimitDetail(detail);
   const code =
     contextLimitExceeded
-      ? "provider_context_limit_exceeded"
+      ? input.admission
+        ? "admission_invariant_violation"
+        : "provider_context_limit_exceeded"
       : status === 401 || status === 403
       ? "provider_auth_error"
       : status === 429
@@ -77,7 +101,9 @@ export function providerHttpError(input: {
         : "provider_api_error";
   const label = providerLabel(input.provider);
   const message =
-    code === "provider_context_limit_exceeded"
+    code === "admission_invariant_violation"
+      ? `${label} rejected a request that passed local context admission. The turn must be rebuilt from canonical state.`
+      : code === "provider_context_limit_exceeded"
       ? `${label} context limit was exceeded. Compact or reduce the session context, then retry.`
       : code === "provider_auth_error"
       ? `${label} authentication failed with HTTP ${status}. Check the configured provider credentials.`
@@ -92,8 +118,13 @@ export function providerHttpError(input: {
     statusCode: status,
     endpoint: input.endpoint,
     model: input.model,
-    retryable: contextLimitExceeded || status === 429 || status >= 500,
+    retryable: code !== "admission_invariant_violation" &&
+      (contextLimitExceeded || status === 429 || status >= 500),
     cause: detail,
+    requestGeneration: input.admission?.plan.generation,
+    measuredInputTokens: input.admission?.plan.compiled_input_tokens,
+    registeredInputCapacity: input.admission?.plan.input_capacity_tokens,
+    requestHash: input.admission?.serialized_request_sha256,
   });
 }
 

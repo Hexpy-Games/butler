@@ -41,7 +41,6 @@ export async function runOpenAIFunctionToolPromptText(
     messages: [{ role: "user", content: promptForAgentLoop }],
     tools: agentLoopTools,
     maxIterations: maxRounds,
-    compactToolResultsBeforeNextModelCall: false,
     evidenceRetention: {
       butlerData: options.butlerData,
       turnId: options.usageAttribution?.turnId,
@@ -87,7 +86,10 @@ export async function runOpenAIFunctionToolPromptText(
               input: input.items,
               __butler_codex_stateless_input: codexStatelessInput,
             }),
-      }, options.signal, authOverride, options.onProviderStreamEvent);
+      }, options.signal, authOverride, options.onProviderStreamEvent, {
+        attribution: options.usageAttribution,
+        roundIndex: modelCallRound,
+      });
       afterAttributedModelResponse({
         attribution: options.usageAttribution,
         model,
@@ -172,7 +174,10 @@ export async function runOpenAIFunctionToolPromptText(
           previous_response_id: previousResponseId,
           input: pending.items,
           __butler_codex_stateless_input: codexStatelessInput,
-        }, options.signal, authOverride, options.onProviderStreamEvent);
+        }, options.signal, authOverride, options.onProviderStreamEvent, {
+          attribution: options.usageAttribution,
+          roundIndex: modelCallRound,
+        });
         afterAttributedModelResponse({
           attribution: options.usageAttribution,
           model,

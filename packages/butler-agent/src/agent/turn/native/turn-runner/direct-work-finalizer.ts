@@ -17,8 +17,7 @@ import type { NativeTurnRunnerDeps } from "./turn-runner-types.ts";
 import type { ToolAuditEntry } from "../output/tool-types.ts";
 import { WorkStreamStore, workStreamTerminal } from "../../../work/work-stream.ts";
 import {
-  directTurnModelRequestsRemaining,
-  hasDirectTurnModelRequestReserve,
+  directTurnPartitionModelRequestsRemaining,
   type createDirectTurnBudget,
 } from "../../direct-turn-budget.ts";
 
@@ -55,10 +54,8 @@ export async function closeDirectWork(input: {
       turnId: input.turnId,
     });
     if (!blocker) break;
-    if (!hasDirectTurnModelRequestReserve(
-      input.turnBudget,
-      DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE,
-    )) {
+    if (directTurnPartitionModelRequestsRemaining(input.turnBudget, "execution") <=
+      DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE) {
       break;
     }
     const repairModelRounds = directWorkFinalizationRepairRounds(input.turnBudget);
@@ -112,7 +109,7 @@ export async function closeDirectWork(input: {
 function directWorkFinalizationRepairRounds(
   turnBudget: ReturnType<typeof createDirectTurnBudget>,
 ): number {
-  const spendable = directTurnModelRequestsRemaining(turnBudget) -
+  const spendable = directTurnPartitionModelRequestsRemaining(turnBudget, "execution") -
     DIRECT_WORK_FINALIZATION_MODEL_REQUEST_RESERVE -
     DIRECT_WORK_FINALIZATION_SYNTHESIS_REQUEST_ALLOWANCE;
   return Math.max(0, Math.min(DIRECT_WORK_CONTINUATION_MAX_TOOL_ROUNDS, spendable));

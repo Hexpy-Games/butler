@@ -1,8 +1,12 @@
-import type { FunctionToolDefinition } from "../runtime-contracts.ts";
+import type { FunctionToolDefinition, PromptUsageAttribution } from "../runtime-contracts.ts";
 import type { LocalModelConfig } from "./models.ts";
 import { ModelProviderRequestError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { withModelApiRetry } from "../shared/runtime-support.ts";
 import { localChatUrl } from "./protocol.ts";
+import {
+  admitSerializedProviderRequest,
+  ModelRequestAdmissionError,
+} from "../shared/request-context-admission.ts";
 
 
 
@@ -10,9 +14,10 @@ export async function createLocalChatCompletion(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
-    async () => await createLocalChatCompletionOnce(config, body, signal),
+    async () => await createLocalChatCompletionOnce(config, body, signal, budgetContext),
     signal,
   );
 }
@@ -22,16 +27,31 @@ async function createLocalChatCompletionOnce(
   config: LocalModelConfig,
   body: Record<string, unknown>,
   signal?: AbortSignal,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<Record<string, any>> {
   const requestBody = {
     temperature: 0,
-    ...(Number.isFinite(config.max_output_tokens) && Number(config.max_output_tokens) > 0
-      ? { max_tokens: Math.trunc(Number(config.max_output_tokens)) }
-      : {}),
+    ...(budgetContext?.attribution?.requestedOutputTokens
+      ? { max_tokens: budgetContext.attribution.requestedOutputTokens }
+      : Number.isFinite(config.max_output_tokens) && Number(config.max_output_tokens) > 0
+        ? { max_tokens: Math.trunc(Number(config.max_output_tokens)) }
+        : {}),
     ...body,
   };
   const endpoint = safeEndpointLabel(localChatUrl(config));
   const model = typeof body.model === "string" ? body.model : config.model_id;
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "local",
+    modelRef: config.model_ref,
+    body: requestBody,
+    contextWindowTokens: config.context_window_tokens,
+    maxOutputTokens: config.max_output_tokens,
+    requestedOutputTokens: typeof requestBody.max_tokens === "number"
+      ? requestBody.max_tokens
+      : undefined,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
+  });
   let response: Response;
   try {
     response = await fetch(localChatUrl(config), {
@@ -39,7 +59,7 @@ async function createLocalChatCompletionOnce(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(requestBody),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
@@ -67,6 +87,7 @@ async function createLocalChatCompletionOnce(
       detail,
       endpoint,
       model,
+      admission: admittedRequest,
     });
   }
   return parsed;
@@ -82,7 +103,12 @@ export function firstLocalAssistantMessage(response: Record<string, any>): Recor
 
 
 export function isLocalContextOverflowError(error: unknown): boolean {
+  if (
+    error instanceof ModelRequestAdmissionError &&
+    error.code === "model_request_context_capacity_exceeded"
+  ) return true;
   if (!(error instanceof Error)) return false;
+  if (error instanceof ModelProviderRequestError && error.code === "admission_invariant_violation") return false;
   const causeMessage = error instanceof ModelProviderRequestError ? error.causeMessage : "";
   const text = [error.message, causeMessage].filter(Boolean).join("\n");
   return /(?:available context size|context (?:size|window|length)|maximum context|too many tokens|request \(\d+ tokens\) exceeds)/iu

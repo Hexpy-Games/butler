@@ -1,7 +1,5 @@
-import {
-  retainToolEvidence,
-  type ToolEvidenceRetentionContext,
-} from "../context/tool-evidence-retention.ts";
+import { serializeToolResultPayloadForProvider } from "../context/completed-tool-evidence.ts";
+import type { ToolEvidenceRetentionContext } from "../context/tool-evidence-retention.ts";
 import {
   blockCapacityObservation,
   blockCapacityToolOutput,
@@ -72,7 +70,6 @@ export interface AgentLoopInput {
   messages: AgentLoopMessage[];
   tools: AgentLoopToolDefinition[];
   maxIterations?: number;
-  compactToolResultsBeforeNextModelCall?: boolean;
   evidenceRetention?: ToolEvidenceRetentionContext;
   callModel: (input: AgentLoopModelInput) => Promise<AgentLoopModelResponse>;
   onAssistantTextBeforeTools?: (input: {
@@ -108,10 +105,6 @@ export interface AgentLoopOutput {
 }
 
 const DEFAULT_MAX_ITERATIONS = 8;
-const CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS = 6_000;
-const CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS = 30_000;
-const GENERIC_TOOL_RESULT_PREVIEW_TOKENS = 800;
-const TOOL_RESULT_COMPACT_MARKER = "[...compacted tool result for context budget...]";
 const GENERIC_AGENT_LOOP_TURN_ID = "generic-agent-loop";
 
 function emit(
@@ -145,241 +138,27 @@ function validateToolInput(
   return null;
 }
 
-function estimateTokens(value: string): number {
-  return Math.ceil(value.length / 4);
-}
-
-function outputRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function compactStringList(value: unknown, limit: number): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    .map((item) => item.trim())
-    .slice(0, limit);
-}
-
-function trimTextToTokenBudgetBalanced(text: string, maxTokens: number): string {
-  const trimmed = text.trim();
-  if (!trimmed) return "";
-  if (estimateTokens(trimmed) <= maxTokens) return trimmed;
-  const marker = `\n${TOOL_RESULT_COMPACT_MARKER}\n`;
-  const maxChars = Math.max(80, Math.trunc(maxTokens) * 4 - marker.length);
-  const headChars = Math.max(20, Math.floor(maxChars * 0.55));
-  const tailChars = Math.max(20, maxChars - headChars);
-  return [
-    trimmed.slice(0, headChars).trimEnd(),
-    marker.trim(),
-    trimmed.slice(Math.max(0, trimmed.length - tailChars)).trimStart(),
-  ].filter(Boolean).join("\n");
-}
-
-function compactGenericToolOutputForModel(input: {
-  toolName: string;
-  toolCallId?: string;
-  output: unknown;
-  reason: string;
-  rawTokens: number;
-  evidenceRetention?: ToolEvidenceRetentionContext;
-}): unknown {
-  const record = outputRecord(input.output);
-  const source = typeof input.output === "string"
-    ? input.output
-    : JSON.stringify(input.output ?? null);
-  const evidence = retainToolEvidence({
-    context: input.evidenceRetention,
-    toolName: input.toolName,
-    toolCallId: input.toolCallId,
-    output: input.output,
-    reason: input.reason,
-    rawTokens: input.rawTokens,
-  });
-  const compact: Record<string, unknown> = {
-    ok: record?.ok !== false,
-    butler_tool_result_compacted: true,
-    checkpoint_reason: input.reason,
-    tool_name: input.toolName,
-    raw_estimated_tokens: input.rawTokens,
-    butler_evidence_packet: evidence.packet,
-    preview: trimTextToTokenBudgetBalanced(source, GENERIC_TOOL_RESULT_PREVIEW_TOKENS),
-  };
-  for (const key of [
-    "query",
-    "title",
-    "source_url",
-    "final_url",
-    "artifact_id",
-    "artifact_label",
-    "artifact_kind",
-    "artifact_path",
-    "row_count",
-    "cache_hit",
-  ]) {
-    if (record?.[key] !== undefined) compact[key] = record[key];
-  }
-  const sourceUrls = compactStringList(record?.source_urls, 8);
-  const artifactLabels = compactStringList(record?.artifact_labels, 8);
-  if (sourceUrls.length > 0) compact.source_urls = sourceUrls;
-  if (artifactLabels.length > 0) compact.artifact_labels = artifactLabels;
-  if (record?.public_work_decision_context !== undefined) {
-    compact.public_work_decision_context = record.public_work_decision_context;
-  }
-  return compact;
-}
-
-function compactToolOutputForModel(input: {
-  toolName: string;
-  toolCallId?: string;
-  output: unknown;
-  reason: string;
-  rawTokens: number;
-  evidenceRetention?: ToolEvidenceRetentionContext;
-}): unknown {
-  const record = outputRecord(input.output);
-  if (!record || !Array.isArray(record.evidence_receipts)) {
-    return compactGenericToolOutputForModel(input);
-  }
-  const evidence = retainToolEvidence({
-    context: input.evidenceRetention,
-    toolName: input.toolName,
-    toolCallId: input.toolCallId,
-    output: input.output,
-    reason: input.reason,
-    rawTokens: input.rawTokens,
-  });
-  const sourceUrls = compactStringList(record.source_urls, 8);
-  const recommendedReadUrls = compactStringList(record.recommended_read_urls, 6);
-  const artifactLabels = compactStringList(record.artifact_labels, 8);
-  const compact: Record<string, unknown> = {
-    ok: record.ok !== false,
-    butler_evidence_checkpoint: true,
-    checkpoint_reason: input.reason,
-    tool_name: input.toolName,
-    raw_estimated_tokens: input.rawTokens,
-    butler_evidence_packet: evidence.packet,
-    evidence_receipts: record.evidence_receipts,
-  };
-  for (const key of [
-    "query",
-    "title",
-    "source_url",
-    "final_url",
-    "artifact_id",
-    "artifact_label",
-    "artifact_kind",
-    "row_count",
-    "read_required",
-    "read_reason",
-    "cache_hit",
-  ]) {
-    if (record[key] !== undefined) compact[key] = record[key];
-  }
-  if (sourceUrls.length > 0) compact.source_urls = sourceUrls;
-  if (recommendedReadUrls.length > 0) compact.recommended_read_urls = recommendedReadUrls;
-  if (artifactLabels.length > 0) compact.artifact_labels = artifactLabels;
-  if (record.public_work_decision_context !== undefined) {
-    compact.public_work_decision_context = record.public_work_decision_context;
-  }
-  return compact;
-}
-
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
-}): {
-  message: AgentLoopMessage;
-  estimatedTokens: number;
-} {
-  const content = JSON.stringify(input.result.ok ? { ok: true, output: input.result.output } : {
+  evidenceRetention?: ToolEvidenceRetentionContext;
+}): AgentLoopMessage {
+  const payload = input.result.ok ? { ok: true, output: input.result.output } : {
     ok: false,
     ...(input.result.output !== undefined
       ? { output: input.result.output }
       : { error: input.result.error ?? "unknown tool error" }),
-  });
-  return {
-    message: {
-      role: "tool",
-      toolCallId: input.result.toolCallId,
-      name: input.result.name,
-      content,
-    },
-    estimatedTokens: estimateTokens(content),
   };
-}
-
-function compactObservedToolMessagesForFutureModelCalls(
-  messages: AgentLoopMessage[],
-  evidenceRetention?: ToolEvidenceRetentionContext,
-): number {
-  let totalTokens = 0;
-  for (const message of messages) {
-    if (message.role !== "tool") continue;
-    const currentTokens = estimateTokens(message.content);
-    const shouldCompactSingle = currentTokens >= CHECKPOINT_SINGLE_TOOL_RESULT_TOKENS;
-    const shouldCompactCumulative =
-      totalTokens + currentTokens >= CHECKPOINT_CUMULATIVE_TOOL_RESULT_TOKENS;
-    if (!shouldCompactSingle && !shouldCompactCumulative) {
-      totalTokens += currentTokens;
-      continue;
-    }
-    const compacted = compactToolMessageContent({
-      content: message.content,
-      toolName: message.name ?? "tool",
-      toolCallId: message.toolCallId,
-      reason: shouldCompactSingle
-        ? "single_tool_result_budget"
-        : "cumulative_tool_result_budget",
-      rawTokens: currentTokens,
-      evidenceRetention,
-    });
-    message.content = compacted;
-    totalTokens += estimateTokens(compacted);
-  }
-  return totalTokens;
-}
-
-function compactToolMessageContent(input: {
-  content: string;
-  toolName: string;
-  toolCallId?: string;
-  reason: string;
-  rawTokens: number;
-  evidenceRetention?: ToolEvidenceRetentionContext;
-}): string {
-  let parsed: Record<string, unknown> | null = null;
-  try {
-    parsed = JSON.parse(input.content) as Record<string, unknown>;
-  } catch {
-    // Invalid JSON cannot be safely compacted as a structured tool result.
-  }
-  if (parsed?.ok !== true) return input.content;
-  const output = compactToolOutputForModel({
-    toolName: input.toolName,
-    toolCallId: input.toolCallId,
-    output: parsed.output,
-    reason: input.reason,
-    rawTokens: input.rawTokens,
-    evidenceRetention: input.evidenceRetention,
-  });
-  const outputMetadata = outputRecord(output);
-  const compactContent = JSON.stringify({ ok: true, output });
-  const compactTokens = estimateTokens(compactContent);
-  if (compactTokens >= input.rawTokens) return input.content;
-  if (
-    outputMetadata?.butler_evidence_checkpoint === true ||
-    outputMetadata?.butler_tool_result_compacted === true
-  ) {
-    const checkpointKey = outputMetadata.butler_evidence_checkpoint === true
-      ? "checkpoint_estimated_tokens"
-      : "compact_estimated_tokens";
-    outputMetadata[checkpointKey] = compactTokens;
-    outputMetadata.estimated_saved_tokens = Math.max(0, input.rawTokens - compactTokens);
-    return JSON.stringify({ ok: true, output });
-  }
-  return compactContent;
+  return {
+    role: "tool",
+    toolCallId: input.result.toolCallId,
+    name: input.result.name,
+    content: serializeToolResultPayloadForProvider({
+      payload,
+      toolName: input.result.name,
+      toolCallId: input.result.toolCallId,
+      evidenceRetention: input.evidenceRetention,
+    }),
+  };
 }
 
 function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {
@@ -512,8 +291,9 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     toolResults.push(result);
     const toolMessage = toolResultToMessage({
       result,
+      evidenceRetention: input.evidenceRetention,
     });
-    messages.push(toolMessage.message);
+    messages.push(toolMessage);
     emit(events, input.onEvent, {
       type: "tool_result",
       iteration,
@@ -559,18 +339,12 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   };
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
-    if (input.compactToolResultsBeforeNextModelCall === true) {
-      compactObservedToolMessagesForFutureModelCalls(messages, input.evidenceRetention);
-    }
     emit(events, input.onEvent, { type: "model_call", iteration });
     const response = await input.callModel({
       messages,
       tools: input.tools,
       iteration,
     });
-    if (input.compactToolResultsBeforeNextModelCall !== true) {
-      compactObservedToolMessagesForFutureModelCalls(messages, input.evidenceRetention);
-    }
     emit(events, input.onEvent, {
       type: "model_response",
       iteration,

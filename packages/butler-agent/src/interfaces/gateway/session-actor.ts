@@ -32,6 +32,7 @@ import {
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import {
   diagnosticDetails,
+  isAdmissionInvariantViolation,
   safeRuntimeFailure,
 } from "../../integrations/providers/provider-errors.ts";
 import { bindProviderToModel } from "../../integrations/providers/registry.ts";
@@ -691,12 +692,42 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
       const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
+      const isCancelled = envelope.signal?.aborted === true || err.name === "AbortError";
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
         isNonPublicContinuationDeliveryError(error) ||
         isPromptUsageModelCallBudgetError(error) ||
+        isAdmissionInvariantViolation(error) ||
         isSchedulerYield;
-      if (!isContinuationFailure) {
+      if (isCancelled) {
+        try {
+          conversationAdmission?.finalize("aborted", timestamp);
+        } catch {
+          recordSystemEvent({
+            sessionId: this.sessionId,
+            category: "conversation.admission.cancel_finalize_failed",
+            message: safeFailure.message,
+            metadata: { source: "gateway-actor" },
+            timestamp,
+          });
+        }
+      } else if (isContinuationFailure) {
+        try {
+          conversationAdmission?.finalizeRecoverable(
+            timestamp,
+            isSchedulerYield ? "turn_scheduler_continuation_yield" : safeFailure.code,
+          );
+        } catch {
+          recordSystemEvent({
+            sessionId: this.sessionId,
+            category: "conversation.admission.recoverable_finalize_failed",
+            message: safeFailure.message,
+            metadata: { source: "gateway-actor" },
+            timestamp,
+          });
+        }
+      }
+      if (!isContinuationFailure && !isCancelled) {
         this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
       }
       this.captureDeveloperModelTurn({

@@ -1,8 +1,9 @@
-import type { CodexSseAccumulator, OpenAIResponse, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
+import type { CodexSseAccumulator, OpenAIResponse, PromptUsageAttribution, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
 import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-client.ts";
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 
 
 
@@ -266,10 +267,20 @@ export async function createCodexResponse(
   authorization: string,
   signal?: AbortSignal,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
+  budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
 ): Promise<OpenAIResponse> {
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
   const model = typeof body.model === "string" ? body.model : undefined;
+  const requestBody = codexRequestBody(body);
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: typeof requestBody.model === "string" ? requestBody.model : model ?? "",
+    body: requestBody,
+    requestedOutputTokens: budgetContext?.attribution?.requestedOutputTokens,
+    usageAttribution: budgetContext?.attribution,
+    roundIndex: budgetContext?.roundIndex,
+  });
   let response: Response;
   try {
     response = await fetch(getCodexResponsesUrl(), {
@@ -283,7 +294,7 @@ export async function createCodexResponse(
         "chatgpt-account-id": accountId,
         originator: getCodexOriginator(),
       },
-      body: JSON.stringify(codexRequestBody(body)),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
@@ -310,6 +321,7 @@ export async function createCodexResponse(
       detail,
       endpoint,
       model,
+      admission: admittedRequest,
     });
   }
 

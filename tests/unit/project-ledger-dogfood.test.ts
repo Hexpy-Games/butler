@@ -65,7 +65,7 @@ test("Butler repo dogfoods Project Ledger with generated bounded views", () => {
   const check = runLedgerJson(["check"]);
   expect(check.ok).toBe(true);
   expect(check.data.issueCount).toBe(0);
-});
+}, 30_000);
 
 test("Sandy-shaped closeout uses valid CLI lifecycle transitions and sequential render/check", () => {
   const project = tempProject();

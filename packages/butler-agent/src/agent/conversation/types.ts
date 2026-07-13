@@ -73,6 +73,43 @@ export interface ConversationSummary {
   invalidated_at: string | null;
 }
 
+export type TurnOutcomeKind = "delivered" | "failed" | "cancelled" | "recoverable";
+
+export interface TurnOutcomeCapsule {
+  id: string;
+  session_id: string;
+  turn_id: string;
+  generation: number;
+  outcome: TurnOutcomeKind;
+  source_hash: string;
+  request_message_id: string | null;
+  public_assistant_message_id: string | null;
+  provider_id: string | null;
+  model_ref: string | null;
+  evidence_refs: string[];
+  unresolved_obligations: string[];
+  continuation: Record<string, unknown> | null;
+  safe_code: string | null;
+  created_at: string;
+}
+
+export interface TurnOutcomeCapsuleInput {
+  id?: string;
+  sessionId: string;
+  turnId: string;
+  generation: number;
+  outcome: TurnOutcomeKind;
+  requestMessageId?: string | null;
+  publicAssistantMessageId?: string | null;
+  providerId?: string | null;
+  modelRef?: string | null;
+  evidenceRefs?: string[];
+  unresolvedObligations?: string[];
+  continuation?: Record<string, unknown> | null;
+  safeCode?: string | null;
+  createdAt?: string;
+}
+
 export interface ConversationMessageWithParts extends ConversationMessage {
   parts: ConversationPart[];
 }
@@ -88,6 +125,7 @@ export interface ConversationProjectionEvent {
     | "conversation.tool_call_committed"
     | "conversation.tool_result_committed"
     | "conversation.summary_written"
+    | "conversation.turn_outcome_written"
     | "conversation.message_compacted"
     | "conversation.redacted";
   payload_ref: string;
@@ -99,6 +137,8 @@ export interface PromptMaterial {
   summaries: ConversationSummary[];
   semantic_tail: ConversationMessageWithParts[];
   current_turn: ConversationMessageWithParts[];
+  turns?: ConversationTurn[];
+  outcomes?: TurnOutcomeCapsule[];
   token_estimate: number;
   provenance: Array<{ kind: "summary" | "message"; id: string }>;
 }
@@ -150,6 +190,7 @@ export interface FinalizeTurnInput {
   turnId: string;
   status?: ConversationTurn["status"];
   completedAt?: string;
+  outcomeCapsule?: TurnOutcomeCapsuleInput;
 }
 
 export interface ConversationSummaryInput {
@@ -199,6 +240,8 @@ export interface ConversationWriter {
   appendToolCall(input: AppendToolPartInput): ConversationPart;
   appendToolResult(input: AppendToolPartInput): ConversationPart;
   finalizeTurn(input: FinalizeTurnInput): ConversationTurn;
+  readTurnOutcome?(turnId: string): TurnOutcomeCapsule | null;
+  writeTurnOutcome?(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule;
   writeSummary(input: ConversationSummaryInput): ConversationSummary;
   getSessionByGatewayBinding(gateway: string, externalSessionId: string): ConversationSession | null;
 }
@@ -222,5 +265,6 @@ export interface ConversationContextStoreReader {
   readMessages(input: ReadMessagesInput): ConversationMessageWithParts[];
   readMessagesAround(input: ReadAroundInput): ConversationMessageWithParts[];
   readSummaries(sessionId: string): ConversationSummary[];
+  readTurnOutcome(turnId: string): TurnOutcomeCapsule | null;
   readPromptMaterial(input: PromptMaterialInput): PromptMaterial;
 }
