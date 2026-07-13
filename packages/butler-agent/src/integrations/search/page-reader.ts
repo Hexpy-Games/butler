@@ -8,6 +8,7 @@ export interface PageReadRequest {
   url: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }
 
 export type PageReaderBackendId = "auto" | "lightpanda" | "lightweight" | "jina-hosted" | "disabled";
@@ -336,12 +337,15 @@ async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
   fetchImpl: typeof fetch,
+  signal?: AbortSignal,
 ): Promise<FetchAttempt> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, {
-      signal: controller.signal,
+      signal: signal
+        ? AbortSignal.any([controller.signal, signal])
+        : controller.signal,
       headers: {
         "user-agent": "butler-lightweight-page-reader/0.1",
         accept: "text/html,application/xhtml+xml,text/plain,application/json;q=0.8,*/*;q=0.5",
@@ -415,11 +419,15 @@ export async function readPageLightweight(request: PageReadRequest): Promise<Pag
   const fetchImpl = request.fetchImpl ?? fetch;
   const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   try {
-    const first = extract(await fetchWithTimeout(request.url, timeoutMs, fetchImpl));
+    const first = extract(
+      await fetchWithTimeout(request.url, timeoutMs, fetchImpl, request.signal),
+    );
     let selected = first;
     const rawUrl = githubRawUrl(request.url);
     if (rawUrl && needsGithubRawRetry(request.url, first)) {
-      const raw = extract(await fetchWithTimeout(rawUrl, timeoutMs, fetchImpl));
+      const raw = extract(
+        await fetchWithTimeout(rawUrl, timeoutMs, fetchImpl, request.signal),
+      );
       if (raw.text.length > first.text.length || raw.method === "github-raw") selected = raw;
     }
     const renderRecommended = shouldRecommendRender(selected);
@@ -446,6 +454,7 @@ export async function readPageLightweight(request: PageReadRequest): Promise<Pag
       renderRecommended,
     };
   } catch (error) {
+    if (request.signal?.aborted) throw pageReadAbortError(request.signal);
     return {
       reader: "butler-lightweight",
       requestedUrl: request.url,
@@ -476,6 +485,7 @@ async function runLightpandaHtmlDump(input: {
   binary: string;
   url: string;
   timeoutMs: number;
+  signal?: AbortSignal;
 }): Promise<{ stdout: string; stderr: string; exitCode: number; timedOut: boolean }> {
   const proc = Bun.spawn([
     input.binary,
@@ -502,6 +512,8 @@ async function runLightpandaHtmlDump(input: {
     timedOut = true;
     proc.kill();
   }, input.timeoutMs);
+  const abort = () => proc.kill();
+  input.signal?.addEventListener("abort", abort, { once: true });
   try {
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(proc.stdout).text(),
@@ -511,6 +523,7 @@ async function runLightpandaHtmlDump(input: {
     return { stdout, stderr, exitCode, timedOut };
   } finally {
     clearTimeout(timeout);
+    input.signal?.removeEventListener("abort", abort);
   }
 }
 
@@ -560,7 +573,13 @@ export async function readPageLightpanda(request: PageReadRequest & { binary?: s
 
   const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   try {
-    const dump = await runLightpandaHtmlDump({ binary, url: request.url, timeoutMs });
+    const dump = await runLightpandaHtmlDump({
+      binary,
+      url: request.url,
+      timeoutMs,
+      signal: request.signal,
+    });
+    if (request.signal?.aborted) throw request.signal.reason;
     if (dump.timedOut || dump.exitCode !== 0 || dump.stdout.trim().length === 0) {
       const reason = dump.timedOut ? "timed out" : `exit ${dump.exitCode}`;
       return {
@@ -614,6 +633,7 @@ export async function readPageLightpanda(request: PageReadRequest & { binary?: s
       renderRecommended: shouldRecommendRender({ ...extracted, warnings }),
     };
   } catch (error) {
+    if (request.signal?.aborted) throw pageReadAbortError(request.signal);
     return {
       reader: "lightpanda",
       requestedUrl: request.url,
@@ -630,6 +650,13 @@ export async function readPageLightpanda(request: PageReadRequest & { binary?: s
       error: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+function pageReadAbortError(signal: AbortSignal): Error {
+  if (signal.reason instanceof Error) return signal.reason;
+  const error = new Error("Page read was cancelled.");
+  error.name = "AbortError";
+  return error;
 }
 
 export async function readPageConfigured(request: ConfiguredPageReadRequest): Promise<PageReadResult> {

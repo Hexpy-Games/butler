@@ -32,6 +32,7 @@ interface ConversationWorkCopy {
 
 interface ConversationCopy {
   work: ConversationWorkCopy;
+  stoppedStatus: string;
   scrollToBottom: {
     ariaLabel: string;
     label: string;
@@ -632,6 +633,7 @@ export interface AppCopy {
 
 const koKrCopy: AppCopy = {
   conversation: {
+    stoppedStatus: "중지됨",
     work: {
       historyRegionLabel: "진행 내역",
       pendingLabel: "요청을 처리하고 있습니다.",
@@ -1363,6 +1365,7 @@ function mergeCopy<T extends object>(
 
 const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
   conversation: {
+    stoppedStatus: "Stopped",
     work: {
       historyRegionLabel: "Progress history",
       pendingLabel: "Working on your request.",

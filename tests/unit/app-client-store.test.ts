@@ -2759,7 +2759,7 @@ test("hydrateUiState restores sidebar and panel presentation state", () => {
   });
 });
 
-test("cancelActiveTurn sends worker cancel when only background worker is active", async () => {
+test("cancelActiveTurn does not infer a Stop target from a background worker", async () => {
   const calls: Array<{ path: string; body?: unknown }> = [];
   globalThis.fetch = (async (
     input: Parameters<typeof fetch>[0],
@@ -2833,11 +2833,97 @@ test("cancelActiveTurn sends worker cancel when only background worker is active
 
   await useButlerStore.getState().cancelActiveTurn();
 
-  expect(calls).toContainEqual({
-    path: "/worker-activity/worker-running/control",
-    body: { action: "cancel" },
-  });
+  expect(calls).toEqual([]);
   expect(calls.some((call) => call.path.startsWith("/turns/"))).toBe(false);
+});
+
+test("cancelActiveTurn targets only the canonical SessionView active turn", async () => {
+  const calls: Array<{ path: string; body?: unknown }> = [];
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const path = String(input);
+    calls.push({
+      path,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    if (path === "/turns/turn-canonical/cancel") {
+      return jsonResponse({ turn: { id: "turn-canonical", state: "cancelling" } });
+    }
+    if (path.startsWith("/messages")) {
+      return jsonResponse<MessageListView>({
+        chat_id: "session-a",
+        messages: [],
+        next_cursor: 0,
+      });
+    }
+    if (path.startsWith("/session-summary")) {
+      return jsonResponse<SessionSummaryView>({
+        session_id: "session-a",
+        turn_state: "cancelling",
+        latest_progress: {
+          turn_id: "turn-canonical",
+          state: "cancelling",
+          safe_progress_rows: [],
+        },
+      });
+    }
+    if (path.startsWith("/session-view")) {
+      return jsonResponse(
+        sessionView("session-a", {
+          latestProgress: {
+            turn_id: "turn-canonical",
+            state: "cancelling",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  const canonicalView = sessionView("session-a", {
+    latestProgress: {
+      turn_id: "turn-canonical",
+      state: "streaming",
+      safe_progress_rows: [],
+    },
+  });
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    sessionView: canonicalView,
+    summary: {
+      session_id: "session-a",
+      turn_state: "thinking",
+      latest_progress: {
+        turn_id: "turn-stale-summary",
+        state: "thinking",
+        safe_progress_rows: [],
+      },
+      worker_activity: [
+        {
+          worker_id: "worker-unrelated",
+          activity_kind: "worker",
+          worker_label: "Worker",
+          objective: "background",
+          phase: "executing",
+          status_line: "Executing",
+          terminal: false,
+          updated_at: "2026-05-16T00:00:00.000Z",
+          supported_controls: ["cancel"],
+        },
+      ],
+    },
+  });
+
+  await useButlerStore.getState().cancelActiveTurn();
+
+  expect(calls.filter((call) => call.path.includes("/cancel"))).toEqual([
+    { path: "/turns/turn-canonical/cancel", body: {} },
+  ]);
+  expect(calls.some((call) => call.path.includes("worker-activity"))).toBe(false);
+  expect(calls.some((call) => call.path.includes("turn-stale-summary"))).toBe(false);
 });
 
 test("sendMessage keeps concurrent session sends scoped until each operation finishes", async () => {

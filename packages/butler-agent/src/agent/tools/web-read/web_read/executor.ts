@@ -6,7 +6,7 @@ import {
 import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
 import { publicWebReadEvidenceItems } from "../../../output/evidence/public-web-evidence.ts";
 
-type WebReadToolCall = { args: Record<string, unknown> };
+type WebReadToolCall = { args: Record<string, unknown>; signal?: AbortSignal };
 
 export function createWebReadHandler(input: {
   butlerData: string;
@@ -39,6 +39,7 @@ export function createWebReadHandler(input: {
       butlerData: input.butlerData,
       url,
       backend,
+      signal: call.signal,
     });
     if (!cached) pageReadCache.set(cacheKey, result);
     const bounded = boundedPageReadToolResult(result, {

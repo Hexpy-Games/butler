@@ -64,6 +64,24 @@ test("web_search emits candidate discovery capability receipts only", async () =
   ]);
 });
 
+test("web_search forwards the turn AbortSignal to its provider", async () => {
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | undefined;
+  const provider: WebSearchProvider = {
+    id: "abort-aware-search",
+    async search(input) {
+      receivedSignal = input.signal;
+      throw input.signal?.reason;
+    },
+  };
+  const handler = createWebSearchHandler({ butlerData: tempDir, provider });
+  controller.abort(Object.assign(new Error("cancelled"), { name: "AbortError" }));
+  await expect(
+    handler({ args: { query: "cancel search" }, signal: controller.signal }),
+  ).rejects.toMatchObject({ name: "AbortError" });
+  expect(receivedSignal).toBe(controller.signal);
+});
+
 test("web_search drops unsafe candidate URLs from capability references", async () => {
   const provider: WebSearchProvider = {
     id: "fixture-search",

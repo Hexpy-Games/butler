@@ -37,7 +37,7 @@ export async function handleSessionFeedRoutes(
 
   const cancel = turnActionMatch(input, "cancel");
   if (cancel) {
-    return json(apiEnvelope(input.store.cancelTurn(cancel.turnId)), 202);
+    return json(apiEnvelope(await input.store.cancelTurn(cancel.turnId)), 202);
   }
 
   if (input.request.method !== "POST" || input.url.pathname !== "/messages") {

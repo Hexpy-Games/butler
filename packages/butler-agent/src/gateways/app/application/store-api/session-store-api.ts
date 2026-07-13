@@ -91,7 +91,7 @@ export interface AppStoreSessionApi {
     responder?: AppMessageResponder,
     options?: SendMessageOptions,
   ): Promise<TurnActionResult>;
-  cancelTurn(turnId: string): TurnActionResult;
+  cancelTurn(turnId: string): Promise<TurnActionResult>;
 }
 
 export function createSessionStoreApi(
@@ -149,6 +149,7 @@ export function createSessionStoreApi(
       return kernel.conversationProjection.readActivityState(conversationSessionId);
     },
     getSessionView(sessionId) {
+      kernel.turnActions.reconcileCancellationSettlements(sessionId);
       return kernel.sessionViews.getSessionView(sessionId);
     },
     listArtifacts(sessionId) {
@@ -197,8 +198,8 @@ export function createSessionStoreApi(
     async retryTurn(turnId, responder, options = {}) {
       return await kernel.turnActions.retryTurn(turnId, responder, options);
     },
-    cancelTurn(turnId) {
-      return kernel.turnActions.cancelTurn(turnId);
+    async cancelTurn(turnId) {
+      return await kernel.turnActions.cancelTurn(turnId);
     },
   };
 }

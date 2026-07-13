@@ -516,7 +516,7 @@ function turnScopedExecutor(input: {
     if (TURN_SCOPED_WORK_TRACKING_TOOLS.has(call.name)) {
       return await defaultExecutor(scopedCall);
     }
-    return await injectedExecutor(call);
+    return await injectedExecutor(scopedCall);
   };
 }
 

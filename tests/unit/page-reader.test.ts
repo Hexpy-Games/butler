@@ -28,6 +28,32 @@ function response(body: string, options: {
   }) as Response & { url: string };
 }
 
+test("lightweight page reader forwards AbortSignal into fetch", async () => {
+  const controller = new AbortController();
+  let receivedSignal: AbortSignal | null = null;
+  const pending = readPageLightweight({
+    url: "https://example.test/pending",
+    signal: controller.signal,
+    fetchImpl: (async (
+      _input: Parameters<typeof fetch>[0],
+      init?: Parameters<typeof fetch>[1],
+    ) => {
+      receivedSignal = init?.signal as AbortSignal;
+      await new Promise<void>((_resolve, reject) => {
+        receivedSignal?.addEventListener(
+          "abort",
+          () => reject(receivedSignal?.reason),
+          { once: true },
+        );
+      });
+      throw new Error("unreachable");
+    }) as unknown as typeof fetch,
+  });
+  controller.abort(Object.assign(new Error("cancelled"), { name: "AbortError" }));
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect((receivedSignal as AbortSignal | null)?.aborted).toBe(true);
+});
+
 function fetchMap(fixtures: Record<string, Response>): typeof fetch {
   return (async (url: string | URL | Request) => {
     const key = String(url);

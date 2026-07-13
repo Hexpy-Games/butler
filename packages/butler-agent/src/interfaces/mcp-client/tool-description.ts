@@ -44,6 +44,7 @@ export async function describeMcpToolSchema(input: {
     const tool = await withMcpClient(
       server,
       input.timeoutMs,
+      undefined,
       async (client) => await findToolSchema(client, toolName),
     );
     if (!tool) {

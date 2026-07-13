@@ -16,6 +16,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { principalTurnCancellationSocketPath } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import {
@@ -2703,6 +2704,113 @@ test("native butler-main default provider generates app transport session titles
   } finally {
     clearTimeout(shutdownWatchdog);
     globalThis.fetch = originalFetch;
+    server.stop();
+  }
+});
+
+test("App Stop falls back to the existing native tick and preserves its public snapshot", async () => {
+  const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
+  mkdirSync(join(tempDir, "app-server"), { recursive: true });
+  const runtime = new AbortSettlingRuntime();
+  const shutdown = new AbortController();
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  const nativeMain = runNativeButlerMain({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    shutdownSignal: shutdown.signal,
+    shutdownPollMs: 10,
+    workerResultPollMs: 10,
+    enableTelegramPolling: false,
+  });
+
+  try {
+    await waitForCondition(() =>
+      existsSync(principalTurnCancellationSocketPath(tempDir)),
+    );
+    mkdirSync(join(tempDir, "state"), { recursive: true });
+    writeFileSync(
+      join(tempDir, "state", "butler-main-native.json"),
+      JSON.stringify({
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        runtime: "native",
+        launcher: "test",
+      }),
+    );
+    const sent = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "stop native execution",
+    });
+    const turnId = sent.data.turn.id as string;
+    await runtime.started;
+
+    const db = new Database(dbPath);
+    const messageId = "msg-native-stop-snapshot";
+    const createdAt = "2026-07-13T03:00:00.000Z";
+    try {
+      db.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        ) VALUES (?, 'general', ?, 'assistant', ?, 'streaming', ?, ?, NULL, 0)
+      `).run(
+        messageId,
+        turnId,
+        "native 실행을 중지하기 전까지 작성된 답변",
+        createdAt,
+        createdAt,
+      );
+    } finally {
+      db.close();
+    }
+
+    rmSync(principalTurnCancellationSocketPath(tempDir), { force: true });
+    const cancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(cancel.data.turn).toMatchObject({ id: turnId, state: "cancelling" });
+    await waitForCondition(() => runtime.aborted);
+    await waitForCondition(() => {
+      const stateDb = new Database(dbPath, { readonly: true });
+      try {
+        return stateDb
+          .query<{ state: string }, [string]>(`
+            SELECT state FROM app_turn_cancel_outbox WHERE turn_id = ?
+          `)
+          .get(turnId)?.state === "completed";
+      } finally {
+        stateDb.close();
+      }
+    });
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.active_turn).toBeNull();
+    expect(view.data.latest_turn).toMatchObject({ id: turnId, state: "cancelled" });
+    expect(view.data.messages).toContainEqual(
+      expect.objectContaining({
+        id: messageId,
+        turn_id: turnId,
+        text: "native 실행을 중지하기 전까지 작성된 답변",
+        status: "cancelled",
+        created_at: createdAt,
+      }),
+    );
+    expect(view.data.messages).not.toContainEqual(
+      expect.objectContaining({ turn_id: turnId, text: "Stopped." }),
+    );
+  } finally {
+    shutdown.abort();
+    await nativeMain;
     server.stop();
   }
 });
@@ -9145,9 +9253,23 @@ test("app transport final result projection does not resurrect cancelled turns",
     {},
   );
   expect(cancel.data.turn).toMatchObject({
-    state: "cancelled",
+    state: "cancelling",
     cancellable: false,
     retryable: false,
+  });
+  const settlementDb = new Database(dbPath);
+  settlementDb.query(`
+    UPDATE app_turn_cancel_outbox
+    SET state = 'completed', completed_at = ?
+    WHERE turn_id = ?
+  `).run(new Date().toISOString(), turnId);
+  settlementDb.close();
+  const settledView = await getJson(
+    `${url}session-view?session_id=general`,
+  );
+  expect(settledView.data.latest_turn).toMatchObject({
+    id: turnId,
+    state: "cancelled",
   });
   server.stop();
 
@@ -12696,6 +12818,126 @@ test("turn cancel preserves earlier assistant work history while stopping active
   }
 });
 
+test("turn cancel freezes same-turn assistant content and attachments in place", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>((resolve) => {
+    markStarted = resolve;
+  });
+  let server = createAppServer({
+    dbPath,
+    port: 0,
+    responder(input) {
+      input.onProgress?.({
+        id: "snapshot-first-visible-row",
+        kind: "message",
+        state: "running",
+        safe_label: "이미 공개된 진행 상황",
+        work_block_id: "first-visible-progress-snapshot",
+        work_block_label: "이미 공개된 진행 상황",
+      });
+      markStarted?.();
+      return new Promise(() => undefined);
+    },
+  });
+
+  try {
+    const inFlight = fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: "general", text: "preserve partial reply" }),
+    });
+    await started;
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    const turnId = turns.data.turns[0].id as string;
+    const messageId = "msg-cancelled-snapshot";
+    const fileId = "file-cancelled-snapshot";
+    const createdAt = "2026-07-13T00:00:00.000Z";
+    const db = new Database(dbPath);
+    try {
+      db.query(`
+        INSERT INTO messages (
+          id, chat_id, turn_id, role, text, status, created_at, updated_at,
+          safe_error_code, retryable
+        ) VALUES (?, 'general', ?, 'assistant', ?, 'streaming', ?, ?, NULL, 0)
+      `).run(messageId, turnId, "정지 전까지 작성된 답변입니다.", createdAt, createdAt);
+      db.query(`
+        INSERT INTO message_files (
+          id, owner_session_id, message_id, kind, mime_type, safe_name,
+          size_bytes, sha256, storage_name, created_at
+        ) VALUES (?, 'general', ?, 'document', 'text/plain', 'evidence.txt',
+          8, 'snapshot-sha256', 'snapshot.txt', ?)
+      `).run(fileId, messageId, createdAt);
+      db.query(`
+        INSERT INTO message_attachments (message_id, file_id, position)
+        VALUES (?, ?, 0)
+      `).run(messageId, fileId);
+    } finally {
+      db.close();
+    }
+
+    const cancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(cancel.data.turn.state).toBe("cancelled");
+    expect((await inFlight).status).toBe(202);
+    const duplicateCancel = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(duplicateCancel.data.turn).toMatchObject({
+      id: turnId,
+      state: "cancelled",
+    });
+
+    const assertFrozenSnapshot = async () => {
+      const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+      const preserved = messages.data.messages.find(
+        (message: { id: string }) => message.id === messageId,
+      );
+      expect(preserved).toMatchObject({
+        id: messageId,
+        turn_id: turnId,
+        role: "assistant",
+        text: "정지 전까지 작성된 답변입니다.",
+        status: "cancelled",
+        created_at: createdAt,
+        attachments: [expect.objectContaining({ file_id: fileId })],
+      });
+      expect(messages.data.messages).not.toContainEqual(
+        expect.objectContaining({ turn_id: turnId, text: "Stopped." }),
+      );
+      expect(messages.data.turn_progress[turnId].safe_progress_rows).toContainEqual(
+        expect.objectContaining({
+          id: "snapshot-first-visible-row",
+          state: "cancelled",
+        }),
+      );
+    };
+
+    await assertFrozenSnapshot();
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(events.data.events).toContainEqual(
+      expect.objectContaining({
+        type: "message.updated",
+        payload: expect.objectContaining({
+          message: expect.objectContaining({ id: messageId, status: "cancelled" }),
+        }),
+      }),
+    );
+    expect(events.data.events).not.toContainEqual(
+      expect.objectContaining({ type: "message.deleted" }),
+    );
+
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+    await assertFrozenSnapshot();
+  } finally {
+    server.stop();
+  }
+});
+
 test("app startup repairs cancelled turns that lost their activity carrier", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let markStarted: (() => void) | undefined;
@@ -12800,7 +13042,7 @@ test("app startup repairs cancelled turns that lost their activity carrier", asy
       expect.objectContaining({
         role: "assistant",
         status: "cancelled",
-        text: "Stopped.",
+        text: "Retrying this turn.",
         turn_id: turnId,
         work_blocks: [
           expect.objectContaining({
@@ -13498,8 +13740,9 @@ test("concurrent ordinary failed turn retries are rejected", async () => {
 });
 
 test("turn cancel endpoint returns safe conflict for completed turns", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
+    dbPath,
     port: 0,
     responder(input) {
       return { texts: [`done: ${input.text}`] };
@@ -13522,6 +13765,13 @@ test("turn cancel endpoint returns safe conflict for completed turns", async () 
     expect(response.status).toBe(409);
     expect(body.error.code).toBe("turn_not_cancellable");
     expect(JSON.stringify(body)).not.toContain(tempDir);
+    const db = new Database(dbPath, { readonly: true });
+    expect(
+      db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM app_turn_cancel_outbox
+      `).get()?.count,
+    ).toBe(0);
+    db.close();
   } finally {
     server.stop();
   }
@@ -14122,6 +14372,44 @@ class HangingRuntime implements AgentRuntimeAdapter {
       this.aborted = true;
     });
     return await new Promise<never>(() => undefined);
+  }
+}
+
+class AbortSettlingRuntime implements AgentRuntimeAdapter {
+  readonly id = "app-abort-settling-runtime";
+  aborted = false;
+  private markStarted: (() => void) | undefined;
+  readonly started = new Promise<void>((resolve) => {
+    this.markStarted = resolve;
+  });
+  readonly capabilities = {
+    supportsSessionResume: false,
+    supportsCompaction: false,
+    supportsToolStreaming: false,
+    supportsParallelToolCalls: false,
+  } as const;
+
+  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
+    return {
+      sessionId: input.sessionId,
+      role: input.role,
+      runtimeAdapterId: this.id,
+      runtimeSessionRef: `app-abort-settling:${input.sessionId}`,
+    };
+  }
+
+  async runTurn(input: RuntimeTurnInput): Promise<never> {
+    this.markStarted?.();
+    return await new Promise<never>((_resolve, reject) => {
+      input.signal?.addEventListener(
+        "abort",
+        () => {
+          this.aborted = true;
+          reject(input.signal?.reason);
+        },
+        { once: true },
+      );
+    });
   }
 }
 

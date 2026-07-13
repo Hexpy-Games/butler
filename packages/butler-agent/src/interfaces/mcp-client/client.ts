@@ -52,6 +52,7 @@ export async function listMcpServerCapabilities(input: {
   butlerData: string;
   includeDisabled?: boolean;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<McpCapabilitiesView> {
   const registry = readMcpRegistry(input.butlerData);
   const servers = input.includeDisabled
@@ -61,6 +62,7 @@ export async function listMcpServerCapabilities(input: {
   for (const server of servers) {
     views.push(await probeMcpServerConfig(server, {
       timeoutMs: input.timeoutMs,
+      signal: input.signal,
       skipDisabled: !input.includeDisabled,
     }));
   }
@@ -71,9 +73,13 @@ export async function probeMcpServer(input: {
   butlerData: string;
   serverId: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<McpCapabilityServerView> {
   const server = requireMcpServer(input.butlerData, input.serverId);
-  return await probeMcpServerConfig(server, { timeoutMs: input.timeoutMs });
+  return await probeMcpServerConfig(server, {
+    timeoutMs: input.timeoutMs,
+    signal: input.signal,
+  });
 }
 
 export async function callMcpTool(input: {
@@ -82,11 +88,12 @@ export async function callMcpTool(input: {
   toolName: string;
   args?: Record<string, unknown>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<McpCallToolResultView> {
   const server = requireEnabledMcpServer(input.butlerData, input.serverId);
   const toolName = input.toolName.trim();
   if (!toolName) throw new Error("MCP tool name is required.");
-  const result = await withMcpClient(server, input.timeoutMs, async (client) =>
+  const result = await withMcpClient(server, input.timeoutMs, input.signal, async (client) =>
     await withTimeout(
       client.callTool({
         name: toolName,
@@ -94,6 +101,7 @@ export async function callMcpTool(input: {
       }),
       input.timeoutMs,
       `MCP tool timed out: ${server.id}/${toolName}`,
+      input.signal,
     ),
   );
   return {
@@ -108,15 +116,17 @@ export async function readMcpResource(input: {
   serverId: string;
   uri: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<McpReadResourceResultView> {
   const server = requireEnabledMcpServer(input.butlerData, input.serverId);
   const uri = input.uri.trim();
   if (!uri) throw new Error("MCP resource uri is required.");
-  const result = await withMcpClient(server, input.timeoutMs, async (client) =>
+  const result = await withMcpClient(server, input.timeoutMs, input.signal, async (client) =>
     await withTimeout(
       client.readResource({ uri }),
       input.timeoutMs,
       `MCP resource read timed out: ${server.id}/${uri}`,
+      input.signal,
     ),
   );
   return {
@@ -128,7 +138,11 @@ export async function readMcpResource(input: {
 
 async function probeMcpServerConfig(
   server: McpServerConfig,
-  options: { timeoutMs?: number; skipDisabled?: boolean } = {},
+  options: {
+    timeoutMs?: number;
+    skipDisabled?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<McpCapabilityServerView> {
   const base = {
     id: server.id,
@@ -143,7 +157,11 @@ async function probeMcpServerConfig(
     return { ...base, ok: false, error: "server disabled" };
   }
   try {
-    const capabilities = await withMcpClient(server, options.timeoutMs, async (client) => {
+    const capabilities = await withMcpClient(
+      server,
+      options.timeoutMs,
+      options.signal,
+      async (client) => {
       const [tools, resources, templates] = await Promise.all([
         listAllMcpPages((cursor) => client.listTools(cursor ? { cursor } : undefined), "tools"),
         listAllMcpPages((cursor) => client.listResources(cursor ? { cursor } : undefined), "resources"),
@@ -175,7 +193,8 @@ async function probeMcpServerConfig(
           mime_type: typeof template.mimeType === "string" ? template.mimeType : undefined,
         })).filter((template) => template.uri_template),
       };
-    });
+      },
+    );
     return { ...base, ...capabilities, ok: true, error: null };
   } catch (error) {
     return {
