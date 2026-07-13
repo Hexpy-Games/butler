@@ -1,4 +1,12 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { createHash } from "node:crypto";
 import { createConnection, createServer, Socket, type Server } from "node:net";
 import { tmpdir } from "node:os";
@@ -50,10 +58,12 @@ export async function startPrincipalTurnCancellationServer(
   const root = resolve(butlerData);
   const socketPath = principalTurnCancellationSocketPath(root);
   mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 });
+  assertPrivateSocketDirectory(dirname(socketPath));
   await prepareSocketPath(socketPath);
 
   const server = createServer((socket) => {
     let frame = "";
+    let handled = false;
     socket.setTimeout(CANCEL_REQUEST_TIMEOUT_MS, () => socket.destroy());
     socket.on("data", (chunk) => {
       frame += chunk.toString("utf8");
@@ -62,11 +72,13 @@ export async function startPrincipalTurnCancellationServer(
         return;
       }
       const newline = frame.indexOf("\n");
-      if (newline < 0) return;
+      if (newline < 0 || handled) return;
+      handled = true;
       const response = handleCancelExecutionFrame(root, frame.slice(0, newline));
       socket.end(`${JSON.stringify(response)}\n`);
     });
   });
+  server.maxConnections = 32;
   await listenUnix(server, socketPath);
   chmodSync(socketPath, 0o600);
   return {
@@ -225,10 +237,29 @@ function parseCancelExecutionRequest(frame: string): CancelExecutionRequest | nu
 function parseCancelExecutionResponse(frame: string): CancelExecutionResponse | null {
   try {
     const value = JSON.parse(frame) as CancelExecutionResponse;
-    if (value.version !== 1 || typeof value.outcome !== "string") return null;
+    if (
+      value.version !== 1 ||
+      ![
+        "signal_dispatched",
+        "already_settled",
+        "decision_not_cancelled",
+        "execution_identity_mismatch",
+      ].includes(value.outcome)
+    ) {
+      return null;
+    }
     return value;
   } catch {
     return null;
+  }
+}
+
+function assertPrivateSocketDirectory(path: string): void {
+  chmodSync(path, 0o700);
+  const stat = statSync(path);
+  const uid = typeof process.getuid === "function" ? process.getuid() : null;
+  if (!stat.isDirectory() || (uid !== null && stat.uid !== uid)) {
+    throw new Error("principal_turn_cancellation_socket_directory_unsafe");
   }
 }
 

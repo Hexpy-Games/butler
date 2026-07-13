@@ -13726,8 +13726,9 @@ test("concurrent ordinary failed turn retries are rejected", async () => {
 });
 
 test("turn cancel endpoint returns safe conflict for completed turns", async () => {
+  const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
+    dbPath,
     port: 0,
     responder(input) {
       return { texts: [`done: ${input.text}`] };
@@ -13750,6 +13751,13 @@ test("turn cancel endpoint returns safe conflict for completed turns", async () 
     expect(response.status).toBe(409);
     expect(body.error.code).toBe("turn_not_cancellable");
     expect(JSON.stringify(body)).not.toContain(tempDir);
+    const db = new Database(dbPath, { readonly: true });
+    expect(
+      db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM app_turn_cancel_outbox
+      `).get()?.count,
+    ).toBe(0);
+    db.close();
   } finally {
     server.stop();
   }

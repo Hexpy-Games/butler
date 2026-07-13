@@ -668,15 +668,15 @@ function completePrincipalCancelledQueueClaim(
   });
   const turnId = item.envelope.routingHints?.turnId?.trim();
   if (completed && turnId) {
-    markPrincipalTurnCancellationDelivery(
-      {
+    const identity = {
         butlerData: options.queue.butlerData,
         turnId,
         queueId: item.queueId,
         dispatchClaimId: item.processing.claimId,
-      },
-      "completed",
-    );
+      };
+    queueMicrotask(() => {
+      markPrincipalTurnCancellationDelivery(identity, "completed");
+    });
   }
   return completed;
 }

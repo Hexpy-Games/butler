@@ -211,13 +211,20 @@ export class AppTurnActionStore {
   ): void {
     const now = new Date().toISOString();
     this.input.db.transaction(() => {
-      this.input.db.query(`
+      const decision = this.input.db.query(`
         UPDATE turns
         SET state = 'cancelling', safe_status_label = 'Stopping',
           safe_error_code = NULL, retryable = 0, cancellable = 0, updated_at = ?
         WHERE id = ?
           AND state NOT IN ('cancelled', 'delivered', 'failed', 'runtime_fault')
       `).run(now, row.id);
+      if (decision.changes !== 1) {
+        throw new AppStoreOperationError(
+          409,
+          "turn_not_cancellable",
+          "Turn is not cancellable.",
+        );
+      }
       if (identity) {
         this.input.db.query(`
           INSERT INTO app_turn_cancel_outbox (
