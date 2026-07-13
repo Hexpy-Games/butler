@@ -9253,9 +9253,23 @@ test("app transport final result projection does not resurrect cancelled turns",
     {},
   );
   expect(cancel.data.turn).toMatchObject({
-    state: "cancelled",
+    state: "cancelling",
     cancellable: false,
     retryable: false,
+  });
+  const settlementDb = new Database(dbPath);
+  settlementDb.query(`
+    UPDATE app_turn_cancel_outbox
+    SET state = 'completed', completed_at = ?
+    WHERE turn_id = ?
+  `).run(new Date().toISOString(), turnId);
+  settlementDb.close();
+  const settledView = await getJson(
+    `${url}session-view?session_id=general`,
+  );
+  expect(settledView.data.latest_turn).toMatchObject({
+    id: turnId,
+    state: "cancelled",
   });
   server.stop();
 
