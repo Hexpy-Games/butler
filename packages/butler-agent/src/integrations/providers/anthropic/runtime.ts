@@ -10,6 +10,7 @@ import {
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 
 
 export async function createAnthropicMessage(
@@ -30,6 +31,19 @@ async function createAnthropicMessageOnce(
   signal?: AbortSignal,
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(anthropicMessagesUrl(config));
+  const requestBody = {
+    model: config.modelId,
+    max_tokens: 4096,
+    ...body,
+  };
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: config.providerId,
+    modelRef: config.modelRef,
+    body: requestBody,
+    requestedOutputTokens: typeof requestBody.max_tokens === "number"
+      ? requestBody.max_tokens
+      : undefined,
+  });
   let response: Response;
   try {
     response = await fetch(anthropicMessagesUrl(config), {
@@ -39,11 +53,7 @@ async function createAnthropicMessageOnce(
         "anthropic-version": process.env.BUTLER_ANTHROPIC_VERSION?.trim() || "2023-06-01",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: config.modelId,
-        max_tokens: 4096,
-        ...body,
-      }),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {

@@ -9,6 +9,7 @@ import {
 } from "./runtime-support.ts";
 import { promptWithAttachmentContext } from "../../../agent/context/attachment-context.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { admitSerializedProviderRequest } from "./request-context-admission.ts";
 
 
 
@@ -221,6 +222,19 @@ async function createHostedChatCompletionOnce(
   signal?: AbortSignal,
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(hostedChatCompletionsUrl(config));
+  const requestBody: Record<string, unknown> = {
+    temperature: 0,
+    model: config.modelId,
+    ...body,
+  };
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: config.providerId,
+    modelRef: config.modelRef,
+    body: requestBody,
+    requestedOutputTokens: typeof requestBody.max_tokens === "number"
+      ? requestBody.max_tokens
+      : undefined,
+  });
   let response: Response;
   try {
     response = await fetch(hostedChatCompletionsUrl(config), {
@@ -229,11 +243,7 @@ async function createHostedChatCompletionOnce(
         Authorization: hostedAuthHeader(config),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        temperature: 0,
-        model: config.modelId,
-        ...body,
-      }),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {

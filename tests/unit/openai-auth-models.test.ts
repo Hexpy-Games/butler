@@ -2679,7 +2679,7 @@ test("local function tool context fallback preserves compact web evidence tools"
   }
 });
 
-test("local function tool prompts preserve large tool results for the immediate follow-up", async () => {
+test("local admission compacts a tool result when raw bytes cannot prove the immediate follow-up fits", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let immediateToolContent = "";
   let finalSynthesisToolContent = "";
@@ -2709,30 +2709,13 @@ test("local function tool prompts preserve large tool results for the immediate 
       }
 
       const toolContent = String(toolMessage.content || "");
-      if (immediateToolContent) {
-        finalSynthesisToolContent = toolContent;
-        return Response.json({
-          choices: [{
-            message: {
-              role: "assistant",
-              content: finalEnvelope("used raw tool evidence"),
-            },
-          }],
-        });
-      }
       immediateToolContent = toolContent;
-      if (!immediateToolContent.includes("RAW_MIDDLE_SHOULD_BE_COMPACTED")) {
-        return Response.json({
-          error: {
-            message: "expected raw local tool result on the immediate follow-up",
-          },
-        }, { status: 400 });
-      }
+      finalSynthesisToolContent = toolContent;
       return Response.json({
         choices: [{
           message: {
             role: "assistant",
-            content: "draft after raw tool evidence",
+            content: finalEnvelope("used compact tool evidence"),
           },
         }],
       });
@@ -2772,12 +2755,12 @@ test("local function tool prompts preserve large tool results for the immediate 
       }),
     });
 
-    expect(text).toBe("used raw tool evidence");
-    expect(seenBodies).toHaveLength(3);
-    expect(immediateToolContent).not.toContain("butler_tool_result_compacted");
+    expect(text).toBe("used compact tool evidence");
+    expect(seenBodies).toHaveLength(2);
+    expect(immediateToolContent).toContain("butler_tool_result_compacted");
     expect(immediateToolContent).toContain("row-0");
     expect(immediateToolContent).toContain("critical-source-at-end");
-    expect(immediateToolContent).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(immediateToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
     expect(finalSynthesisToolContent).toContain("butler_tool_result_compacted");
     expect(finalSynthesisToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
     expect(seenBodies.every((body) =>
@@ -2884,7 +2867,7 @@ test("local function tool prompts compact observed large tool results for final 
     expect(text).toBe("used cumulatively compacted evidence");
     expect(totalToolContentLength).toBeLessThanOrEqual(12_000);
     expect(logs.some((line) => line.includes("final_synthesis_context_retry"))).toBe(true);
-    expect(seenBodies).toHaveLength(4);
+    expect(seenBodies).toHaveLength(2);
   } finally {
     localServer.stop(true);
   }
@@ -2988,7 +2971,7 @@ test("local function tool prompts recover final synthesis context overflow with 
     expect(text).toBe("answered from compact evidence-only synthesis");
     expect(compactFinalRequestSeen).toBe(true);
     expect(logs.some((line) => line.includes("compact evidence-only final synthesis"))).toBe(true);
-    expect(seenBodies.length).toBeGreaterThanOrEqual(4);
+    expect(seenBodies.length).toBeGreaterThanOrEqual(3);
   } finally {
     localServer.stop(true);
   }

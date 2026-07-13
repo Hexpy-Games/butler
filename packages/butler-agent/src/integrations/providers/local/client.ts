@@ -3,6 +3,10 @@ import type { LocalModelConfig } from "./models.ts";
 import { ModelProviderRequestError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { withModelApiRetry } from "../shared/runtime-support.ts";
 import { localChatUrl } from "./protocol.ts";
+import {
+  admitSerializedProviderRequest,
+  ModelRequestAdmissionError,
+} from "../shared/request-context-admission.ts";
 
 
 
@@ -32,6 +36,16 @@ async function createLocalChatCompletionOnce(
   };
   const endpoint = safeEndpointLabel(localChatUrl(config));
   const model = typeof body.model === "string" ? body.model : config.model_id;
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "local",
+    modelRef: config.model_ref,
+    body: requestBody,
+    contextWindowTokens: config.context_window_tokens,
+    maxOutputTokens: config.max_output_tokens,
+    requestedOutputTokens: typeof requestBody.max_tokens === "number"
+      ? requestBody.max_tokens
+      : undefined,
+  });
   let response: Response;
   try {
     response = await fetch(localChatUrl(config), {
@@ -39,7 +53,7 @@ async function createLocalChatCompletionOnce(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(requestBody),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
@@ -82,6 +96,10 @@ export function firstLocalAssistantMessage(response: Record<string, any>): Recor
 
 
 export function isLocalContextOverflowError(error: unknown): boolean {
+  if (
+    error instanceof ModelRequestAdmissionError &&
+    error.code === "model_request_context_capacity_exceeded"
+  ) return true;
   if (!(error instanceof Error)) return false;
   const causeMessage = error instanceof ModelProviderRequestError ? error.causeMessage : "";
   const text = [error.message, causeMessage].filter(Boolean).join("\n");

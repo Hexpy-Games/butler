@@ -10,6 +10,7 @@ import {
   partitionSemanticToolBatch,
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 
 
 export async function createGeminiContent(
@@ -30,6 +31,17 @@ async function createGeminiContentOnce(
   signal?: AbortSignal,
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(geminiGenerateContentUrl(config));
+  const generationConfig = body.generationConfig && typeof body.generationConfig === "object"
+    ? body.generationConfig as Record<string, unknown>
+    : null;
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "google",
+    modelRef: config.modelRef,
+    body,
+    requestedOutputTokens: typeof generationConfig?.maxOutputTokens === "number"
+      ? generationConfig.maxOutputTokens
+      : undefined,
+  });
   let response: Response;
   try {
     response = await fetch(geminiGenerateContentUrl(config), {
@@ -38,7 +50,7 @@ async function createGeminiContentOnce(
         "x-goog-api-key": config.apiKey ?? "",
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {

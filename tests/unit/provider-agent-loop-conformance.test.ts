@@ -192,7 +192,7 @@ function providerHarnesses(): ProviderHarness[] {
     {
       family: "anthropic",
       run: async (options) => await runAnthropicFunctionToolPromptText(
-        hostedConfig("anthropic", "claude-sonnet-4-5"),
+        hostedConfig("anthropic", "claude-sonnet-4-6"),
         options,
       ),
       response: anthropicResponse,
@@ -200,7 +200,7 @@ function providerHarnesses(): ProviderHarness[] {
     {
       family: "google",
       run: async (options) => await runGeminiFunctionToolPromptText(
-        hostedConfig("google", "gemini-2.5-pro"),
+        hostedConfig("google", "gemini-3.1-pro"),
         options,
       ),
       response: geminiResponse,
@@ -377,8 +377,8 @@ function localConfig(): LocalModelConfig {
 function modelForFamily(family: ProviderFamily): string {
   if (family === "openai") return "openai/gpt-5.5";
   if (family === "hosted-chat") return "zai/glm-5.2";
-  if (family === "anthropic") return "anthropic/claude-sonnet-4-5";
-  if (family === "google") return "google/gemini-2.5-pro";
+  if (family === "anthropic") return "anthropic/claude-sonnet-4-6";
+  if (family === "google") return "google/gemini-3.1-pro";
   return "local/conformance";
 }
 

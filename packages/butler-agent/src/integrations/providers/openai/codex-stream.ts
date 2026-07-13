@@ -3,6 +3,7 @@ import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-c
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 
 
 
@@ -270,6 +271,15 @@ export async function createCodexResponse(
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
   const model = typeof body.model === "string" ? body.model : undefined;
+  const requestBody = codexRequestBody(body);
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: typeof requestBody.model === "string" ? requestBody.model : model ?? "",
+    body: requestBody,
+    requestedOutputTokens: typeof requestBody.max_output_tokens === "number"
+      ? requestBody.max_output_tokens
+      : undefined,
+  });
   let response: Response;
   try {
     response = await fetch(getCodexResponsesUrl(), {
@@ -283,7 +293,7 @@ export async function createCodexResponse(
         "chatgpt-account-id": accountId,
         originator: getCodexOriginator(),
       },
-      body: JSON.stringify(codexRequestBody(body)),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {

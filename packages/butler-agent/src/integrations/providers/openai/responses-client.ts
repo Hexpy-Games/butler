@@ -4,6 +4,7 @@ import { createCodexResponse } from "./codex-stream.ts";
 import { getResponsesUrl } from "./config.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveOpenAIAuth } from "./auth.ts";
+import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 
 
 
@@ -36,6 +37,14 @@ export async function createOpenAIResponseOnce(
   const { __butler_codex_stateless_input: _codexStatelessInput, ...officialBody } = body;
   const endpoint = safeEndpointLabel(getResponsesUrl());
   const model = typeof officialBody.model === "string" ? officialBody.model : undefined;
+  const admittedRequest = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: model ?? "",
+    body: officialBody,
+    requestedOutputTokens: typeof officialBody.max_output_tokens === "number"
+      ? officialBody.max_output_tokens
+      : undefined,
+  });
 
   let response: Response;
   try {
@@ -45,7 +54,7 @@ export async function createOpenAIResponseOnce(
         Authorization: auth.authorization,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(officialBody),
+      body: admittedRequest.serialized_request,
       signal,
     });
   } catch (error) {
