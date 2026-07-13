@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   inspectLegacyAppService,
   migrateLegacyAppService,
@@ -99,5 +99,29 @@ describe("legacy App service migration", () => {
     expect(existsSync(statePath)).toBeFalse();
     expect(JSON.parse(readFileSync(join(data, "app/runtime/foreground/legacy-migration.json"), "utf8")))
       .toMatchObject({ raw_text_included: false });
+  });
+
+  test("Linux migration disables and removes the legacy App-owned systemd unit", async () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-linux-migration-"));
+    roots.push(root);
+    const unit = join(root, "home", ".config", "systemd", "user", "butler.service");
+    mkdirSync(dirname(unit), { recursive: true });
+    writeFileSync(unit, "[Service]\n", "utf8");
+    const commands: Array<{ command: string; args: string[] }> = [];
+
+    const result = await migrateLegacyAppService({
+      butlerData: join(root, "data"),
+      homeDir: join(root, "home"),
+      platform: "linux",
+      activeWorkSnapshot: async () => ({ classification: "no_active_work" }),
+      runCommand: async (command, args) => { commands.push({ command, args }); },
+    });
+
+    expect(result.status).toBe("complete");
+    expect(commands).toEqual([{
+      command: "systemctl",
+      args: ["--user", "disable", "--now", "butler.service"],
+    }]);
+    expect(existsSync(unit)).toBe(false);
   });
 });

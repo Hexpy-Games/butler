@@ -238,10 +238,10 @@ test("app release manifest exposes app package files only", () => {
         },
         {
           platform: "linux",
-          selectedV1Path: "linux-deb-owned-user-unit",
-          installerRequired: "yes",
-          packageFormats: ["deb", "pacman", "rpm"],
-          registersUserService: true,
+          selectedV1Path: "linux-app-foreground",
+          installerRequired: "no",
+          packageFormats: ["deb", "pacman"],
+          registersUserService: false,
         },
       ],
       rawTextIncluded: false,
@@ -271,11 +271,7 @@ test("app release manifest exposes app package files only", () => {
     },
     serviceInstallerBundle: {
       servicePlatforms: ["darwin", "linux"],
-      packageArtifacts: [
-        { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
-        { packageFormat: "pacman", selectedV1Path: "linux-pacman-owned-user-unit" },
-        { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
-      ],
+      packageArtifacts: [],
     },
     desktopHelper: {
       helperMode: "electron-main-tray",
@@ -540,28 +536,7 @@ test("app release metadata ships bundled-Agent-only changes as a new App artifac
       publishedArtifactName: item.publishedArtifactName,
       publishedSha256Name: item.publishedSha256Name,
     }))).toEqual(
-      artifact.platform.startsWith("darwin-")
-        ? []
-        : [
-          {
-            packageFormat: "deb",
-            selectedV1Path: "linux-deb-owned-user-unit",
-            publishedArtifactName: `butler-app-service_${manifest.version}_amd64.deb`,
-            publishedSha256Name: `butler-app-service_${manifest.version}_amd64.deb.sha256`,
-          },
-          {
-            packageFormat: "pacman",
-            selectedV1Path: "linux-pacman-owned-user-unit",
-            publishedArtifactName: `butler-app-service-${manifest.version}-1-x86_64.pkg.tar.zst`,
-            publishedSha256Name: `butler-app-service-${manifest.version}-1-x86_64.pkg.tar.zst.sha256`,
-          },
-          {
-            packageFormat: "rpm",
-            selectedV1Path: "linux-rpm-owned-user-unit",
-            publishedArtifactName: `butler-app-service-${manifest.version}-1.x86_64.rpm`,
-            publishedSha256Name: `butler-app-service-${manifest.version}-1.x86_64.rpm.sha256`,
-          },
-        ],
+      [],
     );
   }
 });
@@ -745,17 +720,9 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
   expect(validateAppReleaseManifest(root, brokenAppPlatforms)).toContain(
     "missing app release artifact platform: app/linux-x64",
   );
-  const brokenInstallerAsset = structuredClone(createAppReleaseManifest(root));
-  const linuxArtifact = brokenInstallerAsset.artifacts.find(
-    (artifact) => artifact.platform === "linux-x64",
-  );
-  const debPackage = linuxArtifact?.serviceInstallerBundle.packageArtifacts.find(
-    (item) => item.packageFormat === "deb",
-  );
-  if (debPackage) debPackage.publishedArtifactName = null;
-  expect(validateAppReleaseManifest(root, brokenInstallerAsset)).toContain(
-    "artifact app service installer bundle package artifact path mismatch: deb/linux-deb-owned-user-unit",
-  );
+  expect(createAppReleaseManifest(root).artifacts.every(
+    (artifact) => artifact.serviceInstallerBundle.packageArtifacts.length === 0,
+  )).toBe(true);
 });
 
 test("agent release packager creates an installable artifact with app web client", () => {
@@ -959,7 +926,7 @@ test("agent release packager can write public GitHub artifact URLs", () => {
   }
 }, 90_000);
 
-test("app bundled Agent service launcher uses App version when Agent version differs", () => {
+test("app bundled Agent foreground payload excludes a Linux service launcher", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-app-launcher-app-version-test-"));
   const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
   try {
@@ -986,15 +953,13 @@ test("app bundled Agent service launcher uses App version when Agent version dif
       "2.3.4",
     );
 
-    const launcher = readText(join(
+    expect(existsSync(join(
       resource.resourceDir,
       "service-installer",
       "linux",
       "launcher",
       "butler-app-managed-agent-service",
-    ));
-    expect(launcher).toContain('export BUTLER_APP_VERSION="${BUTLER_APP_VERSION:-2.3.4}"');
-    expect(launcher).not.toContain('export BUTLER_APP_VERSION="${BUTLER_APP_VERSION:-9.9.9}"');
+    ))).toBe(false);
   } finally {
     if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
     else process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = previousLinuxRuntime;
@@ -1028,8 +993,8 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(tarVerboseListing(artifact.artifactPath)).toContain("drwxr-xr-x");
     expect(entries).toContain("./opt/butler/Butler-linux-x64/Butler");
     expect(entries).toContain("./usr/bin/butler-app");
-    expect(entries).toContain("./usr/lib/systemd/user/butler.service");
-    expect(entries).toContain("./usr/lib/butler/butler-app-managed-agent-service");
+    expect(entries).not.toContain("./usr/lib/systemd/user/butler.service");
+    expect(entries).not.toContain("./usr/lib/butler/butler-app-managed-agent-service");
     expect(entries).toContain("./usr/share/applications/butler.desktop");
     expect(entries).toContain("./usr/share/icons/hicolor/512x512/apps/butler.png");
     expect(entries).toContain(`${resourceRoot}/${agentArtifact}`);
@@ -1039,10 +1004,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(entries).toContain(`${resourceRoot}/background-service-capability.json`);
     expect(entries).toContain(`${resourceRoot}/background-service-registration.json`);
     expect(entries).toContain(`${resourceRoot}/service-installer/installer-manifest.json`);
-    expect(entries).toContain(`${resourceRoot}/service-installer/linux/systemd/render-contract.json`);
-    expect(entries).toContain(`${resourceRoot}/service-installer/linux/deb/postinst`);
-    expect(entries).toContain(`${resourceRoot}/service-installer/linux/rpm/postinstall.sh`);
-    expect(entries).toContain(`${resourceRoot}/service-installer/linux/launcher/butler-app-managed-agent-service`);
+    expect(entries).not.toContain(`${resourceRoot}/service-installer/linux/systemd/render-contract.json`);
     expect(entries).toContain(`${resourceRoot}/runtime/bun-version`);
     expect(entries).toContain(`${resourceRoot}/runtime/bin/bun`);
     expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
@@ -1051,15 +1013,6 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
     expect(extractTarEntryText(artifact.artifactPath, "./usr/bin/butler-app")).toContain(
       "BUTLER_APP_ENABLE_GPU",
     );
-    expect(
-      extractTarEntryText(artifact.artifactPath, "./usr/lib/butler/butler-app-managed-agent-service"),
-    ).toContain(`export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${currentVersion}}"`);
-    expect(
-      extractTarEntryText(
-        artifact.artifactPath,
-        `${resourceRoot}/service-installer/linux/launcher/butler-app-managed-agent-service`,
-      ),
-    ).toContain(`export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${currentVersion}}"`);
     expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
       'find "/opt/butler/Butler-linux-x64" -type d -exec chmod 755 {} +',
     );
@@ -1113,26 +1066,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       },
       service_installer_bundle: {
         servicePlatforms: ["darwin", "linux"],
-        packageArtifacts: [
-          {
-            packageFormat: "deb",
-            selectedV1Path: "linux-deb-owned-user-unit",
-            publishedArtifactName: `butler-app-service_${currentVersion}_amd64.deb`,
-            publishedSha256Name: `butler-app-service_${currentVersion}_amd64.deb.sha256`,
-          },
-          {
-            packageFormat: "pacman",
-            selectedV1Path: "linux-pacman-owned-user-unit",
-            publishedArtifactName: `butler-app-service-${currentVersion}-1-x86_64.pkg.tar.zst`,
-            publishedSha256Name: `butler-app-service-${currentVersion}-1-x86_64.pkg.tar.zst.sha256`,
-          },
-          {
-            packageFormat: "rpm",
-            selectedV1Path: "linux-rpm-owned-user-unit",
-            publishedArtifactName: `butler-app-service-${currentVersion}-1.x86_64.rpm`,
-            publishedSha256Name: `butler-app-service-${currentVersion}-1.x86_64.rpm.sha256`,
-          },
-        ],
+        packageArtifacts: [],
       },
       gateway_profile: "electron",
       protocol_compatibility: {
@@ -1157,20 +1091,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       },
       service_installer_bundle: {
         servicePlatforms: ["linux"],
-        packageArtifacts: [
-          {
-            packageFormat: "deb",
-            publishedArtifactName: `butler-app-service_${currentVersion}_amd64.deb`,
-          },
-          {
-            packageFormat: "pacman",
-            publishedArtifactName: `butler-app-service-${currentVersion}-1-x86_64.pkg.tar.zst`,
-          },
-          {
-            packageFormat: "rpm",
-            publishedArtifactName: `butler-app-service-${currentVersion}-1.x86_64.rpm`,
-          },
-        ],
+        packageArtifacts: [],
       },
       protocol_compatibility: {
         protocol: "butler.app.v1",
@@ -1200,10 +1121,6 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       artifact.artifactPath,
       `${resourceRoot}/service-installer/installer-manifest.json`,
     );
-    const systemdRenderContract = extractTarEntryJson(
-      artifact.artifactPath,
-      `${resourceRoot}/service-installer/linux/systemd/render-contract.json`,
-    );
     expect(backgroundServiceCapability).toMatchObject({
       schema: "butler.app-background-service-capability.v1",
       serviceCapable: true,
@@ -1212,10 +1129,10 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       installerRequirements: [
         {
           platform: "linux",
-          selectedV1Path: "linux-deb-owned-user-unit",
-          installerRequired: "yes",
-          packageFormats: ["deb", "pacman", "rpm"],
-          registersUserService: true,
+          selectedV1Path: "linux-app-foreground",
+          installerRequired: "no",
+          packageFormats: ["deb", "pacman"],
+          registersUserService: false,
         },
       ],
       rawTextIncluded: false,
@@ -1230,46 +1147,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       hostToolsRequiredForFirstLaunch: [],
       rawTemplateIncluded: false,
       rawTextIncluded: false,
-      packageArtifacts: [
-        {
-          packageFormat: "deb",
-          selectedV1Path: "linux-deb-owned-user-unit",
-          serviceManager: "systemd-user",
-          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-          renderContractPath: "service-installer/linux/systemd/render-contract.json",
-          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-          postInstallPath: "service-installer/linux/deb/postinst",
-        },
-        {
-          packageFormat: "pacman",
-          selectedV1Path: "linux-pacman-owned-user-unit",
-          serviceManager: "systemd-user",
-          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-          renderContractPath: "service-installer/linux/systemd/render-contract.json",
-          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-          postInstallPath: "service-installer/linux/pacman/post_install",
-        },
-        {
-          packageFormat: "rpm",
-          selectedV1Path: "linux-rpm-owned-user-unit",
-          serviceManager: "systemd-user",
-          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-          renderContractPath: "service-installer/linux/systemd/render-contract.json",
-          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-          postInstallPath: "service-installer/linux/rpm/postinstall.sh",
-        },
-      ],
-    });
-    expect(systemdRenderContract).toMatchObject({
-      schema: "butler.app-service-render-contract.v1",
-      platform: "linux",
-      manager: "systemd-user",
-      target: "/usr/lib/systemd/user/butler.service",
-      renderer: "butler-app-native-service-bridge",
-      requiredEscaping: "systemd-quoted",
-      launcherPath: "/usr/lib/butler/butler-app-managed-agent-service",
-      rawTemplateIncluded: false,
-      rawTextIncluded: false,
+      packageArtifacts: [],
     });
     expect(backgroundServiceRegistration).toMatchObject({
       schema: "butler.app-background-service-registration.v1",
@@ -1277,21 +1155,13 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       releasePlatform: "linux-x64",
       servicePlatform: "linux",
       gatewayProfile: "electron",
-      installerRequired: "yes",
-      packageFormats: ["deb", "pacman", "rpm"],
-      packageInstallerTargets: [
-        { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
-        { packageFormat: "pacman", selectedV1Path: "linux-pacman-owned-user-unit" },
-        { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
-      ],
-      registersUserService: true,
+      installerRequired: "no",
+      packageFormats: ["deb", "pacman"],
+      packageInstallerTargets: [],
+      registersUserService: false,
       runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
       localAuthPath: "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json",
-      serviceDefinition: {
-        manager: "systemd-user",
-        unit: "butler.service",
-        serviceFile: "/usr/lib/systemd/user/butler.service",
-      },
+      serviceDefinition: null,
       desktopHelper: {
         schema: "butler.app-desktop-helper.v1",
         helperMode: "electron-main-tray",
@@ -1384,8 +1254,8 @@ test("app release packager creates Linux ARM64 deb staging", () => {
     expect(tarVerboseListing(artifact.artifactPath)).toContain("drwxr-xr-x");
     expect(listing.stdout).toContain("./opt/butler/Butler-linux-arm64/Butler");
     expect(listing.stdout).toContain("./usr/bin/butler-app");
-    expect(listing.stdout).toContain("./usr/lib/systemd/user/butler.service");
-    expect(listing.stdout).toContain("./usr/lib/butler/butler-app-managed-agent-service");
+    expect(listing.stdout).not.toContain("./usr/lib/systemd/user/butler.service");
+    expect(listing.stdout).not.toContain("./usr/lib/butler/butler-app-managed-agent-service");
     expect(listing.stdout).toContain(
       "./opt/butler/Butler-linux-arm64/resources/bundled-agent/runtime/bin/bun",
     );
@@ -1404,12 +1274,6 @@ test("app release packager creates Linux ARM64 deb staging", () => {
     expect(extractTarEntryText(artifact.artifactPath, "./DEBIAN/postinst")).toContain(
       'if [ -f "/opt/butler/Butler-linux-arm64/chrome-sandbox" ] && [ ! -L "/opt/butler/Butler-linux-arm64/chrome-sandbox" ]; then',
     );
-    expect(extractTarEntryText(artifact.artifactPath, "./usr/lib/systemd/user/butler.service")).toContain(
-      "ExecStart=/usr/lib/butler/butler-app-managed-agent-service",
-    );
-    expect(
-      extractTarEntryText(artifact.artifactPath, "./usr/lib/butler/butler-app-managed-agent-service"),
-    ).toContain(`export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${currentVersion}}"`);
   } finally {
     if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64;
     else process.env.BUTLER_APP_MANAGED_BUN_LINUX_ARM64 = previousLinuxRuntime;
@@ -1452,8 +1316,8 @@ test("app release packager can create Linux x64 pacman package staging", () => {
     expect(listing.status).toBe(0);
     expect(listing.stdout).toContain("./opt/butler/Butler-linux-x64/Butler");
     expect(listing.stdout).toContain("./usr/bin/butler-app");
-    expect(listing.stdout).toContain("./usr/lib/systemd/user/butler.service");
-    expect(listing.stdout).toContain("./usr/lib/butler/butler-app-managed-agent-service");
+    expect(listing.stdout).not.toContain("./usr/lib/systemd/user/butler.service");
+    expect(listing.stdout).not.toContain("./usr/lib/butler/butler-app-managed-agent-service");
     expect(listing.stdout).toContain("./usr/share/applications/butler.desktop");
     expect(listing.stdout).toContain("./usr/share/icons/hicolor/512x512/apps/butler.png");
     expect(listing.stdout).toContain("./usr/share/licenses/butler-app/LICENSE");
@@ -1471,11 +1335,7 @@ test("app release packager can create Linux x64 pacman package staging", () => {
       artifact_url: `file://${artifact.artifactPath}`,
       sha256: artifact.sha256,
       service_installer_bundle: {
-        packageArtifacts: [
-          { packageFormat: "deb" },
-          { packageFormat: "pacman" },
-          { packageFormat: "rpm" },
-        ],
+        packageArtifacts: [],
       },
     });
   } finally {

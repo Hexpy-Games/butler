@@ -521,12 +521,12 @@ function appServiceInstallerRequirementForPlatform(
   const servicePlatform = servicePlatformForReleasePlatform(releasePlatform);
   const capability = appBackgroundServiceCapability(servicePlatform);
   const selectedV1Path = selectedInstallerV1Path(servicePlatform);
-  if (servicePlatform === "darwin") {
+  if (["darwin", "linux"].includes(servicePlatform)) {
     return {
       platform: servicePlatform,
       selectedV1Path,
       installerRequired: "no",
-      packageFormats: ["dmg", "zip"],
+      packageFormats: servicePlatform === "darwin" ? ["dmg", "zip"] : ["deb", "pacman"],
       requiredDecision: "Butler App owns the Agent only while the App is running.",
       allowedMechanisms: ["app-foreground-child"],
       userContext: "signed-in desktop user",
@@ -577,8 +577,8 @@ function selectedInstallerV1Path(
   platform: AppBackgroundServicePlatform,
 ): AppBackgroundServiceV1Path {
   if (platform === "darwin") return "macos-app-foreground";
-  if (platform === "linux") return "linux-deb-owned-user-unit";
-  if (platform === "win32") return "windows-least-privilege-user-service";
+  if (platform === "linux") return "linux-app-foreground";
+  if (platform === "win32") return "windows-app-foreground";
   throw new Error(`unsupported App service platform: ${platform}`);
 }
 
@@ -586,7 +586,7 @@ function serviceInstallerPackageFormats(
   platform: AppBackgroundServicePlatform,
 ): AppReleaseServiceInstallerPackageFormat[] {
   if (platform === "darwin") return ["dmg", "zip"];
-  if (platform === "linux") return ["deb", "pacman", "rpm"];
+  if (platform === "linux") return ["deb", "pacman"];
   throw new Error(`unsupported App service installer platform: ${platform}`);
 }
 
@@ -600,44 +600,8 @@ function serviceInstallerPackageArtifactsForPlatform(
     return [];
   }
   if (platform === "linux") {
-    const debArtifactName = version ? `butler-app-service_${version}_amd64.deb` : null;
-    const pacmanArtifactName = version ? `butler-app-service-${version}-1-x86_64.pkg.tar.zst` : null;
-    const rpmArtifactName = version ? `butler-app-service-${version}-1.x86_64.rpm` : null;
-    return [
-      {
-        packageFormat: "deb",
-        selectedV1Path: "linux-deb-owned-user-unit",
-        serviceManager: "systemd-user",
-        serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-        renderContractPath: "service-installer/linux/systemd/render-contract.json",
-        launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-        postInstallPath: "service-installer/linux/deb/postinst",
-        publishedArtifactName: debArtifactName,
-        publishedSha256Name: debArtifactName ? `${debArtifactName}.sha256` : null,
-      },
-      {
-        packageFormat: "pacman",
-        selectedV1Path: "linux-pacman-owned-user-unit",
-        serviceManager: "systemd-user",
-        serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-        renderContractPath: "service-installer/linux/systemd/render-contract.json",
-        launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-        postInstallPath: "service-installer/linux/pacman/post_install",
-        publishedArtifactName: pacmanArtifactName,
-        publishedSha256Name: pacmanArtifactName ? `${pacmanArtifactName}.sha256` : null,
-      },
-      {
-        packageFormat: "rpm",
-        selectedV1Path: "linux-rpm-owned-user-unit",
-        serviceManager: "systemd-user",
-        serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-        renderContractPath: "service-installer/linux/systemd/render-contract.json",
-        launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-        postInstallPath: "service-installer/linux/rpm/postinstall.sh",
-        publishedArtifactName: rpmArtifactName,
-        publishedSha256Name: rpmArtifactName ? `${rpmArtifactName}.sha256` : null,
-      },
-    ];
+    void version;
+    return [];
   }
   throw new Error(`unsupported App service installer package artifact platform: ${platform}`);
 }
@@ -1344,7 +1308,7 @@ function validateAppBackgroundServiceReleaseCapability(
     if (requirement.selectedV1Path !== expectedPath) {
       issues.push(`${label} ${platform} selected installer path mismatch`);
     }
-    const expectsService = platform !== "darwin";
+    const expectsService = !["darwin", "linux"].includes(platform);
     if (requirement.installerRequired !== (expectsService ? "yes" : "no")) {
       issues.push(`${label} ${platform} installer requirement mismatch`);
     }

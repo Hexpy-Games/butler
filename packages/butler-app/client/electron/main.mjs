@@ -338,7 +338,6 @@ function ensureAppManagedAgentRuntimePointer() {
 }
 
 function shouldUseAppAgentNativeServiceBridge() {
-  if (app.isPackaged && process.platform === "linux") return true;
   if (usesAppForegroundLifecycle) return false;
   if (process.env.BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE !== "1") return false;
   assertNativeServiceTestBridgeEnvironment();
@@ -1785,6 +1784,7 @@ async function ensureLegacyAppServiceMigration() {
   if (legacyMigrationPromise) return await legacyMigrationPromise;
   legacyMigrationPromise = migrateLegacyAppService({
     butlerData: butlerDataRoot,
+    platform: process.platform,
     activeWorkSnapshot: readForegroundActiveWorkSnapshot,
     confirm: (snapshot) => confirmAppForegroundQuit({
       snapshot,

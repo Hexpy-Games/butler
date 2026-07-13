@@ -221,98 +221,6 @@ jobs:
           fi
           gh release upload "$tag" "${files[@]}" --clobber
 
-  app-linux-service-installers:
-    name: Build and publish Linux app service installers
-    runs-on: ubuntu-latest
-    needs: app-artifact
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install package toolchains
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y fakeroot libarchive-tools pacman-package-manager rpm zstd
-          sudo mkdir -p /var/lib/pacman/local
-          sudo chmod -R a+rwx /var/lib/pacman
-          command -v dpkg-deb
-          command -v makepkg
-          command -v rpmbuild
-          command -v bsdtar
-
-      - name: Build Linux app service installer packages
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
-          mkdir -p dist/release/app dist/release/linux-service
-          gh release download "$tag" \
-            --pattern 'butler-app-*-linux-x64.deb' \
-            --dir dist/release/app \
-            --clobber
-          gh release download "$tag" \
-            --pattern app-release-manifest.json \
-            --dir dist/release/app \
-            --clobber
-          shopt -s nullglob
-          linux_debs=(dist/release/app/butler-app-*-linux-x64.deb)
-          if [ "${#linux_debs[@]}" -ne 1 ]; then
-            printf 'Expected one Linux App deb, got %s\n' "${#linux_debs[@]}" >&2
-            printf '%s\n' "${linux_debs[@]}" >&2
-            exit 1
-          fi
-          expected_sha="$(
-            MANIFEST=dist/release/app/app-release-manifest.json bun -e '
-              const manifest = JSON.parse(await Bun.file(process.env.MANIFEST).text());
-              const artifact = manifest.artifacts.find((item) => item.platform === "linux-x64");
-              if (!artifact?.sha256) throw new Error("missing linux-x64 App sha256");
-              console.log(artifact.sha256);
-            '
-          )"
-          actual_sha="$(sha256sum "${linux_debs[0]}" | awk '{print $1}')"
-          if [ "$actual_sha" != "$expected_sha" ]; then
-            printf 'Linux App deb checksum mismatch: expected %s, got %s\n' "$expected_sha" "$actual_sha" >&2
-            exit 1
-          fi
-          dpkg-deb -x "${linux_debs[0]}" dist/release/linux-service
-          resource_dir="dist/release/linux-service/opt/butler/Butler-linux-x64/resources/bundled-agent"
-          test -f "$resource_dir/service-installer/installer-manifest.json"
-          bun packages/butler-app/scripts/release/linux-service-installer-package.ts \
-            --resource-dir "$resource_dir" \
-            --out dist/release/app \
-            --version "$version" \
-            --build
-          for checksum in dist/release/app/butler-app-service_*.deb.sha256 dist/release/app/butler-app-service-*.pkg.tar.zst.sha256 dist/release/app/butler-app-service-*.rpm.sha256; do
-            (cd dist/release/app && sha256sum -c "$(basename "$checksum")")
-          done
-
-      - name: Publish Linux app service installer packages
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          shopt -s nullglob
-          files=(
-            dist/release/app/butler-app-service_*_amd64.deb
-            dist/release/app/butler-app-service-*-1-x86_64.pkg.tar.zst
-            dist/release/app/butler-app-service-*-1.x86_64.rpm
-          )
-          if [ "${#files[@]}" -ne 3 ]; then
-            printf 'Expected 3 Linux app service installer files, got %s\n' "${#files[@]}" >&2
-            printf '%s\n' "${files[@]}" >&2
-            exit 1
-          fi
-          gh release upload "$tag" "${files[@]}" --clobber
-
   app-arch-artifact:
     name: Build and publish Arch app artifact
     runs-on: ubuntu-latest
@@ -376,7 +284,10 @@ jobs:
           bsdtar -tf "${files[0]}" | tee dist/release/app-arch/package-contents.txt
           grep -qx '.PKGINFO' dist/release/app-arch/package-contents.txt
           grep -qx 'usr/bin/butler-app' dist/release/app-arch/package-contents.txt
-          grep -qx 'usr/lib/systemd/user/butler.service' dist/release/app-arch/package-contents.txt
+          if grep -qx 'usr/lib/systemd/user/butler.service' dist/release/app-arch/package-contents.txt; then
+            echo 'Arch App must not contain an App-owned systemd service' >&2
+            exit 1
+          fi
 
       - name: Publish Arch app artifact
         env:
@@ -401,7 +312,6 @@ jobs:
     needs:
       - agent-artifact
       - app-artifact
-      - app-linux-service-installers
       - app-arch-artifact
     steps:
       - name: Build consolidated checksum asset
@@ -424,8 +334,8 @@ jobs:
             done
           ) > "$checksum_file"
           checksum_count="$(wc -l < "$checksum_file" | tr -d ' ')"
-          if [ "$checksum_count" -ne 12 ]; then
-            printf 'Expected 12 checksummed release files, got %s\n' "$checksum_count" >&2
+          if [ "$checksum_count" -ne 10 ]; then
+            printf 'Expected 10 checksummed release files, got %s\n' "$checksum_count" >&2
             cat "$checksum_file" >&2
             exit 1
           fi

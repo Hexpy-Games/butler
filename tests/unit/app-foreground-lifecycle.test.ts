@@ -25,7 +25,9 @@ describe("App foreground lifecycle", () => {
     expect(resolveAppLifecycleMode({ platform: "darwin", isPackaged: true }))
       .toBe(APP_FOREGROUND_LIFECYCLE_MODES.foreground);
     expect(resolveAppLifecycleMode({ platform: "linux", isPackaged: true }))
-      .toBe(APP_FOREGROUND_LIFECYCLE_MODES.nativeService);
+      .toBe(APP_FOREGROUND_LIFECYCLE_MODES.foreground);
+    expect(resolveAppLifecycleMode({ platform: "win32", isPackaged: true }))
+      .toBe(APP_FOREGROUND_LIFECYCLE_MODES.foreground);
     expect(() => resolveAppLifecycleMode({
       platform: "darwin",
       isPackaged: true,

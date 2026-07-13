@@ -452,80 +452,12 @@ function writeAppServiceInstallerPayloads(input: {
   if (!requirement) {
     throw new Error(`missing background service installer requirement for ${input.platform}`);
   }
-  if (requirement.platform === "darwin") {
+  if (requirement.platform === "darwin" || requirement.platform === "linux") {
     writeServiceInstallerManifest({
       resourceDir: input.resourceDir,
       releasePlatform: input.platform,
-      servicePlatform: "darwin",
+      servicePlatform: requirement.platform,
       packageArtifacts: [],
-    });
-    return;
-  }
-  if (requirement.platform === "linux") {
-    writeJson(
-      join(input.resourceDir, "service-installer", "linux", "systemd", "render-contract.json"),
-      serviceRenderContract({
-        platform: "linux",
-        manager: "systemd-user",
-        target: "/usr/lib/systemd/user/butler.service",
-        escaping: "systemd-quoted",
-      }),
-    );
-    writeExecutableText(
-      join(input.resourceDir, "service-installer", "linux", "deb", "postinst"),
-      linuxDebPostinstScript(),
-    );
-    writeExecutableText(
-      join(input.resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"),
-      linuxRpmPostinstallScript(),
-    );
-    writeExecutableText(
-      join(input.resourceDir, "service-installer", "linux", "pacman", "post_install"),
-      linuxPacmanPostInstallScript(),
-    );
-    writeExecutableText(
-      join(
-        input.resourceDir,
-        "service-installer",
-        "linux",
-        "launcher",
-        "butler-app-managed-agent-service",
-      ),
-      linuxAppManagedAgentServiceLauncher(input.appVersion),
-    );
-    writeServiceInstallerManifest({
-      resourceDir: input.resourceDir,
-      releasePlatform: input.platform,
-      servicePlatform: "linux",
-      packageArtifacts: [
-        {
-          packageFormat: "deb",
-          selectedV1Path: "linux-deb-owned-user-unit",
-          serviceManager: "systemd-user",
-          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-          renderContractPath: "service-installer/linux/systemd/render-contract.json",
-          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-          postInstallPath: "service-installer/linux/deb/postinst",
-        },
-        {
-          packageFormat: "pacman",
-          selectedV1Path: "linux-pacman-owned-user-unit",
-          serviceManager: "systemd-user",
-          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-          renderContractPath: "service-installer/linux/systemd/render-contract.json",
-          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-          postInstallPath: "service-installer/linux/pacman/post_install",
-        },
-        {
-          packageFormat: "rpm",
-          selectedV1Path: "linux-rpm-owned-user-unit",
-          serviceManager: "systemd-user",
-          serviceDefinitionTarget: "/usr/lib/systemd/user/butler.service",
-          renderContractPath: "service-installer/linux/systemd/render-contract.json",
-          launcherPath: "service-installer/linux/launcher/butler-app-managed-agent-service",
-          postInstallPath: "service-installer/linux/rpm/postinstall.sh",
-        },
-      ],
     });
     return;
   }
@@ -555,111 +487,6 @@ function writeServiceInstallerManifest(input: {
   );
 }
 
-function serviceRenderContract(input: {
-  platform: "darwin" | "linux";
-  manager: "launchd" | "systemd-user";
-  target: string;
-  escaping: "xml" | "systemd-quoted";
-}): Record<string, unknown> {
-  return {
-    schema: "butler.app-service-render-contract.v1",
-    platform: input.platform,
-    manager: input.manager,
-    target: input.target,
-    renderer: "butler-app-native-service-bridge",
-    requiredEscaping: input.escaping,
-    launcherPath: input.platform === "linux"
-      ? "/usr/lib/butler/butler-app-managed-agent-service"
-      : null,
-    label: "com.hexpy.butler",
-    unit: input.platform === "linux" ? "butler.service" : null,
-    requiredEnvironment: [
-      "BUTLER_HOME",
-      "BUTLER_DATA",
-      "BUTLER_BUN",
-      "BUTLER_APP_MANAGED_RUNTIME_POINTER",
-      "BUTLER_APP_MANAGED_RUNTIME_HOME",
-      "BUTLER_APP_SERVER_HOST",
-      "BUTLER_APP_SERVER_PORT",
-      "BUTLER_APP_GATEWAY_PID_FILE",
-      "BUTLER_APP_LOCAL_AUTH_REQUIRED",
-      "BUTLER_APP_LOCAL_AUTH_FILE",
-    ],
-    rawTemplateIncluded: false,
-    rawTextIncluded: false,
-  };
-}
-
-function linuxDebPostinstScript(): string {
-  return `#!/bin/sh
-set -eu
-echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
-exit 0
-`;
-}
-
-function linuxRpmPostinstallScript(): string {
-  return `#!/bin/sh
-set -eu
-echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
-exit 0
-`;
-}
-
-function linuxPacmanPostInstallScript(): string {
-  return `#!/bin/sh
-set -eu
-echo "Butler App systemd user service payload installed. First-run will render user paths and enable the service."
-exit 0
-`;
-}
-
-function linuxAppManagedAgentServiceLauncher(version: string): string {
-  return `#!/usr/bin/env bash
-set -euo pipefail
-
-BUTLER_DATA="\${BUTLER_DATA:-$HOME/.butler}"
-POINTER="$BUTLER_DATA/app/runtime/agent/current.json"
-AUTH_FILE="\${BUTLER_APP_LOCAL_AUTH_FILE:-$BUTLER_DATA/app/runtime/auth/local-agent-auth.json}"
-PORT="\${BUTLER_APP_SERVER_PORT:-18765}"
-
-if [ ! -f "$POINTER" ]; then
-  echo "Butler App-managed Agent runtime pointer is missing: $POINTER" >&2
-  exit 1
-fi
-
-RUNTIME_HOME_REL="$(sed -n 's/.*"runtime_home"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p' "$POINTER" | head -n 1)"
-case "$RUNTIME_HOME_REL" in
-  ""|/*|..|../*|*/..|*/../*)
-    echo "Butler App-managed Agent runtime pointer is invalid." >&2
-    exit 1
-    ;;
-esac
-RUNTIME_HOME="$BUTLER_DATA/$RUNTIME_HOME_REL"
-SERVICE_DAEMON="$RUNTIME_HOME/packages/butler-agent/scripts/service-daemon.sh"
-BUTLER_BUN="$RUNTIME_HOME/packages/butler-agent/resources/runtime/bin/bun"
-
-if [ ! -x "$BUTLER_BUN" ] || [ ! -f "$SERVICE_DAEMON" ]; then
-  echo "Butler App-managed Agent runtime is not ready." >&2
-  exit 1
-fi
-
-export BUTLER_HOME="$RUNTIME_HOME"
-export BUTLER_DATA
-export BUTLER_BUN
-export BUTLER_APP_MANAGED_RUNTIME_POINTER="$POINTER"
-export BUTLER_APP_MANAGED_RUNTIME_HOME="$RUNTIME_HOME"
-export BUTLER_APP_SERVER_HOST="\${BUTLER_APP_SERVER_HOST:-127.0.0.1}"
-export BUTLER_APP_SERVER_PORT="$PORT"
-export BUTLER_APP_GATEWAY_PID_FILE="\${BUTLER_APP_GATEWAY_PID_FILE:-off}"
-export BUTLER_APP_LOCAL_AUTH_REQUIRED="\${BUTLER_APP_LOCAL_AUTH_REQUIRED:-1}"
-export BUTLER_APP_LOCAL_AUTH_FILE="$AUTH_FILE"
-export BUTLER_APP_VERSION="\${BUTLER_APP_VERSION:-${version}}"
-
-exec /bin/bash "$SERVICE_DAEMON"
-`;
-}
-
 function createAppBackgroundServiceRegistrationMetadata(
   platform: AppReleasePlatform,
 ): Record<string, unknown> {
@@ -676,12 +503,16 @@ function createAppBackgroundServiceRegistrationMetadata(
     gatewayProfile: "electron",
     installerRequired: requirement.installerRequired,
     packageFormats: requirement.packageFormats,
-    packageInstallerTargets: packageInstallerTargets(requirement.platform),
+    packageInstallerTargets: requirement.registersUserService
+      ? packageInstallerTargets(requirement.platform)
+      : [],
     registersUserService: requirement.registersUserService,
     runtimePointerPath: "$BUTLER_DATA/app/runtime/agent/current.json",
     runtimeHomeEnv: "BUTLER_APP_MANAGED_RUNTIME_HOME",
     localAuthPath: "$BUTLER_DATA/app/runtime/auth/local-agent-auth.json",
-    serviceDefinition: serviceDefinitionMetadata(requirement.platform),
+    serviceDefinition: requirement.registersUserService
+      ? serviceDefinitionMetadata(requirement.platform)
+      : null,
     desktopHelper: createAppDesktopHelperMetadata([platform]),
     requiredEnvironment: [
       "BUTLER_HOME",
@@ -1199,15 +1030,11 @@ function stageLinuxAppPackageRoot(input: {
   const finalInstallDir = join("/opt", "butler", packageDirectoryName(input.platform));
   const installDir = join(input.packageRoot, finalInstallDir.slice(1));
   const binDir = join(input.packageRoot, "usr", "bin");
-  const serviceUnitDir = join(input.packageRoot, "usr", "lib", "systemd", "user");
-  const serviceLauncherDir = join(input.packageRoot, "usr", "lib", "butler");
   const appDir = join(input.packageRoot, "usr", "share", "applications");
   const iconDir = join(input.packageRoot, "usr", "share", "icons", "hicolor", "512x512", "apps");
   const licenseDir = join(input.packageRoot, "usr", "share", "licenses", "butler-app");
   mkdirSync(dirname(installDir), { recursive: true });
   mkdirSync(binDir, { recursive: true });
-  mkdirSync(serviceUnitDir, { recursive: true });
-  mkdirSync(serviceLauncherDir, { recursive: true });
   mkdirSync(appDir, { recursive: true });
   mkdirSync(iconDir, { recursive: true });
   mkdirSync(licenseDir, { recursive: true });
@@ -1219,20 +1046,6 @@ function stageLinuxAppPackageRoot(input: {
   });
   chmodPackageDirectories(installDir);
   writeExecutableText(join(binDir, "butler-app"), linuxAppLauncher(finalInstallDir));
-  writeFileSync(join(serviceUnitDir, "butler.service"), linuxSystemdUserUnit(), "utf8");
-  copyFileSync(
-    join(
-      input.packagedDir,
-      "resources",
-      "bundled-agent",
-      "service-installer",
-      "linux",
-      "launcher",
-      "butler-app-managed-agent-service",
-    ),
-    join(serviceLauncherDir, "butler-app-managed-agent-service"),
-  );
-  chmodSync(join(serviceLauncherDir, "butler-app-managed-agent-service"), 0o755);
   copyFileSync(join(input.root, ELECTRON_ROOT, "assets", "icon.png"), join(iconDir, "butler.png"));
   copyFileSync(join(input.root, "LICENSE"), join(licenseDir, "LICENSE"));
   writeFileSync(join(appDir, "butler.desktop"), linuxDesktopEntry(), "utf8");
@@ -1365,23 +1178,6 @@ exec "${installDir}/Butler" "\${chromium_flags[@]}" "$@"
 `;
 }
 
-function linuxSystemdUserUnit(): string {
-  return `[Unit]
-Description=Butler Agent background service
-After=network-online.target
-
-[Service]
-Type=simple
-ExecStart=/usr/lib/butler/butler-app-managed-agent-service
-Restart=always
-RestartSec=5
-KillMode=control-group
-
-[Install]
-WantedBy=default.target
-`;
-}
-
 function linuxDesktopEntry(): string {
   return `[Desktop Entry]
 Type=Application
@@ -1423,7 +1219,6 @@ package() {
   cp -a "$srcdir/../pkgroot/." "$pkgdir/"
   find "$pkgdir${input.installDir}" -type d -exec chmod 755 {} +
   chmod 755 "$pkgdir/usr/bin/butler-app"
-  chmod 755 "$pkgdir/usr/lib/butler/butler-app-managed-agent-service"
   if [ -f "$pkgdir${input.installDir}/Butler" ] && [ ! -L "$pkgdir${input.installDir}/Butler" ]; then
     chmod 755 "$pkgdir${input.installDir}/Butler" 2>/dev/null || true
   fi
@@ -1449,9 +1244,7 @@ if [ -d "${installDir}" ]; then
 fi
 
 chmod 755 /usr/bin/butler-app 2>/dev/null || true
-chmod 755 /usr/lib/butler/butler-app-managed-agent-service 2>/dev/null || true
-
-echo "Butler App installed. First-run will render user paths and enable the service."
+echo "Butler App installed. The bundled Agent runs only while Butler App is open."
 exit 0
 `;
 }
