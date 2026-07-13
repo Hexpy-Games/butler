@@ -6,12 +6,10 @@ import {
   mkdirSync,
   realpathSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { mkdtempSync } from "node:fs";
 import { prepareBundledAgentResource } from "./release/package-app-release.ts";
 
 const root = process.cwd();
@@ -79,7 +77,7 @@ function usage(): string {
     "  --port <number>             Use an explicit app-server port.",
     "  --service-label <label>     LaunchAgent label for the installed test app.",
     "  --systemd-unit <unit>       systemd user unit for the installed test app.",
-    "  --keep-install              Leave the test pkg install root after the app exits.",
+    "  --keep-install              Leave the test DMG install root after the app exits.",
     "  --keep-service              Leave the test service installed after the app exits.",
     "  --reset                     Delete the selected test profile before packaging.",
     "  --clean-on-exit             Delete data/profile state when the app exits.",
@@ -461,77 +459,16 @@ function packageMacApp(input: {
   return appBundle;
 }
 
-function createMacPkg(input: {
+function createMacDmg(input: {
   appBundle: string;
   appName: string;
-  identifier: string;
-  installLocation: string;
   outPath: string;
 }): void {
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-install-pkg-"));
-  try {
-    const pkgRoot = join(workDir, "root");
-    mkdirSync(pkgRoot, { recursive: true });
-    cpSync(input.appBundle, join(pkgRoot, `${input.appName}.app`), {
-      dereference: false,
-      errorOnExist: false,
-      force: true,
-      recursive: true,
-    });
-    const componentPlist = join(workDir, "components.plist");
-    writeMacPkgComponentPlist({
-      path: componentPlist,
-      rootRelativeBundlePath: `${input.appName}.app`,
-    });
-    rmSync(input.outPath, { force: true });
-    runRequired(
-      "pkgbuild",
-      [
-        "--root",
-        pkgRoot,
-        "--component-plist",
-        componentPlist,
-        "--identifier",
-        input.identifier,
-        "--version",
-        "0.0.0",
-        "--install-location",
-        input.installLocation,
-        input.outPath,
-      ],
-      "mac install test pkgbuild failed",
-    );
-  } finally {
-    rmSync(workDir, { recursive: true, force: true });
-  }
-}
-
-function writeMacPkgComponentPlist(input: {
-  path: string;
-  rootRelativeBundlePath: string;
-}): void {
-  writeFileSync(
-    input.path,
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<array>
-  <dict>
-    <key>BundleHasStrictIdentifier</key>
-    <true/>
-    <key>BundleIsRelocatable</key>
-    <false/>
-    <key>BundleIsVersionChecked</key>
-    <true/>
-    <key>BundleOverwriteAction</key>
-    <string>upgrade</string>
-    <key>RootRelativeBundlePath</key>
-    <string>${input.rootRelativeBundlePath}</string>
-  </dict>
-</array>
-</plist>
-`,
-  );
+  rmSync(input.outPath, { force: true });
+  runRequired("hdiutil", [
+    "create", "-volname", input.appName, "-srcfolder", input.appBundle,
+    "-ov", "-format", "UDZO", input.outPath,
+  ], "mac install test DMG creation failed");
 }
 
 function stopChild(child: ChildProcess): void {
@@ -554,7 +491,7 @@ async function waitForLaunch(child: ChildProcess, timeoutMs = 2500): Promise<voi
 
 const options = parseOptions(process.argv.slice(2));
 if (process.platform !== "darwin") {
-  throw new Error("App install test environment currently supports macOS pkg installs only.");
+  throw new Error("App install test environment currently supports macOS DMG installs only.");
 }
 
 const runName = options.profile
@@ -564,13 +501,6 @@ const serviceSafeName = nativeServiceSafeName(runName);
 const runRoot = resolve(testRoot, runName);
 const packageWorkDir = join(runRoot, "package");
 const installedRoot = resolve(userInstallRoot, runName);
-const installLocation = join(
-  "Library",
-  "Application Support",
-  "Butler Install Tests",
-  runName,
-  "Applications",
-);
 const dataDir = options.dataDir ?? join(runRoot, "data");
 const electronProfileDir =
   options.electronProfileDir ?? join(runRoot, "electron-profile");
@@ -580,8 +510,7 @@ const systemdUnit = options.systemdUnit ?? `butler-test-${serviceSafeName}.servi
 const appName = `Butler Install Test ${serviceSafeName}`;
 const bundleId = `com.hexpy.butler.test.install.${serviceSafeName}`;
 const helperBundleId = `${bundleId}.helper`;
-const pkgIdentifier = `${bundleId}.pkg`;
-const pkgPath = join(packageWorkDir, `${appName}.pkg`);
+const dmgPath = join(packageWorkDir, `${appName}.dmg`);
 const installedApp = join(installedRoot, "Applications", `${appName}.app`);
 const executable = join(installedApp, "Contents", "MacOS", appName);
 const nodePath = existingNodePath();
@@ -626,19 +555,21 @@ const appBundle = packageMacApp({
   bundledAgentResourceDir: bundledAgent.resourceDir,
   rendererResourceDir,
 });
-createMacPkg({
+createMacDmg({
   appBundle,
   appName,
-  identifier: pkgIdentifier,
-  installLocation,
-  outPath: pkgPath,
+  outPath: dmgPath,
 });
 rmSync(installedRoot, { recursive: true, force: true });
-runRequired(
-  "installer",
-  ["-pkg", pkgPath, "-target", "CurrentUserHomeDirectory"],
-  "mac install test installer failed",
-);
+mkdirSync(join(installedRoot, "Applications"), { recursive: true });
+const mountPoint = join(packageWorkDir, "mounted-dmg");
+mkdirSync(mountPoint, { recursive: true });
+runRequired("hdiutil", ["attach", dmgPath, "-mountpoint", mountPoint, "-nobrowse"], "mac install test DMG mount failed");
+try {
+  cpSync(join(mountPoint, `${appName}.app`), installedApp, { recursive: true });
+} finally {
+  runRequired("hdiutil", ["detach", mountPoint], "mac install test DMG detach failed");
+}
 assert(existsSync(executable), `installed app executable is missing: ${executable}`);
 
 const env: NodeJS.ProcessEnv = {
@@ -666,7 +597,7 @@ delete env.BUTLER_HOME;
 delete env.BUTLER_BUN;
 
 console.log("Butler App install test environment");
-console.log(`Package: ${pkgPath}`);
+console.log(`DMG: ${dmgPath}`);
 console.log(`Installed app: ${installedApp}`);
 console.log(`Data: ${dataDir}`);
 console.log(`Electron profile: ${electronProfileDir}`);

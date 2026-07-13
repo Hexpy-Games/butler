@@ -631,6 +631,49 @@ export function resolveAppManagedGatewayCommand({
   };
 }
 
+export function resolveAppManagedForegroundCommand({
+  butlerData,
+  env = process.env,
+  resourcesPath = process.resourcesPath,
+} = {}) {
+  const resourceRoot = resolveBundledAgentResourceRoot({ env, resourcesPath });
+  if (!resourceRoot) return null;
+  const activation = prepareAppManagedAgentRuntime({ butlerData, resourceRoot });
+  const runtime = resolveAppManagedRuntimeExecutable(activation.runtimeHome);
+  const daemon = join(
+    activation.runtimeHome,
+    "packages",
+    "butler-agent",
+    "scripts",
+    "native-service-daemon.ts",
+  );
+  if (!existsSync(daemon)) {
+    activation.rollbackActivation(new Error("bundled Agent foreground host is missing"));
+    throw new Error("bundled Agent foreground host is missing");
+  }
+  return {
+    command: runtime,
+    args: ["run", daemon],
+    cwd: activation.runtimeHome,
+    stdio: ["pipe", "inherit", "inherit"],
+    detached: true,
+    appManaged: true,
+    foregroundHost: true,
+    bundledAgentVersion: activation.version,
+    env: {
+      BUTLER_HOME: activation.runtimeHome,
+      BUTLER_APP_BUTLER_HOME: activation.runtimeHome,
+      BUTLER_DATA: butlerData,
+      BUTLER_BUN: runtime,
+      BUTLER_APP_MANAGED_RUNTIME_POINTER: activation.pointerPath,
+      BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
+      BUTLER_APP_FOREGROUND_LEASE: "1",
+    },
+    commitActivation: activation.commitActivation,
+    rollbackActivation: activation.rollbackActivation,
+  };
+}
+
 function resolveBundledAgentArtifact(manifest) {
   const artifact = Array.isArray(manifest?.artifacts)
     ? manifest.artifacts.find((item) =>

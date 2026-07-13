@@ -32,8 +32,23 @@ import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
 import {
   appManagedAgentPointerPath,
   resolveBundledAgentResourceRoot,
+  resolveAppManagedForegroundCommand,
   resolveAppManagedGatewayCommand,
 } from "./app-managed-runtime.mjs";
+import {
+  APP_FOREGROUND_LIFECYCLE_MODES,
+  createAppForegroundLaunch,
+  createRecoveryBudget,
+  resolveAppLifecycleMode,
+  transitionAppForeground,
+  writeAppForegroundInstance,
+  writeAppForegroundLastExit,
+} from "./app-foreground-lifecycle.mjs";
+import {
+  classifyAppForegroundActiveWork,
+  confirmAppForegroundQuit,
+} from "./app-foreground-quit.mjs";
+import { migrateLegacyAppService } from "./app-legacy-service-migration.mjs";
 import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
@@ -90,7 +105,14 @@ let rendererOrigin = new URL(rendererUrl).origin;
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
-const isMenuBarHelperProcess = isMenuBarHelperMode({
+const appLifecycleMode = resolveAppLifecycleMode({
+  platform: process.platform,
+  isPackaged: app.isPackaged,
+  env: process.env,
+});
+const usesAppForegroundLifecycle =
+  appLifecycleMode === APP_FOREGROUND_LIFECYCLE_MODES.foreground;
+const isMenuBarHelperProcess = !usesAppForegroundLifecycle && isMenuBarHelperMode({
   argv: process.argv,
   env: process.env,
 });
@@ -118,6 +140,11 @@ let nativeSettingsCache = null;
 let mainWindow = null;
 let tray = null;
 let isQuitting = false;
+let finalQuitAllowed = false;
+let foregroundInstance = null;
+let legacyMigrationPromise = null;
+let suppressInitialWindowForLogin = false;
+const foregroundRecoveryBudget = createRecoveryBudget();
 let pendingNativeNavigation = navigationRequestFromArgs(process.argv);
 let menuBarHelperLaunchAttempted = false;
 let appAgentLaunchReconcilePromise = null;
@@ -149,6 +176,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitServerUrl,
   explicitUiUrl,
   projectFolderTokenSecret,
+  onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
 });
 const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
   ? createAppAgentNativeServiceBridge({
@@ -189,7 +217,7 @@ if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
   scheduleSignalProcessHardExit();
 }
 if (!appSingleInstanceLock) {
-  isQuitting = true;
+  finalQuitAllowed = true;
   if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
     process.exit(0);
   } else {
@@ -205,7 +233,6 @@ if (!appSingleInstanceLock) {
 } else {
   app.on("second-instance", (_event, argv) => {
     if (isQuitMainUiSignalMode({ argv })) {
-      isQuitting = true;
       app.quit();
       return;
     }
@@ -244,12 +271,29 @@ function resolveProjectFolderTokenSecret() {
 }
 
 function managedGatewayCommand() {
-  const appManagedGateway = resolveAppManagedGatewayCommand({
+  const resolver = usesAppForegroundLifecycle
+    ? resolveAppManagedForegroundCommand
+    : resolveAppManagedGatewayCommand;
+  const appManagedGateway = resolver({
     butlerData: butlerDataRoot,
     env: process.env,
     resourcesPath: process.resourcesPath,
   });
-  if (appManagedGateway) return appManagedGateway;
+  if (appManagedGateway) {
+    if (usesAppForegroundLifecycle) {
+      const launch = createAppForegroundLaunch({
+        appVersion: appInfoView().version,
+        bundledAgentVersion: appManagedGateway.bundledAgentVersion,
+        port,
+      });
+      foregroundInstance = transitionAppForeground(launch.record, "starting");
+      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+      appManagedGateway.env.BUTLER_APP_FOREGROUND_GENERATION =
+        foregroundInstance.generation;
+      appManagedGateway.env.BUTLER_APP_FOREGROUND_NONCE = launch.nonce;
+    }
+    return appManagedGateway;
+  }
   if (app.isPackaged) {
     throw new Error("Packaged Butler App is missing bundled Agent resources.");
   }
@@ -294,7 +338,7 @@ function ensureAppManagedAgentRuntimePointer() {
 }
 
 function shouldUseAppAgentNativeServiceBridge() {
-  if (app.isPackaged && ["darwin", "linux"].includes(process.platform)) return true;
+  if (usesAppForegroundLifecycle) return false;
   if (process.env.BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE !== "1") return false;
   assertNativeServiceTestBridgeEnvironment();
   return ["darwin", "linux"].includes(process.platform);
@@ -419,6 +463,36 @@ async function ensureServer() {
     return;
   }
   await bundledAgentSupervisor.ensureReady();
+  if (usesAppForegroundLifecycle && foregroundInstance?.state === "starting") {
+    const diagnostics = bundledAgentSupervisor.diagnostics();
+    foregroundInstance = transitionAppForeground(foregroundInstance, "ready", {
+      patch: {
+        agent_host_pid: diagnostics.pid,
+        process_group_id: diagnostics.pid,
+      },
+    });
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  }
+}
+
+async function recoverUnexpectedForegroundExit() {
+  if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
+  if (!foregroundRecoveryBudget.record()) {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    scheduleTrayMenuRefresh();
+    return;
+  }
+  try {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "degraded");
+    foregroundInstance = transitionAppForeground(foregroundInstance, "recovering");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    await ensureServer();
+    scheduleTrayMenuRefresh();
+  } catch (error) {
+    console.error(error);
+    scheduleTrayMenuRefresh();
+  }
 }
 
 async function waitForNativeServiceGatewayReady({
@@ -911,6 +985,7 @@ function appManagedMenuBarHelperRegistration() {
 }
 
 function isPersistentMenuBarHelperSupported() {
+  if (usesAppForegroundLifecycle) return false;
   const helperExecutablePath = defaultMenuBarHelperExecutablePath();
   return persistentMenuBarHelperSupported({
     platform: process.platform,
@@ -1121,7 +1196,7 @@ async function readAppData(path) {
 
 async function loadInitialNativeShellPreferences() {
   const settings = await readAppData("/settings");
-  nativeShellPreferences.trayEnabled =
+  nativeShellPreferences.trayEnabled = usesAppForegroundLifecycle ||
     settings?.desktop_tray_enabled !== false;
 }
 
@@ -1138,6 +1213,14 @@ async function recentTraySessions() {
 }
 
 async function trayAgentServiceStatus() {
+  if (usesAppForegroundLifecycle) {
+    const diagnostics = bundledAgentSupervisor.diagnostics();
+    return {
+      status: diagnostics.phase === "running" ? "ready" : diagnostics.phase,
+      service_available: true,
+      diagnostics_available: true,
+    };
+  }
   try {
     return await agentServiceControl.getAgentServiceStatus();
   } catch {
@@ -1150,6 +1233,11 @@ async function trayAgentServiceStatus() {
 }
 
 async function runTrayAgentServiceAction(action) {
+  if (usesAppForegroundLifecycle) {
+    if (action === "restart") await bundledAgentSupervisor.restart();
+    await refreshTrayMenu();
+    return;
+  }
   if (action === "stop" && !(await confirmStopButlerAgentFromTray())) {
     return;
   }
@@ -1238,6 +1326,42 @@ async function refreshTrayMenu() {
             }),
         }))
       : [{ label: "No recent conversations", enabled: false }];
+  const serviceItems = usesAppForegroundLifecycle
+    ? [
+        {
+          label: "Restart Butler Agent",
+          enabled: agentMenu.canRestart || agentServiceStatus.status === "ready",
+          click: () => { void runTrayAgentServiceAction("restart"); },
+        },
+        {
+          label: "Start Butler at Login",
+          type: "checkbox",
+          checked: app.getLoginItemSettings().openAtLogin,
+          click: (item) => {
+            app.setLoginItemSettings({
+              openAtLogin: item.checked,
+              openAsHidden: true,
+            });
+          },
+        },
+      ]
+    : [
+        {
+          label: "Start Butler Agent",
+          enabled: agentMenu.canStart,
+          click: () => { void runTrayAgentServiceAction("start"); },
+        },
+        {
+          label: "Restart Butler Agent",
+          enabled: agentMenu.canRestart,
+          click: () => { void runTrayAgentServiceAction("restart"); },
+        },
+        {
+          label: "Stop Butler Agent",
+          enabled: agentMenu.canStop,
+          click: () => { void runTrayAgentServiceAction("stop"); },
+        },
+      ];
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -1250,27 +1374,7 @@ async function refreshTrayMenu() {
         label: agentMenu.label,
         enabled: false,
       },
-      {
-        label: "Start Butler Agent",
-        enabled: agentMenu.canStart,
-        click: () => {
-          void runTrayAgentServiceAction("start");
-        },
-      },
-      {
-        label: "Restart Butler Agent",
-        enabled: agentMenu.canRestart,
-        click: () => {
-          void runTrayAgentServiceAction("restart");
-        },
-      },
-      {
-        label: "Stop Butler Agent",
-        enabled: agentMenu.canStop,
-        click: () => {
-          void runTrayAgentServiceAction("stop");
-        },
-      },
+      ...serviceItems,
       { type: "separator" },
       {
         label: "New Chat",
@@ -1279,6 +1383,11 @@ async function refreshTrayMenu() {
       {
         label: "Recent Conversations",
         submenu: recentMenu,
+      },
+      { type: "separator" },
+      {
+        label: "Quit Butler",
+        click: () => app.quit(),
       },
     ]),
   );
@@ -1593,6 +1702,7 @@ async function createWindow() {
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   const win = new BrowserWindow({
+    show: false,
     width: 960,
     height: 710,
     minWidth: 320,
@@ -1652,8 +1762,39 @@ async function createWindow() {
     openExternalUrl(url);
   });
   await win.loadURL(rendererUrl);
+  if (usesAppForegroundLifecycle && app.isPackaged) {
+    const migration = await ensureLegacyAppServiceMigration();
+    if (migration.status === "cancelled") {
+      scheduleTrayMenuRefresh();
+      applyDeveloperModeToWindows();
+      if (!suppressInitialWindowForLogin) win.show();
+      suppressInitialWindowForLogin = false;
+      return win;
+    }
+    await ensureServer();
+    scheduleTrayMenuRefresh();
+  }
   applyDeveloperModeToWindows();
+  if (!suppressInitialWindowForLogin) win.show();
+  suppressInitialWindowForLogin = false;
   return win;
+}
+
+async function ensureLegacyAppServiceMigration() {
+  if (legacyMigrationPromise) return await legacyMigrationPromise;
+  legacyMigrationPromise = migrateLegacyAppService({
+    butlerData: butlerDataRoot,
+    platform: process.platform,
+    activeWorkSnapshot: readForegroundActiveWorkSnapshot,
+    confirm: (snapshot) => confirmAppForegroundQuit({
+      snapshot,
+      showMessageBox: (options) => dialog.showMessageBox(options),
+    }),
+  }).catch((error) => {
+    legacyMigrationPromise = null;
+    throw error;
+  });
+  return await legacyMigrationPromise;
 }
 
 async function reconcileAppAgentServiceForLaunch() {
@@ -1801,7 +1942,6 @@ ipcMain.handle("butler:agent-service-diagnostics", () =>
 );
 
 ipcMain.handle("butler:quit-app", () => {
-  isQuitting = true;
   app.quit();
   return { quitting: true };
 });
@@ -1871,7 +2011,8 @@ ipcMain.handle("butler:set-native-appearance-theme", (_event, input) => {
 });
 
 ipcMain.handle("butler:set-native-shell-preferences", async (_event, input) => {
-  nativeShellPreferences.trayEnabled = input?.trayEnabled !== false;
+  nativeShellPreferences.trayEnabled = usesAppForegroundLifecycle ||
+    input?.trayEnabled !== false;
   if (isPersistentMenuBarHelperSupported()) {
     if (nativeShellPreferences.trayEnabled) ensurePersistentMenuBarHelper();
     else signalPersistentMenuBarHelperToQuit();
@@ -2006,6 +2147,8 @@ if (appSingleInstanceLock) {
     .then(async () => {
       configureAppIdentity();
       configureAppIcon();
+      suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
+        app.getLoginItemSettings().wasOpenedAtLogin;
       Menu.setApplicationMenu(null);
       nativeTheme.on("updated", updateTrayIcon);
       if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
@@ -2030,28 +2173,91 @@ app.on("window-all-closed", () => {
 
 app.on("activate", activateButlerApp);
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
+  if (finalQuitAllowed) {
+    if (tray) {
+      tray.destroy();
+      tray = null;
+    }
+    return;
+  }
+  event.preventDefault();
+  if (isQuitting) return;
   isQuitting = true;
   if (isMenuBarHelperProcess) removeMenuBarHelperPid();
-  if (tray) {
-    tray.destroy();
-    tray = null;
-  }
-  if (!isMenuBarHelperProcess) stopServerProcess();
+  void confirmForegroundQuitIfNeeded().then((confirmed) => {
+    if (!confirmed) {
+      isQuitting = false;
+      return;
+    }
+    return stopServerProcess({ reason: "app_quit" });
+  }).then((stopped) => {
+    if (stopped === undefined && !isQuitting) return;
+    finalQuitAllowed = true;
+    app.quit();
+  }).catch((error) => {
+    isQuitting = false;
+    console.error(error);
+  });
 });
 
+async function confirmForegroundQuitIfNeeded() {
+  if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
+  const snapshot = await readForegroundActiveWorkSnapshot();
+  return await confirmAppForegroundQuit({
+    snapshot,
+    showMessageBox: (options) => dialog.showMessageBox(options),
+  });
+}
+
+async function readForegroundActiveWorkSnapshot() {
+  try {
+    const navigation = await readAppData("/navigation");
+    const workerActivity = await readAppData("/worker-activity");
+    if (!navigation || !workerActivity) {
+      return classifyAppForegroundActiveWork({ readFailed: true });
+    }
+    const chatIds = Array.isArray(navigation.chats)
+      ? navigation.chats
+        .map((chat) => safeString(chat?.id))
+        .filter(Boolean)
+      : [];
+    const queues = await Promise.all(chatIds.map((chatId) =>
+      readAppData(`/session-queue?session_id=${encodeURIComponent(chatId)}`),
+    ));
+    return classifyAppForegroundActiveWork({ navigation, workerActivity, queues });
+  } catch {
+    return classifyAppForegroundActiveWork({ readFailed: true });
+  }
+}
+
 process.once("SIGINT", () => {
-  stopServerProcess();
   app.quit();
 });
 
 process.once("SIGTERM", () => {
-  stopServerProcess();
   app.quit();
 });
 
-function stopServerProcess() {
-  void bundledAgentSupervisor.stop();
+async function stopServerProcess({ reason = "app_shutdown" } = {}) {
+  if (usesAppForegroundLifecycle && foregroundInstance) {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  }
+  await bundledAgentSupervisor.stop({ wait: true });
+  if (usesAppForegroundLifecycle && foregroundInstance) {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
+      patch: { clean_exit: true },
+    });
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    writeAppForegroundLastExit(butlerDataRoot, {
+      generation: foregroundInstance.generation,
+      exitReason: reason,
+      graceful: true,
+      processGroupDead: true,
+      portReleased: await isPortAvailable(port),
+    });
+  }
 }
 
 async function appServerFetch(path, init = {}) {
@@ -2091,7 +2297,6 @@ function handleFatalStartupError(error) {
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
-  stopServerProcess();
   app.quit();
 }
 
