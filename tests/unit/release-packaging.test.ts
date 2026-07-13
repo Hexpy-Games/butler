@@ -210,9 +210,9 @@ test("app release manifest exposes app package files only", () => {
       schema: "butler.app-desktop-helper.v1",
       product: "butler-app",
       owner: "butler-app",
-      helperMode: "background-helper-executable",
-      defaultEnabledPlatforms: ["darwin"],
-      survivesMainUiQuitPlatforms: ["darwin"],
+      helperMode: "electron-main-tray",
+      defaultEnabledPlatforms: [],
+      survivesMainUiQuitPlatforms: [],
       stopsAgentOnHelperQuit: false,
       launchArgument: "--butler-menu-bar-helper",
       quitMainUiArgument: "--butler-quit-main-ui",
@@ -231,10 +231,10 @@ test("app release manifest exposes app package files only", () => {
       installerRequirements: [
         {
           platform: "darwin",
-          selectedV1Path: "macos-pkg-launch-agent",
-          installerRequired: "yes",
-          packageFormats: ["pkg"],
-          registersUserService: true,
+          selectedV1Path: "macos-app-foreground",
+          installerRequired: "no",
+          packageFormats: ["dmg", "zip"],
+          registersUserService: false,
         },
         {
           platform: "linux",
@@ -272,16 +272,15 @@ test("app release manifest exposes app package files only", () => {
     serviceInstallerBundle: {
       servicePlatforms: ["darwin", "linux"],
       packageArtifacts: [
-        { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
         { packageFormat: "deb", selectedV1Path: "linux-deb-owned-user-unit" },
         { packageFormat: "pacman", selectedV1Path: "linux-pacman-owned-user-unit" },
         { packageFormat: "rpm", selectedV1Path: "linux-rpm-owned-user-unit" },
       ],
     },
     desktopHelper: {
-      helperMode: "background-helper-executable",
-      defaultEnabledPlatforms: ["darwin"],
-      survivesMainUiQuitPlatforms: ["darwin"],
+      helperMode: "electron-main-tray",
+      defaultEnabledPlatforms: [],
+      survivesMainUiQuitPlatforms: [],
       stopsAgentOnHelperQuit: false,
       platforms: ["darwin", "linux"],
     },
@@ -332,15 +331,13 @@ test("app release manifest exposes app package files only", () => {
     },
     serviceInstallerBundle: {
       servicePlatforms: ["darwin"],
-      packageArtifacts: [
-        { packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" },
-      ],
+      packageArtifacts: [],
     },
     desktopHelper: {
-      helperMode: "background-helper-executable",
+      helperMode: "electron-main-tray",
       platforms: ["darwin"],
-      defaultEnabledPlatforms: ["darwin"],
-      survivesMainUiQuitPlatforms: ["darwin"],
+      defaultEnabledPlatforms: [],
+      survivesMainUiQuitPlatforms: [],
       stopsAgentOnHelperQuit: false,
     },
     bundledAgentPayload: {
@@ -374,7 +371,7 @@ test("app release manifest exposes app package files only", () => {
     manifest.artifacts.find((artifact) => artifact.platform === "linux-x64"),
   ).toMatchObject({
     desktopHelper: {
-      helperMode: "background-helper-executable",
+      helperMode: "electron-main-tray",
       platforms: ["linux"],
       defaultEnabledPlatforms: [],
       survivesMainUiQuitPlatforms: [],
@@ -417,7 +414,7 @@ test("app release manifest exposes app package files only", () => {
     ...APP_RELEASE_PLATFORMS,
   ]);
   expect(manifest.artifacts.map((artifact) => artifact.artifactName)).toEqual([
-    `butler-app-${currentVersion}-darwin-arm64.pkg`,
+    `butler-app-${currentVersion}-darwin-arm64.dmg`,
     `butler-app-${currentVersion}-linux-x64.deb`,
     `butler-app-${currentVersion}-linux-arm64.deb`,
   ]);
@@ -544,12 +541,7 @@ test("app release metadata ships bundled-Agent-only changes as a new App artifac
       publishedSha256Name: item.publishedSha256Name,
     }))).toEqual(
       artifact.platform.startsWith("darwin-")
-        ? [{
-          packageFormat: "pkg",
-          selectedV1Path: "macos-pkg-launch-agent",
-          publishedArtifactName: `butler-app-${manifest.version}-darwin-arm64.pkg`,
-          publishedSha256Name: `butler-app-${manifest.version}-darwin-arm64.pkg.sha256`,
-        }]
+        ? []
         : [
           {
             packageFormat: "deb",
@@ -834,6 +826,7 @@ test("agent release packager creates an installable artifact with app web client
         readText(join(extractDir, "package.json")),
       );
       expect(packagedRootPackage.workspaces).toEqual([
+        "packages/butler-progress-projection",
         "packages/project-ledger",
         "packages/butler-agent/src/interfaces/mcp-server",
         "packages/butler-agent/src/integrations/telegram",
@@ -1122,11 +1115,6 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         servicePlatforms: ["darwin", "linux"],
         packageArtifacts: [
           {
-            packageFormat: "pkg",
-            selectedV1Path: "macos-pkg-launch-agent",
-            publishedArtifactName: `butler-app-${currentVersion}-darwin-arm64.pkg`,
-          },
-          {
             packageFormat: "deb",
             selectedV1Path: "linux-deb-owned-user-unit",
             publishedArtifactName: `butler-app-service_${currentVersion}_amd64.deb`,
@@ -1306,7 +1294,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
       },
       desktopHelper: {
         schema: "butler.app-desktop-helper.v1",
-        helperMode: "background-helper-executable",
+        helperMode: "electron-main-tray",
         defaultEnabledPlatforms: [],
         survivesMainUiQuitPlatforms: [],
         stopsAgentOnHelperQuit: false,
@@ -1691,14 +1679,18 @@ test("app package smoke uses real bundled Agent release resources", () => {
   }
 }, 60_000);
 
-test("app package smoke includes macOS service installer payload", () => {
+test("app package smoke excludes macOS service registration payload", () => {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-smoke-darwin-agent-resource-"));
   const previousDarwinRuntime = process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64;
   try {
     process.env.BUTLER_APP_MANAGED_BUN_DARWIN_ARM64 = writeFakeDarwinArm64Runtime(workDir);
     const bundledAgent = prepareBundledAgentResource(root, workDir, "darwin-arm64");
     expect(bundledAgent.platform).toBe("darwin-arm64");
-    expectServiceInstallerPayload(bundledAgent.resourceDir, "darwin");
+    expect(existsSync(join(
+      bundledAgent.resourceDir,
+      "service-installer",
+      "darwin",
+    ))).toBe(false);
     expect(
       JSON.parse(readText(join(
         bundledAgent.resourceDir,
@@ -1709,15 +1701,7 @@ test("app package smoke includes macOS service installer payload", () => {
       schema: "butler.app-service-installer-bundle.v1",
       releasePlatform: "darwin-arm64",
       servicePlatform: "darwin",
-      packageArtifacts: [
-        {
-          packageFormat: "pkg",
-          selectedV1Path: "macos-pkg-launch-agent",
-          serviceManager: "launchd",
-          renderContractPath: "service-installer/darwin/launchd/render-contract.json",
-          postInstallPath: "service-installer/darwin/pkg/postinstall",
-        },
-      ],
+      packageArtifacts: [],
     });
   } finally {
     if (previousDarwinRuntime === undefined) {

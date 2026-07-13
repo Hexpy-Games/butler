@@ -11,6 +11,7 @@ import {
   readdirSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,6 +43,10 @@ export interface AppReleasePackageArtifact {
   artifactPath: string;
   sha256Path: string;
   sha256: string;
+  updaterArtifactName?: string;
+  updaterArtifactPath?: string;
+  updaterSha256Path?: string;
+  updaterSha256?: string;
 }
 
 export interface AppReleasePackageResult {
@@ -195,18 +200,37 @@ function packagePlatform(input: {
     linuxPackageFormat: input.linuxPackageFormat,
   });
   const artifactPath = join(input.outDir, artifactName);
+  let updaterArtifact: {
+    name: string;
+    path: string;
+    sha256: string;
+    sha256Path: string;
+  } | null = null;
   if (input.platform === "darwin-arm64") {
     const appBundle = join(packagedDir, "Butler.app");
     if (!existsSync(appBundle)) throw new Error(`mac app bundle not found: ${appBundle}`);
     normalizeMacBundle(input.root, appBundle);
     verifyMacBundleIcon(input.root, appBundle);
     signMacBundle(input.root, appBundle);
-    createMacPkg({
-      appBundle,
-      artifactPath,
-      bundledAgentResourceDir: input.bundledAgentResourceDir,
-      version: input.manifest.version,
-    });
+    notarizeMacAppIfConfigured(appBundle);
+    createMacDmg({ appBundle, artifactPath });
+    signAndNotarizeMacContainerIfConfigured(artifactPath);
+    const updaterArtifactName = `butler-app-${input.manifest.version}-darwin-arm64.zip`;
+    const updaterArtifactPath = join(input.outDir, updaterArtifactName);
+    createMacZip(appBundle, updaterArtifactPath);
+    const updaterSha256 = sha256File(updaterArtifactPath);
+    const updaterSha256Path = `${updaterArtifactPath}.sha256`;
+    writeFileSync(
+      updaterSha256Path,
+      `${updaterSha256}  ${updaterArtifactName}\n`,
+      "utf8",
+    );
+    updaterArtifact = {
+      name: updaterArtifactName,
+      path: updaterArtifactPath,
+      sha256: updaterSha256,
+      sha256Path: updaterSha256Path,
+    };
   } else if (input.linuxPackageFormat === "deb") {
     createLinuxAppDeb({
       artifactPath,
@@ -234,6 +258,14 @@ function packagePlatform(input: {
     artifactPath,
     sha256Path,
     sha256,
+    ...(updaterArtifact
+      ? {
+          updaterArtifactName: updaterArtifact.name,
+          updaterArtifactPath: updaterArtifact.path,
+          updaterSha256: updaterArtifact.sha256,
+          updaterSha256Path: updaterArtifact.sha256Path,
+        }
+      : {}),
   };
 }
 
@@ -421,33 +453,11 @@ function writeAppServiceInstallerPayloads(input: {
     throw new Error(`missing background service installer requirement for ${input.platform}`);
   }
   if (requirement.platform === "darwin") {
-    writeJson(
-      join(input.resourceDir, "service-installer", "darwin", "launchd", "render-contract.json"),
-      serviceRenderContract({
-        platform: "darwin",
-        manager: "launchd",
-        target: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
-        escaping: "xml",
-      }),
-    );
-    writeExecutableText(
-      join(input.resourceDir, "service-installer", "darwin", "pkg", "postinstall"),
-      macPkgPostinstallScript(),
-    );
     writeServiceInstallerManifest({
       resourceDir: input.resourceDir,
       releasePlatform: input.platform,
       servicePlatform: "darwin",
-      packageArtifacts: [
-        {
-          packageFormat: "pkg",
-          selectedV1Path: "macos-pkg-launch-agent",
-          serviceManager: "launchd",
-          serviceDefinitionTarget: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
-          renderContractPath: "service-installer/darwin/launchd/render-contract.json",
-          postInstallPath: "service-installer/darwin/pkg/postinstall",
-        },
-      ],
+      packageArtifacts: [],
     });
     return;
   }
@@ -580,14 +590,6 @@ function serviceRenderContract(input: {
   };
 }
 
-function macPkgPostinstallScript(): string {
-  return `#!/bin/sh
-set -eu
-echo "Butler App LaunchAgent payload installed. First-run will render user paths and bootstrap the service."
-exit 0
-`;
-}
-
 function linuxDebPostinstScript(): string {
   return `#!/bin/sh
 set -eu
@@ -699,7 +701,7 @@ function createAppBackgroundServiceRegistrationMetadata(
 
 function packageInstallerTargets(servicePlatform: string): Array<Record<string, string>> {
   if (servicePlatform === "darwin") {
-    return [{ packageFormat: "pkg", selectedV1Path: "macos-pkg-launch-agent" }];
+    return [];
   }
   if (servicePlatform === "linux") {
     return [
@@ -1046,6 +1048,27 @@ function normalizeMacBundle(root: string, appBundle: string): void {
 }
 
 function signMacBundle(root: string, appBundle: string): void {
+  const identity = process.env.BUTLER_APP_SIGN_IDENTITY?.trim();
+  if (identity) {
+    const result = spawnSync("codesign", [
+      "--force",
+      "--deep",
+      "--options",
+      "runtime",
+      "--timestamp",
+      "--sign",
+      identity,
+      appBundle,
+    ], { encoding: "utf8" });
+    if (result.status !== 0) {
+      throw new Error(`mac Developer ID signing failed: ${result.stderr.trim() || result.stdout.trim()}`);
+    }
+    verifyMacCodeSignature(appBundle);
+    return;
+  }
+  if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
+    throw new Error("BUTLER_APP_SIGN_IDENTITY is required for production macOS releases");
+  }
   const result = spawnSync("node", [join(root, MAC_SIGN_SCRIPT), appBundle], {
     cwd: root,
     encoding: "utf8",
@@ -1059,161 +1082,94 @@ function signMacBundle(root: string, appBundle: string): void {
   }
 }
 
-function createMacPkg(input: {
-  appBundle: string;
-  artifactPath: string;
-  bundledAgentResourceDir: string;
-  version: string;
-}): void {
-  const workDir = mkdtempSync(join(tmpdir(), "butler-app-pkg-"));
+function verifyMacCodeSignature(path: string): void {
+  const result = spawnSync("codesign", ["--verify", "--deep", "--strict", "--verbose=4", path], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    throw new Error(`mac code signature verification failed: ${result.stderr.trim() || result.stdout.trim()}`);
+  }
+}
+
+function createMacDmg(input: { appBundle: string; artifactPath: string }): void {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-dmg-"));
   try {
-    const pkgRoot = join(workDir, "root");
-    const applicationsDir = join(pkgRoot, "Applications");
-    const scriptsDir = join(workDir, "scripts");
-    mkdirSync(applicationsDir, { recursive: true });
-    mkdirSync(scriptsDir, { recursive: true });
-    cpSync(input.appBundle, join(applicationsDir, "Butler.app"), {
+    const staging = join(workDir, "Butler");
+    mkdirSync(staging, { recursive: true });
+    cpSync(input.appBundle, join(staging, "Butler.app"), {
       dereference: false,
       errorOnExist: false,
       force: true,
       recursive: true,
     });
-    const postinstall = join(
-      input.bundledAgentResourceDir,
-      "service-installer",
-      "darwin",
-      "pkg",
-      "postinstall",
-    );
-    if (!existsSync(postinstall)) {
-      throw new Error(`mac pkg postinstall script is missing: ${postinstall}`);
-    }
-    copyFileSync(postinstall, join(scriptsDir, "postinstall"));
-    chmodSync(join(scriptsDir, "postinstall"), 0o755);
-    const componentPlist = join(workDir, "components.plist");
-    writeMacPkgComponentPlist({
-      path: componentPlist,
-      rootRelativeBundlePath: join("Applications", "Butler.app"),
-    });
-
+    symlinkSync("/Applications", join(staging, "Applications"));
     rmSync(input.artifactPath, { force: true });
-    const unsignedPkg = process.env.BUTLER_APP_PKG_SIGN_IDENTITY
-      ? join(workDir, "Butler-unsigned.pkg")
-      : input.artifactPath;
-    runPkgbuild({
-      root: pkgRoot,
-      scripts: scriptsDir,
-      componentPlist,
-      version: input.version,
-      artifactPath: unsignedPkg,
-    });
-    if (process.env.BUTLER_APP_PKG_SIGN_IDENTITY) {
-      runProductbuild({
-        packagePath: unsignedPkg,
-        artifactPath: input.artifactPath,
-        signIdentity: process.env.BUTLER_APP_PKG_SIGN_IDENTITY,
-      });
+    const result = spawnSync("hdiutil", [
+      "create",
+      "-volname",
+      "Butler",
+      "-srcfolder",
+      staging,
+      "-ov",
+      "-format",
+      "UDZO",
+      input.artifactPath,
+    ], { encoding: "utf8" });
+    if (result.status !== 0) {
+      throw new Error(`mac app DMG creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
     }
-    notarizeMacPkgIfConfigured(input.artifactPath);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
 }
 
-function runPkgbuild(input: {
-  root: string;
-  scripts: string;
-  componentPlist: string;
-  version: string;
-  artifactPath: string;
-}): void {
-  rmSync(input.artifactPath, { force: true });
-  const result = spawnSync("pkgbuild", [
-    "--root",
-    input.root,
-    "--scripts",
-    input.scripts,
-    "--component-plist",
-    input.componentPlist,
-    "--identifier",
-    MAC_APP_BUNDLE_IDENTIFIER,
-    "--version",
-    input.version,
-    "--install-location",
-    "/",
-    input.artifactPath,
-  ], {
-    encoding: "utf8",
-  });
+function createMacZip(appBundle: string, artifactPath: string): void {
+  rmSync(artifactPath, { force: true });
+  const result = spawnSync("ditto", [
+    "-c",
+    "-k",
+    "--sequesterRsrc",
+    "--keepParent",
+    appBundle,
+    artifactPath,
+  ], { encoding: "utf8" });
   if (result.status !== 0) {
-    throw new Error(
-      `mac app pkgbuild failed: ${
-        result.stderr.trim() || result.stdout.trim() || "unknown error"
-      }`,
-    );
+    throw new Error(`mac app updater ZIP creation failed: ${result.stderr.trim() || result.stdout.trim()}`);
   }
 }
 
-function writeMacPkgComponentPlist(input: {
-  path: string;
-  rootRelativeBundlePath: string;
-}): void {
-  writeFileSync(
-    input.path,
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<array>
-  <dict>
-    <key>BundleHasStrictIdentifier</key>
-    <true/>
-    <key>BundleIsRelocatable</key>
-    <false/>
-    <key>BundleIsVersionChecked</key>
-    <true/>
-    <key>BundleOverwriteAction</key>
-    <string>upgrade</string>
-    <key>RootRelativeBundlePath</key>
-    <string>${input.rootRelativeBundlePath}</string>
-  </dict>
-</array>
-</plist>
-`,
-  );
-}
-
-function runProductbuild(input: {
-  packagePath: string;
-  artifactPath: string;
-  signIdentity: string;
-}): void {
-  rmSync(input.artifactPath, { force: true });
-  const result = spawnSync("productbuild", [
-    "--package",
-    input.packagePath,
-    "--sign",
-    input.signIdentity,
-    input.artifactPath,
-  ], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `mac app productbuild signing failed: ${
-        result.stderr.trim() || result.stdout.trim() || "unknown error"
-      }`,
-    );
-  }
-}
-
-function notarizeMacPkgIfConfigured(artifactPath: string): void {
+function notarizeMacAppIfConfigured(appBundle: string): void {
   const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
-  if (!keychainProfile) return;
-  if (!process.env.BUTLER_APP_PKG_SIGN_IDENTITY?.trim()) {
-    throw new Error(
-      "BUTLER_APP_PKG_SIGN_IDENTITY is required when BUTLER_APP_NOTARY_KEYCHAIN_PROFILE is set",
-    );
+  if (!keychainProfile) {
+    if (process.env.BUTLER_APP_REQUIRE_PRODUCTION_SIGNING === "1") {
+      throw new Error("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE is required for production macOS releases");
+    }
+    return;
   }
+  const workDir = mkdtempSync(join(tmpdir(), "butler-app-notary-"));
+  try {
+    const submission = join(workDir, "Butler.zip");
+    createMacZip(appBundle, submission);
+    submitMacNotarization(submission, keychainProfile);
+    stapleMacArtifact(appBundle);
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+function signAndNotarizeMacContainerIfConfigured(artifactPath: string): void {
+  const identity = process.env.BUTLER_APP_SIGN_IDENTITY?.trim();
+  const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
+  if (!identity || !keychainProfile) return;
+  const sign = spawnSync("codesign", ["--force", "--timestamp", "--sign", identity, artifactPath], {
+    encoding: "utf8",
+  });
+  if (sign.status !== 0) throw new Error(`mac DMG signing failed: ${sign.stderr.trim() || sign.stdout.trim()}`);
+  submitMacNotarization(artifactPath, keychainProfile);
+  stapleMacArtifact(artifactPath);
+}
+
+function submitMacNotarization(artifactPath: string, keychainProfile: string): void {
   const submit = spawnSync("xcrun", [
     "notarytool",
     "submit",
@@ -1223,21 +1179,14 @@ function notarizeMacPkgIfConfigured(artifactPath: string): void {
     "--wait",
   ], { encoding: "utf8" });
   if (submit.status !== 0) {
-    throw new Error(
-      `mac app pkg notarization failed: ${
-        submit.stderr.trim() || submit.stdout.trim() || "unknown error"
-      }`,
-    );
+    throw new Error(`mac notarization failed: ${submit.stderr.trim() || submit.stdout.trim()}`);
   }
-  const staple = spawnSync("xcrun", ["stapler", "staple", artifactPath], {
-    encoding: "utf8",
-  });
+}
+
+function stapleMacArtifact(artifactPath: string): void {
+  const staple = spawnSync("xcrun", ["stapler", "staple", artifactPath], { encoding: "utf8" });
   if (staple.status !== 0) {
-    throw new Error(
-      `mac app pkg notarization staple failed: ${
-        staple.stderr.trim() || staple.stdout.trim() || "unknown error"
-      }`,
-    );
+    throw new Error(`mac notarization staple failed: ${staple.stderr.trim() || staple.stdout.trim()}`);
   }
 }
 

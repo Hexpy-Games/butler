@@ -117,14 +117,17 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("--artifact-base-url");
   expect(verifyIndex).toBeGreaterThan(packageIndex);
   expect(workflow).toContain("bun run release:app:smoke -- --out dist/release/app");
-  expect(workflow).not.toContain("codesign --verify --deep --strict --verbose=4");
+  expect(workflow).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: \"1\"");
+  expect(workflow).toContain("BUTLER_APP_SIGN_IDENTITY");
+  expect(workflow).toContain("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE");
   expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
-  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.pkg");
+  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.dmg");
+  expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-x64.deb");
   expect(workflow).toContain("dist/release/app/butler-app-*-linux-arm64.deb");
   expect(workflow).toContain("dist/release/app/app-release-manifest.json");
   expect(workflow).toContain("dist/release/app/app-update-manifest.json");
-  expect(workflow).toContain("Expected 5 app release files");
+  expect(workflow).toContain("Expected 6 app release files");
   expect(publishIndex).toBeGreaterThan(verifyIndex);
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
 });
@@ -244,7 +247,7 @@ test("README directs default installs to Butler App and advanced installs to Age
   const development = readme.slice(developmentStart);
 
   expect(quickStart).toContain("GitHub Release");
-  expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.pkg`);
+  expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.dmg`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-x64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-arm64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-archlinux-x64.pkg.tar.zst`);
@@ -304,7 +307,7 @@ test("manual first-run test environment launches isolated Electron state", () =>
   expect(script).toContain("Quit Butler from the app/tray, or press Ctrl-C here to stop.");
 });
 
-test("manual app install test environment installs an isolated test pkg", () => {
+test("manual app install test environment installs an isolated test DMG", () => {
   const packageJson = JSON.parse(readRepoFile("package.json")) as {
     scripts?: Record<string, string>;
   };
@@ -318,9 +321,9 @@ test("manual app install test environment installs an isolated test pkg", () => 
     "packages/butler-app/client/ui run build",
   );
   expect(script).toContain("Butler Install Tests");
-  expect(script).toContain("installer");
-  expect(script).toContain("-target");
-  expect(script).toContain("CurrentUserHomeDirectory");
+  expect(script).toContain("hdiutil");
+  expect(script).toContain("attach");
+  expect(script).toContain("detach");
   expect(script).toContain("--validate-only");
   expect(script).toContain("isInsideRealPath");
   expect(script).toContain("Butler Install Test ${serviceSafeName}");

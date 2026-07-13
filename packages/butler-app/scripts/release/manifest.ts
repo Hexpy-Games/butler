@@ -24,7 +24,7 @@ export type AppReleaseActivationPolicy =
   "platform-app-update-then-versioned-app-runtime";
 export type AppReleaseRollbackPolicy =
   "preserve-previous-app-managed-runtime";
-export type AppReleaseServiceInstallerPackageFormat = "pkg" | "deb" | "pacman" | "rpm";
+export type AppReleaseServiceInstallerPackageFormat = "dmg" | "zip" | "pkg" | "deb" | "pacman" | "rpm";
 export type AppOwnedDependencyId =
   | "electron-shell"
   | "renderer-assets"
@@ -122,12 +122,12 @@ export interface AppBundledAgentPayload {
 export interface AppBackgroundServiceInstallerRequirement {
   platform: AppBackgroundServicePlatform;
   selectedV1Path: AppBackgroundServiceV1Path;
-  installerRequired: "yes";
+  installerRequired: "yes" | "no";
   packageFormats: AppReleaseServiceInstallerPackageFormat[];
   requiredDecision: string;
   allowedMechanisms: string[];
   userContext: string;
-  registersUserService: true;
+  registersUserService: boolean;
 }
 
 export interface AppBackgroundServiceReleaseCapability {
@@ -174,7 +174,7 @@ export interface AppDesktopHelperMetadata {
   schema: "butler.app-desktop-helper.v1";
   product: AppReleaseProduct;
   owner: "butler-app";
-  helperMode: "background-helper-executable";
+  helperMode: "background-helper-executable" | "electron-main-tray";
   defaultEnabledPlatforms: AppBackgroundServicePlatform[];
   survivesMainUiQuitPlatforms: AppBackgroundServicePlatform[];
   stopsAgentOnHelperQuit: false;
@@ -496,7 +496,7 @@ export function createAppDesktopHelperMetadata(
     schema: "butler.app-desktop-helper.v1",
     product: "butler-app",
     owner: "butler-app",
-    helperMode: "background-helper-executable",
+    helperMode: "electron-main-tray",
     defaultEnabledPlatforms,
     survivesMainUiQuitPlatforms: defaultEnabledPlatforms,
     stopsAgentOnHelperQuit: false,
@@ -511,9 +511,8 @@ export function createAppDesktopHelperMetadata(
 function persistentMenuBarHelperDefaultPlatforms(
   platforms: readonly AppReleasePlatform[],
 ): AppBackgroundServicePlatform[] {
-  return uniqueServicePlatforms(
-    platforms.filter((platform) => servicePlatformForReleasePlatform(platform) === "darwin"),
-  );
+  void platforms;
+  return [];
 }
 
 function appServiceInstallerRequirementForPlatform(
@@ -522,6 +521,18 @@ function appServiceInstallerRequirementForPlatform(
   const servicePlatform = servicePlatformForReleasePlatform(releasePlatform);
   const capability = appBackgroundServiceCapability(servicePlatform);
   const selectedV1Path = selectedInstallerV1Path(servicePlatform);
+  if (servicePlatform === "darwin") {
+    return {
+      platform: servicePlatform,
+      selectedV1Path,
+      installerRequired: "no",
+      packageFormats: ["dmg", "zip"],
+      requiredDecision: "Butler App owns the Agent only while the App is running.",
+      allowedMechanisms: ["app-foreground-child"],
+      userContext: "signed-in desktop user",
+      registersUserService: false,
+    };
+  }
   return {
     platform: servicePlatform,
     selectedV1Path,
@@ -565,7 +576,7 @@ function servicePlatformForReleasePlatform(
 function selectedInstallerV1Path(
   platform: AppBackgroundServicePlatform,
 ): AppBackgroundServiceV1Path {
-  if (platform === "darwin") return "macos-pkg-launch-agent";
+  if (platform === "darwin") return "macos-app-foreground";
   if (platform === "linux") return "linux-deb-owned-user-unit";
   if (platform === "win32") return "windows-least-privilege-user-service";
   throw new Error(`unsupported App service platform: ${platform}`);
@@ -574,7 +585,7 @@ function selectedInstallerV1Path(
 function serviceInstallerPackageFormats(
   platform: AppBackgroundServicePlatform,
 ): AppReleaseServiceInstallerPackageFormat[] {
-  if (platform === "darwin") return ["pkg"];
+  if (platform === "darwin") return ["dmg", "zip"];
   if (platform === "linux") return ["deb", "pacman", "rpm"];
   throw new Error(`unsupported App service installer platform: ${platform}`);
 }
@@ -585,19 +596,8 @@ function serviceInstallerPackageArtifactsForPlatform(
 ): AppServiceInstallerPackageArtifactMetadata[] {
   const platform = servicePlatformForReleasePlatform(releasePlatform);
   if (platform === "darwin") {
-    const publishedArtifactName = version ? artifactName("app", version, releasePlatform) : null;
-    return [
-      {
-        packageFormat: "pkg",
-        selectedV1Path: "macos-pkg-launch-agent",
-        serviceManager: "launchd",
-        serviceDefinitionTarget: "$HOME/Library/LaunchAgents/com.hexpy.butler.plist",
-        renderContractPath: "service-installer/darwin/launchd/render-contract.json",
-        postInstallPath: "service-installer/darwin/pkg/postinstall",
-        publishedArtifactName,
-        publishedSha256Name: publishedArtifactName ? `${publishedArtifactName}.sha256` : null,
-      },
-    ];
+    void version;
+    return [];
   }
   if (platform === "linux") {
     const debArtifactName = version ? `butler-app-service_${version}_amd64.deb` : null;
@@ -1018,7 +1018,7 @@ function artifactName(
   version: string,
   platform: AppReleasePlatform,
 ): string {
-  const extension = platform === "darwin-arm64" ? "pkg" : "deb";
+  const extension = platform === "darwin-arm64" ? "dmg" : "deb";
   return `butler-app-${version}-${platform}.${extension}`;
 }
 
@@ -1344,11 +1344,12 @@ function validateAppBackgroundServiceReleaseCapability(
     if (requirement.selectedV1Path !== expectedPath) {
       issues.push(`${label} ${platform} selected installer path mismatch`);
     }
-    if (requirement.installerRequired !== "yes") {
-      issues.push(`${label} ${platform} installer must be required`);
+    const expectsService = platform !== "darwin";
+    if (requirement.installerRequired !== (expectsService ? "yes" : "no")) {
+      issues.push(`${label} ${platform} installer requirement mismatch`);
     }
-    if (!requirement.registersUserService) {
-      issues.push(`${label} ${platform} must register a user service`);
+    if (requirement.registersUserService !== expectsService) {
+      issues.push(`${label} ${platform} user service registration mismatch`);
     }
     for (const format of serviceInstallerPackageFormats(platform)) {
       if (!requirement.packageFormats.includes(format)) {
@@ -1449,7 +1450,7 @@ function validateAppDesktopHelper(
   if (helper.product !== "butler-app" || helper.owner !== "butler-app") {
     issues.push(`${label} owner must be butler-app`);
   }
-  if (helper.helperMode !== "background-helper-executable") {
+  if (helper.helperMode !== "electron-main-tray") {
     issues.push(`${label} helper mode mismatch`);
   }
   const expectedDefaultPlatforms = persistentMenuBarHelperDefaultPlatforms(platforms);
@@ -1461,15 +1462,6 @@ function validateAppDesktopHelper(
   }
   if (helper.stopsAgentOnHelperQuit !== false) {
     issues.push(`${label} helper quit must not stop Agent`);
-  }
-  if (helper.launchArgument !== "--butler-menu-bar-helper") {
-    issues.push(`${label} launch argument mismatch`);
-  }
-  if (helper.quitMainUiArgument !== "--butler-quit-main-ui") {
-    issues.push(`${label} quit main UI argument mismatch`);
-  }
-  if (helper.quitHelperArgument !== "--butler-quit-menu-bar-helper") {
-    issues.push(`${label} quit helper argument mismatch`);
   }
   const expectedPlatforms = uniqueServicePlatforms(platforms);
   if (!sameComponentSet(helper.platforms, expectedPlatforms)) {

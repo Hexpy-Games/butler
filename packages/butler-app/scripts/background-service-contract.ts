@@ -78,6 +78,7 @@ export type AppBackgroundServiceRequiredDecision =
   | "linux-package-service-path";
 
 export type AppBackgroundServiceV1Path =
+  | "macos-app-foreground"
   | "macos-pkg-launch-agent"
   | "macos-first-run-launch-agent"
   | "macos-smappservice-helper"
