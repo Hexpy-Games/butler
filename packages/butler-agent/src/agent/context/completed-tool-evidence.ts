@@ -24,7 +24,8 @@ export interface CompletedToolEvidence {
 /**
  * Converts a successful tool result into the only representation allowed to
  * cross a later provider-request boundary. The exact result is retained by the
- * evidence store; provider adapters only serialize this provider-neutral value.
+ * evidence store; provider adapters serialize this provider-neutral value and
+ * may admit its declared provider-safe preview when the exact request fits.
  *
  * Failed results remain structured failures so the provider-valid call/result
  * pair is preserved and the model can repair the call.
@@ -183,9 +184,10 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Keeps completed results pointer-first across later provider boundaries.
- * Exact raw evidence crosses the boundary only through an explicit bounded
- * read_tool_evidence_artifact observation.
+ * Compiles provider-safe completed observations against the exact serialized
+ * request capacity. Results outside the newest semantic block, or results that
+ * do not fit, remain lossless evidence pointers. Exact raw evidence crosses the
+ * boundary only through an explicit bounded read_tool_evidence_artifact call.
  */
 export function compileCompletedToolEvidencePointers(input: {
   body: Record<string, unknown>;
