@@ -656,6 +656,7 @@ export function resolveAppManagedForegroundCommand({
     args: ["run", daemon],
     cwd: activation.runtimeHome,
     stdio: ["pipe", "inherit", "inherit"],
+    detached: true,
     appManaged: true,
     foregroundHost: true,
     bundledAgentVersion: activation.version,

@@ -38,6 +38,7 @@ import {
 import {
   APP_FOREGROUND_LIFECYCLE_MODES,
   createAppForegroundLaunch,
+  createRecoveryBudget,
   resolveAppLifecycleMode,
   transitionAppForeground,
   writeAppForegroundInstance,
@@ -142,6 +143,8 @@ let isQuitting = false;
 let finalQuitAllowed = false;
 let foregroundInstance = null;
 let legacyMigrationPromise = null;
+let suppressInitialWindowForLogin = false;
+const foregroundRecoveryBudget = createRecoveryBudget();
 let pendingNativeNavigation = navigationRequestFromArgs(process.argv);
 let menuBarHelperLaunchAttempted = false;
 let appAgentLaunchReconcilePromise = null;
@@ -173,6 +176,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitServerUrl,
   explicitUiUrl,
   projectFolderTokenSecret,
+  onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
 });
 const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
   ? createAppAgentNativeServiceBridge({
@@ -469,6 +473,26 @@ async function ensureServer() {
       },
     });
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  }
+}
+
+async function recoverUnexpectedForegroundExit() {
+  if (!usesAppForegroundLifecycle || isQuitting || !foregroundInstance) return;
+  if (!foregroundRecoveryBudget.record()) {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "failed");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    scheduleTrayMenuRefresh();
+    return;
+  }
+  try {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "degraded");
+    foregroundInstance = transitionAppForeground(foregroundInstance, "recovering");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    await ensureServer();
+    scheduleTrayMenuRefresh();
+  } catch (error) {
+    console.error(error);
+    scheduleTrayMenuRefresh();
   }
 }
 
@@ -1679,6 +1703,7 @@ async function createWindow() {
   }
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
   const win = new BrowserWindow({
+    show: false,
     width: 960,
     height: 710,
     minWidth: 320,
@@ -1739,11 +1764,20 @@ async function createWindow() {
   });
   await win.loadURL(rendererUrl);
   if (usesAppForegroundLifecycle && app.isPackaged) {
-    await ensureLegacyAppServiceMigration();
+    const migration = await ensureLegacyAppServiceMigration();
+    if (migration.status === "cancelled") {
+      scheduleTrayMenuRefresh();
+      applyDeveloperModeToWindows();
+      if (!suppressInitialWindowForLogin) win.show();
+      suppressInitialWindowForLogin = false;
+      return win;
+    }
     await ensureServer();
     scheduleTrayMenuRefresh();
   }
   applyDeveloperModeToWindows();
+  if (!suppressInitialWindowForLogin) win.show();
+  suppressInitialWindowForLogin = false;
   return win;
 }
 
@@ -1756,13 +1790,6 @@ async function ensureLegacyAppServiceMigration() {
       snapshot,
       showMessageBox: (options) => dialog.showMessageBox(options),
     }),
-  }).then((result) => {
-    if (result.status === "cancelled") {
-      const error = new Error("Legacy Butler service migration was cancelled.");
-      error.code = "legacy_service_migration_cancelled";
-      throw error;
-    }
-    return result;
   }).catch((error) => {
     legacyMigrationPromise = null;
     throw error;
@@ -2120,6 +2147,8 @@ if (appSingleInstanceLock) {
     .then(async () => {
       configureAppIdentity();
       configureAppIcon();
+      suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
+        app.getLoginItemSettings().wasOpenedAtLogin;
       Menu.setApplicationMenu(null);
       nativeTheme.on("updated", updateTrayIcon);
       if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {

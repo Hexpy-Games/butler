@@ -105,6 +105,7 @@ export function createBundledAgentSupervisor({
   killTimeoutMs = 2000,
   probeTimeoutMs = 2000,
   stdio = "inherit",
+  onUnexpectedExit = () => {},
 }) {
   let child = null;
   let startupPromise = null;
@@ -205,6 +206,7 @@ export function createBundledAgentSupervisor({
         ...(gateway.cwd ? { cwd: gateway.cwd } : {}),
         env,
         stdio: gateway.stdio ?? stdio,
+        detached: gateway.detached === true,
       });
     } catch (error) {
       rollbackGatewayActivation(gateway, error);
@@ -223,11 +225,13 @@ export function createBundledAgentSupervisor({
       spawnError = error;
     });
     child.once("exit", (code, signal) => {
+      const wasRunning = phase === "running";
       earlyExit = { code, signal };
       lastExit = earlyExit;
       clearShutdownTimer();
       child = null;
       if (phase !== "stopping") phase = "stopped";
+      if (wasRunning) queueMicrotask(() => onUnexpectedExit(earlyExit));
     });
 
     let observedHealthy = false;

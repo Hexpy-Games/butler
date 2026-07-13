@@ -143,6 +143,7 @@ export function resolveAppManagedForegroundCommand(input?: {
   args: string[];
   cwd: string;
   stdio: ["pipe", "inherit", "inherit"];
+  detached: true;
   appManaged: true;
   foregroundHost: true;
   bundledAgentVersion: string;

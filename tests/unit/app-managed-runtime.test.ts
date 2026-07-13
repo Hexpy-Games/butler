@@ -1068,6 +1068,7 @@ test("App-managed foreground command runs the full service daemon with a parent 
       join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
     ]);
     expect(command.stdio).toEqual(["pipe", "inherit", "inherit"]);
+    expect(command.detached).toBe(true);
     expect(command.env).toMatchObject({
       BUTLER_APP_FOREGROUND_LEASE: "1",
       BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
