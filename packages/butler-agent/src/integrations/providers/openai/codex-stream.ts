@@ -165,9 +165,13 @@ export function codexSseEventFromFrame(frame: string): Record<string, any> | nul
 export async function consumeCodexSseFrame(
   accumulator: CodexSseAccumulator,
   frame: string,
-): Promise<void> {
+  onValidEvent?: () => void,
+): Promise<boolean> {
   const event = codexSseEventFromFrame(frame);
-  if (event) await handleCodexSseEvent(accumulator, event);
+  if (!event) return false;
+  onValidEvent?.();
+  await handleCodexSseEvent(accumulator, event);
+  return true;
 }
 
 
@@ -189,10 +193,11 @@ export function nextSseFrameBoundary(buffer: string): { index: number; length: n
 export async function readCodexSseResponse(
   response: Response,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
+  onValidEvent?: () => void,
 ): Promise<OpenAIResponse> {
   const accumulator = createCodexSseAccumulator(onProviderStreamEvent);
   if (!response.body) {
-    await consumeCodexSseText(await response.text(), accumulator);
+    await consumeCodexSseText(await response.text(), accumulator, onValidEvent);
     return codexSseResponseFromAccumulator(accumulator);
   }
 
@@ -201,18 +206,22 @@ export async function readCodexSseResponse(
   let buffer = "";
   while (true) {
     const { value, done } = await reader.read();
+    if (!done && (!value || value.byteLength === 0)) {
+      await yieldToEventLoop();
+      continue;
+    }
     buffer += decoder.decode(value, { stream: !done });
     while (true) {
       const boundary = nextSseFrameBoundary(buffer);
       if (!boundary) break;
       const frame = buffer.slice(0, boundary.index);
       buffer = buffer.slice(boundary.index + boundary.length);
-      await consumeCodexSseFrame(accumulator, frame);
+      await consumeCodexSseFrame(accumulator, frame, onValidEvent);
     }
     if (done) break;
   }
   if (buffer.trim()) {
-    await consumeCodexSseFrame(accumulator, buffer);
+    await consumeCodexSseFrame(accumulator, buffer, onValidEvent);
   }
   return codexSseResponseFromAccumulator(accumulator);
 }
@@ -223,6 +232,7 @@ export async function readCodexSseResponse(
 export async function consumeCodexSseText(
   text: string,
   accumulator: CodexSseAccumulator,
+  onValidEvent?: () => void,
 ): Promise<void> {
   let buffer = text;
   while (true) {
@@ -230,11 +240,15 @@ export async function consumeCodexSseText(
     if (!boundary) break;
     const frame = buffer.slice(0, boundary.index);
     buffer = buffer.slice(boundary.index + boundary.length);
-    await consumeCodexSseFrame(accumulator, frame);
+    await consumeCodexSseFrame(accumulator, frame, onValidEvent);
   }
   if (buffer.trim()) {
-    await consumeCodexSseFrame(accumulator, buffer);
+    await consumeCodexSseFrame(accumulator, buffer, onValidEvent);
   }
+}
+
+async function yieldToEventLoop(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 
@@ -268,6 +282,7 @@ export async function createCodexResponse(
   signal?: AbortSignal,
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
   budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  onProviderRoundProgress?: () => void,
 ): Promise<OpenAIResponse> {
   const accountId = codexAccountIdFromAuthorization(authorization);
   const endpoint = safeEndpointLabel(getCodexResponsesUrl());
@@ -307,6 +322,8 @@ export async function createCodexResponse(
     });
   }
 
+  onProviderRoundProgress?.();
+
   if (!response.ok) {
     const raw = await response.text();
     let detail = raw;
@@ -325,5 +342,5 @@ export async function createCodexResponse(
     });
   }
 
-  return await readCodexSseResponse(response, onProviderStreamEvent);
+  return await readCodexSseResponse(response, onProviderStreamEvent, onProviderRoundProgress);
 }
