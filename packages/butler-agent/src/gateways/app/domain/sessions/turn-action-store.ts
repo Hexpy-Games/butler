@@ -252,9 +252,9 @@ export class AppTurnActionStore {
   sessionHasActiveTurn(sessionId: string): boolean {
     this.reconcileDeliveredSystemResponderTurns(sessionId);
     const row = this.input.db
-      .query<{ state: TurnState }, [string]>(
+      .query<{ state: TurnState; safe_error_code: string | null }, [string]>(
         `
-      SELECT state
+      SELECT state, safe_error_code
       FROM turns
       WHERE chat_id = ?
       ORDER BY rowid DESC
@@ -262,6 +262,7 @@ export class AppTurnActionStore {
     `,
       )
       .get(sessionId);
+    if (row?.safe_error_code === "provider_round_timeout") return false;
     return Boolean(
       row &&
         [

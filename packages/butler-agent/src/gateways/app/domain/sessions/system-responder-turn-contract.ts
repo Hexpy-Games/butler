@@ -78,6 +78,7 @@ export interface SystemResponderTurnStoreInput {
   markResponderNonPublicContinuation: (
     chatId: string,
     turnId: string,
+    safeErrorCode?: "provider_round_timeout" | null,
   ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
   finalizeResponderLimitedDelivery: (
     chatId: string,

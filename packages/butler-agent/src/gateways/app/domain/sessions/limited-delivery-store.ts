@@ -152,6 +152,7 @@ export class AppLimitedDeliveryStore {
   markResponderNonPublicContinuation(
     chatId: string,
     turnId: string,
+    safeErrorCode?: "provider_round_timeout" | null,
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
     return this.markResponderContinuation(chatId, turnId, {
       text: null,
@@ -165,13 +166,14 @@ export class AppLimitedDeliveryStore {
         limitation_codes: [],
         limitations: [],
       },
-    });
+    }, { safeErrorCode });
   }
 
   private markResponderContinuation(
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
+    options: { safeErrorCode?: "provider_round_timeout" | null } = {},
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord } {
     this.input.deleteAssistantMessagesForTurn(turnId);
     const currentTurn = this.input.getTurnRow(turnId);
@@ -205,7 +207,7 @@ export class AppLimitedDeliveryStore {
         safeStatusLabel: "",
         retryable: false,
         cancellable: true,
-        safeErrorCode: null,
+        safeErrorCode: options.safeErrorCode ?? null,
         attempt,
       },
     );
