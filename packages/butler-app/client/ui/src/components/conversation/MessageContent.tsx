@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { MessageRecord } from "@/app/types.ts";
 import { appCopy } from "@/app/copy.ts";
+import { Tag } from "@/butler-ds";
 import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
 import { AssistantResponseFooter } from "./AssistantResponseFooter";
 import {
@@ -12,7 +13,6 @@ import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { AssistantFooterMeta } from "./messageFooterMeta";
-import styles from "./MessageContent.module.css";
 
 interface MessageContentProps {
   message: MessageRecord;
@@ -46,8 +46,10 @@ function MessageContentComponent({
             />
           )}
           {message.status === "cancelled" && (
-            <div className={styles.stoppedStatus} role="status">
-              {appCopy.conversation.stoppedStatus}
+            <div role="status">
+              <Tag ariaLabel={appCopy.conversation.stoppedStatus}>
+                {appCopy.conversation.stoppedStatus}
+              </Tag>
             </div>
           )}
         </>
