@@ -116,6 +116,21 @@ test("runtime delivery taxonomy keeps live completion gaps non-public without cl
   });
 });
 
+test("provider round timeout remains a non-public resumable turn state", () => {
+  expect(classifyRuntimeFailureDelivery({
+    code: "provider_round_timeout",
+    message: "Provider stopped making forward progress.",
+    retryable: false,
+  })).toMatchObject({
+    delivery_state: "running",
+    terminal: false,
+    issue_kind: "none",
+    visibility: "continuation_progress",
+    failure_notice: false,
+    limitation_codes: [],
+  });
+});
+
 test("runtime delivery taxonomy does not classify live continuation from raw text", () => {
   for (const message of [
     "Butler could not verify that the requested goal was completed.",

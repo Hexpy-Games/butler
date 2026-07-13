@@ -143,8 +143,8 @@ export function createAppSessionModuleGraph(input: {
       host.drainQueuedSessionMessages(chatId, responder, options),
     finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
-    markResponderNonPublicContinuation: (chatId, turnId) =>
-      host.markResponderNonPublicContinuation(chatId, turnId),
+    markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
+      host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
     finalizeCancelledTurn: (chatId, turnId) => {
       cancelPersistedRuntimeTurn({ butlerData, turnId });
       return host.finalizeCancelledTurn(chatId, turnId);

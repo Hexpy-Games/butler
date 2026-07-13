@@ -21,6 +21,7 @@ export interface RuntimeFailureDiagnostic {
   measuredInputTokens?: number;
   registeredInputCapacity?: number;
   requestHash?: string;
+  timeoutKind?: "total" | "idle";
 }
 
 export class ModelProviderRequestError extends Error {
@@ -36,6 +37,7 @@ export class ModelProviderRequestError extends Error {
   readonly measuredInputTokens?: number;
   readonly registeredInputCapacity?: number;
   readonly requestHash?: string;
+  readonly timeoutKind?: "total" | "idle";
 
   constructor(input: RuntimeFailureDiagnostic) {
     super(input.message);
@@ -52,6 +54,7 @@ export class ModelProviderRequestError extends Error {
     this.measuredInputTokens = input.measuredInputTokens;
     this.registeredInputCapacity = input.registeredInputCapacity;
     this.requestHash = input.requestHash;
+    this.timeoutKind = input.timeoutKind;
   }
 
   diagnostic(): RuntimeFailureDiagnostic {
@@ -69,8 +72,29 @@ export class ModelProviderRequestError extends Error {
       measuredInputTokens: this.measuredInputTokens,
       registeredInputCapacity: this.registeredInputCapacity,
       requestHash: this.requestHash,
+      timeoutKind: this.timeoutKind,
     };
   }
+}
+
+export function providerRoundTimeoutError(input: {
+  provider: string;
+  api: string;
+  timeoutKind: "total" | "idle";
+  endpoint?: string;
+  model?: string;
+}): ModelProviderRequestError {
+  const label = providerLabel(input.provider);
+  return new ModelProviderRequestError({
+    code: "provider_round_timeout",
+    message: `${label} stopped making forward progress. Send a new message to continue from the saved turn state.`,
+    provider: input.provider,
+    api: input.api,
+    endpoint: input.endpoint,
+    model: input.model,
+    retryable: false,
+    timeoutKind: input.timeoutKind,
+  });
 }
 
 export function isAdmissionInvariantViolation(error: unknown): error is ModelProviderRequestError {

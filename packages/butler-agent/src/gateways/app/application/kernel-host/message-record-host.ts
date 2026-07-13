@@ -64,6 +64,7 @@ export interface AppStoreKernelMessageRecordHost {
   markResponderNonPublicContinuation(
     chatId: string,
     turnId: string,
+    safeErrorCode?: "provider_round_timeout" | null,
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: unknown };
   deleteAssistantMessagesForTurn(turnId: string): void;
   upsertAssistantTurnFailure(
@@ -177,10 +178,11 @@ export function createMessageRecordHost(
         options,
       );
     },
-    markResponderNonPublicContinuation(chatId, turnId) {
+    markResponderNonPublicContinuation(chatId, turnId, safeErrorCode) {
       return kernel.limitedDelivery.markResponderNonPublicContinuation(
         chatId,
         turnId,
+        safeErrorCode,
       );
     },
     deleteAssistantMessagesForTurn(turnId) {

@@ -16,6 +16,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { principalTurnCancellationSocketPath } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
@@ -39,6 +40,7 @@ import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-l
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { createOpenAIResponse } from "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
 import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 import {
@@ -12468,7 +12470,7 @@ test("session summary keeps repeated identical tool calls separate", async () =>
   }
 });
 
-test("hung responders stay admitted without gateway timeout cancellation", async () => {
+test("deferred logical turns outlive gateway request timeout while provider rounds own liveness", async () => {
   let aborted = false;
   let markStarted: (() => void) | undefined;
   const started = new Promise<void>((resolve) => {
@@ -13873,6 +13875,140 @@ test("gateway bridge keeps runtime turns alive past request timeout budgets", as
   }
 });
 
+test("deferred App messages recover a stalled provider round without capturing the next user message", async () => {
+  let providerRoundCalls = 0;
+  let providerFetchCalls = 0;
+  let appServerUrl = "";
+  globalThis.fetch = (async (request, init) => {
+    if (appServerUrl && String(request).startsWith(appServerUrl)) {
+      return await originalFetch(request, init);
+    }
+    providerFetchCalls += 1;
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        streamController = controller;
+      },
+    });
+    init?.signal?.addEventListener(
+      "abort",
+      () => streamController?.error(init.signal?.reason),
+      { once: true },
+    );
+    return new Response(stream, { status: 200 });
+  }) as typeof fetch;
+
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runFunctionToolPromptText: async (input) => {
+      providerRoundCalls += 1;
+      if (providerRoundCalls === 1) {
+        await createOpenAIResponse(
+          { model: "gpt-5.5", input: input.prompt },
+          input.signal,
+          { mode: "codex_subscription", authorization: fakeCodexAuthorizationForAppTest() },
+          undefined,
+          { roundIndex: 0 },
+          { totalTimeoutMs: 200, idleTimeoutMs: 20 },
+        );
+        throw new Error("stalled provider unexpectedly completed");
+      }
+      return "second turn stayed isolated";
+    },
+  });
+  const bridge = new AppGatewayBridge({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    runtime,
+    provider: fakeProvider,
+    runtimePolicy: { completionReview: "disabled" },
+    sessionTitleGenerator: false,
+  });
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    responder: bridge.responder,
+  });
+  appServerUrl = server.url;
+  try {
+    const first = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "first message with a stalled provider round",
+      queue_policy: "send_now",
+    });
+    expect(first.data.turn).toMatchObject({ state: "thinking", attempt: 1 });
+
+    const timedOutTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) =>
+        turn.state === "waiting_for_tool" &&
+        turn.safe_error_code === "provider_round_timeout",
+    );
+    expect(timedOutTurn).toMatchObject({
+      state: "waiting_for_tool",
+      attempt: 1,
+      safe_error_code: "provider_round_timeout",
+      retryable: false,
+      cancellable: true,
+    });
+    expect(providerRoundCalls).toBe(1);
+    expect(providerFetchCalls).toBe(1);
+
+    const messagesAfterTimeout = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    expect(messagesAfterTimeout.data.messages.filter(
+      (message: { role: string; turn_id?: string }) =>
+        message.role === "assistant" && message.turn_id === timedOutTurn.id,
+    )).toHaveLength(0);
+    const checkpointDir = join(tempDir, "state", "turn-kernel");
+    expect(existsSync(checkpointDir) ? readdirSync(checkpointDir) : []).toEqual([]);
+
+    const stableEvents = await getJson(`${server.url}events?cursor=0`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(await getJson(`${server.url}events?cursor=0`)).toEqual(stableEvents);
+
+    const second = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "an unrelated second message",
+      queue_policy: "enqueue_if_busy",
+    });
+    expect(second.data.queued).toBeUndefined();
+    expect(second.data.turn).toMatchObject({ state: "thinking", attempt: 1 });
+    expect(second.data.turn.id).not.toBe(timedOutTurn.id);
+
+    const secondReply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "second turn stayed isolated",
+    );
+    expect(secondReply).toMatchObject({
+      text: "second turn stayed isolated",
+      status: "delivered",
+      turn_id: second.data.turn.id,
+    });
+    const finalTurns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
+      id: timedOutTurn.id,
+      state: "waiting_for_tool",
+      attempt: 1,
+      safe_error_code: "provider_round_timeout",
+    }));
+    expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
+      id: second.data.turn.id,
+      state: "delivered",
+      attempt: 1,
+    }));
+    expect(providerRoundCalls).toBe(2);
+    expect(providerFetchCalls).toBe(1);
+  } finally {
+    server.stop();
+    bridge.close();
+  }
+}, 15_000);
+
 test("message endpoint rate limits bursts with safe protocol errors", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -14295,6 +14431,14 @@ async function waitForAssistantMessageMatching(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("Expected assistant message projection did not appear.");
+}
+
+function fakeCodexAuthorizationForAppTest(): string {
+  const encode = (value: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `Bearer ${encode({ alg: "none" })}.${encode({
+    "https://api.openai.com/auth": { chatgpt_account_id: "account" },
+  })}.signature`;
 }
 
 class ScriptedRuntime implements AgentRuntimeAdapter {

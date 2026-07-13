@@ -333,6 +333,7 @@ function isLiveKernelContinuationGap(failure: RuntimeDeliveryFailureInput): bool
     failure.code === "completion_gap" ||
     failure.code === "completion_review_incomplete" ||
     failure.code === "prompt_usage_model_call_budget_exhausted" ||
+    failure.code === "provider_round_timeout" ||
     failure.code === "missing_evidence" ||
     failure.code === "candidate_only_evidence" ||
     failure.name === "GoalCompletionIncompleteError" ||
