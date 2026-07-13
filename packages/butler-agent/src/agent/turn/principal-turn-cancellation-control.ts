@@ -29,6 +29,13 @@ export interface CancelExecutionRequest {
   dispatch_claim_id: string;
 }
 
+export interface PrincipalTurnCancellationTarget {
+  butlerData: string;
+  turnId: string;
+  queueId: string;
+  dispatchClaimId: string | null;
+}
+
 export interface CancelExecutionResponse {
   version: 1;
   outcome:
@@ -178,27 +185,46 @@ export function activePrincipalTurnExecutionIdentity(input: {
   butlerData: string;
   turnId: string;
 }): PrincipalTurnExecutionIdentity | null {
-  const processingDir = join(
+  const target = principalTurnCancellationTargetForTurn(input);
+  if (!target?.dispatchClaimId) return null;
+  return { ...target, dispatchClaimId: target.dispatchClaimId };
+}
+
+export function principalTurnCancellationTargetForTurn(input: {
+  butlerData: string;
+  turnId: string;
+}): PrincipalTurnCancellationTarget | null {
+  return (
+    cancellationTargetInQueueState(input, "processing") ??
+    cancellationTargetInQueueState(input, "pending")
+  );
+}
+
+function cancellationTargetInQueueState(
+  input: { butlerData: string; turnId: string },
+  state: "processing" | "pending",
+): PrincipalTurnCancellationTarget | null {
+  const queueDir = join(
     resolve(input.butlerData),
     "runtime",
     "inbound-events",
-    "processing",
+    state,
   );
-  if (!existsSync(processingDir)) return null;
-  for (const name of readdirSync(processingDir).filter((item) => item.endsWith(".json"))) {
+  if (!existsSync(queueDir)) return null;
+  for (const name of readdirSync(queueDir).filter((item) => item.endsWith(".json"))) {
     try {
       const record = JSON.parse(
-        readFileSync(join(processingDir, name), "utf8"),
+        readFileSync(join(queueDir, name), "utf8"),
       ) as Record<string, any>;
       if (record.envelope?.routingHints?.turnId !== input.turnId) continue;
       const queueId = requiredToken(record.queueId);
       const dispatchClaimId = requiredToken(record.processing?.claimId);
-      if (!queueId || !dispatchClaimId) continue;
+      if (!queueId || (state === "processing" && !dispatchClaimId)) continue;
       return {
         butlerData: input.butlerData,
         turnId: input.turnId,
         queueId,
-        dispatchClaimId,
+        dispatchClaimId: dispatchClaimId ?? null,
       };
     } catch {
       continue;

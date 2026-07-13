@@ -213,14 +213,16 @@ export function markPrincipalTurnCancellationDelivery(
     const timestampColumn = state === "accepted" ? "accepted_at" : "completed_at";
     db.query(`
       UPDATE app_turn_cancel_outbox
-      SET state = ?, ${timestampColumn} = ?
+      SET state = ?, ${timestampColumn} = ?,
+        dispatch_claim_id = COALESCE(dispatch_claim_id, ?)
       WHERE turn_id = ?
         AND queue_id = ?
-        AND dispatch_claim_id = ?
+        AND (dispatch_claim_id = ? OR dispatch_claim_id IS NULL)
         AND state != 'completed'
     `).run(
       state,
       new Date().toISOString(),
+      input.dispatchClaimId,
       input.turnId,
       input.queueId,
       input.dispatchClaimId,

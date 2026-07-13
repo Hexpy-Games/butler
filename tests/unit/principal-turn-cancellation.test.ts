@@ -1,11 +1,19 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { cancelPersistedRuntimeTurn } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation.ts";
 import {
   sendCancelExecutionRequest,
+  principalTurnCancellationTargetForTurn,
   startPrincipalTurnCancellationServer,
 } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
 import {
@@ -672,6 +680,33 @@ test("principal cancellation registry contains no filesystem watcher", () => {
   expect(source).not.toContain("watchFile");
   expect(source).not.toContain("unwatchFile");
   expect(source).not.toContain("setInterval");
+});
+
+test("Stop before registration records the pending queue delivery target", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
+  tempDirs.push(butlerData);
+  const pendingDir = join(butlerData, "runtime", "inbound-events", "pending");
+  mkdirSync(pendingDir, { recursive: true });
+  writeFileSync(
+    join(pendingDir, "queue-before-registration.json"),
+    JSON.stringify({
+      version: 1,
+      queueId: "queue-before-registration",
+      envelope: { routingHints: { turnId: "turn-before-registration" } },
+    }),
+  );
+
+  expect(
+    principalTurnCancellationTargetForTurn({
+      butlerData,
+      turnId: "turn-before-registration",
+    }),
+  ).toEqual({
+    butlerData,
+    turnId: "turn-before-registration",
+    queueId: "queue-before-registration",
+    dispatchClaimId: null,
+  });
 });
 
 test("completed turn registration is removed before a later cancellation record", () => {

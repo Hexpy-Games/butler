@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { PrincipalTurnExecutionIdentity } from "../../../../agent/turn/principal-turn-cancellation-registry.ts";
+import type { PrincipalTurnCancellationTarget } from "../../../../agent/turn/principal-turn-cancellation-control.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import { CANCELLED_TURN_ACTIVITY_TEXT } from "./cancelled-turn-activity.ts";
 import { messageFromRow } from "./message-read-model.ts";
@@ -54,9 +54,9 @@ interface TurnActionStoreInput {
   cancelResponder: (turnId: string) => void;
   cancelPersistedRuntimeTurn: (turnId: string) => void;
   signalPrincipalTurnCancellation: (turnId: string) => Promise<unknown>;
-  activePrincipalTurnExecutionIdentity: (
+  principalTurnCancellationTargetForTurn: (
     turnId: string,
-  ) => PrincipalTurnExecutionIdentity | null;
+  ) => PrincipalTurnCancellationTarget | null;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (
@@ -156,9 +156,9 @@ export class AppTurnActionStore {
         "Turn is not cancellable.",
       );
     }
-    const executionIdentity =
-      this.input.activePrincipalTurnExecutionIdentity(turnId);
-    this.recordCancellationDecision(row, executionIdentity);
+    const cancellationTarget =
+      this.input.principalTurnCancellationTargetForTurn(turnId);
+    this.recordCancellationDecision(row, cancellationTarget);
     try {
       this.input.cancelPersistedRuntimeTurn(turnId);
     } finally {
@@ -173,10 +173,10 @@ export class AppTurnActionStore {
     ) {
       this.markCancellationAccepted(turnId);
     }
-    const cancelledTurn = executionIdentity
+    const cancelledTurn = cancellationTarget
       ? this.input.getTurn(turnId)
       : this.input.finalizeCancelledTurn(row.chat_id, turnId);
-    if (!executionIdentity) {
+    if (!cancellationTarget) {
       this.input.cleanupTurnEventSequences(row.chat_id, turnId);
     }
     return {
@@ -207,7 +207,7 @@ export class AppTurnActionStore {
 
   private recordCancellationDecision(
     row: TurnRow,
-    identity: PrincipalTurnExecutionIdentity | null,
+    target: PrincipalTurnCancellationTarget | null,
   ): void {
     const now = new Date().toISOString();
     this.input.db.transaction(() => {
@@ -225,7 +225,7 @@ export class AppTurnActionStore {
           "Turn is not cancellable.",
         );
       }
-      if (identity) {
+      if (target) {
         this.input.db.query(`
           INSERT INTO app_turn_cancel_outbox (
             turn_id, queue_id, dispatch_claim_id, state, created_at
@@ -233,8 +233,8 @@ export class AppTurnActionStore {
           ON CONFLICT(turn_id) DO NOTHING
         `).run(
           row.id,
-          identity.queueId,
-          identity.dispatchClaimId,
+          target.queueId,
+          target.dispatchClaimId,
           now,
         );
       }
