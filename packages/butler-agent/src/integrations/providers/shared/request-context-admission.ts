@@ -6,8 +6,9 @@ import {
   modelRequestContextAdmissionMetric,
   type ModelRequestContextAdmissionMetric,
 } from "./request-context-admission-metrics.ts";
-import { compileCompletedToolEvidenceInline } from "../../../agent/context/completed-tool-evidence.ts";
+import { compileCompletedToolEvidencePointers } from "../../../agent/context/completed-tool-evidence.ts";
 import type { PromptUsageAttribution } from "../runtime-contracts.ts";
+import { estimateTokensForModel } from "../model-catalog.ts";
 
 export type RequestContextMeasurement = "serialized_utf8_upper_bound";
 export type RequestContextAdmission = "admitted" | "reduce" | "cannot_fit_required";
@@ -35,6 +36,7 @@ export interface ModelRequestContextPlan {
   optional_atoms: ContextAtomRef[];
   tool_schema_tokens: number;
   compiled_input_tokens: number;
+  budget_input_tokens: number | null;
   admission: RequestContextAdmission;
 }
 
@@ -130,10 +132,7 @@ export function admitSerializedProviderRequest(
     configuredInputCapacity ?? capacity.contextWindowTokens,
     contextInputCapacity,
   );
-  const compiledBody = compileCompletedToolEvidenceInline({
-    body: input.body,
-    serializedUtf8Capacity: Math.max(0, inputCapacityTokens - providerEnvelopeTokens),
-  });
+  const compiledBody = compileCompletedToolEvidencePointers({ body: input.body });
   const serializedRequest = JSON.stringify(compiledBody);
   const serializedRequestHash = sha256(serializedRequest);
   const compiledInputTokens = Buffer.byteLength(serializedRequest, "utf8") + providerEnvelopeTokens;
@@ -154,6 +153,7 @@ export function admitSerializedProviderRequest(
       input.toolSchemaTokens ?? Buffer.byteLength(JSON.stringify(input.body.tools ?? []), "utf8"),
     )),
     compiled_input_tokens: compiledInputTokens,
+    budget_input_tokens: null,
     admission: compiledInputTokens <= inputCapacityTokens ? "admitted" : "reduce",
   };
 
@@ -172,10 +172,12 @@ export function admitSerializedProviderRequest(
       plan,
     });
   }
+  plan.budget_input_tokens = estimateTokensForModel(serializedRequest, capacity.modelRef).tokens +
+    providerEnvelopeTokens;
   input.usageAttribution?.beforeAdmittedModelRequest?.({
     roundIndex: Math.max(0, Math.trunc(input.roundIndex ?? input.usageAttribution.roundIndex ?? 0)),
     phase: input.usageAttribution.phase,
-    admittedPromptTokens: plan.compiled_input_tokens,
+    admittedPromptTokens: plan.budget_input_tokens,
     requestedOutputTokens: plan.requested_output_tokens,
     requestHash: serializedRequestHash,
   });

@@ -1,4 +1,5 @@
 import { safeLimitationText } from "../../../../agent/turn/runtime-delivery-state.ts";
+import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../../../runtime/internal-recovery-failure.ts";
 
 export interface ProjectedSafeTurnFailure {
   code: string;
@@ -14,7 +15,9 @@ export function projectSafeTurnFailure(input: {
   return {
     code,
     message:
-      safeOptionalShortText(input.message.text) ??
+      code === INTERNAL_RECOVERY_REQUIRED_CODE
+        ? "Butler could not complete this turn."
+        : safeOptionalShortText(input.message.text) ??
       "Butler could not complete this turn.",
     cause: code === "gateway_failed"
       ? undefined

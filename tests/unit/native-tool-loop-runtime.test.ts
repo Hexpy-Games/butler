@@ -11526,6 +11526,13 @@ test("focused WorkStream validation repair continues unchanged gaps until the ph
       phases.push(input.usageAttribution?.phase ?? "");
       maxRounds.push(input.maxToolRounds ?? 0);
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: `focused-repeated-gap-${phases.length}`,
+      });
       return "필수 도구 실행 없이 같은 completion gap을 유지합니다.";
     },
   });
@@ -11723,6 +11730,13 @@ test("focused WorkStream resume yields before executing an oversized tool-call b
     runFunctionToolPromptText: async (input) => {
       promptCalls += 1;
       input.usageAttribution?.beforeModelRequest?.({ roundIndex: 0 });
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: "focused-tool-call-cap",
+      });
       await input.onAssistantTextBeforeTools?.({
         text: "title: 도구 호출 묶음 확인\nsummary: 너무 많은 도구 호출을 한 번에 실행하려 합니다.",
         toolCalls: Array.from({ length: 25 }, (_, index) => ({
