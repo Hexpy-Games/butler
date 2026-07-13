@@ -29,7 +29,7 @@ test("provider-round deadline configuration accepts only positive integer millis
   expect(resolveProviderRoundPolicy()).toEqual({ totalTimeoutMs: 321, idleTimeoutMs: 123 });
 });
 
-test("a Codex stream with no valid events fails on the idle provider-round deadline", async () => {
+test("a Codex stream whose body ignores abort still fails on the idle provider-round deadline", async () => {
   let fetchCalls = 0;
   globalThis.fetch = hangingCodexFetch(() => {
     fetchCalls += 1;
@@ -146,17 +146,13 @@ function createTestResponse(
 }
 
 function hangingCodexFetch(onCall?: () => void): typeof fetch {
-  return (async (_input, init) => {
+  return (async () => {
     onCall?.();
-    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     const stream = new ReadableStream<Uint8Array>({
-      start(value) {
-        controller = value;
-      },
+      start() {},
     });
-    init?.signal?.addEventListener("abort", () => controller?.error(init.signal?.reason), { once: true });
     return new Response(stream, { status: 200 });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
 }
 
 function codexFetchFromSchedule(
