@@ -17,9 +17,6 @@ import {
   reasoningOptionLabel,
   tokenWindowLabel,
 } from "@/app/utils.ts";
-import {
-  executionModelDetail,
-} from "./composerModelTruth.ts";
 import { ComposerModelStatusButton } from "./ComposerModelStatusButton.tsx";
 
 export function ModelMenu() {
@@ -40,12 +37,6 @@ export function ModelMenu() {
     (store) => store.handleReasoningChange,
   );
   const settings = useButlerStore((store) => store.settings);
-  const activeExecutionTurn = useButlerStore(
-    (store) => store.sessionView?.active_turn,
-  );
-  const latestExecutionTurn = useButlerStore(
-    (store) => store.sessionView?.latest_turn,
-  );
   const [searchValue, setSearchValue] = useState("");
   const [providerFilter, setProviderFilter] = useState("all");
 
@@ -96,19 +87,13 @@ export function ModelMenu() {
     return <ComposerModelStatusButton state={modelState} />;
   }
 
-  const executionDetail = executionModelDetail({
-    turn: activeExecutionTurn ?? latestExecutionTurn,
-    active: Boolean(activeExecutionTurn),
-    models,
-  });
-
   return (
     <Popover open={modelMenuOpen} onOpenChange={setModelMenuOpen}>
       <PopoverTrigger asChild>
         <ComposerControlButton
           detail={
             <span data-test-class="composer-model-summary">
-              {executionDetail ?? reasoningBudgetSummary(activeModel, reasoning)}
+              {reasoningBudgetSummary(activeModel, reasoning)}
             </span>
           }
           data-test-class="model-button"

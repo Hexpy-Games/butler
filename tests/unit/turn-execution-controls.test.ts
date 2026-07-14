@@ -58,10 +58,7 @@ describe("immutable turn execution controls", () => {
     expect(
       verifyTurnExecutionControls(JSON.parse(persisted!.execution_controls_json)),
     ).toEqual(turn.execution_controls!);
-    expect(turn.execution_model).toEqual({
-      requested_model_ref: "openai/gpt-5.6-sol",
-      adapter_effective_model_ref: "openai/gpt-5.6-sol",
-    });
+    expect(turn.execution_model).toBeUndefined();
     db.close();
   });
 
