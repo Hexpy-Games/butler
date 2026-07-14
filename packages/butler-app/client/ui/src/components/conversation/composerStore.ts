@@ -10,6 +10,7 @@ import { create } from "zustand";
 import type {
   AccessMode,
   AppModelSummary,
+  ComposerModelState,
   ContextDetailsView,
   ReasoningEffort,
   ProjectDashboardDocument,
@@ -44,6 +45,7 @@ interface ComposerStore {
   accessMode: AccessMode;
   planMode: boolean;
   model: string;
+  modelState: ComposerModelState;
   reasoning: ReasoningEffort;
   context: ContextDetailsView | null | undefined;
   models: AppModelSummary[];
@@ -103,6 +105,7 @@ export const useComposerStore = create<ComposerStore>((set, get) => ({
   accessMode: "full_access",
   planMode: false,
   model: "",
+  modelState: "loading",
   reasoning: "medium",
   context: null,
   models: [],

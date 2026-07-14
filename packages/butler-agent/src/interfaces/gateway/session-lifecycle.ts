@@ -200,7 +200,13 @@ export class SessionLifecycleService {
   }
 
   private requestProjectCapsuleEnsure(binding: StoredSessionBinding): void {
-    if (binding.role !== "steward" || !binding.projectId || !this.options.promptAssembler) return;
+    if (!binding.projectId || !this.options.promptAssembler) return;
+    if (
+      typeof this.options.promptAssembler.projectCapsuleStatus !== "function" ||
+      typeof this.options.promptAssembler.ensureProjectCapsule !== "function"
+    ) {
+      return;
+    }
     if (this.options.promptAssembler.projectCapsuleStatus(binding) !== "missing") return;
     const key = `${binding.projectId}\u0000${binding.workspacePath}`;
     if (this.projectCapsuleRequests.has(key)) return;

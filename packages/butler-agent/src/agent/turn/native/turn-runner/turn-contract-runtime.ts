@@ -13,6 +13,11 @@ import { turnMetadataForContract } from "./turn-contract-tool-policy.ts";
 import { recordTurnContractMetric } from "./turn-contract-metrics.ts";
 import { prepareStartWorkStreamBinding } from "./start-workstream-binding.ts";
 import { turnContractActionRequiresExplicitPlan } from "../../turn-contract-plan-closure.ts";
+import {
+  commitContinuityUpdates,
+  type ContinuityCandidate,
+  type ContinuityProvenance,
+} from "../../../cognition/continuity/continuity-store.ts";
 
 export interface ActiveTurnContract {
   contract: CompiledTurnContract;
@@ -118,6 +123,9 @@ export function activateTurnContract(input: {
   projectId?: string | null;
   turnId: string;
   turnMetadata?: Record<string, unknown>;
+  continuityCandidates?: readonly ContinuityCandidate[];
+  continuityProvenance?: ContinuityProvenance;
+  boundWorkspacePath?: string | null;
   toolSurfaceController: ToolSurfacePromptController;
 }): ActiveTurnContract {
   abortCancelledActivation(input);
@@ -132,6 +140,17 @@ export function activateTurnContract(input: {
     projectId: input.projectId,
     turnId: input.turnId,
   }));
+  if (input.decision.continuity_updates?.length) {
+    if (!input.continuityProvenance) throw new Error("continuity_conversation_provenance_missing");
+    commitContinuityUpdates({
+      butlerData: input.butlerData,
+      decisionId: input.decision.decision_id,
+      updates: input.decision.continuity_updates,
+      candidateRefs: input.continuityCandidates?.map((candidate) => candidate.continuity_id) ?? [],
+      provenance: input.continuityProvenance,
+      boundWorkspacePath: input.boundWorkspacePath,
+    });
+  }
   abortCancelledActivation(input, contract.contract_id);
   recordTurnContractMetric({
     butlerData: input.butlerData,

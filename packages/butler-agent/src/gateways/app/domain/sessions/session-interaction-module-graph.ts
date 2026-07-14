@@ -68,7 +68,8 @@ export function createAppSessionInteractionModuleGraph(input: {
       host.deleteAssistantMessagesForTurn(turnId),
     enqueueAppTransportTurn: (turnInput) =>
       host.enqueueAppTransportTurn(turnInput),
-    getSessionControls: (sessionId) => host.getSessionControls(sessionId),
+    sendMessageWithCurrentControls: (request, responder, options) =>
+      host.sendMessage(request, responder, options),
     dispatchDeferredResponderTurn: (turnInput) =>
       host.dispatchDeferredResponderTurn(turnInput),
     completeResponderTurn: (turnInput) => host.completeResponderTurn(turnInput),

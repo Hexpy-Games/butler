@@ -217,6 +217,12 @@ test("typed decisions distinguish runtime todo plans from canonical Ledger tasks
     projectId: "project-a",
     candidateIds: [],
     waitingBlockerIds: [],
+    continuityCandidates: [{
+      continuity_id: "cu-existing",
+      scope: "project",
+      kind: "instruction",
+      summary: "Use the established remote maintenance procedure.",
+    }],
   });
   const properties = responseFormat.schema.properties as Record<
     string,
@@ -239,6 +245,12 @@ test("typed decisions distinguish runtime todo plans from canonical Ledger tasks
   expect(String(properties.target_project_id?.description)).toContain(
     "does not imply canonical Project Ledger tracking",
   );
+  expect(prompt).toContain("continuity_updates is the model-owned semantic continuity decision");
+  expect(prompt).toContain("absence never implies deletion");
+  const continuity = properties.continuity_updates as Record<string, unknown>;
+  const continuityItem = continuity.items as { properties: Record<string, { enum?: unknown[] }> };
+  expect(continuity.maxItems).toBe(4);
+  expect(continuityItem.properties.target_ref.enum).toEqual([null, "cu-existing"]);
 });
 
 test("complete action and deliverable matrix is deterministic", () => {

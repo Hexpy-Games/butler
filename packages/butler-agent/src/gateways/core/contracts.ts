@@ -1,3 +1,5 @@
+import type { TurnExecutionControlsV1 } from "./turn-execution-controls.ts";
+
 export type SessionRole = "butler" | "steward" | "worker";
 export type ModelRef = `${string}/${string}`;
 export type PromptCacheRetention = "in_memory" | "24h";
@@ -61,6 +63,7 @@ export interface InboundEnvelope {
     stewardId?: string;
     turnId?: string;
   };
+  executionControls?: TurnExecutionControlsV1;
   raw?: unknown;
 }
 

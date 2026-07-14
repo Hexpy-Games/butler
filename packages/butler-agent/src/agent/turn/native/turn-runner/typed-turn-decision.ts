@@ -15,6 +15,16 @@ import {
 } from "../../turn-contract.ts";
 import type { WorkStreamResumeCandidate } from "../../workstream-checkpoint-resume-types.ts";
 import { WorkStreamStore, type WorkStreamRecord } from "../../../work/work-stream.ts";
+import {
+  validateContinuityUpdates,
+  type ContinuityCandidate,
+} from "../../../cognition/continuity/continuity-store.ts";
+import {
+  CONTINUITY_KINDS,
+  CONTINUITY_OPERATIONS,
+  CONTINUITY_SCOPES,
+  type ContinuityUpdate,
+} from "../../turn-contract-types.ts";
 
 export const TURN_DECISION_REPAIR_LIMIT = 1;
 
@@ -49,6 +59,7 @@ export function typedTurnDecisionInstructions(input: {
   decisionId: string;
   projectId?: string | null;
   candidateIds: readonly string[];
+  continuityCandidates?: readonly ContinuityCandidate[];
 }): string {
   return [
     "## Typed Turn Decision",
@@ -72,12 +83,18 @@ export function typedTurnDecisionInstructions(input: {
     "Use cancel_work only for a listed WorkStream. Use supply_user_action only for its listed waiting-user blocker.",
     "For implementation or mutation include the actual durable deliverables, not status_report alone.",
     "status_report means an explicitly requested read-only status snapshot; do not add it merely because the turn will end with a report.",
+    "continuity_updates is the model-owned semantic continuity decision for this turn. Use an empty array for ordinary messages that create no useful future state.",
+    "Add a bounded update only when a compact instruction, decision, constraint, working state, preference, or correction should affect a later relevant turn. Never copy the raw user message.",
+    "Choose project scope for project-specific state, session scope for state useful only in this conversation, and global scope only for a durable cross-project rule or correction.",
+    "Use upsert for new state. Use supersede or forget only with an exact target_ref from Active continuity candidates; absence never implies deletion.",
+    "Do not put secrets, credentials, project ids, workspace paths, conversation ids, message ids, or filesystem destinations in a continuity update. Runtime binds provenance and storage scope.",
     "Post-change verification belongs to validation. The ordinary user-facing completion answer is the final candidate, not status_report.",
     "For a genuine mixed status-and-work instruction, include status_report only when the user separately requested the current status snapshot.",
     "public_title is one concise line naming the immediate work block. It must not repeat public_summary or immediate_next_step.",
     "public_summary states what this decision will do. public_rationale explains why this step is useful now. immediate_next_step explains how the result determines the following step.",
     `Active project id: ${input.projectId?.trim() || "none"}.`,
     `Compatible WorkStream ids: ${input.candidateIds.length > 0 ? input.candidateIds.join(", ") : "none"}.`,
+    `Active continuity candidates: ${renderContinuityCandidates(input.continuityCandidates ?? [])}.`,
     "Do not infer from keyword dictionaries, regexes, or final-answer prose. Do not mention hidden control data.",
   ].join("\n");
 }
@@ -87,7 +104,9 @@ export function turnDecisionResponseFormat(input: {
   projectId?: string | null;
   candidateIds: readonly string[];
   waitingBlockerIds: readonly string[];
+  continuityCandidates?: readonly ContinuityCandidate[];
 }): StructuredDecisionPrompt["responseFormat"] {
+  const continuityCandidateIds = input.continuityCandidates?.map((candidate) => candidate.continuity_id) ?? [];
   return {
     type: "json_schema",
     name: "butler_turn_contract_decision",
@@ -97,7 +116,7 @@ export function turnDecisionResponseFormat(input: {
       additionalProperties: false,
       required: [
         "schema_version", "decision_id", "action", "target_workstream_id", "target_project_id",
-        "blocker_id", "evidence_domain", "inspection_scope", "deliverables", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
+        "blocker_id", "evidence_domain", "inspection_scope", "deliverables", "continuity_updates", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
       ],
       properties: {
         schema_version: { type: "string", const: TURN_CONTRACT_DECISION_SCHEMA },
@@ -118,6 +137,23 @@ export function turnDecisionResponseFormat(input: {
             type: "string",
             enum: [...TURN_DELIVERABLES],
             description: DELIVERABLE_DECISION_GUIDANCE,
+          },
+        },
+        continuity_updates: {
+          type: "array",
+          maxItems: 4,
+          description: "Compact model-selected state that should affect a later relevant turn. Empty is the normal result.",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["scope", "kind", "operation", "summary", "target_ref"],
+            properties: {
+              scope: { type: "string", enum: [...CONTINUITY_SCOPES] },
+              kind: { type: "string", enum: [...CONTINUITY_KINDS] },
+              operation: { type: "string", enum: [...CONTINUITY_OPERATIONS] },
+              summary: { type: "string", minLength: 1, maxLength: 500 },
+              target_ref: { enum: [null, ...continuityCandidateIds] },
+            },
           },
         },
         answer_text: { type: ["string", "null"] },
@@ -152,6 +188,7 @@ export function parseStructuredTurnDecision(text: string, expectedDecisionId: st
     evidence_domain: nullableString(record.evidence_domain) as TurnContractDecision["evidence_domain"],
     inspection_scope: nullableString(record.inspection_scope) as TurnContractDecision["inspection_scope"],
     deliverables: Array.isArray(record.deliverables) ? record.deliverables as TurnDeliverable[] : [],
+    continuity_updates: parseContinuityUpdates(record.continuity_updates),
     answer_text: nullableString(record.answer_text),
     public_title: nullableString(record.public_title) ?? legacyDecisionTitle(record),
     public_summary: String(record.public_summary ?? ""),
@@ -166,6 +203,7 @@ export function canonicalFunctionDecisionArgs(
   const action = typeof args.action === "string" ? args.action : "";
   return {
     ...args,
+    continuity_updates: Array.isArray(args.continuity_updates) ? args.continuity_updates : [],
     ...(action && action !== "answer" ? { answer_text: null } : {}),
     ...(action && action !== "supply_user_action" ? { blocker_id: null } : {}),
     ...(action && action !== "tool_answer" ? { evidence_domain: null } : {}),
@@ -209,8 +247,14 @@ export function compileStructuredTurnDecision(input: {
   candidates: TurnContractCandidates;
   workspaceId: string;
   projectId?: string | null;
+  continuityCandidates?: readonly ContinuityCandidate[];
   now?: Date;
 }): CompiledTurnContract {
+  validateContinuityUpdates({
+    updates: input.decision.continuity_updates ?? [],
+    candidates: input.continuityCandidates ?? [],
+    projectId: input.projectId,
+  });
   if (
     input.decision.target_project_id && input.projectId &&
     input.decision.target_project_id !== input.projectId
@@ -354,4 +398,29 @@ function legacyDecisionTitle(record: Record<string, unknown>): string | undefine
   const oneLine = source.replace(/\s+/gu, " ").trim();
   const sentence = oneLine.split(/[.!?。！？]/u)[0]?.trim() || oneLine;
   return sentence.slice(0, 80);
+}
+
+function parseContinuityUpdates(value: unknown): ContinuityUpdate[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("continuity_updates_invalid");
+  return value.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("continuity_update_invalid_object");
+    }
+    const record = item as Record<string, unknown>;
+    return {
+      scope: record.scope as ContinuityUpdate["scope"],
+      kind: record.kind as ContinuityUpdate["kind"],
+      operation: record.operation as ContinuityUpdate["operation"],
+      summary: typeof record.summary === "string" ? record.summary : "",
+      ...(nullableString(record.target_ref) ? { target_ref: nullableString(record.target_ref) } : {}),
+    };
+  });
+}
+
+function renderContinuityCandidates(candidates: readonly ContinuityCandidate[]): string {
+  if (candidates.length === 0) return "none";
+  return candidates
+    .map((candidate) => `${candidate.continuity_id} [${candidate.scope}/${candidate.kind}] ${candidate.summary}`)
+    .join(" | ");
 }

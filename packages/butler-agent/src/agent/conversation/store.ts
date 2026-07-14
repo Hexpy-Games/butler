@@ -260,6 +260,15 @@ export class AgentConversationStore {
     return rows.map((row) => this.internals.hydrateMessage(row));
   }
 
+  readMessagesForTurn(turnId: string): ConversationMessageWithParts[] {
+    const rows = this.db.query<MessageRow, [string]>(`
+      SELECT * FROM conversation_messages
+      WHERE turn_id = ?
+      ORDER BY seq ASC
+    `).all(turnId);
+    return rows.map((row) => this.internals.hydrateMessage(row));
+  }
+
   readCognitionMessages(input: ReadCognitionMessagesInput = {}): ConversationMessageWithParts[] {
     const capped = normalizeLimit(input.limit ?? 1000, 1000, 5000);
     const offset = Number.isFinite(input.offset) ? Math.max(0, Math.floor(input.offset!)) : 0;

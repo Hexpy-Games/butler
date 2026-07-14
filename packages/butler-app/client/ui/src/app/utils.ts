@@ -1,4 +1,4 @@
-import { ACTIVE_TURN_STATES, EMPTY_MODEL_CATALOG } from "./constants.ts";
+import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy } from "./copy.ts";
 import {
   progressRowFromSharedTurnEvent,
@@ -2119,11 +2119,9 @@ export function runtimeModels(
     );
     if (registered.length > 0) return registered;
   }
-  const models = modelCatalog?.models?.length
-    ? modelCatalog.models
-    : EMPTY_MODEL_CATALOG.models;
+  const models = modelCatalog?.models ?? [];
   const supported = models.filter((model) => model.runtime_supported === true);
-  return supported.length > 0 ? supported : EMPTY_MODEL_CATALOG.models;
+  return supported;
 }
 
 export function systemPrefersDark(): boolean {

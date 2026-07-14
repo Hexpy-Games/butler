@@ -30,6 +30,16 @@ import { transcriptFileNameForSessionId } from "./lib/session-id.ts";
 import { cognitionMemoryRoot } from "../../paths.ts";
 import { indexTranscriptLinesForQuery } from "../exact-query.ts";
 import { butlerAgentScriptPath, butlerAgentSourcePath } from "../../../../runtime/paths.ts";
+import {
+  completionJobProcessed,
+  readConversationCompletionObservation,
+  writeCompletionJobReceipt,
+  type ConversationCompletionObservation,
+} from "../../continuity/completion-observation.ts";
+import {
+  writeSemanticHotCacheEntry,
+  type HotCacheWriteReceipt,
+} from "../../continuity/hot-cache-writer.ts";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -295,6 +305,22 @@ export function processEntry(
   const resolve =
     deps.resolveTranscript ?? ((id: string) => resolveTranscriptPath(id, { butlerDataDir: butlerData }));
   const onAlert = deps.onAlert ?? emitFailureAlert;
+  const completion = canonicalCompletionObservation(entry, butlerData);
+  if (completion === "invalid") {
+    const reason = "completion_observation_invalid";
+    appendDLQ({
+      timestamp: new Date().toISOString(),
+      session_id: entry.session_id,
+      project: entry.project,
+      reason,
+      exit_code: null,
+      stderr_tail: "canonical completion observation is missing, corrupt, or does not match its queue request",
+    }, dlqFile);
+    return { dequeue: true, failCount: readFailCounter(counterFile), reason };
+  }
+  if (completion && completionJobProcessed(butlerData, completion.job_id)) {
+    return { dequeue: true, failCount: readFailCounter(counterFile), reason: "completion_already_processed" };
+  }
 
   if (!isSafeProvenanceValue(entry.source)) {
     const reason = "unsafe_source_provenance";
@@ -319,6 +345,7 @@ export function processEntry(
     resolve,
     dlqFile,
     counterFile,
+    completion,
   });
   if ("result" in payload) return payload.result;
   const chunk = payload.chunks[0];
@@ -339,15 +366,16 @@ export function processEntry(
     return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
 
-  // 2. save_hot — best-effort, not fatal
+  let hotCacheReceipt: HotCacheWriteReceipt | null = null;
+  // 2. Semantic consolidation. Canonical completion jobs use save_hot only as
+  // a summarizer; the consumer owns scope resolution and the shared writer.
   if (existsSync(saveHotPath)) {
     const runSaveHot =
       deps.runSaveHot ??
       ((args, e) =>
         spawnSync(BUN, args, { input: chunk.conversationText, encoding: "utf8", timeout: 60000, env: e }));
     try {
-      const result = runSaveHot(
-        [
+      const saveHotArgs = [
           "run",
           saveHotPath,
           "--project",
@@ -356,23 +384,66 @@ export function processEntry(
           chunk.sessionId.storage,
           "--type",
           "conversation",
-        ],
+          ...(completion ? ["--summarize-only"] : []),
+        ];
+      const result = runSaveHot(
+        saveHotArgs,
         env,
         chunk.conversationText,
       );
       if (result.status === 0) {
+        if (completion) {
+          const summary = result.stdout.trim();
+          if (!summary) throw new Error("semantic_summary_empty");
+          hotCacheReceipt = writeSemanticHotCacheEntry({
+            butlerData,
+            scope: completion.scope,
+            projectId: completion.project_id,
+            sessionId: completion.runtime_session_id,
+            sourceId: completion.job_id,
+            body: summary,
+            createdAt: completion.completed_at,
+          });
+        }
         log("  save_hot: OK");
       } else {
+        if (completion) throw new Error(`semantic_summary_failed:${result.status}`);
         log(`  save_hot: failed — ${(result.stderr || "").slice(0, 200)}`);
       }
     } catch (e: any) {
+      if (completion) {
+        const reason = "semantic_hot_cache_write_failed";
+        const n = readFailCounter(counterFile) + 1;
+        writeFailCounter(n, counterFile);
+        appendDLQ({
+          timestamp: new Date().toISOString(),
+          session_id: entry.session_id,
+          project: entry.project,
+          reason,
+          exit_code: null,
+          stderr_tail: String(e?.message ?? e).slice(-500),
+        }, dlqFile);
+        return { dequeue: n >= FAIL_ALERT_THRESHOLD, failCount: n, reason };
+      }
       log(`  save_hot: error — ${e.message}`);
     }
+  } else if (completion) {
+    const reason = "semantic_summarizer_missing";
+    appendDLQ({
+      timestamp: new Date().toISOString(),
+      session_id: entry.session_id,
+      project: entry.project,
+      reason,
+      exit_code: null,
+      stderr_tail: "configured semantic summarizer is missing",
+    }, dlqFile);
+    return { dequeue: true, failCount: readFailCounter(counterFile), reason };
   }
 
   // 3. index.ts with --file (this is the contract fix)
   if (!existsSync(indexTsPath)) {
     log(`  index: ${indexTsPath} missing — skipping`);
+    completeCanonicalJob(butlerData, completion, hotCacheReceipt, "skipped");
     return { dequeue: true, failCount: readFailCounter(counterFile) };
   }
 
@@ -440,6 +511,7 @@ export function processEntry(
       resetFailCounter(counterFile);
       alertedForStreak = false;
     }
+    completeCanonicalJob(butlerData, completion, hotCacheReceipt, "ok");
     return { dequeue: true, failCount: 0 };
   }
 
@@ -473,18 +545,38 @@ function resolveMemoryPayload(input: {
   resolve: (sessionId: string) => string | null;
   dlqFile: string;
   counterFile: string;
+  completion: ConversationCompletionObservation | null;
 }): MemoryTranscriptPayload | { result: ProcessResult } {
   const canonical = buildMemoryConversationObservationPayload({
     butlerData: input.butlerData,
-    sourceSessionId: input.entry.session_id,
+    sourceSessionId: input.completion?.conversation_session_id ?? input.entry.session_id,
+    conversationTurnId: input.completion?.conversation_turn_id,
     chunkByGap: false,
   });
-  if (canonical.chunks.length > 0) {
+  const canonicalIds = new Set(canonical.chunks.flatMap((chunk) => chunk.sourceMessageIds));
+  const canonicalIdentityMatches = !input.completion || (
+    canonicalIds.has(input.completion.inbound_message_id) &&
+    canonicalIds.has(input.completion.outbound_message_id)
+  );
+  if (canonical.chunks.length > 0 && canonicalIdentityMatches) {
     return {
       sourceSessionId: canonical.conversationSessionId ?? input.entry.session_id,
       chunks: canonical.chunks,
       messageCount: canonical.messageCount,
     };
+  }
+
+  if (input.completion) {
+    const reason = "canonical_completion_not_resolved";
+    appendDLQ({
+      timestamp: new Date().toISOString(),
+      session_id: input.entry.session_id,
+      project: input.entry.project,
+      reason,
+      exit_code: null,
+      stderr_tail: "canonical conversation turn did not contain the completion observation message identities",
+    }, input.dlqFile);
+    return { result: { dequeue: true, failCount: readFailCounter(input.counterFile), reason } };
   }
 
   const filePath = input.resolve(input.entry.session_id);
@@ -522,6 +614,41 @@ function resolveMemoryPayload(input: {
     lines: rawLines,
     sourceSessionId: input.entry.session_id,
     chunkByGap: false,
+  });
+}
+
+function canonicalCompletionObservation(
+  entry: SyncRequest,
+  butlerData: string,
+): ConversationCompletionObservation | null | "invalid" {
+  if (entry.schema_version !== "butler.memory-sync-request.v2") return null;
+  if (!entry.job_id) return "invalid";
+  const observation = readConversationCompletionObservation(butlerData, entry.job_id);
+  if (!observation) return "invalid";
+  return observation.runtime_session_id === entry.session_id &&
+      observation.conversation_session_id === entry.conversation_session_id &&
+      observation.conversation_turn_id === entry.conversation_turn_id &&
+      observation.inbound_message_id === entry.inbound_message_id &&
+      observation.outbound_message_id === entry.outbound_message_id &&
+      observation.scope === entry.scope &&
+      observation.project_id === (entry.project_id ?? null)
+    ? observation
+    : "invalid";
+}
+
+function completeCanonicalJob(
+  butlerData: string,
+  completion: ConversationCompletionObservation | null,
+  hotCacheReceipt: HotCacheWriteReceipt | null,
+  indexStatus: "ok" | "skipped",
+): void {
+  if (!completion) return;
+  writeCompletionJobReceipt(butlerData, {
+    schema_version: "butler.memory-completion-job-receipt.v1",
+    job_id: completion.job_id,
+    completed_at: new Date().toISOString(),
+    hot_cache_receipt: hotCacheReceipt as unknown as Record<string, unknown> | null,
+    index_status: indexStatus,
   });
 }
 
@@ -595,7 +722,7 @@ export function pollIteration(deps: PollDeps = {}): PollResult {
   const debounceKey = `${entry.project}:${topicKey}`;
   const prevLast = lastSync.get(debounceKey);
 
-  if (!shouldSync(entry.project, entry.topic)) {
+  if (entry.schema_version !== "butler.memory-sync-request.v2" && !shouldSync(entry.project, entry.topic)) {
     log(`Debounced: ${debounceKey} (synced <5min ago)`);
     d();
     return { action: "dequeued_debounced", transitioned };

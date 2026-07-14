@@ -91,6 +91,11 @@ export interface AppStoreSessionApi {
     responder?: AppMessageResponder,
     options?: SendMessageOptions,
   ): Promise<TurnActionResult>;
+  retryTurnWithCurrentControls(
+    turnId: string,
+    responder?: AppMessageResponder,
+    options?: SendMessageOptions,
+  ): Promise<MessageSendResult>;
   cancelTurn(turnId: string): Promise<TurnActionResult>;
 }
 
@@ -197,6 +202,13 @@ export function createSessionStoreApi(
     },
     async retryTurn(turnId, responder, options = {}) {
       return await kernel.turnActions.retryTurn(turnId, responder, options);
+    },
+    async retryTurnWithCurrentControls(turnId, responder, options = {}) {
+      return await kernel.turnActions.retryTurnWithCurrentControls(
+        turnId,
+        responder,
+        options,
+      );
     },
     async cancelTurn(turnId) {
       return await kernel.turnActions.cancelTurn(turnId);

@@ -2,7 +2,11 @@ import { Database } from "bun:sqlite";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import type { AppLimitedDelivery } from "../../infrastructure/transport/failure-ux-contract.ts";
 import type { MessageFileRow } from "../message-files/message-file-store.ts";
-import { messageFromRow, turnFromRow } from "./message-read-model.ts";
+import {
+  executionControlsFromJson,
+  messageFromRow,
+  turnFromRow,
+} from "./message-read-model.ts";
 import type { MessageRow, TurnRow } from "../../infrastructure/core/records.ts";
 import {
   isContinuationDeliveryIssue,
@@ -14,15 +18,16 @@ import {
 import type {
   MessageRecord,
   MessageFileRef,
-  SessionControlState,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-controls.ts";
 import {
   isInternalContinuationTurnState,
 } from "../../infrastructure/transport/app-transport-metadata.ts";
 import {
   hasPublicContinuationProgressSinceLatestQueue,
 } from "./continuation-progress-read-model.ts";
+import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 
 interface LimitedDeliveryStoreInput {
   db: Database;
@@ -60,9 +65,8 @@ interface LimitedDeliveryStoreInput {
     turnId: string;
     message: MessageRecord;
     text: string;
-    controls: SessionControlState;
+    executionControls: TurnExecutionControlsV1;
   }) => TurnRecord;
-  getSessionControls: (chatId: string) => SessionControlState;
 }
 
 export class AppLimitedDeliveryStore {
@@ -224,6 +228,16 @@ export class AppLimitedDeliveryStore {
     if (!row?.user_message_id) return;
     const messageRow = this.input.getMessageRow(row.user_message_id);
     if (!messageRow) return;
+    const executionControls = executionControlsFromJson(
+      row.execution_controls_json,
+    );
+    if (!executionControls) {
+      throw new AppStoreOperationError(
+        409,
+        "turn_execution_controls_missing",
+        "This legacy turn cannot be continued without its original execution snapshot.",
+      );
+    }
     this.input.enqueueAppTransportTurn({
       chatId,
       turnId: turn.id,
@@ -232,7 +246,7 @@ export class AppLimitedDeliveryStore {
         this.input.refsForMessage(messageRow.id),
       ),
       text: messageRow.text,
-      controls: this.input.getSessionControls(chatId),
+      executionControls,
     });
   }
 }

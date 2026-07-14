@@ -132,12 +132,14 @@ export function readMemoryTranscriptPayload(input: {
 export function buildMemoryConversationObservationPayload(input: {
   butlerData: string;
   sourceSessionId: string;
+  conversationTurnId?: string | null;
   chunkByGap?: boolean;
   maxMessages?: number;
 }): MemoryConversationObservationPayload {
   const observations = readConversationObservations({
     butlerData: input.butlerData,
     sessionId: input.sourceSessionId,
+    conversationTurnId: input.conversationTurnId,
     roles: ["user", "assistant"],
     includeCompacted: true,
     maxMessages: input.maxMessages,

@@ -647,6 +647,7 @@ test("fresh app settings honor an install-selected local model default", async (
       expect.objectContaining({ id: "routine_work", model: "local/gemma-install" }),
     ]);
     const catalog = await getJson(`${server.url}model-catalog`);
+    expect(catalog.data.generation).toMatch(/^[a-f0-9]{64}$/);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
     expect(catalog.data.default_reasoning_effort).toBe("none");
   } finally {
@@ -4376,6 +4377,8 @@ test("session controls and personalization are app-server backed and privacy saf
       access_mode: "full_access",
       plan_mode: false,
     });
+    expect(initialControls.data.revision).toBe(0);
+    expect(initialControls.data.catalog_generation).toMatch(/^[a-f0-9]{64}$/);
 
     const updatedControls = await patchJson(
       `${server.url}sessions/general/controls`,
@@ -4392,6 +4395,10 @@ test("session controls and personalization are app-server backed and privacy saf
       access_mode: "read_only",
       plan_mode: true,
     });
+    expect(updatedControls.data.revision).toBe(1);
+    expect(updatedControls.data.catalog_generation).toBe(
+      initialControls.data.catalog_generation,
+    );
 
     const roundTripControls = await getJson(
       `${server.url}sessions/general/controls`,
@@ -4399,6 +4406,23 @@ test("session controls and personalization are app-server backed and privacy saf
     expect(roundTripControls.data.controls).toMatchObject(
       updatedControls.data.controls,
     );
+
+    const unavailable = await fetch(
+      `${server.url}sessions/general/controls`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "openai/not-registered" }),
+      },
+    );
+    const unavailableBody = await unavailable.json();
+    expect(unavailable.status).toBe(409);
+    expect(unavailableBody.error.code).toBe("session_model_unavailable");
+    const afterUnavailable = await getJson(
+      `${server.url}sessions/general/controls`,
+    );
+    expect(afterUnavailable.data.controls.model).toBe("openai/gpt-5.4-mini");
+    expect(afterUnavailable.data.revision).toBe(1);
 
     const initialPersonalization = await getJson(
       `${server.url}personalization`,
@@ -7099,11 +7123,37 @@ test("app transport session binding preserves selected reasoning effort", async 
   const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    await postJson(`${server.url}messages`, {
+    const sent = await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "queue with selected reasoning",
       model: "openai/gpt-5.5",
       reasoning_effort: "low",
+    });
+    expect(sent.data.turn.execution_controls).toMatchObject({
+      turn_id: sent.data.turn.id,
+      session_id: "general",
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+      source: "message_override",
+      session_control_revision: 1,
+    });
+    expect(sent.data.turn.execution_model).toEqual({
+      requested_model_ref: "openai/gpt-5.5",
+      adapter_effective_model_ref: "openai/gpt-5.5",
+    });
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.active_turn).toMatchObject({
+      id: sent.data.turn.id,
+      execution_controls: {
+        model_ref: "openai/gpt-5.5",
+        reasoning_effort: "low",
+      },
+      execution_model: {
+        requested_model_ref: "openai/gpt-5.5",
+        adapter_effective_model_ref: "openai/gpt-5.5",
+      },
     });
 
     const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
@@ -7112,6 +7162,10 @@ test("app transport session binding preserves selected reasoning effort", async 
       expect(binding?.modelRef).toBe("openai/gpt-5.5");
       expect(binding?.metadata).toMatchObject({
         reasoning_effort: "low",
+        turnExecutionControls: {
+          turn_id: sent.data.turn.id,
+          model_ref: "openai/gpt-5.5",
+        },
       });
     } finally {
       store.close();
@@ -13133,11 +13187,19 @@ test("failed app turns are not retryable without a runtime fault record", async 
 
 test("retrying a runtime fault updates the same logical turn without synthetic retry text", async () => {
   let attempt = 0;
+  const attemptControls: Array<{
+    model?: string;
+    reasoningEffort?: string;
+  }> = [];
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
     responder(input) {
       attempt += 1;
+      attemptControls.push({
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
+      });
       if (attempt === 1) {
         input.onTurnEvent?.({
           kind: TURN_DECISION_EVENT_KIND,
@@ -13180,6 +13242,8 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       body: JSON.stringify({
         chat_id: "general",
         text: "retry this failed app turn",
+        model: "openai/gpt-5.6-sol",
+        reasoning_effort: "medium",
       }),
     });
     expect(response.status).toBe(202);
@@ -13226,6 +13290,11 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       limitations: [],
     });
 
+    await patchJson(`${server.url}sessions/general/controls`, {
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+
     const retry = await postJson(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
       {},
@@ -13241,6 +13310,10 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       "general",
       (message) => message.text === "recovered reply",
     );
+    expect(attemptControls).toEqual([
+      { model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
+      { model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
+    ]);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -13266,6 +13339,105 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       }),
     );
     expect(JSON.stringify(messages)).not.toContain("Retrying this turn.");
+  } finally {
+    server.stop();
+  }
+});
+
+test("retrying with current controls creates a new turn and leaves the failed snapshot intact", async () => {
+  let attempt = 0;
+  const attemptControls: Array<{
+    turnId: string;
+    model?: string;
+    reasoningEffort?: string;
+  }> = [];
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      attempt += 1;
+      attemptControls.push({
+        turnId: input.turnId,
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
+      });
+      if (attempt === 1) {
+        input.onTurnEvent?.({
+          kind: "runtime.fault",
+          payload: createRuntimeFaultPayload({
+            faultId: "fault-retry-current-controls",
+            sessionId: input.chatId,
+            turnId: input.turnId,
+            kind: "provider_stream_corruption",
+            retryable: true,
+            publicSummary: "Runtime interrupted the original turn.",
+            operatorSummary: "Retry-current contract fixture.",
+            safeErrorCode: "runtime_fault",
+            createdAt: "2026-07-14T00:00:00.000Z",
+          }),
+        });
+        const error = new Error("runtime interrupted the original turn");
+        (error as Error & { code?: string }).code = "runtime_fault";
+        throw error;
+      }
+      return { texts: ["recovered with current controls"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "retry this as a new turn",
+      model: "openai/gpt-5.6-sol",
+      reasoning_effort: "medium",
+    });
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "runtime_fault" && turn.retryable === true,
+    );
+    await patchJson(`${server.url}sessions/general/controls`, {
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+
+    const retry = await postJson(
+      `${server.url}turns/${encodeURIComponent(failedTurn.id as string)}/retry-current`,
+      {},
+    );
+    expect(retry.data.turn.id).not.toBe(failedTurn.id);
+    expect(retry.data.turn.execution_controls).toMatchObject({
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "recovered with current controls",
+    );
+
+    expect(attemptControls).toEqual([
+      {
+        turnId: failedTurn.id,
+        model: "openai/gpt-5.6-sol",
+        reasoningEffort: "medium",
+      },
+      {
+        turnId: retry.data.turn.id,
+        model: "openai/gpt-5.5",
+        reasoningEffort: "low",
+      },
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns).toContainEqual(
+      expect.objectContaining({
+        id: failedTurn.id,
+        state: "runtime_fault",
+        attempt: 1,
+        execution_controls: expect.objectContaining({
+          model_ref: "openai/gpt-5.6-sol",
+        }),
+      }),
+    );
   } finally {
     server.stop();
   }

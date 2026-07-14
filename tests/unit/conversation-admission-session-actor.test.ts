@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readConversationContext } from "../../packages/butler-agent/src/agent/context/conversation-context.ts";
@@ -19,6 +19,7 @@ import type {
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { TurnSchedulerContinuationYieldError } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
+import { memorySyncQueueFile } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/queue.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -60,6 +61,7 @@ const SAFE_RESULT = {
 };
 
 class AdmissionRuntime implements AgentRuntimeAdapter {
+  lastTurnMetadata: Record<string, unknown> | undefined;
   readonly id = "admission-runtime";
   readonly capabilities = {
     supportsSessionResume: false,
@@ -77,6 +79,7 @@ class AdmissionRuntime implements AgentRuntimeAdapter {
   }
 
   async runTurn(input: RuntimeTurnInput) {
+    this.lastTurnMetadata = input.metadata;
     await input.emitTurnEvent?.({
       kind: "model.stream.text_delta",
       payload: {
@@ -362,9 +365,11 @@ function createLifecycle(input: {
 test("session actor admits user and final assistant while stream and progress audit rows stay non-semantic", async () => {
   const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const runtime = new AdmissionRuntime();
   const lifecycle = createLifecycle({
     bindingStore,
     conversationStore,
+    runtime,
   });
 
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
@@ -388,6 +393,23 @@ test("session actor admits user and final assistant while stream and progress au
     request_message_id: semanticTail[0]?.id,
     public_assistant_message_id: semanticTail[1]?.id,
     model_ref: "openai/auto:codex-latest",
+  });
+  expect(runtime.lastTurnMetadata?.conversationProvenance).toEqual({
+    conversationSessionId: session!.id,
+    turnId: "turn-semantic",
+    inboundMessageId: semanticTail[0]?.id,
+  });
+  const completionJob = JSON.parse(readFileSync(memorySyncQueueFile(tempDir), "utf8").trim());
+  expect(completionJob).toMatchObject({
+    schema_version: "butler.memory-sync-request.v2",
+    scope: "project",
+    project_id: "butler",
+    session_id: "butler/main",
+    conversation_session_id: session!.id,
+    conversation_turn_id: "turn-semantic",
+    inbound_message_id: semanticTail[0]?.id,
+    outbound_message_id: semanticTail[1]?.id,
+    trigger: "turn_completed",
   });
   expect(readTranscript("butler/main").length).toBeGreaterThan(semanticTail.length);
 

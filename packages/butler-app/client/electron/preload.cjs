@@ -477,6 +477,10 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  retryTurnWithCurrentControls: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/retry-current`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  }),
   cancelTurn: ({ turnId }) => requestJson(`/turns/${encodeURIComponent(turnId)}/cancel`, {
     method: "POST",
     body: JSON.stringify({}),

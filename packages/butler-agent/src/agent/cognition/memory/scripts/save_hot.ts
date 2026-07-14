@@ -6,6 +6,8 @@ import { BUTLER_DIR, TWENTY_KB } from "./constants.ts";
 import { runPromptText } from "../../../../integrations/providers/provider.ts";
 import { butlerAgentSourcePath } from "../../../../runtime/paths.ts";
 import { normalizeSessionIdForStorage } from "./lib/session-id.ts";
+import { createHash } from "node:crypto";
+import { writeSemanticHotCacheEntry } from "../../continuity/hot-cache-writer.ts";
 
 function getArg(args: string[], flag: string): string | undefined {
   const idx = args.indexOf(flag);
@@ -101,6 +103,7 @@ if (import.meta.main) {
   const sessionId = getArg(args, "--session-id") ?? Date.now().toString();
   const projectPath = getArg(args, "--project-path");
   const topic = getArg(args, "--topic");
+  const summarizeOnly = args.includes("--summarize-only");
   // type param reserved for future use
   // const type = getArg(args, "--type") ?? "task";
 
@@ -157,11 +160,29 @@ ${text.trim()}`;
     }
   }
 
+  if (summarizeOnly) {
+    process.stdout.write(`${entryBody.trim()}\n`);
+    process.exit(0);
+  }
+
   const header = topic
     ? `\n## [${timeStr}] ${project} | ${sessionId} | topic=${topic}\n`
     : `\n## [${timeStr}] ${project} | ${sessionId}\n`;
   const entry = `${header}${entryBody}\n`;
-  appendFileSync(CACHE_FILE, entry);
+  if (resolved.mode === "topic") {
+    appendFileSync(CACHE_FILE, entry);
+  } else {
+    writeSemanticHotCacheEntry({
+      butlerData: BUTLER_DIR.DATA,
+      scope: resolved.mode === "project" ? "project" : "global",
+      projectId: resolved.mode === "project" ? project : null,
+      boundWorkspacePath: projectPath,
+      sessionId,
+      sourceId: `save_${createHash("sha256").update(`${project}\0${sessionId}\0${entryBody}`).digest("hex").slice(0, 32)}`,
+      body: entryBody,
+      createdAt: now.toISOString(),
+    });
+  }
   indexHotCacheEntry({
     project,
     sessionId,

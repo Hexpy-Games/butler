@@ -5,7 +5,7 @@ import type {
   WorkerActivitySummary,
 } from "./automation-worker-contract.ts";
 import type { ContextDetailsView } from "./context-contract.ts";
-import type { MessageRecord } from "./messaging-contract.ts";
+import type { MessageRecord, TurnRecord } from "./messaging-contract.ts";
 import type { ProgressSummaryRow } from "./progress-contract.ts";
 import type { SessionArtifactSummary } from "./attachment-contract.ts";
 import type { SettingsView } from "./settings-contract.ts";
@@ -20,6 +20,8 @@ export interface SessionControlState {
 export interface SessionControlsView {
   session_id: string;
   controls: SessionControlState;
+  revision: number;
+  catalog_generation: string;
 }
 
 export interface WorkStreamSummaryView {
@@ -65,6 +67,11 @@ export interface SessionViewTurn {
   progress: TurnProgressSnapshotView;
   created_at: string;
   updated_at: string;
+  execution_controls?: Pick<
+    NonNullable<TurnRecord["execution_controls"]>,
+    "model_ref" | "reasoning_effort" | "source"
+  >;
+  execution_model?: NonNullable<TurnRecord["execution_model"]>;
 }
 
 export type SessionViewTurnDeliveryState =

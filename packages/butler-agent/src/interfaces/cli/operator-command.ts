@@ -59,6 +59,14 @@ import {
 } from "../../agent/cognition/memory/metadata.ts";
 import { readMemoryHealth } from "../../agent/cognition/memory/quality.ts";
 import { recallMemory } from "../../agent/cognition/memory/recall/engine.ts";
+import {
+  applyContinuityRecovery,
+  approveContinuityRecovery,
+  continuityRecoveryManifestView,
+  planContinuityRecovery,
+  readContinuityRecoveryManifest,
+  rollbackContinuityRecovery,
+} from "../../agent/cognition/continuity/recovery.ts";
 import { tailOperationalMetricEvents } from "../../operations/metrics/operational-metrics.ts";
 import { listServices } from "../../operations/service/native-service-supervisor.ts";
 import {
@@ -1528,6 +1536,65 @@ function memory(parsed: ParsedCommonOptions, args: string[], commandBase: string
       `refreshFailures=${data.refreshFailures.count}`,
       data.diagnostics.length ? `diagnostics=${data.diagnostics.join("; ")}` : "",
     ].filter(Boolean).join("\n"));
+    return;
+  }
+  if (subcommand === "recovery" && args[1] === "plan") {
+    const projectId = args[2];
+    if (!projectId) fail(parsed, "invalid_arguments", "memory recovery plan requires <project-id>");
+    const manifest = planContinuityRecovery({ butlerData: parsed.options.data, projectId });
+    const data = continuityRecoveryManifestView(manifest);
+    print(parsed, `${commandBase} recovery plan`, data, [
+      `manifest=${data.manifest_id} project=${data.project_id} status=${data.status}`,
+      `candidates=${data.candidate_count} approved=${data.approved_count} quarantine=${data.quarantine_count}`,
+      "Dry-run only. Review candidate previews, then use recovery approve before apply.",
+    ].join("\n"));
+    return;
+  }
+  if (subcommand === "recovery" && args[1] === "inspect") {
+    const manifestId = args[2];
+    if (!manifestId) fail(parsed, "invalid_arguments", "memory recovery inspect requires <manifest-id>");
+    const manifest = readContinuityRecoveryManifest(parsed.options.data, manifestId);
+    if (!manifest) fail(parsed, "not_found", `continuity recovery manifest not found: ${manifestId}`, 1);
+    const data = continuityRecoveryManifestView(manifest);
+    print(parsed, `${commandBase} recovery inspect`, data, [
+      `manifest=${data.manifest_id} project=${data.project_id} status=${data.status}`,
+      `candidates=${data.candidate_count} approved=${data.approved_count} quarantine=${data.quarantine_count}`,
+      ...data.candidates.map((candidate) => `${candidate.candidate_id}: ${candidate.preview}`),
+    ].join("\n"));
+    return;
+  }
+  if (subcommand === "recovery" && args[1] === "approve") {
+    requireYes(parsed, "memory recovery approve");
+    const manifestId = args[2];
+    const requested = args.slice(3).filter((arg) => !arg.startsWith("--"));
+    if (!manifestId || requested.length === 0) {
+      fail(parsed, "invalid_arguments", "memory recovery approve requires <manifest-id> <candidate-id...|all>");
+    }
+    const manifest = approveContinuityRecovery({
+      butlerData: parsed.options.data,
+      manifestId,
+      candidateIds: requested.length === 1 && requested[0] === "all" ? "all" : requested,
+    });
+    const data = continuityRecoveryManifestView(manifest);
+    print(parsed, `${commandBase} recovery approve`, data, `Approved ${data.approved_count} candidate(s) in ${data.manifest_id}.`);
+    return;
+  }
+  if (subcommand === "recovery" && args[1] === "apply") {
+    requireYes(parsed, "memory recovery apply");
+    const manifestId = args[2];
+    if (!manifestId) fail(parsed, "invalid_arguments", "memory recovery apply requires <manifest-id>");
+    const result = applyContinuityRecovery({ butlerData: parsed.options.data, manifestId });
+    const data = { ...continuityRecoveryManifestView(result.manifest), replayed: result.replayed };
+    print(parsed, `${commandBase} recovery apply`, data, `Applied ${data.approved_count} candidate(s); replayed=${result.replayed}.`);
+    return;
+  }
+  if (subcommand === "recovery" && args[1] === "rollback") {
+    requireYes(parsed, "memory recovery rollback");
+    const manifestId = args[2];
+    if (!manifestId) fail(parsed, "invalid_arguments", "memory recovery rollback requires <manifest-id>");
+    const result = rollbackContinuityRecovery({ butlerData: parsed.options.data, manifestId });
+    const data = { ...continuityRecoveryManifestView(result.manifest), replayed: result.replayed };
+    print(parsed, `${commandBase} recovery rollback`, data, `Rolled back ${data.manifest_id}; replayed=${result.replayed}.`);
     return;
   }
   if (subcommand === "metadata" && args[1] === "inspect") {

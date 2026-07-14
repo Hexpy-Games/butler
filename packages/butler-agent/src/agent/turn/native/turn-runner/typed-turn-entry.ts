@@ -34,6 +34,10 @@ import {
   isTurnContractSurfaceInconsistentError,
   surfaceRedecisionDiagnostic,
 } from "./turn-contract-surface-invariant.ts";
+import {
+  listContinuityCandidates,
+  type ContinuityProvenance,
+} from "../../../cognition/continuity/continuity-store.ts";
 
 interface TypedTurnEntryContext {
   turnId: string;
@@ -109,6 +113,11 @@ export async function runTypedTurnEntry(input: {
       ...input.context.resumeSelection.blockers,
     ]),
   });
+  const continuityCandidates = listContinuityCandidates({
+    butlerData: input.butlerData,
+    projectId: input.projectId,
+    sessionId: input.turnInput.handle.sessionId,
+  });
   const decisionId = stableTurnDecisionId(
     surfaceRedecisionAttempt === 0
       ? input.context.turnId
@@ -119,6 +128,7 @@ export async function runTypedTurnEntry(input: {
     decisionId,
     projectId: input.projectId,
     candidateIds,
+    continuityCandidates,
   });
   const thin = shouldUseThinFirstResponse({
     turnInput: input.turnInput,
@@ -154,6 +164,7 @@ export async function runTypedTurnEntry(input: {
     waitingBlockerIds: candidates.workstreams
       ?.map((candidate) => candidate.waiting_user_blocker_id)
       .filter((id): id is string => Boolean(id)) ?? [],
+    continuityCandidates,
   });
   const decisionTransport = input.turnInput.provider.capabilities.structuredDecisionTransport;
   if (!decisionTransport) {
@@ -172,6 +183,7 @@ export async function runTypedTurnEntry(input: {
         candidates,
         workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
         projectId: input.projectId,
+        continuityCandidates,
       });
       return { ok: true, canonicalArgs } as const;
     } catch (error) {
@@ -209,6 +221,7 @@ export async function runTypedTurnEntry(input: {
         candidates,
         workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
         projectId: input.projectId,
+        continuityCandidates,
       });
     } catch (error) {
       lastError = error;
@@ -229,6 +242,11 @@ export async function runTypedTurnEntry(input: {
       projectId: input.projectId,
       turnId: input.context.turnId,
       turnMetadata: input.turnInput.metadata,
+      continuityCandidates,
+      continuityProvenance: decision.continuity_updates?.length
+        ? continuityProvenance(input)
+        : undefined,
+      boundWorkspacePath: input.session.init.workspacePath,
       toolSurfaceController: input.context.toolSurfaceController,
     });
     break;
@@ -316,4 +334,32 @@ async function resumeTypedTurnEntry(
 
 function uniqueResumeCandidates<T extends { id: string }>(candidates: T[]): T[] {
   return [...new Map(candidates.map((candidate) => [candidate.id, candidate])).values()];
+}
+
+function continuityProvenance(
+  input: Parameters<typeof runTypedTurnEntry>[0],
+): ContinuityProvenance {
+  const value = input.turnInput.metadata?.conversationProvenance;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("continuity_conversation_provenance_missing");
+  }
+  const record = value as Record<string, unknown>;
+  const conversationSessionId = requiredMetadataString(record.conversationSessionId);
+  const turnId = requiredMetadataString(record.turnId);
+  const inboundMessageId = requiredMetadataString(record.inboundMessageId);
+  if (turnId !== input.context.turnId) throw new Error("continuity_turn_provenance_mismatch");
+  return {
+    conversation_session_id: conversationSessionId,
+    turn_id: turnId,
+    inbound_message_id: inboundMessageId,
+    runtime_session_id: input.turnInput.handle.sessionId,
+    project_id: input.projectId?.trim() || null,
+  };
+}
+
+function requiredMetadataString(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("continuity_conversation_provenance_missing");
+  }
+  return value.trim();
 }

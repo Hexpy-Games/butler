@@ -202,6 +202,53 @@ test("steward lifecycle creates a missing project capsule before first turn", as
   }
 });
 
+test("butler lifecycle also creates a missing project capsule before the next turn", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-project-memory-butler-lifecycle-"));
+  const butlerHome = join(root, "home");
+  const butlerData = join(root, "data");
+  const workspacePath = join(root, "workspace");
+  mkdirSync(butlerData, { recursive: true });
+  mkdirSync(join(butlerHome, "resources", "prompts"), { recursive: true });
+  mkdirSync(join(butlerHome, "resources", "skills"), { recursive: true });
+  mkdirSync(join(workspacePath, ".butler"), { recursive: true });
+  writeFileSync(join(butlerHome, "resources", "prompts", "runtime-system-contract.md"), "RUNTIME_CONTRACT", "utf8");
+  writeFileSync(join(butlerHome, "resources", "prompts", "butler.md"), "BUTLER_RULES", "utf8");
+  writeFileSync(join(butlerData, "butler.config.json"), `${JSON.stringify({
+    projects: [{ name: "butler", path: workspacePath, description: "Butler runtime" }],
+  })}\n`, "utf8");
+  writeFileSync(join(workspacePath, ".butler", "hot-cache.md"), "Butler role project hot cache.\n", "utf8");
+
+  try {
+    const store = new SessionBindingStore(join(root, "runtime", "session-store.sqlite"));
+    const runtime = new CapturingRuntime();
+    store.upsert({
+      sessionId: "butler/project",
+      role: "butler",
+      projectId: "butler",
+      workspacePath,
+      runtimeAdapterId: runtime.id,
+      modelProviderId: fakeProvider.id,
+      modelRef: "openai/auto:codex-latest",
+      transportBindings: [],
+    });
+    const lifecycle = new SessionLifecycleService({
+      store,
+      runtime,
+      provider: fakeProvider,
+      promptAssembler: new PromptAssembler({ butlerHome, butlerData }),
+    });
+    const actor = await lifecycle.getOrCreate("butler/project", "butler");
+    const result = await actor.handleInbound(envelope());
+    const capsulePath = join(butlerData, "cognition", "memory", "projects", "butler.md");
+    expect(result.text).toBe("project memory loaded");
+    expect(String(runtime.turns[0]!.metadata?.promptContext)).toContain("Project Memory Status: missing");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(readFileSync(capsulePath, "utf8")).toContain("Butler role project hot cache");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("concurrent project-routed turns share one steward actor", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-project-memory-concurrent-"));
   const butlerHome = join(root, "home");
