@@ -24,6 +24,11 @@ import {
   registerPrincipalTurnAbortController,
 } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 import { throwIfRuntimeTurnAborted } from "../../packages/butler-agent/src/agent/turn/native/policy/turn-errors.ts";
+import { settlePrincipalDeadOwnerCancellation } from "../../packages/butler-agent/src/gateways/app/domain/sessions/dead-owner-cancellation-settlement.ts";
+import {
+  NativeInboundQueue,
+  type QueuedInboundEvent,
+} from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import {
   compileTurnContract,
   TURN_CONTRACT_DECISION_SCHEMA,
@@ -667,6 +672,88 @@ test("local cancel endpoint aborts only a durably cancelled exact claim", async 
     unregister();
     await server.close();
   }
+});
+
+test("dead-owner settlement requires a durable principal cancellation decision", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-principal-cancel-"));
+  tempDirs.push(butlerData);
+  mkdirSync(join(butlerData, "app-server"), { recursive: true });
+  const db = new Database(join(butlerData, "app-server", "butler-client.sqlite"), {
+    create: true,
+  });
+  db.exec(`
+    CREATE TABLE turns (
+      id TEXT PRIMARY KEY,
+      state TEXT NOT NULL
+    );
+    CREATE TABLE app_turn_cancel_outbox (
+      turn_id TEXT PRIMARY KEY,
+      queue_id TEXT NOT NULL,
+      dispatch_claim_id TEXT,
+      state TEXT NOT NULL,
+      accepted_at TEXT,
+      completed_at TEXT
+    );
+  `);
+  const turnId = "turn-dead-owner-decision-gate";
+  const queue = new NativeInboundQueue(butlerData);
+  queue.enqueue({
+    eventId: "app:dead-owner-decision-gate",
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm", id: "general" },
+    sender: { id: "app-client", displayName: "App" },
+    message: {
+      id: "message-dead-owner-decision-gate",
+      text: "stop only after the durable decision",
+      timestamp: "2026-07-14T07:08:33.000Z",
+    },
+    routingHints: { sessionId: "general", turnId },
+    raw: {},
+  });
+  const [claimed] = queue.claim(1);
+  const record = JSON.parse(
+    readFileSync(claimed!.path, "utf8"),
+  ) as QueuedInboundEvent;
+  record.processing = {
+    ...record.processing!,
+    ownerId: "999999:dead-owner",
+  };
+  writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  db.query("INSERT INTO turns (id, state) VALUES (?, 'thinking')").run(turnId);
+  db.query(`
+    INSERT INTO app_turn_cancel_outbox (
+      turn_id, queue_id, dispatch_claim_id, state
+    ) VALUES (?, ?, ?, 'pending')
+  `).run(turnId, claimed!.queueId, claimed!.processing.claimId);
+
+  const target = {
+    butlerData,
+    turnId,
+    queueId: claimed!.queueId,
+    dispatchClaimId: claimed!.processing.claimId,
+  };
+  expect(settlePrincipalDeadOwnerCancellation(target)).toBe(
+    "decision_not_cancelled",
+  );
+  expect(existsSync(claimed!.path)).toBe(true);
+  expect(
+    db.query<{ state: string }, [string]>(`
+      SELECT state FROM app_turn_cancel_outbox WHERE turn_id = ?
+    `).get(turnId)?.state,
+  ).toBe("pending");
+
+  db.query("UPDATE turns SET state = 'cancelling' WHERE id = ?").run(turnId);
+  expect(settlePrincipalDeadOwnerCancellation(target)).toBe("completed");
+  expect(existsSync(claimed!.path)).toBe(false);
+  expect(
+    db.query<{ state: string; completed_at: string | null }, [string]>(`
+      SELECT state, completed_at
+      FROM app_turn_cancel_outbox
+      WHERE turn_id = ?
+    `).get(turnId),
+  ).toMatchObject({ state: "completed", completed_at: expect.any(String) });
+  db.close();
 });
 
 test("principal cancellation registry contains no filesystem watcher", () => {

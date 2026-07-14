@@ -819,6 +819,7 @@ function retryActionStore(
     cancelPersistedRuntimeTurn() {},
     async signalPrincipalTurnCancellation() {},
     principalTurnCancellationTargetForTurn: () => null,
+    settlePrincipalDeadOwnerCancellation: () => "pending_claim",
     finalizeCancelledTurn: () => retrying,
     cleanupTurnEventSequences() {},
     ensureCancelledTurnActivityMessage: () => null,
