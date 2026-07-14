@@ -16,6 +16,7 @@ import type {
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
+import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
 
 export interface AppStoreKernelSessionContextHost {
   localModelMetadata(): ProviderModelMetadata[];
@@ -25,6 +26,10 @@ export interface AppStoreKernelSessionContextHost {
     sessionId: string,
     input: Partial<SessionControlState>,
   ): SessionControlState;
+  resolveControlsForMessageSend(
+    sessionId: string,
+    input: Partial<SessionControlState>,
+  ): TurnControlResolution;
   hasExplicitSessionControls(sessionId: string): boolean;
   listActiveWorkStreams(
     sessionId: string,
@@ -71,6 +76,9 @@ export function createSessionContextHost(
     },
     controlsForMessageSend(sessionId, input) {
       return kernel.sessionControls.controlsForMessageSend(sessionId, input);
+    },
+    resolveControlsForMessageSend(sessionId, input) {
+      return kernel.sessionControls.resolveForMessageSend(sessionId, input);
     },
     hasExplicitSessionControls(sessionId) {
       return kernel.sessionControls.hasExplicit(sessionId);

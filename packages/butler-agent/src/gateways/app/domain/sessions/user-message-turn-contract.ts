@@ -19,6 +19,10 @@ import type {
   SendMessageOptions,
 } from "./message-responder-contract.ts";
 import type { ProgressSummaryInput } from "../progress-summary/progress-row-normalizer.ts";
+import type {
+  TurnControlResolution,
+  TurnExecutionControlsV1,
+} from "../../../core/turn-execution-controls.ts";
 
 export interface UserMessageTurnStoreInput {
   butlerData: string;
@@ -31,14 +35,15 @@ export interface UserMessageTurnStoreInput {
     chatId: string,
     attachments: MessageSendRequest["attachments"],
   ) => MessageFileRow[];
-  controlsForMessageSend: (
+  resolveControlsForMessageSend: (
     chatId: string,
     input: Partial<SessionControlState>,
-  ) => SessionControlState;
+  ) => TurnControlResolution;
   insertTurn: (
     chatId: string,
     state: TurnState,
     safeStatusLabel: string,
+    controlResolution?: TurnControlResolution,
   ) => TurnRecord;
   insertMessage: (
     chatId: string,
@@ -70,7 +75,7 @@ export interface UserMessageTurnStoreInput {
     turnId: string;
     message: MessageRecord;
     text: string;
-    controls: SessionControlState;
+    executionControls: TurnExecutionControlsV1;
   }) => TurnRecord;
   appendProgressSummaryEvent: (
     chatId: string,

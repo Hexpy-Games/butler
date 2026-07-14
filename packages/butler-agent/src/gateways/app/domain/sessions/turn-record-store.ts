@@ -7,6 +7,10 @@ import type { TurnRow } from "../../infrastructure/core/records.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import { isTerminalTurnState, turnFromRow } from "./message-read-model.ts";
 import type { TurnRecord, TurnState } from "../../interface/protocol/app-protocol.ts";
+import {
+  createTurnExecutionControls,
+  type TurnControlResolution,
+} from "../../../core/turn-execution-controls.ts";
 
 export class AppTurnRecordStore {
   constructor(
@@ -18,20 +22,37 @@ export class AppTurnRecordStore {
     chatId: string,
     state: TurnState,
     safeStatusLabel: string,
+    controlResolution?: TurnControlResolution,
   ): TurnRecord {
     const id = `turn-${crypto.randomUUID()}`;
     const createdAt = new Date().toISOString();
+    const executionControls = controlResolution
+      ? createTurnExecutionControls({
+          turnId: id,
+          sessionId: chatId,
+          resolution: controlResolution,
+          resolvedAt: createdAt,
+        })
+      : undefined;
     this.db
       .query(
         `
       INSERT INTO turns (
         id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
-        retryable, cancellable, attempt, created_at, updated_at
+        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
       )
-      VALUES (?, ?, NULL, ?, ?, NULL, 0, 0, 1, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, NULL, 0, 0, 1, ?, ?, ?)
     `,
       )
-      .run(id, chatId, state, safeStatusLabel, createdAt, createdAt);
+      .run(
+        id,
+        chatId,
+        state,
+        safeStatusLabel,
+        executionControls ? JSON.stringify(executionControls) : null,
+        createdAt,
+        createdAt,
+      );
     return this.getTurn(id);
   }
 
@@ -129,7 +150,7 @@ export class AppTurnRecordStore {
         .query<TurnRow, [string]>(
           `
       SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
-        retryable, cancellable, attempt, created_at, updated_at
+        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
       FROM turns
       WHERE id = ?
     `,

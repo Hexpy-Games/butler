@@ -1,4 +1,5 @@
 import { getEncoding, type Tiktoken } from "js-tiktoken";
+import { createHash } from "node:crypto";
 import { HOSTED_PROVIDER_MODELS } from "./shared/hosted-models.ts";
 import { localModelConfigToMetadata } from "./local/catalog.ts";
 import { workerModelPresets } from "./shared/worker-presets.ts";
@@ -66,6 +67,7 @@ export interface ProviderModelMetadata {
 }
 
 export interface ModelCatalogView {
+  generation: string;
   generated_at: string;
   default_model_ref: `${ModelProviderId}/${string}`;
   default_reasoning_effort: ReasoningEffort;
@@ -206,6 +208,9 @@ export function modelCatalogView(
     };
   });
   return {
+    generation: modelCatalogGeneration(
+      registeredModels.length > 0 ? registeredModels : models,
+    ),
     generated_at: new Date().toISOString(),
     default_model_ref: defaultModel.model_ref,
     default_reasoning_effort: defaultModel.default_reasoning_effort,
@@ -219,6 +224,22 @@ export function modelCatalogView(
     provider_credentials: providerCredentials.map((credential) => ({ ...credential })),
     worker_model_presets: workerModelPresets(),
   };
+}
+
+export function modelCatalogGeneration(
+  registeredModels: readonly ProviderModelMetadata[],
+): string {
+  const stableModels = registeredModels
+    .map((model) => ({
+      model_ref: model.model_ref,
+      runtime_supported: model.runtime_supported,
+      reasoning_efforts: [...model.reasoning_efforts].sort(),
+      default_reasoning_effort: model.default_reasoning_effort,
+    }))
+    .sort((left, right) => left.model_ref.localeCompare(right.model_ref));
+  return createHash("sha256")
+    .update(JSON.stringify(stableModels))
+    .digest("hex");
 }
 
 export function resolveRegisteredRuntimeModelMetadata(
