@@ -80,6 +80,11 @@ interface MutationRow {
   mutation_id: string;
   receipt_json: string;
   status: "pending" | "committed";
+  continuity_id: string | null;
+  target_continuity_id: string | null;
+  owner_ref: string | null;
+  operation: ContinuityOperation | null;
+  created_entry: number;
 }
 
 export function continuityStorePath(butlerData: string): string {
@@ -125,10 +130,24 @@ export class ContinuityStore {
         mutation_id TEXT PRIMARY KEY,
         receipt_json TEXT NOT NULL,
         status TEXT NOT NULL,
+        continuity_id TEXT,
+        target_continuity_id TEXT,
+        owner_ref TEXT,
+        operation TEXT,
+        created_entry INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
     `);
+    ensureMutationColumn(this.db, "continuity_id", "TEXT");
+    ensureMutationColumn(this.db, "target_continuity_id", "TEXT");
+    ensureMutationColumn(this.db, "owner_ref", "TEXT");
+    ensureMutationColumn(this.db, "operation", "TEXT");
+    ensureMutationColumn(
+      this.db,
+      "created_entry",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
   }
 
   close(): void {
@@ -147,8 +166,26 @@ export class ContinuityStore {
       ...(input.projectId?.trim() ? [["project", input.projectId.trim()] as [ContinuityScope, string]] : []),
     ];
     const candidates = owners.flatMap(([scope, owner]) => this.db.query<ContinuityEntryRow, [string, string, number]>(`
-      SELECT * FROM continuity_entries
-      WHERE scope = ? AND owner_ref = ? AND status = 'active'
+      SELECT continuity_entries.* FROM continuity_entries
+      WHERE scope = ? AND owner_ref = ? AND (
+        (
+          status = 'active'
+          AND NOT EXISTS (
+            SELECT 1 FROM continuity_mutations
+            WHERE continuity_mutations.status = 'pending'
+              AND continuity_mutations.created_entry = 1
+              AND continuity_mutations.continuity_id = continuity_entries.continuity_id
+          )
+        )
+        OR (
+          status IN ('superseded', 'forgotten')
+          AND EXISTS (
+            SELECT 1 FROM continuity_mutations
+            WHERE continuity_mutations.status = 'pending'
+              AND continuity_mutations.target_continuity_id = continuity_entries.continuity_id
+          )
+        )
+      )
       ORDER BY updated_at DESC, continuity_id ASC
       LIMIT ?
     `).all(scope, owner, limit));
@@ -187,12 +224,15 @@ export class ContinuityStore {
     const ownerRef = ownerFor(input.update.scope, input.provenance);
     const mutationId = mutationIdFor(input.decisionId, input.provenance.turn_id, input.update);
     const replay = this.db.query<MutationRow, [string]>(
-      "SELECT mutation_id, receipt_json, status FROM continuity_mutations WHERE mutation_id = ?",
+      "SELECT mutation_id, receipt_json, status, continuity_id, target_continuity_id, owner_ref, operation, created_entry FROM continuity_mutations WHERE mutation_id = ?",
     ).get(mutationId);
     if (replay?.status === "committed") {
       return { ...(JSON.parse(replay.receipt_json) as ContinuityMutationReceipt), replayed: true };
     }
-    this.validateOperation(input.update, input.provenance, new Set(input.candidateRefs));
+    const pendingReplay = replay?.status === "pending";
+    if (!pendingReplay) {
+      this.validateOperation(input.update, input.provenance, new Set(input.candidateRefs));
+    }
     const now = input.now ?? new Date().toISOString();
     const target = input.update.target_ref
       ? this.db.query<ContinuityEntryRow, [string]>("SELECT * FROM continuity_entries WHERE continuity_id = ?")
@@ -205,7 +245,12 @@ export class ContinuityStore {
           LIMIT 1
         `).get(input.update.scope, ownerRef, input.update.kind, input.update.summary)
       : null;
-    const continuityId = existing?.continuity_id ?? continuityIdFor(mutationId);
+    const pendingReceipt = pendingReplay
+      ? JSON.parse(replay.receipt_json) as ContinuityMutationReceipt
+      : null;
+    const continuityId = pendingReceipt?.continuity_id ??
+      existing?.continuity_id ??
+      continuityIdFor(mutationId);
     const destination = routeDestination(input.update);
     const receipt: ContinuityMutationReceipt = {
       schema_version: "butler.continuity-mutation-receipt.v1",
@@ -216,6 +261,18 @@ export class ContinuityStore {
       destination,
       replayed: false,
     };
+    const createdEntry = pendingReplay
+      ? replay.created_entry === 1
+      : !existing && input.update.operation !== "forget";
+    if (pendingReplay) {
+      this.validatePendingReplay({
+        replay,
+        receipt,
+        ownerRef,
+        target,
+        provenance: input.provenance,
+      });
+    }
     const tx = this.db.transaction(() => {
       if (!existing && input.update.operation !== "forget") {
         this.db.query(`
@@ -246,12 +303,32 @@ export class ContinuityStore {
           .run(input.update.operation === "forget" ? "forgotten" : "superseded", now, target.continuity_id);
       }
       this.db.query(`
-        INSERT INTO continuity_mutations (mutation_id, receipt_json, status, created_at, updated_at)
-        VALUES (?, ?, 'pending', ?, ?)
-        ON CONFLICT(mutation_id) DO UPDATE SET receipt_json = excluded.receipt_json, updated_at = excluded.updated_at
-      `).run(mutationId, JSON.stringify(receipt), now, now);
+        INSERT INTO continuity_mutations (
+          mutation_id, receipt_json, status, continuity_id, target_continuity_id,
+          owner_ref, operation, created_entry, created_at, updated_at
+        )
+        VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(mutation_id) DO UPDATE SET
+          receipt_json = excluded.receipt_json,
+          continuity_id = excluded.continuity_id,
+          target_continuity_id = excluded.target_continuity_id,
+          owner_ref = excluded.owner_ref,
+          operation = excluded.operation,
+          created_entry = excluded.created_entry,
+          updated_at = excluded.updated_at
+      `).run(
+        mutationId,
+        JSON.stringify(receipt),
+        continuityId,
+        target?.continuity_id ?? null,
+        ownerRef,
+        input.update.operation,
+        createdEntry ? 1 : 0,
+        now,
+        now,
+      );
     });
-    tx();
+    if (!pendingReplay) tx();
     const destinationRef = this.projectDestination({
       destination,
       scope: input.update.scope,
@@ -269,6 +346,41 @@ export class ContinuityStore {
     this.db.query("UPDATE continuity_mutations SET status = 'committed', updated_at = ? WHERE mutation_id = ?")
       .run(now, mutationId);
     return receipt;
+  }
+
+  private validatePendingReplay(input: {
+    replay: MutationRow;
+    receipt: ContinuityMutationReceipt;
+    ownerRef: string;
+    target: ContinuityEntryRow | null;
+    provenance: ContinuityProvenance;
+  }): void {
+    const persisted = JSON.parse(
+      input.replay.receipt_json,
+    ) as ContinuityMutationReceipt;
+    if (
+      persisted.mutation_id !== input.receipt.mutation_id ||
+      persisted.continuity_id !== input.receipt.continuity_id ||
+      persisted.operation !== input.receipt.operation ||
+      persisted.scope !== input.receipt.scope ||
+      persisted.destination !== input.receipt.destination ||
+      input.replay.owner_ref !== input.ownerRef ||
+      input.replay.operation !== input.receipt.operation
+    ) {
+      throw new Error("continuity_pending_replay_conflict");
+    }
+    const entry = this.db.query<ContinuityEntryRow, [string]>(
+      "SELECT * FROM continuity_entries WHERE continuity_id = ?",
+    ).get(input.receipt.continuity_id);
+    const owner = input.receipt.operation === "forget" ? input.target : entry;
+    if (
+      !owner ||
+      owner.owner_ref !== input.ownerRef ||
+      (input.replay.created_entry === 1 &&
+        owner.turn_id !== input.provenance.turn_id)
+    ) {
+      throw new Error("continuity_pending_replay_provenance_mismatch");
+    }
   }
 
   private validateOperation(
@@ -489,4 +601,26 @@ function mutationIdFor(decisionId: string, turnId: string, update: ContinuityUpd
 
 function continuityIdFor(mutationId: string): string {
   return `cu_${createHash("sha256").update(mutationId).digest("hex").slice(0, 24)}`;
+}
+
+function ensureMutationColumn(
+  db: Database,
+  name: string,
+  definition: string,
+): void {
+  const columns = db
+    .query<{ name: string }, []>("PRAGMA table_info(continuity_mutations)")
+    .all();
+  if (columns.some((column) => column.name === name)) return;
+  const allowed = new Map([
+    ["continuity_id", "TEXT"],
+    ["target_continuity_id", "TEXT"],
+    ["owner_ref", "TEXT"],
+    ["operation", "TEXT"],
+    ["created_entry", "INTEGER NOT NULL DEFAULT 0"],
+  ]);
+  if (allowed.get(name) !== definition) {
+    throw new Error("continuity_mutation_schema_column_invalid");
+  }
+  db.exec(`ALTER TABLE continuity_mutations ADD COLUMN ${name} ${definition}`);
 }

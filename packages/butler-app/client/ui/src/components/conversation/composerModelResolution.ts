@@ -1,4 +1,4 @@
-import { runtimeModels } from "@/app/utils.ts";
+import { runtimeModels } from "../../app/utils.ts";
 import type {
   AccessMode,
   AppModelSummary,
@@ -8,8 +8,8 @@ import type {
   ReasoningEffort,
   SessionControlsView,
   SettingsView,
-} from "@/app/types.ts";
-import type { ControlsLoadState } from "./hooks/useSessionControlSnapshot.ts";
+  ControlsLoadState,
+} from "../../app/types.ts";
 
 export interface ComposerModelResolution {
   state: ComposerModelState;

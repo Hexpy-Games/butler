@@ -2,10 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/app/api.ts";
 import { notifyError } from "@/app/notifications.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
-import type { SessionControlsView } from "@/app/types.ts";
+import type { ControlsLoadState, SessionControlsView } from "@/app/types.ts";
 import type { ComposerControlPatch } from "./useComposerControls.ts";
-
-export type ControlsLoadState = "loading" | "ready" | "error";
 
 export function useSessionControlSnapshot(activeChatId: string) {
   const [snapshot, setSnapshot] = useState<SessionControlsView | null>(null);
