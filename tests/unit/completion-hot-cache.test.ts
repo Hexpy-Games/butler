@@ -14,6 +14,8 @@ import {
   resetPauseState,
 } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/sync-consumer.ts";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { ConversationAdmissionTurn } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
+import { readOperationalMetricEvents } from "../../packages/butler-agent/src/operations/metrics/operational-metrics.ts";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
@@ -226,6 +228,65 @@ test("canonical completion jobs bypass project debounce so adjacent turns are no
   expect(pollIteration(deps).action).toBe("processed");
   expect(processed).toBe(2);
   expect(dequeued).toBe(2);
+});
+
+test("completion observation publication failure never downgrades an already completed answer", () => {
+  const { data, projectA } = fixture();
+  const store = new AgentConversationStore({ butlerData: data });
+  const turn = ConversationAdmissionTurn.begin({
+    writer: store,
+    binding: {
+      sessionId: "butler/project-a",
+      role: "butler",
+      projectId: "project-a",
+      workspacePath: projectA,
+      runtimeAdapterId: "codex-api",
+      modelProviderId: "openai",
+      modelRef: "openai/gpt-5.6-sol",
+      transportBindings: [],
+      lifecycleState: "active",
+      createdAt: "2026-07-14T02:40:00.000Z",
+      updatedAt: "2026-07-14T02:40:00.000Z",
+    },
+    envelope: {
+      eventId: "event-completion-publish-failure",
+      transport: "app",
+      accountId: "default",
+      peer: { kind: "dm", id: "butler/project-a" },
+      sender: { id: "user" },
+      message: {
+        id: "message-completion-publish-failure",
+        text: "complete even when cognition queue storage is unavailable",
+        timestamp: "2026-07-14T02:40:00.000Z",
+      },
+    },
+    turnId: "turn-completion-publish-failure",
+    timestamp: "2026-07-14T02:40:00.000Z",
+    butlerData: data,
+  });
+  turn.admitInbound();
+  turn.admitFinalAssistant(
+    "The requested answer is complete.",
+    "outbound-completion-publish-failure",
+  );
+  writeFileSync(join(data, "cognition"), "block cognition directory creation");
+
+  turn.finalize("complete", "2026-07-14T02:40:01.000Z");
+
+  expect(store.readTurnOutcome("turn-completion-publish-failure")).toMatchObject({
+    outcome: "delivered",
+    request_message_id: expect.any(String),
+    public_assistant_message_id: expect.any(String),
+  });
+  expect(readOperationalMetricEvents({ butlerData: data })).toContainEqual(
+    expect.objectContaining({
+      category: "memory",
+      name: "completion_observation_publish",
+      status: "error",
+      dimensions: { scope: "project" },
+    }),
+  );
+  store.close();
 });
 
 function seedConversation(
