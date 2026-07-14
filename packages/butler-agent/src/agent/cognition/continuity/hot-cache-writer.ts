@@ -135,6 +135,21 @@ export function replaceManagedHotCacheSection(input: {
   ensureProjectGitignore(input.path);
 }
 
+export function restoreHotCacheSnapshot(input: {
+  path: string;
+  body: string;
+  lockStaleAfterMs?: number;
+}): void {
+  withHotCacheLock(input.path, input.lockStaleAfterMs, () => {
+    writeAtomicUnlocked(input.path, input.body);
+  });
+  ensureProjectGitignore(input.path);
+}
+
+export function hotCacheContentHash(body: string): string {
+  return createHash("sha256").update(body).digest("hex");
+}
+
 function withHotCacheLock(path: string, staleAfterMs = DEFAULT_LOCK_STALE_MS, fn: () => void): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const lock = `${path}.lock`;
