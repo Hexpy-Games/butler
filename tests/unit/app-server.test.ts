@@ -9988,14 +9988,13 @@ test("recoverable limited final without queue claim cannot close a failed app tu
 
 test("app transport queued final waits for matching processed terminal record", async () => {
   const dbPath = join(tempDir, "app.sqlite");
-  let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+  const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const url = server.url;
   const result = await postJson(`${url}messages`, {
     chat_id: "general",
     text: "this queued final must wait for queue completion",
   });
   const turnId = result.data.turn.id;
-  server.stop();
 
   appendTranscriptEvent(
     createTranscriptEvent({
@@ -10021,7 +10020,6 @@ test("app transport queued final waits for matching processed terminal record", 
     }),
   );
 
-  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
@@ -10036,40 +10034,274 @@ test("app transport queued final waits for matching processed terminal record", 
       retryable: false,
       cancellable: true,
     });
-  } finally {
-    server.stop();
-  }
 
-  const processedQueueDir = join(tempDir, "runtime", "inbound-events", "processed");
-  mkdirSync(processedQueueDir, { recursive: true });
-  writeFileSync(
-    join(processedQueueDir, "queue-wait-terminal.json"),
-    JSON.stringify({
-      queueId: "queue-wait-terminal",
-      processedAt: "2026-05-18T12:00:01.000Z",
-      metadata: {
-        terminalClaimId: "claim-wait-terminal",
-        dispatchStatus: "handled",
-      },
-    }),
-  );
+    const processedQueueDir = join(
+      tempDir,
+      "runtime",
+      "inbound-events",
+      "processed",
+    );
+    mkdirSync(processedQueueDir, { recursive: true });
+    writeFileSync(
+      join(processedQueueDir, "queue-wait-terminal.json"),
+      JSON.stringify({
+        queueId: "queue-wait-terminal",
+        processedAt: "2026-05-18T12:00:01.000Z",
+        metadata: {
+          terminalClaimId: "claim-wait-terminal",
+          dispatchStatus: "handled",
+        },
+      }),
+    );
 
-  server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
-  try {
-    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    const sessionViewAfterTerminal = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionViewAfterTerminal.data.active_turn).toBeNull();
     expect(
-      messages.data.messages.map((message: { text: string }) => message.text),
+      sessionViewAfterTerminal.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
     ).toEqual([
       "this queued final must wait for queue completion",
       "Final after processed terminal.",
     ]);
-    const turns = await getJson(`${server.url}turns?chat_id=general`);
-    expect(turns.data.turns[0]).toMatchObject({
+    const messagesAfterTerminal = await getJson(
+      `${server.url}messages?chat_id=general`,
+    );
+    expect(
+      messagesAfterTerminal.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
+    ).toEqual([
+      "this queued final must wait for queue completion",
+      "Final after processed terminal.",
+    ]);
+    const turnsAfterTerminal = await getJson(
+      `${server.url}turns?chat_id=general`,
+    );
+    expect(turnsAfterTerminal.data.turns[0]).toMatchObject({
       id: turnId,
       state: "delivered",
       retryable: false,
       cancellable: false,
     });
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport rejects a deferred final when the terminal claim mismatches", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "do not publish a final from the wrong dispatch claim",
+    });
+    const turnId = result.data.turn.id;
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-05-18T12:10:00.000Z",
+        payload: {
+          actionId: "runtime-final:reject-mismatched-terminal",
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: { text: "This final belongs to a stale dispatch." },
+          metadata: {
+            kind: "final_result",
+            turnId,
+            queueId: "queue-mismatched-terminal",
+            dispatchClaimId: "claim-stale",
+            source: "test",
+          },
+        },
+      }),
+    );
+
+    await getJson(`${server.url}messages?chat_id=general`);
+    const processedQueueDir = join(
+      tempDir,
+      "runtime",
+      "inbound-events",
+      "processed",
+    );
+    mkdirSync(processedQueueDir, { recursive: true });
+    const terminalPath = join(
+      processedQueueDir,
+      "queue-mismatched-terminal.json",
+    );
+    writeFileSync(
+      terminalPath,
+      JSON.stringify({
+        queueId: "queue-mismatched-terminal",
+        processedAt: "2026-05-18T12:10:01.000Z",
+        metadata: {
+          terminalClaimId: "claim-current",
+          dispatchStatus: "handled",
+        },
+      }),
+    );
+
+    const afterMismatch = await getJson(
+      `${server.url}messages?chat_id=general`,
+    );
+    expect(
+      afterMismatch.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
+    ).toEqual(["do not publish a final from the wrong dispatch claim"]);
+
+    writeFileSync(
+      terminalPath,
+      JSON.stringify({
+        queueId: "queue-mismatched-terminal",
+        processedAt: "2026-05-18T12:10:02.000Z",
+        metadata: {
+          terminalClaimId: "claim-stale",
+          dispatchStatus: "handled",
+        },
+      }),
+    );
+    const afterTerminalMutation = await getJson(
+      `${server.url}messages?chat_id=general`,
+    );
+    expect(
+      afterTerminalMutation.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
+    ).toEqual(["do not publish a final from the wrong dispatch claim"]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("app transport retries deferred finals independently by session", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const otherSession = await postJson(`${server.url}sessions`, {
+      kind: "chat",
+      title: "Independent deferred final",
+    });
+    const otherChatId = otherSession.data.session.id;
+    const first = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "first deferred final",
+    });
+    const second = await postJson(`${server.url}messages`, {
+      chat_id: otherChatId,
+      text: "second deferred final",
+    });
+    for (const item of [
+      {
+        chatId: "general",
+        turnId: first.data.turn.id,
+        actionId: "runtime-final:first-independent",
+        queueId: "queue-first-independent",
+        claimId: "claim-first-independent",
+        text: "First final.",
+      },
+      {
+        chatId: otherChatId,
+        turnId: second.data.turn.id,
+        actionId: "runtime-final:second-independent",
+        queueId: "queue-second-independent",
+        claimId: "claim-second-independent",
+        text: "Second final.",
+      },
+    ]) {
+      appendTranscriptEvent(
+        createTranscriptEvent({
+          sessionId: `butler/app-${item.chatId}`,
+          kind: "outbound",
+          transport: "app",
+          timestamp: "2026-05-18T12:20:00.000Z",
+          payload: {
+            actionId: item.actionId,
+            accountId: "local",
+            peer: { kind: "dm", id: item.chatId },
+            message: { text: item.text },
+            metadata: {
+              kind: "final_result",
+              turnId: item.turnId,
+              queueId: item.queueId,
+              dispatchClaimId: item.claimId,
+              source: "test",
+            },
+          },
+        }),
+      );
+    }
+
+    await getJson(`${server.url}messages?chat_id=general`);
+    await getJson(
+      `${server.url}messages?chat_id=${encodeURIComponent(otherChatId)}`,
+    );
+    const processedQueueDir = join(
+      tempDir,
+      "runtime",
+      "inbound-events",
+      "processed",
+    );
+    mkdirSync(processedQueueDir, { recursive: true });
+    writeFileSync(
+      join(processedQueueDir, "queue-second-independent.json"),
+      JSON.stringify({
+        queueId: "queue-second-independent",
+        processedAt: "2026-05-18T12:20:01.000Z",
+        metadata: {
+          terminalClaimId: "claim-second-independent",
+          dispatchStatus: "handled",
+        },
+      }),
+    );
+
+    const secondMessages = await getJson(
+      `${server.url}messages?chat_id=${encodeURIComponent(otherChatId)}`,
+    );
+    expect(
+      secondMessages.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
+    ).toEqual(["second deferred final", "Second final."]);
+    const firstStillDeferred = await getJson(
+      `${server.url}messages?chat_id=general`,
+    );
+    expect(
+      firstStillDeferred.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
+    ).toEqual(["first deferred final"]);
+
+    writeFileSync(
+      join(processedQueueDir, "queue-first-independent.json"),
+      JSON.stringify({
+        queueId: "queue-first-independent",
+        processedAt: "2026-05-18T12:20:02.000Z",
+        metadata: {
+          terminalClaimId: "claim-first-independent",
+          dispatchStatus: "handled",
+        },
+      }),
+    );
+    const firstMessages = await getJson(
+      `${server.url}messages?chat_id=general`,
+    );
+    expect(
+      firstMessages.data.messages.map(
+        (message: { text: string }) => message.text,
+      ),
+    ).toEqual(["first deferred final", "First final."]);
   } finally {
     server.stop();
   }
