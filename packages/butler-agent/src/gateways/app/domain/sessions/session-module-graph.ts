@@ -102,7 +102,6 @@ export function createAppSessionModuleGraph(input: {
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
     enqueueAppTransportTurn: (turnInput) =>
       host.enqueueAppTransportTurn(turnInput),
-    getSessionControls: (chatId) => host.getSessionControls(chatId),
   });
   const userMessageTurns = new AppUserMessageTurnStore({
     butlerData,
@@ -113,10 +112,10 @@ export function createAppSessionModuleGraph(input: {
     listMessages: (chatId) => host.listMessages(chatId),
     validateAttachable: (chatId, attachments) =>
       messageFiles.validateAttachable(chatId, attachments ?? []),
-    controlsForMessageSend: (chatId, request) =>
-      host.controlsForMessageSend(chatId, request),
-    insertTurn: (chatId, state, safeStatusLabel) =>
-      host.insertTurn(chatId, state, safeStatusLabel),
+    resolveControlsForMessageSend: (chatId, request) =>
+      host.resolveControlsForMessageSend(chatId, request),
+    insertTurn: (chatId, state, safeStatusLabel, controlResolution) =>
+      host.insertTurn(chatId, state, safeStatusLabel, controlResolution),
     insertMessage: (chatId, role, text, status, options) =>
       host.insertMessage(chatId, role, text, status, options),
     setTurnUserMessage: (turnId, messageId) =>

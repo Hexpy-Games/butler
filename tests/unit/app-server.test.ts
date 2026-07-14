@@ -4376,6 +4376,8 @@ test("session controls and personalization are app-server backed and privacy saf
       access_mode: "full_access",
       plan_mode: false,
     });
+    expect(initialControls.data.revision).toBe(0);
+    expect(initialControls.data.catalog_generation).toMatch(/^[a-f0-9]{64}$/);
 
     const updatedControls = await patchJson(
       `${server.url}sessions/general/controls`,
@@ -4392,6 +4394,10 @@ test("session controls and personalization are app-server backed and privacy saf
       access_mode: "read_only",
       plan_mode: true,
     });
+    expect(updatedControls.data.revision).toBe(1);
+    expect(updatedControls.data.catalog_generation).toBe(
+      initialControls.data.catalog_generation,
+    );
 
     const roundTripControls = await getJson(
       `${server.url}sessions/general/controls`,
@@ -4399,6 +4405,23 @@ test("session controls and personalization are app-server backed and privacy saf
     expect(roundTripControls.data.controls).toMatchObject(
       updatedControls.data.controls,
     );
+
+    const unavailable = await fetch(
+      `${server.url}sessions/general/controls`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "openai/not-registered" }),
+      },
+    );
+    const unavailableBody = await unavailable.json();
+    expect(unavailable.status).toBe(409);
+    expect(unavailableBody.error.code).toBe("session_model_unavailable");
+    const afterUnavailable = await getJson(
+      `${server.url}sessions/general/controls`,
+    );
+    expect(afterUnavailable.data.controls.model).toBe("openai/gpt-5.4-mini");
+    expect(afterUnavailable.data.revision).toBe(1);
 
     const initialPersonalization = await getJson(
       `${server.url}personalization`,
@@ -7099,11 +7122,23 @@ test("app transport session binding preserves selected reasoning effort", async 
   const dbPath = join(tempDir, "app.sqlite");
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    await postJson(`${server.url}messages`, {
+    const sent = await postJson(`${server.url}messages`, {
       chat_id: "general",
       text: "queue with selected reasoning",
       model: "openai/gpt-5.5",
       reasoning_effort: "low",
+    });
+    expect(sent.data.turn.execution_controls).toMatchObject({
+      turn_id: sent.data.turn.id,
+      session_id: "general",
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+      source: "message_override",
+      session_control_revision: 1,
+    });
+    expect(sent.data.turn.execution_model).toEqual({
+      requested_model_ref: "openai/gpt-5.5",
+      adapter_effective_model_ref: "openai/gpt-5.5",
     });
 
     const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
@@ -7112,6 +7147,10 @@ test("app transport session binding preserves selected reasoning effort", async 
       expect(binding?.modelRef).toBe("openai/gpt-5.5");
       expect(binding?.metadata).toMatchObject({
         reasoning_effort: "low",
+        turnExecutionControls: {
+          turn_id: sent.data.turn.id,
+          model_ref: "openai/gpt-5.5",
+        },
       });
     } finally {
       store.close();
@@ -13133,11 +13172,19 @@ test("failed app turns are not retryable without a runtime fault record", async 
 
 test("retrying a runtime fault updates the same logical turn without synthetic retry text", async () => {
   let attempt = 0;
+  const attemptControls: Array<{
+    model?: string;
+    reasoningEffort?: string;
+  }> = [];
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     port: 0,
     responder(input) {
       attempt += 1;
+      attemptControls.push({
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
+      });
       if (attempt === 1) {
         input.onTurnEvent?.({
           kind: TURN_DECISION_EVENT_KIND,
@@ -13180,6 +13227,8 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       body: JSON.stringify({
         chat_id: "general",
         text: "retry this failed app turn",
+        model: "openai/gpt-5.6-sol",
+        reasoning_effort: "medium",
       }),
     });
     expect(response.status).toBe(202);
@@ -13226,6 +13275,11 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       limitations: [],
     });
 
+    await patchJson(`${server.url}sessions/general/controls`, {
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+
     const retry = await postJson(
       `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
       {},
@@ -13241,6 +13295,10 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
       "general",
       (message) => message.text === "recovered reply",
     );
+    expect(attemptControls).toEqual([
+      { model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
+      { model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
+    ]);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,

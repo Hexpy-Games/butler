@@ -2,7 +2,10 @@ import { Database } from "bun:sqlite";
 import type { PrincipalTurnCancellationTarget } from "../../../../agent/turn/principal-turn-cancellation-control.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import { CANCELLED_TURN_ACTIVITY_TEXT } from "./cancelled-turn-activity.ts";
-import { messageFromRow } from "./message-read-model.ts";
+import {
+  executionControlsFromJson,
+  messageFromRow,
+} from "./message-read-model.ts";
 import type { MessageRow, TurnRow } from "../../infrastructure/core/records.ts";
 import type {
   MessageRecord,
@@ -16,6 +19,7 @@ import type {
   AppMessageResponder,
   SendMessageOptions,
 } from "./message-responder-contract.ts";
+import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-controls.ts";
 
 interface TurnActionStoreInput {
   db: Database;
@@ -32,7 +36,7 @@ interface TurnActionStoreInput {
     turnId: string;
     message: MessageRecord;
     text: string;
-    controls: SessionControlState;
+    executionControls: TurnExecutionControlsV1;
   }) => TurnRecord;
   getSessionControls: (sessionId: string) => SessionControlState;
   dispatchDeferredResponderTurn: (input: {
@@ -75,6 +79,7 @@ export class AppTurnActionStore {
   ): Promise<TurnActionResult> {
     const row = this.retryableTurnRow(turnId);
     const userMessage = this.userMessageForRetry(row);
+    const executionControls = this.executionControlsForRetry(row);
     const retryingTurn = this.input.claimRetryTurn(turnId, row.attempt + 1);
     this.input.appendEvent("turn.state_changed", { turn: retryingTurn });
     this.input.deleteAssistantMessagesForTurn(turnId);
@@ -88,7 +93,7 @@ export class AppTurnActionStore {
           this.input.refsForMessage(userMessage.id),
         ),
         text: userMessage.text,
-        controls: this.input.getSessionControls(row.chat_id),
+        executionControls,
       });
       return {
         turn: retryingTurn,
@@ -99,7 +104,7 @@ export class AppTurnActionStore {
 
     const responderOptions = {
       ...options,
-      controls: this.input.getSessionControls(row.chat_id),
+      controls: sessionControlsFromExecution(executionControls),
     };
     if (options.deferResponderTurns) {
       this.input.dispatchDeferredResponderTurn({
@@ -125,6 +130,16 @@ export class AppTurnActionStore {
       responder,
       options: responderOptions,
     });
+  }
+
+  private executionControlsForRetry(row: TurnRow): TurnExecutionControlsV1 {
+    const controls = executionControlsFromJson(row.execution_controls_json);
+    if (controls) return controls;
+    throw new AppStoreOperationError(
+      409,
+      "turn_execution_controls_missing",
+      "This legacy turn does not have an immutable execution snapshot and cannot be retried safely.",
+    );
   }
 
   async cancelTurn(turnId: string): Promise<TurnActionResult> {
@@ -372,4 +387,15 @@ export class AppTurnActionStore {
     }
     return userMessage;
   }
+}
+
+function sessionControlsFromExecution(
+  controls: TurnExecutionControlsV1,
+): SessionControlState {
+  return {
+    model: controls.model_ref,
+    reasoning_effort: controls.reasoning_effort,
+    access_mode: controls.access_mode,
+    plan_mode: controls.plan_mode,
+  };
 }

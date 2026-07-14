@@ -20,6 +20,8 @@ export interface SessionControlState {
 export interface SessionControlsView {
   session_id: string;
   controls: SessionControlState;
+  revision: number;
+  catalog_generation: string;
 }
 
 export interface WorkStreamSummaryView {

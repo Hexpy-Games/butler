@@ -55,8 +55,20 @@ export class AppUserMessageTurnStore {
       chatId,
       input.attachments ?? [],
     );
-    const controls = this.input.controlsForMessageSend(chatId, input);
-    const turn = this.input.insertTurn(chatId, "accepted", "Accepted");
+    const controlResolution = this.input.resolveControlsForMessageSend(
+      chatId,
+      input,
+    );
+    const turn = this.input.insertTurn(
+      chatId,
+      "accepted",
+      "Accepted",
+      controlResolution,
+    );
+    const executionControls = turn.execution_controls;
+    if (!executionControls) {
+      throw new Error("accepted_turn_execution_controls_missing");
+    }
     const accepted = this.input.insertMessage(chatId, "user", text, "sent", {
       clientMessageId: input.client_message_id,
       turnId: turn.id,
@@ -78,7 +90,7 @@ export class AppUserMessageTurnStore {
         turnId: turn.id,
         message: accepted,
         text,
-        controls,
+        executionControls,
       });
       return {
         accepted,
@@ -88,7 +100,10 @@ export class AppUserMessageTurnStore {
       };
     }
 
-    const responderOptions = { ...options, controls };
+    const responderOptions = {
+      ...options,
+      controls: controlResolution.controls,
+    };
     if (options.deferResponderTurns) {
       this.dispatchDeferredResponderTurn({
         chatId,

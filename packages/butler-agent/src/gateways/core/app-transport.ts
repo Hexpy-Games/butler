@@ -1,4 +1,8 @@
 import type { DeliveryResult, InboundEnvelope, OutboundAction, TransportAdapter } from "./contracts.ts";
+import {
+  verifyTurnExecutionControls,
+  type TurnExecutionControlsV1,
+} from "./turn-execution-controls.ts";
 
 export const APP_TRANSPORT = "app";
 export const APP_ACCOUNT = "local";
@@ -18,12 +22,16 @@ export interface AppInboundInput {
   senderId?: string;
   senderDisplayName?: string;
   projectId?: string;
+  executionControls?: TurnExecutionControlsV1;
   attachments?: InboundEnvelope["message"]["attachments"];
   raw?: InboundEnvelope["raw"];
   rawSource?: string;
 }
 
 export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelope {
+  const executionControls = input.executionControls
+    ? verifyTurnExecutionControls(input.executionControls)
+    : undefined;
   return {
     eventId: `${APP_TRANSPORT}:${input.messageId}`,
     signal: input.signal,
@@ -49,6 +57,7 @@ export function createAppInboundEnvelope(input: AppInboundInput): InboundEnvelop
       projectId: input.projectId,
       turnId: input.turnId,
     },
+    executionControls,
     raw: input.raw ?? {
       source: input.rawSource ?? "app-server",
     },

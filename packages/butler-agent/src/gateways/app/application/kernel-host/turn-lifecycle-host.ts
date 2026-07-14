@@ -22,6 +22,10 @@ import {
 } from "../../domain/sessions/turn-local-work-outcome.ts";
 import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
+import type {
+  TurnControlResolution,
+  TurnExecutionControlsV1,
+} from "../../../core/turn-execution-controls.ts";
 
 export interface AppStoreKernelTurnLifecycleHost {
   reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void;
@@ -53,7 +57,7 @@ export interface AppStoreKernelTurnLifecycleHost {
     turnId: string;
     message: MessageRecord;
     text: string;
-    controls: SessionControlState;
+    executionControls: TurnExecutionControlsV1;
   }): TurnRecord;
   runSystemResponderTurn(
     chatId: string,
@@ -82,6 +86,7 @@ export interface AppStoreKernelTurnLifecycleHost {
     chatId: string,
     state: TurnState,
     safeStatusLabel: string,
+    controlResolution?: TurnControlResolution,
   ): TurnRecord;
   setTurnUserMessage(turnId: string, messageId: string): void;
   updateTurnState(
@@ -174,8 +179,13 @@ export function createTurnLifecycleHost(
     reconcileCancelledTurnActivityMessages() {
       kernel.turnActions.reconcileCancelledTurnActivityMessages();
     },
-    insertTurn(chatId, state, safeStatusLabel) {
-      return kernel.turns.insertTurn(chatId, state, safeStatusLabel);
+    insertTurn(chatId, state, safeStatusLabel, controlResolution) {
+      return kernel.turns.insertTurn(
+        chatId,
+        state,
+        safeStatusLabel,
+        controlResolution,
+      );
     },
     setTurnUserMessage(turnId, messageId) {
       kernel.turns.setTurnUserMessage(turnId, messageId);

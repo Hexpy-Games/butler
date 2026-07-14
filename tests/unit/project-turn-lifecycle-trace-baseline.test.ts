@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { EMPTY_MODEL_CATALOG } from "../../packages/butler-app/client/ui/src/app/constants.ts";
 import { runtimeModels } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import { createAppInboundEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
+import { createTurnExecutionControls } from "../../packages/butler-agent/src/gateways/core/turn-execution-controls.ts";
 import {
   failedInvariantSteps,
   MessageLifecycleTrace,
@@ -42,7 +43,23 @@ describe("project turn lifecycle execution trace baseline", () => {
     );
   });
 
-  test("records the accepted-turn control loss through createAppInboundEnvelope", () => {
+  test("records accepted-turn controls through createAppInboundEnvelope", () => {
+    const executionControls = createTurnExecutionControls({
+      turnId: TURN_ID,
+      sessionId: SESSION_ID,
+      resolvedAt: "2026-07-14T00:00:00.000Z",
+      resolution: {
+        controls: {
+          model: "openai/gpt-5.6-sol",
+          reasoning_effort: "medium",
+          access_mode: "full_access",
+          plan_mode: false,
+        },
+        source: "session_override",
+        sessionControlRevision: 1,
+        catalogGeneration: "simulation-catalog-a",
+      },
+    });
     const envelope = createAppInboundEnvelope({
       chatId: SESSION_ID,
       messageId: "message-simulation-a",
@@ -51,6 +68,7 @@ describe("project turn lifecycle execution trace baseline", () => {
       timestamp: "2026-07-14T00:00:00.000Z",
       sessionId: SESSION_ID,
       projectId: "sandy",
+      executionControls,
     });
     const trace = new MessageLifecycleTrace(
       "queued-turn-controls-baseline",
@@ -66,18 +84,20 @@ describe("project turn lifecycle execution trace baseline", () => {
       },
       stateRead: { routing_hints: envelope.routingHints ?? null },
       stateWritten: {
-        execution_controls_present: "executionControls" in envelope,
+        execution_controls_present: Boolean(envelope.executionControls),
+        execution_model_ref: envelope.executionControls?.model_ref ?? null,
       },
       outputOrNextCall: { next: "NativeInboundQueue.enqueue" },
-      invariant: "executionControls" in envelope ? "pass" : "fail",
+      invariant:
+        envelope.executionControls?.model_ref === "openai/gpt-5.6-sol"
+          ? "pass"
+          : "fail",
       evidence: "direct createAppInboundEnvelope call",
     });
     trace.requireFunctions(["createAppInboundEnvelope"]);
 
     const artifact = trace.artifact();
-    expect(failedInvariantSteps(artifact).map((step) => step.step)).toEqual([
-      "B1",
-    ]);
+    expect(failedInvariantSteps(artifact)).toEqual([]);
   });
 
   test("rejects incomplete trace rows instead of accepting intuition", () => {
@@ -100,4 +120,3 @@ describe("project turn lifecycle execution trace baseline", () => {
     ).toThrow("message_trace_function_missing");
   });
 });
-
