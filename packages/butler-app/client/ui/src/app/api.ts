@@ -476,6 +476,8 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   }
   const retryMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/retry$/) : null;
   if (retryMatch) return await callBridge<T>(bridge, "retryTurn", { turnId: decodeURIComponent(retryMatch[1]) });
+  const retryCurrentMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/retry-current$/) : null;
+  if (retryCurrentMatch) return await callBridge<T>(bridge, "retryTurnWithCurrentControls", { turnId: decodeURIComponent(retryCurrentMatch[1]) });
   const cancelMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/cancel$/) : null;
   if (cancelMatch) return await callBridge<T>(bridge, "cancelTurn", { turnId: decodeURIComponent(cancelMatch[1]) });
   if (method === "GET" && url.pathname === "/automations") {

@@ -45,6 +45,7 @@ interface ConversationCopy {
     regionLabel: string;
     title: string;
     retry: string;
+    retryCurrent: string;
     retrying: string;
     fallbackReason: string;
   };
@@ -690,7 +691,8 @@ const koKrCopy: AppCopy = {
     failure: {
       regionLabel: "실패한 응답",
       title: "요청을 끝까지 완료하지 못했습니다.",
-      retry: "다시 시도",
+      retry: "원래 설정으로 다시 시도",
+      retryCurrent: "현재 설정으로 새로 시도",
       retrying: "다시 시도 중",
       fallbackReason: "안전한 오류 내용을 확인할 수 없습니다.",
     },
@@ -1411,7 +1413,8 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     failure: {
       regionLabel: "Failed response",
       title: "Butler could not complete the request.",
-      retry: "Retry",
+      retry: "Retry original settings",
+      retryCurrent: "Retry as new with current settings",
       retrying: "Retrying",
       fallbackReason: "No safe error details are available.",
     },

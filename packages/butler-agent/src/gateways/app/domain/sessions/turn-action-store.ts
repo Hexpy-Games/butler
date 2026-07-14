@@ -10,6 +10,8 @@ import type { MessageRow, TurnRow } from "../../infrastructure/core/records.ts";
 import type {
   MessageRecord,
   MessageFileRef,
+  MessageSendRequest,
+  MessageSendResult,
   SessionControlState,
   TurnActionResult,
   TurnRecord,
@@ -38,7 +40,11 @@ interface TurnActionStoreInput {
     text: string;
     executionControls: TurnExecutionControlsV1;
   }) => TurnRecord;
-  getSessionControls: (sessionId: string) => SessionControlState;
+  sendMessageWithCurrentControls: (
+    input: MessageSendRequest,
+    responder?: AppMessageResponder,
+    options?: SendMessageOptions,
+  ) => Promise<MessageSendResult>;
   dispatchDeferredResponderTurn: (input: {
     chatId: string;
     turnId: string;
@@ -130,6 +136,27 @@ export class AppTurnActionStore {
       responder,
       options: responderOptions,
     });
+  }
+
+  async retryTurnWithCurrentControls(
+    turnId: string,
+    responder?: AppMessageResponder,
+    options: SendMessageOptions = {},
+  ): Promise<MessageSendResult> {
+    const row = this.retryableTurnRow(turnId);
+    const userMessage = this.userMessageForRetry(row);
+    return await this.input.sendMessageWithCurrentControls(
+      {
+        chat_id: row.chat_id,
+        text: userMessage.text,
+        attachments: this.input.refsForMessage(userMessage.id).map((file) => ({
+          file_id: file.file_id,
+        })),
+        queue_policy: "send_now",
+      },
+      responder,
+      options,
+    );
   }
 
   private executionControlsForRetry(row: TurnRow): TurnExecutionControlsV1 {

@@ -34,7 +34,11 @@ import type {
   MessageRow,
   TurnRow,
 } from "../../packages/butler-agent/src/gateways/app/infrastructure/core/records.ts";
-import type { TurnRecord } from "../../packages/butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
+import type {
+  MessageSendRequest,
+  MessageSendResult,
+  TurnRecord,
+} from "../../packages/butler-agent/src/gateways/app/interface/protocol/app-protocol.ts";
 import { createAppInboundEnvelope } from "../../packages/butler-agent/src/gateways/core/app-transport.ts";
 import type { ModelRef } from "../../packages/butler-agent/src/gateways/core/contracts.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
@@ -440,12 +444,25 @@ describe("integrated project turn lifecycle execution simulations", () => {
     store.close();
     const queueBeforeRetry = existsSync(memorySyncQueueFile(fixture.data)) ? readFileSync(memorySyncQueueFile(fixture.data), "utf8").trim() : "";
     const retryCaptures: TurnExecutionControlsV1[] = [];
-    const actionStore = retryActionStore(original, (controls) => {
-      retryCaptures.push(controls);
-    });
-    await actionStore.retryTurn("turn-retry");
-    const retriedControls = retryCaptures[0];
     const currentControlsRetry = executionControls("turn-retry-current", sessionId, 13, "openai/gpt-5.5");
+    const currentRetryRequests: MessageSendRequest[] = [];
+    const actionStore = retryActionStore(
+      original,
+      (controls) => {
+        retryCaptures.push(controls);
+      },
+      async (request) => {
+        currentRetryRequests.push(request);
+        return {
+          replies: [],
+          next_cursor: 2,
+          turn: turnRecordForControls(currentControlsRetry),
+        };
+      },
+    );
+    await actionStore.retryTurn("turn-retry");
+    await actionStore.retryTurnWithCurrentControls("turn-retry");
+    const retriedControls = retryCaptures[0];
     const trace = traceFor("cancel-fail-retry", sessionId, "turn-retry");
     trace.record(step("8.1", "ConversationAdmissionTurn.finalize", {
       concreteInput: { outcomes: ["failed", "aborted"] },
@@ -462,15 +479,15 @@ describe("integrated project turn lifecycle execution simulations", () => {
       invariant: retriedControls?.integrity_hash === original.integrity_hash && retriedControls?.model_ref === "openai/gpt-5.6-sol",
       evidence: "default retry reads persisted execution_controls_json",
     }));
-    trace.record(step("8.3", "createTurnExecutionControls", {
-      concreteInput: { explicit_action: "new replacement turn with current controls", new_turn_id: currentControlsRetry.turn_id },
+    trace.record(step("8.3", "AppTurnActionStore.retryTurnWithCurrentControls", {
+      concreteInput: { explicit_action: "new replacement turn with current controls", request: currentRetryRequests[0] },
       stateRead: { current_session_revision: 13 },
       stateWritten: { model_ref: currentControlsRetry.model_ref, integrity_hash: currentControlsRetry.integrity_hash },
       outputOrNextCall: { next: "AppUserMessageTurnStore.sendMessage" },
-      invariant: currentControlsRetry.turn_id !== original.turn_id && currentControlsRetry.integrity_hash !== original.integrity_hash,
-      evidence: "explicit current-control path creates a new admitted turn snapshot",
+      invariant: currentRetryRequests[0]?.chat_id === sessionId && currentControlsRetry.turn_id !== original.turn_id && currentControlsRetry.integrity_hash !== original.integrity_hash,
+      evidence: "explicit current-control endpoint delegates to normal admission for a new turn snapshot",
     }));
-    completeTrace(trace, ["ConversationAdmissionTurn.finalize", "AppTurnActionStore.retryTurn", "createTurnExecutionControls"]);
+    completeTrace(trace, ["ConversationAdmissionTurn.finalize", "AppTurnActionStore.retryTurn", "AppTurnActionStore.retryTurnWithCurrentControls"]);
   });
 
   test("9. role-Butler capsule failure is safe and retry feeds the later prompt", () => {
@@ -725,6 +742,9 @@ function beginAdmission(
 function retryActionStore(
   controls: TurnExecutionControlsV1,
   capture: (controls: TurnExecutionControlsV1) => void,
+  sendWithCurrentControls: (
+    request: MessageSendRequest,
+  ) => Promise<MessageSendResult> = async () => ({ replies: [], next_cursor: 1 }),
 ): AppTurnActionStore {
   const now = "2026-07-14T00:00:00.000Z";
   const row: TurnRow = {
@@ -790,7 +810,7 @@ function retryActionStore(
       capture(input.executionControls);
       return retrying;
     },
-    getSessionControls: () => ({ model: "openai/gpt-5.5", reasoning_effort: "medium", access_mode: "full_access", plan_mode: false }),
+    sendMessageWithCurrentControls: (request) => sendWithCurrentControls(request),
     dispatchDeferredResponderTurn() {},
     async completeResponderTurn() {
       return { turn: retrying, replies: [], next_cursor: 1 };
@@ -803,6 +823,26 @@ function retryActionStore(
     cleanupTurnEventSequences() {},
     ensureCancelledTurnActivityMessage: () => null,
   });
+}
+
+function turnRecordForControls(controls: TurnExecutionControlsV1): TurnRecord {
+  return {
+    id: controls.turn_id,
+    chat_id: controls.session_id,
+    state: "thinking",
+    safe_status_label: "Thinking",
+    retryable: false,
+    cancellable: true,
+    attempt: 1,
+    created_at: "2026-07-14T00:00:00.000Z",
+    updated_at: "2026-07-14T00:00:00.000Z",
+    cursor: 2,
+    execution_controls: controls,
+    execution_model: {
+      requested_model_ref: controls.model_ref,
+      adapter_effective_model_ref: controls.model_ref,
+    },
+  };
 }
 
 function traceFor(scenario: string, sessionId: string, turnId: string) {
