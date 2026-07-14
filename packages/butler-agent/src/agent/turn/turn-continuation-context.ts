@@ -62,6 +62,12 @@ export interface TurnContextAtom {
   nextSemanticBlockSequence?: number;
   providerAdapterId?: string;
   effectiveModel?: string;
+  finalCandidateReview?: {
+    candidateId: string;
+    reviewJobId: string;
+    state: string;
+    revision: number;
+  };
   obligationFrontier?: TurnObligationFrontierCheckpoint;
   terminalOutcome?: { id: string; state: string };
   createdAt: string;
@@ -133,6 +139,7 @@ export function persistTurnContextAtom(input: {
   nextSemanticBlockSequence?: number;
   providerAdapterId?: string;
   effectiveModel?: string;
+  finalCandidateReview?: TurnContextAtom["finalCandidateReview"];
   obligationFrontier?: TurnObligationFrontierCheckpoint;
   expectedGeneration?: number;
 }): string | null {
@@ -193,6 +200,16 @@ export function persistTurnContextAtom(input: {
           : {}),
         ...(input.providerAdapterId ? { providerAdapterId: safeRefId(input.providerAdapterId) } : {}),
         ...(input.effectiveModel ? { effectiveModel: safeRefId(input.effectiveModel) } : {}),
+        ...(input.finalCandidateReview
+          ? {
+            finalCandidateReview: {
+              candidateId: safeRefId(input.finalCandidateReview.candidateId),
+              reviewJobId: safeRefId(input.finalCandidateReview.reviewJobId),
+              state: safeRefId(input.finalCandidateReview.state),
+              revision: finiteNonNegativeInteger(input.finalCandidateReview.revision),
+            },
+          }
+          : {}),
         ...(input.obligationFrontier
           ? { obligationFrontier: sanitizeObligationFrontier(input.obligationFrontier) }
           : {}),

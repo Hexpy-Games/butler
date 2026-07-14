@@ -62,6 +62,7 @@ import {
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { appRuntimePolicy } from "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 import { publicWebSearchEvidenceItems } from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence.ts";
+import { readCurrentFinalCandidate } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/final-candidate-review-store.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -553,6 +554,145 @@ test("general chat tool_answer uses public evidence and a separate grounding rev
     contract_id: storedContract.contract_id,
     items: [expect.objectContaining({ evidence_item_id: items[0]!.evidence_item_id })],
     attempts: [expect.objectContaining({ producer: "web_search", outcome: "evidence" })],
+  });
+});
+
+test("grounding admission yield resumes the persisted Sandy-shaped candidate without rerunning execution", async () => {
+  const turnId = "turn-sandy-review-resume";
+  const sessionId = "butler/sandy-review-resume";
+  const items = publicWebSearchEvidenceItems({
+    results: [{
+      title: "Fixture announcement",
+      url: "https://news.example/announcement",
+      snippet: "The announcement was published on July 12.",
+      source: "Example News",
+    }],
+  });
+  let executionCalls = 0;
+  let groundingCalls = 0;
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      if (input.responseFormat?.name !== "grounded_answer_review") {
+        return JSON.stringify({
+          schema_version: "butler.turn-contract-decision.v1",
+          decision_id: typedDecisionId(input.responseFormat),
+          action: "tool_answer",
+          target_workstream_id: null,
+          target_project_id: null,
+          blocker_id: null,
+          evidence_domain: "public_web",
+          inspection_scope: null,
+          deliverables: ["grounded_answer"],
+          answer_text: null,
+          public_title: "Check the announcement date",
+          public_summary: "공개 웹 근거로 공지 날짜를 확인합니다.",
+          public_rationale: "공개 근거가 필요한 질의입니다.",
+          immediate_next_step: "공개 검색 결과를 확인합니다.",
+        });
+      }
+      groundingCalls += 1;
+      if (groundingCalls === 1) {
+        const error = Object.assign(
+          new Error("Prompt usage model-call budget exhausted before provider request"),
+          {
+            code: "prompt_usage_model_call_budget_exhausted",
+            partition: "review",
+            admittedPromptTokens: 100,
+            requestedOutputTokens: 2_048,
+            rolloverEligible: true,
+          },
+        );
+        error.name = "PromptUsageModelCallBudgetExhaustedError";
+        throw error;
+      }
+      return JSON.stringify({
+        schema_version: "butler.grounded-answer-review.v1",
+        outcome: "supported",
+        candidate_safe_to_deliver: true,
+        next_action: "accept",
+        summary: "The supplied public evidence directly supports the date.",
+        claims: [{
+          claim_id: "claim-date",
+          claim_text: "The announcement was published on July 12.",
+          support: "direct",
+          evidence_item_ids: [items[0]!.evidence_item_id],
+          limitations: [],
+        }],
+        citation_item_ids: [items[0]!.evidence_item_id],
+        limitations: [],
+      });
+    },
+    runFunctionToolPromptText: async (input) => {
+      executionCalls += 1;
+      input.usageAttribution?.beforeAdmittedModelRequest?.({
+        roundIndex: 0,
+        phase: input.usageAttribution.phase,
+        admittedPromptTokens: 100,
+        requestedOutputTokens: input.usageAttribution.requestedOutputTokens ?? 0,
+        requestHash: "sandy-execution-request",
+      });
+      const call = { name: "web_search", args: { query: "fixture announcement date" } };
+      await authorPublicDecisionForTool(input, call, {
+        summary: "공지 날짜의 공개 근거를 검색합니다.",
+        rationale: "공개 근거를 검증해야 합니다.",
+        nextStep: "검색 근거로 최종 답변을 검토합니다.",
+      });
+      await input.executeTool({ ...call, rawArguments: JSON.stringify(call.args) });
+      const candidate = "공지는 7월 12일에 게시됐습니다 ([Example News](https://news.example/announcement)).";
+      await input.reviewFinalCandidate?.({ text: candidate, roundIndex: 0 });
+      return candidate;
+    },
+    executeButlerTool: async () => ({
+      ok: true,
+      results: [{ url: "https://news.example/announcement" }],
+      public_web_evidence_items: items,
+    }),
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: tempDir,
+    systemPrompt: "You are Butler.",
+  });
+  const turn = {
+    handle,
+    provider: structuredFakeProvider,
+    model: "openai/gpt-5.6-sol" as const,
+    input: { text: "공지 날짜를 검색해서 알려줘." },
+  };
+
+  await expect(runtime.runTurn({
+    ...turn,
+    metadata: { turnId, runtimePolicy: { completionReview: "disabled", thinFirstResponse: true } },
+  })).rejects.toThrow("Turn scheduler yielded");
+  const atom = readOnlyPersistedTurnContextAtom();
+  const candidateReviewRef = atom?.finalCandidateReview as { candidateId?: string } | undefined;
+  const beforeResume = readCurrentFinalCandidate({ butlerData: tempDir, turnId });
+  expect(atom?.sourceErrorCode).toMatch(/^review_request_(prompt|output|total)_tokens_lease_exhausted$/u);
+  expect(candidateReviewRef?.candidateId).toBe(beforeResume?.candidate_id);
+  expect(beforeResume).toMatchObject({ revision: 1, state: "pending_review", effective_model: turn.model });
+
+  const result = await runtime.runTurn({
+    ...turn,
+    metadata: {
+      turnId,
+      schedulerContinuation: { contextAtomId: createTurnContextAtomId(sessionId, turnId) },
+      runtimePolicy: { completionReview: "disabled", thinFirstResponse: true },
+    },
+  });
+  const afterResume = readCurrentFinalCandidate({ butlerData: tempDir, turnId });
+
+  expect(result.text).toContain("https://news.example/announcement");
+  expect(executionCalls).toBe(1);
+  expect(groundingCalls).toBe(2);
+  expect(afterResume).toMatchObject({
+    candidate_id: beforeResume?.candidate_id,
+    revision: 1,
+    state: "delivery_pending",
+    effective_model: turn.model,
   });
 });
 
@@ -11497,7 +11637,7 @@ test("focused WorkStream phase exhaustion opens a fresh owned execution slice", 
   }));
 });
 
-test("focused WorkStream validation repair continues unchanged gaps until the phase budget yields", async () => {
+test("focused WorkStream validation repair stops an unchanged candidate and evidence gap structurally", async () => {
   const sessionId = "butler/main/focused-resume-repeated-gap";
   const todoView = new TodoListStore(tempDir).update({
     listId: "focused-repeated-gap",
@@ -11559,32 +11699,17 @@ test("focused WorkStream validation repair continues unchanged gaps until the ph
         requiredNativeTools: ["run_command"],
       },
     },
-  })).rejects.toThrow("Turn scheduler yielded");
+  })).rejects.toThrow("same candidate and evidence revision");
 
   expect(phases).toEqual([
     "phase_execution",
     "validation_repair",
-    "validation_repair",
-    "validation_repair",
   ]);
-  expect(maxRounds).toEqual([6, 2, 2, 2]);
-  expect(readOnlyPersistedTurnContextAtom()).toMatchObject({
-    state: "continuing",
-    budgetSnapshot: expect.objectContaining({
-      executionSlice: 2,
-      modelRequestsUsed: 0,
-      maxModelCalls: 32,
-      cumulativeUsage: expect.objectContaining({ modelRequestsUsed: 3 }),
-    }),
-  });
-  expect(readOperationalMetricEvents({ butlerData: tempDir })).toContainEqual(expect.objectContaining({
-    name: "phase_budget_exhausted",
-    status: "error",
-    dimensions: expect.objectContaining({
-      phase: "validation_repair",
-      reason: "phase_model_budget_exhausted",
-    }),
-  }));
+  expect(maxRounds).toEqual([6, 2]);
+  expect(readOnlyPersistedTurnContextAtom()).toBeNull();
+  expect(readOperationalMetricEvents({ butlerData: tempDir }).some((event) =>
+    event.name === "phase_budget_exhausted" && event.dimensions?.phase === "validation_repair",
+  )).toBe(false);
 });
 
 test("focused WorkStream resume records tool calls by phase", async () => {

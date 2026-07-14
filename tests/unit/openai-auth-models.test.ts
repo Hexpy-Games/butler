@@ -750,7 +750,7 @@ test("registered Z.AI hosted tool result compaction emits rehydratable evidence 
   expect(artifact.digest).toBe(packet.digest);
 });
 
-test("registered Z.AI packetizes every completed tool batch before the next request", async () => {
+test("registered Z.AI packetizes every completed tool batch with only bounded inline previews", async () => {
   registerHostedModelConfig({
     providerId: "zai",
     modelId: "glm-5.2",
@@ -818,8 +818,8 @@ test("registered Z.AI packetizes every completed tool batch before the next requ
   expect(bodies).toHaveLength(3);
   const secondRequest = JSON.stringify(bodies[1]!.messages);
   const thirdRequest = JSON.stringify(bodies[2]!.messages);
-  expect(secondRequest).not.toContain("OLD_RAW_RESULT_");
-  expect(thirdRequest).not.toContain("OLD_RAW_RESULT_");
+  expect(secondRequest).not.toContain("OLD_RAW_RESULT_".repeat(50));
+  expect(thirdRequest).not.toContain("OLD_RAW_RESULT_".repeat(50));
   expect(secondRequest).toContain("butler.completed-tool-evidence.v1");
   expect(thirdRequest).toContain("butler.completed-tool-evidence.v1");
   expect(thirdRequest).toContain("butler.evidence-packet.v1");
