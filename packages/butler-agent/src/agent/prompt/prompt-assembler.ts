@@ -742,7 +742,7 @@ export class PromptAssembler {
   }
 
   ensureProjectCapsule(binding: StoredSessionBinding): ProjectCapsuleEnsureResult {
-    if (binding.role !== "steward" || !binding.projectId) return { status: "skipped" };
+    if (!binding.projectId) return { status: "skipped" };
     const path = projectMemoryPath({
       butlerData: this.butlerData,
       projectId: binding.projectId,
