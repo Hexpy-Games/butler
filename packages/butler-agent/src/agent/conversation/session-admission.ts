@@ -22,6 +22,12 @@ export interface ConversationAdmissionTurnInput {
   butlerData?: string;
 }
 
+export interface ConversationAdmissionProvenance {
+  conversationSessionId: string;
+  turnId: string;
+  inboundMessageId: string;
+}
+
 export class ConversationAdmissionTurn {
   private readonly knownToolCallIds = new Set<string>();
   private readonly evidenceRefs = new Set<string>();
@@ -89,6 +95,15 @@ export class ConversationAdmissionTurn {
       sourceRef,
     };
     this.applyDecision(classifyForConversation(event), event);
+  }
+
+  provenance(): ConversationAdmissionProvenance | null {
+    if (!this.requestMessageId) return null;
+    return {
+      conversationSessionId: this.turn.session_id,
+      turnId: this.turn.id,
+      inboundMessageId: this.requestMessageId,
+    };
   }
 
   finalize(status: ConversationTurn["status"], completedAt: string): void {
