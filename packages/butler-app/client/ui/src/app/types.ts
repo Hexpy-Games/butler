@@ -622,6 +622,8 @@ export type ModelCatalogState =
 
 export type ComposerModelState = ModelCatalogState;
 
+export type ControlsLoadState = "loading" | "ready" | "error";
+
 export interface SessionSummary {
   id: string;
   kind: ChatKind;

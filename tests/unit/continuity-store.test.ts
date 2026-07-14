@@ -171,6 +171,83 @@ test("supersede and forget require an active bounded candidate and update only i
     .not.toContain("signed and reviewed release branch");
 });
 
+test("failed supersede destination remains retryable and hides pending state", () => {
+  const { data, projectA } = fixture();
+  const first = commitContinuityUpdates({
+    butlerData: data,
+    decisionId: "decision-pending-first",
+    updates: [{
+      scope: "project",
+      kind: "constraint",
+      operation: "upsert",
+      summary: "Publish only after the compatibility suite passes.",
+    }],
+    candidateRefs: [],
+    provenance: provenance(),
+    boundWorkspacePath: projectA,
+  })[0]!;
+  writeFileSync(
+    join(data, "butler.config.json"),
+    JSON.stringify({ projects: [] }),
+  );
+  const replacement = {
+    scope: "project" as const,
+    kind: "constraint" as const,
+    operation: "supersede" as const,
+    summary: "Publish only after compatibility and rollback suites pass.",
+    target_ref: first.continuity_id,
+  };
+  const replayInput = {
+    butlerData: data,
+    decisionId: "decision-pending-replacement",
+    updates: [replacement],
+    candidateRefs: [first.continuity_id],
+    provenance: provenance({
+      turn_id: "turn-pending",
+      inbound_message_id: "message-pending",
+    }),
+  };
+
+  expect(() => commitContinuityUpdates(replayInput)).toThrow(
+    "continuity_project_workspace_unresolved",
+  );
+  const pendingStore = new ContinuityStore(data);
+  expect(
+    pendingStore.listCandidates({
+      projectId: "project-a",
+      sessionId: "butler/project-a",
+    }),
+  ).toEqual([
+    expect.objectContaining({
+      continuity_id: first.continuity_id,
+      summary: "Publish only after the compatibility suite passes.",
+    }),
+  ]);
+  pendingStore.close();
+
+  writeFileSync(
+    join(data, "butler.config.json"),
+    JSON.stringify({ projects: [{ name: "project-a", path: projectA }] }),
+  );
+  const recovered = commitContinuityUpdates(replayInput)[0]!;
+  expect(recovered.operation).toBe("supersede");
+  expect(readFileSync(join(projectA, ".butler", "hot-cache.md"), "utf8"))
+    .toContain("compatibility and rollback suites");
+  const recoveredStore = new ContinuityStore(data);
+  expect(
+    recoveredStore.listCandidates({
+      projectId: "project-a",
+      sessionId: "butler/project-a",
+    }),
+  ).toEqual([
+    expect.objectContaining({
+      continuity_id: recovered.continuity_id,
+      summary: "Publish only after compatibility and rollback suites pass.",
+    }),
+  ]);
+  recoveredStore.close();
+});
+
 test("session, global correction, and global preference route to their explicit owners", () => {
   const { data } = fixture();
   const sessionReceipt = commitContinuityUpdates({

@@ -299,7 +299,7 @@ function actionWithTurnIdentity(
   };
 }
 
-function executionBindingForEnvelope(
+export function executionBindingForEnvelope(
   binding: StoredSessionBinding,
   envelope: InboundEnvelope,
 ): StoredSessionBinding {
