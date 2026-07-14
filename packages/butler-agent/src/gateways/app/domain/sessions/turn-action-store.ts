@@ -1,5 +1,6 @@
 import { Database } from "bun:sqlite";
 import type { PrincipalTurnCancellationTarget } from "../../../../agent/turn/principal-turn-cancellation-control.ts";
+import type { PrincipalDeadOwnerCancellationSettlementOutcome } from "./dead-owner-cancellation-settlement.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 import { CANCELLED_TURN_ACTIVITY_TEXT } from "./cancelled-turn-activity.ts";
 import {
@@ -67,6 +68,9 @@ interface TurnActionStoreInput {
   principalTurnCancellationTargetForTurn: (
     turnId: string,
   ) => PrincipalTurnCancellationTarget | null;
+  settlePrincipalDeadOwnerCancellation: (
+    target: PrincipalTurnCancellationTarget,
+  ) => PrincipalDeadOwnerCancellationSettlementOutcome;
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
   ensureCancelledTurnActivityMessage: (
@@ -215,10 +219,20 @@ export class AppTurnActionStore {
     ) {
       this.markCancellationAccepted(turnId);
     }
-    const cancelledTurn = cancellationTarget
+    const deadOwnerSettlement = cancellationTarget
+      ? this.input.settlePrincipalDeadOwnerCancellation(cancellationTarget)
+      : null;
+    const deadOwnerQueueTerminal = deadOwnerSettlement === "completed" ||
+      (resumingCancellation && deadOwnerSettlement === "already_completed");
+    const deadOwnerCancellationSettled = Boolean(
+      cancellationTarget &&
+      deadOwnerQueueTerminal &&
+      this.cancellationOutboxCompleted(turnId, cancellationTarget),
+    );
+    const cancelledTurn = cancellationTarget && !deadOwnerCancellationSettled
       ? this.input.getTurn(turnId)
       : this.input.finalizeCancelledTurn(row.chat_id, turnId);
-    if (!cancellationTarget) {
+    if (!cancellationTarget || deadOwnerCancellationSettled) {
       this.input.cleanupTurnEventSequences(row.chat_id, turnId);
     }
     return {
@@ -229,6 +243,23 @@ export class AppTurnActionStore {
   }
 
   reconcileCancellationSettlements(sessionId?: string): void {
+    const unsettledRows = this.input.db
+      .query<{ id: string }, [string | null, string | null]>(`
+        SELECT turns.id
+        FROM turns
+        JOIN app_turn_cancel_outbox
+          ON app_turn_cancel_outbox.turn_id = turns.id
+        WHERE turns.state = 'cancelling'
+          AND app_turn_cancel_outbox.state != 'completed'
+          AND (? IS NULL OR turns.chat_id = ?)
+        ORDER BY turns.rowid ASC
+      `)
+      .all(sessionId ?? null, sessionId ?? null);
+    for (const row of unsettledRows) {
+      const target = this.input.principalTurnCancellationTargetForTurn(row.id);
+      if (target) this.input.settlePrincipalDeadOwnerCancellation(target);
+    }
+
     const rows = this.input.db
       .query<{ id: string; chat_id: string }, [string | null, string | null]>(`
         SELECT turns.id, turns.chat_id
@@ -289,6 +320,20 @@ export class AppTurnActionStore {
       SET state = 'accepted', accepted_at = ?
       WHERE turn_id = ? AND state = 'pending'
     `).run(new Date().toISOString(), turnId);
+  }
+
+  private cancellationOutboxCompleted(
+    turnId: string,
+    target: PrincipalTurnCancellationTarget,
+  ): boolean {
+    const row = this.input.db.query<{ state: string }, [string, string, string | null]>(`
+      SELECT state
+      FROM app_turn_cancel_outbox
+      WHERE turn_id = ?
+        AND queue_id = ?
+        AND (dispatch_claim_id = ? OR dispatch_claim_id IS NULL)
+    `).get(turnId, target.queueId, target.dispatchClaimId);
+    return row?.state === "completed";
   }
 
   sessionHasActiveTurn(sessionId: string): boolean {
