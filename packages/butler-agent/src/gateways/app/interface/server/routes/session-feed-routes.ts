@@ -22,6 +22,23 @@ export async function handleSessionFeedRoutes(
     return turnsSinceCursor(input);
   }
 
+  const retryCurrent = turnActionMatch(input, "retry-current");
+  if (retryCurrent) {
+    return json(
+      apiEnvelope(
+        await input.store.retryTurnWithCurrentControls(
+          retryCurrent.turnId,
+          input.responder,
+          {
+            responderTimeoutMs: input.responderTimeoutMs,
+            deferResponderTurns: true,
+          },
+        ),
+      ),
+      202,
+    );
+  }
+
   const retry = turnActionMatch(input, "retry");
   if (retry) {
     return json(
@@ -134,7 +151,7 @@ function turnsSinceCursor(input: AppRouteContext): Response {
 
 function turnActionMatch(
   input: AppRouteContext,
-  action: "retry" | "cancel",
+  action: "retry" | "retry-current" | "cancel",
 ): { turnId: string } | null {
   const match =
     input.request.method === "POST"

@@ -13344,6 +13344,105 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
   }
 });
 
+test("retrying with current controls creates a new turn and leaves the failed snapshot intact", async () => {
+  let attempt = 0;
+  const attemptControls: Array<{
+    turnId: string;
+    model?: string;
+    reasoningEffort?: string;
+  }> = [];
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      attempt += 1;
+      attemptControls.push({
+        turnId: input.turnId,
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
+      });
+      if (attempt === 1) {
+        input.onTurnEvent?.({
+          kind: "runtime.fault",
+          payload: createRuntimeFaultPayload({
+            faultId: "fault-retry-current-controls",
+            sessionId: input.chatId,
+            turnId: input.turnId,
+            kind: "provider_stream_corruption",
+            retryable: true,
+            publicSummary: "Runtime interrupted the original turn.",
+            operatorSummary: "Retry-current contract fixture.",
+            safeErrorCode: "runtime_fault",
+            createdAt: "2026-07-14T00:00:00.000Z",
+          }),
+        });
+        const error = new Error("runtime interrupted the original turn");
+        (error as Error & { code?: string }).code = "runtime_fault";
+        throw error;
+      }
+      return { texts: ["recovered with current controls"] };
+    },
+  });
+  try {
+    await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "retry this as a new turn",
+      model: "openai/gpt-5.6-sol",
+      reasoning_effort: "medium",
+    });
+    const failedTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.state === "runtime_fault" && turn.retryable === true,
+    );
+    await patchJson(`${server.url}sessions/general/controls`, {
+      model: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+
+    const retry = await postJson(
+      `${server.url}turns/${encodeURIComponent(failedTurn.id as string)}/retry-current`,
+      {},
+    );
+    expect(retry.data.turn.id).not.toBe(failedTurn.id);
+    expect(retry.data.turn.execution_controls).toMatchObject({
+      model_ref: "openai/gpt-5.5",
+      reasoning_effort: "low",
+    });
+    await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) => message.text === "recovered with current controls",
+    );
+
+    expect(attemptControls).toEqual([
+      {
+        turnId: failedTurn.id,
+        model: "openai/gpt-5.6-sol",
+        reasoningEffort: "medium",
+      },
+      {
+        turnId: retry.data.turn.id,
+        model: "openai/gpt-5.5",
+        reasoningEffort: "low",
+      },
+    ]);
+    const turns = await getJson(`${server.url}turns?chat_id=general`);
+    expect(turns.data.turns).toContainEqual(
+      expect.objectContaining({
+        id: failedTurn.id,
+        state: "runtime_fault",
+        attempt: 1,
+        execution_controls: expect.objectContaining({
+          model_ref: "openai/gpt-5.6-sol",
+        }),
+      }),
+    );
+  } finally {
+    server.stop();
+  }
+});
+
 test("runtime fault retry eligibility comes from the fault record", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

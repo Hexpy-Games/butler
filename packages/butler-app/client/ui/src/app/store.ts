@@ -210,6 +210,7 @@ interface ButlerStore {
     title: string,
   ) => Promise<void>;
   retryTurn: (turnId: string) => Promise<void>;
+  retryTurnWithCurrentControls: (turnId: string) => Promise<void>;
   controlWorker: (workerId: string, action: string) => Promise<void>;
   exportTranscript: () => Promise<void>;
   navigateCommandResult: (result: CommandPaletteResult) => void;
@@ -1599,6 +1600,31 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     } catch (error) {
       await get().reloadMessages(get().activeChatId);
       notifyError(error, "Retry failed", { id: `turn-retry-${turnId}` });
+      set({ status: { label: "ready", tone: "ok" } });
+    } finally {
+      set({ retryingTurnId: null });
+    }
+  },
+
+  retryTurnWithCurrentControls: async (turnId) => {
+    set({
+      retryingTurnId: turnId,
+      status: { label: "retrying with current settings", tone: "muted" },
+    });
+    try {
+      await api(`/turns/${encodeURIComponent(turnId)}/retry-current`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await get().reloadMessages(get().activeChatId);
+      await get().refreshNavigation();
+      await get().refreshSessionSummary(get().activeChatId);
+      set({ status: { label: "ready", tone: "ok" } });
+    } catch (error) {
+      await get().reloadMessages(get().activeChatId);
+      notifyError(error, "Retry with current settings failed", {
+        id: `turn-retry-current-${turnId}`,
+      });
       set({ status: { label: "ready", tone: "ok" } });
     } finally {
       set({ retryingTurnId: null });
