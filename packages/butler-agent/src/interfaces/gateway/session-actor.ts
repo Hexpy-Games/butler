@@ -647,6 +647,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             executionControls: envelope.executionControls,
             requestedModelRef: envelope.executionControls?.model_ref ?? activeBinding.modelRef,
             adapterEffectiveModelRef: activeBinding.modelRef,
+            conversationProvenance: conversationAdmission?.provenance() ?? undefined,
           },
           emitIntermediateDelivery: emitIntermediate,
           emitTurnEvent,

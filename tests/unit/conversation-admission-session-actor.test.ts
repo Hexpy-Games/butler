@@ -60,6 +60,7 @@ const SAFE_RESULT = {
 };
 
 class AdmissionRuntime implements AgentRuntimeAdapter {
+  lastTurnMetadata: Record<string, unknown> | undefined;
   readonly id = "admission-runtime";
   readonly capabilities = {
     supportsSessionResume: false,
@@ -77,6 +78,7 @@ class AdmissionRuntime implements AgentRuntimeAdapter {
   }
 
   async runTurn(input: RuntimeTurnInput) {
+    this.lastTurnMetadata = input.metadata;
     await input.emitTurnEvent?.({
       kind: "model.stream.text_delta",
       payload: {
@@ -362,9 +364,11 @@ function createLifecycle(input: {
 test("session actor admits user and final assistant while stream and progress audit rows stay non-semantic", async () => {
   const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const runtime = new AdmissionRuntime();
   const lifecycle = createLifecycle({
     bindingStore,
     conversationStore,
+    runtime,
   });
 
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
@@ -388,6 +392,11 @@ test("session actor admits user and final assistant while stream and progress au
     request_message_id: semanticTail[0]?.id,
     public_assistant_message_id: semanticTail[1]?.id,
     model_ref: "openai/auto:codex-latest",
+  });
+  expect(runtime.lastTurnMetadata?.conversationProvenance).toEqual({
+    conversationSessionId: session!.id,
+    turnId: "turn-semantic",
+    inboundMessageId: semanticTail[0]?.id,
   });
   expect(readTranscript("butler/main").length).toBeGreaterThan(semanticTail.length);
 

@@ -18,6 +18,7 @@ const DYNAMIC_SECTION_IDS = new Set([
   "skills",
   "active-persona-reminder",
   "hot-cache",
+  "session-continuity",
   "project-memory",
   "project-hot-cache",
   "turn-personalization-profile",

@@ -288,6 +288,7 @@ function semanticDecisionFingerprint(
     inspection_scope: decision.inspection_scope,
     deliverables: decision.deliverables,
     answer_text: decision.answer_text,
+    continuity_updates: decision.continuity_updates ?? [],
     tracking_mode: trackingMode,
     obligations: dedupeSeeds(seeds),
   }));
