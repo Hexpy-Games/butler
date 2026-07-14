@@ -45,6 +45,7 @@ import {
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
 import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
 import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
+import { readCurrentFinalCandidate } from "./final-candidate-review-store.ts";
 import { emitRuntimePreparationProgressBestEffort } from "../progress/turn-delivery-events.ts";
 import { throwIfRuntimeTurnAborted } from "../policy/turn-errors.ts";
 import { unresolvedValidationFailureFromAudit } from "./validation-failure-guard.ts";
@@ -62,6 +63,7 @@ import {
 import {
   commitTurnContractContinuation,
   completeTurnContractDelivery,
+  restoreTurnContractExecution,
   resumeTurnContractExecution,
   type ActiveTurnContract,
 } from "./turn-contract-runtime.ts";
@@ -281,7 +283,41 @@ export async function runNativeToolTurn({
     const initialPromptPhase = phaseBudgetController?.initialPromptPhase() ?? "initial_tool_loop";
     let candidateText: string;
     let activeTurnContract: ActiveTurnContract | null = null;
-    if (useTools && session.init.role === "butler" && input.provider.capabilities.supportsStructuredOutputs === true) {
+    let resumeCandidateId: string | undefined;
+    const candidateReviewResume = finalCandidateReviewResume({
+      butlerData: deps.butlerData,
+      turnId: context.turnId,
+      continuationAtom: context.continuationAtom,
+    });
+    if (candidateReviewResume) {
+      candidateText = candidateReviewResume.candidate_text;
+      resumeCandidateId = candidateReviewResume.candidate_id;
+      toolLoopUsed = useTools;
+      if (candidateReviewResume.contract_id) {
+        const atom = context.continuationAtom;
+        if (!atom?.turnDecision || atom.contractId !== candidateReviewResume.contract_id) {
+          throw new Error("final_candidate_review_contract_resume_state_missing");
+        }
+        activeTurnContract = restoreTurnContractExecution({
+          butlerData: deps.butlerData,
+          contractId: candidateReviewResume.contract_id,
+          decision: atom.turnDecision,
+          nextSemanticBlockSequence: atom.nextSemanticBlockSequence ?? 1,
+          turnMetadata: input.metadata,
+          toolSurfaceController: context.toolSurfaceController,
+        });
+        turnContractContext.current = activeTurnContract;
+      }
+      await emitTurnEventBestEffort(input, {
+        kind: "turn.observation",
+        visibility: "internal",
+        payload: {
+          kind: "final_candidate_review_resumed",
+          safeLabel: "Resuming final review",
+          candidateId: candidateReviewResume.candidate_id,
+        },
+      });
+    } else if (useTools && session.init.role === "butler" && input.provider.capabilities.supportsStructuredOutputs === true) {
       const typedEntry = await runTypedTurnEntry({
         turnInput: input,
         session,
@@ -321,6 +357,7 @@ export async function runNativeToolTurn({
         toolSurfaceController: context.toolSurfaceController,
         turnContract: activeTurnContract?.contract,
         turnId,
+        resumeCandidateId,
         turnBudget: context.turnBudget,
       });
       if (deliveryOutcome.kind === "final") {
@@ -540,6 +577,27 @@ export async function runNativeToolTurn({
   }
 }
 
+function finalCandidateReviewResume(input: {
+  butlerData: string;
+  turnId: string;
+  continuationAtom: ReturnType<typeof readTurnContextAtom>;
+}) {
+  const reference = input.continuationAtom?.finalCandidateReview;
+  if (!reference) return null;
+  const candidate = readCurrentFinalCandidate({
+    butlerData: input.butlerData,
+    turnId: input.turnId,
+  });
+  if (!candidate || candidate.candidate_id !== reference.candidateId ||
+    candidate.review_job.job_id !== reference.reviewJobId) {
+    throw new Error("final_candidate_review_resume_owner_conflict");
+  }
+  if (!new Set(["pending_review", "reviewing", "accepted", "delivery_pending"]).has(candidate.state)) {
+    return null;
+  }
+  return candidate;
+}
+
 function isRetryableProviderFailure(error: unknown): boolean {
   const failure = safeRuntimeFailure(error);
   return failure.retryable === true && failure.code.startsWith("provider_");
@@ -564,11 +622,12 @@ async function persistSchedulerContinuation(input: {
   sourceErrorCode: string;
   retryableProviderFailureStreak: number;
 }> {
+  const finalCandidateReview = readCurrentFinalCandidate({
+    butlerData: input.deps.butlerData,
+    turnId: input.turnId,
+  });
   const safeFailure = isPromptUsageModelCallBudgetError(input.error)
-    ? {
-      code: "prompt_usage_model_call_budget_exhausted",
-      message: "Provider request safety window exhausted.",
-    }
+    ? reviewAwareBudgetFailure(input.error, input.turnBudget)
     : safeRuntimeFailure(input.error);
   const contextAtomId = createTurnContextAtomId(input.input.handle.sessionId, input.turnId);
   if (input.activeTurnContract) {
@@ -576,7 +635,7 @@ async function persistSchedulerContinuation(input: {
       butlerData: input.deps.butlerData,
       contract: input.activeTurnContract.contract,
       audit: input.audit,
-      finalCandidate: "",
+      finalCandidate: finalCandidateReview?.candidate_text ?? "",
     });
   }
   const refs = collectTurnContinuationRefs({
@@ -614,6 +673,16 @@ async function persistSchedulerContinuation(input: {
       : {}),
     providerAdapterId: input.input.provider.id,
     effectiveModel: input.input.model,
+    ...(finalCandidateReview
+      ? {
+        finalCandidateReview: {
+          candidateId: finalCandidateReview.candidate_id,
+          reviewJobId: finalCandidateReview.review_job.job_id,
+          state: finalCandidateReview.state,
+          revision: finalCandidateReview.revision,
+        },
+      }
+      : {}),
     obligationFrontier: input.obligationFrontier,
     expectedGeneration: input.expectedGeneration,
     unresolvedObservations: [{
@@ -655,6 +724,42 @@ async function persistSchedulerContinuation(input: {
     sourceErrorCode: safeFailure.code,
     retryableProviderFailureStreak: committed.retryableProviderFailureStreak ?? 0,
   };
+}
+
+function reviewAwareBudgetFailure(
+  error: unknown,
+  budget: DirectTurnBudget,
+): { code: string; message: string } {
+  const record = typeof error === "object" && error !== null
+    ? error as Record<string, unknown>
+    : {};
+  if (record.partition !== "review") {
+    return {
+      code: "prompt_usage_model_call_budget_exhausted",
+      message: "Provider request safety window exhausted.",
+    };
+  }
+  const review = budget.partitions.review;
+  const admittedPromptTokens = finiteNumber(record.admittedPromptTokens);
+  const requestedOutputTokens = finiteNumber(record.requestedOutputTokens);
+  const dimension = budget.modelRequestsUsed + 1 > budget.maxModelCalls ||
+      review.modelRequestsUsed + 1 > review.maxModelCalls
+    ? "request_count"
+    : budget.promptTokens + admittedPromptTokens > budget.maxPromptTokens ||
+        review.promptTokens + admittedPromptTokens > review.maxPromptTokens
+    ? "prompt_tokens"
+    : budget.outputTokens + requestedOutputTokens > budget.maxOutputTokens ||
+        review.outputTokens + requestedOutputTokens > review.maxOutputTokens
+    ? "output_tokens"
+    : "total_tokens";
+  return {
+    code: `review_request_${dimension}_lease_exhausted`,
+    message: `The persisted final-candidate review node exhausted its ${dimension} lease.`,
+  };
+}
+
+function finiteNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 function continuationContractState(input: {

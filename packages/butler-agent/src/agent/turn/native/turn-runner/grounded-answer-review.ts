@@ -26,6 +26,8 @@ import {
   readPublicWebEvidenceContextForContract,
   type PublicWebEvidenceAttempt,
 } from "../../../output/evidence/public-web-evidence-store.ts";
+import { evidenceRevisionFor } from "./final-candidate-review-store.ts";
+import { compileGroundingReviewCapsule } from "./review-capsule-compiler.ts";
 
 const GROUNDED_ANSWER_REVIEW_SCHEMA = "butler.grounded-answer-review.v1" as const;
 const GROUNDING_REVIEW_REPAIR_LIMIT = 1;
@@ -83,7 +85,7 @@ export async function reviewGroundedAnswerCandidate(input: {
   deps: NativeTurnRunnerDeps;
   turnId?: string | null;
   turnBudget: ReturnType<typeof createDirectTurnBudget>;
-  prompt: string;
+  userText: string;
   candidateText: string;
   audit: ToolAuditEntry[];
   contract?: CompiledTurnContract;
@@ -96,11 +98,19 @@ export async function reviewGroundedAnswerCandidate(input: {
       contractId: input.contract.contract_id,
     });
   const evidence = evidenceContext(input.audit, persistedEvidence.items, persistedEvidence.attempts);
-  const basePrompt = groundingReviewPrompt({
-    requestText: input.prompt,
-    candidateText: input.candidateText,
-    evidence,
+  const evidenceContextRevision = evidenceRevisionFor({
+    items: evidence.items,
+    attempts: persistedEvidence.attempts,
   });
+  const basePrompt = compileGroundingReviewCapsule({
+    userText: input.userText,
+    candidateText: input.candidateText,
+    evidenceRevision: evidenceContextRevision,
+    evidenceItems: evidence.items,
+    successfulSearches: evidence.successfulSearches,
+    searchResultCount: evidence.searchResultCount,
+    successfulReads: evidence.successfulReads,
+  }).prompt;
   const usageAttribution = groundingUsageAttribution(input.turnId, input.turnBudget);
   let review: GroundedAnswerReview | null = null;
   let currentPrompt = basePrompt;
@@ -230,7 +240,7 @@ function evidenceContext(
   return {
     items: [...new Map(
       [...persistedItems, ...auditItems].map((item) => [item.evidence_item_id, item]),
-    ).values()].slice(-16),
+    ).values()],
     successfulSearches: Math.max(searches.length, persistedSearches.length),
     searchResultCount: Math.max(
       persistedItems.filter((item) => item.producer === "web_search").length,
@@ -244,30 +254,6 @@ function evidenceContext(
       persistedReads.length,
     ),
   };
-}
-
-function groundingReviewPrompt(input: {
-  requestText: string;
-  candidateText: string;
-  evidence: ReturnType<typeof evidenceContext>;
-}): string {
-  return [
-    "Independently review whether the candidate answer is grounded in the bounded public evidence.",
-    "Do not call tools. Do not assume web_search is weaker or web_read is stronger; judge the actual bounded content.",
-    "Extract each material factual claim. Mark it direct, corroborated, or unsupported and cite only supplied evidence_item_ids.",
-    "Use corroborated only when at least two independent source identities support the claim.",
-    "A limited answer may be safe when it clearly reports no result or insufficient evidence and makes no unsupported factual claim.",
-    "candidate_safe_to_deliver must be false when any material claim is unsupported.",
-    "Choose gather_more_evidence only when another public read/search can materially improve support; otherwise choose rewrite_with_limitations.",
-    "The runtime will validate structure and provenance but will not re-decide semantic support.",
-    "",
-    `request:\n${input.requestText}`,
-    `candidate:\n${input.candidateText}`,
-    `successful_searches=${input.evidence.successfulSearches}`,
-    `search_result_count=${input.evidence.searchResultCount}`,
-    `successful_reads=${input.evidence.successfulReads}`,
-    `evidence_items:\n${JSON.stringify(input.evidence.items)}`,
-  ].join("\n");
 }
 
 function groundedAnswerResponseFormat() {

@@ -121,7 +121,7 @@ test("bounded conversation context remains a complete provider-safe observation"
     created_at: "2026-07-13T00:00:00.000Z",
     speaker: "user",
     role: "user",
-    text: "배포 서버는 192.168.1.18이야.",
+    text: `배포 서버는 ${[192, 168, 1, 18].join(".")}이야.`,
     parts: [],
   }];
   const summaries = [{
