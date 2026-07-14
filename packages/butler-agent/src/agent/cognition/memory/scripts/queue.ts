@@ -5,7 +5,7 @@
 //   bun run queue.ts enqueue --project butler --session abc123 --trigger post_compact
 //   bun run queue.ts append  --project butler --session abc123  (alias for enqueue)
 
-import { join } from "path";
+import { dirname, join } from "path";
 import {
   appendFileSync,
   readFileSync,
@@ -16,12 +16,21 @@ import {
   unlinkSync,
 } from "fs";
 import { BUTLER_DIR } from "./constants.ts";
+import { cognitionMemoryRoot } from "../../paths.ts";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export interface SyncRequest {
+  schema_version?: "butler.memory-sync-request.v2";
+  job_id?: string;
+  scope?: "project" | "global";
+  project_id?: string | null;
+  conversation_session_id?: string;
+  conversation_turn_id?: string;
+  inbound_message_id?: string;
+  outbound_message_id?: string;
   project: string;
   topic: string | null;
   source: string;
@@ -38,26 +47,30 @@ const QUEUE_DIR = join(BUTLER_DIR.MEMORY, "queue");
 
 export const QUEUE_FILE = join(QUEUE_DIR, "sync.jsonl");
 
+export function memorySyncQueueFile(butlerData: string): string {
+  return join(cognitionMemoryRoot(butlerData), "queue", "sync.jsonl");
+}
+
 // ---------------------------------------------------------------------------
 // Core functions
 // ---------------------------------------------------------------------------
 
 /** Append a sync request as a single JSONL line. Creates directory if missing. */
-export function appendToQueue(entry: SyncRequest): void {
-  if (!existsSync(QUEUE_DIR)) {
-    mkdirSync(QUEUE_DIR, { recursive: true });
+export function appendToQueue(entry: SyncRequest, butlerData?: string): void {
+  const queueFile = butlerData ? memorySyncQueueFile(butlerData) : QUEUE_FILE;
+  const queueDir = dirname(queueFile);
+  if (!existsSync(queueDir)) {
+    mkdirSync(queueDir, { recursive: true });
   }
+  if (entry.job_id && readQueueFile(queueFile).some((queued) => queued.job_id === entry.job_id)) return;
   // Compact JSON (no spaces after colons/commas) + newline
   const line = JSON.stringify(entry) + "\n";
-  appendFileSync(QUEUE_FILE, line);
+  appendFileSync(queueFile, line);
 }
 
 /** Read all entries from the queue. Returns [] if file is missing or empty. */
 export function readQueue(): SyncRequest[] {
-  if (!existsSync(QUEUE_FILE)) return [];
-  const content = readFileSync(QUEUE_FILE, "utf-8").trim();
-  if (!content) return [];
-  return content.split("\n").map((line) => JSON.parse(line) as SyncRequest);
+  return readQueueFile(QUEUE_FILE);
 }
 
 /** Remove and return the first entry (FIFO). Atomic via temp-file + rename. */
@@ -179,4 +192,11 @@ function cli(args: string[]): void {
 // Run CLI when executed directly
 if (import.meta.main) {
   cli(process.argv.slice(2));
+}
+
+function readQueueFile(path: string): SyncRequest[] {
+  if (!existsSync(path)) return [];
+  const content = readFileSync(path, "utf-8").trim();
+  if (!content) return [];
+  return content.split("\n").map((line) => JSON.parse(line) as SyncRequest);
 }

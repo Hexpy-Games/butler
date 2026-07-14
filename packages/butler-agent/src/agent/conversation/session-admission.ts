@@ -12,6 +12,7 @@ import type {
   ConversationTurn,
   ConversationWriter,
 } from "./types.ts";
+import { publishConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
 
 export interface ConversationAdmissionTurnInput {
   writer: ConversationWriter;
@@ -107,7 +108,10 @@ export class ConversationAdmissionTurn {
   }
 
   finalize(status: ConversationTurn["status"], completedAt: string): void {
-    const existingGeneration = this.input.writer.readTurnOutcome?.(this.turn.id)?.generation ?? 0;
+    const existingOutcome = this.input.writer.readTurnOutcome?.(this.turn.id) ?? null;
+    const existingGeneration = existingOutcome?.generation ?? 0;
+    const requestMessageId = this.requestMessageId ?? existingOutcome?.request_message_id ?? null;
+    const publicAssistantMessageId = this.publicAssistantMessageId ?? existingOutcome?.public_assistant_message_id ?? null;
     this.input.writer.finalizeTurn({
       turnId: this.turn.id,
       status,
@@ -121,8 +125,8 @@ export class ConversationAdmissionTurn {
           : status === "aborted"
           ? "cancelled"
           : "failed",
-        requestMessageId: this.requestMessageId,
-        publicAssistantMessageId: this.publicAssistantMessageId,
+        requestMessageId,
+        publicAssistantMessageId,
         providerId: this.input.binding.modelRef.split("/", 1)[0] ?? null,
         modelRef: this.input.binding.modelRef,
         evidenceRefs: [...this.evidenceRefs],
@@ -131,6 +135,24 @@ export class ConversationAdmissionTurn {
         createdAt: completedAt,
       },
     });
+    if (
+      status === "complete" &&
+      this.input.butlerData &&
+      requestMessageId &&
+      publicAssistantMessageId
+    ) {
+      publishConversationCompletionObservation({
+        butlerData: this.input.butlerData,
+        projectId: this.input.binding.projectId ?? null,
+        runtimeSessionId: this.input.binding.sessionId,
+        conversationSessionId: this.turn.session_id,
+        conversationTurnId: this.turn.id,
+        inboundMessageId: requestMessageId,
+        outboundMessageId: publicAssistantMessageId,
+        outcomeGeneration: existingGeneration + 1,
+        completedAt,
+      });
+    }
   }
 
   finalizeRecoverable(completedAt: string, safeCode: string): void {

@@ -1,14 +1,10 @@
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import {
-  existsSync,
   mkdirSync,
-  readFileSync,
-  renameSync,
   rmSync,
-  writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   addFeedbackEntry,
   resolveFeedbackEntry,
@@ -21,6 +17,8 @@ import type {
   ContinuityScope,
   ContinuityUpdate,
 } from "../../turn/turn-contract-types.ts";
+import { resolveCanonicalProjectWorkspace } from "./project-workspace.ts";
+import { replaceManagedHotCacheSection } from "./hot-cache-writer.ts";
 import {
   CONTINUITY_KINDS,
   CONTINUITY_OPERATIONS,
@@ -91,29 +89,6 @@ export function continuityStorePath(butlerData: string): string {
 export function sessionContinuityPath(butlerData: string, sessionId: string): string {
   const key = createHash("sha256").update(sessionId).digest("hex").slice(0, 32);
   return join(cognitionMemoryRoot(butlerData), "sessions", `${key}.md`);
-}
-
-export function resolveCanonicalProjectWorkspace(input: {
-  butlerData: string;
-  projectId: string;
-  boundWorkspacePath?: string | null;
-}): string {
-  const projectId = input.projectId.trim();
-  if (!projectId) throw new Error("continuity_project_binding_missing");
-  const configPath = join(input.butlerData, "butler.config.json");
-  try {
-    const raw = JSON.parse(readFileSync(configPath, "utf8")) as { projects?: unknown };
-    const projects = Array.isArray(raw.projects) ? raw.projects : Object.values(raw.projects ?? {});
-    const match = (projects as Array<{ name?: unknown; path?: unknown }>).find(
-      (entry) => entry?.name === projectId && typeof entry.path === "string" && entry.path.trim(),
-    );
-    if (match && typeof match.path === "string" && isAbsolute(match.path)) return match.path;
-  } catch {
-    // The authenticated session binding is the canonical fallback snapshot.
-  }
-  const bound = input.boundWorkspacePath?.trim();
-  if (!bound || !isAbsolute(bound)) throw new Error("continuity_project_workspace_unresolved");
-  return bound;
 }
 
 export class ContinuityStore {
@@ -398,13 +373,13 @@ export class ContinuityStore {
       ].join("\n")),
       MANAGED_END,
     ].join("\n");
-    const current = existsSync(path) ? readFileSync(path, "utf8") : "";
-    const start = current.indexOf(MANAGED_START);
-    const end = current.indexOf(MANAGED_END);
-    const next = start >= 0 && end >= start
-      ? `${current.slice(0, start)}${managed}${current.slice(end + MANAGED_END.length)}`
-      : `${managed}\n${current ? `\n${current.trim()}\n` : ""}`;
-    writeAtomic(path, next.trimEnd() + "\n");
+    replaceManagedHotCacheSection({
+      butlerData: this.butlerData,
+      path,
+      startMarker: MANAGED_START,
+      endMarker: MANAGED_END,
+      content: managed,
+    });
   }
 }
 
@@ -514,26 +489,4 @@ function mutationIdFor(decisionId: string, turnId: string, update: ContinuityUpd
 
 function continuityIdFor(mutationId: string): string {
   return `cu_${createHash("sha256").update(mutationId).digest("hex").slice(0, 24)}`;
-}
-
-function writeAtomic(path: string, body: string): void {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const lock = `${path}.lock`;
-  try {
-    writeFileSync(lock, String(process.pid), { encoding: "utf8", flag: "wx", mode: 0o600 });
-  } catch {
-    throw new Error("continuity_destination_locked");
-  }
-  const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
-  try {
-    writeFileSync(temp, body, { encoding: "utf8", mode: 0o600 });
-    renameSync(temp, path);
-    if (path.includes(`${join("", ".butler")}`)) {
-      const gitignore = join(dirname(path), ".gitignore");
-      if (!existsSync(gitignore)) writeFileSync(gitignore, "*\n", { encoding: "utf8", mode: 0o600 });
-    }
-  } finally {
-    rmSync(temp, { force: true });
-    rmSync(lock, { force: true });
-  }
 }

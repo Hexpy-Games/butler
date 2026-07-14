@@ -30,6 +30,7 @@ export interface ConversationObservation {
 export interface ReadConversationObservationsInput {
   butlerData: string;
   sessionId?: string | null;
+  conversationTurnId?: string | null;
   roles?: ConversationObservationRole[];
   since?: string | null;
   limit?: number;
@@ -213,17 +214,22 @@ export function readConversationObservations(
   const store = new AgentConversationStore({ butlerData: input.butlerData });
   try {
     const sessionId = resolveConversationObservationSessionId(store, input.sessionId ?? null);
-    const messages = store.readCognitionMessages({
-      sessionId,
-      roles: storeRolesForObservationRoles(input.roles),
-      since: input.since,
-      limit: input.maxMessages ?? input.limit ?? DEFAULT_OBSERVATION_LIMIT,
-      offset: input.offset,
-      includeCompacted: input.includeCompacted,
-      order: input.order,
-    });
+    const messages = input.conversationTurnId?.trim()
+      ? store.readMessagesForTurn(input.conversationTurnId.trim())
+      : store.readCognitionMessages({
+        sessionId,
+        roles: storeRolesForObservationRoles(input.roles),
+        since: input.since,
+        limit: input.maxMessages ?? input.limit ?? DEFAULT_OBSERVATION_LIMIT,
+        offset: input.offset,
+        includeCompacted: input.includeCompacted,
+        order: input.order,
+      });
+    const roles = storeRolesForObservationRoles(input.roles);
     const sessions = new Map<string, { project_id: string | null; workspace_id: string | null }>();
     return messages
+      .filter((message) => !sessionId || message.session_id === sessionId)
+      .filter((message) => !roles || roles.includes(message.role))
       .map((message) => {
         let session = sessions.get(message.session_id);
         if (!session) {
