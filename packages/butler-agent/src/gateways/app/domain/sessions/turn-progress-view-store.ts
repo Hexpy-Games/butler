@@ -116,6 +116,14 @@ export class AppTurnProgressViewStore {
       },
       created_at: turn.created_at,
       updated_at: turn.updated_at,
+      execution_controls: turn.execution_controls
+        ? {
+            model_ref: turn.execution_controls.model_ref,
+            reasoning_effort: turn.execution_controls.reasoning_effort,
+            source: turn.execution_controls.source,
+          }
+        : undefined,
+      execution_model: turn.execution_model,
     };
   }
 }

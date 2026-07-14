@@ -53,6 +53,7 @@ import type {
   MessageListView,
   MessageRecord,
   ModelCatalogView,
+  ModelCatalogState,
   NavigationView,
   ProjectDashboardDocument,
   ProjectSummary,
@@ -87,6 +88,7 @@ import {
   pruneReplacedClientTurnProgress,
   projectDraftId,
   titleFromPrompt,
+  runtimeModels,
 } from "./utils.ts";
 import { isServerBackedSessionId } from "./sessionIds.ts";
 
@@ -122,6 +124,7 @@ interface ButlerStore {
   sessionQueue: QueuedMessageRecord[];
   settings: SettingsView;
   modelCatalog: ModelCatalogView;
+  modelCatalogState: ModelCatalogState;
   status: StatusPill;
   isSending: boolean;
   sendingChatId: string | null;
@@ -157,6 +160,7 @@ interface ButlerStore {
   applyTimelineEvents: (events: TimelineEvent[]) => void;
   setSettings: (settings: SettingsView) => void;
   setModelCatalog: (modelCatalog: ModelCatalogView) => void;
+  setModelCatalogState: (modelCatalogState: ModelCatalogState) => void;
   setStatus: (status: Updater<StatusPill>) => void;
   setIsSending: (isSending: boolean) => void;
   setRetryingTurnId: (retryingTurnId: string | null) => void;
@@ -619,6 +623,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sessionQueue: [],
   settings: initialSettings,
   modelCatalog: EMPTY_MODEL_CATALOG,
+  modelCatalogState: "loading",
   status: { label: "connecting", tone: "muted" },
   isSending: false,
   sendingChatId: null,
@@ -830,11 +835,18 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : { settings: nextSettings };
     }),
   setModelCatalog: (modelCatalog) =>
-    set((state) =>
-      structurallyEqual(state.modelCatalog, modelCatalog)
-        ? state
-        : { modelCatalog },
-    ),
+    set((state) => {
+      const modelCatalogState =
+        runtimeModels(modelCatalog).length > 0 ? "ready" : "unavailable";
+      if (
+        structurallyEqual(state.modelCatalog, modelCatalog) &&
+        state.modelCatalogState === modelCatalogState
+      ) {
+        return state;
+      }
+      return { modelCatalog, modelCatalogState };
+    }),
+  setModelCatalogState: (modelCatalogState) => set({ modelCatalogState }),
   setStatus: (status) =>
     set((state) => {
       const nextStatus = resolveUpdate(status, state.status);

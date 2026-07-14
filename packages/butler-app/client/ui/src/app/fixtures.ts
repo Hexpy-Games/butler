@@ -1,5 +1,6 @@
 import { EMPTY_MODEL_CATALOG } from "./constants.ts";
 import type {
+  AppModelSummary,
   MessageRecord,
   ModelCatalogView,
   NavigationView,
@@ -7,14 +8,42 @@ import type {
   SessionSummaryView,
 } from "./types.ts";
 
+export const HARNESS_PRIMARY_MODEL: AppModelSummary = {
+  provider_id: "openai",
+  provider_label: "OpenAI",
+  model_id: "gpt-5.6-sol",
+  model_ref: "openai/gpt-5.6-sol",
+  display_name: "GPT-5.6 Sol",
+  status: "latest",
+  context_window_tokens: 1_050_000,
+  max_output_tokens: 128_000,
+  default_reasoning_effort: "medium",
+  reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+  token_estimator: "openai_tiktoken_o200k",
+  runtime_supported: true,
+};
+
+export const FIRST_RUN_TEST_MODEL: AppModelSummary = {
+  ...HARNESS_PRIMARY_MODEL,
+  model_id: "gpt-5.5",
+  model_ref: "openai/gpt-5.5",
+  display_name: "GPT-5.5",
+  context_window_tokens: 258_000,
+  default_reasoning_effort: "xhigh",
+  reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
+};
+
 export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
   ...EMPTY_MODEL_CATALOG,
+  generation: "harness-model-catalog-v1",
+  default_model_ref: HARNESS_PRIMARY_MODEL.model_ref,
+  default_reasoning_effort: HARNESS_PRIMARY_MODEL.default_reasoning_effort,
   providers: [
     {
       provider_id: "openai",
       provider_label: "OpenAI",
       latest_model_ref: "openai/gpt-5.6-sol",
-      models: EMPTY_MODEL_CATALOG.models,
+      models: [HARNESS_PRIMARY_MODEL],
     },
     {
       provider_id: "local",
@@ -44,7 +73,7 @@ export const HARNESS_MODEL_CATALOG: ModelCatalogView = {
     },
   ],
   models: [
-    ...EMPTY_MODEL_CATALOG.models,
+    HARNESS_PRIMARY_MODEL,
     {
       provider_id: "openai",
       provider_label: "OpenAI",

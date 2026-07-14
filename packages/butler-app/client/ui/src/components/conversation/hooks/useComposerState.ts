@@ -8,6 +8,7 @@ import {
 } from "@/app/utils.ts";
 import type {
   ModelCatalogView,
+  ComposerModelState,
   SessionSummaryView,
   SettingsView as SettingsData,
   TurnProgressSnapshot,
@@ -21,6 +22,7 @@ export function useComposerState(
   settings: SettingsData,
   modelCatalog: ModelCatalogView,
   model: string,
+  modelState: ComposerModelState,
   text: string,
   attachments: ComposerAttachment[],
   isSending: boolean,
@@ -41,13 +43,16 @@ export function useComposerState(
       firstCancellableWorker(workers),
   );
   const canSend =
-    hasSendableDraft && uploadingCount === 0 && (!isSending || activeTurn);
+    modelState === "ready" &&
+    hasSendableDraft &&
+    uploadingCount === 0 &&
+    (!isSending || activeTurn);
 
   const context = summary?.context_details;
   const models = runtimeModels(modelCatalog);
 
   const activeModel =
-    models.find((item) => item.model_ref === model) ?? models[0];
+    models.find((item) => item.model_ref === model);
 
   const availableReasoning = activeModel?.reasoning_efforts?.length
     ? activeModel.reasoning_efforts
@@ -63,6 +68,7 @@ export function useComposerState(
     activeTurn,
     context,
     models,
+    modelState,
     activeModel,
     availableReasoning,
     popoverThemeClass,

@@ -6,6 +6,9 @@ export function useComposerSession() {
   const turnProgress = useButlerStore((state) => state.turnProgress);
   const settings = useButlerStore((state) => state.settings);
   const modelCatalog = useButlerStore((state) => state.modelCatalog);
+  const modelCatalogState = useButlerStore(
+    (state) => state.modelCatalogState,
+  );
   const isSending = useButlerStore((state) => state.isSending);
   const sendingChatId = useButlerStore((state) => state.sendingChatId);
   const sendingOperations = useButlerStore((state) => state.sendingOperations);
@@ -27,6 +30,7 @@ export function useComposerSession() {
       (sendingChatId === activeChatId ||
         Object.values(sendingOperations).includes(activeChatId)),
     modelCatalog,
+    modelCatalogState,
     pendingProjectDocumentAttachment,
     sendMessage,
     settings,

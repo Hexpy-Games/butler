@@ -1,6 +1,7 @@
 import { test, expect } from "bun:test";
 import {
   listModelMetadata,
+  modelCatalogGeneration,
   modelSupportsJsonSchemaResponseFormat,
   modelStructuredDecisionTransport,
   resolveModelMetadata,
@@ -43,6 +44,16 @@ test("hosted provider registry aggregates provider model modules", () => {
       .map((model) => model.model_ref);
     expect(catalogRefs).toEqual(expectedRefs);
   }
+});
+
+test("model catalog generation is stable across timestamps and input order", () => {
+  const models = listModelMetadata().slice(0, 4);
+  expect(modelCatalogGeneration(models)).toBe(
+    modelCatalogGeneration([...models].reverse()),
+  );
+  expect(modelCatalogGeneration(models)).not.toBe(
+    modelCatalogGeneration(models.slice(0, 3)),
+  );
 });
 
 test("namespaced hosted model metadata resolves duplicate model ids by provider", () => {

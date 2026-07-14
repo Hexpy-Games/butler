@@ -8,7 +8,6 @@ import {
 import type {
   MessageRecord,
   MessageSendResult,
-  SessionControlState,
   TurnRecord,
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";

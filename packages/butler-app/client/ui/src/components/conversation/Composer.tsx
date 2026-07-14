@@ -39,6 +39,7 @@ export function Composer(props: ComposerProps) {
   const controls = useComposerControls(
     session.activeChatId,
     session.modelCatalog,
+    session.modelCatalogState,
     session.settings,
   );
   const files = useFileAttachments(session.activeChatId);
@@ -57,6 +58,7 @@ export function Composer(props: ComposerProps) {
     session.settings,
     session.modelCatalog,
     controls.model,
+    controls.modelState,
     text,
     files.attachments,
     session.isActiveChatSending,

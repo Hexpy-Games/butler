@@ -647,6 +647,7 @@ test("fresh app settings honor an install-selected local model default", async (
       expect.objectContaining({ id: "routine_work", model: "local/gemma-install" }),
     ]);
     const catalog = await getJson(`${server.url}model-catalog`);
+    expect(catalog.data.generation).toMatch(/^[a-f0-9]{64}$/);
     expect(catalog.data.default_model_ref).toBe("local/gemma-install");
     expect(catalog.data.default_reasoning_effort).toBe("none");
   } finally {
@@ -7139,6 +7140,20 @@ test("app transport session binding preserves selected reasoning effort", async 
     expect(sent.data.turn.execution_model).toEqual({
       requested_model_ref: "openai/gpt-5.5",
       adapter_effective_model_ref: "openai/gpt-5.5",
+    });
+    const sessionView = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(sessionView.data.active_turn).toMatchObject({
+      id: sent.data.turn.id,
+      execution_controls: {
+        model_ref: "openai/gpt-5.5",
+        reasoning_effort: "low",
+      },
+      execution_model: {
+        requested_model_ref: "openai/gpt-5.5",
+        adapter_effective_model_ref: "openai/gpt-5.5",
+      },
     });
 
     const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));

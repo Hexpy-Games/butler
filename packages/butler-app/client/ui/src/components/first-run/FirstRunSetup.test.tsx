@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
+import { FIRST_RUN_TEST_MODEL } from "@/app/fixtures.ts";
 import {
   createInitialFirstRunState,
   type FirstRunState,
@@ -810,7 +811,7 @@ function hasSettingsPatchFields(
 function firstRunModelCatalog(
   authMethods: ProviderAuthMethod[] = ["api_key", "codex_oauth"],
 ): ModelCatalogView {
-  const defaultModel = EMPTY_MODEL_CATALOG.models[0]!;
+  const defaultModel = FIRST_RUN_TEST_MODEL;
   return {
     ...EMPTY_MODEL_CATALOG,
     providers: [
@@ -842,7 +843,7 @@ function firstRunRegisteredModelCatalog(
   authType: ProviderAuthMethod = "api_key",
 ): ModelCatalogView {
   const defaultModel: AppModelSummary = {
-    ...EMPTY_MODEL_CATALOG.models[0]!,
+    ...FIRST_RUN_TEST_MODEL,
     registered: true,
     auth_type: authType,
     ...(authType === "api_key"

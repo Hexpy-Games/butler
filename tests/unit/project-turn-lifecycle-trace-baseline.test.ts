@@ -12,7 +12,7 @@ const SESSION_ID = "project-simulation-sandy";
 const TURN_ID = "turn-simulation-a";
 
 describe("project turn lifecycle execution trace baseline", () => {
-  test("records the real-model bootstrap placeholder failure through runtimeModels", () => {
+  test("records that bootstrap does not fabricate a real model through runtimeModels", () => {
     const models = runtimeModels(EMPTY_MODEL_CATALOG);
     const trace = new MessageLifecycleTrace(
       "bootstrap-model-placeholder-baseline",
@@ -30,17 +30,15 @@ describe("project turn lifecycle execution trace baseline", () => {
       stateWritten: { renderer_model_ref: models[0]?.model_ref ?? null },
       outputOrNextCall: { next: "useComposerControls.applyControls" },
       invariant:
-        models[0]?.model_ref === "openai/gpt-5.5" ? "fail" : "pass",
+        models.length === 0 && EMPTY_MODEL_CATALOG.default_model_ref === ""
+          ? "pass"
+          : "fail",
       evidence: "direct runtimeModels call",
     });
 
     const artifact = trace.artifact();
-    expect(failedInvariantSteps(artifact).map((step) => step.step)).toEqual([
-      "A1",
-    ]);
-    expect(artifact.steps[0]?.stateWritten.renderer_model_ref).toBe(
-      "openai/gpt-5.5",
-    );
+    expect(failedInvariantSteps(artifact)).toEqual([]);
+    expect(artifact.steps[0]?.stateWritten.renderer_model_ref).toBeNull();
   });
 
   test("records accepted-turn controls through createAppInboundEnvelope", () => {

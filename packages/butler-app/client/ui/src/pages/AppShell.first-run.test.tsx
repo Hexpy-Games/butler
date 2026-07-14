@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
+import { FIRST_RUN_TEST_MODEL } from "@/app/fixtures.ts";
 import {
   createInitialFirstRunState,
   FIRST_RUN_STORAGE_KEY,
@@ -266,9 +267,9 @@ async function renderAppShell(
           {
             provider_id: "openai",
             provider_label: "OpenAI",
-            latest_model_ref: EMPTY_MODEL_CATALOG.models[0]!.model_ref,
+            latest_model_ref: FIRST_RUN_TEST_MODEL.model_ref,
             auth_methods: authMethods,
-            models: [EMPTY_MODEL_CATALOG.models[0]!],
+            models: [FIRST_RUN_TEST_MODEL],
           },
         ],
         provider_credentials: [
@@ -336,7 +337,7 @@ function buttonByLabel(
 
 function firstRunRegisteredModelCatalog(): ModelCatalogView {
   const defaultModel: AppModelSummary = {
-    ...EMPTY_MODEL_CATALOG.models[0]!,
+    ...FIRST_RUN_TEST_MODEL,
     registered: true,
     auth_type: "api_key",
     credential_id: "cred-test",
