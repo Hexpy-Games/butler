@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -17,7 +18,14 @@ import { join } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
-import { principalTurnCancellationSocketPath } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
+import {
+  principalTurnCancellationSocketPath,
+  startPrincipalTurnCancellationServer,
+} from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
+import {
+  NativeInboundQueue,
+  type QueuedInboundEvent,
+} from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import {
@@ -2814,6 +2822,217 @@ test("App Stop falls back to the existing native tick and preserves its public s
   } finally {
     shutdown.abort();
     await nativeMain;
+    server.stop();
+  }
+});
+
+test("App Stop terminalizes an exact ordinary claim after its processing owner dies", async () => {
+  const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
+  mkdirSync(join(tempDir, "app-server"), { recursive: true });
+  let server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  const sent = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "preserve this interrupted implementation",
+  });
+  const turnId = sent.data.turn.id as string;
+  const queue = new NativeInboundQueue(tempDir);
+  const [claimed] = queue.claimEligible(
+    1,
+    (item) => item.envelope.routingHints?.turnId === turnId,
+    new Date("2026-07-14T07:08:33.000Z"),
+    15 * 60_000,
+  );
+  expect(claimed?.envelope.routingHints?.turnId).toBe(turnId);
+
+  const deadOwner = spawn(process.execPath, ["-e", "process.exit(0)"], {
+    stdio: "ignore",
+  });
+  await new Promise<void>((resolve, reject) => {
+    deadOwner.once("exit", () => resolve());
+    deadOwner.once("error", reject);
+  });
+  expect(deadOwner.pid).toBeNumber();
+  const claimedRecord = JSON.parse(
+    readFileSync(claimed!.path, "utf8"),
+  ) as QueuedInboundEvent;
+  claimedRecord.processing = {
+    ...claimedRecord.processing!,
+    ownerId: `${deadOwner.pid}:terminated-native-owner`,
+  };
+  writeFileSync(
+    claimed!.path,
+    `${JSON.stringify(claimedRecord, null, 2)}\n`,
+    "utf8",
+  );
+
+  const publicMessageId = "msg-dead-owner-public-snapshot";
+  const stateDb = new Database(dbPath);
+  stateDb.query(`
+    INSERT INTO messages (
+      id, chat_id, turn_id, role, text, status, created_at, updated_at,
+      safe_error_code, retryable
+    ) VALUES (?, 'general', ?, 'assistant', ?, 'streaming', ?, ?, NULL, 0)
+  `).run(
+    publicMessageId,
+    turnId,
+    "구현 중 공개된 진행 내용",
+    "2026-07-14T07:09:49.000Z",
+    "2026-07-14T07:09:49.000Z",
+  );
+  stateDb.close();
+
+  server.stop();
+  const cancellationServer = await startPrincipalTurnCancellationServer(tempDir);
+  server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  try {
+    const cancelled = await postJson(
+      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
+      {},
+    );
+    expect(cancelled.data.turn).toMatchObject({ id: turnId, state: "cancelled" });
+
+    const settlementDb = new Database(dbPath, { readonly: true });
+    expect(
+      settlementDb.query<{
+        state: string;
+        accepted_at: string | null;
+        completed_at: string | null;
+      }, [string]>(`
+        SELECT state, accepted_at, completed_at
+        FROM app_turn_cancel_outbox
+        WHERE turn_id = ?
+      `).get(turnId),
+    ).toMatchObject({
+      state: "completed",
+      accepted_at: expect.any(String),
+      completed_at: expect.any(String),
+    });
+    settlementDb.close();
+
+    const processedPath = join(
+      tempDir,
+      "runtime",
+      "inbound-events",
+      "processed",
+      `${claimed!.queueId}.json`,
+    );
+    expect(existsSync(claimed!.path)).toBe(false);
+    expect(existsSync(processedPath)).toBe(true);
+    const processed = JSON.parse(readFileSync(processedPath, "utf8"));
+    expect(processed.metadata).toMatchObject({
+      dispatchStatus: "cancelled-principal-turn",
+      handled: false,
+      cancelled: true,
+      terminalClaimId: claimed!.processing.claimId,
+    });
+    expect(queue.claim(1)).toEqual([]);
+
+    const view = await getJson(`${server.url}session-view?session_id=general`);
+    expect(view.data.active_turn).toBeNull();
+    expect(view.data.latest_turn).toMatchObject({ id: turnId, state: "cancelled" });
+    expect(view.data.messages).toContainEqual(expect.objectContaining({
+      id: publicMessageId,
+      turn_id: turnId,
+      text: "구현 중 공개된 진행 내용",
+      status: "cancelled",
+    }));
+  } finally {
+    server.stop();
+    await cancellationServer.close();
+  }
+});
+
+test("SessionView resumes staged dead-owner settlement before outbox completion", async () => {
+  const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
+  mkdirSync(join(tempDir, "app-server"), { recursive: true });
+  let server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  const sent = await postJson(`${server.url}messages`, {
+    chat_id: "general",
+    text: "resume interrupted cancellation settlement",
+  });
+  const turnId = sent.data.turn.id as string;
+  const queue = new NativeInboundQueue(tempDir);
+  const [claimed] = queue.claimEligible(
+    1,
+    (item) => item.envelope.routingHints?.turnId === turnId,
+    new Date("2026-07-14T07:08:33.000Z"),
+    15 * 60_000,
+  );
+  const claimedRecord = JSON.parse(
+    readFileSync(claimed!.path, "utf8"),
+  ) as QueuedInboundEvent;
+  claimedRecord.processing = {
+    ...claimedRecord.processing!,
+    ownerId: "999999:dead-owner",
+  };
+  writeFileSync(
+    claimed!.path,
+    `${JSON.stringify(claimedRecord, null, 2)}\n`,
+    "utf8",
+  );
+
+  const interruptedDb = new Database(dbPath);
+  interruptedDb.transaction(() => {
+    interruptedDb.query(`
+      UPDATE turns
+      SET state = 'cancelling', safe_status_label = 'Stopping', cancellable = 0
+      WHERE id = ?
+    `).run(turnId);
+    interruptedDb.query(`
+      INSERT INTO app_turn_cancel_outbox (
+        turn_id, queue_id, dispatch_claim_id, state, created_at, accepted_at
+      ) VALUES (?, ?, ?, 'accepted', ?, ?)
+    `).run(
+      turnId,
+      claimed!.queueId,
+      claimed!.processing.claimId,
+      "2026-07-14T07:14:44.000Z",
+      "2026-07-14T07:14:45.000Z",
+    );
+  })();
+  interruptedDb.close();
+  const settlingPath = `${claimed!.path}.cancelling-${claimed!.processing.claimId}`;
+  renameSync(claimed!.path, settlingPath);
+  expect(existsSync(settlingPath)).toBe(true);
+
+  server.stop();
+  server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    butlerHome: process.cwd(),
+    port: 0,
+  });
+  try {
+    const view = await getJson(
+      `${server.url}session-view?session_id=general`,
+    );
+    expect(view.data.active_turn).toBeNull();
+    expect(view.data.latest_turn).toMatchObject({ id: turnId, state: "cancelled" });
+    expect(existsSync(settlingPath)).toBe(false);
+    const settlementDb = new Database(dbPath, { readonly: true });
+    expect(
+      settlementDb.query<{ state: string }, [string]>(`
+        SELECT state FROM app_turn_cancel_outbox WHERE turn_id = ?
+      `).get(turnId)?.state,
+    ).toBe("completed");
+    settlementDb.close();
+    expect(queue.claim(1)).toEqual([]);
+  } finally {
     server.stop();
   }
 });
