@@ -11,6 +11,7 @@ import {
   turnContextAtomsForTurn,
 } from "./turn-continuation-context.ts";
 import { TurnContractStore } from "./turn-contract-store.ts";
+import { cancelCurrentFinalCandidate } from "./native/turn-runner/final-candidate-review-store.ts";
 
 const CANCELLATION_RECONCILIATION_ATTEMPTS = 4;
 const CANCELLATION_LOCK_WAIT_MS = 75;
@@ -21,6 +22,7 @@ export function cancelPersistedRuntimeTurn(input: {
   contractIds?: readonly string[];
 }): void {
   recordPrincipalTurnCancellation({ butlerData: input.butlerData, turnId: input.turnId });
+  cancelCurrentFinalCandidate(input);
   const contracts = new TurnContractStore(input.butlerData);
   const streams = new WorkStreamStore(input.butlerData, { autoRecover: false });
   const claims = new WorkStreamClaimStore(input.butlerData);
