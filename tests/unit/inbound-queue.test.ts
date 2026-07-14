@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { FileQueueButlerServiceClient } from "../../packages/butler-agent/src/gateways/core/client.ts";
@@ -199,6 +206,158 @@ test("native inbound queue keeps ordinary dead-owner claims behind the lease fen
       staleAfterMs: 15 * 60_000,
       now: new Date("2026-04-27T00:01:00.000Z"),
     })).toEqual({ requeued: 0, skipped: 1 });
+    expect(existsSync(claimed!.path)).toBe(true);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue terminalizes only the exact cancelled dead-owner claim", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const turnId = "turn-dead-owner-cancel";
+    const queued = queue.enqueue({
+      ...envelope("automation:dead-owner-cancel"),
+      routingHints: {
+        sessionId: "butler/main",
+        turnId,
+      },
+    });
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-07-14T07:08:33.000Z"),
+      15 * 60_000,
+    );
+    expect(claimed?.queueId).toBe(queued.queueId);
+    const record = JSON.parse(
+      readFileSync(claimed!.path, "utf8"),
+    ) as QueuedInboundEvent;
+    record.processing = {
+      ...record.processing!,
+      ownerId: "999999:dead-owner",
+    };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+    expect(queue.settleDeadOwnerCancellation({
+      turnId,
+      queueId: queued.queueId,
+      dispatchClaimId: "wrong-claim",
+    })).toBe("execution_identity_mismatch");
+    expect(existsSync(claimed!.path)).toBe(true);
+
+    const identity = {
+      turnId,
+      queueId: queued.queueId,
+      dispatchClaimId: claimed!.processing.claimId,
+    };
+    expect(queue.settleDeadOwnerCancellation({
+      ...identity,
+      now: new Date("2026-07-14T07:14:45.000Z"),
+    })).toBe("completed");
+    expect(queue.settleDeadOwnerCancellation(identity)).toBe("already_completed");
+    expect(existsSync(claimed!.path)).toBe(false);
+    expect(queue.claim(1)).toEqual([]);
+
+    const processed = JSON.parse(readFileSync(join(
+      butlerData,
+      "runtime",
+      "inbound-events",
+      "processed",
+      `${queued.queueId}.json`,
+    ), "utf8"));
+    expect(processed).toMatchObject({
+      processedAt: "2026-07-14T07:14:45.000Z",
+      metadata: {
+        dispatchStatus: "cancelled-principal-turn",
+        handled: false,
+        cancelled: true,
+        terminalClaimId: claimed!.processing.claimId,
+      },
+    });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue resumes an interrupted dead-owner settlement staging record", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const turnId = "turn-interrupted-dead-owner-settlement";
+    queue.enqueue({
+      ...envelope("automation:interrupted-dead-owner-settlement"),
+      routingHints: { sessionId: "butler/main", turnId },
+    });
+    const [claimed] = queue.claim(1);
+    const record = JSON.parse(
+      readFileSync(claimed!.path, "utf8"),
+    ) as QueuedInboundEvent;
+    record.processing = {
+      ...record.processing!,
+      ownerId: "999999:dead-owner",
+    };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+    const settlingPath = `${claimed!.path}.cancelling-${claimed!.processing.claimId}`;
+    renameSync(claimed!.path, settlingPath);
+
+    expect(queue.settleDeadOwnerCancellation({
+      turnId,
+      queueId: claimed!.queueId,
+      dispatchClaimId: claimed!.processing.claimId,
+    })).toBe("completed");
+    expect(existsSync(settlingPath)).toBe(false);
+    expect(existsSync(join(
+      butlerData,
+      "runtime",
+      "inbound-events",
+      "processed",
+      `${claimed!.queueId}.json`,
+    ))).toBe(true);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue refuses cancellation settlement for live and unknown owners", () => {
+  const butlerData = tempRoot();
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const turnId = "turn-protected-cancel-owner";
+    queue.enqueue({
+      ...envelope("automation:protected-cancel-owner"),
+      routingHints: {
+        sessionId: "butler/main",
+        turnId,
+      },
+    });
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-07-14T07:08:33.000Z"),
+      15 * 60_000,
+    );
+    const identity = {
+      turnId,
+      queueId: claimed!.queueId,
+      dispatchClaimId: claimed!.processing.claimId,
+    };
+    expect(queue.settleDeadOwnerCancellation(identity)).toBe(
+      "processing_owner_alive",
+    );
+
+    const record = JSON.parse(
+      readFileSync(claimed!.path, "utf8"),
+    ) as QueuedInboundEvent;
+    record.processing = {
+      ...record.processing!,
+      ownerId: "uninspectable-owner",
+    };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+    expect(queue.settleDeadOwnerCancellation(identity)).toBe(
+      "processing_owner_unknown",
+    );
     expect(existsSync(claimed!.path)).toBe(true);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });

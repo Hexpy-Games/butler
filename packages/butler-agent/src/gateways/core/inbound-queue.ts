@@ -37,6 +37,23 @@ export interface RecoverStaleProcessingSummary {
   skipped: number;
 }
 
+export interface DeadOwnerCancellationSettlementOptions {
+  turnId: string;
+  queueId: string;
+  dispatchClaimId: string;
+  now?: Date;
+}
+
+export type DeadOwnerCancellationSettlementOutcome =
+  | "completed"
+  | "already_completed"
+  | "processing_claim_missing"
+  | "execution_identity_mismatch"
+  | "processing_owner_alive"
+  | "processing_owner_unknown"
+  | "pending_record_exists"
+  | "terminal_record_exists";
+
 let enqueueSequence = 0;
 
 function safeQueueId(eventId: string): string {
@@ -225,6 +242,102 @@ export class NativeInboundQueue {
     return summary;
   }
 
+  settleDeadOwnerCancellation(
+    options: DeadOwnerCancellationSettlementOptions,
+  ): DeadOwnerCancellationSettlementOutcome {
+    if (
+      !validQueueToken(options.queueId) ||
+      !validQueueToken(options.dispatchClaimId)
+    ) return "execution_identity_mismatch";
+    const processingPath = join(
+      this.dir("processing"),
+      `${options.queueId}.json`,
+    );
+    const settlingPath = deadOwnerCancellationSettlingPath(
+      processingPath,
+      options.dispatchClaimId,
+    );
+    const processedPath = join(
+      this.dir("processed"),
+      `${options.queueId}.json`,
+    );
+    const processed = this.readQueuedRecord(processedPath);
+    if (processed) {
+      if (!cancelledTerminalMatches(processed, options)) {
+        return "terminal_record_exists";
+      }
+      try {
+        if (existsSync(settlingPath)) {
+          renameSync(settlingPath, `${processingPath}.done`);
+        }
+      } catch {}
+      return "already_completed";
+    }
+    if (existsSync(join(this.dir("failed"), `${options.queueId}.json`))) {
+      return "terminal_record_exists";
+    }
+
+    const existingSettlingRecord = this.readQueuedRecord(settlingPath);
+    const record = existingSettlingRecord ?? this.readQueuedRecord(processingPath);
+    if (!record) return "processing_claim_missing";
+    if (!processingIdentityMatches(record, options)) {
+      return "execution_identity_mismatch";
+    }
+    const ownerLiveness = processingOwnerLiveness(record.processing?.ownerId);
+    if (ownerLiveness === "alive") return "processing_owner_alive";
+    if (ownerLiveness === "unknown") return "processing_owner_unknown";
+    const pendingPath = join(this.dir("pending"), `${options.queueId}.json`);
+    if (existsSync(pendingPath)) {
+      return "pending_record_exists";
+    }
+
+    if (!existingSettlingRecord) {
+      try {
+        renameSync(processingPath, settlingPath);
+      } catch {
+        if (existsSync(pendingPath)) return "pending_record_exists";
+        const racedTerminal = this.readQueuedRecord(processedPath);
+        if (racedTerminal && cancelledTerminalMatches(racedTerminal, options)) {
+          return "already_completed";
+        }
+        return "processing_claim_missing";
+      }
+    }
+    const current = this.readQueuedRecord(settlingPath);
+    if (!current || !processingIdentityMatches(current, options)) {
+      return "execution_identity_mismatch";
+    }
+    const currentOwnerLiveness = processingOwnerLiveness(
+      current.processing?.ownerId,
+    );
+    if (currentOwnerLiveness === "alive") return "processing_owner_alive";
+    if (currentOwnerLiveness === "unknown") return "processing_owner_unknown";
+    try {
+      atomicWriteJson(processedPath, {
+        ...current,
+        processedAt: (options.now ?? new Date()).toISOString(),
+        processingPath: undefined,
+        processing: undefined,
+        metadata: {
+          ...current.metadata,
+          dispatchStatus: "cancelled-principal-turn",
+          handled: false,
+          cancelled: true,
+          terminalClaimId: options.dispatchClaimId,
+        },
+      });
+    } catch (error) {
+      try {
+        renameSync(settlingPath, processingPath);
+      } catch {}
+      throw error;
+    }
+    try {
+      renameSync(settlingPath, `${processingPath}.done`);
+    } catch {}
+    return "completed";
+  }
+
   complete(item: ClaimedInboundEvent, metadata: Record<string, unknown> = {}, now = new Date()): boolean {
     if (!this.ownsProcessingClaim(item)) return false;
     atomicWriteJson(join(this.dir("processed"), `${item.queueId}.json`), {
@@ -289,4 +402,35 @@ function processingOwnerLiveness(ownerId: string | undefined): "alive" | "dead" 
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "ESRCH" ? "dead" : "alive";
   }
+}
+
+function validQueueToken(token: string): boolean {
+  return /^[A-Za-z0-9._:-]{1,240}$/u.test(token);
+}
+
+function deadOwnerCancellationSettlingPath(
+  processingPath: string,
+  dispatchClaimId: string,
+): string {
+  return `${processingPath}.cancelling-${dispatchClaimId}`;
+}
+
+function processingIdentityMatches(
+  record: QueuedInboundEvent,
+  options: DeadOwnerCancellationSettlementOptions,
+): boolean {
+  return record.queueId === options.queueId &&
+    record.envelope.routingHints?.turnId === options.turnId &&
+    record.processing?.claimId === options.dispatchClaimId;
+}
+
+function cancelledTerminalMatches(
+  record: QueuedInboundEvent,
+  options: DeadOwnerCancellationSettlementOptions,
+): boolean {
+  return record.queueId === options.queueId &&
+    record.envelope.routingHints?.turnId === options.turnId &&
+    record.metadata.dispatchStatus === "cancelled-principal-turn" &&
+    record.metadata.cancelled === true &&
+    record.metadata.terminalClaimId === options.dispatchClaimId;
 }
