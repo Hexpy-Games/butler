@@ -12,7 +12,6 @@ import {
 import type { MessageRow } from "../core/records.ts";
 import type { AppTransportProjectionStoreOptions } from "./transport-projection-contract.ts";
 import { artifactFilesFromOutbound } from "./outbound-artifact-files.ts";
-import { queuedFinalProjectionDisposition } from "./inbound-queue-terminal-records.ts";
 
 export function projectAppFinalResult(input: {
   options: AppTransportProjectionStoreOptions;
@@ -28,6 +27,7 @@ export function projectAppFinalResult(input: {
   message: Record<string, unknown>;
   metadata: Record<string, unknown>;
   terminalRecoverableCorrection: boolean;
+  queuedFinalProjection: "accept" | "reject";
 }): boolean {
   const {
     options,
@@ -39,16 +39,12 @@ export function projectAppFinalResult(input: {
     message,
     metadata,
     terminalRecoverableCorrection,
+    queuedFinalProjection,
   } = input;
-  const queuedFinalProjection = queuedFinalProjectionDisposition({
-    butlerData: options.butlerData,
-    metadata,
-  });
   if (queuedFinalProjection === "reject") {
     markProjectedTransportEvent(actionId, event.eventId, chatId);
     return false;
   }
-  if (queuedFinalProjection === "defer") return false;
 
   const text = sanitizeAppTransportFinalText(message.text);
   const artifacts = artifactRefsFromOutboundMessage(message.artifacts);
