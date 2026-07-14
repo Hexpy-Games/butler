@@ -68,4 +68,3 @@ export function failedInvariantSteps(
 ): MessageLifecycleTraceStep[] {
   return artifact.steps.filter((step) => step.invariant === "fail");
 }
-
