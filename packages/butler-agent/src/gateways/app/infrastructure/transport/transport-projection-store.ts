@@ -22,6 +22,7 @@ import { TURN_ACKNOWLEDGED_EVENT_KIND } from "../../../../agent/events/turn-stat
 import { AppTransportTranscriptSyncStore } from "./transcript-sync-store.ts";
 import { AppProjectedTransportEventStore } from "./projected-transport-event-store.ts";
 import {
+  queuedFinalProjectionDisposition,
   recoverableLimitedFinalForFailedQueueDisposition,
 } from "./inbound-queue-terminal-records.ts";
 import { projectAppFinalResult } from "./final-result-projection.ts";
@@ -36,12 +37,18 @@ interface PendingAppTurnEventOutbound {
   event: TranscriptEvent;
 }
 
+type DeferredQueuedFinalOutbound = PendingAppTurnEventOutbound;
+
 export class AppTransportProjectionStore {
   private readonly transcriptSync: AppTransportTranscriptSyncStore;
   private readonly projectedEvents: AppProjectedTransportEventStore;
   private readonly pendingAppTurnEventOutbounds = new Map<
     string,
     PendingAppTurnEventOutbound
+  >();
+  private readonly deferredQueuedFinalOutbounds = new Map<
+    string,
+    DeferredQueuedFinalOutbound
   >();
 
   constructor(private readonly options: AppTransportProjectionStoreOptions) {
@@ -56,11 +63,18 @@ export class AppTransportProjectionStore {
   }
 
   syncAll(): number {
-    return this.transcriptSync.syncAll();
+    const transcriptProjectionCount = this.transcriptSync.syncAll();
+    return (
+      transcriptProjectionCount + this.reconcileDeferredQueuedFinalOutbounds()
+    );
   }
 
   syncChat(chatId: string): number {
-    return this.transcriptSync.syncChat(chatId);
+    const transcriptProjectionCount = this.transcriptSync.syncChat(chatId);
+    return (
+      transcriptProjectionCount +
+      this.reconcileDeferredQueuedFinalOutbounds(chatId)
+    );
   }
 
   private projectAppOutboundEvent(
@@ -156,6 +170,15 @@ export class AppTransportProjectionStore {
     }
 
     if (metadata.kind !== "final_result") return false;
+    const queuedFinalProjection = queuedFinalProjectionDisposition({
+      butlerData: this.options.butlerData,
+      metadata,
+    });
+    if (queuedFinalProjection === "defer") {
+      this.deferredQueuedFinalOutbounds.set(actionId, { chatId, event });
+      return false;
+    }
+    this.deferredQueuedFinalOutbounds.delete(actionId);
     return projectAppFinalResult({
       options: this.options,
       markProjectedTransportEvent: (id, eventId, targetChatId) =>
@@ -167,7 +190,28 @@ export class AppTransportProjectionStore {
       message,
       metadata,
       terminalRecoverableCorrection,
+      queuedFinalProjection,
     });
+  }
+
+  private reconcileDeferredQueuedFinalOutbounds(chatId?: string): number {
+    let projectedCount = 0;
+    for (const [actionId, pending] of [
+      ...this.deferredQueuedFinalOutbounds.entries(),
+    ]) {
+      if (chatId && pending.chatId !== chatId) continue;
+      if (this.hasProjectedTransportEvent(actionId)) {
+        this.deferredQueuedFinalOutbounds.delete(actionId);
+        continue;
+      }
+      if (this.projectAppOutboundEvent(pending.chatId, pending.event)) {
+        projectedCount += 1;
+      }
+      if (this.hasProjectedTransportEvent(actionId)) {
+        this.deferredQueuedFinalOutbounds.delete(actionId);
+      }
+    }
+    return projectedCount;
   }
 
   private projectAppDeliveryEvent(event: TranscriptEvent): boolean {
