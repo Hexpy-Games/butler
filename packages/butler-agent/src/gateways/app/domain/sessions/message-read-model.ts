@@ -117,12 +117,6 @@ export function turnFromRow(row: TurnReadModelRow): TurnRecord {
     updated_at: row.updated_at,
     cursor: row.rowid,
     execution_controls: executionControls,
-    execution_model: executionControls
-      ? {
-          requested_model_ref: executionControls.model_ref,
-          adapter_effective_model_ref: executionControls.model_ref,
-        }
-      : undefined,
   };
 }
 

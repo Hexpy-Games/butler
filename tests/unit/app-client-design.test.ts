@@ -2446,6 +2446,11 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain('data-test-class="composer-model-name"');
   expect(renderer).toContain('data-test-class="composer-model-summary"');
   expect(renderer).toContain("reasoningBudgetSummary(activeModel, reasoning)");
+  expect(renderer).not.toContain("activeExecutionTurn");
+  expect(renderer).not.toContain("latestExecutionTurn");
+  expect(renderer).not.toContain("executionModelDetail");
+  expect(renderer).not.toContain("최근 실행:");
+  expect(renderer).not.toContain("Last run:");
   expect(renderer).toContain("DisclosureRow");
   expect(css).toMatch(
     /\.planToggle\s*\{[\s\S]*border-radius:\s*var\(--radius-pill\);/,

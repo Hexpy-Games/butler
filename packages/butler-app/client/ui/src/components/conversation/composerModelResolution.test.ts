@@ -3,7 +3,6 @@ import { EMPTY_MODEL_CATALOG, EMPTY_SETTINGS } from "@/app/constants.ts";
 import { HARNESS_MODEL_CATALOG } from "@/app/fixtures.ts";
 import { runtimeModels } from "@/app/utils.ts";
 import { resolveComposerModelTruth } from "./composerModelResolution.ts";
-import { executionModelDetail } from "./composerModelTruth.ts";
 
 describe("composer model truth", () => {
   test("empty bootstrap state never fabricates a real model", () => {
@@ -85,30 +84,4 @@ describe("composer model truth", () => {
     expect(result.metadata).toBeUndefined();
   });
 
-  test("labels adapter-effective execution evidence separately from selection", () => {
-    expect(
-      executionModelDetail({
-        active: true,
-        models: HARNESS_MODEL_CATALOG.models,
-        turn: {
-          id: "turn-a",
-          state: "thinking",
-          cancellable: true,
-          retryable: false,
-          progress: { safe_progress_rows: [] },
-          created_at: "2026-07-14T00:00:00.000Z",
-          updated_at: "2026-07-14T00:00:00.000Z",
-          execution_controls: {
-            model_ref: "openai/gpt-5.6-sol",
-            reasoning_effort: "medium",
-            source: "session_override",
-          },
-          execution_model: {
-            requested_model_ref: "openai/gpt-5.6-sol",
-            adapter_effective_model_ref: "openai/gpt-5.6-sol",
-          },
-        },
-      }),
-    ).toContain("GPT-5.6 Sol · medium");
-  });
 });

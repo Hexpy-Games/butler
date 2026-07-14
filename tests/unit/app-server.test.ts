@@ -7137,10 +7137,7 @@ test("app transport session binding preserves selected reasoning effort", async 
       source: "message_override",
       session_control_revision: 1,
     });
-    expect(sent.data.turn.execution_model).toEqual({
-      requested_model_ref: "openai/gpt-5.5",
-      adapter_effective_model_ref: "openai/gpt-5.5",
-    });
+    expect(sent.data.turn.execution_model).toBeUndefined();
     const sessionView = await getJson(
       `${server.url}session-view?session_id=general`,
     );
@@ -7150,11 +7147,8 @@ test("app transport session binding preserves selected reasoning effort", async 
         model_ref: "openai/gpt-5.5",
         reasoning_effort: "low",
       },
-      execution_model: {
-        requested_model_ref: "openai/gpt-5.5",
-        adapter_effective_model_ref: "openai/gpt-5.5",
-      },
     });
+    expect(sessionView.data.active_turn.execution_model).toBeUndefined();
 
     const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
     try {

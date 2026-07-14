@@ -106,8 +106,6 @@ export interface AppCopy {
     modelLoading: string;
     modelUnavailable: string;
     modelError: string;
-    runningModel: (model: string, reasoning: string) => string;
-    lastRunModel: (model: string, reasoning: string) => string;
     reasoning: string;
     reasoningEffort: string;
     send: string;
@@ -751,8 +749,6 @@ const koKrCopy: AppCopy = {
     modelLoading: "모델 확인 중",
     modelUnavailable: "선택한 모델 사용 불가",
     modelError: "모델 상태 오류",
-    runningModel: (model, reasoning) => `실행: ${model} · ${reasoning}`,
-    lastRunModel: (model, reasoning) => `최근 실행: ${model} · ${reasoning}`,
     reasoning: "추론",
     reasoningEffort: "추론 강도",
     send: "전송",
@@ -1473,8 +1469,6 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     modelLoading: "Checking model",
     modelUnavailable: "Selected model unavailable",
     modelError: "Model state error",
-    runningModel: (model, reasoning) => `Running: ${model} · ${reasoning}`,
-    lastRunModel: (model, reasoning) => `Last run: ${model} · ${reasoning}`,
     reasoning: "Reasoning",
     reasoningEffort: "Reasoning effort",
     send: "Send",
