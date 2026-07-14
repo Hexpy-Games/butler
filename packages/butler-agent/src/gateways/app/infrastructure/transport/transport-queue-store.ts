@@ -28,10 +28,13 @@ import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
 import type {
   MessageRecord,
   SettingsView,
-  SessionControlState,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
+import {
+  verifyTurnExecutionControls,
+  type TurnExecutionControlsV1,
+} from "../../../core/turn-execution-controls.ts";
 
 export class AppTransportQueueStore {
   constructor(
@@ -74,9 +77,18 @@ export class AppTransportQueueStore {
     turnId: string;
     message: MessageRecord;
     text: string;
-    controls: SessionControlState;
+    executionControls: TurnExecutionControlsV1;
   }): TurnRecord {
     try {
+      const executionControls = verifyTurnExecutionControls(
+        input.executionControls,
+      );
+      if (
+        executionControls.turn_id !== input.turnId ||
+        executionControls.session_id !== input.chatId
+      ) {
+        throw new Error("turn_execution_controls_identity_mismatch");
+      }
       this.assertAppTransportExecutorReady();
       const chat = this.getChatRow(input.chatId);
       const project = chat?.project_id
@@ -88,7 +100,7 @@ export class AppTransportQueueStore {
         sessionId,
         project,
         sessionKind: chat?.kind ?? "chat",
-        controls: input.controls,
+        executionControls,
       });
       const queued = this.serviceClient.enqueueAppTurn(
         {
@@ -103,6 +115,7 @@ export class AppTransportQueueStore {
           senderId: APP_SENDER_ID,
           senderDisplayName: "Butler App",
           projectId: chat?.project_id ?? undefined,
+          executionControls,
           attachments: this.messageFiles.attachmentsForTransport(
             input.message.id,
           ),
@@ -119,6 +132,8 @@ export class AppTransportQueueStore {
         turn_id: input.turnId,
         transport: APP_TRANSPORT,
         queue_id: queued.queueId,
+        requested_model_ref: executionControls.model_ref,
+        reasoning_effort: executionControls.reasoning_effort,
       });
       return this.getTurn(input.turnId);
     } catch (error) {
@@ -179,11 +194,11 @@ export class AppTransportQueueStore {
     sessionId: string;
     project: ProjectRow | null;
     sessionKind: ChatRow["kind"];
-    controls: SessionControlState;
+    executionControls: TurnExecutionControlsV1;
   }): void {
     const existing = this.sessionBindingStore.getBySessionId(input.sessionId);
     const modelRef = normalizeAppModelRef(
-      input.controls.model ?? existing?.modelRef,
+      input.executionControls.model_ref ?? existing?.modelRef,
     );
     const appBinding: SessionTransportBinding = {
       transport: APP_TRANSPORT,
@@ -197,7 +212,7 @@ export class AppTransportQueueStore {
     const settings = this.getSettings();
     const runtimePolicy = appRuntimePolicy({
       existing: existing?.metadata?.runtimePolicy,
-      accessMode: input.controls.access_mode,
+      accessMode: input.executionControls.access_mode,
       projectId: input.project?.id ?? existing?.projectId,
       sessionKind: input.sessionKind,
     });
@@ -221,14 +236,16 @@ export class AppTransportQueueStore {
         ...(existing?.metadata ?? {}),
         source: "app-server",
         appSessionKind: input.sessionKind,
-        accessMode: input.controls.access_mode,
+        accessMode: input.executionControls.access_mode,
         requiredNativeTools: stringArray(runtimePolicy.requiredNativeTools),
         required_tools: stringArray(runtimePolicy.required_tools),
         requiredNativeToolProfiles: stringArray(
           runtimePolicy.requiredNativeToolProfiles,
         ),
         runtimePolicy,
-        reasoning_effort: input.controls.reasoning_effort,
+        reasoning_effort: input.executionControls.reasoning_effort,
+        plan_mode: input.executionControls.plan_mode,
+        turnExecutionControls: input.executionControls,
         workerModelRules: settings.worker_model_rules,
       },
     });

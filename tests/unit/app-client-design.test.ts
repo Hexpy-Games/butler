@@ -719,6 +719,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("/events/live");
   expect(preload).toContain("listTurns:");
   expect(preload).toContain("retryTurn:");
+  expect(preload).toContain("retryTurnWithCurrentControls:");
+  expect(preload).toContain("/retry-current");
   expect(preload).toContain("cancelTurn:");
   expect(preload).toContain("getSettings:");
   expect(preload).toContain("updateSettings:");

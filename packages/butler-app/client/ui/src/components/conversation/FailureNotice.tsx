@@ -1,4 +1,4 @@
-import { AlertCircle, Button, Notice } from "@/butler-ds";
+import { AlertCircle, Button, Notice, Stack } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { MessageRecord } from "@/app/types.ts";
 import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
@@ -6,10 +6,12 @@ import { isRuntimeFaultRetryableMessage } from "@/app/utils.ts";
 export function FailureNotice({
   message,
   onRetryTurn,
+  onRetryTurnWithCurrentControls,
   retryingTurnId,
 }: {
   message: MessageRecord;
   onRetryTurn: (turnId: string) => void;
+  onRetryTurnWithCurrentControls: (turnId: string) => void;
   retryingTurnId: string | null;
 }) {
   const reason =
@@ -30,19 +32,36 @@ export function FailureNotice({
         message={reason}
         action={
           isRuntimeFaultRetryableMessage(message) && message.turn_id ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                if (message.turn_id) onRetryTurn(message.turn_id);
-              }}
-              disabled={retrying}
-            >
-              {retrying
-                ? appCopy.conversation.failure.retrying
-                : appCopy.conversation.failure.retry}
-            </Button>
+            <Stack align="row" justify="end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (message.turn_id) onRetryTurn(message.turn_id);
+                }}
+                disabled={retrying}
+              >
+                {retrying
+                  ? appCopy.conversation.failure.retrying
+                  : appCopy.conversation.failure.retry}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (message.turn_id) {
+                    onRetryTurnWithCurrentControls(message.turn_id);
+                  }
+                }}
+                disabled={retrying}
+              >
+                {retrying
+                  ? appCopy.conversation.failure.retrying
+                  : appCopy.conversation.failure.retryCurrent}
+              </Button>
+            </Stack>
           ) : null
         }
       />

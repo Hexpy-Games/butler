@@ -9,6 +9,38 @@ import type { AppModelSummary, SettingsView } from "@/app/types.ts";
 
 type FirstRunCopy = (typeof firstRunCopy)[FirstRunLanguage];
 
+function selectedModelWorkerRules(
+  settings: SettingsView,
+  targetModel: AppModelSummary,
+): SettingsView["worker_model_rules"] {
+  const rules = settings.worker_model_rules.length > 0
+    ? settings.worker_model_rules
+    : [
+        {
+          id: "deep_work",
+          label: "Deep work",
+          condition: "Research, feature development, architecture, review, and analysis",
+          enabled: true,
+        },
+        {
+          id: "routine_work",
+          label: "Routine work",
+          condition: "Simple coding, search, inspection, formatting, and tool calls",
+          enabled: true,
+        },
+      ];
+  return rules.map((rule) => {
+    const preferredEffort = rule.id === "deep_work" ? "high" : "medium";
+    return {
+      ...rule,
+      model: targetModel.model_ref,
+      reasoning_effort: targetModel.reasoning_efforts.includes(preferredEffort)
+        ? preferredEffort
+        : targetModel.default_reasoning_effort,
+    };
+  });
+}
+
 interface UseFirstRunAddedModelDefaultOptions {
   copy: FirstRunCopy;
   enabled: boolean;
@@ -86,16 +118,7 @@ export function useFirstRunAddedModelDefault({
         model: targetModel.model_ref,
         reasoning_effort: targetModel.default_reasoning_effort,
         context_window_tokens: targetModel.context_window_tokens,
-        worker_model_rules: baseSettings.worker_model_rules.map((rule) => {
-          const preferredEffort = rule.id === "deep_work" ? "high" : "medium";
-          return {
-            ...rule,
-            model: targetModel.model_ref,
-            reasoning_effort: targetModel.reasoning_efforts.includes(preferredEffort)
-              ? preferredEffort
-              : targetModel.default_reasoning_effort,
-          };
-        }),
+        worker_model_rules: selectedModelWorkerRules(baseSettings, targetModel),
       };
       try {
         const result = await api<Partial<SettingsView>>("/settings", {

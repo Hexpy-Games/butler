@@ -25,6 +25,7 @@ import { FIRST_VISIBLE_PROGRESS_EVENT_KIND } from "../../packages/butler-agent/s
 import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/operations/metrics/first-visible-latency.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 import { createNativeButlerDefaultProvider } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { createTurnExecutionControls } from "../../packages/butler-agent/src/gateways/core/turn-execution-controls.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -826,6 +827,80 @@ test("session actor binds provider capabilities to the effective session model",
     supportsStructuredOutputs: true,
     structuredDecisionTransport: "function_tool",
   });
+  store.close();
+});
+
+test("app session actor keeps the admitted model when mutable session defaults change", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime();
+  runtime.firstTurnRelease.resolve();
+  const provider = createNativeButlerDefaultProvider({
+    system: { defaultModel: "openai/gpt-5.5" },
+  }, async () => openingDecisionText);
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "project-sandy-bot",
+    workspacePath: "fixtures/sandy-bot",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: provider.id,
+    modelRef: "openai/gpt-5.4",
+    transportBindings: [{
+      transport: APP_TRANSPORT,
+      accountId: "local",
+      peerId: "butler/main",
+    }],
+  });
+
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider,
+    systemPromptFactory: () => "You are Butler.",
+    promptAssembler: {
+      buildTurnContext() {
+        const current = store.getBySessionId("butler/main")!;
+        store.upsert({
+          ...current,
+          modelProviderId: "openai",
+          modelRef: "openai/gpt-5.5",
+        });
+        return "current context";
+      },
+    } as unknown as PromptAssembler,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+  const envelope = appInbound("immutable-model", "Use the admitted model.");
+  envelope.executionControls = createTurnExecutionControls({
+    turnId: "turn-immutable-model",
+    sessionId: "butler/main",
+    resolution: {
+      controls: {
+        model: "openai/gpt-5.6-sol",
+        reasoning_effort: "medium",
+        access_mode: "full_access",
+        plan_mode: false,
+      },
+      source: "session_override",
+      sessionControlRevision: 4,
+      catalogGeneration: "catalog-generation-a",
+    },
+  });
+
+  await actor.handleInbound(envelope);
+
+  expect(runtime.turns[0]).toMatchObject({
+    model: "openai/gpt-5.6-sol",
+    provider: { id: "openai" },
+    metadata: {
+      reasoning_effort: "medium",
+      requestedModelRef: "openai/gpt-5.6-sol",
+      adapterEffectiveModelRef: "openai/gpt-5.6-sol",
+    },
+  });
+  expect(store.getBySessionId("butler/main")?.modelRef).toBe(
+    "openai/gpt-5.5",
+  );
   store.close();
 });
 

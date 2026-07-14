@@ -55,6 +55,9 @@ import type {
   GatewaySessionActor,
 } from "../../gateways/core/contracts.ts";
 import { APP_TRANSPORT } from "../../gateways/core/app-transport.ts";
+import {
+  verifyTurnExecutionControls,
+} from "../../gateways/core/turn-execution-controls.ts";
 import { ConversationAdmissionTurn } from "../../agent/conversation/session-admission.ts";
 import { INTERNAL_CONVERSATION_TURN_EVENT_KINDS } from "../../agent/conversation/admission-kinds.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
@@ -296,6 +299,37 @@ function actionWithTurnIdentity(
   };
 }
 
+export function executionBindingForEnvelope(
+  binding: StoredSessionBinding,
+  envelope: InboundEnvelope,
+): StoredSessionBinding {
+  if (!envelope.executionControls) return binding;
+  const controls = verifyTurnExecutionControls(envelope.executionControls);
+  const matchesSessionIdentity =
+    controls.session_id === binding.sessionId ||
+    (envelope.transport === APP_TRANSPORT &&
+      controls.session_id === envelope.peer.id);
+  if (
+    !matchesSessionIdentity ||
+    controls.turn_id !== turnIdFromEnvelope(envelope)
+  ) {
+    throw new Error("turn_execution_controls_identity_mismatch");
+  }
+  return {
+    ...binding,
+    modelProviderId: controls.model_ref.split("/", 1)[0] || binding.modelProviderId,
+    modelRef: controls.model_ref,
+    metadata: {
+      ...(binding.metadata ?? {}),
+      accessMode: controls.access_mode,
+      reasoning_effort: controls.reasoning_effort,
+      reasoningEffort: controls.reasoning_effort,
+      plan_mode: controls.plan_mode,
+      turnExecutionControls: controls,
+    },
+  };
+}
+
 function safeArtifactText(value: string | undefined, fallback: string): string {
   const text = stripControlCharacters(value ?? "")
     .replace(/\s+/gu, " ")
@@ -437,7 +471,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           "Persist the inbound transcript event, then run the steward session agent.",
       });
     }
-    const binding = this.requireBinding();
+    const binding = executionBindingForEnvelope(
+      this.requireBinding(),
+      envelope,
+    );
     const timestamp =
       envelope.message.timestamp || this.options.now?.() || defaultNow();
     const schedulerContinuation = schedulerContinuationMetadata(envelope);
@@ -532,7 +569,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         timestamp,
         promptContext,
       );
-      const activeBinding = this.requireBinding();
+      const activeBinding = executionBindingForEnvelope(
+        this.requireBinding(),
+        envelope,
+      );
       developerLogBinding = activeBinding;
       const generatedSessionTitlePromise = schedulerContinuation
         ? Promise.resolve(null)
@@ -569,13 +609,16 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         envelope,
         emitIntermediate,
       });
-      const turnProvider = bindProviderToModel(this.options.provider, binding.modelRef);
+      const turnProvider = bindProviderToModel(
+        this.options.provider,
+        activeBinding.modelRef,
+      );
       let result;
       try {
         result = await this.options.runtime.runTurn({
           handle,
           provider: turnProvider,
-          model: binding.modelRef,
+          model: activeBinding.modelRef,
           input: envelope,
           signal: envelope.signal,
           metadata: {
@@ -600,6 +643,11 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             workerModelRules: activeBinding.metadata?.workerModelRules,
             reasoning_effort: activeBinding.metadata?.reasoning_effort,
             reasoningEffort: activeBinding.metadata?.reasoningEffort,
+            workspacePath: activeBinding.workspacePath,
+            executionControls: envelope.executionControls,
+            requestedModelRef: envelope.executionControls?.model_ref ?? activeBinding.modelRef,
+            adapterEffectiveModelRef: activeBinding.modelRef,
+            conversationProvenance: conversationAdmission?.provenance() ?? undefined,
           },
           emitIntermediateDelivery: emitIntermediate,
           emitTurnEvent,
@@ -613,10 +661,15 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         runtimeSessionRef: result.runtimeSessionRef ?? handle.runtimeSessionRef,
       };
       this.handle = nextHandle;
-      this.persistBinding(activeBinding, {
+      const latestStoredBinding = this.requireBinding();
+      const sameModelAsMutableSession =
+        latestStoredBinding.modelRef === activeBinding.modelRef;
+      this.persistBinding(latestStoredBinding, {
         runtimeSessionRef: nextHandle.runtimeSessionRef,
         providerThreadRef:
-          result.providerThreadRef ?? activeBinding.providerThreadRef,
+          sameModelAsMutableSession
+            ? result.providerThreadRef ?? latestStoredBinding.providerThreadRef
+            : latestStoredBinding.providerThreadRef,
         lifecycleState: "active",
         updatedAt: timestamp,
         lastActiveAt: timestamp,
@@ -1055,7 +1108,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
     }
     this.handle = null;
     this.liveConfigHash = nextHash;
-    this.persistBinding(binding, {
+    this.persistBinding(this.requireBinding(), {
       runtimeSessionRef: null,
       providerThreadRef: null,
       lifecycleState: "active",
@@ -1124,7 +1177,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       },
     });
     this.handle = created;
-    this.persistBinding(binding, {
+    this.persistBinding(this.requireBinding(), {
       runtimeSessionRef: created.runtimeSessionRef,
       lifecycleState: "active",
       updatedAt: timestamp,

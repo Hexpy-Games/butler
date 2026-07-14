@@ -73,6 +73,7 @@ export function useComposerStoreBridge(props: UseComposerStoreBridgeProps) {
       isSending,
       large,
       model: controls.model,
+      modelState: controls.modelState,
       modelMenuOpen,
       models: state.models,
       onOpenContext,

@@ -8,6 +8,10 @@ import type {
   TurnRecord,
   TurnState,
 } from "../../interface/protocol/app-protocol.ts";
+import {
+  verifyTurnExecutionControls,
+  type TurnExecutionControlsV1,
+} from "../../../core/turn-execution-controls.ts";
 
 export interface MessageReadModelRow {
   rowid: number;
@@ -49,6 +53,7 @@ export interface TurnReadModelRow {
   retryable: number;
   cancellable: number;
   attempt: number;
+  execution_controls_json?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -95,6 +100,9 @@ export function messageFileRefFromRow(
 }
 
 export function turnFromRow(row: TurnReadModelRow): TurnRecord {
+  const executionControls = executionControlsFromJson(
+    row.execution_controls_json,
+  );
   return {
     id: row.id,
     chat_id: row.chat_id,
@@ -108,7 +116,21 @@ export function turnFromRow(row: TurnReadModelRow): TurnRecord {
     created_at: row.created_at,
     updated_at: row.updated_at,
     cursor: row.rowid,
+    execution_controls: executionControls,
+    execution_model: executionControls
+      ? {
+          requested_model_ref: executionControls.model_ref,
+          adapter_effective_model_ref: executionControls.model_ref,
+        }
+      : undefined,
   };
+}
+
+export function executionControlsFromJson(
+  value: string | null | undefined,
+): TurnExecutionControlsV1 | undefined {
+  if (!value) return undefined;
+  return verifyTurnExecutionControls(JSON.parse(value));
 }
 
 export function isTerminalTurnState(state: TurnState): boolean {

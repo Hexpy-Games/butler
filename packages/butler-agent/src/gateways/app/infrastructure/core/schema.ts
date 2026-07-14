@@ -93,6 +93,7 @@ export function migrateAppStoreSchema(db: Database): void {
       retryable INTEGER NOT NULL DEFAULT 0,
       cancellable INTEGER NOT NULL DEFAULT 0,
       attempt INTEGER NOT NULL DEFAULT 1,
+      execution_controls_json TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -216,6 +217,7 @@ export function migrateAppStoreSchema(db: Database): void {
   ensureColumn(db, "messages", "updated_at", "TEXT");
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "turns", "execution_controls_json", "TEXT");
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS messages_conversation_message_idx
     ON messages(conversation_message_id)

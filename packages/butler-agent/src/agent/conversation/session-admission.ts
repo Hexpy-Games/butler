@@ -12,6 +12,8 @@ import type {
   ConversationTurn,
   ConversationWriter,
 } from "./types.ts";
+import { publishConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
+import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
 
 export interface ConversationAdmissionTurnInput {
   writer: ConversationWriter;
@@ -20,6 +22,12 @@ export interface ConversationAdmissionTurnInput {
   turnId: string;
   timestamp: string;
   butlerData?: string;
+}
+
+export interface ConversationAdmissionProvenance {
+  conversationSessionId: string;
+  turnId: string;
+  inboundMessageId: string;
 }
 
 export class ConversationAdmissionTurn {
@@ -91,8 +99,20 @@ export class ConversationAdmissionTurn {
     this.applyDecision(classifyForConversation(event), event);
   }
 
+  provenance(): ConversationAdmissionProvenance | null {
+    if (!this.requestMessageId) return null;
+    return {
+      conversationSessionId: this.turn.session_id,
+      turnId: this.turn.id,
+      inboundMessageId: this.requestMessageId,
+    };
+  }
+
   finalize(status: ConversationTurn["status"], completedAt: string): void {
-    const existingGeneration = this.input.writer.readTurnOutcome?.(this.turn.id)?.generation ?? 0;
+    const existingOutcome = this.input.writer.readTurnOutcome?.(this.turn.id) ?? null;
+    const existingGeneration = existingOutcome?.generation ?? 0;
+    const requestMessageId = this.requestMessageId ?? existingOutcome?.request_message_id ?? null;
+    const publicAssistantMessageId = this.publicAssistantMessageId ?? existingOutcome?.public_assistant_message_id ?? null;
     this.input.writer.finalizeTurn({
       turnId: this.turn.id,
       status,
@@ -106,8 +126,8 @@ export class ConversationAdmissionTurn {
           : status === "aborted"
           ? "cancelled"
           : "failed",
-        requestMessageId: this.requestMessageId,
-        publicAssistantMessageId: this.publicAssistantMessageId,
+        requestMessageId,
+        publicAssistantMessageId,
         providerId: this.input.binding.modelRef.split("/", 1)[0] ?? null,
         modelRef: this.input.binding.modelRef,
         evidenceRefs: [...this.evidenceRefs],
@@ -116,6 +136,43 @@ export class ConversationAdmissionTurn {
         createdAt: completedAt,
       },
     });
+    if (
+      status === "complete" &&
+      this.input.butlerData &&
+      requestMessageId &&
+      publicAssistantMessageId
+    ) {
+      try {
+        publishConversationCompletionObservation({
+          butlerData: this.input.butlerData,
+          projectId: this.input.binding.projectId ?? null,
+          runtimeSessionId: this.input.binding.sessionId,
+          conversationSessionId: this.turn.session_id,
+          conversationTurnId: this.turn.id,
+          inboundMessageId: requestMessageId,
+          outboundMessageId: publicAssistantMessageId,
+          outcomeGeneration: existingGeneration + 1,
+          completedAt,
+        });
+        recordOperationalMetric({
+          category: "memory",
+          name: "completion_observation_publish",
+          status: "ok",
+          dimensions: {
+            scope: this.input.binding.projectId ? "project" : "global",
+          },
+        }, { butlerData: this.input.butlerData });
+      } catch {
+        recordOperationalMetric({
+          category: "memory",
+          name: "completion_observation_publish",
+          status: "error",
+          dimensions: {
+            scope: this.input.binding.projectId ? "project" : "global",
+          },
+        }, { butlerData: this.input.butlerData });
+      }
+    }
   }
 
   finalizeRecoverable(completedAt: string, safeCode: string): void {

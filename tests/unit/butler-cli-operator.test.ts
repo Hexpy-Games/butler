@@ -11,6 +11,7 @@ import { createBoxItem, readBoxManifest } from "../../packages/butler-agent/src/
 import { addFeedbackEntry } from "../../packages/butler-agent/src/agent/cognition/feedback/buffer.ts";
 import { createKnowHowEntry, readKnowHowEntry, recordSourceQualityEvent } from "../../packages/butler-agent/src/agent/cognition/know-how/store.ts";
 import { createMemoryChunk } from "../../packages/butler-agent/src/agent/cognition/memory/metadata.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 
 const root = process.cwd();
 const cli = join(root, "bin", "butler.js");
@@ -729,6 +730,62 @@ test("operator cognition memory, context, search, and web helpers return safe JS
     rmSync(butlerData, { recursive: true, force: true });
   }
 }, 10_000);
+
+test("operator continuity recovery requires plan, explicit approval, apply, and rollback", () => {
+  const butlerData = tempRoot();
+  const workspace = join(butlerData, "workspace");
+  const hotCache = join(workspace, ".butler", "hot-cache.md");
+  try {
+    mkdirSync(join(workspace, ".butler"), { recursive: true });
+    writeFileSync(hotCache, "RECOVERY ORIGINAL\n");
+    writeFileSync(join(butlerData, "butler.config.json"), JSON.stringify({
+      projects: [{ name: "butler", path: workspace }],
+    }));
+    const store = new AgentConversationStore({ butlerData });
+    const turn = store.beginTurn({
+      gateway: "app",
+      externalSessionId: "butler/main",
+      sessionId: "cs-cli-recovery",
+      projectId: "butler",
+      actor: "user",
+      turnId: "turn-cli-recovery",
+      now: "2026-06-01T00:00:00.000Z",
+    });
+    store.appendUserMessage({
+      sessionId: turn.session_id,
+      turnId: turn.id,
+      text: "Retain the reviewed release procedure.",
+      now: "2026-06-01T00:00:01.000Z",
+    });
+    store.appendAssistantMessage({
+      sessionId: turn.session_id,
+      turnId: turn.id,
+      text: "The reviewed release procedure was retained.",
+      now: "2026-06-01T00:00:02.000Z",
+    });
+    store.finalizeTurn({ turnId: turn.id, status: "complete", completedAt: "2026-06-01T00:00:03.000Z" });
+    store.close();
+
+    const plan = runCli(["cognition", "memory", "recovery", "plan", "butler", "--json"], butlerData);
+    expect(plan.exitCode).toBe(0);
+    const planned = JSON.parse(stdoutText(plan));
+    expect(planned.data).toMatchObject({ status: "dry_run", candidate_count: 1, approved_count: 0 });
+    expect(readFileSync(hotCache, "utf8")).toBe("RECOVERY ORIGINAL\n");
+    const manifestId = planned.data.manifest_id as string;
+
+    const approve = runCli(["cognition", "memory", "recovery", "approve", manifestId, "all", "--yes", "--json"], butlerData);
+    expect(approve.exitCode).toBe(0);
+    expect(JSON.parse(stdoutText(approve)).data.approved_count).toBe(1);
+    const apply = runCli(["cognition", "memory", "recovery", "apply", manifestId, "--yes", "--json"], butlerData);
+    expect(apply.exitCode).toBe(0);
+    expect(readFileSync(hotCache, "utf8")).toContain("reviewed release procedure");
+    const rollback = runCli(["cognition", "memory", "recovery", "rollback", manifestId, "--yes", "--json"], butlerData);
+    expect(rollback.exitCode).toBe(0);
+    expect(readFileSync(hotCache, "utf8")).toBe("RECOVERY ORIGINAL\n");
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+}, 15_000);
 
 test("operator cognition feedback commands manage short-term feedback buffer", () => {
   const butlerData = tempRoot();

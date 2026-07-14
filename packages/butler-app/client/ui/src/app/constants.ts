@@ -28,33 +28,14 @@ export const EMPTY_SETTINGS: SettingsView = {
   default_project_workspace_label: "butler-workspace",
   language: "en",
   timezone: "UTC",
-  model: "openai/gpt-5.5",
-  reasoning_effort: "xhigh",
+  model: "",
+  reasoning_effort: "medium",
   consolidation_model: "default",
   consolidation_reasoning_effort: "xhigh",
-  effective_consolidation_model: "openai/gpt-5.5",
+  effective_consolidation_model: "",
   consolidation_uses_butler_model: true,
   context_window_tokens: 258_000,
-  worker_model_rules: [
-    {
-      id: "deep_work",
-      label: "Deep work",
-      condition:
-        "Research, feature-level development, architecture, review, and analysis",
-      model: "openai/gpt-5.5",
-      reasoning_effort: "high",
-      enabled: true,
-    },
-    {
-      id: "routine_work",
-      label: "Routine work",
-      condition:
-        "Simple coding, search, local inspection, formatting, and tool calls",
-      model: "openai/gpt-5.4-mini",
-      reasoning_effort: "medium",
-      enabled: true,
-    },
-  ],
+  worker_model_rules: [],
   access_mode: "full_access",
   plan_mode_default: false,
   follow_up_behavior: "queue",
@@ -83,25 +64,13 @@ export const EMPTY_SETTINGS: SettingsView = {
 };
 
 export const EMPTY_MODEL_CATALOG: ModelCatalogView = {
-  default_model_ref: "openai/gpt-5.5",
-  default_reasoning_effort: "xhigh",
+  generation: "unresolved",
+  default_model_ref: "",
+  default_reasoning_effort: "medium",
   providers: [],
-  models: [
-    {
-      provider_id: "openai",
-      provider_label: "OpenAI",
-      model_id: "gpt-5.5",
-      model_ref: "openai/gpt-5.5",
-      display_name: "GPT-5.5",
-      status: "latest",
-      context_window_tokens: 258_000,
-      max_output_tokens: 128_000,
-      default_reasoning_effort: "xhigh",
-      reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
-      token_estimator: "openai_tiktoken_o200k",
-      runtime_supported: true,
-    },
-  ],
+  models: [],
+  registered_models: [],
+  provider_credentials: [],
   worker_model_presets: [],
 };
 

@@ -95,6 +95,7 @@ export interface WorkerModelPreset {
 }
 
 export interface ModelCatalogView {
+  generation: string;
   generated_at?: string;
   default_model_ref: string;
   default_reasoning_effort: ReasoningEffort;
@@ -609,7 +610,19 @@ export interface SessionControlState {
 export interface SessionControlsView {
   session_id: string;
   controls: SessionControlState;
+  revision: number;
+  catalog_generation: string;
 }
+
+export type ModelCatalogState =
+  | "loading"
+  | "ready"
+  | "unavailable"
+  | "error";
+
+export type ComposerModelState = ModelCatalogState;
+
+export type ControlsLoadState = "loading" | "ready" | "error";
 
 export interface SessionSummary {
   id: string;
@@ -833,6 +846,16 @@ export interface SessionViewTurn {
   progress: TurnProgressSnapshot;
   created_at: string;
   updated_at: string;
+  execution_controls?: {
+    model_ref: string;
+    reasoning_effort: ReasoningEffort;
+    source: "message_override" | "session_override" | "global_default";
+  };
+  execution_model?: {
+    requested_model_ref: string;
+    adapter_effective_model_ref: string;
+    provider_reported_model_ref?: string;
+  };
 }
 
 export interface SessionViewMessageWindow {

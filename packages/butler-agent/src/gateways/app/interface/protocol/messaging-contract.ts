@@ -1,6 +1,7 @@
 import { APP_PROTOCOL_VERSION } from "./base-contract.ts";
 import type { MessageRole, MessageStatus, TurnState } from "./base-contract.ts";
 import type { SettingsView } from "./settings-contract.ts";
+import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-controls.ts";
 import type {
   MessageAttachmentInput,
   MessageFileRef,
@@ -109,6 +110,12 @@ export interface TurnRecord {
   created_at: string;
   updated_at: string;
   cursor: number;
+  execution_controls?: TurnExecutionControlsV1;
+  execution_model?: {
+    requested_model_ref: string;
+    adapter_effective_model_ref: string;
+    provider_reported_model_ref?: string;
+  };
 }
 
 export interface AppEventEnvelope {

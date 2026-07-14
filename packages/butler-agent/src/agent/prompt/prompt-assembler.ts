@@ -13,6 +13,7 @@ import {
 import { cognitionMemoryRoot } from "../cognition/paths.ts";
 import { renderFeedbackBufferContext } from "../cognition/feedback/buffer.ts";
 import { projectMemoryPath, refreshProjectCapsule } from "../cognition/memory/project-memory.ts";
+import { sessionContinuityPath } from "../cognition/continuity/continuity-store.ts";
 import {
   readPersonalizationProfile,
   renderPersonalizationProfilePrompt,
@@ -175,6 +176,7 @@ function joinSections(sections: PromptSection[]): string {
 function buildDynamicMemorySections(input: {
   butlerData: string;
   projectId?: string;
+  sessionId: string;
   workspacePath: string;
 }): PromptSection[] {
   const sections: PromptSection[] = [];
@@ -188,6 +190,13 @@ function buildDynamicMemorySections(input: {
     "hot-cache",
     "Hot Cache",
     readTextIfExists(join(memoryRoot, "hot", "cache.md")),
+    "retrieved_context",
+  );
+  pushSection(
+    sections,
+    "session-continuity",
+    "Session Continuity",
+    readTextIfExists(sessionContinuityPath(input.butlerData, input.sessionId)),
     "retrieved_context",
   );
   pushSection(
@@ -733,7 +742,7 @@ export class PromptAssembler {
   }
 
   ensureProjectCapsule(binding: StoredSessionBinding): ProjectCapsuleEnsureResult {
-    if (binding.role !== "steward" || !binding.projectId) return { status: "skipped" };
+    if (!binding.projectId) return { status: "skipped" };
     const path = projectMemoryPath({
       butlerData: this.butlerData,
       projectId: binding.projectId,
@@ -824,6 +833,7 @@ export class PromptAssembler {
       ...buildDynamicMemorySections({
         butlerData: this.butlerData,
         projectId: input.binding.projectId,
+        sessionId: input.binding.sessionId,
         workspacePath: input.binding.workspacePath,
       }),
     ];

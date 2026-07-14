@@ -161,6 +161,7 @@ export interface ProviderCredentialView {
 }
 
 export interface ModelCatalogView {
+  generation: string;
   generated_at: string;
   default_model_ref: string;
   default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";

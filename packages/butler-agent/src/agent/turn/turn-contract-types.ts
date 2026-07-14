@@ -9,6 +9,25 @@ export const TURN_CONTRACT_ACTIONS = [
 ] as const;
 export type TurnContractAction = typeof TURN_CONTRACT_ACTIONS[number];
 
+export const CONTINUITY_SCOPES = ["project", "session", "global"] as const;
+export type ContinuityScope = typeof CONTINUITY_SCOPES[number];
+
+export const CONTINUITY_KINDS = [
+  "instruction", "decision", "constraint", "working_state", "preference", "correction",
+] as const;
+export type ContinuityKind = typeof CONTINUITY_KINDS[number];
+
+export const CONTINUITY_OPERATIONS = ["upsert", "supersede", "forget"] as const;
+export type ContinuityOperation = typeof CONTINUITY_OPERATIONS[number];
+
+export interface ContinuityUpdate {
+  scope: ContinuityScope;
+  kind: ContinuityKind;
+  operation: ContinuityOperation;
+  summary: string;
+  target_ref?: string;
+}
+
 export const TURN_DELIVERABLES = [
   "grounded_answer", "status_report", "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report",
 ] as const;
@@ -44,6 +63,7 @@ export interface TurnContractDecision {
   evidence_domain?: "public_web";
   inspection_scope?: "project" | "workspace";
   deliverables: TurnDeliverable[];
+  continuity_updates?: ContinuityUpdate[];
   answer_text?: string;
   public_title?: string;
   public_summary: string;
