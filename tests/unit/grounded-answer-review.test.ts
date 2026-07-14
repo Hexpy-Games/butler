@@ -122,7 +122,7 @@ test("search evidence can ground an answer without a mandatory web_read", async 
     deps: deps(butlerData, supportedReview([items[0]!.evidence_item_id])),
     turnId: "turn-1",
     turnBudget: createDirectTurnBudget("turn-1"),
-    prompt: "When did the event happen?",
+    userText: "When did the event happen?",
     candidateText: "The event happened on July 12 ([Example News](https://news.example/event)).",
     audit: [{ name: "web_search", args: { query: "event date" }, ok: true, result: {
       ok: true,
@@ -166,7 +166,7 @@ test("grounding review restores contract-bound evidence after an in-memory audit
     deps: deps(butlerData, supportedReview([items[0]!.evidence_item_id])),
     turnId: "turn-restarted",
     turnBudget: createDirectTurnBudget("turn-restarted"),
-    prompt: "When did it happen?",
+    userText: "When did it happen?",
     candidateText: "July 12 ([Example News](https://news.example/event)).",
     audit: [],
     contract: activeContract,
@@ -200,7 +200,7 @@ test("a persisted zero-result attempt remains distinguishable from provider fail
     deps: deps(butlerData, review),
     turnId: "turn-zero-restarted",
     turnBudget: createDirectTurnBudget("turn-zero-restarted"),
-    prompt: "Find the announcement.",
+    userText: "Find the announcement.",
     candidateText: "검색 결과에서 해당 공지를 찾지 못했습니다.",
     audit: [],
     contract: activeContract,
@@ -217,7 +217,7 @@ test("runtime rejects reviewer citations that do not exist in tool evidence", as
     deps: deps(butlerData, supportedReview(["hallucinated-evidence-id"])),
     turnId: "turn-2",
     turnBudget: createDirectTurnBudget("turn-2"),
-    prompt: "What happened?",
+    userText: "What happened?",
     candidateText: "Something happened.",
     audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
       ok: true,
@@ -257,7 +257,7 @@ test("a structurally invalid grounding review receives one bounded repair", asyn
     deps: repairDeps,
     turnId: "turn-review-repair",
     turnBudget: createDirectTurnBudget("turn-review-repair"),
-    prompt: "When did it happen?",
+    userText: "When did it happen?",
     candidateText: "July 12 ([Example News](https://news.example/event)).",
     audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
       ok: true,
@@ -287,7 +287,7 @@ test("reviewer-declared citations must appear in the candidate answer", async ()
     deps: deps(butlerData, supportedReview([items[0]!.evidence_item_id])),
     turnId: "turn-citation",
     turnBudget: createDirectTurnBudget("turn-citation"),
-    prompt: "When did it happen?",
+    userText: "When did it happen?",
     candidateText: "The event happened on July 12.",
     audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
       ok: true,
@@ -319,7 +319,7 @@ test("observed no-result limitation can finish without fabricated citations", as
     deps: deps(butlerData, review),
     turnId: "turn-3",
     turnBudget: createDirectTurnBudget("turn-3"),
-    prompt: "Find the announcement.",
+    userText: "Find the announcement.",
     candidateText: "공개 검색에서 해당 공지를 찾지 못했습니다.",
     audit: [{ name: "web_search", args: { query: "announcement" }, ok: true, result: {
       ok: true,
@@ -356,7 +356,7 @@ test("unsafe semantic review returns a continuation gap instead of a verified re
     deps: deps(butlerData, review),
     turnId: "turn-4",
     turnBudget: createDirectTurnBudget("turn-4"),
-    prompt: "Did it happen?",
+    userText: "Did it happen?",
     candidateText: "It definitely happened.",
     audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
       ok: true,
@@ -398,7 +398,7 @@ test("a successful web_read remains insufficient when its content does not suppo
     deps: deps(butlerData, review),
     turnId: "turn-read-insufficient",
     turnBudget: createDirectTurnBudget("turn-read-insufficient"),
-    prompt: "Who won?",
+    userText: "Who won?",
     candidateText: "Team A won the final.",
     audit: [{ name: "web_read", args: { url: "https://news.example/unrelated" }, ok: true, result: {
       ok: true,
@@ -428,7 +428,7 @@ test("failed retrieval cannot be reclassified as a no-result answer", async () =
     deps: deps(butlerData, review),
     turnId: "turn-provider-failed",
     turnBudget: createDirectTurnBudget("turn-provider-failed"),
-    prompt: "Find the result.",
+    userText: "Find the result.",
     candidateText: "결과를 찾지 못했습니다.",
     audit: [{ name: "web_search", args: { query: "result" }, ok: false, error: "provider unavailable" }],
     contract: activeContract,
@@ -471,7 +471,7 @@ test("function-tool structured providers run the same mandatory grounding review
     deps: functionDeps,
     turnId: "turn-function-review",
     turnBudget: createDirectTurnBudget("turn-function-review"),
-    prompt: "When did it happen?",
+    userText: "When did it happen?",
     candidateText: "July 12 ([Example News](https://news.example/event)).",
     audit: [{ name: "web_search", args: { query: "event" }, ok: true, result: {
       ok: true,

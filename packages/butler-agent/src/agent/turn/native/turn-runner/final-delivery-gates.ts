@@ -1,4 +1,5 @@
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
+import { createHash } from "crypto";
 import { join } from "path";
 import { readJsonFile } from "../../../persistence/atomic-json-store.ts";
 import {
@@ -40,6 +41,13 @@ import {
 import { buildTurnContinuationEvidence } from "./turn-continuation-evidence.ts";
 import { statusReportEvidenceGuidance } from "./turn-contract-status-evidence.ts";
 import { reviewGroundedAnswerCandidate } from "./grounded-answer-review.ts";
+import { principalTurnCancellationRecorded } from "../../principal-turn-cancellation-registry.ts";
+import { readPublicWebEvidenceContextForContract } from "../../../output/evidence/public-web-evidence-store.ts";
+import {
+  commitFinalCandidateProposal,
+  readCurrentFinalCandidate,
+  updateFinalCandidateReview,
+} from "./final-candidate-review-store.ts";
 
 export type FinalDeliveryOutcome =
   | { kind: "final"; text: string; evidenceRefs: string[] }
@@ -62,6 +70,7 @@ type FinalDeliveryReviewInput = {
   deps: NativeTurnRunnerDeps;
   useTools: boolean;
   turnId?: string | null;
+  resumeCandidateId?: string;
   turnBudget: ReturnType<typeof createDirectTurnBudget>;
   prompt: string;
   userText: string;
@@ -81,12 +90,25 @@ export async function produceFinalDeliveryOutcome(
 ): Promise<FinalDeliveryOutcome> {
   const review = await reviewFinalCandidateForContinuation(input);
   if (review.kind === "completion_gap") return review;
+  const acceptedCheckpoint = input.turnId
+    ? readCurrentFinalCandidate({ butlerData: input.deps.butlerData, turnId: input.turnId })
+    : null;
+  if (acceptedCheckpoint) throwIfFinalCandidateCancelled(input, acceptedCheckpoint.candidate_id);
+  if (acceptedCheckpoint?.state === "accepted" && input.turnId) {
+    updateFinalCandidateReview({
+      butlerData: input.deps.butlerData,
+      turnId: input.turnId,
+      candidateId: acceptedCheckpoint.candidate_id,
+      state: "delivery_pending",
+    });
+  }
   const contractRepairedText = repairFinalContract({ ...input, finalText: review.text });
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.started",
     payload: { guard: "public_output" },
   });
   const checkedText = applyPublicOutputGuards({ ...input, finalText: contractRepairedText });
+  if (acceptedCheckpoint) throwIfFinalCandidateCancelled(input, acceptedCheckpoint.candidate_id);
   await emitTurnEventBestEffort(input.turnInput, {
     kind: "guard.completed",
     payload: { guard: "public_output", status: "approved" },
@@ -95,6 +117,194 @@ export async function produceFinalDeliveryOutcome(
 }
 
 export async function reviewFinalCandidateForContinuation(
+  input: FinalDeliveryReviewInput,
+): Promise<FinalCandidateContinuationReviewOutcome> {
+  if (!input.turnId) return evaluateFinalCandidateForContinuation(input);
+  const resumedCheckpoint = input.resumeCandidateId
+    ? readCurrentFinalCandidate({ butlerData: input.deps.butlerData, turnId: input.turnId })
+    : null;
+  if (input.resumeCandidateId && (
+    !resumedCheckpoint || resumedCheckpoint.candidate_id !== input.resumeCandidateId ||
+    resumedCheckpoint.candidate_text !== input.initialText ||
+    resumedCheckpoint.user_message_sha256 !== createHash("sha256")
+      .update(input.userText, "utf8")
+      .digest("hex") ||
+    resumedCheckpoint.effective_model !== input.turnInput.model ||
+    resumedCheckpoint.provider_adapter_id !== input.turnInput.provider.id
+  )) throw new Error("final_candidate_review_resume_checkpoint_conflict");
+  const checkpoint = resumedCheckpoint ?? commitFinalCandidateProposal({
+    butlerData: input.deps.butlerData,
+    turnId: input.turnId,
+    sessionId: input.turnInput.handle.sessionId,
+    contractId: input.turnContract?.contract_id,
+    userMessageId: inboundUserMessageId(input.turnInput, input.turnId),
+    userText: input.userText,
+    candidateText: input.initialText,
+    evidence: input.turnContract
+      ? readPublicWebEvidenceContextForContract({
+        butlerData: input.deps.butlerData,
+        contractId: input.turnContract.contract_id,
+      })
+      : { items: [], attempts: [] },
+    reviewProgressRevision: finalReviewProgressRevision(input),
+    providerAdapterId: input.turnInput.provider.id,
+    effectiveModel: input.turnInput.model,
+  });
+  if ((checkpoint.state === "accepted" || checkpoint.state === "delivery_pending") &&
+    checkpoint.reviewed_text !== undefined) {
+    return {
+      kind: "accepted",
+      text: checkpoint.reviewed_text,
+      evidenceRefs: checkpoint.evidence_refs,
+    };
+  }
+  if (checkpoint.state === "delivered") {
+    throw new FinalCandidateAlreadyDeliveredError(checkpoint.candidate_id);
+  }
+  if (checkpoint.state === "cancelled") {
+    const error = new Error("turn_cancelled");
+    error.name = "AbortError";
+    throw error;
+  }
+  if (checkpoint.state === "recoverable") {
+    throw new FinalCandidateReviewRecoverableError(checkpoint.candidate_id);
+  }
+  if (checkpoint.state === "review_gap_pending" && checkpoint.gap_fingerprint) {
+    updateFinalCandidateReview({
+      butlerData: input.deps.butlerData,
+      turnId: input.turnId,
+      candidateId: checkpoint.candidate_id,
+      state: "recoverable",
+    });
+    throw new FinalCandidateReviewStalledError(checkpoint.candidate_id);
+  }
+  throwIfFinalCandidateCancelled(input, checkpoint.candidate_id);
+  await emitTurnEventBestEffort(input.turnInput, {
+    kind: "guard.started",
+    payload: {
+      guard: "final_candidate_review",
+      safeLabel: "Reviewing final answer",
+      candidateId: checkpoint.candidate_id,
+    },
+  });
+  updateFinalCandidateReview({
+    butlerData: input.deps.butlerData,
+    turnId: input.turnId,
+    candidateId: checkpoint.candidate_id,
+    state: "reviewing",
+  });
+  try {
+    const outcome = await evaluateFinalCandidateForContinuation(input);
+    throwIfFinalCandidateCancelled(input, checkpoint.candidate_id);
+    if (outcome.kind === "accepted") {
+      updateFinalCandidateReview({
+        butlerData: input.deps.butlerData,
+        turnId: input.turnId,
+        candidateId: checkpoint.candidate_id,
+        state: "accepted",
+        reviewedText: outcome.text,
+        evidenceRefs: outcome.evidenceRefs,
+        completedReceiptId: `review-receipt-${checkpoint.candidate_id}`,
+      });
+      await emitTurnEventBestEffort(input.turnInput, {
+        kind: "guard.completed",
+        payload: {
+          guard: "final_candidate_review",
+          status: "approved",
+          safeLabel: "Final review complete",
+          candidateId: checkpoint.candidate_id,
+        },
+      });
+    } else {
+      updateFinalCandidateReview({
+        butlerData: input.deps.butlerData,
+        turnId: input.turnId,
+        candidateId: checkpoint.candidate_id,
+        state: "review_gap_pending",
+        evidenceRefs: outcome.evidenceRefs,
+        gapFingerprint: createHash("sha256")
+          .update(JSON.stringify(outcome.observation), "utf8")
+          .digest("hex"),
+      });
+      await emitTurnEventBestEffort(input.turnInput, {
+        kind: "guard.completed",
+        payload: {
+          guard: "final_candidate_review",
+          status: "gap",
+          safeLabel: "Final review needs more work",
+          candidateId: checkpoint.candidate_id,
+        },
+      });
+    }
+    return outcome;
+  } catch (error) {
+    // A process/provider failure does not destroy the candidate or consume its job.
+    // The durable pending owner lets the scheduler/restart path resume the same review.
+    if (!principalTurnCancellationRecorded({
+      butlerData: input.deps.butlerData,
+      turnId: input.turnId,
+    })) {
+      updateFinalCandidateReview({
+        butlerData: input.deps.butlerData,
+        turnId: input.turnId,
+        candidateId: checkpoint.candidate_id,
+        state: "pending_review",
+      });
+    }
+    throw error;
+  }
+}
+
+class FinalCandidateReviewStalledError extends Error {
+  readonly code = "final_candidate_review_stalled";
+  readonly retryable = false;
+
+  constructor(readonly candidateId: string) {
+    super("The same candidate and evidence revision reached the same unresolved review gap.");
+    this.name = "FinalCandidateReviewStalledError";
+  }
+}
+
+class FinalCandidateAlreadyDeliveredError extends Error {
+  readonly code = "final_candidate_already_delivered";
+  readonly retryable = false;
+
+  constructor(readonly candidateId: string) {
+    super("The final candidate already has a terminal durable delivery.");
+    this.name = "FinalCandidateAlreadyDeliveredError";
+  }
+}
+
+class FinalCandidateReviewRecoverableError extends Error {
+  readonly code = "final_candidate_review_recoverable";
+  readonly retryable = false;
+
+  constructor(readonly candidateId: string) {
+    super("The retained final candidate requires an explicit recovery dispatch.");
+    this.name = "FinalCandidateReviewRecoverableError";
+  }
+}
+
+function throwIfFinalCandidateCancelled(
+  input: FinalDeliveryReviewInput & { turnId?: string | null },
+  candidateId: string,
+): void {
+  if (!input.turnId || !principalTurnCancellationRecorded({
+    butlerData: input.deps.butlerData,
+    turnId: input.turnId,
+  })) return;
+  updateFinalCandidateReview({
+    butlerData: input.deps.butlerData,
+    turnId: input.turnId,
+    candidateId,
+    state: "cancelled",
+  });
+  const error = new Error("turn_cancelled");
+  error.name = "AbortError";
+  throw error;
+}
+
+async function evaluateFinalCandidateForContinuation(
   input: FinalDeliveryReviewInput,
 ): Promise<FinalCandidateContinuationReviewOutcome> {
   const explicitToolGap = explicitToolRequirementGap(input);
@@ -108,7 +318,7 @@ export async function reviewFinalCandidateForContinuation(
     deps: input.deps,
     turnId: input.turnId,
     turnBudget: input.turnBudget,
-    prompt: input.prompt,
+    userText: input.userText,
     candidateText: groundedText,
     audit: input.audit,
     contract: input.turnContract,
@@ -204,6 +414,31 @@ export async function reviewFinalCandidateForContinuation(
     text: reviewResult.reviewedText,
     evidenceRefs: [...groundingEvidenceRefs, ...reviewResult.outcome.evidenceRefs],
   };
+}
+
+function inboundUserMessageId(input: RuntimeTurnInput, turnId: string): string {
+  return "eventId" in input.input ? input.input.message.id : `turn-input:${turnId}`;
+}
+
+function finalReviewProgressRevision(input: FinalDeliveryReviewInput): string | undefined {
+  if (input.audit.length === 0 && !input.turnContract) return undefined;
+  return createHash("sha256").update(JSON.stringify({
+    audit: input.audit.map((entry) => ({
+      name: entry.name,
+      ok: entry.ok,
+      result_sha256: createHash("sha256")
+        .update(JSON.stringify(entry.result ?? null), "utf8")
+        .digest("hex"),
+    })),
+    contract: input.turnContract
+      ? {
+        id: input.turnContract.contract_id,
+        generation: input.turnContract.generation,
+        state: input.turnContract.state,
+        evidence_receipt_ids: input.turnContract.evidence_receipt_ids,
+      }
+      : null,
+  }), "utf8").digest("hex");
 }
 
 function planClosureGap(
@@ -335,6 +570,7 @@ async function runGoalCompletionReviews(input: {
   useTools: boolean;
   turnId?: string | null;
   prompt: string;
+  userText: string;
   initialText: string;
   audit: ToolAuditEntry[];
   publicDecisionContext: PublicWorkDecision[];
@@ -357,7 +593,7 @@ async function runGoalCompletionReviews(input: {
   }
   const requiredObligations = requiredCompletionObligations(input.publicDecisionContext);
   const outcome = evaluateCompletionReviewOutcome({
-    requestText: input.prompt,
+    requestText: input.userText,
     candidateText: input.initialText,
     evidenceReceipts: evidenceCapabilityReceiptsFromAudit(input.audit),
     requiredObligations,

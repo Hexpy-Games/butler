@@ -26,6 +26,11 @@ import { readFirstVisibleLatencySummary } from "../../packages/butler-agent/src/
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 import { createNativeButlerDefaultProvider } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { createTurnExecutionControls } from "../../packages/butler-agent/src/gateways/core/turn-execution-controls.ts";
+import {
+  commitFinalCandidateProposal,
+  readCurrentFinalCandidate,
+  updateFinalCandidateReview,
+} from "../../packages/butler-agent/src/agent/turn/native/turn-runner/final-candidate-review-store.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -229,6 +234,66 @@ test("session actor serializes concurrent inbound turns in FIFO order", async ()
   });
 
   store.close();
+});
+
+test("session actor commits candidate delivery only after the durable final outbound action", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const runtime = new BlockingRuntime(() => "reviewed final answer");
+  store.upsert({
+    sessionId: "butler/main",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: "fixtures/butler-project",
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [],
+  });
+  const turnId = "turn-candidate-delivery";
+  const candidate = commitFinalCandidateProposal({
+    butlerData: tempDir,
+    turnId,
+    sessionId: "butler/main",
+    contractId: null,
+    userMessageId: "candidate-delivery",
+    userText: "deliver the reviewed answer",
+    candidateText: "reviewed final answer",
+    evidence: { items: [], attempts: [] },
+    providerAdapterId: fakeProvider.id,
+    effectiveModel: "openai/auto:codex-latest",
+  });
+  updateFinalCandidateReview({
+    butlerData: tempDir,
+    turnId,
+    candidateId: candidate.candidate_id,
+    state: "accepted",
+    reviewedText: candidate.candidate_text,
+  });
+  updateFinalCandidateReview({
+    butlerData: tempDir,
+    turnId,
+    candidateId: candidate.candidate_id,
+    state: "delivery_pending",
+  });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler.",
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  const handled = actor.handleInbound(appInbound("candidate-delivery", "deliver the reviewed answer"));
+  await runtime.firstTurnStarted.promise;
+  expect(readCurrentFinalCandidate({ butlerData: tempDir, turnId })?.state).toBe("delivery_pending");
+  runtime.firstTurnRelease.resolve();
+  await handled;
+
+  expect(readCurrentFinalCandidate({ butlerData: tempDir, turnId })).toMatchObject({
+    candidate_id: candidate.candidate_id,
+    state: "delivered",
+    delivery_action_id: `runtime-final:${turnId}`,
+  });
 });
 
 test("session actor records prompt-loaded skill names on final results", async () => {

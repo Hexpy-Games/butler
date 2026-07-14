@@ -48,6 +48,7 @@ import {
   clearTurnContextAtom,
   isTurnSchedulerContinuationYieldError,
 } from "../../agent/turn/turn-continuation-context.ts";
+import { markFinalCandidateDelivered } from "../../agent/turn/native/turn-runner/final-candidate-review-store.ts";
 import type {
   GatewayActorTurnResult,
   GatewayDurableRole,
@@ -711,6 +712,13 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           turnId: turnIdFromEnvelope(envelope),
         },
       });
+      if (turnId) {
+        markFinalCandidateDelivered({
+          butlerData: gatewayMetricsButlerData(),
+          turnId,
+          deliveryActionId: finalAction.actionId,
+        });
+      }
       conversationAdmission?.admitFinalAssistant(result.text, finalAction.actionId);
       conversationAdmission?.finalize("complete", timestamp);
       this.captureDeveloperModelTurn({
