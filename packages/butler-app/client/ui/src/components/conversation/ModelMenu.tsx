@@ -17,11 +17,16 @@ import {
   reasoningOptionLabel,
   tokenWindowLabel,
 } from "@/app/utils.ts";
+import {
+  executionModelDetail,
+} from "./composerModelTruth.ts";
+import { ComposerModelStatusButton } from "./ComposerModelStatusButton.tsx";
 
 export function ModelMenu() {
   const modelMenuOpen = useComposerStore((store) => store.modelMenuOpen);
   const setModelMenuOpen = useComposerStore((store) => store.setModelMenuOpen);
   const activeModel = useComposerStore((store) => store.activeModel);
+  const modelState = useComposerStore((store) => store.modelState);
   const reasoning = useComposerStore((store) => store.reasoning);
   const model = useComposerStore((store) => store.model);
   const models = useComposerStore((store) => store.models);
@@ -35,6 +40,12 @@ export function ModelMenu() {
     (store) => store.handleReasoningChange,
   );
   const settings = useButlerStore((store) => store.settings);
+  const activeExecutionTurn = useButlerStore(
+    (store) => store.sessionView?.active_turn,
+  );
+  const latestExecutionTurn = useButlerStore(
+    (store) => store.sessionView?.latest_turn,
+  );
   const [searchValue, setSearchValue] = useState("");
   const [providerFilter, setProviderFilter] = useState("all");
 
@@ -81,7 +92,15 @@ export function ModelMenu() {
     });
   }, [handleModelChoice, model, models, providerFilter, providers, searchValue]);
 
-  if (!activeModel) return null;
+  if (modelState !== "ready" || !activeModel) {
+    return <ComposerModelStatusButton state={modelState} />;
+  }
+
+  const executionDetail = executionModelDetail({
+    turn: activeExecutionTurn ?? latestExecutionTurn,
+    active: Boolean(activeExecutionTurn),
+    models,
+  });
 
   return (
     <Popover open={modelMenuOpen} onOpenChange={setModelMenuOpen}>
@@ -89,7 +108,7 @@ export function ModelMenu() {
         <ComposerControlButton
           detail={
             <span data-test-class="composer-model-summary">
-              {reasoningBudgetSummary(activeModel, reasoning)}
+              {executionDetail ?? reasoningBudgetSummary(activeModel, reasoning)}
             </span>
           }
           data-test-class="model-button"

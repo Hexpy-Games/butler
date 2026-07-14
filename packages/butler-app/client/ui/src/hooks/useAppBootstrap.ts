@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { api, subscribeLiveEvents } from "@/app/api.ts";
 import {
   ACTIVE_TURN_STATES,
-  EMPTY_MODEL_CATALOG,
   EMPTY_NAVIGATION,
 } from "@/app/constants.ts";
 import {
@@ -113,6 +112,9 @@ export function useAppBootstrap() {
   const setRightOpen = useButlerStore((state) => state.setRightOpen);
   const setNavigation = useButlerStore((state) => state.setNavigation);
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
+  const setModelCatalogState = useButlerStore(
+    (state) => state.setModelCatalogState,
+  );
   const setSettings = useButlerStore((state) => state.setSettings);
   const setMessages = useButlerStore((state) => state.setMessages);
   const setMessageListView = useButlerStore(
@@ -223,14 +225,14 @@ export function useAppBootstrap() {
         const data = await api<ModelCatalogView>("/model-catalog");
         if (!cancelled) setModelCatalog(data);
       } catch {
-        if (!cancelled) setModelCatalog(EMPTY_MODEL_CATALOG);
+        if (!cancelled) setModelCatalogState("error");
       }
     }
     loadModelCatalog();
     return () => {
       cancelled = true;
     };
-  }, [setModelCatalog]);
+  }, [setModelCatalog, setModelCatalogState]);
 
   useEffect(() => {
     let cancelled = false;
