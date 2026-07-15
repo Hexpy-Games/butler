@@ -110,6 +110,14 @@ function goal(state: BtccPhaseStateV1, ref = "goal-1"): GoalContractV1 {
     conceptionModelCallId: "model-call:conception:1",
     requestedOutcome: "Implement and verify the BTCC state machine",
     problemFrame: "The turn must progress only through accepted phase receipts.",
+    intentUnderstanding: {
+      userRequest: "Implement and verify the BTCC state machine",
+      relatedContextRefs: ["memory:btcc-design"],
+      connectedKnowledgeNeeds: ["current runtime call graph"],
+      userPreferenceApplications: [],
+      expertPerspectives: ["runtime state-machine engineering"],
+      requiredResult: "A validated structural implementation",
+    },
     deliverables: [{
       key: "implementation",
       kind: "code",

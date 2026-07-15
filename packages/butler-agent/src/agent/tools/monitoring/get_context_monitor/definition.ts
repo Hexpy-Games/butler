@@ -34,4 +34,9 @@ export const getContextMonitorToolMetadata = {
   satisfiesCompletionObligations: [
     "source_verified",
   ],
+  btcc: {
+    effects: ["observe"],
+    purposes: ["intent_grounding", "planning", "execution", "review"],
+    scopes: ["turn"],
+  },
 } satisfies ToolCapabilityMetadata;

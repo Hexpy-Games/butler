@@ -763,11 +763,18 @@ test("app session actor emits deterministic acknowledgement before context prepa
   store.close();
 });
 
-test("app session actor records opening decision id in runtime metadata", async () => {
+test("app session actor never runs a separate gateway opening model call", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new BlockingRuntime();
   runtime.firstTurnRelease.resolve();
-  const decisionPayloads: Array<Record<string, unknown> | undefined> = [];
+  let providerCalls = 0;
+  const provider: ModelProviderAdapter = {
+    ...providerReturningOpening(),
+    async invoke(input) {
+      providerCalls += 1;
+      return await providerReturningOpening().invoke(input);
+    },
+  };
   store.upsert({
     sessionId: "butler/main",
     role: "butler",
@@ -786,14 +793,10 @@ test("app session actor records opening decision id in runtime metadata", async 
   const lifecycle = new SessionLifecycleService({
     store,
     runtime,
-    provider: providerReturningOpening(),
+    provider,
     systemPromptFactory: () => "You are Butler.",
     openingDecisionTimeoutMs: 250,
-    deliverTurnEvent: async ({ event }) => {
-      if (event.kind === TURN_DECISION_EVENT_KIND) {
-        decisionPayloads.push(event.payload);
-      }
-    },
+    deliverTurnEvent: async () => {},
   });
   const actor = await lifecycle.getOrCreate("butler/main", "butler");
 
@@ -801,11 +804,8 @@ test("app session actor records opening decision id in runtime metadata", async 
     text: "reply-1",
   });
 
-  const decisionId = decisionPayloads[0]?.decisionId;
-  expect(typeof decisionId).toBe("string");
-  expect(runtime.turns[0]?.metadata).toMatchObject({
-    openingDecisionId: decisionId,
-  });
+  expect(providerCalls).toBe(0);
+  expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
   store.close();
 });
 
@@ -969,7 +969,7 @@ test("app session actor keeps the admitted model when mutable session defaults c
   store.close();
 });
 
-test("app session actor omits opening decision metadata when decision delivery fails", async () => {
+test("app session actor leaves the Conception decision channel to the runtime", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new BlockingRuntime();
   runtime.firstTurnRelease.resolve();
@@ -996,9 +996,6 @@ test("app session actor omits opening decision metadata when decision delivery f
     systemPromptFactory: () => "You are Butler.",
     openingDecisionTimeoutMs: 250,
     deliverTurnEvent: async ({ event }) => {
-      if (event.kind === TURN_DECISION_EVENT_KIND) {
-        throw new Error("decision event store unavailable");
-      }
       turnEvents.push(event.kind);
     },
   });
@@ -1012,19 +1009,13 @@ test("app session actor omits opening decision metadata when decision delivery f
   expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
   expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
-  expect(readTranscript("butler/main")).toContainEqual(expect.objectContaining({
-    kind: "system",
-    payload: expect.objectContaining({
-      category: "opening_decision",
-      details: expect.objectContaining({
-        reason: "delivery_failed",
-      }),
-    }),
-  }));
+  expect(readTranscript("butler/main").filter((event) =>
+    event.kind === "system" && event.payload?.category === "opening_decision",
+  )).toHaveLength(0);
   store.close();
 });
 
-test("app session actor times out failed opening generation without public fallback", async () => {
+test("app session actor reaches the runtime without waiting on a gateway opening generator", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const runtime = new BlockingRuntime();
   const turnEvents: string[] = [];
@@ -1068,7 +1059,7 @@ test("app session actor times out failed opening generation without public fallb
   expect(turnEvents[0]).toBe(TURN_ACKNOWLEDGED_EVENT_KIND);
   expect(turnEvents[1]).toBe(FIRST_VISIBLE_PROGRESS_EVENT_KIND);
   expect(turnEvents).not.toContain(TURN_DECISION_EVENT_KIND);
-  expect(providerInvokeCount).toBe(1);
+  expect(providerInvokeCount).toBe(0);
   expect(runtime.turns[0]?.metadata?.openingDecisionId).toBeUndefined();
   runtime.firstTurnRelease.resolve();
 
@@ -1078,13 +1069,9 @@ test("app session actor times out failed opening generation without public fallb
 
   expect(turnEvents).toContain("turn.completed");
   expect(readFirstVisibleLatencySummary({ butlerData: tempDir }).events).toBe(0);
-  expect(readTranscript("butler/main")).toContainEqual(expect.objectContaining({
-    kind: "system",
-    payload: expect.objectContaining({
-      category: "opening_decision",
-      message: "Opening decision was not emitted.",
-    }),
-  }));
+  expect(readTranscript("butler/main").filter((event) =>
+    event.kind === "system" && event.payload?.category === "opening_decision",
+  )).toHaveLength(0);
   store.close();
 });
 

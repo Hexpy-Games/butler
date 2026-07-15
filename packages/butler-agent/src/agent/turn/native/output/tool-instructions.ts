@@ -6,6 +6,14 @@ export interface ButlerToolInstructionOptions {
   structuredSurface?: boolean;
 }
 
+const BTCC_RUNTIME_CONTRACT = [
+  "## Butler Turn Cognition Cycle",
+  "- The runtime injects exactly one current-phase contract for Conception, Planning, Execution, Review, Consolidation, or Reporting before every productive model call.",
+  "- Follow only that phase's typed inputs, capability grants, output schema, and exit criteria. Do not infer or advance phase state from prose, keywords, tool names, retry counts, or final-answer text.",
+  "- Missing authority or evidence remains a typed wait or ReturnTicket owned by the state machine. It is never a model-authored terminal failure.",
+  "- Phase state and checkpoints are internal. Keep user-visible progress specific to the requested work and never expose hidden reasoning, raw prompts, private memory, or tool payloads.",
+];
+
 export function appendButlerToolInstructions(
   systemPrompt?: string,
   options: ButlerToolInstructionOptions = {},
@@ -17,14 +25,7 @@ export function appendButlerToolInstructions(
     return appendStructuredToolInstructions(systemPrompt, options.availableToolNames ?? []);
   }
   const toolContract = [
-    "## Butler Turn Cognition Cycle",
-    "- Every Butler or Steward turn follows this internal work discipline: `구상`, `계획`, `실행`, `검토`, `취합 및 정리`, `보고`. This strengthens work quality but must not expose chain-of-thought, raw prompt text, private memory text, or tool payloads.",
-    "- In `구상`, identify the user's intent, what extra context is needed, Butler's role in this message, and the expected final deliverable. Use recent conversation, working memory, feedback, bounded `read_conversation_context`, associative `recall_memory`, or exact `query_memory` only when the current prompt context is not enough.",
-    "- In `계획`, choose the work path: direct answer for simple few-second no-tool requests, visible direct toolchain for bounded same-turn work, planned dispatch for reviewed durable work, or `create_work_orchestration` when multiple role-aware streams are needed. For non-trivial work, create structured phase/step progress before visible action tools.",
-    "- In `실행`, carry out the selected direct tools or worker/orchestration streams and keep public work decisions tied to the immediate tool action.",
-    "- In `검토`, compare observed evidence, public work decisions, completion obligations, worker criteria, and requested deliverables against the original goal. Continue execution or report explicit incomplete/failure when evidence is missing.",
-    "- In `취합 및 정리`, synthesize the reviewed evidence into a concise outcome draft and internally check whether the result is sufficient; keep any self-evaluation raw-text-free.",
-    "- In `보고`, produce the final persona-aligned answer only after review. Do not dump the cycle checklist, public decision fields, raw tool logs, or hidden reasoning in the final answer.",
+    ...BTCC_RUNTIME_CONTRACT,
     "## Persona Continuity",
     "- The Active Persona and any current-turn Active Persona Reminder are binding for every user-facing final answer, public work decision, and visible status text.",
     "- Use the configured Assistant Response Language from the Turn Environment for every user-facing final answer, public work decision, and visible status text.",
@@ -150,6 +151,7 @@ function appendScopedToolInstructions(
   const tools = new Set(availableToolNames);
   const exactSurface = [...tools].sort().map((name) => `\`${name}\``).join(", ");
   const instructions = [
+    ...BTCC_RUNTIME_CONTRACT,
     scope === "fixed" ? "## Fixed Butler Tool Surface" : "## Typed Contract Tool Surface",
     scope === "fixed"
       ? `- The complete tool surface for this turn is: ${exactSurface || "none"}. Plan each next step directly with this surface.`

@@ -25,16 +25,17 @@ import {
   CONTINUITY_SCOPES,
   type ContinuityUpdate,
 } from "../../turn-contract-types.ts";
+import type { GoalContractCandidateV1 } from "../../btcc/phase-types.ts";
 
 export const TURN_DECISION_REPAIR_LIMIT = 1;
 
 const DELIVERABLE_DECISION_GUIDANCE = [
   "Select only concrete output obligations required by the user's semantic objective.",
-  "ledger_spec, ledger_work, and ledger_tasks mean canonical Project Ledger records only.",
+  "ledger_spec, ledger_plan, ledger_work, and ledger_tasks mean canonical Project Ledger records only.",
   "ledger_tasks never means the bound runtime todo plan created with update_todo_list.",
   "A request for a task list, todo list, work list, checklist, or explicit plan before execution does not by itself request ledger_tasks.",
   "Every work action receives its bound runtime todo plan independently of deliverables and tracking mode.",
-  "The active project id alone does not imply Ledger tracking.",
+  "Project-bound managed work uses canonical Project Ledger tracking before execution.",
   "For local command, file, test, or operational verification with no intended durable diff, use validation; use code_change for an intended durable workspace mutation.",
   "resume_work may declare only execution deliverables already listed as unsatisfied for the selected WorkStream; use modify_work when the current request adds execution scope.",
 ].join(" ");
@@ -62,10 +63,12 @@ export function typedTurnDecisionInstructions(input: {
   continuityCandidates?: readonly ContinuityCandidate[];
 }): string {
   return [
-    "## Typed Turn Decision",
-    "Return one strict structured decision for the current user instruction.",
+    "## Conception Output Contract",
+    "Return one strict structured Conception decision for the current user instruction.",
     `decision_id must be ${input.decisionId}.`,
-    "This is the first productive pass, not a separate natural-language classifier.",
+    "This is the first productive semantic pass, not a separate classifier. Its accepted output becomes the immutable GoalContract for Planning.",
+    "Account for six intent lenses: the current request, related admitted memories, connected knowledge or current reality, accepted user preferences, needed expert perspectives, and the exact required result.",
+    "Populate goal_contract_candidate from those six lenses and an evidence-oriented work shape. Do not copy hidden context or raw profile material.",
     "Use answer only when the response can be delivered now without tools or durable work; include the complete answer_text.",
     "Use tool_answer for a general answer that requires public web evidence; include grounded_answer, set evidence_domain to public_web, and do not select project or WorkStream targets.",
     "Search and page-read outputs are evidence material. Do not force a search-then-read sequence: search material may support a claim, and a successful page read may still be insufficient.",
@@ -77,8 +80,9 @@ export function typedTurnDecisionInstructions(input: {
     "For resume_work, keep execution deliverables within the selected WorkStream's inherited unsatisfied frontier. Use modify_work when the request adds a new execution deliverable.",
     "Every start_work, resume_work, or modify_work decision first creates or restores an explicit bound todo plan before ordinary tools run; the runtime opening placeholder is not that plan.",
     "The bound runtime todo plan is not a ledger_tasks deliverable. Never add ledger_tasks merely because the user asks for a task list, todo list, work list, checklist, or explicit plan before execution.",
-    "Use ledger_spec, ledger_work, or ledger_tasks only when the semantic objective requires canonical Project Ledger records or the selected compatible WorkStream already has unsatisfied Ledger obligations.",
-    "An active project id alone does not imply Ledger tracking. Ordinary local commands, files, tests, and operational checks remain local workspace work.",
+    "Use ledger_spec, ledger_plan, ledger_work, or ledger_tasks only when the semantic objective requires canonical Project Ledger records or the selected compatible WorkStream already has unsatisfied Ledger obligations.",
+    "Project binding is structural. Managed work in an active project must use canonical Project Ledger tracking before Execution; a direct answer with no work obligation remains turn-local.",
+    "In an active project, local commands, files, tests, operational checks, and non-coding deliverables are governed by the Ledger when they create a work obligation.",
     "For local command, file, test, or operational verification with no intended durable diff, select validation; select code_change for an intended durable workspace mutation.",
     "Use cancel_work only for a listed WorkStream. Use supply_user_action only for its listed waiting-user blocker.",
     "For implementation or mutation include the actual durable deliverables, not status_report alone.",
@@ -105,6 +109,8 @@ export function turnDecisionResponseFormat(input: {
   candidateIds: readonly string[];
   waitingBlockerIds: readonly string[];
   continuityCandidates?: readonly ContinuityCandidate[];
+  relatedContextRefs?: readonly string[];
+  adaptationHintRefs?: readonly string[];
 }): StructuredDecisionPrompt["responseFormat"] {
   const continuityCandidateIds = input.continuityCandidates?.map((candidate) => candidate.continuity_id) ?? [];
   return {
@@ -116,7 +122,7 @@ export function turnDecisionResponseFormat(input: {
       additionalProperties: false,
       required: [
         "schema_version", "decision_id", "action", "target_workstream_id", "target_project_id",
-        "blocker_id", "evidence_domain", "inspection_scope", "deliverables", "continuity_updates", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step",
+        "blocker_id", "evidence_domain", "inspection_scope", "deliverables", "continuity_updates", "answer_text", "public_title", "public_summary", "public_rationale", "immediate_next_step", "goal_contract_candidate",
       ],
       properties: {
         schema_version: { type: "string", const: TURN_CONTRACT_DECISION_SCHEMA },
@@ -124,7 +130,7 @@ export function turnDecisionResponseFormat(input: {
         action: { type: "string", enum: [...TURN_CONTRACT_ACTIONS] },
         target_workstream_id: { enum: [null, ...input.candidateIds] },
         target_project_id: {
-          description: "The active project target. Selecting it does not imply canonical Project Ledger tracking.",
+          description: "The active project target. Managed work bound to it uses canonical Project Ledger tracking.",
           enum: [null, ...(input.projectId?.trim() ? [input.projectId.trim()] : [])],
         },
         blocker_id: { enum: [null, ...input.waitingBlockerIds] },
@@ -161,6 +167,7 @@ export function turnDecisionResponseFormat(input: {
         public_summary: { type: "string", minLength: 1, maxLength: 320 },
         public_rationale: { type: "string", minLength: 1, maxLength: 320 },
         immediate_next_step: { type: ["string", "null"], maxLength: 240 },
+        goal_contract_candidate: goalContractCandidateSchema(input),
       },
     },
   };
@@ -194,7 +201,210 @@ export function parseStructuredTurnDecision(text: string, expectedDecisionId: st
     public_summary: String(record.public_summary ?? ""),
     public_rationale: nullableString(record.public_rationale) ?? String(record.public_summary ?? ""),
     immediate_next_step: nullableString(record.immediate_next_step),
+    goal_contract_candidate: parseGoalContractCandidate(record.goal_contract_candidate),
   });
+}
+
+function goalContractCandidateSchema(input: {
+  relatedContextRefs?: readonly string[];
+  adaptationHintRefs?: readonly string[];
+}): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "requested_outcome", "problem_frame", "intent_understanding",
+      "binding_constraints", "non_goals", "acceptance_intents",
+      "ambiguity_decisions", "current_state_needs", "evidence_needs",
+      "downstream_authority_needs", "work_shape",
+    ],
+    properties: {
+      requested_outcome: { type: "string", minLength: 1, maxLength: 1000 },
+      problem_frame: { type: "string", minLength: 1, maxLength: 1600 },
+      intent_understanding: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "user_request", "related_context_refs", "connected_knowledge_needs",
+          "user_preference_applications", "expert_perspectives", "required_result",
+        ],
+        properties: {
+          user_request: { type: "string", minLength: 1, maxLength: 1000 },
+          related_context_refs: {
+            type: "array",
+            uniqueItems: true,
+            items: allowedRefSchema(input.relatedContextRefs),
+          },
+          connected_knowledge_needs: stringArraySchema(12, 500),
+          user_preference_applications: {
+            type: "array",
+            maxItems: 12,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["hint_ref", "application"],
+              properties: {
+                hint_ref: allowedRefSchema(input.adaptationHintRefs),
+                application: { type: "string", minLength: 1, maxLength: 500 },
+              },
+            },
+          },
+          expert_perspectives: stringArraySchema(12, 300),
+          required_result: { type: "string", minLength: 1, maxLength: 1000 },
+        },
+      },
+      binding_constraints: stringArraySchema(20, 500),
+      non_goals: stringArraySchema(20, 500),
+      acceptance_intents: {
+        type: "array",
+        minItems: 1,
+        maxItems: 30,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["key", "statement", "evidence_class"],
+          properties: {
+            key: { type: "string", minLength: 1, maxLength: 120 },
+            statement: { type: "string", minLength: 1, maxLength: 800 },
+            evidence_class: {
+              type: "string",
+              enum: ["admitted_context", "current_state", "artifact", "validation", "user_confirmation"],
+            },
+          },
+        },
+      },
+      ambiguity_decisions: {
+        type: "array",
+        maxItems: 20,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["issue", "decision", "basis", "source_refs"],
+          properties: {
+            issue: { type: "string", minLength: 1, maxLength: 500 },
+            decision: { type: "string", minLength: 1, maxLength: 800 },
+            basis: {
+              type: "string",
+              enum: ["current_user_message", "canonical_project_contract", "accepted_prior_decision", "fallible_context"],
+            },
+            source_refs: { type: "array", uniqueItems: true, items: { type: "string" } },
+          },
+        },
+      },
+      current_state_needs: stringArraySchema(20, 500),
+      evidence_needs: stringArraySchema(30, 500),
+      downstream_authority_needs: stringArraySchema(20, 500),
+      work_shape: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "work_disposition", "custody", "required_effects", "deliverable_kinds",
+          "requires_current_state", "requires_tools",
+        ],
+        properties: {
+          work_disposition: { type: "string", enum: ["direct_answer", "managed_work"] },
+          custody: { type: "string", enum: ["same_turn", "durable"] },
+          required_effects: stringArraySchema(20, 200),
+          deliverable_kinds: stringArraySchema(20, 200),
+          requires_current_state: { type: "boolean" },
+          requires_tools: { type: "boolean" },
+        },
+      },
+    },
+  };
+}
+
+function stringArraySchema(maxItems: number, maxLength: number): Record<string, unknown> {
+  return {
+    type: "array",
+    maxItems,
+    items: { type: "string", minLength: 1, maxLength },
+  };
+}
+
+function allowedRefSchema(refs: readonly string[] | undefined): Record<string, unknown> {
+  return refs && refs.length > 0
+    ? { type: "string", enum: [...refs] }
+    : { type: "string", minLength: 1 };
+}
+
+function parseGoalContractCandidate(value: unknown): GoalContractCandidateV1 | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("btcc_goal_contract_candidate_invalid");
+  }
+  const record = value as Record<string, unknown>;
+  const understanding = requiredRecord(
+    record.intent_understanding,
+    "btcc_goal_contract_intent_understanding_invalid",
+  );
+  const workShape = requiredRecord(
+    record.work_shape,
+    "btcc_goal_contract_work_shape_invalid",
+  );
+  return {
+    requestedOutcome: requiredCandidateString(record.requested_outcome),
+    problemFrame: requiredCandidateString(record.problem_frame),
+    intentUnderstanding: {
+      userRequest: requiredCandidateString(understanding.user_request),
+      relatedContextRefs: stringArray(understanding.related_context_refs),
+      connectedKnowledgeNeeds: stringArray(understanding.connected_knowledge_needs),
+      userPreferenceApplications: recordArray(understanding.user_preference_applications).map((item) => ({
+        hintRef: requiredCandidateString(item.hint_ref),
+        application: requiredCandidateString(item.application),
+      })),
+      expertPerspectives: stringArray(understanding.expert_perspectives),
+      requiredResult: requiredCandidateString(understanding.required_result),
+    },
+    bindingConstraints: stringArray(record.binding_constraints),
+    nonGoals: stringArray(record.non_goals),
+    acceptanceIntents: recordArray(record.acceptance_intents).map((item) => ({
+      key: requiredCandidateString(item.key),
+      statement: requiredCandidateString(item.statement),
+      evidenceClass: item.evidence_class as GoalContractCandidateV1["acceptanceIntents"][number]["evidenceClass"],
+    })),
+    ambiguityDecisions: recordArray(record.ambiguity_decisions).map((item) => ({
+      issue: requiredCandidateString(item.issue),
+      decision: requiredCandidateString(item.decision),
+      basis: item.basis as GoalContractCandidateV1["ambiguityDecisions"][number]["basis"],
+      sourceRefs: stringArray(item.source_refs),
+    })),
+    currentStateNeeds: stringArray(record.current_state_needs),
+    evidenceNeeds: stringArray(record.evidence_needs),
+    downstreamAuthorityNeeds: stringArray(record.downstream_authority_needs),
+    workShape: {
+      workDisposition: workShape.work_disposition as GoalContractCandidateV1["workShape"]["workDisposition"],
+      custody: workShape.custody as GoalContractCandidateV1["workShape"]["custody"],
+      requiredEffects: stringArray(workShape.required_effects),
+      deliverableKinds: stringArray(workShape.deliverable_kinds),
+      requiresCurrentState: workShape.requires_current_state === true,
+      requiresTools: workShape.requires_tools === true,
+    },
+  };
+}
+
+function requiredRecord(value: unknown, code: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(code);
+  return value as Record<string, unknown>;
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) throw new Error("btcc_goal_contract_candidate_array_invalid");
+  return value.map((item) => requiredRecord(item, "btcc_goal_contract_candidate_item_invalid"));
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) {
+    throw new Error("btcc_goal_contract_candidate_string_array_invalid");
+  }
+  return value.map((item) => String(item).trim());
+}
+
+function requiredCandidateString(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("btcc_goal_contract_candidate_string_invalid");
+  }
+  return value.trim();
 }
 
 export function canonicalFunctionDecisionArgs(
@@ -248,6 +458,7 @@ export function compileStructuredTurnDecision(input: {
   workspaceId: string;
   projectId?: string | null;
   continuityCandidates?: readonly ContinuityCandidate[];
+  projectLedgerBound?: boolean;
   now?: Date;
 }): CompiledTurnContract {
   validateContinuityUpdates({
@@ -262,9 +473,22 @@ export function compileStructuredTurnDecision(input: {
     throw new Error("turn_contract_project_target_mismatch");
   }
   const attachesProjectTarget = !["answer", "tool_answer", "inspect"].includes(input.decision.action);
-  const decision = input.projectId?.trim() && !input.decision.target_project_id && attachesProjectTarget
+  const targetedDecision = input.projectId?.trim() && !input.decision.target_project_id && attachesProjectTarget
     ? { ...input.decision, target_project_id: input.projectId.trim() }
     : input.decision;
+  const decision = input.projectLedgerBound === true && targetedDecision.target_project_id &&
+      ["start_work", "modify_work"].includes(targetedDecision.action)
+    ? {
+      ...targetedDecision,
+      deliverables: [...new Set([
+        "ledger_spec" as const,
+        "ledger_plan" as const,
+        "ledger_work" as const,
+        "ledger_tasks" as const,
+        ...targetedDecision.deliverables,
+      ])],
+    }
+    : targetedDecision;
   return compileTurnContract({
     decision,
     candidates: input.candidates,

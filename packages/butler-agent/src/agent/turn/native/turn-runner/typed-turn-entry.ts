@@ -26,6 +26,7 @@ import {
   typedTurnDecisionInstructions,
 } from "./typed-turn-decision.ts";
 import type { PublicWorkDecision } from "../output/tool-types.ts";
+import type { ToolAuditEntry } from "../output/tool-types.ts";
 import type { NativeStoredSessionConfig } from "./turn-runner-types.ts";
 import type { TurnContextAtom } from "../../turn-continuation-context.ts";
 import type { ConversationPromptContextPlan } from "../../../context/conversation-context.ts";
@@ -38,6 +39,15 @@ import {
   listContinuityCandidates,
   type ContinuityProvenance,
 } from "../../../cognition/continuity/continuity-store.ts";
+import {
+  completeBtccConception,
+  readBtccActivationSnapshot,
+  renderConceptionContextEnvelope,
+  type PreparedBtccTurn,
+} from "../../btcc/conception-runtime.ts";
+import { BtccNativePhaseCoordinator } from "../../btcc/native-phase-coordinator.ts";
+import type { ObligationToolSurfaceState } from "./obligation-tool-surface.ts";
+import { isToolBatchCompletedHandoffText } from "../../tool-batch-handoff.ts";
 
 interface TypedTurnEntryContext {
   turnId: string;
@@ -99,9 +109,13 @@ export async function runTypedTurnEntry(input: {
     prompt: string,
     maxToolRounds?: number,
     phase?: string,
+    options?: { handoffAfterToolBatch?: boolean },
   ) => Promise<string>;
+  obligationToolSurfaceState?: () => ObligationToolSurfaceState;
+  audit?: ToolAuditEntry[];
   surfaceRedecisionAttempt?: number;
   surfaceDiagnostic?: string;
+  preparedBtccTurn?: PreparedBtccTurn | null;
 }): Promise<{ candidateText: string; activeTurnContract: ActiveTurnContract }> {
   const surfaceRedecisionAttempt = input.surfaceRedecisionAttempt ?? 0;
   const resumed = surfaceRedecisionAttempt === 0 ? await resumeTypedTurnEntry(input) : null;
@@ -124,12 +138,19 @@ export async function runTypedTurnEntry(input: {
       : `${input.context.turnId}:surface-redecision:${surfaceRedecisionAttempt}`,
   );
   const candidateIds = candidates.workstreams?.map((candidate) => candidate.workstream_id) ?? [];
-  const decisionInstructions = typedTurnDecisionInstructions({
+  const typedInstructions = typedTurnDecisionInstructions({
     decisionId,
     projectId: input.projectId,
     candidateIds,
     continuityCandidates,
   });
+  const decisionInstructions = input.preparedBtccTurn
+    ? [
+      input.preparedBtccTurn.phasePrompt.text,
+      renderConceptionContextEnvelope(input.preparedBtccTurn.envelope),
+      typedInstructions,
+    ].join("\n\n")
+    : typedInstructions;
   const thin = shouldUseThinFirstResponse({
     turnInput: input.turnInput,
     session: input.session,
@@ -165,6 +186,10 @@ export async function runTypedTurnEntry(input: {
       ?.map((candidate) => candidate.waiting_user_blocker_id)
       .filter((id): id is string => Boolean(id)) ?? [],
     continuityCandidates,
+    relatedContextRefs: input.preparedBtccTurn?.envelope.relatedContextAtoms
+      .map((atom) => atom.ref),
+    adaptationHintRefs: input.preparedBtccTurn?.envelope.adaptationHints
+      .map((hint) => hint.hintRef),
   });
   const decisionTransport = input.turnInput.provider.capabilities.structuredDecisionTransport;
   if (!decisionTransport) {
@@ -184,6 +209,7 @@ export async function runTypedTurnEntry(input: {
         workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
         projectId: input.projectId,
         continuityCandidates,
+        projectLedgerBound: input.preparedBtccTurn?.envelope.projectPolicy.kind === "project_bound",
       });
       return { ok: true, canonicalArgs } as const;
     } catch (error) {
@@ -222,6 +248,7 @@ export async function runTypedTurnEntry(input: {
         workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
         projectId: input.projectId,
         continuityCandidates,
+        projectLedgerBound: input.preparedBtccTurn?.envelope.projectPolicy.kind === "project_bound",
       });
     } catch (error) {
       lastError = error;
@@ -253,6 +280,14 @@ export async function runTypedTurnEntry(input: {
   }
   if (!active) throw lastError ?? new Error("turn_contract_decision_unavailable");
   input.turnContractContext.current = active;
+  let btccCoordinator: BtccNativePhaseCoordinator | null = null;
+  if (input.preparedBtccTurn) {
+    completeBtccConception({ prepared: input.preparedBtccTurn, active });
+    btccCoordinator = new BtccNativePhaseCoordinator(
+      input.preparedBtccTurn,
+      input.butlerData,
+    );
+  }
   if (active.contract.action === "answer") {
     return { candidateText: active.decision.answer_text ?? "", activeTurnContract: active };
   }
@@ -266,6 +301,43 @@ export async function runTypedTurnEntry(input: {
   input.pendingPublicDecisions.push(active.publicDecision);
   let candidateText: string;
   try {
+    if (btccCoordinator && input.obligationToolSurfaceState) {
+      const planningCallRefs: string[] = [];
+      let frontier = input.obligationToolSurfaceState();
+      while (frontier.stage === "work_planning" || frontier.stage === "ledger") {
+        const before = JSON.stringify(frontier);
+        const planningPrompt = btccCoordinator.planningPrompt(active, frontier);
+        const callRef = `model-call:planning:${input.context.turnId}:${planningCallRefs.length + 1}`;
+        const handoff = await input.runKernelToolPrompt(
+          planningPrompt,
+          1,
+          "btcc_planning",
+          { handoffAfterToolBatch: true },
+        );
+        planningCallRefs.push(callRef);
+        frontier = input.obligationToolSurfaceState();
+        if (JSON.stringify(frontier) === before) {
+          throw new Error("btcc_planning_same_state_reentry_blocked");
+        }
+        if (!isToolBatchCompletedHandoffText(handoff) &&
+          (frontier.stage === "work_planning" || frontier.stage === "ledger")) {
+          throw new Error("btcc_planning_phase_output_incomplete");
+        }
+      }
+      btccCoordinator.completePlanning({
+        active,
+        frontier,
+        audit: input.audit ?? [],
+        modelCallRefs: planningCallRefs.length > 0
+          ? planningCallRefs
+          : [`runtime-call:planning:${input.context.turnId}`],
+      });
+      candidateText = await input.runKernelToolPrompt(
+        btccCoordinator.executionPrompt(active),
+        undefined,
+        "btcc_execution",
+      );
+    } else {
     candidateText = await input.runKernelToolPrompt(
       contractExecutionPrompt({
         basePrompt: input.context.prompt,
@@ -275,6 +347,7 @@ export async function runTypedTurnEntry(input: {
       undefined,
       input.initialPromptPhase,
     );
+    }
   } catch (error) {
     if (!isTurnContractSurfaceInconsistentError(error)) throw error;
     active.contract = failContractForSurfaceInconsistency({
@@ -292,6 +365,7 @@ export async function runTypedTurnEntry(input: {
     if (!safeToRedecide || surfaceRedecisionAttempt >= 1) throw error;
     return await runTypedTurnEntry({
       ...input,
+      preparedBtccTurn: null,
       surfaceRedecisionAttempt: surfaceRedecisionAttempt + 1,
       surfaceDiagnostic: surfaceRedecisionDiagnostic(error),
     });
@@ -303,33 +377,101 @@ async function resumeTypedTurnEntry(
   input: Parameters<typeof runTypedTurnEntry>[0],
 ): Promise<{ candidateText: string; activeTurnContract: ActiveTurnContract } | null> {
   const atom = input.context.continuationAtom;
-  if (!atom) return null;
-  if (!atom.contractId || !atom.turnDecision) {
-    throw new Error("turn_continuation_contract_state_missing");
-  }
-  const nextSemanticBlockSequence = atom.nextSemanticBlockSequence ?? 1;
+  const btccState = input.preparedBtccTurn?.store.readPhaseState(input.context.turnId) ?? null;
+  if (!atom && (!btccState || btccState.currentPhase === "conception")) return null;
+  const activation = atom?.contractId && atom.turnDecision
+    ? { contractId: atom.contractId, decision: atom.turnDecision }
+    : input.preparedBtccTurn
+    ? readBtccActivationSnapshot(input.preparedBtccTurn)
+    : null;
+  if (!activation) throw new Error("btcc_activation_snapshot_missing");
+  const nextSemanticBlockSequence = atom?.nextSemanticBlockSequence ?? 1;
   const active = restoreTurnContractExecution({
     butlerData: input.butlerData,
-    contractId: atom.contractId,
-    decision: atom.turnDecision,
+    contractId: activation.contractId,
+    decision: activation.decision,
     nextSemanticBlockSequence,
     turnMetadata: input.turnInput.metadata,
     toolSurfaceController: input.context.toolSurfaceController,
+    allowBtccOwnedState: Boolean(input.preparedBtccTurn),
   });
-  if (atom.workStreamId && active.contract.target_workstream_id !== atom.workStreamId) {
+  if (atom?.workStreamId && active.contract.target_workstream_id !== atom.workStreamId) {
     throw new Error("turn_continuation_workstream_conflict");
   }
   input.turnContractContext.current = active;
-  const candidateText = await input.runKernelToolPrompt(
-    contractResumePrompt({
-      basePrompt: input.context.prompt,
-      active,
-      nextSemanticBlockSequence,
-    }),
-    undefined,
-    input.initialPromptPhase,
-  );
+  const coordinator = input.preparedBtccTurn
+    ? new BtccNativePhaseCoordinator(input.preparedBtccTurn, input.butlerData)
+    : null;
+  const candidateText = coordinator
+    ? await resumeBtccOwnedPhase(input, coordinator, active)
+    : await input.runKernelToolPrompt(
+      contractResumePrompt({
+        basePrompt: input.context.prompt,
+        active,
+        nextSemanticBlockSequence,
+      }),
+      undefined,
+      input.initialPromptPhase,
+    );
   return { candidateText, activeTurnContract: active };
+}
+
+async function resumeBtccOwnedPhase(
+  input: Parameters<typeof runTypedTurnEntry>[0],
+  coordinator: BtccNativePhaseCoordinator,
+  active: ActiveTurnContract,
+): Promise<string> {
+  const state = coordinator.state();
+  if (state.currentPhase === "planning") {
+    if (!input.obligationToolSurfaceState) throw new Error("btcc_planning_frontier_missing");
+    const planningCallRefs: string[] = [];
+    let frontier = input.obligationToolSurfaceState();
+    while (frontier.stage === "work_planning" || frontier.stage === "ledger") {
+      const before = JSON.stringify(frontier);
+      const callRef = `model-call:planning-resume:${input.context.turnId}:${planningCallRefs.length + 1}`;
+      const handoff = await input.runKernelToolPrompt(
+        coordinator.planningPrompt(active, frontier),
+        1,
+        "btcc_planning_resume",
+        { handoffAfterToolBatch: true },
+      );
+      planningCallRefs.push(callRef);
+      frontier = input.obligationToolSurfaceState();
+      if (JSON.stringify(frontier) === before) {
+        throw new Error("btcc_planning_same_state_reentry_blocked");
+      }
+      if (!isToolBatchCompletedHandoffText(handoff) &&
+        (frontier.stage === "work_planning" || frontier.stage === "ledger")) {
+        throw new Error("btcc_planning_phase_output_incomplete");
+      }
+    }
+    coordinator.completePlanning({
+      active,
+      frontier,
+      audit: input.audit ?? [],
+      modelCallRefs: planningCallRefs.length > 0
+        ? planningCallRefs
+        : [`runtime-call:planning-resume:${input.context.turnId}`],
+    });
+    return await input.runKernelToolPrompt(
+      coordinator.executionPrompt(active),
+      undefined,
+      "btcc_execution_resume",
+    );
+  }
+  if (state.currentPhase === "execution") {
+    return await input.runKernelToolPrompt(
+      coordinator.executionPrompt(active),
+      undefined,
+      "btcc_execution_resume",
+    );
+  }
+  const candidateRef = state.activeReviewTargetRef;
+  const candidate = candidateRef ? coordinator.readArtifact(candidateRef) : null;
+  const payload = candidate?.payload as Record<string, unknown> | undefined;
+  const candidateText = typeof payload?.candidateText === "string" ? payload.candidateText : "";
+  if (!candidateText) throw new Error("btcc_execution_candidate_missing");
+  return candidateText;
 }
 
 function uniqueResumeCandidates<T extends { id: string }>(candidates: T[]): T[] {

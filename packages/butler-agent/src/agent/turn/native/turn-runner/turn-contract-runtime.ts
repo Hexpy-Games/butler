@@ -100,6 +100,7 @@ export function commitTurnContractContinuation(input: {
   const store = new TurnContractStore(input.butlerData);
   const contract = store.read(input.contractId);
   if (!contract) throw new Error("turn_contract_not_found");
+  if (contract.state === "satisfied") return contract;
   const continuing = store.recordContinuationCommit({
     contractId: contract.contract_id,
     commitId: input.commitId,
@@ -344,6 +345,7 @@ export function restoreTurnContractExecution(input: {
   nextSemanticBlockSequence: number;
   turnMetadata?: Record<string, unknown>;
   toolSurfaceController: ToolSurfacePromptController;
+  allowBtccOwnedState?: boolean;
 }): ActiveTurnContract {
   const contracts = new TurnContractStore(input.butlerData);
   let contract = contracts.read(input.contractId);
@@ -357,7 +359,11 @@ export function restoreTurnContractExecution(input: {
       state: "executing",
       expectedGeneration: contract.generation,
     });
-  } else if (contract.state !== "executing" && contract.state !== "reviewing") {
+  } else if (
+    contract.state !== "executing" && contract.state !== "reviewing" &&
+    !(input.allowBtccOwnedState &&
+      (contract.state === "validated" || contract.state === "satisfied"))
+  ) {
     throw new Error(`turn_contract_resume_state_invalid:${contract.state}`);
   }
   if (contract.target_workstream_id) {

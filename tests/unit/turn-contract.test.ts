@@ -233,7 +233,7 @@ test("typed decisions distinguish runtime todo plans from canonical Ledger tasks
 
   expect(prompt).toContain("The bound runtime todo plan is not a ledger_tasks deliverable");
   expect(prompt).toContain("Never add ledger_tasks merely because the user asks for a task list");
-  expect(prompt).toContain("An active project id alone does not imply Ledger tracking");
+  expect(prompt).toContain("Managed work in an active project must use canonical Project Ledger tracking");
   expect(prompt).toContain("with no intended durable diff, select validation");
   expect(prompt).toContain("resume_work, keep execution deliverables within");
   expect(String(deliverables.description)).toContain(
@@ -243,7 +243,7 @@ test("typed decisions distinguish runtime todo plans from canonical Ledger tasks
     "A request for a task list, todo list, work list, checklist",
   );
   expect(String(properties.target_project_id?.description)).toContain(
-    "does not imply canonical Project Ledger tracking",
+    "uses canonical Project Ledger tracking",
   );
   expect(prompt).toContain("continuity_updates is the model-owned semantic continuity decision");
   expect(prompt).toContain("absence never implies deletion");
@@ -255,7 +255,7 @@ test("typed decisions distinguish runtime todo plans from canonical Ledger tasks
 
 test("complete action and deliverable matrix is deterministic", () => {
   for (const action of ["answer", "inspect", "cancel_work"] as const) {
-    for (const deliverable of ["status_report", "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report"] as const) {
+    for (const deliverable of ["status_report", "ledger_spec", "ledger_plan", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report"] as const) {
       const allowed = TURN_ACTION_DELIVERABLE_MATRIX[action].allowed.includes(deliverable);
       const input = decision({
         action,
@@ -269,7 +269,7 @@ test("complete action and deliverable matrix is deterministic", () => {
     }
   }
   for (const action of ["start_work", "resume_work", "modify_work"] as const) {
-    for (const deliverable of ["ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review"] as const) {
+    for (const deliverable of ["ledger_spec", "ledger_plan", "ledger_work", "ledger_tasks", "code_change", "validation", "review"] as const) {
       const invoke = () => compileTurnContract({
         decision: decision({ action, target_workstream_id: action === "start_work" ? undefined : "ws-a", deliverables: [deliverable] }),
         candidates: action === "start_work" ? undefined : candidate(),
@@ -383,6 +383,7 @@ test("contract semantics include the inherited tracking mode", () => {
   const input = decision({
     action: "resume_work",
     target_workstream_id: "ws-a",
+    target_project_id: undefined,
     deliverables: ["code_change"],
   });
   const local = compileTurnContract({ decision: input, candidates: candidate({ tracking_mode: "local" }) });

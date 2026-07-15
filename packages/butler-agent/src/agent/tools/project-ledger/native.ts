@@ -100,7 +100,7 @@ const lifecycleCompleteFields = {
   code_commit: recordFields.code_commit,
 };
 
-const toolSpecs = [
+const toolSpecs: ToolSpec[] = [
   { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project.", properties: { project_ref: recordFields.project_ref }, mutates: true },
   { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
   { name: "project_ledger_list", description: "List bounded Project Ledger records by kind with optional status and text filtering.", required: ["kind"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
@@ -116,7 +116,7 @@ const toolSpecs = [
   { name: "project_ledger_attempt_fail", description: "Mark a Project Ledger attempt failed through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
   { name: "project_ledger_render", description: "Render a Project Ledger generated view, writing only when write is true.", required: ["view"], properties: { project_ref: recordFields.project_ref, view: { type: "string", description: "Generated view name: dashboard, handoff, or roadmap." }, write: { type: "boolean", description: "Persist the generated view." } }, mutates: true },
   { name: "project_ledger_check", description: "Run strict Project Ledger validation and return safe issue details.", properties: { project_ref: recordFields.project_ref, verbose: { type: "boolean", description: "Request verbose check behavior from the CLI where supported." } }, mutates: false },
-] satisfies ToolSpec[];
+];
 
 export const projectLedgerNativeToolDefinitions = toolSpecs.map((spec) => ({
   type: "function",
@@ -191,9 +191,55 @@ export const projectLedgerNativeToolMetadata = Object.fromEntries(
       category: "project",
       tags: projectLedgerTags,
       safetyNotes: ["Delegates to Project Ledger CLI/core behavior and preserves recoverable error details."],
+      btcc: {
+        effects: [ledgerToolSpec(tool.name).mutates
+          ? "ledger_mutation" as const
+          : "observe" as const],
+        purposes: projectLedgerPurposes(tool.name),
+        scopes: ["project" as const],
+        ledgerOperation: projectLedgerOperation(tool.name),
+      },
     } satisfies ToolCapabilityMetadata,
   ]),
 ) as Record<string, ToolCapabilityMetadata>;
+
+function ledgerToolSpec(name: string): ToolSpec {
+  const spec = toolSpecs.find((candidate) => candidate.name === name);
+  if (!spec) throw new Error(`Unknown Project Ledger tool capability: ${name}`);
+  return spec;
+}
+
+function projectLedgerOperation(
+  name: string,
+): NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerOperation"] {
+  switch (name) {
+    case "project_ledger_status":
+    case "project_ledger_list":
+      return "discover";
+    case "project_ledger_show":
+      return "read";
+    case "project_ledger_check":
+      return "validate";
+    case "project_ledger_index":
+    case "project_ledger_render":
+      return "render";
+    case "project_ledger_work_complete":
+    case "project_ledger_task_complete":
+    case "project_ledger_attempt_succeed":
+    case "project_ledger_attempt_fail":
+      return "closeout";
+    default:
+      return "mutate";
+  }
+}
+
+function projectLedgerPurposes(
+  name: string,
+): NonNullable<ToolCapabilityMetadata["btcc"]>["purposes"] {
+  return name === "project_ledger_status"
+    ? ["execution", "review"]
+    : ["planning", "execution", "review"];
+}
 
 export function createProjectLedgerNativeToolHandlers(input: ProjectLedgerExecutorInput) {
   return Object.fromEntries(projectLedgerNativeToolDefinitions.map((tool) => [
@@ -232,9 +278,9 @@ function runProjectLedgerNativeTool(
     projectPath,
     finalCliArgs: cliArgs,
   });
-  const result = plannedResult ?? withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
+  let result = plannedResult ?? withRecoverableProjectLedgerError(runProjectLedgerTool(input, cliArgs));
   if (needsProjectLedgerLifecycleCloseout(toolName, result)) {
-    return applyProjectLedgerLifecycleCloseout(
+    result = applyProjectLedgerLifecycleCloseout(
       result,
       runProjectLedgerLifecycleCloseout({
         executor: input,
@@ -242,9 +288,8 @@ function runProjectLedgerNativeTool(
         refreshedIndex: refreshedProjectLedgerIndexResult(result),
       }),
     );
-  }
-  if (toolName === "project_ledger_render") {
-    return {
+  } else if (toolName === "project_ledger_render") {
+    result = {
       ...result,
       ...projectLedgerRenderedViewEvidence({
         projectPath,
@@ -256,7 +301,57 @@ function runProjectLedgerNativeTool(
   }
   if (toolName === "project_ledger_list") return applyListBounds(result, args);
   if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(result);
-  return result;
+  return withProjectLedgerMutationEvidence(toolName, args, result);
+}
+
+function withProjectLedgerMutationEvidence(
+  toolName: string,
+  args: Record<string, unknown>,
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  if (result.ok !== true || !ledgerToolSpec(toolName).mutates) return result;
+  const recordKind = projectLedgerMutationRecordKind(toolName, args);
+  if (!recordKind) return result;
+  const recordId = safeRecordIdentity(args.id) ?? safeRecordIdentity(args.task_id) ?? "unknown";
+  const receipt = createEvidenceCapabilityReceipt({
+    producer: { kind: "project_ledger", name: toolName },
+    capability: "durable_artifact",
+    evidence_kind: "artifact",
+    verified: true,
+    confidence: 0.95,
+    summary: "A canonical Project Ledger record mutation completed.",
+    scope: { record_kind: recordKind, record_id: recordId },
+    references: [{ label: `${recordKind}:${recordId}` }],
+    satisfies: ["durable_artifact"],
+    limitations: [],
+  });
+  const existing = Array.isArray(result.evidence_capability_receipts)
+    ? result.evidence_capability_receipts
+    : [];
+  return { ...result, evidence_capability_receipts: [...existing, receipt] };
+}
+
+function projectLedgerMutationRecordKind(
+  toolName: string,
+  args: Record<string, unknown>,
+): "spec" | "plan" | "work" | "task" | "attempt" | null {
+  const explicit = args.kind;
+  if (explicit === "spec" || explicit === "plan" || explicit === "work" ||
+    explicit === "task" || explicit === "attempt") return explicit;
+  switch (toolName) {
+    case "project_ledger_work_update":
+    case "project_ledger_work_complete":
+      return "work";
+    case "project_ledger_task_update":
+    case "project_ledger_task_complete":
+      return "task";
+    case "project_ledger_attempt_start":
+    case "project_ledger_attempt_succeed":
+    case "project_ledger_attempt_fail":
+      return "attempt";
+    default:
+      return null;
+  }
 }
 
 function withCanonicalRecordEvidence(result: Record<string, unknown>): Record<string, unknown> {

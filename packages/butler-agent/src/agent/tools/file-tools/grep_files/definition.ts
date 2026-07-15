@@ -35,4 +35,9 @@ export const grepFilesToolMetadata: ToolCapabilityMetadata = {
   tags: ["file", "grep", "search", "native"],
   safetyNotes: ["Searches only regular text files inside the workspace path guard."],
   satisfiesCompletionObligations: [],
+  btcc: {
+    effects: ["observe"],
+    purposes: ["intent_grounding", "planning", "execution", "review"],
+    scopes: ["workspace", "task"],
+  },
 };

@@ -441,6 +441,7 @@ function defaultEvidencePolicy(deliverable: CompiledTurnContract["deliverables"]
     case "grounded_answer": return { evidence_class: "grounded_answer", allowed_producers: ["public_web"] };
     case "status_report": return { evidence_class: "status_snapshot", allowed_producers: ["runtime", "project_ledger"] };
     case "ledger_spec":
+    case "ledger_plan":
     case "ledger_work": return { evidence_class: "canonical_record", allowed_producers: ["project_ledger"] };
     case "ledger_tasks": return { evidence_class: "canonical_task_set", allowed_producers: ["project_ledger"] };
     case "code_change": return { evidence_class: "durable_diff", allowed_producers: ["workspace"] };

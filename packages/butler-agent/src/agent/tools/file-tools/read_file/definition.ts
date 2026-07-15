@@ -28,4 +28,9 @@ export const readFileToolMetadata: ToolCapabilityMetadata = {
   tags: ["file", "read", "native"],
   safetyNotes: ["Only reads files inside the supplied workspace root after realpath guard checks."],
   satisfiesCompletionObligations: ["source_verified"],
+  btcc: {
+    effects: ["observe"],
+    purposes: ["intent_grounding", "planning", "execution", "review"],
+    scopes: ["workspace", "task"],
+  },
 };

@@ -50,24 +50,28 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
   expect(controller.project(tools).map((tool) => tool.name)).not.toContain("project_ledger_show");
 
   let create = controller.project(tools).find((tool) => tool.name === "project_ledger_create")!;
-  expect(oneOfBranches(create).map((branch: any) => branch.properties.kind.const)).toEqual([
-    "spec", "work", "task",
-  ]);
+  const ledgerKinds = ["spec", "plan", "work", "task"] as const;
+  expect(oneOfBranches(create).map((branch: any) => branch.properties.kind.const))
+    .toEqual([...ledgerKinds]);
   expect(create.description).toContain("later calls in the same block reference the earlier chosen spec or work id");
 
-  for (const kind of ["spec", "work", "task"] as const) {
+  for (const [index, kind] of ledgerKinds.entries()) {
     controller.observe({
       name: "project_ledger_create",
       args: { kind, id: `TEST-${kind}` },
-      result: { ok: true },
+      result: ledgerMutationResult(kind),
     });
-    const remaining = kind === "spec" ? ["work", "task"] : kind === "work" ? ["task"] : [];
+    const remaining = ledgerKinds.slice(index + 1);
     create = controller.project(tools).find((tool) => tool.name === "project_ledger_create")!;
     if (remaining.length > 0) {
       expect(oneOfBranches(create).map((branch: any) => branch.properties.kind.const)).toEqual(remaining);
       const nextBranch = oneOfBranches(create)[0] as any;
-      expect(nextBranch.required).toContain("spec");
-      expect(nextBranch.required).toContain("acceptance");
+      if (remaining[0] === "work" || remaining[0] === "task") {
+        expect(nextBranch.required).toContain("spec");
+        expect(nextBranch.required).toContain("acceptance");
+      } else {
+        expect(nextBranch.required).toContain("body");
+      }
       if (remaining[0] === "task") expect(nextBranch.required).toContain("work_id");
       expect(create.parameters.properties).not.toHaveProperty("status");
       expect(create.description).toContain("Omit status");
@@ -86,7 +90,7 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
   expect(controller.state()).toMatchObject({
     gated: false,
     ledgerCheckPassed: true,
-    observedLedgerKinds: ["spec", "task", "work"],
+    observedLedgerKinds: ["plan", "spec", "task", "work"],
     stage: "workspace_execution",
   });
   expect(controller.project(tools).map((tool) => tool.name)).toEqual([
@@ -103,11 +107,11 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
 test("a ledger check must follow the latest required mutation", () => {
   const controller = createObligationToolSurfaceController(contract(), { planReady: true });
   controller.observe({ name: "project_ledger_check", args: {}, result: { ok: true } });
-  for (const kind of ["spec", "work", "task"] as const) {
+  for (const kind of ["spec", "plan", "work", "task"] as const) {
     controller.observe({
       name: "project_ledger_create",
       args: { kind },
-      result: { ok: true },
+      result: ledgerMutationResult(kind),
     });
   }
   expect(controller.state()).toMatchObject({
@@ -134,8 +138,12 @@ test("Ledger show is exposed only when bounded discovery returned a candidate", 
 
 test("todo progress cannot satisfy workspace mutation and a completion gap focuses structured validation", () => {
   const controller = createObligationToolSurfaceController(contract(), { planReady: true });
-  for (const kind of ["spec", "work", "task"] as const) {
-    controller.observe({ name: "project_ledger_create", args: { kind }, result: { ok: true } });
+  for (const kind of ["spec", "plan", "work", "task"] as const) {
+    controller.observe({
+      name: "project_ledger_create",
+      args: { kind },
+      result: ledgerMutationResult(kind),
+    });
   }
   controller.observe({ name: "update_todo_list", args: { todos: [] }, result: { ok: true } });
   controller.observe({ name: "project_ledger_check", args: {}, result: { ok: true } });
@@ -276,7 +284,7 @@ test("a missing status report exposes only status evidence producers", () => {
 test("failed validation opens repair and a passing retry restores workspace execution", () => {
   const controller = createObligationToolSurfaceController(contract(), {
     planReady: true,
-    observedLedgerKinds: ["spec", "work", "task"],
+    observedLedgerKinds: ["spec", "plan", "work", "task"],
     ledgerCheckPassed: true,
     workspaceMutationObserved: true,
     validationFocused: true,
@@ -307,7 +315,11 @@ test("failed validation opens repair and a passing retry restores workspace exec
 test("one surface session preserves the frontier across prompt phases for the same contract", () => {
   const session = createObligationToolSurfaceSession();
   const first = session.controllerFor(contract(), { planReady: true });
-  first.observe({ name: "project_ledger_create", args: { kind: "spec" }, result: { ok: true } });
+  first.observe({
+    name: "project_ledger_create",
+    args: { kind: "spec" },
+    result: ledgerMutationResult("spec"),
+  });
   const nextGeneration = { ...contract(), generation: 9 };
   const second = session.controllerFor(nextGeneration);
   expect(second).toBe(first);
@@ -777,6 +789,7 @@ test("unverified focused commands stay recoverable and cannot bypass direct repa
 function contract(overrides: Partial<CompiledTurnContract> = {}): CompiledTurnContract {
   const obligations = [
     ["ledger_spec", "project_ledger"],
+    ["ledger_plan", "project_ledger"],
     ["ledger_work", "project_ledger"],
     ["ledger_tasks", "project_ledger"],
     ["code_change", "workspace"],
@@ -863,6 +876,20 @@ function validationResult(passed: boolean) {
       capability: "validation_passed",
       maturity: passed ? "verified" : "rejected",
       verified: passed,
+    }],
+  };
+}
+
+function ledgerMutationResult(kind: "spec" | "plan" | "work" | "task") {
+  return {
+    ok: true,
+    evidence_capability_receipts: [{
+      producer: { kind: "project_ledger" },
+      capability: "durable_artifact",
+      evidence_kind: "artifact",
+      maturity: "verified",
+      verified: true,
+      scope: { record_kind: kind },
     }],
   };
 }

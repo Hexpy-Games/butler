@@ -65,6 +65,17 @@ export interface GoalContractV1 {
   conceptionModelCallId: string;
   requestedOutcome: string;
   problemFrame: string;
+  intentUnderstanding: {
+    userRequest: string;
+    relatedContextRefs: string[];
+    connectedKnowledgeNeeds: string[];
+    userPreferenceApplications: Array<{
+      hintRef: string;
+      application: string;
+    }>;
+    expertPerspectives: string[];
+    requiredResult: string;
+  };
   deliverables: Array<{
     key: string;
     kind: string;
@@ -102,6 +113,20 @@ export interface GoalContractV1 {
   }>;
   workShape: GoalWorkShapeV1;
   semanticAuthorityRefs: string[];
+}
+
+export interface GoalContractCandidateV1 {
+  requestedOutcome: string;
+  problemFrame: string;
+  intentUnderstanding: GoalContractV1["intentUnderstanding"];
+  bindingConstraints: string[];
+  nonGoals: string[];
+  acceptanceIntents: GoalContractV1["acceptanceIntents"];
+  ambiguityDecisions: GoalContractV1["ambiguityDecisions"];
+  currentStateNeeds: string[];
+  evidenceNeeds: string[];
+  downstreamAuthorityNeeds: string[];
+  workShape: GoalWorkShapeV1;
 }
 
 export interface ConceptionCheckpointV1 {

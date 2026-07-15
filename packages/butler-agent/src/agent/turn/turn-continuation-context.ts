@@ -20,8 +20,8 @@ export interface TurnObligationFrontierCheckpoint {
   gated: boolean;
   ledgerDiscoveryObserved?: boolean;
   ledgerDiscoveryCandidateCount?: number;
-  requiredLedgerKinds: Array<"spec" | "work" | "task">;
-  observedLedgerKinds: Array<"spec" | "work" | "task">;
+  requiredLedgerKinds: Array<"spec" | "plan" | "work" | "task">;
+  observedLedgerKinds: Array<"spec" | "plan" | "work" | "task">;
   ledgerCheckPassed: boolean;
   workspaceMutationObserved: boolean;
   workspaceInspectionCount?: number;
@@ -327,13 +327,13 @@ function safeRefId(value: string): string {
 function sanitizeObligationFrontier(
   frontier: TurnObligationFrontierCheckpoint,
 ): TurnObligationFrontierCheckpoint {
-  const ledgerKinds = new Set(["spec", "work", "task"] as const);
+  const ledgerKinds = new Set(["spec", "plan", "work", "task"] as const);
   const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
     "open", "work_planning", "ledger", "workspace_execution", "workspace_action", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
   ]);
   const kinds = (values: readonly string[]) => [...new Set(values)]
-    .filter((value): value is "spec" | "work" | "task" =>
-      ledgerKinds.has(value as "spec" | "work" | "task"))
+    .filter((value): value is "spec" | "plan" | "work" | "task" =>
+      ledgerKinds.has(value as "spec" | "plan" | "work" | "task"))
     .sort();
   return {
     planReady: frontier.planReady === true,
