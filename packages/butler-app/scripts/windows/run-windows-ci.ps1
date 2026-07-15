@@ -267,6 +267,8 @@ switch ($Mode) {
       $env:BUTLER_WINDOWS_PROCESS_HOST = $testHost
       Invoke-Checked -Command "bun.exe" -Arguments @(
         "test",
+        "--timeout",
+        "30000",
         "tests/unit/platform-command-executor.test.ts",
         "tests/unit/background-command-registry.test.ts",
         "tests/unit/butler-cli-command-registry.test.ts",

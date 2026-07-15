@@ -39,6 +39,8 @@ test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(entrypoint).toContain('"--audit-level=high"');
   expect(entrypoint).toContain("build-process-host.ts");
   expect(entrypoint).toContain("BUTLER_WINDOWS_PROCESS_HOST");
+  expect(entrypoint).toContain('"--timeout"');
+  expect(entrypoint).toContain('"30000"');
   expect(entrypoint).toContain("Invoke-StandardUserSmoke");
   expect(entrypoint).toContain("run-standard-user-bundled-payload-smoke.ps1");
   expect(entrypoint).toMatch(/function Invoke-StandardUserSmoke[\s\S]*?client\/ui[\s\S]*?run[\s\S]*?build/u);

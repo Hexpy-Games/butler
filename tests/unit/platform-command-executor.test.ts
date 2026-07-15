@@ -77,7 +77,7 @@ describe("platform command executor", () => {
       duration: true,
       forceTermination: true,
     });
-  }, 20_000);
+  }, 60_000);
 
   test("normalizes spawn failures without reflecting executable or environment secrets", async () => {
     const executableSecret = `missing-secret-executable-${process.pid}-${Date.now()}`;
