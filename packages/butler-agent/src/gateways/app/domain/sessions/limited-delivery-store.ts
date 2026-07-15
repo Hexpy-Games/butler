@@ -67,6 +67,7 @@ interface LimitedDeliveryStoreInput {
     text: string;
     executionControls: TurnExecutionControlsV1;
   }) => TurnRecord;
+  runtimeRecoveryOwnsTurn: (turnId: string) => boolean;
 }
 
 export class AppLimitedDeliveryStore {
@@ -182,8 +183,10 @@ export class AppLimitedDeliveryStore {
     this.input.deleteAssistantMessagesForTurn(turnId);
     const currentTurn = this.input.getTurnRow(turnId);
     const deliveryState = limitedDelivery.delivery.delivery_state;
+    const runtimeRecoveryOwnsTurn = this.input.runtimeRecoveryOwnsTurn(turnId);
     const progressedDuringCurrentQueue =
-      currentTurn && isInternalContinuationTurnState(currentTurn.state)
+      !runtimeRecoveryOwnsTurn &&
+        currentTurn && isInternalContinuationTurnState(currentTurn.state)
         ? hasPublicContinuationProgressSinceLatestQueue({
             db: this.input.db,
             getTurnRow: this.input.getTurnRow,
@@ -191,8 +194,11 @@ export class AppLimitedDeliveryStore {
           })
         : false;
     const shouldRequeue =
-      shouldAutomaticallyRequeueContinuation(currentTurn, deliveryState) ||
-      progressedDuringCurrentQueue;
+      !runtimeRecoveryOwnsTurn &&
+      (
+        shouldAutomaticallyRequeueContinuation(currentTurn, deliveryState) ||
+        progressedDuringCurrentQueue
+      );
     if (
       !shouldRequeue &&
       currentTurn &&

@@ -33,6 +33,11 @@ describe("current turn interruption producer registry", () => {
         "queued_failure_action",
         "queued_claim_failure",
         "native_turn_catch",
+        "direct_responder_completion",
+        "user_responder_failure",
+        "system_responder_failure",
+        "app_failure_projection",
+        "app_responder_timeout",
       ]);
   });
 

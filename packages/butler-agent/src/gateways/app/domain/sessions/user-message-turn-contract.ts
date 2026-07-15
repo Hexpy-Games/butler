@@ -103,6 +103,9 @@ export interface UserMessageTurnStoreInput {
   markResponderNonPublicContinuation: Parameters<
     typeof completeResponderTurnLifecycle
   >[1]["markResponderNonPublicContinuation"];
+  routeResponderRuntimeInterruption: Parameters<
+    typeof completeResponderTurnLifecycle
+  >[1]["routeResponderRuntimeInterruption"];
   finalizeCancelledTurn: Parameters<
     typeof completeResponderTurnLifecycle
   >[1]["finalizeCancelledTurn"];
@@ -125,13 +128,6 @@ export interface UserMessageTurnStoreInput {
   ) => Promise<AppMessageResponderResult>;
   touchChat: (chatId: string) => void;
   appendTerminalTurnStateChanged: (turn: TurnRecord) => void;
-  runtimeFaultRecordForTurn: (turnId: string) => Record<string, unknown> | null;
-  upsertAssistantTurnFailure: (
-    chatId: string,
-    turnId: string,
-    safeError: { code: string; message: string },
-    options?: { retryable?: boolean },
-  ) => MessageRecord;
 }
 
 export interface UserResponderTurnInput {

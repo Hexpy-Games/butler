@@ -4,6 +4,10 @@ import type { AppMessageFileStore } from "../../domain/message-files/message-fil
 import { AppTransportProjectionStore } from "./transport-projection-store.ts";
 import { AppTransportQueueStore } from "./transport-queue-store.ts";
 import { Database } from "bun:sqlite";
+import {
+  appResponderRuntimeRecoveryOwnsTurn,
+  routeAppResponderRuntimeInterruption,
+} from "../../domain/sessions/app-responder-interruption-router.ts";
 
 export interface AppTransportModuleGraph {
   appTransportQueue: AppTransportQueueStore;
@@ -76,10 +80,33 @@ export function createAppTransportModuleGraph(input: {
       host.hasEquivalentProgressSummaryRow(turnId, row),
     finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
-    upsertAssistantTurnFailure: (chatId, turnId, safeError, options) =>
-      host.upsertAssistantTurnFailure(chatId, turnId, safeError, options),
-    runtimeFaultRecordForTurn: (turnId) =>
-      host.runtimeFaultRecordForTurn(turnId),
+    markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
+      host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
+    routeResponderRuntimeInterruption: (turnInput) => {
+      const turn = host.getTurnRow(turnInput.turnId);
+      const userMessage = turn?.user_message_id
+        ? host.getMessageRow(turn.user_message_id)
+        : null;
+      const chat = host.getChatRow(turnInput.chatId);
+      routeAppResponderRuntimeInterruption({
+        butlerData,
+        chatId: turnInput.chatId,
+        turnId: turnInput.turnId,
+        messageId: userMessage?.id ?? turnInput.turnId,
+        text: userMessage?.text ?? "",
+        actor: "user",
+        projectId: chat?.project_id ?? null,
+        origin: "projection",
+        boundary: "transport_failure_projection",
+        error: {
+          message: turnInput.message,
+          metadata: turnInput.metadata,
+        },
+        now: turnInput.eventTimestamp,
+      });
+    },
+    runtimeRecoveryOwnsTurn: (turnId) =>
+      appResponderRuntimeRecoveryOwnsTurn(butlerData, turnId),
     generatedSessionTitleHandler: (chatId, sourceText) =>
       host.generatedSessionTitleHandler(chatId, sourceText),
     touchChat: (chatId) => host.touchChat(chatId),

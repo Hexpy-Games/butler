@@ -170,6 +170,13 @@ export class AppTransportProjectionStore {
     }
 
     if (metadata.kind !== "final_result") return false;
+    if (this.options.runtimeRecoveryOwnsTurn(turnId)) {
+      // A transcript final is evidence, not terminal authority. Keep it
+      // replayable until the durable BTCC recovery owner has explicitly
+      // resumed the turn and Reporting is allowed to close it.
+      this.deferredQueuedFinalOutbounds.set(actionId, { chatId, event });
+      return false;
+    }
     const queuedFinalProjection = queuedFinalProjectionDisposition({
       butlerData: this.options.butlerData,
       metadata,
