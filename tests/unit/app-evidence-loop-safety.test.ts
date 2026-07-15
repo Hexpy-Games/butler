@@ -217,7 +217,7 @@ test("App message path rehydrates exact child evidence once without recursive ar
   }
 });
 
-test("App unspent budget fault stops once and the next user message starts from the new intent", async () => {
+test("App budget interruption stays recoverable until Stop starts a new intent", async () => {
   const dbPath = join(data, "app.sqlite");
   let firstTurnActive = true;
   let toolPromptCalls = 0;
@@ -302,14 +302,15 @@ test("App unspent budget fault stops once and the next user message starts from 
     const firstTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.id === first.data.turn.id && turn.state === "failed",
+      (turn) => turn.id === first.data.turn.id && turn.state === "waiting_for_tool",
     );
     expect(firstTurn).toMatchObject({
-      state: "failed",
+      state: "waiting_for_tool",
       attempt: 1,
-      safe_error_code: "prompt_usage_model_call_budget_exhausted",
-      cancellable: false,
+      retryable: false,
+      cancellable: true,
     });
+    expect(firstTurn.safe_error_code ?? null).toBeNull();
     expect(toolPromptCalls).toBe(1);
     expect(finalizationAttempts).toBe(0);
     expect(turnContextAtomCount(data)).toBe(0);
@@ -317,15 +318,26 @@ test("App unspent budget fault stops once and the next user message starts from 
     const firstEvents = await getJson(`${server.url}events?cursor=0`);
     expect(JSON.stringify(firstEvents)).not.toContain("turn.continuation_scheduled");
     expect(JSON.stringify(firstEvents)).not.toContain("turn_scheduler_continuation_yield");
+    expect(JSON.stringify(firstEvents)).not.toContain("turn.failed");
     await Bun.sleep(250);
     const stableTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(stableTurns.data.turns[0]).toMatchObject({
       id: first.data.turn.id,
-      state: "failed",
+      state: "waiting_for_tool",
       attempt: 1,
     });
     const stableFirstEvents = await getJson(`${server.url}events?cursor=0`);
     expect(stableFirstEvents.data.events).toHaveLength(firstEvents.data.events.length);
+
+    const stopped = await postJson(
+      `${server.url}turns/${encodeURIComponent(first.data.turn.id)}/cancel`,
+      {},
+    );
+    expect(stopped.data.turn).toMatchObject({
+      id: first.data.turn.id,
+      state: "cancelled",
+      cancellable: false,
+    });
 
     const second = await postJson(`${server.url}messages`, {
       chat_id: "general",

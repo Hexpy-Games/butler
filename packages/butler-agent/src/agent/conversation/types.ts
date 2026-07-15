@@ -132,6 +132,11 @@ export interface ConversationProjectionEvent {
     | "runtime.interruption.recorded"
     | "recovery.case.opened"
     | "recovery.case.resolved"
+    | "btcc.phase.admitted"
+    | "btcc.conception.checkpointed"
+    | "btcc.phase.receipt_accepted"
+    | "btcc.return_ticket.activated"
+    | "btcc.phase.wait_resumed"
     | "turn.outcome";
   payload_ref: string;
   created_at: string;

@@ -9,6 +9,7 @@ import {
   conversationMessagesSourceHash,
 } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import type { ConversationIdFactory } from "../../packages/butler-agent/src/agent/conversation/ids.ts";
+import { CONVERSATION_STORE_SCHEMA_VERSION } from "../../packages/butler-agent/src/agent/conversation/schema.ts";
 
 let tempDir = "";
 
@@ -78,8 +79,12 @@ test("conversation store creates the canonical schema and migration marker", () 
     expect(tables).toContain("btcc_recovery_cases");
     expect(tables).toContain("btcc_reporting_receipts");
     expect(tables).toContain("btcc_cancellation_receipts");
+    expect(tables).toContain("btcc_conception_checkpoints");
+    expect(tables).toContain("btcc_goal_contracts");
+    expect(tables).toContain("btcc_phase_artifacts");
+    expect(tables).toContain("btcc_phase_receipts");
     expect(db.query<{ version: number }, []>("SELECT version FROM conversation_schema_migrations").get()?.version)
-      .toBe(3);
+      .toBe(CONVERSATION_STORE_SCHEMA_VERSION);
   } finally {
     db.close();
   }
@@ -109,7 +114,7 @@ test("conversation store upgrades a version-one database without losing semantic
   const verified = new Database(conversationStorePath(tempDir), { readonly: true });
   expect(verified.query<{ version: number }, []>(`
     SELECT MAX(version) AS version FROM conversation_schema_migrations
-  `).get()?.version).toBe(3);
+  `).get()?.version).toBe(CONVERSATION_STORE_SCHEMA_VERSION);
   expect(verified.query<{ name: string }, []>(`
     SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turn_outcomes'
   `).get()?.name).toBe("conversation_turn_outcomes");

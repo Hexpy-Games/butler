@@ -14007,7 +14007,7 @@ test("recovery-store outages park and stop the accepted App turn without escapin
       await waitForCondition(() =>
         appDb.query<{ state: string }, []>(
           "SELECT state FROM turns ORDER BY rowid DESC LIMIT 1",
-        ).get()?.state === "waiting_for_tool"
+        ).get()?.state === "waiting_for_tool",
       );
     } finally {
       appDb.close();
