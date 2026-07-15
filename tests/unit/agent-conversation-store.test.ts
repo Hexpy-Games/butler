@@ -73,8 +73,11 @@ test("conversation store creates the canonical schema and migration marker", () 
     expect(tables).toContain("conversation_turn_outcomes");
     expect(tables).toContain("conversation_projection_outbox");
     expect(tables).toContain("conversation_schema_migrations");
+    expect(tables).toContain("btcc_turn_states");
+    expect(tables).toContain("btcc_interruption_receipts");
+    expect(tables).toContain("btcc_recovery_cases");
     expect(db.query<{ version: number }, []>("SELECT version FROM conversation_schema_migrations").get()?.version)
-      .toBe(2);
+      .toBe(3);
   } finally {
     db.close();
   }
@@ -104,7 +107,7 @@ test("conversation store upgrades a version-one database without losing semantic
   const verified = new Database(conversationStorePath(tempDir), { readonly: true });
   expect(verified.query<{ version: number }, []>(`
     SELECT MAX(version) AS version FROM conversation_schema_migrations
-  `).get()?.version).toBe(2);
+  `).get()?.version).toBe(3);
   expect(verified.query<{ name: string }, []>(`
     SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turn_outcomes'
   `).get()?.name).toBe("conversation_turn_outcomes");
