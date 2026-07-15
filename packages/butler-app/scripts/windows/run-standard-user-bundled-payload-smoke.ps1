@@ -4,7 +4,8 @@ param(
   [Parameter(Mandatory = $true)][string]$Output,
   [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
   [ValidateRange(1, 30)][int]$TimeoutMinutes = 10,
-  [switch]$InteractiveDesktop
+  [switch]$InteractiveDesktop,
+  [switch]$PrepareRelease
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,7 @@ $signedBun = Join-Path $workspace "bun.exe"
 $unsignedHost = Join-Path $workspace "butler-process-host-unsigned.exe"
 $signedHost = Join-Path $workspace "butler-process-host.exe"
 $certificateFile = Join-Path $workspace "butler-test-signing.cer"
+$preparedReleaseRoot = Join-Path $workspace "prepared-release"
 $childScript = Join-Path $Root "packages\butler-app\scripts\windows\run-bundled-payload-smoke-child.ps1"
 $taskName = "ButlerWindowsPayloadSmoke-$PID"
 $certificate = $null
@@ -200,6 +202,28 @@ try {
     }
   }
 
+  if ($PrepareRelease) {
+    $env:BUTLER_BUN = $signedBun
+    $env:BUTLER_APP_MANAGED_BUN_WIN32_X64 = $signedBun
+    $env:BUTLER_APP_WINDOWS_PROCESS_HOST = $signedHost
+    $env:BUTLER_WINDOWS_PROCESS_HOST = $signedHost
+    $env:BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1 = $certificate.Thumbprint
+    $env:BUTLER_WINDOWS_STANDARD_USER = "0"
+    $env:BUTLER_WINDOWS_CI_ELEVATED_TOKEN = "1"
+    $env:BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN = "1"
+    $env:BUTLER_APP_REQUIRE_PRODUCTION_SIGNING = "1"
+    $env:BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT = $preparedReleaseRoot
+    Push-Location $Root
+    try {
+      & $Bun "run" $Smoke "--prepare-only"
+      if ($LASTEXITCODE -ne 0) {
+        throw "Windows lifecycle release preparation failed"
+      }
+    } finally {
+      Pop-Location
+    }
+  }
+
   $actionArgumentParts = @(
     "-NoLogo",
     "-NoProfile",
@@ -214,6 +238,9 @@ try {
     "-Smoke `"$Smoke`"",
     "-Output `"$Output`""
   )
+  if ($PrepareRelease) {
+    $actionArgumentParts += "-PreparedReleaseRoot `"$preparedReleaseRoot`""
+  }
   if ($InteractiveDesktop) { $actionArgumentParts += "-InteractiveDesktop" }
   if ($ciMode -and $InteractiveDesktop) {
     $actionArgumentParts += "-DirectInteractive"

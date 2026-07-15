@@ -14,12 +14,36 @@ test("Windows full-product validation runs the clean isolated loop twice", () =>
   expect(source).toContain('BUTLER_APP_CLIENT_E2E_MODE: "deterministic"');
   expect(source).toContain('BUTLER_APP_CLIENT_E2E_MODE: "toolchain"');
   expect(source).toContain("native runtime can drive the real run_command tool");
+  const nativeRuntime = readFileSync(
+    resolve(import.meta.dir, "native-tool-loop-runtime.test.ts"),
+    "utf8",
+  );
+  expect(nativeRuntime).not.toContain("timeout_ms: 120_000");
+  const legacyCommandBoundary = readFileSync(
+    resolve(
+      import.meta.dir,
+      "../../packages/butler-agent/src/runtime/command/legacy-command-compat.ts",
+    ),
+    "utf8",
+  );
+  expect(legacyCommandBoundary).toContain("stdin: input.command");
+  expect(legacyCommandBoundary).not.toContain("legacy-command-host");
   expect(source).toContain("inbound-queue.test.ts");
   expect(source).toContain("app-worker-cancel.test.ts");
   expect(source).toContain("native scheduler claims due automations");
   expect(source).toContain("active-work-cancellation-smoke.ts");
   expect(source).toContain("unpacked-foreground-app-smoke.ts");
   expect(source).toContain("app-foreground-lifecycle-smoke.ts");
+  const unpackedForeground = readFileSync(
+    resolve(
+      import.meta.dir,
+      "../../packages/butler-app/scripts/windows/unpacked-foreground-app-smoke.ts",
+    ),
+    "utf8",
+  );
+  expect(unpackedForeground).toContain("timeoutMs: 120_000");
+  expect(unpackedForeground).toContain("waitForProcessDeath(");
+  expect(unpackedForeground).toContain("agentHostStopped");
   expect(source).toContain("waitForE2eTempCleanup(initialE2eTempDirs)");
   expect(source).toContain('spawnSync("taskkill.exe"');
   expect(source).toContain("}, 300_000);");

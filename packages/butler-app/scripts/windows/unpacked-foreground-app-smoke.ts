@@ -81,7 +81,9 @@ try {
     dataRoot,
     port,
     electron,
-    timeoutMs: 60_000,
+    // Archive activation is intentionally bounded, but hosted Windows runners
+    // can spend more than one minute scanning the freshly extracted payload.
+    timeoutMs: 120_000,
   });
   const startup = await waitForDesktopStartup(dataRoot, 15_000);
   const authToken = readAuthToken(dataRoot);
@@ -117,8 +119,12 @@ try {
   const appExit = await waitForExit(electron.launcher, 20_000);
   const lastExit = await waitForLastExit(dataRoot, 15_000);
   const portReleased = await waitForPort(port, false, 15_000);
+  const agentHostStopped = await waitForProcessDeath(
+    recovered.agent_host_pid ?? 0,
+    15_000,
+  );
   const runtimeStopped =
-    !processAlive(recovered.agent_host_pid ?? 0) &&
+    agentHostStopped &&
     lastExit.process_tree_dead === true &&
     lastExit.port_released === true &&
     portReleased;
@@ -154,6 +160,8 @@ try {
     boundedRecovery,
     gracefulQuit: appExit.exited && lastExit.graceful === true,
     processTreeDead: runtimeStopped,
+    agentHostStopped,
+    recordedProcessTreeDead: lastExit.process_tree_dead === true,
     portReleased,
     unicodeAndSpaces: true,
     rawTextIncluded: false,
@@ -493,6 +501,15 @@ function processAlive(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+async function waitForProcessDeath(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!processAlive(pid)) return true;
+    await delay(50);
+  }
+  return !processAlive(pid);
 }
 
 function readJson<T>(path: string): T | null {
