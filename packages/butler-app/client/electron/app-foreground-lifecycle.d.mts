@@ -5,6 +5,11 @@ export interface AppForegroundInstanceRecord {
   app_pid: number;
   agent_host_pid: number | null;
   process_group_id: number | null;
+  platform: string | null;
+  architecture: string | null;
+  containment_kind: string | null;
+  containment_verified: boolean;
+  owner_death_guaranteed: boolean;
   launch_nonce_hash: string;
   app_version: string | null;
   bundled_agent_version: string | null;
@@ -16,6 +21,40 @@ export interface AppForegroundInstanceRecord {
   clean_exit: boolean;
   raw_text_included: false;
 }
+
+export function appForegroundStartupFailurePath(butlerData: string): string;
+export function appForegroundStartupProgressPath(butlerData: string): string;
+export function clearAppForegroundStartupFailure(butlerData: string): void;
+export function writeAppForegroundStartupFailure(
+  butlerData: string,
+  input: {
+    platform?: string;
+    architecture?: string;
+    lifecycleMode?: string;
+    supervisorPhase?: string;
+    errorCode?: string | null;
+    exitCode?: number | null;
+    signal?: string | null;
+    containmentKind?: string | null;
+    containmentVerified?: boolean;
+    ownerDeathGuaranteed?: boolean;
+  },
+  now?: () => Date,
+): Record<string, unknown>;
+export function writeAppForegroundStartupProgress(
+  butlerData: string,
+  input: {
+    stage: string;
+    platform?: string;
+    architecture?: string;
+    lifecycleMode?: string;
+    agentPhase?: string | null;
+    containmentKind?: string | null;
+    trayReady?: boolean;
+    windowReady?: boolean;
+  },
+  now?: () => Date,
+): Record<string, unknown>;
 
 export const APP_FOREGROUND_INSTANCE_SCHEMA: string;
 export const APP_FOREGROUND_LAST_EXIT_SCHEMA: string;

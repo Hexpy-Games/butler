@@ -95,6 +95,7 @@ export function activateAppManagedAgentRuntime(input: {
   butlerData: string;
   resourceRoot: string;
   now?: () => Date;
+  platform?: NodeJS.Platform;
 }): {
   runtimeHome: string;
   runtimeHomeLabel: string;
@@ -108,6 +109,8 @@ export function prepareAppManagedAgentRuntime(input: {
   butlerData: string;
   resourceRoot: string;
   now?: () => Date;
+  platform?: NodeJS.Platform;
+  onProgress?: ((stage: string) => void) | null;
 }): {
   runtimeHome: string;
   runtimeHomeLabel: string;
@@ -119,10 +122,13 @@ export function prepareAppManagedAgentRuntime(input: {
   rollbackActivation: (error?: Error) => void;
 };
 
+export function windowsRuntimeSignatureIssue(runtimePayloadHome: string): string | null;
+
 export function resolveAppManagedGatewayCommand(input?: {
   butlerData: string;
   env?: Record<string, string | undefined>;
   resourcesPath?: string;
+  platform?: NodeJS.Platform;
 }): {
   command: string;
   args: string[];
@@ -138,16 +144,37 @@ export function resolveAppManagedForegroundCommand(input?: {
   butlerData: string;
   env?: Record<string, string | undefined>;
   resourcesPath?: string;
+  platform?: NodeJS.Platform;
+  ownerPid?: number;
+  onProgress?: ((stage: string) => void) | null;
 }): {
   command: string;
   args: string[];
   cwd: string;
-  stdio: ["pipe", "inherit", "inherit"];
-  detached: true;
+  stdio: ["pipe" | "ignore", "inherit", "inherit"];
+  detached: boolean;
   appManaged: true;
   foregroundHost: true;
+  containmentKind: "posix_process_group" | "windows_job_object";
+  containmentVerified: true;
+  ownerDeathGuaranteed: boolean;
+  recordsProcessGroupId: boolean;
   bundledAgentVersion: string;
   env: Record<string, string>;
   commitActivation: () => void;
   rollbackActivation: (error?: Error) => void;
 } | null;
+
+export function windowsAppForegroundCommand(input: {
+  runtimeHome: string;
+  runtime: string;
+  processHost: string;
+  launcher: string;
+  ownerPid: number;
+}): {
+  command: string;
+  args: string[];
+  cwd: string;
+  stdio: ["ignore", "inherit", "inherit"];
+  detached: false;
+};

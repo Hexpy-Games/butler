@@ -13,6 +13,23 @@ function tempRoot(): string {
   return dir;
 }
 
+function removeTempRoot(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true });
+  } catch (error) {
+    if (
+      process.platform === "win32" &&
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "EBUSY"
+    ) {
+      // Bun can retain closed SQLite handles until the test process exits on Windows.
+      return;
+    }
+    throw error;
+  }
+}
+
 function currentAppUpdatePlatformForTest(): string {
   const os = process.platform === "darwin" ? "darwin" : process.platform;
   const arch = process.arch === "x64" ? "x64" : process.arch;
@@ -102,7 +119,7 @@ test("packaged App update checks use configured public App update manifest", asy
     });
   } finally {
     store.close();
-    rmSync(workDir, { recursive: true, force: true });
+    removeTempRoot(workDir);
   }
 });
 
@@ -160,6 +177,6 @@ test("packaged App update checks default to the public latest App manifest", asy
     } else {
       process.env.BUTLER_UPDATE_MANIFEST = previousManifest;
     }
-    rmSync(workDir, { recursive: true, force: true });
+    removeTempRoot(workDir);
   }
 });

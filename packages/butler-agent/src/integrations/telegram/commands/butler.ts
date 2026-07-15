@@ -5,14 +5,12 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { exec as execCb } from "child_process";
-import { promisify } from "util";
 import { listServices } from "../../../operations/service/native-service-supervisor.ts";
 import { defaultSchedulerJobs } from "../../../operations/scheduler/native-scheduler.ts";
 import { cognitionMemoryRoot } from "../../../agent/cognition/paths.ts";
 import { butlerAgentResourcesPath } from "../../../runtime/paths.ts";
+import { requestBackgroundCommandCancellation } from "../../../runtime/command/background-command-registry.ts";
 
-const exec = promisify(execCb);
 
 export function butlerHome(): string {
   return process.env.BUTLER_HOME ?? process.cwd();
@@ -239,16 +237,13 @@ export function listRunningTasks(): TaskRow[] {
 }
 
 export async function killTask(taskId: string): Promise<{ ok: boolean; msg: string }> {
-  const pid = readTaskFile(taskId, "pid");
-  if (!pid) return { ok: false, msg: `no pid for ${taskId}` };
-  const pgid = readTaskFile(taskId, "pgid") || pid;
-  try {
-    // Negative pid = signal the whole process group (kills worker + children).
-    await exec(`kill -TERM -${pgid}`);
-    return { ok: true, msg: `sent SIGTERM to pgid ${pgid}` };
-  } catch (e) {
-    return { ok: false, msg: `kill failed: ${(e as Error).message}` };
-  }
+  const cancelled = requestBackgroundCommandCancellation({
+    butlerData: butlerData(),
+    id: taskId,
+  });
+  return cancelled
+    ? { ok: true, msg: `cancelled background execution ${taskId}` }
+    : { ok: false, msg: `no active background execution for ${taskId}` };
 }
 
 // ── status / restart ─────────────────────────────────────────────────────────

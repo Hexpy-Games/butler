@@ -2623,9 +2623,9 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
     expect(events.find((event) => event.kind === "work.block.started")?.payload?.activityKind)
       .toBe("ran_command");
     expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName)
-      .toBe("Bash");
+      .toBe("Command");
     expect(events.find((event) => event.kind === "tool.started")?.payload?.safeLabel)
-      .toBe("Bash: pwd");
+      .toBe("Command: pwd");
   }
 });
 
@@ -3119,13 +3119,13 @@ test("native runtime can drive the real run_command tool through the default exe
         toolCalls: [{
           name: "run_command",
           args: {
-            command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt",
+            command: "echo ok | tee command-proof.txt",
             output_paths: ["command-proof.txt"],
           },
         }],
       });
       const args = {
-        command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt",
+        command: "echo ok | tee command-proof.txt",
         output_paths: ["command-proof.txt"],
       };
       const result = await input.executeTool({
@@ -3155,7 +3155,11 @@ test("native runtime can drive the real run_command tool through the default exe
   });
 
   expect(result.text).toBe("검증 파일을 만들고 확인했습니다.");
-  expect(readFileSync(join(workspace, "command-proof.txt"), "utf8")).toBe("ok\n");
+  const proof = readFileSync(join(workspace, "command-proof.txt"));
+  expect(
+    proof.includes(Buffer.from("ok")) ||
+      proof.includes(Buffer.from("ok", "utf16le")),
+  ).toBeTrue();
   expect(result.artifacts?.[0]).toMatchObject({
     title: "command-proof.txt",
     safePathLabel: "command-proof.txt",
@@ -3163,7 +3167,7 @@ test("native runtime can drive the real run_command tool through the default exe
     kind: "file",
   });
   expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName)
-    .toBe("Bash");
+    .toBe("Command");
 });
 
 test("native runtime resolves run_command generated artifacts from Butler data", async () => {
@@ -9655,7 +9659,7 @@ test("native runtime redacts complex tool progress command metadata", async () =
   expect(commandProgressActions).toHaveLength(1);
   expect(commandProgressActions[0]).toMatchObject({
     activityKind: "ran_command",
-    toolName: "Bash",
+    toolName: "Command",
   });
   const serialized = JSON.stringify(commandProgressActions);
   expect(serialized).toContain("[redacted]");

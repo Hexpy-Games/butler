@@ -278,6 +278,8 @@ const butlerApp = Object.freeze({
   exportAgentServiceDiagnostics: () =>
     ipcRenderer.invoke("butler:agent-service-diagnostics"),
   quitApp: () => ipcRenderer.invoke("butler:quit-app"),
+  quitAndInstallUpdate: () =>
+    ipcRenderer.invoke("butler:quit-and-install-update"),
   minimizeWindow: () => ipcRenderer.invoke("butler:window-minimize"),
   toggleWindowMaximize: () =>
     ipcRenderer.invoke("butler:window-toggle-maximize"),

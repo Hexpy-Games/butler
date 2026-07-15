@@ -1,9 +1,7 @@
-import { spawn } from "child_process";
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import { join } from "path";
-import { butlerAgentScriptPath } from "../../runtime/paths.ts";
-import { butlerToolProcessEnvironment } from "./executor-support.ts";
+import { dispatchBackgroundWorker } from "./background-worker-dispatch.ts";
 import {
   plannedReviewCapabilityReceipts,
   stalePlannedReviewCapabilityReceipts,
@@ -504,31 +502,10 @@ export function dispatchBackgroundTask(input: {
 }): { task_id: string; status: "RUNNING"; message: string } {
   const taskId = createTaskId();
   mkdirSync(join(input.butlerData, "tasks"), { recursive: true });
-  const dispatchScript = butlerAgentScriptPath(input.butlerHome, "dispatch.sh");
-  if (!existsSync(dispatchScript)) {
-    throw new Error(`worker dispatch script not found: ${dispatchScript}`);
-  }
-  const args = [dispatchScript, input.task, input.projectPath];
-  const model = input.model?.trim();
-  if (model) args.push(model);
-
-  const child = spawn(
-    "/bin/bash",
-    args,
-    {
-      cwd: input.butlerHome,
-      detached: true,
-      stdio: "ignore",
-      env: {
-        ...butlerToolProcessEnvironment(),
-        BUTLER_HOME: input.butlerHome,
-        BUTLER_DATA: input.butlerData,
-        TASK_ID_OVERRIDE: taskId,
-        ...(input.reasoningEffort ? { BUTLER_OPENAI_REASONING_EFFORT: input.reasoningEffort } : {}),
-      },
-    },
-  );
-  child.unref();
+  dispatchBackgroundWorker({
+    ...input,
+    taskId,
+  });
   return {
     task_id: taskId,
     status: "RUNNING",
