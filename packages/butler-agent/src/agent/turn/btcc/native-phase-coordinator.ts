@@ -541,6 +541,7 @@ interface BtccTaskGraphPayload {
   schemaVersion: "butler.btcc-task-graph.v1";
   workstreamRef: string | null;
   todoListRef: string | null;
+  sourcePlanningItemRefs: string[];
   tasks: Array<{
     taskRef: string;
     objective: string;
@@ -577,55 +578,35 @@ function taskGraphPayload(
   const todo = stream?.todo_list_id
     ? new TodoListStore(butlerData, { autoRecover: false }).read(stream.todo_list_id)
     : null;
-  const sourceTasks = todo?.items.length ? todo.items : [{
-    id: `task:${active.contract.contract_id}:answer`,
-    content: active.decision.public_summary,
-    status: "completed" as const,
-    phase: "execution" as const,
-  }];
-  const taskRefs = sourceTasks.map((item) => item.id);
-  const criterionAssignments = new Map(taskRefs.map((taskRef) => [taskRef, [] as string[]]));
-  goal.acceptanceIntents.forEach((criterion, index) => {
-    criterionAssignments.get(taskRefs[index % taskRefs.length]!)!.push(criterion.key);
-  });
-  const obligationAssignments = new Map(taskRefs.map((taskRef) => [taskRef, [] as string[]]));
-  active.contract.required_evidence.forEach((obligation, index) => {
-    obligationAssignments.get(taskRefs[index % taskRefs.length]!)!.push(obligation.obligation_id);
-  });
-  const validationObligationRefs = new Set(active.contract.required_evidence
+  const taskRef = `task:${active.contract.contract_id}:integrated-execution`;
+  const outputObligationRefs = active.contract.required_evidence.map((evidence) =>
+    evidence.obligation_id);
+  const validationEvidenceRefs = active.contract.required_evidence
     .filter((evidence) => evidence.evidence_class === "passing_validation")
-    .map((evidence) => evidence.obligation_id));
-  const tasks = sourceTasks.map((item, index) => {
-    const outputObligationRefs = obligationAssignments.get(item.id) ?? [];
-    return {
-      taskRef: item.id,
-      objective: item.content,
-      status: item.status,
-      phase: item.phase ?? null,
-      dependencyRefs: index === 0 ? [] : [sourceTasks[index - 1]!.id],
-      authorityRefs: [...goal.semanticAuthorityRefs],
-      requiredEffects: [...goal.workShape.requiredEffects],
-      outputObligationRefs,
-      validationEvidenceRefs: outputObligationRefs.filter((ref) =>
-        validationObligationRefs.has(ref)),
-      reviewCriterionIds: [
-        `task-output:${hashBtccPayload({ taskRef: item.id, objective: item.content }).slice(0, 16)}`,
-        ...(criterionAssignments.get(item.id) ?? []),
-      ],
-      repairOwner: "execution" as const,
-    };
-  });
+    .map((evidence) => evidence.obligation_id);
+  const tasks: BtccTaskGraphPayload["tasks"] = [{
+    taskRef,
+    objective: goal.requestedOutcome,
+    status: goal.workShape.workDisposition === "direct_answer" ? "completed" : "pending",
+    phase: "execution",
+    dependencyRefs: [],
+    authorityRefs: [...goal.semanticAuthorityRefs],
+    requiredEffects: [...goal.workShape.requiredEffects],
+    outputObligationRefs,
+    validationEvidenceRefs,
+    reviewCriterionIds: goal.acceptanceIntents.map((criterion) => criterion.key),
+    repairOwner: "execution",
+  }];
   return {
     schemaVersion: "butler.btcc-task-graph.v1",
     workstreamRef,
     todoListRef: stream?.todo_list_id ?? null,
+    sourcePlanningItemRefs: todo?.items.map((item) => item.id) ?? [],
     tasks,
     acceptanceObligationRefs: active.contract.required_evidence.map((item) => item.obligation_id),
     coverageMatrix: goal.acceptanceIntents.map((criterion) => ({
       criterionId: criterion.key,
-      taskRefs: tasks
-        .filter((task) => task.reviewCriterionIds.includes(criterion.key))
-        .map((task) => task.taskRef),
+      taskRefs: [taskRef],
     })),
     integratedValidation: {
       required: active.contract.deliverables.includes("validation"),
