@@ -22,6 +22,8 @@ const entrypoint = readFileSync(
 test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(workflow).toContain("runs-on: windows-latest");
   expect(workflow).toContain("shell: pwsh");
+  expect(workflow).toContain("bun-version: 1.3.11");
+  expect(workflow).toContain("-Mode Setup");
   expect(workflow).toContain("-Mode Quality");
   expect(workflow).toContain("-Mode Tests");
   expect(workflow).toContain("-Mode ProductE2E");
@@ -30,6 +32,9 @@ test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(workflow).not.toContain("shell: bash");
   expect(workflow).not.toMatch(/run:\s*(?:bash|sh)\b/u);
   expect(entrypoint).not.toMatch(/\.sh(?:\s|")/u);
+  expect(entrypoint).toContain('"Setup"');
+  expect(entrypoint).toContain('"--frozen-lockfile"');
+  expect(entrypoint).toContain('"--audit-level=high"');
   expect(entrypoint).toContain("Invoke-StandardUserSmoke");
   expect(entrypoint).toContain("run-standard-user-bundled-payload-smoke.ps1");
   expect(entrypoint).toContain("-InteractiveDesktop");
