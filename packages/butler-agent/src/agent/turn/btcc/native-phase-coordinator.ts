@@ -42,6 +42,13 @@ export class BtccNativePhaseCoordinator {
     return this.prepared.store.readPhaseArtifact(ref);
   }
 
+  acceptedReceiptRef(phase: BtccPhase): string | null {
+    for (const receiptRef of this.state().acceptedReceiptRefs) {
+      if (this.prepared.store.readPhaseReceipt(receiptRef)?.phase === phase) return receiptRef;
+    }
+    return null;
+  }
+
   goalContract(): GoalContractV1 {
     const state = this.state();
     const goal = state.goalContractRef
