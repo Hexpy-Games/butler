@@ -8,6 +8,11 @@ export interface CommandExecutorConformanceReport {
   pipeline: true;
   cancellation: true;
   timeout: true;
+  unicode: true;
+  unicodeChunkBoundary: true;
+  quoting: true;
+  duration: true;
+  forceTermination: true;
 }
 
 export async function runCommandExecutorConformance(
@@ -66,6 +71,67 @@ export async function runCommandExecutorConformance(
   });
   assert(timeout.timedOut && timeout.exitCode === null, "timeout");
 
+  const unicodeValue = "한글 path with spaces — 日本語";
+  const unicode = await executor.execute({
+    plan: plan({
+      executable: runtimeExecutable,
+      arguments: ["-e", "process.stdout.write(process.argv[1])", unicodeValue],
+    }),
+  });
+  assert(unicode.stdout === unicodeValue && unicode.exitCode === 0, "unicode");
+
+  const unicodeChunkBoundary = await executor.execute({
+    plan: processPlan(
+      runtimeExecutable,
+      "const value=Buffer.from('한'); process.stdout.write(value.subarray(0, 1)); setTimeout(() => process.stdout.write(value.subarray(1)), 10)",
+    ),
+  });
+  assert(
+    unicodeChunkBoundary.stdout === "한" && unicodeChunkBoundary.exitCode === 0,
+    "unicode chunk boundary",
+  );
+
+  const quotedArguments = [
+    "space value",
+    'double"quote',
+    "single'quote",
+    "dollar$()&pipe|",
+    "back`tick",
+  ];
+  const quoting = await executor.execute({
+    plan: plan({
+      executable: runtimeExecutable,
+      arguments: [
+        "-e",
+        "process.stdout.write(JSON.stringify(process.argv.slice(1)))",
+        ...quotedArguments,
+      ],
+    }),
+  });
+  assert(
+    quoting.stdout === JSON.stringify(quotedArguments) && quoting.exitCode === 0,
+    "quoting",
+  );
+  assert(
+    Number.isFinite(quoting.durationMs) && quoting.durationMs >= 0,
+    "duration",
+  );
+
+  const forceController = new AbortController();
+  const forcePromise = executor.execute({
+    plan: processPlan(
+      runtimeExecutable,
+      "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)",
+    ),
+    signal: forceController.signal,
+  });
+  setTimeout(() => forceController.abort(), 25);
+  const forceTermination = await forcePromise;
+  assert(
+    forceTermination.cancelled && forceTermination.exitCode === null,
+    "force termination",
+  );
+
   return {
     stdout: true,
     stderr: true,
@@ -74,6 +140,11 @@ export async function runCommandExecutorConformance(
     pipeline: true,
     cancellation: true,
     timeout: true,
+    unicode: true,
+    unicodeChunkBoundary: true,
+    quoting: true,
+    duration: true,
+    forceTermination: true,
   };
 }
 

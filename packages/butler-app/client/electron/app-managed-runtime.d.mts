@@ -95,6 +95,7 @@ export function activateAppManagedAgentRuntime(input: {
   butlerData: string;
   resourceRoot: string;
   now?: () => Date;
+  platform?: NodeJS.Platform;
 }): {
   runtimeHome: string;
   runtimeHomeLabel: string;
@@ -108,6 +109,7 @@ export function prepareAppManagedAgentRuntime(input: {
   butlerData: string;
   resourceRoot: string;
   now?: () => Date;
+  platform?: NodeJS.Platform;
 }): {
   runtimeHome: string;
   runtimeHomeLabel: string;
@@ -119,10 +121,13 @@ export function prepareAppManagedAgentRuntime(input: {
   rollbackActivation: (error?: Error) => void;
 };
 
+export function windowsRuntimeSignatureIssue(runtimePayloadHome: string): string | null;
+
 export function resolveAppManagedGatewayCommand(input?: {
   butlerData: string;
   env?: Record<string, string | undefined>;
   resourcesPath?: string;
+  platform?: NodeJS.Platform;
 }): {
   command: string;
   args: string[];
@@ -138,6 +143,7 @@ export function resolveAppManagedForegroundCommand(input?: {
   butlerData: string;
   env?: Record<string, string | undefined>;
   resourcesPath?: string;
+  platform?: NodeJS.Platform;
 }): {
   command: string;
   args: string[];

@@ -77,7 +77,8 @@ type LinuxAppPackageFormat = "deb" | "pacman";
 type AppEmbeddedAgentCliLauncherPlatform =
   | "darwin-arm64"
   | "linux-arm64"
-  | "linux-x64";
+  | "linux-x64"
+  | "windows-x64";
 
 const ELECTRON_ROOT = join("packages", "butler-app", "client", "electron");
 const APP_RENDERER_DIST = join("packages", "butler-app", "client", "ui", "dist");
@@ -461,13 +462,22 @@ function writeAppServiceInstallerPayloads(input: {
     });
     return;
   }
+  if (requirement.platform === "win32") {
+    writeServiceInstallerManifest({
+      resourceDir: input.resourceDir,
+      releasePlatform: input.platform,
+      servicePlatform: requirement.platform,
+      packageArtifacts: [],
+    });
+    return;
+  }
   throw new Error(`unsupported background service installer payload platform: ${requirement.platform}`);
 }
 
 function writeServiceInstallerManifest(input: {
   resourceDir: string;
   releasePlatform: AppReleasePlatform;
-  servicePlatform: "darwin" | "linux";
+  servicePlatform: "darwin" | "linux" | "win32";
   packageArtifacts: Array<Record<string, string>>;
 }): void {
   writeJson(
@@ -575,9 +585,22 @@ function copyManagedRuntimeExecutable(runtimeDir: string, platform: AppReleasePl
     throw new Error(`managed App runtime executable is missing: ${source}`);
   }
   assertManagedRuntimeExecutablePlatform(source, platform);
-  const target = join(runtimeDir, "bin", "bun");
+  const target = join(runtimeDir, "bin", platform === "win32-x64" ? "bun.exe" : "bun");
   mkdirSync(dirname(target), { recursive: true });
   copyFileSync(source, target);
+  if (platform === "win32-x64") {
+    const processHostSource = managedWindowsProcessHostExecutable();
+    if (!existsSync(processHostSource)) {
+      throw new Error(`managed Windows process host is missing: ${processHostSource}`);
+    }
+    assertWindowsX64Pe(processHostSource, "managed Windows process host");
+    const processHostTarget = join(runtimeDir, "bin", "butler-process-host.exe");
+    copyFileSync(processHostSource, processHostTarget);
+    writeWindowsRuntimeSignatureManifest(runtimeDir, [
+      { relativePath: "bin/bun.exe", path: target },
+      { relativePath: "bin/butler-process-host.exe", path: processHostTarget },
+    ]);
+  }
   try {
     chmodSync(target, 0o755);
   } catch {
@@ -595,7 +618,15 @@ function managedRuntimeExecutableForPlatform(platform: AppReleasePlatform): stri
   throw new Error(`managed App runtime executable for ${platform} is missing; set ${platformEnv}`);
 }
 
-function assertManagedRuntimeExecutablePlatform(
+function managedWindowsProcessHostExecutable(): string {
+  const explicit = process.env.BUTLER_APP_WINDOWS_PROCESS_HOST?.trim();
+  if (explicit) return explicit;
+  throw new Error(
+    "managed Windows process host is missing; set BUTLER_APP_WINDOWS_PROCESS_HOST",
+  );
+}
+
+export function assertManagedRuntimeExecutablePlatform(
   path: string,
   platform: AppReleasePlatform,
 ): void {
@@ -603,7 +634,122 @@ function assertManagedRuntimeExecutablePlatform(
   if (platform === "linux-x64" && isElfX64(bytes)) return;
   if (platform === "linux-arm64" && isElfArm64(bytes)) return;
   if (platform === "darwin-arm64" && isMachOArm64(bytes)) return;
+  if (platform === "win32-x64" && isWindowsX64Pe(bytes)) return;
   throw new Error(`managed App runtime executable does not match ${platform}: ${path}`);
+}
+
+export function isWindowsX64Pe(bytes: Buffer): boolean {
+  if (bytes.length < 0x40 || bytes[0] !== 0x4d || bytes[1] !== 0x5a) {
+    return false;
+  }
+  const peOffset = bytes.readUInt32LE(0x3c);
+  if (peOffset > bytes.length - 6) return false;
+  return (
+    bytes[peOffset] === 0x50 &&
+    bytes[peOffset + 1] === 0x45 &&
+    bytes[peOffset + 2] === 0 &&
+    bytes[peOffset + 3] === 0 &&
+    bytes.readUInt16LE(peOffset + 4) === 0x8664
+  );
+}
+
+function assertWindowsX64Pe(path: string, label: string): void {
+  if (!isWindowsX64Pe(readFileSync(path))) {
+    throw new Error(`${label} is not a Windows x64 PE executable: ${path}`);
+  }
+}
+
+interface WindowsRuntimeSignedFile {
+  relativePath: string;
+  path: string;
+}
+
+interface WindowsAuthenticodeResult {
+  status: string;
+  signerThumbprint: string;
+  signerSubject: string;
+}
+
+function writeWindowsRuntimeSignatureManifest(
+  runtimeDir: string,
+  files: WindowsRuntimeSignedFile[],
+): void {
+  const signatures = verifyWindowsAuthenticodeFiles(files.map((file) => file.path));
+  writeJson(join(runtimeDir, "windows-signatures.json"), {
+    schema: "butler.windows-runtime-signatures.v1",
+    verification: "authenticode-powershell-5.1",
+    files: files.map((file, index) => ({
+      path: file.relativePath,
+      sha256: sha256File(file.path),
+      status: signatures[index]?.status,
+      signerThumbprint: signatures[index]?.signerThumbprint,
+      signerSubject: signatures[index]?.signerSubject,
+    })),
+    rawTextIncluded: false,
+  });
+}
+
+export function verifyWindowsAuthenticodeFiles(paths: string[]): WindowsAuthenticodeResult[] {
+  if (process.platform !== "win32") {
+    throw new Error("Windows Authenticode verification must run on Windows");
+  }
+  if (paths.length === 0) throw new Error("Windows Authenticode verification requires files");
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$decodedPaths = ConvertFrom-Json $env:BUTLER_WINDOWS_SIGNATURE_PATHS_JSON",
+    "$paths = @()",
+    "for ($index = 0; $index -lt $decodedPaths.Count; $index += 1) { $paths += [string]$decodedPaths[$index] }",
+    "$results = @()",
+    "foreach ($path in $paths) {",
+    "  $signature = Get-AuthenticodeSignature -LiteralPath ([string]$path)",
+    "  $certificate = $signature.SignerCertificate",
+    "  $thumbprint = if ($null -ne $certificate) { [string]$certificate.Thumbprint } else { '' }",
+    "  $subject = if ($null -ne $certificate) { [string]$certificate.Subject } else { '' }",
+    "  $results += [pscustomobject]@{ status = [string]$signature.Status; signerThumbprint = $thumbprint; signerSubject = $subject }",
+    "}",
+    "ConvertTo-Json -Compress -InputObject @($results)",
+  ].join("; ");
+  const result = spawnSync(process.env.BUTLER_POWERSHELL || "powershell.exe", [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    script,
+  ], {
+    encoding: "utf8",
+    windowsHide: true,
+    env: {
+      ...process.env,
+      BUTLER_WINDOWS_SIGNATURE_PATHS_JSON: JSON.stringify(paths),
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Windows Authenticode verification failed: ${summarizeCommandOutput(result.stderr || result.stdout) || "unknown error"}`,
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(result.stdout.trim());
+  } catch {
+    throw new Error("Windows Authenticode verification returned invalid JSON");
+  }
+  const values = Array.isArray(parsed) ? parsed : [parsed];
+  if (values.length !== paths.length) {
+    throw new Error("Windows Authenticode verification returned an incomplete result");
+  }
+  return values.map((value, index) => {
+    const signature = value as Partial<WindowsAuthenticodeResult>;
+    const status = String(signature.status ?? "");
+    const signerThumbprint = String(signature.signerThumbprint ?? "").toUpperCase();
+    const signerSubject = String(signature.signerSubject ?? "");
+    if (status !== "Valid" || !/^[A-F0-9]{40,128}$/u.test(signerThumbprint)) {
+      throw new Error(`Windows Authenticode signature is not valid for input ${index + 1}`);
+    }
+    return { status, signerThumbprint, signerSubject };
+  });
 }
 
 function isElfX64(bytes: Buffer): boolean {
@@ -672,6 +818,7 @@ function currentHostAppReleasePlatform(): AppReleasePlatform {
   if (process.platform === "darwin" && process.arch === "arm64") return "darwin-arm64";
   if (process.platform === "linux" && process.arch === "x64") return "linux-x64";
   if (process.platform === "linux" && process.arch === "arm64") return "linux-arm64";
+  if (process.platform === "win32" && process.arch === "x64") return "win32-x64";
   throw new Error(
     "current host platform is not a supported App release runtime; set BUTLER_APP_MANAGED_BUN_<PLATFORM>",
   );
@@ -765,6 +912,7 @@ function serviceCliLauncherPlatformsForAppPlatform(
 ): AppEmbeddedAgentCliLauncherPlatform[] {
   if (platform === "darwin-arm64") return ["darwin-arm64"];
   if (platform === "linux-arm64") return ["linux-arm64"];
+  if (platform === "win32-x64") return ["windows-x64"];
   return ["linux-x64"];
 }
 
@@ -1393,7 +1541,7 @@ function summarizeCommandOutput(output: string): string {
 
 function assertSupportedPlatforms(platforms: AppReleasePlatform[]): void {
   for (const platform of platforms) {
-    if (!APP_RELEASE_PLATFORMS.includes(platform)) {
+    if (!(APP_RELEASE_PLATFORMS as readonly string[]).includes(platform)) {
       throw new Error(`unsupported app release platform: ${platform}`);
     }
   }
@@ -1460,7 +1608,7 @@ function parseCliArgs(args: string[]): {
 }
 
 function parsePlatform(value: string): AppReleasePlatform {
-  if (APP_RELEASE_PLATFORMS.includes(value as AppReleasePlatform)) {
+  if ((APP_RELEASE_PLATFORMS as readonly string[]).includes(value)) {
     return value as AppReleasePlatform;
   }
   throw new Error(`unsupported app release platform: ${value}`);

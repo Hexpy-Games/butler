@@ -32,9 +32,54 @@ import {
   resolveAppManagedGatewayCommand,
   resolveAppManagedForegroundCommand,
   rollbackAppManagedAgentRuntimeUpdate,
+  windowsRuntimeSignatureIssue,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
 
 const root = process.cwd();
+
+test("Windows runtime signature metadata pins the signed runtime files", () => {
+  const runtime = mkdtempSync(join(tmpdir(), "butler-windows-signature-"));
+  try {
+    mkdirSync(join(runtime, "bin"), { recursive: true });
+    writeFileSync(join(runtime, "bin", "bun.exe"), "signed bun\n");
+    writeFileSync(
+      join(runtime, "bin", "butler-process-host.exe"),
+      "signed process host\n",
+    );
+    const thumbprint = "A".repeat(40);
+    writeFileSync(
+      join(runtime, "windows-signatures.json"),
+      `${JSON.stringify({
+        schema: "butler.windows-runtime-signatures.v1",
+        verification: "authenticode-powershell-5.1",
+        files: [
+          {
+            path: "bin/bun.exe",
+            sha256: sha256File(join(runtime, "bin", "bun.exe")),
+            status: "Valid",
+            signerThumbprint: thumbprint,
+            signerSubject: "CN=Butler Windows Payload Test",
+          },
+          {
+            path: "bin/butler-process-host.exe",
+            sha256: sha256File(join(runtime, "bin", "butler-process-host.exe")),
+            status: "Valid",
+            signerThumbprint: thumbprint,
+            signerSubject: "CN=Butler Windows Payload Test",
+          },
+        ],
+        rawTextIncluded: false,
+      }, null, 2)}\n`,
+    );
+    expect(windowsRuntimeSignatureIssue(runtime)).toBeNull();
+    writeFileSync(join(runtime, "bin", "bun.exe"), "tampered\n");
+    expect(windowsRuntimeSignatureIssue(runtime)).toBe(
+      "Windows runtime signature verification failed for bin/bun.exe",
+    );
+  } finally {
+    rmSync(runtime, { recursive: true, force: true });
+  }
+});
 
 test("App-managed runtime activation writes an app-owned pointer only", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-"));
@@ -596,7 +641,8 @@ test("App-managed runtime activation does not shell out to host tar", () => {
     join(root, "packages", "butler-app", "client", "electron", "app-managed-runtime.mjs"),
     "utf8",
   );
-  expect(source).not.toContain("node:child_process");
+  expect(source).toContain("managedRuntimeSourceExecutablePath");
+  expect(source).toContain("windows-archive-worker.mjs");
   expect(source).not.toContain('spawnSync("tar"');
   expect(source).not.toContain('"tar", ["-xzf"');
   expect(source).not.toContain("npm install");

@@ -2,11 +2,16 @@ import {
   spawn,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import type {
   CommandInvocation,
   CommandRequest,
   CommandResult,
 } from "./contracts.ts";
+import {
+  directProcessContainment,
+  type CommandProcessContainment,
+} from "./process-containment.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_TIMEOUT_MS = 300_000;
@@ -14,6 +19,7 @@ const MAX_TIMEOUT_MS = 300_000;
 export async function runNodeCommand(
   invocations: readonly CommandInvocation[],
   request: CommandRequest,
+  containment: CommandProcessContainment = directProcessContainment,
 ): Promise<CommandResult> {
   const startedAt = Date.now();
   if (request.signal?.aborted) {
@@ -37,12 +43,16 @@ export async function runNodeCommand(
     let settled = false;
     const children: ChildProcessWithoutNullStreams[] = [];
     const exitCodes: Array<number | null> = [];
+    const stderrDecoders: StringDecoder[] = [];
+    const stdoutDecoder = new StringDecoder("utf8");
     let closedChildren = 0;
+    let forceTimer: ReturnType<typeof setTimeout> | undefined;
 
     const settle = (value: Partial<CommandResult> = {}) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (forceTimer) clearTimeout(forceTimer);
       request.signal?.removeEventListener("abort", onAbort);
       resolveResult(result({
         startedAt,
@@ -56,9 +66,18 @@ export async function runNodeCommand(
     const terminate = () => {
       for (const child of children) {
         if (child.exitCode === null && child.signalCode === null) {
-          child.kill("SIGTERM");
+          containment.signal(child, "SIGTERM");
         }
       }
+      if (forceTimer) return;
+      forceTimer = setTimeout(() => {
+        for (const child of children) {
+          if (child.exitCode === null && child.signalCode === null) {
+            containment.signal(child, "SIGKILL");
+          }
+        }
+      }, 500);
+      forceTimer.unref?.();
     };
     const onAbort = () => {
       cancelled = true;
@@ -72,11 +91,13 @@ export async function runNodeCommand(
           ...request.environment,
         },
         shell: false,
+        detached: containment.detached,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       });
       children.push(child);
       exitCodes.push(null);
+      stderrDecoders.push(new StringDecoder("utf8"));
     }
 
     const timeout = setTimeout(() => {
@@ -89,11 +110,17 @@ export async function runNodeCommand(
     if (request.signal?.aborted) onAbort();
     const lastChild = children.at(-1)!;
     lastChild.stdout.on("data", (chunk) => {
-      stdout += chunk.toString("utf8");
+      stdout += stdoutDecoder.write(chunk);
+    });
+    lastChild.stdout.once("end", () => {
+      stdout += stdoutDecoder.end();
     });
     children.forEach((child, index) => {
       child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString("utf8");
+        stderr += stderrDecoders[index]!.write(chunk);
+      });
+      child.stderr.once("end", () => {
+        stderr += stderrDecoders[index]!.end();
       });
       child.once("error", (error) => {
         terminate();
