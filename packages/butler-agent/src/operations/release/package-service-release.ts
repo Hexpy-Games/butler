@@ -340,6 +340,7 @@ function createTarball(stageRoot: string, artifactPath: string): void {
     createTarArchive({
       cwd: stageRoot,
       file: artifactPath,
+      follow: true,
       gzip: true,
       portable: true,
       sync: true,
