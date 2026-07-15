@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("Quality", "Tests", "ProductE2E", "Package", "Lifecycle")]
+  [ValidateSet("Setup", "Quality", "Tests", "ProductE2E", "Package", "Lifecycle")]
   [string]$Mode
 )
 
@@ -180,6 +180,33 @@ function Invoke-StandardUserSmoke {
 }
 
 switch ($Mode) {
+  "Setup" {
+    Invoke-Checked -Command "bun.exe" -Arguments @(
+      "install",
+      "--frozen-lockfile"
+    )
+    Invoke-Checked -Command "npm.cmd" -Arguments @(
+      "--prefix",
+      "packages/butler-app/client/electron",
+      "ci"
+    )
+    Invoke-Checked -Command "npm.cmd" -Arguments @(
+      "--prefix",
+      "packages/butler-app/client/ui",
+      "ci"
+    )
+    foreach ($packageRoot in @(
+      "packages/butler-app/client/electron",
+      "packages/butler-app/client/ui"
+    )) {
+      Invoke-Checked -Command "npm.cmd" -Arguments @(
+        "--prefix",
+        $packageRoot,
+        "audit",
+        "--audit-level=high"
+      )
+    }
+  }
   "Quality" {
     Invoke-Checked -Command "bun.exe" -Arguments @("x", "eslint", ".")
     foreach ($script in @(
