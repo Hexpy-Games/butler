@@ -24,7 +24,7 @@ export interface FirstRunSetupBridge {
   status(): FirstRunSetupStatusView;
   diagnostics(): FirstRunSetupDiagnosticsView;
   cancel(): FirstRunSetupStatusView;
-  start(): Promise<FirstRunSetupStatusView>;
+  start(input?: { mode?: "check" | "repair" }): Promise<FirstRunSetupStatusView>;
 }
 
 export interface FirstRunServiceControlBridge {
@@ -48,6 +48,7 @@ export function createFirstRunSetupBridge(input: {
       token_configured?: boolean;
     };
   };
+  repairRuntime?: (() => Promise<void>) | null;
   serviceControl?: FirstRunServiceControlBridge | null;
   gatewayReadyPollAttempts?: number;
   gatewayReadyPollDelayMs?: number;

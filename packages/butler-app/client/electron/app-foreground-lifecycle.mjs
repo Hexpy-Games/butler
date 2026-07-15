@@ -1,9 +1,13 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export const APP_FOREGROUND_INSTANCE_SCHEMA = "butler.app-foreground-instance.v1";
 export const APP_FOREGROUND_LAST_EXIT_SCHEMA = "butler.app-foreground-last-exit.v1";
+export const APP_FOREGROUND_STARTUP_FAILURE_SCHEMA =
+  "butler.app-foreground-startup-failure.v1";
+export const APP_FOREGROUND_STARTUP_PROGRESS_SCHEMA =
+  "butler.app-foreground-startup-progress.v1";
 export const APP_FOREGROUND_MIGRATION_SCHEMA = "butler.app-foreground-legacy-migration.v1";
 export const APP_FOREGROUND_LIFECYCLE_MODES = Object.freeze({
   foreground: "app-foreground",
@@ -52,6 +56,18 @@ export function appForegroundLastExitPath(butlerData) {
   return join(appForegroundRuntimeDir(butlerData), "last-exit.json");
 }
 
+export function appForegroundStartupFailurePath(butlerData) {
+  return join(appForegroundRuntimeDir(butlerData), "startup-failure.json");
+}
+
+export function appForegroundStartupProgressPath(butlerData) {
+  return join(appForegroundRuntimeDir(butlerData), "startup-progress.json");
+}
+
+export function clearAppForegroundStartupFailure(butlerData) {
+  rmSync(appForegroundStartupFailurePath(butlerData), { force: true });
+}
+
 export function appForegroundMigrationPath(butlerData) {
   return join(appForegroundRuntimeDir(butlerData), "legacy-migration.json");
 }
@@ -83,6 +99,8 @@ export function createAppForegroundLaunch({
   host = "127.0.0.1",
   port,
   appPid = process.pid,
+  platform = process.platform,
+  architecture = process.arch,
   now = () => new Date(),
   generateGeneration = () => randomUUID(),
   generateNonce = () => randomBytes(32).toString("base64url"),
@@ -98,6 +116,11 @@ export function createAppForegroundLaunch({
       app_pid: appPid,
       agent_host_pid: null,
       process_group_id: null,
+      platform: safeString(platform),
+      architecture: safeString(architecture),
+      containment_kind: null,
+      containment_verified: false,
+      owner_death_guaranteed: false,
       launch_nonce_hash: createHash("sha256").update(nonce).digest("hex"),
       app_version: safeString(appVersion),
       bundled_agent_version: safeString(bundledAgentVersion),
@@ -157,12 +180,60 @@ export function writeAppForegroundLastExit(butlerData, input, now = () => new Da
     graceful: input?.graceful === true,
     checkpoint_result: safeString(input?.checkpointResult),
     process_group_dead: input?.processGroupDead === true,
+    process_tree_dead:
+      input?.processTreeDead === true || input?.processGroupDead === true,
     port_released: input?.portReleased === true,
     error_code: safeErrorCode(input?.errorCode),
     exited_at: now().toISOString(),
     raw_text_included: false,
   };
   atomicWriteJson(appForegroundLastExitPath(butlerData), record);
+  return record;
+}
+
+export function writeAppForegroundStartupFailure(
+  butlerData,
+  input,
+  now = () => new Date(),
+) {
+  const record = {
+    schema: APP_FOREGROUND_STARTUP_FAILURE_SCHEMA,
+    platform: safeString(input?.platform),
+    architecture: safeString(input?.architecture),
+    lifecycle_mode: safeString(input?.lifecycleMode),
+    supervisor_phase: safeString(input?.supervisorPhase),
+    error_code: safeErrorCode(input?.errorCode) ?? "app_startup_failed",
+    exit_code: Number.isInteger(input?.exitCode) ? input.exitCode : null,
+    signal: safeErrorCode(input?.signal),
+    containment_kind: safeString(input?.containmentKind),
+    containment_verified: input?.containmentVerified === true,
+    owner_death_guaranteed: input?.ownerDeathGuaranteed === true,
+    failed_at: now().toISOString(),
+    raw_text_included: false,
+  };
+  atomicWriteJson(appForegroundStartupFailurePath(butlerData), record);
+  return record;
+}
+
+export function writeAppForegroundStartupProgress(
+  butlerData,
+  input,
+  now = () => new Date(),
+) {
+  const record = {
+    schema: APP_FOREGROUND_STARTUP_PROGRESS_SCHEMA,
+    stage: safeErrorCode(input?.stage) ?? "unknown",
+    platform: safeString(input?.platform),
+    architecture: safeString(input?.architecture),
+    lifecycle_mode: safeString(input?.lifecycleMode),
+    agent_phase: safeErrorCode(input?.agentPhase),
+    containment_kind: safeString(input?.containmentKind),
+    tray_ready: input?.trayReady === true,
+    window_ready: input?.windowReady === true,
+    updated_at: now().toISOString(),
+    raw_text_included: false,
+  };
+  atomicWriteJson(appForegroundStartupProgressPath(butlerData), record);
   return record;
 }
 
@@ -219,6 +290,15 @@ function sanitizeLifecyclePatch(patch) {
   }
   if (Number.isInteger(patch.process_group_id) && patch.process_group_id > 0) {
     allowed.process_group_id = patch.process_group_id;
+  }
+  if (typeof patch.containment_kind === "string" && patch.containment_kind.trim()) {
+    allowed.containment_kind = patch.containment_kind.trim().slice(0, 80);
+  }
+  if (typeof patch.containment_verified === "boolean") {
+    allowed.containment_verified = patch.containment_verified;
+  }
+  if (typeof patch.owner_death_guaranteed === "boolean") {
+    allowed.owner_death_guaranteed = patch.owner_death_guaranteed;
   }
   if (typeof patch.clean_exit === "boolean") allowed.clean_exit = patch.clean_exit;
   return allowed;

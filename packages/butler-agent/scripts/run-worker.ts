@@ -424,7 +424,7 @@ function classifyNativeWorkerActivity(kind: string, payload: unknown): {
   if (toolName || activityKind) {
     return {
       semanticPhase: "inspecting",
-      actionKind: toolName === "Bash" || activityKind === "ran_command" ? "run_command" : "read",
+      actionKind: toolName === "Command" || activityKind === "ran_command" ? "run_command" : "read",
       statusLine: "Inspecting worker context.",
       currentTitle: "작업 맥락을 확인하는 중입니다.",
     };

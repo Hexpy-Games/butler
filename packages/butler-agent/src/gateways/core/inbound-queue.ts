@@ -57,7 +57,7 @@ export type DeadOwnerCancellationSettlementOutcome =
 let enqueueSequence = 0;
 
 function safeQueueId(eventId: string): string {
-  return eventId.replace(/[^A-Za-z0-9._:-]+/g, "_").slice(0, 120) || randomUUID();
+  return eventId.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 120) || randomUUID();
 }
 
 function sortableQueueIdPrefix(now: Date): string {

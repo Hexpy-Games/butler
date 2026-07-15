@@ -531,6 +531,8 @@ const runtime = new NativeToolLoopRuntime({
           reportText: deterministicReportText,
           publicTitle: "Project Ledger 상태 확인",
           publicSummary: "Project Ledger 상태와 다음 작업을 확인하고 대시보드를 갱신합니다.",
+          targetProjectId: toolchainProjectId,
+          inspectionScope: "project",
           requiresCurrentState: true,
           requiresTools: true,
         }
@@ -701,6 +703,7 @@ const nativeService = usesExternalButlerService
     })
   : null;
 const output: string[] = [];
+let e2eFailure: Error | null = null;
 
 try {
   const debugPort = await freePort();
@@ -895,10 +898,10 @@ try {
     details,
     bodyPreview ? `BODY PREVIEW:\n${bodyPreview.slice(0, 4_000)}` : "",
   ].filter(Boolean).join("\n");
-  throw new Error(diagnostic, { cause: error });
+  e2eFailure = new Error(diagnostic, { cause: error });
 } finally {
   cdp?.close();
-  stopElectron();
+  await stopElectron();
   server.stop();
   nativeShutdown.abort();
   if (nativeService) {
@@ -913,10 +916,21 @@ try {
   if (process.env.BUTLER_APP_CLIENT_E2E_KEEP_TEMP === "1") {
     redactE2eProviderCredentialSecrets(tempDir);
     console.error(`Preserved E2E temp dir: ${tempDir}`);
+  } else if (process.platform === "win32") {
+    scheduleWindowsTreeCleanup(tempDir);
   } else {
-    rmSync(tempDir, { recursive: true, force: true });
+    await removeTreeWhenUnlocked(tempDir);
   }
 }
+
+// This file is a standalone E2E entrypoint. All owned resources are closed in
+// the finally block above; terminate explicitly so platform runtime handles do
+// not keep a successful Windows validation child alive indefinitely.
+if (e2eFailure) {
+  console.error(e2eFailure.stack ?? e2eFailure.message);
+  process.exit(1);
+}
+process.exit(0);
 
 function initializeToolchainProject(): void {
   mkdirSync(toolchainProjectDir, { recursive: true });
@@ -3432,13 +3446,91 @@ async function connectCdp(url: string): Promise<CdpClient> {
   };
 }
 
-function stopElectron(): void {
+async function stopElectron(): Promise<void> {
   if (!electronProcess || electronProcess.exitCode !== null) return;
-  electronProcess.kill("SIGTERM");
   const child = electronProcess;
-  setTimeout(() => {
-    if (child.exitCode === null) child.kill("SIGKILL");
-  }, 1500).unref();
+  if (process.platform === "win32" && child.pid) {
+    spawnSync(
+      "taskkill.exe",
+      ["/PID", String(child.pid), "/T", "/F"],
+      { stdio: "ignore", windowsHide: true },
+    );
+    await waitForChildExit(child, 5_000);
+    return;
+  }
+  child.kill("SIGTERM");
+  if (await waitForChildExit(child, 1_500)) return;
+  child.kill("SIGKILL");
+  await waitForChildExit(child, 5_000);
+}
+
+async function waitForChildExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null) return true;
+  return await Promise.race([
+    new Promise<boolean>((resolveExit) =>
+      child.once("exit", () => resolveExit(true)),
+    ),
+    delay(timeoutMs).then(() => false),
+  ]);
+}
+
+async function removeTreeWhenUnlocked(path: string): Promise<void> {
+  const attempts = process.platform === "win32" ? 100 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      rmSync(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (
+        attempt + 1 >= attempts ||
+        !["EBUSY", "EPERM", "ENOTEMPTY"].includes(
+          String((error as NodeJS.ErrnoException)?.code),
+        )
+      ) {
+        throw error;
+      }
+      await delay(100);
+    }
+  }
+}
+
+function scheduleWindowsTreeCleanup(path: string): void {
+  const script = [
+    "$ErrorActionPreference='SilentlyContinue'",
+    "Wait-Process -Id ([int]$env:BUTLER_E2E_PARENT_PID) -Timeout 30",
+    "for($i=0;$i -lt 100;$i+=1){",
+    "Remove-Item -LiteralPath $env:BUTLER_E2E_CLEANUP_PATH -Recurse -Force",
+    "if(-not (Test-Path -LiteralPath $env:BUTLER_E2E_CLEANUP_PATH)){break}",
+    "Start-Sleep -Milliseconds 100",
+    "}",
+  ].join(";");
+  const cleanup = spawn(
+    "powershell.exe",
+    [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      script,
+    ],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        BUTLER_E2E_PARENT_PID: String(process.pid),
+        BUTLER_E2E_CLEANUP_PATH: path,
+      },
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  );
+  cleanup.unref();
 }
 
 async function delay(ms: number): Promise<void> {

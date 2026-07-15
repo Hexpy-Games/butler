@@ -2,6 +2,7 @@ export function createFirstRunSetupBridge({
   ensureReady,
   readSettings,
   readRuntimeDiagnostics = () => ({}),
+  repairRuntime = null,
   serviceControl = null,
   gatewayProfile = "electron",
   gatewayReadyPollAttempts = 120,
@@ -33,16 +34,13 @@ export function createFirstRunSetupBridge({
       });
       return statusView(session);
     },
-    async start() {
+    async start(request = {}) {
       const currentRunId = runId + 1;
       runId = currentRunId;
       const startedAt = new Date().toISOString();
       const currentSession = createSession("checking", {
         checks: [
-          setupCheck(
-            "agent_service",
-            "Butler Agent 서비스",
-          ),
+          setupCheck(...agentControlCheck(serviceControl)),
           setupCheck(
             "managed_gateway",
             "Butler Agent 연결",
@@ -61,6 +59,9 @@ export function createFirstRunSetupBridge({
       session = currentSession;
       try {
         let runtimeDiagnostics = null;
+        if (request?.mode === "repair" && typeof repairRuntime === "function") {
+          await repairRuntime();
+        }
         const serviceStatus = await readServiceStatus(serviceControl);
         if (!serviceReady(serviceStatus)) {
           await installOrStartService(serviceControl, serviceStatus);
@@ -89,7 +90,7 @@ export function createFirstRunSetupBridge({
         }
         markCheck(
           currentSession,
-          "agent_service",
+          agentControlCheck(serviceControl)[0],
           "passed",
         );
         if (!gatewayReadyConfirmed) {
@@ -158,6 +159,12 @@ export function createFirstRunSetupBridge({
       return statusView(session);
     },
   };
+}
+
+function agentControlCheck(serviceControl) {
+  return serviceControl
+    ? ["agent_service", "Butler Agent 서비스"]
+    : ["agent_runtime", "Butler Agent 실행"];
 }
 
 function createSession(phase, patch = {}) {

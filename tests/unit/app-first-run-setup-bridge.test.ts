@@ -58,9 +58,7 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
 
   expect(main).not.toContain("async function createWindow() {\n  await ensureServer();");
   expect(main).not.toContain("if (rendererUrl === serverUrl) {\n    await ensureServer();");
-  expect(main).toContain(
-    "if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge())",
-  );
+  expect(main).toContain("eagerUnpackedForegroundStartup");
   expect(main).toContain("let appAgentLaunchReconcilePromise = null");
   expect(main).toContain("const launchReconcile = reconcileAppAgentServiceForLaunch();");
   expect(main).toContain("await launchReconcile;");
@@ -111,6 +109,8 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(setupBridge).toContain("createFirstRunSetupBridge");
   expect(setupBridge).toContain("serviceControl");
   expect(setupBridge).toContain("agent_service");
+  expect(setupBridge).toContain("agent_runtime");
+  expect(setupBridge).toContain('request?.mode === "repair"');
   expect(setupBridge).toContain("service_registration_unavailable");
   expect(setupBridge).toContain("bundled_agent_version");
   expect(setupBridge).toContain("local_auth");
@@ -176,7 +176,7 @@ test("first-run setup passes only after version auth health protocol and profile
 
   expect(status.phase).toBe("ready");
   expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
-    "agent_service",
+    "agent_runtime",
     "managed_gateway",
     "bundled_agent_version",
     "local_auth",
@@ -212,7 +212,7 @@ test("default first-run setup does not run optional external tool preflights", a
 
   const checkIds = bridge.diagnostics().checks.map((check) => check.id);
   expect(checkIds).toEqual([
-    "agent_service",
+    "agent_runtime",
     "managed_gateway",
     "bundled_agent_version",
     "local_auth",
@@ -223,6 +223,39 @@ test("default first-run setup does not run optional external tool preflights", a
   expect(checkIds.join(" ")).not.toMatch(
     /git|xcode|docker|mcp|local_model|curl|wget|unzip|brew|apt|dnf|yum|pacman/u,
   );
+});
+
+test("foreground first-run repair revalidates runtime without service UX", async () => {
+  let repairs = 0;
+  const bridge = createFirstRunSetupBridge({
+    ensureReady: async () => undefined,
+    repairRuntime: async () => {
+      repairs += 1;
+    },
+    readRuntimeDiagnostics: () => ({
+      phase: "running",
+      bundled_agent: {
+        source: "app-managed",
+        version_configured: true,
+      },
+      local_auth: {
+        required: true,
+        token_configured: true,
+      },
+    }),
+    readSettings: async () => ({ gateway_profile: "electron" }),
+  });
+
+  await expect(bridge.start({ mode: "repair" })).resolves.toMatchObject({
+    phase: "ready",
+  });
+  expect(repairs).toBe(1);
+  expect(bridge.diagnostics().checks[0]).toEqual({
+    id: "agent_runtime",
+    label: "Butler Agent 실행",
+    status: "passed",
+  });
+  expect(JSON.stringify(bridge.diagnostics())).not.toContain("Agent 서비스");
 });
 
 test("default first-run setup exercises bundled supervisor readiness without host tool probes", async () => {
@@ -297,7 +330,7 @@ test("default first-run setup exercises bundled supervisor readiness without hos
       "/Applications/Butler.app/Contents/Resources/bundled-agent/runtime/bin/bun",
     ]);
     expect(bridge.diagnostics().checks.map((check) => check.id)).toEqual([
-      "agent_service",
+      "agent_runtime",
       "managed_gateway",
       "bundled_agent_version",
       "local_auth",
@@ -1002,7 +1035,9 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   expect(main).toContain("adapter: appAgentServiceAdapter");
   expect(main).toContain("healthCheck: healthOk");
   expect(main).toContain("readinessCheck: gatewayReady");
-  const gatewayResolveIndex = ensureReady.indexOf("gateway = resolveGateway();");
+  const gatewayResolveIndex = ensureReady.indexOf(
+    "gateway = readyGateway ?? resolveGateway();",
+  );
   const managedHealthIndex = ensureReady.indexOf(
     "if ((await checkGatewayReadiness()).ready)",
     gatewayResolveIndex,

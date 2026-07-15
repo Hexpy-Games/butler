@@ -75,7 +75,7 @@ test("first-run setup renders the minimal Electron setup order", async () => {
   expect(rendered.container.textContent).toContain("준비 완료");
   expect(rendered.container.textContent).not.toContain("기존 Agent 연결");
   expect(rendered.calls).toContain("startSetup");
-  expect(rendered.setupModes).toEqual(["bundled-agent"]);
+  expect(rendered.setupModes).toEqual(["check"]);
 
   await waitForText(rendered.container, "모델 설정");
   expect(rendered.container.textContent).toContain(
@@ -293,7 +293,7 @@ test("first-run setup keeps waiting for bundled Agent without alternate connecti
   bundled.resolve();
   await waitForText(rendered.container, "모델 설정");
   await addHostedModelAndFinish(rendered);
-  expect(rendered.setupModes).toEqual(["bundled-agent"]);
+  expect(rendered.setupModes).toEqual(["check"]);
   expect(rendered.completedStates[0]?.connection_mode).toBe("bundled-agent");
 
   await act(async () => rendered.root.unmount());
@@ -318,7 +318,7 @@ test("first-run setup resumes install from persisted idle state without blank bo
   bundled.resolve();
   await waitForText(rendered.container, "모델 설정");
   expect(rendered.calls.filter((call) => call === "startSetup")).toHaveLength(1);
-  expect(rendered.setupModes).toEqual(["bundled-agent"]);
+  expect(rendered.setupModes).toEqual(["check"]);
 
   await act(async () => rendered.root.unmount());
 });
@@ -485,6 +485,7 @@ test("first-run setup shows concise retry after install readiness failure", asyn
 
   await waitForText(rendered.container, "Butler Agent is not ready.");
   expect(rendered.container.textContent).toContain("Retry");
+  expect(rendered.container.textContent).toContain("Repair");
   expect(rendered.container.textContent).toContain("Copy diagnostics");
   expect(rendered.container.textContent).toContain("Quit");
   expect(rendered.container.textContent).not.toContain("stack");
@@ -503,6 +504,26 @@ test("first-run setup shows concise retry after install readiness failure", asyn
   await clickButton(rendered.container, "Retry");
   await waitForText(rendered.container, "Model setup");
   expect(rendered.calls.filter((call) => call === "startSetup")).toHaveLength(2);
+
+  await act(async () => rendered.root.unmount());
+});
+
+test("first-run setup offers explicit bundled runtime repair", async () => {
+  const rendered = await renderFirstRun(
+    {
+      ...createInitialFirstRunState("en"),
+      step: "install",
+      language_confirmed: true,
+      safety_accepted: true,
+      install_status: "checking",
+    },
+    { failHealthOnce: true },
+  );
+
+  await waitForText(rendered.container, "Butler Agent is not ready.");
+  await clickButton(rendered.container, "Repair");
+  await waitForText(rendered.container, "Model setup");
+  expect(rendered.setupModes).toEqual(["check", "repair"]);
 
   await act(async () => rendered.root.unmount());
 });

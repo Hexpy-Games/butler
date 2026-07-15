@@ -20,6 +20,10 @@ import {
   type WorkerCompletionEvidenceSummary,
 } from "./worker-evidence.ts";
 import { isAuthoredDecisionSource } from "../events/turn-state-contract.ts";
+import {
+  hasFreshBackgroundCommandHeartbeat,
+  isRegisteredBackgroundCommandActive,
+} from "../../runtime/command/background-command-registry.ts";
 
 export type TaskStatus =
   | "APPROVED"
@@ -754,11 +758,11 @@ function transcriptEventCreatedAt(event: Record<string, unknown>): string {
 }
 
 function transcriptToolDisplayName(name: string): string {
-  return name === "run_command" ? "Bash" : name;
+  return name === "run_command" ? "Command" : name;
 }
 
 function transcriptToolLabel(name: string, kind: string): string {
-  if (name === "run_command") return "Bash";
+  if (name === "run_command") return "Command";
   return kind === "tool_call" ? `Started ${name}.` : `Completed ${name}.`;
 }
 
@@ -1158,6 +1162,8 @@ export class TaskStore {
     for (const taskId of this.taskIds()) {
       const task = this.read(taskId);
       if (!task || task.status !== "RUNNING") continue;
+      if (isRegisteredBackgroundCommandActive(taskId)) continue;
+      if (hasFreshBackgroundCommandHeartbeat(this.butlerData, taskId)) continue;
       const pidText = readText(join(task.taskDir, "pid"));
       const pid = Number.parseInt(pidText, 10);
       if (Number.isFinite(pid) && pid > 0 && isPidAlive(pid)) continue;

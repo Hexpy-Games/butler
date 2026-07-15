@@ -56,14 +56,14 @@ export const SHELL_TOOL = {
   type: "function",
   name: "run_shell",
   description:
-    "Run a single non-interactive shell command in the local project workspace. Prefer rg for search, structured extraction or case-insensitive matching for config/script/log questions, and standard shell-safe edit patterns for file changes.",
+    "Run a single non-interactive command in the local project workspace through Butler's platform-neutral command executor. Prefer cross-platform executables with explicit arguments, rg for search, and structured extraction or case-insensitive matching for config, script, or log questions.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       command: {
         type: "string",
-        description: "The shell command to execute in bash.",
+        description: "The command to execute. Prefer one executable with explicit arguments and avoid shell-dialect-specific syntax.",
       },
       timeout_ms: {
         type: "integer",

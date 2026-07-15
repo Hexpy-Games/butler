@@ -22,6 +22,7 @@ export function useFirstRunSetupController(
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [diagnosticsStatus, setDiagnosticsStatus] = useState("");
+  const [installMode, setInstallMode] = useState<"check" | "repair">("check");
   const language = state.language;
   const step = state.step;
   const copy = firstRunCopy[language];
@@ -53,7 +54,7 @@ export function useFirstRunSetupController(
       setError("");
       setStatus(copy.installChecking);
       try {
-        const setupStatus = await startFirstRunSetup();
+        const setupStatus = await startFirstRunSetup(installMode);
         if (setupStatus.phase === "cancelled") return;
         if (setupStatus.phase !== "ready") throw new Error("setup_failed");
         if (!cancelled) {
@@ -73,6 +74,7 @@ export function useFirstRunSetupController(
   }, [
     copy.installChecking,
     copy.installReady,
+    installMode,
     state.install_status,
     step,
   ]);
@@ -169,6 +171,16 @@ export function useFirstRunSetupController(
     onRetryModelSave: modelSetup.onRetryModelSave,
     onLanguageContinue: () => void selectLanguage(),
     onRetryInstall: () => {
+      setInstallMode("check");
+      setError("");
+      setDiagnosticsStatus("");
+      setStatus(copy.installChecking);
+      setState((current) =>
+        nextFirstRunState(current, { type: "retry_install" }),
+      );
+    },
+    onRepairInstall: () => {
+      setInstallMode("repair");
       setError("");
       setDiagnosticsStatus("");
       setStatus(copy.installChecking);

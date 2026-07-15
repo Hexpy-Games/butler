@@ -50,7 +50,7 @@ export function displayToolName(name: string, kind: ToolProgressSummary["kind"])
     return explicitDisplayName;
   }
   if (kind === "ran_command") {
-    return "Bash";
+    return "Command";
   }
   if (kind === "edited") {
     return "Edit";
