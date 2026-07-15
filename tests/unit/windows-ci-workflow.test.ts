@@ -19,6 +19,39 @@ const entrypoint = readFileSync(
   "utf8",
 );
 const gitAttributes = readFileSync(join(root, ".gitattributes"), "utf8");
+const standardUserRunner = readFileSync(
+  join(
+    root,
+    "packages",
+    "butler-app",
+    "scripts",
+    "windows",
+    "run-standard-user-bundled-payload-smoke.ps1",
+  ),
+  "utf8",
+);
+const standardUserChild = readFileSync(
+  join(
+    root,
+    "packages",
+    "butler-app",
+    "scripts",
+    "windows",
+    "run-bundled-payload-smoke-child.ps1",
+  ),
+  "utf8",
+);
+const interactiveController = readFileSync(
+  join(
+    root,
+    "packages",
+    "butler-app",
+    "scripts",
+    "windows",
+    "interactive-smoke-controller.ts",
+  ),
+  "utf8",
+);
 
 test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(workflow).toContain("runs-on: windows-latest");
@@ -64,4 +97,18 @@ test("nightly Windows CI executes the packaged Squirrel lifecycle", () => {
     "Run packaged install, update, rollback, repair, and uninstall E2E",
   );
   expect(entrypoint).toContain("windows-squirrel-release-cycle-smoke.ts");
+  expect(entrypoint).toContain("-PrepareRelease");
+  expect(standardUserRunner).toContain('$Bun "run" $Smoke "--prepare-only"');
+  expect(standardUserRunner).toContain("BUTLER_WINDOWS_CI_ELEVATED_TOKEN = \"1\"");
+  expect(standardUserRunner).toContain(
+    "BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN = \"1\"",
+  );
+  expect(standardUserRunner).toContain("-PreparedReleaseRoot");
+  expect(standardUserChild).toContain(
+    "BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT = $PreparedReleaseRoot",
+  );
+  expect(standardUserChild).toContain("--prepared-release-root");
+  expect(interactiveController).toContain(
+    "BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT: preparedReleaseRoot",
+  );
 });

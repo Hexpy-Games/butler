@@ -145,7 +145,8 @@ function Invoke-StandardUserSmoke {
   param(
     [Parameter(Mandatory = $true)][string]$Smoke,
     [Parameter(Mandatory = $true)][int]$TimeoutMinutes,
-    [switch]$InteractiveDesktop
+    [switch]$InteractiveDesktop,
+    [switch]$PrepareRelease
   )
 
   Invoke-Checked -Command "npm.cmd" -Arguments @(
@@ -170,7 +171,8 @@ function Invoke-StandardUserSmoke {
       -Output $output `
       -Smoke $Smoke `
       -TimeoutMinutes $TimeoutMinutes `
-      -InteractiveDesktop:$InteractiveDesktop
+      -InteractiveDesktop:$InteractiveDesktop `
+      -PrepareRelease:$PrepareRelease
     if ($LASTEXITCODE -ne 0) {
       $diagnostic = if (Test-Path -LiteralPath $output) {
         [IO.File]::ReadAllText($output)
@@ -322,6 +324,7 @@ switch ($Mode) {
     Invoke-StandardUserSmoke `
       -Smoke "packages/butler-app/scripts/windows/windows-squirrel-release-cycle-smoke.ts" `
       -TimeoutMinutes 30 `
-      -InteractiveDesktop
+      -InteractiveDesktop `
+      -PrepareRelease
   }
 }

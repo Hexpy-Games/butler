@@ -10,6 +10,7 @@ const signedHost = requiredArgument("--signed-host");
 const signingThumbprint = requiredArgument("--signing-thumbprint");
 const smoke = requiredArgument("--smoke");
 const output = requiredArgument("--output");
+const preparedReleaseRoot = optionalArgument("--prepared-release-root");
 const integrity = spawnSync("whoami.exe", ["/groups", "/fo", "csv", "/nh"], {
   encoding: "utf8",
   windowsHide: true,
@@ -30,6 +31,9 @@ const child = spawn(signedBun, ["run", smoke], {
     BUTLER_WINDOWS_PROCESS_HOST: signedHost,
     BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1: signingThumbprint,
     BUTLER_WINDOWS_STANDARD_USER: "1",
+    ...(preparedReleaseRoot
+      ? { BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT: preparedReleaseRoot }
+      : {}),
   },
   shell: false,
   stdio: ["ignore", "pipe", "pipe"],
@@ -60,4 +64,10 @@ function requiredArgument(name: string): string {
   const value = index >= 0 ? process.argv[index + 1]?.trim() : null;
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+function optionalArgument(name: string): string | null {
+  const index = process.argv.indexOf(name);
+  const value = index >= 0 ? process.argv[index + 1]?.trim() : null;
+  return value || null;
 }

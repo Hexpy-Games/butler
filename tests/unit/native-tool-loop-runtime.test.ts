@@ -3120,12 +3120,14 @@ test("native runtime can drive the real run_command tool through the default exe
           name: "run_command",
           args: {
             command: "echo ok | tee command-proof.txt",
+            timeout_ms: 120_000,
             output_paths: ["command-proof.txt"],
           },
         }],
       });
       const args = {
         command: "echo ok | tee command-proof.txt",
+        timeout_ms: 120_000,
         output_paths: ["command-proof.txt"],
       };
       const result = await input.executeTool({

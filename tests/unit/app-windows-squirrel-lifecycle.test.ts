@@ -38,6 +38,10 @@ describe("Windows Squirrel lifecycle", () => {
     expect(smoke).toContain('].join(" ");');
     expect(smoke).toContain("runSquirrelUpdate(outCurrent);");
     expect(smoke).not.toContain("runInstaller(currentSetup);");
+    expect(smoke).toContain('process.argv.includes("--prepare-only")');
+    expect(smoke).toContain("BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN");
+    expect(smoke).toContain("prepared-releases.json");
+    expect(smoke).toContain("loadPreparedLifecycleReleases()");
   });
 
   test("handles install and update events before normal app initialization", () => {
