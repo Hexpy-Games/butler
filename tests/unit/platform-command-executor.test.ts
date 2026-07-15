@@ -143,7 +143,7 @@ describe("platform command executor", () => {
     for (const path of sources) {
       const source = readFileSync(join(process.cwd(), path), "utf8");
       expect(source).not.toMatch(
-        /\/bin\/bash|powershell(?:\.exe)?|pwsh(?:\.exe)?|dispatch\.sh|taskkill|process\.platform|process\.kill\(\s*-/iu,
+        /\/bin\/bash|powershell(?:\.exe)?|pwsh(?:\.exe)?|dispatch\.sh|taskkill|process\.platform|process\.kill\(\s*-|\bspawn(?:Sync)?\s*\(/iu,
       );
     }
 

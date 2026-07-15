@@ -1,4 +1,3 @@
-import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
@@ -238,20 +237,28 @@ function commandArtifactsFromPaths(input: {
     .filter((artifact): artifact is CommandArtifactEvidence => Boolean(artifact)));
 }
 
-function gitWorkspaceStatusSnapshot(workspace: string): GitWorkspaceStatusSnapshot | null {
-  const result = spawnSync("git", [
-    "-C",
-    workspace,
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all",
-  ], {
-    encoding: "utf8",
-    maxBuffer: 1024 * 1024,
-    windowsHide: true,
+async function gitWorkspaceStatusSnapshot(
+  workspace: string,
+  executor: CommandExecutor,
+): Promise<GitWorkspaceStatusSnapshot | null> {
+  const result = await executor.execute({
+    plan: {
+      steps: [{
+        executable: "git",
+        arguments: [
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+        ],
+      }],
+    },
+    cwd: workspace,
+    timeoutMs: 10_000,
   });
-  if (result.status !== 0) return null;
+  if (result.exitCode !== 0 || result.timedOut || result.cancelled || result.error) {
+    return null;
+  }
   const snapshot: GitWorkspaceStatusSnapshot = new Map();
   const records = result.stdout.split("\0").filter(Boolean);
   for (let index = 0; index < records.length; index += 1) {
@@ -268,14 +275,15 @@ function gitWorkspaceStatusSnapshot(workspace: string): GitWorkspaceStatusSnapsh
   return snapshot;
 }
 
-function gitWorkspaceDeltaArtifacts(input: {
+async function gitWorkspaceDeltaArtifacts(input: {
   before: GitWorkspaceStatusSnapshot | null;
   workspace: string;
   butlerData: string;
   success: boolean;
-}): CommandArtifactEvidence[] {
+  executor: CommandExecutor;
+}): Promise<CommandArtifactEvidence[]> {
   if (!input.success || !input.before) return [];
-  const after = gitWorkspaceStatusSnapshot(input.workspace);
+  const after = await gitWorkspaceStatusSnapshot(input.workspace, input.executor);
   if (!after) return [];
   const paths = [...after.entries()]
     .filter(([path, status]) => input.before?.get(path) !== status)
@@ -647,7 +655,11 @@ export async function runCommandTool(input: {
       }),
     };
   }
-  const gitStatusBeforeCommand = gitWorkspaceStatusSnapshot(workspace);
+  const commandExecutor = input.commandExecutor ?? createPlatformCommandExecutor();
+  const gitStatusBeforeCommand = await gitWorkspaceStatusSnapshot(
+    workspace,
+    commandExecutor,
+  );
   const commandStartedAtMs = Date.now();
   mkdirSync(commandGeneratedArtifactRoot(input.butlerData), { recursive: true });
   const projectLedgerSnapshot = createProjectLedgerMutationSnapshot({
@@ -669,7 +681,7 @@ export async function runCommandTool(input: {
       butlerData: input.butlerData,
       pipefail: Boolean(validationSuiteFromArgs(input.args)),
       signal: input.signal,
-      commandExecutor: input.commandExecutor ?? createPlatformCommandExecutor(),
+      commandExecutor,
     });
     projectLedgerMutation = restoreProjectLedgerMutationIfChanged(
       projectLedgerSnapshot,
@@ -749,11 +761,12 @@ export async function runCommandTool(input: {
     });
   const discoveredWorkspaceArtifacts = declaredArtifacts.length > 0 || stdoutArtifacts.length > 0
     ? []
-    : gitWorkspaceDeltaArtifacts({
+    : await gitWorkspaceDeltaArtifacts({
       before: gitStatusBeforeCommand,
       workspace,
       butlerData: input.butlerData,
       success,
+      executor: commandExecutor,
     });
   const artifacts = uniqueCommandArtifacts([
     ...declaredArtifacts,
