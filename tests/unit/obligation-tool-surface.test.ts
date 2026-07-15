@@ -26,7 +26,25 @@ const tools = [
   type: "function",
   name,
   description: name,
-  parameters: { type: "object", properties: {} },
+  parameters: name === "project_ledger_create"
+    ? {
+      type: "object",
+      properties: {
+        kind: { type: "string" },
+        id: { type: "string" },
+        title: { type: "string" },
+        task_id: { type: "string" },
+        status: { type: "string" },
+      },
+      required: ["kind", "id", "title"],
+    }
+    : name === "project_ledger_list"
+    ? {
+      type: "object",
+      properties: { kind: { type: "string" } },
+      required: ["kind"],
+    }
+    : { type: "object", properties: {} },
 }));
 
 test("mixed ledger-first contracts expose the next obligation producer instead of workspace exploration", () => {

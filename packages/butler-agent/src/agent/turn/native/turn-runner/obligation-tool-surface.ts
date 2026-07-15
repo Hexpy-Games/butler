@@ -357,7 +357,7 @@ export function createObligationToolSurfaceController(
         }
         return null;
       }
-      if (input.name === "project_ledger_list") {
+      if (toolHasLedgerOperation(input.name, "discover")) {
         ledgerDiscoveryObserved = true;
         ledgerDiscoveryCandidateCount = projectLedgerListCandidateCount(input.result);
       }
@@ -380,7 +380,7 @@ export function createObligationToolSurfaceController(
         }
         resetWorkspaceInspection();
       }
-      if (input.name === "project_ledger_check") {
+      if (toolHasLedgerOperation(input.name, "validate")) {
         const checkAdvanced = mutationSequence > 0 && checkedMutationSequence !== mutationSequence;
         checkedMutationSequence = mutationSequence;
         if (checkAdvanced) resetWorkspaceInspection();
@@ -464,7 +464,8 @@ export function createObligationToolSurfaceController(
   }
 
   function canonicalResumeEvidenceTool(name: string): boolean {
-    return canonicalResumeEvidence && name === "project_ledger_show";
+    return canonicalResumeEvidence && toolHasLedgerOperation(name, "read") &&
+      toolSupportsLedgerRecords(name);
   }
 }
 
@@ -628,9 +629,11 @@ function ledgerDiscoveryTool(
   tool: FunctionToolDefinition,
   discoveryObserved: boolean,
 ): FunctionToolDefinition {
-  if (discoveryObserved || tool.name !== "project_ledger_list") return tool;
+  if (discoveryObserved || !toolHasLedgerOperation(tool.name, "discover") ||
+    !toolSupportsLedgerRecords(tool.name)) return tool;
   const parameters = recordValue(tool.parameters);
   const properties = recordValue(parameters.properties);
+  if (!("kind" in properties)) return tool;
   return {
     ...tool,
     description: `${tool.description} This is the bounded discovery step for the active Ledger obligation. Search all matching record kinds in one call before choosing create or update.`,
@@ -662,15 +665,17 @@ function ledgerCreationTool(
   tool: FunctionToolDefinition,
   remainingKinds: readonly PlanningLedgerRecordKind[],
 ): FunctionToolDefinition {
-  if ((tool.name !== "project_ledger_create" && tool.name !== "project_ledger_update") ||
-    remainingKinds.length === 0) return tool;
+  const variableMutation = btccCapabilityManifestForTool(tool).some((entry) =>
+    entry.ledgerOperation === "mutate" && (entry.ledgerRecordKinds?.length ?? 0) > 1,
+  );
+  if (!variableMutation || remainingKinds.length === 0) return tool;
   const parameters = recordValue(tool.parameters);
   const properties = recordValue(parameters.properties);
   const { status: _runtimeOwnedInitialStatus, ...modelProperties } = properties;
   const required = Array.isArray(parameters.required)
     ? parameters.required.filter((value): value is string => typeof value === "string")
     : [];
-  const create = tool.name === "project_ledger_create";
+  const create = required.includes("title");
   return {
     ...tool,
     description: [
@@ -741,7 +746,8 @@ function executionAttemptTool(tool: FunctionToolDefinition): FunctionToolDefinit
 }
 
 function isLedgerOnlyTool(name: string): boolean {
-  return name.startsWith("project_ledger_") || LEGACY_LEDGER_TOOLS.has(name);
+  return btccCapabilityManifestForTool({ name, parameters: {} })
+    .some((entry) => Boolean(entry.ledgerOperation)) || LEGACY_LEDGER_TOOLS.has(name);
 }
 
 function isWorkspaceMutation(name: string, args: Record<string, unknown>): boolean {
@@ -789,7 +795,7 @@ function canonicalResumeLedgerRecordKind(
   name: string,
   value: unknown,
 ): PlanningLedgerRecordKind | null {
-  if (name !== "project_ledger_show") return null;
+  if (!toolHasLedgerOperation(name, "read") || !toolSupportsLedgerRecords(name)) return null;
   const receipt = evidenceCapabilityReceipts(value).find((candidate) => {
     const record = recordValue(candidate);
     const producer = recordValue(record.producer);
@@ -805,6 +811,19 @@ function canonicalResumeLedgerRecordKind(
       scopeKind === "task"
     ? scopeKind
     : null;
+}
+
+function toolHasLedgerOperation(
+  name: string,
+  operation: "discover" | "read" | "mutate" | "validate" | "render" | "closeout",
+): boolean {
+  return btccCapabilityManifestForTool({ name, parameters: {} })
+    .some((entry) => entry.ledgerOperation === operation);
+}
+
+function toolSupportsLedgerRecords(name: string): boolean {
+  return btccCapabilityManifestForTool({ name, parameters: {} })
+    .some((entry) => (entry.ledgerRecordKinds?.length ?? 0) > 0);
 }
 
 function workspaceMutationVerified(name: string, value: unknown): boolean {

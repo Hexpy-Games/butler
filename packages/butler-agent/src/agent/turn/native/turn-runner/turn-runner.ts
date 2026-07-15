@@ -818,7 +818,7 @@ function finalCandidateReviewResume(input: {
 
 function isRetryableProviderFailure(error: unknown): boolean {
   const failure = safeRuntimeFailure(error);
-  return failure.retryable === true && failure.code.startsWith("provider_");
+  return failure.retryable === true;
 }
 
 async function persistSchedulerContinuation(input: {

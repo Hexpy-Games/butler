@@ -437,7 +437,10 @@ function fallbackGoalCandidate(active: ActiveTurnContract): GoalContractCandidat
     downstreamAuthorityNeeds: requiresCurrentState ? ["planned task authority"] : [],
     workShape: {
       workDisposition: direct ? "direct_answer" : "managed_work",
-      custody: active.contract.target_workstream_id || active.contract.action.includes("work")
+      custody: active.contract.target_workstream_id ||
+          active.contract.action === "start_work" ||
+          active.contract.action === "resume_work" ||
+          active.contract.action === "modify_work"
         ? "durable"
         : "same_turn",
       requiredEffects: direct ? [] : active.contract.required_evidence.map((item) => item.evidence_class),
