@@ -6,6 +6,7 @@ param(
   [Parameter(Mandatory = $true)][string]$SigningThumbprint,
   [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
   [Parameter(Mandatory = $true)][string]$Output,
+  [string]$PreparedReleaseRoot = "",
   [switch]$InteractiveDesktop,
   [switch]$DirectInteractive
 )
@@ -22,6 +23,9 @@ try {
   $env:BUTLER_WINDOWS_PROCESS_HOST = $SignedHost
   $env:BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1 = $SigningThumbprint
   $env:BUTLER_WINDOWS_STANDARD_USER = "1"
+  if ($PreparedReleaseRoot) {
+    $env:BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT = $PreparedReleaseRoot
+  }
   Push-Location $Root
   try {
     if ($InteractiveDesktop -and -not $DirectInteractive) {
@@ -30,7 +34,7 @@ try {
       $shell = New-Object -ComObject WScript.Shell
       $shortcut = $shell.CreateShortcut($shortcutPath)
       $shortcut.TargetPath = $SignedBun
-      $shortcut.Arguments = @(
+      $shortcutArgumentParts = @(
         "run",
         "`"$controller`"",
         "--signed-bun",
@@ -43,7 +47,12 @@ try {
         "`"$Smoke`"",
         "--output",
         "`"$Output`""
-      ) -join " "
+      )
+      if ($PreparedReleaseRoot) {
+        $shortcutArgumentParts += "--prepared-release-root"
+        $shortcutArgumentParts += "`"$PreparedReleaseRoot`""
+      }
+      $shortcut.Arguments = $shortcutArgumentParts -join " "
       $shortcut.WorkingDirectory = $Root
       $shortcut.WindowStyle = 7
       $shortcut.Save()

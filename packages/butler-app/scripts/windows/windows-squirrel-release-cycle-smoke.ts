@@ -8,7 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   createAppReleasePackage,
   verifyWindowsAuthenticodeFiles,
@@ -26,7 +26,10 @@ if (process.platform !== "win32" || process.arch !== "x64") {
   throw new Error("Squirrel release-cycle smoke requires Windows x64");
 }
 const validationToken = windowsValidationToken();
-if (!validationToken.accepted) {
+const prepareOnly = process.argv.includes("--prepare-only");
+const releasePreparationAuthorized = prepareOnly &&
+  process.env.BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN === "1";
+if (!validationToken.accepted && !releasePreparationAuthorized) {
   throw new Error("Squirrel release-cycle smoke requires a standard-user or CI token");
 }
 const expectedSignerThumbprint = requireExpectedSignerThumbprint();
@@ -46,9 +49,14 @@ const rootPackagePath = join(root, "package.json");
 const originalRootPackage = readFileSync(rootPackagePath);
 const originalVersionFile = readFileSync(join(root, "VERSION"));
 const originalElectronPackage = readFileSync(electronPackagePath);
-const validationRoot = join(homedir(), ".butler-release-validation", "squirrel-cycle");
+const preparedReleaseRoot = process.env.BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT
+  ?.trim();
+const validationRoot = preparedReleaseRoot
+  ? resolve(preparedReleaseRoot)
+  : join(homedir(), ".butler-release-validation", "squirrel-cycle");
 const outPrevious = join(validationRoot, previousVersion);
 const outCurrent = join(validationRoot, currentVersion);
+const preparedReleaseManifestPath = join(validationRoot, "prepared-releases.json");
 const isolatedRoot = join(tmpdir(), "Butler Squirrel E2E 한글");
 const butlerData = join(isolatedRoot, "data");
 const electronUserData = join(isolatedRoot, "electron-profile");
@@ -89,16 +97,24 @@ const smokeEnv = {
   BUTLER_APP_SERVER_PORT: "18865",
 };
 
+if (prepareOnly) {
+  prepareLifecycleReleases();
+  process.exit(0);
+}
+
 let installedBySmoke = false;
 try {
   cleanupOwnedPriorInstall();
-  rmSync(validationRoot, { force: true, recursive: true });
+  if (!preparedReleaseRoot) {
+    rmSync(validationRoot, { force: true, recursive: true });
+  }
   rmSync(isolatedRoot, { force: true, recursive: true });
   mkdirSync(butlerData, { recursive: true });
 
-  const previous = packageVersion(previousVersion, outPrevious);
-  const current = packageVersion(currentVersion, outCurrent);
-  restoreSourceVersions();
+  const prepared = loadPreparedLifecycleReleases();
+  const previous = prepared?.previous ?? packageVersion(previousVersion, outPrevious);
+  const current = prepared?.current ?? packageVersion(currentVersion, outCurrent);
+  if (!prepared) restoreSourceVersions();
   const previousPackageVerification = verifyPackagedRelease(previous);
   const currentPackageVerification = verifyPackagedRelease(current);
 
@@ -230,7 +246,7 @@ try {
     rawTextIncluded: false,
   })}\n`);
 } finally {
-  restoreSourceVersions();
+  if (!preparedReleaseRoot) restoreSourceVersions();
   stopInstalledProcesses();
   if (installedBySmoke || existsSync(ownershipMarker)) {
     try {
@@ -239,6 +255,68 @@ try {
       // Preserve the primary validation result while still attempting teardown.
     }
   }
+}
+
+function prepareLifecycleReleases(): void {
+  if (!preparedReleaseRoot) {
+    throw new Error(
+      "Squirrel release preparation requires BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT",
+    );
+  }
+  try {
+    rmSync(validationRoot, { force: true, recursive: true });
+    mkdirSync(validationRoot, { recursive: true });
+    const previous = packageVersion(previousVersion, outPrevious);
+    const current = packageVersion(currentVersion, outCurrent);
+    restoreSourceVersions();
+    const previousVerification = verifyPackagedRelease(previous);
+    const currentVerification = verifyPackagedRelease(current);
+    writeFileSync(preparedReleaseManifestPath, `${JSON.stringify({
+      schema: "butler.windows.prepared-squirrel-releases.v1",
+      previousVersion,
+      currentVersion,
+      previous,
+      current,
+    }, null, 2)}\n`, "utf8");
+    process.stdout.write(`${JSON.stringify({
+      ok: true,
+      preparedOnly: true,
+      previousVersion,
+      currentVersion,
+      previousSignedPeCount: previousVerification.peCount,
+      currentSignedPeCount: currentVerification.peCount,
+      rawTextIncluded: false,
+    })}\n`);
+  } finally {
+    restoreSourceVersions();
+  }
+}
+
+function loadPreparedLifecycleReleases(): {
+  previous: ReturnType<typeof createAppReleasePackage>;
+  current: ReturnType<typeof createAppReleasePackage>;
+} | null {
+  if (!preparedReleaseRoot) return null;
+  if (!existsSync(preparedReleaseManifestPath)) {
+    throw new Error("Prepared Windows Squirrel releases are missing");
+  }
+  const manifest = JSON.parse(readFileSync(
+    preparedReleaseManifestPath,
+    "utf8",
+  ));
+  if (
+    manifest?.schema !== "butler.windows.prepared-squirrel-releases.v1" ||
+    manifest.previousVersion !== previousVersion ||
+    manifest.currentVersion !== currentVersion ||
+    !manifest.previous ||
+    !manifest.current
+  ) {
+    throw new Error("Prepared Windows Squirrel release manifest is invalid");
+  }
+  return {
+    previous: manifest.previous,
+    current: manifest.current,
+  };
 }
 
 function packageVersion(version: string, outDir: string) {
