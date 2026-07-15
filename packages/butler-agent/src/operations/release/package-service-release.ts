@@ -21,6 +21,7 @@ import {
   sep,
 } from "node:path";
 import { spawnSync } from "node:child_process";
+import { create as createTarArchive } from "tar";
 import {
   createReleaseManifest,
   SERVICE_APP_WEB_CLIENT_DIST,
@@ -335,26 +336,16 @@ function buildPrebuiltCliLaunchers(
 }
 
 function createTarball(stageRoot: string, artifactPath: string): void {
-  const result = spawnSync("tar", [
-    "--format",
-    "ustar",
-    "-czf",
-    artifactPath,
-    "-C",
-    stageRoot,
-    ".",
-  ], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      COPYFILE_DISABLE: "1",
-      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
-    },
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `tar failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
-    );
+  try {
+    createTarArchive({
+      cwd: stageRoot,
+      file: artifactPath,
+      gzip: true,
+      portable: true,
+      sync: true,
+    }, ["."]);
+  } catch (error) {
+    throw new Error("portable Agent archive creation failed", { cause: error });
   }
 }
 

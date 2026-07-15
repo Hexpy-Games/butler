@@ -772,7 +772,7 @@ test("release manifest validation rejects cross-owned bundled artifacts", () => 
 });
 
 test("agent release packager creates an installable artifact with app web client", () => {
-  const outDir = mkdtempSync(join(tmpdir(), "butler-agent-release-test-"));
+  const outDir = mkdtempSync(join(tmpdir(), "Butler 에이전트 release test "));
   try {
     const currentCliPlatform = currentServiceCliLauncherPlatform();
     const result = createServiceReleasePackage({
