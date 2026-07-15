@@ -795,7 +795,10 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         isPromptUsageModelCallBudgetError(error) ||
         isAdmissionInvariantViolation(error) ||
         isSchedulerYield;
-      const runtimeWait = !isCancelled && !isContinuationFailure
+      const runtimeWait = !isCancelled && (
+        !isContinuationFailure ||
+        (Boolean(this.options.btccInterruptionStateWriter) && !isSchedulerYield)
+      )
         ? conversationAdmission?.routeRuntimeInterruption({
           error,
           timestamp,
@@ -817,7 +820,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             timestamp,
           });
         }
-      } else if (isContinuationFailure) {
+      } else if (isContinuationFailure && !this.options.btccInterruptionStateWriter) {
         try {
           conversationAdmission?.finalizeRecoverable(
             timestamp,

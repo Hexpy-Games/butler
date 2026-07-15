@@ -23,6 +23,17 @@ import {
 } from "../../agent/turn/principal-turn-cancellation-registry.ts";
 import { runtimeTurnAbortError } from "../../agent/turn/native/policy/turn-errors.ts";
 import { isTurnRuntimeWaitSignal } from "../../agent/turn/interruption/turn-runtime-wait-signal.ts";
+import {
+  btccAttemptIdForTurn,
+  conversationSessionIdForDurableSession,
+  type BtccInterruptionStateWriter,
+} from "../../agent/conversation/session-admission.ts";
+import type { ConversationWriter } from "../../agent/conversation/types.ts";
+import {
+  routeTurnInterruption,
+  runtimeInterruptionFromUnknown,
+} from "../../agent/turn/interruption/turn-interruption-router.ts";
+import { TURN_INTERRUPTION_ENVELOPE_SCHEMA } from "../../agent/turn/interruption/turn-interruption-types.ts";
 
 export interface QueuedInboundServer {
   handleInbound(envelope: InboundEnvelope): Promise<GatewayDispatchResult>;
@@ -33,6 +44,8 @@ export interface ProcessQueuedInboundOptions {
   server: QueuedInboundServer;
   store: SessionBindingStore;
   deliveryGuard: DeliveryGuard;
+  btccInterruptionStateWriter?: BtccInterruptionStateWriter;
+  conversationWriter?: ConversationWriter;
   deliverAction?: (
     sessionId: string,
     action: OutboundAction,
@@ -368,6 +381,252 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+type ExistingBtccQueueOwnership =
+  | { kind: "none" }
+  | { kind: "preserve_queue_owner" }
+  | { kind: "continuation_committed"; checkpointRef: string }
+  | { kind: "waiting_runtime"; recoveryCaseId: string; turnId: string }
+  | { kind: "terminal"; state: "delivered" | "cancelled"; turnId: string };
+
+type QueuedBtccInterruption =
+  | { kind: "legacy" }
+  | { kind: "preserve_queue_owner" }
+  | { kind: "waiting_runtime"; recoveryCaseId: string; turnId: string }
+  | { kind: "terminal"; state: "delivered" | "cancelled"; turnId: string };
+
+function ensureBtccQueueAdmission(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+): "legacy" | "ready" | "preserve_queue_owner" {
+  const stateWriter = options.btccInterruptionStateWriter;
+  if (!stateWriter || item.envelope.transport === "system") return "legacy";
+  const turnId = item.envelope.routingHints?.turnId?.trim();
+  const durableSessionId = item.envelope.routingHints?.sessionId?.trim();
+  if (!turnId || !durableSessionId) {
+    return "preserve_queue_owner";
+  }
+  try {
+    if (stateWriter.readTurnState(turnId)) return "ready";
+    const conversationWriter = options.conversationWriter;
+    if (!conversationWriter) return "preserve_queue_owner";
+    const binding = options.store.getBySessionId(durableSessionId);
+    const conversationSessionId = conversationSessionIdForDurableSession(durableSessionId);
+    const turn = conversationWriter.beginTurn({
+      gateway: item.envelope.transport,
+      externalSessionId: durableSessionId,
+      sessionId: conversationSessionId,
+      workspaceId: null,
+      projectId: binding?.projectId ?? null,
+      actor: "user",
+      requestId: item.envelope.eventId,
+      turnId,
+      now: inputTimestamp(options),
+    });
+    stateWriter.admitTurn({
+      turnId: turn.id,
+      sessionId: turn.session_id,
+      attemptId: btccAttemptIdForTurn(turn.id),
+      now: inputTimestamp(options),
+    });
+    return "ready";
+  } catch {
+    return "preserve_queue_owner";
+  }
+}
+
+function inputTimestamp(options: ProcessQueuedInboundOptions): string {
+  return options.now?.().toISOString() ?? new Date().toISOString();
+}
+
+function existingBtccQueueOwnership(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+): ExistingBtccQueueOwnership {
+  const writer = options.btccInterruptionStateWriter;
+  const turnId = item.envelope.routingHints?.turnId?.trim();
+  if (!writer || !turnId) return { kind: "none" };
+  try {
+    const state = writer.readTurnState(turnId);
+    if (!state) return { kind: "none" };
+    if (state.state === "waiting_runtime" && state.activeRecoveryCaseId) {
+      return {
+        kind: "waiting_runtime",
+        recoveryCaseId: state.activeRecoveryCaseId,
+        turnId,
+      };
+    }
+    if (state.state === "delivered" || state.state === "cancelled") {
+      return { kind: "terminal", state: state.state, turnId };
+    }
+    const checkpointPrefix = `queue-continuation:${item.queueId}:`;
+    if (
+      state.state === "continuing" &&
+      state.lastStableCheckpointRef?.startsWith(checkpointPrefix)
+    ) {
+      return {
+        kind: "continuation_committed",
+        checkpointRef: state.lastStableCheckpointRef,
+      };
+    }
+    return { kind: "none" };
+  } catch {
+    return { kind: "preserve_queue_owner" };
+  }
+}
+
+function settleExistingBtccQueueOwnership(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+  summary: ProcessQueuedInboundSummary,
+  ownership: Exclude<ExistingBtccQueueOwnership, { kind: "none" }>,
+): void {
+  if (ownership.kind === "preserve_queue_owner") return;
+  const completed = completeQueueClaim(options, item, ownership.kind === "waiting_runtime"
+    ? {
+      dispatchStatus: "waiting_runtime",
+      handled: true,
+      recoveryCaseId: ownership.recoveryCaseId,
+      turnId: ownership.turnId,
+      reconciled: true,
+    }
+    : ownership.kind === "continuation_committed"
+    ? {
+      dispatchStatus: "continuing",
+      handled: true,
+      checkpointRef: ownership.checkpointRef,
+      reconciled: true,
+    }
+    : {
+      dispatchStatus: `btcc_${ownership.state}`,
+      handled: true,
+      turnId: ownership.turnId,
+      reconciled: true,
+    });
+  if (completed) summary.handled += 1;
+}
+
+function routeQueuedBtccInterruption(input: {
+  options: ProcessQueuedInboundOptions;
+  item: ClaimedInboundEvent;
+  error: unknown;
+  origin: "dispatch" | "queue_handoff";
+  boundary: string;
+  sideEffectState: "known_not_applied" | "indeterminate";
+}): QueuedBtccInterruption {
+  const writer = input.options.btccInterruptionStateWriter;
+  const turnId = input.item.envelope.routingHints?.turnId?.trim();
+  if (!writer || !turnId) return { kind: "legacy" };
+  try {
+    const current = writer.readTurnState(turnId);
+    if (!current) return { kind: "legacy" };
+    if (current.state === "waiting_runtime" && current.activeRecoveryCaseId) {
+      return {
+        kind: "waiting_runtime",
+        recoveryCaseId: current.activeRecoveryCaseId,
+        turnId,
+      };
+    }
+    if (current.state === "delivered" || current.state === "cancelled") {
+      return { kind: "terminal", state: current.state, turnId };
+    }
+    const checkpointRef = current.lastStableCheckpointRef ??
+      `queue-claim:${input.item.queueId}:${input.item.processing.claimId}`;
+    const directive = routeTurnInterruption(runtimeInterruptionFromUnknown({
+      error: input.error,
+      interruptionId: `queue-interruption:${input.item.queueId}:${input.boundary}:g${current.generation}`,
+      turnId: current.turnId,
+      attemptId: current.attemptId,
+      origin: input.origin,
+      currentGeneration: current.generation,
+      lastStableCheckpointRef: checkpointRef,
+      createdAt: input.options.now?.().toISOString() ?? new Date().toISOString(),
+      pendingOperationRef: `queue-claim:${input.item.queueId}:${input.item.processing.claimId}`,
+      sideEffectState: input.sideEffectState,
+      resumePredicateRef: `queue-revision:${input.item.queueId}:${input.boundary}`,
+      diagnosticRefs: [],
+    }));
+    if (directive.kind !== "waiting_runtime") {
+      return { kind: "preserve_queue_owner" };
+    }
+    const next = writer.applyDirective(directive);
+    return {
+      kind: "waiting_runtime",
+      recoveryCaseId: next.activeRecoveryCaseId ?? directive.recoveryCase.recoveryCaseId,
+      turnId,
+    };
+  } catch {
+    return { kind: "preserve_queue_owner" };
+  }
+}
+
+function settleQueuedBtccInterruption(
+  options: ProcessQueuedInboundOptions,
+  item: ClaimedInboundEvent,
+  summary: ProcessQueuedInboundSummary,
+  interruption: QueuedBtccInterruption,
+): boolean {
+  if (interruption.kind === "legacy") return false;
+  if (interruption.kind === "preserve_queue_owner") return true;
+  const completed = completeQueueClaim(options, item, interruption.kind === "waiting_runtime"
+    ? {
+      dispatchStatus: "waiting_runtime",
+      handled: true,
+      recoveryCaseId: interruption.recoveryCaseId,
+      turnId: interruption.turnId,
+    }
+    : {
+      dispatchStatus: `btcc_${interruption.state}`,
+      handled: true,
+      turnId: interruption.turnId,
+    });
+  if (completed) summary.handled += 1;
+  return true;
+}
+
+function persistScheduledBtccContinuation(input: {
+  options: ProcessQueuedInboundOptions;
+  item: ClaimedInboundEvent;
+  turnId: string;
+  checkpointId: string;
+  schedulerItemId: string;
+}): "legacy" | "committed" | "preserve_queue_owner" {
+  const writer = input.options.btccInterruptionStateWriter;
+  if (!writer) return "legacy";
+  try {
+    const current = writer.readTurnState(input.turnId);
+    if (!current) return "legacy";
+    const checkpointRef = [
+      "queue-continuation",
+      input.item.queueId,
+      input.schedulerItemId,
+      input.checkpointId,
+    ].join(":");
+    if (
+      current.state === "continuing" &&
+      current.lastStableCheckpointRef === checkpointRef
+    ) return "committed";
+    if (current.state === "delivered" || current.state === "cancelled") {
+      return "committed";
+    }
+    writer.applyDirective(routeTurnInterruption({
+      schemaVersion: TURN_INTERRUPTION_ENVELOPE_SCHEMA,
+      kind: "internal_incompletion",
+      interruptionId: `queue-continuation:${input.item.queueId}`,
+      turnId: current.turnId,
+      attemptId: current.attemptId,
+      origin: "continuation_handoff",
+      currentGeneration: current.generation,
+      lastStableCheckpointRef: current.lastStableCheckpointRef ??
+        `queue-claim:${input.item.queueId}:${input.item.processing.claimId}`,
+      createdAt: input.options.now?.().toISOString() ?? new Date().toISOString(),
+      continuationCheckpointRef: checkpointRef,
+    }));
+    return "committed";
+  } catch {
+    return "preserve_queue_owner";
+  }
+}
+
 async function processClaimedQueuedInboundItem(input: {
   item: ClaimedInboundEvent;
   options: ProcessQueuedInboundOptions;
@@ -394,6 +653,13 @@ async function processClaimedQueuedInboundItem(input: {
     }
     if (principalCancellationRecordedForItem(options, item)) {
       completePrincipalCancelledQueueClaim(options, item);
+      return summary;
+    }
+    const btccAdmission = ensureBtccQueueAdmission(options, item);
+    if (btccAdmission === "preserve_queue_owner") return summary;
+    const existingBtccOwnership = existingBtccQueueOwnership(options, item);
+    if (existingBtccOwnership.kind !== "none") {
+      settleExistingBtccQueueOwnership(options, item, summary, existingBtccOwnership);
       return summary;
     }
     reactivateHintedSessionForInbound({
@@ -442,6 +708,17 @@ async function processClaimedQueuedInboundItem(input: {
       return summary;
     }
     if (result.status !== "handled") {
+      const btccInterruption = routeQueuedBtccInterruption({
+        options,
+        item,
+        error: new Error(`queued_dispatch_${result.status}`),
+        origin: "dispatch",
+        boundary: `dispatch_${result.status}`,
+        sideEffectState: "known_not_applied",
+      });
+      if (settleQueuedBtccInterruption(options, item, summary, btccInterruption)) {
+        return summary;
+      }
       summary.failed += 1;
       const failure = failureForDispatchResult(result);
       const terminalRecorded = failQueueClaim(
@@ -514,6 +791,17 @@ async function processClaimedQueuedInboundItem(input: {
           completePrincipalCancelledQueueClaim(options, item);
           return summary;
         }
+        const btccInterruption = routeQueuedBtccInterruption({
+          options,
+          item,
+          error: new Error("turn_scheduler_continuation_schedule_uncommitted"),
+          origin: "queue_handoff",
+          boundary: "continuation_schedule",
+          sideEffectState: "known_not_applied",
+        });
+        if (settleQueuedBtccInterruption(options, item, summary, btccInterruption)) {
+          return summary;
+        }
         clearTurnContextAtom({
           butlerData: options.queue.butlerData,
           sessionId,
@@ -539,6 +827,14 @@ async function processClaimedQueuedInboundItem(input: {
         if (delivered) summary.delivered += 1;
         return summary;
       }
+      const continuationOwnership = persistScheduledBtccContinuation({
+        options,
+        item,
+        turnId,
+        checkpointId: error.checkpointId ?? error.contextAtomId,
+        schedulerItemId: scheduled.queueId,
+      });
+      if (continuationOwnership === "preserve_queue_owner") return summary;
       const terminalRecorded = completeQueueClaim(options, item, {
         dispatchStatus: "continuing",
         handled: true,
@@ -560,6 +856,17 @@ async function processClaimedQueuedInboundItem(input: {
       });
       if (!waitingRecorded) return summary;
       summary.handled += 1;
+      return summary;
+    }
+    const btccInterruption = routeQueuedBtccInterruption({
+      options,
+      item,
+      error,
+      origin: "dispatch",
+      boundary: "dispatch_exception",
+      sideEffectState: "indeterminate",
+    });
+    if (settleQueuedBtccInterruption(options, item, summary, btccInterruption)) {
       return summary;
     }
     const limitedDelivery = recoverableLimitedDeliveryForError(error);
