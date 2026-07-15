@@ -127,7 +127,11 @@ export interface ConversationProjectionEvent {
     | "conversation.summary_written"
     | "conversation.turn_outcome_written"
     | "conversation.message_compacted"
-    | "conversation.redacted";
+    | "conversation.redacted"
+    | "turn.state_changed"
+    | "runtime.interruption.recorded"
+    | "recovery.case.opened"
+    | "recovery.case.resolved";
   payload_ref: string;
   created_at: string;
 }

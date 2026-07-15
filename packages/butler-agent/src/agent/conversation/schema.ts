@@ -1,4 +1,4 @@
-export const CONVERSATION_STORE_SCHEMA_VERSION = 2;
+export const CONVERSATION_STORE_SCHEMA_VERSION = 3;
 
 export const CONVERSATION_STORE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -112,6 +112,103 @@ CREATE TABLE IF NOT EXISTS conversation_projection_outbox (
   FOREIGN KEY (conversation_session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS btcc_interruption_receipts (
+  interruption_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  diagnostic_code TEXT NOT NULL,
+  last_stable_checkpoint_ref TEXT NOT NULL,
+  pending_operation_ref TEXT,
+  side_effect_state TEXT NOT NULL CHECK (
+    side_effect_state IN ('none', 'known_applied', 'known_not_applied', 'indeterminate')
+  ),
+  resume_predicate_ref TEXT NOT NULL,
+  wake_revision_ref TEXT,
+  progress_fingerprint TEXT NOT NULL,
+  diagnostic_refs_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS btcc_recovery_cases (
+  recovery_case_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  interruption_id TEXT NOT NULL UNIQUE,
+  origin TEXT NOT NULL,
+  diagnostic_code TEXT NOT NULL,
+  last_stable_checkpoint_ref TEXT NOT NULL,
+  pending_operation_ref TEXT,
+  side_effect_state TEXT NOT NULL CHECK (
+    side_effect_state IN ('none', 'known_applied', 'known_not_applied', 'indeterminate')
+  ),
+  owner TEXT NOT NULL CHECK (owner = 'turn_runtime_recovery'),
+  resume_predicate_ref TEXT NOT NULL,
+  wake_revision_ref TEXT,
+  progress_fingerprint TEXT NOT NULL,
+  diagnostic_refs_json TEXT NOT NULL,
+  public_status_id TEXT NOT NULL,
+  available_control_refs_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('open', 'resolved', 'cancelled')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE CASCADE,
+  FOREIGN KEY (interruption_id) REFERENCES btcc_interruption_receipts(interruption_id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS btcc_turn_states (
+  turn_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  state TEXT NOT NULL CHECK (
+    state IN (
+      'accepted', 'model_deciding', 'announcing_intent', 'executing_tools',
+      'observing_tools', 'continuing', 'waiting_user', 'waiting_external',
+      'waiting_runtime', 'delivered', 'cancelled'
+    )
+  ),
+  generation INTEGER NOT NULL CHECK (generation > 0),
+  last_stable_checkpoint_ref TEXT,
+  active_recovery_case_id TEXT,
+  active_wait_owner_ref TEXT,
+  active_wake_revision_ref TEXT,
+  terminal_outcome_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE CASCADE,
+  FOREIGN KEY (session_id) REFERENCES conversation_sessions(id) ON DELETE CASCADE,
+  FOREIGN KEY (active_recovery_case_id) REFERENCES btcc_recovery_cases(recovery_case_id) ON DELETE RESTRICT,
+  CHECK (
+    (state = 'waiting_runtime' AND active_recovery_case_id IS NOT NULL) OR
+    (state != 'waiting_runtime' AND active_recovery_case_id IS NULL)
+  ),
+  CHECK (
+    (state IN ('waiting_user', 'waiting_external') AND active_wait_owner_ref IS NOT NULL) OR
+    (state NOT IN ('waiting_user', 'waiting_external') AND active_wait_owner_ref IS NULL)
+  ),
+  CHECK (
+    (state = 'waiting_external' AND active_wake_revision_ref IS NOT NULL) OR
+    (state != 'waiting_external' AND active_wake_revision_ref IS NULL)
+  ),
+  CHECK (
+    (state IN ('delivered', 'cancelled') AND terminal_outcome_id IS NOT NULL) OR
+    (state NOT IN ('delivered', 'cancelled') AND terminal_outcome_id IS NULL)
+  )
+);
+
+CREATE TRIGGER IF NOT EXISTS btcc_interruption_receipts_immutable_update
+BEFORE UPDATE ON btcc_interruption_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_interruption_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_interruption_receipts_immutable_delete
+BEFORE DELETE ON btcc_interruption_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_interruption_receipt_immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS conversation_schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -147,4 +244,10 @@ ON conversation_summaries(session_id, covers_from_seq, covers_to_seq);
 
 CREATE INDEX IF NOT EXISTS conversation_turn_outcomes_session_created_idx
 ON conversation_turn_outcomes(session_id, created_at, turn_id);
+
+CREATE INDEX IF NOT EXISTS btcc_turn_states_session_updated_idx
+ON btcc_turn_states(session_id, updated_at, turn_id);
+
+CREATE INDEX IF NOT EXISTS btcc_recovery_cases_turn_status_idx
+ON btcc_recovery_cases(turn_id, status, created_at);
 `;
