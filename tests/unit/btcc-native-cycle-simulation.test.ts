@@ -125,7 +125,9 @@ test("one admitted message traverses all six BTCC phases before Reporting delive
     artifactKind: "task_graph",
     payload: {
       schemaVersion: "butler.btcc-task-graph.v1",
-      tasks: [{ reviewCriterionIds: ["translation-complete"] }],
+      tasks: [{
+        reviewCriterionIds: expect.arrayContaining(["translation-complete"]),
+      }],
     },
   });
   const receipts = beforeDelivery?.acceptedReceiptRefs

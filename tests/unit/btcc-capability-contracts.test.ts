@@ -36,13 +36,30 @@ test("BTCC admits tools by declared effect, purpose, scope, and Ledger operation
 
   const create = requiredLedgerTool("project_ledger_create");
   const check = requiredLedgerTool("project_ledger_check");
+  const attemptStart = requiredLedgerTool("project_ledger_attempt_start");
   expect(btccCapabilityAllows({
     tool: create,
     purpose: "planning",
     effects: ["ledger_mutation"],
     scopes: ["project"],
     ledgerOperations: ["mutate"],
+    ledgerRecordKinds: ["spec", "plan", "work", "task"],
   })).toBe(true);
+  expect(btccCapabilityAllows({
+    tool: attemptStart,
+    purpose: "execution",
+    effects: ["ledger_mutation"],
+    scopes: ["project"],
+    ledgerOperations: ["mutate"],
+    ledgerRecordKinds: ["attempt"],
+  })).toBe(true);
+  expect(btccCapabilityAllows({
+    tool: attemptStart,
+    purpose: "planning",
+    effects: ["ledger_mutation"],
+    scopes: ["project"],
+    ledgerRecordKinds: ["task"],
+  })).toBe(false);
   expect(btccCapabilityAllows({
     tool: check,
     purpose: "planning",

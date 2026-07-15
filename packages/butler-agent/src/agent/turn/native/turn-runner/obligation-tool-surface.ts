@@ -13,11 +13,13 @@ import {
   btccCapabilityManifestForTool,
 } from "../../btcc/capability-manifest.ts";
 
-type LedgerRecordKind = "spec" | "plan" | "work" | "task";
+type LedgerRecordKind = "spec" | "plan" | "work" | "task" | "attempt";
+type PlanningLedgerRecordKind = Exclude<LedgerRecordKind, "attempt">;
 export type ObligationToolSurfaceStage =
   | "open"
   | "work_planning"
   | "ledger"
+  | "execution_attempt"
   | "workspace_execution"
   | "workspace_action"
   | "workspace_validation"
@@ -36,14 +38,14 @@ export type ObligationToolAdmission =
     terminal: boolean;
   };
 
-const LEDGER_DELIVERABLE_KINDS = new Map<string, LedgerRecordKind>([
+const LEDGER_DELIVERABLE_KINDS = new Map<string, PlanningLedgerRecordKind>([
   ["ledger_spec", "spec"],
   ["ledger_plan", "plan"],
   ["ledger_work", "work"],
   ["ledger_tasks", "task"],
 ]);
 
-const LEDGER_RECORD_DEPENDENCY_ORDER: readonly LedgerRecordKind[] = [
+const LEDGER_RECORD_DEPENDENCY_ORDER: readonly PlanningLedgerRecordKind[] = [
   "spec", "plan", "work", "task",
 ];
 
@@ -60,9 +62,10 @@ export interface ObligationToolSurfaceState {
   gated: boolean;
   ledgerDiscoveryObserved: boolean;
   ledgerDiscoveryCandidateCount: number;
-  requiredLedgerKinds: LedgerRecordKind[];
-  observedLedgerKinds: LedgerRecordKind[];
+  requiredLedgerKinds: PlanningLedgerRecordKind[];
+  observedLedgerKinds: PlanningLedgerRecordKind[];
   ledgerCheckPassed: boolean;
+  ledgerAttemptStarted: boolean;
   workspaceMutationObserved: boolean;
   workspaceInspectionCount: number;
   workspaceActionFocused: boolean;
@@ -79,8 +82,9 @@ export interface ObligationToolSurfaceSeed {
   planReady?: boolean;
   ledgerDiscoveryObserved?: boolean;
   ledgerDiscoveryCandidateCount?: number;
-  observedLedgerKinds?: readonly LedgerRecordKind[];
+  observedLedgerKinds?: readonly PlanningLedgerRecordKind[];
   ledgerCheckPassed?: boolean;
+  ledgerAttemptStarted?: boolean;
   workspaceMutationObserved?: boolean;
   workspaceInspectionCount?: number;
   workspaceActionFocused?: boolean;
@@ -144,7 +148,7 @@ export function createObligationToolSurfaceController(
   contract: CompiledTurnContract | null | undefined,
   seed: ObligationToolSurfaceSeed = {},
 ): ObligationToolSurfaceController {
-  const requiredLedgerKinds = new Set<LedgerRecordKind>();
+  const requiredLedgerKinds = new Set<PlanningLedgerRecordKind>();
   for (const deliverable of contract?.deliverables ?? []) {
     const kind = LEDGER_DELIVERABLE_KINDS.get(deliverable);
     if (kind) requiredLedgerKinds.add(kind);
@@ -160,10 +164,12 @@ export function createObligationToolSurfaceController(
     contract.tracking_mode === "ledger";
   const hasWorkspaceDeliverable = requiresCodeChange || requiresValidation;
   const ledgerFirst = Boolean(
-    workAction && contract?.tracking_mode === "ledger" &&
-    requiredLedgerKinds.size > 0 && hasWorkspaceDeliverable,
+    workAction && contract?.tracking_mode === "ledger" && requiredLedgerKinds.size > 0,
   );
   const managed = workAction && (ledgerFirst || hasWorkspaceDeliverable);
+  const requiresLedgerAttempt = Boolean(
+    workAction && contract?.tracking_mode === "ledger" && requiredLedgerKinds.has("task"),
+  );
   const observedLedgerKinds = new Set(
     (seed.observedLedgerKinds ?? []).filter((kind) => requiredLedgerKinds.has(kind)),
   );
@@ -174,6 +180,7 @@ export function createObligationToolSurfaceController(
     Math.floor(seed.ledgerDiscoveryCandidateCount ?? 0),
   );
   let checkedMutationSequence = seed.ledgerCheckPassed ? mutationSequence : -1;
+  let ledgerAttemptStarted = seed.ledgerAttemptStarted === true;
   let workspaceMutationObserved = seed.workspaceMutationObserved === true;
   const workspaceMutationOutstanding = () =>
     requiresCodeChange && !workspaceMutationObserved;
@@ -208,6 +215,7 @@ export function createObligationToolSurfaceController(
     if (requiresStatusReport && statusFocused) return "status_inspection";
     if (!managed) return "open";
     if (gated()) return "ledger";
+    if (requiresLedgerAttempt && !ledgerAttemptStarted) return "execution_attempt";
     if (workspaceMutationOutstanding() && workspaceActionFocused) {
       return "workspace_action";
     }
@@ -258,9 +266,21 @@ export function createObligationToolSurfaceController(
             }))
             .filter((tool) =>
               tool.name !== "project_ledger_create" || remainingLedgerKinds.length > 0)
+            .filter((tool) => ledgerCapabilityTargetsKinds(tool, remainingLedgerKinds))
             .map((tool) => ledgerDiscoveryTool(tool, ledgerDiscoveryObserved))
             .map((tool) => ledgerCreationTool(tool, remainingLedgerKinds));
         }
+        case "execution_attempt":
+          return runtimeOwnedLifecycleFiltered.filter((tool) =>
+            isInternalProgressTool(tool.name) || btccCapabilityAllows({
+              tool,
+              purpose: "execution",
+              effects: ["ledger_mutation"],
+              scopes: ["project"],
+              ledgerOperations: ["mutate"],
+              ledgerRecordKinds: ["attempt"],
+              requireDeclared: true,
+            })).map(executionAttemptTool);
         case "workspace_execution":
         case "workspace_repair":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
@@ -352,8 +372,12 @@ export function createObligationToolSurfaceController(
       const kind = ledgerRecordKindForMutationResult(input.result);
       if (kind) {
         ledgerDiscoveryObserved = true;
-        observedLedgerKinds.add(kind);
-        mutationSequence += 1;
+        if (kind === "attempt") {
+          ledgerAttemptStarted = true;
+        } else if (requiredLedgerKinds.has(kind)) {
+          observedLedgerKinds.add(kind);
+          mutationSequence += 1;
+        }
         resetWorkspaceInspection();
       }
       if (input.name === "project_ledger_check") {
@@ -414,6 +438,7 @@ export function createObligationToolSurfaceController(
       requiredLedgerKinds: [...requiredLedgerKinds].sort(),
       observedLedgerKinds: [...observedLedgerKinds].sort(),
       ledgerCheckPassed: mutationSequence > 0 && checkedMutationSequence === mutationSequence,
+      ledgerAttemptStarted,
       workspaceMutationObserved,
       workspaceInspectionCount,
       workspaceActionFocused,
@@ -625,9 +650,9 @@ function ledgerDiscoveryTool(
 }
 
 function remainingRequiredLedgerKinds(
-  requiredKinds: ReadonlySet<LedgerRecordKind>,
-  observedKinds: ReadonlySet<LedgerRecordKind>,
-): LedgerRecordKind[] {
+  requiredKinds: ReadonlySet<PlanningLedgerRecordKind>,
+  observedKinds: ReadonlySet<PlanningLedgerRecordKind>,
+): PlanningLedgerRecordKind[] {
   return LEDGER_RECORD_DEPENDENCY_ORDER.filter((kind) =>
     requiredKinds.has(kind) && !observedKinds.has(kind),
   );
@@ -635,37 +660,82 @@ function remainingRequiredLedgerKinds(
 
 function ledgerCreationTool(
   tool: FunctionToolDefinition,
-  remainingKinds: readonly LedgerRecordKind[],
+  remainingKinds: readonly PlanningLedgerRecordKind[],
 ): FunctionToolDefinition {
-  if (tool.name !== "project_ledger_create" || remainingKinds.length === 0) return tool;
+  if ((tool.name !== "project_ledger_create" && tool.name !== "project_ledger_update") ||
+    remainingKinds.length === 0) return tool;
   const parameters = recordValue(tool.parameters);
   const properties = recordValue(parameters.properties);
   const { status: _runtimeOwnedInitialStatus, ...modelProperties } = properties;
   const required = Array.isArray(parameters.required)
     ? parameters.required.filter((value): value is string => typeof value === "string")
     : [];
+  const create = tool.name === "project_ledger_create";
   return {
     ...tool,
     description: [
       tool.description,
-      `The current typed frontier accepts the remaining dependency chain in this order: ${remainingKinds.join(" -> ")}.`,
-      "One work block may batch that ordered chain and multiple task records. Choose stable record ids in the calls, and let later calls in the same block reference the earlier chosen spec or work id; execution preserves call order. Omit status; Project Ledger owns each valid initial lifecycle state.",
+      `The current typed frontier accepts only this remaining dependency chain: ${remainingKinds.join(" -> ")}.`,
+      create
+        ? "One work block may batch that ordered chain and multiple task records. Choose stable record ids in the calls, and let later calls in the same block reference earlier ids. Omit status; Project Ledger owns each valid initial lifecycle state."
+        : "Update only a record kind in that typed frontier and include its explicit kind.",
     ].join(" "),
     parameters: {
       ...parameters,
       properties: modelProperties,
-      required,
+      required: create ? required : [...new Set([...required, "kind"])],
       oneOf: remainingKinds.map((kind) => ({
         title: `Create ${kind}`,
         properties: {
           kind: { type: "string", const: kind },
         },
-        required: kind === "task"
+        required: !create ? ["kind"] : kind === "task"
           ? ["work_id", "spec", "acceptance"]
           : kind === "work"
           ? ["spec", "acceptance"]
           : ["body"],
       })),
+    },
+  };
+}
+
+function ledgerCapabilityTargetsKinds(
+  tool: FunctionToolDefinition,
+  remainingKinds: readonly PlanningLedgerRecordKind[],
+): boolean {
+  const remaining = new Set(remainingKinds);
+  return btccCapabilityManifestForTool(tool).some((entry) =>
+    entry.ledgerOperation !== "mutate" ||
+    Boolean(entry.ledgerRecordKinds?.some((kind) =>
+      kind !== "attempt" && remaining.has(kind))),
+  );
+}
+
+function executionAttemptTool(tool: FunctionToolDefinition): FunctionToolDefinition {
+  const variableAttemptCapability = btccCapabilityManifestForTool(tool).some((entry) =>
+    entry.ledgerOperation === "mutate" && entry.ledgerRecordKinds?.includes("attempt") &&
+    entry.ledgerRecordKinds.length > 1,
+  );
+  if (!variableAttemptCapability) return tool;
+  const parameters = recordValue(tool.parameters);
+  const properties = recordValue(parameters.properties);
+  const required = Array.isArray(parameters.required)
+    ? parameters.required.filter((value): value is string => typeof value === "string")
+    : [];
+  return {
+    ...tool,
+    description: `${tool.description} The accepted Execution frontier constrains this variable Ledger capability to one started Attempt under the active task.`,
+    parameters: {
+      ...parameters,
+      properties: {
+        ...properties,
+        kind: { type: "string", const: "attempt" },
+        task_id: properties.task_id ?? {
+          type: "string",
+          description: "The active planned task that owns this Attempt.",
+        },
+      },
+      required: [...new Set([...required, "kind", "task_id"])],
     },
   };
 }
@@ -689,7 +759,8 @@ function ledgerRecordKindForMutationResult(value: unknown): LedgerRecordKind | n
       record.verified === true && record.maturity === "verified";
   });
   const kind = recordValue(recordValue(receipt).scope).record_kind;
-  return kind === "spec" || kind === "plan" || kind === "work" || kind === "task"
+  return kind === "spec" || kind === "plan" || kind === "work" || kind === "task" ||
+      kind === "attempt"
     ? kind
     : null;
 }
@@ -717,7 +788,7 @@ function validationReceiptState(
 function canonicalResumeLedgerRecordKind(
   name: string,
   value: unknown,
-): LedgerRecordKind | null {
+): PlanningLedgerRecordKind | null {
   if (name !== "project_ledger_show") return null;
   const receipt = evidenceCapabilityReceipts(value).find((candidate) => {
     const record = recordValue(candidate);

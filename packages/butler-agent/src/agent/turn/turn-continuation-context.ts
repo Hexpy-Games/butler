@@ -23,6 +23,7 @@ export interface TurnObligationFrontierCheckpoint {
   requiredLedgerKinds: Array<"spec" | "plan" | "work" | "task">;
   observedLedgerKinds: Array<"spec" | "plan" | "work" | "task">;
   ledgerCheckPassed: boolean;
+  ledgerAttemptStarted?: boolean;
   workspaceMutationObserved: boolean;
   workspaceInspectionCount?: number;
   workspaceActionFocused?: boolean;
@@ -32,7 +33,7 @@ export interface TurnObligationFrontierCheckpoint {
   validationFocused?: boolean;
   statusObserved?: boolean;
   statusFocused?: boolean;
-  stage: "open" | "work_planning" | "ledger" | "workspace_execution" | "workspace_action" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
+  stage: "open" | "work_planning" | "ledger" | "execution_attempt" | "workspace_execution" | "workspace_action" | "workspace_validation" | "workspace_repair" | "status_inspection" | "closeout";
 }
 
 export interface TurnContextAtom {
@@ -329,7 +330,7 @@ function sanitizeObligationFrontier(
 ): TurnObligationFrontierCheckpoint {
   const ledgerKinds = new Set(["spec", "plan", "work", "task"] as const);
   const stages = new Set<TurnObligationFrontierCheckpoint["stage"]>([
-    "open", "work_planning", "ledger", "workspace_execution", "workspace_action", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
+    "open", "work_planning", "ledger", "execution_attempt", "workspace_execution", "workspace_action", "workspace_validation", "workspace_repair", "status_inspection", "closeout",
   ]);
   const kinds = (values: readonly string[]) => [...new Set(values)]
     .filter((value): value is "spec" | "plan" | "work" | "task" =>
@@ -345,6 +346,7 @@ function sanitizeObligationFrontier(
     requiredLedgerKinds: kinds(frontier.requiredLedgerKinds),
     observedLedgerKinds: kinds(frontier.observedLedgerKinds),
     ledgerCheckPassed: frontier.ledgerCheckPassed === true,
+    ledgerAttemptStarted: frontier.ledgerAttemptStarted === true,
     workspaceMutationObserved: frontier.workspaceMutationObserved === true,
     workspaceInspectionCount: finiteNonNegativeInteger(frontier.workspaceInspectionCount ?? 0),
     workspaceActionFocused: frontier.workspaceActionFocused === true,

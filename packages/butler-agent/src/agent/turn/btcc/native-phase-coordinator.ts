@@ -583,25 +583,38 @@ function taskGraphPayload(
     status: "completed" as const,
     phase: "execution" as const,
   }];
-  const tasks = sourceTasks.map((item, index) => ({
-    taskRef: `task:${active.contract.contract_id}:answer`,
-    objective: item.content,
-    status: item.status,
-    phase: item.phase ?? null,
-    dependencyRefs: index === 0 ? [] : [sourceTasks[index - 1]!.id],
-    authorityRefs: [...goal.semanticAuthorityRefs],
-    requiredEffects: [...goal.workShape.requiredEffects],
-    outputObligationRefs: active.contract.required_evidence.map((evidence) =>
-      evidence.obligation_id),
-    validationEvidenceRefs: active.contract.required_evidence
-      .filter((evidence) => evidence.evidence_class === "passing_validation")
-      .map((evidence) => evidence.obligation_id),
-    reviewCriterionIds: goal.acceptanceIntents.map((criterion) => criterion.key),
-    repairOwner: "execution" as const,
-  })).map((task, index) => ({
-    ...task,
-    taskRef: sourceTasks[index]!.id,
-  }));
+  const taskRefs = sourceTasks.map((item) => item.id);
+  const criterionAssignments = new Map(taskRefs.map((taskRef) => [taskRef, [] as string[]]));
+  goal.acceptanceIntents.forEach((criterion, index) => {
+    criterionAssignments.get(taskRefs[index % taskRefs.length]!)!.push(criterion.key);
+  });
+  const obligationAssignments = new Map(taskRefs.map((taskRef) => [taskRef, [] as string[]]));
+  active.contract.required_evidence.forEach((obligation, index) => {
+    obligationAssignments.get(taskRefs[index % taskRefs.length]!)!.push(obligation.obligation_id);
+  });
+  const validationObligationRefs = new Set(active.contract.required_evidence
+    .filter((evidence) => evidence.evidence_class === "passing_validation")
+    .map((evidence) => evidence.obligation_id));
+  const tasks = sourceTasks.map((item, index) => {
+    const outputObligationRefs = obligationAssignments.get(item.id) ?? [];
+    return {
+      taskRef: item.id,
+      objective: item.content,
+      status: item.status,
+      phase: item.phase ?? null,
+      dependencyRefs: index === 0 ? [] : [sourceTasks[index - 1]!.id],
+      authorityRefs: [...goal.semanticAuthorityRefs],
+      requiredEffects: [...goal.workShape.requiredEffects],
+      outputObligationRefs,
+      validationEvidenceRefs: outputObligationRefs.filter((ref) =>
+        validationObligationRefs.has(ref)),
+      reviewCriterionIds: [
+        `task-output:${hashBtccPayload({ taskRef: item.id, objective: item.content }).slice(0, 16)}`,
+        ...(criterionAssignments.get(item.id) ?? []),
+      ],
+      repairOwner: "execution" as const,
+    };
+  });
   return {
     schemaVersion: "butler.btcc-task-graph.v1",
     workstreamRef,
@@ -610,7 +623,9 @@ function taskGraphPayload(
     acceptanceObligationRefs: active.contract.required_evidence.map((item) => item.obligation_id),
     coverageMatrix: goal.acceptanceIntents.map((criterion) => ({
       criterionId: criterion.key,
-      taskRefs: tasks.map((task) => task.taskRef),
+      taskRefs: tasks
+        .filter((task) => task.reviewCriterionIds.includes(criterion.key))
+        .map((task) => task.taskRef),
     })),
     integratedValidation: {
       required: active.contract.deliverables.includes("validation"),
@@ -641,6 +656,17 @@ function assertTaskGraph(graph: BtccTaskGraphPayload): void {
   }
   if (graph.coverageMatrix.some((entry) => entry.taskRefs.length === 0)) {
     throw new Error("btcc_task_graph_coverage_invalid");
+  }
+  if (graph.coverageMatrix.some((entry) => entry.taskRefs.length !== 1) ||
+    new Set(graph.coverageMatrix.map((entry) => entry.criterionId)).size !==
+      graph.coverageMatrix.length) {
+    throw new Error("btcc_task_graph_coverage_not_unique");
+  }
+  const assignedObligations = graph.tasks.flatMap((task) => task.outputObligationRefs);
+  if (assignedObligations.length !== graph.acceptanceObligationRefs.length ||
+    new Set(assignedObligations).size !== assignedObligations.length ||
+    graph.acceptanceObligationRefs.some((ref) => !assignedObligations.includes(ref))) {
+    throw new Error("btcc_task_graph_obligation_coverage_invalid");
   }
 }
 

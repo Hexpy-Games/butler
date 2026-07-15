@@ -12,6 +12,7 @@ const tools = [
   "project_ledger_show",
   "project_ledger_list",
   "project_ledger_create",
+  "project_ledger_attempt_start",
   "project_ledger_check",
   "update_todo_list",
   "update_work_stream_state",
@@ -53,7 +54,7 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
   const ledgerKinds = ["spec", "plan", "work", "task"] as const;
   expect(oneOfBranches(create).map((branch: any) => branch.properties.kind.const))
     .toEqual([...ledgerKinds]);
-  expect(create.description).toContain("later calls in the same block reference the earlier chosen spec or work id");
+  expect(create.description).toContain("later calls in the same block reference earlier ids");
 
   for (const [index, kind] of ledgerKinds.entries()) {
     controller.observe({
@@ -91,6 +92,24 @@ test("mixed ledger-first contracts expose the next obligation producer instead o
     gated: false,
     ledgerCheckPassed: true,
     observedLedgerKinds: ["plan", "spec", "task", "work"],
+    stage: "execution_attempt",
+  });
+  expect(controller.project(tools).map((tool) => tool.name)).toEqual([
+    "project_ledger_create",
+    "project_ledger_attempt_start",
+    "update_todo_list",
+  ]);
+  const variableAttempt = controller.project(tools).find((tool) =>
+    tool.name === "project_ledger_create")!;
+  expect((variableAttempt.parameters.properties as any).kind.const).toBe("attempt");
+  expect(variableAttempt.parameters.required).toContain("task_id");
+  controller.observe({
+    name: "project_ledger_attempt_start",
+    args: { task_id: "TEST-task" },
+    result: ledgerMutationResult("attempt"),
+  });
+  expect(controller.state()).toMatchObject({
+    ledgerAttemptStarted: true,
     stage: "workspace_execution",
   });
   expect(controller.project(tools).map((tool) => tool.name)).toEqual([
@@ -147,6 +166,11 @@ test("todo progress cannot satisfy workspace mutation and a completion gap focus
   }
   controller.observe({ name: "update_todo_list", args: { todos: [] }, result: { ok: true } });
   controller.observe({ name: "project_ledger_check", args: {}, result: { ok: true } });
+  controller.observe({
+    name: "project_ledger_attempt_start",
+    args: { task_id: "TEST-task" },
+    result: ledgerMutationResult("attempt"),
+  });
   expect(controller.state()).toMatchObject({ stage: "workspace_execution", workspaceMutationObserved: false });
 
   controller.observe({ name: "write_file", args: { path: "src/a.ts" }, result: { ok: true } });
@@ -286,6 +310,7 @@ test("failed validation opens repair and a passing retry restores workspace exec
     planReady: true,
     observedLedgerKinds: ["spec", "plan", "work", "task"],
     ledgerCheckPassed: true,
+    ledgerAttemptStarted: true,
     workspaceMutationObserved: true,
     validationFocused: true,
   });
@@ -880,7 +905,7 @@ function validationResult(passed: boolean) {
   };
 }
 
-function ledgerMutationResult(kind: "spec" | "plan" | "work" | "task") {
+function ledgerMutationResult(kind: "spec" | "plan" | "work" | "task" | "attempt") {
   return {
     ok: true,
     evidence_capability_receipts: [{
