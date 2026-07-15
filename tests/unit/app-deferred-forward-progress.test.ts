@@ -462,7 +462,7 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
   }
 });
 
-test("real deferred App route terminates an ownerless budget failure and isolates the next message", async () => {
+test("real deferred App route parks a budget interruption until Stop isolates the next message", async () => {
   const runtime = new BudgetFailureThenSuccessRuntime();
   const appServer = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -539,21 +539,35 @@ test("real deferred App route terminates an ownerless budget failure and isolate
     expect(JSON.stringify(failedReceipt)).not.toContain("continuationOnly");
     expect(existingQueueFiles(tempDir, "pending")).toEqual([]);
 
-    const failedTurns = await getJson(
+    const recoveryTurns = await getJson(
       `${appServer.url}turns?chat_id=general&cursor=0`,
     );
-    expect(failedTurns.data.turns).toContainEqual(expect.objectContaining({
+    expect(recoveryTurns.data.turns).toContainEqual(expect.objectContaining({
       id: firstTurnId,
-      state: "failed",
-      safe_error_code: "prompt_usage_model_call_budget_exhausted",
-      cancellable: false,
+      state: "waiting_for_tool",
+      retryable: false,
+      cancellable: true,
     }));
-    const failedView = await getJson(
+    expect(JSON.stringify(recoveryTurns)).not.toContain("turn.failed");
+    const recoveryView = await getJson(
       `${appServer.url}session-view?session_id=general`,
     );
-    expect(failedView.data.active_turn).toBeNull();
+    expect(recoveryView.data.active_turn).toMatchObject({
+      id: firstTurnId,
+      state: "waiting_for_tool",
+    });
     expect(bindingStore.getBySessionId("butler/app-general")?.lifecycleState)
       .toBe("active");
+
+    const stopped = await postJson(
+      `${appServer.url}turns/${encodeURIComponent(firstTurnId)}/cancel`,
+      {},
+    );
+    expect(stopped.data.turn).toMatchObject({
+      id: firstTurnId,
+      state: "cancelled",
+      cancellable: false,
+    });
 
     const second = await postJson(`${appServer.url}messages`, {
       chat_id: "general",

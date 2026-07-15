@@ -1,8 +1,5 @@
 import type { Database } from "bun:sqlite";
-import {
-  CONVERSATION_STORE_SCHEMA_SQL,
-  CONVERSATION_STORE_SCHEMA_VERSION,
-} from "./schema.ts";
+import { ensureConversationStoreSchema } from "./schema-migrations.ts";
 import type { ConversationIdFactory } from "./ids.ts";
 import type {
   ConversationBinding,
@@ -50,11 +47,7 @@ export class ConversationStoreInternals {
   ) {}
 
   ensureSchema(): void {
-    this.db.exec(CONVERSATION_STORE_SCHEMA_SQL);
-    this.db.query(`
-      INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at)
-      VALUES (?, ?)
-    `).run(CONVERSATION_STORE_SCHEMA_VERSION, isoNow());
+    ensureConversationStoreSchema(this.db);
   }
 
   upsertSession(session: ConversationSession): void {

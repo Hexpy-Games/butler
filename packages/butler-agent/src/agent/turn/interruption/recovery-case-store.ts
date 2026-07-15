@@ -2,10 +2,7 @@ import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import {
-  CONVERSATION_STORE_SCHEMA_SQL,
-  CONVERSATION_STORE_SCHEMA_VERSION,
-} from "../../conversation/schema.ts";
+import { ensureConversationStoreSchema } from "../../conversation/schema-migrations.ts";
 import { conversationStorePath } from "../../conversation/store.ts";
 import type {
   BtccTurnState,
@@ -26,7 +23,7 @@ import {
 } from "./btcc-interruption-transition.ts";
 
 export class BtccRecoveryCaseStore {
-  private readonly db: Database;
+  protected readonly db: Database;
 
   constructor(input: { butlerData: string; dbPath?: string }) {
     const path = input.dbPath ?? conversationStorePath(input.butlerData);
@@ -35,11 +32,7 @@ export class BtccRecoveryCaseStore {
     this.db.exec("PRAGMA journal_mode=WAL");
     this.db.exec("PRAGMA synchronous=NORMAL");
     this.db.exec("PRAGMA foreign_keys=ON");
-    this.db.exec(CONVERSATION_STORE_SCHEMA_SQL);
-    this.db.query(`
-      INSERT OR IGNORE INTO conversation_schema_migrations (version, applied_at)
-      VALUES (?, ?)
-    `).run(CONVERSATION_STORE_SCHEMA_VERSION, new Date().toISOString());
+    ensureConversationStoreSchema(this.db);
   }
 
   close(): void {
@@ -64,9 +57,22 @@ export class BtccRecoveryCaseStore {
         turn_id, session_id, attempt_id, state, generation,
         last_stable_checkpoint_ref, active_recovery_case_id,
         active_wait_owner_ref, active_wake_revision_ref, terminal_outcome_id,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, 'accepted', 1, NULL, NULL, NULL, NULL, NULL, ?, ?)
-    `).run(input.turnId, input.sessionId, input.attemptId, now, now);
+        lifecycle_status, current_phase, phase_generation, row_version,
+        project_policy_json, accepted_controls_ref,
+        accepted_receipt_refs_json, invalidated_receipt_refs_json,
+        last_stable_input_fingerprint, created_at, updated_at
+      ) VALUES (
+        ?, ?, ?, 'accepted', 1, NULL, NULL, NULL, NULL, NULL,
+        'active', 'conception', 1, 1, '{"kind":"unbound"}', ?, '[]', '[]', '', ?, ?
+      )
+    `).run(
+      input.turnId,
+      input.sessionId,
+      input.attemptId,
+      `controls:${input.turnId}`,
+      now,
+      now,
+    );
     const state = this.requireTurnState(input.turnId);
     if (state.attemptId !== input.attemptId || state.sessionId !== input.sessionId) {
       throw new Error("btcc_turn_admission_identity_conflict");
@@ -135,8 +141,10 @@ export class BtccRecoveryCaseStore {
       const result = this.db.query(`
         UPDATE btcc_turn_states
         SET state = 'delivered', generation = generation + 1,
+            lifecycle_status = 'delivered', row_version = row_version + 1,
             active_recovery_case_id = NULL, active_wait_owner_ref = NULL,
-            active_wake_revision_ref = NULL, terminal_outcome_id = ?,
+            active_wake_revision_ref = NULL,
+            active_continuation_owner_ref = NULL, terminal_outcome_id = ?,
             updated_at = ?
         WHERE turn_id = ? AND attempt_id = ? AND generation = ?
       `).run(
@@ -176,8 +184,10 @@ export class BtccRecoveryCaseStore {
       const turnResult = this.db.query(`
         UPDATE btcc_turn_states
         SET state = 'continuing', generation = generation + 1,
+            lifecycle_status = 'active', row_version = row_version + 1,
             active_recovery_case_id = NULL, active_wait_owner_ref = NULL,
-            active_wake_revision_ref = NULL, terminal_outcome_id = NULL,
+            active_wake_revision_ref = NULL,
+            active_continuation_owner_ref = NULL, terminal_outcome_id = NULL,
             updated_at = ?
         WHERE turn_id = ? AND state = 'waiting_runtime'
           AND active_recovery_case_id = ?
@@ -283,12 +293,15 @@ export class BtccRecoveryCaseStore {
     const result = this.db.query(`
       UPDATE btcc_turn_states
       SET state = ?, generation = generation + 1,
+          lifecycle_status = ?, row_version = row_version + 1,
           last_stable_checkpoint_ref = ?, active_recovery_case_id = ?,
           active_wait_owner_ref = ?, active_wake_revision_ref = ?,
+          active_continuation_owner_ref = NULL,
           terminal_outcome_id = ?, updated_at = ?
       WHERE turn_id = ? AND generation = ? AND attempt_id = ?
     `).run(
       state,
+      lifecycleForTurnState(state),
       directive.checkpointRef,
       refs.recoveryCaseId ?? null,
       refs.waitOwnerRef ?? null,
@@ -387,4 +400,17 @@ function stableHash(value: unknown): string {
 
 function uniqueRefs(refs: readonly string[]): string[] {
   return [...new Set(refs.map((ref) => ref.trim()).filter(Boolean))].slice(0, 64);
+}
+
+function lifecycleForTurnState(state: BtccTurnState): string {
+  switch (state) {
+    case "waiting_user":
+    case "waiting_external":
+    case "waiting_runtime":
+    case "delivered":
+    case "cancelled":
+      return state;
+    default:
+      return "active";
+  }
 }

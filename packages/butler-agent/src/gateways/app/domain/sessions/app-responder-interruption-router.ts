@@ -1,9 +1,5 @@
 import { createHash } from "node:crypto";
-import { AgentConversationStore } from "../../../../agent/conversation/store.ts";
-import {
-  btccAttemptIdForTurn,
-  conversationSessionIdForDurableSession,
-} from "../../../../agent/conversation/session-admission.ts";
+import { ensureAppInterruptionTurnAdmission } from "../../../../agent/turn/interruption/app-turn-interruption-admission.ts";
 import { BtccRecoveryCaseStore } from "../../../../agent/turn/interruption/recovery-case-store.ts";
 import {
   routeTurnInterruption,
@@ -40,47 +36,22 @@ export interface AppResponderInterruptionResult {
 export function routeAppResponderRuntimeInterruption(
   input: AppResponderInterruptionInput,
 ): AppResponderInterruptionResult {
-  let conversations: AgentConversationStore | null = null;
   let recoveryCases: BtccRecoveryCaseStore | null = null;
   try {
-    conversations = new AgentConversationStore({
-      butlerData: input.butlerData,
-    });
     recoveryCases = new BtccRecoveryCaseStore({
       butlerData: input.butlerData,
     });
-    let state = recoveryCases.readTurnState(input.turnId);
-    if (!state) {
-      const existingTurn = conversations.readTurn(input.turnId);
-      const durableSessionId = sessionHintForRow(input.chatId);
-      const turn = existingTurn ?? conversations.beginTurn({
-        gateway: "app",
-        externalSessionId: durableSessionId,
-        sessionId: conversationSessionIdForDurableSession(durableSessionId),
-        workspaceId: null,
-        projectId: input.projectId ?? null,
-        actor: input.actor,
-        requestId: `app-responder:${input.messageId}`,
-        turnId: input.turnId,
-        now: input.now,
-      });
-      if (!existingTurn && input.actor === "user") {
-        conversations.appendUserMessage({
-          sessionId: turn.session_id,
-          turnId: turn.id,
-          text: input.text,
-          sourceGateway: "app",
-          sourceRef: input.messageId,
-          now: input.now,
-        });
-      }
-      state = recoveryCases.admitTurn({
-        turnId: turn.id,
-        sessionId: turn.session_id,
-        attemptId: btccAttemptIdForTurn(turn.id),
-        now: input.now,
-      });
-    }
+    const state = ensureAppInterruptionTurnAdmission({
+      recoveryCases,
+      butlerData: input.butlerData,
+      durableSessionId: sessionHintForRow(input.chatId),
+      turnId: input.turnId,
+      messageId: input.messageId,
+      text: input.text,
+      actor: input.actor,
+      projectId: input.projectId,
+      now: input.now,
+    });
     if (state.state === "waiting_runtime") {
       return {
         state,
@@ -123,7 +94,6 @@ export function routeAppResponderRuntimeInterruption(
     };
   } finally {
     recoveryCases?.close();
-    conversations?.close();
   }
 }
 

@@ -1,4 +1,4 @@
-export const CONVERSATION_STORE_SCHEMA_VERSION = 3;
+export const CONVERSATION_STORE_SCHEMA_VERSION = 4;
 
 export const CONVERSATION_STORE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -198,6 +198,52 @@ CREATE TABLE IF NOT EXISTS btcc_turn_states (
   active_wait_owner_ref TEXT,
   active_wake_revision_ref TEXT,
   terminal_outcome_id TEXT,
+  lifecycle_status TEXT NOT NULL DEFAULT 'active' CHECK (
+    lifecycle_status IN (
+      'active', 'waiting_user', 'waiting_external', 'waiting_runtime',
+      'scheduled_continuation', 'cancelled', 'delivered'
+    )
+  ),
+  current_phase TEXT NOT NULL DEFAULT 'conception' CHECK (
+    current_phase IN (
+      'conception', 'planning', 'execution', 'review', 'consolidation', 'reporting'
+    )
+  ),
+  phase_generation INTEGER NOT NULL DEFAULT 1 CHECK (phase_generation > 0),
+  row_version INTEGER NOT NULL DEFAULT 1 CHECK (row_version > 0),
+  project_policy_json TEXT NOT NULL DEFAULT '{"kind":"unbound"}'
+    CHECK (json_valid(project_policy_json)),
+  tracking_policy_candidate_json TEXT CHECK (
+    tracking_policy_candidate_json IS NULL OR json_valid(tracking_policy_candidate_json)
+  ),
+  tracking_policy_json TEXT CHECK (
+    tracking_policy_json IS NULL OR json_valid(tracking_policy_json)
+  ),
+  accepted_controls_ref TEXT NOT NULL DEFAULT '',
+  goal_contract_ref TEXT,
+  active_conception_checkpoint_ref TEXT,
+  active_planning_checkpoint_ref TEXT,
+  active_execution_checkpoint_ref TEXT,
+  active_review_checkpoint_ref TEXT,
+  active_consolidation_checkpoint_ref TEXT,
+  active_reporting_checkpoint_ref TEXT,
+  active_consolidation_target_ref TEXT,
+  active_final_dossier_ref TEXT,
+  active_tracking_attempt_ref TEXT,
+  active_execution_operation_ref TEXT,
+  active_review_target_ref TEXT,
+  open_tool_call_ref TEXT,
+  plan_revision_ref TEXT,
+  active_tracking_work_ref TEXT,
+  active_task_ref TEXT,
+  active_return_ticket_ref TEXT,
+  pending_closeout_ref TEXT,
+  active_continuation_owner_ref TEXT,
+  accepted_receipt_refs_json TEXT NOT NULL DEFAULT '[]'
+    CHECK (json_valid(accepted_receipt_refs_json)),
+  invalidated_receipt_refs_json TEXT NOT NULL DEFAULT '[]'
+    CHECK (json_valid(invalidated_receipt_refs_json)),
+  last_stable_input_fingerprint TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE CASCADE,
@@ -219,6 +265,103 @@ CREATE TABLE IF NOT EXISTS btcc_turn_states (
     (state IN ('delivered', 'cancelled') AND terminal_outcome_id IS NOT NULL) OR
     (state NOT IN ('delivered', 'cancelled') AND terminal_outcome_id IS NULL)
   )
+);
+
+CREATE TABLE IF NOT EXISTS btcc_conception_checkpoints (
+  checkpoint_ref TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  phase_generation INTEGER NOT NULL CHECK (phase_generation > 0),
+  round_index INTEGER NOT NULL CHECK (round_index >= 0),
+  working_goal_draft_json TEXT,
+  open_evidence_needs_json TEXT NOT NULL,
+  observation_refs_json TEXT NOT NULL,
+  pending_tool_call_ref TEXT,
+  last_input_fingerprint TEXT NOT NULL,
+  public_progress_ref TEXT,
+  status TEXT NOT NULL CHECK (
+    status IN ('active', 'superseded', 'finalized', 'aborted')
+  ),
+  content_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES btcc_turn_states(turn_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS btcc_goal_contracts (
+  goal_contract_ref TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  conception_model_call_id TEXT NOT NULL,
+  contract_json TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES btcc_turn_states(turn_id) ON DELETE CASCADE,
+  UNIQUE (turn_id, attempt_id, revision)
+);
+
+CREATE TABLE IF NOT EXISTS btcc_phase_artifacts (
+  artifact_ref TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK (
+    phase IN (
+      'conception', 'planning', 'execution', 'review', 'consolidation', 'reporting'
+    )
+  ),
+  phase_generation INTEGER NOT NULL CHECK (phase_generation > 0),
+  artifact_kind TEXT NOT NULL CHECK (artifact_kind IN (
+    'accepted_controls', 'structural_project_policy', 'tracking_policy_candidate',
+    'opening_decision', 'continuity_update', 'user_blocker', 'planning_input',
+    'planning_checkpoint', 'planning_validation_gap', 'task_graph',
+    'tracking_materialization', 'execution_input', 'execution_checkpoint',
+    'execution_operation', 'execution_candidate', 'review_input',
+    'review_checkpoint', 'review_candidate', 'review_verdict_frontier',
+    'consolidation_input', 'consolidation_checkpoint', 'consolidation_candidate',
+    'consolidation_finding_frontier', 'final_dossier', 'reporting_input',
+    'reporting_checkpoint', 'report_candidate', 'report_validation_receipt',
+    'report_guard_candidate', 'report_guard_receipt', 'tracking_closeout',
+    'return_ticket', 'public_progress'
+  )),
+  artifact_schema_version TEXT NOT NULL,
+  task_ref TEXT,
+  payload_json TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  provenance_refs_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES btcc_turn_states(turn_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS btcc_phase_receipts (
+  receipt_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  phase TEXT NOT NULL CHECK (
+    phase IN (
+      'conception', 'planning', 'execution', 'review', 'consolidation', 'reporting'
+    )
+  ),
+  phase_generation INTEGER NOT NULL CHECK (phase_generation > 0),
+  task_ref TEXT,
+  input_fingerprint TEXT NOT NULL,
+  phase_prompt_id TEXT NOT NULL,
+  phase_prompt_version INTEGER NOT NULL CHECK (phase_prompt_version > 0),
+  phase_prompt_hash TEXT NOT NULL,
+  output_artifact_refs_json TEXT NOT NULL,
+  evidence_refs_json TEXT NOT NULL,
+  dependency_receipt_refs_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status = 'passed'),
+  next_state TEXT NOT NULL CHECK (
+    next_state IN (
+      'conception', 'planning', 'execution', 'review', 'consolidation', 'reporting',
+      'waiting_user', 'waiting_external', 'waiting_runtime',
+      'scheduled_continuation', 'kernel_delivery'
+    )
+  ),
+  payload_json TEXT,
+  content_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES btcc_turn_states(turn_id) ON DELETE CASCADE
 );
 
 CREATE TRIGGER IF NOT EXISTS btcc_interruption_receipts_immutable_update
@@ -283,6 +426,54 @@ BEGIN
   SELECT RAISE(ABORT, 'btcc_cancellation_receipt_required');
 END;
 
+CREATE TRIGGER IF NOT EXISTS btcc_conception_checkpoints_immutable_update
+BEFORE UPDATE ON btcc_conception_checkpoints
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_conception_checkpoint_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_conception_checkpoints_immutable_delete
+BEFORE DELETE ON btcc_conception_checkpoints
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_conception_checkpoint_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_goal_contracts_immutable_update
+BEFORE UPDATE ON btcc_goal_contracts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_goal_contract_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_goal_contracts_immutable_delete
+BEFORE DELETE ON btcc_goal_contracts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_goal_contract_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_phase_artifacts_immutable_update
+BEFORE UPDATE ON btcc_phase_artifacts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_artifact_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_phase_artifacts_immutable_delete
+BEFORE DELETE ON btcc_phase_artifacts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_artifact_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_phase_receipts_immutable_update
+BEFORE UPDATE ON btcc_phase_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_phase_receipts_immutable_delete
+BEFORE DELETE ON btcc_phase_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_receipt_immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS conversation_schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at TEXT NOT NULL
@@ -324,4 +515,135 @@ ON btcc_turn_states(session_id, updated_at, turn_id);
 
 CREATE INDEX IF NOT EXISTS btcc_recovery_cases_turn_status_idx
 ON btcc_recovery_cases(turn_id, status, created_at);
+
+CREATE INDEX IF NOT EXISTS btcc_phase_artifacts_turn_phase_idx
+ON btcc_phase_artifacts(turn_id, phase, phase_generation, created_at);
+
+CREATE INDEX IF NOT EXISTS btcc_phase_receipts_turn_phase_idx
+ON btcc_phase_receipts(turn_id, phase, phase_generation, created_at);
+`;
+
+export const CONVERSATION_STORE_POST_MIGRATION_SQL = `
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_lifecycle_insert_guard
+BEFORE INSERT ON btcc_turn_states
+WHEN NEW.current_phase NOT IN (
+  'conception', 'planning', 'execution', 'review', 'consolidation', 'reporting'
+) OR NEW.phase_generation <= 0 OR NEW.row_version <= 0 OR NOT (
+  (NEW.lifecycle_status = 'active' AND NEW.state IN (
+    'accepted', 'model_deciding', 'announcing_intent', 'executing_tools',
+    'observing_tools', 'continuing'
+  )) OR
+  (NEW.lifecycle_status = 'scheduled_continuation' AND NEW.state = 'continuing') OR
+  (NEW.lifecycle_status = 'waiting_user' AND NEW.state = 'waiting_user') OR
+  (NEW.lifecycle_status = 'waiting_external' AND NEW.state = 'waiting_external') OR
+  (NEW.lifecycle_status = 'waiting_runtime' AND NEW.state = 'waiting_runtime') OR
+  (NEW.lifecycle_status = 'delivered' AND NEW.state = 'delivered') OR
+  (NEW.lifecycle_status = 'cancelled' AND NEW.state = 'cancelled')
+)
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_turn_lifecycle_state_mismatch');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_lifecycle_update_guard
+BEFORE UPDATE OF state, lifecycle_status ON btcc_turn_states
+WHEN NEW.state NOT IN ('delivered', 'cancelled') AND NOT (
+  (NEW.lifecycle_status = 'active' AND NEW.state IN (
+    'accepted', 'model_deciding', 'announcing_intent', 'executing_tools',
+    'observing_tools', 'continuing'
+  )) OR
+  (NEW.lifecycle_status = 'scheduled_continuation' AND NEW.state = 'continuing') OR
+  (NEW.lifecycle_status = 'waiting_user' AND NEW.state = 'waiting_user') OR
+  (NEW.lifecycle_status = 'waiting_external' AND NEW.state = 'waiting_external') OR
+  (NEW.lifecycle_status = 'waiting_runtime' AND NEW.state = 'waiting_runtime') OR
+  (NEW.lifecycle_status = 'delivered' AND NEW.state = 'delivered') OR
+  (NEW.lifecycle_status = 'cancelled' AND NEW.state = 'cancelled')
+)
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_turn_lifecycle_state_mismatch');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_reporting_lifecycle_guard
+BEFORE UPDATE OF state, lifecycle_status ON btcc_turn_states
+WHEN NEW.state = 'delivered' AND NEW.lifecycle_status != 'delivered'
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_reporting_receipt_required');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_cancellation_lifecycle_guard
+BEFORE UPDATE OF state, lifecycle_status ON btcc_turn_states
+WHEN NEW.state = 'cancelled' AND NEW.lifecycle_status != 'cancelled'
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_cancellation_receipt_required');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_phase_value_guard
+BEFORE UPDATE OF current_phase, lifecycle_status ON btcc_turn_states
+WHEN NEW.current_phase NOT IN (
+  'conception', 'planning', 'execution', 'review', 'consolidation', 'reporting'
+) OR NEW.lifecycle_status NOT IN (
+  'active', 'waiting_user', 'waiting_external', 'waiting_runtime',
+  'scheduled_continuation', 'cancelled', 'delivered'
+) OR NEW.phase_generation <= 0 OR NEW.row_version <= 0
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_state_value_invalid');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_receipt_refs_guard
+BEFORE UPDATE OF current_phase, phase_generation,
+  accepted_receipt_refs_json, invalidated_receipt_refs_json ON btcc_turn_states
+WHEN NOT json_valid(NEW.accepted_receipt_refs_json)
+  OR NOT json_valid(NEW.invalidated_receipt_refs_json)
+  OR EXISTS (
+    SELECT 1 FROM json_each(NEW.accepted_receipt_refs_json) accepted
+    LEFT JOIN btcc_phase_receipts receipt ON receipt.receipt_id = accepted.value
+    WHERE receipt.receipt_id IS NULL
+      OR receipt.turn_id != NEW.turn_id
+      OR receipt.attempt_id != NEW.attempt_id
+  )
+  OR EXISTS (
+    SELECT 1 FROM json_each(NEW.invalidated_receipt_refs_json) invalidated
+    LEFT JOIN btcc_phase_receipts receipt ON receipt.receipt_id = invalidated.value
+    WHERE receipt.receipt_id IS NULL
+      OR receipt.turn_id != NEW.turn_id
+      OR receipt.attempt_id != NEW.attempt_id
+  )
+  OR EXISTS (
+    SELECT 1 FROM json_each(NEW.accepted_receipt_refs_json) accepted
+    JOIN json_each(NEW.invalidated_receipt_refs_json) invalidated
+      ON invalidated.value = accepted.value
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_receipt_refs_invalid');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_phase_transition_guard
+BEFORE UPDATE OF current_phase, phase_generation ON btcc_turn_states
+WHEN (
+  NEW.current_phase = OLD.current_phase AND
+  NEW.phase_generation != OLD.phase_generation
+) OR (
+  NEW.current_phase != OLD.current_phase AND (
+    NEW.phase_generation != OLD.phase_generation + 1 OR NOT EXISTS (
+      SELECT 1 FROM btcc_phase_receipts receipt
+      JOIN json_each(NEW.accepted_receipt_refs_json) accepted
+        ON accepted.value = receipt.receipt_id
+      WHERE receipt.turn_id = OLD.turn_id
+        AND receipt.attempt_id = OLD.attempt_id
+        AND receipt.phase = OLD.current_phase
+        AND receipt.phase_generation = OLD.phase_generation
+        AND receipt.next_state = NEW.current_phase
+        AND receipt.status = 'passed'
+    )
+  )
+)
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_phase_receipt_required');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_terminal_immutable
+BEFORE UPDATE ON btcc_turn_states
+WHEN OLD.lifecycle_status IN ('delivered', 'cancelled')
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_turn_terminal_immutable');
+END;
 `;

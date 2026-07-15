@@ -24,6 +24,7 @@ import { PolicyEngine, type PolicyApprovalMode } from "../../agent/policy/policy
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { BtccRecoveryCaseStore } from "../../agent/turn/interruption/recovery-case-store.ts";
+import { BtccPhaseStore } from "../../agent/turn/btcc/phase-store.ts";
 import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
 import {
   appTransportExecutorWakeRevision,
@@ -646,7 +647,7 @@ export async function runNativeButlerMain(
     });
     const appAdapter = createAppTransportAdapter();
     conversationWriter = new AgentConversationStore({ butlerData });
-    btccInterruptionStateWriter = new BtccRecoveryCaseStore({ butlerData });
+    btccInterruptionStateWriter = new BtccPhaseStore({ butlerData });
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
