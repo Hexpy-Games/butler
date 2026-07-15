@@ -198,6 +198,7 @@ export const projectLedgerNativeToolMetadata = Object.fromEntries(
         purposes: projectLedgerPurposes(tool.name),
         scopes: ["project" as const],
         ledgerOperation: projectLedgerOperation(tool.name),
+        ledgerRecordKinds: projectLedgerRecordKinds(tool.name),
       },
     } satisfies ToolCapabilityMetadata,
   ]),
@@ -239,6 +240,28 @@ function projectLedgerPurposes(
   return name === "project_ledger_status"
     ? ["execution", "review"]
     : ["planning", "execution", "review"];
+}
+
+function projectLedgerRecordKinds(
+  name: string,
+): NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerRecordKinds"] {
+  switch (name) {
+    case "project_ledger_work_update":
+    case "project_ledger_work_complete":
+      return ["work"];
+    case "project_ledger_task_update":
+    case "project_ledger_task_complete":
+      return ["task"];
+    case "project_ledger_attempt_start":
+    case "project_ledger_attempt_succeed":
+    case "project_ledger_attempt_fail":
+      return ["attempt"];
+    case "project_ledger_create":
+    case "project_ledger_update":
+      return ["spec", "plan", "work", "task", "attempt"];
+    default:
+      return [];
+  }
 }
 
 export function createProjectLedgerNativeToolHandlers(input: ProjectLedgerExecutorInput) {

@@ -48,6 +48,7 @@ export interface ToolCapabilityMetadata {
     >;
     scopes: Array<"turn" | "task" | "project" | "workspace" | "external">;
     ledgerOperation?: "discover" | "read" | "mutate" | "validate" | "render" | "closeout";
+    ledgerRecordKinds?: Array<"spec" | "plan" | "work" | "task" | "attempt">;
   };
 }
 

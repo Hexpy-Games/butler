@@ -19,6 +19,7 @@ export interface BtccCapabilityManifestEntry {
   purposes: BtccCapabilityPurpose[];
   scopes: BtccCapabilityScope[];
   ledgerOperation?: NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerOperation"];
+  ledgerRecordKinds?: NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerRecordKinds"];
   declared: boolean;
 }
 
@@ -41,6 +42,9 @@ export function btccCapabilityManifestForTool(
     purposes: [...declared.purposes],
     scopes: [...declared.scopes],
     ...(declared.ledgerOperation ? { ledgerOperation: declared.ledgerOperation } : {}),
+    ...(declared.ledgerRecordKinds?.length
+      ? { ledgerRecordKinds: [...declared.ledgerRecordKinds] }
+      : {}),
     declared: true,
   }));
 }
@@ -51,17 +55,20 @@ export function btccCapabilityAllows(input: {
   effects: readonly BtccCapabilityEffect[];
   scopes?: readonly BtccCapabilityScope[];
   ledgerOperations?: readonly NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerOperation"][];
+  ledgerRecordKinds?: readonly ("spec" | "plan" | "work" | "task" | "attempt")[];
   requireDeclared?: boolean;
 }): boolean {
   const effects = new Set(input.effects);
   const scopes = input.scopes ? new Set(input.scopes) : null;
   const operations = input.ledgerOperations ? new Set(input.ledgerOperations) : null;
+  const recordKinds = input.ledgerRecordKinds ? new Set(input.ledgerRecordKinds) : null;
   return btccCapabilityManifestForTool(input.tool).some((entry) =>
     (input.requireDeclared !== true || entry.declared) &&
     entry.purposes.includes(input.purpose) &&
     effects.has(entry.effect) &&
     (!scopes || entry.scopes.some((scope) => scopes.has(scope))) &&
-    (!operations || Boolean(entry.ledgerOperation && operations.has(entry.ledgerOperation))),
+    (!operations || Boolean(entry.ledgerOperation && operations.has(entry.ledgerOperation))) &&
+    (!recordKinds || Boolean(entry.ledgerRecordKinds?.some((kind) => recordKinds.has(kind)))),
   );
 }
 
