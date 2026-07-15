@@ -15,7 +15,7 @@ const request = {
 const response = { version: 1 as const, outcome: "signal_dispatched" as const };
 
 test("Windows cancellation authentication accepts one exact generation and identity", () => {
-  const control = createWindowsCancellationControl("C:\\Users\\연우\\Butler Data", {
+  const control = createWindowsCancellationControl("C:\\Users\\테스터\\Butler Data", {
     generateSecret: () => Buffer.alloc(32, 7),
     generateGeneration: () => "generation-1234567890",
   });

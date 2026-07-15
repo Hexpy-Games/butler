@@ -9659,7 +9659,7 @@ test("native runtime redacts complex tool progress command metadata", async () =
   expect(commandProgressActions).toHaveLength(1);
   expect(commandProgressActions[0]).toMatchObject({
     activityKind: "ran_command",
-    toolName: "Bash",
+    toolName: "Command",
   });
   const serialized = JSON.stringify(commandProgressActions);
   expect(serialized).toContain("[redacted]");

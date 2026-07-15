@@ -12,12 +12,12 @@ import {
 
 test("runtime filesystem resolves platform executable names without caller branching", () => {
   expect(
-    managedRuntimeExecutablePath("C:\\Users\\연우 Kim\\Butler", "win32"),
+    managedRuntimeExecutablePath("C:\\Users\\테스터 Kim\\Butler", "win32"),
   ).toBe(
-    "C:\\Users\\연우 Kim\\Butler\\packages\\butler-agent\\resources\\runtime\\bin\\bun.exe",
+    "C:\\Users\\테스터 Kim\\Butler\\packages\\butler-agent\\resources\\runtime\\bin\\bun.exe",
   );
-  expect(managedRuntimeExecutablePath("/Users/연우 Kim/Butler", "darwin")).toBe(
-    "/Users/연우 Kim/Butler/packages/butler-agent/resources/runtime/bin/bun",
+  expect(managedRuntimeExecutablePath("/Users/테스터 Kim/Butler", "darwin")).toBe(
+    "/Users/테스터 Kim/Butler/packages/butler-agent/resources/runtime/bin/bun",
   );
 });
 
@@ -35,7 +35,7 @@ test("runtime filesystem handles Windows drive UNC case and long paths", () => {
       "win32",
     ),
   ).toBe(true);
-  const longRoot = `\\\\?\\C:\\Users\\연우\\${"long-segment\\".repeat(24)}Butler`;
+  const longRoot = `\\\\?\\C:\\Users\\테스터\\${"long-segment\\".repeat(24)}Butler`;
   expect(pathIsInside(longRoot, `${longRoot}\\runtime\\bun.exe`, "win32")).toBe(
     true,
   );

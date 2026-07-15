@@ -7,6 +7,7 @@ if (process.platform !== "win32") {
 
 const signedBun = requiredArgument("--signed-bun");
 const signedHost = requiredArgument("--signed-host");
+const signingThumbprint = requiredArgument("--signing-thumbprint");
 const smoke = requiredArgument("--smoke");
 const output = requiredArgument("--output");
 const integrity = spawnSync("whoami.exe", ["/groups", "/fo", "csv", "/nh"], {
@@ -27,6 +28,7 @@ const child = spawn(signedBun, ["run", smoke], {
     BUTLER_APP_MANAGED_BUN_WIN32_X64: signedBun,
     BUTLER_APP_WINDOWS_PROCESS_HOST: signedHost,
     BUTLER_WINDOWS_PROCESS_HOST: signedHost,
+    BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1: signingThumbprint,
     BUTLER_WINDOWS_STANDARD_USER: "1",
   },
   shell: false,

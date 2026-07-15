@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
+  APP_RELEASE_BUILD_PLATFORMS,
   APP_RELEASE_PLATFORMS,
   createAppBackgroundServiceReleaseCapability,
   createAppDependencyClosureManifest,
@@ -47,6 +48,10 @@ export interface AppReleasePackageArtifact {
   updaterArtifactPath?: string;
   updaterSha256Path?: string;
   updaterSha256?: string;
+  updaterIndexName?: string;
+  updaterIndexPath?: string;
+  updaterIndexSha256Path?: string;
+  updaterIndexSha256?: string;
 }
 
 export interface AppReleasePackageResult {
@@ -92,6 +97,10 @@ export function appReleaseIconPath(root: string): string {
   return join(resolve(root), ELECTRON_ROOT, "assets", "butler.icns");
 }
 
+export function appReleaseWindowsIconPath(root: string): string {
+  return join(resolve(root), ELECTRON_ROOT, "assets", "butler.ico");
+}
+
 export function appReleasePackagerIconPath(outDir: string): string {
   return join(resolve(outDir), "butler-release-icon.icns");
 }
@@ -101,15 +110,17 @@ export function createAppReleasePackage(
 ): AppReleasePackageResult {
   const root = resolve(options.root);
   const outDir = resolve(options.outDir);
-  const manifest = createAppReleaseManifest(root);
-  const issues = validateAppReleaseManifest(root, manifest);
-  if (issues.length > 0) {
-    throw new Error(`app release manifest is invalid: ${issues.join("; ")}`);
-  }
   const platforms = options.platforms ?? [...APP_RELEASE_PLATFORMS];
   assertSupportedPlatforms(platforms);
   if (platforms.length === 0) {
     throw new Error("at least one app release platform is required");
+  }
+  const manifest = createAppReleaseManifest(root, platforms);
+  const issues = validateAppReleaseManifest(root, manifest, {
+    expectedPlatforms: platforms,
+  });
+  if (issues.length > 0) {
+    throw new Error(`app release manifest is invalid: ${issues.join("; ")}`);
   }
   mkdirSync(outDir, { recursive: true });
 
@@ -176,6 +187,9 @@ function packagePlatform(input: {
   if (input.platform === "darwin-arm64" && process.platform !== "darwin") {
     throw new Error("darwin-arm64 app releases must be packaged on macOS for signing");
   }
+  if (input.platform === "win32-x64" && process.platform !== "win32") {
+    throw new Error("win32-x64 app releases must be packaged on Windows");
+  }
   const artifact = input.manifest.artifacts.find(
     (item) => item.platform === input.platform,
   );
@@ -206,6 +220,10 @@ function packagePlatform(input: {
     path: string;
     sha256: string;
     sha256Path: string;
+    indexName?: string;
+    indexPath?: string;
+    indexSha256?: string;
+    indexSha256Path?: string;
   } | null = null;
   if (input.platform === "darwin-arm64") {
     const appBundle = join(packagedDir, "Butler.app");
@@ -232,6 +250,15 @@ function packagePlatform(input: {
       sha256: updaterSha256,
       sha256Path: updaterSha256Path,
     };
+  } else if (input.platform === "win32-x64") {
+    updaterArtifact = createWindowsSquirrelInstaller({
+      artifactPath,
+      root: input.root,
+      outDir: input.outDir,
+      packagedDir,
+      version: input.manifest.version,
+      workDir: input.workDir,
+    });
   } else if (input.linuxPackageFormat === "deb") {
     createLinuxAppDeb({
       artifactPath,
@@ -265,6 +292,14 @@ function packagePlatform(input: {
           updaterArtifactPath: updaterArtifact.path,
           updaterSha256: updaterArtifact.sha256,
           updaterSha256Path: updaterArtifact.sha256Path,
+          ...(updaterArtifact.indexName
+            ? {
+                updaterIndexName: updaterArtifact.indexName,
+                updaterIndexPath: updaterArtifact.indexPath,
+                updaterIndexSha256: updaterArtifact.indexSha256,
+                updaterIndexSha256Path: updaterArtifact.indexSha256Path,
+              }
+            : {}),
         }
       : {}),
   };
@@ -291,14 +326,24 @@ function runElectronPackager(
   platform: AppReleasePlatform,
   bundledAgentResourceDir: string,
 ): void {
-  const packager = process.env.BUTLER_APP_PACKAGER ||
-    join(root, ELECTRON_ROOT, "node_modules", ".bin", "electron-packager");
-  if (!existsSync(packager)) {
+  const packagerOverride = process.env.BUTLER_APP_PACKAGER?.trim();
+  const packagerCli = join(
+    root,
+    ELECTRON_ROOT,
+    "node_modules",
+    "@electron",
+    "packager",
+    "bin",
+    "electron-packager.mjs",
+  );
+  if (!packagerOverride && !existsSync(packagerCli)) {
     throw new Error(
       "Electron packager is missing; run npm --prefix packages/butler-app/client/electron ci",
     );
   }
-  const iconPath = appReleaseIconPath(root);
+  const iconPath = platform === "win32-x64"
+    ? appReleaseWindowsIconPath(root)
+    : appReleaseIconPath(root);
   if (!existsSync(iconPath)) {
     throw new Error(`Butler app icon is missing: ${iconPath}`);
   }
@@ -314,10 +359,12 @@ function runElectronPackager(
     force: true,
     recursive: true,
   });
-  const packagerIconPath = appReleasePackagerIconPath(outDir);
+  const packagerIconPath = platform === "win32-x64"
+    ? join(resolve(outDir), "butler-release-icon.ico")
+    : appReleasePackagerIconPath(outDir);
   copyFileSync(iconPath, packagerIconPath);
   const [electronPlatform, electronArch] = platform.split("-");
-  const result = spawnSync(packager, [
+  const packagerArguments = [
     join(root, ELECTRON_ROOT),
     "Butler",
     `--platform=${electronPlatform}`,
@@ -331,10 +378,16 @@ function runElectronPackager(
     `--extra-resource=${rendererResourceDir}`,
     "--ignore=^/dist($|/)",
     "--quiet",
-  ], {
-    cwd: root,
-    encoding: "utf8",
-  });
+  ];
+  const result = spawnSync(
+    packagerOverride || process.env.BUTLER_NODE || "node",
+    packagerOverride ? packagerArguments : [packagerCli, ...packagerArguments],
+    {
+      cwd: root,
+      encoding: "utf8",
+      windowsHide: true,
+    },
+  );
   if (result.status !== 0) {
     throw new Error(
       `electron package failed for ${platform}: ${
@@ -745,7 +798,7 @@ export function verifyWindowsAuthenticodeFiles(paths: string[]): WindowsAuthenti
     const status = String(signature.status ?? "");
     const signerThumbprint = String(signature.signerThumbprint ?? "").toUpperCase();
     const signerSubject = String(signature.signerSubject ?? "");
-    if (status !== "Valid" || !/^[A-F0-9]{40,128}$/u.test(signerThumbprint)) {
+    if (status !== "Valid" || !/^[A-F0-9]{40}$/u.test(signerThumbprint)) {
       throw new Error(`Windows Authenticode signature is not valid for input ${index + 1}`);
     }
     return { status, signerThumbprint, signerSubject };
@@ -1117,6 +1170,121 @@ function createMacZip(appBundle: string, artifactPath: string): void {
   }
 }
 
+function createWindowsSquirrelInstaller(input: {
+  artifactPath: string;
+  root: string;
+  outDir: string;
+  packagedDir: string;
+  version: string;
+  workDir: string;
+}): {
+  name: string;
+  path: string;
+  sha256: string;
+  sha256Path: string;
+  indexName: string;
+  indexPath: string;
+  indexSha256: string;
+  indexSha256Path: string;
+} {
+  const installerOut = join(input.workDir, "squirrel", "win32-x64");
+  rmSync(installerOut, { recursive: true, force: true });
+  mkdirSync(installerOut, { recursive: true });
+  const script = join(
+    input.root,
+    ELECTRON_ROOT,
+    "scripts",
+    "create-windows-installer.mjs",
+  );
+  if (!existsSync(script)) {
+    throw new Error(`Windows Squirrel packager is missing: ${script}`);
+  }
+  const setupName = basename(input.artifactPath);
+  const result = spawnSync(process.env.BUTLER_NODE || "node.exe", [
+    script,
+    "--app-directory",
+    input.packagedDir,
+    "--output-directory",
+    installerOut,
+    "--setup-exe",
+    setupName,
+    "--setup-icon",
+    appReleaseWindowsIconPath(input.root),
+    "--version",
+    input.version,
+  ], {
+    cwd: input.root,
+    encoding: "utf8",
+    env: process.env,
+    windowsHide: true,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Windows Squirrel packaging failed: ${
+        summarizeCommandOutput(result.stderr || result.stdout) ||
+        result.error?.message ||
+        "unknown error"
+      }`,
+    );
+  }
+  const setupSource = join(installerOut, setupName);
+  if (!existsSync(setupSource)) {
+    throw new Error(`Windows Squirrel Setup.exe was not created: ${setupSource}`);
+  }
+  const packageSource = findExactlyOneFile(
+    installerOut,
+    (name) => name.toLocaleLowerCase("en-US").endsWith(".nupkg"),
+    "Squirrel update package",
+  );
+  const indexSource = join(installerOut, "RELEASES");
+  if (!existsSync(indexSource)) {
+    throw new Error(`Windows Squirrel RELEASES index was not created: ${indexSource}`);
+  }
+  copyFileSync(setupSource, input.artifactPath);
+  const packagePath = join(input.outDir, basename(packageSource));
+  copyFileSync(packageSource, packagePath);
+  const indexPath = join(input.outDir, "RELEASES");
+  copyFileSync(indexSource, indexPath);
+  const packageSha256 = sha256File(packagePath);
+  const packageSha256Path = `${packagePath}.sha256`;
+  writeFileSync(
+    packageSha256Path,
+    `${packageSha256}  ${basename(packagePath)}\n`,
+    "utf8",
+  );
+  const indexSha256 = sha256File(indexPath);
+  const indexSha256Path = `${indexPath}.sha256`;
+  writeFileSync(
+    indexSha256Path,
+    `${indexSha256}  ${basename(indexPath)}\n`,
+    "utf8",
+  );
+  return {
+    name: basename(packagePath),
+    path: packagePath,
+    sha256: packageSha256,
+    sha256Path: packageSha256Path,
+    indexName: basename(indexPath),
+    indexPath,
+    indexSha256,
+    indexSha256Path,
+  };
+}
+
+function findExactlyOneFile(
+  directory: string,
+  matches: (name: string) => boolean,
+  label: string,
+): string {
+  const names = readdirSync(directory).filter(matches).sort();
+  if (names.length !== 1) {
+    throw new Error(
+      `expected exactly one ${label} in ${directory}, found ${names.length}`,
+    );
+  }
+  return join(directory, names[0]);
+}
+
 function notarizeMacAppIfConfigured(appBundle: string): void {
   const keychainProfile = process.env.BUTLER_APP_NOTARY_KEYCHAIN_PROFILE?.trim();
   if (!keychainProfile) {
@@ -1237,7 +1405,9 @@ function createLinuxAppDeb(input: {
     if (result.status !== 0) {
       throw new Error(
         `linux app deb package failed: ${
-          result.stderr.trim() || result.stdout.trim() || "unknown error"
+          summarizeCommandOutput(result.stderr || result.stdout) ||
+          result.error?.message ||
+          "unknown error"
         }`,
       );
     }
@@ -1423,6 +1593,32 @@ function withArtifactMetadata(
           digest: packaged.sha256,
           signature: artifact.signature,
         },
+        updateFeed:
+          artifact.platform === "win32-x64" &&
+            packaged.updaterArtifactName &&
+            packaged.updaterArtifactPath &&
+            packaged.updaterSha256 &&
+            packaged.updaterIndexName === "RELEASES" &&
+            packaged.updaterIndexPath &&
+            packaged.updaterIndexSha256
+            ? {
+                kind: "squirrel-windows" as const,
+                packageName: packaged.updaterArtifactName,
+                packageUrl: artifactDownloadUrl(
+                  artifactBaseUrl,
+                  packaged.updaterArtifactPath,
+                  packaged.updaterArtifactName,
+                ),
+                packageSha256: packaged.updaterSha256,
+                indexName: "RELEASES" as const,
+                indexUrl: artifactDownloadUrl(
+                  artifactBaseUrl,
+                  packaged.updaterIndexPath,
+                  packaged.updaterIndexName,
+                ),
+                indexSha256: packaged.updaterIndexSha256,
+              }
+            : artifact.updateFeed,
       };
     }),
   };
@@ -1465,6 +1661,8 @@ function createAppUpdateManifest(manifest: AppReleaseManifest): Record<string, u
       staging_policy: artifact.stagingPolicy,
       activation_policy: artifact.activationPolicy,
       rollback_policy: artifact.rollbackPolicy,
+      distribution_status: artifact.distributionStatus,
+      update_feed: artifact.updateFeed,
     })),
   };
 }
@@ -1535,13 +1733,13 @@ function writeExecutableText(path: string, value: string): void {
   }
 }
 
-function summarizeCommandOutput(output: string): string {
-  return output.trim().split(/\r?\n/u).slice(-8).join("\n").slice(0, 4000);
+function summarizeCommandOutput(output: unknown): string {
+  return String(output ?? "").trim().split(/\r?\n/u).slice(-8).join("\n").slice(0, 4000);
 }
 
 function assertSupportedPlatforms(platforms: AppReleasePlatform[]): void {
   for (const platform of platforms) {
-    if (!(APP_RELEASE_PLATFORMS as readonly string[]).includes(platform)) {
+    if (!(APP_RELEASE_BUILD_PLATFORMS as readonly string[]).includes(platform)) {
       throw new Error(`unsupported app release platform: ${platform}`);
     }
   }
@@ -1608,7 +1806,7 @@ function parseCliArgs(args: string[]): {
 }
 
 function parsePlatform(value: string): AppReleasePlatform {
-  if ((APP_RELEASE_PLATFORMS as readonly string[]).includes(value)) {
+  if ((APP_RELEASE_BUILD_PLATFORMS as readonly string[]).includes(value)) {
     return value as AppReleasePlatform;
   }
   throw new Error(`unsupported app release platform: ${value}`);

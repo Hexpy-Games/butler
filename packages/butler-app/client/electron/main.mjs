@@ -11,7 +11,7 @@ import {
   nativeTheme,
   shell,
 } from "electron";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -77,6 +77,19 @@ import {
   shouldLaunchPersistentMenuBarHelper,
 } from "./menu-bar-helper-lifecycle.mjs";
 import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
+import {
+  executeWindowsSquirrelLaunch,
+  manageWindowsSquirrelShortcut,
+  removeWindowsOperationalState,
+  resolveWindowsSquirrelLaunch,
+  resolveWindowsUpdateFeedUrl,
+  shouldDelayWindowsFirstUpdateCheck,
+  verifyWindowsInstallerPublisher,
+  WINDOWS_APP_PROTOCOL,
+  WINDOWS_APP_USER_MODEL_ID,
+  WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
+  windowsLoginItemSettings,
+} from "./windows-squirrel-lifecycle.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -102,6 +115,42 @@ const nativeSettingsFileName = "butler-native-settings.json";
 const macNotificationSettingsUrl =
   "x-apple.systempreferences:com.apple.Notifications-Settings.extension";
 const winNotificationSettingsUrl = "ms-settings:notifications";
+const windowsSquirrelLaunch = resolveWindowsSquirrelLaunch({
+  platform: process.platform,
+  argv: process.argv,
+  execPath: process.execPath,
+});
+if (process.platform === "win32") {
+  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+}
+if (windowsSquirrelLaunch.handled) {
+  let squirrelExitCode = 0;
+  let squirrelResult = null;
+  try {
+    squirrelResult = executeWindowsSquirrelLaunch(windowsSquirrelLaunch, {
+      manageShortcut: (shortcut) => manageWindowsSquirrelShortcut({
+        ...shortcut,
+        runPowerShell: spawnSync,
+      }),
+      setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
+      registerProtocol: (scheme, executable, args) =>
+        app.setAsDefaultProtocolClient(scheme, executable, args),
+      unregisterProtocol: (scheme, executable, args) =>
+        app.removeAsDefaultProtocolClient(scheme, executable, args),
+      cleanupOperationalState: () =>
+        removeWindowsOperationalState({ butlerData: butlerDataRoot }),
+    });
+  } catch (error) {
+    squirrelExitCode = 1;
+    console.error(`Windows Squirrel lifecycle failed: ${safeErrorCode(error)}`);
+  }
+  writeWindowsSquirrelEvidence({
+    event: windowsSquirrelLaunch.event,
+    exitCode: squirrelExitCode,
+    result: squirrelResult,
+  });
+  process.exit(squirrelExitCode);
+}
 let port = normalizePort(process.env.BUTLER_APP_SERVER_PORT, 18765);
 const explicitServerUrl = process.env.BUTLER_APP_SERVER_URL;
 let serverUrl = normalizeLocalHttpUrl(
@@ -116,6 +165,7 @@ let rendererOrigin = new URL(rendererUrl).origin;
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
+const isWindows = process.platform === "win32";
 const appLifecycleMode = resolveAppLifecycleMode({
   platform: process.platform,
   isPackaged: app.isPackaged,
@@ -170,6 +220,10 @@ const nativeNotificationState = {
   lastAttemptedAt: null,
   lastShownAt: null,
 };
+autoUpdater.on("before-quit-for-update", () => {
+  isQuitting = true;
+  finalQuitAllowed = true;
+});
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
@@ -589,7 +643,7 @@ function readFirstRunRuntimeDiagnostics() {
         appForegroundLastExitPath(butlerDataRoot),
       ),
       trayReady: Boolean(tray),
-      startAtLogin: app.getLoginItemSettings().openAtLogin,
+      startAtLogin: getButlerLoginItemSettings().openAtLogin,
       notificationsSupported: Notification.isSupported(),
     }),
   };
@@ -948,13 +1002,74 @@ async function readSetupSettings() {
 function configureAppIdentity() {
   const pkg = readPackageJson(packagePath);
   app.setName(appDisplayName);
-  if (process.platform === "win32") {
-    app.setAppUserModelId("com.hexpy.butler");
+  if (isWindows) {
+    app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+    configureWindowsProtocolRegistration();
   }
   app.setAboutPanelOptions({
     applicationName: appDisplayName,
     applicationVersion: safeString(pkg.version) || "0.0.0",
   });
+}
+
+function configureWindowsProtocolRegistration() {
+  if (!isWindows || !app.isPackaged) return false;
+  const settings = windowsLoginItemSettings({
+    openAtLogin: false,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+  });
+  return app.setAsDefaultProtocolClient(
+    WINDOWS_APP_PROTOCOL,
+    settings.path,
+    settings.args,
+  );
+}
+
+function getButlerLoginItemSettings() {
+  if (!isWindows || !app.isPackaged) return app.getLoginItemSettings();
+  const settings = windowsLoginItemSettings({
+    openAtLogin: false,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+  });
+  return app.getLoginItemSettings({
+    path: settings.path,
+    args: settings.args,
+  });
+}
+
+function setButlerLoginItemSettings(openAtLogin) {
+  app.setLoginItemSettings(windowsLoginItemSettings({
+    openAtLogin,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+  }));
+}
+
+function configureWindowsAppUpdater() {
+  const updateFeedUrl = resolveWindowsUpdateFeedUrl({
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    env: process.env,
+  });
+  if (!updateFeedUrl) return;
+  autoUpdater.setFeedURL({ url: updateFeedUrl });
+  if (process.env.BUTLER_APP_WINDOWS_AUTO_UPDATE !== "1") return;
+  const delay = shouldDelayWindowsFirstUpdateCheck({
+    platform: process.platform,
+    argv: process.argv,
+  })
+    ? WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS
+    : 0;
+  setTimeout(() => {
+    void autoUpdater.checkForUpdates().catch((error) => {
+      console.error(`Windows update check failed: ${safeErrorCode(error)}`);
+    });
+  }, delay);
 }
 
 function configureAppIcon() {
@@ -1387,12 +1502,9 @@ async function refreshTrayMenu() {
         {
           label: "Start Butler at Login",
           type: "checkbox",
-          checked: app.getLoginItemSettings().openAtLogin,
+          checked: getButlerLoginItemSettings().openAtLogin,
           click: (item) => {
-            app.setLoginItemSettings({
-              openAtLogin: item.checked,
-              openAsHidden: true,
-            });
+            setButlerLoginItemSettings(item.checked);
           },
         },
       ]
@@ -1732,6 +1844,34 @@ function isDevToolsAccelerator(input) {
   );
 }
 
+function writeWindowsSquirrelEvidence({ event, exitCode, result }) {
+  const evidenceTemplate = process.env.BUTLER_WINDOWS_SQUIRREL_EVIDENCE_PATH?.trim();
+  if (!evidenceTemplate) return;
+  const eventLabel = typeof event === "string"
+    ? event.replace(/^--squirrel-/u, "").replace(/[^a-z0-9_-]/giu, "_")
+    : "unknown";
+  const evidencePath = evidenceTemplate.replaceAll("{event}", eventLabel);
+  try {
+    mkdirSync(dirname(evidencePath), { recursive: true });
+    writeFileSync(evidencePath, `${JSON.stringify({
+      schema: "butler.windows-squirrel-lifecycle-evidence.v1",
+      event,
+      exitCode,
+      shortcutAction: result?.shortcutAction ?? null,
+      operationalStateRemoved: result?.operationalStateRemoved === true,
+      normalInitializationReached: false,
+      rawTextIncluded: false,
+    })}\n`, "utf8");
+  } catch {
+    console.error("Windows Squirrel lifecycle evidence write failed");
+  }
+}
+
+function safeErrorCode(error) {
+  const value = typeof error?.code === "string" ? error.code : "unknown_error";
+  return /^[a-z0-9_]{1,80}$/u.test(value) ? value : "unknown_error";
+}
+
 function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
@@ -2005,8 +2145,8 @@ ipcMain.handle("butler:quit-app", () => {
   return { quitting: true };
 });
 
-ipcMain.handle("butler:quit-and-install-update", async () =>
-  await quitAndInstallAppUpdate({
+async function runAppUpdateQuit(quitAndInstall) {
+  return await quitAndInstallAppUpdate({
     readActiveWork: readForegroundActiveWorkSnapshot,
     confirmQuit: async (snapshot) =>
       await confirmAppForegroundQuit({
@@ -2027,8 +2167,12 @@ ipcMain.handle("butler:quit-and-install-update", async () =>
       });
       finalQuitAllowed = true;
     },
-    quitAndInstall: () => autoUpdater.quitAndInstall(),
-  }),
+    quitAndInstall,
+  });
+}
+
+ipcMain.handle("butler:quit-and-install-update", async () =>
+  await runAppUpdateQuit(() => autoUpdater.quitAndInstall()),
 );
 
 function windowForControlEvent(event) {
@@ -2173,6 +2317,33 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
+  if (isWindows && artifactPath.toLocaleLowerCase("en-US").endsWith(".exe")) {
+    const signature = verifyWindowsInstallerPublisher({
+      currentExecutable: process.execPath,
+      candidateInstaller: artifactPath,
+      runPowerShell: spawnSync,
+      env: process.env,
+    });
+    const update = await runAppUpdateQuit(() => {
+      const installer = spawn(artifactPath, ["--silent"], {
+        detached: true,
+        shell: false,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      installer.unref();
+      finalQuitAllowed = true;
+      app.quit();
+    });
+    return {
+      opened: update.update_started,
+      update,
+      signature: {
+        status: signature.status,
+        publisherConsistent: signature.publisherConsistent,
+      },
+    };
+  }
   const error = await shell.openPath(artifactPath);
   if (error) throw new Error(error);
   return { opened: true };
@@ -2232,6 +2403,7 @@ if (appSingleInstanceLock) {
     .then(async () => {
       recordAppStartupProgress("electron_ready");
       configureAppIdentity();
+      configureWindowsAppUpdater();
       configureAppIcon();
       suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
         app.getLoginItemSettings().wasOpenedAtLogin;

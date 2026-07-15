@@ -11,8 +11,12 @@ import {
 
 export const APP_RELEASE_COMPONENT_IDS = ["app"] as const;
 export const APP_RELEASE_PLATFORMS = ["darwin-arm64", "linux-x64", "linux-arm64"] as const;
+export const APP_RELEASE_BUILD_PLATFORMS = [
+  ...APP_RELEASE_PLATFORMS,
+  "win32-x64",
+] as const;
 export type AppReleaseComponentId = (typeof APP_RELEASE_COMPONENT_IDS)[number];
-export type AppReleasePlatform = (typeof APP_RELEASE_PLATFORMS)[number] | "win32-x64";
+export type AppReleasePlatform = (typeof APP_RELEASE_BUILD_PLATFORMS)[number];
 export type AppReleaseRestartPolicy = "restart-app";
 export type AppReleaseUpdatePolicy = "app-user-action";
 export type AppReleaseProduct = "butler-app";
@@ -237,6 +241,18 @@ export interface AppReleaseArtifact {
   stagingPolicy: AppReleaseStagingPolicy;
   activationPolicy: AppReleaseActivationPolicy;
   rollbackPolicy: AppReleaseRollbackPolicy;
+  distributionStatus: "public" | "gated";
+  updateFeed: AppReleaseUpdateFeed | null;
+}
+
+export interface AppReleaseUpdateFeed {
+  kind: "squirrel-windows";
+  packageName: string;
+  packageUrl: string;
+  packageSha256: string;
+  indexName: "RELEASES";
+  indexUrl: string;
+  indexSha256: string;
 }
 
 export interface AppReleaseManifest {
@@ -264,6 +280,7 @@ export interface AppReleaseVersionBaseline {
 
 export interface ValidateAppReleaseManifestOptions {
   previousManifest?: AppReleaseVersionBaseline | null;
+  expectedPlatforms?: readonly AppReleasePlatform[];
 }
 
 export interface AppComponentVersions {
@@ -327,15 +344,20 @@ export function readAppComponentVersions(root: string): AppComponentVersions {
   };
 }
 
-export function createAppReleaseManifest(root: string): AppReleaseManifest {
+export function createAppReleaseManifest(
+  root: string,
+  platforms: readonly AppReleasePlatform[] = APP_RELEASE_PLATFORMS,
+): AppReleaseManifest {
   const versions = readAppComponentVersions(root);
   const bundledAgentPayload = createBundledAgentPayloadMetadata(versions.bundledAgent);
-  const backgroundServiceCapability = createAppBackgroundServiceReleaseCapability();
+  const backgroundServiceCapability = createAppBackgroundServiceReleaseCapability(
+    platforms,
+  );
   const serviceInstallerBundle = createAppServiceInstallerBundleMetadata(
-    APP_RELEASE_PLATFORMS,
+    platforms,
     versions.app,
   );
-  const desktopHelper = createAppDesktopHelperMetadata(APP_RELEASE_PLATFORMS);
+  const desktopHelper = createAppDesktopHelperMetadata(platforms);
   const protocolCompatibility: AppReleaseProtocolCompatibility = {
     protocol: "butler.app.v1",
     minimumAppProtocol: "butler.app.v1",
@@ -351,6 +373,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     "packages/butler-app/client/electron/assets/butler-icon.svg",
     "packages/butler-app/client/electron/assets/butler.icon",
     "packages/butler-app/client/electron/assets/butler.icns",
+    "packages/butler-app/client/electron/assets/butler.ico",
     "packages/butler-app/client/electron/assets/butler-mac.png",
     "packages/butler-app/client/electron/assets/butler-mark-flat.png",
     "packages/butler-app/client/electron/assets/butler-mark-flat-white.png",
@@ -403,7 +426,7 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
     updaterOwner: "butler-app",
     components,
     artifacts: components.flatMap((component) =>
-      APP_RELEASE_PLATFORMS.map((platform) => ({
+      platforms.map((platform) => ({
         product: "butler-app",
         component: component.id,
         version: component.version,
@@ -440,6 +463,8 @@ export function createAppReleaseManifest(root: string): AppReleaseManifest {
         stagingPolicy: "platform-updater-cache",
         activationPolicy: "platform-app-update-then-versioned-app-runtime",
         rollbackPolicy: "preserve-previous-app-managed-runtime",
+        distributionStatus: platform === "win32-x64" ? "gated" : "public",
+        updateFeed: null,
       })),
     ),
   };
@@ -907,6 +932,7 @@ export function validateAppReleaseManifest(
 ): string[] {
   const issues: string[] = [];
   const versions = readAppComponentVersions(root);
+  const expectedPlatforms = options.expectedPlatforms ?? APP_RELEASE_PLATFORMS;
   if (manifest.name !== "butler-app")
     issues.push("app release manifest name must be butler-app");
   if (manifest.product !== "butler-app")
@@ -930,20 +956,20 @@ export function validateAppReleaseManifest(
   validateAppBackgroundServiceReleaseCapability(
     "app release background service capability",
     manifest.backgroundServiceCapability,
-    APP_RELEASE_PLATFORMS,
+    expectedPlatforms,
     issues,
   );
   validateAppServiceInstallerBundle(
     "app release service installer bundle",
     manifest.serviceInstallerBundle,
-    APP_RELEASE_PLATFORMS,
+    expectedPlatforms,
     manifest.version,
     issues,
   );
   validateAppDesktopHelper(
     "app release desktop helper",
     manifest.desktopHelper,
-    APP_RELEASE_PLATFORMS,
+    expectedPlatforms,
     issues,
   );
   if (manifest.updaterOwner !== "butler-app")
@@ -952,8 +978,8 @@ export function validateAppReleaseManifest(
     issues.push("app package version mismatch");
   }
   issues.push(...validateAppReleaseVersionCoupling(manifest, options.previousManifest));
-  validateComponents(root, manifest, versions, issues);
-  validateArtifacts(manifest, issues);
+  validateComponents(root, manifest, versions, expectedPlatforms, issues);
+  validateArtifacts(manifest, expectedPlatforms, issues);
   return issues;
 }
 
@@ -992,7 +1018,12 @@ function artifactName(
   version: string,
   platform: AppReleasePlatform,
 ): string {
-  const extension = platform === "darwin-arm64" ? "dmg" : "deb";
+  if (platform === "win32-x64") {
+    return `butler-app-${version}-${platform}-setup.exe`;
+  }
+  const extension = platform === "darwin-arm64"
+    ? "dmg"
+    : "deb";
   return `butler-app-${version}-${platform}.${extension}`;
 }
 
@@ -1026,6 +1057,7 @@ function validateComponents(
   root: string,
   manifest: AppReleaseManifest,
   versions: AppComponentVersions,
+  expectedPlatforms: readonly AppReleasePlatform[],
   issues: string[],
 ): void {
   const components = new Map<AppReleaseComponentId, AppReleaseComponent>();
@@ -1059,20 +1091,20 @@ function validateComponents(
     validateAppBackgroundServiceReleaseCapability(
       `component ${component.id} background service capability`,
       component.backgroundServiceCapability,
-      APP_RELEASE_PLATFORMS,
+      expectedPlatforms,
       issues,
     );
     validateAppServiceInstallerBundle(
       `component ${component.id} service installer bundle`,
       component.serviceInstallerBundle,
-      APP_RELEASE_PLATFORMS,
+      expectedPlatforms,
       component.version,
       issues,
     );
     validateAppDesktopHelper(
       `component ${component.id} desktop helper`,
       component.desktopHelper,
-      APP_RELEASE_PLATFORMS,
+      expectedPlatforms,
       issues,
     );
     validateProtocolCompatibility(
@@ -1110,6 +1142,7 @@ function validateNoServiceInternals(files: string[], issues: string[]): void {
 
 function validateArtifacts(
   manifest: AppReleaseManifest,
+  expectedPlatforms: readonly AppReleasePlatform[],
   issues: string[],
 ): void {
   const artifactComponents = new Set<AppReleaseComponentId>();
@@ -1125,8 +1158,12 @@ function validateArtifacts(
     if (artifact.product !== "butler-app") {
       issues.push(`artifact ${artifact.component} product must be butler-app`);
     }
-    if (!(APP_RELEASE_PLATFORMS as readonly string[]).includes(artifact.platform)) {
+    if (!(APP_RELEASE_BUILD_PLATFORMS as readonly string[]).includes(artifact.platform)) {
       issues.push(`unknown app release artifact platform: ${artifact.platform}`);
+      continue;
+    }
+    if (!expectedPlatforms.includes(artifact.platform)) {
+      issues.push(`unexpected app release artifact platform: ${artifact.platform}`);
       continue;
     }
     const platforms = artifactPlatforms.get(artifact.component) ?? new Set();
@@ -1194,13 +1231,21 @@ function validateArtifacts(
     if (!artifact.artifactName.trim()) {
       issues.push(`artifact ${artifact.component} must have an artifact name`);
     }
+    const expectedDistributionStatus = artifact.platform === "win32-x64"
+      ? "gated"
+      : "public";
+    if (artifact.distributionStatus !== expectedDistributionStatus) {
+      issues.push(
+        `artifact ${artifact.component}/${artifact.platform} distribution status must be ${expectedDistributionStatus}`,
+      );
+    }
   }
   for (const id of APP_RELEASE_COMPONENT_IDS) {
     if (!artifactComponents.has(id)) {
       issues.push(`missing app release artifact: ${id}`);
     }
     const platforms = artifactPlatforms.get(id) ?? new Set();
-    for (const platform of APP_RELEASE_PLATFORMS) {
+    for (const platform of expectedPlatforms) {
       if (!platforms.has(platform)) {
         issues.push(`missing app release artifact platform: ${id}/${platform}`);
       }

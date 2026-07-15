@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory = $true)][string]$Bun,
   [Parameter(Mandatory = $true)][string]$SignedBun,
   [Parameter(Mandatory = $true)][string]$SignedHost,
+  [Parameter(Mandatory = $true)][string]$SigningThumbprint,
   [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
   [Parameter(Mandatory = $true)][string]$Output,
   [switch]$InteractiveDesktop
@@ -18,6 +19,7 @@ try {
   $env:BUTLER_APP_MANAGED_BUN_WIN32_X64 = $SignedBun
   $env:BUTLER_APP_WINDOWS_PROCESS_HOST = $SignedHost
   $env:BUTLER_WINDOWS_PROCESS_HOST = $SignedHost
+  $env:BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1 = $SigningThumbprint
   $env:BUTLER_WINDOWS_STANDARD_USER = "1"
   Push-Location $Root
   try {
@@ -34,6 +36,8 @@ try {
         "`"$SignedBun`"",
         "--signed-host",
         "`"$SignedHost`"",
+        "--signing-thumbprint",
+        "`"$SigningThumbprint`"",
         "--smoke",
         "`"$Smoke`"",
         "--output",

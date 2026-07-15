@@ -96,7 +96,9 @@ describe("App foreground lifecycle", () => {
     });
     writeAppForegroundInstance(root, launch.record);
     expect(readAppForegroundInstance(root)?.generation).toBe(launch.record.generation);
-    expect(statSync(appForegroundInstancePath(root)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(statSync(appForegroundInstancePath(root)).mode & 0o777).toBe(0o600);
+    }
     const exit = writeAppForegroundLastExit(root, {
       generation: launch.record.generation,
       exitReason: "user_quit",

@@ -1411,10 +1411,12 @@ function extractWindowsAgentArchive(artifactPath, runtimeHome, resourceRoot) {
   const inventory = readJson(inventoryPath);
   if (
     inventory?.schema !== "butler.windows-agent-archive-inventory.v1" ||
-    inventory?.hasLauncher !== true ||
     inventory?.rawTextIncluded !== false
   ) {
     throw new Error("Windows bundled Agent extraction inventory is invalid");
+  }
+  if (inventory?.hasLauncher !== true) {
+    throw new Error("bundled Agent artifact is missing bin/butler.js");
   }
   return { hasLauncher: true };
 }

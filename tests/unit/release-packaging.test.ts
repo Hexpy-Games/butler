@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { join } from "path";
 import {
   createReleaseManifest as createServiceReleaseManifest,
   SERVICE_CLI_LAUNCHER_PLATFORMS,
@@ -15,6 +15,7 @@ import {
   currentServiceCliLauncherPlatform,
 } from "../../packages/butler-agent/src/operations/release/package-service-release.ts";
 import {
+  APP_RELEASE_BUILD_PLATFORMS,
   APP_RELEASE_PLATFORMS,
   createAppReleaseManifest,
   validateAppDependencyClosureManifest,
@@ -29,10 +30,6 @@ import {
   prepareBundledAgentResource,
   prepareBundledAgentResourceFromPackage,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
-import {
-  buildLinuxServiceInstallerPackages,
-  createLinuxServiceInstallerPackageStaging,
-} from "../../packages/butler-app/scripts/release/linux-service-installer-package.ts";
 
 const root = process.cwd();
 const currentVersion = String(
@@ -395,6 +392,9 @@ test("app release manifest exposes app package files only", () => {
     "packages/butler-app/client/electron/assets/butler.icns",
   );
   expect(appReleasePaths).toContain(
+    "packages/butler-app/client/electron/assets/butler.ico",
+  );
+  expect(appReleasePaths).toContain(
     "packages/butler-app/client/electron/assets/butler-mac.png",
   );
   expect(appReleasePaths).toContain(
@@ -417,6 +417,36 @@ test("app release manifest exposes app package files only", () => {
     `butler-app-${currentVersion}-linux-arm64.deb`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
+});
+
+test("Windows app release artifacts are buildable but remain gated", () => {
+  expect(APP_RELEASE_BUILD_PLATFORMS).toContain("win32-x64");
+  expect(APP_RELEASE_PLATFORMS).not.toContain("win32-x64" as never);
+
+  const manifest = createAppReleaseManifest(root, ["win32-x64"]);
+  expect(manifest.artifacts).toHaveLength(1);
+  expect(manifest.artifacts[0]).toMatchObject({
+    platform: "win32-x64",
+    artifactName: `butler-app-${currentVersion}-win32-x64-setup.exe`,
+    distributionStatus: "gated",
+    updateFeed: null,
+    backgroundServiceCapability: {
+      installerRequirements: [{
+        platform: "win32",
+        selectedV1Path: "windows-app-foreground",
+        installerRequired: "no",
+        registersUserService: false,
+      }],
+    },
+  });
+  expect(
+    validateAppReleaseManifest(root, manifest, {
+      expectedPlatforms: ["win32-x64"],
+    }),
+  ).toEqual([]);
+  expect(validateAppReleaseManifest(root, manifest)).toContain(
+    "unexpected app release artifact platform: win32-x64",
+  );
 });
 
 test("Windows managed runtime validation accepts only x64 PE images", () => {
@@ -1060,7 +1090,9 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         appGatewayOwner: "background-agent-service",
       },
     });
-    expect(validateAppReleaseManifest(root, releaseManifest)).toEqual([]);
+    expect(validateAppReleaseManifest(root, releaseManifest, {
+      expectedPlatforms: ["linux-x64"],
+    })).toEqual([]);
     const releaseArtifact = releaseManifest.artifacts.find(
       (item: any) => item.platform === "linux-x64",
     );
@@ -1081,7 +1113,7 @@ test("app release packager embeds self-contained bundled Agent resources", () =>
         appGatewayOwner: "background-agent-service",
       },
       service_installer_bundle: {
-        servicePlatforms: ["darwin", "linux"],
+        servicePlatforms: ["linux"],
         packageArtifacts: [],
       },
       gateway_profile: "electron",
@@ -1368,7 +1400,6 @@ test("app package smoke uses real bundled Agent release resources", () => {
   const workDir = mkdtempSync(join(tmpdir(), "butler-app-smoke-agent-resource-"));
   try {
     const bundledAgent = prepareBundledAgentResource(root, workDir);
-    const servicePlatform = servicePlatformForReleasePlatform(bundledAgent.platform);
     expect(bundledAgent.artifactName).toBe(`butler-agent-${currentVersion}-${bundledAgent.platform}.tar.gz`);
     expect(bundledAgent.version).toBe(currentVersion);
     expect(existsSync(join(bundledAgent.resourceDir, bundledAgent.artifactName))).toBe(true);
@@ -1382,7 +1413,11 @@ test("app package smoke uses real bundled Agent release resources", () => {
       "service-installer",
       "installer-manifest.json",
     ))).toBe(true);
-    expectServiceInstallerPayload(bundledAgent.resourceDir, servicePlatform);
+    expect(existsSync(join(
+      bundledAgent.resourceDir,
+      "service-installer",
+      bundledAgent.platform.startsWith("darwin-") ? "darwin" : "linux",
+    ))).toBe(false);
 
     const listing = spawnSync("tar", [
       "-tzf",
@@ -1589,123 +1624,37 @@ test("app package smoke excludes macOS service registration payload", () => {
   }
 }, 60_000);
 
-test("linux service installer package staging uses package-owned systemd unit", () => {
-  const workDir = mkdtempSync(join(tmpdir(), "butler-linux-service-package-staging-"));
+test("Linux App payload declares foreground ownership without service installers", () => {
+  const workDir = mkdtempSync(join(tmpdir(), "butler-linux-foreground-payload-"));
   const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
   try {
     process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(workDir);
     const bundledAgent = prepareBundledAgentResource(root, workDir, "linux-x64");
-    const result = createLinuxServiceInstallerPackageStaging({
-      resourceDir: bundledAgent.resourceDir,
-      outDir: join(workDir, "linux-service-installer"),
-      version: currentVersion,
+    const registration = JSON.parse(readText(join(
+      bundledAgent.resourceDir,
+      "background-service-registration.json",
+    )));
+    const installer = JSON.parse(readText(join(
+      bundledAgent.resourceDir,
+      "service-installer",
+      "installer-manifest.json",
+    )));
+    expect(registration).toMatchObject({
+      installerRequired: "no",
+      registersUserService: false,
+      serviceDefinition: null,
     });
-
-    const unit = readText(result.systemdUnitPath);
-    expect(unit).toContain("ExecStart=/usr/lib/butler/butler-app-managed-agent-service");
-    expect(unit).toContain("WantedBy=default.target");
-    expect(readText(result.launcherPath)).toContain("BUTLER_APP_MANAGED_RUNTIME_POINTER");
-    expect((statSync(result.launcherPath).mode & 0o111)).not.toBe(0);
-    expect(readText(result.debControlPath)).toContain("Package: butler-app-service");
-    expect(readText(result.debControlPath)).toContain(`Version: ${currentVersion}`);
-    expect(readText(result.debPostinstPath)).toContain("systemd user service payload installed");
-    expect((statSync(result.debPostinstPath).mode & 0o111)).not.toBe(0);
-    expect(readText(result.pacmanPkgbuildPath)).toContain("pkgname=butler-app-service");
-    expect(readText(result.pacmanPkgbuildPath)).toContain(`pkgver=${currentVersion}`);
-    expect(readText(result.pacmanInstallPath)).toContain("post_install()");
-    expect(readText(result.pacmanInstallPath)).toContain("systemd user service payload installed");
-    expect(readText(result.rpmSpecPath)).toContain("Name: butler-app-service");
-    expect(readText(result.rpmSpecPath)).toContain("%post -p /bin/sh");
-    expect(readText(result.rpmSpecPath)).toContain("/usr/lib/systemd/user/butler.service");
-    expect(readText(result.rpmPostinstallPath)).toContain("systemd user service payload installed");
-    expect((statSync(result.rpmPostinstallPath).mode & 0o111)).not.toBe(0);
-  } finally {
-    if (previousLinuxRuntime === undefined) delete process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
-    else process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = previousLinuxRuntime;
-    rmSync(workDir, { recursive: true, force: true });
-  }
-}, 60_000);
-
-test("linux service installer package builder invokes deb, pacman, and rpm toolchains", () => {
-  const workDir = mkdtempSync(join(tmpdir(), "butler-linux-service-package-build-"));
-  const previousLinuxRuntime = process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64;
-  const previousDpkgDeb = process.env.BUTLER_APP_DPKG_DEB;
-  const previousMakepkg = process.env.BUTLER_APP_MAKEPKG;
-  const previousRpmbuild = process.env.BUTLER_APP_RPMBUILD;
-  try {
-    process.env.BUTLER_APP_MANAGED_BUN_LINUX_X64 = writeFakeLinuxX64Runtime(workDir);
-    const fakeDpkg = join(workDir, "fake-dpkg-deb");
-    const fakeMakepkg = join(workDir, "fake-makepkg");
-    const fakeRpmbuild = join(workDir, "fake-rpmbuild");
-    writeExecutableScript(fakeDpkg, `#!/bin/sh
-set -eu
-out="$4"
-printf 'fake deb\\n' > "$out"
-`);
-    writeExecutableScript(fakeMakepkg, `#!/bin/sh
-set -eu
-printf 'PKGEXT=%s\\n' "\${PKGEXT:-}" > "${workDir}/makepkg-env.log"
-version="$(sed -n 's/^pkgver=//p' PKGBUILD)"
-printf 'fake pacman\\n' > "butler-app-service-\${version}-1-x86_64.pkg.tar.zst"
-`);
-    writeExecutableScript(fakeRpmbuild, `#!/bin/sh
-set -eu
-topdir=""
-while [ "$#" -gt 0 ]; do
-  if [ "$1" = "--define" ]; then
-    shift
-    case "$1" in
-      _topdir*) topdir="\${1#_topdir }" ;;
-    esac
-  fi
-  shift || true
-done
-mkdir -p "$topdir/RPMS/x86_64"
-printf 'fake rpm\\n' > "$topdir/RPMS/x86_64/butler-app-service-${currentVersion}-1.x86_64.rpm"
-`);
-    process.env.BUTLER_APP_DPKG_DEB = fakeDpkg;
-    process.env.BUTLER_APP_MAKEPKG = fakeMakepkg;
-    process.env.BUTLER_APP_RPMBUILD = fakeRpmbuild;
-
-    const bundledAgent = prepareBundledAgentResource(root, workDir, "linux-x64");
-    const result = buildLinuxServiceInstallerPackages({
-      resourceDir: bundledAgent.resourceDir,
-      outDir: join(workDir, "linux-service-installer-build"),
-      version: currentVersion,
+    expect(installer).toMatchObject({
+      servicePlatform: "linux",
+      packageArtifacts: [],
     });
-
-    expect(readText(result.debPackagePath)).toBe("fake deb\n");
-    expect(readText(result.pacmanPackagePath)).toBe("fake pacman\n");
-    expect(readText(result.rpmPackagePath)).toBe("fake rpm\n");
-    expect(result.debSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(result.pacmanSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(result.rpmSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(readText(result.debSha256Path)).toBe(
-      `${result.debSha256}  butler-app-service_${currentVersion}_amd64.deb\n`,
-    );
-    expect(readText(result.rpmSha256Path)).toBe(
-      `${result.rpmSha256}  butler-app-service-${currentVersion}-1.x86_64.rpm\n`,
-    );
-    expect(readText(result.pacmanSha256Path)).toBe(
-      `${result.pacmanSha256}  butler-app-service-${currentVersion}-1-x86_64.pkg.tar.zst\n`,
-    );
-    expect(readText(join(workDir, "makepkg-env.log"))).toBe("PKGEXT=.pkg.tar.zst\n");
-    expect(readText(join(dirname(result.pacmanPkgbuildPath), "PKGBUILD"))).toContain(
-      "pkgname=butler-app-service",
-    );
-    expect(readText(join(dirname(result.rpmSpecPath), "butler-app-service.spec"))).toContain(
-      "%files",
-    );
-    for (const dir of ["BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"]) {
-      expect(existsSync(join(workDir, "linux-service-installer-build", "rpmbuild", dir))).toBe(
-        true,
-      );
-    }
+    expect(existsSync(join(
+      bundledAgent.resourceDir,
+      "service-installer",
+      "linux",
+    ))).toBe(false);
   } finally {
     restoreEnv("BUTLER_APP_MANAGED_BUN_LINUX_X64", previousLinuxRuntime);
-    restoreEnv("BUTLER_APP_DPKG_DEB", previousDpkgDeb);
-    restoreEnv("BUTLER_APP_MAKEPKG", previousMakepkg);
-    restoreEnv("BUTLER_APP_RPMBUILD", previousRpmbuild);
     rmSync(workDir, { recursive: true, force: true });
   }
 }, 60_000);
@@ -2058,15 +2007,12 @@ test("dedicated client package smoke and metadata are available", () => {
   expect(appReleasePackager).toContain("copyFileSync(iconPath, packagerIconPath)");
   expect(appReleasePackager).toContain("CFBundleIconName");
   expect(appReleasePackager).toContain("--app-bundle-id=");
-  expect(appReleasePackager).toContain("--component-plist");
-  expect(appReleasePackager).toContain("BundleIsRelocatable");
-  expect(appReleasePackager).toContain("<false/>");
-  expect(appReleasePackager).toContain('join("Applications", "Butler.app")');
+  expect(appReleasePackager).toContain("createMacDmg");
+  expect(appReleasePackager).toContain("symlinkSync(\"/Applications\"");
   expect(appReleasePackager).toContain("packaged mac app icon does not match Butler icon");
   expect(appReleasePackager).toContain("--ignore=^/dist($|/)");
-  expect(appInstallTestEnv).toContain("--component-plist");
-  expect(appInstallTestEnv).toContain("BundleIsRelocatable");
-  expect(appInstallTestEnv).toContain("<false/>");
+  expect(appInstallTestEnv).toContain("createMacDmg");
+  expect(appInstallTestEnv).toContain('runRequired("hdiutil"');
   expect(appReleaseIconPath(root)).toBe(
     join(root, "packages", "butler-app", "client", "electron", "assets", "butler.icns"),
   );
@@ -2261,82 +2207,6 @@ function isElfX64(bytes: Buffer): boolean {
     bytes[4] === 2 &&
     bytes.readUInt16LE(18) === 0x3e
   );
-}
-
-function servicePlatformForReleasePlatform(platform: string): "darwin" | "linux" {
-  if (platform.startsWith("darwin-")) return "darwin";
-  if (platform.startsWith("linux-")) return "linux";
-  throw new Error(`unsupported app release platform in test: ${platform}`);
-}
-
-function expectServiceInstallerPayload(
-  resourceDir: string,
-  servicePlatform: "darwin" | "linux",
-): void {
-  if (servicePlatform === "darwin") {
-    expect(
-      JSON.parse(
-        readText(join(
-          resourceDir,
-          "service-installer",
-          "darwin",
-          "launchd",
-          "render-contract.json",
-        )),
-      ),
-    ).toMatchObject({
-      platform: "darwin",
-      manager: "launchd",
-      requiredEscaping: "xml",
-      rawTemplateIncluded: false,
-      rawTextIncluded: false,
-    });
-    expectExecutable(join(
-      resourceDir,
-      "service-installer",
-      "darwin",
-      "pkg",
-      "postinstall",
-    ));
-    return;
-  }
-
-  expect(
-    JSON.parse(
-      readText(join(
-        resourceDir,
-        "service-installer",
-        "linux",
-        "systemd",
-        "render-contract.json",
-      )),
-    ),
-  ).toMatchObject({
-    platform: "linux",
-    manager: "systemd-user",
-    requiredEscaping: "systemd-quoted",
-    rawTemplateIncluded: false,
-    rawTextIncluded: false,
-  });
-  expectExecutable(join(resourceDir, "service-installer", "linux", "deb", "postinst"));
-  expectExecutable(join(resourceDir, "service-installer", "linux", "pacman", "post_install"));
-  expectExecutable(join(resourceDir, "service-installer", "linux", "rpm", "postinstall.sh"));
-  const launcher = join(
-    resourceDir,
-    "service-installer",
-    "linux",
-    "launcher",
-    "butler-app-managed-agent-service",
-  );
-  expectExecutable(launcher);
-  expect(readText(launcher)).toContain("BUTLER_APP_MANAGED_RUNTIME_POINTER");
-  expect(readText(launcher)).toContain("runtime_home");
-  expect(readText(launcher)).toContain("*/../*");
-}
-
-function expectExecutable(path: string): void {
-  expect(existsSync(path)).toBe(true);
-  expect((statSync(path).mode & 0o111)).not.toBe(0);
 }
 
 function writeExecutableScript(path: string, body: string): void {

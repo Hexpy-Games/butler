@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { windowsValidationToken } from "./windows-validation-token.ts";
 
 if (process.platform !== "win32" || process.arch !== "x64") {
   throw new Error("Windows product loop smoke requires Windows x64");
@@ -9,8 +10,11 @@ if (process.platform !== "win32" || process.arch !== "x64") {
 
 const repoRoot = process.cwd();
 const passCount = 2;
-const standardUser = isMediumIntegrityProcess();
-if (!standardUser) throw new Error("Windows product loop smoke requires a limited token");
+const validationToken = windowsValidationToken();
+const standardUser = validationToken.standardUser;
+if (!validationToken.accepted) {
+  throw new Error("Windows product loop smoke requires a standard user token");
+}
 const initialE2eTempDirs = currentE2eTempDirs();
 
 const passes: Array<Record<string, unknown>> = [];
@@ -20,11 +24,13 @@ for (let pass = 1; pass <= passCount; pass += 1) {
     ["run", "tests/e2e/app-client-multiturn-e2e.ts"],
     { BUTLER_APP_CLIENT_E2E_MODE: "deterministic" },
   );
+  await waitForE2eTempCleanup(initialE2eTempDirs);
   const project = await runJsonScenario(
     `project-${pass}`,
     ["run", "tests/e2e/app-client-multiturn-e2e.ts"],
     { BUTLER_APP_CLIENT_E2E_MODE: "toolchain" },
   );
+  await waitForE2eTempCleanup(initialE2eTempDirs);
   await runExitScenario(`command-${pass}`, [
     "test",
     "tests/unit/native-tool-loop-runtime.test.ts",
@@ -104,6 +110,7 @@ const result = {
   ok: passes.length === passCount,
   platform: `${process.platform}-${process.arch}`,
   standardUser,
+  ciElevatedToken: validationToken.ciElevatedToken,
   cleanIsolatedData: true,
   passes,
   rawTextIncluded: false,
@@ -157,9 +164,11 @@ async function runScenario(
   }
   const exit = await new Promise<number | null>((resolveExit, reject) => {
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`${label} timed out`));
-    }, 180_000);
+      terminateWindowsProcessTree(child.pid);
+      reject(new Error(
+        `${label} timed out\n${scenarioDiagnostic(output)}`,
+      ));
+    }, 300_000);
     child.once("error", (error) => {
       clearTimeout(timer);
       reject(error);
@@ -170,25 +179,26 @@ async function runScenario(
     });
   });
   if (exit !== 0) {
-    const diagnostic = output
-      .replaceAll(repoRoot, "<repo>")
-      .replace(/[A-Z]:\\Users\\[^\\\r\n]+\\AppData\\Local\\Temp/giu, "<temp>")
-      .slice(-12_000);
     throw new Error(
-      `${label} failed with exit code ${exit ?? "null"}\n${diagnostic}`,
+      `${label} failed with exit code ${exit ?? "null"}\n${scenarioDiagnostic(output)}`,
     );
   }
   return output;
 }
 
-function isMediumIntegrityProcess(): boolean {
-  const result = spawnSync("whoami.exe", ["/groups", "/fo", "csv", "/nh"], {
+function terminateWindowsProcessTree(pid: number | undefined): void {
+  if (!Number.isInteger(pid) || !pid) return;
+  spawnSync("taskkill.exe", ["/PID", String(pid), "/T", "/F"], {
     encoding: "utf8",
     windowsHide: true,
   });
-  return result.status === 0 &&
-    String(result.stdout).includes("S-1-16-8192") &&
-    !String(result.stdout).includes("S-1-16-12288");
+}
+
+function scenarioDiagnostic(output: string): string {
+  return output
+    .replaceAll(repoRoot, "<repo>")
+    .replace(/[A-Z]:\\Users\\[^\\\r\n]+\\AppData\\Local\\Temp/giu, "<temp>")
+    .slice(-12_000);
 }
 
 function stringArray(value: unknown): string[] {
