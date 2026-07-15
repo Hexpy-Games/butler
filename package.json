@@ -97,7 +97,7 @@
     "check:full": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts check:full:run --timeout=1800",
     "check:full:verbose": "${BUTLER_BUN:-bun} run --silent tools/validation/validate.ts check:full:run --verbose --timeout=1800",
     "check:full:run": "${BUTLER_BUN:-bun} run --silent check:run && ${BUTLER_BUN:-bun} run --silent check:packaging:run",
-    "prepare": "git rev-parse --git-dir >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
+    "prepare": "bun run --silent tools/configure-git-hooks.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
