@@ -24,10 +24,10 @@ export function buildWorkerInstructions(): string {
   const toolContract = [
     "## Tool Contract",
     "- You have one tool named `run_shell`.",
-    "- Commands execute in a non-interactive bash shell rooted at the assigned project path.",
-    "- Prefer `rg` / `rg --files` for search and `sed`, `head`, `tail`, `cat` for inspection.",
+    "- Commands execute through Butler's platform-neutral command executor rooted at the assigned project path.",
+    "- Prefer cross-platform executables with explicit arguments and `rg` / `rg --files` for search.",
     "- For config, manifest, script, log, or code searches based on user wording, prefer structured extraction or case-insensitive search before concluding absence.",
-    "- You do not have a dedicated patch-edit tool. Make precise file edits with shell commands only.",
+    "- You do not have a dedicated patch-edit tool. Make precise file edits with cross-platform runtime or command tools.",
     "- Prefer targeted edits over full-file rewrites when the file is large or easy to corrupt.",
     "- Run tests and checks yourself before finishing whenever the task touches code.",
     "- Batch read-only discovery into a small number of targeted commands. Avoid broad repository scans, vendor trees, and repeated overlapping file slices.",

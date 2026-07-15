@@ -53,7 +53,11 @@ test("native inbound queue atomically enqueues, claims, completes, and fails eve
   try {
     const queue = new NativeInboundQueue(butlerData);
     const queued = queue.enqueue(envelope("automation:test"), { source: "test" }, new Date("2026-04-27T00:00:00.000Z"));
-    expect(queued.queueId).toContain("automation:test");
+    expect(queued.queueId).toContain("automation_test");
+    for (const reserved of ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]) {
+      expect(queued.queueId).not.toContain(reserved);
+    }
+    expect(queued.envelope.eventId).toBe("automation:test");
 
     const [claimed] = queue.claimEligible(
       1,

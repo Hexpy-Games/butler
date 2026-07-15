@@ -6,8 +6,10 @@ import { clampTimeout, reportWorkerActivity, summarizeWorkerShellWorkBlock, trun
 import { extractResponseText, finalNoToolInstructions, getButlerData, getButlerHome, getFunctionCalls, MAX_TOOL_ROUNDS, modelFacingFunctionTools, parseToolArguments, writeWorkerTrace } from "../shared/runtime-support.ts";
 import { resolveDynamicOpenAIModel } from "../openai/models.ts";
 import { resolveRuntimeMessageLanguage } from "../../../agent/output/messages.ts";
-import { spawn } from "child_process";
 import { type ShellTaskOptions, workerEvidenceStatusLine, type WorkerOptions, workerPlanningStatusLine, workerReportingStatusLine } from "../runtime-contracts.ts";
+import type { CommandExecutor } from "../../../runtime/command/contracts.ts";
+import { executeLegacyCommandCompatibility } from "../../../runtime/command/legacy-command-compat.ts";
+import { createPlatformCommandExecutor } from "../../../runtime/command/platform-command-executor.ts";
 
 
 
@@ -15,68 +17,24 @@ export async function executeShellCommand(
   command: string,
   cwd: string,
   timeoutMs: number,
+  commandExecutor: CommandExecutor = createPlatformCommandExecutor(),
 ): Promise<{
   stdout: string;
   stderr: string;
   exit_code: number | null;
   timed_out: boolean;
 }> {
-  return await new Promise((resolve) => {
-    const child = spawn("/bin/bash", ["-lc", command], {
-      cwd,
-      env: {
-        ...process.env,
-        PATH: augmentedPath(),
-        BUTLER_HOME: getButlerHome(),
-        BUTLER_DATA: getButlerData(),
-        BUTLER_WORKER: "1",
-      },
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let timedOut = false;
-    let settled = false;
-    let forceKillTimer: NodeJS.Timeout | null = null;
-
-    const settle = (result: { stdout: string; stderr: string; exit_code: number | null; timed_out: boolean }) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutTimer);
-      if (forceKillTimer) clearTimeout(forceKillTimer);
-      resolve(result);
-    };
-
-    child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
-    });
-    child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
-    });
-    child.on("error", (error) => {
-      settle({
-        stdout,
-        stderr: `${stderr}${stderr ? "\n" : ""}${error.message}`,
-        exit_code: null,
-        timed_out: timedOut,
-      });
-    });
-    child.on("close", (code) => {
-      settle({
-        stdout,
-        stderr,
-        exit_code: timedOut ? null : (code ?? 0),
-        timed_out: timedOut,
-      });
-    });
-
-    const timeoutTimer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-      forceKillTimer = setTimeout(() => child.kill("SIGKILL"), 1_000);
-      forceKillTimer.unref();
-    }, timeoutMs);
-    timeoutTimer.unref();
+  return await executeLegacyCommandCompatibility(commandExecutor, {
+    command,
+    cwd,
+    timeoutMs,
+    environment: {
+      ...process.env,
+      PATH: augmentedPath(),
+      BUTLER_HOME: getButlerHome(),
+      BUTLER_DATA: getButlerData(),
+      BUTLER_WORKER: "1",
+    },
   });
 }
 
@@ -94,6 +52,7 @@ export async function runShellTask(options: ShellTaskOptions): Promise<string> {
   const codexStatelessInput = toCodexStatelessInput(options.prompt);
   const messageLanguage = options.messageLanguage ?? resolveRuntimeMessageLanguage();
   const shellTools = modelFacingFunctionTools([SHELL_TOOL]);
+  const commandExecutor = createPlatformCommandExecutor();
 
   await reportWorkerActivity(options.onActivity, {
     phase: "planning",
@@ -172,7 +131,12 @@ export async function runShellTask(options: ShellTaskOptions): Promise<string> {
           : "";
 
       log(`run_shell${justification}: ${command}`);
-      const result = await executeShellCommand(command, options.projectPath, timeoutMs);
+      const result = await executeShellCommand(
+        command,
+        options.projectPath,
+        timeoutMs,
+        commandExecutor,
+      );
       const budgetedResult = budgetToolOutput({
         result,
         command,

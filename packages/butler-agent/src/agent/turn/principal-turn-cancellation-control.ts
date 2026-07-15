@@ -4,19 +4,30 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { createConnection, createServer, Socket, type Server } from "node:net";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import {
   abortPrincipalTurnExecution,
   markPrincipalTurnCancellationDelivery,
   principalTurnCancellationRecorded,
   type PrincipalTurnExecutionIdentity,
 } from "./principal-turn-cancellation-registry.ts";
+import {
+  createWindowsCancellationControl,
+  WindowsCancellationAuthenticator,
+  windowsCancellationPipeName,
+  type WindowsCancellationControl,
+} from "./principal-turn-cancellation-auth.ts";
+import { windowsProcessHostExecutable } from "../../runtime/command/powershell-command-adapter.ts";
 
 const MAX_CANCEL_FRAME_BYTES = 4_096;
 const CANCEL_REQUEST_TIMEOUT_MS = 500;
@@ -47,6 +58,7 @@ export interface CancelExecutionResponse {
 
 export interface PrincipalTurnCancellationServer {
   socketPath: string;
+  transport: "unix-socket" | "windows-named-pipe";
   close(): Promise<void>;
 }
 
@@ -61,8 +73,15 @@ export function principalTurnCancellationSocketPath(butlerData: string): string 
 
 export async function startPrincipalTurnCancellationServer(
   butlerData: string,
+  options: {
+    platform?: NodeJS.Platform;
+    processHost?: string;
+  } = {},
 ): Promise<PrincipalTurnCancellationServer> {
   const root = resolve(butlerData);
+  if ((options.platform ?? process.platform) === "win32") {
+    return await startWindowsCancellationServer(root, options.processHost);
+  }
   const socketPath = principalTurnCancellationSocketPath(root);
   mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 });
   assertPrivateSocketDirectory(dirname(socketPath));
@@ -90,6 +109,7 @@ export async function startPrincipalTurnCancellationServer(
   chmodSync(socketPath, 0o600);
   return {
     socketPath,
+    transport: "unix-socket",
     close: async () => {
       await closeServer(server);
       rmSync(socketPath, { force: true });
@@ -100,27 +120,51 @@ export async function startPrincipalTurnCancellationServer(
 export async function signalPrincipalTurnCancellation(input: {
   butlerData: string;
   turnId: string;
-}): Promise<CancelExecutionResponse | null> {
+}, options: { platform?: NodeJS.Platform } = {}): Promise<CancelExecutionResponse | null> {
   const identity = activePrincipalTurnExecutionIdentity(input);
   if (!identity) return null;
-  return await sendCancelExecutionRequest(input.butlerData, {
-    version: 1,
-    action: "cancel_execution",
-    turn_id: identity.turnId,
-    queue_id: identity.queueId,
-    dispatch_claim_id: identity.dispatchClaimId,
-  });
+  return await sendCancelExecutionRequest(
+    input.butlerData,
+    {
+      version: 1,
+      action: "cancel_execution",
+      turn_id: identity.turnId,
+      queue_id: identity.queueId,
+      dispatch_claim_id: identity.dispatchClaimId,
+    },
+    options,
+  );
 }
 
 export async function sendCancelExecutionRequest(
   butlerData: string,
   request: CancelExecutionRequest,
+  options: { platform?: NodeJS.Platform } = {},
 ): Promise<CancelExecutionResponse | null> {
+  if ((options.platform ?? process.platform) === "win32") {
+    const control = readWindowsCancellationControl(butlerData);
+    if (!control) return null;
+    const auth = new WindowsCancellationAuthenticator<
+      CancelExecutionRequest,
+      CancelExecutionResponse
+    >(control);
+    const requestFrame = auth.createRequest(request);
+    const responseFrame = await sendCancellationFrame(control.pipe_path, requestFrame);
+    return responseFrame ? auth.acceptResponse(requestFrame, responseFrame) : null;
+  }
   const socketPath = principalTurnCancellationSocketPath(butlerData);
+  const responseFrame = await sendCancellationFrame(socketPath, JSON.stringify(request));
+  return responseFrame ? parseCancelExecutionResponse(responseFrame) : null;
+}
+
+async function sendCancellationFrame(
+  socketPath: string,
+  requestFrame: string,
+): Promise<string | null> {
   return await new Promise((resolveResponse) => {
     let settled = false;
     let responseFrame = "";
-    const finish = (response: CancelExecutionResponse | null) => {
+    const finish = (response: string | null) => {
       if (settled) return;
       settled = true;
       resolveResponse(response);
@@ -130,7 +174,7 @@ export async function sendCancelExecutionRequest(
       socket.destroy();
       finish(null);
     });
-    socket.on("connect", () => socket.write(`${JSON.stringify(request)}\n`));
+    socket.on("connect", () => socket.write(`${requestFrame}\n`));
     socket.on("data", (chunk) => {
       responseFrame += chunk.toString("utf8");
       if (Buffer.byteLength(responseFrame) > MAX_CANCEL_FRAME_BYTES) {
@@ -140,13 +184,137 @@ export async function sendCancelExecutionRequest(
       }
       const newline = responseFrame.indexOf("\n");
       if (newline < 0) return;
-      finish(parseCancelExecutionResponse(responseFrame.slice(0, newline)));
+      finish(responseFrame.slice(0, newline));
       socket.end();
     });
     socket.on("error", () => finish(null));
     socket.on("close", () => finish(null));
     socket.connect(socketPath);
   });
+}
+
+function windowsCancellationControlPath(butlerData: string): string {
+  return join(resolve(butlerData), "runtime", "cancellation", "control.json");
+}
+
+async function startWindowsCancellationServer(
+  butlerData: string,
+  processHost: string = windowsProcessHostExecutable(),
+): Promise<PrincipalTurnCancellationServer> {
+  const control = createWindowsCancellationControl(butlerData);
+  const pipeName = windowsCancellationPipeName(control);
+  const auth = new WindowsCancellationAuthenticator<
+    CancelExecutionRequest,
+    CancelExecutionResponse
+  >(control);
+  const child = spawn(processHost, ["--cancellation-pipe", pipeName], {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  const lines = createInterface({ input: child.stdout });
+  let ready = false;
+  let resolveReady!: () => void;
+  let rejectReady!: (error: Error) => void;
+  const readyPromise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolveReady = resolvePromise;
+    rejectReady = rejectPromise;
+  });
+  lines.on("line", (line) => {
+    const normalized = line.replace(/^\uFEFF/u, "");
+    if (!ready) {
+      if (normalized !== "butler-cancellation-pipe-v1") {
+        rejectReady(new Error("Windows cancellation pipe host readiness failed"));
+        return;
+      }
+      ready = true;
+      resolveReady();
+      return;
+    }
+    let responseFrame = "{}";
+    try {
+      const requestFrame = Buffer.from(normalized, "base64").toString("utf8");
+      if (Buffer.byteLength(requestFrame) <= MAX_CANCEL_FRAME_BYTES) {
+        responseFrame = auth.acceptRequest(
+          requestFrame,
+          (request) => handleCancelExecutionFrame(butlerData, JSON.stringify(request)),
+        ) ?? "{}";
+      }
+    } catch {
+      responseFrame = "{}";
+    }
+    child.stdin.write(`${Buffer.from(responseFrame).toString("base64")}\n`);
+  });
+  child.once("error", () => {
+    rejectReady(new Error("Windows cancellation pipe host failed to start"));
+  });
+  child.once("exit", () => {
+    if (!ready) rejectReady(new Error("Windows cancellation pipe host exited early"));
+  });
+  const readinessTimer = setTimeout(() => {
+    rejectReady(new Error("Windows cancellation pipe host readiness timed out"));
+  }, 2_000);
+  try {
+    await readyPromise;
+  } catch (error) {
+    child.kill();
+    lines.close();
+    throw error;
+  } finally {
+    clearTimeout(readinessTimer);
+  }
+
+  const controlPath = windowsCancellationControlPath(butlerData);
+  mkdirSync(dirname(controlPath), { recursive: true, mode: 0o700 });
+  atomicWriteJson(controlPath, control);
+  return {
+    socketPath: control.pipe_path,
+    transport: "windows-named-pipe",
+    close: async () => {
+      rmSync(controlPath, { force: true });
+      lines.close();
+      child.kill();
+      await new Promise<void>((resolveClose) => {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          resolveClose();
+          return;
+        }
+        child.once("close", () => resolveClose());
+        setTimeout(resolveClose, 1_000).unref?.();
+      });
+    },
+  };
+}
+
+function readWindowsCancellationControl(
+  butlerData: string,
+): WindowsCancellationControl | null {
+  try {
+    const control = JSON.parse(
+      readFileSync(windowsCancellationControlPath(butlerData), "utf8"),
+    ) as WindowsCancellationControl;
+    if (
+      control.version !== 1 ||
+      control.raw_text_included !== false ||
+      typeof control.generation !== "string" ||
+      typeof control.secret !== "string"
+    ) {
+      return null;
+    }
+    windowsCancellationPipeName(control);
+    return control;
+  } catch {
+    return null;
+  }
+}
+
+function atomicWriteJson(path: string, value: unknown): void {
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  renameSync(tempPath, path);
 }
 
 function handleCancelExecutionFrame(

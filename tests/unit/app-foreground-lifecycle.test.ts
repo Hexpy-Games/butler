@@ -5,6 +5,9 @@ import { join } from "node:path";
 import {
   APP_FOREGROUND_LIFECYCLE_MODES,
   appForegroundInstancePath,
+  appForegroundStartupFailurePath,
+  appForegroundStartupProgressPath,
+  clearAppForegroundStartupFailure,
   createAppForegroundLaunch,
   createRecoveryBudget,
   readAppForegroundInstance,
@@ -12,6 +15,8 @@ import {
   transitionAppForeground,
   writeAppForegroundInstance,
   writeAppForegroundLastExit,
+  writeAppForegroundStartupFailure,
+  writeAppForegroundStartupProgress,
 } from "../../packages/butler-app/client/electron/app-foreground-lifecycle.mjs";
 
 const roots: string[] = [];
@@ -52,12 +57,27 @@ describe("App foreground lifecycle", () => {
       now: () => new Date("2026-07-13T00:00:00Z"),
       generateGeneration: () => "generation-1",
       generateNonce: () => "n".repeat(32),
+      platform: "win32",
+      architecture: "x64",
     });
     const starting = transitionAppForeground(launch.record, "starting", {
       generation: "generation-1",
-      patch: { agent_host_pid: 456, process_group_id: 456 },
+      patch: {
+        agent_host_pid: 456,
+        containment_kind: "windows_job_object",
+        containment_verified: true,
+        owner_death_guaranteed: true,
+      },
     });
     expect(starting.agent_host_pid).toBe(456);
+    expect(starting).toMatchObject({
+      process_group_id: null,
+      platform: "win32",
+      architecture: "x64",
+      containment_kind: "windows_job_object",
+      containment_verified: true,
+      owner_death_guaranteed: true,
+    });
     expect(() => transitionAppForeground(starting, "ready", {
       generation: "stale-generation",
     })).toThrow("stale");
@@ -76,18 +96,73 @@ describe("App foreground lifecycle", () => {
     });
     writeAppForegroundInstance(root, launch.record);
     expect(readAppForegroundInstance(root)?.generation).toBe(launch.record.generation);
-    expect(statSync(appForegroundInstancePath(root)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(statSync(appForegroundInstancePath(root)).mode & 0o777).toBe(0o600);
+    }
     const exit = writeAppForegroundLastExit(root, {
       generation: launch.record.generation,
       exitReason: "user_quit",
       graceful: true,
       processGroupDead: true,
+      processTreeDead: true,
       portReleased: true,
       errorCode: "secret: should not pass",
     }, () => new Date("2026-07-13T00:00:00Z"));
     expect(exit.error_code).toBe("secret__should_not_pass");
+    expect(exit.process_tree_dead).toBe(true);
     expect(readFileSync(join(root, "app/runtime/foreground/last-exit.json"), "utf8"))
       .not.toContain("raw prompt");
+  });
+
+  test("persists enum-only startup failure diagnostics", () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-foreground-failure-"));
+    const failure = writeAppForegroundStartupFailure(root, {
+      platform: "win32",
+      architecture: "x64",
+      lifecycleMode: "app-foreground",
+      supervisorPhase: "failed",
+      errorCode: "early_exit:C:\\Users\\secret",
+      exitCode: 125,
+      signal: "SIGTERM",
+      containmentKind: "windows_job_object",
+      containmentVerified: true,
+      ownerDeathGuaranteed: true,
+    }, () => new Date("2026-07-15T00:00:00Z"));
+
+    expect(failure).toMatchObject({
+      error_code: "early_exit_C__Users_secret",
+      exit_code: 125,
+      containment_kind: "windows_job_object",
+      raw_text_included: false,
+    });
+    expect(readFileSync(appForegroundStartupFailurePath(root), "utf8"))
+      .not.toContain("C:\\Users");
+    clearAppForegroundStartupFailure(root);
+    expect(() => readFileSync(appForegroundStartupFailurePath(root), "utf8"))
+      .toThrow();
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  test("persists redacted startup progress", () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-foreground-progress-"));
+    const progress = writeAppForegroundStartupProgress(root, {
+      stage: "agent ready:C:\\secret",
+      platform: "win32",
+      architecture: "x64",
+      lifecycleMode: "app-foreground",
+      agentPhase: "running",
+      containmentKind: "windows_job_object",
+      trayReady: true,
+    }, () => new Date("2026-07-15T00:00:00Z"));
+    expect(progress).toMatchObject({
+      stage: "agent_ready_C__secret",
+      agent_phase: "running",
+      tray_ready: true,
+      raw_text_included: false,
+    });
+    expect(readFileSync(appForegroundStartupProgressPath(root), "utf8"))
+      .not.toContain("C:\\secret");
+    rmSync(root, { recursive: true, force: true });
   });
 
   test("bounds recovery attempts in a rolling window", () => {

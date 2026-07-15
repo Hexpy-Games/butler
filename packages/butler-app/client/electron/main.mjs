@@ -4,13 +4,14 @@ import {
   Menu,
   Notification,
   Tray,
+  autoUpdater,
   dialog,
   ipcMain,
   nativeImage,
   nativeTheme,
   shell,
 } from "electron";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -26,6 +27,9 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
+import { createAppForegroundDoctorView } from "./app-foreground-doctor.mjs";
+import { drainAppForegroundActiveWork } from "./app-foreground-drain.mjs";
+import { quitAndInstallAppUpdate } from "./app-foreground-update.mjs";
 import { reconcileAgentServiceOnAppLaunch } from "./app-agent-launch-reconciler.mjs";
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
 import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
@@ -37,12 +41,19 @@ import {
 } from "./app-managed-runtime.mjs";
 import {
   APP_FOREGROUND_LIFECYCLE_MODES,
+  appForegroundInstancePath,
+  appForegroundLastExitPath,
+  appForegroundStartupFailurePath,
+  appForegroundStartupProgressPath,
+  clearAppForegroundStartupFailure,
   createAppForegroundLaunch,
   createRecoveryBudget,
   resolveAppLifecycleMode,
   transitionAppForeground,
   writeAppForegroundInstance,
   writeAppForegroundLastExit,
+  writeAppForegroundStartupFailure,
+  writeAppForegroundStartupProgress,
 } from "./app-foreground-lifecycle.mjs";
 import {
   classifyAppForegroundActiveWork,
@@ -66,6 +77,19 @@ import {
   shouldLaunchPersistentMenuBarHelper,
 } from "./menu-bar-helper-lifecycle.mjs";
 import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
+import {
+  executeWindowsSquirrelLaunch,
+  manageWindowsSquirrelShortcut,
+  removeWindowsOperationalState,
+  resolveWindowsSquirrelLaunch,
+  resolveWindowsUpdateFeedUrl,
+  shouldDelayWindowsFirstUpdateCheck,
+  verifyWindowsInstallerPublisher,
+  WINDOWS_APP_PROTOCOL,
+  WINDOWS_APP_USER_MODEL_ID,
+  WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS,
+  windowsLoginItemSettings,
+} from "./windows-squirrel-lifecycle.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../../..");
@@ -91,6 +115,42 @@ const nativeSettingsFileName = "butler-native-settings.json";
 const macNotificationSettingsUrl =
   "x-apple.systempreferences:com.apple.Notifications-Settings.extension";
 const winNotificationSettingsUrl = "ms-settings:notifications";
+const windowsSquirrelLaunch = resolveWindowsSquirrelLaunch({
+  platform: process.platform,
+  argv: process.argv,
+  execPath: process.execPath,
+});
+if (process.platform === "win32") {
+  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+}
+if (windowsSquirrelLaunch.handled) {
+  let squirrelExitCode = 0;
+  let squirrelResult = null;
+  try {
+    squirrelResult = executeWindowsSquirrelLaunch(windowsSquirrelLaunch, {
+      manageShortcut: (shortcut) => manageWindowsSquirrelShortcut({
+        ...shortcut,
+        runPowerShell: spawnSync,
+      }),
+      setLoginItemSettings: (settings) => app.setLoginItemSettings(settings),
+      registerProtocol: (scheme, executable, args) =>
+        app.setAsDefaultProtocolClient(scheme, executable, args),
+      unregisterProtocol: (scheme, executable, args) =>
+        app.removeAsDefaultProtocolClient(scheme, executable, args),
+      cleanupOperationalState: () =>
+        removeWindowsOperationalState({ butlerData: butlerDataRoot }),
+    });
+  } catch (error) {
+    squirrelExitCode = 1;
+    console.error(`Windows Squirrel lifecycle failed: ${safeErrorCode(error)}`);
+  }
+  writeWindowsSquirrelEvidence({
+    event: windowsSquirrelLaunch.event,
+    exitCode: squirrelExitCode,
+    result: squirrelResult,
+  });
+  process.exit(squirrelExitCode);
+}
 let port = normalizePort(process.env.BUTLER_APP_SERVER_PORT, 18765);
 const explicitServerUrl = process.env.BUTLER_APP_SERVER_URL;
 let serverUrl = normalizeLocalHttpUrl(
@@ -105,6 +165,7 @@ let rendererOrigin = new URL(rendererUrl).origin;
 let serverHealthUrl = new URL("/health", serverUrl).toString();
 const isMac = process.platform === "darwin";
 const isLinux = process.platform === "linux";
+const isWindows = process.platform === "win32";
 const appLifecycleMode = resolveAppLifecycleMode({
   platform: process.platform,
   isPackaged: app.isPackaged,
@@ -142,6 +203,7 @@ let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
 let foregroundInstance = null;
+let foregroundQuitSnapshot = null;
 let legacyMigrationPromise = null;
 let suppressInitialWindowForLogin = false;
 const foregroundRecoveryBudget = createRecoveryBudget();
@@ -158,6 +220,10 @@ const nativeNotificationState = {
   lastAttemptedAt: null,
   lastShownAt: null,
 };
+autoUpdater.on("before-quit-for-update", () => {
+  isQuitting = true;
+  finalQuitAllowed = true;
+});
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
 const bundledAgentSupervisor = createBundledAgentSupervisor({
@@ -177,6 +243,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
+  onGatewayStarting: prepareAppForegroundGatewayLaunch,
 });
 const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
   ? createAppAgentNativeServiceBridge({
@@ -198,6 +265,9 @@ const agentServiceControl = createAgentServiceControl({
 });
 const firstRunSetupBridge = createFirstRunSetupBridge({
   ensureReady: ensureServer,
+  repairRuntime: async () => {
+    await bundledAgentSupervisor.repair();
+  },
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
   readRuntimeDiagnostics: readFirstRunRuntimeDiagnostics,
@@ -213,6 +283,9 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
   app.setPath("userData", explicitElectronUserDataDir);
 }
 const appSingleInstanceLock = app.requestSingleInstanceLock();
+if (appSingleInstanceLock) {
+  recordAppStartupProgress("single_instance_acquired");
+}
 if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
   scheduleSignalProcessHardExit();
 }
@@ -278,22 +351,11 @@ function managedGatewayCommand() {
     butlerData: butlerDataRoot,
     env: process.env,
     resourcesPath: process.resourcesPath,
+    ...(usesAppForegroundLifecycle
+      ? { onProgress: (stage) => recordAppStartupProgress(stage) }
+      : {}),
   });
-  if (appManagedGateway) {
-    if (usesAppForegroundLifecycle) {
-      const launch = createAppForegroundLaunch({
-        appVersion: appInfoView().version,
-        bundledAgentVersion: appManagedGateway.bundledAgentVersion,
-        port,
-      });
-      foregroundInstance = transitionAppForeground(launch.record, "starting");
-      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-      appManagedGateway.env.BUTLER_APP_FOREGROUND_GENERATION =
-        foregroundInstance.generation;
-      appManagedGateway.env.BUTLER_APP_FOREGROUND_NONCE = launch.nonce;
-    }
-    return appManagedGateway;
-  }
+  if (appManagedGateway) return appManagedGateway;
   if (app.isPackaged) {
     throw new Error("Packaged Butler App is missing bundled Agent resources.");
   }
@@ -320,6 +382,20 @@ function managedGatewayCommand() {
     cwd: undefined,
     appManaged: false,
   };
+}
+
+function prepareAppForegroundGatewayLaunch(gateway) {
+  if (!usesAppForegroundLifecycle) return;
+  const launch = createAppForegroundLaunch({
+    appVersion: appInfoView().version,
+    bundledAgentVersion: gateway.bundledAgentVersion,
+    port,
+  });
+  foregroundInstance = transitionAppForeground(launch.record, "starting");
+  writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  gateway.env ??= {};
+  gateway.env.BUTLER_APP_FOREGROUND_GENERATION = foregroundInstance.generation;
+  gateway.env.BUTLER_APP_FOREGROUND_NONCE = launch.nonce;
 }
 
 function ensureAppManagedAgentRuntimePointer() {
@@ -466,12 +542,10 @@ async function ensureServer() {
   if (usesAppForegroundLifecycle && foregroundInstance?.state === "starting") {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     foregroundInstance = transitionAppForeground(foregroundInstance, "ready", {
-      patch: {
-        agent_host_pid: diagnostics.pid,
-        process_group_id: diagnostics.pid,
-      },
+      patch: diagnostics.lifecycle_patch,
     });
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    clearAppForegroundStartupFailure(butlerDataRoot);
   }
 }
 
@@ -549,7 +623,38 @@ function readFirstRunRuntimeDiagnostics() {
     ...diagnostics,
     app_managed_runtime_failure:
       diagnostics.phase === "failed" ? readLatestAppManagedRuntimeFailure() : null,
+    desktop: createAppForegroundDoctorView({
+      platform: process.platform,
+      architecture: process.arch,
+      lifecycleMode: appLifecycleMode,
+      supervisor: diagnostics,
+      startupProgress: readAppForegroundDiagnosticRecord(
+        appForegroundStartupProgressPath(butlerDataRoot),
+      ),
+      startupFailure: diagnostics.phase === "failed"
+        ? readAppForegroundDiagnosticRecord(
+            appForegroundStartupFailurePath(butlerDataRoot),
+          )
+        : null,
+      instance: readAppForegroundDiagnosticRecord(
+        appForegroundInstancePath(butlerDataRoot),
+      ),
+      lastExit: readAppForegroundDiagnosticRecord(
+        appForegroundLastExitPath(butlerDataRoot),
+      ),
+      trayReady: Boolean(tray),
+      startAtLogin: getButlerLoginItemSettings().openAtLogin,
+      notificationsSupported: Notification.isSupported(),
+    }),
   };
+}
+
+function readAppForegroundDiagnosticRecord(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function appManagedRuntimePointerReady() {
@@ -897,13 +1002,74 @@ async function readSetupSettings() {
 function configureAppIdentity() {
   const pkg = readPackageJson(packagePath);
   app.setName(appDisplayName);
-  if (process.platform === "win32") {
-    app.setAppUserModelId("com.hexpy.butler");
+  if (isWindows) {
+    app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+    configureWindowsProtocolRegistration();
   }
   app.setAboutPanelOptions({
     applicationName: appDisplayName,
     applicationVersion: safeString(pkg.version) || "0.0.0",
   });
+}
+
+function configureWindowsProtocolRegistration() {
+  if (!isWindows || !app.isPackaged) return false;
+  const settings = windowsLoginItemSettings({
+    openAtLogin: false,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+  });
+  return app.setAsDefaultProtocolClient(
+    WINDOWS_APP_PROTOCOL,
+    settings.path,
+    settings.args,
+  );
+}
+
+function getButlerLoginItemSettings() {
+  if (!isWindows || !app.isPackaged) return app.getLoginItemSettings();
+  const settings = windowsLoginItemSettings({
+    openAtLogin: false,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+  });
+  return app.getLoginItemSettings({
+    path: settings.path,
+    args: settings.args,
+  });
+}
+
+function setButlerLoginItemSettings(openAtLogin) {
+  app.setLoginItemSettings(windowsLoginItemSettings({
+    openAtLogin,
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    execPath: process.execPath,
+  }));
+}
+
+function configureWindowsAppUpdater() {
+  const updateFeedUrl = resolveWindowsUpdateFeedUrl({
+    platform: process.platform,
+    isPackaged: app.isPackaged,
+    env: process.env,
+  });
+  if (!updateFeedUrl) return;
+  autoUpdater.setFeedURL({ url: updateFeedUrl });
+  if (process.env.BUTLER_APP_WINDOWS_AUTO_UPDATE !== "1") return;
+  const delay = shouldDelayWindowsFirstUpdateCheck({
+    platform: process.platform,
+    argv: process.argv,
+  })
+    ? WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS
+    : 0;
+  setTimeout(() => {
+    void autoUpdater.checkForUpdates().catch((error) => {
+      console.error(`Windows update check failed: ${safeErrorCode(error)}`);
+    });
+  }, delay);
 }
 
 function configureAppIcon() {
@@ -1336,12 +1502,9 @@ async function refreshTrayMenu() {
         {
           label: "Start Butler at Login",
           type: "checkbox",
-          checked: app.getLoginItemSettings().openAtLogin,
+          checked: getButlerLoginItemSettings().openAtLogin,
           click: (item) => {
-            app.setLoginItemSettings({
-              openAtLogin: item.checked,
-              openAsHidden: true,
-            });
+            setButlerLoginItemSettings(item.checked);
           },
         },
       ]
@@ -1681,13 +1844,48 @@ function isDevToolsAccelerator(input) {
   );
 }
 
+function writeWindowsSquirrelEvidence({ event, exitCode, result }) {
+  const evidenceTemplate = process.env.BUTLER_WINDOWS_SQUIRREL_EVIDENCE_PATH?.trim();
+  if (!evidenceTemplate) return;
+  const eventLabel = typeof event === "string"
+    ? event.replace(/^--squirrel-/u, "").replace(/[^a-z0-9_-]/giu, "_")
+    : "unknown";
+  const evidencePath = evidenceTemplate.replaceAll("{event}", eventLabel);
+  try {
+    mkdirSync(dirname(evidencePath), { recursive: true });
+    writeFileSync(evidencePath, `${JSON.stringify({
+      schema: "butler.windows-squirrel-lifecycle-evidence.v1",
+      event,
+      exitCode,
+      shortcutAction: result?.shortcutAction ?? null,
+      operationalStateRemoved: result?.operationalStateRemoved === true,
+      normalInitializationReached: false,
+      rawTextIncluded: false,
+    })}\n`, "utf8");
+  } catch {
+    console.error("Windows Squirrel lifecycle evidence write failed");
+  }
+}
+
+function safeErrorCode(error) {
+  const value = typeof error?.code === "string" ? error.code : "unknown_error";
+  return /^[a-z0-9_]{1,80}$/u.test(value) ? value : "unknown_error";
+}
+
 function safeString(value) {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 async function createWindow() {
-  if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge()) {
+  const eagerUnpackedForegroundStartup =
+    usesAppForegroundLifecycle && !app.isPackaged;
+  if (
+    (rendererUrl === serverUrl || eagerUnpackedForegroundStartup) &&
+    !shouldUseAppAgentNativeServiceBridge()
+  ) {
+    recordAppStartupProgress("agent_starting");
     await ensureServer();
+    recordAppStartupProgress("agent_ready");
   }
   const launchReconcile = reconcileAppAgentServiceForLaunch();
   if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
@@ -1775,6 +1973,7 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   applyDeveloperModeToWindows();
+  recordAppStartupProgress("window_ready", { windowReady: true });
   if (!suppressInitialWindowForLogin) win.show();
   suppressInitialWindowForLogin = false;
   return win;
@@ -1886,8 +2085,8 @@ ipcMain.handle("butler:first-run-setup-status", () =>
   firstRunSetupBridge.status(),
 );
 
-ipcMain.handle("butler:first-run-setup-start", async () =>
-  await firstRunSetupBridge.start(),
+ipcMain.handle("butler:first-run-setup-start", async (_event, input = {}) =>
+  await firstRunSetupBridge.start(input ?? {}),
 );
 
 ipcMain.handle("butler:ensure-server", async () => {
@@ -1945,6 +2144,36 @@ ipcMain.handle("butler:quit-app", () => {
   app.quit();
   return { quitting: true };
 });
+
+async function runAppUpdateQuit(quitAndInstall) {
+  return await quitAndInstallAppUpdate({
+    readActiveWork: readForegroundActiveWorkSnapshot,
+    confirmQuit: async (snapshot) =>
+      await confirmAppForegroundQuit({
+        snapshot,
+        showMessageBox: (options) => dialog.showMessageBox(options),
+      }),
+    stopForUpdate: async (snapshot) => {
+      if (foregroundInstance?.state === "ready") {
+        foregroundInstance = transitionAppForeground(
+          foregroundInstance,
+          "update_pending",
+        );
+        writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+      }
+      await stopServerProcess({
+        reason: "app_update",
+        activeWorkSnapshot: snapshot,
+      });
+      finalQuitAllowed = true;
+    },
+    quitAndInstall,
+  });
+}
+
+ipcMain.handle("butler:quit-and-install-update", async () =>
+  await runAppUpdateQuit(() => autoUpdater.quitAndInstall()),
+);
 
 function windowForControlEvent(event) {
   return BrowserWindow.fromWebContents(event.sender) ??
@@ -2088,6 +2317,33 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
+  if (isWindows && artifactPath.toLocaleLowerCase("en-US").endsWith(".exe")) {
+    const signature = verifyWindowsInstallerPublisher({
+      currentExecutable: process.execPath,
+      candidateInstaller: artifactPath,
+      runPowerShell: spawnSync,
+      env: process.env,
+    });
+    const update = await runAppUpdateQuit(() => {
+      const installer = spawn(artifactPath, ["--silent"], {
+        detached: true,
+        shell: false,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      installer.unref();
+      finalQuitAllowed = true;
+      app.quit();
+    });
+    return {
+      opened: update.update_started,
+      update,
+      signature: {
+        status: signature.status,
+        publisherConsistent: signature.publisherConsistent,
+      },
+    };
+  }
   const error = await shell.openPath(artifactPath);
   if (error) throw new Error(error);
   return { opened: true };
@@ -2145,7 +2401,9 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
+      recordAppStartupProgress("electron_ready");
       configureAppIdentity();
+      configureWindowsAppUpdater();
       configureAppIcon();
       suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
         app.getLoginItemSettings().wasOpenedAtLogin;
@@ -2188,9 +2446,13 @@ app.on("before-quit", (event) => {
   void confirmForegroundQuitIfNeeded().then((confirmed) => {
     if (!confirmed) {
       isQuitting = false;
+      foregroundQuitSnapshot = null;
       return;
     }
-    return stopServerProcess({ reason: "app_quit" });
+    return stopServerProcess({
+      reason: "app_quit",
+      activeWorkSnapshot: foregroundQuitSnapshot,
+    });
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;
     finalQuitAllowed = true;
@@ -2204,10 +2466,12 @@ app.on("before-quit", (event) => {
 async function confirmForegroundQuitIfNeeded() {
   if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
   const snapshot = await readForegroundActiveWorkSnapshot();
-  return await confirmAppForegroundQuit({
+  const confirmed = await confirmAppForegroundQuit({
     snapshot,
     showMessageBox: (options) => dialog.showMessageBox(options),
   });
+  foregroundQuitSnapshot = confirmed ? snapshot : null;
+  return confirmed;
 }
 
 async function readForegroundActiveWorkSnapshot() {
@@ -2239,12 +2503,34 @@ process.once("SIGTERM", () => {
   app.quit();
 });
 
-async function stopServerProcess({ reason = "app_shutdown" } = {}) {
+async function stopServerProcess({
+  reason = "app_shutdown",
+  activeWorkSnapshot = null,
+} = {}) {
+  let checkpointResult = "not_needed";
   if (usesAppForegroundLifecycle && foregroundInstance) {
+    if (
+      activeWorkSnapshot &&
+      activeWorkSnapshot.classification !== "no_active_work" &&
+      ["ready", "degraded", "update_pending"].includes(foregroundInstance.state)
+    ) {
+      foregroundInstance = transitionAppForeground(
+        foregroundInstance,
+        "draining",
+      );
+      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+      const drain = await drainAppForegroundActiveWork({
+        snapshot: activeWorkSnapshot,
+        cancelTurn: cancelForegroundTurn,
+        cancelWorker: cancelForegroundWorker,
+        readSnapshot: readForegroundActiveWorkSnapshot,
+      });
+      checkpointResult = drain.status;
+    }
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
-  await bundledAgentSupervisor.stop({ wait: true });
+  const stopResult = await bundledAgentSupervisor.stop({ wait: true });
   if (usesAppForegroundLifecycle && foregroundInstance) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
       patch: { clean_exit: true },
@@ -2254,10 +2540,34 @@ async function stopServerProcess({ reason = "app_shutdown" } = {}) {
       generation: foregroundInstance.generation,
       exitReason: reason,
       graceful: true,
-      processGroupDead: true,
+      checkpointResult,
+      processGroupDead: foregroundInstance.process_group_id !== null &&
+        stopResult.containment_released,
+      processTreeDead: stopResult.containment_released,
       portReleased: await isPortAvailable(port),
     });
   }
+  foregroundQuitSnapshot = null;
+}
+
+async function cancelForegroundTurn(turnId) {
+  const response = await appServerFetch(
+    `/turns/${encodeURIComponent(turnId)}/cancel`,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new Error("foreground_turn_cancel_failed");
+}
+
+async function cancelForegroundWorker(workerId) {
+  const response = await appServerFetch(
+    `/worker-activity/${encodeURIComponent(workerId)}/control`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
+    },
+  );
+  if (!response.ok) throw new Error("foreground_worker_cancel_failed");
 }
 
 async function appServerFetch(path, init = {}) {
@@ -2294,10 +2604,49 @@ function createProjectFolderSelectionToken(folderPath, secret) {
 }
 
 function handleFatalStartupError(error) {
+  try {
+    const diagnostics = bundledAgentSupervisor.diagnostics();
+    writeAppForegroundStartupFailure(butlerDataRoot, {
+      platform: process.platform,
+      architecture: process.arch,
+      lifecycleMode: appLifecycleMode,
+      supervisorPhase: diagnostics.phase,
+      errorCode: diagnostics.last_error_code,
+      exitCode: diagnostics.last_exit?.code,
+      signal: diagnostics.last_exit?.signal,
+      containmentKind: diagnostics.containment?.kind,
+      containmentVerified: diagnostics.containment?.verified,
+      ownerDeathGuaranteed:
+        diagnostics.containment?.owner_death_guaranteed,
+    });
+  } catch {
+    // A startup failure must still terminate even if diagnostics persistence fails.
+  }
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
   app.quit();
+}
+
+function recordAppStartupProgress(stage, {
+  windowReady = false,
+  trayReady = Boolean(tray),
+} = {}) {
+  try {
+    const diagnostics = bundledAgentSupervisor.diagnostics();
+    writeAppForegroundStartupProgress(butlerDataRoot, {
+      stage,
+      platform: process.platform,
+      architecture: process.arch,
+      lifecycleMode: appLifecycleMode,
+      agentPhase: diagnostics.phase,
+      containmentKind: diagnostics.containment?.kind,
+      trayReady,
+      windowReady,
+    });
+  } catch {
+    // Startup progress is diagnostic-only and never blocks App launch.
+  }
 }
 
 function normalizeLocalHttpUrl(value, label) {

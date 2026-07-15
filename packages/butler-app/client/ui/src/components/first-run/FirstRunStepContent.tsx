@@ -37,6 +37,7 @@ interface FirstRunStepContentProps {
   onLanguageChange: (language: FirstRunLanguage) => void;
   onLanguageContinue: () => void;
   onQuit: () => void;
+  onRepairInstall: () => void;
   onRetryModelLoad: () => void;
   onRetryModelSave: () => void;
   onRetryInstall: () => void;
@@ -58,6 +59,7 @@ export function FirstRunStepContent({
   onLanguageChange,
   onLanguageContinue,
   onQuit,
+  onRepairInstall,
   onRetryModelLoad,
   onRetryModelSave,
   onRetryInstall,
@@ -126,6 +128,9 @@ export function FirstRunStepContent({
             <>
               <Button type="button" onClick={onRetryInstall}>
                 {copy.retry}
+              </Button>
+              <Button type="button" variant="outline" onClick={onRepairInstall}>
+                {copy.repair}
               </Button>
               <Button type="button" variant="outline" onClick={onCopyDiagnostics}>
                 {copy.diagnostics}

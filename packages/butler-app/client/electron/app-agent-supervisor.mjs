@@ -106,6 +106,7 @@ export function createBundledAgentSupervisor({
   probeTimeoutMs = 2000,
   stdio = "inherit",
   onUnexpectedExit = () => {},
+  onGatewayStarting = () => {},
 }) {
   let child = null;
   let startupPromise = null;
@@ -116,6 +117,7 @@ export function createBundledAgentSupervisor({
   let lastExit = null;
   let localAuth = null;
   let activeGateway = null;
+  let readyGateway = null;
 
   async function ensureReady() {
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
@@ -130,7 +132,7 @@ export function createBundledAgentSupervisor({
     if (startupPromise) return startupPromise;
     let gateway;
     try {
-      gateway = resolveGateway();
+      gateway = readyGateway ?? resolveGateway();
     } catch (error) {
       recordError("gateway_unavailable", {
         reason: "resolve_gateway_failed",
@@ -145,6 +147,7 @@ export function createBundledAgentSupervisor({
     if ((await checkGatewayReadiness()).ready) {
       if (!gateway.commitActivation) {
         phase = "running";
+        readyGateway = gateway;
         return;
       }
       updatePort(await findAvailablePort(getPort() + 1));
@@ -190,6 +193,7 @@ export function createBundledAgentSupervisor({
     lastErrorCode = null;
     lastExit = null;
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
+    onGatewayStarting(gateway);
     const env = buildBundledAgentSupervisorEnv({
       baseEnv,
       gatewayEnv: gateway.env,
@@ -255,6 +259,7 @@ export function createBundledAgentSupervisor({
           throw activationError;
         }
         phase = "running";
+        readyGateway = gateway;
         return;
       }
       if (spawnError) {
@@ -301,10 +306,26 @@ export function createBundledAgentSupervisor({
     await ensureReady();
   }
 
+  async function repair() {
+    await stop({ wait: true });
+    readyGateway = null;
+    activeGateway = null;
+    lastErrorCode = null;
+    lastErrorDetails = null;
+    lastExit = null;
+    phase = "idle";
+    await ensureReady();
+  }
+
   async function stop({ wait = false } = {}) {
     if (!child) {
       phase = "stopped";
-      return;
+      return {
+        stopped: true,
+        containment_released:
+          activeGateway === null || activeGateway.containmentVerified === true,
+        raw_text_included: false,
+      };
     }
     phase = "stopping";
     const stopping = child;
@@ -316,6 +337,12 @@ export function createBundledAgentSupervisor({
       await new Promise((resolve) => stopping.once("exit", resolve));
       if (child === null) phase = "stopped";
     }
+    return {
+      stopped: child === null,
+      containment_released: wait && child === null &&
+        activeGateway?.containmentVerified === true,
+      raw_text_included: false,
+    };
   }
 
   function diagnostics() {
@@ -325,6 +352,23 @@ export function createBundledAgentSupervisor({
       binding: {
         host: "127.0.0.1",
         port: getPort(),
+      },
+      containment: {
+        kind: activeGateway?.containmentKind ?? "direct_child",
+        verified: activeGateway?.containmentVerified === true,
+        owner_death_guaranteed: activeGateway?.ownerDeathGuaranteed === true,
+        raw_text_included: false,
+      },
+      lifecycle_patch: {
+        agent_host_pid: typeof child?.pid === "number" ? child.pid : null,
+        process_group_id:
+          activeGateway?.recordsProcessGroupId === true &&
+            typeof child?.pid === "number"
+            ? child.pid
+            : null,
+        containment_kind: activeGateway?.containmentKind ?? "direct_child",
+        containment_verified: activeGateway?.containmentVerified === true,
+        owner_death_guaranteed: activeGateway?.ownerDeathGuaranteed === true,
       },
       bundled_agent: {
         source: activeGateway?.appManaged ? "app-managed" : "development",
@@ -409,6 +453,7 @@ export function createBundledAgentSupervisor({
   }
 
   function rollbackGatewayActivation(gateway, error) {
+    if (readyGateway === gateway) readyGateway = null;
     try {
       gateway.rollbackActivation?.(error);
     } catch {
@@ -424,6 +469,7 @@ export function createBundledAgentSupervisor({
     authHeaders,
     diagnostics,
     ensureReady,
+    repair,
     restart,
     start,
     stop,

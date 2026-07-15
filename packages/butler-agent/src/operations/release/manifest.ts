@@ -48,6 +48,7 @@ export const SERVICE_CLI_LAUNCHER_PLATFORMS = [
   "darwin-x64",
   "linux-arm64",
   "linux-x64",
+  "windows-x64",
 ] as const;
 export const SERVICE_APP_WEB_CLIENT_DIST =
   "packages/butler-agent/resources/app-client/dist";
@@ -382,7 +383,9 @@ function validateDesktopCompanionPolicy(
 export function serviceCliLauncherRelativePath(
   platform: ServiceCliLauncherPlatform,
 ): string {
-  return `packages/butler-agent/resources/cli/${platform}/butler`;
+  return `packages/butler-agent/resources/cli/${platform}/butler${
+    platform === "windows-x64" ? ".exe" : ""
+  }`;
 }
 
 export function serviceCliLauncherBuildTarget(

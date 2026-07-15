@@ -64,7 +64,7 @@ test("worker shell activity exposes a durable work block title for the UI", () =
     state: "running",
     rows: [
       {
-        safe_tool_name: "Bash",
+        safe_tool_name: "Command",
         safe_input_label: "sed -n '1,80p' README.md",
         work_block_label: "README.md 파일을 읽어 분석합니다.",
       },
@@ -147,21 +147,22 @@ test("worker runner refreshes activity while waiting on model continuation", () 
   expect(provider).toMatch(/workerReportingStatusLine/);
 });
 
-test("dispatch keeps worker in planning until the worker runner emits execution", () => {
-  const dispatch = readFileSync(join(root, "packages/butler-agent/scripts/dispatch.sh"), "utf8");
-  const planningIndex = dispatch.indexOf(
-    'write_worker_activity "planning" "Planning: structuring the worker phase and step path."',
+test("App dispatch uses the platform-neutral registered background command runtime", () => {
+  const dispatch = readFileSync(
+    join(root, "packages/butler-agent/src/agent/tool-support/background-worker-dispatch.ts"),
+    "utf8",
   );
-  const runnerIndex = dispatch.indexOf('"$BUTLER_BUN" run "$BUTLER_HOME/packages/butler-agent/scripts/run-worker.ts"');
-  const eagerExecutingIndex = dispatch.indexOf(
-    'write_worker_activity "executing" "Executing: worker implementation is running."',
+  const plannedRuntime = readFileSync(
+    join(root, "packages/butler-agent/src/agent/tool-support/planned-worker-runtime.ts"),
+    "utf8",
   );
 
-  expect(planningIndex).toBeGreaterThan(0);
-  expect(runnerIndex).toBeGreaterThan(planningIndex);
-  expect(eagerExecutingIndex).toBe(-1);
-  expect(dispatch).toContain('if [[ "$(worker_activity_phase)" != "failed" ]]');
-  expect(dispatch).toContain(". + {phase:$phase,status_line:$status_line,updated_at:$updated_at}");
+  expect(dispatch).toContain("startRegisteredBackgroundCommand");
+  expect(dispatch).toContain("createPlatformCommandExecutor");
+  expect(dispatch).toContain("executable: process.execPath");
+  expect(plannedRuntime).toContain("dispatchBackgroundWorker");
+  expect(plannedRuntime).not.toContain("dispatch.sh");
+  expect(plannedRuntime).not.toContain("/bin/bash");
 });
 
 test("worker runner writes account-model failures into activity before exiting", () => {

@@ -10,6 +10,8 @@ export interface BtccPhaseFixtureOptions {
   reportText?: string;
   publicTitle?: string;
   publicSummary?: string;
+  targetProjectId?: string | null;
+  inspectionScope?: "project" | "workspace";
   requiredEffects?: string[];
   requiresCurrentState?: boolean;
   requiresTools?: boolean;
@@ -165,10 +167,10 @@ function conceptionDecision(
     decision_id: decisionId(schema),
     action,
     target_workstream_id: null,
-    target_project_id: null,
+    target_project_id: options.targetProjectId ?? null,
     blocker_id: null,
     evidence_domain: null,
-    inspection_scope: action === "answer" ? null : "workspace",
+    inspection_scope: action === "answer" ? null : options.inspectionScope ?? "workspace",
     deliverables: action === "answer" ? [] : ["status_report"],
     continuity_updates: [],
     answer_text: answerText,

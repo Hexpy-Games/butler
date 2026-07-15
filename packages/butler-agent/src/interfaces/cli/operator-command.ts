@@ -78,6 +78,7 @@ import {
 } from "../../operations/update/component-updater.ts";
 import { readWebSearchMetrics } from "../../integrations/search/provider.ts";
 import { createConfiguredWebSearchProvider } from "../../integrations/search/provider.ts";
+import { requestBackgroundCommandCancellation } from "../../runtime/command/background-command-registry.ts";
 import { configuredPageReaderBackend, readPageConfigured } from "../../integrations/search/page-reader.ts";
 import {
   PERSONALIZATION_PROFILE_STORAGE_LABEL,
@@ -1456,15 +1457,10 @@ function work(parsed: ParsedCommonOptions, args: string[]): void {
     if (!result.ok) fail(parsed, "invalid_state", result.message, 1);
     const task = store.read(taskId);
     if (task) {
-      const pidText = existsSync(join(task.taskDir, "pid")) ? readFileSync(join(task.taskDir, "pid"), "utf8").trim() : "";
-      const pid = Number.parseInt(pidText, 10);
-      if (Number.isFinite(pid) && pid > 0) {
-        try {
-          process.kill(pid, "SIGTERM");
-        } catch {
-          // Idempotent cancellation: missing process is still cancelled in durable state.
-        }
-      }
+      requestBackgroundCommandCancellation({
+        butlerData: parsed.options.data,
+        id: taskId,
+      });
       writeFileSync(join(task.taskDir, "status"), "KILLED\n", "utf8");
     }
     print(parsed, "butler work cancel", { ...result, status: "KILLED" }, `Work cancelled: ${taskId}`);

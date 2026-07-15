@@ -85,8 +85,11 @@ function parseCommonOptions(rawArgs) {
 
 function resolveBun(data) {
   if (process.env.BUTLER_BUN) return process.env.BUTLER_BUN;
-  const managed = join(data, "runtime", "bun", "current", "bin", "bun");
-  if (existsSync(managed)) return managed;
+  const managedRoot = join(data, "runtime", "bun", "current", "bin");
+  for (const executable of ["bun.exe", "bun"]) {
+    const managed = join(managedRoot, executable);
+    if (existsSync(managed)) return managed;
+  }
   return "bun";
 }
 
@@ -547,7 +550,7 @@ switch (command) {
     run("bash", [resolve(root, "install.sh"), "--upgrade-report", ...scriptArgs(args, common)], common);
     break;
   case "doctor":
-    run("bash", [resolve(root, "packages", "butler-agent", "scripts", "doctor.sh"), ...scriptArgs(args, common)], common);
+    runBun(coreCommandArgs(command, args, common), common);
     break;
   case "status":
     runBun(coreCommandArgs(command, args, common), common);
