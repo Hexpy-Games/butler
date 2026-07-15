@@ -14,6 +14,7 @@ import type {
   CommandResult,
 } from "../../packages/butler-agent/src/runtime/command/contracts.ts";
 import { runNodeCommand } from "../../packages/butler-agent/src/runtime/command/node-command-runner.ts";
+import { legacyCommandCompatibilityRequest } from "../../packages/butler-agent/src/runtime/command/legacy-command-compat.ts";
 
 const baseResult: CommandResult = {
   stdout: "",
@@ -200,5 +201,49 @@ describe("platform command executor", () => {
     expect(commandTool).toContain("executeLegacyCommandCompatibility");
     expect(workerProvider).toContain("createPlatformCommandExecutor");
     expect(workerProvider).toContain("executeLegacyCommandCompatibility");
+  });
+
+  test("legacy shell compatibility owns one direct platform process tree", () => {
+    const input = {
+      command: "echo private-command",
+      cwd: process.cwd(),
+      environment: { PATH: process.env.PATH },
+      timeoutMs: 30_000,
+      pipefail: true,
+    };
+    const windows = legacyCommandCompatibilityRequest(input, "win32");
+    const posix = legacyCommandCompatibilityRequest(input, "darwin");
+
+    expect(windows).toMatchObject({
+      plan: {
+        steps: [{
+          executable: "powershell.exe",
+          arguments: [
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            "-",
+          ],
+        }],
+      },
+      stdin: input.command,
+      inheritEnvironment: false,
+    });
+    expect(posix).toMatchObject({
+      plan: {
+        steps: [{
+          executable: "/bin/bash",
+          arguments: ["-o", "pipefail", "-s"],
+        }],
+      },
+      stdin: input.command,
+      inheritEnvironment: false,
+    });
+    expect(JSON.stringify(windows.plan)).not.toContain(input.command);
+    expect(JSON.stringify(posix.plan)).not.toContain(input.command);
+    expect(JSON.stringify([windows.plan, posix.plan])).not.toContain("legacy-command-host");
   });
 });

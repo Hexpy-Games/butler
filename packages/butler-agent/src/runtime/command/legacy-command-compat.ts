@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import type { CommandExecutor, CommandRequest } from "./contracts.ts";
 
 export interface LegacyCommandCompatibilityInput {
@@ -19,29 +18,40 @@ export interface LegacyCommandCompatibilityResult {
 
 /**
  * Temporary boundary for model-authored command text that predates CommandPlan.
- * Platform and shell selection stay in the child host; callers still use the
- * single structured CommandExecutor port and cannot select an adapter.
+ * Platform and shell selection stay inside this infrastructure boundary;
+ * callers still use the single structured CommandExecutor port and cannot
+ * select an adapter. The command travels over stdin so the platform executor
+ * owns one child process tree without a nested runtime host.
  */
 export function legacyCommandCompatibilityRequest(
   input: LegacyCommandCompatibilityInput,
+  platform: NodeJS.Platform = process.platform,
 ): CommandRequest {
+  const shell = platform === "win32"
+    ? {
+        executable: "powershell.exe",
+        arguments: [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-Command",
+          "-",
+        ],
+      }
+    : {
+        executable: "/bin/bash",
+        arguments: input.pipefail ? ["-o", "pipefail", "-s"] : ["-s"],
+      };
   return {
     plan: {
-      steps: [{
-        executable: process.execPath,
-        arguments: [
-          "run",
-          join(import.meta.dir, "legacy-command-host.ts"),
-          ...(input.pipefail ? ["--pipefail"] : []),
-        ],
-      }],
+      steps: [shell],
     },
     cwd: input.cwd,
-    environment: {
-      ...input.environment,
-      BUTLER_LEGACY_COMMAND_BASE64: Buffer.from(input.command, "utf8").toString("base64"),
-    },
+    environment: input.environment,
     inheritEnvironment: false,
+    stdin: input.command,
     timeoutMs: input.timeoutMs,
     signal: input.signal,
   };
