@@ -14,7 +14,7 @@ import {
 } from "./process-containment.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
-const MAX_TIMEOUT_MS = 300_000;
+const MAX_TIMEOUT_MS = 3_600_000;
 
 export async function runNodeCommand(
   invocations: readonly CommandInvocation[],
@@ -86,10 +86,9 @@ export async function runNodeCommand(
     for (const invocation of invocations) {
       const child = spawn(invocation.executable, [...invocation.arguments], {
         ...(request.cwd ? { cwd: request.cwd } : {}),
-        env: {
-          ...process.env,
-          ...request.environment,
-        },
+        env: request.inheritEnvironment === false
+          ? { ...request.environment }
+          : { ...process.env, ...request.environment },
         shell: false,
         detached: containment.detached,
         stdio: ["pipe", "pipe", "pipe"],
@@ -122,12 +121,12 @@ export async function runNodeCommand(
       child.stderr.once("end", () => {
         stderr += stderrDecoders[index]!.end();
       });
-      child.once("error", (error) => {
+      child.once("error", () => {
         terminate();
         settle({
           exitCode: null,
           error: {
-            code: safeErrorCode(error),
+            code: "command_spawn_failed",
             message: "command process could not be started",
           },
         });
@@ -160,13 +159,6 @@ function pipelineExitCode(exitCodes: readonly (number | null)[]): number | null 
 function boundedTimeout(value: number | undefined): number {
   if (!Number.isFinite(value)) return DEFAULT_TIMEOUT_MS;
   return Math.max(1, Math.min(MAX_TIMEOUT_MS, Math.trunc(value!)));
-}
-
-function safeErrorCode(error: unknown): string {
-  const value = error && typeof error === "object" && "code" in error
-    ? String(error.code)
-    : "command_spawn_failed";
-  return value.replace(/[^a-z0-9_.-]/giu, "_").slice(0, 80) || "command_spawn_failed";
 }
 
 function result(input: {

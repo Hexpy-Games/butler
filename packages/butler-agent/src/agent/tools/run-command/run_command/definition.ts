@@ -3,14 +3,14 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const runCommandToolDefinition = {
   type: "function",
   name: "run_command",
-  description: "Run one non-interactive bash command in the active Butler or Steward workspace and return structured stdout, stderr, exit status, timeout state, and compacted artifact references when needed. For validation such as typecheck, lint, test, or project checks, set validation_suite to a stable suite name so the runtime records a structured validation receipt. Write generated artifacts under $BUTLER_ARTIFACTS_DIR unless they are intentional workspace files listed in output_paths. Prefer focused output over broad dumps, and keep command JSON-safe with no literal newlines.",
+  description: "Run one non-interactive command in the active Butler or Steward workspace through Butler's platform-neutral command executor and return structured stdout, stderr, exit status, timeout state, and compacted artifact references when needed. For validation such as typecheck, lint, test, or project checks, set validation_suite to a stable suite name so the runtime records a structured validation receipt. Write generated artifacts under $BUTLER_ARTIFACTS_DIR unless they are intentional workspace files listed in output_paths. Prefer cross-platform executables with explicit arguments, focused output over broad dumps, and JSON-safe command text with no literal newlines.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       command: {
         type: "string",
-        description: "The non-interactive bash command to execute.",
+        description: "The non-interactive command to execute. Prefer one cross-platform executable with explicit arguments and avoid shell-dialect-specific syntax.",
       },
       cwd: {
         type: "string",
@@ -62,8 +62,6 @@ export const runCommandToolDefinition = {
 export const runCommandToolMetadata = {
   category: "command",
   tags: [
-    "bash",
-    "shell",
     "command",
     "terminal",
     "verify",
@@ -74,7 +72,7 @@ export const runCommandToolMetadata = {
     "파일",
   ],
   safetyNotes: [
-    "Runs non-interactive bash in the active session workspace.",
+    "Runs through the platform-neutral command executor in the active session workspace.",
     "Generated Butler artifacts are auto-verified only under $BUTLER_ARTIFACTS_DIR; declare intentional workspace outputs in output_paths.",
     "Large stdout/stderr is compacted into Butler-owned tool-output artifacts.",
   ],

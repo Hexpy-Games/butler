@@ -11,10 +11,8 @@ import {
 } from "../../../../agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../../../agent/work/work-stream.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
+import { requestBackgroundCommandCancellation } from "../../../../runtime/command/background-command-registry.ts";
 import {
-  isNoSuchProcessError,
-  parsePositiveInteger,
-  readTextFile,
   workerTaskIdsForPlannedTask,
   writeWorkerActivityProjection,
 } from "./worker-task-files.ts";
@@ -183,7 +181,7 @@ export class AppWorkerControlStore {
     cancelledTaskIds.add(taskId);
     const task = taskStore.read(taskId);
     const taskDir = task?.taskDir ?? taskStore.taskDir(taskId);
-    this.terminateWorkerProcessGroup(taskDir, taskId);
+    this.terminateWorkerExecution(taskId);
     mkdirSync(taskDir, { recursive: true });
     writeFileSync(join(taskDir, "status"), "KILLED\n", "utf8");
     writeWorkerActivityProjection(
@@ -220,34 +218,11 @@ export class AppWorkerControlStore {
     }
   }
 
-  private terminateWorkerProcessGroup(taskDir: string, taskId: string): void {
-    const pgid = parsePositiveInteger(readTextFile(join(taskDir, "pgid")));
-    const pid = parsePositiveInteger(readTextFile(join(taskDir, "pid")));
-    const targets = pgid ? [-pgid] : pid ? [pid] : [];
-    if (targets.length === 0) {
+  private terminateWorkerExecution(taskId: string): void {
+    if (!requestBackgroundCommandCancellation({ butlerData: this.butlerData, id: taskId })) {
       this.appendEvent("worker_activity_cancel_no_process", {
         task_id: taskId,
       });
-      return;
     }
-
-    const signalTargets = (signal: NodeJS.Signals) => {
-      for (const target of targets) {
-        try {
-          process.kill(target, signal);
-        } catch (error) {
-          if (!isNoSuchProcessError(error)) {
-            this.appendEvent("worker_activity_cancel_signal_failed", {
-              task_id: taskId,
-              signal,
-            });
-          }
-        }
-      }
-    };
-
-    signalTargets("SIGTERM");
-    const killTimer = setTimeout(() => signalTargets("SIGKILL"), 500);
-    killTimer.unref?.();
   }
 }

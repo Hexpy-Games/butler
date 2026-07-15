@@ -6,6 +6,11 @@ import { stdin as input, stdout as output } from "process";
 import { buildMetricsStatus, renderMetricsStatus } from "../../../scripts/metrics-status.ts";
 import { buildServiceHealth, renderStatusContext } from "../../../scripts/status-context.ts";
 import { getModelProviderControlStatus, renderModelProviderControlStatus } from "../../integrations/providers/control-plane.ts";
+import {
+  buildPlatformDoctorReport,
+  PlatformDoctorInputError,
+  renderPlatformDoctorReport,
+} from "../../operations/doctor/platform-doctor.ts";
 import { parseCommonOptions, type ParsedCommonOptions } from "./args.ts";
 import { renderJsonEnvelope } from "./output.ts";
 import { loadPrivateEnvIntoProcess, privateEnvPath } from "./private-env.ts";
@@ -27,9 +32,11 @@ function numericOption(args: string[], name: string): number | null {
 
 function safeCommand(args: string[]): string {
   const safeArgs = [...args];
-  const tokenIndex = safeArgs.indexOf("--token");
-  if (tokenIndex !== -1 && safeArgs[tokenIndex + 1]) {
-    safeArgs[tokenIndex + 1] = "[redacted]";
+  for (const flag of ["--token", "--check"]) {
+    const valueIndex = safeArgs.indexOf(flag) + 1;
+    if (valueIndex > 0 && safeArgs[valueIndex]) {
+      safeArgs[valueIndex] = "[redacted]";
+    }
   }
   return `butler ${safeArgs.join(" ")}`.trim();
 }
@@ -146,6 +153,35 @@ function status(parsed: ParsedCommonOptions, args: string[]): void {
   }
 }
 
+async function doctor(parsed: ParsedCommonOptions, args: string[]): Promise<void> {
+  if (args.includes("--fix") || args.includes("--collect-logs") || args.includes("--github")) {
+    fail(
+      parsed,
+      "unsupported_logical_operation",
+      "this doctor operation is not supported by the platform-neutral diagnostic surface",
+      3,
+    );
+  }
+  try {
+    const report = await buildPlatformDoctorReport({
+      butlerHome: parsed.options.home,
+      butlerData: parsed.options.data,
+      check: optionValue(args, "--check"),
+    });
+    if (parsed.options.json) {
+      printEnvelope(parsed, "butler doctor", report);
+    } else if (!parsed.options.quiet) {
+      process.stdout.write(renderPlatformDoctorReport(report));
+    }
+    if (report.exitCode !== 0) process.exit(report.exitCode);
+  } catch (error) {
+    if (error instanceof PlatformDoctorInputError) {
+      fail(parsed, error.code, error.message, 2);
+    }
+    fail(parsed, "doctor_failed", "platform-neutral doctor failed", 4);
+  }
+}
+
 function metrics(parsed: ParsedCommonOptions, args: string[]): never | void {
   const [subcommand = "status", ...rest] = args;
   const sinceHours = numericOption(rest, "--since-hours");
@@ -243,6 +279,7 @@ async function main(): Promise<void> {
   }
   prepareEnvironment(parsed);
   const [command, ...args] = parsed.args;
+  if (command === "doctor") return await doctor(parsed, args);
   if (command === "status") return status(parsed, args);
   if (command === "metrics") return metrics(parsed, args);
   if (command === "auth" && args[0] === "status") return authStatus(parsed);

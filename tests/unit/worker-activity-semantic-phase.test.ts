@@ -69,7 +69,7 @@ function run(): void {
       actionKind: "list_files",
     });
     assertEqual(update.workBlock?.rows[0]?.tool_call_id, "call_123", "tool_call_id");
-    assertEqual(update.workBlock?.rows[0]?.safe_tool_name, "Bash", "safe_tool_name");
+    assertEqual(update.workBlock?.rows[0]?.safe_tool_name, "Command", "safe_tool_name");
 }
 
 run();

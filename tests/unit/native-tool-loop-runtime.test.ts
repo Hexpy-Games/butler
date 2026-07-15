@@ -2623,9 +2623,9 @@ test("native runtime exposes direct command toolchains to Butler and Steward ses
     expect(events.find((event) => event.kind === "work.block.started")?.payload?.activityKind)
       .toBe("ran_command");
     expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName)
-      .toBe("Bash");
+      .toBe("Command");
     expect(events.find((event) => event.kind === "tool.started")?.payload?.safeLabel)
-      .toBe("Bash: pwd");
+      .toBe("Command: pwd");
   }
 });
 
@@ -3163,7 +3163,7 @@ test("native runtime can drive the real run_command tool through the default exe
     kind: "file",
   });
   expect(events.find((event) => event.kind === "tool.started")?.payload?.toolName)
-    .toBe("Bash");
+    .toBe("Command");
 });
 
 test("native runtime resolves run_command generated artifacts from Butler data", async () => {

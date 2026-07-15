@@ -79,6 +79,28 @@ describe("platform command executor", () => {
     });
   });
 
+  test("normalizes spawn failures without reflecting executable or environment secrets", async () => {
+    const executableSecret = `missing-secret-executable-${process.pid}-${Date.now()}`;
+    const environmentSecret = "environment-secret-must-not-leak";
+    const result = await createPlatformCommandExecutor().execute({
+      plan: { steps: [{ executable: executableSecret }] },
+      environment: { PRIVATE_TEST_TOKEN: environmentSecret },
+      inheritEnvironment: false,
+    });
+
+    expect(result).toMatchObject({
+      exitCode: null,
+      timedOut: false,
+      cancelled: false,
+      error: {
+        code: "command_spawn_failed",
+        message: "command process could not be started",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(executableSecret);
+    expect(JSON.stringify(result)).not.toContain(environmentSecret);
+  });
+
   test("rejects raw shell scripts and dialect selection at the caller contract", () => {
     const invalidRequest: CommandRequest = {
       // @ts-expect-error raw platform-specific scripts are infrastructure-only
@@ -108,5 +130,40 @@ describe("platform command executor", () => {
     expect(posix).not.toMatch(/\/bin\/(?:ba)?sh|["']-(?:c|lc)["']/u);
     expect(windows).not.toMatch(/powershell\.exe|pwsh\.exe|["']-Command["']/iu);
     expect(selector).toContain('platform === "win32"');
+  });
+
+  test("keeps App-reachable command callers free of platform and process dialect ownership", () => {
+    const sources = [
+      "packages/butler-agent/src/agent/tools/run-command/run_command/executor.ts",
+      "packages/butler-agent/src/integrations/providers/worker/shell.ts",
+      "packages/butler-agent/src/agent/tool-support/planned-worker-runtime.ts",
+      "packages/butler-agent/src/agent/tool-support/background-worker-dispatch.ts",
+      "packages/butler-agent/src/gateways/app/domain/workers/worker-control-store.ts",
+    ];
+    for (const path of sources) {
+      const source = readFileSync(join(process.cwd(), path), "utf8");
+      expect(source).not.toMatch(
+        /\/bin\/bash|powershell(?:\.exe)?|pwsh(?:\.exe)?|dispatch\.sh|taskkill|process\.platform|process\.kill\(\s*-/iu,
+      );
+    }
+
+    const commandTool = readFileSync(
+      join(
+        process.cwd(),
+        "packages/butler-agent/src/agent/tools/run-command/run_command/executor.ts",
+      ),
+      "utf8",
+    );
+    const workerProvider = readFileSync(
+      join(
+        process.cwd(),
+        "packages/butler-agent/src/integrations/providers/worker/shell.ts",
+      ),
+      "utf8",
+    );
+    expect(commandTool).toContain("createPlatformCommandExecutor");
+    expect(commandTool).toContain("executeLegacyCommandCompatibility");
+    expect(workerProvider).toContain("createPlatformCommandExecutor");
+    expect(workerProvider).toContain("executeLegacyCommandCompatibility");
   });
 });
