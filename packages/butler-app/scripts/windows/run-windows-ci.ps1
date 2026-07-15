@@ -148,6 +148,12 @@ function Invoke-StandardUserSmoke {
     [switch]$InteractiveDesktop
   )
 
+  Invoke-Checked -Command "npm.cmd" -Arguments @(
+    "--prefix",
+    "packages/butler-app/client/ui",
+    "run",
+    "build"
+  )
   $groups = (& whoami.exe /groups /fo csv /nh | Out-String)
   if ($groups -notmatch "S-1-16-12288") {
     throw "Windows standard-user smoke dispatch requires an elevated parent token"
