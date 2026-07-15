@@ -1,6 +1,5 @@
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import { isRuntimeCancellationFailure } from "../../../../agent/turn/runtime-cancellation.ts";
-import { isTurnSchedulerContinuationYieldError } from "../../../../agent/turn/turn-continuation-context.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
@@ -19,6 +18,7 @@ import type {
   AppMessageResponderResult,
   SendMessageOptions,
 } from "./message-responder-contract.ts";
+import { isResponderRuntimeInterruption } from "./responder-runtime-interruption.ts";
 
 type ProgressSummaryInput = Omit<ProgressSummaryRow, "created_at"> & {
   created_at?: string;
@@ -188,6 +188,25 @@ export async function completeResponderTurn<FileRecord>(
         next_cursor: cancelledTurn.cursor,
       };
     }
+    if (isResponderRuntimeInterruption(error)) {
+      const continuation = context.markResponderNonPublicContinuation(
+        input.chatId,
+        input.turnId,
+        null,
+      );
+      context.touchChat(input.chatId);
+      await context.drainQueuedSessionMessages(
+        input.chatId,
+        input.responder,
+        input.options,
+      );
+      return {
+        reply: continuation.reply,
+        replies: continuation.replies,
+        turn: continuation.turn,
+        next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
+      };
+    }
     const limitedDelivery = appLimitedDeliveryForError(error);
     if (limitedDelivery) {
       const delivered = context.finalizeResponderLimitedDelivery(
@@ -227,12 +246,7 @@ export async function completeResponderTurn<FileRecord>(
         next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
       };
     }
-    const safeError = isTurnSchedulerContinuationYieldError(error)
-      ? {
-        code: "turn_scheduler_continuation_schedule_failed",
-        message: "Butler saved the turn state but could not commit its next continuation owner.",
-      }
-      : appSafeResponderError(error);
+    const safeError = appSafeResponderError(error);
     const failedTurn = context.updateTurnFailed(
       input.chatId,
       input.turnId,

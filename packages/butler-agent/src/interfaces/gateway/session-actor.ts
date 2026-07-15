@@ -795,9 +795,13 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         isPromptUsageModelCallBudgetError(error) ||
         isAdmissionInvariantViolation(error) ||
         isSchedulerYield;
+      const queueDispatchOwnsContinuation = hasQueueDispatchOwnership(envelope);
       const runtimeWait = !isCancelled && (
         !isContinuationFailure ||
-        (Boolean(this.options.btccInterruptionStateWriter) && !isSchedulerYield)
+        (
+          Boolean(this.options.btccInterruptionStateWriter) &&
+          (!isSchedulerYield || !queueDispatchOwnsContinuation)
+        )
       )
         ? conversationAdmission?.routeRuntimeInterruption({
           error,
@@ -1400,6 +1404,15 @@ function schedulerContinuationMetadata(envelope: InboundEnvelope): {
   const checkpointId = typeof raw.checkpointId === "string" ? raw.checkpointId.trim() : undefined;
   const schedulerItemId = typeof raw.schedulerItemId === "string" ? raw.schedulerItemId.trim() : undefined;
   return { contextAtomId, continuationForQueueId, checkpointId, schedulerItemId };
+}
+
+function hasQueueDispatchOwnership(envelope: InboundEnvelope): boolean {
+  const raw = envelope.raw && typeof envelope.raw === "object"
+    ? envelope.raw as Record<string, unknown>
+    : {};
+  return typeof raw.queueId === "string" && raw.queueId.trim().length > 0 &&
+    typeof raw.dispatchClaimId === "string" &&
+    raw.dispatchClaimId.trim().length > 0;
 }
 
 function timestampAfter(timestamp: string, offsetMs: number): string {
