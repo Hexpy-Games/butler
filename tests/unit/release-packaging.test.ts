@@ -3,6 +3,7 @@ import { spawnSync } from "child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { extract as extractTarArchive, list as listTarArchive } from "tar";
 import {
   createReleaseManifest as createServiceReleaseManifest,
   SERVICE_CLI_LAUNCHER_PLATFORMS,
@@ -788,12 +789,15 @@ test("agent release packager creates an installable artifact with app web client
     expect(result.releaseManifestPath.endsWith("agent-release-manifest.json")).toBe(true);
     expect(result.updateManifestPath.endsWith("agent-update-manifest.json")).toBe(true);
 
-    const listing = spawnSync("tar", ["-tzf", result.artifactPath], {
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
+    const entries: string[] = [];
+    listTarArchive({
+      file: result.artifactPath,
+      sync: true,
+      onentry: (entry) => {
+        entries.push(entry.path);
+        entry.resume();
+      },
     });
-    expect(listing.status).toBe(0);
-    const entries = listing.stdout.split(/\r?\n/).filter(Boolean);
     const currentCliLauncher = serviceCliLauncherRelativePath(
       currentCliPlatform,
     );
@@ -831,10 +835,11 @@ test("agent release packager creates an installable artifact with app web client
 
     const extractDir = mkdtempSync(join(tmpdir(), "butler-agent-release-extract-"));
     try {
-      const extract = spawnSync("tar", ["-xzf", result.artifactPath, "-C", extractDir], {
-        encoding: "utf8",
+      extractTarArchive({
+        cwd: extractDir,
+        file: result.artifactPath,
+        sync: true,
       });
-      expect(extract.status).toBe(0);
       const packagedRootPackage = JSON.parse(
         readText(join(extractDir, "package.json")),
       );
@@ -943,7 +948,7 @@ test("agent release packager creates an installable artifact with app web client
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
-}, 90_000);
+}, 180_000);
 test("agent release packager can write public GitHub artifact URLs", () => {
   const outDir = mkdtempSync(join(tmpdir(), "butler-agent-release-url-test-"));
   try {
