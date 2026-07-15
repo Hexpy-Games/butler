@@ -201,10 +201,15 @@ function terminateWindowsProcessTree(pid: number | undefined): void {
 }
 
 function scenarioDiagnostic(output: string): string {
-  return output
+  const redacted = output
     .replaceAll(repoRoot, "<repo>")
-    .replace(/[A-Z]:\\Users\\[^\\\r\n]+\\AppData\\Local\\Temp/giu, "<temp>")
-    .slice(-12_000);
+    .replace(/[A-Z]:\\Users\\[^\\\r\n]+\\AppData\\Local\\Temp/giu, "<temp>");
+  if (redacted.length <= 12_000) return redacted;
+  return [
+    redacted.slice(0, 4_000),
+    "... diagnostic middle omitted ...",
+    redacted.slice(-8_000),
+  ].join("\n");
 }
 
 function stringArray(value: unknown): string[] {
