@@ -216,6 +216,7 @@ export function createNativeTurnPromptRunners(input: {
       promptText: string,
       maxToolRounds = DIRECT_TOOL_CHAIN_MAX_ROUNDS,
       phase = "tool_loop",
+      options: { handoffAfterToolBatch?: boolean } = {},
     ): Promise<string> => {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const phaseMaxToolRounds = input.phaseBudgetController?.maxToolRoundsForPhase(
@@ -392,7 +393,7 @@ export function createNativeTurnPromptRunners(input: {
             tools: modelTools(toolSurface.tools),
             dynamicTools: () => modelTools(toolSurface.dynamicTools?.() ?? toolSurface.tools),
             maxToolRounds: grantedToolRounds,
-            handoffAfterToolBatch: false,
+            handoffAfterToolBatch: options.handoffAfterToolBatch === true,
             butlerData: input.deps.butlerData,
             usageAttribution: usageAttribution(phase),
             onProviderStreamEvent: projector.project,

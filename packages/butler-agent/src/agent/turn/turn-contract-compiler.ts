@@ -17,10 +17,10 @@ import {
 } from "./turn-contract-types.ts";
 
 const EXECUTION_DELIVERABLES = new Set<TurnDeliverable>([
-  "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review",
+  "ledger_spec", "ledger_plan", "ledger_work", "ledger_tasks", "code_change", "validation", "review",
 ]);
 const START_WORK_EXECUTION_DELIVERABLES = new Set<TurnDeliverable>([
-  "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation",
+  "ledger_spec", "ledger_plan", "ledger_work", "ledger_tasks", "code_change", "validation",
 ]);
 type NormalizedEvidenceSeed = Omit<RequiredEvidenceObligation, "obligation_id">;
 
@@ -322,6 +322,7 @@ function defaultEvidencePolicy(deliverable: TurnDeliverable): {
     case "grounded_answer": return { evidence_class: "grounded_answer", allowed_producers: ["public_web"] };
     case "status_report": return { evidence_class: "status_snapshot", allowed_producers: ["runtime", "project_ledger"] };
     case "ledger_spec":
+    case "ledger_plan":
     case "ledger_work": return { evidence_class: "canonical_record", allowed_producers: ["project_ledger"] };
     case "ledger_tasks": return { evidence_class: "canonical_task_set", allowed_producers: ["project_ledger"] };
     case "code_change": return { evidence_class: "durable_diff", allowed_producers: ["workspace"] };

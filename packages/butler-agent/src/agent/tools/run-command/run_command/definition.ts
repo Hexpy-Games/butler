@@ -78,4 +78,9 @@ export const runCommandToolMetadata = {
     "Generated Butler artifacts are auto-verified only under $BUTLER_ARTIFACTS_DIR; declare intentional workspace outputs in output_paths.",
     "Large stdout/stderr is compacted into Butler-owned tool-output artifacts.",
   ],
+  btcc: {
+    effects: ["observe", "workspace_mutation", "validation"],
+    purposes: ["planning", "execution", "review"],
+    scopes: ["workspace", "task"],
+  },
 } satisfies ToolCapabilityMetadata;

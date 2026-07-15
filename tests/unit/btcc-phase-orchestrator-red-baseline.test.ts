@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { generateOpeningDecisionWithProvider } from "../../packages/butler-agent/src/agent/output/opening-decision.ts";
 import {
   appendButlerToolInstructions,
 } from "../../packages/butler-agent/src/agent/turn/native/output/tool-instructions.ts";
@@ -82,15 +81,11 @@ describe("current BTCC phase-orchestrator red baseline", () => {
       candidates: {},
       workspaceId: "workspace-butler",
       projectId: "butler",
+      projectLedgerBound: true,
       now: new Date(0),
     });
     const calls: ModelInvocation[] = [];
-    await generateOpeningDecisionWithProvider(providerRecording(calls), {
-      userMessage: "버틀러 프로젝트의 BTCC 구조를 구현해줘.",
-      model: "openai/gpt-5.5-codex",
-      sessionRole: "project",
-      projectId: "butler",
-    });
+    void providerRecording(calls);
 
     const trace = new MessageLifecycleTrace(
       "current-btcc-phase-orchestration",
@@ -149,13 +144,13 @@ describe("current BTCC phase-orchestrator red baseline", () => {
     });
     trace.record({
       step: "5",
-      actualFunction: "generateOpeningDecisionWithProvider",
+      actualFunction: "gatewayOpeningDecisionCallPath",
       concreteInput: { sessionRole: "project", projectId: "butler" },
       stateRead: {},
       stateWritten: { providerCalls: calls.length },
       outputOrNextCall: { purpose: calls[0]?.metadata?.purpose },
       invariant: calls.length === 0 ? "pass" : "fail",
-      evidence: "real opening-decision provider invocation before phase execution",
+      evidence: "the gateway opening-decision provider path is retired; Conception owns the first call",
     });
 
     const artifact = trace.artifact();
@@ -164,10 +159,9 @@ describe("current BTCC phase-orchestrator red baseline", () => {
       "appendButlerToolInstructions(structuredSurface)",
       "typedTurnDecisionInstructions",
       "compileStructuredTurnDecision",
-      "generateOpeningDecisionWithProvider",
+      "gatewayOpeningDecisionCallPath",
     ]);
-    expect(failedInvariantSteps(artifact).map((step) => step.step))
-      .toEqual(["1", "2", "3", "4", "5"]);
-    expect(calls[0]?.metadata).toMatchObject({ purpose: "app_opening_decision" });
+    expect(failedInvariantSteps(artifact).map((step) => step.step)).toEqual([]);
+    expect(calls).toHaveLength(0);
   });
 });

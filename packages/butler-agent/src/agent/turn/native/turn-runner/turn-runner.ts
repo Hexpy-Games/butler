@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { recordOperationalMetric } from "../../../../operations/metrics/operational-metrics.ts";
 import { recordFirstVisibleLatencyMetric } from "../../../../operations/metrics/first-visible-latency.ts";
 import type { RuntimeTurnResult } from "../../../../test-support/harness/contracts.ts";
@@ -80,6 +81,18 @@ import { WorkStreamStore } from "../../../work/work-stream.ts";
 import { recordTurnContractAuditEvidence } from "./turn-contract-audit-evidence.ts";
 import type { ObligationToolSurfaceState } from "./obligation-tool-surface.ts";
 import { reviewProviderFinalCandidateInTurn } from "./provider-final-candidate-review.ts";
+import {
+  prepareBtccTurn,
+  type PreparedBtccTurn,
+} from "../../btcc/conception-runtime.ts";
+import { BtccNativePhaseCoordinator } from "../../btcc/native-phase-coordinator.ts";
+import { runBtccIndependentReview } from "../../btcc/independent-review.ts";
+import {
+  runBtccConsolidation,
+  runBtccReporter,
+  runBtccReportGuard,
+  type BtccReportGuardGap,
+} from "../../btcc/terminal-phases.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -92,6 +105,7 @@ export async function runNativeToolTurn({
   const useTools = ["butler", "steward", "worker"].includes(session.init.role);
   let turnId: string | undefined;
   let toolLoopUsed = false;
+  let preparedBtccTurn: PreparedBtccTurn | null = null;
   const turnKernel = createTurnKernelController("accepted");
   try {
     const audit: ToolAuditEntry[] = [];
@@ -145,6 +159,19 @@ export async function runNativeToolTurn({
         runtime: deps.runtimeId,
         model: input.model,
       });
+    preparedBtccTurn = session.init.role === "butler"
+      ? prepareBtccTurn({
+        turnInput: input,
+        butlerData: deps.butlerData,
+        turnId: context.turnId,
+        userText: context.userText,
+        projectId: projectId(session),
+        workspacePath: session.init.workspacePath,
+        conversationContextPlan: context.conversationContextPlan,
+        promptSectionIds: context.promptSections.map((section) => section.id),
+        capabilityManifest: session.init.tools ?? [],
+      })
+      : null;
     turnKernel.transitionTo("model_deciding");
     const {
       obligationToolSurfaceState,
@@ -198,10 +225,11 @@ export async function runNativeToolTurn({
       promptText: string,
       maxToolRounds?: number,
       phase?: string,
+      options?: { handoffAfterToolBatch?: boolean },
     ): Promise<string> => {
       toolLoopUsed = true;
       try {
-        return await runToolPrompt(promptText, maxToolRounds, phase);
+        return await runToolPrompt(promptText, maxToolRounds, phase, options);
       } catch (error) {
         if (!isPromptUsageModelCallBudgetError(error) && !isRetryableProviderFailure(error)) {
           throw error;
@@ -279,6 +307,7 @@ export async function runNativeToolTurn({
     };
     const initialPromptPhase = phaseBudgetController?.initialPromptPhase() ?? "initial_tool_loop";
     let candidateText: string;
+    let btccTerminalText: string | null = null;
     let activeTurnContract: ActiveTurnContract | null = null;
     let resumeCandidateId: string | undefined;
     const candidateReviewResume = finalCandidateReviewResume({
@@ -327,9 +356,33 @@ export async function runNativeToolTurn({
         runPrivateTextPrompt,
         runPrivateFunctionDecisionPrompt,
         runKernelToolPrompt,
+        preparedBtccTurn,
+        obligationToolSurfaceState,
+        audit,
       });
       candidateText = typedEntry.candidateText;
       activeTurnContract = typedEntry.activeTurnContract;
+      if (preparedBtccTurn) {
+        const coordinator = new BtccNativePhaseCoordinator(preparedBtccTurn, deps.butlerData);
+        if (coordinator.state().currentPhase === "planning") {
+          coordinator.completePlanning({
+            active: activeTurnContract,
+            frontier: obligationToolSurfaceState(),
+            audit,
+            modelCallRefs: [`runtime-call:planning:${context.turnId}`],
+          });
+        }
+        if (coordinator.state().currentPhase === "execution") {
+          coordinator.completeExecution({
+            active: activeTurnContract,
+            candidateText,
+            audit,
+            modelCallRefs: [toolLoopUsed
+              ? `model-call:execution:${context.turnId}`
+              : `runtime-call:execution:${context.turnId}`],
+          });
+        }
+      }
     } else if (useTools && input.provider.capabilities.supportsStructuredOutputs === false) {
       throw new Error("provider_capability_missing");
     } else {
@@ -337,10 +390,188 @@ export async function runNativeToolTurn({
         ? await runKernelToolPrompt(context.prompt, undefined, initialPromptPhase)
         : await runTextPrompt(context.prompt);
     }
+    if (preparedBtccTurn && activeTurnContract) {
+      const coordinator = new BtccNativePhaseCoordinator(preparedBtccTurn, deps.butlerData);
+      const seenReviewGaps = new Set<string>();
+      let reviewIndex = 0;
+      while (coordinator.state().currentPhase === "review") {
+        reviewIndex += 1;
+        const review = await runBtccIndependentReview({
+          coordinator,
+          candidateText,
+          audit,
+          reviewIndex,
+          runPrivateTextPrompt,
+        });
+        if (review.outcome === "passed") {
+          coordinator.completeReview({
+            candidateText,
+            evidenceRefs: review.evidenceRefs,
+            modelCallRefs: [review.modelCallRef],
+          });
+          break;
+        }
+        if (seenReviewGaps.has(review.gapFingerprint)) {
+          throw new Error("btcc_review_same_gap_reentry_blocked");
+        }
+        seenReviewGaps.add(review.gapFingerprint);
+        coordinator.returnReviewToExecution({
+          reasonCode: review.reasonCode,
+          requiredChange: review.requiredChange,
+          criterionId: review.criterionId,
+          evidenceRefs: review.evidenceRefs,
+          gapFingerprint: review.gapFingerprint,
+          modelCallRef: review.modelCallRef,
+        });
+        const repairPrompt = [
+          coordinator.executionPrompt(activeTurnContract),
+          "## Accepted Review ReturnTicket",
+          JSON.stringify({
+            criterionId: review.criterionId,
+            reasonCode: review.reasonCode,
+            requiredChange: review.requiredChange,
+            evidenceRefs: review.evidenceRefs,
+          }),
+        ].join("\n\n");
+        candidateText = activeTurnContract.contract.action === "answer"
+          ? await runKernelTextPrompt(repairPrompt, "btcc_execution_repair")
+          : await runKernelToolPrompt(repairPrompt, undefined, "btcc_execution_repair");
+        coordinator.completeExecution({
+          active: activeTurnContract,
+          candidateText,
+          audit,
+          modelCallRefs: [`model-call:execution-repair:${context.turnId}:${reviewIndex}`],
+        });
+      }
+      if (coordinator.state().currentPhase === "consolidation") {
+        const consolidation = await runBtccConsolidation({
+          coordinator,
+          candidateText,
+          audit,
+          runPrivateTextPrompt,
+        });
+        coordinator.completeConsolidation({
+          finalDossier: consolidation.dossier,
+          evidenceRefs: consolidation.evidenceRefs,
+          modelCallRefs: [consolidation.modelCallRef],
+        });
+      }
+      if (coordinator.state().currentPhase === "reporting") {
+        const seenReportGaps = new Set<string>();
+        let guardFeedback: BtccReportGuardGap | undefined;
+        let priorFailedCriteria: Set<string> | null = null;
+        let priorReportHash: string | null = null;
+        let reportIndex = 0;
+        while (true) {
+          reportIndex += 1;
+          const report = await runBtccReporter({
+            coordinator,
+            priorCandidateText: candidateText,
+            guardFeedback,
+            runPrivateTextPrompt,
+            reportIndex,
+          });
+          const repairedReport = repairFinalContract({
+            turnInput: input,
+            session,
+            deps,
+            useTools: toolLoopUsed,
+            prompt: context.prompt,
+            finalText: report.text,
+            audit,
+            publicDecisionContext,
+          });
+          const guardedReport = applyPublicOutputGuards({
+            turnInput: input,
+            session,
+            deps,
+            useTools: toolLoopUsed,
+            userText: context.userText,
+            finalText: repairedReport,
+            audit,
+          });
+          const reportHash = createHash("sha256").update(guardedReport).digest("hex");
+          if (priorReportHash === reportHash) {
+            throw new Error("btcc_reporting_unchanged_candidate_blocked");
+          }
+          priorReportHash = reportHash;
+          const guard = await runBtccReportGuard({
+            coordinator,
+            reportText: guardedReport,
+            runPrivateTextPrompt,
+            guardIndex: reportIndex,
+          });
+          if (guard.outcome === "passed") {
+            coordinator.completeReporting({
+              reportText: guardedReport,
+              validationPayload: {
+                status: "passed",
+                reporterCallRef: report.modelCallRef,
+                reportingItemRefs: report.reportingItemRefs,
+                evidenceRefs: report.evidenceRefs,
+                deterministicPublicGuards: "passed",
+              },
+              guardPayload: {
+                status: "passed",
+                summary: guard.summary,
+                criterionVerdicts: guard.criterionVerdicts,
+                reportHash,
+              },
+              evidenceRefs: [
+                ...audit.flatMap((entry) => entry.evidenceReceipts?.map((receipt) => receipt.id) ?? []),
+                ...audit.flatMap((entry) => entry.evidenceCapabilityReceipts?.map((receipt) => receipt.receipt_id) ?? []),
+              ],
+              reporterCallRef: report.modelCallRef,
+              guardCallRef: guard.modelCallRef,
+            });
+            btccTerminalText = guardedReport;
+            break;
+          }
+          if (seenReportGaps.has(guard.gapFingerprint)) {
+            throw new Error("btcc_reporting_same_gap_reentry_blocked");
+          }
+          const failedCriteria = new Set(
+            guard.criterionVerdicts
+              .filter((criterion) => criterion.status === "failed")
+              .map((criterion) => criterion.criterionId),
+          );
+          if (priorFailedCriteria && (
+            failedCriteria.size >= priorFailedCriteria.size ||
+            [...failedCriteria].some((criterion) => !priorFailedCriteria!.has(criterion))
+          )) {
+            throw new Error("btcc_reporting_frontier_not_monotonic");
+          }
+          priorFailedCriteria = failedCriteria;
+          seenReportGaps.add(guard.gapFingerprint);
+          coordinator.returnReporting({
+            reasonCode: guard.reasonCode,
+            requiredChange: guard.requiredChange,
+            gapFingerprint: guard.gapFingerprint,
+            modelCallRef: guard.modelCallRef,
+          });
+          guardFeedback = guard;
+        }
+      }
+    }
     throwIfRuntimeTurnAborted(input.signal);
     turnKernel.transitionTo("observing_tools");
     let decisionCheckedText: string | null = null;
-    while (true) {
+    if (btccTerminalText !== null) {
+      if (activeTurnContract) {
+        activeTurnContract.contract = completeTurnContractDelivery({
+          butlerData: deps.butlerData,
+          active: activeTurnContract,
+          turnId,
+        });
+        completeReportingWorkStreamBestEffort({
+          butlerData: deps.butlerData,
+          sessionId: input.handle.sessionId,
+          turnId,
+          audit,
+        });
+      }
+      decisionCheckedText = btccTerminalText;
+    } else while (true) {
       const deliveryOutcome = await produceFinalDeliveryOutcome({
         turnInput: input,
         session,
@@ -559,6 +790,8 @@ export async function runNativeToolTurn({
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
     throw error;
+  } finally {
+    preparedBtccTurn?.close();
   }
 }
 

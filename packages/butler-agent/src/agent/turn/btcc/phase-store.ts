@@ -162,6 +162,68 @@ export class BtccPhaseStore extends BtccRecoveryCaseStore {
     return row ? hydratePhaseState(row) : null;
   }
 
+  readGoalContract(goalContractRef: string): GoalContractV1 | null {
+    const row = this.db.query<{ contract_json: string }, [string]>(`
+      SELECT contract_json FROM btcc_goal_contracts WHERE goal_contract_ref = ?
+    `).get(goalContractRef);
+    return row ? JSON.parse(row.contract_json) as GoalContractV1 : null;
+  }
+
+  readPhaseArtifact(artifactRef: string): BtccPhaseArtifactV1 | null {
+    const row = this.db.query<{
+      turn_id: string;
+      attempt_id: string;
+      phase: BtccPhase;
+      phase_generation: number;
+      artifact_kind: BtccPhaseArtifactKind;
+      artifact_schema_version: string;
+      task_ref: string | null;
+      payload_json: string;
+      content_hash: string;
+      provenance_refs_json: string;
+      created_at: string;
+    }, [string]>(`
+      SELECT * FROM btcc_phase_artifacts WHERE artifact_ref = ?
+    `).get(artifactRef);
+    if (!row) return null;
+    return {
+      schemaVersion: BTCC_PHASE_ARTIFACT_SCHEMA,
+      artifactRef,
+      turnId: row.turn_id,
+      attemptId: row.attempt_id,
+      phase: row.phase,
+      phaseGeneration: row.phase_generation,
+      artifactKind: row.artifact_kind,
+      artifactSchemaVersion: row.artifact_schema_version,
+      ...(row.task_ref ? { taskRef: row.task_ref } : {}),
+      payload: JSON.parse(row.payload_json),
+      contentHash: row.content_hash,
+      provenanceRefs: parseStringArray(row.provenance_refs_json),
+      createdAt: row.created_at,
+    };
+  }
+
+  override acceptReportingReceipt(
+    input: Parameters<BtccRecoveryCaseStore["acceptReportingReceipt"]>[0],
+  ): ReturnType<BtccRecoveryCaseStore["acceptReportingReceipt"]> {
+    const state = this.requirePhaseState(input.turnId);
+    if (state.currentPhase !== "reporting" || state.lifecycleStatus !== "active") {
+      throw new Error("btcc_kernel_delivery_phase_not_ready");
+    }
+    const accepted = new Set(state.acceptedReceiptRefs);
+    const invalidated = new Set(state.invalidatedReceiptRefs);
+    const kernelReceipt = this.db.query<{ receipt_id: string }, [string]>(`
+      SELECT receipt_id FROM btcc_phase_receipts
+      WHERE turn_id = ? AND phase = 'reporting' AND next_state = 'kernel_delivery'
+      ORDER BY created_at DESC LIMIT 1
+    `).get(input.turnId);
+    if (!kernelReceipt || !accepted.has(kernelReceipt.receipt_id) ||
+      invalidated.has(kernelReceipt.receipt_id)) {
+      throw new Error("btcc_kernel_delivery_receipt_missing");
+    }
+    return super.acceptReportingReceipt(input);
+  }
+
   commitConceptionCheckpoint(input: {
     expectedRowVersion: number;
     checkpoint: ConceptionCheckpointV1;

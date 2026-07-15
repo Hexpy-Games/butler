@@ -40,4 +40,9 @@ export const getWorkDashboardToolMetadata = {
   satisfiesCompletionObligations: [
     "source_verified",
   ],
+  btcc: {
+    effects: ["observe"],
+    purposes: ["planning", "execution", "review"],
+    scopes: ["project", "task"],
+  },
 } satisfies ToolCapabilityMetadata;

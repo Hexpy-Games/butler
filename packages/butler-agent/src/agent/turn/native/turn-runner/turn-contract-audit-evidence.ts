@@ -120,6 +120,8 @@ function auditMatchesObligation(
         verifiedCapability(receipt, ["source_verified"], ["project_state", "workspace_inspection"]));
     case "ledger_spec":
       return ledgerMutationMatches(entry, "spec");
+    case "ledger_plan":
+      return ledgerMutationMatches(entry, "plan");
     case "ledger_work":
       return ledgerMutationMatches(entry, "work") || canonicalResumeWorkRecordMatches(entry, contract);
     case "ledger_tasks":
@@ -167,14 +169,14 @@ function recordScopeKind(receipt: EvidenceCapabilityReceipt): string | null {
   return typeof scope.record_kind === "string" ? scope.record_kind : null;
 }
 
-function ledgerMutationMatches(entry: ToolAuditEntry, kind: "spec" | "work" | "task"): boolean {
-  if (!new Set([
-    "project_ledger_create", "project_ledger_update", "project_ledger_work_update",
-    "project_ledger_work_complete", "project_ledger_task_update", "project_ledger_task_complete",
-  ]).has(entry.name)) return false;
-  if (entry.name.includes("work_")) return kind === "work";
-  if (entry.name.includes("task_")) return kind === "task";
-  return entry.args.kind === kind;
+function ledgerMutationMatches(
+  entry: ToolAuditEntry,
+  kind: "spec" | "plan" | "work" | "task",
+): boolean {
+  return (entry.evidenceCapabilityReceipts ?? []).some((receipt) =>
+    receipt.producer.kind === "project_ledger" &&
+    verifiedCapability(receipt, ["durable_artifact"], ["artifact"]) &&
+    recordScopeKind(receipt) === kind);
 }
 
 function evidenceItemIds(entry: ToolAuditEntry, obligation: RequiredEvidenceObligation): string[] {

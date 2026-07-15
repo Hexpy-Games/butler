@@ -28,6 +28,27 @@ export interface ToolCapabilityMetadata {
   tags: string[];
   safetyNotes: string[];
   satisfiesCompletionObligations?: PublicWorkObligationKind[];
+  btcc?: {
+    effects: Array<
+      | "observe"
+      | "plan_mutation"
+      | "ledger_mutation"
+      | "workspace_mutation"
+      | "validation"
+      | "external_mutation"
+      | "control"
+    >;
+    purposes: Array<
+      | "intent_grounding"
+      | "planning"
+      | "execution"
+      | "review"
+      | "consolidation"
+      | "reporting"
+    >;
+    scopes: Array<"turn" | "task" | "project" | "workspace" | "external">;
+    ledgerOperation?: "discover" | "read" | "mutate" | "validate" | "render" | "closeout";
+  };
 }
 
 export type ToolCatalogProvider = "native" | "mcp" | "plugin";

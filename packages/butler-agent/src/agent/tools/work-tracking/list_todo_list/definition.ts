@@ -37,4 +37,9 @@ export const listTodoListToolMetadata = {
   satisfiesCompletionObligations: [
     "source_verified",
   ],
+  btcc: {
+    effects: ["observe"],
+    purposes: ["planning", "execution", "review"],
+    scopes: ["task"],
+  },
 } satisfies ToolCapabilityMetadata;

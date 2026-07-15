@@ -55,4 +55,10 @@ export const queryProjectWorkToolMetadata = {
   satisfiesCompletionObligations: [
     "source_verified",
   ],
+  btcc: {
+    effects: ["observe"],
+    purposes: ["execution", "review"],
+    scopes: ["project"],
+    ledgerOperation: "read",
+  },
 } satisfies ToolCapabilityMetadata;

@@ -1,9 +1,6 @@
 import type { FunctionToolDefinition } from "../../../../integrations/providers/provider.ts";
 import type { CompiledTurnContract } from "../../turn-contract-types.ts";
-import {
-  isStateMutatingToolCall,
-  isStaticallyReadOnlyToolName,
-} from "../../tool-loop-guards.ts";
+import { isStateMutatingToolCall } from "../../tool-loop-guards.ts";
 import { isInternalProgressTool } from "../progress/runtime-semantic-progress.ts";
 import { isStatusReportEvidenceTool } from "./turn-contract-status-evidence.ts";
 import {
@@ -11,8 +8,12 @@ import {
   requireExplicitPlanUpdate,
 } from "./turn-contract-plan-admission.ts";
 import { turnContractActionRequiresExplicitPlan } from "../../turn-contract-plan-closure.ts";
+import {
+  btccCapabilityAllows,
+  btccCapabilityManifestForTool,
+} from "../../btcc/capability-manifest.ts";
 
-type LedgerRecordKind = "spec" | "work" | "task";
+type LedgerRecordKind = "spec" | "plan" | "work" | "task";
 export type ObligationToolSurfaceStage =
   | "open"
   | "work_planning"
@@ -37,11 +38,14 @@ export type ObligationToolAdmission =
 
 const LEDGER_DELIVERABLE_KINDS = new Map<string, LedgerRecordKind>([
   ["ledger_spec", "spec"],
+  ["ledger_plan", "plan"],
   ["ledger_work", "work"],
   ["ledger_tasks", "task"],
 ]);
 
-const LEDGER_RECORD_DEPENDENCY_ORDER: readonly LedgerRecordKind[] = ["spec", "work", "task"];
+const LEDGER_RECORD_DEPENDENCY_ORDER: readonly LedgerRecordKind[] = [
+  "spec", "plan", "work", "task",
+];
 
 const LEGACY_LEDGER_TOOLS = new Set([
   "inspect_project_status",
@@ -49,25 +53,6 @@ const LEGACY_LEDGER_TOOLS = new Set([
   "get_work_dashboard",
   "complete_project_work",
   "render_project_dashboard",
-]);
-
-const CLOSEOUT_TOOLS = new Set([
-  "project_ledger_update",
-  "project_ledger_check",
-  "project_ledger_work_update",
-  "project_ledger_work_complete",
-  "project_ledger_task_update",
-  "project_ledger_task_complete",
-  "update_todo_list",
-]);
-
-const LEDGER_OBLIGATION_MUTATION_TOOLS = new Set([
-  "project_ledger_create",
-  "project_ledger_update",
-  "project_ledger_work_update",
-  "project_ledger_work_complete",
-  "project_ledger_task_update",
-  "project_ledger_task_complete",
 ]);
 
 export interface ObligationToolSurfaceState {
@@ -242,21 +227,34 @@ export function createObligationToolSurfaceController(
           return [...runtimeOwnedLifecycleFiltered];
         case "work_planning":
           return runtimeOwnedLifecycleFiltered
-            .filter((tool) => tool.name === "update_todo_list" || isInternalProgressTool(tool.name))
+            .filter((tool) => isInternalProgressTool(tool.name) || btccCapabilityAllows({
+              tool,
+              purpose: "planning",
+              effects: ["plan_mutation"],
+              scopes: ["task", "turn"],
+            }))
             .map(requireExplicitPlanUpdate);
         case "ledger": {
           const remainingLedgerKinds = remainingRequiredLedgerKinds(
             requiredLedgerKinds,
             observedLedgerKinds,
           );
-          return runtimeOwnedLifecycleFiltered
-            .filter((tool) => ledgerPhaseAllows(tool.name, {
+          const allowedLedgerOperations = ledgerOperationsForState({
             discoveryObserved: ledgerDiscoveryObserved,
             discoveryCandidateCount: ledgerDiscoveryCandidateCount,
             allRequiredKindsObserved: [...requiredLedgerKinds]
               .every((kind) => observedLedgerKinds.has(kind)),
             checkPending: checkedMutationSequence !== mutationSequence,
             canonicalResumeEvidence,
+          });
+          return runtimeOwnedLifecycleFiltered
+            .filter((tool) => (ledgerDiscoveryObserved && isInternalProgressTool(tool.name)) ||
+              btccCapabilityAllows({
+              tool,
+              purpose: "planning",
+              effects: ["observe", "ledger_mutation"],
+              scopes: ["project"],
+              ledgerOperations: allowedLedgerOperations,
             }))
             .filter((tool) =>
               tool.name !== "project_ledger_create" || remainingLedgerKinds.length > 0)
@@ -266,27 +264,30 @@ export function createObligationToolSurfaceController(
         case "workspace_execution":
         case "workspace_repair":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
-            !isLedgerOnlyTool(tool.name) || CLOSEOUT_TOOLS.has(tool.name) ||
+            isInternalProgressTool(tool.name) ||
+            executionCapabilityAllows(tool) ||
+            ledgerCloseoutCapabilityAllows(tool) ||
             canonicalResumeEvidenceTool(tool.name));
         case "workspace_action":
           return runtimeOwnedLifecycleFiltered
-            .filter((tool) => workspaceActionSurfaceAllows(
-              tool.name,
-              workspaceActionRejections,
-              canonicalResumeEvidence,
-            ))
+            .filter((tool) => isInternalProgressTool(tool.name) ||
+              (canonicalResumeEvidence && canonicalResumeEvidenceTool(tool.name)) ||
+              workspaceActionCapabilityAllows(tool, workspaceActionRejections))
             .map(requireWorkspaceMutation);
         case "workspace_validation":
           return runtimeOwnedLifecycleFiltered
-            .filter((tool) => tool.name === "run_command" || canonicalResumeEvidenceTool(tool.name))
+            .filter((tool) => validationCapabilityAllows(tool) ||
+              canonicalResumeEvidenceTool(tool.name))
             .map(requireStructuredValidation);
         case "status_inspection":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
             isInternalProgressTool(tool.name) ||
-            (!statusObserved && isStatusReportEvidenceTool(tool.name)));
+            (!statusObserved && isStatusReportEvidenceTool(tool.name) &&
+              observationCapabilityAllows(tool)));
         case "closeout":
           return runtimeOwnedLifecycleFiltered.filter((tool) =>
-            CLOSEOUT_TOOLS.has(tool.name) || isInternalProgressTool(tool.name));
+            isInternalProgressTool(tool.name) || planningCloseoutCapabilityAllows(tool) ||
+            ledgerCloseoutCapabilityAllows(tool));
       }
     },
     authorize(input) {
@@ -348,7 +349,7 @@ export function createObligationToolSurfaceController(
         ledgerDiscoveryCandidateCount = Math.max(1, ledgerDiscoveryCandidateCount);
         if (requiredLedgerKinds.has(canonicalKind)) observedLedgerKinds.add(canonicalKind);
       }
-      const kind = ledgerRecordKindForMutation(input.name, input.args);
+      const kind = ledgerRecordKindForMutationResult(input.result);
       if (kind) {
         ledgerDiscoveryObserved = true;
         observedLedgerKinds.add(kind);
@@ -482,24 +483,13 @@ function requireWorkspaceMutation(tool: FunctionToolDefinition): FunctionToolDef
   };
 }
 
-function workspaceActionSurfaceAllows(
-  name: string,
-  rejectionCount: number,
-  canonicalResumeEvidence: boolean,
-): boolean {
-  if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
-  if (canonicalResumeEvidence && name === "project_ledger_show") return true;
-  if (rejectionCount > 0) return name === "write_file";
-  return !isLedgerOnlyTool(name) && !isStaticallyReadOnlyToolName(name);
-}
-
 function workspaceActionCallAllowed(
   name: string,
   args: Record<string, unknown>,
   rejectionCount: number,
 ): boolean {
   if (name === "update_todo_list" || isInternalProgressTool(name)) return true;
-  if (rejectionCount > 0) return name === "write_file";
+  if (rejectionCount > 0) return isDirectDeclaredWorkspaceMutation(name);
   if (name === "run_command") return args.state_effect === "mutation";
   return isWorkspaceMutation(name, args);
 }
@@ -520,24 +510,93 @@ function workspaceActionRejection(rejectionCount: number): ObligationToolAdmissi
   };
 }
 
-function ledgerPhaseAllows(name: string, state: {
+function ledgerOperationsForState(state: {
   discoveryObserved: boolean;
   discoveryCandidateCount: number;
   allRequiredKindsObserved: boolean;
   checkPending: boolean;
   canonicalResumeEvidence: boolean;
-}): boolean {
+}): Array<"discover" | "read" | "mutate" | "validate" | "render" | "closeout"> {
   if (!state.discoveryObserved) {
-    return name === "project_ledger_list" ||
-      (state.canonicalResumeEvidence && name === "project_ledger_show");
+    return state.canonicalResumeEvidence ? ["discover", "read"] : ["discover"];
   }
-  if (isInternalProgressTool(name)) return true;
   if (state.allRequiredKindsObserved) {
-    return name === "project_ledger_check" && state.checkPending;
+    return state.checkPending ? ["validate"] : [];
   }
-  if (LEDGER_OBLIGATION_MUTATION_TOOLS.has(name)) return true;
-  if (name === "project_ledger_show") return state.discoveryCandidateCount > 0;
-  return false;
+  return state.discoveryCandidateCount > 0 ? ["read", "mutate"] : ["mutate"];
+}
+
+function executionCapabilityAllows(tool: FunctionToolDefinition): boolean {
+  return btccCapabilityAllows({
+    tool,
+    purpose: "execution",
+    effects: [
+      "observe",
+      "plan_mutation",
+      "workspace_mutation",
+      "validation",
+      "external_mutation",
+      "control",
+    ],
+    scopes: ["turn", "task", "workspace", "external"],
+  });
+}
+
+function workspaceActionCapabilityAllows(
+  tool: FunctionToolDefinition,
+  rejectionCount: number,
+): boolean {
+  if (rejectionCount > 0 && !isDirectDeclaredWorkspaceMutation(tool.name)) return false;
+  return btccCapabilityAllows({
+    tool,
+    purpose: "execution",
+    effects: ["workspace_mutation", "external_mutation"],
+    scopes: ["workspace", "task", "external"],
+    requireDeclared: true,
+  });
+}
+
+function isDirectDeclaredWorkspaceMutation(name: string): boolean {
+  const manifest = btccCapabilityManifestForTool({ name, parameters: {} });
+  return manifest.length > 0 && manifest.every((entry) =>
+    entry.declared && entry.effect === "workspace_mutation" &&
+    entry.scopes.includes("workspace"));
+}
+
+function validationCapabilityAllows(tool: FunctionToolDefinition): boolean {
+  return btccCapabilityAllows({
+    tool,
+    purpose: "execution",
+    effects: ["validation"],
+    scopes: ["workspace", "task", "project", "external"],
+  });
+}
+
+function observationCapabilityAllows(tool: FunctionToolDefinition): boolean {
+  return btccCapabilityAllows({
+    tool,
+    purpose: "review",
+    effects: ["observe", "validation"],
+  });
+}
+
+function planningCloseoutCapabilityAllows(tool: FunctionToolDefinition): boolean {
+  return btccCapabilityAllows({
+    tool,
+    purpose: "planning",
+    effects: ["plan_mutation"],
+    scopes: ["turn", "task", "project"],
+  });
+}
+
+function ledgerCloseoutCapabilityAllows(tool: FunctionToolDefinition): boolean {
+  return btccCapabilityAllows({
+    tool,
+    purpose: "execution",
+    effects: ["observe", "ledger_mutation"],
+    scopes: ["project"],
+    ledgerOperations: ["validate", "render", "closeout"],
+  });
 }
 
 function ledgerDiscoveryTool(
@@ -620,15 +679,19 @@ function isWorkspaceMutation(name: string, args: Record<string, unknown>): boole
     !isInternalProgressTool(name) && isStateMutatingToolCall(name, args);
 }
 
-function ledgerRecordKindForMutation(
-  name: string,
-  args: Record<string, unknown>,
-): LedgerRecordKind | null {
-  if (name === "project_ledger_task_update" || name === "project_ledger_task_complete") return "task";
-  if (name === "project_ledger_work_update" || name === "project_ledger_work_complete") return "work";
-  if (name !== "project_ledger_create" && name !== "project_ledger_update") return null;
-  const kind = args.kind;
-  return kind === "spec" || kind === "work" || kind === "task" ? kind : null;
+function ledgerRecordKindForMutationResult(value: unknown): LedgerRecordKind | null {
+  const receipt = evidenceCapabilityReceipts(value).find((candidate) => {
+    const record = recordValue(candidate);
+    const producer = recordValue(record.producer);
+    return producer.kind === "project_ledger" &&
+      record.capability === "durable_artifact" &&
+      record.evidence_kind === "artifact" &&
+      record.verified === true && record.maturity === "verified";
+  });
+  const kind = recordValue(recordValue(receipt).scope).record_kind;
+  return kind === "spec" || kind === "plan" || kind === "work" || kind === "task"
+    ? kind
+    : null;
 }
 
 function successful(value: unknown): boolean {
@@ -667,7 +730,8 @@ function canonicalResumeLedgerRecordKind(
   });
   if (!receipt) return null;
   const scopeKind = recordValue(recordValue(receipt).scope).record_kind;
-  return scopeKind === "spec" || scopeKind === "work" || scopeKind === "task"
+  return scopeKind === "spec" || scopeKind === "plan" || scopeKind === "work" ||
+      scopeKind === "task"
     ? scopeKind
     : null;
 }

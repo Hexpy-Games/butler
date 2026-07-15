@@ -29,7 +29,7 @@ export interface ContinuityUpdate {
 }
 
 export const TURN_DELIVERABLES = [
-  "grounded_answer", "status_report", "ledger_spec", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report",
+  "grounded_answer", "status_report", "ledger_spec", "ledger_plan", "ledger_work", "ledger_tasks", "code_change", "validation", "review", "final_report",
 ] as const;
 export type TurnDeliverable = typeof TURN_DELIVERABLES[number];
 
@@ -69,6 +69,7 @@ export interface TurnContractDecision {
   public_summary: string;
   public_rationale?: string;
   immediate_next_step?: string;
+  goal_contract_candidate?: import("./btcc/phase-types.ts").GoalContractCandidateV1;
 }
 
 export interface EvidenceObligationSeed {

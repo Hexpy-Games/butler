@@ -102,4 +102,9 @@ export const updateTodoListToolMetadata = {
   safetyNotes: [
     "Use for non-trivial multi-step work, not simple chat answers.",
   ],
+  btcc: {
+    effects: ["plan_mutation"],
+    purposes: ["planning", "execution"],
+    scopes: ["task"],
+  },
 } satisfies ToolCapabilityMetadata;
