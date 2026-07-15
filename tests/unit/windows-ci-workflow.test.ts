@@ -18,10 +18,12 @@ const entrypoint = readFileSync(
   ),
   "utf8",
 );
+const gitAttributes = readFileSync(join(root, ".gitattributes"), "utf8");
 
 test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(workflow).toContain("runs-on: windows-latest");
   expect(workflow).toContain("shell: pwsh");
+  expect(gitAttributes).toContain("* text=auto eol=lf");
   expect(workflow).toContain("bun-version: 1.3.11");
   expect(workflow).toContain("-Mode Setup");
   expect(workflow).toContain("-Mode Quality");
