@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import {
   PlatformCommandExecutor,
@@ -69,6 +71,11 @@ describe("platform command executor", () => {
       pipeline: true,
       cancellation: true,
       timeout: true,
+      unicode: true,
+      unicodeChunkBoundary: true,
+      quoting: true,
+      duration: true,
+      forceTermination: true,
     });
   });
 
@@ -79,5 +86,27 @@ describe("platform command executor", () => {
     };
 
     expect(JSON.stringify(invalidRequest)).not.toContain("platform");
+  });
+
+  test("keeps shell and platform decisions out of the caller contract", () => {
+    const runtimeRoot = join(
+      process.cwd(),
+      "packages",
+      "butler-agent",
+      "src",
+      "runtime",
+      "command",
+    );
+    const contracts = readFileSync(join(runtimeRoot, "contracts.ts"), "utf8");
+    const runner = readFileSync(join(runtimeRoot, "node-command-runner.ts"), "utf8");
+    const posix = readFileSync(join(runtimeRoot, "posix-command-adapter.ts"), "utf8");
+    const windows = readFileSync(join(runtimeRoot, "powershell-command-adapter.ts"), "utf8");
+    const selector = readFileSync(join(runtimeRoot, "platform-command-executor.ts"), "utf8");
+
+    expect(contracts).not.toMatch(/platform|dialect|shell|bash|powershell/iu);
+    expect(runner).toContain("shell: false");
+    expect(posix).not.toMatch(/\/bin\/(?:ba)?sh|["']-(?:c|lc)["']/u);
+    expect(windows).not.toMatch(/powershell\.exe|pwsh\.exe|["']-Command["']/iu);
+    expect(selector).toContain('platform === "win32"');
   });
 });

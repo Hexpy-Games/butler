@@ -24,6 +24,7 @@ import {
 import {
   appReleaseIconPath,
   appReleasePackagerIconPath,
+  isWindowsX64Pe,
   createAppReleasePackage,
   prepareBundledAgentResource,
   prepareBundledAgentResourceFromPackage,
@@ -138,6 +139,7 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     "darwin-x64",
     "linux-arm64",
     "linux-x64",
+    "windows-x64",
   ]);
   expect(manifest.cliLaunchers.map((launcher) => launcher.path)).toContain(
     "packages/butler-agent/resources/cli/darwin-arm64/butler",
@@ -415,6 +417,20 @@ test("app release manifest exposes app package files only", () => {
     `butler-app-${currentVersion}-linux-arm64.deb`,
   ]);
   expect(validateAppReleaseManifest(root, manifest)).toEqual([]);
+});
+
+test("Windows managed runtime validation accepts only x64 PE images", () => {
+  const x64 = Buffer.alloc(256);
+  x64.write("MZ", 0, "ascii");
+  x64.writeUInt32LE(0x80, 0x3c);
+  x64.write("PE\0\0", 0x80, "binary");
+  x64.writeUInt16LE(0x8664, 0x84);
+  expect(isWindowsX64Pe(x64)).toBe(true);
+
+  const x86 = Buffer.from(x64);
+  x86.writeUInt16LE(0x014c, 0x84);
+  expect(isWindowsX64Pe(x86)).toBe(false);
+  expect(isWindowsX64Pe(Buffer.from("not-a-pe"))).toBe(false);
 });
 
 test("app release manifest validation enforces bundled Agent version coupling", () => {

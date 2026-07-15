@@ -12,7 +12,7 @@ import {
 export const APP_RELEASE_COMPONENT_IDS = ["app"] as const;
 export const APP_RELEASE_PLATFORMS = ["darwin-arm64", "linux-x64", "linux-arm64"] as const;
 export type AppReleaseComponentId = (typeof APP_RELEASE_COMPONENT_IDS)[number];
-export type AppReleasePlatform = (typeof APP_RELEASE_PLATFORMS)[number];
+export type AppReleasePlatform = (typeof APP_RELEASE_PLATFORMS)[number] | "win32-x64";
 export type AppReleaseRestartPolicy = "restart-app";
 export type AppReleaseUpdatePolicy = "app-user-action";
 export type AppReleaseProduct = "butler-app";
@@ -521,12 +521,16 @@ function appServiceInstallerRequirementForPlatform(
   const servicePlatform = servicePlatformForReleasePlatform(releasePlatform);
   const capability = appBackgroundServiceCapability(servicePlatform);
   const selectedV1Path = selectedInstallerV1Path(servicePlatform);
-  if (["darwin", "linux"].includes(servicePlatform)) {
+  if (["darwin", "linux", "win32"].includes(servicePlatform)) {
     return {
       platform: servicePlatform,
       selectedV1Path,
       installerRequired: "no",
-      packageFormats: servicePlatform === "darwin" ? ["dmg", "zip"] : ["deb", "pacman"],
+      packageFormats: servicePlatform === "darwin"
+        ? ["dmg", "zip"]
+        : servicePlatform === "linux"
+        ? ["deb", "pacman"]
+        : [],
       requiredDecision: "Butler App owns the Agent only while the App is running.",
       allowedMechanisms: ["app-foreground-child"],
       userContext: "signed-in desktop user",
@@ -570,6 +574,7 @@ function servicePlatformForReleasePlatform(
 ): AppBackgroundServicePlatform {
   if (platform.startsWith("darwin-")) return "darwin";
   if (platform.startsWith("linux-")) return "linux";
+  if (platform === "win32-x64") return "win32";
   throw new Error(`unsupported App service release platform: ${platform}`);
 }
 
@@ -587,6 +592,7 @@ function serviceInstallerPackageFormats(
 ): AppReleaseServiceInstallerPackageFormat[] {
   if (platform === "darwin") return ["dmg", "zip"];
   if (platform === "linux") return ["deb", "pacman"];
+  if (platform === "win32") return [];
   throw new Error(`unsupported App service installer platform: ${platform}`);
 }
 
@@ -600,6 +606,10 @@ function serviceInstallerPackageArtifactsForPlatform(
     return [];
   }
   if (platform === "linux") {
+    void version;
+    return [];
+  }
+  if (platform === "win32") {
     void version;
     return [];
   }
@@ -1115,7 +1125,7 @@ function validateArtifacts(
     if (artifact.product !== "butler-app") {
       issues.push(`artifact ${artifact.component} product must be butler-app`);
     }
-    if (!APP_RELEASE_PLATFORMS.includes(artifact.platform)) {
+    if (!(APP_RELEASE_PLATFORMS as readonly string[]).includes(artifact.platform)) {
       issues.push(`unknown app release artifact platform: ${artifact.platform}`);
       continue;
     }
@@ -1308,7 +1318,7 @@ function validateAppBackgroundServiceReleaseCapability(
     if (requirement.selectedV1Path !== expectedPath) {
       issues.push(`${label} ${platform} selected installer path mismatch`);
     }
-    const expectsService = !["darwin", "linux"].includes(platform);
+    const expectsService = false;
     if (requirement.installerRequired !== (expectsService ? "yes" : "no")) {
       issues.push(`${label} ${platform} installer requirement mismatch`);
     }
