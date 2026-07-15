@@ -1883,15 +1883,38 @@ async function runToolchainBrowserScenario(client: CdpClient): Promise<void> {
     );
   }
   const turnEvents = await replayAgentTurnEvents();
-  const completedTools = usesExternalButlerService
-    ? durableTranscriptToolResults()
-    : turnEvents
-        .filter((event) => event.kind === "tool.completed")
-        .map((event) => String(event.payload?.toolName ?? ""));
+  const projectedCompletedTools = turnEvents
+    .filter((event) => event.kind === "tool.completed")
+    .map((event) => String(event.payload?.toolName ?? ""));
+  const durableCompletedToolReceipts = durableTranscriptSuccessfulToolReceipts();
+  const completedTools = durableCompletedToolReceipts.map((receipt) => receipt.name);
   const minCompletedTools = usesWorkStreamScenario ? 1 : 3;
   assert(
     completedTools.length >= minCompletedTools,
-    `expected at least ${minCompletedTools} completed tool events, observed ${completedTools.length}.`,
+    `expected at least ${minCompletedTools} durable successful tool receipts, observed ${completedTools.length}.`,
+  );
+  for (const name of activeRequiredToolCalls) {
+    assert(
+      completedTools.includes(name),
+      `durable successful tool receipts did not include ${name}: ${completedTools.join(" -> ") || "(none)"}.`,
+    );
+  }
+  const durableCompletedDecisionIds = durableCompletedToolReceipts
+    .map((receipt) => receipt.decisionId)
+    .filter((decisionId): decisionId is string => Boolean(decisionId));
+  const projectedCompletedDecisionIds = turnEvents
+    .filter((event) => event.kind === "tool.completed")
+    .map((event) => String(event.payload?.decisionId ?? ""));
+  const unreceiptedProjectedCompletions = projectedCompletedDecisionIds.filter((decisionId) =>
+    !decisionId || !durableCompletedDecisionIds.includes(decisionId),
+  );
+  assert(
+    unreceiptedProjectedCompletions.length === 0,
+    `public tool completion projection had no matching durable success decision receipt: ${unreceiptedProjectedCompletions.join(", ")}.`,
+  );
+  assert(
+    projectedCompletedTools.length >= 1,
+    "toolchain did not replay any public tool completion projection.",
   );
   const workEvents = usesExternalButlerService || usesWorkStreamScenario
     ? durableTodoProgressLabels()
@@ -3663,10 +3686,13 @@ function durableTranscriptEventMatchesSession(event: { sessionId?: unknown }, se
   return !sessionId.startsWith("butler/") && eventSessionId === `butler/app-${sessionId}`;
 }
 
-function durableTranscriptToolResults(): string[] {
+function durableTranscriptSuccessfulToolReceipts(): Array<{
+  name: string;
+  decisionId?: string;
+}> {
   const dir = join(tempDir, "transcripts");
   if (!existsSync(dir)) return [];
-  const names: string[] = [];
+  const receipts: Array<{ name: string; decisionId?: string }> = [];
   for (const file of readdirSync(dir)) {
     if (!file.endsWith(".jsonl")) continue;
     for (const line of readFileSync(join(dir, file), "utf8").split("\n")) {
@@ -3675,21 +3701,31 @@ function durableTranscriptToolResults(): string[] {
       try {
         const event = JSON.parse(trimmed) as {
           kind?: string;
-          payload?: { name?: unknown; ok?: unknown };
+          payload?: {
+            name?: unknown;
+            ok?: unknown;
+            publicDecision?: { decisionId?: unknown };
+          };
         };
         if (
           event.kind === "tool_result" &&
           event.payload?.ok === true &&
           typeof event.payload.name === "string"
         ) {
-          names.push(event.payload.name);
+          const decisionId = event.payload.publicDecision?.decisionId;
+          receipts.push({
+            name: event.payload.name,
+            ...(typeof decisionId === "string" && decisionId.trim()
+              ? { decisionId }
+              : {}),
+          });
         }
       } catch {
         // Ignore malformed transcript lines; the E2E assertions use valid durable events.
       }
     }
   }
-  return names;
+  return receipts;
 }
 
 function durableTranscriptToolResultPayloads(toolName: string, sessionId?: string): Array<Record<string, unknown>> {
