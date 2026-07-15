@@ -1,5 +1,6 @@
 import { rmSync } from "node:fs";
 import { basename, win32 } from "node:path";
+import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
 export const WINDOWS_SQUIRREL_PACKAGE_ID = "butler-app";
 export const WINDOWS_SQUIRREL_EXE_NAME = "Butler.exe";
@@ -187,15 +188,14 @@ export function manageWindowsSquirrelShortcut({
     script,
   ], {
     encoding: "utf8",
-    env: {
-      ...env,
+    env: windowsPowerShellEnvironment(env, {
       BUTLER_WINDOWS_SHORTCUT_INPUT: JSON.stringify({
         action,
         name,
         target,
         workingDirectory,
       }),
-    },
+    }),
     shell: false,
     timeout: 12_000,
     windowsHide: true,
@@ -271,13 +271,12 @@ export function verifyWindowsInstallerPublisher({
     script,
   ], {
     encoding: "utf8",
-    env: {
-      ...env,
+    env: windowsPowerShellEnvironment(env, {
       BUTLER_WINDOWS_INSTALLER_SIGNATURE_PATHS: JSON.stringify([
         currentExecutable,
         candidateInstaller,
       ]),
-    },
+    }),
     shell: false,
     timeout: 15_000,
     windowsHide: true,

@@ -13,6 +13,8 @@ import {
   windowsLoginItemSettings,
   windowsOperationalCleanupPaths,
 } from "../../packages/butler-app/client/electron/windows-squirrel-lifecycle.mjs";
+import { windowsPowerShellEnvironment } from
+  "../../packages/butler-app/client/electron/windows-powershell-environment.mjs";
 
 describe("Windows Squirrel lifecycle", () => {
   test("Electron handles Squirrel before single-instance and supervisor setup", () => {
@@ -143,6 +145,7 @@ describe("Windows Squirrel lifecycle", () => {
       name: "Butler.lnk",
       target: "C:\\Users\\dev\\AppData\\Local\\butler-app\\Butler.exe",
       workingDirectory: "C:\\Users\\dev\\AppData\\Local\\butler-app",
+      env: { PSModulePath: "C:\\pwsh-only-modules", Path: "C:\\Windows" },
       runPowerShell: (_executable, args, options) => {
         command = args.at(-1) ?? "";
         environment = options.env;
@@ -157,6 +160,16 @@ describe("Windows Squirrel lifecycle", () => {
       target: "C:\\Users\\dev\\AppData\\Local\\butler-app\\Butler.exe",
       workingDirectory: "C:\\Users\\dev\\AppData\\Local\\butler-app",
     });
+    expect(environment.PSModulePath).toBeUndefined();
+    expect(environment.Path).toBe("C:\\Windows");
+  });
+
+  test("PowerShell child processes reconstruct their native module path", () => {
+    expect(windowsPowerShellEnvironment({
+      PSModulePath: "C:\\Program Files\\PowerShell\\Modules",
+      pSmOdUlEpAtH: "C:\\mixed-case-modules",
+      Path: "C:\\Windows",
+    })).toEqual({ Path: "C:\\Windows" });
   });
 
   test("login registration targets the version-independent Squirrel stub", () => {
@@ -197,22 +210,28 @@ describe("Windows Squirrel lifecycle", () => {
   test("staged installer must match the installed Butler publisher", () => {
     const thumbprint = "A".repeat(40);
     const subject = "CN=Hexpy Games, O=Hexpy Games";
+    let environment: NodeJS.ProcessEnv = {};
     expect(verifyWindowsInstallerPublisher({
       currentExecutable: "C:\\installed\\Butler.exe",
       candidateInstaller: "C:\\updates\\ButlerSetup.exe",
-      runPowerShell: () => ({
-        status: 0,
-        stdout: JSON.stringify([
-          { status: "Valid", thumbprint, subject },
-          { status: "Valid", thumbprint: "B".repeat(40), subject },
-        ]),
-      }),
+      env: { PSModulePath: "C:\\pwsh-only-modules" },
+      runPowerShell: (_executable, _args, options) => {
+        environment = options.env;
+        return {
+          status: 0,
+          stdout: JSON.stringify([
+            { status: "Valid", thumbprint, subject },
+            { status: "Valid", thumbprint: "B".repeat(40), subject },
+          ]),
+        };
+      },
     })).toMatchObject({
       status: "Valid",
       signerThumbprint: thumbprint,
       signerSubject: subject,
       publisherConsistent: true,
     });
+    expect(environment.PSModulePath).toBeUndefined();
     expect(() => verifyWindowsInstallerPublisher({
       currentExecutable: "C:\\installed\\Butler.exe",
       candidateInstaller: "C:\\updates\\ButlerSetup.exe",

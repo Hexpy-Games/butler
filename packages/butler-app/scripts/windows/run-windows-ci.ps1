@@ -247,7 +247,18 @@ switch ($Mode) {
     )
   }
   "Tests" {
+    $testHostRoot = Join-Path $env:TEMP "butler-windows-ci-tests-$PID"
+    $testHost = Join-Path $testHostRoot "butler-process-host.exe"
+    $previousProcessHost = $env:BUTLER_WINDOWS_PROCESS_HOST
     try {
+      Remove-Item -LiteralPath $testHostRoot -Recurse -Force -ErrorAction SilentlyContinue
+      New-Item -ItemType Directory -Path $testHostRoot -Force | Out-Null
+      Invoke-Checked -Command "bun.exe" -Arguments @(
+        "run",
+        "packages/butler-agent/scripts/windows/build-process-host.ts",
+        $testHost
+      )
+      $env:BUTLER_WINDOWS_PROCESS_HOST = $testHost
       Invoke-Checked -Command "bun.exe" -Arguments @(
         "test",
         "tests/unit/platform-command-executor.test.ts",
@@ -278,6 +289,12 @@ switch ($Mode) {
         -Recurse `
         -Force `
         -ErrorAction SilentlyContinue
+      if ($null -eq $previousProcessHost) {
+        Remove-Item Env:BUTLER_WINDOWS_PROCESS_HOST -ErrorAction SilentlyContinue
+      } else {
+        $env:BUTLER_WINDOWS_PROCESS_HOST = $previousProcessHost
+      }
+      Remove-Item -LiteralPath $testHostRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
   }
   "ProductE2E" {

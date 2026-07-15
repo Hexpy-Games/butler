@@ -37,6 +37,8 @@ test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(entrypoint).toContain('"Setup"');
   expect(entrypoint).toContain('"--frozen-lockfile"');
   expect(entrypoint).toContain('"--audit-level=high"');
+  expect(entrypoint).toContain("build-process-host.ts");
+  expect(entrypoint).toContain("BUTLER_WINDOWS_PROCESS_HOST");
   expect(entrypoint).toContain("Invoke-StandardUserSmoke");
   expect(entrypoint).toContain("run-standard-user-bundled-payload-smoke.ps1");
   expect(entrypoint).toContain("-InteractiveDesktop");
