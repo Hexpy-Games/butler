@@ -109,6 +109,21 @@ export function migrateAppStoreSchema(db: Database): void {
       safe_error_code TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS app_turn_dispatch_outbox (
+      turn_id TEXT PRIMARY KEY REFERENCES turns(id) ON DELETE CASCADE,
+      chat_id TEXT NOT NULL,
+      input_json TEXT NOT NULL,
+      metadata_json TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'pending' CHECK (
+        state IN ('pending', 'committed', 'cancelled')
+      ),
+      observed_wake_revision_ref TEXT NOT NULL,
+      queue_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      committed_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
@@ -193,6 +208,9 @@ export function migrateAppStoreSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS app_turn_cancel_outbox_pending_idx
     ON app_turn_cancel_outbox(state, turn_id);
 
+    CREATE INDEX IF NOT EXISTS app_turn_dispatch_outbox_pending_idx
+    ON app_turn_dispatch_outbox(state, observed_wake_revision_ref, turn_id);
+
     CREATE INDEX IF NOT EXISTS events_type_id_idx
     ON events(type, id DESC);
 
@@ -204,6 +222,13 @@ export function migrateAppStoreSchema(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS events_turn_event_kind_idx
     ON events(type, json_extract(payload_json, '$.turn_id'), json_extract(payload_json, '$.event.kind'), id DESC);
+
+    CREATE TRIGGER IF NOT EXISTS app_turn_dispatch_outbox_identity_immutable
+    BEFORE UPDATE OF turn_id, chat_id, input_json, metadata_json, created_at
+    ON app_turn_dispatch_outbox
+    BEGIN
+      SELECT RAISE(ABORT, 'app_turn_dispatch_outbox_identity_immutable');
+    END;
 
   `);
   ensureAppMessageQuerySchema(db);

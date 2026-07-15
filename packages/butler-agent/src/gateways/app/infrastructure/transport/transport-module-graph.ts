@@ -29,6 +29,7 @@ export function createAppTransportModuleGraph(input: {
     host,
   } = input;
   const appTransportQueue = new AppTransportQueueStore(
+    db,
     butlerData,
     butlerHome,
     serviceClient,
@@ -40,13 +41,6 @@ export function createAppTransportModuleGraph(input: {
     (turnId) => host.getTurn(turnId),
     (type, payload) => {
       host.appendEvent(type, payload);
-    },
-    (chatId, turnId, event) => {
-      host.appendTurnEvent(chatId, turnId, event);
-    },
-    (turnId, state, options) => host.updateTurnState(turnId, state, options),
-    (turn) => {
-      host.appendTerminalTurnStateChanged(turn);
     },
   );
   const transportProjection = new AppTransportProjectionStore({

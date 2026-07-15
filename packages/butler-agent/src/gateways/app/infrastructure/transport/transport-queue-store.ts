@@ -17,8 +17,6 @@ import {
 import type { AppMessageFileStore } from "../../domain/message-files/message-file-store.ts";
 import type { ProjectRow, ChatRow } from "../core/records.ts";
 import { appSafeResponderError } from "./failure-ux-contract.ts";
-import { APP_TURN_QUEUE_FAILED_CODE } from "./btcc-public-projection.ts";
-import { safeTurnFailureEventPayload } from "./turn-failure-projection.ts";
 import { appRuntimePolicy, stringArray } from "../../domain/runtime/app-runtime-policy.ts";
 import {
   mergeTransportBindings,
@@ -30,14 +28,20 @@ import type {
   SettingsView,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
-import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import {
   verifyTurnExecutionControls,
   type TurnExecutionControlsV1,
 } from "../../../core/turn-execution-controls.ts";
+import {
+  appTransportExecutorWakeRevision,
+  markAppTurnDispatchCommitted,
+  markAppTurnDispatchWaiting,
+  recordAppTurnDispatchIntent,
+} from "./app-turn-dispatch-outbox.ts";
 
 export class AppTransportQueueStore {
   constructor(
+    private readonly db: Database,
     private readonly butlerData: string,
     private readonly butlerHome: string,
     private readonly serviceClient: ButlerServiceClient,
@@ -51,25 +55,6 @@ export class AppTransportQueueStore {
       type: string,
       payload: Record<string, unknown>,
     ) => void,
-    private readonly appendTurnEvent: (
-      chatId: string,
-      turnId: string,
-      event: RuntimeTurnEventInput,
-    ) => void,
-    private readonly updateTurnState: (
-      turnId: string,
-      state: TurnRecord["state"],
-      options: {
-        safeStatusLabel: string;
-        safeErrorCode?: string | null;
-        retryable?: boolean;
-        cancellable?: boolean;
-        attempt?: number;
-      },
-    ) => TurnRecord,
-    private readonly appendTerminalTurnStateChanged: (
-      turn: TurnRecord,
-    ) => void,
   ) {}
 
   enqueueAppTransportTurn(input: {
@@ -79,6 +64,8 @@ export class AppTransportQueueStore {
     text: string;
     executionControls: TurnExecutionControlsV1;
   }): TurnRecord {
+    const wakeRevisionRef = appTransportExecutorWakeRevision(this.butlerData);
+    let dispatchIntentRecorded = false;
     try {
       const executionControls = verifyTurnExecutionControls(
         input.executionControls,
@@ -89,7 +76,6 @@ export class AppTransportQueueStore {
       ) {
         throw new Error("turn_execution_controls_identity_mismatch");
       }
-      this.assertAppTransportExecutorReady();
       const chat = this.getChatRow(input.chatId);
       const project = chat?.project_id
         ? this.getProjectRow(chat.project_id)
@@ -102,31 +88,49 @@ export class AppTransportQueueStore {
         sessionKind: chat?.kind ?? "chat",
         executionControls,
       });
-      const queued = this.serviceClient.enqueueAppTurn(
-        {
-          chatId: input.chatId,
-          messageId: input.message.id,
-          turnId: input.turnId,
-          text: input.text,
-          timestamp: input.message.created_at,
-          sessionId,
-          accountId: APP_ACCOUNT,
-          peerKind: "dm",
-          senderId: APP_SENDER_ID,
-          senderDisplayName: "Butler App",
-          projectId: chat?.project_id ?? undefined,
-          executionControls,
-          attachments: this.messageFiles.attachmentsForTransport(
-            input.message.id,
-          ),
-          rawSource: "app-server",
-        },
-        {
-          source: "app-server",
-          chatId: input.chatId,
-          turnId: input.turnId,
-        },
-      );
+      const appInput = {
+        chatId: input.chatId,
+        messageId: input.message.id,
+        turnId: input.turnId,
+        text: input.text,
+        timestamp: input.message.created_at,
+        sessionId,
+        accountId: APP_ACCOUNT,
+        peerKind: "dm" as const,
+        senderId: APP_SENDER_ID,
+        senderDisplayName: "Butler App",
+        projectId: chat?.project_id ?? undefined,
+        executionControls,
+        attachments: this.messageFiles.attachmentsForTransport(
+          input.message.id,
+        ),
+        rawSource: "app-server",
+      };
+      const metadata = {
+        source: "app-server",
+        chatId: input.chatId,
+        turnId: input.turnId,
+      };
+      recordAppTurnDispatchIntent(this.db, {
+        turnId: input.turnId,
+        chatId: input.chatId,
+        input: appInput,
+        metadata,
+        observedWakeRevisionRef: `dispatch-unattempted:${input.turnId}`,
+        createdAt: input.message.created_at,
+      });
+      dispatchIntentRecorded = true;
+      this.assertAppTransportExecutorReady();
+      const queued = this.serviceClient.enqueueAppTurn(appInput, {
+        ...metadata,
+        idempotencyKey: `app-turn-dispatch:${input.turnId}`,
+      });
+      markAppTurnDispatchCommitted({
+        db: this.db,
+        turnId: input.turnId,
+        queueId: queued.queueId,
+        committedAt: new Date().toISOString(),
+      });
       this.appendEvent("turn.queued", {
         session_id: input.chatId,
         turn_id: input.turnId,
@@ -137,7 +141,13 @@ export class AppTransportQueueStore {
       });
       return this.getTurn(input.turnId);
     } catch (error) {
-      return this.failAppTransportQueueHandoff(input, error);
+      return this.waitAppTransportQueueHandoff({
+        chatId: input.chatId,
+        turnId: input.turnId,
+        wakeRevisionRef,
+        dispatchIntentRecorded,
+        error,
+      });
     }
   }
 
@@ -156,37 +166,34 @@ export class AppTransportQueueStore {
     }
   }
 
-  private failAppTransportQueueHandoff(
+  private waitAppTransportQueueHandoff(
     input: {
       chatId: string;
       turnId: string;
+      wakeRevisionRef: string;
+      dispatchIntentRecorded: boolean;
+      error: unknown;
     },
-    error: unknown,
   ): TurnRecord {
-    const safeError = appSafeResponderError(error);
-    this.appendTurnEvent(input.chatId, input.turnId, {
-      kind: "turn.failed",
-      payload: safeTurnFailureEventPayload({
-        code: APP_TURN_QUEUE_FAILED_CODE,
-        message:
-          "Butler could not queue this request for execution. Retry the turn.",
-        cause: safeError.cause ?? safeError.message,
-      }),
-    });
-    const failedTurn = this.updateTurnState(input.turnId, "failed", {
-      safeStatusLabel: "Failed",
-      retryable: false,
-      cancellable: false,
-      safeErrorCode: APP_TURN_QUEUE_FAILED_CODE,
-    });
-    this.appendTerminalTurnStateChanged(failedTurn);
-    this.appendEvent("turn.queue_failed", {
+    const safeError = appSafeResponderError(input.error);
+    if (input.dispatchIntentRecorded) {
+      markAppTurnDispatchWaiting({
+        db: this.db,
+        turnId: input.turnId,
+        observedWakeRevisionRef: input.wakeRevisionRef,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    this.appendEvent("turn.queue_waiting_runtime", {
       session_id: input.chatId,
       turn_id: input.turnId,
       transport: APP_TRANSPORT,
-      safe_error_code: APP_TURN_QUEUE_FAILED_CODE,
+      dispatch_intent_recorded: input.dispatchIntentRecorded,
+      wake_revision_ref: input.wakeRevisionRef,
+      diagnostic_code: "runtime_unclassified_interruption",
+      safe_cause: safeError.cause ?? safeError.message,
     });
-    return failedTurn;
+    return this.getTurn(input.turnId);
   }
 
   private ensureAppTransportSessionBinding(input: {
@@ -251,3 +258,4 @@ export class AppTransportQueueStore {
     });
   }
 }
+import type { Database } from "bun:sqlite";

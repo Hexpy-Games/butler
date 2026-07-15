@@ -25,6 +25,11 @@ import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { BtccRecoveryCaseStore } from "../../agent/turn/interruption/recovery-case-store.ts";
 import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
+import {
+  appTransportExecutorWakeRevision,
+  appTurnDispatchOutboxStorageRevision,
+  reconcileAppTurnDispatchOutbox,
+} from "../../gateways/app/infrastructure/transport/app-turn-dispatch-outbox.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
 import {
@@ -606,6 +611,7 @@ export async function runNativeButlerMain(
   let cancellationServer: PrincipalTurnCancellationServer | undefined;
   let conversationWriter: AgentConversationStore | undefined;
   let btccInterruptionStateWriter: BtccRecoveryCaseStore | undefined;
+  let lastDispatchReconciliationRevision: string | null = null;
   const inboundDispatcher = new QueuedInboundDispatcher();
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
@@ -887,6 +893,38 @@ export async function runNativeButlerMain(
         onPoll: async () => {
           if (activePrincipalTurnExecutionCount(butlerData) > 0) {
             abortDurablyCancelledPrincipalTurnExecutions(butlerData);
+          }
+          const dispatchDbPath = appTurnStateDbPath(butlerData);
+          const dispatchWakeRevision = appTransportExecutorWakeRevision(butlerData);
+          const dispatchReconciliationRevision = [
+            dispatchWakeRevision,
+            appTurnDispatchOutboxStorageRevision(dispatchDbPath),
+          ].join("|");
+          if (dispatchReconciliationRevision !== lastDispatchReconciliationRevision) {
+            lastDispatchReconciliationRevision = dispatchReconciliationRevision;
+            try {
+              const reconciliation = reconcileAppTurnDispatchOutbox({
+                dbPath: dispatchDbPath,
+                butlerData,
+                wakeRevisionRef: dispatchWakeRevision,
+              });
+              if (reconciliation.inspected > 0) {
+                process.stdout.write(
+                  `[app-dispatch-outbox] inspected=${reconciliation.inspected} committed=${reconciliation.committed} preserved=${reconciliation.preserved}\n`,
+                );
+              }
+            } catch (error) {
+              const failure = safeRuntimeFailure(error);
+              recordSystemEvent({
+                sessionId: binding.sessionId,
+                category: "app.dispatch_outbox.reconciliation_waiting",
+                message: failure.message,
+                metadata: {
+                  source: "native-butler-bootstrap",
+                  wakeRevisionRef: dispatchWakeRevision,
+                },
+              });
+            }
           }
           const summary = inboundDispatcher.poll({
             queue: new NativeInboundQueue(butlerData),

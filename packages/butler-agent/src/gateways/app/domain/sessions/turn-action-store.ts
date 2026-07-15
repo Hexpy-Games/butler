@@ -298,6 +298,11 @@ export class AppTurnActionStore {
           "Turn is not cancellable.",
         );
       }
+      this.input.db.query(`
+        UPDATE app_turn_dispatch_outbox
+        SET state = 'cancelled', updated_at = ?
+        WHERE turn_id = ? AND state = 'pending'
+      `).run(now, row.id);
       if (target) {
         this.input.db.query(`
           INSERT INTO app_turn_cancel_outbox (

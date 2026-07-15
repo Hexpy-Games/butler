@@ -7388,7 +7388,7 @@ test("app transport session binding preserves selected reasoning effort", async 
   }
 });
 
-test("app transport send fails the turn instead of leaving thinking when queue handoff fails", async () => {
+test("app transport queue handoff failure preserves the active turn and durable dispatch intent", async () => {
   const serviceClient: ButlerServiceClient = {
     enqueueAppTurn() {
       throw new Error("simulated queue write failure");
@@ -7408,23 +7408,22 @@ test("app transport send fails the turn instead of leaving thinking when queue h
     });
 
     expect(result.data.turn).toMatchObject({
-      state: "failed",
-      safe_status_label: "Failed",
-      safe_error_code: "app_turn_queue_failed",
+      state: "thinking",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
+    expect(result.data.turn.safe_error_code).toBeUndefined();
     const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
     expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
 
     const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(turns.data.turns[0]).toMatchObject({
-      state: "failed",
+      state: "thinking",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
     expect(turns.data.turns[0]).not.toHaveProperty("safe_error_code");
-    expect(turns.data.turns[0].safe_status_label ?? "").toBe("");
+    expect(turns.data.turns[0].safe_status_label).toBe("Thinking");
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
@@ -7453,11 +7452,26 @@ test("app transport send fails the turn instead of leaving thinking when queue h
     ).toBe(false);
     expect(
       replay.data.events.some(
-        (event: { type: string; payload?: { safe_error_code?: string } }) =>
-          event.type === "turn.queue_failed" &&
-          event.payload?.safe_error_code === "app_turn_queue_failed",
+        (event: { type: string; payload?: { dispatch_intent_recorded?: boolean } }) =>
+          event.type === "turn.queue_waiting_runtime" &&
+          event.payload?.dispatch_intent_recorded === true,
       ),
     ).toBe(true);
+    const storeDb = (server.store as unknown as { db: Database }).db;
+    expect(storeDb.query<{
+      state: string;
+      queue_id: string | null;
+    }, [string]>(`
+      SELECT state, queue_id FROM app_turn_dispatch_outbox WHERE turn_id = ?
+    `).get(result.data.turn.id)).toEqual({ state: "pending", queue_id: null });
+    const cancelled = await postJson(
+      `${server.url}turns/${encodeURIComponent(result.data.turn.id)}/cancel`,
+      {},
+    );
+    expect(cancelled.data.turn.state).toBe("cancelled");
+    expect(storeDb.query<{ state: string }, [string]>(`
+      SELECT state FROM app_turn_dispatch_outbox WHERE turn_id = ?
+    `).get(result.data.turn.id)).toEqual({ state: "cancelled" });
   } finally {
     server.stop();
   }
@@ -7820,7 +7834,7 @@ test("historical internal continuation failed turns are normalized in public pro
   }
 });
 
-test("app transport send fails instead of leaving thinking when butler-main state is stale", async () => {
+test("app transport preserves dispatch ownership when butler-main state is stale", async () => {
   const servicesDir = join(tempDir, "state", "services");
   mkdirSync(servicesDir, { recursive: true });
   writeFileSync(
@@ -7854,11 +7868,11 @@ test("app transport send fails instead of leaving thinking when butler-main stat
     });
 
     expect(result.data.turn).toMatchObject({
-      state: "failed",
-      safe_error_code: "app_turn_queue_failed",
+      state: "thinking",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
+    expect(result.data.turn.safe_error_code).toBeUndefined();
     const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
     expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
 
@@ -7872,9 +7886,9 @@ test("app transport send fails instead of leaving thinking when butler-main stat
     ).toBe(false);
     expect(
       replay.data.events.some(
-        (event: { type: string; payload?: { safe_error_code?: string } }) =>
-          event.type === "turn.queue_failed" &&
-          event.payload?.safe_error_code === "app_turn_queue_failed",
+        (event: { type: string; payload?: { dispatch_intent_recorded?: boolean } }) =>
+          event.type === "turn.queue_waiting_runtime" &&
+          event.payload?.dispatch_intent_recorded === true,
       ),
     ).toBe(true);
   } finally {

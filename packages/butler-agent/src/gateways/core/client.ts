@@ -24,7 +24,17 @@ export class FileQueueButlerServiceClient implements ButlerServiceClient {
     input: AppInboundInput,
     metadata: Record<string, unknown> = {},
   ): QueuedInboundEvent {
-    return this.queue.enqueue(createAppInboundEnvelope(input), metadata);
+    const idempotencyKey = typeof metadata.idempotencyKey === "string"
+      ? metadata.idempotencyKey.trim()
+      : "";
+    return idempotencyKey
+      ? this.queue.enqueueIdempotent(
+        createAppInboundEnvelope(input),
+        metadata,
+        idempotencyKey,
+        new Date(input.timestamp),
+      )
+      : this.queue.enqueue(createAppInboundEnvelope(input), metadata);
   }
 }
 
