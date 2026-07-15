@@ -20,6 +20,7 @@ import type {
   DeveloperLogCaptureInput,
   DeveloperLogStore,
 } from "../../operations/diagnostics/developer-log-store.ts";
+import type { BtccInterruptionStateWriter } from "../../agent/conversation/session-admission.ts";
 
 export interface SessionLifecycleServiceOptions {
   store: SessionBindingStore;
@@ -44,6 +45,7 @@ export interface SessionLifecycleServiceOptions {
     event: RuntimeTurnEventInput;
   }) => Promise<void>;
   conversationWriter?: ConversationWriter;
+  btccInterruptionStateWriter?: BtccInterruptionStateWriter;
   conversationMetricsButlerData?: string;
   sessionTitleGenerator?: SessionTitleGenerator | false;
   openingDecisionTimeoutMs?: number;
@@ -170,6 +172,7 @@ export class SessionLifecycleService {
       deliverIntermediate: this.options.deliverIntermediate,
       deliverTurnEvent: this.options.deliverTurnEvent,
       conversationWriter: this.options.conversationWriter,
+      btccInterruptionStateWriter: this.options.btccInterruptionStateWriter,
       conversationMetricsButlerData: this.options.conversationMetricsButlerData,
       generateSessionTitle: this.options.sessionTitleGenerator
         ? async ({ binding, envelope }: {

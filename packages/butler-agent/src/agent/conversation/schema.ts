@@ -157,6 +157,30 @@ CREATE TABLE IF NOT EXISTS btcc_recovery_cases (
   FOREIGN KEY (interruption_id) REFERENCES btcc_interruption_receipts(interruption_id) ON DELETE RESTRICT
 );
 
+CREATE TABLE IF NOT EXISTS btcc_reporting_receipts (
+  reporting_receipt_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  expected_generation INTEGER NOT NULL CHECK (expected_generation > 0),
+  result_disposition TEXT NOT NULL CHECK (
+    result_disposition IN ('fulfilled', 'partially_fulfilled', 'not_fulfilled')
+  ),
+  public_message_ref TEXT NOT NULL,
+  completion_evidence_refs_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS btcc_cancellation_receipts (
+  cancellation_receipt_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL,
+  expected_generation INTEGER NOT NULL CHECK (expected_generation > 0),
+  checkpoint_ref TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES conversation_turns(id) ON DELETE RESTRICT
+);
+
 CREATE TABLE IF NOT EXISTS btcc_turn_states (
   turn_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -207,6 +231,56 @@ CREATE TRIGGER IF NOT EXISTS btcc_interruption_receipts_immutable_delete
 BEFORE DELETE ON btcc_interruption_receipts
 BEGIN
   SELECT RAISE(ABORT, 'btcc_interruption_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_reporting_receipts_immutable_update
+BEFORE UPDATE ON btcc_reporting_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_reporting_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_reporting_receipts_immutable_delete
+BEFORE DELETE ON btcc_reporting_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_reporting_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_cancellation_receipts_immutable_update
+BEFORE UPDATE ON btcc_cancellation_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_cancellation_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_cancellation_receipts_immutable_delete
+BEFORE DELETE ON btcc_cancellation_receipts
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_cancellation_receipt_immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_delivered_guard
+BEFORE UPDATE OF state ON btcc_turn_states
+WHEN NEW.state = 'delivered' AND NOT EXISTS (
+  SELECT 1 FROM btcc_reporting_receipts receipt
+  WHERE receipt.reporting_receipt_id = NEW.terminal_outcome_id
+    AND receipt.turn_id = OLD.turn_id
+    AND receipt.attempt_id = OLD.attempt_id
+    AND receipt.expected_generation = OLD.generation
+)
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_reporting_receipt_required');
+END;
+
+CREATE TRIGGER IF NOT EXISTS btcc_turn_states_cancelled_guard
+BEFORE UPDATE OF state ON btcc_turn_states
+WHEN NEW.state = 'cancelled' AND NOT EXISTS (
+  SELECT 1 FROM btcc_cancellation_receipts receipt
+  WHERE receipt.cancellation_receipt_id = NEW.terminal_outcome_id
+    AND receipt.turn_id = OLD.turn_id
+    AND receipt.attempt_id = OLD.attempt_id
+    AND receipt.expected_generation = OLD.generation
+)
+BEGIN
+  SELECT RAISE(ABORT, 'btcc_cancellation_receipt_required');
 END;
 
 CREATE TABLE IF NOT EXISTS conversation_schema_migrations (

@@ -76,6 +76,8 @@ test("conversation store creates the canonical schema and migration marker", () 
     expect(tables).toContain("btcc_turn_states");
     expect(tables).toContain("btcc_interruption_receipts");
     expect(tables).toContain("btcc_recovery_cases");
+    expect(tables).toContain("btcc_reporting_receipts");
+    expect(tables).toContain("btcc_cancellation_receipts");
     expect(db.query<{ version: number }, []>("SELECT version FROM conversation_schema_migrations").get()?.version)
       .toBe(3);
   } finally {

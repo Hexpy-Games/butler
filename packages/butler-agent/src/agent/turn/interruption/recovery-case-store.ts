@@ -10,6 +10,7 @@ import { conversationStorePath } from "../../conversation/store.ts";
 import type {
   BtccTurnState,
   BtccTurnStateRecord,
+  BtccReportingReceiptInput,
   RecoveryCaseV1,
   TurnInterruptionDirective,
 } from "./turn-interruption-types.ts";
@@ -19,7 +20,10 @@ import {
   type RecoveryCaseRow,
   type TurnStateRow,
 } from "./recovery-case-store-rows.ts";
-import { assertBtccInterruptionTransition } from "./btcc-interruption-transition.ts";
+import {
+  assertBtccInterruptionTransition,
+  assertBtccReportingTransition,
+} from "./btcc-interruption-transition.ts";
 
 export class BtccRecoveryCaseStore {
   private readonly db: Database;
@@ -100,10 +104,51 @@ export class BtccRecoveryCaseStore {
       case "waiting_runtime":
         return this.openRuntimeWait(directive);
       case "cancelled":
-        return this.transition(directive, "cancelled", {
-          terminalOutcomeId: directive.cancellationReceiptRef,
-        });
+        return this.acceptCancellationDirective(directive);
     }
+  }
+
+  acceptReportingReceipt(input: BtccReportingReceiptInput): BtccTurnStateRecord {
+    const before = this.requireTurnState(input.turnId);
+    if (before.state === "delivered" &&
+      before.terminalOutcomeId === input.reportingReceiptId) return before;
+    if (before.attemptId !== input.attemptId) throw new Error("btcc_turn_attempt_mismatch");
+    if (before.generation !== input.expectedGeneration) {
+      throw new Error("btcc_turn_generation_conflict");
+    }
+    assertBtccReportingTransition(before.state);
+    if (!input.reportingReceiptId.trim() || !input.publicMessageRef.trim()) {
+      throw new Error("btcc_reporting_receipt_identity_missing");
+    }
+    const tx = this.db.transaction(() => {
+      this.db.query(`
+        INSERT INTO btcc_reporting_receipts (
+          reporting_receipt_id, turn_id, attempt_id, expected_generation,
+          result_disposition, public_message_ref,
+          completion_evidence_refs_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        input.reportingReceiptId, input.turnId, input.attemptId,
+        input.expectedGeneration, input.resultDisposition, input.publicMessageRef,
+        JSON.stringify(uniqueRefs(input.completionEvidenceRefs)), input.createdAt,
+      );
+      const result = this.db.query(`
+        UPDATE btcc_turn_states
+        SET state = 'delivered', generation = generation + 1,
+            active_recovery_case_id = NULL, active_wait_owner_ref = NULL,
+            active_wake_revision_ref = NULL, terminal_outcome_id = ?,
+            updated_at = ?
+        WHERE turn_id = ? AND attempt_id = ? AND generation = ?
+      `).run(
+        input.reportingReceiptId, input.createdAt, input.turnId,
+        input.attemptId, input.expectedGeneration,
+      );
+      if (result.changes !== 1) throw new Error("btcc_reporting_receipt_cas_conflict");
+      const next = this.requireTurnState(input.turnId);
+      this.enqueueProjection(next, "turn.outcome", input.reportingReceiptId);
+      return next;
+    });
+    return tx();
   }
 
   resolveRecoveryCase(input: {
@@ -180,6 +225,29 @@ export class BtccRecoveryCaseStore {
         directive.recoveryCase.recoveryCaseId,
       );
       return state;
+    });
+    return tx();
+  }
+
+  private acceptCancellationDirective(
+    directive: Extract<TurnInterruptionDirective, { kind: "cancelled" }>,
+  ): BtccTurnStateRecord {
+    const before = this.requireTurnState(directive.turnId);
+    if (before.state === "cancelled" &&
+      before.terminalOutcomeId === directive.cancellationReceiptRef) return before;
+    const tx = this.db.transaction(() => {
+      this.db.query(`
+        INSERT INTO btcc_cancellation_receipts (
+          cancellation_receipt_id, turn_id, attempt_id,
+          expected_generation, checkpoint_ref, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        directive.cancellationReceiptRef, directive.turnId, directive.attemptId,
+        directive.expectedGeneration, directive.checkpointRef, directive.createdAt,
+      );
+      return this.transition(directive, "cancelled", {
+        terminalOutcomeId: directive.cancellationReceiptRef,
+      });
     });
     return tx();
   }
@@ -303,4 +371,8 @@ export class BtccRecoveryCaseStore {
 
 function stableHash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function uniqueRefs(refs: readonly string[]): string[] {
+  return [...new Set(refs.map((ref) => ref.trim()).filter(Boolean))].slice(0, 64);
 }

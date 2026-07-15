@@ -27,6 +27,8 @@ describe("current turn interruption producer registry", () => {
       .toBe(TURN_INTERRUPTION_PRODUCER_COUNT);
     expect(new Set(TURN_INTERRUPTION_PRODUCERS.flatMap((item) => item.entryRoots)))
       .toEqual(new Set(["app", "queued", "direct", "system", "automation", "recovery", "legacy"]));
+    expect(TURN_INTERRUPTION_PRODUCERS.filter((item) => item.migrationStatus === "routed")
+      .map((item) => item.id)).toEqual(["native_turn_catch"]);
   });
 
   test("registry boundaries still exist in the current production modules", () => {

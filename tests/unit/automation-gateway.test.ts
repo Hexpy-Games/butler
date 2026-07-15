@@ -37,6 +37,7 @@ import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { readTranscript } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
 import { recordPrincipalTurnCancellation } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
+import { TurnRuntimeWaitSignal } from "../../packages/butler-agent/src/agent/turn/interruption/turn-runtime-wait-signal.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -1021,6 +1022,42 @@ test("queued inbound runtime failure emits terminal app turn failure action", as
     },
   });
   expect(JSON.stringify(app.sentActions[0])).not.toContain("private provider");
+});
+
+test("queued inbound completes transport ownership without failure delivery after BTCC runtime wait routing", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const queue = new NativeInboundQueue(tempDir);
+  queue.enqueue(appEnvelope({
+    eventId: "app:message-runtime-wait",
+    messageId: "message-runtime-wait",
+    sessionId: "butler/app-general",
+  }), { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+  const guard = new DeliveryGuard({ adapters: [app] });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new TurnRuntimeWaitSignal(
+          "turn-message-runtime-wait",
+          "recovery-case-runtime-wait",
+        );
+      },
+    },
+    store,
+    deliveryGuard: guard,
+  });
+
+  expect(summary).toMatchObject({
+    claimed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
+  });
+  expect(app.sentActions).toEqual([]);
+  expect(existsSync(join(queue.rootDir, "failed"))).toBe(false);
+  expect(readdirSync(join(queue.rootDir, "processed"))).toHaveLength(1);
 });
 
 test("queued inbound provider failure preserves safe API diagnostics for app projection", async () => {

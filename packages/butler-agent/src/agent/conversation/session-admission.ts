@@ -14,6 +14,28 @@ import type {
 } from "./types.ts";
 import { publishConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
+import {
+  routeTurnInterruption,
+  runtimeInterruptionFromUnknown,
+} from "../turn/interruption/turn-interruption-router.ts";
+import {
+  TURN_INTERRUPTION_ENVELOPE_SCHEMA,
+  type BtccReportingReceiptInput,
+  type BtccTurnStateRecord,
+  type TurnInterruptionDirective,
+} from "../turn/interruption/turn-interruption-types.ts";
+
+export interface BtccInterruptionStateWriter {
+  admitTurn(input: {
+    turnId: string;
+    sessionId: string;
+    attemptId: string;
+    now?: string;
+  }): BtccTurnStateRecord;
+  readTurnState(turnId: string): BtccTurnStateRecord | null;
+  applyDirective(directive: TurnInterruptionDirective): BtccTurnStateRecord;
+  acceptReportingReceipt(input: BtccReportingReceiptInput): BtccTurnStateRecord;
+}
 
 export interface ConversationAdmissionTurnInput {
   writer: ConversationWriter;
@@ -22,6 +44,7 @@ export interface ConversationAdmissionTurnInput {
   turnId: string;
   timestamp: string;
   butlerData?: string;
+  btccInterruptionStateWriter?: BtccInterruptionStateWriter;
 }
 
 export interface ConversationAdmissionProvenance {
@@ -57,6 +80,12 @@ export class ConversationAdmissionTurn {
       actor: "user",
       requestId: input.envelope.eventId,
       turnId: input.turnId,
+      now: input.timestamp,
+    });
+    input.btccInterruptionStateWriter?.admitTurn({
+      turnId: turn.id,
+      sessionId: turn.session_id,
+      attemptId: btccAttemptId(turn.id),
       now: input.timestamp,
     });
     return new ConversationAdmissionTurn(input, turn);
@@ -108,11 +137,109 @@ export class ConversationAdmissionTurn {
     };
   }
 
-  finalize(status: ConversationTurn["status"], completedAt: string): void {
+  activeRuntimeWait(): { turnId: string; recoveryCaseId: string } | null {
+    const current = this.input.btccInterruptionStateWriter?.readTurnState(this.turn.id);
+    if (current?.state !== "waiting_runtime" || !current.activeRecoveryCaseId) {
+      return null;
+    }
+    return {
+      turnId: current.turnId,
+      recoveryCaseId: current.activeRecoveryCaseId,
+    };
+  }
+
+  routeRuntimeInterruption(input: {
+    error: unknown;
+    timestamp: string;
+  }): { recoveryCaseId: string; state: BtccTurnStateRecord } | null {
+    const writer = this.input.btccInterruptionStateWriter;
+    const current = writer?.readTurnState(this.turn.id);
+    if (!writer || !current) return null;
+    const checkpointRef = current.lastStableCheckpointRef ??
+      `btcc-turn-state:${current.turnId}:g${current.generation}`;
+    const interruptionId = `interruption-${stableId({
+      turnId: current.turnId,
+      attemptId: current.attemptId,
+      generation: current.generation,
+      origin: "phase_runtime",
+    })}`;
+    const directive = routeTurnInterruption(runtimeInterruptionFromUnknown({
+      error: input.error,
+      interruptionId,
+      turnId: current.turnId,
+      attemptId: current.attemptId,
+      origin: "phase_runtime",
+      currentGeneration: current.generation,
+      lastStableCheckpointRef: checkpointRef,
+      createdAt: input.timestamp,
+      sideEffectState: "indeterminate",
+      resumePredicateRef: `turn-runtime-revision:${current.turnId}:g${current.generation}`,
+      diagnosticRefs: [],
+    }));
+    if (directive.kind !== "waiting_runtime") {
+      throw new Error("btcc_runtime_interruption_route_invalid");
+    }
+    return {
+      recoveryCaseId: directive.recoveryCase.recoveryCaseId,
+      state: writer.applyDirective(directive),
+    };
+  }
+
+  acceptPrincipalCancellation(input: {
+    cancellationReceiptRef: string;
+    timestamp: string;
+  }): BtccTurnStateRecord | null {
+    const writer = this.input.btccInterruptionStateWriter;
+    const current = writer?.readTurnState(this.turn.id);
+    if (!writer || !current) return null;
+    return writer.applyDirective(routeTurnInterruption({
+      schemaVersion: TURN_INTERRUPTION_ENVELOPE_SCHEMA,
+      kind: "user_cancellation",
+      interruptionId: input.cancellationReceiptRef,
+      turnId: current.turnId,
+      attemptId: current.attemptId,
+      origin: "admission",
+      currentGeneration: current.generation,
+      lastStableCheckpointRef: current.lastStableCheckpointRef ??
+        `btcc-turn-state:${current.turnId}:g${current.generation}`,
+      createdAt: input.timestamp,
+      cancellationGeneration: current.generation,
+      cancellationReceiptRef: input.cancellationReceiptRef,
+    }));
+  }
+
+  finalize(
+    status: ConversationTurn["status"],
+    completedAt: string,
+    options: { resultDisposition?: BtccReportingReceiptInput["resultDisposition"] } = {},
+  ): void {
     const existingOutcome = this.input.writer.readTurnOutcome?.(this.turn.id) ?? null;
     const existingGeneration = existingOutcome?.generation ?? 0;
     const requestMessageId = this.requestMessageId ?? existingOutcome?.request_message_id ?? null;
     const publicAssistantMessageId = this.publicAssistantMessageId ?? existingOutcome?.public_assistant_message_id ?? null;
+    if (status === "complete" && this.input.btccInterruptionStateWriter) {
+      const current = this.input.btccInterruptionStateWriter.readTurnState(this.turn.id);
+      if (!current || !publicAssistantMessageId) {
+        throw new Error("btcc_reporting_receipt_prerequisite_missing");
+      }
+      if (current.state !== "delivered") {
+        this.input.btccInterruptionStateWriter.acceptReportingReceipt({
+          reportingReceiptId: `reporting-${stableId({
+            turnId: current.turnId,
+            attemptId: current.attemptId,
+            generation: current.generation,
+            publicAssistantMessageId,
+          })}`,
+          turnId: current.turnId,
+          attemptId: current.attemptId,
+          expectedGeneration: current.generation,
+          resultDisposition: options.resultDisposition ?? "fulfilled",
+          publicMessageRef: publicAssistantMessageId,
+          completionEvidenceRefs: [...this.evidenceRefs],
+          createdAt: completedAt,
+        });
+      }
+    }
     this.input.writer.finalizeTurn({
       turnId: this.turn.id,
       status,
@@ -322,4 +449,12 @@ function collectEvidenceRefs(value: unknown, refs: Set<string>): void {
 export function conversationSessionIdForDurableSession(sessionId: string): string {
   const hash = createHash("sha256").update(sessionId).digest("hex").slice(0, 32);
   return `cs_${hash}`;
+}
+
+function btccAttemptId(turnId: string): string {
+  return `btcc-attempt-${stableId({ turnId })}`;
+}
+
+function stableId(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 24);
 }

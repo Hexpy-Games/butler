@@ -39,6 +39,10 @@ export type SideEffectState =
   | "known_not_applied"
   | "indeterminate";
 export type RuntimeInterruptionCode = (typeof RUNTIME_INTERRUPTION_CODES)[number];
+export type DeliveredResultDisposition =
+  | "fulfilled"
+  | "partially_fulfilled"
+  | "not_fulfilled";
 
 interface TurnInterruptionEnvelopeBase {
   schemaVersion: typeof TURN_INTERRUPTION_ENVELOPE_SCHEMA;
@@ -172,6 +176,7 @@ export type TurnInterruptionDirective =
     expectedGeneration: number;
     checkpointRef: string;
     cancellationReceiptRef: string;
+    createdAt: string;
   };
 
 export interface BtccTurnStateRecord {
@@ -187,4 +192,15 @@ export interface BtccTurnStateRecord {
   terminalOutcomeId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BtccReportingReceiptInput {
+  reportingReceiptId: string;
+  turnId: string;
+  attemptId: string;
+  expectedGeneration: number;
+  resultDisposition: DeliveredResultDisposition;
+  publicMessageRef: string;
+  completionEvidenceRefs: string[];
+  createdAt: string;
 }

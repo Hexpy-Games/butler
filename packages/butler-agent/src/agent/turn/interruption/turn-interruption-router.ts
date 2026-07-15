@@ -62,6 +62,7 @@ export function routeTurnInterruption(
         expectedGeneration: envelope.currentGeneration,
         checkpointRef: envelope.lastStableCheckpointRef,
         cancellationReceiptRef: envelope.cancellationReceiptRef,
+        createdAt: envelope.createdAt,
       };
     default:
       return assertNever(envelope);

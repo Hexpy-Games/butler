@@ -10646,6 +10646,7 @@ test("native runtime delivers recoverable direct work progress when model reques
 
 test("native runtime preserves validation limitation when direct work is delivered recoverable", async () => {
   let promptCalls = 0;
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -10711,6 +10712,9 @@ test("native runtime preserves validation limitation when direct work is deliver
     provider: fakeProvider,
     model: "local/gemma-test",
     input: { text: "검증 실패까지 포함해 직접 작업 상태를 정리해줘." },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind, payload: event.payload });
+    },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
   });
 
@@ -10723,6 +10727,12 @@ test("native runtime preserves validation limitation when direct work is deliver
   expect(result.delivery?.limitations).toEqual([
     "Validation suite failed without a later passing receipt: direct-validation",
   ]);
+  expect(events.map((event) => event.kind)).not.toContain("turn.failed");
+  expect(events.find((event) => event.kind === "turn.outcome")?.payload)
+    .toMatchObject({
+      outcome: "completed",
+      publicSummary: "Delivered with an unresolved validation limitation: direct-validation",
+    });
   const streams = new WorkStreamStore(tempDir).list({
     sessionId: "butler/main/direct-work-validation-limitation",
     includeTerminal: true,
@@ -11108,8 +11118,9 @@ test("native runtime does not emit turn failed before recoverable limited delive
   expect(events.map((event) => event.kind)).not.toContain("turn.outcome");
 });
 
-test("native runtime marks interrupted direct WorkStreams recoverable", async () => {
+test("native runtime leaves interrupted direct WorkStreams owned until the interruption router records a wait", async () => {
   const sessionId = "butler/main/interrupted-direct-work";
+  const events: Array<{ kind: string }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
     messageLanguage: "ko",
@@ -11152,24 +11163,26 @@ test("native runtime marks interrupted direct WorkStreams recoverable", async ()
     model: "local/gemma-test",
     input: { text: "이 작업은 오래 걸려도 계속되어야 해." },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
+    emitTurnEvent: (event) => {
+      events.push({ kind: event.kind });
+    },
   })).rejects.toThrow("socket connection");
 
   const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
   expect(streams[0]).toMatchObject({
-    state: "recoverable",
+    state: "executing",
     current_phase: "execution",
     active_step_id: "inspect",
     terminal: false,
   });
   const record = new WorkStreamStore(tempDir).read(streams[0].id);
-  expect(record?.status_note).toContain("interrupted before final delivery");
   const todoView = new TodoListStore(tempDir).view(record!.todo_list_id!, { includeCompleted: true });
   expect(todoView.progress.active).toBe(2);
   expect(todoView.items).toEqual(expect.arrayContaining([
     expect.objectContaining({
       id: "inspect",
-      status: "pending",
+      status: "in_progress",
       active_form: "긴 작업 상태 확인 중",
     }),
     expect.objectContaining({
@@ -11177,6 +11190,8 @@ test("native runtime marks interrupted direct WorkStreams recoverable", async ()
       status: "pending",
     }),
   ]));
+  expect(events.map((event) => event.kind)).not.toContain("turn.failed");
+  expect(events.map((event) => event.kind)).not.toContain("turn.outcome");
 });
 
 test("native runtime resumes prompt-budget interrupted WorkStreams from durable todo state", async () => {
