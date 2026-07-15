@@ -6,7 +6,8 @@ param(
   [Parameter(Mandatory = $true)][string]$SigningThumbprint,
   [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
   [Parameter(Mandatory = $true)][string]$Output,
-  [switch]$InteractiveDesktop
+  [switch]$InteractiveDesktop,
+  [switch]$DirectInteractive
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,7 +24,7 @@ try {
   $env:BUTLER_WINDOWS_STANDARD_USER = "1"
   Push-Location $Root
   try {
-    if ($InteractiveDesktop) {
+    if ($InteractiveDesktop -and -not $DirectInteractive) {
       $controller = Join-Path $Root "packages\butler-app\scripts\windows\interactive-smoke-controller.ts"
       $shortcutPath = Join-Path $env:TEMP "ButlerInteractiveSmoke-$PID.lnk"
       $shell = New-Object -ComObject WScript.Shell
@@ -73,7 +74,7 @@ try {
   } finally {
     Pop-Location
   }
-  if (-not $InteractiveDesktop) {
+  if (-not $InteractiveDesktop -or $DirectInteractive) {
     [IO.File]::WriteAllText($Output, (($lines | Out-String).Trim() + "`r`n"))
   }
   exit $code
