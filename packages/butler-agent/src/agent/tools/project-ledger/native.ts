@@ -258,6 +258,8 @@ function projectLedgerRecordKinds(
       return ["attempt"];
     case "project_ledger_create":
     case "project_ledger_update":
+    case "project_ledger_list":
+    case "project_ledger_show":
       return ["spec", "plan", "work", "task", "attempt"];
     default:
       return [];
