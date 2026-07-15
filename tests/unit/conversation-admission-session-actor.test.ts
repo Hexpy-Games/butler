@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { readConversationContext } from "../../packages/butler-agent/src/agent/context/conversation-context.ts";
@@ -406,6 +406,9 @@ test("session actor admits user and final assistant while stream and progress au
     turnId: "turn-semantic",
     inboundMessageId: semanticTail[0]?.id,
   });
+  for (let attempt = 0; attempt < 100 && !existsSync(memorySyncQueueFile(tempDir)); attempt += 1) {
+    await Bun.sleep(5);
+  }
   const completionJob = JSON.parse(readFileSync(memorySyncQueueFile(tempDir), "utf8").trim());
   expect(completionJob).toMatchObject({
     schema_version: "butler.memory-sync-request.v2",

@@ -12,7 +12,7 @@ import type {
   ConversationTurn,
   ConversationWriter,
 } from "./types.ts";
-import { publishConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
+import { scheduleConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
 import {
   routeTurnInterruption,
@@ -275,36 +275,34 @@ export class ConversationAdmissionTurn {
       requestMessageId &&
       publicAssistantMessageId
     ) {
-      try {
-        publishConversationCompletionObservation({
-          butlerData: this.input.butlerData,
-          projectId: this.input.binding.projectId ?? null,
-          runtimeSessionId: this.input.binding.sessionId,
-          conversationSessionId: this.turn.session_id,
-          conversationTurnId: this.turn.id,
-          inboundMessageId: requestMessageId,
-          outboundMessageId: publicAssistantMessageId,
-          outcomeGeneration: existingGeneration + 1,
-          completedAt,
-        });
-        recordOperationalMetric({
+      scheduleConversationCompletionObservation({
+        butlerData: this.input.butlerData,
+        projectId: this.input.binding.projectId ?? null,
+        runtimeSessionId: this.input.binding.sessionId,
+        conversationSessionId: this.turn.session_id,
+        conversationTurnId: this.turn.id,
+        inboundMessageId: requestMessageId,
+        outboundMessageId: publicAssistantMessageId,
+        outcomeGeneration: existingGeneration + 1,
+        completedAt,
+      }, {
+        onPublished: () => recordOperationalMetric({
           category: "memory",
           name: "completion_observation_publish",
           status: "ok",
           dimensions: {
             scope: this.input.binding.projectId ? "project" : "global",
           },
-        }, { butlerData: this.input.butlerData });
-      } catch {
-        recordOperationalMetric({
+        }, { butlerData: this.input.butlerData }),
+        onError: () => recordOperationalMetric({
           category: "memory",
           name: "completion_observation_publish",
           status: "error",
           dimensions: {
             scope: this.input.binding.projectId ? "project" : "global",
           },
-        }, { butlerData: this.input.butlerData });
-      }
+        }, { butlerData: this.input.butlerData }),
+      });
     }
   }
 

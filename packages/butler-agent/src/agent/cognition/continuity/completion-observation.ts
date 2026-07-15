@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { cognitionMemoryRoot } from "../paths.ts";
 import { appendToQueue, type SyncRequest } from "../memory/scripts/queue.ts";
 
@@ -27,6 +27,29 @@ export interface CompletionJobReceipt {
   completed_at: string;
   hot_cache_receipt: Record<string, unknown> | null;
   index_status: "ok" | "skipped";
+}
+
+const scheduledCompletionJobs = new Set<string>();
+
+export function scheduleConversationCompletionObservation(
+  input: Parameters<typeof publishConversationCompletionObservation>[0],
+  callbacks: {
+    onPublished?: (observation: ConversationCompletionObservation) => void;
+    onError?: (error: unknown) => void;
+  } = {},
+): void {
+  const jobId = completionJobId(input.conversationTurnId, input.outcomeGeneration);
+  const schedulingKey = `${resolve(input.butlerData)}\0${jobId}`;
+  if (scheduledCompletionJobs.has(schedulingKey)) return;
+  scheduledCompletionJobs.add(schedulingKey);
+  setImmediate(() => {
+    scheduledCompletionJobs.delete(schedulingKey);
+    try {
+      callbacks.onPublished?.(publishConversationCompletionObservation(input));
+    } catch (error) {
+      callbacks.onError?.(error);
+    }
+  });
 }
 
 export function publishConversationCompletionObservation(input: {
