@@ -58,8 +58,10 @@ import {
 import {
   createTurnContextAtomId,
   persistTurnContextAtom,
+  readTurnContextAtom,
 } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { appRuntimePolicy } from "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 import { publicWebSearchEvidenceItems } from "../../packages/butler-agent/src/agent/output/evidence/public-web-evidence.ts";
 import { readCurrentFinalCandidate } from "../../packages/butler-agent/src/agent/turn/native/turn-runner/final-candidate-review-store.ts";
@@ -3107,6 +3109,9 @@ test("native runtime allows repeated tests after a state-mutating command resets
 test("native runtime can drive the real run_command tool through the default executor", async () => {
   const workspace = join(tempDir, "workspace");
   mkdirSync(workspace, { recursive: true });
+  const command = process.platform === "win32"
+    ? "Set-Content -Path command-proof.txt -Value ok; Get-Content command-proof.txt"
+    : "printf 'ok\\n' > command-proof.txt; cat command-proof.txt";
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const runtime = new NativeToolLoopRuntime({
     butlerHome: process.cwd(),
@@ -3119,13 +3124,13 @@ test("native runtime can drive the real run_command tool through the default exe
         toolCalls: [{
           name: "run_command",
           args: {
-            command: "echo ok | tee command-proof.txt",
+            command,
             output_paths: ["command-proof.txt"],
           },
         }],
       });
       const args = {
-        command: "echo ok | tee command-proof.txt",
+        command,
         output_paths: ["command-proof.txt"],
       };
       const result = await input.executeTool({
@@ -9233,7 +9238,9 @@ test("native runtime records bridge resolution failures without visible wrapper 
   )).toBe(true);
 });
 
-test("native runtime checkpoints runtime-fault-shaped bridge exceptions without model-visible failure", async () => {
+test("native runtime passes runtime-fault-shaped bridge exceptions to the interruption router", async () => {
+  const sessionId = "butler/main/progressive-tool-call-runtime-fault";
+  const turnId = "turn-progressive-tool-call-runtime-fault";
   let bridgeResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -9258,7 +9265,7 @@ test("native runtime checkpoints runtime-fault-shaped bridge exceptions without 
     },
   });
   const handle = await runtime.createSession({
-    sessionId: "butler/main/progressive-tool-call-runtime-fault",
+    sessionId,
     role: "butler",
     workspacePath: tempDir,
     systemPrompt: "You are Butler.",
@@ -9269,11 +9276,16 @@ test("native runtime checkpoints runtime-fault-shaped bridge exceptions without 
     provider: fakeProvider,
     model: "openai/auto:codex-latest",
     input: { text: "도구 호출 runtime fault를 확인해줘" },
-    metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("Turn scheduler yielded after persisting a continuation context atom");
+    metadata: { turnId, runtimePolicy: { completionReview: "disabled" } },
+  })).rejects.toThrow("bridge invariant broke");
 
   expect(bridgeResult).toBeNull();
-  const transcript = readTranscript("butler/main/progressive-tool-call-runtime-fault");
+  expect(readTurnContextAtom({
+    butlerData: tempDir,
+    sessionId,
+    turnId,
+  })).toBeNull();
+  const transcript = readTranscript(sessionId);
   expect(transcript.some((event) => {
     return event.kind === "tool_result" &&
       event.payload.name === "tool_call" &&
@@ -11084,7 +11096,7 @@ test("native runtime returns recoverable tool errors to the model instead of abo
     event.payload.ok === false)).toBe(true);
 });
 
-test("native runtime does not emit turn failed before recoverable limited delivery", async () => {
+test("native runtime passes untyped completion errors to the interruption router without turn failed", async () => {
   const events: Array<{ kind: string }> = [];
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -11115,7 +11127,7 @@ test("native runtime does not emit turn failed before recoverable limited delive
       events.push({ kind: event.kind });
     },
     metadata: { runtimePolicy: { completionReview: "enabled" } },
-  })).rejects.toThrow("Turn scheduler yielded after persisting a continuation context atom");
+  })).rejects.toThrow("missing evidence receipt for source_verified");
 
   expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
@@ -11151,7 +11163,14 @@ test("native runtime leaves interrupted direct WorkStreams owned until the inter
         },
         rawArguments: JSON.stringify({ title: "긴 작업 내구성 확인" }),
       });
-      throw new Error("The socket connection was closed unexpectedly.");
+      throw new ModelProviderRequestError({
+        code: "provider_network_error",
+        message: "Model provider API connection failed before a response was received.",
+        provider: "test-provider",
+        api: "chat_completions",
+        retryable: true,
+        cause: "The socket connection was closed unexpectedly.",
+      });
     },
   });
   const handle = await runtime.createSession({
