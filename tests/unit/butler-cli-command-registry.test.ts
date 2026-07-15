@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { basename, join } from "path";
 
 import { parseCommonOptions } from "../../packages/butler-agent/src/interfaces/cli/args.ts";
 import { findCommand, listCommands } from "../../packages/butler-agent/src/interfaces/cli/command-registry.ts";
@@ -65,8 +65,8 @@ test("common option parser normalizes product-wide options", () => {
   expect(parsed.options.quiet).toBe(true);
   expect(parsed.options.yes).toBe(true);
   expect(parsed.options.nonInteractive).toBe(true);
-  expect(parsed.options.home.endsWith("/custom-butler")).toBe(true);
-  expect(parsed.options.data.endsWith("/custom-data")).toBe(true);
+  expect(basename(parsed.options.home)).toBe("custom-butler");
+  expect(basename(parsed.options.data)).toBe("custom-data");
   expect(parsed.errors).toEqual([]);
 });
 

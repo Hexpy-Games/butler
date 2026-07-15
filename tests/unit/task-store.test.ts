@@ -10,6 +10,7 @@ import {
   summarizeWorkerLog,
   TaskStore,
 } from "../../packages/butler-agent/src/agent/work/task-store.ts";
+import { backgroundCommandControlPaths } from "../../packages/butler-agent/src/runtime/command/background-command-registry.ts";
 
 let tempDir = "";
 
@@ -685,6 +686,29 @@ test("task store reconciles dead running workers into recoverable state when con
   expect(store.taskIds()).toEqual(["task-dead-running"]);
 });
 
+test("task store preserves a cross-process worker while its neutral heartbeat is fresh", () => {
+  const store = new TaskStore(tempDir);
+  const taskId = "task-heartbeat-running";
+  const taskDir = join(tempDir, "tasks", taskId);
+  const heartbeat = backgroundCommandControlPaths(tempDir, taskId).heartbeatFile;
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "RUNNING\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "continue this active task\n", "utf8");
+  writeFileSync(heartbeat, `${new Date().toISOString()}\n`, "utf8");
+
+  expect(store.reconcileRecoverableTasks({ isPidAlive: () => false })).toEqual([]);
+  expect(store.read(taskId)?.status).toBe("RUNNING");
+
+  const stale = new Date(Date.now() - 10_000);
+  utimesSync(heartbeat, stale, stale);
+  expect(store.reconcileRecoverableTasks({ isPidAlive: () => false })).toEqual([{
+    task_id: taskId,
+    from: "RUNNING",
+    to: "RECOVERABLE",
+    reason: "running worker process is missing; durable context is available",
+  }]);
+});
+
 test("task store leaves live running workers alone and fails unrecoverable empty tasks", () => {
   const store = new TaskStore(tempDir);
   const liveDir = join(tempDir, "tasks", "task-live-running");
@@ -855,7 +879,7 @@ test("task store projects worker transcript command details instead of generic d
       label: "rg -n worker_activity packages/butler-agent/src",
       rows: expect.arrayContaining([
         expect.objectContaining({
-          safe_tool_name: "Bash",
+          safe_tool_name: "Command",
           safe_input_label: "rg -n worker_activity packages/butler-agent/src",
         }),
       ]),

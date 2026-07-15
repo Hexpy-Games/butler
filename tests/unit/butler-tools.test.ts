@@ -1541,7 +1541,7 @@ test("transform_public_data_table writes bounded public CSV artifacts", async ()
   expect(readFileSync(artifactPath, "utf8")).toContain("중원문화제");
 });
 
-test("run_command schema exposes bounded non-interactive bash execution", () => {
+test("run_command schema exposes bounded platform-neutral command execution", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "run_command");
 
   expect(tool?.parameters.required).toEqual(["command"]);
@@ -1555,7 +1555,7 @@ test("run_command schema exposes bounded non-interactive bash execution", () => 
     "state_effect",
     "output_mode",
   ]);
-  expect(tool?.description).toContain("non-interactive bash command");
+  expect(tool?.description).toContain("platform-neutral command executor");
   const properties = tool?.parameters.properties as Record<string, unknown> | undefined;
   expect(properties?.output_paths).toMatchObject({
     type: "array",
@@ -3744,9 +3744,12 @@ test("dispatch_worker launches with sanitized environment plus Butler task vars"
   const fakeHome = join(tempDir, "fake-butler-home");
   const scriptDir = join(fakeHome, "packages", "butler-agent", "scripts");
   mkdirSync(scriptDir, { recursive: true });
-  writeFileSync(join(scriptDir, "dispatch.sh"), [
-    "#!/usr/bin/env bash",
-    "env > \"$BUTLER_DATA/worker-env.txt\"",
+  writeFileSync(join(scriptDir, "run-worker.ts"), [
+    "import { writeFileSync } from 'node:fs';",
+    "const keys = ['BUTLER_HOME', 'BUTLER_DATA', 'TASK_ID_OVERRIDE', 'BUTLER_SECRET_TOKEN'];",
+    "writeFileSync(`${process.env.BUTLER_DATA}/worker-env.txt`, keys.filter((key) => process.env[key] !== undefined).map((key) => `${key}=${process.env[key]}`).join('\\n'));",
+    "writeFileSync(`${process.argv[2]}/worker_activity.json`, JSON.stringify({ phase: 'executing', work_blocks: [{ id: 'proof-block', state: 'delivered' }] }));",
+    "process.stdout.write('worker complete\\n');",
   ].join("\n"), "utf8");
   const previousSecret = process.env.BUTLER_SECRET_TOKEN;
   process.env.BUTLER_SECRET_TOKEN = "should-not-reach-worker";
@@ -3769,7 +3772,8 @@ test("dispatch_worker launches with sanitized environment plus Butler task vars"
     for (let index = 0; index < 50; index += 1) {
       if (
         existsSync(join(tempDir, "worker-env.txt")) &&
-        readFileSync(join(tempDir, "worker-env.txt"), "utf8").includes(`BUTLER_HOME=${fakeHome}`)
+        readFileSync(join(tempDir, "worker-env.txt"), "utf8").includes(`BUTLER_HOME=${fakeHome}`) &&
+        readFileSync(join(tempDir, "tasks", result.task_id, "status"), "utf8").trim() === "DONE"
       ) break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -3779,13 +3783,22 @@ test("dispatch_worker launches with sanitized environment plus Butler task vars"
     expect(envText).toContain(`TASK_ID_OVERRIDE=${result.task_id}`);
     expect(envText).not.toContain("BUTLER_SECRET_TOKEN");
     expect(envText).not.toContain("should-not-reach-worker");
+    expect(readFileSync(join(tempDir, "tasks", result.task_id, "status"), "utf8").trim()).toBe("DONE");
+    expect(existsSync(join(tempDir, "tasks", result.task_id, "pid"))).toBe(false);
+    expect(existsSync(join(tempDir, "tasks", result.task_id, "pgid"))).toBe(false);
+    expect(JSON.parse(
+      readFileSync(join(tempDir, "tasks", result.task_id, "worker_activity.json"), "utf8"),
+    )).toMatchObject({
+      phase: "complete",
+      work_blocks: [{ id: "proof-block", state: "delivered" }],
+    });
   } finally {
     if (previousSecret === undefined) delete process.env.BUTLER_SECRET_TOKEN;
     else process.env.BUTLER_SECRET_TOKEN = previousSecret;
   }
 });
 
-test("dispatch_worker refuses to report success when the dispatch script is missing", async () => {
+test("dispatch_worker refuses to report success when the worker runtime is missing", async () => {
   const fakeHome = join(tempDir, "fake-butler-home");
   const execute = createButlerToolExecutor({
     butlerHome: fakeHome,
@@ -3799,7 +3812,7 @@ test("dispatch_worker refuses to report success when the dispatch script is miss
       project_path: tempDir,
     },
     rawArguments: "{}",
-  })).rejects.toThrow("worker dispatch script not found");
+  })).rejects.toThrow("worker runtime entrypoint not found");
 });
 
 test("web_search returns normalized source-bearing results and telemetry", async () => {

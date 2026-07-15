@@ -38,6 +38,7 @@ export function FirstRunSetup({
         onLanguageChange={setup.onLanguageChange}
         onLanguageContinue={setup.onLanguageContinue}
         onQuit={setup.onQuit}
+        onRepairInstall={setup.onRepairInstall}
         onRetryInstall={setup.onRetryInstall}
         onRetryModelLoad={setup.onRetryModelLoad}
         onRetryModelSave={setup.onRetryModelSave}

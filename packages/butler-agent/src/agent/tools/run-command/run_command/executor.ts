@@ -1,12 +1,10 @@
-import {
-  spawn,
-  spawnSync,
-  type ChildProcessWithoutNullStreams,
-} from "child_process";
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
 import { butlerToolProcessEnvironment } from "../../../tool-support/executor-support.ts";
+import type { CommandExecutor } from "../../../../runtime/command/contracts.ts";
+import { executeLegacyCommandCompatibility } from "../../../../runtime/command/legacy-command-compat.ts";
+import { createPlatformCommandExecutor } from "../../../../runtime/command/platform-command-executor.ts";
 import {
   commandEvidenceCapabilityReceipts,
   commandEvidenceReceipts,
@@ -26,7 +24,9 @@ export function createRunCommandToolHandlers(input: {
   butlerHome: string;
   butlerData: string;
   workspacePath: string;
+  commandExecutor?: CommandExecutor;
 }) {
+  const commandExecutor = input.commandExecutor ?? createPlatformCommandExecutor();
   return {
     "run_command": async (call: ToolCall) => await runCommandTool({
       butlerHome: input.butlerHome,
@@ -34,6 +34,7 @@ export function createRunCommandToolHandlers(input: {
       workspacePath: input.workspacePath,
       args: call.args,
       signal: call.signal,
+      commandExecutor,
     }),
   };
 }
@@ -236,20 +237,28 @@ function commandArtifactsFromPaths(input: {
     .filter((artifact): artifact is CommandArtifactEvidence => Boolean(artifact)));
 }
 
-function gitWorkspaceStatusSnapshot(workspace: string): GitWorkspaceStatusSnapshot | null {
-  const result = spawnSync("git", [
-    "-C",
-    workspace,
-    "status",
-    "--porcelain=v1",
-    "-z",
-    "--untracked-files=all",
-  ], {
-    encoding: "utf8",
-    maxBuffer: 1024 * 1024,
-    windowsHide: true,
+async function gitWorkspaceStatusSnapshot(
+  workspace: string,
+  executor: CommandExecutor,
+): Promise<GitWorkspaceStatusSnapshot | null> {
+  const result = await executor.execute({
+    plan: {
+      steps: [{
+        executable: "git",
+        arguments: [
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+        ],
+      }],
+    },
+    cwd: workspace,
+    timeoutMs: 10_000,
   });
-  if (result.status !== 0) return null;
+  if (result.exitCode !== 0 || result.timedOut || result.cancelled || result.error) {
+    return null;
+  }
   const snapshot: GitWorkspaceStatusSnapshot = new Map();
   const records = result.stdout.split("\0").filter(Boolean);
   for (let index = 0; index < records.length; index += 1) {
@@ -266,14 +275,15 @@ function gitWorkspaceStatusSnapshot(workspace: string): GitWorkspaceStatusSnapsh
   return snapshot;
 }
 
-function gitWorkspaceDeltaArtifacts(input: {
+async function gitWorkspaceDeltaArtifacts(input: {
   before: GitWorkspaceStatusSnapshot | null;
   workspace: string;
   butlerData: string;
   success: boolean;
-}): CommandArtifactEvidence[] {
+  executor: CommandExecutor;
+}): Promise<CommandArtifactEvidence[]> {
   if (!input.success || !input.before) return [];
-  const after = gitWorkspaceStatusSnapshot(input.workspace);
+  const after = await gitWorkspaceStatusSnapshot(input.workspace, input.executor);
   if (!after) return [];
   const paths = [...after.entries()]
     .filter(([path, status]) => input.before?.get(path) !== status)
@@ -526,160 +536,33 @@ function commandArtifactEvidenceFields(artifacts: CommandArtifactEvidence[]): Re
   };
 }
 
-function appendCapturedText(current: string, chunk: Buffer | string): {
-  text: string;
-  truncated: boolean;
-} {
-  if (current.length >= MAX_COMMAND_CAPTURE_CHARS) return { text: current, truncated: true };
-  const next = current + chunk.toString();
-  if (next.length <= MAX_COMMAND_CAPTURE_CHARS) return { text: next, truncated: false };
-  return {
-    text: next.slice(0, MAX_COMMAND_CAPTURE_CHARS),
-    truncated: true,
-  };
-}
-
-async function executeBashCommand(input: {
+async function executeCommandCompatibility(input: {
   command: string;
   cwd: string;
   timeoutMs: number;
   butlerData: string;
   pipefail: boolean;
   signal?: AbortSignal;
+  commandExecutor: CommandExecutor;
 }): Promise<ShellCommandResult> {
-  return await new Promise((resolveCommand, reject) => {
-    const child = spawn(
-      "/bin/bash",
-      input.pipefail ? ["-o", "pipefail", "-lc", input.command] : ["-lc", input.command],
-      {
-        cwd: input.cwd,
-        env: butlerToolProcessEnvironment({ butlerData: input.butlerData }),
-        detached: process.platform !== "win32",
-        windowsHide: true,
-      },
-    );
-    let stdout = "";
-    let stderr = "";
-    let stdoutTruncated = false;
-    let stderrTruncated = false;
-    let timedOut = false;
-    let escalationTimer: ReturnType<typeof setTimeout> | undefined;
-    let terminationStarted = false;
-
-    const terminateProcessTree = () => {
-      if (terminationStarted) return;
-      terminationStarted = true;
-      signalCommandProcessTree(child, "SIGTERM");
-      escalationTimer = setTimeout(() => {
-        signalCommandProcessTree(child, "SIGKILL");
-      }, 500);
-      escalationTimer.unref?.();
-    };
-    const timeoutTimer = setTimeout(() => {
-      timedOut = true;
-      terminateProcessTree();
-    }, input.timeoutMs);
-    const onAbort = () => {
-      clearTimeout(timeoutTimer);
-      terminateProcessTree();
-    };
-    const cleanup = (includeEscalation: boolean) => {
-      clearTimeout(timeoutTimer);
-      if (includeEscalation && escalationTimer) clearTimeout(escalationTimer);
-      input.signal?.removeEventListener("abort", onAbort);
-    };
-    if (input.signal?.aborted) onAbort();
-    else input.signal?.addEventListener("abort", onAbort, { once: true });
-
-    child.stdout.on("data", (chunk) => {
-      const next = appendCapturedText(stdout, chunk);
-      stdout = next.text;
-      stdoutTruncated ||= next.truncated;
-    });
-    child.stderr.on("data", (chunk) => {
-      const next = appendCapturedText(stderr, chunk);
-      stderr = next.text;
-      stderrTruncated ||= next.truncated;
-    });
-    child.on("error", (error) => {
-      cleanup(true);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      cleanup(false);
-      void (async () => {
-        if (terminationStarted) {
-          let stopped = await waitForCommandProcessTreeExit(child, 500);
-          if (!stopped) {
-            signalCommandProcessTree(child, "SIGKILL");
-            stopped = await waitForCommandProcessTreeExit(child, 500);
-          }
-          if (!stopped) {
-            cleanup(true);
-            reject(new Error("run_command_process_tree_termination_failed"));
-            return;
-          }
-        }
-        cleanup(true);
-        const truncationNotes = [
-          stdoutTruncated ? `[stdout truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]` : "",
-          stderrTruncated ? `[stderr truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]` : "",
-        ].filter(Boolean);
-        resolveCommand({
-          stdout: stdoutTruncated ? `${stdout}\n${truncationNotes[0] ?? ""}` : stdout,
-          stderr: stderrTruncated ? `${stderr}\n${truncationNotes.at(-1) ?? ""}` : stderr,
-          exit_code: timedOut ? null : code,
-          timed_out: timedOut,
-        });
-      })();
-    });
+  const raw = await executeLegacyCommandCompatibility(input.commandExecutor, {
+    command: input.command,
+    cwd: input.cwd,
+    timeoutMs: input.timeoutMs,
+    environment: butlerToolProcessEnvironment({ butlerData: input.butlerData }),
+    pipefail: input.pipefail,
+    signal: input.signal,
   });
+  return {
+    ...raw,
+    stdout: boundedCommandCapture(raw.stdout, "stdout"),
+    stderr: boundedCommandCapture(raw.stderr, "stderr"),
+  };
 }
 
-function signalCommandProcessTree(
-  child: ChildProcessWithoutNullStreams,
-  signal: NodeJS.Signals,
-): void {
-  if (!child.pid) return;
-  if (process.platform === "win32") {
-    const result = spawnSync(
-      "taskkill",
-      ["/pid", String(child.pid), "/t", "/f"],
-      { stdio: "ignore", windowsHide: true },
-    );
-    if (result.status === 0) return;
-    child.kill(signal);
-    return;
-  }
-  try {
-    process.kill(-child.pid, signal);
-  } catch {
-    child.kill(signal);
-  }
-}
-
-async function waitForCommandProcessTreeExit(
-  child: ChildProcessWithoutNullStreams,
-  timeoutMs: number,
-): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (commandProcessTreeRunning(child) && Date.now() < deadline) {
-    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
-  }
-  return !commandProcessTreeRunning(child);
-}
-
-function commandProcessTreeRunning(child: ChildProcessWithoutNullStreams): boolean {
-  if (!child.pid) return false;
-  if (process.platform === "win32") {
-    return child.exitCode === null && child.signalCode === null;
-  }
-  try {
-    process.kill(-child.pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+function boundedCommandCapture(value: string, stream: "stdout" | "stderr"): string {
+  if (value.length <= MAX_COMMAND_CAPTURE_CHARS) return value;
+  return `${value.slice(0, MAX_COMMAND_CAPTURE_CHARS)}\n[${stream} truncated after ${MAX_COMMAND_CAPTURE_CHARS} chars]`;
 }
 
 function throwIfCommandAborted(signal?: AbortSignal): void {
@@ -719,6 +602,7 @@ export async function runCommandTool(input: {
   workspacePath: string;
   args: Record<string, unknown>;
   signal?: AbortSignal;
+  commandExecutor?: CommandExecutor;
 }): Promise<Record<string, unknown>> {
   throwIfCommandAborted(input.signal);
   const command = typeof input.args.command === "string" ? input.args.command.trim() : "";
@@ -771,7 +655,11 @@ export async function runCommandTool(input: {
       }),
     };
   }
-  const gitStatusBeforeCommand = gitWorkspaceStatusSnapshot(workspace);
+  const commandExecutor = input.commandExecutor ?? createPlatformCommandExecutor();
+  const gitStatusBeforeCommand = await gitWorkspaceStatusSnapshot(
+    workspace,
+    commandExecutor,
+  );
   const commandStartedAtMs = Date.now();
   mkdirSync(commandGeneratedArtifactRoot(input.butlerData), { recursive: true });
   const projectLedgerSnapshot = createProjectLedgerMutationSnapshot({
@@ -786,13 +674,14 @@ export async function runCommandTool(input: {
     typeof restoreProjectLedgerMutationIfChanged
   >;
   try {
-    raw = await executeBashCommand({
+    raw = await executeCommandCompatibility({
       command,
       cwd,
       timeoutMs,
       butlerData: input.butlerData,
       pipefail: Boolean(validationSuiteFromArgs(input.args)),
       signal: input.signal,
+      commandExecutor,
     });
     projectLedgerMutation = restoreProjectLedgerMutationIfChanged(
       projectLedgerSnapshot,
@@ -872,11 +761,12 @@ export async function runCommandTool(input: {
     });
   const discoveredWorkspaceArtifacts = declaredArtifacts.length > 0 || stdoutArtifacts.length > 0
     ? []
-    : gitWorkspaceDeltaArtifacts({
+    : await gitWorkspaceDeltaArtifacts({
       before: gitStatusBeforeCommand,
       workspace,
       butlerData: input.butlerData,
       success,
+      executor: commandExecutor,
     });
   const artifacts = uniqueCommandArtifacts([
     ...declaredArtifacts,

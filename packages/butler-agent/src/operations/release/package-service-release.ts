@@ -21,6 +21,7 @@ import {
   sep,
 } from "node:path";
 import { spawnSync } from "node:child_process";
+import { create as createTarArchive } from "tar";
 import {
   createReleaseManifest,
   SERVICE_APP_WEB_CLIENT_DIST,
@@ -72,7 +73,11 @@ const IGNORED_PATH_SEGMENTS = new Set([
 ]);
 
 export function currentServiceCliLauncherPlatform(): ServiceCliLauncherPlatform {
-  const os = process.platform === "darwin" ? "darwin" : process.platform;
+  const os = process.platform === "win32"
+    ? "windows"
+    : process.platform === "darwin"
+    ? "darwin"
+    : process.platform;
   const arch = process.arch === "arm64" ? "arm64" : "x64";
   const platform = `${os}-${arch}`;
   if (SERVICE_CLI_LAUNCHER_PLATFORMS.includes(platform as ServiceCliLauncherPlatform)) {
@@ -255,14 +260,12 @@ function installServiceProductionDependencies(stageRoot: string): void {
 function buildAppWebClientDist(root: string, stageRoot: string): void {
   const uiRoot = join(root, "packages", "butler-app", "client", "ui");
   const sourceDist = join(uiRoot, "dist");
-  const result = spawnSync(process.env.BUTLER_NPM || "npm", [
-    "--prefix",
-    "packages/butler-app/client/ui",
+  const result = spawnSync(process.env.BUTLER_BUN || "bun", [
     "run",
     "--silent",
     "build",
   ], {
-    cwd: root,
+    cwd: uiRoot,
     encoding: "utf8",
   });
   if (result.status !== 0) {
@@ -333,26 +336,17 @@ function buildPrebuiltCliLaunchers(
 }
 
 function createTarball(stageRoot: string, artifactPath: string): void {
-  const result = spawnSync("tar", [
-    "--format",
-    "ustar",
-    "-czf",
-    artifactPath,
-    "-C",
-    stageRoot,
-    ".",
-  ], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      COPYFILE_DISABLE: "1",
-      COPY_EXTENDED_ATTRIBUTES_DISABLE: "1",
-    },
-  });
-  if (result.status !== 0) {
-    throw new Error(
-      `tar failed: ${result.stderr.trim() || result.stdout.trim() || "unknown error"}`,
-    );
+  try {
+    createTarArchive({
+      cwd: stageRoot,
+      file: artifactPath,
+      follow: true,
+      gzip: true,
+      portable: true,
+      sync: true,
+    }, ["."]);
+  } catch (error) {
+    throw new Error("portable Agent archive creation failed", { cause: error });
   }
 }
 
