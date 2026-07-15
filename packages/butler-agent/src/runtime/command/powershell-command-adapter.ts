@@ -15,10 +15,25 @@ export class PowerShellCommandAdapter implements CommandAdapter {
   }
 
   async execute(request: CommandRequest): Promise<CommandResult> {
-    return await runNodeCommand(
+    const result = await runNodeCommand(
       powerShellInvocations(request, this.processHost),
       request,
     );
+    if (
+      result.exitCode === 125 &&
+      /^butler_process_host_error:[a-z0-9_.-]+$/iu.test(result.stderr.trim())
+    ) {
+      return {
+        ...result,
+        stderr: "",
+        exitCode: null,
+        error: {
+          code: "command_spawn_failed",
+          message: "command process could not be started",
+        },
+      };
+    }
+    return result;
   }
 }
 

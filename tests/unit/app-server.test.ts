@@ -76,6 +76,7 @@ import type {
   RuntimeSessionInit,
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import { startRegisteredBackgroundCommand } from "../../packages/butler-agent/src/runtime/command/background-command-registry.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -5931,7 +5932,7 @@ test("automation scheduler drains queued prompts after a busy session becomes id
 
 test("worker activity projects durable worker state without raw worker requests", async () => {
   const tasksDir = join(tempDir, "tasks", "20260501010101");
-  let sleeper: ReturnType<typeof spawn> | undefined;
+  let backgroundCancelled = false;
   mkdirSync(tasksDir, { recursive: true });
   writeFileSync(join(tasksDir, "status"), "RUNNING\n", "utf8");
   writeFileSync(
@@ -6002,12 +6003,30 @@ test("worker activity projects durable worker state without raw worker requests"
       "private worker request sentinel",
     );
 
-    sleeper = spawn("sleep", ["30"], { detached: true, stdio: "ignore" });
-    if (!sleeper.pid) throw new Error("sleep process did not start");
-    const runningSleeper = sleeper;
-    writeFileSync(join(tasksDir, "pid"), `${runningSleeper.pid}\n`, "utf8");
-    writeFileSync(join(tasksDir, "pgid"), `${runningSleeper.pid}\n`, "utf8");
-    runningSleeper.unref();
+    startRegisteredBackgroundCommand({
+      id: "20260501010101",
+      executor: {
+        async execute(request) {
+          return await new Promise((resolve) => {
+            request.signal?.addEventListener("abort", () => {
+              backgroundCancelled = true;
+              resolve({
+                stdout: "",
+                stderr: "",
+                exitCode: null,
+                timedOut: false,
+                cancelled: true,
+                durationMs: 1,
+                error: null,
+              });
+            }, { once: true });
+          });
+        },
+      },
+      request: {
+        plan: { steps: [{ executable: "worker-fixture" }] },
+      },
+    });
     const control = await postJson(
       `${server.url}worker-activity/worker-20260501010101/control`,
       {
@@ -6023,22 +6042,8 @@ test("worker activity projects durable worker state without raw worker requests"
       "KILLED",
     );
     expect(JSON.stringify(control)).not.toContain("received cancel");
-    await waitForCondition(
-      () =>
-        runningSleeper.exitCode !== null || runningSleeper.signalCode !== null,
-    );
+    await waitForCondition(() => backgroundCancelled);
   } finally {
-    if (
-      sleeper?.pid &&
-      sleeper.exitCode === null &&
-      sleeper.signalCode === null
-    ) {
-      try {
-        process.kill(-sleeper.pid, "SIGKILL");
-      } catch {
-        // Best-effort cleanup for failed assertions.
-      }
-    }
     server.stop();
   }
 });

@@ -11,6 +11,7 @@ export interface CommandRequest {
   plan: CommandPlan;
   cwd?: string;
   environment?: Readonly<Record<string, string | undefined>>;
+  inheritEnvironment?: boolean;
   stdin?: string;
   timeoutMs?: number;
   signal?: AbortSignal;

@@ -9,8 +9,12 @@ function defaultButlerData(): string {
 
 function resolveButlerRuntime(data: string): string {
   if (process.env.BUTLER_BUN) return process.env.BUTLER_BUN;
-  const managed = join(data, "runtime", "bun", "current", "bin", "bun");
-  return existsSync(managed) ? managed : "bun";
+  const managedRoot = join(data, "runtime", "bun", "current", "bin");
+  for (const executable of ["bun.exe", "bun"]) {
+    const managed = join(managedRoot, executable);
+    if (existsSync(managed)) return managed;
+  }
+  return "bun";
 }
 
 const butlerData = defaultButlerData();
