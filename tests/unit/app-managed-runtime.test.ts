@@ -32,6 +32,7 @@ import {
   resolveAppManagedGatewayCommand,
   resolveAppManagedForegroundCommand,
   rollbackAppManagedAgentRuntimeUpdate,
+  windowsAppForegroundCommand,
   windowsRuntimeSignatureIssue,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
 
@@ -1123,6 +1124,40 @@ test("App-managed foreground command runs the full service daemon with a parent 
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+});
+
+test("Windows App foreground command uses the owner-death Job host and direct gateway", () => {
+  const command = windowsAppForegroundCommand({
+    runtimeHome: "C:\\Users\\연우\\Butler Data\\runtime",
+    runtime: "C:\\Users\\연우\\Butler Data\\runtime\\bin\\bun.exe",
+    processHost:
+      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler-process-host.exe",
+    launcher: "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler.js",
+    ownerPid: 4242,
+  });
+
+  expect(command).toEqual({
+    command:
+      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler-process-host.exe",
+    args: [
+      "--owner-pid",
+      "4242",
+      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\bun.exe",
+      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler.js",
+      "gateway",
+      "app",
+    ],
+    cwd: "C:\\Users\\연우\\Butler Data\\runtime",
+    stdio: ["ignore", "inherit", "inherit"],
+    detached: false,
+  });
+  expect(() => windowsAppForegroundCommand({
+    runtimeHome: "C:\\runtime",
+    runtime: "bun.exe",
+    processHost: "butler-process-host.exe",
+    launcher: "butler.js",
+    ownerPid: 0,
+  })).toThrow("owner PID");
 });
 
 function createBundledAgentResource(

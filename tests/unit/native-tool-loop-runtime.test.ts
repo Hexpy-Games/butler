@@ -3119,13 +3119,13 @@ test("native runtime can drive the real run_command tool through the default exe
         toolCalls: [{
           name: "run_command",
           args: {
-            command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt",
+            command: "echo ok | tee command-proof.txt",
             output_paths: ["command-proof.txt"],
           },
         }],
       });
       const args = {
-        command: "printf 'ok\\n' > command-proof.txt && cat command-proof.txt",
+        command: "echo ok | tee command-proof.txt",
         output_paths: ["command-proof.txt"],
       };
       const result = await input.executeTool({
@@ -3155,7 +3155,11 @@ test("native runtime can drive the real run_command tool through the default exe
   });
 
   expect(result.text).toBe("검증 파일을 만들고 확인했습니다.");
-  expect(readFileSync(join(workspace, "command-proof.txt"), "utf8")).toBe("ok\n");
+  const proof = readFileSync(join(workspace, "command-proof.txt"));
+  expect(
+    proof.includes(Buffer.from("ok")) ||
+      proof.includes(Buffer.from("ok", "utf16le")),
+  ).toBeTrue();
   expect(result.artifacts?.[0]).toMatchObject({
     title: "command-proof.txt",
     safePathLabel: "command-proof.txt",

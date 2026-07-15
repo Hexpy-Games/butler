@@ -1,7 +1,9 @@
 param(
   [Parameter(Mandatory = $true)][string]$Root,
   [Parameter(Mandatory = $true)][string]$Bun,
-  [Parameter(Mandatory = $true)][string]$Output
+  [Parameter(Mandatory = $true)][string]$Output,
+  [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
+  [switch]$InteractiveDesktop
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +13,7 @@ $unsignedHost = Join-Path $workspace "butler-process-host-unsigned.exe"
 $signedHost = Join-Path $workspace "butler-process-host.exe"
 $certificateFile = Join-Path $workspace "butler-test-signing.cer"
 $childScript = Join-Path $Root "packages\butler-app\scripts\windows\run-bundled-payload-smoke-child.ps1"
+$interactiveController = Join-Path $Root "packages\butler-app\scripts\windows\interactive-smoke-controller.ts"
 $taskName = "ButlerWindowsPayloadSmoke-$PID"
 $certificate = $null
 $taskRegistered = $false
@@ -24,6 +27,10 @@ try {
   Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $Output -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Path $workspace -Force | Out-Null
+  $smokePath = Join-Path $Root $Smoke
+  if (-not (Test-Path -LiteralPath $smokePath -PathType Leaf)) {
+    throw "Windows standard-user smoke script is missing"
+  }
   Copy-Item -LiteralPath $Bun -Destination $signedBun -Force
 
   Push-Location $Root
@@ -61,7 +68,7 @@ try {
     }
   }
 
-  $actionArguments = @(
+  $actionArgumentParts = @(
     "-NoLogo",
     "-NoProfile",
     "-NonInteractive",
@@ -71,8 +78,11 @@ try {
     "-Bun `"$Bun`"",
     "-SignedBun `"$signedBun`"",
     "-SignedHost `"$signedHost`"",
+    "-Smoke `"$Smoke`"",
     "-Output `"$Output`""
-  ) -join " "
+  )
+  if ($InteractiveDesktop) { $actionArgumentParts += "-InteractiveDesktop" }
+  $actionArguments = $actionArgumentParts -join " "
   $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $actionArguments
   $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddHours(1)
   $principal = New-ScheduledTaskPrincipal `
@@ -95,7 +105,11 @@ try {
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
     $taskInfo = Get-ScheduledTaskInfo -TaskName $taskName -ErrorAction Stop
     if ((Get-Date) -gt $deadline) { throw "Standard-user payload smoke timed out" }
-  } while ($task.State -eq "Running" -or $taskInfo.LastRunTime.Year -lt 2000)
+  } while (
+    -not (Test-Path -LiteralPath $Output) -or
+    $task.State -eq "Running" -or
+    $taskInfo.LastRunTime.Year -lt 2000
+  )
 
   if (-not (Test-Path -LiteralPath $Output)) {
     throw "Standard-user payload smoke did not write a result"

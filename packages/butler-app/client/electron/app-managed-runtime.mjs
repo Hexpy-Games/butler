@@ -3,9 +3,9 @@ import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
+  readlinkSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -365,8 +365,10 @@ export function prepareAppManagedAgentRuntime({
   resourceRoot,
   now = () => new Date(),
   platform = process.platform,
+  onProgress = null,
 }) {
   const root = resolve(resourceRoot);
+  notifyProgress(onProgress, "runtime_manifest_reading");
   const preparedAt = now().toISOString();
   let artifact = null;
   let artifactPath;
@@ -388,6 +390,7 @@ export function prepareAppManagedAgentRuntime({
     if (artifact.sha256 && artifact.sha256 !== digest) {
       throw new Error("bundled Agent artifact digest mismatch");
     }
+    notifyProgress(onProgress, "runtime_manifest_verified");
   } catch (error) {
     writeAppManagedRuntimeFailure({
       butlerData,
@@ -406,6 +409,7 @@ export function prepareAppManagedAgentRuntime({
   let verifiedClosure;
   try {
     verifiedClosure = verifyDependencyClosure(root, artifact, digest);
+    notifyProgress(onProgress, "runtime_dependency_closure_verified");
   } catch (error) {
     writeAppManagedRuntimeFailure({
       butlerData,
@@ -447,6 +451,7 @@ export function prepareAppManagedAgentRuntime({
       platform,
     )
   ) {
+    notifyProgress(onProgress, "runtime_existing_ready");
     return {
       runtimeHome: join(butlerData, existingPointer.runtime_home),
       runtimeHomeLabel: existingPointer.runtime_home,
@@ -481,20 +486,24 @@ export function prepareAppManagedAgentRuntime({
   });
   rmSync(stagingHome, { recursive: true, force: true });
   rmSync(backupHome, { recursive: true, force: true });
+  notifyProgress(onProgress, "runtime_staging_ready");
 
   try {
     mkdirSync(dirname(stagingPayloadPath), { recursive: true });
     copyFileSync(artifactPath, stagingPayloadPath);
+    notifyProgress(onProgress, "runtime_archive_extraction_starting");
     const extraction = extractAgentArchive(
       artifactPath,
       stagingHome,
       platform,
       root,
     );
+    notifyProgress(onProgress, "runtime_archive_extracted");
     if (!extraction.hasLauncher) {
       throw new Error("bundled Agent artifact is missing bin/butler.js");
     }
-    installManagedRuntimePayload(root, stagingHome, platform);
+    installManagedRuntimePayload(root, stagingHome, platform, onProgress);
+    notifyProgress(onProgress, "runtime_payload_installed");
     const readinessIssue = runtimeHomeReadinessIssue(
       stagingHome,
       readiness,
@@ -530,6 +539,7 @@ export function prepareAppManagedAgentRuntime({
       backupCreated = true;
     }
     renameWithRetrySync(stagingHome, runtimeHome, { platform });
+    notifyProgress(onProgress, "runtime_prepared");
     let rolledBack = false;
     let activationCommitted = false;
     const activation = {
@@ -712,18 +722,70 @@ export function resolveAppManagedForegroundCommand({
   env = process.env,
   resourcesPath = process.resourcesPath,
   platform = process.platform,
+  ownerPid = process.pid,
+  onProgress = null,
 } = {}) {
   const resourceRoot = resolveBundledAgentResourceRoot({ env, resourcesPath });
   if (!resourceRoot) return null;
+  notifyProgress(onProgress, "runtime_resource_resolved");
   const activation = prepareAppManagedAgentRuntime({
     butlerData,
     resourceRoot,
     platform,
+    onProgress,
   });
+  notifyProgress(onProgress, "runtime_activation_prepared");
   const runtime = resolveAppManagedRuntimeExecutable(
     activation.runtimeHome,
     platform,
   );
+  if (platform === "win32") {
+    const processHost = join(
+      activation.runtimeHome,
+      "packages",
+      "butler-agent",
+      "resources",
+      "runtime",
+      "bin",
+      "butler-process-host.exe",
+    );
+    const launcher = join(activation.runtimeHome, "bin", "butler.js");
+    if (!existsSync(processHost) || !existsSync(launcher)) {
+      activation.rollbackActivation(
+        new Error("bundled Windows Agent foreground host is missing"),
+      );
+      throw new Error("bundled Windows Agent foreground host is missing");
+    }
+    notifyProgress(onProgress, "runtime_windows_host_verified");
+    return {
+      ...windowsAppForegroundCommand({
+        runtimeHome: activation.runtimeHome,
+        runtime,
+        processHost,
+        launcher,
+        ownerPid,
+      }),
+      appManaged: true,
+      foregroundHost: true,
+      containmentKind: "windows_job_object",
+      containmentVerified: true,
+      ownerDeathGuaranteed: true,
+      recordsProcessGroupId: false,
+      bundledAgentVersion: activation.version,
+      env: {
+        BUTLER_HOME: activation.runtimeHome,
+        BUTLER_APP_BUTLER_HOME: activation.runtimeHome,
+        BUTLER_DATA: butlerData,
+        BUTLER_BUN: runtime,
+        BUTLER_WINDOWS_PROCESS_HOST: processHost,
+        BUTLER_APP_MANAGED_RUNTIME_POINTER: activation.pointerPath,
+        BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
+        BUTLER_APP_FOREGROUND_LEASE: "1",
+      },
+      commitActivation: activation.commitActivation,
+      rollbackActivation: activation.rollbackActivation,
+    };
+  }
   const daemon = join(
     activation.runtimeHome,
     "packages",
@@ -745,6 +807,10 @@ export function resolveAppManagedForegroundCommand({
     detached: true,
     appManaged: true,
     foregroundHost: true,
+    containmentKind: "posix_process_group",
+    containmentVerified: true,
+    ownerDeathGuaranteed: false,
+    recordsProcessGroupId: true,
     bundledAgentVersion: activation.version,
     env: {
       BUTLER_HOME: activation.runtimeHome,
@@ -757,6 +823,32 @@ export function resolveAppManagedForegroundCommand({
     },
     commitActivation: activation.commitActivation,
     rollbackActivation: activation.rollbackActivation,
+  };
+}
+
+export function windowsAppForegroundCommand({
+  runtimeHome,
+  runtime,
+  processHost,
+  launcher,
+  ownerPid,
+}) {
+  if (!Number.isInteger(ownerPid) || ownerPid <= 0) {
+    throw new Error("Windows foreground owner PID is invalid");
+  }
+  return {
+    command: processHost,
+    args: [
+      "--owner-pid",
+      String(ownerPid),
+      runtime,
+      launcher,
+      "gateway",
+      "app",
+    ],
+    cwd: runtimeHome,
+    stdio: ["ignore", "inherit", "inherit"],
+    detached: false,
   };
 }
 
@@ -1105,6 +1197,7 @@ function installManagedRuntimePayload(
   resourceRoot,
   runtimeHome,
   platform = process.platform,
+  onProgress = null,
 ) {
   const source = join(resourceRoot, "runtime");
   const bun = managedRuntimeSourceExecutablePath(resourceRoot, platform);
@@ -1121,10 +1214,14 @@ function installManagedRuntimePayload(
       "managed runtime payload is missing bin/butler-process-host.exe",
     );
   }
+  notifyProgress(onProgress, "runtime_payload_source_verified");
   const target = appManagedRuntimePayloadHome(runtimeHome);
   rmSync(target, { recursive: true, force: true });
+  notifyProgress(onProgress, "runtime_payload_target_removed");
   mkdirSync(dirname(target), { recursive: true });
-  cpSync(source, target, { recursive: true });
+  notifyProgress(onProgress, "runtime_payload_copy_starting");
+  copyRuntimeDirectorySync(source, target);
+  notifyProgress(onProgress, "runtime_payload_copy_complete");
   try {
     chmodSync(resolveAppManagedRuntimeExecutable(runtimeHome, platform), 0o755);
   } catch {
@@ -1134,6 +1231,31 @@ function installManagedRuntimePayload(
 
 function appManagedRuntimePayloadHome(runtimeHome) {
   return join(runtimeHome, "packages", "butler-agent", "resources", "runtime");
+}
+
+function copyRuntimeDirectorySync(source, target) {
+  mkdirSync(target, { recursive: true });
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = join(source, entry.name);
+    const targetPath = join(target, entry.name);
+    if (entry.isDirectory()) {
+      copyRuntimeDirectorySync(sourcePath, targetPath);
+      continue;
+    }
+    if (entry.isSymbolicLink()) {
+      symlinkSync(readlinkSync(sourcePath), targetPath);
+      continue;
+    }
+    if (!entry.isFile()) {
+      throw new Error("managed runtime payload contains an unsupported entry");
+    }
+    copyFileSync(sourcePath, targetPath);
+    try {
+      chmodSync(targetPath, statSync(sourcePath).mode);
+    } catch {
+      // Windows and read-only media may not preserve POSIX modes.
+    }
+  }
 }
 
 export function windowsRuntimeSignatureIssue(runtimePayloadHome) {
@@ -1532,6 +1654,15 @@ function safeRuntimeVersionSegment(version) {
 
 function safeString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function notifyProgress(callback, stage) {
+  if (typeof callback !== "function") return;
+  try {
+    callback(stage);
+  } catch {
+    // Optional diagnostics must not affect runtime activation.
+  }
 }
 
 function writeAppManagedRuntimeFailure({

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import {
   activateAppManagedAgentRuntime,
   appManagedAgentPointerPath,
-  resolveAppManagedGatewayCommand,
+  resolveAppManagedForegroundCommand,
   windowsRuntimeSignatureIssue,
 } from "../../client/electron/app-managed-runtime.mjs";
 import { prepareBundledAgentResource } from "../release/package-app-release.ts";
@@ -67,26 +67,18 @@ try {
   ).installerRequired === "no";
   const noLinksInstalled = !treeContainsLinks(activation.runtimeHome);
 
-  const command = resolveAppManagedGatewayCommand({
+  const command = resolveAppManagedForegroundCommand({
     butlerData,
     env: {
       ...process.env,
       BUTLER_APP_BUNDLED_AGENT_DIR: resource.resourceDir,
     },
     platform: "win32",
+    ownerPid: process.pid,
   });
-  if (!command) throw new Error("App-managed Windows gateway command is unavailable");
+  if (!command) throw new Error("App-managed Windows foreground command is unavailable");
   const port = await availablePort();
-  const processHost = join(
-    command.cwd,
-    "packages",
-    "butler-agent",
-    "resources",
-    "runtime",
-    "bin",
-    "butler-process-host.exe",
-  );
-  const child = spawn(processHost, [command.command, ...command.args], {
+  const child = spawn(command.command, command.args, {
     cwd: command.cwd,
     env: {
       ...process.env,
@@ -94,7 +86,7 @@ try {
       BUTLER_APP_SERVER_HOST: "127.0.0.1",
       BUTLER_APP_SERVER_PORT: String(port),
       BUTLER_APP_LOCAL_AUTH_REQUIRED: "0",
-      BUTLER_WINDOWS_PROCESS_HOST: processHost,
+      BUTLER_WINDOWS_PROCESS_HOST: command.command,
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -171,6 +163,8 @@ try {
     repair: repairSucceeded,
     rollback: rollbackPreserved,
     appForegroundOwned: foregroundOwned,
+    containment: command.containmentKind,
+    ownerDeathGuaranteed: command.ownerDeathGuaranteed,
     compileRequiredAtRuntime: false,
     hostRuntimeRequired: false,
     unicodeAndSpaces: true,
