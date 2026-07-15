@@ -322,4 +322,65 @@ describe("BtccRecoveryCaseStore", () => {
     store.close();
     conversations.close();
   });
+
+  test("only an immutable reporting receipt can deliver a BTCC turn", () => {
+    const butlerData = tempData();
+    const conversations = new AgentConversationStore({ butlerData });
+    const store = new BtccRecoveryCaseStore({ butlerData });
+    beginConversationTurn(conversations, "turn-reporting", "session-reporting");
+    const admitted = store.admitTurn({
+      turnId: "turn-reporting",
+      sessionId: "session-reporting",
+      attemptId: "attempt-reporting",
+    });
+    const delivered = store.acceptReportingReceipt({
+      reportingReceiptId: "reporting-receipt-1",
+      turnId: admitted.turnId,
+      attemptId: admitted.attemptId,
+      expectedGeneration: admitted.generation,
+      resultDisposition: "fulfilled",
+      publicMessageRef: "assistant-message-1",
+      completionEvidenceRefs: ["evidence-1", "evidence-1"],
+      createdAt: "2026-07-15T00:00:06.000Z",
+    });
+    const replayed = store.acceptReportingReceipt({
+      reportingReceiptId: "reporting-receipt-1",
+      turnId: admitted.turnId,
+      attemptId: admitted.attemptId,
+      expectedGeneration: admitted.generation,
+      resultDisposition: "fulfilled",
+      publicMessageRef: "assistant-message-1",
+      completionEvidenceRefs: ["evidence-1"],
+      createdAt: "2026-07-15T00:00:06.000Z",
+    });
+    const db = new Database(conversationStorePath(butlerData));
+
+    expect(delivered).toMatchObject({
+      state: "delivered",
+      generation: 2,
+      terminalOutcomeId: "reporting-receipt-1",
+    });
+    expect(replayed).toEqual(delivered);
+    expect(() => db.query(`
+      UPDATE btcc_reporting_receipts
+      SET public_message_ref = 'assistant-message-rewritten'
+      WHERE reporting_receipt_id = 'reporting-receipt-1'
+    `).run()).toThrow("btcc_reporting_receipt_immutable");
+
+    beginConversationTurn(conversations, "turn-unguarded", "session-reporting");
+    store.admitTurn({
+      turnId: "turn-unguarded",
+      sessionId: "session-reporting",
+      attemptId: "attempt-unguarded",
+    });
+    expect(() => db.query(`
+      UPDATE btcc_turn_states
+      SET state = 'delivered', terminal_outcome_id = 'fabricated-report'
+      WHERE turn_id = 'turn-unguarded'
+    `).run()).toThrow("btcc_reporting_receipt_required");
+
+    db.close();
+    store.close();
+    conversations.close();
+  });
 });

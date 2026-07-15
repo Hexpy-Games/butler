@@ -20,6 +20,9 @@ import type {
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { TurnSchedulerContinuationYieldError } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { memorySyncQueueFile } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/queue.ts";
+import { BtccRecoveryCaseStore } from "../../packages/butler-agent/src/agent/turn/interruption/recovery-case-store.ts";
+import { isTurnRuntimeWaitSignal } from "../../packages/butler-agent/src/agent/turn/interruption/turn-runtime-wait-signal.ts";
+import { recordPrincipalTurnCancellation } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -287,8 +290,10 @@ class CancelledRuntime implements AgentRuntimeAdapter {
 
 class FailedRuntime extends CancelledRuntime {
   override readonly id = "failed-runtime";
+  turnCount = 0;
 
   override async runTurn(): Promise<never> {
+    this.turnCount += 1;
     throw new Error("runtime failed");
   }
 }
@@ -339,6 +344,7 @@ function createLifecycle(input: {
   runtime?: AgentRuntimeAdapter;
   conversationStore: AgentConversationStore;
   bindingStore: SessionBindingStore;
+  btccInterruptionStateWriter?: BtccRecoveryCaseStore;
   deliverTurnEvent?: (input: { event: RuntimeTurnEventInput }) => Promise<void>;
 }): SessionLifecycleService {
   input.bindingStore.upsert({
@@ -357,6 +363,7 @@ function createLifecycle(input: {
     provider,
     systemPromptFactory: () => "You are Butler.",
     conversationWriter: input.conversationStore,
+    btccInterruptionStateWriter: input.btccInterruptionStateWriter,
     conversationMetricsButlerData: tempDir,
     deliverTurnEvent: input.deliverTurnEvent,
   });
@@ -738,6 +745,164 @@ test("ordinary terminal failure writes a failed outcome capsule", async () => {
     safe_code: "turn_failed",
   });
 
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("production BTCC adapter routes an ordinary runtime exception to a durable wait without a failed outcome", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const btccStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const runtime = new FailedRuntime();
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    btccInterruptionStateWriter: btccStore,
+    runtime,
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  let caught: unknown;
+  try {
+    await actor.handleInbound(inbound("btcc-runtime-wait", "do work"));
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(isTurnRuntimeWaitSignal(caught)).toBe(true);
+  expect(conversationStore.readTurn("turn-btcc-runtime-wait")).toMatchObject({
+    status: "running",
+  });
+  expect(conversationStore.readTurnOutcome("turn-btcc-runtime-wait")).toBeNull();
+  const state = btccStore.readTurnState("turn-btcc-runtime-wait");
+  expect(state).toMatchObject({
+    state: "waiting_runtime",
+    generation: 2,
+  });
+  expect(btccStore.readRecoveryCase(state!.activeRecoveryCaseId!)).toMatchObject({
+    diagnosticCode: "runtime_unclassified_interruption",
+    status: "open",
+    owner: "turn_runtime_recovery",
+  });
+  const transcript = readTranscript("butler/main");
+  expect(transcript.some((event) =>
+    event.kind === "session_status" &&
+    event.payload.reason === "gateway-turn-waiting-runtime",
+  )).toBe(true);
+
+  let replayCaught: unknown;
+  try {
+    await actor.handleInbound(inbound("btcc-runtime-wait", "do work"));
+  } catch (error) {
+    replayCaught = error;
+  }
+  expect(isTurnRuntimeWaitSignal(replayCaught)).toBe(true);
+  expect(runtime.turnCount).toBe(1);
+  expect(btccStore.readTurnState("turn-btcc-runtime-wait")).toMatchObject({
+    state: "waiting_runtime",
+    generation: 2,
+    activeRecoveryCaseId: state!.activeRecoveryCaseId,
+  });
+
+  btccStore.close();
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("production BTCC adapter accepts a reporting receipt before successful terminal delivery", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const btccStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    btccInterruptionStateWriter: btccStore,
+    runtime: new AdmissionRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound("btcc-delivered", "answer directly")))
+    .resolves.toMatchObject({ text: "final answer" });
+
+  const state = btccStore.readTurnState("turn-btcc-delivered");
+  expect(state).toMatchObject({
+    state: "delivered",
+    generation: 2,
+  });
+  expect(state?.terminalOutcomeId).toStartWith("reporting-");
+  expect(conversationStore.readTurnOutcome("turn-btcc-delivered")).toMatchObject({
+    outcome: "delivered",
+  });
+  const outcomes = conversationStore.readProjectionBatch(null, 100)
+    .filter((event) => event.kind === "turn.outcome");
+  expect(outcomes).toHaveLength(1);
+  expect(outcomes[0]?.payload_ref).toBe(state!.terminalOutcomeId!);
+
+  btccStore.close();
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("production BTCC adapter accepts cancellation only from durable principal authority", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const btccStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  recordPrincipalTurnCancellation({
+    butlerData: tempDir,
+    turnId: "turn-btcc-cancelled",
+  });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    btccInterruptionStateWriter: btccStore,
+    runtime: new CancelledRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound("btcc-cancelled", "stop")))
+    .rejects.toThrow("cancelled by principal");
+
+  expect(btccStore.readTurnState("turn-btcc-cancelled")).toMatchObject({
+    state: "cancelled",
+    generation: 2,
+    terminalOutcomeId: "principal-turn-cancellation:turn-btcc-cancelled",
+  });
+  expect(conversationStore.readTurnOutcome("turn-btcc-cancelled")).toMatchObject({
+    outcome: "cancelled",
+  });
+
+  btccStore.close();
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("production BTCC adapter treats an unproven abort as runtime interruption, not user cancellation", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const btccStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    btccInterruptionStateWriter: btccStore,
+    runtime: new CancelledRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  let caught: unknown;
+  try {
+    await actor.handleInbound(inbound("btcc-unproven-abort", "continue"));
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(isTurnRuntimeWaitSignal(caught)).toBe(true);
+  expect(btccStore.readTurnState("turn-btcc-unproven-abort")).toMatchObject({
+    state: "waiting_runtime",
+    generation: 2,
+  });
+  expect(conversationStore.readTurnOutcome("turn-btcc-unproven-abort")).toBeNull();
+
+  btccStore.close();
   conversationStore.close();
   bindingStore.close();
 });

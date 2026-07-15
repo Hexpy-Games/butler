@@ -24,15 +24,14 @@ export async function emitSuccessfulTurnOutcome(input: {
   const validationFailure = unresolvedValidationFailureFromAudit(input.audit);
   const evidenceRefs = await emitCompletionEvidenceFromAudit(input.turnInput, input.audit);
   if (validationFailure) {
-    const failureRef = `validation:${validationFailure.suite}`;
     await emitTurnEventBestEffort(input.turnInput, {
       kind: TURN_OUTCOME_EVENT_KIND,
       payload: createKernelTurnOutcomePayload({
         turnKernel: input.turnKernel,
-        to: "failed",
-        completionEvidenceRefs: Array.from(new Set([...evidenceRefs, failureRef])),
-        publicSummary: `Validation suite failed without a later passing receipt: ${validationFailure.suite}`,
-        reason: "validation_failed_without_later_passing_receipt",
+        to: "completed",
+        completionEvidenceRefs: evidenceRefs,
+        publicSummary: `Delivered with an unresolved validation limitation: ${validationFailure.suite}`,
+        reason: "final_delivery_completed_with_validation_limitation",
       }),
     });
     return;
@@ -52,17 +51,17 @@ export async function emitSuccessfulTurnOutcome(input: {
 
 export async function emitInterruptedTurnOutcome(input: {
   turnInput: RuntimeTurnInput;
-  cancelled: boolean;
+  cancelled: true;
   reason: string;
   turnKernel: TurnKernelController;
 }): Promise<void> {
-  const evidenceRef = `turn:${input.turnInput.handle.sessionId}:${input.cancelled ? "cancelled" : "failed"}`;
+  const evidenceRef = `turn:${input.turnInput.handle.sessionId}:cancelled`;
   await emitTurnEventBestEffort(input.turnInput, {
     kind: TURN_COMPLETION_EVIDENCE_EVENT_KIND,
     payload: createCompletionEvidencePayload({
-      evidenceKind: input.cancelled ? "cancelled" : "provider_failed",
-      status: input.cancelled ? "cancelled" : "failed",
-      summary: input.cancelled ? "Turn was cancelled before final delivery." : input.reason,
+      evidenceKind: "cancelled",
+      status: "cancelled",
+      summary: "Turn was cancelled before final delivery.",
       refs: [evidenceRef],
     }),
   });
@@ -70,11 +69,11 @@ export async function emitInterruptedTurnOutcome(input: {
     kind: TURN_OUTCOME_EVENT_KIND,
     payload: createKernelTurnOutcomePayload({
       turnKernel: input.turnKernel,
-      to: input.cancelled ? "aborted" : "failed",
-      eventOutcome: input.cancelled ? "cancelled" : "failed",
+      to: "aborted",
+      eventOutcome: "cancelled",
       completionEvidenceRefs: [evidenceRef],
-      publicSummary: input.cancelled ? "Cancelled." : "Failed.",
-      reason: input.cancelled ? "turn_cancelled" : input.reason,
+      publicSummary: "Cancelled.",
+      reason: input.reason,
     }),
   });
 }

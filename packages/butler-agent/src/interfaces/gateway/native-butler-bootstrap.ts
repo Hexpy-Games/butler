@@ -23,6 +23,7 @@ import { createGatewayServer } from "../../gateways/core/server.ts";
 import { PolicyEngine, type PolicyApprovalMode } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { AgentConversationStore } from "../../agent/conversation/store.ts";
+import { BtccRecoveryCaseStore } from "../../agent/turn/interruption/recovery-case-store.ts";
 import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
@@ -603,6 +604,8 @@ export async function runNativeButlerMain(
   let workerResultMonitor: Promise<void> | undefined;
   let appWorkerResultMonitor: Promise<void> | undefined;
   let cancellationServer: PrincipalTurnCancellationServer | undefined;
+  let conversationWriter: AgentConversationStore | undefined;
+  let btccInterruptionStateWriter: BtccRecoveryCaseStore | undefined;
   const inboundDispatcher = new QueuedInboundDispatcher();
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
@@ -636,7 +639,8 @@ export async function runNativeButlerMain(
       sendTelegram: input.sendTelegram,
     });
     const appAdapter = createAppTransportAdapter();
-    const conversationWriter = new AgentConversationStore({ butlerData });
+    conversationWriter = new AgentConversationStore({ butlerData });
+    btccInterruptionStateWriter = new BtccRecoveryCaseStore({ butlerData });
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
@@ -666,6 +670,7 @@ export async function runNativeButlerMain(
         generateSessionTitleWithProvider(provider, titleInput),
       approvalMode: input.approvalMode ?? "default",
       conversationWriter,
+      btccInterruptionStateWriter,
       conversationMetricsButlerData: butlerData,
       developerLogStore,
       developerDiagnosticsEnabled: () =>
@@ -965,6 +970,8 @@ export async function runNativeButlerMain(
   } finally {
     stopTelegramPolling = true;
     await cancellationServer?.close();
+    btccInterruptionStateWriter?.close();
+    conversationWriter?.close();
     store.close();
   }
 }

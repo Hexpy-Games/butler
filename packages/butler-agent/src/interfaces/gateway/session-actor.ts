@@ -59,13 +59,21 @@ import { APP_TRANSPORT } from "../../gateways/core/app-transport.ts";
 import {
   verifyTurnExecutionControls,
 } from "../../gateways/core/turn-execution-controls.ts";
-import { ConversationAdmissionTurn } from "../../agent/conversation/session-admission.ts";
+import {
+  ConversationAdmissionTurn,
+  type BtccInterruptionStateWriter,
+} from "../../agent/conversation/session-admission.ts";
 import { INTERNAL_CONVERSATION_TURN_EVENT_KINDS } from "../../agent/conversation/admission-kinds.ts";
 import type { ConversationWriter } from "../../agent/conversation/types.ts";
 import type { ContextAssembly } from "../../agent/prompt/prompt-assembler.ts";
 import type {
   DeveloperLogCaptureInput,
 } from "../../operations/diagnostics/developer-log-store.ts";
+import {
+  isTurnRuntimeWaitSignal,
+  TurnRuntimeWaitSignal,
+} from "../../agent/turn/interruption/turn-runtime-wait-signal.ts";
+import { principalTurnCancellationRecorded } from "../../agent/turn/principal-turn-cancellation-registry.ts";
 
 interface SessionActorOptions {
   sessionId: string;
@@ -103,6 +111,7 @@ interface SessionActorOptions {
     route?: GatewayRoute;
   }) => Promise<string | null>;
   conversationWriter?: ConversationWriter;
+  btccInterruptionStateWriter?: BtccInterruptionStateWriter;
   conversationMetricsButlerData?: string;
   openingDecisionTimeoutMs?: number;
   now?: () => string;
@@ -513,6 +522,13 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           turnId,
           timestamp,
         });
+        const activeRuntimeWait = conversationAdmission?.activeRuntimeWait();
+        if (activeRuntimeWait) {
+          throw new TurnRuntimeWaitSignal(
+            activeRuntimeWait.turnId,
+            activeRuntimeWait.recoveryCaseId,
+          );
+        }
         if (!schedulerContinuation) conversationAdmission?.admitInbound();
       }
 
@@ -720,7 +736,12 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         });
       }
       conversationAdmission?.admitFinalAssistant(result.text, finalAction.actionId);
-      conversationAdmission?.finalize("complete", timestamp);
+      conversationAdmission?.finalize("complete", timestamp, {
+        resultDisposition: result.delivery?.delivery_state === "delivered_with_limitations" ||
+          result.delivery?.delivery_state === "delivered_with_continuation"
+          ? "partially_fulfilled"
+          : "fulfilled",
+      });
       this.captureDeveloperModelTurn({
         binding: activeBinding,
         envelope,
@@ -753,18 +774,39 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
         raw: result.raw,
       };
       } catch (error) {
+      if (isTurnRuntimeWaitSignal(error)) throw error;
       const err = asError(error);
       const safeFailure = safeRuntimeFailure(error);
       const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
-      const isCancelled = envelope.signal?.aborted === true || err.name === "AbortError";
+      const abortRequested = envelope.signal?.aborted === true || err.name === "AbortError";
+      const principalCancellation = Boolean(
+        abortRequested && turnId && this.options.conversationMetricsButlerData &&
+        principalTurnCancellationRecorded({
+          butlerData: this.options.conversationMetricsButlerData,
+          turnId,
+        }),
+      );
+      const isCancelled = this.options.btccInterruptionStateWriter
+        ? principalCancellation
+        : abortRequested;
       const isContinuationFailure =
         safeFailure.code === INTERNAL_RECOVERY_REQUIRED_CODE ||
         isNonPublicContinuationDeliveryError(error) ||
         isPromptUsageModelCallBudgetError(error) ||
         isAdmissionInvariantViolation(error) ||
         isSchedulerYield;
+      const runtimeWait = !isCancelled && !isContinuationFailure
+        ? conversationAdmission?.routeRuntimeInterruption({
+          error,
+          timestamp,
+        }) ?? null
+        : null;
       if (isCancelled) {
         try {
+          conversationAdmission?.acceptPrincipalCancellation({
+            cancellationReceiptRef: `principal-turn-cancellation:${turnId}`,
+            timestamp,
+          });
           conversationAdmission?.finalize("aborted", timestamp);
         } catch {
           recordSystemEvent({
@@ -791,7 +833,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           });
         }
       }
-      if (!isContinuationFailure && !isCancelled) {
+      if (!isContinuationFailure && !isCancelled && !runtimeWait) {
         this.finalizeConversationAdmissionFailure(conversationAdmission, timestamp, error);
       }
       this.captureDeveloperModelTurn({
@@ -815,18 +857,27 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
             : undefined,
         },
       });
-      const failureState = isRuntimeFaultFailure(error) ? "crashed" : "active";
+      const failureState = runtimeWait
+        ? "active"
+        : isRuntimeFaultFailure(error) ? "crashed" : "active";
       this.options.store.updateLifecycleState(binding.sessionId, failureState, timestamp);
       recordSessionLifecycle({
         sessionId: binding.sessionId,
         role: binding.role,
         state: failureState,
-        reason: isSchedulerYield
+        reason: runtimeWait
+          ? "gateway-turn-waiting-runtime"
+          : isSchedulerYield
           ? "gateway-turn-continuing"
           : failureState === "active"
           ? "gateway-turn-incomplete"
           : "gateway-runtime-error",
-        metadata: isSchedulerYield
+        metadata: runtimeWait
+          ? {
+            recoveryCaseId: runtimeWait.recoveryCaseId,
+            state: runtimeWait.state.state,
+          }
+          : isSchedulerYield
           ? {
             contextAtomId: error.contextAtomId,
             checkpointId: error.checkpointId,
@@ -852,7 +903,9 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
           timestamp,
         });
       }
-      throw err;
+      throw runtimeWait
+        ? new TurnRuntimeWaitSignal(turnId, runtimeWait.recoveryCaseId)
+        : err;
     }
   }
 
@@ -870,6 +923,7 @@ export abstract class BaseGatewaySessionActor implements GatewaySessionActor {
       turnId: input.turnId,
       timestamp: input.timestamp,
       butlerData: this.options.conversationMetricsButlerData,
+      btccInterruptionStateWriter: this.options.btccInterruptionStateWriter,
     });
   }
 

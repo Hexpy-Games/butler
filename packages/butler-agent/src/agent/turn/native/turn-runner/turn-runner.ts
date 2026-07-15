@@ -5,13 +5,11 @@ import { runtimeArtifactsFromAudit } from "../output/runtime-artifacts.ts";
 import { emitTurnEventBestEffort } from "../progress/turn-delivery-events.ts";
 import {
   isPromptUsageModelCallBudgetError,
-  recoverableLimitedDeliveryForError,
 } from "../../recoverable-delivery.ts";
 import { deliveredWithLimitationsState } from "../../runtime-delivery-state.ts";
 import {
   clearTurnContextAtom,
   createTurnContextAtomId,
-  isTurnSchedulerContinuationYieldError,
   persistTurnContextAtom,
   readTurnContextAtom,
   TurnSchedulerContinuationYieldError,
@@ -28,7 +26,6 @@ import {
   cancelActiveWorkStreamBestEffort,
   completeReportingWorkStreamBestEffort,
   completeRuntimeSemanticWorkStreamBestEffort,
-  markActiveWorkStreamRecoverableBestEffort,
 } from "./workstream-finalizers.ts";
 import {
   emitInterruptedTurnOutcome,
@@ -528,39 +525,27 @@ export async function runNativeToolTurn({
       }),
     };
   } catch (error) {
-    const limitedDelivery = recoverableLimitedDeliveryForError(error);
-    const isBudgetError = isPromptUsageModelCallBudgetError(error);
-    const isSchedulerYield = isTurnSchedulerContinuationYieldError(error);
-    const isCompletionIncomplete = error instanceof Error && error.name === "GoalCompletionIncompleteError";
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (toolLoopUsed) {
-      if (input.signal?.aborted) {
-        if (!turnId || !principalTurnCancellationRecorded({ butlerData: deps.butlerData, turnId })) {
-          cancelActiveWorkStreamBestEffort({
-            butlerData: deps.butlerData,
-            sessionId: input.handle.sessionId,
-            turnId,
-          });
-        }
-      } else if (!limitedDelivery && !isBudgetError && !isSchedulerYield && !isCompletionIncomplete) {
-        markActiveWorkStreamRecoverableBestEffort({
+    const principalCancelled = Boolean(
+      input.signal?.aborted && turnId &&
+      principalTurnCancellationRecorded({ butlerData: deps.butlerData, turnId }),
+    );
+    if (principalCancelled) {
+      if (toolLoopUsed) {
+        cancelActiveWorkStreamBestEffort({
           butlerData: deps.butlerData,
           sessionId: input.handle.sessionId,
           turnId,
-          reason: errorMessage,
         });
       }
-    }
-    if (!limitedDelivery && !isBudgetError && !isSchedulerYield && !isCompletionIncomplete) {
       await emitInterruptedTurnOutcome({
         turnInput: input,
-        cancelled: Boolean(input.signal?.aborted),
-        reason: errorMessage,
+        cancelled: true,
+        reason: "turn_cancelled_by_principal",
         turnKernel,
       });
       await emitTurnEventBestEffort(input, {
-        kind: input.signal?.aborted ? "turn.cancelled" : "turn.failed",
-        payload: { safeLabel: input.signal?.aborted ? "Cancelled" : "Failed" },
+        kind: "turn.cancelled",
+        payload: { safeLabel: "Cancelled" },
       });
     }
     recordTurnMetric({

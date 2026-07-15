@@ -22,6 +22,7 @@ import {
   markPrincipalTurnCancellationDelivery,
 } from "../../agent/turn/principal-turn-cancellation-registry.ts";
 import { runtimeTurnAbortError } from "../../agent/turn/native/policy/turn-errors.ts";
+import { isTurnRuntimeWaitSignal } from "../../agent/turn/interruption/turn-runtime-wait-signal.ts";
 
 export interface QueuedInboundServer {
   handleInbound(envelope: InboundEnvelope): Promise<GatewayDispatchResult>;
@@ -547,6 +548,17 @@ async function processClaimedQueuedInboundItem(input: {
         schedulerItemId: scheduled.queueId,
       });
       if (!terminalRecorded) return summary;
+      summary.handled += 1;
+      return summary;
+    }
+    if (isTurnRuntimeWaitSignal(error)) {
+      const waitingRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: "waiting_runtime",
+        handled: true,
+        recoveryCaseId: error.recoveryCaseId,
+        turnId: error.turnId,
+      });
+      if (!waitingRecorded) return summary;
       summary.handled += 1;
       return summary;
     }

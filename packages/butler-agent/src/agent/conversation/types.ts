@@ -131,7 +131,8 @@ export interface ConversationProjectionEvent {
     | "turn.state_changed"
     | "runtime.interruption.recorded"
     | "recovery.case.opened"
-    | "recovery.case.resolved";
+    | "recovery.case.resolved"
+    | "turn.outcome";
   payload_ref: string;
   created_at: string;
 }

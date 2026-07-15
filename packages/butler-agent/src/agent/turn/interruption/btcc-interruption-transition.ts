@@ -29,3 +29,12 @@ export function assertBtccInterruptionTransition(
     throw new Error(`btcc_turn_interruption_transition_invalid:${from}:${to}`);
   }
 }
+
+export function assertBtccReportingTransition(from: BtccTurnState): void {
+  if (from === "delivered" || from === "cancelled") {
+    throw new Error("btcc_turn_terminal_immutable");
+  }
+  if (!ACTIVE_BTCC_STATES.has(from)) {
+    throw new Error(`btcc_reporting_requires_active_phase:${from}`);
+  }
+}

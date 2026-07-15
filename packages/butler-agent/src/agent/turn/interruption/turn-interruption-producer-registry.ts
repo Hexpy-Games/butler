@@ -25,6 +25,7 @@ export interface TurnInterruptionProducerDescriptor {
   entryRoots: readonly string[];
   legacyFailureAuthorities: readonly string[];
   requiredTarget: TurnInterruptionTarget;
+  migrationStatus: "legacy" | "routed";
 }
 
 export const TURN_INTERRUPTION_PRODUCERS = [
@@ -32,7 +33,7 @@ export const TURN_INTERRUPTION_PRODUCERS = [
   producer("app_queue_handoff", "queue_handoff", "gateways/app/infrastructure/transport/transport-queue-store.ts", "failAppTransportQueueHandoff", ["app"], ["assistant failure", "failed App turn"], "turn_interruption_router"),
   producer("queued_failure_action", "dispatch", "interfaces/gateway/queued-inbound.ts", "failureActionForOriginalInbound", ["queued", "automation", "recovery"], ["turn_failed action"], "turn_interruption_router"),
   producer("queued_claim_failure", "dispatch", "interfaces/gateway/queued-inbound.ts", "failQueueClaim", ["queued", "automation", "recovery"], ["failed queue claim"], "turn_interruption_router"),
-  producer("native_turn_catch", "phase_runtime", "agent/turn/native/turn-runner/turn-runner.ts", "turn.failed", ["queued", "direct"], ["turn.failed event"], "turn_interruption_router"),
+  producer("native_turn_catch", "phase_runtime", "agent/turn/native/turn-runner/turn-runner.ts", "principalCancelled", ["queued", "direct"], ["turn.failed event"], "turn_interruption_router", "routed"),
   producer("direct_responder_completion", "legacy_responder", "gateways/app/domain/sessions/responder-turn-lifecycle.ts", "completeResponderTurn", ["direct"], ["failed App turn"], "turn_interruption_router"),
   producer("user_responder_failure", "legacy_responder", "gateways/app/domain/sessions/user-message-responder-turn.ts", "updateTurnFailed", ["direct"], ["failed App turn"], "turn_interruption_router"),
   producer("system_responder_failure", "legacy_responder", "gateways/app/domain/sessions/system-responder-turn-store.ts", "handleError", ["system", "automation"], ["failed App turn"], "turn_interruption_router"),
@@ -81,6 +82,7 @@ function producer(
   entryRoots: readonly string[],
   legacyFailureAuthorities: readonly string[],
   requiredTarget: TurnInterruptionTarget,
+  migrationStatus: TurnInterruptionProducerDescriptor["migrationStatus"] = "legacy",
 ): TurnInterruptionProducerDescriptor {
   return {
     id,
@@ -90,5 +92,6 @@ function producer(
     entryRoots,
     legacyFailureAuthorities,
     requiredTarget,
+    migrationStatus,
   };
 }
