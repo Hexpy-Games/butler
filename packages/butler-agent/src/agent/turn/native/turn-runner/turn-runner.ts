@@ -22,7 +22,10 @@ import {
   type DirectTurnBudget,
 } from "../../direct-turn-budget.ts";
 import { principalTurnCancellationRecorded } from "../../principal-turn-cancellation-registry.ts";
-import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
+import {
+  ModelProviderRequestError,
+  safeRuntimeFailure,
+} from "../../../../integrations/providers/provider-errors.ts";
 import {
   cancelActiveWorkStreamBestEffort,
   completeReportingWorkStreamBestEffort,
@@ -930,8 +933,7 @@ function finalCandidateReviewResume(input: {
 }
 
 function isRetryableProviderFailure(error: unknown): boolean {
-  const failure = safeRuntimeFailure(error);
-  return failure.retryable === true;
+  return error instanceof ModelProviderRequestError && error.retryable === true;
 }
 
 async function persistSchedulerContinuation(input: {

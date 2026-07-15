@@ -1837,6 +1837,59 @@ test("retryable provider failures checkpoint the active contract instead of fail
   });
 });
 
+test("non-provider execution errors never become scheduler continuations", async () => {
+  const turnId = "turn-non-provider-error";
+  const sessionId = "butler/non-provider-error";
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => JSON.stringify({
+      schema_version: "butler.turn-contract-decision.v1",
+      decision_id: decisionIdFromFormat(input.responseFormat),
+      action: "start_work",
+      target_workstream_id: null,
+      target_project_id: "butler",
+      blocker_id: null,
+      deliverables: ["code_change", "validation", "final_report"],
+      answer_text: null,
+      public_title: "실행 경계 검증",
+      public_summary: "공급자 오류와 실행 오류의 소유권을 분리합니다.",
+      public_rationale: "실행 오류가 공급자 연속 실행으로 위장되면 정확한 복구가 불가능합니다.",
+      immediate_next_step: "실행 오류를 원래 경계로 전달합니다.",
+    }),
+    runFunctionToolPromptText: async () => {
+      throw new Error("tool_execution_invariant_broken");
+    },
+    executeButlerTool: async () => ({ ok: true }),
+  });
+  const handle = await runtime.createSession({
+    sessionId,
+    role: "butler",
+    workspacePath: data,
+    systemPrompt: "You are Sandy.",
+    metadata: { projectId: "butler" },
+  });
+
+  let thrown: unknown;
+  try {
+    await runtime.runTurn({
+      handle,
+      provider: typedProvider,
+      model: "openai/gpt-5.5",
+      input: { text: "파일을 변경하고 검증해줘." },
+      metadata: { turnId, runtimePolicy: { completionReview: "disabled" } },
+    });
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBeInstanceOf(Error);
+  expect((thrown as Error).message).toBe("tool_execution_invariant_broken");
+  expect(isTurnSchedulerContinuationYieldError(thrown)).toBe(false);
+  expect(readTurnContextAtom({ butlerData: data, sessionId, turnId })).toBeNull();
+});
+
 test("scheduler resume restores one typed contract and retires its satisfied mutation frontier", async () => {
   const turnId = "turn-typed-checkpoint-resume";
   const sessionId = "butler/typed-checkpoint-resume";
