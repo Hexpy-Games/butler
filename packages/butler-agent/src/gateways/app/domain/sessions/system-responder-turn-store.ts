@@ -19,6 +19,7 @@ import {
   AppSystemResponderCompletionProjector,
   systemAcceptedMessage,
 } from "./system-responder-completion.ts";
+import { isResponderRuntimeInterruption } from "./responder-runtime-interruption.ts";
 import type {
   SystemResponderCompletionInput,
   SystemResponderTurnStoreInput,
@@ -80,7 +81,10 @@ export class AppSystemResponderTurnStore {
       input.key,
       input.text,
       input.responder,
-      input.options,
+      {
+        ...input.options,
+        responderTimeoutMs: undefined,
+      },
     )
       .then(() => {
         input.onSuccess?.();
@@ -125,6 +129,24 @@ export class AppSystemResponderTurnStore {
         replies: [],
         turn: cancelledTurn,
         next_cursor: cancelledTurn.cursor,
+      };
+    }
+    if (isResponderRuntimeInterruption(input.error)) {
+      const continuation = this.input.markResponderNonPublicContinuation(
+        input.chatId,
+        input.turn.id,
+        null,
+      );
+      this.input.touchChat(input.chatId);
+      return {
+        accepted: this.acceptedMessageForExistingOrSynthetic(
+          input.chatId,
+          input.messageId,
+          continuation.turn,
+        ),
+        replies: [],
+        turn: continuation.turn,
+        next_cursor: continuation.turn.cursor,
       };
     }
     if (isNonPublicContinuationDeliveryError(input.error)) {

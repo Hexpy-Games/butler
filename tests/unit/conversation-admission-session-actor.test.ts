@@ -922,6 +922,7 @@ test("production BTCC adapter leaves scheduler incompletion active for queue-own
   await expect(actor.handleInbound(inbound(
     "btcc-checkpoint-yield",
     "continue durable work",
+    { raw: { queueId: "queue-checkpoint-yield", dispatchClaimId: "claim-checkpoint-yield" } },
   ))).rejects.toBeInstanceOf(TurnSchedulerContinuationYieldError);
 
   expect(btccStore.readTurnState("turn-btcc-checkpoint-yield")).toMatchObject({
@@ -930,6 +931,40 @@ test("production BTCC adapter leaves scheduler incompletion active for queue-own
   });
   expect(conversationStore.readTurn("turn-btcc-checkpoint-yield")).toMatchObject({
     status: "running",
+  });
+  expect(conversationStore.readTurnOutcome("turn-btcc-checkpoint-yield")).toBeNull();
+
+  btccStore.close();
+  conversationStore.close();
+  bindingStore.close();
+});
+
+test("production BTCC adapter routes an ownerless scheduler yield to runtime recovery", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const btccStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    btccInterruptionStateWriter: btccStore,
+    runtime: new CheckpointYieldRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  let caught: unknown;
+  try {
+    await actor.handleInbound(inbound(
+      "btcc-checkpoint-yield",
+      "continue durable work",
+    ));
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(isTurnRuntimeWaitSignal(caught)).toBe(true);
+  expect(btccStore.readTurnState("turn-btcc-checkpoint-yield")).toMatchObject({
+    state: "waiting_runtime",
+    generation: 2,
   });
   expect(conversationStore.readTurnOutcome("turn-btcc-checkpoint-yield")).toBeNull();
 

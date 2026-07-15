@@ -50,6 +50,8 @@ import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { createOpenAIResponse } from "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
 import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
+import { TurnRuntimeWaitSignal } from "../../packages/butler-agent/src/agent/turn/interruption/turn-runtime-wait-signal.ts";
+import { TurnSchedulerContinuationYieldError } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 import {
   discoverLocalModels,
@@ -5798,6 +5800,53 @@ test("automations expose prompt bodies only in detail and can run while paused",
   }
 });
 
+test("automation dispatch detaches from gateway deadlines without aborting the owned turn", async () => {
+  let aborted = false;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responderTimeoutMs: 5,
+    async responder(input) {
+      input.signal?.addEventListener("abort", () => {
+        aborted = true;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return { texts: ["automation completed after the gateway deadline"] };
+    },
+  });
+  try {
+    const created = await postJson(`${server.url}automations`, {
+      title: "Deadline ownership",
+      prompt_body: "finish after caller detaches",
+      target_session_id: "general",
+      interval_seconds: 600,
+    });
+    const run = await postJson(
+      `${server.url}automations/${encodeURIComponent(created.data.automation.id)}/run`,
+      {},
+    );
+    expect(run.data.run).toMatchObject({ state: "succeeded" });
+    expect(run.data.run.safe_error_code ?? null).toBeNull();
+
+    const reply = await waitForAssistantMessageMatching(
+      server.url,
+      "general",
+      (message) =>
+        message.text === "automation completed after the gateway deadline",
+    );
+    expect(reply).toMatchObject({
+      status: "delivered",
+      text: "automation completed after the gateway deadline",
+    });
+    expect(aborted).toBe(false);
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("gateway_timeout");
+  } finally {
+    server.stop();
+  }
+});
+
 test("automation scheduler dispatches due enabled automations", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -7089,6 +7138,55 @@ test("session summary reconciles orphaned system responder turns after public re
     expect(summary.data.turn_state).toBe("delivered");
     expect(summary.data.latest_progress.state).toBe("delivered");
     expect(summary.data.latest_progress.safe_progress_rows).toEqual([]);
+  } finally {
+    server.stop();
+  }
+});
+
+test("system responder runtime recovery stays non-terminal through the real store graph", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const runtimeStore = server.store as unknown as {
+      kernel: {
+        systemResponderTurns: {
+          run(
+            chatId: string,
+            messageId: string,
+            text: string,
+            responder: () => never,
+          ): Promise<{ turn: { id: string; state: string; cancellable: boolean } }>;
+        };
+      };
+    };
+    const result = await runtimeStore.kernel.systemResponderTurns.run(
+      "general",
+      "system-runtime-wait",
+      "continue system-owned work",
+      () => {
+        throw new TurnRuntimeWaitSignal(
+          "system-runtime-wait-turn",
+          "system-runtime-recovery-case",
+        );
+      },
+    );
+    expect(result.turn).toMatchObject({
+      state: "waiting_for_tool",
+      cancellable: true,
+    });
+    const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
+    expect(turns.data.turns).toContainEqual(expect.objectContaining({
+      id: result.turn.id,
+      state: "waiting_for_tool",
+      retryable: false,
+      cancellable: true,
+    }));
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("runtime.fault");
   } finally {
     server.stop();
   }
@@ -13045,6 +13143,101 @@ test("deferred logical turns outlive gateway request timeout while provider roun
       cancellable: true,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+  } finally {
+    server.stop();
+  }
+});
+
+test("direct responder runtime recovery stays active without a failure projection", async () => {
+  let calls = 0;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      calls += 1;
+      throw new TurnRuntimeWaitSignal(
+        input.turnId,
+        `recovery-${input.turnId}`,
+      );
+    },
+  });
+  try {
+    const response = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "preserve runtime recovery ownership",
+    });
+    const waitingTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.id === response.data.turn.id &&
+        turn.state === "waiting_for_tool",
+    );
+    expect(waitingTurn).toMatchObject({
+      state: "waiting_for_tool",
+      retryable: false,
+      cancellable: true,
+      attempt: 1,
+    });
+    expect(waitingTurn.safe_error_code ?? null).toBeNull();
+    expect(calls).toBe(1);
+
+    const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    expect(messages.data.messages).not.toContainEqual(expect.objectContaining({
+      role: "assistant",
+      status: "failed",
+    }));
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("runtime.fault");
+  } finally {
+    server.stop();
+  }
+});
+
+test("direct responder scheduler yield waits instead of inventing a failed terminal", async () => {
+  let calls = 0;
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+    responder(input) {
+      calls += 1;
+      throw new TurnSchedulerContinuationYieldError(
+        `butler/app-${input.chatId}`,
+        input.turnId,
+        `${input.turnId}-continuation.json`,
+        `${input.turnId}-continuation.json:g1`,
+        1,
+      );
+    },
+  });
+  try {
+    const response = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "preserve scheduler checkpoint",
+    });
+    const waitingTurn = await waitForLatestTurnMatching(
+      server.url,
+      "general",
+      (turn) => turn.id === response.data.turn.id &&
+        turn.state === "waiting_for_tool",
+    );
+    expect(waitingTurn).toMatchObject({
+      state: "waiting_for_tool",
+      retryable: false,
+      cancellable: true,
+      attempt: 1,
+    });
+    expect(calls).toBe(1);
+    const messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
+    expect(messages.data.messages).not.toContainEqual(expect.objectContaining({
+      role: "assistant",
+      status: "failed",
+    }));
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain(
+      "turn_scheduler_continuation_schedule_failed",
+    );
   } finally {
     server.stop();
   }

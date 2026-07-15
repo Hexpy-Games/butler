@@ -211,6 +211,7 @@ function createAutomationScheduler(input: {
     input.store
       .dispatchDueAutomations(input.responder, {
         responderTimeoutMs: input.responderTimeoutMs,
+        deferResponderTurns: true,
       })
       .catch((error) => {
         input.store.appendSafeServerEvent("automation.scheduler_error", {
