@@ -12,6 +12,11 @@ import {
   createAppSessionInteractionModuleGraph,
   type AppSessionInteractionModuleGraph,
 } from "./session-interaction-module-graph.ts";
+import {
+  appResponderRuntimeRecoveryOwnsTurn,
+  cancelAppResponderRuntimeTurn,
+  routeAppResponderRuntimeInterruption,
+} from "./app-responder-interruption-router.ts";
 
 export interface AppSessionModuleGraph {
   messageFiles: AppMessageFileStore;
@@ -102,6 +107,8 @@ export function createAppSessionModuleGraph(input: {
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
     enqueueAppTransportTurn: (turnInput) =>
       host.enqueueAppTransportTurn(turnInput),
+    runtimeRecoveryOwnsTurn: (turnId) =>
+      appResponderRuntimeRecoveryOwnsTurn(butlerData, turnId),
   });
   const userMessageTurns = new AppUserMessageTurnStore({
     butlerData,
@@ -144,8 +151,24 @@ export function createAppSessionModuleGraph(input: {
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
     markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
       host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
+    routeResponderRuntimeInterruption: (turnInput, error) => {
+      const chat = host.getChatRow(turnInput.chatId);
+      routeAppResponderRuntimeInterruption({
+        butlerData,
+        chatId: turnInput.chatId,
+        turnId: turnInput.turnId,
+        messageId: turnInput.messageId,
+        text: turnInput.text,
+        actor: "user",
+        projectId: chat?.project_id ?? null,
+        origin: "legacy_responder",
+        boundary: "direct_responder_completion",
+        error,
+      });
+    },
     finalizeCancelledTurn: (chatId, turnId) => {
       cancelPersistedRuntimeTurn({ butlerData, turnId });
+      cancelAppResponderRuntimeTurn(butlerData, turnId);
       return host.finalizeCancelledTurn(chatId, turnId);
     },
     hasTurnEventKind: (turnId, kind) => host.hasTurnEventKind(turnId, kind),
@@ -174,10 +197,6 @@ export function createAppSessionModuleGraph(input: {
     touchChat: (chatId) => host.touchChat(chatId),
     appendTerminalTurnStateChanged: (turn) =>
       host.appendTerminalTurnStateChanged(turn),
-    runtimeFaultRecordForTurn: (turnId) =>
-      host.runtimeFaultRecordForTurn(turnId),
-    upsertAssistantTurnFailure: (chatId, turnId, safeError, options) =>
-      host.upsertAssistantTurnFailure(chatId, turnId, safeError, options),
   });
   const interactionModules = createAppSessionInteractionModuleGraph({
     db,

@@ -80,18 +80,18 @@ export interface SystemResponderTurnStoreInput {
     turnId: string,
     safeErrorCode?: "provider_round_timeout" | null,
   ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  routeResponderRuntimeInterruption: (input: {
+    chatId: string;
+    turnId: string;
+    messageId: string;
+    text: string;
+    error: unknown;
+  }) => void;
   finalizeResponderLimitedDelivery: (
     chatId: string,
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
   ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
-  upsertAssistantTurnFailure: (
-    chatId: string,
-    turnId: string,
-    safeError: { code: string; message: string },
-    options?: { retryable?: boolean },
-  ) => MessageRecord;
-  runtimeFaultRecordForTurn: (turnId: string) => Record<string, unknown> | null;
   cleanupTurnEventSequences: (chatId: string, turnId: string) => void;
 }
 

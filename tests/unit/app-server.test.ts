@@ -53,6 +53,7 @@ import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/a
 import { TurnRuntimeWaitSignal } from "../../packages/butler-agent/src/agent/turn/interruption/turn-runtime-wait-signal.ts";
 import { TurnSchedulerContinuationYieldError } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
+import { BtccRecoveryCaseStore } from "../../packages/butler-agent/src/agent/turn/interruption/recovery-case-store.ts";
 import {
   discoverLocalModels,
   upsertLocalModelConfig,
@@ -7184,9 +7185,55 @@ test("system responder runtime recovery stays non-terminal through the real stor
       retryable: false,
       cancellable: true,
     }));
+    expectBtccRuntimeRecovery(result.turn.id);
     const events = await getJson(`${server.url}events?cursor=0`);
     expect(JSON.stringify(events)).not.toContain("turn.failed");
     expect(JSON.stringify(events)).not.toContain("runtime.fault");
+  } finally {
+    server.stop();
+  }
+});
+
+test("system responder generic errors use the same durable runtime recovery owner", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const runtimeStore = server.store as unknown as {
+      kernel: {
+        systemResponderTurns: {
+          run(
+            chatId: string,
+            messageId: string,
+            text: string,
+            responder: () => never,
+          ): Promise<{ turn: { id: string; state: string; cancellable: boolean } }>;
+        };
+      };
+    };
+    const result = await runtimeStore.kernel.systemResponderTurns.run(
+      "general",
+      "system-generic-interruption",
+      "continue scheduled system work",
+      () => {
+        throw new Error("private scheduled responder stack");
+      },
+    );
+    expect(result.turn).toMatchObject({
+      state: "waiting_for_tool",
+      cancellable: true,
+    });
+    expectBtccRuntimeRecovery(result.turn.id);
+
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(messages.data.messages.filter(
+      (message: { role: string }) => message.role === "assistant",
+    )).toEqual([]);
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
+    expect(JSON.stringify(events)).not.toContain("private scheduled responder stack");
   } finally {
     server.stop();
   }
@@ -8739,7 +8786,7 @@ test("app transport internal limited final text is hidden by typed limitation co
   }
 });
 
-test("app transport ownerless internal recovery failures terminate without leaking recovery internals", async () => {
+test("app transport failure projection opens runtime recovery without leaking internals", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -8779,19 +8826,15 @@ test("app transport ownerless internal recovery failures terminate without leaki
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual([
-      "continue after internal recovery",
-      "Butler could not complete this turn.",
-    ]);
+    ).toEqual(["continue after internal recovery"]);
     expect(JSON.stringify(messages)).not.toContain("could not verify");
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_status_label: "",
+      state: "waiting_for_tool",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
       attempt: 1,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
@@ -8799,7 +8842,10 @@ test("app transport ownerless internal recovery failures terminate without leaki
     const sessionView = await getJson(
       `${server.url}session-view?session_id=general`,
     );
-    expect(sessionView.data.active_turn).toBeNull();
+    expect(sessionView.data.active_turn).toMatchObject({
+      id: turnId,
+      state: "waiting_for_tool",
+    });
     expect(JSON.stringify(sessionView)).not.toContain("recovering_internal");
     expect(JSON.stringify(sessionView)).not.toContain("needs_evidence");
     expect(JSON.stringify(sessionView)).not.toContain("needs_tool_surface");
@@ -8813,7 +8859,7 @@ test("app transport ownerless internal recovery failures terminate without leaki
       }) =>
         event.type === "turn.state_changed" &&
         event.payload?.turn?.id === turnId &&
-        event.payload?.turn?.state === "failed",
+        event.payload?.turn?.state === "waiting_for_tool",
     );
     expect(stateChanged).toBeTruthy();
     const stateChangedPayload = stateChanged?.payload;
@@ -8823,8 +8869,7 @@ test("app transport ownerless internal recovery failures terminate without leaki
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "failed",
-      delivery_state: "failed_system",
+      state: "waiting_for_tool",
     });
     expect(JSON.stringify(summary)).not.toContain("could not verify");
     expect(JSON.stringify(summary)).not.toContain("Continuing");
@@ -8832,12 +8877,26 @@ test("app transport ownerless internal recovery failures terminate without leaki
     expect(JSON.stringify(summary)).not.toContain("needs_evidence");
     expect(JSON.stringify(summary)).not.toContain("needs_tool_surface");
     expect(JSON.stringify(summary)).not.toContain("needs_argument_repair");
+    const btcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
+    try {
+      const state = btcc.readTurnState(turnId);
+      expect(state).toMatchObject({
+        state: "waiting_runtime",
+        generation: 2,
+      });
+      expect(btcc.readRecoveryCase(state!.activeRecoveryCaseId!)).toMatchObject({
+        status: "open",
+        diagnosticCode: "runtime_unclassified_interruption",
+      });
+    } finally {
+      btcc.close();
+    }
   } finally {
     server.stop();
   }
 });
 
-test("repeated app transport ownerless recovery failures remain terminal without requeue", async () => {
+test("repeated app transport failure projections reuse runtime recovery without requeue", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -8875,10 +8934,10 @@ test("repeated app transport ownerless recovery failures remain terminal without
     const firstTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(firstTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
+      state: "waiting_for_tool",
       safe_status_label: "",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
       attempt: 1,
     });
     const firstEvents = await getJson(`${server.url}events?cursor=0`);
@@ -8914,10 +8973,10 @@ test("repeated app transport ownerless recovery failures remain terminal without
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
+      state: "waiting_for_tool",
       safe_status_label: "",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
       attempt: 1,
     });
     expect(secondTurns.data.turns[0].safe_error_code ?? null).toBeNull();
@@ -8925,12 +8984,7 @@ test("repeated app transport ownerless recovery failures remain terminal without
     const assistantMessages = messages.data.messages.filter(
       (message: { role: string }) => message.role === "assistant",
     );
-    expect(assistantMessages).toEqual([
-      expect.objectContaining({
-        text: "Butler could not complete this turn.",
-        status: "failed",
-      }),
-    ]);
+    expect(assistantMessages).toEqual([]);
     expect(JSON.stringify(messages)).not.toContain("could not verify");
     expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
 
@@ -8943,7 +8997,7 @@ test("repeated app transport ownerless recovery failures remain terminal without
     const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(secondSummary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "failed",
+      state: "waiting_for_tool",
     });
     expect(JSON.stringify(secondSummary)).not.toContain("Retry required");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
@@ -8961,7 +9015,7 @@ test("repeated app transport ownerless recovery failures remain terminal without
   }
 });
 
-test("late continuation evidence cannot resurrect an already terminal ownerless failure", async () => {
+test("late continuation evidence cannot bypass runtime recovery ownership", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9073,21 +9127,15 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_status_label: "",
+      state: "waiting_for_tool",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
       attempt: 1,
     });
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.filter((message: { role: string }) => message.role === "assistant"),
-    ).toEqual([
-      expect.objectContaining({
-        text: "Butler could not complete this turn.",
-        status: "failed",
-      }),
-    ]);
+    ).toEqual([]);
     expect(JSON.stringify(messages)).not.toContain("같은 이어가기 상태");
     expect(JSON.stringify(messages)).not.toContain("could not verify");
 
@@ -9098,7 +9146,10 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
     ).length;
     expect(secondQueuedCount).toBe(firstQueuedCount);
     const sessionView = await getJson(`${server.url}session-view?session_id=general`);
-    expect(sessionView.data.active_turn).toBeNull();
+    expect(sessionView.data.active_turn).toMatchObject({
+      id: turnId,
+      state: "waiting_for_tool",
+    });
     expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
   } finally {
@@ -9106,7 +9157,7 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
   }
 });
 
-test("app transport internal recovery failures do not mask prior provider failures", async () => {
+test("app transport failure diagnostics coalesce into one runtime recovery owner", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9166,25 +9217,23 @@ test("app transport internal recovery failures do not mask prior provider failur
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual([
-      "preserve provider failure",
-      "OpenAI API request failed with HTTP 500.",
-    ]);
+    ).toEqual(["preserve provider failure"]);
 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_error_code: "provider_api_error",
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
     });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
     expect(JSON.stringify(messages)).not.toContain("could not verify");
   } finally {
     server.stop();
   }
 });
 
-test("app transport no-visible final removes an earlier failure assistant for the same turn", async () => {
+test("app transport no-visible final stays private and deferred during runtime recovery", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9277,8 +9326,8 @@ test("app transport no-visible final removes an earlier failure assistant for th
     expect(JSON.stringify(messages)).not.toContain("dispatch lease expired");
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     expect(messages.data.turn_progress[turnId]).toMatchObject({
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "waiting_for_tool",
+      delivery_state: "running",
       limitation_codes: [],
       limitations: [],
     });
@@ -9288,11 +9337,12 @@ test("app transport no-visible final removes an earlier failure assistant for th
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "waiting_for_tool",
+      delivery_state: "running",
       limitation_codes: [],
       limitations: [],
     });
+    expectBtccRuntimeRecovery(turnId);
     expect(JSON.stringify(summary.data.latest_progress)).not.toContain(
       "internal_recovery_required",
     );
@@ -9779,7 +9829,7 @@ test("app transport failure projection does not downgrade delivered turns", asyn
   }
 });
 
-test("app transport final projection does not resurrect timed out failed turns", async () => {
+test("app transport stale final cannot bypass timeout runtime recovery ownership", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const url = server.url;
@@ -9857,24 +9907,20 @@ test("app transport final projection does not resurrect timed out failed turns",
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual([
-      "this turn times out before a late final",
-      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
-    ]);
+    ).toEqual(["this turn times out before a late final"]);
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_error_code: "inbound_dispatch_timeout",
+      state: "waiting_for_tool",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
   } finally {
     server.stop();
   }
 });
 
-test("recoverable limited final can close a timeout failed app turn", async () => {
+test("recoverable limited final evidence waits for BTCC recovery resolution", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -9993,14 +10039,15 @@ test("recoverable limited final can close a timeout failed app turn", async () =
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "delivered",
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
     });
     expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
+    expectBtccRuntimeRecovery(turnId);
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
-      state: "delivered",
-      delivery_state: "delivered_with_limitations",
+      state: "waiting_for_tool",
       limitation_codes: [],
       limitations: [],
     });
@@ -10018,7 +10065,7 @@ test("recoverable limited final can close a timeout failed app turn", async () =
   }
 });
 
-test("recoverable limited final without queue claim cannot close a failed app turn", async () => {
+test("recoverable limited final without queue claim cannot bypass runtime recovery", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const result = await postJson(`${server.url}messages`, {
@@ -10082,16 +10129,13 @@ test("recoverable limited final without queue claim cannot close a failed app tu
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual([
-      "continue a failed turn without claim",
-      "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
-    ]);
+    ).toEqual(["continue a failed turn without claim"]);
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_error_code: "inbound_dispatch_timeout",
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
     });
   } finally {
     server.stop();
@@ -11189,7 +11233,7 @@ test("terminal app transport snapshots do not expose stale running progress rows
   }
 });
 
-test("app transport failure projection fails queued turns after app-server restart", async () => {
+test("app transport failure projection opens runtime recovery after app-server restart", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   const url = server.url;
@@ -11231,18 +11275,7 @@ test("app transport failure projection fails queued turns after app-server resta
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
-    ).toEqual([
-      "this queued turn should fail safely",
-      "Butler could not complete this turn.",
-    ]);
-    const assistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(assistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "gateway_failed",
-      retryable: false,
-    });
+    ).toEqual(["this queued turn should fail safely"]);
     expect(JSON.stringify(messages)).not.toContain("private stack");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
 
@@ -11250,9 +11283,8 @@ test("app transport failure projection fails queued turns after app-server resta
     expect(turns.data.turns).toHaveLength(1);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      safe_error_code: "gateway_failed",
-      cancellable: false,
+      state: "waiting_for_tool",
+      cancellable: true,
       retryable: false,
     });
     const events = await getJson(`${server.url}events?cursor=0`);
@@ -11266,12 +11298,7 @@ test("app transport failure projection fails queued turns after app-server resta
         event.type === "agent.turn_event" &&
         event.payload?.event?.kind === "turn.failed",
     );
-    expect(failedEvent?.payload?.event?.payload).toMatchObject({
-      safeErrorCode: "gateway_failed",
-    });
-    expect(JSON.stringify(failedEvent?.payload?.event?.payload)).not.toContain(
-      "safeCause",
-    );
+    expect(failedEvent).toBeUndefined();
     expect(JSON.stringify(events)).not.toContain("token=secret");
     expect(JSON.stringify(events)).not.toContain("private stack");
   } finally {
@@ -11279,7 +11306,7 @@ test("app transport failure projection fails queued turns after app-server resta
   }
 });
 
-test("retry without runtime fault rejects ordinary failed app transport turns", async () => {
+test("retry endpoint cannot replay a runtime-recovery-owned turn", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({
     dbPath,
@@ -11298,12 +11325,12 @@ test("retry without runtime fault rejects ordinary failed app transport turns", 
     }),
   });
   expect(first.status).toBe(202);
-  const failedTurn = await waitForLatestTurnMatching(
+  const waitingTurn = await waitForLatestTurnMatching(
     server.url,
     "general",
-    (turn) => turn.state === "failed",
+    (turn) => turn.state === "waiting_for_tool",
   );
-  const turnId = failedTurn.id as string;
+  const turnId = waitingTurn.id as string;
   server.stop();
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -11318,8 +11345,9 @@ test("retry without runtime fault rejects ordinary failed app transport turns", 
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
       attempt: 1,
     });
     const messages = await getJson(`${server.url}messages?chat_id=general`);
@@ -11337,11 +11365,6 @@ test("retry without runtime fault rejects ordinary failed app transport turns", 
         text: "retry through core",
         status: "sent",
       },
-      {
-        role: "assistant",
-        text: "Butler could not complete this turn.",
-        status: "failed",
-      },
     ]);
     expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
@@ -11349,7 +11372,7 @@ test("retry without runtime fault rejects ordinary failed app transport turns", 
   }
 });
 
-test("ordinary failed turn retry rejection keeps stale app transport failure projection unchanged", async () => {
+test("stale failure projection cannot reopen retry on runtime recovery", async () => {
   const dbPath = join(tempDir, "app.sqlite");
   let server = createAppServer({
     dbPath,
@@ -11368,12 +11391,12 @@ test("ordinary failed turn retry rejection keeps stale app transport failure pro
     }),
   });
   expect(first.status).toBe(202);
-  const failedTurn = await waitForLatestTurnMatching(
+  const waitingTurn = await waitForLatestTurnMatching(
     server.url,
     "general",
-    (turn) => turn.state === "failed",
+    (turn) => turn.state === "waiting_for_tool",
   );
-  const turnId = failedTurn.id as string;
+  const turnId = waitingTurn.id as string;
   server.stop();
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
@@ -11410,12 +11433,12 @@ test("ordinary failed turn retry rejection keeps stale app transport failure pro
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "failed",
-      cancellable: false,
+      state: "waiting_for_tool",
+      cancellable: true,
       retryable: false,
       attempt: 1,
-      safe_error_code: "gateway_failed",
     });
+    expect(turns.data.turns[0].safe_error_code ?? null).toBeNull();
   } finally {
     server.stop();
   }
@@ -13771,44 +13794,40 @@ test("app startup repairs cancelled turns that lost their activity carrier", asy
   }
 });
 
-test("failed app turns are not retryable without a runtime fault record", async () => {
-  let attempt = 0;
+test("generic responder errors open durable runtime recovery without public failure", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
     responder() {
-      attempt += 1;
-      if (attempt === 1)
-        throw new Error("private provider stack should not leak");
-      return { texts: ["recovered reply"] };
+      throw new Error("private provider stack should not leak");
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chat_id: "general", text: "please retry this" }),
     });
-    const failedBody = await failedResponse.json();
-    expect(failedResponse.status).toBe(202);
-    expect(failedBody.data.turn.state).toBe("thinking");
-    expect(JSON.stringify(failedBody)).not.toContain("private provider stack");
+    expect(response.status).toBe(202);
+    expect(JSON.stringify(await response.json())).not.toContain("private provider stack");
 
-    const failedTurn = await waitForLatestTurnMatching(
+    const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "failed",
+      (turn) => turn.state === "waiting_for_tool",
     );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "gateway_failed",
+    expect(recoveryTurn).toMatchObject({
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
       attempt: 1,
     });
+    expect(recoveryTurn.safe_error_code ?? null).toBeNull();
+    expectBtccRuntimeRecovery(recoveryTurn.id as string);
 
-    const failedTurnId = failedTurn.id as string;
     const retry = await fetch(
-      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
+      `${server.url}turns/${encodeURIComponent(recoveryTurn.id as string)}/retry`,
       { method: "POST", headers: { "content-type": "application/json" } },
     );
     expect(retry.status).toBe(409);
@@ -13820,71 +13839,73 @@ test("failed app turns are not retryable without a runtime fault record", async 
       messages.data.messages.map(
         (message: { status: string }) => message.status,
       ),
-    ).toEqual(["sent", "failed"]);
+    ).toEqual(["sent"]);
     expect(
       messages.data.messages.filter(
         (message: { role: string }) => message.role === "assistant",
       ),
-    ).toHaveLength(1);
-    expect(messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    )).toMatchObject({
+    ).toHaveLength(0);
+    expect(JSON.stringify(messages)).not.toContain("private provider stack");
+    expect(JSON.stringify(messages)).not.toContain("turn.failed");
+
+    const recoveryBeforeStop = new BtccRecoveryCaseStore({ butlerData: tempDir });
+    const recoveryCaseId = recoveryBeforeStop.readTurnState(
+      recoveryTurn.id as string,
+    )!.activeRecoveryCaseId!;
+    recoveryBeforeStop.close();
+    const stop = await postJson(
+      `${server.url}turns/${encodeURIComponent(recoveryTurn.id as string)}/cancel`,
+      {},
+    );
+    expect(stop.data.turn).toMatchObject({
+      state: "cancelled",
+      cancellable: false,
       retryable: false,
-      safe_error_code: "gateway_failed",
     });
+    const recoveryAfterStop = new BtccRecoveryCaseStore({ butlerData: tempDir });
+    try {
+      expect(recoveryAfterStop.readTurnState(recoveryTurn.id as string)).toMatchObject({
+        state: "cancelled",
+      });
+      expect(
+        recoveryAfterStop.readTurnState(recoveryTurn.id as string)
+          ?.activeRecoveryCaseId ?? null,
+      ).toBeNull();
+      expect(recoveryAfterStop.readRecoveryCase(recoveryCaseId)).toMatchObject({
+        status: "resolved",
+      });
+    } finally {
+      recoveryAfterStop.close();
+    }
   } finally {
     server.stop();
   }
 });
 
-test("retrying a runtime fault updates the same logical turn without synthetic retry text", async () => {
-  let attempt = 0;
-  const attemptControls: Array<{
-    model?: string;
-    reasoningEffort?: string;
-  }> = [];
+test("runtime fault diagnostics do not authorize App terminality or manual retry", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
     responder(input) {
-      attempt += 1;
-      attemptControls.push({
-        model: input.model,
-        reasoningEffort: input.reasoningEffort,
+      input.onTurnEvent?.({
+        kind: "runtime.fault",
+        payload: createRuntimeFaultPayload({
+          faultId: "fault-runtime-diagnostic",
+          sessionId: input.chatId,
+          turnId: input.turnId,
+          kind: "provider_stream_corruption",
+          retryable: true,
+          publicSummary: "Runtime invariant interrupted the turn.",
+          operatorSummary: "Tool result pairing invariant broke.",
+          safeErrorCode: "runtime_fault",
+          safeCause: "safe cause",
+          createdAt: "2026-06-28T00:00:00.000Z",
+        }),
       });
-      if (attempt === 1) {
-        input.onTurnEvent?.({
-          kind: TURN_DECISION_EVENT_KIND,
-          payload: createTurnDecisionPayload({
-            decisionId: "opening-runtime-retry",
-            role: "opening",
-            source: "model-authored",
-            firstVisible: true,
-            summary: "I will preserve this opening decision through Retry.",
-            rationale: "Retry must keep typed turn history on the same turn.",
-            nextStep: "Retry the failed runtime attempt without synthetic text.",
-          }),
-        });
-        input.onTurnEvent?.({
-          kind: "runtime.fault",
-          payload: createRuntimeFaultPayload({
-            faultId: "fault-retryable-runtime",
-            sessionId: input.chatId,
-            turnId: input.turnId,
-            kind: "provider_stream_corruption",
-            retryable: true,
-            publicSummary: "Runtime invariant interrupted the turn.",
-            operatorSummary: "Tool result pairing invariant broke.",
-            safeErrorCode: "runtime_fault",
-            safeCause: "safe cause",
-            createdAt: "2026-06-28T00:00:00.000Z",
-          }),
-        });
-        const error = new Error("runtime invariant interrupted the turn");
-        (error as Error & { code?: string }).code = "runtime_fault";
-        throw error;
-      }
-      return { texts: ["recovered reply"] };
+      const error = new Error("runtime invariant interrupted the turn");
+      (error as Error & { code?: string }).code = "runtime_fault";
+      throw error;
     },
   });
   try {
@@ -13900,14 +13921,19 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
     });
     expect(response.status).toBe(202);
 
-    const failedTurn = await waitForLatestTurnMatching(
+    const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) =>
-        turn.state === "runtime_fault" &&
-        turn.retryable === true,
+      (turn) => turn.state === "waiting_for_tool",
     );
-    const failedTurnId = failedTurn.id as string;
+    expect(recoveryTurn).toMatchObject({
+      state: "waiting_for_tool",
+      retryable: false,
+      cancellable: true,
+      attempt: 1,
+    });
+    expectBtccRuntimeRecovery(recoveryTurn.id as string);
+
     const events = await getJson(`${server.url}events?cursor=0`);
     const runtimeFaultEvent = events.data.events.find(
       (
@@ -13920,9 +13946,9 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
         event.payload?.event?.kind === "runtime.fault",
     );
     expect(runtimeFaultEvent?.payload?.event?.payload).toEqual({
-      faultId: "fault-retryable-runtime",
+      faultId: "fault-runtime-diagnostic",
       sessionId: "general",
-      turnId: failedTurnId,
+      turnId: recoveryTurn.id,
       kind: "provider_stream_corruption",
       retryable: true,
       publicSummary: "Runtime invariant interrupted the turn.",
@@ -13932,191 +13958,109 @@ test("retrying a runtime fault updates the same logical turn without synthetic r
     });
     expect(JSON.stringify(events)).not.toContain("operatorSummary");
     expect(JSON.stringify(events)).not.toContain("Tool result pairing invariant broke.");
-    const failedMessages = await getJson(
-      `${server.url}messages?chat_id=general&cursor=0`,
+    const retry = await fetch(
+      `${server.url}turns/${encodeURIComponent(recoveryTurn.id as string)}/retry`,
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(failedMessages.data.turn_progress[failedTurnId]).toMatchObject({
-      state: "runtime_fault",
-      delivery_state: "failed_system",
-      limitation_codes: [],
-      limitations: [],
-    });
-
-    await patchJson(`${server.url}sessions/general/controls`, {
-      model: "openai/gpt-5.5",
-      reasoning_effort: "low",
-    });
-
-    const retry = await postJson(
-      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
-      {},
+    expect(retry.status).toBe(409);
+    const retryCurrent = await fetch(
+      `${server.url}turns/${encodeURIComponent(recoveryTurn.id as string)}/retry-current`,
+      { method: "POST", headers: { "content-type": "application/json" } },
     );
-    expect(retry.data.turn).toMatchObject({
-      state: "retrying",
-      retryable: false,
-      cancellable: true,
-      attempt: 2,
-    });
-    await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.text === "recovered reply",
-    );
-    expect(attemptControls).toEqual([
-      { model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
-      { model: "openai/gpt-5.6-sol", reasoningEffort: "medium" },
-    ]);
-
-    const messages = await getJson(
-      `${server.url}messages?chat_id=general&cursor=0`,
-    );
-    expect(
-      messages.data.messages.filter(
-        (message: { role: string }) => message.role === "assistant",
-      ),
-    ).toHaveLength(1);
-    const openingRows = messages.data.turn_progress[
-      failedTurnId
-    ].safe_progress_rows.filter(
-      (row: { kind?: string; public_decision_summary?: string }) =>
-        row.kind === "decision" &&
-        row.public_decision_summary ===
-          "I will preserve this opening decision through Retry.",
-    );
-    expect(openingRows).toHaveLength(1);
-    expect(messages.data.messages).not.toContainEqual(
-      expect.objectContaining({
-        role: "assistant",
-        text: "Retrying this turn.",
-      }),
-    );
-    expect(JSON.stringify(messages)).not.toContain("Retrying this turn.");
+    expect(retryCurrent.status).toBe(409);
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(messages.data.messages).toHaveLength(1);
+    expect(messages.data.messages[0].role).toBe("user");
   } finally {
     server.stop();
   }
 });
 
-test("retrying with current controls creates a new turn and leaves the failed snapshot intact", async () => {
-  let attempt = 0;
-  const attemptControls: Array<{
-    turnId: string;
-    model?: string;
-    reasoningEffort?: string;
-  }> = [];
+test("recovery-store outages park and stop the accepted App turn without escaping", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
-    responder(input) {
-      attempt += 1;
-      attemptControls.push({
-        turnId: input.turnId,
-        model: input.model,
-        reasoningEffort: input.reasoningEffort,
-      });
-      if (attempt === 1) {
-        input.onTurnEvent?.({
-          kind: "runtime.fault",
-          payload: createRuntimeFaultPayload({
-            faultId: "fault-retry-current-controls",
-            sessionId: input.chatId,
-            turnId: input.turnId,
-            kind: "provider_stream_corruption",
-            retryable: true,
-            publicSummary: "Runtime interrupted the original turn.",
-            operatorSummary: "Retry-current contract fixture.",
-            safeErrorCode: "runtime_fault",
-            createdAt: "2026-07-14T00:00:00.000Z",
-          }),
-        });
-        const error = new Error("runtime interrupted the original turn");
-        (error as Error & { code?: string }).code = "runtime_fault";
-        throw error;
-      }
-      return { texts: ["recovered with current controls"] };
+    responder() {
+      throw new Error("opaque responder interruption during store outage");
     },
   });
+  const conversationDbPath = join(
+    tempDir,
+    "runtime",
+    "conversation-store.sqlite",
+  );
+  const recoveryLock = new Database(conversationDbPath);
+  recoveryLock.exec("BEGIN IMMEDIATE");
   try {
-    await postJson(`${server.url}messages`, {
-      chat_id: "general",
-      text: "retry this as a new turn",
-      model: "openai/gpt-5.6-sol",
-      reasoning_effort: "medium",
+    const response = await fetch(`${server.url}messages`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: "general",
+        text: "keep this accepted turn controllable",
+      }),
     });
-    const failedTurn = await waitForLatestTurnMatching(
+    expect(response.status).toBe(202);
+    const appDb = new Database(join(tempDir, "app.sqlite"), { readonly: true });
+    try {
+      await waitForCondition(() =>
+        appDb.query<{ state: string }, []>(
+          "SELECT state FROM turns ORDER BY rowid DESC LIMIT 1",
+        ).get()?.state === "waiting_for_tool"
+      );
+    } finally {
+      appDb.close();
+      recoveryLock.exec("ROLLBACK");
+      recoveryLock.close();
+    }
+    const parked = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "runtime_fault" && turn.retryable === true,
+      (turn) => turn.state === "waiting_for_tool",
     );
-    await patchJson(`${server.url}sessions/general/controls`, {
-      model: "openai/gpt-5.5",
-      reasoning_effort: "low",
+    expect(parked).toMatchObject({
+      state: "waiting_for_tool",
+      cancellable: true,
+      retryable: false,
     });
-
-    const retry = await postJson(
-      `${server.url}turns/${encodeURIComponent(failedTurn.id as string)}/retry-current`,
+    const stop = await postJson(
+      `${server.url}turns/${encodeURIComponent(parked.id as string)}/cancel`,
       {},
     );
-    expect(retry.data.turn.id).not.toBe(failedTurn.id);
-    expect(retry.data.turn.execution_controls).toMatchObject({
-      model_ref: "openai/gpt-5.5",
-      reasoning_effort: "low",
+    expect(stop.data.turn).toMatchObject({
+      state: "cancelled",
+      cancellable: false,
+      retryable: false,
     });
-    await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.text === "recovered with current controls",
+    const messages = await getJson(`${server.url}messages?chat_id=general`);
+    expect(JSON.stringify(messages)).not.toContain(
+      "opaque responder interruption during store outage",
     );
-
-    expect(attemptControls).toEqual([
-      {
-        turnId: failedTurn.id,
-        model: "openai/gpt-5.6-sol",
-        reasoningEffort: "medium",
-      },
-      {
-        turnId: retry.data.turn.id,
-        model: "openai/gpt-5.5",
-        reasoningEffort: "low",
-      },
-    ]);
-    const turns = await getJson(`${server.url}turns?chat_id=general`);
-    expect(turns.data.turns).toContainEqual(
-      expect.objectContaining({
-        id: failedTurn.id,
-        state: "runtime_fault",
-        attempt: 1,
-        execution_controls: expect.objectContaining({
-          model_ref: "openai/gpt-5.6-sol",
-        }),
-      }),
-    );
+    const events = await getJson(`${server.url}events?cursor=0`);
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
   } finally {
     server.stop();
+    try {
+      recoveryLock.exec("ROLLBACK");
+    } catch {
+      // The deterministic wait above already released the injected lock.
+    }
+    try {
+      recoveryLock.close();
+    } catch {
+      // Already closed.
+    }
   }
 });
 
-test("runtime fault retry eligibility comes from the fault record", async () => {
+test("provider empty responses remain owned without exposing a failure reply", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
-    responder(input) {
-      input.onTurnEvent?.({
-        kind: "runtime.fault",
-        payload: createRuntimeFaultPayload({
-          faultId: "fault-non-retryable-runtime",
-          sessionId: input.chatId,
-          turnId: input.turnId,
-          kind: "storage_invariant_violation",
-          retryable: false,
-          publicSummary: "Runtime stopped with a non-retryable fault.",
-          operatorSummary: "Operator-only non-retryable detail.",
-          safeErrorCode: "runtime_fault",
-          createdAt: "2026-06-28T00:00:01.000Z",
-        }),
-      });
-      const error = new Error("runtime invariant interrupted the turn");
-      (error as Error & { code?: string }).code = "runtime_fault";
-      throw error;
+    responder() {
+      throw new Error("Local model API returned no text output");
     },
   });
   try {
@@ -14125,80 +14069,33 @@ test("runtime fault retry eligibility comes from the fault record", async () => 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         chat_id: "general",
-        text: "do not retry this runtime fault",
+        text: "please retry local model",
       }),
     });
     expect(response.status).toBe(202);
 
-    const failedTurn = await waitForLatestTurnMatching(
+    const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) =>
-        turn.state === "runtime_fault" &&
-        turn.safe_error_code === "runtime_fault" &&
-        turn.retryable === false,
+      (turn) => turn.state === "waiting_for_tool",
     );
-    const retry = await fetch(
-      `${server.url}turns/${encodeURIComponent(failedTurn.id as string)}/retry`,
-      { method: "POST", headers: { "content-type": "application/json" } },
-    );
-    expect(retry.status).toBe(409);
-    const summary = await getJson(`${server.url}session-summary?session_id=general`);
-    const messages = await getJson(`${server.url}messages?chat_id=general`);
-    expect(JSON.stringify(summary)).not.toContain("Operator-only non-retryable detail");
-    expect(JSON.stringify(messages)).not.toContain("Operator-only non-retryable detail");
-  } finally {
-    server.stop();
-  }
-});
-
-test("provider empty responses do not expose Retry without runtime fault", async () => {
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    port: 0,
-    responder() {
-      throw new Error("Local model API returned no text output");
-    },
-  });
-  try {
-    const failedResponse = await fetch(`${server.url}messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: "general",
-        text: "please retry local model",
-      }),
-    });
-    expect(failedResponse.status).toBe(202);
-
-    const failedTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) => turn.state === "failed",
-    );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "provider_empty_response",
+    expect(recoveryTurn).toMatchObject({
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
     });
+    expect(recoveryTurn.safe_error_code ?? null).toBeNull();
+    expectBtccRuntimeRecovery(recoveryTurn.id as string);
 
-    let messages = await getJson(
+    const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    const firstAssistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(firstAssistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "provider_empty_response",
-      retryable: false,
-    });
-    expect(firstAssistant.text).toContain("no visible answer");
-    expect(firstAssistant.text).not.toContain("Local model API");
+    expect(messages.data.messages).toHaveLength(1);
+    expect(messages.data.messages[0].role).toBe("user");
+    expect(JSON.stringify(messages)).not.toContain("Local model API returned no text output");
 
-    const failedTurnId = failedTurn.id as string;
     const retryResponse = await fetch(
-      `${server.url}turns/${encodeURIComponent(failedTurnId)}/retry`,
+      `${server.url}turns/${encodeURIComponent(recoveryTurn.id as string)}/retry`,
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -14206,28 +14103,15 @@ test("provider empty responses do not expose Retry without runtime fault", async
       },
     );
     expect(retryResponse.status).toBe(409);
-
-    messages = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
-    const assistantMessages = messages.data.messages.filter(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(assistantMessages).toHaveLength(1);
-    expect(assistantMessages[0]).toMatchObject({
-      status: "failed",
-      safe_error_code: "provider_empty_response",
-      retryable: false,
-    });
-    expect(assistantMessages[0].id).toBe(firstAssistant.id);
-    expect(assistantMessages[0].text).toContain("no visible answer");
-    expect(JSON.stringify(messages)).not.toContain("Retrying this turn");
   } finally {
     server.stop();
   }
 });
 
-test("provider failures persist actionable safe API status", async () => {
+test("provider diagnostics remain private while BTCC owns recovery", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
     responder() {
       throw new ModelProviderRequestError({
@@ -14244,7 +14128,7 @@ test("provider failures persist actionable safe API status", async () => {
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -14252,67 +14136,41 @@ test("provider failures persist actionable safe API status", async () => {
         text: "please surface provider status",
       }),
     });
-    expect(failedResponse.status).toBe(202);
+    expect(response.status).toBe(202);
 
-    const failedTurn = await waitForLatestTurnMatching(
+    const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "failed",
+      (turn) => turn.state === "waiting_for_tool",
     );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "provider_api_error",
+    expect(recoveryTurn).toMatchObject({
+      state: "waiting_for_tool",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
-    const failedTurnId = failedTurn.id as string;
+    expectBtccRuntimeRecovery(recoveryTurn.id as string);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    expect(messages.data.turn_progress[failedTurnId]).toMatchObject({
-      state: "failed",
-      summary: "Failed",
-      delivery_state: "failed_system",
-      limitation_codes: [],
-      limitations: [],
-    });
-    const assistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(assistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "provider_api_error",
-      retryable: false,
-    });
-    expect(assistant.text).toContain("HTTP 500");
+    expect(messages.data.messages).toHaveLength(1);
+    expect(messages.data.messages[0].role).toBe("user");
     expect(JSON.stringify(messages)).not.toContain("token=secret");
     expect(JSON.stringify(messages)).not.toContain("private upstream stack");
 
     const events = await getJson(`${server.url}events?cursor=0`);
-    const failedEvent = events.data.events.find(
-      (
-        event: {
-          type: string;
-          payload?: { event?: { kind?: string; payload?: unknown } };
-        },
-      ) =>
-        event.type === "agent.turn_event" &&
-        event.payload?.event?.kind === "turn.failed",
-    );
-    expect(failedEvent?.payload?.event?.payload).toMatchObject({
-      safeErrorCode: "provider_api_error",
-      safeCause: "private upstream stack [redacted]",
-    });
+    expect(JSON.stringify(events)).not.toContain("turn.failed");
     expect(JSON.stringify(events)).not.toContain("token=secret");
+    expect(JSON.stringify(events)).not.toContain("private upstream stack");
   } finally {
     server.stop();
   }
 });
 
-test("raw provider aborts remain failed app turns instead of cancellation", async () => {
+test("raw provider aborts open recovery instead of false cancellation or failure", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
     responder() {
       const error = new Error("Provider request aborted by remote connection reset.");
@@ -14322,7 +14180,7 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
     },
   });
   try {
-    const failedResponse = await fetch(`${server.url}messages`, {
+    const response = await fetch(`${server.url}messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -14330,210 +14188,111 @@ test("raw provider aborts remain failed app turns instead of cancellation", asyn
         text: "please keep provider abort visible",
       }),
     });
-    expect(failedResponse.status).toBe(202);
+    expect(response.status).toBe(202);
 
-    const failedTurn = await waitForLatestTurnMatching(
+    const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "failed",
+      (turn) => turn.state === "waiting_for_tool",
     );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "provider_network_error",
+    expect(recoveryTurn).toMatchObject({
+      state: "waiting_for_tool",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
+    expectBtccRuntimeRecovery(recoveryTurn.id as string);
 
     const messages = await getJson(
       `${server.url}messages?chat_id=general&cursor=0`,
     );
-    const assistant = messages.data.messages.find(
-      (message: { role: string }) => message.role === "assistant",
-    );
-    expect(assistant).toMatchObject({
-      status: "failed",
-      safe_error_code: "provider_network_error",
-      retryable: false,
-    });
     expect(messages.data.messages.map((message: { status: string }) => message.status))
-      .toEqual(["sent", "failed"]);
+      .toEqual(["sent"]);
   } finally {
     server.stop();
   }
 });
 
-test("ownerless goal completion gaps terminate instead of leaving App turns active", async () => {
+for (const scenario of [
+  {
+    name: "goal completion gaps",
+    text: "complete this only with verified evidence",
+    error: Object.assign(
+      new Error("확인 가능한 공개 출처를 읽지 못했습니다. token=secret"),
+      { name: "GoalCompletionIncompleteError" },
+    ),
+    secrets: ["token=secret"],
+  },
+  {
+    name: "completion obligation gaps",
+    text: "create a csv and report",
+    error: Object.assign(
+      new Error("missing public completion obligation: durable_artifact, data_table_created"),
+      { name: "GoalCompletionIncompleteError" },
+    ),
+    secrets: ["durable_artifact", "data_table_created"],
+  },
+  {
+    name: "internal recovery signals",
+    text: "continue the latest work",
+    error: Object.assign(
+      new Error("Butler could not verify that the requested goal was completed."),
+      { code: "internal_recovery_required" },
+    ),
+    secrets: ["could not verify"],
+  },
+]) {
+  test(`${scenario.name} become owned runtime waits without failure prose`, async () => {
+    const server = createAppServer({
+      dbPath: join(tempDir, "app.sqlite"),
+      butlerData: tempDir,
+      port: 0,
+      responder() {
+        throw scenario.error;
+      },
+    });
+    try {
+      const response = await fetch(`${server.url}messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: "general", text: scenario.text }),
+      });
+      expect(response.status).toBe(202);
+
+      const recoveryTurn = await waitForLatestTurnMatching(
+        server.url,
+        "general",
+        (turn) => turn.state === "waiting_for_tool",
+      );
+      expect(recoveryTurn).toMatchObject({
+        state: "waiting_for_tool",
+        retryable: false,
+        cancellable: true,
+        attempt: 1,
+      });
+      expectBtccRuntimeRecovery(recoveryTurn.id as string);
+
+      const messages = await getJson(`${server.url}messages?chat_id=general`);
+      expect(messages.data.messages).toHaveLength(1);
+      expect(messages.data.messages[0].role).toBe("user");
+      const events = await getJson(`${server.url}events?cursor=0`);
+      expect(JSON.stringify(events)).not.toContain("turn.failed");
+      for (const secret of scenario.secrets) {
+        expect(JSON.stringify(messages)).not.toContain(secret);
+        expect(JSON.stringify(events)).not.toContain(secret);
+      }
+    } finally {
+      server.stop();
+    }
+  });
+}
+
+test("concurrent manual retries cannot fork a RecoveryCase-owned turn", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
     port: 0,
     responder() {
-      const error = new Error(
-        "확인 가능한 공개 출처를 읽지 못했습니다. token=secret",
-      );
-      error.name = "GoalCompletionIncompleteError";
-      throw error;
-    },
-  });
-  try {
-    const response = await fetch(`${server.url}messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: "general",
-        text: "complete this only with verified evidence",
-      }),
-    });
-    expect(response.status).toBe(202);
-
-    const failedTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) => turn.state === "failed",
-    );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "gateway_failed",
-      retryable: false,
-      cancellable: false,
-    });
-
-    const messages = await getJson(`${server.url}messages?chat_id=general`);
-    expect(
-      messages.data.messages.filter(
-        (message: { role: string }) => message.role === "assistant",
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        status: "failed",
-        safe_error_code: "gateway_failed",
-      }),
-    ]);
-    expect(JSON.stringify(messages)).not.toContain("token=secret");
-  } finally {
-    server.stop();
-  }
-});
-
-test("ownerless completion obligation gaps fail without exposing protocol details", async () => {
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    port: 0,
-    responder() {
-      const error = new Error(
-        "The turn still needs repair for missing public completion obligation(s): durable_artifact, data_table_created.",
-      );
-      error.name = "GoalCompletionIncompleteError";
-      throw error;
-    },
-  });
-  try {
-    const response = await fetch(`${server.url}messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: "general",
-        text: "create a csv and report",
-      }),
-    });
-    expect(response.status).toBe(202);
-
-    const failedTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) => turn.state === "failed",
-    );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "gateway_failed",
-      retryable: false,
-      cancellable: false,
-    });
-    const messages = await getJson(`${server.url}messages?chat_id=general`);
-    expect(
-      messages.data.messages.filter(
-        (message: { role: string }) => message.role === "assistant",
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        status: "failed",
-        safe_error_code: "gateway_failed",
-      }),
-    ]);
-    expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
-    expect(JSON.stringify(messages)).not.toContain("could not verify");
-    expect(JSON.stringify(messages)).not.toContain("durable_artifact");
-    expect(JSON.stringify(messages)).not.toContain("data_table_created");
-  } finally {
-    server.stop();
-  }
-});
-
-test("ownerless internal recovery responder failures terminate", async () => {
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    port: 0,
-    responder() {
-      const error = new Error(
-        "Butler could not verify that the requested goal was completed.",
-      );
-      (error as Error & { code?: string }).code = "internal_recovery_required";
-      throw error;
-    },
-  });
-  try {
-    const response = await fetch(`${server.url}messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        chat_id: "general",
-        text: "continue the latest work",
-      }),
-    });
-    expect(response.status).toBe(202);
-
-    const failedTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) => turn.state === "failed",
-    );
-    expect(failedTurn).toMatchObject({
-      state: "failed",
-      safe_error_code: "gateway_failed",
-      retryable: false,
-      cancellable: false,
-    });
-
-    const messages = await getJson(`${server.url}messages?chat_id=general`);
-    expect(
-      messages.data.messages.filter(
-        (message: { role: string }) => message.role === "assistant",
-      ),
-    ).toEqual([
-      expect.objectContaining({
-        status: "failed",
-        safe_error_code: "gateway_failed",
-      }),
-    ]);
-    expect(JSON.stringify(messages)).not.toContain("could not verify");
-
-    const events = await getJson(`${server.url}events?cursor=0`);
-    expect(JSON.stringify(events)).toContain("turn.failed");
-    expect(JSON.stringify(events)).not.toContain("could not verify");
-  } finally {
-    server.stop();
-  }
-});
-
-test("concurrent ordinary failed turn retries are rejected", async () => {
-  let attempt = 0;
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    port: 0,
-    async responder() {
-      attempt += 1;
-      if (attempt === 1) throw new Error("first attempt fails");
-      await new Promise((resolve) => setTimeout(resolve, 25));
-      return { texts: [`retry attempt ${attempt}`] };
+      throw new Error("first attempt needs runtime recovery");
     },
   });
   try {
@@ -14542,12 +14301,13 @@ test("concurrent ordinary failed turn retries are rejected", async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ chat_id: "general", text: "retry once only" }),
     });
-    const failedTurn = await waitForLatestTurnMatching(
+    const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "failed",
+      (turn) => turn.state === "waiting_for_tool",
     );
-    const turnId = failedTurn.id as string;
+    const turnId = recoveryTurn.id as string;
+    expectBtccRuntimeRecovery(turnId);
 
     const [first, second] = await Promise.all([
       fetch(`${server.url}turns/${encodeURIComponent(turnId)}/retry`, {
@@ -14561,12 +14321,12 @@ test("concurrent ordinary failed turn retries are rejected", async () => {
         body: JSON.stringify({}),
       }),
     ]);
-    const statuses = [first.status, second.status].sort();
-    expect(statuses).toEqual([409, 409]);
+    expect([first.status, second.status].sort()).toEqual([409, 409]);
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
-      state: "failed",
+      state: "waiting_for_tool",
       retryable: false,
+      cancellable: true,
       attempt: 1,
     });
   } finally {
@@ -14708,7 +14468,7 @@ test("gateway bridge keeps runtime turns alive past request timeout budgets", as
   }
 });
 
-test("direct responder App messages terminate an ownerless provider timeout without capturing the next user message", async () => {
+test("direct responder provider timeouts open recovery and keep later messages isolated", async () => {
   let providerRoundCalls = 0;
   let providerFetchCalls = 0;
   let appServerUrl = "";
@@ -14778,16 +14538,16 @@ test("direct responder App messages terminate an ownerless provider timeout with
       server.url,
       "general",
       (turn) =>
-        turn.state === "failed" &&
-        turn.safe_error_code === "provider_round_timeout",
+        turn.state !== "thinking",
     );
     expect(timedOutTurn).toMatchObject({
-      state: "failed",
+      state: "waiting_for_tool",
       attempt: 1,
-      safe_error_code: "provider_round_timeout",
       retryable: false,
-      cancellable: false,
+      cancellable: true,
     });
+    expect(timedOutTurn.safe_error_code ?? null).toBeNull();
+    expectBtccRuntimeRecovery(timedOutTurn.id as string);
     expect(providerRoundCalls).toBe(1);
     expect(providerFetchCalls).toBe(1);
 
@@ -14795,12 +14555,7 @@ test("direct responder App messages terminate an ownerless provider timeout with
     expect(messagesAfterTimeout.data.messages.filter(
       (message: { role: string; turn_id?: string }) =>
         message.role === "assistant" && message.turn_id === timedOutTurn.id,
-    )).toEqual([
-      expect.objectContaining({
-        status: "failed",
-        safe_error_code: "provider_round_timeout",
-      }),
-    ]);
+    )).toEqual([]);
     const checkpointDir = join(tempDir, "state", "turn-kernel");
     expect(existsSync(checkpointDir) ? readdirSync(checkpointDir) : []).toEqual([]);
 
@@ -14813,33 +14568,25 @@ test("direct responder App messages terminate an ownerless provider timeout with
       text: "an unrelated second message",
       queue_policy: "enqueue_if_busy",
     });
-    expect(second.data.queued).toBeUndefined();
-    expect(second.data.turn).toMatchObject({ state: "thinking", attempt: 1 });
-    expect(second.data.turn.id).not.toBe(timedOutTurn.id);
-
-    const secondReply = await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.text === "second turn stayed isolated",
-    );
-    expect(secondReply).toMatchObject({
-      text: "second turn stayed isolated",
-      status: "delivered",
-      turn_id: second.data.turn.id,
+    expect(second.data.queued).toMatchObject({
+      chat_id: "general",
+      text: "an unrelated second message",
+      state: "queued",
     });
+
     const finalTurns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
       id: timedOutTurn.id,
-      state: "failed",
-      attempt: 1,
-      safe_error_code: "provider_round_timeout",
-    }));
-    expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
-      id: second.data.turn.id,
-      state: "delivered",
+      state: "waiting_for_tool",
       attempt: 1,
     }));
-    expect(providerRoundCalls).toBe(2);
+    expect(finalTurns.data.turns).toHaveLength(1);
+    const queue = await getJson(`${server.url}session-queue?session_id=general`);
+    expect(queue.data.queued_messages).toContainEqual(expect.objectContaining({
+      id: second.data.queued.id,
+      state: "queued",
+    }));
+    expect(providerRoundCalls).toBe(1);
     expect(providerFetchCalls).toBe(1);
   } finally {
     server.stop();
@@ -15251,6 +14998,25 @@ async function waitForLatestTurnMatching(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("Expected turn projection did not appear.");
+}
+
+function expectBtccRuntimeRecovery(turnId: string): void {
+  const btcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  try {
+    const state = btcc.readTurnState(turnId);
+    expect(state).toMatchObject({
+      state: "waiting_runtime",
+      turnId,
+      generation: 2,
+    });
+    expect(state?.activeRecoveryCaseId).toBeTruthy();
+    expect(btcc.readRecoveryCase(state!.activeRecoveryCaseId!)).toMatchObject({
+      status: "open",
+      turnId,
+    });
+  } finally {
+    btcc.close();
+  }
 }
 
 async function waitForAssistantMessageMatching(

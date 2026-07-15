@@ -245,9 +245,21 @@ export class BtccRecoveryCaseStore {
         directive.cancellationReceiptRef, directive.turnId, directive.attemptId,
         directive.expectedGeneration, directive.checkpointRef, directive.createdAt,
       );
-      return this.transition(directive, "cancelled", {
+      const next = this.transition(directive, "cancelled", {
         terminalOutcomeId: directive.cancellationReceiptRef,
       });
+      if (before.activeRecoveryCaseId) {
+        this.db.query(`
+          UPDATE btcc_recovery_cases
+          SET status = 'resolved', wake_revision_ref = ?, updated_at = ?
+          WHERE recovery_case_id = ? AND status = 'open'
+        `).run(
+          directive.cancellationReceiptRef,
+          directive.createdAt,
+          before.activeRecoveryCaseId,
+        );
+      }
+      return next;
     });
     return tx();
   }

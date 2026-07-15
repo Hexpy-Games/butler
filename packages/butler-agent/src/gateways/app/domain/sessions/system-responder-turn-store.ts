@@ -60,7 +60,7 @@ export class AppSystemResponderTurnStore {
         turn,
       });
     } catch (error) {
-      return this.handleError({ chatId, messageId, turn, error });
+      return this.handleError({ chatId, messageId, text, turn, error });
     } finally {
       this.input.cleanupTurnEventSequences(chatId, turn.id);
     }
@@ -112,6 +112,7 @@ export class AppSystemResponderTurnStore {
   private handleError(input: {
     chatId: string;
     messageId: string;
+    text: string;
     turn: TurnRecord;
     error: unknown;
   }): MessageSendResult {
@@ -132,6 +133,7 @@ export class AppSystemResponderTurnStore {
       };
     }
     if (isResponderRuntimeInterruption(input.error)) {
+      this.routeRuntimeInterruptionSafely(input);
       const continuation = this.input.markResponderNonPublicContinuation(
         input.chatId,
         input.turn.id,
@@ -150,6 +152,7 @@ export class AppSystemResponderTurnStore {
       };
     }
     if (isNonPublicContinuationDeliveryError(input.error)) {
+      this.routeRuntimeInterruptionSafely(input);
       const continuation = this.input.markResponderNonPublicContinuation(
         input.chatId,
         input.turn.id,
@@ -169,11 +172,18 @@ export class AppSystemResponderTurnStore {
     }
     const limitedDelivery = appLimitedDeliveryForError(input.error);
     if (limitedDelivery) {
-      const delivered = this.input.finalizeResponderLimitedDelivery(
-        input.chatId,
-        input.turn.id,
-        limitedDelivery,
-      );
+      const routed = this.routeRuntimeInterruptionSafely(input);
+      const delivered = routed
+        ? this.input.finalizeResponderLimitedDelivery(
+            input.chatId,
+            input.turn.id,
+            limitedDelivery,
+          )
+        : this.input.markResponderNonPublicContinuation(
+            input.chatId,
+            input.turn.id,
+            null,
+          );
       this.input.touchChat(input.chatId);
       return {
         accepted: this.acceptedMessageForExistingOrSynthetic(
@@ -187,40 +197,44 @@ export class AppSystemResponderTurnStore {
         next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
       };
     }
-    this.failTurn(input.chatId, input.turn, input.error);
-    throw input.error;
+    this.routeRuntimeInterruptionSafely(input);
+    const continuation = this.input.markResponderNonPublicContinuation(
+      input.chatId,
+      input.turn.id,
+      null,
+    );
+    this.input.touchChat(input.chatId);
+    return {
+      accepted: this.acceptedMessageForExistingOrSynthetic(
+        input.chatId,
+        input.messageId,
+        continuation.turn,
+      ),
+      replies: [],
+      turn: continuation.turn,
+      next_cursor: continuation.turn.cursor,
+    };
   }
 
-  private failTurn(chatId: string, turn: TurnRecord, error: unknown): void {
-    const safeError = appSafeResponderError(error);
-    const runtimeFault = this.input.runtimeFaultRecordForTurn(turn.id);
-    const isRuntimeFault = Boolean(runtimeFault);
-    const isRetryableRuntimeFault = runtimeFault?.retryable === true;
-    this.input.upsertAssistantTurnFailure(chatId, turn.id, safeError, {
-      retryable: isRetryableRuntimeFault,
-    });
-    const failureKind = isRuntimeFault ? "runtime.fault" : "turn.failed";
-    if (!this.input.hasTurnEventKind(turn.id, failureKind)) {
-      this.input.appendTurnEvent(chatId, turn.id, {
-        kind: failureKind,
-        payload: runtimeFault ?? {
-          safeLabel: safeError.message,
-          safeErrorCode: safeError.code,
-        },
+  private routeRuntimeInterruptionSafely(input: {
+    chatId: string;
+    messageId: string;
+    text: string;
+    turn: TurnRecord;
+    error: unknown;
+  }): boolean {
+    try {
+      this.input.routeResponderRuntimeInterruption({
+        chatId: input.chatId,
+        turnId: input.turn.id,
+        messageId: input.messageId,
+        text: input.text,
+        error: input.error,
       });
+      return true;
+    } catch {
+      return false;
     }
-    const failedTurn = this.input.updateTurnState(
-      turn.id,
-      isRuntimeFault ? "runtime_fault" : "failed",
-      {
-        safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
-        retryable: isRetryableRuntimeFault,
-        cancellable: false,
-        safeErrorCode: safeError.code,
-      },
-    );
-    this.input.appendTerminalTurnStateChanged(failedTurn);
-    this.input.touchChat(chatId);
   }
 
   private acceptedMessageForExistingOrSynthetic(

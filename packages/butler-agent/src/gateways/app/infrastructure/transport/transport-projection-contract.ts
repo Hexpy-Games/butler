@@ -84,13 +84,19 @@ export interface AppTransportProjectionStoreOptions {
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
   ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
-  upsertAssistantTurnFailure: (
+  markResponderNonPublicContinuation: (
     chatId: string,
     turnId: string,
-    safeError: { code: string; message: string },
-    options?: { retryable?: boolean },
-  ) => MessageRecord;
-  runtimeFaultRecordForTurn: (turnId: string) => Record<string, unknown> | null;
+    safeErrorCode?: "provider_round_timeout" | null,
+  ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  routeResponderRuntimeInterruption: (input: {
+    chatId: string;
+    turnId: string;
+    message: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+    eventTimestamp: string;
+  }) => void;
+  runtimeRecoveryOwnsTurn: (turnId: string) => boolean;
   generatedSessionTitleHandler: (
     chatId: string,
     sourceText: string,

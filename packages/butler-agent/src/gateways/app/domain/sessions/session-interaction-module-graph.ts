@@ -15,6 +15,10 @@ import {
   signalPrincipalTurnCancellation,
   type PrincipalTurnCancellationTarget,
 } from "../../../../agent/turn/principal-turn-cancellation-control.ts";
+import {
+  cancelAppResponderRuntimeTurn,
+  routeAppResponderRuntimeInterruption,
+} from "./app-responder-interruption-router.ts";
 
 export interface AppSessionInteractionModuleGraph {
   generatedSessionTitles: AppGeneratedSessionTitleStore;
@@ -82,8 +86,10 @@ export function createAppSessionInteractionModuleGraph(input: {
     principalTurnCancellationTargetForTurn: (turnId) =>
       cancellationTargetForTurn({ db, butlerData, turnId }),
     settlePrincipalDeadOwnerCancellation,
-    finalizeCancelledTurn: (chatId, turnId) =>
-      host.finalizeCancelledTurn(chatId, turnId),
+    finalizeCancelledTurn: (chatId, turnId) => {
+      cancelAppResponderRuntimeTurn(butlerData, turnId);
+      return host.finalizeCancelledTurn(chatId, turnId);
+    },
     cleanupTurnEventSequences: (chatId, turnId) =>
       host.cleanupTurnEventSequences(chatId, turnId),
     ensureCancelledTurnActivityMessage: (chatId, turnId) =>
@@ -230,18 +236,30 @@ function createSystemResponderTurns(input: {
       host.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),
     finalizeCancelledTurn: (chatId, turnId) => {
       cancelPersistedRuntimeTurn({ butlerData, turnId });
+      cancelAppResponderRuntimeTurn(butlerData, turnId);
       return host.finalizeCancelledTurn(chatId, turnId);
     },
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
     markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
       host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
+    routeResponderRuntimeInterruption: (turnInput) => {
+      const chat = host.getChatRow(turnInput.chatId);
+      routeAppResponderRuntimeInterruption({
+        butlerData,
+        chatId: turnInput.chatId,
+        turnId: turnInput.turnId,
+        messageId: turnInput.messageId,
+        text: turnInput.text,
+        actor: "system",
+        projectId: chat?.project_id ?? null,
+        origin: "legacy_responder",
+        boundary: "system_responder_completion",
+        error: turnInput.error,
+      });
+    },
     finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
-    upsertAssistantTurnFailure: (chatId, turnId, safeError, options) =>
-      host.upsertAssistantTurnFailure(chatId, turnId, safeError, options),
-    runtimeFaultRecordForTurn: (turnId) =>
-      host.runtimeFaultRecordForTurn(turnId),
     cleanupTurnEventSequences: (chatId, turnId) =>
       host.cleanupTurnEventSequences(chatId, turnId),
   });

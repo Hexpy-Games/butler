@@ -54,7 +54,10 @@ export class AppSessionMessageProjectionStore {
   }
 
   deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata {
-    return this.deliveryLimitationMetadataForTurn(turn.id) ?? {
+    const terminalDelivery = isTerminalProgressState(turn.state)
+      ? this.deliveryLimitationMetadataForTurn(turn.id)
+      : null;
+    return terminalDelivery ?? {
       delivery_state: publicDeliveryStateForTurnState(turn.state),
       limitation_codes: [],
       limitations: [],

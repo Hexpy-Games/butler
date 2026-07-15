@@ -8,7 +8,6 @@ import type {
 import {
   appLimitedDeliveryForError,
   appNonPublicContinuationSafeErrorCode,
-  appSafeResponderError,
   isNonPublicContinuationDeliveryError,
   type AppLimitedDelivery,
 } from "../../infrastructure/transport/failure-ux-contract.ts";
@@ -63,6 +62,10 @@ export interface CompleteResponderTurnContext<FileRecord> {
     turnId: string,
     safeErrorCode?: "provider_round_timeout" | null,
   ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  routeResponderRuntimeInterruption(
+    input: CompleteResponderTurnInput,
+    error: unknown,
+  ): void;
   finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord;
   hasTurnEventKind(turnId: string, kind: string): boolean;
   insertOrReplaceAssistantReplies(
@@ -85,11 +88,6 @@ export interface CompleteResponderTurnContext<FileRecord> {
   updateTurnDelivered(
     turnId: string,
     delivery?: AppMessageResponderResult["delivery"] | null,
-  ): TurnRecord;
-  updateTurnFailed(
-    chatId: string,
-    turnId: string,
-    safeError: { code: string; message: string; cause?: string },
   ): TurnRecord;
 }
 
@@ -189,6 +187,7 @@ export async function completeResponderTurn<FileRecord>(
       };
     }
     if (isResponderRuntimeInterruption(error)) {
+      routeResponderRuntimeInterruptionSafely(context, input, error);
       const continuation = context.markResponderNonPublicContinuation(
         input.chatId,
         input.turnId,
@@ -209,11 +208,22 @@ export async function completeResponderTurn<FileRecord>(
     }
     const limitedDelivery = appLimitedDeliveryForError(error);
     if (limitedDelivery) {
-      const delivered = context.finalizeResponderLimitedDelivery(
-        input.chatId,
-        input.turnId,
-        limitedDelivery,
+      const routed = routeResponderRuntimeInterruptionSafely(
+        context,
+        input,
+        error,
       );
+      const delivered = routed
+        ? context.finalizeResponderLimitedDelivery(
+            input.chatId,
+            input.turnId,
+            limitedDelivery,
+          )
+        : context.markResponderNonPublicContinuation(
+            input.chatId,
+            input.turnId,
+            null,
+          );
       context.touchChat(input.chatId);
       await context.drainQueuedSessionMessages(
         input.chatId,
@@ -228,6 +238,7 @@ export async function completeResponderTurn<FileRecord>(
       };
     }
     if (isNonPublicContinuationDeliveryError(error)) {
+      routeResponderRuntimeInterruptionSafely(context, input, error);
       const continuation = context.markResponderNonPublicContinuation(
         input.chatId,
         input.turnId,
@@ -246,11 +257,11 @@ export async function completeResponderTurn<FileRecord>(
         next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
       };
     }
-    const safeError = appSafeResponderError(error);
-    const failedTurn = context.updateTurnFailed(
+    routeResponderRuntimeInterruptionSafely(context, input, error);
+    const continuation = context.markResponderNonPublicContinuation(
       input.chatId,
       input.turnId,
-      safeError,
+      null,
     );
     context.touchChat(input.chatId);
     await context.drainQueuedSessionMessages(
@@ -258,12 +269,29 @@ export async function completeResponderTurn<FileRecord>(
       input.responder,
       input.options,
     );
-    throw Object.assign(
-      error instanceof Error ? error : new Error(String(error)),
-      { turn: failedTurn },
-    );
+    return {
+      reply: continuation.reply,
+      replies: continuation.replies,
+      turn: continuation.turn,
+      next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
+    };
   } finally {
     context.cleanupTurnEventSequences(input.chatId, input.turnId);
+  }
+}
+
+function routeResponderRuntimeInterruptionSafely<FileRecord>(
+  context: CompleteResponderTurnContext<FileRecord>,
+  input: CompleteResponderTurnInput,
+  error: unknown,
+): boolean {
+  try {
+    context.routeResponderRuntimeInterruption(input, error);
+    return true;
+  } catch {
+    // The accepted App turn remains the fallback owner. A recovery-store
+    // outage must park the turn, not escape this lifecycle as another error.
+    return false;
   }
 }
 

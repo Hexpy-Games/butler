@@ -1,7 +1,6 @@
 import {
   completeResponderTurn as completeResponderTurnLifecycle,
 } from "./responder-turn-lifecycle.ts";
-import { safeTurnFailureEventPayload } from "../../infrastructure/transport/turn-failure-projection.ts";
 import type {
   MessageRecord,
   TurnRecord,
@@ -39,6 +38,8 @@ export class AppUserMessageResponderTurn {
         ),
       markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
         this.input.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
+      routeResponderRuntimeInterruption: (turnInput, error) =>
+        this.input.routeResponderRuntimeInterruption(turnInput, error),
       finalizeCancelledTurn: (chatId, turnId) =>
         this.input.finalizeCancelledTurn(chatId, turnId),
       hasTurnEventKind: (turnId, kind) =>
@@ -86,40 +87,6 @@ export class AppUserMessageResponderTurn {
         this.input.appendTerminalTurnStateChanged(deliveredTurn);
         return deliveredTurn;
       },
-      updateTurnFailed: (chatId, turnId, safeError) =>
-        this.updateTurnFailed(chatId, turnId, safeError),
     });
-  }
-
-  private updateTurnFailed(
-    chatId: string,
-    turnId: string,
-    safeError: { code: string; message: string },
-  ): TurnRecord {
-    const runtimeFault = this.input.runtimeFaultRecordForTurn(turnId);
-    const isRuntimeFault = Boolean(runtimeFault);
-    const isRetryableRuntimeFault = runtimeFault?.retryable === true;
-    this.input.upsertAssistantTurnFailure(chatId, turnId, safeError, {
-      retryable: isRetryableRuntimeFault,
-    });
-    const failureKind = isRuntimeFault ? "runtime.fault" : "turn.failed";
-    if (!this.input.hasTurnEventKind(turnId, failureKind)) {
-      this.input.appendTurnEvent(chatId, turnId, {
-        kind: failureKind,
-        payload: runtimeFault ?? safeTurnFailureEventPayload(safeError),
-      });
-    }
-    const failedTurn = this.input.updateTurnState(
-      turnId,
-      isRuntimeFault ? "runtime_fault" : "failed",
-      {
-        safeStatusLabel: isRuntimeFault ? "Runtime fault" : "Failed",
-        retryable: isRetryableRuntimeFault,
-        cancellable: false,
-        safeErrorCode: safeError.code,
-      },
-    );
-    this.input.appendTerminalTurnStateChanged(failedTurn);
-    return failedTurn;
   }
 }
