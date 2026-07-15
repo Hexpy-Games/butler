@@ -3,6 +3,7 @@ param(
   [Parameter(Mandatory = $true)][string]$Bun,
   [Parameter(Mandatory = $true)][string]$Output,
   [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
+  [ValidateRange(1, 30)][int]$TimeoutMinutes = 10,
   [switch]$InteractiveDesktop
 )
 
@@ -78,6 +79,7 @@ try {
     "-Bun `"$Bun`"",
     "-SignedBun `"$signedBun`"",
     "-SignedHost `"$signedHost`"",
+    "-SigningThumbprint `"$($certificate.Thumbprint)`"",
     "-Smoke `"$Smoke`"",
     "-Output `"$Output`""
   )
@@ -99,7 +101,7 @@ try {
   $taskRegistered = $true
   Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
 
-  $deadline = (Get-Date).AddMinutes(10)
+  $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
   do {
     Start-Sleep -Milliseconds 500
     $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop

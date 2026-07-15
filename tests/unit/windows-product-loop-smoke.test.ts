@@ -21,6 +21,8 @@ test("Windows full-product validation runs the clean isolated loop twice", () =>
   expect(source).toContain("unpacked-foreground-app-smoke.ts");
   expect(source).toContain("app-foreground-lifecycle-smoke.ts");
   expect(source).toContain("waitForE2eTempCleanup(initialE2eTempDirs)");
+  expect(source).toContain('spawnSync("taskkill.exe"');
+  expect(source).toContain("}, 300_000);");
   const standardUserRunner = readFileSync(
     resolve(
       import.meta.dir,

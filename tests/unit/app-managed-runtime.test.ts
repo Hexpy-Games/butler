@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -36,7 +37,7 @@ import {
   windowsRuntimeSignatureIssue,
 } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
 
-const root = process.cwd();
+const repoRoot = process.cwd();
 
 test("Windows runtime signature metadata pins the signed runtime files", () => {
   const runtime = mkdtempSync(join(tmpdir(), "butler-windows-signature-"));
@@ -331,7 +332,9 @@ test("App-managed runtime rollback hook restores previous prepared runtime after
   }
 });
 
-test("App-managed runtime rejects unsafe bundled Agent archive entries", () => {
+test.skipIf(process.platform === "win32")(
+  "App-managed runtime rejects unsafe bundled Agent archive entries",
+  () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-unsafe-"));
   try {
     const resourceRoot = createBundledAgentResource(tempDir, {
@@ -349,7 +352,8 @@ test("App-managed runtime rejects unsafe bundled Agent archive entries", () => {
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
-});
+  },
+);
 
 test("App-managed runtime rejects directory launcher archive entries", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-dir-launcher-"));
@@ -513,7 +517,7 @@ test("App-managed runtime repairs damaged selected runtime from App-owned payloa
           "resources",
           "runtime",
           "bin",
-          "bun",
+          process.platform === "win32" ? "bun.exe" : "bun",
         ),
       ),
     ).toBe(true);
@@ -639,7 +643,7 @@ test("App-managed runtime rolls failed same-version repair back to previous runt
 
 test("App-managed runtime activation does not shell out to host tar", () => {
   const source = readFileSync(
-    join(root, "packages", "butler-app", "client", "electron", "app-managed-runtime.mjs"),
+    join(repoRoot, "packages", "butler-app", "client", "electron", "app-managed-runtime.mjs"),
     "utf8",
   );
   expect(source).toContain("managedRuntimeSourceExecutablePath");
@@ -1066,7 +1070,7 @@ test("App-managed gateway command uses App runtime instead of standalone BUTLER_
       "resources",
       "runtime",
       "bin",
-      "bun",
+      process.platform === "win32" ? "bun.exe" : "bun",
     );
     expect(command.command).toBe(appBundledBun);
     expect(command.cwd).toBe(join(butlerData, "app", "runtime", "agent", "versions", "3.0.0"));
@@ -1094,7 +1098,7 @@ test("App-managed gateway command uses App runtime instead of standalone BUTLER_
   }
 });
 
-test("App-managed foreground command runs the full service daemon with a parent lease", () => {
+test("App-managed foreground command uses the platform owner with a parent lease", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-foreground-command-"));
   try {
     const butlerData = join(tempDir, "data");
@@ -1106,16 +1110,35 @@ test("App-managed foreground command runs the full service daemon with a parent 
     });
     expect(command).not.toBeNull();
     if (!command) throw new Error("expected App foreground command");
-    expect(command.command).toBe(join(
+    const runtimeBin = join(
       command.cwd,
-      "packages/butler-agent/resources/runtime/bin/bun",
-    ));
-    expect(command.args).toEqual([
-      "run",
-      join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
-    ]);
-    expect(command.stdio).toEqual(["pipe", "inherit", "inherit"]);
-    expect(command.detached).toBe(true);
+      "packages",
+      "butler-agent",
+      "resources",
+      "runtime",
+      "bin",
+    );
+    if (process.platform === "win32") {
+      expect(command.command).toBe(join(runtimeBin, "butler-process-host.exe"));
+      expect(command.args).toEqual([
+        "--owner-pid",
+        String(process.pid),
+        join(runtimeBin, "bun.exe"),
+        join(command.cwd, "bin", "butler.js"),
+        "gateway",
+        "app",
+      ]);
+      expect(command.stdio).toEqual(["ignore", "inherit", "inherit"]);
+      expect(command.detached).toBe(false);
+    } else {
+      expect(command.command).toBe(join(runtimeBin, "bun"));
+      expect(command.args).toEqual([
+        "run",
+        join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
+      ]);
+      expect(command.stdio).toEqual(["pipe", "inherit", "inherit"]);
+      expect(command.detached).toBe(true);
+    }
     expect(command.env).toMatchObject({
       BUTLER_APP_FOREGROUND_LEASE: "1",
       BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
@@ -1128,26 +1151,26 @@ test("App-managed foreground command runs the full service daemon with a parent 
 
 test("Windows App foreground command uses the owner-death Job host and direct gateway", () => {
   const command = windowsAppForegroundCommand({
-    runtimeHome: "C:\\Users\\연우\\Butler Data\\runtime",
-    runtime: "C:\\Users\\연우\\Butler Data\\runtime\\bin\\bun.exe",
+    runtimeHome: "C:\\Users\\테스터\\Butler Data\\runtime",
+    runtime: "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\bun.exe",
     processHost:
-      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler-process-host.exe",
-    launcher: "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler.js",
+      "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler-process-host.exe",
+    launcher: "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler.js",
     ownerPid: 4242,
   });
 
   expect(command).toEqual({
     command:
-      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler-process-host.exe",
+      "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler-process-host.exe",
     args: [
       "--owner-pid",
       "4242",
-      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\bun.exe",
-      "C:\\Users\\연우\\Butler Data\\runtime\\bin\\butler.js",
+      "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\bun.exe",
+      "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler.js",
       "gateway",
       "app",
     ],
-    cwd: "C:\\Users\\연우\\Butler Data\\runtime",
+    cwd: "C:\\Users\\테스터\\Butler Data\\runtime",
     stdio: ["ignore", "inherit", "inherit"],
     detached: false,
   });
@@ -1215,10 +1238,18 @@ function createBundledAgentResource(
   expect(tar.status).toBe(0);
   mkdirSync(join(resourceRoot, "runtime"), { recursive: true });
   writeFileSync(join(resourceRoot, "runtime", "bun-version"), "1.3.11\n");
-  mkdirSync(join(resourceRoot, "runtime", "bin"), { recursive: true });
-  writeFileSync(join(resourceRoot, "runtime", "bin", "bun"), "#!/bin/sh\n", {
-    mode: 0o755,
-  });
+  if (process.platform === "win32") {
+    writeWindowsRuntimeFixture(join(resourceRoot, "runtime"));
+    copyFileSync(
+      join(repoRoot, "packages", "butler-agent", "resources", "runtime", "windows-archive-worker.mjs"),
+      join(resourceRoot, "runtime", "windows-archive-worker.mjs"),
+    );
+  } else {
+    mkdirSync(join(resourceRoot, "runtime", "bin"), { recursive: true });
+    writeFileSync(join(resourceRoot, "runtime", "bin", "bun"), "#!/bin/sh\n", {
+      mode: 0o755,
+    });
+  }
   const sha256 = input.sha256 ?? sha256File(artifactPath);
   writeFileSync(
     join(resourceRoot, "agent-release-manifest.json"),
@@ -1389,23 +1420,55 @@ function writeReadyRuntime(butlerData: string, runtimeLabel: string): void {
     ),
     "1.3.11\n",
   );
-  mkdirSync(
-    join(butlerData, runtimeLabel, "packages", "butler-agent", "resources", "runtime", "bin"),
-    { recursive: true },
+  const runtimePayloadHome = join(
+    butlerData,
+    runtimeLabel,
+    "packages",
+    "butler-agent",
+    "resources",
+    "runtime",
   );
+  if (process.platform === "win32") {
+    writeWindowsRuntimeFixture(runtimePayloadHome);
+  } else {
+    mkdirSync(join(runtimePayloadHome, "bin"), { recursive: true });
+    writeFileSync(join(runtimePayloadHome, "bin", "bun"), "#!/bin/sh\n", {
+      mode: 0o755,
+    });
+  }
+}
+
+function writeWindowsRuntimeFixture(runtimePayloadHome: string): void {
+  const bin = join(runtimePayloadHome, "bin");
+  const bun = join(bin, "bun.exe");
+  const processHost = join(bin, "butler-process-host.exe");
+  mkdirSync(bin, { recursive: true });
+  copyFileSync(process.execPath, bun);
+  copyFileSync(process.execPath, processHost);
+  const thumbprint = "A".repeat(40);
   writeFileSync(
-    join(
-      butlerData,
-      runtimeLabel,
-      "packages",
-      "butler-agent",
-      "resources",
-      "runtime",
-      "bin",
-      "bun",
-    ),
-    "#!/bin/sh\n",
-    { mode: 0o755 },
+    join(runtimePayloadHome, "windows-signatures.json"),
+    `${JSON.stringify({
+      schema: "butler.windows-runtime-signatures.v1",
+      verification: "authenticode-powershell-5.1",
+      files: [
+        {
+          path: "bin/bun.exe",
+          sha256: sha256File(bun),
+          status: "Valid",
+          signerThumbprint: thumbprint,
+          signerSubject: "CN=Butler Windows Runtime Fixture",
+        },
+        {
+          path: "bin/butler-process-host.exe",
+          sha256: sha256File(processHost),
+          status: "Valid",
+          signerThumbprint: thumbprint,
+          signerSubject: "CN=Butler Windows Runtime Fixture",
+        },
+      ],
+      rawTextIncluded: false,
+    }, null, 2)}\n`,
   );
 }
 

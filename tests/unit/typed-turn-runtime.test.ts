@@ -1183,7 +1183,7 @@ test("principal cancellation aborts an active default run_command process tree",
   expect(existsSync(latePath)).toBe(false);
   expect(events.some((event) =>
     event.kind === "tool.started" &&
-    (event.payload as Record<string, unknown> | undefined)?.toolName === "Bash",
+    (event.payload as Record<string, unknown> | undefined)?.toolName === "Command",
   )).toBe(true);
   expect(events.some((event) => event.kind === "tool.completed")).toBe(false);
 });

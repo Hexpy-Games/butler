@@ -6445,8 +6445,8 @@ test("session worker activity synthesizes planned parent for orphan work orchest
       rows: expect.arrayContaining([
         expect.objectContaining({
           kind: "ran_command",
-          safe_label: "Bash",
-          safe_tool_name: "Bash",
+          safe_label: "Command",
+          safe_tool_name: "Command",
           safe_input_label: "cd ~/butler && bun test tests/unit/app-server.test.ts",
           safe_detail_rows: expect.arrayContaining([
             expect.objectContaining({
@@ -6458,8 +6458,8 @@ test("session worker activity synthesizes planned parent for orphan work orchest
         }),
         expect.objectContaining({
           kind: "ran_command",
-          safe_label: "Bash",
-          safe_tool_name: "Bash",
+          safe_label: "Command",
+          safe_tool_name: "Command",
           safe_input_label: "cd ~/butler && bun test tests/unit/app-server.test.ts",
           safe_detail_rows: expect.arrayContaining([
             expect.objectContaining({

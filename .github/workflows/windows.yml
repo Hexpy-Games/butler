@@ -1,0 +1,127 @@
+name: Butler Windows
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "17 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  quality:
+    name: Windows native lint and typecheck
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix packages/butler-app/client/electron ci
+          npm --prefix packages/butler-app/client/ui ci
+      - name: Run Windows-native quality gates
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Quality
+
+  unit-integration:
+    name: Windows native unit and product integration
+    runs-on: windows-latest
+    needs: quality
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix packages/butler-app/client/electron ci
+          npm --prefix packages/butler-app/client/ui ci
+      - name: Run Windows unit contracts
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Tests
+      - name: Run Windows product loop twice
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode ProductE2E
+
+  signed-package:
+    name: Windows signed package, signatures, and checksums
+    runs-on: windows-latest
+    needs: quality
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix packages/butler-app/client/electron ci
+          npm --prefix packages/butler-app/client/ui ci
+      - name: Package and verify gated Windows artifacts
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Package
+      - name: Retain gated Windows validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: butler-windows-gated-${{ github.sha }}
+          path: ~/.butler-release-validation/win32-x64/
+          if-no-files-found: error
+          retention-days: 7
+
+  nightly-packaged-e2e:
+    name: Windows nightly signed install and update lifecycle
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    needs: quality
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          npm --prefix packages/butler-app/client/electron ci
+          npm --prefix packages/butler-app/client/ui ci
+      - name: Run packaged install, update, rollback, repair, and uninstall E2E
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Lifecycle
