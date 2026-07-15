@@ -552,6 +552,10 @@ export async function runNativeToolTurn({
             audit,
             publicDecisionContext,
           });
+          await emitTurnEventBestEffort(input, {
+            kind: "guard.started",
+            payload: { guard: "public_output" },
+          });
           const guardedReport = applyPublicOutputGuards({
             turnInput: input,
             session,
@@ -561,16 +565,31 @@ export async function runNativeToolTurn({
             finalText: repairedReport,
             audit,
           });
+          await emitTurnEventBestEffort(input, {
+            kind: "guard.completed",
+            payload: { guard: "public_output", status: "approved" },
+          });
           const reportHash = createHash("sha256").update(guardedReport).digest("hex");
           if (priorReportHash === reportHash) {
             throw new Error("btcc_reporting_unchanged_candidate_blocked");
           }
           priorReportHash = reportHash;
+          await emitTurnEventBestEffort(input, {
+            kind: "guard.started",
+            payload: { guard: "btcc_report" },
+          });
           const guard = await runBtccReportGuard({
             coordinator,
             reportText: guardedReport,
             runPrivateTextPrompt,
             guardIndex: reportIndex,
+          });
+          await emitTurnEventBestEffort(input, {
+            kind: "guard.completed",
+            payload: {
+              guard: "btcc_report",
+              status: guard.outcome === "passed" ? "approved" : "revision_required",
+            },
           });
           if (guard.outcome === "passed") {
             coordinator.completeReporting({
