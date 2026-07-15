@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
+import { btccFixtureResponse } from "../support/btcc-phase-fixture.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
@@ -437,23 +438,6 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function decisionIdFromResponseFormat(responseFormat: unknown): string {
-  const schema = responseFormat && typeof responseFormat === "object"
-    ? (responseFormat as { schema?: unknown }).schema
-    : undefined;
-  const properties = schema && typeof schema === "object"
-    ? (schema as { properties?: unknown }).properties
-    : undefined;
-  const decision = properties && typeof properties === "object"
-    ? (properties as { decision_id?: unknown }).decision_id
-    : undefined;
-  const decisionId = decision && typeof decision === "object"
-    ? (decision as { const?: unknown }).const
-    : undefined;
-  assert(typeof decisionId === "string" && decisionId.length > 0, "typed decision id is missing from the response schema.");
-  return decisionId;
-}
-
 assert(existsSync(electronBin), "Electron binary is missing; run npm --prefix packages/butler-app/client/electron install first.");
 assert(existsSync(join(uiRoot, "index.html")), "UI dist is missing; run npm --prefix packages/butler-app/client/ui run build first.");
 
@@ -510,6 +494,7 @@ const fakeProvider: ModelProviderAdapter = {
 
 const prompts: string[] = [];
 const decisionPrompts: string[] = [];
+const conceptionPrompts: string[] = [];
 const observedToolCalls: string[] = [];
 const observedToolSurfaces: Array<{
   count: number;
@@ -517,6 +502,8 @@ const observedToolSurfaces: Array<{
   names: string[];
 }> = [];
 let liveLlmCalls = 0;
+let deterministicTurnNumber = 0;
+let deterministicReportText = FIRST_FINAL;
 const runtime = new NativeToolLoopRuntime({
   butlerHome: root,
   butlerData: tempDir,
@@ -528,36 +515,32 @@ const runtime = new NativeToolLoopRuntime({
       liveLlmCalls += 1;
       return await runPromptText(input);
     }
-    const decisionId = decisionIdFromResponseFormat(input.responseFormat);
-    if (usesToolchainScenario) {
-      return JSON.stringify({
-        schema_version: "butler.turn-contract-decision.v1",
-        decision_id: decisionId,
-        action: "inspect",
-        target_workstream_id: null,
-        target_project_id: null,
-        blocker_id: null,
-        deliverables: ["status_report"],
-        answer_text: null,
-        public_title: "Project Ledger 상태 확인",
-        public_summary: "Project Ledger 상태와 다음 작업을 확인하고 대시보드를 갱신합니다.",
-        public_rationale: "요청한 세 작업을 순서대로 실행해야 각 결과를 검증할 수 있습니다.",
-        immediate_next_step: "먼저 현재 Project Ledger 상태를 조회합니다.",
-      });
+    if (input.responseFormat?.name === "butler_turn_contract_decision") {
+      conceptionPrompts.push(input.prompt);
+      deterministicTurnNumber += 1;
+      deterministicReportText = usesToolchainScenario
+        ? TOOLCHAIN_FINAL
+        : deterministicTurnNumber === 1 ? FIRST_FINAL : SECOND_FINAL;
     }
-    return JSON.stringify({
-      schema_version: "butler.turn-contract-decision.v1",
-      decision_id: decisionId,
-      action: "answer",
-      target_workstream_id: null,
-      target_project_id: null,
-      blocker_id: null,
-      deliverables: [],
-      answer_text: decisionPrompts.length === 1 ? FIRST_FINAL : SECOND_FINAL,
-      public_title: "요청에 답변",
-      public_summary: "현재 대화 맥락으로 바로 답변합니다.",
-      public_rationale: "추가 도구나 사용자 확인이 필요하지 않습니다.",
-      immediate_next_step: null,
+    return btccFixtureResponse({
+      prompt: input.prompt,
+      responseFormat: input.responseFormat,
+      options: usesToolchainScenario
+        ? {
+          action: "inspect",
+          reportText: deterministicReportText,
+          publicTitle: "Project Ledger 상태 확인",
+          publicSummary: "Project Ledger 상태와 다음 작업을 확인하고 대시보드를 갱신합니다.",
+          requiresCurrentState: true,
+          requiresTools: true,
+        }
+        : {
+          action: "answer",
+          answerText: deterministicReportText,
+          reportText: deterministicReportText,
+          publicTitle: "요청에 답변",
+          publicSummary: "현재 대화 맥락으로 바로 답변합니다.",
+        },
     });
   },
   executeButlerTool: usesLiveLlm ? undefined : async (call) => {
@@ -620,6 +603,10 @@ const bridge = usesExternalButlerService
       provider: fakeProvider,
       runtimePolicy: e2eRuntimePolicy(),
       ...(usesLiveLlm ? {} : { sessionTitleGenerator: false }),
+      // This harness invokes the responder bridge directly and therefore has
+      // no production inbound queue to own canonical conversation/BTCC
+      // admission. Make that single semantic owner explicit.
+      semanticLifecycleOwner: "bridge",
     });
 const server = createAppServer({
   dbPath: appDbPath,
@@ -1477,7 +1464,7 @@ async function runMultiturnBrowserScenario(client: CdpClient): Promise<void> {
 
   await sendComposerTurn(client, secondPrompt);
   await waitForAnyAssistantFinalText(client, [SECOND_FINAL, MISSING_FINAL], waitForFinalTimeoutMs);
-  const secondPromptContainsFirstFinal = (prompts[1] ?? decisionPrompts[1])?.includes(FIRST_FINAL) ?? false;
+  const secondPromptContainsFirstFinal = conceptionPrompts[1]?.includes(FIRST_FINAL) ?? false;
   assert(secondPromptContainsFirstFinal, liveDiagnostics("second runtime prompt did not include the first final answer."));
   assert(!(await assistantFinalTextIncludes(client, MISSING_FINAL)), liveDiagnostics("second final rendered the failure sentinel."));
   await waitForAssistantFinalText(client, SECOND_FINAL, waitForFinalTimeoutMs);
@@ -3158,9 +3145,9 @@ function liveDiagnostics(message: string): string {
     message,
     `mode=${e2eMode}`,
     `liveLlmCalls=${liveLlmCalls}`,
-    `firstPromptObserved=${Boolean(prompts[0])}`,
-    `secondPromptObserved=${Boolean(prompts[1])}`,
-    `secondPromptContainsFirstFinal=${Boolean(prompts[1]?.includes(FIRST_FINAL))}`,
+    `firstConceptionPromptObserved=${Boolean(conceptionPrompts[0])}`,
+    `secondConceptionPromptObserved=${Boolean(conceptionPrompts[1])}`,
+    `secondConceptionPromptContainsFirstFinal=${Boolean(conceptionPrompts[1]?.includes(FIRST_FINAL))}`,
   ].join("; ");
 }
 
