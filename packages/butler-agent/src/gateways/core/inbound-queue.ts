@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import type { InboundEnvelope } from "./contracts.ts";
@@ -120,6 +120,38 @@ export class NativeInboundQueue {
       enqueuedAt: now.toISOString(),
       attempts: 0,
       metadata,
+    };
+    atomicWriteJson(join(this.dir("pending"), `${queueId}.json`), record);
+    return record;
+  }
+
+  enqueueIdempotent(
+    envelope: InboundEnvelope,
+    metadata: Record<string, unknown>,
+    idempotencyKey: string,
+    now = new Date(),
+  ): QueuedInboundEvent {
+    const key = idempotencyKey.trim();
+    if (!key) throw new Error("inbound_queue_idempotency_key_missing");
+    const queueId = [
+      now.toISOString().replace(/[-:.]/g, ""),
+      safeQueueId(envelope.eventId),
+      createHash("sha256").update(key).digest("hex").slice(0, 16),
+    ].join("-");
+    for (const directory of ["pending", "processing", "processed", "failed"] as const) {
+      const existing = this.readQueuedRecord(join(this.dir(directory), `${queueId}.json`));
+      if (existing) return existing;
+    }
+    const record: QueuedInboundEvent = {
+      version: 1,
+      queueId,
+      envelope,
+      enqueuedAt: now.toISOString(),
+      attempts: 0,
+      metadata: {
+        ...metadata,
+        idempotencyKey: key,
+      },
     };
     atomicWriteJson(join(this.dir("pending"), `${queueId}.json`), record);
     return record;

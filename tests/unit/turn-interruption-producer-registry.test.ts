@@ -29,6 +29,7 @@ describe("current turn interruption producer registry", () => {
       .toEqual(new Set(["app", "queued", "direct", "system", "automation", "recovery", "legacy"]));
     expect(TURN_INTERRUPTION_PRODUCERS.filter((item) => item.migrationStatus === "routed")
       .map((item) => item.id)).toEqual([
+        "app_queue_handoff",
         "queued_failure_action",
         "queued_claim_failure",
         "native_turn_catch",
