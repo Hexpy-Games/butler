@@ -46,6 +46,10 @@ export class ToolSurfacePromptController {
     return this.selectInitialSurface().toolNames;
   }
 
+  allToolDefinitions(): readonly FunctionToolDefinition[] {
+    return this.input.tools;
+  }
+
   async runWithSelectedSurface<T>(
     run: (state: SelectedToolSurfacePromptState) => Promise<T>,
   ): Promise<T> {

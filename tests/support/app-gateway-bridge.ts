@@ -69,6 +69,7 @@ export interface AppGatewayBridgeOptions {
   provider?: ModelProviderAdapter;
   runtimePolicy?: Record<string, unknown>;
   sessionTitleGenerator?: SessionTitleGenerator | false;
+  semanticLifecycleOwner?: "external" | "bridge";
 }
 
 export class AppGatewayBridge {
@@ -80,8 +81,8 @@ export class AppGatewayBridge {
   private readonly runtimePolicy?: Record<string, unknown>;
   private readonly sessionTitleGenerator: SessionTitleGenerator | false;
   private readonly store: SessionBindingStore;
-  private readonly conversationStore: AgentConversationStore;
-  private readonly btccPhaseStore: BtccPhaseStore;
+  private readonly conversationStore: AgentConversationStore | null;
+  private readonly btccPhaseStore: BtccPhaseStore | null;
   private readonly server: ReturnType<typeof createGatewayServer>;
   private readonly visibleDeliveries = new Map<string, string[]>();
   private readonly visibleProgress = new Map<string, NonNullable<AppMessageResponderInput["onProgress"]>>();
@@ -99,8 +100,13 @@ export class AppGatewayBridge {
     this.sessionTitleGenerator = options.sessionTitleGenerator ??
       ((titleInput) => generateSessionTitleWithProvider(this.provider, titleInput));
     this.store = new SessionBindingStore(join(this.butlerData, "runtime", "session-store.sqlite"));
-    this.conversationStore = new AgentConversationStore({ butlerData: this.butlerData });
-    this.btccPhaseStore = new BtccPhaseStore({ butlerData: this.butlerData });
+    const ownsSemanticLifecycle = options.semanticLifecycleOwner === "bridge";
+    this.conversationStore = ownsSemanticLifecycle
+      ? new AgentConversationStore({ butlerData: this.butlerData })
+      : null;
+    this.btccPhaseStore = ownsSemanticLifecycle
+      ? new BtccPhaseStore({ butlerData: this.butlerData })
+      : null;
     this.ensureAppSession();
 
     const router = new GatewayRouter({ store: this.store });
@@ -110,8 +116,12 @@ export class AppGatewayBridge {
       provider: this.provider,
       promptAssembler: new PromptAssembler({ butlerHome: this.butlerHome, butlerData: this.butlerData }),
       policyEngine: new PolicyEngine(),
-      conversationWriter: this.conversationStore,
-      btccInterruptionStateWriter: this.btccPhaseStore,
+      ...(this.conversationStore && this.btccPhaseStore
+        ? {
+          conversationWriter: this.conversationStore,
+          btccInterruptionStateWriter: this.btccPhaseStore,
+        }
+        : {}),
       conversationMetricsButlerData: this.butlerData,
       deliverIntermediate: async (delivery) => this.collectIntermediate(delivery.action, delivery.metadata),
       deliverTurnEvent: async (delivery) => this.collectTurnEvent(delivery.envelope, delivery.event),
@@ -124,8 +134,8 @@ export class AppGatewayBridge {
   }
 
   close(): void {
-    this.btccPhaseStore.close();
-    this.conversationStore.close();
+    this.btccPhaseStore?.close();
+    this.conversationStore?.close();
     this.store.close();
   }
 

@@ -345,7 +345,14 @@ function withProjectLedgerMutationEvidence(
     verified: true,
     confidence: 0.95,
     summary: "A canonical Project Ledger record mutation completed.",
-    scope: { record_kind: recordKind, record_id: recordId },
+    scope: {
+      record_kind: recordKind,
+      record_id: recordId,
+      ledger_operation: projectLedgerOperation(toolName),
+      ...(projectLedgerLifecycleOutcome(toolName)
+        ? { lifecycle_outcome: projectLedgerLifecycleOutcome(toolName) }
+        : {}),
+    },
     references: [{ label: `${recordKind}:${recordId}` }],
     satisfies: ["durable_artifact"],
     limitations: [],
@@ -354,6 +361,22 @@ function withProjectLedgerMutationEvidence(
     ? result.evidence_capability_receipts
     : [];
   return { ...result, evidence_capability_receipts: [...existing, receipt] };
+}
+
+function projectLedgerLifecycleOutcome(
+  toolName: string,
+): "completed" | "succeeded" | "failed" | null {
+  switch (toolName) {
+    case "project_ledger_work_complete":
+    case "project_ledger_task_complete":
+      return "completed";
+    case "project_ledger_attempt_succeed":
+      return "succeeded";
+    case "project_ledger_attempt_fail":
+      return "failed";
+    default:
+      return null;
+  }
 }
 
 function projectLedgerMutationRecordKind(

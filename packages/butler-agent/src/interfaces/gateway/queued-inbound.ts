@@ -13,7 +13,6 @@ import {
   clearTurnContextAtom,
   isTurnSchedulerContinuationYieldError,
 } from "../../agent/turn/turn-continuation-context.ts";
-import { safeLimitationText } from "../../agent/turn/runtime-delivery-state.ts";
 import type { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { continuationBackoffForFailure } from "./continuation-backoff.ts";
 import {
@@ -44,8 +43,8 @@ export interface ProcessQueuedInboundOptions {
   server: QueuedInboundServer;
   store: SessionBindingStore;
   deliveryGuard: DeliveryGuard;
-  btccInterruptionStateWriter?: BtccInterruptionStateWriter;
-  conversationWriter?: ConversationWriter;
+  btccInterruptionStateWriter: BtccInterruptionStateWriter;
+  conversationWriter: ConversationWriter;
   deliverAction?: (
     sessionId: string,
     action: OutboundAction,
@@ -136,50 +135,6 @@ function actionForTarget(input: {
   };
 }
 
-function failureActionForOriginalInbound(input: {
-  item: ClaimedInboundEvent;
-  error?: unknown;
-  failure?: RuntimeFailureDiagnostic;
-}): OutboundAction | null {
-  const turnId = input.item.envelope.routingHints?.turnId?.trim();
-  const sessionId = input.item.envelope.routingHints?.sessionId?.trim();
-  if (!turnId || !sessionId) return null;
-  const safeFailure = input.failure ?? safeRuntimeFailure(input.error);
-  const safeErrorCause = safeFailure.code === "gateway_failed"
-    ? ""
-    : safeLimitationText(safeFailure.cause, "");
-  return {
-    actionId: `queued-inbound-failure:${input.item.queueId}:${input.item.envelope.transport}:${turnId}`,
-    transport: input.item.envelope.transport,
-    accountId: input.item.envelope.accountId,
-    peer: input.item.envelope.peer,
-    message: {
-      text: safeFailure.message,
-      replyToMessageId: input.item.envelope.message.id,
-    },
-    metadata: {
-      source: "gateway/queued-inbound.ts",
-      kind: "turn_failed",
-      queueId: input.item.queueId,
-      dispatchClaimId: input.item.processing.claimId,
-      originalTransport: input.item.envelope.transport,
-      sessionId,
-      turnId,
-      safeErrorCode: safeFailure.code,
-      safeErrorCause: safeErrorCause || undefined,
-      provider: safeFailure.provider,
-      api: safeFailure.api,
-      statusCode: safeFailure.statusCode,
-      endpoint: safeFailure.endpoint,
-      model: safeFailure.model,
-      retryable: safeFailure.retryable,
-      dispatchStatus: safeFailure.cause?.startsWith("dispatch_status=")
-        ? safeFailure.cause.slice("dispatch_status=".length).split(" ", 1)[0]
-        : undefined,
-    },
-  };
-}
-
 function limitedDeliveryActionForOriginalInbound(input: {
   item: ClaimedInboundEvent;
   text: string | null;
@@ -242,31 +197,6 @@ function failureForDispatchResult(result: Exclude<GatewayDispatchResult, { statu
     retryable: true,
     cause: `dispatch_status=missing-handler role=${result.route.role}`,
   };
-}
-
-async function deliverFailureForOriginalInbound(input: {
-  item: ClaimedInboundEvent;
-  deliverAction: (
-    sessionId: string,
-    action: OutboundAction,
-    metadata: Record<string, unknown>,
-  ) => Promise<DeliveryResult>;
-  error?: unknown;
-  failure?: RuntimeFailureDiagnostic;
-  queueSource: string;
-}): Promise<boolean> {
-  const failureAction = failureActionForOriginalInbound({
-    item: input.item,
-    error: input.error,
-    failure: input.failure,
-  });
-  const sessionId = input.item.envelope.routingHints?.sessionId?.trim();
-  if (!failureAction || !sessionId) return false;
-  const delivery = await input.deliverAction(sessionId, failureAction, {
-    source: input.queueSource,
-    queueId: input.item.queueId,
-  });
-  return delivery.ok;
 }
 
 function targetActionsForResult(input: {
@@ -399,16 +329,15 @@ function ensureBtccQueueAdmission(
   item: ClaimedInboundEvent,
 ): "legacy" | "ready" | "preserve_queue_owner" {
   const stateWriter = options.btccInterruptionStateWriter;
-  if (!stateWriter || item.envelope.transport === "system") return "legacy";
+  if (item.envelope.transport === "system") return "legacy";
   const turnId = item.envelope.routingHints?.turnId?.trim();
   const durableSessionId = item.envelope.routingHints?.sessionId?.trim();
-  if (!turnId || !durableSessionId) {
-    return "preserve_queue_owner";
-  }
+  // Queue records without a durable turn identity are transport/operational
+  // events, not accepted semantic turns. They remain outside BTCC admission.
+  if (!turnId || !durableSessionId) return "legacy";
   try {
     if (stateWriter.readTurnState(turnId)) return "ready";
     const conversationWriter = options.conversationWriter;
-    if (!conversationWriter) return "preserve_queue_owner";
     const binding = options.store.getBySessionId(durableSessionId);
     const conversationSessionId = conversationSessionIdForDurableSession(durableSessionId);
     const turn = conversationWriter.beginTurn({
@@ -444,7 +373,7 @@ function existingBtccQueueOwnership(
 ): ExistingBtccQueueOwnership {
   const writer = options.btccInterruptionStateWriter;
   const turnId = item.envelope.routingHints?.turnId?.trim();
-  if (!writer || !turnId) return { kind: "none" };
+  if (!turnId) return { kind: "none" };
   try {
     const state = writer.readTurnState(turnId);
     if (!state) return { kind: "none" };
@@ -515,10 +444,10 @@ function routeQueuedBtccInterruption(input: {
 }): QueuedBtccInterruption {
   const writer = input.options.btccInterruptionStateWriter;
   const turnId = input.item.envelope.routingHints?.turnId?.trim();
-  if (!writer || !turnId) return { kind: "legacy" };
+  if (!turnId) return { kind: "legacy" };
   try {
     const current = writer.readTurnState(turnId);
-    if (!current) return { kind: "legacy" };
+    if (!current) return { kind: "preserve_queue_owner" };
     if (current.state === "waiting_runtime" && current.activeRecoveryCaseId) {
       return {
         kind: "waiting_runtime",
@@ -531,6 +460,18 @@ function routeQueuedBtccInterruption(input: {
     }
     const checkpointRef = current.lastStableCheckpointRef ??
       `queue-claim:${input.item.queueId}:${input.item.processing.claimId}`;
+    const failure = safeRuntimeFailure(input.error);
+    const sourceDiagnosticCode = isRecord(input.error) &&
+        typeof input.error.code === "string"
+      ? safeText(input.error.code) ?? failure.code
+      : failure.code;
+    const diagnosticRefs = [
+      `runtime-failure:${sourceDiagnosticCode}`,
+      failure.provider ? `provider:${failure.provider}` : null,
+      failure.api ? `provider-api:${failure.api}` : null,
+      typeof failure.statusCode === "number" ? `provider-status:${failure.statusCode}` : null,
+      failure.model ? `provider-model:${failure.model}` : null,
+    ].filter((ref): ref is string => Boolean(ref));
     const directive = routeTurnInterruption(runtimeInterruptionFromUnknown({
       error: input.error,
       interruptionId: `queue-interruption:${input.item.queueId}:${input.boundary}:g${current.generation}`,
@@ -543,7 +484,7 @@ function routeQueuedBtccInterruption(input: {
       pendingOperationRef: `queue-claim:${input.item.queueId}:${input.item.processing.claimId}`,
       sideEffectState: input.sideEffectState,
       resumePredicateRef: `queue-revision:${input.item.queueId}:${input.boundary}`,
-      diagnosticRefs: [],
+      diagnosticRefs,
     }));
     if (directive.kind !== "waiting_runtime") {
       return { kind: "preserve_queue_owner" };
@@ -591,10 +532,9 @@ function persistScheduledBtccContinuation(input: {
   schedulerItemId: string;
 }): "legacy" | "committed" | "preserve_queue_owner" {
   const writer = input.options.btccInterruptionStateWriter;
-  if (!writer) return "legacy";
   try {
     const current = writer.readTurnState(input.turnId);
-    if (!current) return "legacy";
+    if (!current) return "preserve_queue_owner";
     const checkpointRef = [
       "queue-continuation",
       input.item.queueId,
@@ -708,10 +648,11 @@ async function processClaimedQueuedInboundItem(input: {
       return summary;
     }
     if (result.status !== "handled") {
+      const failure = failureForDispatchResult(result);
       const btccInterruption = routeQueuedBtccInterruption({
         options,
         item,
-        error: new Error(`queued_dispatch_${result.status}`),
+        error: failure,
         origin: "dispatch",
         boundary: `dispatch_${result.status}`,
         sideEffectState: "known_not_applied",
@@ -720,7 +661,6 @@ async function processClaimedQueuedInboundItem(input: {
         return summary;
       }
       summary.failed += 1;
-      const failure = failureForDispatchResult(result);
       const terminalRecorded = failQueueClaim(
         options,
         item,
@@ -736,13 +676,6 @@ async function processClaimedQueuedInboundItem(input: {
         },
       );
       if (!terminalRecorded) return summary;
-      const delivered = await deliverFailureForOriginalInbound({
-        item,
-        deliverAction,
-        failure,
-        queueSource: "gateway/queued-inbound.ts#dispatch-failure",
-      });
-      if (delivered) summary.delivered += 1;
       return summary;
     }
     if (result.status === "handled") {
@@ -791,10 +724,15 @@ async function processClaimedQueuedInboundItem(input: {
           completePrincipalCancelledQueueClaim(options, item);
           return summary;
         }
+        const failure: RuntimeFailureDiagnostic = {
+          code: "turn_scheduler_continuation_schedule_failed",
+          message: "Butler could not commit the next continuation owner.",
+          retryable: true,
+        };
         const btccInterruption = routeQueuedBtccInterruption({
           options,
           item,
-          error: new Error("turn_scheduler_continuation_schedule_uncommitted"),
+          error: failure,
           origin: "queue_handoff",
           boundary: "continuation_schedule",
           sideEffectState: "known_not_applied",
@@ -807,24 +745,12 @@ async function processClaimedQueuedInboundItem(input: {
           sessionId,
           turnId,
         });
-        const failure: RuntimeFailureDiagnostic = {
-          code: "turn_scheduler_continuation_schedule_failed",
-          message: "Butler could not commit the next continuation owner.",
-          retryable: true,
-        };
         summary.failed += 1;
         const terminalRecorded = failQueueClaim(options, item, failure.message, {
           source: "gateway/queued-inbound.ts#scheduler-continuation",
           failure,
         });
         if (!terminalRecorded) return summary;
-        const delivered = await deliverFailureForOriginalInbound({
-          item,
-          deliverAction,
-          failure,
-          queueSource: "gateway/queued-inbound.ts#scheduler-continuation-failure",
-        });
-        if (delivered) summary.delivered += 1;
         return summary;
       }
       const continuationOwnership = persistScheduledBtccContinuation({
@@ -926,13 +852,6 @@ async function processClaimedQueuedInboundItem(input: {
         turnId,
       });
     }
-    const delivered = await deliverFailureForOriginalInbound({
-      item,
-      deliverAction,
-      failure: safeFailure,
-      queueSource: "gateway/queued-inbound.ts#failure",
-    });
-    if (delivered) summary.delivered += 1;
   } finally {
     unregisterTurnController?.();
   }

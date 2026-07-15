@@ -46,6 +46,8 @@ import { BtccRecoveryCaseStore } from "../../packages/butler-agent/src/agent/tur
 
 let tempDir = "";
 let originalButlerData: string | undefined;
+let dispatcherConversations: AgentConversationStore;
+let dispatcherBtcc: BtccRecoveryCaseStore;
 
 class ScriptedRuntime implements AgentRuntimeAdapter {
   readonly id = "automation-runtime";
@@ -188,13 +190,44 @@ function admitBtccQueueTurn(input: {
   });
 }
 
+function managedQueueContract() {
+  return {
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
+  };
+}
+
+function expectRuntimeRecovery(turnId: string, diagnosticRef?: string) {
+  const state = dispatcherBtcc.readTurnState(turnId);
+  const recoveryCaseId = state?.activeRecoveryCaseId;
+  const recovery = recoveryCaseId
+    ? dispatcherBtcc.readRecoveryCase(recoveryCaseId)
+    : null;
+  expect(state).toMatchObject({
+    state: "waiting_runtime",
+    activeRecoveryCaseId: expect.any(String),
+  });
+  expect(recovery).toMatchObject({
+    turnId,
+    owner: "turn_runtime_recovery",
+    status: "open",
+    publicStatusId: "runtime_recovery_pending",
+  });
+  if (diagnosticRef) expect(recovery?.diagnosticRefs).toContain(diagnosticRef);
+  return recovery;
+}
+
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-automation-gateway-"));
   originalButlerData = process.env.BUTLER_DATA;
   process.env.BUTLER_DATA = tempDir;
+  dispatcherConversations = new AgentConversationStore({ butlerData: tempDir });
+  dispatcherBtcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
 });
 
 afterEach(() => {
+  dispatcherBtcc.close();
+  dispatcherConversations.close();
   if (originalButlerData === undefined) delete process.env.BUTLER_DATA;
   else process.env.BUTLER_DATA = originalButlerData;
   rmSync(tempDir, { recursive: true, force: true });
@@ -361,6 +394,7 @@ test("queued automation events are consumed by butler-main path and delivered to
   const guard = new DeliveryGuard({ adapters: [mock] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server,
     store,
@@ -445,6 +479,7 @@ test("queued app inbound dispatch preserves selected reasoning effort", async ()
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server,
     store,
@@ -484,6 +519,7 @@ test("queued inbound skips terminal app turns before dispatch", async () => {
 
   let handled = false;
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     store,
     deliveryGuard: new DeliveryGuard({ adapters: [] }),
@@ -532,6 +568,8 @@ test("queued inbound dispatcher runs different sessions concurrently", async () 
   let shortTurnCompleted = false;
   const dispatcher = new QueuedInboundDispatcher();
   const summary = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: new DeliveryGuard({ adapters: [] }),
@@ -628,6 +666,8 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   const starts: string[] = [];
   const dispatcher = new QueuedInboundDispatcher();
   const baseOptions = {
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: new DeliveryGuard({ adapters: [] }),
@@ -676,7 +716,7 @@ test("queued inbound dispatcher preserves same-session FIFO eligibility", async 
   store.close();
 });
 
-test("queued inbound dispatcher fails timed out app turns and holds the session slot until quiescence", async () => {
+test("queued inbound dispatcher routes timed out app turns to recovery and holds the session slot until quiescence", async () => {
   const queue = new NativeInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   queue.enqueue(appEnvelope({
@@ -696,6 +736,8 @@ test("queued inbound dispatcher fails timed out app turns and holds the session 
   const releaseTimedOutHandler = deferred<void>();
 
   const first = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: guard,
@@ -728,25 +770,16 @@ test("queued inbound dispatcher fails timed out app turns and holds the session 
   await dispatcher.waitForIdle();
 
   expect(sawAbort).toBe(true);
-  expect(app.sentActions[0]).toMatchObject({
-    transport: "app",
-    message: {
-      text: "Butler did not finish this queued request before the dispatch lease expired. Retry the turn.",
-      replyToMessageId: "message-timeout",
-    },
-    metadata: {
-      kind: "turn_failed",
-      turnId: "turn-message-timeout",
-      safeErrorCode: "inbound_dispatch_timeout",
-    },
-  });
+  expect(first).toMatchObject({ handled: 1, delivered: 0, failed: 0 });
+  expect(app.sentActions).toEqual([]);
+  expectRuntimeRecovery("turn-message-timeout", "runtime-failure:inbound_dispatch_timeout");
   const failedDir = join(tempDir, "runtime", "inbound-events", "failed");
   const failedFiles = existsSync(failedDir) ? readdirSync(failedDir) : [];
-  expect(failedFiles).toHaveLength(1);
-  const failedRecord = JSON.parse(readFileSync(join(failedDir, failedFiles[0]!), "utf8"));
-  expect(failedRecord.metadata.terminalClaimId).toBeString();
+  expect(failedFiles).toHaveLength(0);
 
   const blockedByUnsettledTimeout = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: guard,
@@ -777,6 +810,8 @@ test("queued inbound dispatcher fails timed out app turns and holds the session 
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   const second = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: guard,
@@ -804,11 +839,11 @@ test("queued inbound dispatcher fails timed out app turns and holds the session 
   expect(second.claimed).toBe(1);
   await dispatcher.waitForIdle();
   const processedDir = join(tempDir, "runtime", "inbound-events", "processed");
-  expect(existsSync(processedDir) ? readdirSync(processedDir).length : 0).toBe(1);
+  expect(existsSync(processedDir) ? readdirSync(processedDir).length : 0).toBe(2);
   store.close();
 });
 
-test("queued inbound dispatcher contains failure persistence rejections", async () => {
+test("queued inbound dispatcher bypasses legacy failure persistence after BTCC recovery ownership", async () => {
   const queue = new PersistenceFailingInboundQueue(tempDir);
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   queue.enqueue(appEnvelope({
@@ -819,6 +854,8 @@ test("queued inbound dispatcher contains failure persistence rejections", async 
 
   const dispatcher = new QueuedInboundDispatcher();
   const summary = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: new DeliveryGuard({ adapters: [] }),
@@ -835,10 +872,11 @@ test("queued inbound dispatcher contains failure persistence rejections", async 
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
+    handled: 1,
     delivered: 0,
-    failed: 1,
+    failed: 0,
   });
+  expectRuntimeRecovery("turn-message-persistence-failure", "runtime-failure:gateway_failed");
   store.close();
 });
 
@@ -871,6 +909,8 @@ test("queued inbound dispatcher does not time out active app turns by default", 
   });
 
   const first = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: guard,
@@ -900,6 +940,8 @@ test("queued inbound dispatcher does not time out active app turns by default", 
 
   await new Promise((resolve) => setTimeout(resolve, 15));
   const whileActive = dispatcher.poll({
+    btccInterruptionStateWriter: dispatcherBtcc,
+    conversationWriter: dispatcherConversations,
     queue,
     store,
     deliveryGuard: guard,
@@ -992,6 +1034,7 @@ test("queued inbound delivery preserves safe artifact refs for app projection", 
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server,
     store,
@@ -1013,7 +1056,7 @@ test("queued inbound delivery preserves safe artifact refs for app projection", 
   expect(JSON.stringify(app.sentActions[0])).not.toContain(tempDir);
 });
 
-test("queued inbound runtime failure emits terminal app turn failure action", async () => {
+test("queued inbound runtime failure opens durable recovery without a terminal app action", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   const envelope: InboundEnvelope = {
@@ -1037,6 +1080,7 @@ test("queued inbound runtime failure emits terminal app turn failure action", as
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1049,25 +1093,12 @@ test("queued inbound runtime failure emits terminal app turn failure action", as
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions).toHaveLength(1);
-  expect(app.sentActions[0]).toMatchObject({
-    transport: "app",
-    peer: { kind: "dm", id: "general" },
-    message: {
-      text: "Butler could not complete this turn.",
-      replyToMessageId: "message-failure",
-    },
-    metadata: {
-      kind: "turn_failed",
-      turnId: "turn-failure",
-      safeErrorCode: "gateway_failed",
-    },
-  });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("private provider");
+  expect(app.sentActions).toEqual([]);
+  expectRuntimeRecovery("turn-failure", "runtime-failure:gateway_failed");
 });
 
 test("queued inbound completes transport ownership without failure delivery after BTCC runtime wait routing", async () => {
@@ -1082,6 +1113,7 @@ test("queued inbound completes transport ownership without failure delivery afte
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1121,6 +1153,7 @@ test("queued inbound reconciles BTCC admission before routing a dispatch excepti
   const app = new MockTransportAdapter({ id: "app" });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1192,6 +1225,7 @@ test("queued BTCC admission and session actor share one turn through Reporting d
   }));
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server,
     store,
@@ -1265,6 +1299,7 @@ test("BTCC continuation commits the next queue owner before state and replay ski
     store,
     deliveryGuard: new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] }),
     btccInterruptionStateWriter: btcc,
+    conversationWriter: conversations,
     processingLeaseMs: 1,
     limit: 1,
   };
@@ -1279,6 +1314,7 @@ test("BTCC continuation commits the next queue owner before state and replay ski
   });
 
   const replay = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     ...options,
     now: () => new Date(now.getTime() + 2),
   });
@@ -1286,6 +1322,7 @@ test("BTCC continuation commits the next queue owner before state and replay ski
   expect(serverCalls).toBe(1);
 
   const resumed = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     ...options,
     now: () => new Date(now.getTime() + 3),
   });
@@ -1314,6 +1351,7 @@ test("BTCC continuation enqueue failure opens RecoveryCase without terminal fail
   const app = new MockTransportAdapter({ id: "app" });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1344,7 +1382,7 @@ test("BTCC continuation enqueue failure opens RecoveryCase without terminal fail
   store.close();
 });
 
-test("queued inbound provider failure preserves safe API diagnostics for app projection", async () => {
+test("queued inbound provider failure preserves typed diagnostics in recovery without public failure copy", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1367,6 +1405,7 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1389,30 +1428,22 @@ test("queued inbound provider failure preserves safe API diagnostics for app pro
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions[0]).toMatchObject({
-    message: {
-      text: "OpenAI API request failed with HTTP 500.",
-    },
-    metadata: {
-      kind: "turn_failed",
-      turnId: "turn-provider-failure",
-      safeErrorCode: "provider_api_error",
-      provider: "openai",
-      api: "responses",
-      statusCode: 500,
-      endpoint: "https://api.openai.com/v1/responses",
-      model: "gpt-5.5",
-      retryable: true,
-    },
-  });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("token=secret");
+  expect(app.sentActions).toEqual([]);
+  const recovery = expectRuntimeRecovery("turn-provider-failure", "runtime-failure:provider_api_error");
+  expect(recovery?.diagnosticRefs).toEqual(expect.arrayContaining([
+    "provider:openai",
+    "provider-api:responses",
+    "provider-status:500",
+    "provider-model:gpt-5.5",
+  ]));
+  expect(JSON.stringify(recovery)).not.toContain("token=secret");
 });
 
-test("queued inbound terminates raw budget exhaustion without an orchestrator checkpoint", async () => {
+test("queued inbound routes raw budget exhaustion to recovery and preserves its checkpoint", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -1443,6 +1474,7 @@ test("queued inbound terminates raw budget exhaustion without an orchestrator ch
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1462,14 +1494,15 @@ test("queued inbound terminates raw budget exhaustion without an orchestrator ch
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions).toHaveLength(1);
-  expect(app.sentActions[0]).toMatchObject({
-    metadata: { kind: "turn_failed", turnId: "turn-budget-failure" },
-  });
+  expect(app.sentActions).toEqual([]);
+  expectRuntimeRecovery(
+    "turn-budget-failure",
+    "runtime-failure:prompt_usage_model_call_budget_exhausted",
+  );
   const pendingRecords = readdirSync(join(tempDir, "runtime", "inbound-events", "pending"))
     .filter((name) => name.endsWith(".json"))
     .map((name) => JSON.parse(readFileSync(join(tempDir, "runtime", "inbound-events", "pending", name), "utf8")));
@@ -1479,7 +1512,7 @@ test("queued inbound terminates raw budget exhaustion without an orchestrator ch
     sessionId: "butler/app-general",
     turnId: "turn-budget-failure",
   });
-  expect(persisted).toBeNull();
+  expect(persisted).not.toBeNull();
   store.close();
 });
 
@@ -1606,6 +1639,7 @@ test("queued inbound completion gap consumes same logical turn continuation with
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound(envelope) {
@@ -1658,6 +1692,7 @@ test("queued rate-limit continuation is durably delayed before another provider 
   const guard = new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1693,7 +1728,7 @@ test("queued rate-limit continuation is durably delayed before another provider 
   store.close();
 });
 
-test("queued continuation enqueue failure terminates the original App turn", async () => {
+test("queued continuation enqueue failure opens recovery and preserves the original App turn", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new ContinuationEnqueueFailingInboundQueue(tempDir);
   queue.enqueue(appEnvelope({
@@ -1712,6 +1747,7 @@ test("queued continuation enqueue failure terminates the original App turn", asy
   const app = new MockTransportAdapter({ id: "app" });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1731,35 +1767,24 @@ test("queued continuation enqueue failure terminates the original App turn", asy
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions).toEqual([
-    expect.objectContaining({
-      metadata: expect.objectContaining({
-        kind: "turn_failed",
-        turnId: "turn-continuation-enqueue-failure",
-        safeErrorCode: "turn_scheduler_continuation_schedule_failed",
-      }),
-    }),
-  ]);
+  expect(app.sentActions).toEqual([]);
+  expectRuntimeRecovery(
+    "turn-continuation-enqueue-failure",
+    "runtime-failure:turn_scheduler_continuation_schedule_failed",
+  );
   const pendingDir = join(tempDir, "runtime", "inbound-events", "pending");
   expect(existsSync(pendingDir) ? readdirSync(pendingDir) : []).toEqual([]);
   const failedDir = join(tempDir, "runtime", "inbound-events", "failed");
-  const failedFiles = readdirSync(failedDir).filter((name) => name.endsWith(".json"));
-  expect(failedFiles).toHaveLength(1);
-  const failed = JSON.parse(readFileSync(join(failedDir, failedFiles[0]!), "utf8"));
-  expect(failed.metadata.failure).toMatchObject({
-    code: "turn_scheduler_continuation_schedule_failed",
-    retryable: true,
-  });
-  expect(JSON.stringify(failed)).not.toContain("continuationOnly");
+  expect(existsSync(failedDir) ? readdirSync(failedDir) : []).toEqual([]);
   expect(readTurnContextAtom({
     butlerData: tempDir,
     sessionId: "butler/app-general",
     turnId: "turn-continuation-enqueue-failure",
-  })).toBeNull();
+  })).not.toBeNull();
   store.close();
 });
 
@@ -1776,6 +1801,7 @@ test("queued dispatcher never enters a turn that was durably cancelled before cl
   let serverCalls = 0;
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1812,6 +1838,7 @@ test("principal cancellation aborts an in-flight queued continuation without fai
   let providerRequestsAfterCancel = 0;
   const app = new MockTransportAdapter({ id: "app" });
   const processing = processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound(envelope) {
@@ -1857,6 +1884,7 @@ test("cancelled queued turn discards a late successful dispatch result", async (
   const release = deferred();
   const app = new MockTransportAdapter({ id: "app" });
   const processing = processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1915,6 +1943,7 @@ test("queued inbound consumes normalized live recovery failures without public c
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -1931,18 +1960,16 @@ test("queued inbound consumes normalized live recovery failures without public c
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions).toHaveLength(1);
-  expect(app.sentActions[0]).toMatchObject({
-    metadata: {
-      kind: "turn_failed",
-      turnId: "turn-normalized-internal-recovery",
-    },
-  });
-  expect(JSON.stringify(app.sentActions[0])).not.toContain("requested goal was completed");
+  expect(app.sentActions).toEqual([]);
+  const recovery = expectRuntimeRecovery(
+    "turn-normalized-internal-recovery",
+    "runtime-failure:internal_recovery_required",
+  );
+  expect(JSON.stringify(recovery)).not.toContain("requested goal was completed");
   store.close();
 });
 
@@ -2089,6 +2116,7 @@ test("queued app retryable provider interruption resumes same logical turn from 
   }), { source: "test" });
 
   const first = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server,
     store,
@@ -2173,6 +2201,7 @@ test("queued app retryable provider interruption resumes same logical turn from 
   });
 
   const second = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server,
     store,
@@ -2236,7 +2265,7 @@ test("queued app retryable provider interruption resumes same logical turn from 
   store.close();
 });
 
-test("queued inbound goal completion incomplete terminates without a continuation owner", async () => {
+test("queued inbound goal completion incomplete opens a typed runtime continuation owner", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -2259,6 +2288,7 @@ test("queued inbound goal completion incomplete terminates without a continuatio
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -2275,14 +2305,12 @@ test("queued inbound goal completion incomplete terminates without a continuatio
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions).toHaveLength(1);
-  expect(app.sentActions[0]).toMatchObject({
-    metadata: { kind: "turn_failed", turnId: "turn-goal-incomplete" },
-  });
+  expect(app.sentActions).toEqual([]);
+  expectRuntimeRecovery("turn-goal-incomplete", "runtime-failure:gateway_failed");
 });
 
 test("queued inbound reactivates hinted crashed app sessions before routing", async () => {
@@ -2322,6 +2350,7 @@ test("queued inbound reactivates hinted crashed app sessions before routing", as
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -2376,7 +2405,7 @@ test("queued inbound reactivates hinted crashed app sessions before routing", as
   });
 });
 
-test("queued inbound unroutable app turn emits terminal failure instead of completing pending", async () => {
+test("queued inbound unroutable app turn opens recovery without terminal failure", async () => {
   const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
   const queue = new NativeInboundQueue(tempDir);
   queue.enqueue({
@@ -2399,6 +2428,7 @@ test("queued inbound unroutable app turn emits terminal failure instead of compl
   const guard = new DeliveryGuard({ adapters: [app] });
 
   const summary = await processQueuedInboundEvents({
+    ...managedQueueContract(),
     queue,
     server: {
       async handleInbound() {
@@ -2420,20 +2450,10 @@ test("queued inbound unroutable app turn emits terminal failure instead of compl
 
   expect(summary).toMatchObject({
     claimed: 1,
-    handled: 0,
-    delivered: 1,
-    failed: 1,
+    handled: 1,
+    delivered: 0,
+    failed: 0,
   });
-  expect(app.sentActions[0]).toMatchObject({
-    message: {
-      text: "Butler could not route this turn to an active session.",
-      replyToMessageId: "message-unroutable",
-    },
-    metadata: {
-      kind: "turn_failed",
-      turnId: "turn-unroutable",
-      safeErrorCode: "gateway_unroutable",
-      dispatchStatus: "unroutable",
-    },
-  });
+  expect(app.sentActions).toEqual([]);
+  expectRuntimeRecovery("turn-unroutable", "runtime-failure:gateway_unroutable");
 });

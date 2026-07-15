@@ -32,10 +32,15 @@ import type {
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { SessionBindingStore } from "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { BtccRecoveryCaseStore } from "../../packages/butler-agent/src/agent/turn/interruption/recovery-case-store.ts";
+import { btccFixtureResponse } from "../support/btcc-phase-fixture.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
 let originalButlerHome: string | undefined;
+let conversationWriter: AgentConversationStore;
+let btccStateWriter: BtccRecoveryCaseStore;
 
 beforeEach(() => {
   tempDir = mkdtempSync(join(tmpdir(), "butler-app-deferred-progress-"));
@@ -43,15 +48,26 @@ beforeEach(() => {
   originalButlerHome = process.env.BUTLER_HOME;
   process.env.BUTLER_DATA = tempDir;
   process.env.BUTLER_HOME = process.cwd();
+  conversationWriter = new AgentConversationStore({ butlerData: tempDir });
+  btccStateWriter = new BtccRecoveryCaseStore({ butlerData: tempDir });
 });
 
 afterEach(() => {
+  btccStateWriter.close();
+  conversationWriter.close();
   if (originalButlerData === undefined) delete process.env.BUTLER_DATA;
   else process.env.BUTLER_DATA = originalButlerData;
   if (originalButlerHome === undefined) delete process.env.BUTLER_HOME;
   else process.env.BUTLER_HOME = originalButlerHome;
   rmSync(tempDir, { recursive: true, force: true });
 });
+
+function managedQueueContract() {
+  return {
+    conversationWriter,
+    btccInterruptionStateWriter: btccStateWriter,
+  };
+}
 
 class BudgetFailureThenSuccessRuntime implements AgentRuntimeAdapter {
   readonly id = "native-tool-loop";
@@ -198,6 +214,19 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
         finalizationCalls += 1;
         throw new Error("budget-only finalization must not run");
       }
+      if (input.responseFormat?.name?.startsWith("butler_btcc_")) {
+        return btccFixtureResponse({
+          prompt: input.prompt,
+          responseFormat: input.responseFormat,
+          options: {
+            action: "inspect",
+            reportText: input.prompt.includes("두 번째 질문은 이전 작업과 분리해 답했습니다.")
+              ? "두 번째 질문은 이전 작업과 분리해 답했습니다."
+              : "샌디 음성 경로 구현과 검증을 같은 작업에서 완료했습니다.",
+            requiredEffects: ["observe", "mutate", "validation"],
+          },
+        });
+      }
       typedDecisionCalls += 1;
       return JSON.stringify(firstTurnCompleted
         ? {
@@ -280,7 +309,14 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
             },
           });
         }
-        throw new Error("sixth request should have exceeded the slice");
+        const budgetError = new Error(
+          "Prompt usage model-call budget exhausted before provider request",
+        );
+        budgetError.name = "PromptUsageModelCallBudgetExhaustedError";
+        Object.assign(budgetError, {
+          code: "prompt_usage_model_call_budget_exhausted",
+        });
+        throw budgetError;
       }
 
       admit(0, 1_000);
@@ -372,6 +408,7 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
     const turnId = posted.data.turn.id as string;
     bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
     const lifecycle = new SessionLifecycleService({
+      ...managedQueueContract(),
       store: bindingStore,
       runtime,
       provider,
@@ -386,8 +423,15 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
     });
     const deliveryGuard = new DeliveryGuard({ adapters: [createAppTransportAdapter()] });
 
-    const yielded = await processQueuedInboundEvents({ queue, server: gateway, store: bindingStore, deliveryGuard });
+    const yielded = await processQueuedInboundEvents({
+      ...managedQueueContract(),
+      queue,
+      server: gateway,
+      store: bindingStore,
+      deliveryGuard,
+    });
     expect(yielded).toMatchObject({ claimed: 1, handled: 1, failed: 0, delivered: 0 });
+    expect(btccStateWriter.readTurnState(turnId)).toMatchObject({ state: "continuing" });
     expect(existingQueueFiles(tempDir, "pending")).toHaveLength(1);
     const atom = readTurnContextAtom({
       butlerData: tempDir,
@@ -409,7 +453,13 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
     const continuing = await getJson(`${appServer.url}session-view?session_id=general`);
     expect(continuing.data.active_turn).toMatchObject({ id: turnId, state: "thinking" });
 
-    const completed = await processQueuedInboundEvents({ queue, server: gateway, store: bindingStore, deliveryGuard });
+    const completed = await processQueuedInboundEvents({
+      ...managedQueueContract(),
+      queue,
+      server: gateway,
+      store: bindingStore,
+      deliveryGuard,
+    });
     expect(completed).toMatchObject({ claimed: 1, handled: 1, failed: 0 });
     expect(existingQueueFiles(tempDir, "pending")).toEqual([]);
     expect(readTurnContextAtom({
@@ -441,6 +491,7 @@ test("real App route rolls a Sandy-shaped spent budget into one owned continuati
     });
     expect(unrelated.data.turn.id).not.toBe(turnId);
     const unrelatedCompleted = await processQueuedInboundEvents({
+      ...managedQueueContract(),
       queue,
       server: gateway,
       store: bindingStore,
@@ -490,6 +541,7 @@ test("real deferred App route parks a budget interruption until Stop isolates th
       join(tempDir, "runtime", "session-store.sqlite"),
     );
     const lifecycle = new SessionLifecycleService({
+      ...managedQueueContract(),
       store: bindingStore,
       runtime,
       provider,
@@ -506,17 +558,18 @@ test("real deferred App route parks a budget interruption until Stop isolates th
       adapters: [createAppTransportAdapter()],
     });
 
-    const failedSummary = await processQueuedInboundEvents({
+    const waitingSummary = await processQueuedInboundEvents({
+      ...managedQueueContract(),
       queue,
       server: gateway,
       store: bindingStore,
       deliveryGuard,
     });
-    expect(failedSummary).toMatchObject({
+    expect(waitingSummary).toMatchObject({
       claimed: 1,
-      handled: 0,
-      delivered: 1,
-      failed: 1,
+      handled: 1,
+      delivered: 0,
+      failed: 0,
     });
 
     const failedQueueDir = join(
@@ -525,18 +578,22 @@ test("real deferred App route parks a budget interruption until Stop isolates th
       "inbound-events",
       "failed",
     );
-    const failedFiles = readdirSync(failedQueueDir).filter((name) =>
-      name.endsWith(".json"),
-    );
-    expect(failedFiles).toHaveLength(1);
-    const failedReceipt = JSON.parse(
-      readFileSync(join(failedQueueDir, failedFiles[0]!), "utf8"),
-    );
-    expect(failedReceipt.metadata.failure).toMatchObject({
-      code: "prompt_usage_model_call_budget_exhausted",
-      retryable: true,
+    const failedFiles = existsSync(failedQueueDir)
+      ? readdirSync(failedQueueDir).filter((name) => name.endsWith(".json"))
+      : [];
+    expect(failedFiles).toHaveLength(0);
+    const btccState = btccStateWriter.readTurnState(firstTurnId);
+    const recoveryCase = btccState?.activeRecoveryCaseId
+      ? btccStateWriter.readRecoveryCase(btccState.activeRecoveryCaseId)
+      : null;
+    expect(btccState).toMatchObject({ state: "waiting_runtime" });
+    expect(recoveryCase).toMatchObject({
+      owner: "turn_runtime_recovery",
+      status: "open",
+      diagnosticRefs: expect.arrayContaining([
+        "runtime-failure:prompt_usage_model_call_budget_exhausted",
+      ]),
     });
-    expect(JSON.stringify(failedReceipt)).not.toContain("continuationOnly");
     expect(existingQueueFiles(tempDir, "pending")).toEqual([]);
 
     const recoveryTurns = await getJson(
@@ -544,7 +601,7 @@ test("real deferred App route parks a budget interruption until Stop isolates th
     );
     expect(recoveryTurns.data.turns).toContainEqual(expect.objectContaining({
       id: firstTurnId,
-      state: "waiting_for_tool",
+      state: "thinking",
       retryable: false,
       cancellable: true,
     }));
@@ -554,7 +611,7 @@ test("real deferred App route parks a budget interruption until Stop isolates th
     );
     expect(recoveryView.data.active_turn).toMatchObject({
       id: firstTurnId,
-      state: "waiting_for_tool",
+      state: "thinking",
     });
     expect(bindingStore.getBySessionId("butler/app-general")?.lifecycleState)
       .toBe("active");
@@ -579,6 +636,7 @@ test("real deferred App route parks a budget interruption until Stop isolates th
     expect(second.data.turn.id).not.toBe(firstTurnId);
 
     const deliveredSummary = await processQueuedInboundEvents({
+      ...managedQueueContract(),
       queue,
       server: gateway,
       store: bindingStore,
@@ -636,6 +694,7 @@ test("real deferred App route keeps a turn nonterminal only while a scheduler ow
       join(tempDir, "runtime", "session-store.sqlite"),
     );
     const lifecycle = new SessionLifecycleService({
+      ...managedQueueContract(),
       store: bindingStore,
       runtime,
       provider,
@@ -653,6 +712,7 @@ test("real deferred App route keeps a turn nonterminal only while a scheduler ow
     });
 
     const yielded = await processQueuedInboundEvents({
+      ...managedQueueContract(),
       queue,
       server: gateway,
       store: bindingStore,
@@ -691,6 +751,7 @@ test("real deferred App route keeps a turn nonterminal only while a scheduler ow
     });
 
     const completed = await processQueuedInboundEvents({
+      ...managedQueueContract(),
       queue,
       server: gateway,
       store: bindingStore,

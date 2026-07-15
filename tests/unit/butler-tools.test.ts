@@ -4609,6 +4609,16 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     check_ok: true,
     issue_count: 0,
   }));
+  expect(nativeCompletedTask.evidence_capability_receipts).toContainEqual(expect.objectContaining({
+    producer: expect.objectContaining({ kind: "project_ledger" }),
+    capability: "durable_artifact",
+    verified: true,
+    scope: expect.objectContaining({
+      record_kind: "task",
+      ledger_operation: "closeout",
+      lifecycle_outcome: "completed",
+    }),
+  }));
 
   const nativeIndexed = await execute({
     name: "project_ledger_index",

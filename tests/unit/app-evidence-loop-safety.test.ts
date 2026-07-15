@@ -152,6 +152,7 @@ test("App message path rehydrates exact child evidence once without recursive ar
       requiredNativeTools: ["run_command", "read_tool_evidence_artifact", "get_context_monitor"],
     },
     sessionTitleGenerator: false,
+    semanticLifecycleOwner: "bridge",
   });
   const originalRunTurn = runtime.runTurn.bind(runtime);
   runtime.runTurn = async (input) => {

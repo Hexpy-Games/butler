@@ -438,6 +438,8 @@ describe("BtccPhaseStore", () => {
       turnId: state.turnId,
       sourcePhase: "review",
       ownerPhase: "execution",
+      criterionId: "requested-result-complete",
+      criterionIds: ["requested-result-complete"],
       reasonCode: "execution_evidence_gap",
       authoritativeInputGeneration: state.phaseGeneration,
       artifactRevisionRefs: ["execution-candidate:1"],
@@ -478,6 +480,20 @@ describe("BtccPhaseStore", () => {
       "receipt:review:return:1",
     ]);
     expect(state.invalidatedReceiptRefs).toContain("receipt:execution:1");
+    expect(store.hasReturnTicketGap({
+      turnId: state.turnId,
+      sourcePhase: "review",
+      gapFingerprint: ticket.gapFingerprint,
+    })).toBe(true);
+    expect(store.hasReturnTicketGap({
+      turnId: state.turnId,
+      sourcePhase: "consolidation",
+      gapFingerprint: ticket.gapFingerprint,
+    })).toBe(false);
+    expect(store.latestReturnedCriterionIds({
+      turnId: state.turnId,
+      sourcePhase: "review",
+    })).toEqual(new Set(["requested-result-complete"]));
 
     expect(() => commitStep(store, state, {
       receiptId: "receipt:execution:stale-dependency",
@@ -498,6 +514,49 @@ describe("BtccPhaseStore", () => {
     expect(state.activeReturnTicketRef).toBeUndefined();
     expect(state.acceptedReceiptRefs).toContain("receipt:execution:2");
     expect(state.invalidatedReceiptRefs).toContain("receipt:execution:1");
+
+    store.close();
+    conversations.close();
+  });
+
+  test("persists completed Conception observation fields across runtime restarts", () => {
+    const butlerData = tempData();
+    const conversations = new AgentConversationStore({ butlerData });
+    beginTurn(conversations);
+    let store = new BtccPhaseStore({ butlerData });
+    let state = admit(store);
+    const need = {
+      evidenceNeedId: "workspace-package",
+      goalField: "referent" as const,
+      question: "Which package is bound to the current workspace?",
+      whyMaterial: "The requested referent must be grounded.",
+      sourceScopeRefs: ["workspace"],
+      expectedResolution: "Read the package manifest.",
+    };
+    state = store.commitConceptionCheckpoint({
+      expectedRowVersion: state.rowVersion,
+      checkpoint: {
+        ...checkpoint(state, "checkpoint:observation:pending", "active"),
+        openEvidenceNeeds: [need],
+        pendingToolCallRef: "tool-call:read-package",
+      },
+    });
+    state = store.commitConceptionCheckpoint({
+      expectedRowVersion: state.rowVersion,
+      checkpoint: {
+        ...checkpoint(state, "checkpoint:observation:accepted", "active"),
+        roundIndex: 2,
+        openEvidenceNeeds: [need],
+        observationRefs: ["observation:package-manifest"],
+      },
+    });
+    store.close();
+
+    store = new BtccPhaseStore({ butlerData });
+    expect(store.completedConceptionObservationGoalFields(
+      state.turnId,
+      state.phaseGeneration,
+    )).toEqual(new Set(["referent"]));
 
     store.close();
     conversations.close();

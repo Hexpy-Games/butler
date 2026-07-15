@@ -169,6 +169,117 @@ export class BtccPhaseStore extends BtccRecoveryCaseStore {
     return row ? JSON.parse(row.contract_json) as GoalContractV1 : null;
   }
 
+  readConceptionCheckpoint(checkpointRef: string): ConceptionCheckpointV1 | null {
+    const row = this.db.query<{
+      turn_id: string;
+      attempt_id: string;
+      phase_generation: number;
+      round_index: number;
+      working_goal_draft_json: string | null;
+      open_evidence_needs_json: string;
+      observation_refs_json: string;
+      pending_tool_call_ref: string | null;
+      last_input_fingerprint: string;
+      public_progress_ref: string | null;
+      status: ConceptionCheckpointV1["status"];
+    }, [string]>(`
+      SELECT turn_id, attempt_id, phase_generation, round_index,
+             working_goal_draft_json, open_evidence_needs_json,
+             observation_refs_json, pending_tool_call_ref,
+             last_input_fingerprint, public_progress_ref, status
+      FROM btcc_conception_checkpoints WHERE checkpoint_ref = ?
+    `).get(checkpointRef);
+    if (!row) return null;
+    return {
+      schemaVersion: BTCC_CONCEPTION_CHECKPOINT_SCHEMA,
+      checkpointRef,
+      turnRef: row.turn_id,
+      attemptRef: row.attempt_id,
+      phaseGeneration: row.phase_generation,
+      roundIndex: row.round_index,
+      ...(row.working_goal_draft_json
+        ? { workingGoalDraft: JSON.parse(row.working_goal_draft_json) }
+        : {}),
+      openEvidenceNeeds: JSON.parse(row.open_evidence_needs_json),
+      observationRefs: parseStringArray(row.observation_refs_json),
+      ...(row.pending_tool_call_ref ? { pendingToolCallRef: row.pending_tool_call_ref } : {}),
+      lastInputFingerprint: row.last_input_fingerprint,
+      ...(row.public_progress_ref ? { publicProgressRef: row.public_progress_ref } : {}),
+      status: row.status,
+    };
+  }
+
+  completedConceptionObservationGoalFields(
+    turnId: string,
+    phaseGeneration: number,
+  ): Set<ConceptionCheckpointV1["openEvidenceNeeds"][number]["goalField"]> {
+    const rows = this.db.query<{ open_evidence_needs_json: string }, [string, number]>(`
+      SELECT open_evidence_needs_json
+      FROM btcc_conception_checkpoints
+      WHERE turn_id = ? AND phase_generation = ?
+        AND pending_tool_call_ref IS NULL AND status = 'active'
+      ORDER BY round_index ASC, created_at ASC
+    `).all(turnId, phaseGeneration);
+    const fields = new Set<ConceptionCheckpointV1["openEvidenceNeeds"][number]["goalField"]>();
+    for (const row of rows) {
+      const needs = JSON.parse(row.open_evidence_needs_json) as unknown;
+      if (!Array.isArray(needs)) continue;
+      for (const need of needs) {
+        if (!need || typeof need !== "object" || Array.isArray(need)) continue;
+        const field = (need as Record<string, unknown>).goalField;
+        if (isConceptionGoalField(field)) fields.add(field);
+      }
+    }
+    return fields;
+  }
+
+  hasReturnTicketGap(input: {
+    turnId: string;
+    sourcePhase: "review" | "consolidation" | "reporting";
+    gapFingerprint: string;
+  }): boolean {
+    const rows = this.db.query<{ payload_json: string }, [string, string]>(`
+      SELECT payload_json FROM btcc_phase_artifacts
+      WHERE turn_id = ? AND phase = ? AND artifact_kind = 'return_ticket'
+    `).all(input.turnId, input.sourcePhase);
+    return rows.some((row) => {
+      const payload = JSON.parse(row.payload_json) as unknown;
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+      const ticket = payload as Record<string, unknown>;
+      return ticket.schemaVersion === BTCC_RETURN_TICKET_SCHEMA &&
+        ticket.sourcePhase === input.sourcePhase &&
+        ticket.gapFingerprint === input.gapFingerprint;
+    });
+  }
+
+  latestReturnedCriterionIds(input: {
+    turnId: string;
+    sourcePhase: "review" | "consolidation" | "reporting";
+  }): Set<string> {
+    const row = this.db.query<{ payload_json: string }, [string, string]>(`
+      SELECT payload_json FROM btcc_phase_artifacts
+      WHERE turn_id = ? AND phase = ? AND artifact_kind = 'return_ticket'
+      ORDER BY phase_generation DESC, created_at DESC LIMIT 1
+    `).get(input.turnId, input.sourcePhase);
+    const criterionIds = new Set<string>();
+    if (!row) return criterionIds;
+    const payload = JSON.parse(row.payload_json) as unknown;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) return criterionIds;
+    const ticket = payload as Record<string, unknown>;
+    if (ticket.schemaVersion !== BTCC_RETURN_TICKET_SCHEMA ||
+      ticket.sourcePhase !== input.sourcePhase) return criterionIds;
+    if (Array.isArray(ticket.criterionIds)) {
+      for (const criterionId of ticket.criterionIds) {
+        if (typeof criterionId === "string" && criterionId.trim()) {
+          criterionIds.add(criterionId.trim());
+        }
+      }
+    } else if (typeof ticket.criterionId === "string" && ticket.criterionId.trim()) {
+      criterionIds.add(ticket.criterionId.trim());
+    }
+    return criterionIds;
+  }
+
   readPhaseArtifact(artifactRef: string): BtccPhaseArtifactV1 | null {
     const row = this.db.query<{
       turn_id: string;
@@ -948,6 +1059,13 @@ function assertConceptionCheckpoint(
   );
 }
 
+function isConceptionGoalField(
+  value: unknown,
+): value is ConceptionCheckpointV1["openEvidenceNeeds"][number]["goalField"] {
+  return value === "referent" || value === "requested_outcome" || value === "scope" ||
+    value === "constraint" || value === "authority" || value === "acceptance";
+}
+
 function assertGoalContract(contract: GoalContractV1, state: BtccPhaseStateV1): void {
   if (
     contract.schemaVersion !== BTCC_GOAL_CONTRACT_SCHEMA ||
@@ -980,6 +1098,14 @@ function assertReturnTicket(
   }
   assertNonEmpty(ticket.gapFingerprint, "btcc_return_ticket_fingerprint_missing");
   assertNonEmpty(ticket.requiredChange, "btcc_return_ticket_change_missing");
+  if (ticket.criterionIds && (
+    ticket.criterionIds.length === 0 ||
+    new Set(ticket.criterionIds).size !== ticket.criterionIds.length ||
+    ticket.criterionIds.some((criterionId) => !criterionId.trim()) ||
+    (ticket.criterionId && !ticket.criterionIds.includes(ticket.criterionId))
+  )) {
+    throw new Error("btcc_return_ticket_criterion_frontier_invalid");
+  }
 }
 
 const NORMAL_FORWARD_PHASE: Partial<Record<BtccPhase, BtccPhase>> = {

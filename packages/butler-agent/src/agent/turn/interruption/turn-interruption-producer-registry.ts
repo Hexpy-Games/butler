@@ -31,7 +31,6 @@ export interface TurnInterruptionProducerDescriptor {
 export const TURN_INTERRUPTION_PRODUCERS = [
   producer("app_message_admission", "admission", "gateways/app/domain/sessions/user-message-turn-store.ts", "enqueueAppTransportTurn", ["app"], ["failed App turn"], "admission_reconciliation"),
   producer("app_queue_handoff", "queue_handoff", "gateways/app/infrastructure/transport/transport-queue-store.ts", "waitAppTransportQueueHandoff", ["app"], ["assistant failure", "failed App turn"], "turn_interruption_router", "routed"),
-  producer("queued_failure_action", "dispatch", "interfaces/gateway/queued-inbound.ts", "failureActionForOriginalInbound", ["queued", "automation", "recovery"], ["turn_failed action"], "turn_interruption_router", "routed"),
   producer("queued_claim_failure", "dispatch", "interfaces/gateway/queued-inbound.ts", "failQueueClaim", ["queued", "automation", "recovery"], ["failed queue claim"], "turn_interruption_router", "routed"),
   producer("native_turn_catch", "phase_runtime", "agent/turn/native/turn-runner/turn-runner.ts", "principalCancelled", ["queued", "direct"], ["turn.failed event"], "turn_interruption_router", "routed"),
   producer("direct_responder_completion", "legacy_responder", "gateways/app/domain/sessions/responder-turn-lifecycle.ts", "completeResponderTurn", ["direct"], ["failed App turn"], "turn_interruption_router", "routed"),
@@ -47,7 +46,7 @@ export const TURN_INTERRUPTION_PRODUCERS = [
   producer("completion_review_incomplete", "phase_runtime", "agent/output/completion/final-output-contract.ts", "completionReviewIncompleteReason", ["queued", "direct"], ["completion terminal"], "turn_interruption_router"),
 ] as const satisfies readonly TurnInterruptionProducerDescriptor[];
 
-export const TURN_INTERRUPTION_PRODUCER_COUNT = 16;
+export const TURN_INTERRUPTION_PRODUCER_COUNT = 15;
 
 export function validateTurnInterruptionProducerRegistry(
   producers: readonly TurnInterruptionProducerDescriptor[] = TURN_INTERRUPTION_PRODUCERS,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { FunctionToolDefinition } from "../../../integrations/providers/provider.ts";
+import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
 import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 import type { ToolCapabilityMetadata } from "../../tools/types.ts";
 
@@ -21,6 +22,40 @@ export interface BtccCapabilityManifestEntry {
   ledgerOperation?: NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerOperation"];
   ledgerRecordKinds?: NonNullable<ToolCapabilityMetadata["btcc"]>["ledgerRecordKinds"];
   declared: boolean;
+}
+
+export interface BtccCapabilityPolicy {
+  purpose: BtccCapabilityPurpose;
+  effects: readonly BtccCapabilityEffect[];
+  scopes?: readonly BtccCapabilityScope[];
+  requireDeclared?: boolean;
+}
+
+export function successfulLedgerCloseoutKinds(
+  audit: readonly {
+    ok: boolean;
+    evidenceCapabilityReceipts?: readonly EvidenceCapabilityReceipt[];
+  }[],
+): Set<"task" | "attempt"> {
+  const closedKinds = new Set<"task" | "attempt">();
+  for (const entry of audit) {
+    if (!entry.ok) continue;
+    for (const receipt of entry.evidenceCapabilityReceipts ?? []) {
+      if (receipt.producer.kind !== "project_ledger" ||
+        receipt.capability !== "durable_artifact" ||
+        receipt.evidence_kind !== "artifact" ||
+        receipt.verified !== true || receipt.maturity !== "verified") continue;
+      const scope = receipt.scope;
+      if (!scope || scope.ledger_operation !== "closeout") continue;
+      if (scope.record_kind === "task" && scope.lifecycle_outcome === "completed") {
+        closedKinds.add("task");
+      }
+      if (scope.record_kind === "attempt" && scope.lifecycle_outcome === "succeeded") {
+        closedKinds.add("attempt");
+      }
+    }
+  }
+  return closedKinds;
 }
 
 export function btccCapabilityManifestForTool(

@@ -648,6 +648,10 @@ export async function runNativeButlerMain(
     const appAdapter = createAppTransportAdapter();
     conversationWriter = new AgentConversationStore({ butlerData });
     btccInterruptionStateWriter = new BtccPhaseStore({ butlerData });
+    // Capture the successfully constructed lifecycle owners as non-optional
+    // values. The production queue dispatcher cannot be composed without them.
+    const queueConversationWriter = conversationWriter;
+    const queueBtccInterruptionStateWriter = btccInterruptionStateWriter;
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
@@ -932,8 +936,8 @@ export async function runNativeButlerMain(
             server,
             store,
             deliveryGuard,
-            btccInterruptionStateWriter,
-            conversationWriter,
+            btccInterruptionStateWriter: queueBtccInterruptionStateWriter,
+            conversationWriter: queueConversationWriter,
             deliverAction: deliverThroughEnabledGate,
             shouldHandleItem: shouldHandleAppInboundTurn(butlerData),
             telegramGroupId: currentTelegramChatId(),

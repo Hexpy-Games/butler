@@ -363,7 +363,7 @@ test("native runtime uses the bounded typed first pass for direct answers withou
 
   expect(result.text).toContain("opening decision");
   expect(textPrompts).toHaveLength(1);
-  expect(textPrompts[0]).toContain("## Typed Turn Decision");
+  expect(textPrompts[0]).toContain("## Conception Output Contract");
   expect(textPrompts[0]).toContain("## Active Persona Reminder");
   expect(textPrompts[0]).toContain("Use answer only when the response can be delivered now");
   expect(textPrompts[0]).not.toContain("heavy project memory");
@@ -8256,8 +8256,8 @@ test("native runtime prompt describes direct versus planned dispatch choices", a
   expect(capturedInstructions).toContain("case-insensitive search");
   expect(capturedInstructions).toContain("Do not conclude that something is absent from a single exact case-sensitive text match");
   expect(capturedInstructions).toContain("Butler Turn Cognition Cycle");
-  expect(capturedInstructions).toContain("`구상`, `계획`, `실행`, `검토`, `취합 및 정리`, `보고`");
-  expect(capturedInstructions).toContain("expected final deliverable");
+  expect(capturedInstructions).toContain("Conception, Planning, Execution, Review, Consolidation, or Reporting");
+  expect(capturedInstructions).toContain("typed inputs, capability grants, output schema, and exit criteria");
   expect(capturedInstructions).toContain("Default Response Shape");
   expect(capturedInstructions).toContain("one to three short paragraphs");
   expect(capturedInstructions).toContain("Do not expand the internal BTCC cycle");
@@ -9229,7 +9229,7 @@ test("native runtime records bridge resolution failures without visible wrapper 
   )).toBe(true);
 });
 
-test("native runtime rethrows runtime-fault-shaped bridge resolution exceptions", async () => {
+test("native runtime checkpoints runtime-fault-shaped bridge exceptions without model-visible failure", async () => {
   let bridgeResult: Record<string, unknown> | null = null;
   const runtime = new NativeToolLoopRuntime({
     disableAutomaticRecall: true,
@@ -9266,7 +9266,7 @@ test("native runtime rethrows runtime-fault-shaped bridge resolution exceptions"
     model: "openai/auto:codex-latest",
     input: { text: "도구 호출 runtime fault를 확인해줘" },
     metadata: { runtimePolicy: { completionReview: "disabled" } },
-  })).rejects.toThrow("bridge invariant broke");
+  })).rejects.toThrow("Turn scheduler yielded after persisting a continuation context atom");
 
   expect(bridgeResult).toBeNull();
   const transcript = readTranscript("butler/main/progressive-tool-call-runtime-fault");
@@ -11111,7 +11111,7 @@ test("native runtime does not emit turn failed before recoverable limited delive
       events.push({ kind: event.kind });
     },
     metadata: { runtimePolicy: { completionReview: "enabled" } },
-  })).rejects.toThrow("missing evidence");
+  })).rejects.toThrow("Turn scheduler yielded after persisting a continuation context atom");
 
   expect(events.some((event) => event.kind === "turn.failed")).toBe(false);
   expect(events.map((event) => event.kind)).not.toContain("recovery.recorded");
@@ -11166,7 +11166,7 @@ test("native runtime leaves interrupted direct WorkStreams owned until the inter
     emitTurnEvent: (event) => {
       events.push({ kind: event.kind });
     },
-  })).rejects.toThrow("socket connection");
+  })).rejects.toThrow("Turn scheduler yielded after persisting a continuation context atom");
 
   const streams = new WorkStreamStore(tempDir).list({ sessionId, includeTerminal: true });
   expect(streams).toHaveLength(1);
