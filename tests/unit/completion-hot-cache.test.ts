@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import {
   completionJobProcessed,
   publishConversationCompletionObservation,
+  scheduleConversationCompletionObservation,
 } from "../../packages/butler-agent/src/agent/cognition/continuity/completion-observation.ts";
 import { writeSemanticHotCacheEntry } from "../../packages/butler-agent/src/agent/cognition/continuity/hot-cache-writer.ts";
 import { memorySyncQueueFile, type SyncRequest } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/queue.ts";
@@ -41,6 +42,38 @@ function fixture(): { root: string; data: string; projectA: string; projectB: st
   }));
   return { root, data, projectA, projectB, saveHot, index };
 }
+
+test("terminal delivery schedules the learning signal outside the response call stack", async () => {
+  const { data } = fixture();
+  let schedulingError: unknown = null;
+  const published = new Promise<void>((resolve, reject) => {
+    scheduleConversationCompletionObservation({
+      butlerData: data,
+      projectId: "project-a",
+      runtimeSessionId: "butler/project-a",
+      conversationSessionId: "conversation-async",
+      conversationTurnId: "turn-async",
+      inboundMessageId: "message-user-async",
+      outboundMessageId: "message-assistant-async",
+      outcomeGeneration: 1,
+      completedAt: "2026-07-15T17:00:00.000Z",
+    }, {
+      onPublished: () => resolve(),
+      onError: (error) => {
+        schedulingError = error;
+        reject(error);
+      },
+    });
+  });
+
+  expect(existsSync(memorySyncQueueFile(data))).toBe(false);
+  await published;
+  expect(schedulingError).toBeNull();
+  expect(readRequests(data)).toMatchObject([{
+    conversation_turn_id: "turn-async",
+    trigger: "turn_completed",
+  }]);
+});
 
 test("canonical completion publishes one idempotent job and consumer writes only that project turn", () => {
   const { data, projectA, projectB, saveHot, index } = fixture();
@@ -230,7 +263,7 @@ test("canonical completion jobs bypass project debounce so adjacent turns are no
   expect(dequeued).toBe(2);
 });
 
-test("completion observation publication failure never downgrades an already completed answer", () => {
+test("completion observation publication failure never downgrades an already completed answer", async () => {
   const { data, projectA } = fixture();
   const store = new AgentConversationStore({ butlerData: data });
   const turn = ConversationAdmissionTurn.begin({
@@ -278,6 +311,11 @@ test("completion observation publication failure never downgrades an already com
     request_message_id: expect.any(String),
     public_assistant_message_id: expect.any(String),
   });
+  for (let attempt = 0; attempt < 100 && !readOperationalMetricEvents({ butlerData: data }).some(
+    (metric) => metric.name === "completion_observation_publish",
+  ); attempt += 1) {
+    await Bun.sleep(5);
+  }
   expect(readOperationalMetricEvents({ butlerData: data })).toContainEqual(
     expect.objectContaining({
       category: "memory",
