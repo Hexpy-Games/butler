@@ -69,6 +69,8 @@ export function typedTurnDecisionInstructions(input: {
     "This is the first productive semantic pass, not a separate classifier. Its accepted output becomes the immutable GoalContract for Planning.",
     "Account for six intent lenses: the current request, related admitted memories, connected knowledge or current reality, accepted user preferences, needed expert perspectives, and the exact required result.",
     "Populate goal_contract_candidate from those six lenses and an evidence-oriented work shape. Do not copy hidden context or raw profile material.",
+    "If one material fact must be observed before the intent can be finalized, set intent_grounding_observation to one typed evidence need. It requests a read-only capability by purpose and scope, never by tool name. Set it to null once the GoalContract is ready.",
+    "Do not use intent_grounding_observation for implementation, mutation, validation of work not yet executed, or facts that Planning/Execution should own.",
     "Use answer only when the response can be delivered now without tools or durable work; include the complete answer_text.",
     "Use tool_answer for a general answer that requires public web evidence; include grounded_answer, set evidence_domain to public_web, and do not select project or WorkStream targets.",
     "Search and page-read outputs are evidence material. Do not force a search-then-read sequence: search material may support a claim, and a successful page read may still be insufficient.",
@@ -216,7 +218,7 @@ function goalContractCandidateSchema(input: {
       "requested_outcome", "problem_frame", "intent_understanding",
       "binding_constraints", "non_goals", "acceptance_intents",
       "ambiguity_decisions", "current_state_needs", "evidence_needs",
-      "downstream_authority_needs", "work_shape",
+      "downstream_authority_needs", "work_shape", "intent_grounding_observation",
     ],
     properties: {
       requested_outcome: { type: "string", minLength: 1, maxLength: 1000 },
@@ -310,6 +312,38 @@ function goalContractCandidateSchema(input: {
           requires_tools: { type: "boolean" },
         },
       },
+      intent_grounding_observation: {
+        anyOf: [
+          {
+            type: "object",
+            additionalProperties: false,
+            required: [
+              "evidence_need_id", "goal_field", "question", "why_material",
+              "source_scope_refs", "expected_resolution",
+            ],
+            properties: {
+              evidence_need_id: { type: "string", minLength: 1, maxLength: 160 },
+              goal_field: {
+                type: "string",
+                enum: [
+                  "referent", "requested_outcome", "scope", "constraint",
+                  "authority", "acceptance",
+                ],
+              },
+              question: { type: "string", minLength: 1, maxLength: 800 },
+              why_material: { type: "string", minLength: 1, maxLength: 800 },
+              source_scope_refs: {
+                type: "array",
+                maxItems: 20,
+                uniqueItems: true,
+                items: { type: "string", minLength: 1, maxLength: 240 },
+              },
+              expected_resolution: { type: "string", minLength: 1, maxLength: 800 },
+            },
+          },
+          { type: "null" },
+        ],
+      },
     },
   };
 }
@@ -379,6 +413,32 @@ function parseGoalContractCandidate(value: unknown): GoalContractCandidateV1 | u
       deliverableKinds: stringArray(workShape.deliverable_kinds),
       requiresCurrentState: workShape.requires_current_state === true,
       requiresTools: workShape.requires_tools === true,
+    },
+    ...parseIntentGroundingObservation(record.intent_grounding_observation),
+  };
+}
+
+function parseIntentGroundingObservation(
+  value: unknown,
+): Pick<GoalContractCandidateV1, "intentGroundingObservation"> {
+  if (value === null || value === undefined) return {};
+  const record = requiredRecord(value, "btcc_intent_grounding_observation_invalid");
+  const goalField = record.goal_field;
+  if (![
+    "referent", "requested_outcome", "scope", "constraint", "authority", "acceptance",
+  ].includes(String(goalField))) {
+    throw new Error("btcc_intent_grounding_observation_goal_field_invalid");
+  }
+  return {
+    intentGroundingObservation: {
+      evidenceNeedId: requiredCandidateString(record.evidence_need_id),
+      goalField: goalField as NonNullable<
+        GoalContractCandidateV1["intentGroundingObservation"]
+      >["goalField"],
+      question: requiredCandidateString(record.question),
+      whyMaterial: requiredCandidateString(record.why_material),
+      sourceScopeRefs: stringArray(record.source_scope_refs),
+      expectedResolution: requiredCandidateString(record.expected_resolution),
     },
   };
 }

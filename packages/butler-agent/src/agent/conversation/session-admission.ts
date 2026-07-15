@@ -24,6 +24,7 @@ import {
   type BtccTurnStateRecord,
   type TurnInterruptionDirective,
 } from "../turn/interruption/turn-interruption-types.ts";
+import { safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 
 export interface BtccInterruptionStateWriter {
   admitTurn(input: {
@@ -169,6 +170,8 @@ export class ConversationAdmissionTurn {
       generation: current.generation,
       origin: "phase_runtime",
     })}`;
+    const safeFailure = safeRuntimeFailure(input.error);
+    const sourceName = input.error instanceof Error ? input.error.name : undefined;
     const directive = routeTurnInterruption(runtimeInterruptionFromUnknown({
       error: input.error,
       interruptionId,
@@ -180,7 +183,13 @@ export class ConversationAdmissionTurn {
       createdAt: input.timestamp,
       sideEffectState: "indeterminate",
       resumePredicateRef: `turn-runtime-revision:${current.turnId}:g${current.generation}`,
-      diagnosticRefs: [],
+      diagnosticRefs: [
+        `runtime-failure:${safeFailure.code}`,
+        ...(sourceName ? [`runtime-error-name:${sourceName.slice(0, 120)}`] : []),
+        ...(safeFailure.cause
+          ? [`runtime-cause-hash:${createHash("sha256").update(safeFailure.cause).digest("hex").slice(0, 24)}`]
+          : []),
+      ],
     }));
     if (directive.kind !== "waiting_runtime") {
       throw new Error("btcc_runtime_interruption_route_invalid");

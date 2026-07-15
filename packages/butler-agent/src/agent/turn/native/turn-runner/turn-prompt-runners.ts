@@ -75,6 +75,10 @@ import { bindRuntimeOwnedWorkspaceArguments } from "./model-facing-tool-argument
 import { turnContractPlanIsExplicit } from "../../turn-contract-plan-closure.ts";
 import { reconcileOpenWorkBlocks } from "../progress/work-block-lifecycle.ts";
 import { TurnContractSurfaceInconsistentError } from "./turn-contract-surface-invariant.ts";
+import {
+  btccCapabilityAllows,
+  type BtccCapabilityPolicy,
+} from "../../btcc/capability-manifest.ts";
 
 const REASONING_EFFORT_VALUES = new Set<ReasoningEffort>([
   "none",
@@ -94,6 +98,17 @@ function selectedReasoningEffort(turnInput: RuntimeTurnInput): ReasoningEffort |
 
 function isReasoningEffort(value: unknown): value is ReasoningEffort {
   return typeof value === "string" && REASONING_EFFORT_VALUES.has(value as ReasoningEffort);
+}
+
+export interface BtccToolPromptOptions {
+  handoffAfterToolBatch?: boolean;
+  capabilityPolicy?: BtccCapabilityPolicy;
+  onToolObservation?: (input: {
+    name: string;
+    args: Record<string, unknown>;
+    result: unknown;
+    ok: boolean;
+  }) => void;
 }
 
 export function createNativeTurnPromptRunners(input: {
@@ -216,7 +231,7 @@ export function createNativeTurnPromptRunners(input: {
       promptText: string,
       maxToolRounds = DIRECT_TOOL_CHAIN_MAX_ROUNDS,
       phase = "tool_loop",
-      options: { handoffAfterToolBatch?: boolean } = {},
+      options: BtccToolPromptOptions = {},
     ): Promise<string> => {
       throwIfRuntimeTurnAborted(input.turnInput.signal);
       const phaseMaxToolRounds = input.phaseBudgetController?.maxToolRoundsForPhase(
@@ -234,17 +249,31 @@ export function createNativeTurnPromptRunners(input: {
         try {
           const ordinaryTools = (
             tools: readonly FunctionToolPromptOptions["tools"][number][],
-          ) => obligationToolSurface.project(
-            tools.filter((tool) => !isWorkBlockTool(tool.name)),
-          );
+          ) => {
+            const capabilityPolicy = options.capabilityPolicy;
+            const phaseProjected = capabilityPolicy
+              ? tools.filter((tool) => btccCapabilityAllows({
+                tool,
+                ...capabilityPolicy,
+              }))
+              : tools;
+            return obligationToolSurface.project(
+              phaseProjected.filter((tool) => !isWorkBlockTool(tool.name)),
+            );
+          };
+          const phaseSurfaceTools = options.capabilityPolicy
+            ? input.toolSurfaceController.allToolDefinitions()
+            : toolSurface.tools;
           const currentOrdinaryTools = () => ordinaryTools(
-            toolSurface.dynamicTools?.() ?? toolSurface.tools,
+            options.capabilityPolicy
+              ? input.toolSurfaceController.allToolDefinitions()
+              : toolSurface.dynamicTools?.() ?? toolSurface.tools,
           );
           const modelTools = (
             tools: readonly FunctionToolPromptOptions["tools"][number][],
           ) => {
-            if (!input.turnContractContext?.current) return [...tools];
             const projected = ordinaryTools(tools);
+            if (!input.turnContractContext?.current) return projected;
             if (projected.length === 0) {
               const contract = input.turnContractContext.current.contract;
               throw new TurnContractSurfaceInconsistentError(
@@ -318,12 +347,24 @@ export function createNativeTurnPromptRunners(input: {
                     });
                     break;
                   }
+                  options.onToolObservation?.({
+                    name: embedded.name,
+                    args: embedded.args,
+                    result: output,
+                    ok: toolResultSucceeded(output),
+                  });
                   results.push({
                     ...embedded,
                     ok: toolResultSucceeded(output),
                     output: modelFacingToolOutput(output, input.session.init.workspacePath),
                   });
                 } catch (error) {
+                  options.onToolObservation?.({
+                    name: embedded.name,
+                    args: embedded.args,
+                    result: error,
+                    ok: false,
+                  });
                   const verification = obligationToolSurface.observe({
                     name: embedded.name,
                     args: embedded.args,
@@ -372,6 +413,12 @@ export function createNativeTurnPromptRunners(input: {
             if (verification && !verification.allowed) {
               return workspaceActionAdmissionResult(verification);
             }
+            options.onToolObservation?.({
+              name: call.name,
+              args: call.args,
+              result,
+              ok: toolResultSucceeded(result),
+            });
             return result;
           };
           const text = await input.deps.toolPromptRunner({
@@ -381,7 +428,7 @@ export function createNativeTurnPromptRunners(input: {
             instructions: appendRoleToolPolicyInstructions(
               input.session.init.role,
               appendButlerToolInstructions(input.session.init.systemPrompt, {
-                availableToolNames: ordinaryTools(toolSurface.tools).map((tool) => tool.name),
+                availableToolNames: ordinaryTools(phaseSurfaceTools).map((tool) => tool.name),
                 fixedSurface: fixedToolSurface ||
                   input.turnContractContext?.current?.contract.action === "inspect",
                 structuredSurface: Boolean(input.turnContractContext?.current),
@@ -390,8 +437,12 @@ export function createNativeTurnPromptRunners(input: {
             cacheScope: "session-turn",
             signal: input.turnInput.signal,
             attachments: input.attachments,
-            tools: modelTools(toolSurface.tools),
-            dynamicTools: () => modelTools(toolSurface.dynamicTools?.() ?? toolSurface.tools),
+            tools: modelTools(phaseSurfaceTools),
+            dynamicTools: () => modelTools(
+              options.capabilityPolicy
+                ? input.toolSurfaceController.allToolDefinitions()
+                : toolSurface.dynamicTools?.() ?? toolSurface.tools,
+            ),
             maxToolRounds: grantedToolRounds,
             handoffAfterToolBatch: options.handoffAfterToolBatch === true,
             butlerData: input.deps.butlerData,

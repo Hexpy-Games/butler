@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { PromptUsageSectionAttribution } from "../../../../integrations/providers/provider.ts";
 import type { RuntimeTurnInput } from "../../../../test-support/harness/contracts.ts";
 import type { PlannedReviewTurnContext } from "../context/planned-review-context.ts";
@@ -40,7 +41,9 @@ import {
   type ContinuityProvenance,
 } from "../../../cognition/continuity/continuity-store.ts";
 import {
+  checkpointBtccConceptionObservation,
   completeBtccConception,
+  readActiveConceptionCheckpoint,
   readBtccActivationSnapshot,
   renderConceptionContextEnvelope,
   type PreparedBtccTurn,
@@ -48,6 +51,9 @@ import {
 import { BtccNativePhaseCoordinator } from "../../btcc/native-phase-coordinator.ts";
 import type { ObligationToolSurfaceState } from "./obligation-tool-surface.ts";
 import { isToolBatchCompletedHandoffText } from "../../tool-batch-handoff.ts";
+import type { BtccToolPromptOptions } from "./turn-prompt-runners.ts";
+import type { GoalContractCandidateV1 } from "../../btcc/phase-types.ts";
+import { runBtccPlanningSynthesis } from "../../btcc/planning-synthesis.ts";
 
 interface TypedTurnEntryContext {
   turnId: string;
@@ -109,7 +115,7 @@ export async function runTypedTurnEntry(input: {
     prompt: string,
     maxToolRounds?: number,
     phase?: string,
-    options?: { handoffAfterToolBatch?: boolean },
+    options?: BtccToolPromptOptions,
   ) => Promise<string>;
   obligationToolSurfaceState?: () => ObligationToolSurfaceState;
   audit?: ToolAuditEntry[];
@@ -195,10 +201,34 @@ export async function runTypedTurnEntry(input: {
   if (!decisionTransport) {
     throw new Error("turn_contract_structured_decision_transport_missing");
   }
-  let currentPrompt = decisionPrompt.prompt;
+  const restoredConceptionCheckpoint = input.preparedBtccTurn
+    ? readActiveConceptionCheckpoint(input.preparedBtccTurn)
+    : null;
+  let decisionBasePrompt = restoredConceptionCheckpoint
+    ? [
+      decisionPrompt.prompt,
+      "## Restored Conception Checkpoint",
+      JSON.stringify(restoredConceptionCheckpoint),
+      "Continue from this exact typed checkpoint. Re-evaluate its open evidence need from admitted observations; do not restart intent analysis from prose.",
+    ].join("\n\n")
+    : decisionPrompt.prompt;
   let active: ActiveTurnContract | null = null;
   let lastError: unknown = null;
   const repairLimit = TURN_DECISION_REPAIR_LIMIT;
+  let observationRoundIndex = restoredConceptionCheckpoint?.roundIndex ?? 0;
+  let observationRefs = [...(restoredConceptionCheckpoint?.observationRefs ?? [])];
+  const completedObservationFields = input.preparedBtccTurn
+    ? input.preparedBtccTurn.store.completedConceptionObservationGoalFields(
+      input.context.turnId,
+      input.preparedBtccTurn.state.phaseGeneration,
+    )
+    : new Set<NonNullable<GoalContractCandidateV1["intentGroundingObservation"]>["goalField"]>();
+  const seenObservationFingerprints = new Set<string>();
+  if (restoredConceptionCheckpoint && !restoredConceptionCheckpoint.pendingToolCallRef) {
+    for (const need of restoredConceptionCheckpoint.openEvidenceNeeds) {
+      seenObservationFingerprints.add(hashObservationNeed(need));
+    }
+  }
   const validateFunctionDecision = (args: Record<string, unknown>) => {
     const canonicalArgs = canonicalFunctionDecisionArgs(args);
     try {
@@ -222,42 +252,128 @@ export async function runTypedTurnEntry(input: {
       } as const;
     }
   };
-  for (let attempt = 0; attempt <= repairLimit; attempt += 1) {
-    const phase = attempt === 0 ? "typed_turn_decision" : "typed_turn_decision_repair";
-    const raw = decisionTransport === "function_tool"
-      ? await input.runPrivateFunctionDecisionPrompt(
-        currentPrompt,
-        phase,
-        decisionPrompt.promptSections,
-        responseFormat,
-        validateFunctionDecision,
-      )
-      : await input.runPrivateTextPrompt(
-        currentPrompt,
-        phase,
-        decisionPrompt.promptSections,
-        responseFormat,
+  while (!active) {
+    let decision: ReturnType<typeof parseStructuredTurnDecision> | null = null;
+    let contract: ReturnType<typeof compileStructuredTurnDecision> | null = null;
+    let currentPrompt = decisionBasePrompt;
+    for (let attempt = 0; attempt <= repairLimit; attempt += 1) {
+      const phase = attempt === 0 ? "typed_turn_decision" : "typed_turn_decision_repair";
+      const raw = decisionTransport === "function_tool"
+        ? await input.runPrivateFunctionDecisionPrompt(
+          currentPrompt,
+          phase,
+          decisionPrompt.promptSections,
+          responseFormat,
+          validateFunctionDecision,
+        )
+        : await input.runPrivateTextPrompt(
+          currentPrompt,
+          phase,
+          decisionPrompt.promptSections,
+          responseFormat,
+        );
+      try {
+        decision = parseStructuredTurnDecision(raw, decisionId);
+        contract = compileStructuredTurnDecision({
+          decision,
+          candidates,
+          workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
+          projectId: input.projectId,
+          continuityCandidates,
+          projectLedgerBound: input.preparedBtccTurn?.envelope.projectPolicy.kind === "project_bound",
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt >= repairLimit) throw error;
+        currentPrompt = structuredDecisionRepairPrompt({
+          prompt: decisionBasePrompt,
+          error,
+          transport: decisionTransport,
+        });
+      }
+    }
+    if (!decision || !contract) throw lastError ?? new Error("turn_contract_decision_unavailable");
+    const observationNeed = decision.goal_contract_candidate?.intentGroundingObservation;
+    if (observationNeed) {
+      if (!input.preparedBtccTurn || !decision.goal_contract_candidate) {
+        throw new Error("btcc_conception_observation_authority_missing");
+      }
+      if (completedObservationFields.has(observationNeed.goalField)) {
+        throw new Error("btcc_conception_goal_field_reentry_blocked");
+      }
+      const observationFingerprint = hashObservationNeed(observationNeed);
+      if (seenObservationFingerprints.has(observationFingerprint)) {
+        throw new Error("btcc_conception_same_observation_reentry_blocked");
+      }
+      seenObservationFingerprints.add(observationFingerprint);
+      observationRoundIndex += 1;
+      const pendingToolCallRef = `conception-observation:${input.context.turnId}:${observationFingerprint}`;
+      checkpointBtccConceptionObservation({
+        prepared: input.preparedBtccTurn,
+        candidate: decision.goal_contract_candidate,
+        roundIndex: observationRoundIndex,
+        observationRefs,
+        pendingToolCallRef,
+      });
+      const auditStart = input.audit?.length ?? 0;
+      const observationPrompt = [
+        input.preparedBtccTurn.phasePrompt.text,
+        "## Typed Intent-Grounding Observation",
+        JSON.stringify({
+          observationNeed,
+          workingGoalDraft: decision.goal_contract_candidate,
+          admittedCapabilityManifestRevision:
+            input.preparedBtccTurn.envelope.capabilityManifestRevision,
+        }),
+        "Use one or more admitted read-only observations only as needed to resolve this evidence need. Explain visible progress, then hand the observed facts back to Conception. Do not plan, implement, mutate, or validate future work.",
+      ].join("\n\n");
+      const toolObservations: ConceptionToolObservation[] = [];
+      const handoff = await input.runKernelToolPrompt(
+        observationPrompt,
+        1,
+        "btcc_conception_observation",
+        {
+          handoffAfterToolBatch: true,
+          capabilityPolicy: {
+            purpose: "intent_grounding",
+            effects: ["observe"],
+            requireDeclared: true,
+          },
+          onToolObservation: (observation) => toolObservations.push(observation),
+        },
       );
-    let decision: ReturnType<typeof parseStructuredTurnDecision>;
-    let contract: ReturnType<typeof compileStructuredTurnDecision>;
-    try {
-      decision = parseStructuredTurnDecision(raw, decisionId);
-      contract = compileStructuredTurnDecision({
-        decision,
-        candidates,
-        workspaceId: input.projectId ?? input.turnInput.handle.sessionId,
-        projectId: input.projectId,
-        continuityCandidates,
-        projectLedgerBound: input.preparedBtccTurn?.envelope.projectPolicy.kind === "project_bound",
+      const observedAudit = (input.audit ?? []).slice(auditStart).filter((entry) => entry.ok);
+      const acceptedToolObservations = toolObservations.filter((entry) => entry.ok);
+      const newObservationRefs = [...new Set([
+        ...conceptionObservationRefs(observedAudit),
+        ...conceptionToolObservationRefs(acceptedToolObservations),
+      ])];
+      if (newObservationRefs.length === 0) {
+        throw new Error("btcc_conception_observation_evidence_missing");
+      }
+      observationRefs = [...new Set([...observationRefs, ...newObservationRefs])];
+      completedObservationFields.add(observationNeed.goalField);
+      checkpointBtccConceptionObservation({
+        prepared: input.preparedBtccTurn,
+        candidate: decision.goal_contract_candidate,
+        roundIndex: observationRoundIndex,
+        observationRefs,
       });
-    } catch (error) {
-      lastError = error;
-      if (attempt >= repairLimit) throw error;
-      currentPrompt = structuredDecisionRepairPrompt({
-        prompt: decisionPrompt.prompt,
-        error,
-        transport: decisionTransport,
-      });
+      decisionBasePrompt = [
+        decisionPrompt.prompt,
+        "## Accepted Intent-Grounding Observations",
+        JSON.stringify({
+          resolvedNeed: observationNeed,
+          observationRefs: newObservationRefs,
+          handoff: handoff.trim(),
+          observations: [
+            ...conceptionObservationSummaries(observedAudit),
+            ...conceptionToolObservationSummaries(acceptedToolObservations),
+          ],
+        }),
+        "Revise the same Conception decision from this evidence. Set intent_grounding_observation to null when the GoalContract is ready; request another observation only for a distinct unresolved material fact.",
+      ].join("\n\n");
       continue;
     }
     active = activateTurnContract({
@@ -276,7 +392,6 @@ export async function runTypedTurnEntry(input: {
       boundWorkspacePath: input.session.init.workspacePath,
       toolSurfaceController: input.context.toolSurfaceController,
     });
-    break;
   }
   if (!active) throw lastError ?? new Error("turn_contract_decision_unavailable");
   input.turnContractContext.current = active;
@@ -287,6 +402,13 @@ export async function runTypedTurnEntry(input: {
       input.preparedBtccTurn,
       input.butlerData,
     );
+  }
+  if (
+    btccCoordinator &&
+    input.obligationToolSurfaceState &&
+    (active.contract.action === "answer" || active.contract.action === "cancel_work")
+  ) {
+    await completeBtccPlanningPhase(input, btccCoordinator, active, false);
   }
   if (active.contract.action === "answer") {
     return { candidateText: active.decision.answer_text ?? "", activeTurnContract: active };
@@ -302,36 +424,7 @@ export async function runTypedTurnEntry(input: {
   let candidateText: string;
   try {
     if (btccCoordinator && input.obligationToolSurfaceState) {
-      const planningCallRefs: string[] = [];
-      let frontier = input.obligationToolSurfaceState();
-      while (frontier.stage === "work_planning" || frontier.stage === "ledger") {
-        const before = JSON.stringify(frontier);
-        const planningPrompt = btccCoordinator.planningPrompt(active, frontier);
-        const callRef = `model-call:planning:${input.context.turnId}:${planningCallRefs.length + 1}`;
-        const handoff = await input.runKernelToolPrompt(
-          planningPrompt,
-          1,
-          "btcc_planning",
-          { handoffAfterToolBatch: true },
-        );
-        planningCallRefs.push(callRef);
-        frontier = input.obligationToolSurfaceState();
-        if (JSON.stringify(frontier) === before) {
-          throw new Error("btcc_planning_same_state_reentry_blocked");
-        }
-        if (!isToolBatchCompletedHandoffText(handoff) &&
-          (frontier.stage === "work_planning" || frontier.stage === "ledger")) {
-          throw new Error("btcc_planning_phase_output_incomplete");
-        }
-      }
-      btccCoordinator.completePlanning({
-        active,
-        frontier,
-        audit: input.audit ?? [],
-        modelCallRefs: planningCallRefs.length > 0
-          ? planningCallRefs
-          : [`runtime-call:planning:${input.context.turnId}`],
-      });
+      await completeBtccPlanningPhase(input, btccCoordinator, active, true);
       candidateText = await input.runKernelToolPrompt(
         btccCoordinator.executionPrompt(active),
         undefined,
@@ -378,7 +471,8 @@ async function resumeTypedTurnEntry(
 ): Promise<{ candidateText: string; activeTurnContract: ActiveTurnContract } | null> {
   const atom = input.context.continuationAtom;
   const btccState = input.preparedBtccTurn?.store.readPhaseState(input.context.turnId) ?? null;
-  if (!atom && (!btccState || btccState.currentPhase === "conception")) return null;
+  if (btccState?.currentPhase === "conception") return null;
+  if (!atom && !btccState) return null;
   const activation = atom?.contractId && atom.turnDecision
     ? { contractId: atom.contractId, decision: atom.turnDecision }
     : input.preparedBtccTurn
@@ -424,35 +518,7 @@ async function resumeBtccOwnedPhase(
   const state = coordinator.state();
   if (state.currentPhase === "planning") {
     if (!input.obligationToolSurfaceState) throw new Error("btcc_planning_frontier_missing");
-    const planningCallRefs: string[] = [];
-    let frontier = input.obligationToolSurfaceState();
-    while (frontier.stage === "work_planning" || frontier.stage === "ledger") {
-      const before = JSON.stringify(frontier);
-      const callRef = `model-call:planning-resume:${input.context.turnId}:${planningCallRefs.length + 1}`;
-      const handoff = await input.runKernelToolPrompt(
-        coordinator.planningPrompt(active, frontier),
-        1,
-        "btcc_planning_resume",
-        { handoffAfterToolBatch: true },
-      );
-      planningCallRefs.push(callRef);
-      frontier = input.obligationToolSurfaceState();
-      if (JSON.stringify(frontier) === before) {
-        throw new Error("btcc_planning_same_state_reentry_blocked");
-      }
-      if (!isToolBatchCompletedHandoffText(handoff) &&
-        (frontier.stage === "work_planning" || frontier.stage === "ledger")) {
-        throw new Error("btcc_planning_phase_output_incomplete");
-      }
-    }
-    coordinator.completePlanning({
-      active,
-      frontier,
-      audit: input.audit ?? [],
-      modelCallRefs: planningCallRefs.length > 0
-        ? planningCallRefs
-        : [`runtime-call:planning-resume:${input.context.turnId}`],
-    });
+    await completeBtccPlanningPhase(input, coordinator, active, true, true);
     return await input.runKernelToolPrompt(
       coordinator.executionPrompt(active),
       undefined,
@@ -472,6 +538,56 @@ async function resumeBtccOwnedPhase(
   const candidateText = typeof payload?.candidateText === "string" ? payload.candidateText : "";
   if (!candidateText) throw new Error("btcc_execution_candidate_missing");
   return candidateText;
+}
+
+async function completeBtccPlanningPhase(
+  input: Parameters<typeof runTypedTurnEntry>[0],
+  coordinator: BtccNativePhaseCoordinator,
+  active: ActiveTurnContract,
+  allowToolPlanning: boolean,
+  resume = false,
+): Promise<void> {
+  if (!input.obligationToolSurfaceState) throw new Error("btcc_planning_frontier_missing");
+  if (coordinator.state().currentPhase !== "planning") return;
+  const planningCallRefs: string[] = [];
+  let frontier = input.obligationToolSurfaceState();
+  while (allowToolPlanning && (frontier.stage === "work_planning" || frontier.stage === "ledger")) {
+    const before = JSON.stringify(frontier);
+    const callRef = `model-call:planning${resume ? "-resume" : ""}:${input.context.turnId}:${planningCallRefs.length + 1}`;
+    const handoff = await input.runKernelToolPrompt(
+      coordinator.planningPrompt(active, frontier),
+      1,
+      resume ? "btcc_planning_resume" : "btcc_planning",
+      { handoffAfterToolBatch: true },
+    );
+    planningCallRefs.push(callRef);
+    frontier = input.obligationToolSurfaceState();
+    if (JSON.stringify(frontier) === before) {
+      throw new Error("btcc_planning_same_state_reentry_blocked");
+    }
+    if (!isToolBatchCompletedHandoffText(handoff) &&
+      (frontier.stage === "work_planning" || frontier.stage === "ledger")) {
+      throw new Error("btcc_planning_phase_output_incomplete");
+    }
+  }
+  if (frontier.stage === "work_planning" || frontier.stage === "ledger") {
+    throw new Error("btcc_planning_frontier_incomplete");
+  }
+  const synthesis = await runBtccPlanningSynthesis({
+    butlerData: input.butlerData,
+    coordinator,
+    active,
+    frontier,
+    audit: input.audit ?? [],
+    runPrivateTextPrompt: input.runPrivateTextPrompt,
+  });
+  coordinator.completePlanning({
+    active,
+    frontier,
+    audit: input.audit ?? [],
+    modelCallRefs: [...planningCallRefs, synthesis.modelCallRef],
+    taskGraph: synthesis.taskGraph,
+  });
 }
 
 function uniqueResumeCandidates<T extends { id: string }>(candidates: T[]): T[] {
@@ -504,4 +620,96 @@ function requiredMetadataString(value: unknown): string {
     throw new Error("continuity_conversation_provenance_missing");
   }
   return value.trim();
+}
+
+function hashObservationNeed(
+  need: NonNullable<GoalContractCandidateV1["intentGroundingObservation"]>,
+): string {
+  return createHash("sha256").update(JSON.stringify(need)).digest("hex").slice(0, 24);
+}
+
+function conceptionObservationRefs(entries: ToolAuditEntry[]): string[] {
+  return [...new Set(entries.flatMap((entry, index) => [
+    ...(entry.evidenceReceipts?.map((receipt) => receipt.id) ?? []),
+    ...(entry.evidenceCapabilityReceipts?.map((receipt) => receipt.receipt_id) ?? []),
+    `conception-observation:${createHash("sha256").update(JSON.stringify({
+      index,
+      name: entry.name,
+      args: entry.args,
+      observationRefs: entry.observation?.refs ?? [],
+    })).digest("hex").slice(0, 24)}`,
+  ]))];
+}
+
+function conceptionObservationSummaries(entries: ToolAuditEntry[]): Array<{
+  observationRef: string;
+  summary: string;
+}> {
+  return entries.map((entry, index) => {
+    const content = entry.observation?.modelVisibleContent ??
+      entry.observation?.summary ??
+      "Observation completed; use the referenced evidence and handoff.";
+    return {
+      observationRef: conceptionObservationRefs([entry])[0] ?? `observation:${index}`,
+      summary: content.slice(0, 6_000),
+    };
+  });
+}
+
+interface ConceptionToolObservation {
+  name: string;
+  args: Record<string, unknown>;
+  result: unknown;
+  ok: boolean;
+}
+
+function conceptionToolObservationRefs(entries: ConceptionToolObservation[]): string[] {
+  return [...new Set(entries.flatMap((entry, index) => [
+    ...resultReceiptRefs(entry.result),
+    `conception-observation:${createHash("sha256").update(JSON.stringify({
+      index,
+      name: entry.name,
+      args: entry.args,
+      result: boundedJson(entry.result, 50_000),
+    })).digest("hex").slice(0, 24)}`,
+  ]))];
+}
+
+function conceptionToolObservationSummaries(entries: ConceptionToolObservation[]): Array<{
+  observationRef: string;
+  summary: string;
+}> {
+  return entries.map((entry, index) => ({
+    observationRef: conceptionToolObservationRefs([entry])[0] ?? `observation:${index}`,
+    summary: boundedJson(entry.result, 6_000),
+  }));
+}
+
+function resultReceiptRefs(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const record = value as Record<string, unknown>;
+  const refs: string[] = [];
+  for (const item of Array.isArray(record.evidence_capability_receipts)
+    ? record.evidence_capability_receipts
+    : []) {
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const ref = (item as Record<string, unknown>).receipt_id;
+      if (typeof ref === "string" && ref.trim()) refs.push(ref.trim());
+    }
+  }
+  for (const item of Array.isArray(record.evidence_receipts) ? record.evidence_receipts : []) {
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const ref = (item as Record<string, unknown>).id;
+      if (typeof ref === "string" && ref.trim()) refs.push(ref.trim());
+    }
+  }
+  return refs;
+}
+
+function boundedJson(value: unknown, maxLength: number): string {
+  try {
+    return JSON.stringify(value).slice(0, maxLength);
+  } catch {
+    return "Observation completed; inspect its evidence reference.";
+  }
 }

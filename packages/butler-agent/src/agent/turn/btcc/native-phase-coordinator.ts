@@ -2,8 +2,6 @@ import { createHash } from "node:crypto";
 import type { ToolAuditEntry } from "../native/output/tool-types.ts";
 import type { ActiveTurnContract } from "../native/turn-runner/turn-contract-runtime.ts";
 import type { ObligationToolSurfaceState } from "../native/turn-runner/obligation-tool-surface.ts";
-import { TodoListStore } from "../../work/todo-list.ts";
-import { WorkStreamStore } from "../../work/work-stream.ts";
 import { hashBtccPayload } from "./phase-store.ts";
 import {
   BTCC_PHASE_ARTIFACT_SCHEMA,
@@ -43,7 +41,10 @@ export class BtccNativePhaseCoordinator {
   }
 
   acceptedReceiptRef(phase: BtccPhase): string | null {
-    for (const receiptRef of this.state().acceptedReceiptRefs) {
+    const state = this.state();
+    const invalidated = new Set(state.invalidatedReceiptRefs);
+    for (const receiptRef of [...state.acceptedReceiptRefs].reverse()) {
+      if (invalidated.has(receiptRef)) continue;
       if (this.prepared.store.readPhaseReceipt(receiptRef)?.phase === phase) return receiptRef;
     }
     return null;
@@ -123,12 +124,13 @@ export class BtccNativePhaseCoordinator {
     frontier: ObligationToolSurfaceState;
     audit: ToolAuditEntry[];
     modelCallRefs: string[];
+    taskGraph: BtccTaskGraphPayload;
   }): BtccPhaseStateV1 {
     const state = this.requirePhase("planning");
     if (input.frontier.stage === "work_planning" || input.frontier.stage === "ledger") {
       throw new Error("btcc_planning_frontier_incomplete");
     }
-    const taskGraph = taskGraphPayload(this.butlerData, input.active, this.goalContract());
+    const taskGraph = input.taskGraph;
     assertTaskGraph(taskGraph);
     const tracking = state.trackingPolicyCandidate ?? trackingPolicyFor(input.active);
     const authoringContracts = tracking.kind === "project_ledger"
@@ -238,15 +240,23 @@ export class BtccNativePhaseCoordinator {
     });
   }
 
-  returnReviewToExecution(input: {
+  returnReview(input: {
+    ownerPhase: "planning" | "execution";
     reasonCode: string;
     requiredChange: string;
-    criterionId?: string;
+    criterionId: string;
+    criterionIds: string[];
     evidenceRefs: string[];
     gapFingerprint: string;
     modelCallRef: string;
   }): BtccPhaseStateV1 {
     const state = this.requirePhase("review");
+    this.assertNovelReturnTicket(
+      state,
+      "review",
+      input.gapFingerprint,
+      input.criterionIds,
+    );
     const ticket: ReturnTicketV1 = {
       schemaVersion: BTCC_RETURN_TICKET_SCHEMA,
       ticketId: stableRef("return-ticket:review", {
@@ -256,9 +266,10 @@ export class BtccNativePhaseCoordinator {
       }),
       turnId: state.turnId,
       sourcePhase: "review",
-      ownerPhase: "execution",
+      ownerPhase: input.ownerPhase,
       ...(state.activeTaskRef ? { taskRef: state.activeTaskRef } : {}),
-      ...(input.criterionId ? { criterionId: input.criterionId } : {}),
+      criterionId: input.criterionId,
+      criterionIds: input.criterionIds,
       reasonCode: input.reasonCode,
       authoritativeInputGeneration: state.phaseGeneration,
       artifactRevisionRefs: [
@@ -296,7 +307,7 @@ export class BtccNativePhaseCoordinator {
         (ref) => !state.invalidatedReceiptRefs.includes(ref),
       ),
       status: "passed",
-      nextState: "execution",
+      nextState: input.ownerPhase,
       createdAt: new Date().toISOString(),
     };
     return this.prepared.store.commitPhase({
@@ -305,7 +316,9 @@ export class BtccNativePhaseCoordinator {
       artifacts: [artifact],
       returnTicket: {
         ticket,
-        invalidatesAuthority: "task_review",
+        invalidatesAuthority: input.ownerPhase === "planning"
+          ? "plan_or_task_graph"
+          : "task_artifact_or_evidence",
       },
     });
   }
@@ -335,6 +348,88 @@ export class BtccNativePhaseCoordinator {
       refs: {
         activeConsolidationCheckpointRef: checkpoint.artifactRef,
         activeFinalDossierRef: dossier.artifactRef,
+      },
+    });
+  }
+
+  returnConsolidation(input: {
+    ownerPhase: "planning" | "execution";
+    reasonCode: string;
+    requiredChange: string;
+    criterionIds: string[];
+    evidenceRefs: string[];
+    gapFingerprint: string;
+    modelCallRef: string;
+  }): BtccPhaseStateV1 {
+    const state = this.requirePhase("consolidation");
+    this.assertNovelReturnTicket(
+      state,
+      "consolidation",
+      input.gapFingerprint,
+      input.criterionIds,
+    );
+    const ticket: ReturnTicketV1 = {
+      schemaVersion: BTCC_RETURN_TICKET_SCHEMA,
+      ticketId: stableRef("return-ticket:consolidation", {
+        turnId: state.turnId,
+        phaseGeneration: state.phaseGeneration,
+        gapFingerprint: input.gapFingerprint,
+      }),
+      turnId: state.turnId,
+      sourcePhase: "consolidation",
+      ownerPhase: input.ownerPhase,
+      ...(state.activeTaskRef ? { taskRef: state.activeTaskRef } : {}),
+      criterionId: input.criterionIds[0],
+      criterionIds: input.criterionIds,
+      reasonCode: input.reasonCode,
+      authoritativeInputGeneration: state.phaseGeneration,
+      artifactRevisionRefs: [
+        state.activeConsolidationTargetRef,
+        state.planRevisionRef,
+      ].filter((ref): ref is string => Boolean(ref)),
+      evidenceRefs: unique(input.evidenceRefs),
+      requiredChange: input.requiredChange,
+      gapFingerprint: input.gapFingerprint,
+      createdAt: new Date().toISOString(),
+    };
+    const artifact = this.artifact(
+      state,
+      "return_ticket",
+      ticket,
+      [input.modelCallRef, ...input.evidenceRefs],
+    );
+    artifact.artifactRef = ticket.ticketId;
+    const prompt = this.prompt("task", state.activeTaskRef);
+    const receipt: PhaseReceiptV1 = {
+      schemaVersion: BTCC_PHASE_RECEIPT_SCHEMA,
+      receiptId: stableRef("receipt:consolidation:return", ticket),
+      turnId: state.turnId,
+      attemptId: state.attemptId,
+      phase: "consolidation",
+      phaseGeneration: state.phaseGeneration,
+      ...(state.activeTaskRef ? { taskRef: state.activeTaskRef } : {}),
+      inputFingerprint: state.lastStableInputFingerprint,
+      phasePromptId: prompt.promptId,
+      phasePromptVersion: prompt.version,
+      phasePromptHash: prompt.promptHash,
+      outputArtifactRefs: [artifact.artifactRef],
+      evidenceRefs: unique([input.modelCallRef, ...input.evidenceRefs]),
+      dependencyReceiptRefs: state.acceptedReceiptRefs.filter(
+        (ref) => !state.invalidatedReceiptRefs.includes(ref),
+      ),
+      status: "passed",
+      nextState: input.ownerPhase,
+      createdAt: new Date().toISOString(),
+    };
+    return this.prepared.store.commitPhase({
+      expectedRowVersion: state.rowVersion,
+      receipt,
+      artifacts: [artifact],
+      returnTicket: {
+        ticket,
+        invalidatesAuthority: input.ownerPhase === "planning"
+          ? "plan_or_task_graph"
+          : "task_artifact_or_evidence",
       },
     });
   }
@@ -408,10 +503,17 @@ export class BtccNativePhaseCoordinator {
   returnReporting(input: {
     reasonCode: string;
     requiredChange: string;
+    criterionIds: string[];
     gapFingerprint: string;
     modelCallRef: string;
   }): BtccPhaseStateV1 {
     const state = this.requirePhase("reporting");
+    this.assertNovelReturnTicket(
+      state,
+      "reporting",
+      input.gapFingerprint,
+      input.criterionIds,
+    );
     const ticket: ReturnTicketV1 = {
       schemaVersion: BTCC_RETURN_TICKET_SCHEMA,
       ticketId: stableRef("return-ticket:reporting", {
@@ -422,6 +524,8 @@ export class BtccNativePhaseCoordinator {
       turnId: state.turnId,
       sourcePhase: "reporting",
       ownerPhase: "reporting",
+      criterionId: input.criterionIds[0],
+      criterionIds: input.criterionIds,
       reasonCode: input.reasonCode,
       authoritativeInputGeneration: state.phaseGeneration,
       artifactRevisionRefs: [state.activeFinalDossierRef]
@@ -468,6 +572,34 @@ export class BtccNativePhaseCoordinator {
       throw new Error(`btcc_phase_owner_mismatch:${phase}:${state.currentPhase}:${state.lifecycleStatus}`);
     }
     return state;
+  }
+
+  private assertNovelReturnTicket(
+    state: BtccPhaseStateV1,
+    sourcePhase: "review" | "consolidation" | "reporting",
+    gapFingerprint: string,
+    criterionIds: string[],
+  ): void {
+    if (criterionIds.length === 0 || new Set(criterionIds).size !== criterionIds.length) {
+      throw new Error(`btcc_${sourcePhase}_criterion_frontier_invalid`);
+    }
+    if (this.prepared.store.hasReturnTicketGap({
+      turnId: state.turnId,
+      sourcePhase,
+      gapFingerprint,
+    })) {
+      throw new Error(`btcc_${sourcePhase}_same_gap_reentry_blocked`);
+    }
+    const priorCriteria = this.prepared.store.latestReturnedCriterionIds({
+      turnId: state.turnId,
+      sourcePhase,
+    });
+    if (priorCriteria.size > 0 && (
+      criterionIds.length >= priorCriteria.size ||
+      criterionIds.some((criterionId) => !priorCriteria.has(criterionId))
+    )) {
+      throw new Error(`btcc_${sourcePhase}_frontier_not_monotonic`);
+    }
   }
 
   private artifact(
@@ -544,7 +676,7 @@ export class BtccNativePhaseCoordinator {
   }
 }
 
-interface BtccTaskGraphPayload {
+export interface BtccTaskGraphPayload {
   schemaVersion: "butler.btcc-task-graph.v1";
   workstreamRef: string | null;
   todoListRef: string | null;
@@ -573,58 +705,7 @@ interface BtccTaskGraphPayload {
   };
 }
 
-function taskGraphPayload(
-  butlerData: string,
-  active: ActiveTurnContract,
-  goal: GoalContractV1,
-): BtccTaskGraphPayload {
-  const workstreamRef = active.contract.target_workstream_id ?? null;
-  const stream = workstreamRef
-    ? new WorkStreamStore(butlerData, { autoRecover: false }).read(workstreamRef)
-    : null;
-  const todo = stream?.todo_list_id
-    ? new TodoListStore(butlerData, { autoRecover: false }).read(stream.todo_list_id)
-    : null;
-  const taskRef = `task:${active.contract.contract_id}:integrated-execution`;
-  const outputObligationRefs = active.contract.required_evidence.map((evidence) =>
-    evidence.obligation_id);
-  const validationEvidenceRefs = active.contract.required_evidence
-    .filter((evidence) => evidence.evidence_class === "passing_validation")
-    .map((evidence) => evidence.obligation_id);
-  const tasks: BtccTaskGraphPayload["tasks"] = [{
-    taskRef,
-    objective: goal.requestedOutcome,
-    status: goal.workShape.workDisposition === "direct_answer" ? "completed" : "pending",
-    phase: "execution",
-    dependencyRefs: [],
-    authorityRefs: [...goal.semanticAuthorityRefs],
-    requiredEffects: [...goal.workShape.requiredEffects],
-    outputObligationRefs,
-    validationEvidenceRefs,
-    reviewCriterionIds: goal.acceptanceIntents.map((criterion) => criterion.key),
-    repairOwner: "execution",
-  }];
-  return {
-    schemaVersion: "butler.btcc-task-graph.v1",
-    workstreamRef,
-    todoListRef: stream?.todo_list_id ?? null,
-    sourcePlanningItemRefs: todo?.items.map((item) => item.id) ?? [],
-    tasks,
-    acceptanceObligationRefs: active.contract.required_evidence.map((item) => item.obligation_id),
-    coverageMatrix: goal.acceptanceIntents.map((criterion) => ({
-      criterionId: criterion.key,
-      taskRefs: [taskRef],
-    })),
-    integratedValidation: {
-      required: active.contract.deliverables.includes("validation"),
-      evidenceObligationRefs: active.contract.required_evidence
-        .filter((evidence) => evidence.evidence_class === "passing_validation")
-        .map((evidence) => evidence.obligation_id),
-    },
-  };
-}
-
-function assertTaskGraph(graph: BtccTaskGraphPayload): void {
+export function assertTaskGraph(graph: BtccTaskGraphPayload): void {
   if (graph.tasks.length === 0) throw new Error("btcc_task_graph_empty");
   const taskIds = new Set(graph.tasks.map((task) => task.taskRef));
   if (taskIds.size !== graph.tasks.length) throw new Error("btcc_task_graph_duplicate_task");
@@ -645,10 +726,27 @@ function assertTaskGraph(graph: BtccTaskGraphPayload): void {
   if (graph.coverageMatrix.some((entry) => entry.taskRefs.length === 0)) {
     throw new Error("btcc_task_graph_coverage_invalid");
   }
-  if (graph.coverageMatrix.some((entry) => entry.taskRefs.length !== 1) ||
-    new Set(graph.coverageMatrix.map((entry) => entry.criterionId)).size !==
+  if (new Set(graph.coverageMatrix.map((entry) => entry.criterionId)).size !==
       graph.coverageMatrix.length) {
     throw new Error("btcc_task_graph_coverage_not_unique");
+  }
+  const coverageByCriterion = new Map(
+    graph.coverageMatrix.map((entry) => [entry.criterionId, new Set(entry.taskRefs)]),
+  );
+  for (const task of graph.tasks) {
+    for (const criterionId of task.reviewCriterionIds) {
+      if (!coverageByCriterion.get(criterionId)?.has(task.taskRef)) {
+        throw new Error("btcc_task_graph_review_coverage_mismatch");
+      }
+    }
+  }
+  for (const entry of graph.coverageMatrix) {
+    for (const taskRef of entry.taskRefs) {
+      const task = graph.tasks.find((candidate) => candidate.taskRef === taskRef);
+      if (!task?.reviewCriterionIds.includes(entry.criterionId)) {
+        throw new Error("btcc_task_graph_review_coverage_mismatch");
+      }
+    }
   }
   const assignedObligations = graph.tasks.flatMap((task) => task.outputObligationRefs);
   if (assignedObligations.length !== graph.acceptanceObligationRefs.length ||

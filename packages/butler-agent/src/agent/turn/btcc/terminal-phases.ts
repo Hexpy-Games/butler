@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { PromptUsageSectionAttribution } from "../../../integrations/providers/provider.ts";
 import type { ToolAuditEntry } from "../native/output/tool-types.ts";
 import type { BtccNativePhaseCoordinator } from "./native-phase-coordinator.ts";
+import { successfulLedgerCloseoutKinds } from "./capability-manifest.ts";
 
 type PrivateTextPrompt = (
   prompt: string,
@@ -29,13 +30,30 @@ export interface BtccFinalDossierV1 {
   evidenceRefs: string[];
 }
 
+export interface BtccConsolidationGap {
+  outcome: "return_ticket";
+  ownerPhase: "planning" | "execution";
+  summary: string;
+  criterionIds: string[];
+  reasonCode: string;
+  requiredChange: string;
+  gapFingerprint: string;
+  evidenceRefs: string[];
+}
+
 export async function runBtccConsolidation(input: {
   coordinator: BtccNativePhaseCoordinator;
   candidateText: string;
   audit: ToolAuditEntry[];
   runPrivateTextPrompt: PrivateTextPrompt;
 }): Promise<{
+  outcome: "complete";
   dossier: BtccFinalDossierV1;
+  modelCallRef: string;
+  evidenceRefs: string[];
+} | {
+  outcome: "return_ticket";
+  gap: BtccConsolidationGap;
   modelCallRef: string;
   evidenceRefs: string[];
 }> {
@@ -52,6 +70,32 @@ export async function runBtccConsolidation(input: {
     ...(state.planRevisionRef ? [state.planRevisionRef] : []),
     ...auditEvidenceRefs(input.audit),
   ]);
+  if (state.trackingPolicy?.kind === "project_ledger" &&
+    !hasAcceptedLedgerCloseout(input.audit)) {
+    const reasonCode = "project-ledger-closeout-evidence-missing";
+    const requiredChange = "Close the bound Project Ledger attempt and task, validate the Ledger, and attach its closeout observation.";
+    return {
+      outcome: "return_ticket",
+      gap: {
+        outcome: "return_ticket",
+        ownerPhase: "execution",
+        summary: "Project-bound work has no accepted Ledger closeout evidence.",
+        criterionIds: input.coordinator.goalContract().acceptanceIntents
+          .map((criterion) => criterion.key),
+        reasonCode,
+        requiredChange,
+        evidenceRefs,
+        gapFingerprint: createHash("sha256").update(JSON.stringify({
+          trackingPolicy: state.trackingPolicy,
+          reasonCode,
+          requiredChange,
+          evidenceRefs,
+        })).digest("hex"),
+      },
+      modelCallRef: `runtime-call:consolidation-tracking:${state.turnId}:${state.phaseGeneration}`,
+      evidenceRefs,
+    };
+  }
   const goalContract = input.coordinator.goalContract();
   const expectedCriterionIds = goalContract.acceptanceIntents.map((criterion) => criterion.key);
   const modelCallRef = `model-call:consolidation:${state.turnId}:${state.phaseGeneration}`;
@@ -66,7 +110,7 @@ export async function runBtccConsolidation(input: {
       candidateText: input.candidateText,
       evidenceRefs,
     }),
-    "Return one complete FinalDossier. Do not rewrite a missing criterion as a limitation; an actual gap must be returned to its owning phase before this call.",
+    "Return one complete FinalDossier only when every criterion is supported. Otherwise return one typed ReturnTicket: Planning owns a defective graph or acceptance mapping; Execution owns a missing result or evidence. Never rewrite a missing criterion as a limitation.",
   ].join("\n\n");
   const raw = await input.runPrivateTextPrompt(
     prompt,
@@ -74,11 +118,10 @@ export async function runBtccConsolidation(input: {
     sections("btcc_consolidation", prompt),
     consolidationResponseFormat(expectedCriterionIds),
   );
-  return {
-    dossier: parseDossier(raw, new Set(evidenceRefs), expectedCriterionIds),
-    modelCallRef,
-    evidenceRefs,
-  };
+  const result = parseDossier(raw, new Set(evidenceRefs), expectedCriterionIds);
+  return result.outcome === "complete"
+    ? { outcome: "complete", dossier: result.dossier, modelCallRef, evidenceRefs }
+    : { outcome: "return_ticket", gap: result.gap, modelCallRef, evidenceRefs };
 }
 
 export async function runBtccReporter(input: {
@@ -209,11 +252,16 @@ function consolidationResponseFormat(expectedCriterionIds: readonly string[]) {
       additionalProperties: false,
       required: [
         "schema_version", "outcome", "goal_coverage", "delivered_items",
-        "limitations", "tracking_closeout", "evidence_refs",
+        "limitations", "tracking_closeout", "evidence_refs", "summary",
+        "owner_phase", "reason_code", "required_change",
       ],
       properties: {
         schema_version: { type: "string", const: "butler.btcc-final-dossier.v1" },
-        outcome: { type: "string", const: "complete" },
+        outcome: { type: "string", enum: ["complete", "return_ticket"] },
+        summary: { type: "string", minLength: 1, maxLength: 1200 },
+        owner_phase: { enum: [null, "planning", "execution"] },
+        reason_code: { type: ["string", "null"], maxLength: 160 },
+        required_change: { type: ["string", "null"], maxLength: 1200 },
         goal_coverage: {
           type: "array",
           minItems: expectedCriterionIds.length,
@@ -224,7 +272,7 @@ function consolidationResponseFormat(expectedCriterionIds: readonly string[]) {
             required: ["criterion_id", "status", "evidence_refs"],
             properties: {
               criterion_id: { type: "string", enum: [...expectedCriterionIds] },
-              status: { type: "string", const: "passed" },
+              status: { type: "string", enum: ["passed", "failed"] },
               evidence_refs: {
                 type: "array",
                 minItems: 1,
@@ -349,15 +397,19 @@ function parseDossier(
   raw: string,
   admittedEvidenceRefs: Set<string>,
   expectedCriterionIds: readonly string[],
-): BtccFinalDossierV1 {
+): { outcome: "complete"; dossier: BtccFinalDossierV1 } | {
+  outcome: "return_ticket";
+  gap: BtccConsolidationGap;
+} {
   const record = parseRecord(raw, "btcc_consolidation_invalid_json");
-  if (record.schema_version !== "butler.btcc-final-dossier.v1" || record.outcome !== "complete") {
+  if (record.schema_version !== "butler.btcc-final-dossier.v1" ||
+    (record.outcome !== "complete" && record.outcome !== "return_ticket")) {
     throw new Error("btcc_consolidation_outcome_invalid");
   }
   const evidenceRefs = strings(record.evidence_refs);
   const goalCoverage = records(record.goal_coverage).map((item) => ({
     criterionId: requiredString(item.criterion_id),
-    status: "passed" as const,
+    status: consolidationCriterionStatus(item.status),
     evidenceRefs: strings(item.evidence_refs),
   }));
   if (evidenceRefs.length === 0 || goalCoverage.some((item) => item.evidenceRefs.length === 0)) {
@@ -372,15 +424,58 @@ function parseDossier(
   if (referenced.some((ref) => !admittedEvidenceRefs.has(ref))) {
     throw new Error("btcc_consolidation_evidence_ref_not_admitted");
   }
+  const failed = goalCoverage.filter((item) => item.status === "failed");
+  if (record.outcome === "complete") {
+    if (failed.length > 0 || nullableString(record.owner_phase) ||
+      nullableString(record.reason_code) || nullableString(record.required_change)) {
+      throw new Error("btcc_consolidation_complete_frontier_invalid");
+    }
+    return {
+      outcome: "complete",
+      dossier: {
+        schemaVersion: "butler.btcc-final-dossier.v1",
+        outcome: "complete",
+        goalCoverage: goalCoverage.map((item) => ({ ...item, status: "passed" as const })),
+        deliveredItems: strings(record.delivered_items),
+        limitations: strings(record.limitations),
+        trackingCloseout: requiredString(record.tracking_closeout),
+        evidenceRefs,
+      },
+    };
+  }
+  const ownerPhase = requiredString(record.owner_phase);
+  if ((ownerPhase !== "planning" && ownerPhase !== "execution") || failed.length === 0) {
+    throw new Error("btcc_consolidation_return_frontier_invalid");
+  }
+  const summary = requiredString(record.summary);
+  const reasonCode = requiredString(record.reason_code);
+  const requiredChange = requiredString(record.required_change);
   return {
-    schemaVersion: "butler.btcc-final-dossier.v1",
-    outcome: "complete",
-    goalCoverage,
-    deliveredItems: strings(record.delivered_items),
-    limitations: strings(record.limitations),
-    trackingCloseout: requiredString(record.tracking_closeout),
-    evidenceRefs,
+    outcome: "return_ticket",
+    gap: {
+      outcome: "return_ticket",
+      ownerPhase,
+      summary,
+      criterionIds: failed.map((item) => item.criterionId),
+      reasonCode,
+      requiredChange,
+      evidenceRefs,
+      gapFingerprint: createHash("sha256").update(JSON.stringify({
+        ownerPhase,
+        criterionIds: failed.map((item) => item.criterionId),
+        reasonCode,
+        requiredChange,
+        evidenceRefs,
+      })).digest("hex"),
+    },
   };
+}
+
+function consolidationCriterionStatus(value: unknown): "passed" | "failed" {
+  if (value !== "passed" && value !== "failed") {
+    throw new Error("btcc_consolidation_criterion_status_invalid");
+  }
+  return value;
 }
 
 function parseReportGuard(raw: string, modelCallRef: string): BtccReportGuardPass | BtccReportGuardGap {
@@ -439,6 +534,11 @@ function auditEvidenceRefs(audit: ToolAuditEntry[]): string[] {
   return audit.map((entry, index) => `terminal-evidence:${createHash("sha256")
     .update(JSON.stringify({ index, name: entry.name, args: entry.args, ok: entry.ok }))
     .digest("hex").slice(0, 24)}`);
+}
+
+function hasAcceptedLedgerCloseout(audit: ToolAuditEntry[]): boolean {
+  const closedKinds = successfulLedgerCloseoutKinds(audit);
+  return closedKinds.has("attempt") && closedKinds.has("task");
 }
 
 function unique(values: readonly string[]): string[] {

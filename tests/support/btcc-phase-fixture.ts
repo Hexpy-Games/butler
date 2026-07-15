@@ -39,17 +39,57 @@ export function btccFixtureResponse(input: {
   if (name === "butler_turn_contract_decision") {
     return JSON.stringify(conceptionDecision(input.responseFormat?.schema, options));
   }
+  if (name === "butler_btcc_task_graph") {
+    const capsule = capsuleObject(input.prompt, "## Planning Synthesis Capsule");
+    const taskRefs = stringRecordArray(capsule.requiredTaskRefs);
+    const criterionIds = stringRecordArray(capsule.expectedCriterionIds);
+    const obligationRefs = stringRecordArray(capsule.expectedObligationRefs);
+    const validationRefs = stringRecordArray(capsule.expectedValidationRefs);
+    const goal = objectRecord(capsule.goalContract);
+    const workShape = objectRecord(goal.workShape);
+    const authorityRefs = stringRecordArray(goal.semanticAuthorityRefs);
+    const requiredEffects = stringRecordArray(workShape.requiredEffects);
+    const completed = workShape.workDisposition === "direct_answer";
+    return JSON.stringify({
+      tasks: taskRefs.map((task_ref, index) => ({
+        task_ref,
+        objective: `Produce accepted task result ${index + 1}.`,
+        status: completed ? "completed" : index === 0 ? "in_progress" : "pending",
+        phase: "execution",
+        dependency_refs: index === 0 ? [] : [taskRefs[index - 1]],
+        authority_refs: authorityRefs,
+        required_effects: requiredEffects,
+        output_obligation_refs: index === taskRefs.length - 1 ? obligationRefs : [],
+        validation_evidence_refs: index === taskRefs.length - 1 ? validationRefs : [],
+        review_criterion_ids: criterionIds,
+        repair_owner: "execution",
+      })),
+      coverage_matrix: criterionIds.map((criterion_id) => ({
+        criterion_id,
+        task_refs: taskRefs,
+      })),
+      integrated_validation: {
+        required: validationRefs.length > 0,
+        evidence_obligation_refs: validationRefs,
+      },
+    });
+  }
   if (name === "butler_btcc_independent_review") {
     const evidenceRef = capsuleRef(input.prompt, "executionCandidateRef");
+    const criterionIds = schemaEnumValues(
+      input.responseFormat?.schema,
+      ["properties", "criterion_verdicts", "items", "properties", "criterion_id", "enum"],
+    );
     return JSON.stringify({
       outcome: "passed",
       summary: "The execution candidate satisfies the requested result.",
-      criterion_verdicts: [{
-        criterion_id: DEFAULT_CRITERION_ID,
+      criterion_verdicts: criterionIds.map((criterion_id) => ({
+        criterion_id,
         status: "passed",
         evidence_refs: [evidenceRef],
-      }],
+      })),
       criterion_id: null,
+      owner_phase: null,
       reason_code: null,
       required_change: null,
       evidence_refs: [evidenceRef],
@@ -57,14 +97,22 @@ export function btccFixtureResponse(input: {
   }
   if (name === "butler_btcc_final_dossier") {
     const evidenceRef = capsuleRef(input.prompt, "reviewCandidateRef");
+    const criterionIds = schemaEnumValues(
+      input.responseFormat?.schema,
+      ["properties", "goal_coverage", "items", "properties", "criterion_id", "enum"],
+    );
     return JSON.stringify({
       schema_version: "butler.btcc-final-dossier.v1",
       outcome: "complete",
-      goal_coverage: [{
-        criterion_id: DEFAULT_CRITERION_ID,
+      summary: "All goal criteria are supported by accepted review evidence.",
+      owner_phase: null,
+      reason_code: null,
+      required_change: null,
+      goal_coverage: criterionIds.map((criterion_id) => ({
+        criterion_id,
         status: "passed",
         evidence_refs: [evidenceRef],
-      }],
+      })),
       delivered_items: ["Requested result"],
       limitations: [],
       tracking_closeout: "Turn-local work is complete.",
@@ -160,6 +208,7 @@ function conceptionDecision(
         requires_current_state: requiresCurrentState,
         requires_tools: requiresTools,
       },
+      intent_grounding_observation: null,
     },
   };
 }
@@ -192,4 +241,42 @@ function capsuleStringArray(prompt: string, key: string): string[] {
     throw new Error(`invalid_capsule_array:${key}`);
   }
   return value;
+}
+
+function capsuleObject(prompt: string, heading: string): Record<string, unknown> {
+  const start = prompt.indexOf(heading);
+  if (start < 0) throw new Error(`missing_capsule:${heading}`);
+  const jsonStart = prompt.indexOf("{", start + heading.length);
+  const lineEnd = prompt.indexOf("\n", jsonStart);
+  if (jsonStart < 0) throw new Error(`invalid_capsule:${heading}`);
+  const value: unknown = JSON.parse(prompt.slice(jsonStart, lineEnd < 0 ? undefined : lineEnd));
+  return objectRecord(value);
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid_fixture_object");
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringRecordArray(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error("invalid_fixture_string_array");
+  }
+  return value as string[];
+}
+
+function schemaEnumValues(
+  schema: Record<string, unknown> | undefined,
+  path: string[],
+): string[] {
+  let current: unknown = schema;
+  for (const key of path) {
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      throw new Error("invalid_fixture_schema_path");
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return stringRecordArray(current);
 }

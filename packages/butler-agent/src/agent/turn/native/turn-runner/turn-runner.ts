@@ -41,7 +41,10 @@ import {
   repairFinalContract,
 } from "./public-output-gates.ts";
 import { prepareNativeTurnContext } from "./turn-context-builder.ts";
-import { createNativeTurnPromptRunners } from "./turn-prompt-runners.ts";
+import {
+  createNativeTurnPromptRunners,
+  type BtccToolPromptOptions,
+} from "./turn-prompt-runners.ts";
 import { runtimePreparationProgressSummary } from "./runtime-preparation-progress.ts";
 import { readCurrentFinalCandidate } from "./final-candidate-review-store.ts";
 import { emitRuntimePreparationProgressBestEffort } from "../progress/turn-delivery-events.ts";
@@ -96,6 +99,7 @@ import {
   runBtccReportGuard,
   type BtccReportGuardGap,
 } from "../../btcc/terminal-phases.ts";
+import { runBtccPlanningSynthesis } from "../../btcc/planning-synthesis.ts";
 
 export async function runNativeToolTurn({
   input,
@@ -228,7 +232,7 @@ export async function runNativeToolTurn({
       promptText: string,
       maxToolRounds?: number,
       phase?: string,
-      options?: { handoffAfterToolBatch?: boolean },
+      options?: BtccToolPromptOptions,
     ): Promise<string> => {
       toolLoopUsed = true;
       try {
@@ -368,12 +372,7 @@ export async function runNativeToolTurn({
       if (preparedBtccTurn) {
         const coordinator = new BtccNativePhaseCoordinator(preparedBtccTurn, deps.butlerData);
         if (coordinator.state().currentPhase === "planning") {
-          coordinator.completePlanning({
-            active: activeTurnContract,
-            frontier: obligationToolSurfaceState(),
-            audit,
-            modelCallRefs: [`runtime-call:planning:${context.turnId}`],
-          });
+          throw new Error("btcc_planning_synthesis_missing");
         }
         if (coordinator.state().currentPhase === "execution") {
           coordinator.completeExecution({
@@ -395,8 +394,9 @@ export async function runNativeToolTurn({
     }
     if (preparedBtccTurn && activeTurnContract) {
       const coordinator = new BtccNativePhaseCoordinator(preparedBtccTurn, deps.butlerData);
-      const seenReviewGaps = new Set<string>();
       let reviewIndex = 0;
+      let consolidationRepairIndex = 0;
+      btccPhaseCycle: while (true) {
       while (coordinator.state().currentPhase === "review") {
         reviewIndex += 1;
         const review = await runBtccIndependentReview({
@@ -414,22 +414,39 @@ export async function runNativeToolTurn({
           });
           break;
         }
-        if (seenReviewGaps.has(review.gapFingerprint)) {
-          throw new Error("btcc_review_same_gap_reentry_blocked");
-        }
-        seenReviewGaps.add(review.gapFingerprint);
-        coordinator.returnReviewToExecution({
+        coordinator.returnReview({
+          ownerPhase: review.ownerPhase,
           reasonCode: review.reasonCode,
           requiredChange: review.requiredChange,
           criterionId: review.criterionId,
+          criterionIds: review.failedCriterionIds,
           evidenceRefs: review.evidenceRefs,
           gapFingerprint: review.gapFingerprint,
           modelCallRef: review.modelCallRef,
         });
+        if (review.ownerPhase === "planning") {
+          const frontier = obligationToolSurfaceState();
+          const synthesis = await runBtccPlanningSynthesis({
+            butlerData: deps.butlerData,
+            coordinator,
+            active: activeTurnContract,
+            frontier,
+            audit,
+            runPrivateTextPrompt,
+          });
+          coordinator.completePlanning({
+            active: activeTurnContract,
+            frontier,
+            audit,
+            modelCallRefs: [synthesis.modelCallRef],
+            taskGraph: synthesis.taskGraph,
+          });
+        }
         const repairPrompt = [
           coordinator.executionPrompt(activeTurnContract),
           "## Accepted Review ReturnTicket",
           JSON.stringify({
+            ownerPhase: review.ownerPhase,
             criterionId: review.criterionId,
             reasonCode: review.reasonCode,
             requiredChange: review.requiredChange,
@@ -453,16 +470,67 @@ export async function runNativeToolTurn({
           audit,
           runPrivateTextPrompt,
         });
-        coordinator.completeConsolidation({
-          finalDossier: consolidation.dossier,
-          evidenceRefs: consolidation.evidenceRefs,
-          modelCallRefs: [consolidation.modelCallRef],
-        });
+        if (consolidation.outcome === "complete") {
+          coordinator.completeConsolidation({
+            finalDossier: consolidation.dossier,
+            evidenceRefs: consolidation.evidenceRefs,
+            modelCallRefs: [consolidation.modelCallRef],
+          });
+        } else {
+          const { gap } = consolidation;
+          consolidationRepairIndex += 1;
+          coordinator.returnConsolidation({
+            ownerPhase: gap.ownerPhase,
+            reasonCode: gap.reasonCode,
+            requiredChange: gap.requiredChange,
+            criterionIds: gap.criterionIds,
+            evidenceRefs: gap.evidenceRefs,
+            gapFingerprint: gap.gapFingerprint,
+            modelCallRef: consolidation.modelCallRef,
+          });
+          if (gap.ownerPhase === "planning") {
+            const frontier = obligationToolSurfaceState();
+            const synthesis = await runBtccPlanningSynthesis({
+              butlerData: deps.butlerData,
+              coordinator,
+              active: activeTurnContract,
+              frontier,
+              audit,
+              runPrivateTextPrompt,
+            });
+            coordinator.completePlanning({
+              active: activeTurnContract,
+              frontier,
+              audit,
+              modelCallRefs: [synthesis.modelCallRef],
+              taskGraph: synthesis.taskGraph,
+            });
+          }
+          const repairPrompt = [
+            coordinator.executionPrompt(activeTurnContract),
+            "## Accepted Consolidation ReturnTicket",
+            JSON.stringify(gap),
+          ].join("\n\n");
+          candidateText = activeTurnContract.contract.action === "answer"
+            ? await runKernelTextPrompt(repairPrompt, "btcc_execution_consolidation_repair")
+            : await runKernelToolPrompt(
+              repairPrompt,
+              undefined,
+              "btcc_execution_consolidation_repair",
+            );
+          coordinator.completeExecution({
+            active: activeTurnContract,
+            candidateText,
+            audit,
+            modelCallRefs: [
+              `model-call:execution-consolidation-repair:${context.turnId}:${consolidationRepairIndex}`,
+            ],
+          });
+          continue btccPhaseCycle;
+        }
       }
       if (coordinator.state().currentPhase === "reporting") {
-        const seenReportGaps = new Set<string>();
         let guardFeedback: BtccReportGuardGap | undefined;
-        let priorFailedCriteria: Set<string> | null = null;
         let priorReportHash: string | null = null;
         let reportIndex = 0;
         while (true) {
@@ -530,30 +598,27 @@ export async function runNativeToolTurn({
             btccTerminalText = guardedReport;
             break;
           }
-          if (seenReportGaps.has(guard.gapFingerprint)) {
-            throw new Error("btcc_reporting_same_gap_reentry_blocked");
-          }
           const failedCriteria = new Set(
             guard.criterionVerdicts
               .filter((criterion) => criterion.status === "failed")
               .map((criterion) => criterion.criterionId),
           );
-          if (priorFailedCriteria && (
-            failedCriteria.size >= priorFailedCriteria.size ||
-            [...failedCriteria].some((criterion) => !priorFailedCriteria!.has(criterion))
-          )) {
-            throw new Error("btcc_reporting_frontier_not_monotonic");
-          }
-          priorFailedCriteria = failedCriteria;
-          seenReportGaps.add(guard.gapFingerprint);
           coordinator.returnReporting({
             reasonCode: guard.reasonCode,
             requiredChange: guard.requiredChange,
+            criterionIds: [...failedCriteria],
             gapFingerprint: guard.gapFingerprint,
             modelCallRef: guard.modelCallRef,
           });
           guardFeedback = guard;
         }
+      }
+      if (btccTerminalText !== null) break btccPhaseCycle;
+      const unresolvedPhase = coordinator.state().currentPhase;
+      if (unresolvedPhase !== "review" && unresolvedPhase !== "consolidation" &&
+        unresolvedPhase !== "reporting") {
+        throw new Error(`btcc_phase_dispatch_unresolved:${unresolvedPhase}`);
+      }
       }
     }
     throwIfRuntimeTurnAborted(input.signal);

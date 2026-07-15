@@ -127,6 +127,20 @@ export interface GoalContractCandidateV1 {
   evidenceNeeds: string[];
   downstreamAuthorityNeeds: string[];
   workShape: GoalWorkShapeV1;
+  intentGroundingObservation?: {
+    evidenceNeedId: string;
+    goalField:
+      | "referent"
+      | "requested_outcome"
+      | "scope"
+      | "constraint"
+      | "authority"
+      | "acceptance";
+    question: string;
+    whyMaterial: string;
+    sourceScopeRefs: string[];
+    expectedResolution: string;
+  };
 }
 
 export interface ConceptionCheckpointV1 {
@@ -221,6 +235,7 @@ export interface ReturnTicketV1 {
   ownerPhase: "conception" | "planning" | "execution" | "review" | "reporting";
   taskRef?: string;
   criterionId?: string;
+  criterionIds?: string[];
   contractFieldRef?: string;
   reasonCode: string;
   authoritativeInputGeneration: number;

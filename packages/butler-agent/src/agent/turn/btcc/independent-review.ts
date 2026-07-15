@@ -17,8 +17,10 @@ export interface BtccIndependentReviewPass {
 
 export interface BtccIndependentReviewGap {
   outcome: "return_ticket";
+  ownerPhase: "planning" | "execution";
   summary: string;
   criterionId: string;
+  failedCriterionIds: string[];
   reasonCode: string;
   requiredChange: string;
   evidenceRefs: string[];
@@ -74,7 +76,7 @@ export async function runBtccIndependentReview(input: {
       candidateText: input.candidateText,
       evidence,
     }),
-    "Return a criterion-level passed verdict only when the current evidence proves the requested result. Otherwise return one ReturnTicket to Execution. Do not propose or perform a repair in Review.",
+    "Return the complete criterion frontier. Mark each criterion passed or failed from admitted evidence. A passed outcome requires every criterion to pass. Otherwise select one failed criterion for one typed ReturnTicket: Planning owns a defective task graph, dependency, authority, or acceptance mapping; Execution owns a missing or defective task result or evidence. Do not perform the repair in Review.",
   ].join("\n\n");
   const raw = await input.runPrivateTextPrompt(
     prompt,
@@ -100,7 +102,7 @@ function reviewResponseFormat(expectedCriterionIds: readonly string[]) {
       additionalProperties: false,
       required: [
         "outcome", "summary", "criterion_verdicts", "criterion_id",
-        "reason_code", "required_change", "evidence_refs",
+        "owner_phase", "reason_code", "required_change", "evidence_refs",
       ],
       properties: {
         outcome: { type: "string", enum: ["passed", "return_ticket"] },
@@ -115,7 +117,7 @@ function reviewResponseFormat(expectedCriterionIds: readonly string[]) {
             required: ["criterion_id", "status", "evidence_refs"],
             properties: {
               criterion_id: { type: "string", enum: [...expectedCriterionIds] },
-              status: { type: "string", enum: ["passed"] },
+              status: { type: "string", enum: ["passed", "failed"] },
               evidence_refs: {
                 type: "array",
                 minItems: 1,
@@ -126,6 +128,7 @@ function reviewResponseFormat(expectedCriterionIds: readonly string[]) {
           },
         },
         criterion_id: { type: ["string", "null"], maxLength: 160 },
+        owner_phase: { enum: [null, "planning", "execution"] },
         reason_code: { type: ["string", "null"], maxLength: 160 },
         required_change: { type: ["string", "null"], maxLength: 1200 },
         evidence_refs: {
@@ -161,51 +164,75 @@ function parseReview(
     throw new Error("btcc_review_evidence_ref_not_admitted");
   }
   const summary = requiredString(record.summary, "btcc_review_summary_missing");
+  const criterionVerdicts = records(record.criterion_verdicts).map((item) => ({
+    criterionId: requiredString(item.criterion_id, "btcc_review_criterion_missing"),
+    status: reviewCriterionStatus(item.status),
+    evidenceRefs: strings(item.evidence_refs),
+  }));
+  if (criterionVerdicts.length === 0) throw new Error("btcc_review_verdicts_missing");
+  if (criterionVerdicts.some((item) => item.evidenceRefs.length === 0)) {
+    throw new Error("btcc_review_criterion_evidence_missing");
+  }
+  if (criterionVerdicts.some((item) => item.evidenceRefs.some((ref) => !admitted.has(ref)))) {
+    throw new Error("btcc_review_evidence_ref_not_admitted");
+  }
+  assertExactCriterionFrontier(
+    criterionVerdicts.map((item) => item.criterionId),
+    expectedCriterionIds,
+    "btcc_review_criterion_frontier_invalid",
+  );
+  const failedCriterionIds = criterionVerdicts
+    .filter((item) => item.status === "failed")
+    .map((item) => item.criterionId);
   if (record.outcome === "passed") {
-    const criterionVerdicts = records(record.criterion_verdicts).map((item) => ({
-      criterionId: requiredString(item.criterion_id, "btcc_review_criterion_missing"),
-      status: "passed" as const,
-      evidenceRefs: strings(item.evidence_refs),
-    }));
-    if (criterionVerdicts.length === 0) throw new Error("btcc_review_verdicts_missing");
-    if (criterionVerdicts.some((item) => item.evidenceRefs.length === 0)) {
-      throw new Error("btcc_review_criterion_evidence_missing");
-    }
-    if (criterionVerdicts.some((item) => item.evidenceRefs.some((ref) => !admitted.has(ref)))) {
-      throw new Error("btcc_review_evidence_ref_not_admitted");
-    }
-    assertExactCriterionFrontier(
-      criterionVerdicts.map((item) => item.criterionId),
-      expectedCriterionIds,
-      "btcc_review_criterion_frontier_invalid",
-    );
+    if (failedCriterionIds.length > 0) throw new Error("btcc_review_pass_frontier_invalid");
     return {
       outcome: "passed",
       summary,
-      criterionVerdicts,
+      criterionVerdicts: criterionVerdicts.map((item) => ({
+        ...item,
+        status: "passed" as const,
+      })),
       evidenceRefs,
       modelCallRef,
     };
   }
   if (record.outcome !== "return_ticket") throw new Error("btcc_review_outcome_invalid");
   const criterionId = requiredString(record.criterion_id, "btcc_review_criterion_missing");
+  if (!failedCriterionIds.includes(criterionId)) {
+    throw new Error("btcc_review_return_criterion_not_failed");
+  }
+  const ownerPhase = requiredString(record.owner_phase, "btcc_review_owner_missing");
+  if (ownerPhase !== "planning" && ownerPhase !== "execution") {
+    throw new Error("btcc_review_owner_invalid");
+  }
   const reasonCode = requiredString(record.reason_code, "btcc_review_reason_missing");
   const requiredChange = requiredString(record.required_change, "btcc_review_change_missing");
   return {
     outcome: "return_ticket",
+    ownerPhase,
     summary,
     criterionId,
+    failedCriterionIds,
     reasonCode,
     requiredChange,
     evidenceRefs,
     gapFingerprint: createHash("sha256").update(JSON.stringify({
       criterionId,
+      ownerPhase,
       reasonCode,
       requiredChange,
       evidenceRefs,
     })).digest("hex"),
     modelCallRef,
   };
+}
+
+function reviewCriterionStatus(value: unknown): "passed" | "failed" {
+  if (value !== "passed" && value !== "failed") {
+    throw new Error("btcc_review_criterion_status_invalid");
+  }
+  return value;
 }
 
 function assertExactCriterionFrontier(

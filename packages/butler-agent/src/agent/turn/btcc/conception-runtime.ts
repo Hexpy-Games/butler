@@ -100,10 +100,12 @@ export function prepareBtccTurn(input: {
       store.close();
       return null;
     }
-    const projectPolicy = admitted.currentPhase === "conception"
+    const freshConception = admitted.currentPhase === "conception" &&
+      !admitted.activeConceptionCheckpointRef;
+    const projectPolicy = freshConception
       ? projectPolicyFor(input.projectId, input.workspacePath)
       : admitted.projectPolicy;
-    const acceptedControlsRef = admitted.currentPhase === "conception"
+    const acceptedControlsRef = freshConception
       ? stableRef("controls", input.turnInput.metadata?.executionControls ?? null)
       : admitted.acceptedControlsRef;
     const inputFingerprint = stableRef("conception-input", {
@@ -114,7 +116,7 @@ export function prepareBtccTurn(input: {
       acceptedControlsRef,
       selectedContextAtoms: input.conversationContextPlan.selected_atom_ids,
     });
-    const state = admitted.currentPhase === "conception"
+    const state = freshConception
       ? store.admitPhaseTurn({
         turnId: input.turnId,
         sessionId: provenance.conversationSessionId,
@@ -169,6 +171,10 @@ export function completeBtccConception(input: {
   const { prepared, active } = input;
   const now = new Date().toISOString();
   const candidate = active.decision.goal_contract_candidate ?? fallbackGoalCandidate(active);
+  if (candidate.intentGroundingObservation) {
+    throw new Error("btcc_conception_observation_unresolved");
+  }
+  const priorCheckpoint = readActiveConceptionCheckpoint(prepared);
   validateCandidateAuthorities(candidate, prepared.envelope);
   const goalContractRef = stableRef("goal-contract", {
     turnId: prepared.state.turnId,
@@ -202,6 +208,7 @@ export function completeBtccConception(input: {
       prepared.state.acceptedControlsRef,
       projectPolicyRef(prepared.state.projectPolicy),
       prepared.envelope.inboundMessageRef,
+      ...(priorCheckpoint?.observationRefs ?? []),
     ]),
   };
   const checkpoint: ConceptionCheckpointV1 = {
@@ -214,12 +221,13 @@ export function completeBtccConception(input: {
     turnRef: prepared.state.turnId,
     attemptRef: prepared.state.attemptId,
     phaseGeneration: prepared.state.phaseGeneration,
-    roundIndex: 1,
+    roundIndex: (priorCheckpoint?.roundIndex ?? 0) + 1,
     workingGoalDraft: goalDraft(goalContract),
     openEvidenceNeeds: [],
     observationRefs: unique([
       prepared.envelope.inboundMessageRef,
       ...prepared.envelope.relatedContextAtoms.map((atom) => atom.ref),
+      ...(priorCheckpoint?.observationRefs ?? []),
     ]),
     lastInputFingerprint: prepared.state.lastStableInputFingerprint,
     status: "finalized",
@@ -281,7 +289,11 @@ export function completeBtccConception(input: {
       phasePromptVersion: prepared.phasePrompt.version,
       phasePromptHash: prepared.phasePrompt.promptHash,
       outputArtifactRefs,
-      evidenceRefs: [prepared.modelCallRef, prepared.envelope.inboundMessageRef],
+      evidenceRefs: unique([
+        prepared.modelCallRef,
+        prepared.envelope.inboundMessageRef,
+        ...(priorCheckpoint?.observationRefs ?? []),
+      ]),
       dependencyReceiptRefs: [],
       status: "passed",
       nextState: "planning",
@@ -293,6 +305,55 @@ export function completeBtccConception(input: {
     goalContract,
     trackingPolicyCandidate: trackingPolicyCandidate(prepared.state.projectPolicy, active),
   });
+}
+
+export function readActiveConceptionCheckpoint(
+  prepared: PreparedBtccTurn,
+): ConceptionCheckpointV1 | null {
+  const ref = prepared.state.activeConceptionCheckpointRef;
+  return ref ? prepared.store.readConceptionCheckpoint(ref) : null;
+}
+
+export function checkpointBtccConceptionObservation(input: {
+  prepared: PreparedBtccTurn;
+  candidate: GoalContractCandidateV1;
+  roundIndex: number;
+  observationRefs: string[];
+  pendingToolCallRef?: string;
+}): ConceptionCheckpointV1 {
+  const { prepared, candidate } = input;
+  const need = candidate.intentGroundingObservation;
+  const lastInputFingerprint = stableRef("conception-observation-input", {
+    prior: prepared.state.lastStableInputFingerprint,
+    roundIndex: input.roundIndex,
+    observationRefs: unique(input.observationRefs),
+    pendingToolCallRef: input.pendingToolCallRef ?? null,
+  });
+  const checkpoint: ConceptionCheckpointV1 = {
+    schemaVersion: BTCC_CONCEPTION_CHECKPOINT_SCHEMA,
+    checkpointRef: stableRef("checkpoint:conception:observation", {
+      turnId: prepared.state.turnId,
+      phaseGeneration: prepared.state.phaseGeneration,
+      roundIndex: input.roundIndex,
+      lastInputFingerprint,
+      need: need ?? null,
+    }),
+    turnRef: prepared.state.turnId,
+    attemptRef: prepared.state.attemptId,
+    phaseGeneration: prepared.state.phaseGeneration,
+    roundIndex: input.roundIndex,
+    workingGoalDraft: candidateGoalDraft(candidate, prepared),
+    openEvidenceNeeds: need ? [{ ...need }] : [],
+    observationRefs: unique(input.observationRefs),
+    ...(input.pendingToolCallRef ? { pendingToolCallRef: input.pendingToolCallRef } : {}),
+    lastInputFingerprint,
+    status: "active",
+  };
+  prepared.state = prepared.store.commitConceptionCheckpoint({
+    expectedRowVersion: prepared.state.rowVersion,
+    checkpoint,
+  });
+  return checkpoint;
 }
 
 export function readBtccActivationSnapshot(prepared: PreparedBtccTurn): {
@@ -519,6 +580,40 @@ function goalDraft(contract: GoalContractV1): ConceptionCheckpointV1["workingGoa
     ...draft
   } = contract;
   return draft;
+}
+
+function candidateGoalDraft(
+  candidate: GoalContractCandidateV1,
+  prepared: PreparedBtccTurn,
+): NonNullable<ConceptionCheckpointV1["workingGoalDraft"]> {
+  return {
+    requestedOutcome: candidate.requestedOutcome,
+    problemFrame: candidate.problemFrame,
+    intentUnderstanding: candidate.intentUnderstanding,
+    deliverables: candidate.workShape.deliverableKinds.map((kind, index) => ({
+      key: `draft-deliverable-${index + 1}`,
+      kind,
+      description: kind,
+      required: true,
+    })),
+    bindingConstraints: candidate.bindingConstraints,
+    nonGoals: candidate.nonGoals,
+    acceptanceIntents: candidate.acceptanceIntents,
+    ambiguityDecisions: candidate.ambiguityDecisions,
+    currentStateNeeds: candidate.currentStateNeeds,
+    evidenceNeeds: candidate.evidenceNeeds,
+    downstreamAuthorityNeeds: candidate.downstreamAuthorityNeeds,
+    applicableAdaptationHints: candidate.intentUnderstanding.userPreferenceApplications
+      .map(({ hintRef }) => prepared.envelope.adaptationHints.find((hint) => hint.hintRef === hintRef))
+      .filter((hint): hint is ConceptionContextEnvelopeV1["adaptationHints"][number] => Boolean(hint))
+      .map(({ hintRef, appliesTo }) => ({ hintRef, appliesTo })),
+    workShape: candidate.workShape,
+    semanticAuthorityRefs: unique([
+      prepared.state.acceptedControlsRef,
+      projectPolicyRef(prepared.state.projectPolicy),
+      prepared.envelope.inboundMessageRef,
+    ]),
+  };
 }
 
 function validateCandidateAuthorities(

@@ -2,12 +2,14 @@ import { expect, test } from "bun:test";
 import {
   btccCapabilityAllows,
   btccCapabilityManifestForTool,
+  successfulLedgerCloseoutKinds,
 } from "../../packages/butler-agent/src/agent/turn/btcc/capability-manifest.ts";
 import { btccLedgerAuthoringBundle } from "../../packages/butler-agent/src/agent/turn/btcc/ledger-authoring-contracts.ts";
 import { updateTodoListToolDefinition } from "../../packages/butler-agent/src/agent/tools/work-tracking/update_todo_list/definition.ts";
 import { readFileToolDefinition } from "../../packages/butler-agent/src/agent/tools/file-tools/read_file/definition.ts";
 import { writeFileToolDefinition } from "../../packages/butler-agent/src/agent/tools/file-tools/write_file/definition.ts";
 import { projectLedgerNativeToolDefinitions } from "../../packages/butler-agent/src/agent/tools/project-ledger/native.ts";
+import type { EvidenceCapabilityReceipt } from "../../packages/butler-agent/src/agent/output/evidence/types.ts";
 
 test("BTCC admits tools by declared effect, purpose, scope, and Ledger operation", () => {
   expect(btccCapabilityAllows({
@@ -102,6 +104,49 @@ test("Ledger authoring contracts are complete, ordered, and content-addressed", 
     expect(contract.completionEvidence.length).toBeGreaterThanOrEqual(3);
   }
 });
+
+test("project closeout requires successful typed task and attempt receipts", () => {
+  expect([...successfulLedgerCloseoutKinds([
+    ledgerCloseoutAudit("task", "completed"),
+    ledgerCloseoutAudit("attempt", "succeeded", false),
+    ledgerCloseoutAudit("work", "completed"),
+  ])]).toEqual(["task"]);
+  expect(successfulLedgerCloseoutKinds([
+    ledgerCloseoutAudit("task", "completed"),
+    ledgerCloseoutAudit("attempt", "succeeded"),
+  ])).toEqual(new Set(["task", "attempt"]));
+  expect(successfulLedgerCloseoutKinds([
+    ledgerCloseoutAudit("attempt", "failed"),
+    { ok: true },
+  ])).toEqual(new Set());
+});
+
+function ledgerCloseoutAudit(
+  recordKind: "spec" | "plan" | "work" | "task" | "attempt",
+  lifecycleOutcome: "completed" | "succeeded" | "failed",
+  ok = true,
+) {
+  const receipt: EvidenceCapabilityReceipt = {
+    receipt_id: `receipt:${recordKind}:${lifecycleOutcome}`,
+    schema_version: "evidence-capability.v1",
+    producer: { kind: "project_ledger", name: "renamed-ledger-executor" },
+    capability: "durable_artifact",
+    evidence_kind: "artifact",
+    maturity: "verified",
+    confidence: 1,
+    verified: true,
+    summary: "typed lifecycle evidence",
+    scope: {
+      record_kind: recordKind,
+      ledger_operation: "closeout",
+      lifecycle_outcome: lifecycleOutcome,
+    },
+    references: [],
+    limitations: [],
+    created_at: "2026-07-15T00:00:00.000Z",
+  };
+  return { ok, evidenceCapabilityReceipts: [receipt] };
+}
 
 function requiredLedgerTool(name: string) {
   const tool = projectLedgerNativeToolDefinitions.find((candidate) => candidate.name === name);
