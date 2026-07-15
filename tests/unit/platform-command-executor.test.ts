@@ -13,6 +13,7 @@ import type {
   CommandRequest,
   CommandResult,
 } from "../../packages/butler-agent/src/runtime/command/contracts.ts";
+import { runNodeCommand } from "../../packages/butler-agent/src/runtime/command/node-command-runner.ts";
 
 const baseResult: CommandResult = {
   stdout: "",
@@ -78,6 +79,40 @@ describe("platform command executor", () => {
       forceTermination: true,
     });
   }, 60_000);
+
+  test("settles after forced termination when close delivery is delayed", async () => {
+    const signals: NodeJS.Signals[] = [];
+    const result = await runNodeCommand(
+      [{
+        executable: process.execPath,
+        arguments: ["-e", "setInterval(() => {}, 1000)"],
+      }],
+      {
+        plan: {
+          steps: [{ executable: process.execPath }],
+        },
+        timeoutMs: 10,
+      },
+      {
+        detached: false,
+        signal: (child, signal) => {
+          signals.push(signal);
+          if (signal === "SIGKILL") {
+            setTimeout(() => child.kill("SIGKILL"), 750).unref?.();
+          }
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      exitCode: null,
+      timedOut: true,
+      cancelled: false,
+    });
+    expect(result.durationMs).toBeLessThan(5_000);
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }, 10_000);
 
   test("normalizes spawn failures without reflecting executable or environment secrets", async () => {
     const executableSecret = `missing-secret-executable-${process.pid}-${Date.now()}`;

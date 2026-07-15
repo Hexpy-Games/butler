@@ -47,12 +47,14 @@ export async function runNodeCommand(
     const stdoutDecoder = new StringDecoder("utf8");
     let closedChildren = 0;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
+    let forcedSettlementTimer: ReturnType<typeof setTimeout> | undefined;
 
     const settle = (value: Partial<CommandResult> = {}) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       if (forceTimer) clearTimeout(forceTimer);
+      if (forcedSettlementTimer) clearTimeout(forcedSettlementTimer);
       request.signal?.removeEventListener("abort", onAbort);
       resolveResult(result({
         startedAt,
@@ -76,6 +78,10 @@ export async function runNodeCommand(
             containment.signal(child, "SIGKILL");
           }
         }
+        forcedSettlementTimer = setTimeout(() => {
+          settle({ exitCode: null });
+        }, 500);
+        forcedSettlementTimer.unref?.();
       }, 500);
       forceTimer.unref?.();
     };
