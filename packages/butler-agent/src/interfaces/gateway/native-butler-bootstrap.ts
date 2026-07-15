@@ -893,6 +893,8 @@ export async function runNativeButlerMain(
             server,
             store,
             deliveryGuard,
+            btccInterruptionStateWriter,
+            conversationWriter,
             deliverAction: deliverThroughEnabledGate,
             shouldHandleItem: shouldHandleAppInboundTurn(butlerData),
             telegramGroupId: currentTelegramChatId(),

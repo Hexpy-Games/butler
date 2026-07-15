@@ -906,3 +906,34 @@ test("production BTCC adapter treats an unproven abort as runtime interruption, 
   conversationStore.close();
   bindingStore.close();
 });
+
+test("production BTCC adapter leaves scheduler incompletion active for queue-owned continuation commit", async () => {
+  const bindingStore = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
+  const btccStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const lifecycle = createLifecycle({
+    bindingStore,
+    conversationStore,
+    btccInterruptionStateWriter: btccStore,
+    runtime: new CheckpointYieldRuntime(),
+  });
+  const actor = await lifecycle.getOrCreate("butler/main", "butler");
+
+  await expect(actor.handleInbound(inbound(
+    "btcc-checkpoint-yield",
+    "continue durable work",
+  ))).rejects.toBeInstanceOf(TurnSchedulerContinuationYieldError);
+
+  expect(btccStore.readTurnState("turn-btcc-checkpoint-yield")).toMatchObject({
+    state: "accepted",
+    generation: 1,
+  });
+  expect(conversationStore.readTurn("turn-btcc-checkpoint-yield")).toMatchObject({
+    status: "running",
+  });
+  expect(conversationStore.readTurnOutcome("turn-btcc-checkpoint-yield")).toBeNull();
+
+  btccStore.close();
+  conversationStore.close();
+  bindingStore.close();
+});

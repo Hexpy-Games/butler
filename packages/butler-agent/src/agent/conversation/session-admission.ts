@@ -85,7 +85,7 @@ export class ConversationAdmissionTurn {
     input.btccInterruptionStateWriter?.admitTurn({
       turnId: turn.id,
       sessionId: turn.session_id,
-      attemptId: btccAttemptId(turn.id),
+      attemptId: btccAttemptIdForTurn(turn.id),
       now: input.timestamp,
     });
     return new ConversationAdmissionTurn(input, turn);
@@ -155,6 +155,12 @@ export class ConversationAdmissionTurn {
     const writer = this.input.btccInterruptionStateWriter;
     const current = writer?.readTurnState(this.turn.id);
     if (!writer || !current) return null;
+    if (current.state === "waiting_runtime" && current.activeRecoveryCaseId) {
+      return {
+        recoveryCaseId: current.activeRecoveryCaseId,
+        state: current,
+      };
+    }
     const checkpointRef = current.lastStableCheckpointRef ??
       `btcc-turn-state:${current.turnId}:g${current.generation}`;
     const interruptionId = `interruption-${stableId({
@@ -451,7 +457,7 @@ export function conversationSessionIdForDurableSession(sessionId: string): strin
   return `cs_${hash}`;
 }
 
-function btccAttemptId(turnId: string): string {
+export function btccAttemptIdForTurn(turnId: string): string {
   return `btcc-attempt-${stableId({ turnId })}`;
 }
 

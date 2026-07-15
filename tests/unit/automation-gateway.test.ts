@@ -16,7 +16,10 @@ import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/rou
 import { createGatewayServer } from "../../packages/butler-agent/src/gateways/core/server.ts";
 import { createLifecycleGatewayHandlers, SessionLifecycleService } from "../../packages/butler-agent/src/interfaces/gateway/session-lifecycle.ts";
 import { AutomationStore } from "../../packages/butler-agent/src/operations/service/automation-store.ts";
-import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
+import {
+  type ClaimedInboundEvent,
+  NativeInboundQueue,
+} from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import {
   processQueuedInboundEvents,
   QueuedInboundDispatcher,
@@ -38,6 +41,8 @@ import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-l
 import { readTranscript } from "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
 import { recordPrincipalTurnCancellation } from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-registry.ts";
 import { TurnRuntimeWaitSignal } from "../../packages/butler-agent/src/agent/turn/interruption/turn-runtime-wait-signal.ts";
+import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
+import { BtccRecoveryCaseStore } from "../../packages/butler-agent/src/agent/turn/interruption/recovery-case-store.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -92,6 +97,22 @@ class ContinuationEnqueueFailingInboundQueue extends NativeInboundQueue {
   }
 }
 
+class CompletionFailingOnceInboundQueue extends NativeInboundQueue {
+  private rejectNextCompletion = true;
+
+  override complete(
+    item: ClaimedInboundEvent,
+    metadata: Record<string, unknown> = {},
+    now = new Date(),
+  ): boolean {
+    if (this.rejectNextCompletion) {
+      this.rejectNextCompletion = false;
+      return false;
+    }
+    return super.complete(item, metadata, now);
+  }
+}
+
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-provider",
   capabilities: {
@@ -140,6 +161,31 @@ function appEnvelope(input: {
       turnId: `turn-${input.messageId}`,
     },
   };
+}
+
+function admitBtccQueueTurn(input: {
+  conversations: AgentConversationStore;
+  btcc: BtccRecoveryCaseStore;
+  turnId: string;
+  sessionId?: string;
+}): void {
+  const sessionId = input.sessionId ?? "conversation-btcc-queue";
+  input.conversations.beginTurn({
+    gateway: "app",
+    externalSessionId: "butler/app-general",
+    sessionId,
+    workspaceId: "workspace-btcc-queue",
+    projectId: "butler",
+    actor: "user",
+    turnId: input.turnId,
+    now: "2026-07-15T00:00:00.000Z",
+  });
+  input.btcc.admitTurn({
+    turnId: input.turnId,
+    sessionId,
+    attemptId: `attempt-${input.turnId}`,
+    now: "2026-07-15T00:00:01.000Z",
+  });
 }
 
 beforeEach(() => {
@@ -1058,6 +1104,244 @@ test("queued inbound completes transport ownership without failure delivery afte
   expect(app.sentActions).toEqual([]);
   expect(existsSync(join(queue.rootDir, "failed"))).toBe(false);
   expect(readdirSync(join(queue.rootDir, "processed"))).toHaveLength(1);
+});
+
+test("queued inbound reconciles BTCC admission before routing a dispatch exception to durable wait", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversations = new AgentConversationStore({ butlerData: tempDir });
+  const btcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const queue = new NativeInboundQueue(tempDir);
+  const messageId = "btcc-queue-exception";
+  const turnId = `turn-${messageId}`;
+  queue.enqueue(appEnvelope({
+    eventId: "app:btcc-queue-exception",
+    messageId,
+    sessionId: "butler/app-general",
+  }), { source: "test" });
+  const app = new MockTransportAdapter({ id: "app" });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new Error("opaque queue dispatch exception");
+      },
+    },
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [app] }),
+    btccInterruptionStateWriter: btcc,
+    conversationWriter: conversations,
+  });
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 1, delivered: 0, failed: 0 });
+  expect(btcc.readTurnState(turnId)).toMatchObject({
+    state: "waiting_runtime",
+    generation: 2,
+    activeRecoveryCaseId: expect.stringContaining("recovery-"),
+  });
+  expect(conversations.readTurn(turnId)).toMatchObject({ status: "running" });
+  expect(app.sentActions).toEqual([]);
+  expect(existsSync(join(queue.rootDir, "failed"))).toBe(false);
+  expect(readdirSync(join(queue.rootDir, "processed"))).toHaveLength(1);
+
+  btcc.close();
+  conversations.close();
+  store.close();
+});
+
+test("queued BTCC admission and session actor share one turn through Reporting delivery", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversations = new AgentConversationStore({ butlerData: tempDir });
+  const btcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const runtime = new ScriptedRuntime();
+  store.upsert({
+    sessionId: "butler/app-general",
+    role: "butler",
+    projectId: "butler",
+    workspacePath: tempDir,
+    runtimeAdapterId: runtime.id,
+    modelProviderId: fakeProvider.id,
+    modelRef: "openai/auto:codex-latest",
+    transportBindings: [{
+      transport: "app",
+      accountId: "local",
+      peerId: "general",
+    }],
+  });
+  const lifecycle = new SessionLifecycleService({
+    store,
+    runtime,
+    provider: fakeProvider,
+    systemPromptFactory: () => "You are Butler in a BTCC queue admission test.",
+    conversationWriter: conversations,
+    btccInterruptionStateWriter: btcc,
+    conversationMetricsButlerData: tempDir,
+  });
+  const server = createGatewayServer({
+    router: new GatewayRouter({ store }),
+    handlers: createLifecycleGatewayHandlers(lifecycle),
+    butlerData: tempDir,
+  });
+  const queue = new NativeInboundQueue(tempDir);
+  const messageId = "btcc-queue-success";
+  const turnId = `turn-${messageId}`;
+  queue.enqueue(appEnvelope({
+    eventId: "app:btcc-queue-success",
+    messageId,
+    sessionId: "butler/app-general",
+  }));
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server,
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] }),
+    btccInterruptionStateWriter: btcc,
+    conversationWriter: conversations,
+  });
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 1, failed: 0 });
+  expect(runtime.turns).toHaveLength(1);
+  expect(btcc.readTurnState(turnId)).toMatchObject({
+    state: "delivered",
+    generation: 2,
+    terminalOutcomeId: expect.stringContaining("reporting-"),
+  });
+  expect(conversations.readTurn(turnId)).toMatchObject({ status: "complete" });
+  expect(conversations.readTurnOutcome(turnId)).toMatchObject({ outcome: "delivered" });
+
+  btcc.close();
+  conversations.close();
+  store.close();
+});
+
+test("BTCC continuation commits the next queue owner before state and replay skips the model path", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversations = new AgentConversationStore({ butlerData: tempDir });
+  const btcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const queue = new CompletionFailingOnceInboundQueue(tempDir);
+  const now = new Date("2026-07-15T00:00:00.000Z");
+  const messageId = "btcc-continuation-replay";
+  const turnId = `turn-${messageId}`;
+  admitBtccQueueTurn({ conversations, btcc, turnId });
+  queue.enqueue(appEnvelope({
+    eventId: "app:btcc-continuation-replay",
+    messageId,
+    sessionId: "butler/app-general",
+  }), { source: "test" }, now);
+  let serverCalls = 0;
+  const server = {
+    async handleInbound(envelope: InboundEnvelope) {
+      serverCalls += 1;
+      if (
+        envelope.raw &&
+        typeof envelope.raw === "object" &&
+        !Array.isArray(envelope.raw) &&
+        (envelope.raw as Record<string, unknown>).sameLogicalTurnContinuation === true
+      ) {
+        return {
+          status: "handled" as const,
+          route: {
+            sessionId: "butler/app-general",
+            role: "butler" as const,
+            reason: "session-hint" as const,
+            workspacePath: tempDir,
+          },
+          handlerResult: { ok: true, handledBy: "test", metadata: {} },
+        };
+      }
+      throw new TurnSchedulerContinuationYieldError(
+        "butler/app-general",
+        turnId,
+        "context-btcc-continuation",
+        "checkpoint-btcc-continuation",
+        1,
+      );
+    },
+  };
+  const options = {
+    queue,
+    server,
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [new MockTransportAdapter({ id: "app" })] }),
+    btccInterruptionStateWriter: btcc,
+    processingLeaseMs: 1,
+    limit: 1,
+  };
+
+  const first = await processQueuedInboundEvents({ ...options, now: () => now });
+  expect(first).toMatchObject({ claimed: 1, handled: 0, failed: 0 });
+  expect(serverCalls).toBe(1);
+  expect(btcc.readTurnState(turnId)).toMatchObject({
+    state: "continuing",
+    generation: 2,
+    lastStableCheckpointRef: expect.stringContaining("queue-continuation:"),
+  });
+
+  const replay = await processQueuedInboundEvents({
+    ...options,
+    now: () => new Date(now.getTime() + 2),
+  });
+  expect(replay).toMatchObject({ claimed: 1, handled: 1, failed: 0 });
+  expect(serverCalls).toBe(1);
+
+  const resumed = await processQueuedInboundEvents({
+    ...options,
+    now: () => new Date(now.getTime() + 3),
+  });
+  expect(resumed).toMatchObject({ claimed: 1, handled: 1, failed: 0 });
+  expect(serverCalls).toBe(2);
+  expect(existsSync(join(queue.rootDir, "failed"))).toBe(false);
+
+  btcc.close();
+  conversations.close();
+  store.close();
+});
+
+test("BTCC continuation enqueue failure opens RecoveryCase without terminal failure delivery", async () => {
+  const store = new SessionBindingStore(join(tempDir, "runtime", "session-store.sqlite"));
+  const conversations = new AgentConversationStore({ butlerData: tempDir });
+  const btcc = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const queue = new ContinuationEnqueueFailingInboundQueue(tempDir);
+  const messageId = "btcc-continuation-enqueue-failure";
+  const turnId = `turn-${messageId}`;
+  admitBtccQueueTurn({ conversations, btcc, turnId });
+  queue.enqueue(appEnvelope({
+    eventId: "app:btcc-continuation-enqueue-failure",
+    messageId,
+    sessionId: "butler/app-general",
+  }));
+  const app = new MockTransportAdapter({ id: "app" });
+
+  const summary = await processQueuedInboundEvents({
+    queue,
+    server: {
+      async handleInbound() {
+        throw new TurnSchedulerContinuationYieldError(
+          "butler/app-general",
+          turnId,
+          "context-btcc-enqueue-failure",
+          "checkpoint-btcc-enqueue-failure",
+          1,
+        );
+      },
+    },
+    store,
+    deliveryGuard: new DeliveryGuard({ adapters: [app] }),
+    btccInterruptionStateWriter: btcc,
+  });
+
+  expect(summary).toMatchObject({ claimed: 1, handled: 1, delivered: 0, failed: 0 });
+  expect(btcc.readTurnState(turnId)).toMatchObject({
+    state: "waiting_runtime",
+    generation: 2,
+  });
+  expect(app.sentActions).toEqual([]);
+  expect(existsSync(join(queue.rootDir, "failed"))).toBe(false);
+
+  btcc.close();
+  conversations.close();
+  store.close();
 });
 
 test("queued inbound provider failure preserves safe API diagnostics for app projection", async () => {
