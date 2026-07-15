@@ -790,14 +790,19 @@ test("agent release packager creates an installable artifact with app web client
     expect(result.updateManifestPath.endsWith("agent-update-manifest.json")).toBe(true);
 
     const entries: string[] = [];
+    const linkEntries: string[] = [];
     listTarArchive({
       file: result.artifactPath,
       sync: true,
       onentry: (entry) => {
         entries.push(entry.path);
+        if (entry.type === "SymbolicLink" || entry.type === "Link") {
+          linkEntries.push(entry.path);
+        }
         entry.resume();
       },
     });
+    expect(linkEntries).toEqual([]);
     const currentCliLauncher = serviceCliLauncherRelativePath(
       currentCliPlatform,
     );
