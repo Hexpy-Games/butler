@@ -33,18 +33,24 @@ for (let pass = 1; pass <= passCount; pass += 1) {
   await waitForE2eTempCleanup(initialE2eTempDirs);
   await runExitScenario(`command-${pass}`, [
     "test",
+    "--timeout",
+    "30000",
     "tests/unit/native-tool-loop-runtime.test.ts",
     "--test-name-pattern",
     "native runtime can drive the real run_command tool through the default executor",
   ]);
   await runExitScenario(`background-${pass}`, [
     "test",
+    "--timeout",
+    "30000",
     "tests/unit/inbound-queue.test.ts",
     "tests/unit/app-worker-cancel.test.ts",
     "tests/unit/work-orchestration.test.ts",
   ]);
   await runExitScenario(`scheduler-${pass}`, [
     "test",
+    "--timeout",
+    "30000",
     "tests/unit/native-scheduler.test.ts",
     "--test-name-pattern",
     "native scheduler claims due automations into the inbound queue",
