@@ -33,6 +33,12 @@ test("Windows full-product validation runs the clean isolated loop twice", () =>
   expect(standardUserRunner).toContain(
     "-not (Test-Path -LiteralPath $Output)",
   );
+  expect(standardUserRunner).toContain("-AllowStartIfOnBatteries");
+  expect(standardUserRunner).toContain("New-LocalUser");
+  expect(standardUserRunner).toContain("SeBatchLogonRight");
+  expect(standardUserRunner).toContain("LsaRemoveAccountRights");
+  expect(standardUserRunner).toContain("Remove-LocalUser");
+  expect(standardUserRunner).toContain("$env:ProgramData");
   expect(
     readFileSync(
       resolve(
