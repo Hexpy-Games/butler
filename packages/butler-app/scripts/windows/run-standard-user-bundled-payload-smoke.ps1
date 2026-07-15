@@ -157,6 +157,12 @@ try {
   if (-not (Test-Path -LiteralPath $smokePath -PathType Leaf)) {
     throw "Windows standard-user smoke script is missing"
   }
+  if ($env:GITHUB_ACTIONS -eq "true") {
+    & icacls.exe $Root /grant "*S-1-5-32-545:(OI)(CI)M" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      throw "GitHub Windows workspace standard-user access setup failed"
+    }
+  }
   Copy-Item -LiteralPath $Bun -Destination $signedBun -Force
 
   Push-Location $Root

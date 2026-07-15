@@ -39,6 +39,7 @@ test("Windows full-product validation runs the clean isolated loop twice", () =>
   expect(standardUserRunner).toContain("LsaRemoveAccountRights");
   expect(standardUserRunner).toContain("Remove-LocalUser");
   expect(standardUserRunner).toContain("$env:ProgramData");
+  expect(standardUserRunner).toContain('"*S-1-5-32-545:(OI)(CI)M"');
   expect(
     readFileSync(
       resolve(
