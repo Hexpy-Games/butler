@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { windowsPowerShellEnvironment } from "../../client/electron/windows-powershell-environment.mjs";
 import {
   APP_RELEASE_BUILD_PLATFORMS,
   APP_RELEASE_PLATFORMS,
@@ -773,10 +774,9 @@ export function verifyWindowsAuthenticodeFiles(paths: string[]): WindowsAuthenti
   ], {
     encoding: "utf8",
     windowsHide: true,
-    env: {
-      ...process.env,
+    env: windowsPowerShellEnvironment(process.env, {
       BUTLER_WINDOWS_SIGNATURE_PATHS_JSON: JSON.stringify(paths),
-    },
+    }),
   });
   if (result.status !== 0) {
     throw new Error(

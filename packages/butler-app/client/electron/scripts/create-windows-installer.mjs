@@ -2,6 +2,7 @@
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { windowsPowerShellEnvironment } from "../windows-powershell-environment.mjs";
 
 if (process.platform !== "win32" || process.arch !== "x64") {
   throw new Error("Butler Squirrel packaging requires Windows x64");
@@ -123,13 +124,12 @@ function signWithCurrentUserCertificate(path, thumbprint) {
     ],
     {
       encoding: "utf8",
-      env: {
-        ...process.env,
+      env: windowsPowerShellEnvironment(process.env, {
         BUTLER_SIGN_PATH: path,
         BUTLER_SIGN_THUMBPRINT: thumbprint,
         BUTLER_SIGN_TIMESTAMP_SERVER:
           process.env.BUTLER_WINDOWS_SIGN_TIMESTAMP_SERVER ?? "",
-      },
+      }),
       shell: false,
       timeout: 30_000,
       windowsHide: true,

@@ -100,7 +100,10 @@ export function verifyWindowsInstallerPublisher(input: {
   runPowerShell: (
     command: string,
     args: string[],
-    options: Record<string, unknown>,
+    options: {
+      env: Record<string, string | undefined>;
+      [key: string]: unknown;
+    },
   ) => { status?: number | null; stdout?: string };
   env?: Record<string, string | undefined>;
 }): {
