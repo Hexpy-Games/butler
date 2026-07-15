@@ -16,6 +16,9 @@ internal static class ButlerProcessHost
     private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
     private const int JobObjectExtendedLimitInformation = 9;
     private const uint INFINITE = 0xFFFFFFFF;
+    private const uint SYNCHRONIZE = 0x00100000;
+    private const uint WAIT_OBJECT_0 = 0x00000000;
+    private const uint WAIT_FAILED = 0xFFFFFFFF;
     private const int STD_INPUT_HANDLE = -10;
     private const int STD_OUTPUT_HANDLE = -11;
     private const int STD_ERROR_HANDLE = -12;
@@ -134,6 +137,19 @@ internal static class ButlerProcessHost
     private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint WaitForMultipleObjects(
+        uint count,
+        IntPtr[] handles,
+        bool waitAll,
+        uint milliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(
+        uint desiredAccess,
+        bool inheritHandle,
+        uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GetExitCodeProcess(IntPtr process, out uint exitCode);
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -173,7 +189,19 @@ internal static class ButlerProcessHost
         {
             return ProbeCancellationPipeAsUser(args[1], args[2], args[3]);
         }
-        if (args.Length == 0)
+        int ownerPid = 0;
+        string[] commandArgs = args;
+        if (args.Length >= 3 && args[0] == "--owner-pid")
+        {
+            if (!Int32.TryParse(args[1], out ownerPid) || ownerPid <= 0)
+            {
+                Console.Error.Write("butler_process_host_error:invalid_owner_pid");
+                return 125;
+            }
+            commandArgs = new string[args.Length - 2];
+            Array.Copy(args, 2, commandArgs, 0, commandArgs.Length);
+        }
+        if (commandArgs.Length == 0)
         {
             Console.Error.Write("butler_process_host_error:missing_command");
             return 125;
@@ -182,8 +210,14 @@ internal static class ButlerProcessHost
         IntPtr job = IntPtr.Zero;
         IntPtr process = IntPtr.Zero;
         IntPtr thread = IntPtr.Zero;
+        IntPtr owner = IntPtr.Zero;
         try
         {
+            if (ownerPid > 0)
+            {
+                owner = OpenProcess(SYNCHRONIZE, false, unchecked((uint)ownerPid));
+                ThrowIfInvalid(owner, "open_owner");
+            }
             job = CreateJobObject(IntPtr.Zero, null);
             ThrowIfInvalid(job, "create_job");
             ConfigureKillOnClose(job);
@@ -196,9 +230,9 @@ internal static class ButlerProcessHost
             startup.hStdError = InheritableStandardHandle(STD_ERROR_HANDLE);
 
             PROCESS_INFORMATION child;
-            StringBuilder commandLine = new StringBuilder(BuildCommandLine(args));
+            StringBuilder commandLine = new StringBuilder(BuildCommandLine(commandArgs));
             if (!CreateProcess(
-                args[0],
+                commandArgs[0],
                 commandLine,
                 IntPtr.Zero,
                 IntPtr.Zero,
@@ -222,7 +256,26 @@ internal static class ButlerProcessHost
             {
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "resume_process");
             }
-            WaitForSingleObject(process, INFINITE);
+            if (owner != IntPtr.Zero)
+            {
+                uint waitResult = WaitForMultipleObjects(
+                    2,
+                    new IntPtr[] { process, owner },
+                    false,
+                    INFINITE);
+                if (waitResult == WAIT_OBJECT_0 + 1)
+                {
+                    return 143;
+                }
+                if (waitResult == WAIT_FAILED || waitResult != WAIT_OBJECT_0)
+                {
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "wait_process_or_owner");
+                }
+            }
+            else
+            {
+                WaitForSingleObject(process, INFINITE);
+            }
             uint exitCode;
             if (!GetExitCodeProcess(process, out exitCode))
             {
@@ -244,6 +297,7 @@ internal static class ButlerProcessHost
             if (thread != IntPtr.Zero) CloseHandle(thread);
             if (process != IntPtr.Zero) CloseHandle(process);
             if (job != IntPtr.Zero) CloseHandle(job);
+            if (owner != IntPtr.Zero) CloseHandle(owner);
         }
     }
 

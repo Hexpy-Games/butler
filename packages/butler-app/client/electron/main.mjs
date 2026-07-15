@@ -4,6 +4,7 @@ import {
   Menu,
   Notification,
   Tray,
+  autoUpdater,
   dialog,
   ipcMain,
   nativeImage,
@@ -26,6 +27,9 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
+import { createAppForegroundDoctorView } from "./app-foreground-doctor.mjs";
+import { drainAppForegroundActiveWork } from "./app-foreground-drain.mjs";
+import { quitAndInstallAppUpdate } from "./app-foreground-update.mjs";
 import { reconcileAgentServiceOnAppLaunch } from "./app-agent-launch-reconciler.mjs";
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
 import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
@@ -37,12 +41,19 @@ import {
 } from "./app-managed-runtime.mjs";
 import {
   APP_FOREGROUND_LIFECYCLE_MODES,
+  appForegroundInstancePath,
+  appForegroundLastExitPath,
+  appForegroundStartupFailurePath,
+  appForegroundStartupProgressPath,
+  clearAppForegroundStartupFailure,
   createAppForegroundLaunch,
   createRecoveryBudget,
   resolveAppLifecycleMode,
   transitionAppForeground,
   writeAppForegroundInstance,
   writeAppForegroundLastExit,
+  writeAppForegroundStartupFailure,
+  writeAppForegroundStartupProgress,
 } from "./app-foreground-lifecycle.mjs";
 import {
   classifyAppForegroundActiveWork,
@@ -142,6 +153,7 @@ let tray = null;
 let isQuitting = false;
 let finalQuitAllowed = false;
 let foregroundInstance = null;
+let foregroundQuitSnapshot = null;
 let legacyMigrationPromise = null;
 let suppressInitialWindowForLogin = false;
 const foregroundRecoveryBudget = createRecoveryBudget();
@@ -177,6 +189,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitUiUrl,
   projectFolderTokenSecret,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
+  onGatewayStarting: prepareAppForegroundGatewayLaunch,
 });
 const appAgentNativeServiceBridge = shouldUseAppAgentNativeServiceBridge()
   ? createAppAgentNativeServiceBridge({
@@ -198,6 +211,9 @@ const agentServiceControl = createAgentServiceControl({
 });
 const firstRunSetupBridge = createFirstRunSetupBridge({
   ensureReady: ensureServer,
+  repairRuntime: async () => {
+    await bundledAgentSupervisor.repair();
+  },
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
   readRuntimeDiagnostics: readFirstRunRuntimeDiagnostics,
@@ -213,6 +229,9 @@ if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
   app.setPath("userData", explicitElectronUserDataDir);
 }
 const appSingleInstanceLock = app.requestSingleInstanceLock();
+if (appSingleInstanceLock) {
+  recordAppStartupProgress("single_instance_acquired");
+}
 if (isQuitMainUiSignalProcess || isQuitMenuBarHelperSignalProcess) {
   scheduleSignalProcessHardExit();
 }
@@ -278,22 +297,11 @@ function managedGatewayCommand() {
     butlerData: butlerDataRoot,
     env: process.env,
     resourcesPath: process.resourcesPath,
+    ...(usesAppForegroundLifecycle
+      ? { onProgress: (stage) => recordAppStartupProgress(stage) }
+      : {}),
   });
-  if (appManagedGateway) {
-    if (usesAppForegroundLifecycle) {
-      const launch = createAppForegroundLaunch({
-        appVersion: appInfoView().version,
-        bundledAgentVersion: appManagedGateway.bundledAgentVersion,
-        port,
-      });
-      foregroundInstance = transitionAppForeground(launch.record, "starting");
-      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-      appManagedGateway.env.BUTLER_APP_FOREGROUND_GENERATION =
-        foregroundInstance.generation;
-      appManagedGateway.env.BUTLER_APP_FOREGROUND_NONCE = launch.nonce;
-    }
-    return appManagedGateway;
-  }
+  if (appManagedGateway) return appManagedGateway;
   if (app.isPackaged) {
     throw new Error("Packaged Butler App is missing bundled Agent resources.");
   }
@@ -320,6 +328,20 @@ function managedGatewayCommand() {
     cwd: undefined,
     appManaged: false,
   };
+}
+
+function prepareAppForegroundGatewayLaunch(gateway) {
+  if (!usesAppForegroundLifecycle) return;
+  const launch = createAppForegroundLaunch({
+    appVersion: appInfoView().version,
+    bundledAgentVersion: gateway.bundledAgentVersion,
+    port,
+  });
+  foregroundInstance = transitionAppForeground(launch.record, "starting");
+  writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  gateway.env ??= {};
+  gateway.env.BUTLER_APP_FOREGROUND_GENERATION = foregroundInstance.generation;
+  gateway.env.BUTLER_APP_FOREGROUND_NONCE = launch.nonce;
 }
 
 function ensureAppManagedAgentRuntimePointer() {
@@ -466,12 +488,10 @@ async function ensureServer() {
   if (usesAppForegroundLifecycle && foregroundInstance?.state === "starting") {
     const diagnostics = bundledAgentSupervisor.diagnostics();
     foregroundInstance = transitionAppForeground(foregroundInstance, "ready", {
-      patch: {
-        agent_host_pid: diagnostics.pid,
-        process_group_id: diagnostics.pid,
-      },
+      patch: diagnostics.lifecycle_patch,
     });
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+    clearAppForegroundStartupFailure(butlerDataRoot);
   }
 }
 
@@ -549,7 +569,38 @@ function readFirstRunRuntimeDiagnostics() {
     ...diagnostics,
     app_managed_runtime_failure:
       diagnostics.phase === "failed" ? readLatestAppManagedRuntimeFailure() : null,
+    desktop: createAppForegroundDoctorView({
+      platform: process.platform,
+      architecture: process.arch,
+      lifecycleMode: appLifecycleMode,
+      supervisor: diagnostics,
+      startupProgress: readAppForegroundDiagnosticRecord(
+        appForegroundStartupProgressPath(butlerDataRoot),
+      ),
+      startupFailure: diagnostics.phase === "failed"
+        ? readAppForegroundDiagnosticRecord(
+            appForegroundStartupFailurePath(butlerDataRoot),
+          )
+        : null,
+      instance: readAppForegroundDiagnosticRecord(
+        appForegroundInstancePath(butlerDataRoot),
+      ),
+      lastExit: readAppForegroundDiagnosticRecord(
+        appForegroundLastExitPath(butlerDataRoot),
+      ),
+      trayReady: Boolean(tray),
+      startAtLogin: app.getLoginItemSettings().openAtLogin,
+      notificationsSupported: Notification.isSupported(),
+    }),
   };
+}
+
+function readAppForegroundDiagnosticRecord(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function appManagedRuntimePointerReady() {
@@ -1686,8 +1737,15 @@ function safeString(value) {
 }
 
 async function createWindow() {
-  if (rendererUrl === serverUrl && !shouldUseAppAgentNativeServiceBridge()) {
+  const eagerUnpackedForegroundStartup =
+    usesAppForegroundLifecycle && !app.isPackaged;
+  if (
+    (rendererUrl === serverUrl || eagerUnpackedForegroundStartup) &&
+    !shouldUseAppAgentNativeServiceBridge()
+  ) {
+    recordAppStartupProgress("agent_starting");
     await ensureServer();
+    recordAppStartupProgress("agent_ready");
   }
   const launchReconcile = reconcileAppAgentServiceForLaunch();
   if (rendererUrl === serverUrl && shouldUseAppAgentNativeServiceBridge()) {
@@ -1775,6 +1833,7 @@ async function createWindow() {
     scheduleTrayMenuRefresh();
   }
   applyDeveloperModeToWindows();
+  recordAppStartupProgress("window_ready", { windowReady: true });
   if (!suppressInitialWindowForLogin) win.show();
   suppressInitialWindowForLogin = false;
   return win;
@@ -1886,8 +1945,8 @@ ipcMain.handle("butler:first-run-setup-status", () =>
   firstRunSetupBridge.status(),
 );
 
-ipcMain.handle("butler:first-run-setup-start", async () =>
-  await firstRunSetupBridge.start(),
+ipcMain.handle("butler:first-run-setup-start", async (_event, input = {}) =>
+  await firstRunSetupBridge.start(input ?? {}),
 );
 
 ipcMain.handle("butler:ensure-server", async () => {
@@ -1945,6 +2004,32 @@ ipcMain.handle("butler:quit-app", () => {
   app.quit();
   return { quitting: true };
 });
+
+ipcMain.handle("butler:quit-and-install-update", async () =>
+  await quitAndInstallAppUpdate({
+    readActiveWork: readForegroundActiveWorkSnapshot,
+    confirmQuit: async (snapshot) =>
+      await confirmAppForegroundQuit({
+        snapshot,
+        showMessageBox: (options) => dialog.showMessageBox(options),
+      }),
+    stopForUpdate: async (snapshot) => {
+      if (foregroundInstance?.state === "ready") {
+        foregroundInstance = transitionAppForeground(
+          foregroundInstance,
+          "update_pending",
+        );
+        writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+      }
+      await stopServerProcess({
+        reason: "app_update",
+        activeWorkSnapshot: snapshot,
+      });
+      finalQuitAllowed = true;
+    },
+    quitAndInstall: () => autoUpdater.quitAndInstall(),
+  }),
+);
 
 function windowForControlEvent(event) {
   return BrowserWindow.fromWebContents(event.sender) ??
@@ -2145,6 +2230,7 @@ if (appSingleInstanceLock) {
   app
     .whenReady()
     .then(async () => {
+      recordAppStartupProgress("electron_ready");
       configureAppIdentity();
       configureAppIcon();
       suppressInitialWindowForLogin = usesAppForegroundLifecycle && isMac &&
@@ -2188,9 +2274,13 @@ app.on("before-quit", (event) => {
   void confirmForegroundQuitIfNeeded().then((confirmed) => {
     if (!confirmed) {
       isQuitting = false;
+      foregroundQuitSnapshot = null;
       return;
     }
-    return stopServerProcess({ reason: "app_quit" });
+    return stopServerProcess({
+      reason: "app_quit",
+      activeWorkSnapshot: foregroundQuitSnapshot,
+    });
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;
     finalQuitAllowed = true;
@@ -2204,10 +2294,12 @@ app.on("before-quit", (event) => {
 async function confirmForegroundQuitIfNeeded() {
   if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
   const snapshot = await readForegroundActiveWorkSnapshot();
-  return await confirmAppForegroundQuit({
+  const confirmed = await confirmAppForegroundQuit({
     snapshot,
     showMessageBox: (options) => dialog.showMessageBox(options),
   });
+  foregroundQuitSnapshot = confirmed ? snapshot : null;
+  return confirmed;
 }
 
 async function readForegroundActiveWorkSnapshot() {
@@ -2239,12 +2331,34 @@ process.once("SIGTERM", () => {
   app.quit();
 });
 
-async function stopServerProcess({ reason = "app_shutdown" } = {}) {
+async function stopServerProcess({
+  reason = "app_shutdown",
+  activeWorkSnapshot = null,
+} = {}) {
+  let checkpointResult = "not_needed";
   if (usesAppForegroundLifecycle && foregroundInstance) {
+    if (
+      activeWorkSnapshot &&
+      activeWorkSnapshot.classification !== "no_active_work" &&
+      ["ready", "degraded", "update_pending"].includes(foregroundInstance.state)
+    ) {
+      foregroundInstance = transitionAppForeground(
+        foregroundInstance,
+        "draining",
+      );
+      writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+      const drain = await drainAppForegroundActiveWork({
+        snapshot: activeWorkSnapshot,
+        cancelTurn: cancelForegroundTurn,
+        cancelWorker: cancelForegroundWorker,
+        readSnapshot: readForegroundActiveWorkSnapshot,
+      });
+      checkpointResult = drain.status;
+    }
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
-  await bundledAgentSupervisor.stop({ wait: true });
+  const stopResult = await bundledAgentSupervisor.stop({ wait: true });
   if (usesAppForegroundLifecycle && foregroundInstance) {
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopped", {
       patch: { clean_exit: true },
@@ -2254,10 +2368,34 @@ async function stopServerProcess({ reason = "app_shutdown" } = {}) {
       generation: foregroundInstance.generation,
       exitReason: reason,
       graceful: true,
-      processGroupDead: true,
+      checkpointResult,
+      processGroupDead: foregroundInstance.process_group_id !== null &&
+        stopResult.containment_released,
+      processTreeDead: stopResult.containment_released,
       portReleased: await isPortAvailable(port),
     });
   }
+  foregroundQuitSnapshot = null;
+}
+
+async function cancelForegroundTurn(turnId) {
+  const response = await appServerFetch(
+    `/turns/${encodeURIComponent(turnId)}/cancel`,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new Error("foreground_turn_cancel_failed");
+}
+
+async function cancelForegroundWorker(workerId) {
+  const response = await appServerFetch(
+    `/worker-activity/${encodeURIComponent(workerId)}/control`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
+    },
+  );
+  if (!response.ok) throw new Error("foreground_worker_cancel_failed");
 }
 
 async function appServerFetch(path, init = {}) {
@@ -2294,10 +2432,49 @@ function createProjectFolderSelectionToken(folderPath, secret) {
 }
 
 function handleFatalStartupError(error) {
+  try {
+    const diagnostics = bundledAgentSupervisor.diagnostics();
+    writeAppForegroundStartupFailure(butlerDataRoot, {
+      platform: process.platform,
+      architecture: process.arch,
+      lifecycleMode: appLifecycleMode,
+      supervisorPhase: diagnostics.phase,
+      errorCode: diagnostics.last_error_code,
+      exitCode: diagnostics.last_exit?.code,
+      signal: diagnostics.last_exit?.signal,
+      containmentKind: diagnostics.containment?.kind,
+      containmentVerified: diagnostics.containment?.verified,
+      ownerDeathGuaranteed:
+        diagnostics.containment?.owner_death_guaranteed,
+    });
+  } catch {
+    // A startup failure must still terminate even if diagnostics persistence fails.
+  }
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
   console.error(message);
   app.quit();
+}
+
+function recordAppStartupProgress(stage, {
+  windowReady = false,
+  trayReady = Boolean(tray),
+} = {}) {
+  try {
+    const diagnostics = bundledAgentSupervisor.diagnostics();
+    writeAppForegroundStartupProgress(butlerDataRoot, {
+      stage,
+      platform: process.platform,
+      architecture: process.arch,
+      lifecycleMode: appLifecycleMode,
+      agentPhase: diagnostics.phase,
+      containmentKind: diagnostics.containment?.kind,
+      trayReady,
+      windowReady,
+    });
+  } catch {
+    // Startup progress is diagnostic-only and never blocks App launch.
+  }
 }
 
 function normalizeLocalHttpUrl(value, label) {

@@ -94,21 +94,30 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
     const killed: string[] = [];
     let healthChecks = 0;
     let committed = 0;
+    let resolved = 0;
+    let gatewayStarts = 0;
     let port = 18765;
     const healthAuthTokens: string[] = [];
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
-      resolveGateway: () => ({
-        command: "/runtime/bun",
-        args: ["/runtime/bin/butler.js", "gateway", "app"],
-        cwd: "/runtime",
-        env: { BUTLER_HOME: "/runtime" },
-        appManaged: true,
-        bundledAgentVersion: "1.2.3",
-        commitActivation: () => {
-          committed += 1;
-        },
-      }),
+      resolveGateway: () => {
+        resolved += 1;
+        return {
+          command: "/runtime/bun",
+          args: ["/runtime/bin/butler.js", "gateway", "app"],
+          cwd: "/runtime",
+          env: { BUTLER_HOME: "/runtime" },
+          appManaged: true,
+          bundledAgentVersion: "1.2.3",
+          containmentKind: "windows_job_object",
+          containmentVerified: true,
+          ownerDeathGuaranteed: true,
+          recordsProcessGroupId: false,
+          commitActivation: () => {
+            committed += 1;
+          },
+        };
+      },
       spawnProcess: (command, args, options) => {
         const child = new FakeChildProcess(9000 + spawned.length, killed);
         child.spawn = { command, args, options };
@@ -136,6 +145,9 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
       },
       clearKillTimer: () => undefined,
       startupAttempts: 3,
+      onGatewayStarting: () => {
+        gatewayStarts += 1;
+      },
     });
 
     await supervisor.ensureReady();
@@ -167,6 +179,19 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
       phase: "running",
       pid: 9000,
       binding: { host: "127.0.0.1", port: 18765 },
+      containment: {
+        kind: "windows_job_object",
+        verified: true,
+        owner_death_guaranteed: true,
+        raw_text_included: false,
+      },
+      lifecycle_patch: {
+        agent_host_pid: 9000,
+        process_group_id: null,
+        containment_kind: "windows_job_object",
+        containment_verified: true,
+        owner_death_guaranteed: true,
+      },
       bundled_agent: {
         source: "app-managed",
         version: "1.2.3",
@@ -188,11 +213,99 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
     spawned[0]?.emit("exit", 0, null);
     await restarting;
     expect(spawned).toHaveLength(2);
+    expect(resolved).toBe(1);
+    expect(gatewayStarts).toBe(2);
 
-    await supervisor.stop();
+    const stopped = await supervisor.stop({ wait: true });
+    expect(stopped).toMatchObject({
+      stopped: true,
+      containment_released: true,
+      raw_text_included: false,
+    });
     expect(killed.filter((signal) => signal === "SIGTERM")).toHaveLength(2);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("bundled Agent supervisor does not overclaim unverified tree containment", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-supervisor-unverified-"));
+  try {
+    const child = new FakeChildProcess(9001, []);
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => ({
+        command: "bun",
+        args: ["gateway"],
+        env: {},
+      }),
+      spawnProcess: () => child,
+      healthCheck: async () => true,
+      isPortAvailable: async () => true,
+      findAvailablePort: async () => 18766,
+      updatePort: () => {},
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765",
+      getRendererOrigin: () => "http://127.0.0.1:5173",
+    });
+
+    await supervisor.ensureReady();
+    child.emit("exit", 1, null);
+    await expect(supervisor.stop({ wait: true })).resolves.toEqual({
+      stopped: true,
+      containment_released: false,
+      raw_text_included: false,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("supervisor repair discards the cached gateway and resolves a fresh runtime", async () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-supervisor-repair-"));
+  try {
+    let resolved = 0;
+    const children: FakeChildProcess[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: root,
+      resolveGateway: () => {
+        resolved += 1;
+        return {
+          command: `bun-${resolved}`,
+          args: ["gateway"],
+          env: {},
+          commitActivation: () => {},
+          containmentVerified: true,
+        };
+      },
+      spawnProcess: () => {
+        const child = new FakeChildProcess(9100 + children.length, []);
+        children.push(child);
+        return child;
+      },
+      healthCheck: async () => children.length > 0,
+      isPortAvailable: async () => true,
+      findAvailablePort: async (port) => port + 1,
+      updatePort: () => {},
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765",
+      getRendererOrigin: () => "http://127.0.0.1:5173",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+    });
+
+    await supervisor.ensureReady();
+    await supervisor.repair();
+
+    expect(resolved).toBe(2);
+    expect(children).toHaveLength(2);
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "running",
+      pid: 9101,
+    });
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

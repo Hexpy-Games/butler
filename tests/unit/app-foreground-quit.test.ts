@@ -8,12 +8,21 @@ import {
 describe("App foreground quit", () => {
   test("classifies active turns, workers, and queued work", () => {
     expect(classifyAppForegroundActiveWork({
-      navigation: { chats: [{ active_turn_state: "streaming" }] },
-      workerActivity: { workers: [{ status: "running" }] },
+      navigation: {
+        chats: [{
+          active_turn_state: "streaming",
+          active_turn_id: "turn-active",
+        }],
+      },
+      workerActivity: {
+        workers: [{ status: "running", worker_id: "worker-active" }],
+      },
       queues: [{ items: [{ id: "queued" }] }],
     })).toEqual({
       classification: "active_work_detected",
       reasons: ["active_turn", "active_worker", "queued_work"],
+      turn_ids: ["turn-active"],
+      worker_ids: ["worker-active"],
       raw_text_included: false,
     });
   });

@@ -86,6 +86,7 @@ export const firstRunCopy = {
     installChecking: "상태 확인 중",
     installFailed: "Butler Agent를 준비하지 못했습니다.",
     retry: "다시 시도",
+    repair: "복구",
     diagnostics: "진단 복사",
     diagnosticsCopied: "진단을 복사했습니다.",
     diagnosticsUnavailable: "진단을 복사하지 못했습니다.",
@@ -122,6 +123,7 @@ export const firstRunCopy = {
     installChecking: "Checking status",
     installFailed: "Butler Agent is not ready.",
     retry: "Retry",
+    repair: "Repair",
     diagnostics: "Copy diagnostics",
     diagnosticsCopied: "Diagnostics copied.",
     diagnosticsUnavailable: "Diagnostics unavailable.",
@@ -378,10 +380,12 @@ export function settingsLanguagePatch(
   return { language };
 }
 
-export async function startFirstRunSetup(): Promise<FirstRunSetupStatusView> {
+export async function startFirstRunSetup(
+  mode: "check" | "repair" = "check",
+): Promise<FirstRunSetupStatusView> {
   return await api<FirstRunSetupStatusView>("/setup/start", {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({ mode }),
   });
 }
 

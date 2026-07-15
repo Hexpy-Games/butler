@@ -35,6 +35,10 @@ export function createBundledAgentSupervisor(input: {
     bundledAgentVersion?: string;
     commitActivation?: () => void;
     rollbackActivation?: (error: Error) => void;
+    containmentKind?: string;
+    containmentVerified?: boolean;
+    ownerDeathGuaranteed?: boolean;
+    recordsProcessGroupId?: boolean;
   };
   spawnProcess: (
     command: string,
@@ -75,11 +79,22 @@ export function createBundledAgentSupervisor(input: {
   killTimeoutMs?: number;
   probeTimeoutMs?: number;
   stdio?: string;
+  onGatewayStarting?: (gateway: {
+    env?: Record<string, string | undefined>;
+    bundledAgentVersion?: string;
+  }) => void;
 }): {
   diagnostics(): {
     phase: string;
     pid: number | null;
     binding: { host: "127.0.0.1"; port: number };
+    containment: {
+      kind: string;
+      verified: boolean;
+      owner_death_guaranteed: boolean;
+      raw_text_included: false;
+    };
+    lifecycle_patch: Record<string, unknown>;
     bundled_agent: {
       source: "app-managed" | "development";
       version: string | null;
@@ -97,7 +112,12 @@ export function createBundledAgentSupervisor(input: {
   };
   authHeaders(): Record<string, string>;
   ensureReady(): Promise<void>;
+  repair(): Promise<void>;
   restart(): Promise<void>;
   start(): Promise<void>;
-  stop(input?: { wait?: boolean }): Promise<void>;
+  stop(input?: { wait?: boolean }): Promise<{
+    stopped: boolean;
+    containment_released: boolean;
+    raw_text_included: false;
+  }>;
 };
