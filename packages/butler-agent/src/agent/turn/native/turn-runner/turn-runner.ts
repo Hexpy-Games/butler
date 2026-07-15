@@ -78,7 +78,10 @@ import {
 } from "./turn-continuation-prompts.ts";
 import { buildDurableTurnRoundJournal } from "./turn-round-journal.ts";
 import { WorkStreamStore } from "../../../work/work-stream.ts";
-import { recordTurnContractAuditEvidence } from "./turn-contract-audit-evidence.ts";
+import {
+  recordTurnContractAuditEvidence,
+  recordTurnContractBtccPhaseEvidence,
+} from "./turn-contract-audit-evidence.ts";
 import type { ObligationToolSurfaceState } from "./obligation-tool-surface.ts";
 import { reviewProviderFinalCandidateInTurn } from "./provider-final-candidate-review.ts";
 import {
@@ -558,6 +561,32 @@ export async function runNativeToolTurn({
     let decisionCheckedText: string | null = null;
     if (btccTerminalText !== null) {
       if (activeTurnContract) {
+        const terminalCoordinator = preparedBtccTurn
+          ? new BtccNativePhaseCoordinator(preparedBtccTurn, deps.butlerData)
+          : null;
+        const reviewReceiptRef = terminalCoordinator?.acceptedReceiptRef("review") ?? null;
+        const reportingReceiptRef = terminalCoordinator?.acceptedReceiptRef("reporting") ?? null;
+        if (!reviewReceiptRef || !reportingReceiptRef) {
+          throw new Error("btcc_terminal_phase_receipts_missing");
+        }
+        activeTurnContract.contract = recordTurnContractBtccPhaseEvidence({
+          butlerData: deps.butlerData,
+          contract: activeTurnContract.contract,
+          reviewReceiptRef,
+          reportingReceiptRef,
+        });
+        activeTurnContract.contract = recordTurnContractAuditEvidence({
+          butlerData: deps.butlerData,
+          contract: activeTurnContract.contract,
+          audit,
+          finalCandidate: "",
+        });
+        activeTurnContract.contract = recordTurnContractBtccPhaseEvidence({
+          butlerData: deps.butlerData,
+          contract: activeTurnContract.contract,
+          reviewReceiptRef,
+          reportingReceiptRef,
+        });
         activeTurnContract.contract = completeTurnContractDelivery({
           butlerData: deps.butlerData,
           active: activeTurnContract,

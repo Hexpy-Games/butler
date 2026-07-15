@@ -76,6 +76,74 @@ export function recordTurnContractAuditEvidence(input: {
   return recorded;
 }
 
+export function recordTurnContractBtccPhaseEvidence(input: {
+  butlerData: string;
+  contract: CompiledTurnContract;
+  reviewReceiptRef: string;
+  reportingReceiptRef: string;
+}): CompiledTurnContract {
+  const store = new TurnContractStore(input.butlerData);
+  let contract = store.read(input.contract.contract_id) ?? input.contract;
+  const phaseSource = (obligation: RequiredEvidenceObligation): {
+    producer: TurnEvidenceProducer;
+    sourceRef: string;
+  } | null => {
+    if (obligation.deliverable === "review" && obligation.allowed_producers.includes("review")) {
+      return { producer: "review", sourceRef: input.reviewReceiptRef };
+    }
+    if (
+      (obligation.deliverable === "status_report" || obligation.deliverable === "final_report") &&
+      obligation.allowed_producers.includes("runtime")
+    ) {
+      return { producer: "runtime", sourceRef: input.reportingReceiptRef };
+    }
+    return null;
+  };
+  for (const obligation of contract.required_evidence) {
+    if (obligation.deliverable === "final_report") continue;
+    const source = phaseSource(obligation);
+    if (!source) continue;
+    contract = recordPhaseReceipts({ store, contract, obligation, ...source });
+  }
+  const evidence = store.evidenceFor(contract);
+  if (nonReportObligationsSatisfied(contract, evidence)) {
+    for (const obligation of contract.required_evidence.filter((item) => item.deliverable === "final_report")) {
+      const source = phaseSource(obligation);
+      if (!source) continue;
+      contract = recordPhaseReceipts({ store, contract, obligation, ...source });
+    }
+  }
+  recordTurnContractMetric({
+    butlerData: input.butlerData,
+    name: "evidence",
+    status: "ok",
+    contract,
+  });
+  return contract;
+}
+
+function recordPhaseReceipts(input: {
+  store: TurnContractStore;
+  contract: CompiledTurnContract;
+  obligation: RequiredEvidenceObligation;
+  producer: TurnEvidenceProducer;
+  sourceRef: string;
+}): CompiledTurnContract {
+  const contract = input.contract;
+  if (evidenceObligationSatisfied({
+    contract,
+    obligation: input.obligation,
+    receipts: input.store.evidenceFor(contract),
+  })) return contract;
+  return input.store.recordEvidence(receiptFor({
+    contract,
+    obligation: input.obligation,
+    producer: input.producer,
+    sourceId: input.sourceRef,
+    itemIds: input.obligation.expected_item_ids,
+  }));
+}
+
 export function unsatisfiedTurnContractObligations(input: {
   butlerData: string;
   contract: CompiledTurnContract;

@@ -28,6 +28,7 @@ import {
 } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
+import { btccFixtureResponse } from "../support/btcc-phase-fixture.ts";
 import {
   appRuntimePolicy,
   createProjectFolderSelectionToken,
@@ -2657,6 +2658,20 @@ test("native butler-main default provider generates app transport session titles
   const controller = new AbortController();
   const shutdownWatchdog = setTimeout(() => controller.abort(), 1_000);
   let sawTitleRequest = false;
+  const runtime = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: tempDir,
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => btccFixtureResponse({
+      prompt: input.prompt,
+      responseFormat: input.responseFormat,
+      options: {
+        action: "answer",
+        answerText: "비 예보를 확인해볼게요.",
+        reportText: "비 예보를 확인해볼게요.",
+      },
+    }),
+  });
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     butlerData: tempDir,
@@ -2704,7 +2719,7 @@ test("native butler-main default provider generates app transport session titles
     await runNativeButlerMain({
       butlerHome: process.cwd(),
       butlerData: tempDir,
-      runtime: new ScriptedRuntime("비 예보를 확인해볼게요."),
+      runtime,
       shutdownSignal: controller.signal,
       shutdownPollMs: 10,
       workerResultPollMs: 10,
@@ -14495,6 +14510,11 @@ test("direct responder provider timeouts open recovery and keep later messages i
     butlerHome: tempDir,
     butlerData: tempDir,
     disableAutomaticRecall: true,
+    runPromptText: async (input) => btccFixtureResponse({
+      prompt: input.prompt,
+      responseFormat: input.responseFormat,
+      options: { action: "inspect" },
+    }),
     runFunctionToolPromptText: async (input) => {
       providerRoundCalls += 1;
       if (providerRoundCalls === 1) {
@@ -14515,7 +14535,14 @@ test("direct responder provider timeouts open recovery and keep later messages i
     butlerHome: tempDir,
     butlerData: tempDir,
     runtime,
-    provider: fakeProvider,
+    provider: {
+      ...fakeProvider,
+      capabilities: {
+        ...fakeProvider.capabilities,
+        supportsStructuredOutputs: true,
+        structuredDecisionTransport: "json_schema",
+      },
+    },
     runtimePolicy: { completionReview: "disabled" },
     sessionTitleGenerator: false,
   });

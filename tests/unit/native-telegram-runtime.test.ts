@@ -10,6 +10,7 @@ import type {
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/router.ts";
 import { createTelegramLiveGateway } from "../../packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts";
 import { createTelegramTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/telegram/adapter.ts";
@@ -19,6 +20,7 @@ import {
   resolveTelegramGatewayRuntimeConfig,
   writeGatewaySettings,
 } from "../../packages/butler-agent/src/operations/gateway/registry.ts";
+import { btccFixtureResponse } from "../support/btcc-phase-fixture.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -38,25 +40,34 @@ class FakeRuntime implements AgentRuntimeAdapter {
   } as const;
 
   readonly turns: RuntimeTurnInput[] = [];
+  private responseText = "runtime reply";
+  private readonly delegate = new NativeToolLoopRuntime({
+    butlerHome: process.cwd(),
+    butlerData: process.env.BUTLER_DATA ?? process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => btccFixtureResponse({
+      prompt: input.prompt,
+      responseFormat: input.responseFormat,
+      options: {
+        action: "answer",
+        answerText: this.responseText,
+        reportText: this.responseText,
+      },
+    }),
+  });
 
   async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
-    return {
-      sessionId: input.sessionId,
-      role: input.role,
-      runtimeAdapterId: this.id,
-      runtimeSessionRef: `fake:${input.sessionId}`,
-    };
+    const handle = await this.delegate.createSession(input);
+    return { ...handle, runtimeAdapterId: this.id };
   }
 
   async runTurn(input: RuntimeTurnInput) {
     this.turns.push(input);
     const turnText = ("message" in input.input ? input.input.message.text : input.input.text) ?? "";
-    return {
-      text: turnText.includes("background worker task completed")
-        ? "작업 보고입니다. 차트가 준비되었습니다: chart is ready"
-        : "runtime reply",
-      runtimeSessionRef: input.handle.runtimeSessionRef,
-    };
+    this.responseText = turnText.includes("background worker task completed")
+      ? "작업 보고입니다. 차트가 준비되었습니다: chart is ready"
+      : "runtime reply";
+    return await this.delegate.runTurn(input);
   }
 
   async closeSession() {}
@@ -72,6 +83,8 @@ const fakeProvider: ModelProviderAdapter = {
     supportsServerThreads: false,
     supportsReasoningConfig: true,
     supportsPromptCaching: true,
+    supportsStructuredOutputs: true,
+    structuredDecisionTransport: "json_schema",
   },
   async invoke() {
     return { text: "unused" };

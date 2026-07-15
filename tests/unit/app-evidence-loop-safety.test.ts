@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,8 @@ import { hostedToolResultContent } from "../../packages/butler-agent/src/integra
 import { promptUsageModelCallBudgetExhaustedError } from "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
 import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
+import { btccFixtureResponse } from "../support/btcc-phase-fixture.ts";
+import { BtccPhaseStore } from "../../packages/butler-agent/src/agent/turn/btcc/phase-store.ts";
 
 let data = "";
 
@@ -56,21 +59,15 @@ test("App message path rehydrates exact child evidence once without recursive ar
     butlerData: data,
     appMessageDbPath: dbPath,
     disableAutomaticRecall: true,
-    runPromptText: async (input) => JSON.stringify({
-      schema_version: "butler.turn-contract-decision.v1",
-      decision_id: decisionIdFromFormat(input.responseFormat),
-      action: "inspect",
-      target_workstream_id: null,
-      target_project_id: null,
-      blocker_id: null,
-      evidence_domain: null,
-      inspection_scope: "workspace",
-      deliverables: ["status_report"],
-      answer_text: null,
-      public_title: "증거 재수화 경로 점검",
-      public_summary: "큰 도구 결과를 보존한 뒤 필요한 원문 범위만 한 번 읽습니다.",
-      public_rationale: "App의 실제 호출 경로에서 재귀 artifact가 생기지 않아야 합니다.",
-      immediate_next_step: "큰 명령 결과를 생성하고 정확한 원문 범위를 다시 읽습니다.",
+    runPromptText: async (input) => btccFixtureResponse({
+      prompt: input.prompt,
+      responseFormat: input.responseFormat,
+      options: {
+        action: "inspect",
+        reportText: "App evidence hydration completed without recursive artifacts.",
+        publicTitle: "증거 재수화 경로 점검",
+        publicSummary: "큰 도구 결과를 보존한 뒤 필요한 원문 범위만 한 번 읽습니다.",
+      },
     }),
     executeButlerTool: async (call) => {
       if (call.name === "run_command") {
@@ -204,6 +201,28 @@ test("App message path rehydrates exact child evidence once without recursive ar
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     const latest = turns.data.turns.at(-1);
     expect(latest.state).toBe("delivered");
+    const phaseStore = new BtccPhaseStore({ butlerData: data });
+    try {
+      const phaseState = phaseStore.readPhaseState(latest.id);
+      const reportingReceiptRef = phaseState?.acceptedReceiptRefs.find((receiptRef) =>
+        phaseStore.readPhaseReceipt(receiptRef)?.phase === "reporting",
+      );
+      expect(phaseState?.lifecycleStatus).toBe("delivered");
+      expect(reportingReceiptRef).toBeString();
+      const legacyContract = onlyLegacyTurnContract(data);
+      const statusObligation = legacyContract.required_evidence.find(
+        (obligation: any) => obligation.deliverable === "status_report",
+      );
+      const expectedReceiptId = `turn-evidence-${createHash("sha256").update(
+        `${legacyContract.contract_id}\n${statusObligation.obligation_id}\n${reportingReceiptRef}`,
+      ).digest("hex").slice(0, 24)}`;
+      expect(legacyContract).toMatchObject({
+        state: "delivered",
+        evidence_receipt_ids: expect.arrayContaining([expectedReceiptId]),
+      });
+    } finally {
+      phaseStore.close();
+    }
     const events = await getJson(`${server.url}events?cursor=0`);
     expect(JSON.stringify(events)).not.toContain("turn.continuation_scheduled");
     expect(turnContextAtomCount(data)).toBe(0);
@@ -233,39 +252,23 @@ test("App budget interruption stays recoverable until Stop starts a new intent",
         firstTurnActive = false;
         throw promptUsageModelCallBudgetExhaustedError();
       }
-      return JSON.stringify(firstTurnActive
-        ? {
-          schema_version: "butler.turn-contract-decision.v1",
-          decision_id: decisionIdFromFormat(input.responseFormat),
-          action: "inspect",
-          target_workstream_id: null,
-          target_project_id: null,
-          blocker_id: null,
-          evidence_domain: null,
-          inspection_scope: "workspace",
-          deliverables: ["status_report"],
-          answer_text: null,
-          public_title: "긴 조사 실행",
-          public_summary: "도구 조사를 실행하고 결과를 확인합니다.",
-          public_rationale: "첫 요청의 실행 경로를 검증합니다.",
-          immediate_next_step: "조사 결과를 수집합니다.",
-        }
-        : {
-          schema_version: "butler.turn-contract-decision.v1",
-          decision_id: decisionIdFromFormat(input.responseFormat),
-          action: "answer",
-          target_workstream_id: null,
-          target_project_id: null,
-          blocker_id: null,
-          evidence_domain: null,
-          inspection_scope: null,
-          deliverables: [],
-          answer_text: "후속 질문의 새 의도에만 답했습니다.",
-          public_title: "후속 질문 답변",
-          public_summary: "후속 질문에 답합니다.",
-          public_rationale: "새 사용자 메시지가 현재 의도입니다.",
-          immediate_next_step: null,
-        });
+      return btccFixtureResponse({
+        prompt: input.prompt,
+        responseFormat: input.responseFormat,
+        options: firstTurnActive
+          ? {
+            action: "inspect",
+            publicTitle: "긴 조사 실행",
+            publicSummary: "도구 조사를 실행하고 결과를 확인합니다.",
+          }
+          : {
+            action: "answer",
+            answerText: "후속 질문의 새 의도에만 답했습니다.",
+            reportText: "후속 질문의 새 의도에만 답했습니다.",
+            publicTitle: "후속 질문 답변",
+            publicSummary: "후속 질문에 답합니다.",
+          },
+      });
     },
     runFunctionToolPromptText: async () => {
       toolPromptCalls += 1;
@@ -400,13 +403,13 @@ function turnContextAtomCount(root: string): number {
     .length;
 }
 
-function decisionIdFromFormat(format: { schema: Record<string, unknown> } | undefined): string {
-  const value = format?.schema && typeof format.schema === "object"
-    ? (format.schema as { properties?: { decision_id?: { const?: unknown } } })
-      .properties?.decision_id?.const
-    : null;
-  if (typeof value !== "string") throw new Error("decision id missing from response format");
-  return value;
+function onlyLegacyTurnContract(root: string): any {
+  const contractRoot = join(root, "turn-contracts");
+  const paths = readdirSync(contractRoot)
+    .map((entry) => String(entry))
+    .filter((entry) => entry.startsWith("contract-") && entry.endsWith(".json"));
+  expect(paths).toHaveLength(1);
+  return JSON.parse(readFileSync(join(contractRoot, paths[0]!), "utf8"));
 }
 
 async function postJson(url: string, body: unknown): Promise<any> {
