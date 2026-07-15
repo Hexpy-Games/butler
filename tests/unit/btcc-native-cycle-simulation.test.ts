@@ -236,6 +236,91 @@ test("a restarted call resumes from the persisted BTCC owner without replaying C
   conversations.close();
 });
 
+test("a restart at the final ReportGuard resumes Reporting without replaying upstream phases", async () => {
+  const conversations = new AgentConversationStore({ butlerData: data });
+  const phases = new BtccPhaseStore({ butlerData: data });
+  const envelope = inbound("turn-btcc-report-resume", "이 문장을 영어로 번역해줘: 구조가 행동을 만든다.");
+  const binding = storedBinding();
+  const admission = ConversationAdmissionTurn.begin({
+    writer: conversations,
+    binding,
+    envelope,
+    turnId: "turn-btcc-report-resume",
+    timestamp: envelope.message.timestamp,
+    butlerData: data,
+    btccInterruptionStateWriter: phases,
+  });
+  admission.admitInbound();
+  const provenance = admission.provenance();
+  expect(provenance).not.toBeNull();
+
+  const calls: string[] = [];
+  let interruptGuard = true;
+  const runtime = new NativeToolLoopRuntime({
+    butlerData: data,
+    butlerHome: process.cwd(),
+    disableAutomaticRecall: true,
+    runPromptText: async (input) => {
+      const phase = input.usageAttribution?.phase ?? "unknown";
+      calls.push(phase);
+      if (phase === "btcc_reporting_guard" && interruptGuard) {
+        interruptGuard = false;
+        throw new Error("simulated_report_guard_restart");
+      }
+      return successfulBtccResponse(phase, input.prompt, input.responseFormat);
+    },
+    runFunctionToolPromptText: async () => {
+      throw new Error("direct_answer_must_not_enter_tool_execution");
+    },
+  });
+  const handle = await runtime.createSession({
+    sessionId: binding.sessionId,
+    role: "butler",
+    workspacePath: binding.workspacePath,
+    systemPrompt: "Answer accurately and concisely.",
+  });
+  const turnInput = {
+    handle,
+    provider,
+    model: "openai/gpt-5.5",
+    input: envelope,
+    metadata: {
+      turnId: "turn-btcc-report-resume",
+      currentUserText: envelope.message.text,
+      conversationProvenance: provenance,
+      executionControls: envelope.executionControls,
+      runtimePolicy: { completionReview: "disabled" },
+    },
+  } as const;
+  await expect(runtime.runTurn(turnInput)).rejects.toThrow("simulated_report_guard_restart");
+  expect(phases.readPhaseState("turn-btcc-report-resume")).toMatchObject({
+    currentPhase: "reporting",
+    lifecycleStatus: "active",
+  });
+
+  calls.splice(0, calls.length);
+  const resumed = await runtime.runTurn(turnInput);
+  expect(resumed.text).toBe("Structure shapes behavior.");
+  expect(calls).toEqual([
+    "btcc_reporting_reporter",
+    "btcc_reporting_guard",
+  ]);
+  const state = phases.readPhaseState("turn-btcc-report-resume");
+  expect(state?.acceptedReceiptRefs).toHaveLength(6);
+  expect(state?.acceptedReceiptRefs
+    .map((ref) => phases.readPhaseReceipt(ref)?.phase)).toEqual([
+      "conception",
+      "planning",
+      "execution",
+      "review",
+      "consolidation",
+      "reporting",
+    ]);
+
+  phases.close();
+  conversations.close();
+});
+
 function conceptionDecision(responseFormat: unknown): Record<string, unknown> {
   const decisionId = ((responseFormat as {
     schema?: { properties?: { decision_id?: { const?: string } } };
