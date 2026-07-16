@@ -20,14 +20,15 @@ export interface LegacyCommandCompatibilityResult {
  * Temporary boundary for model-authored command text that predates CommandPlan.
  * Platform and shell selection stay inside this infrastructure boundary;
  * callers still use the single structured CommandExecutor port and cannot
- * select an adapter. The command travels over stdin so the platform executor
- * owns one child process tree without a nested runtime host.
+ * select an adapter. The platform executor owns one child process tree without
+ * a nested runtime host.
  */
 export function legacyCommandCompatibilityRequest(
   input: LegacyCommandCompatibilityInput,
   platform: NodeJS.Platform = process.platform,
 ): CommandRequest {
-  const shell = platform === "win32"
+  const windows = platform === "win32";
+  const shell = windows
     ? {
         executable: "powershell.exe",
         arguments: [
@@ -36,8 +37,8 @@ export function legacyCommandCompatibilityRequest(
           "-NonInteractive",
           "-ExecutionPolicy",
           "Bypass",
-          "-Command",
-          "-",
+          "-EncodedCommand",
+          Buffer.from(input.command, "utf16le").toString("base64"),
         ],
       }
     : {
@@ -51,7 +52,7 @@ export function legacyCommandCompatibilityRequest(
     cwd: input.cwd,
     environment: input.environment,
     inheritEnvironment: false,
-    stdin: input.command,
+    ...(!windows ? { stdin: input.command } : {}),
     timeoutMs: input.timeoutMs,
     signal: input.signal,
   };
