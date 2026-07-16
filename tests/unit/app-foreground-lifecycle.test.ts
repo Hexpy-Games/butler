@@ -13,6 +13,7 @@ import {
   readAppForegroundInstance,
   resolveAppLifecycleMode,
   transitionAppForeground,
+  waitForAppForegroundPortRelease,
   writeAppForegroundInstance,
   writeAppForegroundLastExit,
   writeAppForegroundStartupFailure,
@@ -112,6 +113,45 @@ describe("App foreground lifecycle", () => {
     expect(exit.process_tree_dead).toBe(true);
     expect(readFileSync(join(root, "app/runtime/foreground/last-exit.json"), "utf8"))
       .not.toContain("raw prompt");
+  });
+
+  test("waits within a bounded window for foreground port release", async () => {
+    let now = 0;
+    let probes = 0;
+    const released = await waitForAppForegroundPortRelease({
+      port: 18765,
+      isPortAvailable: () => {
+        probes += 1;
+        return probes >= 3;
+      },
+      timeoutMs: 500,
+      pollIntervalMs: 100,
+      nowMs: () => now,
+      sleepMs: async (ms) => {
+        now += ms;
+      },
+    });
+
+    expect(released).toBeTrue();
+    expect(probes).toBe(3);
+    expect(now).toBe(200);
+  });
+
+  test("reports an unreleased foreground port after the bounded window", async () => {
+    let now = 0;
+    const released = await waitForAppForegroundPortRelease({
+      port: 18765,
+      isPortAvailable: () => false,
+      timeoutMs: 250,
+      pollIntervalMs: 100,
+      nowMs: () => now,
+      sleepMs: async (ms) => {
+        now += ms;
+      },
+    });
+
+    expect(released).toBeFalse();
+    expect(now).toBe(250);
   });
 
   test("persists enum-only startup failure diagnostics", () => {

@@ -83,7 +83,7 @@ try {
     electron,
     // Archive activation is intentionally bounded, but hosted Windows runners
     // can spend more than one minute scanning the freshly extracted payload.
-    timeoutMs: 120_000,
+    timeoutMs: 150_000,
   });
   const startup = await waitForDesktopStartup(dataRoot, 15_000);
   const authToken = readAuthToken(dataRoot);
@@ -162,6 +162,7 @@ try {
     processTreeDead: runtimeStopped,
     agentHostStopped,
     recordedProcessTreeDead: lastExit.process_tree_dead === true,
+    recordedPortReleased: lastExit.port_released === true,
     portReleased,
     unicodeAndSpaces: true,
     rawTextIncluded: false,
