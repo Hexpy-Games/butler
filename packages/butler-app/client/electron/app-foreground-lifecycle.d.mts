@@ -69,6 +69,14 @@ export function appForegroundInstancePath(butlerData: string): string;
 export function appForegroundLastExitPath(butlerData: string): string;
 export function appForegroundMigrationPath(butlerData: string): string;
 export function resolveAppLifecycleMode(input?: Record<string, unknown>): string;
+export function waitForAppForegroundPortRelease(input: {
+  port: number;
+  isPortAvailable: (port: number) => boolean | Promise<boolean>;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  nowMs?: () => number;
+  sleepMs?: (ms: number) => Promise<void>;
+}): Promise<boolean>;
 export function createAppForegroundLaunch(input?: Record<string, unknown>): {
   nonce: string;
   record: AppForegroundInstanceRecord;

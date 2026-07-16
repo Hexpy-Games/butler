@@ -7,6 +7,7 @@ param(
   [string]$Smoke = "packages/butler-app/scripts/windows/bundled-agent-payload-smoke.ts",
   [Parameter(Mandatory = $true)][string]$Output,
   [string]$PreparedReleaseRoot = "",
+  [ValidateRange(1, 30)][int]$TimeoutMinutes = 10,
   [switch]$InteractiveDesktop,
   [switch]$DirectInteractive
 )
@@ -23,6 +24,7 @@ try {
   $env:BUTLER_WINDOWS_PROCESS_HOST = $SignedHost
   $env:BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1 = $SigningThumbprint
   $env:BUTLER_WINDOWS_STANDARD_USER = "1"
+  $env:BUTLER_POWERSHELL = Join-Path $PSHOME "powershell.exe"
   if ($PreparedReleaseRoot) {
     $env:BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT = $PreparedReleaseRoot
   }
@@ -58,7 +60,7 @@ try {
       $shortcut.Save()
       try {
         & explorer.exe $shortcutPath
-        $deadline = (Get-Date).AddMinutes(9)
+        $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
         while (-not (Test-Path -LiteralPath $Output)) {
           if ((Get-Date) -gt $deadline) {
             throw "Interactive standard-user smoke controller timed out"

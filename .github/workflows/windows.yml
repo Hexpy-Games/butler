@@ -63,7 +63,7 @@ jobs:
         run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup
       - name: Run Windows unit contracts
         run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Tests
-      - name: Run Windows product loop twice
+      - name: Run Windows product validation and repeat platform lifecycle
         run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode ProductE2E
 
   signed-package:
