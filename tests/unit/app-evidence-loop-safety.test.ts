@@ -306,10 +306,10 @@ test("App budget interruption stays recoverable until Stop starts a new intent",
     const firstTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.id === first.data.turn.id && turn.state === "waiting_for_tool",
+      (turn) => turn.id === first.data.turn.id && turn.state === "waiting_runtime",
     );
     expect(firstTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       attempt: 1,
       retryable: false,
       cancellable: true,
@@ -327,7 +327,7 @@ test("App budget interruption stays recoverable until Stop starts a new intent",
     const stableTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(stableTurns.data.turns[0]).toMatchObject({
       id: first.data.turn.id,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       attempt: 1,
     });
     const stableFirstEvents = await getJson(`${server.url}events?cursor=0`);

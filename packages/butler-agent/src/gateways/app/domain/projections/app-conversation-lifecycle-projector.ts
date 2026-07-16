@@ -44,10 +44,11 @@ export class AppConversationLifecycleProjector {
       WHERE id = ?
     `).get(snapshot.turn_id);
     const projected = appLifecycleState(snapshot);
-    if (!current) {
-      if (projected.state === "thinking") return null;
-      throw new Error(`app_turn_for_lifecycle_missing:${snapshot.turn_id}`);
-    }
+    // Gateway-neutral conversations can be projected into App as semantic
+    // messages without an App-owned turn lifecycle row. App-admitted turns
+    // create that row before canonical conversation admission, so absence here
+    // means there is no local lifecycle entity to reconcile.
+    if (!current) return null;
     if (current.state === "cancelling" && projected.state === "cancelled") {
       // The App cancellation owner must freeze public assistant snapshots and
       // settle its control-plane outbox before the turn row becomes terminal.
