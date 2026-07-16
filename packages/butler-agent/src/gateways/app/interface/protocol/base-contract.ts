@@ -28,6 +28,7 @@ export type TurnState =
   | "streaming"
   | "waiting_for_form"
   | "waiting_for_tool"
+  | "waiting_runtime"
   | "cancelling"
   | "cancelled"
   | "delivered"

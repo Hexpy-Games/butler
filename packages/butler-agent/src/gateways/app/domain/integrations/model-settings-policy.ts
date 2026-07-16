@@ -20,7 +20,7 @@ export class AppModelSettingsPolicy {
         `
       SELECT DISTINCT chat_id
       FROM turns
-      WHERE state IN ('queued', 'accepted', 'thinking', 'streaming', 'waiting_for_form', 'waiting_for_tool', 'retrying', 'cancelling')
+      WHERE state IN ('queued', 'accepted', 'thinking', 'streaming', 'waiting_for_form', 'waiting_for_tool', 'waiting_runtime', 'retrying', 'cancelling')
     `,
       )
       .all();

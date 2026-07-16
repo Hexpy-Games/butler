@@ -23,6 +23,7 @@ import type {
   ConversationPart,
   ConversationBinding,
   ConversationProjectionEvent,
+  ConversationTurnLifecycleProjection,
   ConversationRole,
   ConversationSession,
   ConversationSummary,
@@ -423,6 +424,35 @@ export class AgentConversationStore {
       ORDER BY outbox_rowid ASC
       LIMIT ?
     `).all(afterRow, capped);
+  }
+
+  readTurnLifecycleProjection(
+    sessionId: string,
+    turnSeq: number,
+  ): ConversationTurnLifecycleProjection | null {
+    return this.db.query<ConversationTurnLifecycleProjection, [string, number]>(`
+      SELECT
+        conversation_turns.id AS turn_id,
+        conversation_turns.session_id AS conversation_session_id,
+        conversation_turns.seq AS turn_seq,
+        conversation_turns.status AS conversation_status,
+        conversation_turns.completed_at AS conversation_completed_at,
+        btcc_turn_states.state AS btcc_state,
+        btcc_turn_states.lifecycle_status AS btcc_lifecycle_status,
+        btcc_turn_states.active_recovery_case_id AS active_recovery_case_id,
+        btcc_recovery_cases.status AS recovery_status,
+        btcc_recovery_cases.public_status_id AS recovery_public_status_id,
+        COALESCE(btcc_turn_states.updated_at, conversation_turns.completed_at,
+          conversation_turns.started_at) AS updated_at
+      FROM conversation_turns
+      LEFT JOIN btcc_turn_states
+        ON btcc_turn_states.turn_id = conversation_turns.id
+      LEFT JOIN btcc_recovery_cases
+        ON btcc_recovery_cases.recovery_case_id = btcc_turn_states.active_recovery_case_id
+      WHERE conversation_turns.session_id = ?
+        AND conversation_turns.seq = ?
+      LIMIT 1
+    `).get(sessionId, turnSeq) ?? null;
   }
 
   private appendMessage(input: AppendMessageInput & { role: ConversationRole }): ConversationMessageWithParts {

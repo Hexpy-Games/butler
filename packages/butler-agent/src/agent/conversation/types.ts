@@ -142,6 +142,20 @@ export interface ConversationProjectionEvent {
   created_at: string;
 }
 
+export interface ConversationTurnLifecycleProjection {
+  turn_id: string;
+  conversation_session_id: string;
+  turn_seq: number;
+  conversation_status: ConversationTurn["status"];
+  conversation_completed_at: string | null;
+  btcc_state: string | null;
+  btcc_lifecycle_status: string | null;
+  active_recovery_case_id: string | null;
+  recovery_status: string | null;
+  recovery_public_status_id: string | null;
+  updated_at: string;
+}
+
 export interface PromptMaterial {
   session_id: string;
   summaries: ConversationSummary[];
@@ -258,6 +272,10 @@ export interface ConversationWriter {
 
 export interface ConversationProjectionReader {
   readProjectionBatch(afterOutboxId: string | null, limit?: number): ConversationProjectionEvent[];
+  readTurnLifecycleProjection?(
+    sessionId: string,
+    turnSeq: number,
+  ): ConversationTurnLifecycleProjection | null;
   getSession(sessionId: string): ConversationSession | null;
   getGatewayBindingForConversation(sessionId: string, gateway: string): ConversationBinding | null;
   readMessageById(messageId: string): ConversationMessageWithParts | null;

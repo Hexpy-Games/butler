@@ -601,7 +601,7 @@ test("real deferred App route parks a budget interruption until Stop isolates th
     );
     expect(recoveryTurns.data.turns).toContainEqual(expect.objectContaining({
       id: firstTurnId,
-      state: "thinking",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     }));
@@ -611,7 +611,7 @@ test("real deferred App route parks a budget interruption until Stop isolates th
     );
     expect(recoveryView.data.active_turn).toMatchObject({
       id: firstTurnId,
-      state: "thinking",
+      state: "waiting_runtime",
     });
     expect(bindingStore.getBySessionId("butler/app-general")?.lifecycleState)
       .toBe("active");

@@ -7195,13 +7195,13 @@ test("system responder runtime recovery stays non-terminal through the real stor
       },
     );
     expect(result.turn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       cancellable: true,
     });
     const turns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(turns.data.turns).toContainEqual(expect.objectContaining({
       id: result.turn.id,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     }));
@@ -7242,7 +7242,7 @@ test("system responder generic errors use the same durable runtime recovery owne
       },
     );
     expect(result.turn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       cancellable: true,
     });
     expectBtccRuntimeRecovery(result.turn.id);
@@ -8852,7 +8852,7 @@ test("app transport failure projection opens runtime recovery without leaking in
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -8864,7 +8864,7 @@ test("app transport failure projection opens runtime recovery without leaking in
     );
     expect(sessionView.data.active_turn).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
     });
     expect(JSON.stringify(sessionView)).not.toContain("recovering_internal");
     expect(JSON.stringify(sessionView)).not.toContain("needs_evidence");
@@ -8879,17 +8879,21 @@ test("app transport failure projection opens runtime recovery without leaking in
       }) =>
         event.type === "turn.state_changed" &&
         event.payload?.turn?.id === turnId &&
-        event.payload?.turn?.state === "waiting_for_tool",
+        event.payload?.turn?.state === "waiting_runtime",
     );
     expect(stateChanged).toBeTruthy();
     const stateChangedPayload = stateChanged?.payload;
-    expect(stateChangedPayload).not.toHaveProperty("safe_status_label");
-    expect(stateChangedPayload?.turn).not.toHaveProperty("safe_status_label");
+    expect(stateChangedPayload?.safe_status_label).toBe(
+      "Waiting for runtime recovery",
+    );
+    expect(stateChangedPayload?.turn?.safe_status_label).toBe(
+      "Waiting for runtime recovery",
+    );
 
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
     });
     expect(JSON.stringify(summary)).not.toContain("could not verify");
     expect(JSON.stringify(summary)).not.toContain("Continuing");
@@ -8954,8 +8958,8 @@ test("repeated app transport failure projections reuse runtime recovery without 
     const firstTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(firstTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
-      safe_status_label: "",
+      state: "waiting_runtime",
+      safe_status_label: "Waiting for runtime recovery",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -8993,8 +8997,8 @@ test("repeated app transport failure projections reuse runtime recovery without 
     const secondTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(secondTurns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
-      safe_status_label: "",
+      state: "waiting_runtime",
+      safe_status_label: "Waiting for runtime recovery",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -9017,7 +9021,7 @@ test("repeated app transport failure projections reuse runtime recovery without 
     const secondSummary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(secondSummary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
     });
     expect(JSON.stringify(secondSummary)).not.toContain("Retry required");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
@@ -9147,7 +9151,7 @@ test("late continuation evidence cannot bypass runtime recovery ownership", asyn
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -9168,7 +9172,7 @@ test("late continuation evidence cannot bypass runtime recovery ownership", asyn
     const sessionView = await getJson(`${server.url}session-view?session_id=general`);
     expect(sessionView.data.active_turn).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
     });
     expect(JSON.stringify(secondEvents)).not.toContain("같은 이어가기 상태");
     expect(JSON.stringify(secondEvents)).not.toContain("Recovery needs continuation");
@@ -9242,7 +9246,7 @@ test("app transport failure diagnostics coalesce into one runtime recovery owner
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -9346,7 +9350,7 @@ test("app transport no-visible final stays private and deferred during runtime r
     expect(JSON.stringify(messages)).not.toContain("dispatch lease expired");
     expect(JSON.stringify(messages)).not.toContain("진행한 내용은 보존했습니다");
     expect(messages.data.turn_progress[turnId]).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       delivery_state: "running",
       limitation_codes: [],
       limitations: [],
@@ -9357,7 +9361,7 @@ test("app transport no-visible final stays private and deferred during runtime r
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
       turn_id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       delivery_state: "running",
       limitation_codes: [],
       limitations: [],
@@ -9931,7 +9935,7 @@ test("app transport stale final cannot bypass timeout runtime recovery ownership
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -10059,7 +10063,7 @@ test("recoverable limited final evidence waits for BTCC recovery resolution", as
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -10067,7 +10071,7 @@ test("recoverable limited final evidence waits for BTCC recovery resolution", as
     expectBtccRuntimeRecovery(turnId);
     const summary = await getJson(`${server.url}session-summary?session_id=general`);
     expect(summary.data.latest_progress).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       limitation_codes: [],
       limitations: [],
     });
@@ -10153,7 +10157,7 @@ test("recoverable limited final without queue claim cannot bypass runtime recove
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -11303,7 +11307,7 @@ test("app transport failure projection opens runtime recovery after app-server r
     expect(turns.data.turns).toHaveLength(1);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       cancellable: true,
       retryable: false,
     });
@@ -11348,7 +11352,7 @@ test("retry endpoint cannot replay a runtime-recovery-owned turn", async () => {
   const waitingTurn = await waitForLatestTurnMatching(
     server.url,
     "general",
-    (turn) => turn.state === "waiting_for_tool",
+    (turn) => turn.state === "waiting_runtime",
   );
   const turnId = waitingTurn.id as string;
   server.stop();
@@ -11365,7 +11369,7 @@ test("retry endpoint cannot replay a runtime-recovery-owned turn", async () => {
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -11414,7 +11418,7 @@ test("stale failure projection cannot reopen retry on runtime recovery", async (
   const waitingTurn = await waitForLatestTurnMatching(
     server.url,
     "general",
-    (turn) => turn.state === "waiting_for_tool",
+    (turn) => turn.state === "waiting_runtime",
   );
   const turnId = waitingTurn.id as string;
   server.stop();
@@ -11453,7 +11457,7 @@ test("stale failure projection cannot reopen retry on runtime recovery", async (
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       cancellable: true,
       retryable: false,
       attempt: 1,
@@ -13213,10 +13217,10 @@ test("direct responder runtime recovery stays active without a failure projectio
       server.url,
       "general",
       (turn) => turn.id === response.data.turn.id &&
-        turn.state === "waiting_for_tool",
+        turn.state === "waiting_runtime",
     );
     expect(waitingTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -13262,10 +13266,10 @@ test("direct responder scheduler yield waits instead of inventing a failed termi
       server.url,
       "general",
       (turn) => turn.id === response.data.turn.id &&
-        turn.state === "waiting_for_tool",
+        turn.state === "waiting_runtime",
     );
     expect(waitingTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -13835,10 +13839,10 @@ test("generic responder errors open durable runtime recovery without public fail
     const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     expect(recoveryTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -13944,10 +13948,10 @@ test("runtime fault diagnostics do not authorize App terminality or manual retry
     const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     expect(recoveryTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -14027,7 +14031,7 @@ test("recovery-store outages park and stop the accepted App turn without escapin
       await waitForCondition(() =>
         appDb.query<{ state: string }, []>(
           "SELECT state FROM turns ORDER BY rowid DESC LIMIT 1",
-        ).get()?.state === "waiting_for_tool",
+        ).get()?.state === "waiting_runtime",
       );
     } finally {
       appDb.close();
@@ -14037,10 +14041,10 @@ test("recovery-store outages park and stop the accepted App turn without escapin
     const parked = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     expect(parked).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       cancellable: true,
       retryable: false,
     });
@@ -14097,10 +14101,10 @@ test("provider empty responses remain owned without exposing a failure reply", a
     const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     expect(recoveryTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -14161,10 +14165,10 @@ test("provider diagnostics remain private while BTCC owns recovery", async () =>
     const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     expect(recoveryTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -14213,10 +14217,10 @@ test("raw provider aborts open recovery instead of false cancellation or failure
     const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     expect(recoveryTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
     });
@@ -14281,10 +14285,10 @@ for (const scenario of [
       const recoveryTurn = await waitForLatestTurnMatching(
         server.url,
         "general",
-        (turn) => turn.state === "waiting_for_tool",
+        (turn) => turn.state === "waiting_runtime",
       );
       expect(recoveryTurn).toMatchObject({
-        state: "waiting_for_tool",
+        state: "waiting_runtime",
         retryable: false,
         cancellable: true,
         attempt: 1,
@@ -14324,7 +14328,7 @@ test("concurrent manual retries cannot fork a RecoveryCase-owned turn", async ()
     const recoveryTurn = await waitForLatestTurnMatching(
       server.url,
       "general",
-      (turn) => turn.state === "waiting_for_tool",
+      (turn) => turn.state === "waiting_runtime",
     );
     const turnId = recoveryTurn.id as string;
     expectBtccRuntimeRecovery(turnId);
@@ -14344,7 +14348,7 @@ test("concurrent manual retries cannot fork a RecoveryCase-owned turn", async ()
     expect([first.status, second.status].sort()).toEqual([409, 409]);
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       retryable: false,
       cancellable: true,
       attempt: 1,
@@ -14573,7 +14577,7 @@ test("direct responder provider timeouts open recovery and keep later messages i
         turn.state !== "thinking",
     );
     expect(timedOutTurn).toMatchObject({
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       attempt: 1,
       retryable: false,
       cancellable: true,
@@ -14609,7 +14613,7 @@ test("direct responder provider timeouts open recovery and keep later messages i
     const finalTurns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
     expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
       id: timedOutTurn.id,
-      state: "waiting_for_tool",
+      state: "waiting_runtime",
       attempt: 1,
     }));
     expect(finalTurns.data.turns).toHaveLength(1);

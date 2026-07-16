@@ -5,6 +5,10 @@ import { createOpenAIResponse } from "./responses.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "./usage.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
+import {
+  compileOpenAIResponseFormat,
+  validateOpenAIStructuredResponse,
+} from "./response-schema-dialect.ts";
 
 
 export async function runOpenAIPromptWithUsage(
@@ -15,6 +19,9 @@ export async function runOpenAIPromptWithUsage(
   const resolution = resolveOpenAIModel(modelOverride ?? options.model, options.reasoningEffort);
   const model = await resolveDynamicOpenAIModel(resolution.model);
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "text-prompt");
+  const responseFormat = options.responseFormat
+    ? compileOpenAIResponseFormat(options.responseFormat)
+    : null;
   beforeAttributedModelRequest({
     attribution: options.usageAttribution,
     roundIndex: options.usageAttribution?.roundIndex ?? 0,
@@ -24,7 +31,7 @@ export async function runOpenAIPromptWithUsage(
     store: true,
     ...promptCache,
     instructions: options.instructions,
-    ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
+    ...(responseFormat ? { text: { format: responseFormat.format } } : {}),
     reasoning: buildReasoningConfig(resolution),
     input: openAIInputWithAttachments(options.prompt, options.attachments),
   }, options.signal, authOverride, options.onProviderStreamEvent, {
@@ -57,6 +64,7 @@ export async function runOpenAIPromptWithUsage(
       model,
     });
   }
+  if (responseFormat) validateOpenAIStructuredResponse(text, responseFormat);
   const stats = extractPromptCacheStats(response);
   return {
     text,

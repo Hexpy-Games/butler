@@ -275,6 +275,11 @@ export function initializeAppStoreKernel(
   kernel.conversationProjection = new AppConversationProjectionStore({
     db: kernel.db,
     conversationReader: options.conversationProjectionReader,
+    onTurnStateProjected(turnId) {
+      const turn = kernel.turns.getTurn(turnId);
+      kernel.appendEvent("turn.state_changed", { turn });
+      kernel.touchChat(turn.chat_id);
+    },
   });
   kernel.projectWorkspaceRoot =
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??

@@ -212,7 +212,7 @@ export class AppTurnProgressEventStore {
       UPDATE turns
       SET safe_status_label = ?, updated_at = ?
       WHERE id = ?
-        AND state NOT IN ('delivered', 'failed', 'cancelled')
+        AND state NOT IN ('delivered', 'failed', 'cancelled', 'waiting_runtime')
     `,
       )
       .run(label, row.created_at ?? new Date().toISOString(), turnId);

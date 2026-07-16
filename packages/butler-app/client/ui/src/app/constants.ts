@@ -80,6 +80,7 @@ export const ACTIVE_TURN_STATES = new Set([
   "streaming",
   "waiting_for_form",
   "waiting_for_tool",
+  "waiting_runtime",
   "cancelling",
   "retrying",
 ]);
