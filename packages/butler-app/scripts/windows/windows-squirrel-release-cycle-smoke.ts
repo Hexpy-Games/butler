@@ -139,8 +139,10 @@ try {
 
   const previousApp = installedAppExecutable(previousVersion);
   await waitFor(() => existsSync(previousApp), "N-1 installed executable");
-  await waitFor(() => evidence("install")?.normalInitializationReached === false,
-    "install event early exit");
+  const installEvidence = await requireSuccessfulSquirrelEvidence("install");
+  if (installEvidence.normalInitializationReached !== false) {
+    throw new Error("Squirrel install event reached normal initialization");
+  }
   await waitFor(() => existsSync(startMenuShortcut), "Start Menu shortcut");
   await ensureRuntimeReady(previousApp, previousVersion);
   const previousPointer = readFileSync(previousPointerPath);
@@ -168,8 +170,10 @@ try {
   runSquirrelUpdate(outCurrent);
   const currentApp = installedAppExecutable(currentVersion);
   await waitFor(() => existsSync(currentApp), "updated installed executable");
-  await waitFor(() => evidence("updated")?.normalInitializationReached === false,
-    "update event early exit");
+  const updateEvidence = await requireSuccessfulSquirrelEvidence("updated");
+  if (updateEvidence.normalInitializationReached !== false) {
+    throw new Error("Squirrel update event reached normal initialization");
+  }
   await stopInstalledProcessesAndWait("post-update process cleanup");
 
   writeFileSync(previousPointerPath, previousPointer);
@@ -215,8 +219,10 @@ try {
   mkdirSync(join(butlerData, "updates", "artifacts"), { recursive: true });
   writeFileSync(join(butlerData, "updates", "artifacts", "ephemeral"), "remove\n");
   runOwnedAppUninstaller();
-  await waitFor(() => evidence("uninstall")?.operationalStateRemoved === true,
-    "uninstall event cleanup evidence");
+  const uninstallEvidence = await requireSuccessfulSquirrelEvidence("uninstall");
+  if (uninstallEvidence.operationalStateRemoved !== true) {
+    throw new Error("Squirrel uninstall did not remove operational state");
+  }
   removeOwnedInstallRoot();
   installedBySmoke = false;
   await waitFor(() => !existsSync(installRoot), "Squirrel uninstall cleanup");
@@ -476,6 +482,25 @@ function evidence(event: string): Record<string, any> | null {
   } catch {
     return null;
   }
+}
+
+async function requireSuccessfulSquirrelEvidence(
+  event: string,
+): Promise<Record<string, any>> {
+  await waitFor(() => evidence(event) !== null, `${event} event evidence`);
+  const record = evidence(event);
+  if (!record || record.exitCode !== 0) {
+    throw new Error(
+      `Squirrel ${event} event failed: ${safeEvidenceCode(record?.errorCode)}`,
+    );
+  }
+  return record;
+}
+
+function safeEvidenceCode(value: unknown): string {
+  return typeof value === "string" && /^[a-z0-9_]{1,80}$/u.test(value)
+    ? value
+    : "unknown_error";
 }
 
 function evidenceDigest(): string {

@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { basename, win32 } from "node:path";
 import { windowsPowerShellEnvironment } from "./windows-powershell-environment.mjs";
 
@@ -149,12 +149,41 @@ export function manageWindowsSquirrelShortcut({
   workingDirectory,
   runPowerShell,
   env = process.env,
+  removePath = (path) => rmSync(path, { force: true }),
+  pathExists = existsSync,
 } = {}) {
   if (!["create", "remove"].includes(action) ||
     typeof name !== "string" || !name.endsWith(".lnk") ||
     typeof target !== "string" || !target ||
-    typeof workingDirectory !== "string" || !workingDirectory ||
-    typeof runPowerShell !== "function") {
+    typeof workingDirectory !== "string" || !workingDirectory) {
+    throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
+  }
+  if (action === "remove") {
+    // Squirrel cancels lifecycle hooks after roughly ten seconds. Avoid a
+    // PowerShell process launch for an idempotent file deletion during uninstall.
+    const appData = env.APPDATA?.trim();
+    if (!appData) {
+      throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
+    }
+    const shortcutPath = win32.join(
+      appData,
+      "Microsoft",
+      "Windows",
+      "Start Menu",
+      "Programs",
+      name,
+    );
+    try {
+      removePath(shortcutPath);
+    } catch {
+      throw windowsSquirrelError("windows_squirrel_shortcut_failed");
+    }
+    if (pathExists(shortcutPath)) {
+      throw windowsSquirrelError("windows_squirrel_shortcut_failed");
+    }
+    return true;
+  }
+  if (typeof runPowerShell !== "function") {
     throw windowsSquirrelError("windows_squirrel_shortcut_input_invalid");
   }
   const script = [
@@ -163,20 +192,15 @@ export function manageWindowsSquirrelShortcut({
     "$programs = [Environment]::GetFolderPath('Programs')",
     "if (-not $programs) { throw 'programs_folder_unavailable' }",
     "$shortcutPath = Join-Path $programs ([string]$input.name)",
-    "if ([string]$input.action -eq 'remove') {",
-    "  Remove-Item -LiteralPath $shortcutPath -Force -ErrorAction SilentlyContinue",
-    "  if (Test-Path -LiteralPath $shortcutPath) { throw 'shortcut_remove_failed' }",
-    "} else {",
-    "  New-Item -ItemType Directory -Path $programs -Force | Out-Null",
-    "  $shell = New-Object -ComObject WScript.Shell",
-    "  $shortcut = $shell.CreateShortcut($shortcutPath)",
-    "  $shortcut.TargetPath = [string]$input.target",
-    "  $shortcut.WorkingDirectory = [string]$input.workingDirectory",
-    "  $shortcut.IconLocation = ([string]$input.target + ',0')",
-    "  $shortcut.Description = 'Butler'",
-    "  $shortcut.Save()",
-    "  if (-not (Test-Path -LiteralPath $shortcutPath)) { throw 'shortcut_create_failed' }",
-    "}",
+    "New-Item -ItemType Directory -Path $programs -Force | Out-Null",
+    "$shell = New-Object -ComObject WScript.Shell",
+    "$shortcut = $shell.CreateShortcut($shortcutPath)",
+    "$shortcut.TargetPath = [string]$input.target",
+    "$shortcut.WorkingDirectory = [string]$input.workingDirectory",
+    "$shortcut.IconLocation = ([string]$input.target + ',0')",
+    "$shortcut.Description = 'Butler'",
+    "$shortcut.Save()",
+    "if (-not (Test-Path -LiteralPath $shortcutPath)) { throw 'shortcut_create_failed' }",
   ].join("; ");
   const result = runPowerShell(env.BUTLER_POWERSHELL || "powershell.exe", [
     "-NoLogo",
@@ -197,7 +221,9 @@ export function manageWindowsSquirrelShortcut({
       }),
     }),
     shell: false,
-    timeout: 12_000,
+    // Leave time for Electron startup and evidence persistence within Squirrel's
+    // lifecycle hook deadline.
+    timeout: 5_000,
     windowsHide: true,
   });
   if (result?.status !== 0) {
