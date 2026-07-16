@@ -4,6 +4,7 @@ import type {
   ConversationProjectionReader,
 } from "../../../../agent/conversation/types.ts";
 import { AppConversationMessageProjector } from "./app-conversation-message-projector.ts";
+import { AppConversationLifecycleProjector } from "./app-conversation-lifecycle-projector.ts";
 import { AppConversationProjectionReadModel } from "./app-conversation-projection-read-model.ts";
 import type {
   AppConversationProjectionActivityState,
@@ -43,6 +44,7 @@ export class AppConversationProjectionStore {
       db: Database;
       conversationReader?: ConversationProjectionReader;
       gateway?: string;
+      onTurnStateProjected?: (turnId: string) => void;
     },
   ) {
     this.readModel = new AppConversationProjectionReadModel({
@@ -83,13 +85,19 @@ export class AppConversationProjectionStore {
     let projectedMessages = 0;
     for (const event of events) {
       try {
-        projectedMessages += this.projectOutboxEvent(event, projector);
-        processed += 1;
-        state = this.writeState({
-          lastOutboxId: event.outbox_id,
-          pendingCount: events.length === limit ? 1 : 0,
-          safeErrorCode: null,
+        const projectAndAdvance = this.input.db.transaction(() => {
+          const projected = this.projectOutboxEvent(event, projector);
+          const nextState = this.writeState({
+            lastOutboxId: event.outbox_id,
+            pendingCount: events.length === limit ? 1 : 0,
+            safeErrorCode: null,
+          });
+          return { projected, nextState };
         });
+        const result = projectAndAdvance();
+        projectedMessages += result.projected;
+        processed += 1;
+        state = result.nextState;
       } catch {
         state = this.writeState({
           lastOutboxId: state.last_outbox_id,
@@ -127,11 +135,40 @@ export class AppConversationProjectionStore {
     event: ConversationProjectionEvent,
     projector: AppConversationMessageProjector | null = null,
   ): number {
-    if (event.kind !== "conversation.message_committed") return 0;
     const reader = this.requireReader();
-    const message = reader.readMessageById(event.payload_ref);
-    if (!message) throw new Error(`Conversation message not found: ${event.payload_ref}`);
-    return (projector ?? this.messageProjector(reader)).project(message);
+    switch (event.kind) {
+      case "conversation.message_committed": {
+        const message = reader.readMessageById(event.payload_ref);
+        if (!message) throw new Error(`Conversation message not found: ${event.payload_ref}`);
+        return (projector ?? this.messageProjector(reader)).project(message);
+      }
+      case "conversation.turn_started":
+      case "conversation.turn_outcome_written":
+      case "turn.state_changed":
+      case "runtime.interruption.recorded":
+      case "recovery.case.opened":
+      case "recovery.case.resolved":
+      case "turn.outcome": {
+        const turnId = new AppConversationLifecycleProjector({
+          db: this.input.db,
+          reader,
+        }).project(event);
+        if (turnId) this.input.onTurnStateProjected?.(turnId);
+        return 0;
+      }
+      case "conversation.session_bound":
+      case "conversation.tool_call_committed":
+      case "conversation.tool_result_committed":
+      case "conversation.summary_written":
+      case "conversation.message_compacted":
+      case "conversation.redacted":
+      case "btcc.phase.admitted":
+      case "btcc.conception.checkpointed":
+      case "btcc.phase.receipt_accepted":
+      case "btcc.return_ticket.activated":
+      case "btcc.phase.wait_resumed":
+        return 0;
+    }
   }
 
   rebuildSession(conversationSessionId: string): AppConversationProjectionRebuildResult {

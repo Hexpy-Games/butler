@@ -210,11 +210,18 @@ export class AppLimitedDeliveryStore {
       shouldRequeue && currentTurn
         ? currentTurn.attempt + 1
         : currentTurn?.attempt;
+    const recoveryState = shouldRequeue
+      ? "retrying"
+      : runtimeRecoveryOwnsTurn
+        ? "waiting_runtime"
+        : "waiting_for_tool";
     const recoveryTurn = this.input.updateTurnState(
       turnId,
-      shouldRequeue ? "retrying" : "waiting_for_tool",
+      recoveryState,
       {
-        safeStatusLabel: "",
+        safeStatusLabel: runtimeRecoveryOwnsTurn
+          ? "Waiting for runtime recovery"
+          : "",
         retryable: false,
         cancellable: true,
         safeErrorCode: options.safeErrorCode ?? null,

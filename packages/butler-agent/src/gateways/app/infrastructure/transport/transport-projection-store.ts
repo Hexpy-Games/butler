@@ -25,7 +25,10 @@ import {
   queuedFinalProjectionDisposition,
   recoverableLimitedFinalForFailedQueueDisposition,
 } from "./inbound-queue-terminal-records.ts";
-import { projectAppFinalResult } from "./final-result-projection.ts";
+import {
+  projectAppFinalResult,
+  projectAppFinalResultMetadata,
+} from "./final-result-projection.ts";
 import { projectAppTurnFailure } from "./projected-turn-failure.ts";
 import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
@@ -103,6 +106,13 @@ export class AppTransportProjectionStore {
     if (!actionId || !turnId) return false;
     const turn = this.options.getTurnRow(turnId);
     if (!turn) return false;
+    const projectedFinalMetadata = metadata.kind === "final_result"
+      ? projectAppFinalResultMetadata(this.options, {
+          chatId,
+          turnId,
+          title: metadata.generatedSessionTitle,
+        })
+      : false;
     const turnEvent = runtimeTurnEventFromAppOutboundMetadata(metadata);
     if (turnEvent) {
       if (deliveryState !== "delivered") {
@@ -131,6 +141,7 @@ export class AppTransportProjectionStore {
           "accept"
       ) {
         this.markProjectedTransportEvent(actionId, event.eventId, chatId);
+        if (projectedFinalMetadata) this.options.touchChat(chatId);
         return false;
       }
       terminalRecoverableCorrection = true;

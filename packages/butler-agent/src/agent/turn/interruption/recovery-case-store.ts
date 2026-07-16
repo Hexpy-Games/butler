@@ -33,10 +33,74 @@ export class BtccRecoveryCaseStore {
     this.db.exec("PRAGMA synchronous=NORMAL");
     this.db.exec("PRAGMA foreign_keys=ON");
     ensureConversationStoreSchema(this.db);
+    this.reconcileCancelledCoreTurns();
   }
 
   close(): void {
     this.db.close();
+  }
+
+  private reconcileCancelledCoreTurns(): void {
+    const tornCancellation = this.db.query<{ present: number }, []>(`
+      SELECT 1 AS present
+      FROM conversation_turns
+      JOIN btcc_turn_states
+        ON btcc_turn_states.turn_id = conversation_turns.id
+      WHERE btcc_turn_states.state = 'cancelled'
+        AND btcc_turn_states.terminal_outcome_id IS NOT NULL
+        AND (
+          conversation_turns.status != 'aborted' OR
+          conversation_turns.completed_at IS NULL OR
+          EXISTS (
+            SELECT 1
+            FROM btcc_recovery_cases
+            WHERE btcc_recovery_cases.turn_id = conversation_turns.id
+              AND btcc_recovery_cases.status = 'open'
+          )
+        )
+      LIMIT 1
+    `).get();
+    if (!tornCancellation) return;
+    const tx = this.db.transaction(() => {
+      this.db.query(`
+        UPDATE btcc_recovery_cases
+        SET status = 'resolved',
+            wake_revision_ref = COALESCE(wake_revision_ref, (
+              SELECT terminal_outcome_id
+              FROM btcc_turn_states
+              WHERE btcc_turn_states.turn_id = btcc_recovery_cases.turn_id
+            )),
+            updated_at = (
+              SELECT updated_at
+              FROM btcc_turn_states
+              WHERE btcc_turn_states.turn_id = btcc_recovery_cases.turn_id
+            )
+        WHERE status = 'open'
+          AND EXISTS (
+            SELECT 1
+            FROM btcc_turn_states
+            WHERE btcc_turn_states.turn_id = btcc_recovery_cases.turn_id
+              AND btcc_turn_states.state = 'cancelled'
+          )
+      `).run();
+      this.db.query(`
+        UPDATE conversation_turns
+        SET status = 'aborted',
+            completed_at = COALESCE(completed_at, (
+              SELECT updated_at
+              FROM btcc_turn_states
+              WHERE btcc_turn_states.turn_id = conversation_turns.id
+            ))
+        WHERE EXISTS (
+            SELECT 1
+            FROM btcc_turn_states
+            WHERE btcc_turn_states.turn_id = conversation_turns.id
+              AND btcc_turn_states.state = 'cancelled'
+              AND btcc_turn_states.terminal_outcome_id IS NOT NULL
+          )
+      `).run();
+    });
+    tx();
   }
 
   admitTurn(input: {
@@ -244,7 +308,13 @@ export class BtccRecoveryCaseStore {
   ): BtccTurnStateRecord {
     const before = this.requireTurnState(directive.turnId);
     if (before.state === "cancelled" &&
-      before.terminalOutcomeId === directive.cancellationReceiptRef) return before;
+      before.terminalOutcomeId === directive.cancellationReceiptRef) {
+      const replayTx = this.db.transaction(() => {
+        this.settleCancellation(directive);
+        return this.requireTurnState(directive.turnId);
+      });
+      return replayTx();
+    }
     const tx = this.db.transaction(() => {
       this.db.query(`
         INSERT INTO btcc_cancellation_receipts (
@@ -258,20 +328,40 @@ export class BtccRecoveryCaseStore {
       const next = this.transition(directive, "cancelled", {
         terminalOutcomeId: directive.cancellationReceiptRef,
       });
-      if (before.activeRecoveryCaseId) {
-        this.db.query(`
-          UPDATE btcc_recovery_cases
-          SET status = 'resolved', wake_revision_ref = ?, updated_at = ?
-          WHERE recovery_case_id = ? AND status = 'open'
-        `).run(
-          directive.cancellationReceiptRef,
-          directive.createdAt,
-          before.activeRecoveryCaseId,
-        );
-      }
+      this.settleCancellation(directive);
       return next;
     });
     return tx();
+  }
+
+  private settleCancellation(
+    directive: Extract<TurnInterruptionDirective, { kind: "cancelled" }>,
+  ): void {
+    this.db.query(`
+      UPDATE btcc_recovery_cases
+      SET status = 'resolved', wake_revision_ref = ?, updated_at = ?
+      WHERE turn_id = ? AND status = 'open'
+    `).run(
+      directive.cancellationReceiptRef,
+      directive.createdAt,
+      directive.turnId,
+    );
+    this.db.query(`
+      UPDATE conversation_turns
+      SET status = 'aborted', completed_at = COALESCE(completed_at, ?)
+      WHERE id = ? AND status IN ('accepted', 'running', 'aborted')
+    `).run(directive.createdAt, directive.turnId);
+    const coreTurn = this.db.query<{
+      status: string;
+      completed_at: string | null;
+    }, [string]>(`
+      SELECT status, completed_at
+      FROM conversation_turns
+      WHERE id = ?
+    `).get(directive.turnId);
+    if (!coreTurn || coreTurn.status !== "aborted" || !coreTurn.completed_at) {
+      throw new Error("btcc_cancellation_core_turn_conflict");
+    }
   }
 
   private transition(

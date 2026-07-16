@@ -287,7 +287,7 @@ describe("BtccRecoveryCaseStore", () => {
       sessionId: "session-4",
       attemptId: "attempt-4",
     });
-    const cancelled = store.applyDirective(routeTurnInterruption({
+    const directive = routeTurnInterruption({
       schemaVersion: TURN_INTERRUPTION_ENVELOPE_SCHEMA,
       kind: "user_cancellation",
       interruptionId: "interruption-4",
@@ -299,14 +299,34 @@ describe("BtccRecoveryCaseStore", () => {
       createdAt: "2026-07-15T00:00:04.000Z",
       cancellationGeneration: 1,
       cancellationReceiptRef: "principal-cancel-4",
-    }));
+    });
+    const cancelled = store.applyDirective(directive);
+    const replayed = store.applyDirective(directive);
 
     expect(cancelled).toMatchObject({
       state: "cancelled",
       terminalOutcomeId: "principal-cancel-4",
       generation: 2,
     });
-    expect(() => store.applyDirective(routeTurnInterruption({
+    expect(replayed).toEqual(cancelled);
+    expect(conversations.readTurn("turn-4")).toMatchObject({
+      status: "aborted",
+      completed_at: "2026-07-15T00:00:04.000Z",
+    });
+    const db = new Database(conversationStorePath(butlerData));
+    db.query(`
+      UPDATE conversation_turns
+      SET status = 'running', completed_at = NULL
+      WHERE id = 'turn-4'
+    `).run();
+    db.close();
+    store.close();
+    const restarted = new BtccRecoveryCaseStore({ butlerData });
+    expect(conversations.readTurn("turn-4")).toMatchObject({
+      status: "aborted",
+      completed_at: expect.any(String),
+    });
+    expect(() => restarted.applyDirective(routeTurnInterruption({
       schemaVersion: TURN_INTERRUPTION_ENVELOPE_SCHEMA,
       kind: "internal_incompletion",
       interruptionId: "interruption-late",
@@ -319,7 +339,7 @@ describe("BtccRecoveryCaseStore", () => {
       continuationCheckpointRef: "checkpoint-5",
     }))).toThrow("btcc_turn_terminal_immutable");
 
-    store.close();
+    restarted.close();
     conversations.close();
   });
 

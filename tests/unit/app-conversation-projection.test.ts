@@ -14,6 +14,11 @@ import type {
 } from "../../packages/butler-agent/src/agent/conversation/types.ts";
 import { AppServerStore } from "../../packages/butler-agent/src/gateways/app/application/store/app-server-store.ts";
 import { sessionHintForRow } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
+import { BtccRecoveryCaseStore } from "../../packages/butler-agent/src/agent/turn/interruption/recovery-case-store.ts";
+import {
+  routeTurnInterruption,
+  runtimeInterruptionFromUnknown,
+} from "../../packages/butler-agent/src/agent/turn/interruption/turn-interruption-router.ts";
 
 let tempDir = "";
 
@@ -166,6 +171,206 @@ test("app conversation projection replays canonical messages with refs idempoten
 
   conversationStore.close();
   appStore.db.close();
+});
+
+test("app conversation projection reconciles runtime wait from durable turn truth", () => {
+  const conversationStore = createConversationStore();
+  const recoveryStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const appStore = new AppServerStore({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    conversationProjectionReader: conversationStore,
+  });
+  const turn = conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: "general",
+    sessionId: "cs_runtime_wait",
+    actor: "user",
+    turnId: "turn-runtime-wait",
+    now: "2026-07-16T00:00:00.000Z",
+  });
+  const user = appStore.insertMessage("general", "user", "do the work", "sent", {
+    turnId: turn.id,
+  });
+  appStore.db.query(`
+    INSERT INTO turns (
+      id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      retryable, cancellable, attempt, created_at, updated_at
+    ) VALUES (?, 'general', ?, 'thinking', 'Thinking', NULL, 0, 1, 1, ?, ?)
+  `).run(
+    turn.id,
+    user.id,
+    "2026-07-16T00:00:00.000Z",
+    "2026-07-16T00:00:00.000Z",
+  );
+  const admitted = recoveryStore.admitTurn({
+    turnId: turn.id,
+    sessionId: turn.session_id,
+    attemptId: "attempt-runtime-wait",
+    now: "2026-07-16T00:00:01.000Z",
+  });
+  const waiting = recoveryStore.applyDirective(routeTurnInterruption(runtimeInterruptionFromUnknown({
+    error: new Error("provider schema rejected"),
+    interruptionId: "interruption-runtime-wait",
+    turnId: turn.id,
+    attemptId: admitted.attemptId,
+    origin: "phase_runtime",
+    currentGeneration: admitted.generation,
+    lastStableCheckpointRef: "checkpoint-conception-input",
+    createdAt: "2026-07-16T00:00:02.000Z",
+    sideEffectState: "known_not_applied",
+    resumePredicateRef: "provider-schema-dialect-revision",
+    diagnosticRefs: ["diagnostic-provider-schema"],
+  })));
+
+  const replay = appStore.replayConversationProjection();
+  const projectedTurn = appStore.db.query<{
+    state: string;
+    safe_status_label: string;
+    safe_error_code: string | null;
+    retryable: number;
+    cancellable: number;
+  }, [string]>(`
+    SELECT state, safe_status_label, safe_error_code, retryable, cancellable
+    FROM turns
+    WHERE id = ?
+  `).get(turn.id);
+  const view = appStore.getSessionView("general");
+
+  expect(replay).toMatchObject({ ok: true, pending_count: 0 });
+  expect(projectedTurn).toEqual({
+    state: "waiting_runtime",
+    safe_status_label: "Waiting for runtime recovery",
+    safe_error_code: null,
+    retryable: 0,
+    cancellable: 1,
+  });
+  expect(view.status).toBe("active");
+  expect(view.active_turn).toMatchObject({
+    id: turn.id,
+    state: "waiting_runtime",
+    cancellable: true,
+    retryable: false,
+  });
+
+  recoveryStore.applyDirective(routeTurnInterruption({
+    schemaVersion: "butler.turn-interruption-envelope.v1",
+    kind: "user_cancellation",
+    interruptionId: "cancel-runtime-wait",
+    turnId: turn.id,
+    attemptId: admitted.attemptId,
+    origin: "admission",
+    currentGeneration: waiting.generation,
+    lastStableCheckpointRef: "checkpoint-conception-input",
+    createdAt: "2026-07-16T00:00:03.000Z",
+    cancellationGeneration: waiting.generation,
+    cancellationReceiptRef: "cancel-receipt-runtime-wait",
+  }));
+  const cancellationReplay = appStore.replayConversationProjection();
+  const cancelledTurn = appStore.db.query<{
+    state: string;
+    cancellable: number;
+  }, [string]>(`
+    SELECT state, cancellable FROM turns WHERE id = ?
+  `).get(turn.id);
+
+  expect(cancellationReplay).toMatchObject({ ok: true, pending_count: 0 });
+  expect(cancelledTurn).toEqual({ state: "cancelled", cancellable: 0 });
+  expect(appStore.getSessionView("general").active_turn).toBeNull();
+  expect(conversationStore.readTurn(turn.id)).toMatchObject({
+    status: "aborted",
+    completed_at: "2026-07-16T00:00:03.000Z",
+  });
+  expect(recoveryStore.readRecoveryCase(waiting.activeRecoveryCaseId!)).toMatchObject({
+    status: "resolved",
+    wakeRevisionRef: "cancel-receipt-runtime-wait",
+  });
+
+  appStore.db.close();
+  recoveryStore.close();
+  conversationStore.close();
+});
+
+test("app lifecycle projection rolls back state and cursor when its UI event cannot commit", () => {
+  const conversationStore = createConversationStore();
+  const recoveryStore = new BtccRecoveryCaseStore({ butlerData: tempDir });
+  const appStore = new AppServerStore({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    conversationProjectionReader: conversationStore,
+  });
+  const turn = conversationStore.beginTurn({
+    gateway: "app",
+    externalSessionId: "general",
+    sessionId: "cs_atomic_lifecycle",
+    actor: "user",
+    turnId: "turn-atomic-lifecycle",
+    now: "2026-07-16T01:00:00.000Z",
+  });
+  const user = appStore.insertMessage("general", "user", "keep projection atomic", "sent", {
+    turnId: turn.id,
+  });
+  appStore.db.query(`
+    INSERT INTO turns (
+      id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+      retryable, cancellable, attempt, created_at, updated_at
+    ) VALUES (?, 'general', ?, 'thinking', 'Thinking', NULL, 0, 1, 1, ?, ?)
+  `).run(
+    turn.id,
+    user.id,
+    "2026-07-16T01:00:00.000Z",
+    "2026-07-16T01:00:00.000Z",
+  );
+  const admitted = recoveryStore.admitTurn({
+    turnId: turn.id,
+    sessionId: turn.session_id,
+    attemptId: "attempt-atomic-lifecycle",
+    now: "2026-07-16T01:00:01.000Z",
+  });
+  recoveryStore.applyDirective(routeTurnInterruption(runtimeInterruptionFromUnknown({
+    error: new Error("provider schema rejected"),
+    interruptionId: "interruption-atomic-lifecycle",
+    turnId: turn.id,
+    attemptId: admitted.attemptId,
+    origin: "phase_runtime",
+    currentGeneration: admitted.generation,
+    lastStableCheckpointRef: "checkpoint-atomic-lifecycle",
+    createdAt: "2026-07-16T01:00:02.000Z",
+    sideEffectState: "known_not_applied",
+    resumePredicateRef: "provider-schema-dialect-revision",
+    diagnosticRefs: [],
+  })));
+  appStore.db.exec(`
+    CREATE TRIGGER reject_lifecycle_ui_event
+    BEFORE INSERT ON events
+    WHEN NEW.type = 'turn.state_changed'
+    BEGIN
+      SELECT RAISE(ABORT, 'injected lifecycle event failure');
+    END
+  `);
+
+  const failedReplay = appStore.replayConversationProjection();
+  expect(failedReplay).toMatchObject({
+    ok: false,
+    pending_count: 1,
+    safe_error_code: "conversation_projection_failed",
+  });
+  expect(appStore.getTurn(turn.id)).toMatchObject({
+    state: "thinking",
+    safe_status_label: "Thinking",
+  });
+
+  appStore.db.exec("DROP TRIGGER reject_lifecycle_ui_event");
+  const replayed = appStore.replayConversationProjection();
+  expect(replayed).toMatchObject({ ok: true, pending_count: 0 });
+  expect(appStore.getTurn(turn.id)).toMatchObject({
+    state: "waiting_runtime",
+    safe_status_label: "Waiting for runtime recovery",
+  });
+
+  appStore.db.close();
+  recoveryStore.close();
+  conversationStore.close();
 });
 
 test("app conversation projection resolves app runtime session hints to existing chats", () => {

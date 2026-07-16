@@ -189,6 +189,7 @@ export function isActiveSessionTurnState(state: string): boolean {
     state === "streaming" ||
     state === "waiting_for_form" ||
     state === "waiting_for_tool" ||
+    state === "waiting_runtime" ||
     state === "cancelling" ||
     state === "retrying"
   );

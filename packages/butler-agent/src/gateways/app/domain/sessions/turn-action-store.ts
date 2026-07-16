@@ -363,6 +363,7 @@ export class AppTurnActionStore {
           "streaming",
           "waiting_for_form",
           "waiting_for_tool",
+          "waiting_runtime",
           "cancelling",
           "retrying",
         ].includes(row.state),
@@ -384,7 +385,7 @@ export class AppTurnActionStore {
         updated_at = ?
       WHERE chat_id = ?
         AND user_message_id IS NULL
-        AND state IN ('accepted', 'thinking', 'streaming', 'waiting_for_form', 'waiting_for_tool', 'cancelling', 'retrying')
+        AND state IN ('accepted', 'thinking', 'streaming', 'waiting_for_form', 'waiting_for_tool', 'waiting_runtime', 'cancelling', 'retrying')
         AND EXISTS (
           SELECT 1
           FROM messages

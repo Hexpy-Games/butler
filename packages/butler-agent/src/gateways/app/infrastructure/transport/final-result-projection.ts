@@ -101,11 +101,6 @@ export function projectAppFinalResult(input: {
       payload: { safeLabel: "Preparing final answer" },
     });
   }
-  applyGeneratedSessionTitleFromProjection(options, {
-    chatId,
-    turnId,
-    title: metadata.generatedSessionTitle,
-  });
   options.insertOrReplaceAssistantReplies(
     chatId,
     turnId,
@@ -154,19 +149,20 @@ export function projectAppFinalResult(input: {
   return true;
 }
 
-function applyGeneratedSessionTitleFromProjection(
+export function projectAppFinalResultMetadata(
   options: AppTransportProjectionStoreOptions,
   input: { chatId: string; turnId: string; title: unknown },
-): void {
-  if (typeof input.title !== "string" || !input.title.trim()) return;
+): boolean {
+  if (typeof input.title !== "string" || !input.title.trim()) return false;
   const turn = options.getTurnRow(input.turnId);
   const sourceText = turn?.user_message_id
     ? options.getMessageRow(turn.user_message_id)?.text
     : null;
-  if (!sourceText) return;
-  options.generatedSessionTitleHandler(input.chatId, sourceText)?.(
-    input.title,
-  );
+  if (!sourceText) return false;
+  const handler = options.generatedSessionTitleHandler(input.chatId, sourceText);
+  if (!handler) return false;
+  handler(input.title);
+  return true;
 }
 
 function isSameDeliveredFinal(
