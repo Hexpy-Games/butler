@@ -72,10 +72,12 @@ export function createBundledAgentSupervisor(input: {
   projectFolderTokenSecret?: string | null;
   baseEnv?: Record<string, string | undefined>;
   sleepMs?: (ms: number) => Promise<void>;
+  nowMs?: () => number;
   setKillTimer?: (fn: () => void, ms: number) => unknown;
   clearKillTimer?: (timer: unknown) => void;
   startupAttempts?: number;
   startupDelayMs?: number;
+  startupTimeoutMs?: number | null;
   killTimeoutMs?: number;
   probeTimeoutMs?: number;
   stdio?: string;

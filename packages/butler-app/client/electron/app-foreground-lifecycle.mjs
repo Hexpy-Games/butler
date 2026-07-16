@@ -92,6 +92,24 @@ export function resolveAppLifecycleMode({
   return assertLifecycleMode(releaseMode ?? APP_FOREGROUND_LIFECYCLE_MODES.foreground);
 }
 
+export async function waitForAppForegroundPortRelease({
+  port,
+  isPortAvailable,
+  timeoutMs = 10_000,
+  pollIntervalMs = 100,
+  nowMs = () => Date.now(),
+  sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  const deadline = nowMs() + timeoutMs;
+  do {
+    if (await isPortAvailable(port)) return true;
+    const remainingMs = deadline - nowMs();
+    if (remainingMs <= 0) return false;
+    await sleepMs(Math.min(pollIntervalMs, remainingMs));
+  } while (nowMs() <= deadline);
+  return false;
+}
+
 export function createAppForegroundLaunch({
   appVersion,
   bundledAgentVersion,

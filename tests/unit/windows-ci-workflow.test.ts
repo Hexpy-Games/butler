@@ -107,6 +107,13 @@ test("nightly Windows CI executes the packaged Squirrel lifecycle", () => {
   expect(standardUserChild).toContain(
     "BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT = $PreparedReleaseRoot",
   );
+  expect(standardUserChild).toContain(
+    '$env:BUTLER_POWERSHELL = Join-Path $PSHOME "powershell.exe"',
+  );
+  expect(standardUserRunner).toContain('"-TimeoutMinutes $TimeoutMinutes"');
+  expect(standardUserChild).toContain(
+    "$deadline = (Get-Date).AddMinutes($TimeoutMinutes)",
+  );
   expect(standardUserChild).toContain("--prepared-release-root");
   expect(interactiveController).toContain(
     "BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT: preparedReleaseRoot",

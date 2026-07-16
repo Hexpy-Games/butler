@@ -236,7 +236,8 @@ try {
     "-SignedHost `"$signedHost`"",
     "-SigningThumbprint `"$($certificate.Thumbprint)`"",
     "-Smoke `"$Smoke`"",
-    "-Output `"$Output`""
+    "-Output `"$Output`"",
+    "-TimeoutMinutes $TimeoutMinutes"
   )
   if ($PrepareRelease) {
     $actionArgumentParts += "-PreparedReleaseRoot `"$preparedReleaseRoot`""
