@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createAppReleasePackage } from "../release/package-app-release.ts";
 import { windowsValidationToken } from "./windows-validation-token.ts";
 import {
@@ -13,17 +13,25 @@ if (process.platform !== "win32" || process.arch !== "x64") {
 }
 const validationToken = windowsValidationToken();
 if (!validationToken.accepted) {
-  throw new Error("Windows release package smoke requires a standard user token");
+  throw new Error(
+    "Windows release package smoke requires a standard user token",
+  );
 }
 const expectedSignerThumbprint = requireExpectedSignerThumbprint();
 
-const outDir = join(homedir(), ".butler-release-validation", "win32-x64");
+const outDir = resolve(
+  optionValue("--out") ??
+    join(homedir(), ".butler-release-validation", "win32-x64"),
+);
+const artifactBaseUrl =
+  optionValue("--artifact-base-url") ??
+  "https://updates.invalid/butler/windows";
 rmSync(outDir, { recursive: true, force: true });
 const result = createAppReleasePackage({
   root: process.cwd(),
   outDir,
   platforms: ["win32-x64"],
-  artifactBaseUrl: "https://updates.invalid/butler/windows",
+  artifactBaseUrl,
 });
 const artifact = result.artifacts[0];
 if (!artifact || artifact.platform !== "win32-x64") {
@@ -70,28 +78,37 @@ if (
   throw new Error("Windows release and updater manifests are inconsistent");
 }
 
-process.stdout.write(`${JSON.stringify({
-  ok: true,
-  platform: "win32-x64",
-  standardUser: validationToken.standardUser,
-  ciElevatedToken: validationToken.ciElevatedToken,
-  distributionStatus: "gated",
-  setup: basename(artifact.artifactPath),
-  updatePackage: basename(artifact.updaterArtifactPath!),
-  updateIndex: basename(artifact.updaterIndexPath!),
-  checksumsVerified: true,
-  signaturesVerified: true,
-  signedPayload: signedPayload.required,
-  signedPeCount: signedPayload.peCount,
-  rawTextIncluded: false,
-})}\n`);
+process.stdout.write(
+  `${JSON.stringify({
+    ok: true,
+    platform: "win32-x64",
+    standardUser: validationToken.standardUser,
+    ciElevatedToken: validationToken.ciElevatedToken,
+    distributionStatus: "gated",
+    setup: basename(artifact.artifactPath),
+    updatePackage: basename(artifact.updaterArtifactPath!),
+    updateIndex: basename(artifact.updaterIndexPath!),
+    checksumsVerified: true,
+    signaturesVerified: true,
+    signedPayload: signedPayload.required,
+    signedPeCount: signedPayload.peCount,
+    rawTextIncluded: false,
+  })}\n`,
+);
 
 function requireExpectedSignerThumbprint(): string {
-  const value = process.env.BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1
-    ?.trim()
-    .toUpperCase();
+  const value =
+    process.env.BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1?.trim().toUpperCase();
   if (!value || !/^[A-F0-9]{40}$/u.test(value)) {
-    throw new Error("Windows release package smoke requires a signing thumbprint");
+    throw new Error(
+      "Windows release package smoke requires a signing thumbprint",
+    );
   }
   return value;
+}
+
+function optionValue(name: string): string | null {
+  const index = process.argv.indexOf(name);
+  const value = index >= 0 ? process.argv[index + 1]?.trim() : "";
+  return value || null;
 }
