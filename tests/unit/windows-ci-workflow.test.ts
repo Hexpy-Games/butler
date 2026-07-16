@@ -7,6 +7,10 @@ const workflow = readFileSync(
   join(root, ".github", "workflows", "windows.yml"),
   "utf8",
 );
+const distributionWorkflow = readFileSync(
+  join(root, ".github", "workflows", "windows-distribution.yml"),
+  "utf8",
+);
 const entrypoint = readFileSync(
   join(
     root,
@@ -53,17 +57,22 @@ const interactiveController = readFileSync(
   "utf8",
 );
 
-test("Windows CI uses native runners and PowerShell entrypoints", () => {
+test("Windows pull-request CI only builds and verifies the package", () => {
+  expect(workflow).toContain("pull_request:");
   expect(workflow).toContain("runs-on: windows-latest");
   expect(workflow).toContain("shell: pwsh");
   expect(gitAttributes).toContain("* text=auto eol=lf");
   expect(workflow).toContain("bun-version: 1.3.11");
   expect(workflow).toContain("-Mode Setup");
-  expect(workflow).toContain("-Mode Quality");
-  expect(workflow).toContain("-Mode Tests");
-  expect(workflow).toContain("-Mode ProductE2E");
   expect(workflow).toContain("-Mode Package");
-  expect(workflow).toContain("-Mode Lifecycle");
+  expect(workflow).not.toContain("-Mode Quality");
+  expect(workflow).not.toContain("-Mode Tests");
+  expect(workflow).not.toContain("-Mode ProductE2E");
+  expect(workflow).not.toContain("-Mode Lifecycle");
+  expect(workflow).not.toContain("schedule:");
+  expect(workflow).not.toContain("workflow_dispatch:");
+  expect(workflow).not.toContain("push:");
+  expect(workflow.match(/runs-on: windows-latest/gu)).toHaveLength(1);
   expect(workflow).not.toContain("shell: bash");
   expect(workflow).not.toMatch(/run:\s*(?:bash|sh)\b/u);
   expect(entrypoint).not.toMatch(/\.sh(?:\s|")/u);
@@ -72,17 +81,15 @@ test("Windows CI uses native runners and PowerShell entrypoints", () => {
   expect(entrypoint).toContain('"--audit-level=high"');
   expect(entrypoint).toContain("build-process-host.ts");
   expect(entrypoint).toContain("BUTLER_WINDOWS_PROCESS_HOST");
-  expect(entrypoint).toContain('"--timeout"');
-  expect(entrypoint).toContain('"30000"');
-  expect(entrypoint).toContain("Invoke-StandardUserSmoke");
-  expect(entrypoint).toContain("run-standard-user-bundled-payload-smoke.ps1");
-  expect(entrypoint).toMatch(/function Invoke-StandardUserSmoke[\s\S]*?client\/ui[\s\S]*?run[\s\S]*?build/u);
-  expect(entrypoint).toContain("-InteractiveDesktop");
+  expect(entrypoint).toContain('$Mode -notin @("Setup", "Package")');
+  expect(entrypoint).toContain(
+    "Hosted Windows CI owns package construction only",
+  );
 });
 
-test("Windows CI proves signed package checksums and keeps distribution gated", () => {
-  expect(workflow).toContain("Windows signed package, signatures, and checksums");
-  expect(workflow).toContain("Package and verify gated Windows artifacts");
+test("Windows CI proves package structure and checksums without distribution", () => {
+  expect(workflow).toContain("Windows package build");
+  expect(workflow).toContain("Build and verify Windows package artifacts");
   expect(workflow).toContain("actions/upload-artifact@v4");
   expect(workflow).not.toContain("gh release upload");
   expect(entrypoint).toContain("New-SelfSignedCertificate");
@@ -90,18 +97,37 @@ test("Windows CI proves signed package checksums and keeps distribution gated", 
   expect(entrypoint).toContain("windows-release-package-smoke.ts");
 });
 
-test("nightly Windows CI executes the packaged Squirrel lifecycle", () => {
-  expect(workflow).toContain('cron: "17 17 * * *"');
-  expect(workflow).toContain("nightly-packaged-e2e:");
-  expect(workflow).toContain(
-    "Run packaged install, update, rollback, repair, and uninstall E2E",
+test("Windows distribution is a separate manually dispatched action", () => {
+  expect(distributionWorkflow).toContain("workflow_dispatch:");
+  expect(distributionWorkflow).toContain("tag:");
+  expect(distributionWorkflow).toContain("contents: write");
+  expect(distributionWorkflow).toContain("WINDOWS_CERTIFICATE_PFX");
+  expect(distributionWorkflow).toContain("WINDOWS_CERTIFICATE_PASSWORD");
+  expect(distributionWorkflow).toContain(
+    "BUTLER_APP_REQUIRE_PRODUCTION_SIGNING",
   );
+  expect(distributionWorkflow).toContain(
+    "releases/download/$env:WINDOWS_RELEASE_TAG",
+  );
+  expect(distributionWorkflow).toContain("windows-app-release-manifest.json");
+  expect(distributionWorkflow).toContain("windows-app-update-manifest.json");
+  expect(distributionWorkflow).toContain("gh release upload");
+  expect(distributionWorkflow).not.toContain("pull_request:");
+  expect(distributionWorkflow).not.toContain("-Mode ProductE2E");
+  expect(distributionWorkflow).not.toContain("-Mode Lifecycle");
+});
+
+test("packaged desktop lifecycle remains physical-interactive only", () => {
+  expect(workflow).not.toContain("InteractiveDesktop");
+  expect(workflow).not.toContain("standard-user");
   expect(entrypoint).toContain("windows-squirrel-release-cycle-smoke.ts");
   expect(entrypoint).toContain("-PrepareRelease");
   expect(standardUserRunner).toContain('$Bun "run" $Smoke "--prepare-only"');
-  expect(standardUserRunner).toContain("BUTLER_WINDOWS_CI_ELEVATED_TOKEN = \"1\"");
   expect(standardUserRunner).toContain(
-    "BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN = \"1\"",
+    'BUTLER_WINDOWS_CI_ELEVATED_TOKEN = "1"',
+  );
+  expect(standardUserRunner).toContain(
+    'BUTLER_WINDOWS_RELEASE_PREPARATION_TOKEN = "1"',
   );
   expect(standardUserRunner).toContain("-PreparedReleaseRoot");
   expect(standardUserChild).toContain(
@@ -118,4 +144,6 @@ test("nightly Windows CI executes the packaged Squirrel lifecycle", () => {
   expect(interactiveController).toContain(
     "BUTLER_WINDOWS_LIFECYCLE_RELEASE_ROOT: preparedReleaseRoot",
   );
+  expect(standardUserRunner).toContain("-LogonType Interactive");
+  expect(standardUserChild).toContain("& explorer.exe $shortcutPath");
 });
