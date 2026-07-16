@@ -8,6 +8,16 @@ $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")
 Set-Location $root
 
+if (
+  $env:GITHUB_ACTIONS -eq "true" -and
+  $Mode -notin @("Setup", "Package")
+) {
+  throw (
+    "Hosted Windows CI owns package construction only. " +
+    "Common CI owns tests and a physical interactive Windows desktop owns E2E."
+  )
+}
+
 function Invoke-Checked {
   param(
     [Parameter(Mandatory = $true)][string]$Command,

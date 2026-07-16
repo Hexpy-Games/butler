@@ -1,0 +1,109 @@
+name: Butler Windows Distribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub release tag that receives the Windows assets
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-distribution-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  distribute:
+    name: Build and publish signed Windows package
+    runs-on: windows-latest
+    environment: windows-production
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+      - name: Require existing release and production signing inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+          WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if ($env:WINDOWS_RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw 'tag must be a semantic version beginning with v'
+          }
+          gh release view $env:WINDOWS_RELEASE_TAG | Out-Null
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PFX)) {
+            throw 'WINDOWS_CERTIFICATE_PFX is required'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD)) {
+            throw 'WINDOWS_CERTIFICATE_PASSWORD is required'
+          }
+      - name: Install package dependencies
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup
+      - name: Prepare production signing and runtime inputs
+        env:
+          WINDOWS_CERTIFICATE_PFX: ${{ secrets.WINDOWS_CERTIFICATE_PFX }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'butler-windows-signing.pfx'
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX)
+          )
+          $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $certificatePath,
+            $env:WINDOWS_CERTIFICATE_PASSWORD
+          )
+          $processHost = Join-Path $env:RUNNER_TEMP 'butler-process-host.exe'
+          bun run packages/butler-agent/scripts/windows/build-process-host.ts $processHost
+          if ($LASTEXITCODE -ne 0) { throw 'Windows process host build failed' }
+          "BUTLER_WINDOWS_SIGN_CERTIFICATE_FILE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_APP_MANAGED_BUN_WIN32_X64=$((Get-Command bun.exe).Source)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_APP_WINDOWS_PROCESS_HOST=$processHost" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build and verify production-signed Windows package
+        env:
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+          BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: "1"
+          BUTLER_WINDOWS_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          BUTLER_WINDOWS_SIGN_TIMESTAMP_SERVER: ${{ secrets.WINDOWS_SIGN_TIMESTAMP_SERVER }}
+          BUTLER_WINDOWS_STANDARD_USER: "0"
+          BUTLER_WINDOWS_CI_ELEVATED_TOKEN: "1"
+        run: |
+          npm.cmd --prefix packages/butler-app/client/ui run build
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          $artifactBaseUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:WINDOWS_RELEASE_TAG"
+          bun run packages/butler-app/scripts/windows/windows-release-package-smoke.ts --out $output --artifact-base-url $artifactBaseUrl
+      - name: Publish Windows release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          Move-Item -LiteralPath (Join-Path $output 'app-release-manifest.json') -Destination (Join-Path $output 'windows-app-release-manifest.json')
+          Move-Item -LiteralPath (Join-Path $output 'app-update-manifest.json') -Destination (Join-Path $output 'windows-app-update-manifest.json')
+          $files = @(Get-ChildItem -LiteralPath $output -File | Select-Object -ExpandProperty FullName)
+          if ($files.Count -ne 8) {
+            throw "Expected 8 Windows release files, got $($files.Count)"
+          }
+          gh release upload $env:WINDOWS_RELEASE_TAG @files --clobber
