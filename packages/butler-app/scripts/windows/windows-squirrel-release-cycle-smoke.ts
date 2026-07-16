@@ -214,11 +214,12 @@ try {
 
   mkdirSync(join(butlerData, "updates", "artifacts"), { recursive: true });
   writeFileSync(join(butlerData, "updates", "artifacts", "ephemeral"), "remove\n");
-  uninstallOwnedApp();
-  installedBySmoke = false;
-  await waitFor(() => !existsSync(installRoot), "Squirrel uninstall cleanup");
+  runOwnedAppUninstaller();
   await waitFor(() => evidence("uninstall")?.operationalStateRemoved === true,
     "uninstall event cleanup evidence");
+  removeOwnedInstallRoot();
+  installedBySmoke = false;
+  await waitFor(() => !existsSync(installRoot), "Squirrel uninstall cleanup");
   if (existsSync(join(butlerData, "app", "runtime")) ||
     existsSync(join(butlerData, "updates"))) {
     throw new Error("Uninstall preserved App operational state");
@@ -542,6 +543,11 @@ function processAlive(pid: number): boolean {
 }
 
 function uninstallOwnedApp(): void {
+  runOwnedAppUninstaller();
+  removeOwnedInstallRoot();
+}
+
+function runOwnedAppUninstaller(): void {
   const updateExecutable = join(installRoot, "Update.exe");
   if (existsSync(updateExecutable)) {
     const result = spawnSync(updateExecutable, ["--uninstall", "-s"], {
@@ -555,6 +561,9 @@ function uninstallOwnedApp(): void {
       throw new Error(`Squirrel uninstall failed: ${boundedCode(result.status)}`);
     }
   }
+}
+
+function removeOwnedInstallRoot(): void {
   rmSync(installRoot, { force: true, maxRetries: 4, recursive: true, retryDelay: 250 });
 }
 

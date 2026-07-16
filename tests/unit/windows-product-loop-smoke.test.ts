@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-test("Windows full-product validation runs the clean isolated loop twice", () => {
+test("Windows validation runs the full product once and platform lifecycle twice", () => {
   const source = readFileSync(
     resolve(
       import.meta.dir,
@@ -10,7 +10,9 @@ test("Windows full-product validation runs the clean isolated loop twice", () =>
     ),
     "utf8",
   );
-  expect(source).toContain("const passCount = 2");
+  expect(source).toContain("const fullProductPassCount = 1");
+  expect(source).toContain("const platformPassCount = 2");
+  expect(source).toContain("platformPasses");
   expect(source).toContain('BUTLER_APP_CLIENT_E2E_MODE: "deterministic"');
   expect(source).toContain('BUTLER_APP_CLIENT_E2E_MODE: "toolchain"');
   expect(source).toContain("native runtime can drive the real run_command tool");
@@ -31,9 +33,10 @@ test("Windows full-product validation runs the clean isolated loop twice", () =>
     ),
     "utf8",
   );
-  expect(unpackedForeground).toContain("timeoutMs: 120_000");
+  expect(unpackedForeground).toContain("timeoutMs: 150_000");
   expect(unpackedForeground).toContain("waitForProcessDeath(");
   expect(unpackedForeground).toContain("agentHostStopped");
+  expect(unpackedForeground).toContain("recordedPortReleased");
   expect(source).toContain("waitForE2eTempCleanup(initialE2eTempDirs)");
   expect(source).toContain('spawnSync("taskkill.exe"');
   expect(source).toContain("}, 300_000);");

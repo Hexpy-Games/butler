@@ -75,6 +75,10 @@ describe("Windows Squirrel lifecycle", () => {
   });
 
   test("uninstall removes only App operational state and preserves durable data", () => {
+    const smoke = readFileSync(resolve(
+      import.meta.dir,
+      "../../packages/butler-app/scripts/windows/windows-squirrel-release-cycle-smoke.ts",
+    ), "utf8");
     const plan = resolveWindowsSquirrelLaunch({
       platform: "win32",
       argv: ["Butler.exe", "--squirrel-uninstall", "0.0.19"],
@@ -115,6 +119,15 @@ describe("Windows Squirrel lifecycle", () => {
     expect(windowsOperationalCleanupPaths("C:\\Users\\dev\\.butler")).not.toContain(
       "C:\\Users\\dev\\.butler",
     );
+    const uninstall = smoke.indexOf("  runOwnedAppUninstaller();");
+    const evidence = smoke.indexOf(
+      '  await waitFor(() => evidence("uninstall")?.operationalStateRemoved === true,',
+      uninstall,
+    );
+    const forcedCleanup = smoke.indexOf("  removeOwnedInstallRoot();", evidence);
+    expect(uninstall).toBeGreaterThan(0);
+    expect(evidence).toBeGreaterThan(uninstall);
+    expect(forcedCleanup).toBeGreaterThan(evidence);
   });
 
   test("operational cleanup uses bounded idempotent removals", () => {
