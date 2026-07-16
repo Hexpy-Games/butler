@@ -72,7 +72,7 @@ export function manageWindowsSquirrelShortcut(input: {
   name: string;
   target: string;
   workingDirectory: string;
-  runPowerShell: (
+  runPowerShell?: (
     command: string,
     args: string[],
     options: {
@@ -81,6 +81,8 @@ export function manageWindowsSquirrelShortcut(input: {
     },
   ) => { status?: number | null };
   env?: Record<string, string | undefined>;
+  removePath?: (path: string) => void;
+  pathExists?: (path: string) => boolean;
 }): true;
 
 export function resolveWindowsUpdateFeedUrl(input?: {
