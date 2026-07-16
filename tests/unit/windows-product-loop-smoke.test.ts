@@ -28,7 +28,8 @@ test("Windows validation runs the full product once and platform lifecycle twice
     ),
     "utf8",
   );
-  expect(legacyCommandBoundary).toContain("stdin: input.command");
+  expect(legacyCommandBoundary).toContain('Buffer.from(input.command, "utf16le")');
+  expect(legacyCommandBoundary).toContain('"-EncodedCommand"');
   expect(legacyCommandBoundary).not.toContain("legacy-command-host");
   expect(source).toContain("inbound-queue.test.ts");
   expect(source).toContain("app-worker-cancel.test.ts");

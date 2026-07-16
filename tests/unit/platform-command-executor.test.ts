@@ -213,6 +213,7 @@ describe("platform command executor", () => {
     };
     const windows = legacyCommandCompatibilityRequest(input, "win32");
     const posix = legacyCommandCompatibilityRequest(input, "darwin");
+    const encodedWindowsCommand = Buffer.from(input.command, "utf16le").toString("base64");
 
     expect(windows).toMatchObject({
       plan: {
@@ -224,14 +225,15 @@ describe("platform command executor", () => {
             "-NonInteractive",
             "-ExecutionPolicy",
             "Bypass",
-            "-Command",
-            "-",
+            "-EncodedCommand",
+            encodedWindowsCommand,
           ],
         }],
       },
-      stdin: input.command,
       inheritEnvironment: false,
     });
+    expect(windows.stdin).toBeUndefined();
+    expect(Buffer.from(encodedWindowsCommand, "base64").toString("utf16le")).toBe(input.command);
     expect(posix).toMatchObject({
       plan: {
         steps: [{
