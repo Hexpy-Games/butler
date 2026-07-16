@@ -89,12 +89,24 @@ const startupFailurePath = join(
   "startup-failure.json",
 );
 const durableSentinel = join(butlerData, "user-preserved.txt");
+const systemRoot = process.env.SystemRoot?.trim() ||
+  process.env.SYSTEMROOT?.trim() || "C:\\Windows";
+const powerShellExecutable = process.env.BUTLER_POWERSHELL?.trim() || join(
+  systemRoot,
+  "System32",
+  "WindowsPowerShell",
+  "v1.0",
+  "powershell.exe",
+);
+const taskkillExecutable = join(systemRoot, "System32", "taskkill.exe");
+const launchedAppPids = new Set<number>();
 const smokeEnv = {
   ...process.env,
   BUTLER_DATA: butlerData,
   BUTLER_APP_ELECTRON_USER_DATA_DIR: electronUserData,
   BUTLER_WINDOWS_SQUIRREL_EVIDENCE_PATH: evidenceTemplate,
   BUTLER_APP_SERVER_PORT: "18865",
+  BUTLER_POWERSHELL: powerShellExecutable,
 };
 
 if (prepareOnly) {
@@ -132,8 +144,7 @@ try {
   await waitFor(() => existsSync(startMenuShortcut), "Start Menu shortcut");
   await ensureRuntimeReady(previousApp, previousVersion);
   const previousPointer = readFileSync(previousPointerPath);
-  stopInstalledProcesses();
-  await waitFor(() => installedProcessCount() === 0, "N-1 process cleanup");
+  await stopInstalledProcessesAndWait("N-1 process cleanup");
 
   const installedPreviousSignature = verifyWindowsAuthenticodeFiles([previousApp])[0];
   const setupSignatures = verifyWindowsAuthenticodeFiles([previousSetup, currentSetup]);
@@ -159,8 +170,7 @@ try {
   await waitFor(() => existsSync(currentApp), "updated installed executable");
   await waitFor(() => evidence("updated")?.normalInitializationReached === false,
     "update event early exit");
-  stopInstalledProcesses();
-  await waitFor(() => installedProcessCount() === 0, "post-update process cleanup");
+  await stopInstalledProcessesAndWait("post-update process cleanup");
 
   writeFileSync(previousPointerPath, previousPointer);
   rmSync(join(
@@ -194,16 +204,13 @@ try {
     await waitFor(() => pointerVersion() === previousVersion, "runtime rollback pointer");
   } finally {
     writeFileSync(agentArtifact, originalArtifact);
-    stopInstalledProcesses();
-    await waitFor(() => installedProcessCount() === 0, "failed candidate cleanup");
+    await stopInstalledProcessesAndWait("failed candidate cleanup");
   }
 
   await ensureRuntimeReady(currentApp, currentVersion);
-  stopInstalledProcesses();
-  await waitFor(() => installedProcessCount() === 0, "repair process cleanup");
+  await stopInstalledProcessesAndWait("repair process cleanup");
   await ensureRuntimeReady(currentApp, currentVersion);
-  stopInstalledProcesses();
-  await waitFor(() => installedProcessCount() === 0, "idempotent repair cleanup");
+  await stopInstalledProcessesAndWait("idempotent repair cleanup");
 
   mkdirSync(join(butlerData, "updates", "artifacts"), { recursive: true });
   writeFileSync(join(butlerData, "updates", "artifacts", "ephemeral"), "remove\n");
@@ -222,7 +229,7 @@ try {
   if (existsSync(startMenuShortcut)) {
     throw new Error("Uninstall left the Butler Start Menu shortcut");
   }
-  await waitFor(() => installedProcessCount() === 0, "uninstall process cleanup");
+  await stopInstalledProcessesAndWait("uninstall process cleanup");
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
@@ -247,7 +254,11 @@ try {
   })}\n`);
 } finally {
   if (!preparedReleaseRoot) restoreSourceVersions();
-  stopInstalledProcesses();
+  try {
+    await stopInstalledProcessesAndWait("final teardown", 20_000);
+  } catch {
+    // Preserve the primary validation result while still attempting uninstall.
+  }
   if (installedBySmoke || existsSync(ownershipMarker)) {
     try {
       uninstallOwnedApp();
@@ -441,6 +452,8 @@ function launchInstalledApp(executable: string): void {
     stdio: "ignore",
     windowsHide: false,
   });
+  if (!child.pid) throw new Error("Installed Butler launch did not return a PID");
+  launchedAppPids.add(child.pid);
   child.unref();
 }
 
@@ -474,68 +487,58 @@ function evidenceDigest(): string {
     .slice(0, 16);
 }
 
-function stopInstalledProcesses(): void {
-  const script = [
-    "$ErrorActionPreference = 'SilentlyContinue';",
-    "$installRoot = $env:BUTLER_WINDOWS_E2E_INSTALL_ROOT;",
-    "$dataRoot = $env:BUTLER_WINDOWS_E2E_DATA_ROOT;",
-    "Get-CimInstance Win32_Process | Where-Object {",
-    "  ([string]$_.ExecutablePath).StartsWith($installRoot, [StringComparison]::OrdinalIgnoreCase) -or",
-    "  ([string]$_.CommandLine).Contains($dataRoot)",
-    "} | ForEach-Object { Invoke-CimMethod -InputObject $_ -MethodName Terminate | Out-Null }",
-  ].join(" ");
-  spawnSync("powershell.exe", [
-    "-NoLogo",
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    script,
-  ], {
-    encoding: "utf8",
-    env: {
-      ...smokeEnv,
-      BUTLER_WINDOWS_E2E_INSTALL_ROOT: installRoot,
-      BUTLER_WINDOWS_E2E_DATA_ROOT: butlerData,
-    },
-    shell: false,
-    timeout: 20_000,
-    windowsHide: true,
-  });
+interface InstalledProcessSummary {
+  pid: number;
+  name: string;
+}
+
+async function stopInstalledProcessesAndWait(
+  label: string,
+  timeoutMs = 120_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let remaining = installedProcesses();
+  while (remaining.length > 0 && Date.now() < deadline) {
+    for (const item of remaining) {
+      spawnSync(taskkillExecutable, [
+        "/PID",
+        String(item.pid),
+        "/T",
+        "/F",
+      ], {
+        encoding: "utf8",
+        shell: false,
+        timeout: 20_000,
+        windowsHide: true,
+      });
+    }
+    await Bun.sleep(250);
+    remaining = installedProcesses();
+  }
+  if (remaining.length > 0) {
+    throw new Error(
+      `Squirrel release-cycle timeout: ${label}; remaining=${JSON.stringify(remaining)}`,
+    );
+  }
+}
+
+function installedProcesses(): InstalledProcessSummary[] {
+  return [...launchedAppPids]
+    .filter((pid) => processAlive(pid))
+    .map((pid) => ({ pid, name: "Butler.exe" }));
 }
 
 function installedProcessCount(): number {
-  const script = [
-    "$installRoot = $env:BUTLER_WINDOWS_E2E_INSTALL_ROOT;",
-    "$dataRoot = $env:BUTLER_WINDOWS_E2E_DATA_ROOT;",
-    "$items = @(Get-CimInstance Win32_Process | Where-Object {",
-    "  ([string]$_.ExecutablePath).StartsWith($installRoot, [StringComparison]::OrdinalIgnoreCase) -or",
-    "  ([string]$_.CommandLine).Contains($dataRoot)",
-    "});",
-    "Write-Output $items.Count",
-  ].join(" ");
-  const result = spawnSync("powershell.exe", [
-    "-NoLogo",
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    script,
-  ], {
-    encoding: "utf8",
-    env: {
-      ...smokeEnv,
-      BUTLER_WINDOWS_E2E_INSTALL_ROOT: installRoot,
-      BUTLER_WINDOWS_E2E_DATA_ROOT: butlerData,
-    },
-    shell: false,
-    timeout: 20_000,
-    windowsHide: true,
-  });
-  const value = Number.parseInt(String(result.stdout).trim(), 10);
-  return Number.isFinite(value) ? value : -1;
+  return installedProcesses().length;
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function uninstallOwnedApp(): void {
