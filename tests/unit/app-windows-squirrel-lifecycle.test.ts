@@ -27,6 +27,7 @@ describe("Windows Squirrel lifecycle", () => {
     expect(handler).toBeLessThan(main.indexOf("createBundledAgentSupervisor({"));
     expect(handler).toBeLessThan(main.indexOf("app.requestSingleInstanceLock()"));
     expect(main).toContain("normalInitializationReached: false");
+    expect(main).toContain('errorCode: typeof errorCode === "string" ? errorCode : null');
   });
 
   test("release-cycle cleanup tracks only app processes launched by the smoke", () => {
@@ -121,7 +122,7 @@ describe("Windows Squirrel lifecycle", () => {
     );
     const uninstall = smoke.indexOf("  runOwnedAppUninstaller();");
     const evidence = smoke.indexOf(
-      '  await waitFor(() => evidence("uninstall")?.operationalStateRemoved === true,',
+      '  const uninstallEvidence = await requireSuccessfulSquirrelEvidence("uninstall");',
       uninstall,
     );
     const forcedCleanup = smoke.indexOf("  removeOwnedInstallRoot();", evidence);
@@ -166,6 +167,7 @@ describe("Windows Squirrel lifecycle", () => {
   test("Start Menu shortcut targets the version-independent Squirrel stub", () => {
     let command = "";
     let environment: NodeJS.ProcessEnv = {};
+    let timeout = 0;
     expect(manageWindowsSquirrelShortcut({
       action: "create",
       name: "Butler.lnk",
@@ -175,6 +177,7 @@ describe("Windows Squirrel lifecycle", () => {
       runPowerShell: (_executable, args, options) => {
         command = args.at(-1) ?? "";
         environment = options.env;
+        timeout = Number(options.timeout);
         return { status: 0 };
       },
     })).toBe(true);
@@ -188,6 +191,26 @@ describe("Windows Squirrel lifecycle", () => {
     });
     expect(environment.PSModulePath).toBeUndefined();
     expect(environment.Path).toBe("C:\\Windows");
+    expect(timeout).toBe(5_000);
+  });
+
+  test("uninstall removes the Start Menu shortcut without launching PowerShell", () => {
+    const removed: string[] = [];
+    expect(manageWindowsSquirrelShortcut({
+      action: "remove",
+      name: "Butler.lnk",
+      target: "C:\\Users\\dev\\AppData\\Local\\butler-app\\Butler.exe",
+      workingDirectory: "C:\\Users\\dev\\AppData\\Local\\butler-app",
+      env: { APPDATA: "C:\\Users\\dev\\AppData\\Roaming" },
+      runPowerShell: () => {
+        throw new Error("PowerShell must not run during uninstall shortcut cleanup");
+      },
+      removePath: (path) => removed.push(path),
+      pathExists: () => false,
+    })).toBe(true);
+    expect(removed).toEqual([
+      "C:\\Users\\dev\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Butler.lnk",
+    ]);
   });
 
   test("PowerShell child processes reconstruct their native module path", () => {

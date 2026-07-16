@@ -126,6 +126,7 @@ if (process.platform === "win32") {
 }
 if (windowsSquirrelLaunch.handled) {
   let squirrelExitCode = 0;
+  let squirrelErrorCode = null;
   let squirrelResult = null;
   try {
     squirrelResult = executeWindowsSquirrelLaunch(windowsSquirrelLaunch, {
@@ -143,11 +144,13 @@ if (windowsSquirrelLaunch.handled) {
     });
   } catch (error) {
     squirrelExitCode = 1;
-    console.error(`Windows Squirrel lifecycle failed: ${safeErrorCode(error)}`);
+    squirrelErrorCode = safeErrorCode(error);
+    console.error(`Windows Squirrel lifecycle failed: ${squirrelErrorCode}`);
   }
   writeWindowsSquirrelEvidence({
     event: windowsSquirrelLaunch.event,
     exitCode: squirrelExitCode,
+    errorCode: squirrelErrorCode,
     result: squirrelResult,
   });
   process.exit(squirrelExitCode);
@@ -1846,7 +1849,7 @@ function isDevToolsAccelerator(input) {
   );
 }
 
-function writeWindowsSquirrelEvidence({ event, exitCode, result }) {
+function writeWindowsSquirrelEvidence({ event, exitCode, errorCode, result }) {
   const evidenceTemplate = process.env.BUTLER_WINDOWS_SQUIRREL_EVIDENCE_PATH?.trim();
   if (!evidenceTemplate) return;
   const eventLabel = typeof event === "string"
@@ -1859,6 +1862,7 @@ function writeWindowsSquirrelEvidence({ event, exitCode, result }) {
       schema: "butler.windows-squirrel-lifecycle-evidence.v1",
       event,
       exitCode,
+      errorCode: typeof errorCode === "string" ? errorCode : null,
       shortcutAction: result?.shortcutAction ?? null,
       operationalStateRemoved: result?.operationalStateRemoved === true,
       normalInitializationReached: false,
