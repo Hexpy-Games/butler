@@ -50,6 +50,7 @@ import {
   createRecoveryBudget,
   resolveAppLifecycleMode,
   transitionAppForeground,
+  waitForAppForegroundPortRelease,
   writeAppForegroundInstance,
   writeAppForegroundLastExit,
   writeAppForegroundStartupFailure,
@@ -242,6 +243,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   explicitServerUrl,
   explicitUiUrl,
   projectFolderTokenSecret,
+  startupTimeoutMs: 120_000,
   onUnexpectedExit: () => { void recoverUnexpectedForegroundExit(); },
   onGatewayStarting: prepareAppForegroundGatewayLaunch,
 });
@@ -2544,7 +2546,10 @@ async function stopServerProcess({
       processGroupDead: foregroundInstance.process_group_id !== null &&
         stopResult.containment_released,
       processTreeDead: stopResult.containment_released,
-      portReleased: await isPortAvailable(port),
+      portReleased: await waitForAppForegroundPortRelease({
+        port,
+        isPortAvailable,
+      }),
     });
   }
   foregroundQuitSnapshot = null;

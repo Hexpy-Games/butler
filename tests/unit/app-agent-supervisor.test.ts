@@ -487,6 +487,54 @@ test("supervisor rolls back prepared App-managed runtime on health timeout", asy
   }
 });
 
+test("supervisor startup deadline overrides a shorter attempt count", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-deadline-"));
+  try {
+    let now = 0;
+    let healthChecks = 0;
+    const killed: string[] = [];
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/bin/butler.js", "gateway", "app"],
+      }),
+      spawnProcess: () => new FakeChildProcess(9350, killed),
+      healthCheck: () => {
+        healthChecks += 1;
+        return false;
+      },
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      nowMs: () => now,
+      sleepMs: async (ms) => {
+        now += ms;
+      },
+      startupAttempts: 1,
+      startupDelayMs: 100,
+      startupTimeoutMs: 250,
+      baseEnv: {},
+    });
+
+    await expect(supervisor.ensureReady()).rejects.toThrow("Timed out waiting");
+    expect(healthChecks).toBe(4);
+    expect(killed).toContain("SIGTERM");
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "failed",
+      last_error_code: "health_timeout",
+      last_error: {
+        details: { attempts: 3 },
+      },
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("supervisor rolls back prepared App-managed runtime when readiness never passes", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-ready-rollback-"));
   try {

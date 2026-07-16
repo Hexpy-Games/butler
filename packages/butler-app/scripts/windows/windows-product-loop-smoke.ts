@@ -9,7 +9,8 @@ if (process.platform !== "win32" || process.arch !== "x64") {
 }
 
 const repoRoot = process.cwd();
-const passCount = 2;
+const fullProductPassCount = 1;
+const platformPassCount = 2;
 const validationToken = windowsValidationToken();
 const standardUser = validationToken.standardUser;
 if (!validationToken.accepted) {
@@ -18,7 +19,8 @@ if (!validationToken.accepted) {
 const initialE2eTempDirs = currentE2eTempDirs();
 
 const passes: Array<Record<string, unknown>> = [];
-for (let pass = 1; pass <= passCount; pass += 1) {
+const platformPasses: Array<Record<string, unknown>> = [];
+for (let pass = 1; pass <= fullProductPassCount; pass += 1) {
   const chat = await runJsonScenario(
     `chat-${pass}`,
     ["run", "tests/e2e/app-client-multiturn-e2e.ts"],
@@ -71,6 +73,7 @@ for (let pass = 1; pass <= passCount; pass += 1) {
   const chatChecks = stringArray(chat.checks);
   const projectChecks = stringArray(project.checks);
   const projectTools = stringArray(project.toolCalls);
+  const platformChecks = platformGateChecks(containment, desktop);
   const passResult = {
     pass,
     deterministicChat:
@@ -91,34 +94,47 @@ for (let pass = 1; pass <= passCount; pass += 1) {
     restartDataReload:
       chatChecks.includes("electron-reload-preserved-session-state") &&
       chatChecks.includes("canonical-session-view-consistent"),
-    agentCrashRecovery: desktop.boundedRecovery === true,
-    normalQuit:
-      desktop.gracefulQuit === true &&
-      objectRecord(containment.normalStop)?.processTreeDead === true,
-    forceKill:
-      objectRecord(containment.ownerDeath)?.processTreeDead === true,
-    portRelease:
-      desktop.portReleased === true &&
-      objectRecord(containment.normalStop)?.portReleased === true &&
-      objectRecord(containment.ownerDeath)?.portReleased === true,
+    ...platformChecks,
     rawTextIncluded: false,
   };
-  if (Object.entries(passResult).some(([key, value]) =>
-    !["pass", "rawTextIncluded"].includes(key) && value !== true,
-  )) {
-    throw new Error(`Windows product loop pass ${pass} did not satisfy every gate`);
-  }
+  assertAllGates(`Windows full-product pass ${pass}`, passResult);
   passes.push(passResult);
+  platformPasses.push({ pass, ...platformChecks, rawTextIncluded: false });
+}
+
+for (
+  let pass = fullProductPassCount + 1;
+  pass <= platformPassCount;
+  pass += 1
+) {
+  const containment = await runJsonScenario(
+    `containment-${pass}`,
+    ["run", "packages/butler-app/scripts/windows/app-foreground-lifecycle-smoke.ts"],
+  );
+  const desktop = await runJsonScenario(
+    `desktop-${pass}`,
+    ["run", "packages/butler-app/scripts/windows/unpacked-foreground-app-smoke.ts"],
+  );
+  const platformResult = {
+    pass,
+    ...platformGateChecks(containment, desktop),
+    rawTextIncluded: false,
+  };
+  assertAllGates(`Windows platform lifecycle pass ${pass}`, platformResult);
+  platformPasses.push(platformResult);
 }
 await waitForE2eTempCleanup(initialE2eTempDirs);
 
 const result = {
-  ok: passes.length === passCount,
+  ok:
+    passes.length === fullProductPassCount &&
+    platformPasses.length === platformPassCount,
   platform: `${process.platform}-${process.arch}`,
   standardUser,
   ciElevatedToken: validationToken.ciElevatedToken,
   cleanIsolatedData: true,
   passes,
+  platformPasses,
   rawTextIncluded: false,
 };
 process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -222,6 +238,32 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function platformGateChecks(
+  containment: Record<string, unknown>,
+  desktop: Record<string, unknown>,
+): Record<string, boolean> {
+  return {
+    agentCrashRecovery: desktop.boundedRecovery === true,
+    normalQuit:
+      desktop.gracefulQuit === true &&
+      objectRecord(containment.normalStop)?.processTreeDead === true,
+    forceKill:
+      objectRecord(containment.ownerDeath)?.processTreeDead === true,
+    portRelease:
+      desktop.portReleased === true &&
+      objectRecord(containment.normalStop)?.portReleased === true &&
+      objectRecord(containment.ownerDeath)?.portReleased === true,
+  };
+}
+
+function assertAllGates(label: string, result: Record<string, unknown>): void {
+  if (Object.entries(result).some(([key, value]) =>
+    !["pass", "rawTextIncluded"].includes(key) && value !== true,
+  )) {
+    throw new Error(`${label} did not satisfy every gate`);
+  }
 }
 
 function currentE2eTempDirs(): Set<string> {
