@@ -98,10 +98,12 @@ export function createBundledAgentSupervisor({
   projectFolderTokenSecret = null,
   baseEnv = process.env,
   sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  nowMs = () => Date.now(),
   setKillTimer = (fn, ms) => setTimeout(fn, ms),
   clearKillTimer = (timer) => clearTimeout(timer),
   startupAttempts = 60,
   startupDelayMs = 150,
+  startupTimeoutMs = null,
   killTimeoutMs = 2000,
   probeTimeoutMs = 2000,
   stdio = "inherit",
@@ -165,7 +167,9 @@ export function createBundledAgentSupervisor({
 
   async function waitForExplicitServerReady() {
     let observedHealthy = false;
-    for (let attempt = 0; attempt < startupAttempts; attempt += 1) {
+    const startupWindow = createStartupWindow();
+    while (startupWindow.canAttempt()) {
+      startupWindow.recordAttempt();
       const state = await checkGatewayReadiness();
       observedHealthy = observedHealthy || state.healthy;
       if (state.ready) {
@@ -174,10 +178,10 @@ export function createBundledAgentSupervisor({
         lastErrorDetails = null;
         return;
       }
-      if (attempt + 1 < startupAttempts) await sleepMs(startupDelayMs);
+      await startupWindow.waitBeforeRetry();
     }
     recordError(observedHealthy ? "external_not_ready" : "external_unhealthy", {
-      attempts: startupAttempts,
+      attempts: startupWindow.attempts(),
       server_url: explicitServerUrl,
     });
     throw new Error(`Butler app server is not healthy: ${explicitServerUrl}`);
@@ -239,7 +243,9 @@ export function createBundledAgentSupervisor({
     });
 
     let observedHealthy = false;
-    for (let attempt = 0; attempt < startupAttempts; attempt += 1) {
+    const startupWindow = createStartupWindow();
+    while (startupWindow.canAttempt()) {
+      startupWindow.recordAttempt();
       const state = await checkGatewayReadiness();
       observedHealthy = observedHealthy || state.healthy;
       if (state.ready) {
@@ -285,7 +291,7 @@ export function createBundledAgentSupervisor({
           `Butler app server exited before becoming healthy: code=${earlyExit.code ?? "null"} signal=${earlyExit.signal ?? "null"}.`,
         );
       }
-      await sleepMs(startupDelayMs);
+      await startupWindow.waitBeforeRetry();
     }
     const errorCode = observedHealthy ? "readiness_timeout" : "health_timeout";
     const timeoutError = new Error(
@@ -294,7 +300,7 @@ export function createBundledAgentSupervisor({
     await stopCandidateAfterStartupFailure();
     rollbackGatewayActivation(gateway, timeoutError);
     recordError(errorCode, {
-      attempts: startupAttempts,
+      attempts: startupWindow.attempts(),
       host: "127.0.0.1",
       port: getPort(),
     });
@@ -411,6 +417,30 @@ export function createBundledAgentSupervisor({
     lastErrorCode = code;
     lastErrorDetails = details;
     phase = "failed";
+  }
+
+  function createStartupWindow() {
+    const usesDeadline = Number.isFinite(startupTimeoutMs) && startupTimeoutMs > 0;
+    const deadline = usesDeadline ? nowMs() + startupTimeoutMs : null;
+    let attempts = 0;
+    return {
+      attempts: () => attempts,
+      canAttempt: () =>
+        attempts === 0 || (usesDeadline ? nowMs() < deadline : attempts < startupAttempts),
+      recordAttempt: () => {
+        attempts += 1;
+      },
+      waitBeforeRetry: async () => {
+        const canRetry = usesDeadline
+          ? nowMs() < deadline
+          : attempts < startupAttempts;
+        if (!canRetry) return;
+        const delay = usesDeadline
+          ? Math.min(startupDelayMs, Math.max(0, deadline - nowMs()))
+          : startupDelayMs;
+        if (delay > 0) await sleepMs(delay);
+      },
+    };
   }
 
   async function checkGatewayReadiness() {
