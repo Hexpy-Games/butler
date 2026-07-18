@@ -1,3 +1,10 @@
+export function resolveFirstRunServiceControl({
+  usesAppForegroundLifecycle,
+  serviceControl,
+}) {
+  return usesAppForegroundLifecycle ? null : serviceControl;
+}
+
 export function createFirstRunSetupBridge({
   ensureReady,
   readSettings,

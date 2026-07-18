@@ -1,3 +1,17 @@
+const traysWithWindowsInteractions = new WeakSet();
+
+export function bindWindowsTrayInteractions(tray, openButler) {
+  if (traysWithWindowsInteractions.has(tray)) return false;
+  traysWithWindowsInteractions.add(tray);
+  tray.on("click", () => {
+    tray.popUpContextMenu();
+  });
+  tray.on("double-click", () => {
+    openButler();
+  });
+  return true;
+}
+
 export function createTrayAgentMenuModel(status = {}) {
   const agentStatus = typeof status.status === "string" ? status.status : "not_installed";
   const serviceAvailable = status.service_available === true;

@@ -3,7 +3,10 @@ import { readFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { createBundledAgentSupervisor } from "../../packages/butler-app/client/electron/app-agent-supervisor.mjs";
-import { createFirstRunSetupBridge } from "../../packages/butler-app/client/electron/setup-bridge.mjs";
+import {
+  createFirstRunSetupBridge,
+  resolveFirstRunServiceControl,
+} from "../../packages/butler-app/client/electron/setup-bridge.mjs";
 import {
   api,
   subscribeLiveEvents,
@@ -12,6 +15,23 @@ import {
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
   delete (globalThis as { EventSource?: unknown }).EventSource;
+});
+
+test("App-foreground first-run setup does not receive legacy service control", () => {
+  const serviceControl = {
+    getAgentServiceStatus: async () => {
+      throw new Error("legacy service must not be queried");
+    },
+  };
+
+  expect(resolveFirstRunServiceControl({
+    usesAppForegroundLifecycle: true,
+    serviceControl,
+  })).toBeNull();
+  expect(resolveFirstRunServiceControl({
+    usesAppForegroundLifecycle: false,
+    serviceControl,
+  })).toBe(serviceControl);
 });
 
 test("Electron first-run setup bridge exposes status start cancel and diagnostics", () => {
@@ -104,6 +124,8 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain("OAuth callback state mismatch.");
   expect(main).toContain("waitForOAuthCompletion");
   expect(main).toContain("createFirstRunSetupBridge");
+  expect(main).toContain("serviceControl: resolveFirstRunServiceControl({");
+  expect(main).toContain("usesAppForegroundLifecycle,");
   expect(main).toContain("readRuntimeDiagnostics");
   expect(main).toContain("readLatestAppManagedRuntimeFailure");
   expect(setupBridge).toContain("createFirstRunSetupBridge");
