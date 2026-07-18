@@ -34,6 +34,11 @@ export interface FirstRunServiceControlBridge {
   readAgentServiceDiagnostics?: () => Promise<unknown> | unknown;
 }
 
+export function resolveFirstRunServiceControl(input: {
+  usesAppForegroundLifecycle: boolean;
+  serviceControl: FirstRunServiceControlBridge;
+}): FirstRunServiceControlBridge | null;
+
 export function createFirstRunSetupBridge(input: {
   ensureReady: () => Promise<void>;
   gatewayProfile?: "electron";

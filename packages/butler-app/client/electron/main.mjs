@@ -63,7 +63,10 @@ import {
 import { migrateLegacyAppService } from "./app-legacy-service-migration.mjs";
 import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
-import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
+import {
+  createFirstRunSetupBridge,
+  resolveFirstRunServiceControl,
+} from "./setup-bridge.mjs";
 import {
   MENU_BAR_HELPER_ARG,
   argsForNavigationRequest,
@@ -77,7 +80,10 @@ import {
   resolvePersistentMenuBarHelperLaunch,
   shouldLaunchPersistentMenuBarHelper,
 } from "./menu-bar-helper-lifecycle.mjs";
-import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
+import {
+  bindWindowsTrayInteractions,
+  createTrayAgentMenuModel,
+} from "./tray-agent-menu.mjs";
 import {
   executeWindowsSquirrelLaunch,
   manageWindowsSquirrelShortcut,
@@ -276,7 +282,10 @@ const firstRunSetupBridge = createFirstRunSetupBridge({
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
   readRuntimeDiagnostics: readFirstRunRuntimeDiagnostics,
-  serviceControl: agentServiceControl,
+  serviceControl: resolveFirstRunServiceControl({
+    usesAppForegroundLifecycle,
+    serviceControl: agentServiceControl,
+  }),
 });
 app.setName(appDisplayName);
 if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {
@@ -1480,6 +1489,9 @@ async function refreshTrayMenu() {
   if (!tray) {
     tray = new Tray(trayIconForMenuBar());
     tray.setToolTip(appDisplayName);
+    if (process.platform === "win32") {
+      bindWindowsTrayInteractions(tray, openButlerFromTray);
+    }
   } else {
     updateTrayIcon();
   }
