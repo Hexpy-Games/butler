@@ -1752,12 +1752,20 @@ function writeExecutableText(path: string, value: string): void {
   }
 }
 
-function summarizeCommandOutput(output: unknown): string {
+export function summarizeCommandOutput(output: unknown): string {
   const lines = String(output ?? "").trim().split(/\r?\n/u);
-  const summary = lines.length <= 12
+  const diagnosticMiddle = lines
+    .slice(4, -8)
+    .filter((line) => /error|exception|fail|sign|msi|squirrel/iu.test(line))
+    .slice(0, 24);
+  const summary = lines.length <= 40
     ? lines
-    : [...lines.slice(0, 4), "...", ...lines.slice(-8)];
-  return summary.join("\n").slice(0, 4000);
+    : [
+        ...lines.slice(0, 4),
+        ...(diagnosticMiddle.length > 0 ? diagnosticMiddle : ["..."]),
+        ...lines.slice(-8),
+      ];
+  return summary.join("\n").slice(0, 12_000);
 }
 
 function assertSupportedPlatforms(platforms: AppReleasePlatform[]): void {
