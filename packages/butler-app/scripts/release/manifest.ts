@@ -1019,7 +1019,7 @@ function artifactName(
   platform: AppReleasePlatform,
 ): string {
   if (platform === "win32-x64") {
-    return `butler-app-${version}-${platform}-setup.exe`;
+    return "butler_setup.msi";
   }
   const extension = platform === "darwin-arm64"
     ? "dmg"

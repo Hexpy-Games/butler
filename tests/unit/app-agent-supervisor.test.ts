@@ -39,7 +39,9 @@ test("App local auth is generated under App runtime state and reused", () => {
       created_at: "2026-06-12T00:00:00.000Z",
       raw_text_included: false,
     });
-    expect(statSync(first.filePath).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") {
+      expect(statSync(first.filePath).mode & 0o777).toBe(0o600);
+    }
 
     const second = prepareAppLocalAuth({
       butlerData,
@@ -161,6 +163,9 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
       args: ["/runtime/bin/butler.js", "gateway", "app"],
       options: {
         cwd: "/runtime",
+        detached: false,
+        shell: false,
+        windowsHide: true,
         env: {
           BUTLER_APP_SERVER_HOST: "127.0.0.1",
           BUTLER_APP_SERVER_PORT: "18765",

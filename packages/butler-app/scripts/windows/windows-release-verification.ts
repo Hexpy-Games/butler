@@ -8,12 +8,16 @@ import {
 import { tmpdir } from "node:os";
 import { basename, extname, join, relative } from "node:path";
 import { spawnSync } from "node:child_process";
-import { verifyWindowsAuthenticodeFiles } from "../release/package-app-release.ts";
+import {
+  isWindowsGuiSubsystemPe,
+  isWindowsX64Pe,
+  verifyWindowsAuthenticodeFiles,
+} from "../release/package-app-release.ts";
 
 export function verifySignedWindowsPayload(input: {
   expectedSignerThumbprint: string;
   packagePath: string;
-  setupPath: string;
+  installerPath: string;
 }): { required: string[]; peCount: number } {
   const extractDir = mkdtempSync(join(tmpdir(), "butler-windows-nupkg-"));
   try {
@@ -29,16 +33,25 @@ export function verifySignedWindowsPayload(input: {
       throw new Error("Windows release update package could not be inspected");
     }
     const files = listFiles(extractDir);
-    const required = [
-      input.setupPath,
-      requireUniqueFile(files, "Butler.exe"),
-      requireUniqueFile(files, "bun.exe", "resources/bundled-agent/runtime/bin"),
-      requireUniqueFile(
-        files,
-        "butler-process-host.exe",
-        "resources/bundled-agent/runtime/bin",
-      ),
-    ];
+    const appExecutable = requireUniqueFile(files, "Butler.exe");
+    const bunExecutable = requireUniqueFile(
+      files,
+      "bun.exe",
+      "resources/bundled-agent/runtime/bin",
+    );
+    const processHost = requireUniqueFile(
+      files,
+      "butler-process-host.exe",
+      "resources/bundled-agent/runtime/bin",
+    );
+    const required = [input.installerPath, appExecutable, bunExecutable, processHost];
+    if (![appExecutable, bunExecutable, processHost].every((path) =>
+      isWindowsX64Pe(readFileSync(path)))) {
+      throw new Error("Windows release payload must contain x64 PE images only");
+    }
+    if (!isWindowsGuiSubsystemPe(readFileSync(processHost))) {
+      throw new Error("Windows process host must use the GUI subsystem");
+    }
     const signableExtensions = new Set([
       ".dll",
       ".efi",
@@ -53,7 +66,7 @@ export function verifySignedWindowsPayload(input: {
     if (packagedPeFiles.length < required.length - 1) {
       throw new Error("Windows release package PE inventory is incomplete");
     }
-    const signedFiles = [input.setupPath, ...packagedPeFiles];
+    const signedFiles = [input.installerPath, ...packagedPeFiles];
     const signatures = verifyWindowsAuthenticodeFiles(signedFiles);
     for (const signature of signatures) {
       if (signature.signerThumbprint !== input.expectedSignerThumbprint) {
@@ -62,11 +75,11 @@ export function verifySignedWindowsPayload(input: {
     }
     return {
       required: required.map((path) =>
-        path === input.setupPath
+        path === input.installerPath
           ? basename(path)
           : relative(extractDir, path).replaceAll("\\", "/"),
       ),
-      peCount: signedFiles.length,
+      peCount: packagedPeFiles.length,
     };
   } finally {
     rmSync(extractDir, { recursive: true, force: true });

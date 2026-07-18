@@ -215,6 +215,8 @@ export function createBundledAgentSupervisor({
         env,
         stdio: gateway.stdio ?? stdio,
         detached: gateway.detached === true,
+        shell: false,
+        windowsHide: true,
       });
     } catch (error) {
       rollbackGatewayActivation(gateway, error);

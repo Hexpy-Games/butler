@@ -362,7 +362,7 @@ function verifyPackagedRelease(
   return verifySignedWindowsPayload({
     expectedSignerThumbprint,
     packagePath: artifact.updaterArtifactPath,
-    setupPath: artifact.artifactPath,
+    installerPath: artifact.artifactPath,
   });
 }
 
@@ -385,7 +385,7 @@ function restoreSourceVersions(): void {
 function requiredSetup(result: ReturnType<typeof createAppReleasePackage>): string {
   const artifact = requiredWindowsArtifact(result);
   if (!existsSync(artifact.artifactPath)) {
-    throw new Error("Windows Setup.exe is missing from release package result");
+    throw new Error("Windows MSI is missing from release package result");
   }
   return artifact.artifactPath;
 }
@@ -408,8 +408,12 @@ function requireExpectedSignerThumbprint(): string {
   return value;
 }
 
-function runInstaller(setupPath: string): void {
-  const result = spawnSync(setupPath, ["--silent"], {
+function runInstaller(installerPath: string): void {
+  const result = spawnSync(process.env.SystemRoot
+    ? join(process.env.SystemRoot, "System32", "msiexec.exe")
+    : "msiexec.exe", [
+      "/i", installerPath, "/qn", "/norestart",
+    ], {
     encoding: "utf8",
     env: smokeEnv,
     shell: false,

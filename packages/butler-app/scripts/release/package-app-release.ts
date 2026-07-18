@@ -647,7 +647,7 @@ function copyManagedRuntimeExecutable(runtimeDir: string, platform: AppReleasePl
     if (!existsSync(processHostSource)) {
       throw new Error(`managed Windows process host is missing: ${processHostSource}`);
     }
-    assertWindowsX64Pe(processHostSource, "managed Windows process host");
+    assertWindowsX64GuiPe(processHostSource, "managed Windows process host");
     const processHostTarget = join(runtimeDir, "bin", "butler-process-host.exe");
     copyFileSync(processHostSource, processHostTarget);
     writeWindowsRuntimeSignatureManifest(runtimeDir, [
@@ -707,9 +707,25 @@ export function isWindowsX64Pe(bytes: Buffer): boolean {
   );
 }
 
-function assertWindowsX64Pe(path: string, label: string): void {
-  if (!isWindowsX64Pe(readFileSync(path))) {
-    throw new Error(`${label} is not a Windows x64 PE executable: ${path}`);
+export function isWindowsGuiSubsystemPe(bytes: Buffer): boolean {
+  if (!isWindowsX64Pe(bytes)) return false;
+  const peOffset = bytes.readUInt32LE(0x3c);
+  const optionalHeaderOffset = peOffset + 24;
+  const subsystemOffset = optionalHeaderOffset + 0x44;
+  if (subsystemOffset > bytes.length - 2) return false;
+  const optionalHeaderMagic = bytes.readUInt16LE(optionalHeaderOffset);
+  if (optionalHeaderMagic !== 0x10b && optionalHeaderMagic !== 0x20b) {
+    return false;
+  }
+  return bytes.readUInt16LE(subsystemOffset) === 2;
+}
+
+function assertWindowsX64GuiPe(path: string, label: string): void {
+  const bytes = readFileSync(path);
+  if (!isWindowsX64Pe(bytes) || !isWindowsGuiSubsystemPe(bytes)) {
+    throw new Error(
+      `${label} is not a Windows x64 GUI-subsystem PE executable: ${path}`,
+    );
   }
 }
 
@@ -1199,7 +1215,8 @@ function createWindowsSquirrelInstaller(input: {
   if (!existsSync(script)) {
     throw new Error(`Windows Squirrel packager is missing: ${script}`);
   }
-  const setupName = basename(input.artifactPath);
+  const setupExeName = "butler_update_setup.exe";
+  const setupMsiName = basename(input.artifactPath);
   const result = spawnSync(process.env.BUTLER_NODE || "node.exe", [
     script,
     "--app-directory",
@@ -1207,7 +1224,9 @@ function createWindowsSquirrelInstaller(input: {
     "--output-directory",
     installerOut,
     "--setup-exe",
-    setupName,
+    setupExeName,
+    "--setup-msi",
+    setupMsiName,
     "--setup-icon",
     appReleaseWindowsIconPath(input.root),
     "--version",
@@ -1227,9 +1246,9 @@ function createWindowsSquirrelInstaller(input: {
       }`,
     );
   }
-  const setupSource = join(installerOut, setupName);
-  if (!existsSync(setupSource)) {
-    throw new Error(`Windows Squirrel Setup.exe was not created: ${setupSource}`);
+  const setupMsiSource = join(installerOut, setupMsiName);
+  if (!existsSync(setupMsiSource)) {
+    throw new Error(`Windows Squirrel MSI was not created: ${setupMsiSource}`);
   }
   const packageSource = findExactlyOneFile(
     installerOut,
@@ -1240,7 +1259,7 @@ function createWindowsSquirrelInstaller(input: {
   if (!existsSync(indexSource)) {
     throw new Error(`Windows Squirrel RELEASES index was not created: ${indexSource}`);
   }
-  copyFileSync(setupSource, input.artifactPath);
+  copyFileSync(setupMsiSource, input.artifactPath);
   const packagePath = join(input.outDir, basename(packageSource));
   copyFileSync(packageSource, packagePath);
   const indexPath = join(input.outDir, "RELEASES");
@@ -1734,7 +1753,11 @@ function writeExecutableText(path: string, value: string): void {
 }
 
 function summarizeCommandOutput(output: unknown): string {
-  return String(output ?? "").trim().split(/\r?\n/u).slice(-8).join("\n").slice(0, 4000);
+  const lines = String(output ?? "").trim().split(/\r?\n/u);
+  const summary = lines.length <= 12
+    ? lines
+    : [...lines.slice(0, 4), "...", ...lines.slice(-8)];
+  return summary.join("\n").slice(0, 4000);
 }
 
 function assertSupportedPlatforms(platforms: AppReleasePlatform[]): void {
