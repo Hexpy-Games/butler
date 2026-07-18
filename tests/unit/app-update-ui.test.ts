@@ -77,6 +77,9 @@ test("Electron App update apply opens a staged App artifact", () => {
 
   expect(preload).toContain('ipcRenderer.invoke("butler:open-update-artifact"');
   expect(preload).toContain('result?.stage_status === "staged"');
+  expect(main).toContain('lowerArtifactPath.endsWith(".msi")');
+  expect(main).toContain('"System32", "msiexec.exe"');
+  expect(main).toContain('["/i", artifactPath, "/qn", "/norestart"]');
   expect(preload).toContain("result?.artifact_path");
   expect(main).toContain('ipcMain.handle("butler:open-update-artifact"');
   expect(main).toContain("shell.openPath(artifactPath)");

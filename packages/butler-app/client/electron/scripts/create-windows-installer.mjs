@@ -14,6 +14,7 @@ const { sign } = require("@electron/windows-sign");
 const appDirectory = requiredOption("--app-directory");
 const outputDirectory = requiredOption("--output-directory");
 const setupExe = requiredOption("--setup-exe");
+const setupMsi = requiredOption("--setup-msi");
 const setupIcon = requiredOption("--setup-icon");
 const version = requiredOption("--version");
 const certificateFile = process.env.BUTLER_WINDOWS_SIGN_CERTIFICATE_FILE?.trim();
@@ -86,10 +87,11 @@ await createWindowsInstaller({
   exe: "Butler.exe",
   version,
   setupExe,
+  setupMsi,
   setupIcon: resolve(setupIcon),
   iconUrl:
     "https://raw.githubusercontent.com/Hexpy-Games/butler/main/packages/butler-app/client/electron/assets/butler.ico",
-  noMsi: true,
+  noMsi: false,
   ...(signingOptions ?? {}),
 });
 

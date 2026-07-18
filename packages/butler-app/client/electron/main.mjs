@@ -2323,7 +2323,11 @@ ipcMain.handle("butler:save-message-file", async (_event, input = {}) => {
 
 ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
   const artifactPath = safeUpdateArtifactPath(input?.artifactPath);
-  if (isWindows && artifactPath.toLocaleLowerCase("en-US").endsWith(".exe")) {
+  const lowerArtifactPath = artifactPath.toLocaleLowerCase("en-US");
+  const isWindowsMsi = isWindows && lowerArtifactPath.endsWith(".msi");
+  if (
+    isWindows && (isWindowsMsi || lowerArtifactPath.endsWith(".exe"))
+  ) {
     const signature = verifyWindowsInstallerPublisher({
       currentExecutable: process.execPath,
       candidateInstaller: artifactPath,
@@ -2331,7 +2335,13 @@ ipcMain.handle("butler:open-update-artifact", async (_event, input = {}) => {
       env: process.env,
     });
     const update = await runAppUpdateQuit(() => {
-      const installer = spawn(artifactPath, ["--silent"], {
+      const installerCommand = isWindowsMsi
+        ? join(process.env.SystemRoot ?? "C:\\Windows", "System32", "msiexec.exe")
+        : artifactPath;
+      const installerArgs = isWindowsMsi
+        ? ["/i", artifactPath, "/qn", "/norestart"]
+        : ["--silent"];
+      const installer = spawn(installerCommand, installerArgs, {
         detached: true,
         shell: false,
         stdio: "ignore",

@@ -37,6 +37,9 @@ const artifact = result.artifacts[0];
 if (!artifact || artifact.platform !== "win32-x64") {
   throw new Error("Windows release package result is missing win32-x64");
 }
+if (basename(artifact.artifactPath) !== "butler_setup.msi") {
+  throw new Error("Windows release artifact must be named butler_setup.msi");
+}
 for (const path of [
   artifact.artifactPath,
   artifact.sha256Path,
@@ -57,7 +60,7 @@ verifySha256(artifact.updaterIndexPath!, artifact.updaterIndexSha256Path!);
 const signedPayload = verifySignedWindowsPayload({
   expectedSignerThumbprint,
   packagePath: artifact.updaterArtifactPath!,
-  setupPath: artifact.artifactPath,
+  installerPath: artifact.artifactPath,
 });
 
 const releaseManifest = JSON.parse(
