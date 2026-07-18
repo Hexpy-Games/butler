@@ -31,6 +31,7 @@ import {
   createAppReleasePackage,
   prepareBundledAgentResource,
   prepareBundledAgentResourceFromPackage,
+  summarizeCommandOutput,
 } from "../../packages/butler-app/scripts/release/package-app-release.ts";
 
 const root = process.cwd();
@@ -38,6 +39,24 @@ const currentVersion = String(
   JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version ?? "",
 );
 const currentReleaseTag = `v${currentVersion}`;
+test("package diagnostics retain actionable errors from long child output", () => {
+  const output = [
+    "header 1",
+    "header 2",
+    "header 3",
+    "header 4",
+    ...Array.from({ length: 30 }, (_, index) =>
+      index === 17
+        ? "Squirrel MSI signing failed: certificate unavailable"
+        : `progress ${index}`,
+    ),
+    ...Array.from({ length: 8 }, (_, index) => `footer ${index}`),
+  ].join("\n");
+
+  expect(summarizeCommandOutput(output)).toContain(
+    "Squirrel MSI signing failed: certificate unavailable",
+  );
+});
 
 test("service release manifest exposes Butler CLI entrypoint and service files only", () => {
   const manifest = createServiceReleaseManifest(root);
