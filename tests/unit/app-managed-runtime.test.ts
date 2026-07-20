@@ -83,6 +83,58 @@ test("Windows runtime signature metadata pins the signed runtime files", () => {
   }
 });
 
+test("unsigned Windows runtime metadata is accepted only for an explicit local test process", () => {
+  const runtime = mkdtempSync(join(tmpdir(), "butler-windows-unsigned-"));
+  try {
+    mkdirSync(join(runtime, "bin"), { recursive: true });
+    writeFileSync(join(runtime, "bin", "bun.exe"), "unsigned bun\n");
+    writeFileSync(
+      join(runtime, "bin", "butler-process-host.exe"),
+      "unsigned process host\n",
+    );
+    writeFileSync(
+      join(runtime, "windows-signatures.json"),
+      JSON.stringify({
+        schema: "butler.windows-runtime-signatures.v1",
+        verification: "unsigned-local-test",
+        localTestOnly: true,
+        files: [
+          {
+            path: "bin/bun.exe",
+            sha256: sha256File(join(runtime, "bin", "bun.exe")),
+            status: "UnsignedLocalTest",
+            signerThumbprint: "",
+            signerSubject: "",
+          },
+          {
+            path: "bin/butler-process-host.exe",
+            sha256: sha256File(join(runtime, "bin", "butler-process-host.exe")),
+            status: "UnsignedLocalTest",
+            signerThumbprint: "",
+            signerSubject: "",
+          },
+        ],
+        rawTextIncluded: false,
+      }, null, 2) + "\n",
+    );
+
+    expect(windowsRuntimeSignatureIssue(runtime)).toBe(
+      "unsigned Windows runtime requires explicit local test mode",
+    );
+    expect(windowsRuntimeSignatureIssue(runtime, {
+      allowUnsignedLocalTest: true,
+    })).toBeNull();
+
+    writeFileSync(join(runtime, "bin", "bun.exe"), "tampered\n");
+    expect(windowsRuntimeSignatureIssue(runtime, {
+      allowUnsignedLocalTest: true,
+    })).toBe(
+      "Windows runtime signature verification failed for bin/bun.exe",
+    );
+  } finally {
+    rmSync(runtime, { recursive: true, force: true });
+  }
+});
 test("App-managed runtime activation writes an app-owned pointer only", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-"));
   try {

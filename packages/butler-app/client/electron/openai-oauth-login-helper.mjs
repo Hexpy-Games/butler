@@ -10,15 +10,16 @@ export function resolveOpenAIOAuthLoginHelper({
   repoRoot,
   resourcesPath = process.resourcesPath,
   fallbackRuntime = "bun",
+  platform = process.platform,
   allowBundledResourceFallback = true,
   allowDevelopmentFallback = true,
   fileExists = existsSync,
   readFile = readFileSync,
 } = {}) {
   const candidates = [
-    appManagedOAuthLoginHelper({ butlerData, fileExists, readFile }),
+    appManagedOAuthLoginHelper({ butlerData, platform, fileExists, readFile }),
     allowBundledResourceFallback
-      ? bundledResourceOAuthLoginHelper({ resourcesPath, fileExists })
+      ? bundledResourceOAuthLoginHelper({ resourcesPath, platform, fileExists })
       : null,
     allowDevelopmentFallback
       ? repoOAuthLoginHelper({ repoRoot, fallbackRuntime })
@@ -39,11 +40,15 @@ export function resolveOpenAIOAuthLoginHelper({
   return null;
 }
 
+function runtimeExecutableName(platform) {
+  return platform === "win32" ? "bun.exe" : "bun";
+}
+
 export function oauthScriptButlerHome(scriptPath) {
   return resolve(dirname(scriptPath), "../../..");
 }
 
-function appManagedOAuthLoginHelper({ butlerData, fileExists, readFile }) {
+function appManagedOAuthLoginHelper({ butlerData, platform, fileExists, readFile }) {
   if (!butlerData) return null;
   const pointerPath = appManagedAgentPointerPath(butlerData);
   if (!fileExists(pointerPath)) return null;
@@ -71,7 +76,7 @@ function appManagedOAuthLoginHelper({ butlerData, fileExists, readFile }) {
       "resources",
       "runtime",
       "bin",
-      "bun",
+      runtimeExecutableName(platform),
     ),
     butlerHome: runtimeHome,
     runtimeMustExist: true,
@@ -94,7 +99,7 @@ function appManagedRuntimeHome(butlerData, pointer) {
   return join(butlerData, normalized);
 }
 
-function bundledResourceOAuthLoginHelper({ resourcesPath, fileExists }) {
+function bundledResourceOAuthLoginHelper({ resourcesPath, platform, fileExists }) {
   if (!resourcesPath) return null;
   const resourceRoot = join(resourcesPath, "bundled-agent");
   if (!fileExists(resourceRoot)) return null;
@@ -107,7 +112,7 @@ function bundledResourceOAuthLoginHelper({ resourcesPath, fileExists }) {
       "scripts",
       "openai-oauth-login.ts",
     ),
-    runtime: join(resourceRoot, "runtime", "bin", "bun"),
+    runtime: join(resourceRoot, "runtime", "bin", runtimeExecutableName(platform)),
     butlerHome: resourceRoot,
     runtimeMustExist: true,
   };

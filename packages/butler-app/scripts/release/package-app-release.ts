@@ -744,10 +744,21 @@ function writeWindowsRuntimeSignatureManifest(
   runtimeDir: string,
   files: WindowsRuntimeSignedFile[],
 ): void {
-  const signatures = verifyWindowsAuthenticodeFiles(files.map((file) => file.path));
+  const unsignedLocalTest =
+    process.env.BUTLER_APP_ALLOW_UNSIGNED_WINDOWS_LOCAL_TEST === "1";
+  const signatures = unsignedLocalTest
+    ? files.map(() => ({
+        status: "UnsignedLocalTest",
+        signerThumbprint: "",
+        signerSubject: "",
+      }))
+    : verifyWindowsAuthenticodeFiles(files.map((file) => file.path));
   writeJson(join(runtimeDir, "windows-signatures.json"), {
     schema: "butler.windows-runtime-signatures.v1",
-    verification: "authenticode-powershell-5.1",
+    verification: unsignedLocalTest
+      ? "unsigned-local-test"
+      : "authenticode-powershell-5.1",
+    ...(unsignedLocalTest ? { localTestOnly: true } : {}),
     files: files.map((file, index) => ({
       path: file.relativePath,
       sha256: sha256File(file.path),
@@ -758,7 +769,6 @@ function writeWindowsRuntimeSignatureManifest(
     rawTextIncluded: false,
   });
 }
-
 export function verifyWindowsAuthenticodeFiles(paths: string[]): WindowsAuthenticodeResult[] {
   if (process.platform !== "win32") {
     throw new Error("Windows Authenticode verification must run on Windows");

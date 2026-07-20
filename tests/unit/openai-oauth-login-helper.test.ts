@@ -41,6 +41,7 @@ test("OpenAI OAuth helper resolves from active App-managed Agent pointer", () =>
       repoRoot: join(root, "repo"),
       resourcesPath: join(root, "missing-resources"),
       fallbackRuntime: "bun",
+      platform: "linux",
     });
 
     expect(helper).toEqual({
@@ -54,6 +55,52 @@ test("OpenAI OAuth helper resolves from active App-managed Agent pointer", () =>
   }
 });
 
+test("OpenAI OAuth helper resolves bun.exe from the App-managed Agent on Windows", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
+  try {
+    const butlerData = join(root, "data");
+    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "1.2.3");
+    const runtimeHome = join(butlerData, runtimeHomeLabel);
+    const scriptPath = join(
+      runtimeHome,
+      "packages",
+      "butler-agent",
+      "scripts",
+      "openai-oauth-login.ts",
+    );
+    const runtime = join(
+      runtimeHome,
+      "packages",
+      "butler-agent",
+      "resources",
+      "runtime",
+      "bin",
+      "bun.exe",
+    );
+    mkdirSync(join(scriptPath, ".."), { recursive: true });
+    mkdirSync(join(runtime, ".."), { recursive: true });
+    writeFileSync(scriptPath, "");
+    writeFileSync(runtime, "");
+    writePointer(butlerData, runtimeHomeLabel);
+
+    expect(resolveOpenAIOAuthLoginHelper({
+      butlerData,
+      repoRoot: join(root, "repo"),
+      resourcesPath: join(root, "missing-resources"),
+      fallbackRuntime: "bun",
+      platform: "win32",
+      allowBundledResourceFallback: false,
+      allowDevelopmentFallback: false,
+    })).toEqual({
+      source: "app-managed",
+      scriptPath,
+      runtime,
+      butlerHome: runtimeHome,
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 test("OpenAI OAuth helper ignores unsafe App-managed runtime pointers", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-oauth-helper-"));
   try {
@@ -75,6 +122,7 @@ test("OpenAI OAuth helper ignores unsafe App-managed runtime pointers", () => {
       repoRoot,
       resourcesPath: join(root, "missing-resources"),
       fallbackRuntime: "bun",
+      platform: "linux",
     });
 
     expect(helper).toEqual({
@@ -148,6 +196,6 @@ function writePointer(butlerData: string, runtimeHome: string): void {
       raw_text_included: false,
     }, null, 2)}\n`,
   );
-  expect(readFileSync(pointerPath, "utf8")).toContain(runtimeHome);
+  expect(JSON.parse(readFileSync(pointerPath, "utf8")).runtime_home).toBe(runtimeHome);
   expect(existsSync(pointerPath)).toBe(true);
 }
