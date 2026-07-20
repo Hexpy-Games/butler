@@ -122,7 +122,10 @@ export function prepareAppManagedAgentRuntime(input: {
   rollbackActivation: (error?: Error) => void;
 };
 
-export function windowsRuntimeSignatureIssue(runtimePayloadHome: string): string | null;
+export function windowsRuntimeSignatureIssue(
+  runtimePayloadHome: string,
+  options?: { allowUnsignedLocalTest?: boolean },
+): string | null;
 
 export function resolveAppManagedGatewayCommand(input?: {
   butlerData: string;
