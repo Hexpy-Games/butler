@@ -1170,7 +1170,10 @@ function runtimeHomeReadinessIssue(
   }
   const runtimePayloadHome = appManagedRuntimePayloadHome(runtimeHome);
   if (platform === "win32") {
-    const windowsRuntimeIssue = windowsRuntimeSignatureIssue(runtimePayloadHome);
+    const windowsRuntimeIssue = windowsRuntimeSignatureIssue(runtimePayloadHome, {
+      allowUnsignedLocalTest:
+        process.env.BUTLER_APP_ALLOW_UNSIGNED_WINDOWS_LOCAL_TEST === "1",
+    });
     if (windowsRuntimeIssue) return windowsRuntimeIssue;
   }
   if (!expected) return null;
@@ -1258,7 +1261,10 @@ function copyRuntimeDirectorySync(source, target) {
   }
 }
 
-export function windowsRuntimeSignatureIssue(runtimePayloadHome) {
+export function windowsRuntimeSignatureIssue(
+  runtimePayloadHome,
+  options = {},
+) {
   const manifestPath = join(runtimePayloadHome, "windows-signatures.json");
   if (!isFile(manifestPath)) return "missing Windows runtime signature manifest";
   let manifest;
@@ -1269,12 +1275,23 @@ export function windowsRuntimeSignatureIssue(runtimePayloadHome) {
   }
   if (
     manifest?.schema !== "butler.windows-runtime-signatures.v1" ||
-    manifest?.verification !== "authenticode-powershell-5.1" ||
     manifest?.rawTextIncluded !== false ||
     !Array.isArray(manifest?.files)
   ) {
     return "invalid Windows runtime signature manifest";
   }
+  const unsignedLocalTest = manifest.verification === "unsigned-local-test";
+  if (unsignedLocalTest) {
+    if (manifest.localTestOnly !== true) {
+      return "invalid Windows runtime signature manifest";
+    }
+    if (options.allowUnsignedLocalTest !== true) {
+      return "unsigned Windows runtime requires explicit local test mode";
+    }
+  } else if (manifest.verification !== "authenticode-powershell-5.1") {
+    return "invalid Windows runtime signature manifest";
+  }
+
   const expectedPaths = ["bin/bun.exe", "bin/butler-process-host.exe"];
   const filesByPath = new Map(
     manifest.files.map((file) => [safeString(file?.path), file]),
@@ -1288,19 +1305,22 @@ export function windowsRuntimeSignatureIssue(runtimePayloadHome) {
   for (const relativePath of expectedPaths) {
     const file = filesByPath.get(relativePath);
     const target = join(runtimePayloadHome, ...relativePath.split("/"));
-    if (
+    const commonInvalid =
       !isFile(target) ||
-      file?.status !== "Valid" ||
-      !/^[A-F0-9]{40,128}$/u.test(safeString(file?.signerThumbprint)) ||
       !/^[a-f0-9]{64}$/u.test(safeString(file?.sha256)) ||
-      sha256File(target) !== file.sha256
-    ) {
-      return `Windows runtime signature verification failed for ${relativePath}`;
+      sha256File(target) !== file.sha256;
+    const trustInvalid = unsignedLocalTest
+      ? file?.status !== "UnsignedLocalTest" ||
+        file?.signerThumbprint !== "" ||
+        file?.signerSubject !== ""
+      : file?.status !== "Valid" ||
+        !/^[A-F0-9]{40,128}$/u.test(safeString(file?.signerThumbprint));
+    if (commonInvalid || trustInvalid) {
+      return "Windows runtime signature verification failed for " + relativePath;
     }
   }
   return null;
 }
-
 function resolveAppManagedRuntimeExecutable(
   runtimeHome,
   platform = process.platform,
