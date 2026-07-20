@@ -92,6 +92,10 @@ export interface NativeButlerMainOptions {
   workerResultPollMs?: number;
   enableTelegramPolling?: boolean;
   waitForShutdown?: boolean;
+  onReady?: (input: {
+    sessionId: string;
+    modelRef: string;
+  }) => void | Promise<void>;
 }
 
 export interface NativeButlerMainResult {
@@ -873,6 +877,10 @@ export async function runNativeButlerMain(
       sendTelegram: input.sendTelegram,
     }) : undefined;
 
+    await input.onReady?.({
+      sessionId: binding.sessionId,
+      modelRef: binding.modelRef,
+    });
     let shutdownReason: NativeButlerMainResult["shutdownReason"] = "bootstrap-only";
     if (input.waitForShutdown !== false) {
       shutdownReason = await waitForShutdown({

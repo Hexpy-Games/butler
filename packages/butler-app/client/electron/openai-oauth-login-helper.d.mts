@@ -10,6 +10,7 @@ export interface ResolveOpenAIOAuthLoginHelperOptions {
   repoRoot?: string;
   resourcesPath?: string;
   fallbackRuntime?: string;
+  platform?: NodeJS.Platform;
   allowBundledResourceFallback?: boolean;
   allowDevelopmentFallback?: boolean;
   fileExists?: (path: string) => boolean;

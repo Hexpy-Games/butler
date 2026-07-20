@@ -8,6 +8,8 @@ import {
 } from "../../../../operations/gateway/registry.ts";
 import { reclaimStaleAppGatewayPort } from "../../domain/runtime/port-claim.ts";
 import { createAppServer } from "../server/create-app-server.ts";
+import { startBundledSupervisorDispatcher } from "../../application/runtime/bundled-supervisor-dispatcher.ts";
+import { runNativeButlerMain } from "../../../../interfaces/gateway/native-butler-bootstrap.ts";
 
 const dataRoot =
   process.env.BUTLER_DATA ?? join(process.env.HOME ?? process.cwd(), ".butler");
@@ -61,6 +63,18 @@ if (portClaim.reclaimedPids.length > 0) {
   );
 }
 
+let shuttingDown = false;
+const bundledDispatcher = isBundledSupervisor
+  ? await startBundledSupervisorDispatcher({
+    run: async ({ shutdownSignal, onReady }) =>
+      await runNativeButlerMain({ shutdownSignal, onReady }),
+    onUnexpectedExit: (error) => {
+      console.error(`[bundled-dispatcher] ${error.message}`);
+      if (!shuttingDown) process.exit(1);
+    },
+  })
+  : null;
+
 const app = createAppServer({
   dbPath,
   butlerData: dataRoot,
@@ -98,18 +112,19 @@ const keepAliveInterval = setInterval(() => {
   void app.url;
 }, 60 * 60 * 1000);
 
-process.on("SIGINT", () => {
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   clearInterval(keepAliveInterval);
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
   app.stop();
+  bundledDispatcher?.requestStop(new Error(`App gateway received ${signal}`));
+  await bundledDispatcher?.waitForExit().catch(() => undefined);
   process.exit(0);
-});
-process.on("SIGTERM", () => {
-  clearInterval(keepAliveInterval);
-  if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
-  app.stop();
-  process.exit(0);
-});
+}
+
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("exit", () => {
   if (shouldWritePidFile) clearAppGatewayPid(dataRoot);
 });

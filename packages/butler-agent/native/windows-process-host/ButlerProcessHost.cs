@@ -363,8 +363,6 @@ internal static class ButlerProcessHost
         }
         try
         {
-            Console.InputEncoding = new UTF8Encoding(false);
-            Console.OutputEncoding = new UTF8Encoding(false);
             PipeSecurity security = CurrentUserPipeSecurity();
             bool announced = false;
             while (true)
@@ -411,7 +409,7 @@ internal static class ButlerProcessHost
             string code = windowsError == null
                 ? error.GetType().Name
                 : windowsError.NativeErrorCode.ToString();
-            Console.Error.Write("butler_cancellation_pipe_error:" + code);
+            Console.Error.Write("butler_cancellation_pipe_error:" + code + ":" + error.HResult.ToString("X8"));
             return 125;
         }
     }
