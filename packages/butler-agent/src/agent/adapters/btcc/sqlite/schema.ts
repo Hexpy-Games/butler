@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   active_checkpoint_id TEXT,
   route TEXT,
   opening_answer_json TEXT,
+  managed_state_json TEXT,
+  final_payload_json TEXT,
+  goal_contract_ref TEXT,
+  final_dossier_ref TEXT,
   delivery_outbox_id TEXT,
   canonical_assistant_message_id TEXT,
   revision INTEGER NOT NULL,
@@ -102,5 +106,55 @@ CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (
   outbox_id TEXT NOT NULL UNIQUE,
   assistant_message_id TEXT NOT NULL UNIQUE,
   inserted_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_opening_projections (
+  turn_id TEXT PRIMARY KEY,
+  projection_ref TEXT NOT NULL UNIQUE,
+  content TEXT NOT NULL,
+  content_sha256 TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_programs (
+  program_id TEXT PRIMARY KEY,
+  ledger_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  goal_contract_ref TEXT NOT NULL,
+  authority_ref TEXT NOT NULL,
+  accepted_plan_ref TEXT,
+  planning_review_ref TEXT,
+  frontier TEXT NOT NULL,
+  manifest_revision INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_work_items (
+  work_id TEXT PRIMARY KEY,
+  program_id TEXT NOT NULL,
+  work_ref TEXT NOT NULL,
+  status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_tasks (
+  task_id TEXT PRIMARY KEY,
+  program_id TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  task_ref TEXT NOT NULL,
+  status TEXT NOT NULL,
+  current_attempt_id TEXT,
+  result_ref TEXT,
+  review_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS btcc_attempts (
+  attempt_id TEXT PRIMARY KEY,
+  program_id TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  attempt_ref TEXT NOT NULL,
+  previous_attempt_id TEXT,
+  correction_plan_ref TEXT,
+  execution_target_ref TEXT NOT NULL,
+  status TEXT NOT NULL,
+  result_ref TEXT,
+  review_ref TEXT
 );
 `;

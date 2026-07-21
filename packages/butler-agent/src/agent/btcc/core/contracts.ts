@@ -3,12 +3,26 @@ import type { AdmittedModelSelection } from "../contracts.ts";
 export type PhaseRunBinding = {
   turnId: string;
   turnRevision: number;
-  semanticState: "conception_opening";
+  semanticState: ModelPhaseState;
   checkpointId: string;
   checkpointRevision: number;
   claimId: string;
   executionFence: number;
 };
+
+export type ModelPhaseState =
+  | "conception_opening"
+  | "conception_deliberation"
+  | "contract_review"
+  | "planning"
+  | "planning_review"
+  | "task_execution"
+  | "task_review"
+  | "feedback_conception"
+  | "feedback_planning"
+  | "feedback_planning_review"
+  | "consolidation"
+  | "reporting";
 
 export type OpeningContext = {
   originalMessageId: string;
@@ -19,38 +33,29 @@ export type OpeningContext = {
   recentFeedbackRefs: string[];
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
+  stateInput?: unknown;
 };
 
 export type PhaseEnvelope = {
   binding: PhaseRunBinding;
-  phase: "conception_opening";
-  objective: "understand_and_answer_or_deepen";
-  duties: readonly [
-    "preserve_selected_model",
-    "state_input_only",
-    "understand_request",
-    "apply_profile_feedback_cache",
-    "choose_direct_assisted_or_deepen",
-    "author_minimal_goal",
-    "guard_fast_output",
-    "apply_accepted_output_preferences",
-  ];
-  prohibitions: readonly [
-    "no_successor_choice",
-    "no_runtime_semantic_judgment",
-    "no_model_substitution",
-    "no_heuristic_route",
-    "no_generic_evidence",
-    "no_hidden_retry_loop",
-    "no_mutation",
-  ];
+  phase: ModelPhaseState;
+  objective: string;
+  duties: readonly string[];
+  prohibitions: readonly string[];
+  exitDuties?: Readonly<Record<string, readonly string[]>>;
+  authoringContractRefs?: readonly string[];
   modelSelection: AdmittedModelSelection;
   context: OpeningContext;
 };
 
 export type PhaseContract = Pick<
   PhaseEnvelope,
-  "phase" | "objective" | "duties" | "prohibitions"
+  | "phase"
+  | "objective"
+  | "duties"
+  | "prohibitions"
+  | "exitDuties"
+  | "authoringContractRefs"
 >;
 
 export type ActualModelIdentity = {
@@ -97,3 +102,8 @@ export type PhaseConversationCommand<Product> = {
   store: PhaseConversationStore;
   model: SelectedModel;
 };
+
+export type PhaseInvocation = Pick<
+  PhaseConversationCommand<unknown>,
+  "binding" | "modelSelection" | "context" | "store" | "model"
+>;

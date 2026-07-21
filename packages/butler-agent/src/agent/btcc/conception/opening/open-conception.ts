@@ -4,7 +4,7 @@ import {
 } from "../../core/index.ts";
 import type {
   OpenConceptionCommand,
-  OpeningAnswerProduct,
+  OpeningProduct,
 } from "./contracts.ts";
 import { openingAnswerCodec } from "./opening-answer-codec.ts";
 
@@ -17,10 +17,15 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
     "understand_request",
     "apply_profile_feedback_cache",
     "choose_direct_assisted_or_deepen",
-    "author_minimal_goal",
-    "guard_fast_output",
-    "apply_accepted_output_preferences",
   ],
+  exitDuties: {
+    direct_answer: [
+      "author_minimal_goal",
+      "guard_fast_output",
+      "apply_accepted_output_preferences",
+    ],
+    opening_continuation: ["publish_truthful_continuation"],
+  },
   prohibitions: [
     "no_successor_choice",
     "no_runtime_semantic_judgment",
@@ -34,7 +39,7 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
 
 export async function openConception(
   command: OpenConceptionCommand,
-): Promise<OpeningAnswerProduct> {
+): Promise<OpeningProduct> {
   return runPhaseConversation({
     binding: command.binding,
     modelSelection: command.modelSelection,

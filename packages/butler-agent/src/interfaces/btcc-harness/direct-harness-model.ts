@@ -8,9 +8,11 @@ type ProviderRoundValue = Awaited<ReturnType<SelectedModel["runRound"]>>;
 
 export class DirectHarnessModel implements SelectedModel {
   callCount = 0;
+  readonly phases: string[] = [];
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
     this.callCount += 1;
+    this.phases.push(envelope.phase);
     const personalizationRefs = [
       ...envelope.context.profileRefs,
       ...envelope.context.recentFeedbackRefs,

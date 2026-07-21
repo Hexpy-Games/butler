@@ -1,4 +1,15 @@
 export { runPhaseConversation } from "./run-phase-conversation.ts";
+export {
+  contentRef,
+  digest,
+  isRecord,
+  requireLiteral,
+  requireRecord,
+  requireString,
+  requireStringArray,
+  stableJson,
+} from "./record-codec.ts";
+export type { ContentRef } from "./record-codec.ts";
 export type {
   ActualModelIdentity,
   OpeningContext,
@@ -7,7 +18,9 @@ export type {
   PhaseConversationCommand,
   PhaseConversationStore,
   PhaseEnvelope,
+  PhaseInvocation,
   PhaseRunBinding,
+  ModelPhaseState,
   ProviderRoundValue,
   SelectedModel,
 } from "./contracts.ts";

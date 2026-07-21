@@ -16,7 +16,7 @@ export async function insertCanonicalMessage(input: {
   messages: CanonicalMessageStore;
 }): Promise<{ messageId: string }> {
   const outbox = input.turn.deliveryOutbox;
-  if (!outbox || !input.turn.openingAnswer) {
+  if (!outbox || !input.turn.finalPayload) {
     throw new Error("BTCC delivery_committed Turn has no immutable Outbox payload");
   }
   return input.messages.insertCanonicalAssistantMessage({
