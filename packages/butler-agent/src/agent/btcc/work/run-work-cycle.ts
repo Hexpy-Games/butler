@@ -19,7 +19,8 @@ type WorkCycleEvent = Extract<TurnEvent, {
     | "TaskReviewFailed"
     | "FeedbackIntentAccepted"
     | "FeedbackPlanCandidateSubmitted"
-    | "FeedbackPlanningReviewAccepted";
+    | "FeedbackPlanningReviewAccepted"
+    | "FeedbackPlanningRevisionRequested";
 }>;
 
 export function runWorkCycle(command: {

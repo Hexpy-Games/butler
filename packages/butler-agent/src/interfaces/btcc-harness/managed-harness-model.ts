@@ -8,8 +8,14 @@ export class ManagedHarnessModel implements SelectedModel {
   callCount = 0;
   readonly phases: string[] = [];
   private reviewCount = 0;
+  private planningReviewCount = 0;
+  private feedbackPlanningReviewCount = 0;
 
-  constructor(private readonly failFirstReview: boolean) {}
+  constructor(
+    private readonly failFirstReview: boolean,
+    private readonly reviseFirstPlan = false,
+    private readonly reviseFirstCorrection = false,
+  ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
     this.callCount += 1;
@@ -78,27 +84,65 @@ export class ManagedHarnessModel implements SelectedModel {
       case "planning":
         return {
           kind: "plan_candidate",
-          strategy: "하나의 조사·정리 Task로 최소 작업 그래프를 구성한다",
-          workOutcome: "고객 응대 운영 가이드 완성",
-          taskOutcome: "핵심 원칙과 적용 지침을 조사하고 정리",
-          acceptanceCriterion: "가이드가 요청한 고객 응대 원칙과 실행 지침을 모두 포함한다",
-          verificationQuestion: "완성된 가이드가 원래 요청과 완료 조건을 충족하는가?",
+          strategy: "조사와 가이드 완성을 독립적으로 검토 가능한 두 Task로 구성한다",
+          works: [{
+            logicalId: "customer-service-guide",
+            outcome: "고객 응대 운영 가이드 완성",
+            dependencyWorkIds: [],
+            tasks: [
+              {
+                logicalId: "research-principles",
+                intendedOutcome: "고객 응대 핵심 원칙을 조사하고 정리",
+                executionOrdinal: 1,
+                dependencyTaskIds: [],
+                targetScopeRefs: ["session:managed-guide"],
+                criteria: [{
+                  statement: "요청한 고객 응대 원칙이 조사 결과에 포함된다",
+                  question: "조사 결과가 원래 요청의 핵심 원칙을 충족하는가?",
+                  sourceGoalFieldIds: ["request"],
+                  sourceRequiredOutcomeRefs: [state.requiredOutcomeId],
+                }],
+              },
+              {
+                logicalId: "write-guide",
+                intendedOutcome: "조사 결과를 짧고 실행 가능한 가이드로 작성",
+                executionOrdinal: 2,
+                dependencyTaskIds: ["research-principles"],
+                targetScopeRefs: ["session:managed-guide"],
+                criteria: [{
+                  statement: "가이드가 짧고 실행 가능한 적용 지침을 제공한다",
+                  question: "최종 가이드가 의도한 결과와 완료 조건을 충족하는가?",
+                  sourceGoalFieldIds: ["intended_result"],
+                  sourceRequiredOutcomeRefs: [state.requiredOutcomeId],
+                }],
+              },
+            ],
+          }],
         };
       case "planning_review":
+        this.planningReviewCount += 1;
         return {
           kind: "planning_review",
           candidateRef: nestedRef(state, "planCandidate", "candidate"),
           reviewedBundleRef: nestedValue(state, "planCandidate", "candidate", "bundle", "ref"),
-          reviewedWorkRef: nestedValue(state, "planCandidate", "candidate", "work", "ref"),
-          reviewedTaskRef: nestedValue(state, "planCandidate", "candidate", "task", "ref"),
-          reviewedCriterionRef: nestedValue(state, "planCandidate", "candidate", "criterion", "ref"),
-          reviewedVerificationQuestionRef: nestedValue(
-            state, "planCandidate", "candidate", "verificationQuestion", "ref",
+          reviewedWorkGraphRef: nestedValue(
+            state, "planCandidate", "candidate", "workGraph", "ref",
           ),
+          reviewedWorkRefs: nestedRecords(state, "works"),
+          reviewedTaskRefs: nestedRecords(state, "tasks"),
+          reviewedCriterionRefs: nestedRecords(state, "criteria"),
+          reviewedVerificationQuestionRefs: nestedRecords(state, "verificationQuestions"),
           reviewedArtifactLifecycleRef: nestedValue(
             state, "planCandidate", "candidate", "artifactLifecycle", "ref",
           ),
-          verdict: "accepted",
+          reviewedGoalFieldIds: ["request", "intended_result"],
+          reviewedRequiredOutcomeRefs: [firstCriterionOutcome(state)],
+          verdict: this.reviseFirstPlan && this.planningReviewCount === 1
+            ? "revision_required"
+            : "accepted",
+          findings: this.reviseFirstPlan && this.planningReviewCount === 1
+            ? ["두 번째 Task의 완료 조건을 더 명확히 표현해야 한다"]
+            : [],
         };
       case "task_execution":
         return {
@@ -140,11 +184,17 @@ export class ManagedHarnessModel implements SelectedModel {
           correctionAction: "같은 Task에서 고객 응대 원칙별 실행 지침을 추가한다",
         };
       case "feedback_planning_review":
+        this.feedbackPlanningReviewCount += 1;
         return {
           kind: "feedback_planning_review",
           candidateRef: nestedRef(state, "feedbackPlan", "candidate"),
           correctionKind: "implementation_repair",
-          verdict: "accepted",
+          verdict: this.reviseFirstCorrection && this.feedbackPlanningReviewCount === 1
+            ? "revision_required"
+            : "accepted",
+          findings: this.reviseFirstCorrection && this.feedbackPlanningReviewCount === 1
+            ? ["보완 행동을 실패한 Task 범위로 더 명확히 제한해야 한다"]
+            : [],
         };
       case "consolidation":
         return {
@@ -163,6 +213,19 @@ export class ManagedHarnessModel implements SelectedModel {
         };
     }
   }
+}
+
+function nestedRecords(state: Record<string, unknown>, key: string): unknown[] {
+  const records = nestedValue(state, "planCandidate", "candidate", key);
+  if (!Array.isArray(records)) return [];
+  return records.map((record) => asRecord(record).ref);
+}
+
+function firstCriterionOutcome(state: Record<string, unknown>): unknown {
+  const criteria = nestedValue(state, "planCandidate", "candidate", "criteria");
+  if (!Array.isArray(criteria)) return undefined;
+  const refs = asRecord(criteria[0]).sourceRequiredOutcomeRefs;
+  return Array.isArray(refs) ? refs[0] : undefined;
 }
 
 function adopted(assessment: string, adoptedGoalFieldIds: string[]) {

@@ -14,8 +14,10 @@ afterEach(() => {
 
 describe("BTCC managed executable ingress", () => {
   test.each([
-    ["managed-pass", 9, 1],
-    ["managed-review-repair", 14, 2],
+    ["managed-pass", 11, 2],
+    ["managed-review-repair", 16, 3],
+    ["managed-planning-revision", 13, 2],
+    ["managed-feedback-planning-revision", 18, 3],
   ] as const)("completes %s through the same Turn entry", async (
     scenario,
     expectedModelCalls,
@@ -67,18 +69,29 @@ describe("BTCC managed executable ingress", () => {
     expect(result.initial.kind).toBe("delivered");
     expect(result.replay).toEqual(result.initial);
     expect(result.modelCalls).toBe(expectedModelCalls);
-    const commonStart = [
+    const initialPlanning = [
       "conception_opening", "conception_deliberation", "contract_review",
-      "planning", "planning_review", "task_execution", "task_review",
+      "planning", "planning_review",
     ];
-    expect(result.phases).toEqual(scenario === "managed-pass"
-      ? [...commonStart, "consolidation", "reporting"]
-      : [
-          ...commonStart,
+    const reviewedPlanning = scenario === "managed-planning-revision"
+      ? [...initialPlanning, "planning", "planning_review"]
+      : initialPlanning;
+    const firstTask = [...reviewedPlanning, "task_execution", "task_review"];
+    const repairCycle = scenario === "managed-feedback-planning-revision"
+      ? [
           "feedback_conception", "feedback_planning", "feedback_planning_review",
-          "task_execution", "task_review", "consolidation", "reporting",
-        ]);
-    if (scenario === "managed-review-repair") {
+          "feedback_planning", "feedback_planning_review",
+        ]
+      : ["feedback_conception", "feedback_planning", "feedback_planning_review"];
+    const needsRepair = scenario === "managed-review-repair" ||
+      scenario === "managed-feedback-planning-revision";
+    expect(result.phases).toEqual([
+      ...firstTask,
+      ...(needsRepair ? repairCycle : []),
+      ...(needsRepair ? ["task_execution", "task_review"] : []),
+      "task_execution", "task_review", "consolidation", "reporting",
+    ]);
+    if (needsRepair) {
       expect(result.phases).toContain("feedback_conception");
       expect(result.phases).toContain("feedback_planning");
       expect(result.phases).toContain("feedback_planning_review");
@@ -108,9 +121,9 @@ describe("BTCC managed executable ingress", () => {
         SELECT goal_contract_ref, frontier, scope_kind, manifest_revision
         FROM btcc_programs
       `).get();
-      const task = db.query<{ status: string }, []>(
-        "SELECT status FROM btcc_tasks",
-      ).get();
+      const tasks = db.query<{ status: string }, []>(
+        "SELECT status FROM btcc_tasks ORDER BY rowid",
+      ).all();
       const attempts = db.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_attempts",
       ).get();
@@ -137,6 +150,13 @@ describe("BTCC managed executable ingress", () => {
         SELECT attempt_id, previous_attempt_id, correction_plan_ref
         FROM btcc_attempts ORDER BY rowid
       `).all();
+      const planningCandidates = db.query<{ content_json: string }, []>(`
+        SELECT content_json FROM btcc_records WHERE kind = 'plan_candidate' ORDER BY rowid
+      `).all().map((row) => JSON.parse(row.content_json));
+      const feedbackCandidates = db.query<{ content_json: string }, []>(`
+        SELECT content_json FROM btcc_records
+        WHERE kind = 'feedback_plan_candidate' ORDER BY rowid
+      `).all().map((row) => JSON.parse(row.content_json));
 
       expect(turn?.semantic_state).toBe("delivered");
       expect(turn?.route).toBe("managed");
@@ -147,11 +167,11 @@ describe("BTCC managed executable ingress", () => {
       expect(persistedManaged.programId).toBeTruthy();
       expect(program?.frontier).toBe("closed");
       expect(program?.scope_kind).toBe("session");
-      const expectedManifestRevision = scenario === "managed-pass" ? 6 : 10;
+      const expectedManifestRevision = needsRepair ? 13 : 9;
       expect(program?.manifest_revision).toBe(expectedManifestRevision);
       expect(ledgerMutations?.count).toBe(expectedManifestRevision);
       expect(promotedClaims?.count).toBe(expectedManifestRevision);
-      expect(task?.status).toBe("accepted");
+      expect(tasks).toEqual([{ status: "accepted" }, { status: "accepted" }]);
       expect(attempts?.count).toBe(expectedAttempts);
       expect(openingProjection?.count).toBe(1);
       for (const record of reviewRecords) {
@@ -159,7 +179,22 @@ describe("BTCC managed executable ingress", () => {
       }
       expect(JSON.parse(dossierRecord!.content_json).originalGoalContractRef.id)
         .toBe(turn!.goal_contract_ref);
-      if (scenario === "managed-review-repair") {
+      expect(planningCandidates.at(-1)?.works).toHaveLength(1);
+      expect(planningCandidates.at(-1)?.tasks).toHaveLength(2);
+      expect(planningCandidates.at(-1)?.observedManifestRevision).toBe(1);
+      if (scenario === "managed-planning-revision") {
+        expect(planningCandidates).toHaveLength(2);
+        expect(planningCandidates[1]?.revisionOrigin).toEqual({
+          kind: "review_revision",
+          previousCandidateRef: planningCandidates[0]?.ref,
+          findingSetRef: expect.any(Object),
+        });
+      }
+      if (scenario === "managed-feedback-planning-revision") {
+        expect(feedbackCandidates).toHaveLength(2);
+        expect(feedbackCandidates[1]?.revisionOrigin.kind).toBe("review_revision");
+      }
+      if (needsRepair) {
         expect(attemptRows[1]?.previous_attempt_id).toBe(attemptRows[0]?.attempt_id);
         expect(attemptRows[1]?.correction_plan_ref).toBeTruthy();
       }
@@ -212,7 +247,7 @@ describe("BTCC managed executable ingress", () => {
       expect(program).toEqual({
         scope_kind: "project",
         scope_id: "project:sandybot",
-        manifest_revision: 6,
+        manifest_revision: 9,
       });
     } finally {
       db.close();
@@ -273,8 +308,8 @@ describe("BTCC managed executable ingress", () => {
       const mutations = db.query<{ count: number }, []>(`
         SELECT COUNT(*) AS count FROM btcc_ledger_mutations
       `).get();
-      expect(attempts?.count).toBe(1);
-      expect(mutations?.count).toBe(6);
+      expect(attempts?.count).toBe(2);
+      expect(mutations?.count).toBe(9);
     } finally {
       db.close();
     }

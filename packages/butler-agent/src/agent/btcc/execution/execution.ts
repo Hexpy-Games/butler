@@ -20,8 +20,8 @@ export async function execution(command: {
   const product = await performTask(withPhaseState(command.phase, {
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
-    workRef: program.work.ref,
-    taskRef: program.task.ref,
+    workRef: program.currentWork.work.ref,
+    taskRef: program.currentTask.task.ref,
     attemptRef: attempt.ref,
     executionTargetRef: attempt.executionTargetRef,
   }));

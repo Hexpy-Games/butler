@@ -50,6 +50,12 @@ export class SqliteManagedTransitionWriter {
           ...requiredManaged(turn), planCandidate: transition.product,
         });
         return;
+      case "request_plan_revision":
+        this.insert("planning_review", transition.product.review);
+        this.advance(turn, nextRevision, transition.successor, {
+          ...requiredManaged(turn), planningRevision: transition.product,
+        });
+        return;
       case "accept_plan":
         this.acceptPlan(turn, nextRevision, transition);
         return;
@@ -74,6 +80,12 @@ export class SqliteManagedTransitionWriter {
         this.insert("plan", transition.product.candidate.correctionPlan);
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), feedbackPlan: transition.product,
+        });
+        return;
+      case "request_feedback_plan_revision":
+        this.insert("feedback_planning_review", transition.product.review);
+        this.advance(turn, nextRevision, transition.successor, {
+          ...requiredManaged(turn), feedbackPlanningRevision: transition.product,
         });
         return;
       case "accept_feedback_plan":
@@ -103,9 +115,9 @@ export class SqliteManagedTransitionWriter {
     this.insert("goal_contract", goalContract);
     this.insert("authority_revision", authority);
     this.insert("goal_contract_review", review);
-    this.commitLedger(transition.ledgerCommit);
+    const program = this.requireCommittedProgram(this.commitLedger(transition.ledgerCommit));
     this.advance(turn, nextRevision, transition.successor, {
-      ...requiredManaged(turn), goalAcceptance: transition.product,
+      ...requiredManaged(turn), goalAcceptance: transition.product, program,
     }, { goalContractRef: goalContract.ref.id });
   }
 
@@ -278,10 +290,13 @@ export class SqliteManagedTransitionWriter {
   private insertPlanningCandidate(candidate: Extract<ManagedTransition, { kind: "submit_plan_candidate" }>["product"]["candidate"]): void {
     this.insert("plan_candidate", candidate);
     this.insert("plan", candidate.plan);
-    this.insert("work", candidate.work);
-    this.insert("task", candidate.task);
-    this.insert("acceptance_criterion", candidate.criterion);
-    this.insert("verification_question", candidate.verificationQuestion);
+    for (const work of candidate.works) this.insert("work", work);
+    for (const task of candidate.tasks) this.insert("task", task);
+    for (const criterion of candidate.criteria) this.insert("acceptance_criterion", criterion);
+    for (const question of candidate.verificationQuestions) {
+      this.insert("verification_question", question);
+    }
+    this.insert("work_graph", candidate.workGraph);
     this.insert("artifact_lifecycle_relation", candidate.artifactLifecycle);
     this.insert("planning_candidate_bundle", candidate.bundle);
   }

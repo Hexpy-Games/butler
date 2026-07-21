@@ -9,7 +9,7 @@ export type FinalDossierProduct = {
     currentAuthorityRef: ContentRef;
     acceptedPlanRef: ContentRef;
     planningReviewRef: ContentRef;
-    taskReviewRefs: [ContentRef];
+    taskReviewRefs: [ContentRef, ...ContentRef[]];
     goalCoverage: "fulfilled";
     semanticFidelity: "faithful";
     promotionClosure: "not_required";

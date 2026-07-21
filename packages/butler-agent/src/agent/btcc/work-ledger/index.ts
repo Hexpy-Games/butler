@@ -5,5 +5,8 @@ export type {
   WorkLedgerMutation,
   WorkLedgerStorage,
   ManagedProgramState,
+  ManagedProgramAuthority,
+  ReviewedManagedProgramState,
+  UnplannedManagedProgramState,
   WorkLedgerCursor,
 } from "./contracts.ts";

@@ -8,11 +8,16 @@ import type { FinalDossierProduct } from "../consolidation/index.ts";
 import type {
   FeedbackPlanProduct,
   FeedbackPlanningAcceptedProduct,
+  FeedbackPlanningRevisionRequiredProduct,
   PlanningAcceptedProduct,
   PlanningCandidateProduct,
+  PlanningRevisionRequiredProduct,
 } from "../planning/index.ts";
 import type { PreparedReportProduct } from "../reporting/index.ts";
-import type { ManagedProgramState } from "../work-ledger/index.ts";
+import type {
+  ManagedProgramState,
+  ReviewedManagedProgramState,
+} from "../work-ledger/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
 
 export type ManagedTurnState = {
@@ -21,10 +26,12 @@ export type ManagedTurnState = {
   goalCandidate?: GoalContractCandidateProduct;
   goalAcceptance?: GoalContractAcceptedProduct;
   planCandidate?: PlanningCandidateProduct;
+  planningRevision?: PlanningRevisionRequiredProduct;
   planningAcceptance?: PlanningAcceptedProduct;
   program?: ManagedProgramState;
   feedbackIntent?: FeedbackIntentProduct;
   feedbackPlan?: FeedbackPlanProduct;
+  feedbackPlanningRevision?: FeedbackPlanningRevisionRequiredProduct;
   feedbackAcceptance?: FeedbackPlanningAcceptedProduct;
   finalDossier?: FinalDossierProduct;
   preparedReport?: PreparedReportProduct;
@@ -43,14 +50,26 @@ export function requireManagedState(turn: {
 export function requireManagedProgram(turn: {
   semanticState: string;
   managed?: ManagedTurnState;
-}): ManagedProgramState {
+}): ReviewedManagedProgramState {
   const program = requireManagedState(turn).program;
   if (!program) throw new Error(`Managed Program is missing at ${turn.semanticState}`);
+  if (program.planningState !== "reviewed") {
+    throw new Error(`Managed Program has no reviewed Plan at ${turn.semanticState}`);
+  }
   return program;
 }
 
-export function requireCurrentAttempt(program: ManagedProgramState): ManagedAttempt {
-  const attempt = program.attempts.at(-1);
+export function requireManagedPlanningAuthority(turn: {
+  semanticState: string;
+  managed?: ManagedTurnState;
+}): ManagedProgramState {
+  const program = requireManagedState(turn).program;
+  if (!program) throw new Error(`Managed Program authority is missing at ${turn.semanticState}`);
+  return program;
+}
+
+export function requireCurrentAttempt(program: ReviewedManagedProgramState): ManagedAttempt {
+  const attempt = program.currentTask.attempts.at(-1);
   if (!attempt || attempt.status !== "ready") {
     throw new Error("Task Execution requires the current ready Attempt");
   }

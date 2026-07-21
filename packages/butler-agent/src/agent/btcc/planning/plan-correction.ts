@@ -11,6 +11,7 @@ import {
 } from "../core/index.ts";
 import type { FeedbackIntentProduct } from "../conception/index.ts";
 import type { FeedbackPlanProduct } from "./contracts.ts";
+import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -30,6 +31,7 @@ const CONTRACT: PhaseContract = {
     "SPEC-BTCC-PLANNING-RECORD-CONTRACT",
     "SPEC-BTCC-WORK-LEDGER-STATE-AND-MUTATION-CONTRACT",
   ],
+  authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
 const codec: PhaseCodec<FeedbackPlanProduct> = {
@@ -56,6 +58,13 @@ const codec: PhaseCodec<FeedbackPlanProduct> = {
       ref: contentRef("correction-plan", correctionBody), ...correctionBody,
     };
     const candidateBody = {
+      revisionOrigin: state.previousCandidateRef && state.findingSetRef
+        ? {
+            kind: "review_revision" as const,
+            previousCandidateRef: requireContentRef(state.previousCandidateRef, "previousCandidateRef"),
+            findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef"),
+          }
+        : { kind: "initial" as const },
       feedbackIntentRef: intent.feedbackIntent.ref,
       correctionScopeRef: intent.feedbackIntent.correctionScopeRef,
       correctionPlan,

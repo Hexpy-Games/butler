@@ -9,6 +9,7 @@ export { stopTurn } from "./stop-turn.ts";
 export {
   requireCurrentAttempt,
   requireManagedProgram,
+  requireManagedPlanningAuthority,
   requireManagedState,
 } from "./managed-turn-state.ts";
 export type {

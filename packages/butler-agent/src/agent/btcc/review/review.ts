@@ -19,9 +19,12 @@ export async function review(command: {
     throw new Error(`Review cannot advance ${command.turn.semanticState}`);
   }
   const program = requireManagedProgram(command.turn);
+  const criterion = program.criteria.find((candidate) =>
+    program.currentTask.task.criterionRefs.some((ref) => ref.id === candidate.ref.id));
+  if (!criterion) throw new Error("Review cannot resolve the current Task criterion");
   const product = await reviewTask(withPhaseState(command.phase, {
-    resultCandidate: program.currentResult,
-    criterionRef: program.criterion.ref,
+    resultCandidate: program.currentTask.currentResult,
+    criterionRef: criterion.ref,
   }));
   return product.review.verdict === "passed"
     ? { kind: "TaskReviewPassed", product }

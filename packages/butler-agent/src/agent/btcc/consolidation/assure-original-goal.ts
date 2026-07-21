@@ -31,12 +31,14 @@ const codec: PhaseCodec<FinalDossierProduct> = {
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Consolidation state");
     requireLiteral(state.frontier, "closed", "Program frontier");
-    requireLiteral(state.taskStatus, "accepted", "Task status");
+    if (!Array.isArray(state.taskStatuses) || state.taskStatuses.some((status) => status !== "accepted")) {
+      throw new Error("Consolidation requires every accepted Task");
+    }
     const goalContractRef = requireContentRef(state.goalContractRef, "goalContractRef");
     const authorityRef = requireContentRef(state.authorityRef, "authorityRef");
     const planRef = requireContentRef(state.planRef, "planRef");
     const planningReviewRef = requireContentRef(state.planningReviewRef, "planningReviewRef");
-    const taskReviewRef = requireContentRef(state.taskReviewRef, "taskReviewRef");
+    const taskReviewRefs = requireContentRefs(state.taskReviewRefs, "taskReviewRefs");
     const value = requireRecord(submission, "Consolidation submission");
     requireLiteral(value.kind, "final_dossier", "Consolidation kind");
     requireLiteral(value.goalCoverage, "fulfilled", "goal coverage");
@@ -50,7 +52,7 @@ const codec: PhaseCodec<FinalDossierProduct> = {
       currentAuthorityRef: authorityRef,
       acceptedPlanRef: planRef,
       planningReviewRef,
-      taskReviewRefs: [taskReviewRef] as [ContentRef],
+      taskReviewRefs,
       goalCoverage: "fulfilled" as const,
       semanticFidelity: "faithful" as const,
       promotionClosure: "not_required" as const,
@@ -66,6 +68,12 @@ const codec: PhaseCodec<FinalDossierProduct> = {
 
 export function assureOriginalGoal(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function requireContentRefs(value: unknown, label: string): [ContentRef, ...ContentRef[]] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} is empty`);
+  return value.map((item, index) =>
+    requireContentRef(item, `${label}[${index}]`)) as [ContentRef, ...ContentRef[]];
 }
 
 function requireContentRef(value: unknown, label: string): ContentRef {

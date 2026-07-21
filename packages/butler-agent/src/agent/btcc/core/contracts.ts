@@ -45,10 +45,17 @@ export type PhaseEnvelope = {
   prohibitions: readonly string[];
   exitDuties?: Readonly<Record<string, readonly string[]>>;
   authoringContractRefs?: readonly string[];
+  authoringContracts?: readonly AuthoringContractBinding[];
   modelSelection: AdmittedModelSelection;
   context: OpeningContext;
   operationAuthority: OperationAuthority;
   operationResults: OperationResult[];
+};
+
+export type AuthoringContractBinding = {
+  contractId: string;
+  revisionRef: { id: string; sha256: string };
+  applicableRules: readonly string[];
 };
 
 export type PhaseContract = Pick<
@@ -59,6 +66,7 @@ export type PhaseContract = Pick<
   | "prohibitions"
   | "exitDuties"
   | "authoringContractRefs"
+  | "authoringContracts"
 >;
 
 export type ActualModelIdentity = {
