@@ -11,7 +11,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       import.meta.dir,
       "../../packages/butler-agent/src/interfaces/btcc-harness/run-btcc-harness.ts",
     );
-    const child = Bun.spawn([
+    const args = [
       process.execPath,
       "run",
       harness,
@@ -24,7 +24,8 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       "--effort", "low",
       "--scenario", "managed-artifact",
       "--replay",
-    ], {
+    ];
+    const child = Bun.spawn(args, {
       cwd: resolve(import.meta.dir, "../.."),
       stderr: "pipe",
       stdout: "pipe",
@@ -41,6 +42,9 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
     expect(result.replay).toEqual(result.initial);
     expect(result.modelCalls).toBe(25);
     expect(result.operationCalls).toBe(7);
+    expect(result.artifactSnapshot.promoted).toBe(result.artifactSnapshot.workspace["guide.md"]);
+    expect(result.artifactSnapshot.promoted).toContain("격리 작업공간");
+    expect(result.artifactSnapshot.promoted).not.toContain("workspace artifact:");
     expect(result.selectedModel).toEqual({
       provider: "openai",
       model: "gpt-5.6-sol",
@@ -111,6 +115,23 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
     } finally {
       db.close();
     }
+
+    const restarted = Bun.spawn(args, {
+      cwd: resolve(import.meta.dir, "../.."),
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    const [restartExit, restartOutput, restartError] = await Promise.all([
+      restarted.exited,
+      new Response(restarted.stdout).text(),
+      new Response(restarted.stderr).text(),
+    ]);
+    expect(restartError).toBe("");
+    expect(restartExit).toBe(0);
+    const restartedResult = JSON.parse(restartOutput.trim());
+    expect(restartedResult.modelCalls).toBe(0);
+    expect(restartedResult.operationCalls).toBe(0);
+    expect(restartedResult.artifactSnapshot.promoted).toBe(result.artifactSnapshot.promoted);
   } finally {
     rmSync(dataRoot, { force: true, recursive: true });
   }

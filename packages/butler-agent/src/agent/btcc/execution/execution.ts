@@ -33,33 +33,51 @@ export async function execution(command: {
     attemptRef: attempt.ref,
     executionTargetRef: attempt.executionTargetRef,
     executionTarget: attempt.executionTarget,
-    targetScopeRefs: target.kind === "non_artifact"
-      ? target.targetScopeRefs
-      : target.kind === "provisioned_workspace"
-        ? [program.currentTask.task.artifactPolicy.kind === "workspace_artifact"
-          ? program.currentTask.task.artifactPolicy.targetScopeRef
-          : ""]
-        : [],
+    targetScopeRefs: executionScopeRefs(program, target),
   });
   const product = await performTask({
     ...invocation,
-    operationAuthority: target.kind === "provisioned_workspace"
-      ? {
-          observationScopeRefs: command.phase.operationAuthority.observationScopeRefs,
-          mutation: { kind: "workspace_only", workspaceRef: target.workspaceRef },
-        }
-      : target.kind === "repository_promotion"
-        ? {
-            observationScopeRefs: command.phase.operationAuthority.observationScopeRefs,
-            mutation: {
-              kind: "repository_promotion_only",
-              authorizationRef: target.authorizationRef,
-            },
-          }
-        : invocation.operationAuthority,
+    operationAuthority: executionAuthority(command.phase, invocation, target),
   });
   if (isPromotionDeferral(product)) return { kind: "PromotionDeferralAccepted", product };
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "ResultCandidateSubmitted", product };
+}
+
+function executionScopeRefs(
+  program: ReturnType<typeof requireManagedProgram>,
+  target: ReturnType<typeof requireCurrentAttempt>["executionTarget"]["target"],
+): string[] {
+  if (target.kind === "non_artifact") return target.targetScopeRefs;
+  if (target.kind === "repository_promotion") return [];
+  const policy = program.currentTask.task.artifactPolicy;
+  if (policy.kind !== "workspace_artifact") {
+    throw new Error("Provisioned workspace requires a workspace artifact Task");
+  }
+  return [policy.targetScopeRef];
+}
+
+function executionAuthority(
+  phase: PhaseInvocation,
+  invocation: ReturnType<typeof withManagedDeferralState>,
+  target: ReturnType<typeof requireCurrentAttempt>["executionTarget"]["target"],
+) {
+  const observationScopeRefs = phase.operationAuthority.observationScopeRefs;
+  if (target.kind === "provisioned_workspace") {
+    return {
+      observationScopeRefs,
+      mutation: { kind: "workspace_only" as const, workspaceRef: target.workspaceRef },
+    };
+  }
+  if (target.kind === "repository_promotion") {
+    return {
+      observationScopeRefs,
+      mutation: {
+        kind: "repository_promotion_only" as const,
+        authorizationRef: target.authorizationRef,
+      },
+    };
+  }
+  return invocation.operationAuthority;
 }

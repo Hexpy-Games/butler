@@ -19,22 +19,12 @@ export async function review(command: {
     throw new Error(`Review cannot advance ${command.turn.semanticState}`);
   }
   const program = requireManagedProgram(command.turn);
-  const criteria = program.currentTask.task.criterionRefs.map((ref) => {
-    const criterion = program.criteria.find((candidate) => candidate.ref.id === ref.id);
-    if (!criterion) throw new Error("Review cannot resolve a current Task criterion");
-    return criterion;
-  });
-  const verificationQuestions = program.currentTask.task.verificationQuestionRefs.map((ref) => {
-    const question = program.verificationQuestions.find((candidate) => candidate.ref.id === ref.id);
-    if (!question) throw new Error("Review cannot resolve a current verification question");
-    return question;
-  });
   const result = program.currentTask.currentResult;
   if (!result) throw new Error("Review requires the current ResultCandidate");
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     resultCandidate: result,
-    criteria,
-    verificationQuestions,
+    criteria: resolveCriteria(program),
+    verificationQuestions: resolveVerificationQuestions(program),
     ...(result.result.kind === "workspace_artifact"
       ? { reviewSourceRef: result.result.workspaceRevisionRef }
       : {}),
@@ -55,4 +45,20 @@ export async function review(command: {
   return product.review.verdict === "passed"
     ? { kind: "TaskReviewPassed", product }
     : { kind: "TaskReviewFailed", product };
+}
+
+function resolveCriteria(program: ReturnType<typeof requireManagedProgram>) {
+  return program.currentTask.task.criterionRefs.map((ref) => {
+    const criterion = program.criteria.find((candidate) => candidate.ref.id === ref.id);
+    if (!criterion) throw new Error("Review cannot resolve a current Task criterion");
+    return criterion;
+  });
+}
+
+function resolveVerificationQuestions(program: ReturnType<typeof requireManagedProgram>) {
+  return program.currentTask.task.verificationQuestionRefs.map((ref) => {
+    const question = program.verificationQuestions.find((candidate) => candidate.ref.id === ref.id);
+    if (!question) throw new Error("Review cannot resolve a current verification question");
+    return question;
+  });
 }

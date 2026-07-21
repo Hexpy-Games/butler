@@ -1,11 +1,13 @@
 import type { BtccRuntimeDependencies } from "../contracts.ts";
 import type { PhaseInvocation } from "../core/index.ts";
 import type { StateExecutionClaim, TurnRecord } from "./contracts.ts";
+import type { ExecutionPermit } from "../recovery/index.ts";
 
 export function createPhaseInvocation(
   turn: TurnRecord,
   claim: StateExecutionClaim,
   dependencies: BtccRuntimeDependencies,
+  executionPermit: ExecutionPermit,
 ): PhaseInvocation {
   return {
     binding: {
@@ -31,5 +33,6 @@ export function createPhaseInvocation(
       observationScopeRefs: turn.context.baselineObservationScopeRefs,
       mutation: { kind: "forbidden" },
     },
+    executionPermit,
   };
 }

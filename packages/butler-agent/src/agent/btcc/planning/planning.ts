@@ -54,61 +54,88 @@ async function planInitialWork(command: {
   turn: TurnRecord;
   phase: PhaseInvocation;
 }): Promise<InitialPlanningEvent> {
-  const managed = requireManagedState(command.turn);
-  if (command.turn.semanticState === "planning") {
-    const accepted = managed.goalAcceptance;
-    if (!accepted) throw new Error("Planning is missing accepted Goal authority");
-    const authority = requireManagedPlanningAuthority(command.turn);
-    const previous = managed.planningRevision;
-    const product = await proposePlan(withManagedDeferralState(command.phase, command.turn, {
-      goalContractRef: authority.goalContractRef,
-      authorityRef: authority.authorityRef,
-      requiredOutcomeId: authority.requiredOutcomeId,
-      ledgerId: authority.ledgerId,
-      programId: authority.programId,
-      observedManifestRevision: authority.manifestRevision,
-      ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
-        ? { continuation: accepted.authority.managedBinding.continuationBinding }
-        : {}),
-      ...(previous
-        ? {
-            previousCandidateRef: previous.candidate.ref,
-            findingSetRef: previous.review.findingSetRef,
-          }
-        : {}),
-    }));
-    return isManagedDeferral(product)
-      ? { kind: "ManagedDeferralAccepted", product }
-      : { kind: "PlanCandidateSubmitted", product };
+  switch (command.turn.semanticState) {
+    case "planning":
+      return authorInitialPlan(command);
+    case "planning_review":
+      return reviewInitialPlan(command);
+    default:
+      throw new Error(`Initial Planning cannot advance ${command.turn.semanticState}`);
   }
-  if (command.turn.semanticState === "planning_review") {
-    const product = await reviewPlan(withManagedDeferralState(command.phase, command.turn, {
-      planCandidate: managed.planCandidate,
-    }));
-    if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
-    return product.kind === "planning_accepted"
-      ? { kind: "PlanningReviewAccepted", product }
-      : { kind: "PlanningRevisionRequested", product };
-  }
-  throw new Error(`Initial Planning cannot advance ${command.turn.semanticState}`);
 }
 
 async function planReviewFeedback(command: {
   turn: TurnRecord;
   phase: PhaseInvocation;
 }): Promise<FeedbackPlanningEvent> {
+  switch (command.turn.semanticState) {
+    case "feedback_planning":
+      return authorFeedbackPlan(command);
+    case "feedback_planning_review":
+      return reviewFeedbackPlan(command);
+    default:
+      throw new Error(`Feedback Planning cannot advance ${command.turn.semanticState}`);
+  }
+}
+
+async function authorInitialPlan(command: {
+  turn: TurnRecord;
+  phase: PhaseInvocation;
+}): Promise<InitialPlanningEvent> {
+  const managed = requireManagedState(command.turn);
+  const accepted = managed.goalAcceptance;
+  if (!accepted) throw new Error("Planning is missing accepted Goal authority");
+  const authority = requireManagedPlanningAuthority(command.turn);
+  const previous = managed.planningRevision;
+  const product = await proposePlan(withManagedDeferralState(command.phase, command.turn, {
+    goalContractRef: authority.goalContractRef,
+    authorityRef: authority.authorityRef,
+    requiredOutcomeId: authority.requiredOutcomeId,
+    ledgerId: authority.ledgerId,
+    programId: authority.programId,
+    observedManifestRevision: authority.manifestRevision,
+    ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
+      ? { continuation: accepted.authority.managedBinding.continuationBinding }
+      : {}),
+    ...(previous
+      ? {
+          previousCandidateRef: previous.candidate.ref,
+          findingSetRef: previous.review.findingSetRef,
+        }
+      : {}),
+  }));
+  return isManagedDeferral(product)
+    ? { kind: "ManagedDeferralAccepted", product }
+    : { kind: "PlanCandidateSubmitted", product };
+}
+
+async function reviewInitialPlan(command: {
+  turn: TurnRecord;
+  phase: PhaseInvocation;
+}): Promise<InitialPlanningEvent> {
+  const product = await reviewPlan(withManagedDeferralState(command.phase, command.turn, {
+    planCandidate: requireManagedState(command.turn).planCandidate,
+  }));
+  if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
+  return product.kind === "planning_accepted"
+    ? { kind: "PlanningReviewAccepted", product }
+    : { kind: "PlanningRevisionRequested", product };
+}
+
+async function authorFeedbackPlan(command: {
+  turn: TurnRecord;
+  phase: PhaseInvocation;
+}): Promise<FeedbackPlanningEvent> {
   const managed = requireManagedState(command.turn);
   const program = requireManagedProgram(command.turn);
-  if (command.turn.semanticState === "feedback_planning") {
-    const accepted = managed.goalAcceptance;
-    if (!accepted) throw new Error("Feedback Planning is missing Goal authority");
-    const previous = managed.feedbackPlanningRevision;
-    const affectedTaskRefs = managed.consolidationRepair?.repair.correctionScope.affectedTaskRefs
-      ?? [program.currentTask.task.ref];
-    const product = await proposeCorrectionOrRevision(withManagedDeferralState(
-      command.phase,
-      command.turn,
-      {
+  if (!managed.goalAcceptance) throw new Error("Feedback Planning is missing Goal authority");
+  const previous = managed.feedbackPlanningRevision;
+  const affectedTaskRefs = managed.consolidationRepair?.repair.correctionScope.affectedTaskRefs
+    ?? [program.currentTask.task.ref];
+  const product = await proposeCorrectionOrRevision(withManagedDeferralState(
+    command.phase,
+    command.turn,
+    {
       feedbackIntent: managed.feedbackIntent,
       workPlanRef: program.plan.ref,
       affectedTaskRefs,
@@ -126,21 +153,25 @@ async function planReviewFeedback(command: {
             findingSetRef: previous.review.findingSetRef,
           }
         : {}),
-      },
-    ));
-    return isManagedDeferral(product)
-      ? { kind: "ManagedDeferralAccepted", product }
-      : { kind: "FeedbackPlanCandidateSubmitted", product };
-  }
-  if (command.turn.semanticState === "feedback_planning_review") {
-    const product = await reviewCorrection(withManagedDeferralState(command.phase, command.turn, {
-      feedbackPlan: managed.feedbackPlan,
-      goalContractRef: program.goalContractRef,
-    }));
-    if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
-    return product.kind === "feedback_planning_accepted"
-      ? { kind: "FeedbackPlanningReviewAccepted", product }
-      : { kind: "FeedbackPlanningRevisionRequested", product };
-  }
-  throw new Error(`Feedback Planning cannot advance ${command.turn.semanticState}`);
+    },
+  ));
+  return isManagedDeferral(product)
+    ? { kind: "ManagedDeferralAccepted", product }
+    : { kind: "FeedbackPlanCandidateSubmitted", product };
+}
+
+async function reviewFeedbackPlan(command: {
+  turn: TurnRecord;
+  phase: PhaseInvocation;
+}): Promise<FeedbackPlanningEvent> {
+  const managed = requireManagedState(command.turn);
+  const program = requireManagedProgram(command.turn);
+  const product = await reviewCorrection(withManagedDeferralState(command.phase, command.turn, {
+    feedbackPlan: managed.feedbackPlan,
+    goalContractRef: program.goalContractRef,
+  }));
+  if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
+  return product.kind === "feedback_planning_accepted"
+    ? { kind: "FeedbackPlanningReviewAccepted", product }
+    : { kind: "FeedbackPlanningRevisionRequested", product };
 }

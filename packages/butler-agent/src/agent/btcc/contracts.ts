@@ -13,6 +13,7 @@ import type {
 } from "./turn/index.ts";
 import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
 import type { DeferredContinuationCandidate } from "./continuation/index.ts";
+import type { StopPersistenceOutcome } from "./turn/index.ts";
 
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
@@ -51,7 +52,11 @@ export type BtccTurnCommand =
 
 export type BtccTurnOutcome =
   | { kind: "delivered"; turnId: string; messageId: string; content: string }
-  | { kind: "cancelled"; turnId: string };
+  | { kind: "cancelled"; turnId: string }
+  | { kind: "already_cancelled"; turnId: string }
+  | { kind: "already_finalizing"; turnId: string }
+  | { kind: "fenced_pending_persistence"; turnId: string }
+  | Extract<StopPersistenceOutcome, { kind: "already_delivered" }>;
 
 export interface BtccTurnRuntime {
   handle(command: BtccTurnCommand): Promise<BtccTurnOutcome>;

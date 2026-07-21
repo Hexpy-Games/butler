@@ -10,6 +10,7 @@ import { DirectHarnessModel } from "./direct-harness-model.ts";
 import { HarnessArtifactWorkspace } from "./harness-artifact-workspace.ts";
 import { HarnessOperationExecutor } from "./harness-operation-executor.ts";
 import { ManagedHarnessModel } from "./managed-harness-model.ts";
+import { LiveProviderHarnessModel } from "./live-provider/index.ts";
 import { RestartingManagedHarnessModel } from "./restarting-managed-harness-model.ts";
 import {
   NoLedgerHarnessModel,
@@ -30,6 +31,7 @@ type HarnessOptions = {
   hotCacheRefs: string[];
   observationScopeRefs: string[];
   replay: boolean;
+  liveProvider: boolean;
   scenario:
     | "direct"
     | "managed-pass"
@@ -48,8 +50,12 @@ type HarnessOptions = {
 };
 
 async function runHarness(options: HarnessOptions): Promise<void> {
-  const model = createHarnessModel(options.scenario, options.data);
-  const operations = new HarnessOperationExecutor();
+  const structuralAuthor = createHarnessModel(options.scenario, options.data);
+  const liveTrace: Array<{ phase: string; submission: unknown }> = [];
+  const model = options.liveProvider
+    ? new LiveProviderHarnessModel(structuralAuthor, (entry) => liveTrace.push(entry))
+    : structuralAuthor;
+  const operations = new HarnessOperationExecutor(options.data);
   const runtime = createBtccComposition({
     dbPath: join(options.data, "runtime", "btcc-successor.sqlite"),
     ownerId: `btcc-harness:${options.turnId}`,
@@ -82,13 +88,26 @@ async function runHarness(options: HarnessOptions): Promise<void> {
       baselineObservationScopeRefs: options.observationScopeRefs,
     },
   };
-  const initial = await runtime.handle(command);
-  const replay = options.replay ? await runtime.handle(command) : initial;
+  let initial;
+  let replay;
+  try {
+    initial = await runtime.handle(command);
+    replay = options.replay ? await runtime.handle(command) : initial;
+  } catch (error) {
+    if (liveTrace.length > 0) {
+      process.stderr.write(`BTCC live phase trace: ${JSON.stringify(liveTrace.at(-1))}\n`);
+    }
+    throw error;
+  }
   process.stdout.write(`${JSON.stringify({
     initial,
     replay,
     modelCalls: model.callCount,
+    providerCalls: model instanceof LiveProviderHarnessModel
+      ? model.providerCallCount
+      : model.callCount,
     operationCalls: operations.callCount,
+    artifactSnapshot: operations.artifactSnapshot(),
     phases: model.phases,
     selectedModel: {
       provider: command.modelSelection.provider,
@@ -101,10 +120,15 @@ async function runHarness(options: HarnessOptions): Promise<void> {
 function parseOptions(argv: string[]): HarnessOptions {
   const values = new Map<string, string>();
   let replay = false;
+  let liveProvider = false;
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
     if (key === "--replay") {
       replay = true;
+      continue;
+    }
+    if (key === "--live-provider") {
+      liveProvider = true;
       continue;
     }
     const value = argv[index + 1];
@@ -132,6 +156,7 @@ function parseOptions(argv: string[]): HarnessOptions {
     hotCacheRefs: optionalMany(values, "--hot-cache-ref"),
     observationScopeRefs: optionalMany(values, "--observation-scope"),
     replay,
+    liveProvider,
     scenario: parseScenario(values.get("--scenario")),
   };
 }

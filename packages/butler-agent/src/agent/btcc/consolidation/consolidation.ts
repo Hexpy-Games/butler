@@ -1,5 +1,7 @@
 import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
+import type { GoalContractRecord } from "../conception/index.ts";
+import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import {
   requireManagedPlanningAuthority,
   requireManagedProgram,
@@ -22,28 +24,45 @@ export async function consolidation(command: {
   const goalContract = managed.goalAcceptance?.goalContract;
   if (!goalContract) throw new Error("Consolidation is missing the accepted GoalContract");
   if (managed.deferral) {
-    const authority = requireManagedPlanningAuthority(command.turn);
-    const reviewed = authority.planningState === "reviewed" ? authority : undefined;
-    const product = await assureOriginalGoal(withPhaseState(command.phase, {
-      frontier: "deferred",
-      taskStatuses: [],
-      programId: authority.programId,
-      goalContractRef: authority.goalContractRef,
-      authorityRef: authority.authorityRef,
-      goalFields: goalContract.fields,
-      taskReviewRefs: reviewed?.tasks.flatMap((task) =>
-        task.currentReview?.review.verdict === "passed" ? [task.currentReview.review.ref] : []) ?? [],
-      candidateRefs: reviewed?.promotionAssemblies.map((assembly) => assembly.candidate.ref) ?? [],
-      ...(reviewed
-        ? { planRef: reviewed.plan.ref, planningReviewRef: reviewed.planningReviewRef }
-        : {}),
-      sourceDeferral: managed.deferral,
-    }));
-    if (product.kind !== "final_dossier") {
-      throw new Error("Deferred Consolidation cannot authorize promotion");
-    }
-    return { kind: "FinalDossierAccepted", product };
+    return consolidateDeferredTurn(command, goalContract.fields, managed.deferral);
   }
+  return consolidateCompletedWork(command, goalContract.fields);
+}
+
+async function consolidateDeferredTurn(
+  command: { turn: TurnRecord; phase: PhaseInvocation },
+  goalFields: GoalContractRecord["fields"],
+  sourceDeferral: ManagedDeferralProduct,
+): Promise<Extract<TurnEvent, { kind: "FinalDossierAccepted" }>> {
+  const authority = requireManagedPlanningAuthority(command.turn);
+  const reviewed = authority.planningState === "reviewed" ? authority : undefined;
+  const product = await assureOriginalGoal(withPhaseState(command.phase, {
+    frontier: "deferred",
+    taskStatuses: [],
+    programId: authority.programId,
+    goalContractRef: authority.goalContractRef,
+    authorityRef: authority.authorityRef,
+    goalFields,
+    taskReviewRefs: reviewed?.tasks.flatMap((task) =>
+      task.currentReview?.review.verdict === "passed" ? [task.currentReview.review.ref] : []) ?? [],
+    candidateRefs: reviewed?.promotionAssemblies.map((assembly) => assembly.candidate.ref) ?? [],
+    ...(reviewed
+      ? { planRef: reviewed.plan.ref, planningReviewRef: reviewed.planningReviewRef }
+      : {}),
+    sourceDeferral,
+  }));
+  if (product.kind !== "final_dossier") {
+    throw new Error("Deferred Consolidation cannot authorize promotion");
+  }
+  return { kind: "FinalDossierAccepted", product };
+}
+
+async function consolidateCompletedWork(
+  command: { turn: TurnRecord; phase: PhaseInvocation },
+  goalFields: GoalContractRecord["fields"],
+): Promise<Extract<TurnEvent, {
+  kind: "ConsolidationRepairRequired" | "FinalDossierAccepted" | "PromotionAuthorized";
+}>> {
   const program = requireManagedProgram(command.turn);
   const implementationTasks = program.tasks.filter(
     (task) => task.task.artifactPolicy.kind !== "repository_promotion",
@@ -56,7 +75,7 @@ export async function consolidation(command: {
     frontier: program.frontier,
     taskStatuses: implementationTasks.map((task) => task.status),
     taskRefs: implementationTasks.map((task) => task.task.ref),
-    goalFields: goalContract.fields,
+    goalFields,
     programId: program.programId,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
