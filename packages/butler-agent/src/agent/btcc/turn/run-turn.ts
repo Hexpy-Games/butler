@@ -5,6 +5,11 @@ import {
   reviewGoalContract,
 } from "../conception/index.ts";
 import { assureOriginalGoal } from "../consolidation/index.ts";
+import type {
+  BtccRuntimeDependencies,
+  BtccTurnCommand,
+  BtccTurnOutcome,
+} from "../contracts.ts";
 import { insertCanonicalMessage } from "../delivery/index.ts";
 import { performTask } from "../execution/index.ts";
 import {
@@ -16,39 +21,106 @@ import {
 import { prepareReport } from "../reporting/index.ts";
 import { reviewTask } from "../review/index.ts";
 import { selectNextTaskOrClose } from "../work/index.ts";
-import type { BtccTurnCommand, BtccTurnOutcome } from "../contracts.ts";
+import { admitTurn } from "./admission/index.ts";
+import { decideTransition } from "./state-machine/index.ts";
+import type {
+  StateExecutionClaim,
+  TurnEvent,
+  TurnRecord,
+} from "./contracts.ts";
+
+type RunCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
 
 export async function runTurn(
-  _command: Exclude<BtccTurnCommand, { kind: "stop" }>,
+  command: RunCommand,
+  dependencies: BtccRuntimeDependencies,
 ): Promise<BtccTurnOutcome> {
-  return runCurrentPhase("admitted");
+  let turn = await loadOrAdmitTurn(command, dependencies);
+  while (turn.semanticState !== "delivered" && turn.semanticState !== "cancelled") {
+    const claim = await dependencies.turns.acquireStateExecutionClaim(turn);
+    const event = await runCurrentPhase(turn, claim, dependencies);
+    const transition = decideTransition(turn, event);
+    await dependencies.turns.commitTransition({ turn, claim, transition });
+    turn = await loadRequiredTurn(turn.turnId, dependencies);
+  }
+  return projectTerminalOutcome(turn);
 }
 
-type TurnState =
-  | "admitted"
-  | "conception_opening"
-  | "conception_deliberation"
-  | "contract_review"
-  | "planning"
-  | "planning_review"
-  | "work_frontier"
-  | "task_execution"
-  | "task_review"
-  | "feedback_conception"
-  | "feedback_planning"
-  | "feedback_planning_review"
-  | "consolidation"
-  | "reporting"
-  | "delivery_committed"
-  | "delivered"
-  | "cancelled";
+async function loadOrAdmitTurn(
+  command: RunCommand,
+  dependencies: BtccRuntimeDependencies,
+): Promise<TurnRecord> {
+  if (command.kind === "wake") {
+    throw new Error("BTCC fresh continuation wake admission is not implemented");
+  }
+  const existing = await dependencies.turns.findTurn(command.turnId);
+  if (existing) {
+    if (command.kind === "run") assertExactRunReplay(existing, command);
+    return existing;
+  }
+  if (command.kind !== "run") {
+    throw new Error(`BTCC Turn is not admitted: ${command.turnId}`);
+  }
+  return admitTurn(command, dependencies.admission, dependencies.turns);
+}
 
-function runCurrentPhase(state: TurnState): Promise<never> {
-  switch (state) {
+function assertExactRunReplay(
+  turn: TurnRecord,
+  command: Extract<BtccTurnCommand, { kind: "run" }>,
+): void {
+  if (
+    turn.sessionId !== command.sessionId ||
+    turn.triggerKey !== command.triggerKey ||
+    turn.originalMessageId !== command.message.messageId ||
+    turn.originalMessage !== command.message.content ||
+    canonicalJson(turn.modelSelection) !== canonicalJson(command.modelSelection) ||
+    canonicalJson(turn.context) !== canonicalJson(command.context)
+  ) {
+    throw new Error(`BTCC run replay does not match admitted Turn: ${turn.turnId}`);
+  }
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+async function runCurrentPhase(
+  turn: TurnRecord,
+  claim: StateExecutionClaim,
+  dependencies: BtccRuntimeDependencies,
+): Promise<TurnEvent> {
+  switch (turn.semanticState) {
     case "admitted":
-      return activateTurn();
-    case "conception_opening":
-      return openConception();
+      return { kind: "TurnActivated" };
+    case "conception_opening": {
+      const product = await openConception({
+        binding: {
+          turnId: turn.turnId,
+          turnRevision: turn.revision,
+          semanticState: "conception_opening",
+          checkpointId: claim.checkpointId,
+          checkpointRevision: claim.checkpointRevision,
+          claimId: claim.claimId,
+          executionFence: claim.executionFence,
+        },
+        modelSelection: turn.modelSelection,
+        context: {
+          originalMessageId: turn.originalMessageId,
+          originalMessage: turn.originalMessage,
+          ...turn.context,
+        },
+        conversations: dependencies.phaseConversations,
+        model: dependencies.model,
+      });
+      return { kind: "OpeningAnswerAccepted", product };
+    }
     case "conception_deliberation":
       return deliberateGoal();
     case "contract_review":
@@ -73,18 +145,39 @@ function runCurrentPhase(state: TurnState): Promise<never> {
       return assureOriginalGoal();
     case "reporting":
       return prepareReport();
-    case "delivery_committed":
-      return insertCanonicalMessage();
+    case "delivery_committed": {
+      const observation = await insertCanonicalMessage({
+        turn,
+        messages: dependencies.messages,
+      });
+      return { kind: "DeliveryObserved", assistantMessageId: observation.messageId };
+    }
     case "delivered":
     case "cancelled":
-      return terminalDispatchError(state);
+      throw new Error(`Terminal BTCC state cannot be dispatched: ${turn.semanticState}`);
   }
 }
 
-function activateTurn(): Promise<never> {
-  throw new Error("BTCC Turn activation is not implemented");
+async function loadRequiredTurn(
+  turnId: string,
+  dependencies: BtccRuntimeDependencies,
+): Promise<TurnRecord> {
+  const turn = await dependencies.turns.findTurn(turnId);
+  if (!turn) throw new Error(`BTCC Turn disappeared after commit: ${turnId}`);
+  return turn;
 }
 
-function terminalDispatchError(state: TurnState): never {
-  throw new Error(`Terminal BTCC state cannot be dispatched: ${state}`);
+function projectTerminalOutcome(turn: TurnRecord): BtccTurnOutcome {
+  if (turn.semanticState === "cancelled") {
+    return { kind: "cancelled", turnId: turn.turnId };
+  }
+  if (!turn.canonicalAssistantMessageId || !turn.openingAnswer) {
+    throw new Error("Delivered BTCC Turn is missing its canonical delivery");
+  }
+  return {
+    kind: "delivered",
+    turnId: turn.turnId,
+    messageId: turn.canonicalAssistantMessageId,
+    content: turn.openingAnswer.finalPayload.content,
+  };
 }
