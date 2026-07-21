@@ -1,5 +1,4 @@
 import {
-  contentRefSchema,
   literalSchema,
   objectSchema,
   textSchema,
@@ -7,7 +6,5 @@ import {
 
 export const reportingSubmissionSchema = objectSchema({
   kind: literalSchema("prepared_report"),
-  finalDossierRef: contentRefSchema(),
-  guardVerdict: literalSchema("accepted"),
   content: textSchema(),
 });

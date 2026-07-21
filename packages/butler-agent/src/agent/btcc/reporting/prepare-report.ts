@@ -5,7 +5,6 @@ import {
   requireRecord,
   requireString,
   runPhaseConversation,
-  stableJson,
   type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
@@ -39,10 +38,6 @@ const codec: PhaseCodec<PreparedReportProduct> = {
     }
     const value = requireRecord(submission, "Reporting submission");
     requireLiteral(value.kind, "prepared_report", "Reporting kind");
-    requireLiteral(value.guardVerdict, "accepted", "Reporting guard verdict");
-    if (stableJson(value.finalDossierRef) !== stableJson(dossier.dossier.ref)) {
-      throw new Error("Reporting did not render the exact FinalDossier");
-    }
     const content = requireString(value.content, "report content");
     const reportBody = {
       finalDossierRef: dossier.dossier.ref,

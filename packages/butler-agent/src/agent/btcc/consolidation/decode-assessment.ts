@@ -2,7 +2,6 @@ import {
   contentRef,
   requireRecord,
   requireString,
-  stableJson,
   type ContentRef,
 } from "../core/index.ts";
 import type { ConsolidationAssessment } from "./contracts.ts";
@@ -55,10 +54,9 @@ function decodeGoalFieldVerdicts(
   if (value.length !== fields.length) throw new Error("Consolidation Goal field verdict set changed");
   const verdicts = value.map((item, index) => {
     const record = requireRecord(item, `goalFieldVerdicts[${index}]`);
-    const fieldId = requireString(record.fieldId, `goalFieldVerdicts[${index}].fieldId`);
+    const fieldId = fields[index]!;
     const verdict = record.verdict;
-    if (fieldId !== fields[index] ||
-      (verdict !== "fulfilled" && verdict !== "deferred" && verdict !== "not_fulfilled")) {
+    if (verdict !== "fulfilled" && verdict !== "deferred" && verdict !== "not_fulfilled") {
       throw new Error("Consolidation Goal field verdict does not match the original contract");
     }
     return {
@@ -77,15 +75,11 @@ function decodeTaskCompatibility(
   taskReviewRefs: ContentRef[],
 ): ConsolidationAssessment["taskCompatibility"] {
   const record = requireRecord(value, "taskCompatibility");
-  const reviewedTaskRefs = requireContentRefs(record.reviewedTaskRefs, "reviewedTaskRefs", true);
-  if (stableJson(reviewedTaskRefs) !== stableJson(taskReviewRefs)) {
-    throw new Error("Consolidation compatibility did not inspect the exact Task Review set");
-  }
   const verdict = record.verdict;
   if (verdict !== "compatible" && verdict !== "deferred" && verdict !== "not_compatible") {
     throw new Error("Consolidation Task compatibility verdict is invalid");
   }
-  return { reviewedTaskRefs, verdict };
+  return { reviewedTaskRefs: taskReviewRefs, verdict };
 }
 
 function requireContentRefs(value: unknown, label: string, allowEmpty: boolean): ContentRef[] {
