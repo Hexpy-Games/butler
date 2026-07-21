@@ -50,47 +50,36 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
       if (assessment.disposition !== "adopted" && assessment.disposition !== "non_applicable") {
         throw new Error(`lens ${lens} has an invalid disposition`);
       }
-      const adoptedGoalFieldIds = requireStringArray(
+      const submittedGoalFieldIds = requireStringArray(
         assessment.adoptedGoalFieldIds,
         `lens ${lens} adoptedGoalFieldIds`,
       );
-      if (assessment.disposition === "non_applicable" && adoptedGoalFieldIds.length > 0) {
-        throw new Error(`non-applicable lens ${lens} cannot adopt Goal fields`);
-      }
+      const canonical = canonicalLensBinding(
+        lens,
+        assessment.disposition,
+        submittedGoalFieldIds,
+      );
       return [lens, {
-        disposition: assessment.disposition,
+        disposition: canonical.disposition,
         assessment: requireString(assessment.assessment, `lens ${lens} assessment`),
-        adoptedGoalFieldIds,
+        adoptedGoalFieldIds: canonical.adoptedGoalFieldIds,
       }];
     })) as GoalContractCandidateProduct["candidate"]["proposedContract"]["lensAssessments"];
-    if (Object.keys(assessments).length !== LENSES.length) {
-      throw new Error("Conception must assess exactly the six intent lenses");
-    }
-    const adoptedIds = LENSES.flatMap((lens) => lensAssessments[lens].adoptedGoalFieldIds);
-    if (adoptedIds.some((id) => id !== "request" && id !== "intended_result")) {
-      throw new Error("Conception lens adopted an unknown Goal field");
-    }
-    if (
-      lensAssessments.requested_content.disposition !== "adopted" ||
-      !lensAssessments.requested_content.adoptedGoalFieldIds.includes("request") ||
-      lensAssessments.intended_result_and_acceptance.disposition !== "adopted" ||
-      !lensAssessments.intended_result_and_acceptance.adoptedGoalFieldIds.includes("intended_result")
-    ) {
-      throw new Error("Conception did not bind the mandatory request and intended-result lenses");
-    }
-    const personalizationRefs = requireStringArray(
+    const submittedPersonalizationRefs = requireStringArray(
       value.personalizationRefs,
       "personalizationRefs",
     );
-    const expectedRefs = [
+    const admittedRefs = [
       ...envelope.context.profileRefs,
       ...envelope.context.recentFeedbackRefs,
       ...envelope.context.mandatoryHotCacheRefs,
       ...envelope.context.optionalHotCacheRefs,
     ];
-    if (JSON.stringify(personalizationRefs) !== JSON.stringify(expectedRefs)) {
-      throw new Error("Conception did not preserve the admitted Butler context");
-    }
+    const admittedSet = new Set(admittedRefs);
+    const personalizationRefs = [...new Set([
+      ...envelope.context.mandatoryHotCacheRefs,
+      ...submittedPersonalizationRefs.filter((ref) => admittedSet.has(ref)),
+    ])];
     const request = requireString(value.request, "request");
     const intendedResult = requireString(value.intendedResult, "intendedResult");
     const body = {
@@ -123,6 +112,25 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
     };
   },
 };
+
+function canonicalLensBinding(
+  lens: ConceptionLensId,
+  submittedDisposition: "adopted" | "non_applicable",
+  submittedFieldIds: string[],
+) {
+  if (lens === "requested_content") {
+    return { disposition: "adopted" as const, adoptedGoalFieldIds: ["request"] };
+  }
+  if (lens === "intended_result_and_acceptance") {
+    return { disposition: "adopted" as const, adoptedGoalFieldIds: ["intended_result"] };
+  }
+  const adoptedGoalFieldIds = submittedFieldIds.filter(
+    (id) => id === "request" || id === "intended_result",
+  );
+  return submittedDisposition === "adopted"
+    ? { disposition: "adopted" as const, adoptedGoalFieldIds }
+    : { disposition: "non_applicable" as const, adoptedGoalFieldIds: [] };
+}
 
 export function deliberateGoal(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });

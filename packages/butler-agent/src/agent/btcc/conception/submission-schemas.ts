@@ -74,11 +74,7 @@ export const goalCandidateSubmissionSchema = objectSchema({
 
 const goalReviewFields = {
   kind: literalSchema("goal_contract_review"),
-  candidateRef: contentRefSchema(),
   strategy: literalSchema("managed"),
-  reviewedLensIds: textList(),
-  reviewedFieldIds: textList(),
-  reviewedOutcomeIds: textList(),
   verdict: literalSchema("accepted"),
 };
 export const goalReviewSubmissionSchema = variantsSchema(
