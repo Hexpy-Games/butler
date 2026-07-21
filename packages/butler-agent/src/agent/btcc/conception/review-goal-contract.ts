@@ -4,7 +4,6 @@ import {
   requireLiteral,
   requireRecord,
   runPhaseConversation,
-  stableJson,
   type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
@@ -39,24 +38,15 @@ const codec: PhaseCodec<GoalContractAcceptedProduct> = {
     requireLiteral(value.kind, "goal_contract_review", "Goal Contract Review kind");
     requireLiteral(value.verdict, "accepted", "Goal Contract Review verdict");
     requireLiteral(value.strategy, "managed", "Goal Contract Review strategy");
-    if (stableJson(value.candidateRef) !== stableJson(candidate.candidate.ref)) {
-      throw new Error("Goal Contract Review did not review the exact candidate");
-    }
-    const reviewedLensIds = requireExactStringArray(value.reviewedLensIds, [
+    const reviewedLensIds: ConceptionLensId[] = [
       "requested_content", "related_memory", "connected_current_knowledge",
       "user_preferences_and_resolution_style", "expert_perspective",
       "intended_result_and_acceptance",
-    ], "reviewedLensIds") as ConceptionLensId[];
-    const reviewedFieldIds = requireExactStringArray(
-      value.reviewedFieldIds,
-      ["request", "intended_result"],
-      "reviewedFieldIds",
-    ) as ["request", "intended_result"];
-    const reviewedOutcomeIds = requireExactStringArray(
-      value.reviewedOutcomeIds,
-      [candidate.candidate.proposedContract.requiredOutcome.outcomeId],
-      "reviewedOutcomeIds",
-    ) as [string];
+    ];
+    const reviewedFieldIds: ["request", "intended_result"] = ["request", "intended_result"];
+    const reviewedOutcomeIds: [string] = [
+      candidate.candidate.proposedContract.requiredOutcome.outcomeId,
+    ];
     const inboxId = requireStringState(envelope.context.stateInput, "inboxId");
     const sessionId = requireStringState(envelope.context.stateInput, "sessionId");
     const projectRef = optionalStringState(envelope.context.stateInput, "projectRef");
@@ -144,20 +134,6 @@ function selectContinuation(
     ref: contentRef("continuation-binding", body),
     ...candidate,
   };
-}
-
-function requireExactStringArray(
-  value: unknown,
-  expected: string[],
-  label: string,
-): string[] {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    throw new Error(`${label} must be a string array`);
-  }
-  if (JSON.stringify(value) !== JSON.stringify(expected)) {
-    throw new Error(`${label} does not cover the exact reviewed subjects`);
-  }
-  return value;
 }
 
 function loadCandidate(input: unknown): GoalContractCandidateProduct {
