@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
   WorkLedger,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 import { SqliteManagedTransitionWriter } from "./managed-transition-writer.ts";

@@ -21,5 +21,6 @@ export function createBtccComposition(input: {
     operations: input.operations,
     artifacts: input.artifacts,
     messages: stores.messages,
+    learning: stores.learning,
   });
 }

@@ -16,6 +16,7 @@ export function finalizePromotedWork(
     programId: program.programId,
     originalGoalContractRef: program.goalContractRef,
     currentAuthorityRef: program.authorityRef,
+    consolidationAssessmentRef: program.promotionAuthorization.assessmentRef,
     acceptedPlanRef: program.plan.ref,
     planningReviewRef: program.planningReviewRef,
     taskReviewRefs: reviews.map((review) => review!.ref) as [ContentRef, ...ContentRef[]],

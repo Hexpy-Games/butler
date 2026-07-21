@@ -27,6 +27,7 @@ type AuthoringState = {
   requiredOutcomeId: string;
   previousCandidateRef?: ContentRef;
   findingSetRef?: ContentRef;
+  continuation?: import("../contracts.ts").PlanningContinuation;
 };
 
 type TaskDraft = {
@@ -137,7 +138,14 @@ export function authorPlanCandidate(
         previousCandidateRef: state.previousCandidateRef,
         findingSetRef: state.findingSetRef,
       }
-    : { kind: "initial" as const };
+    : state.continuation
+      ? {
+          kind: "deferred_continuation" as const,
+          continuationBindingRef: state.continuation.ref,
+          sourceTurnId: state.continuation.sourceTurnId,
+          deferredAnchorRef: state.continuation.anchorRef,
+        }
+      : { kind: "initial" as const };
   const candidateBody = {
     ledgerId: state.ledgerId,
     programId: state.programId,
@@ -145,6 +153,7 @@ export function authorPlanCandidate(
     goalContractRef: state.goalContractRef,
     authorityRef: state.authorityRef,
     revisionOrigin,
+    resolvedDeferralAnchorRefs: state.continuation ? [state.continuation.anchorRef] : [],
     plan,
     works,
     tasks,

@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { WorkLedgerCommit } from "../../../../btcc/index.ts";
+import type { WorkLedgerCommit } from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
 
 type CommitBoundary =
@@ -38,7 +38,9 @@ export class WorkLedgerCommitJournal {
   }
 
   private currentManifestRevision(input: WorkLedgerCommit): number {
-    if (input.mutation.kind === "bind_program") return 0;
+    if (input.mutation.kind === "bind_program") {
+      return input.mutation.product.authority.managedBinding.expectedManifestRevision;
+    }
     const programId = programIdOf(input);
     const row = this.db.query<{ manifest_revision: number }, [string]>(`
       SELECT manifest_revision FROM btcc_programs WHERE program_id = ?
@@ -113,6 +115,8 @@ function projectedManifestRevision(input: WorkLedgerCommit): number {
   if (mutation.kind === "install_reviewed_plan") {
     return mutation.product.candidate.observedManifestRevision;
   }
-  if (mutation.kind === "bind_program") return 0;
+  if (mutation.kind === "bind_program") {
+    return mutation.product.authority.managedBinding.expectedManifestRevision;
+  }
   return mutation.cursor.expectedManifestRevision;
 }

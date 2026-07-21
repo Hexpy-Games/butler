@@ -1,10 +1,12 @@
 import type { Database } from "bun:sqlite";
-import type { BtccPersistenceTypes } from "../../../../btcc/index.ts";
+import type { BtccPersistenceTypes } from "../../../../btcc/gateway-api.ts";
 
 type ManagedProgramState = BtccPersistenceTypes["managedProgramState"];
 type ContentRef = ManagedProgramState["goalContractRef"];
 type ReviewedProgram = Extract<ManagedProgramState, { planningState: "reviewed" }>;
 type ManagedTaskState = ReviewedProgram["tasks"][number];
+type ManagedDeferralProduct = NonNullable<ManagedProgramState["activeDeferral"]>;
+type PromotionDeferralProduct = NonNullable<ReviewedProgram["promotionDeferral"]>;
 
 type ProgramRow = {
   goal_contract_ref: string;
@@ -17,6 +19,8 @@ type ProgramRow = {
   pending_correction_plan_ref: string | null;
   promotion_assembly_refs_json: string | null;
   promotion_authorization_ref: string | null;
+  active_deferral_ref: string | null;
+  promotion_deferral_ref: string | null;
 };
 
 export class SqliteWorkLedgerProgramReader {
@@ -31,9 +35,18 @@ export class SqliteWorkLedgerProgramReader {
       manifestRevision: program.manifest_revision,
       goalContractRef: this.loadRef(program.goal_contract_ref),
       authorityRef: this.loadRef(program.authority_ref),
+      requiredOutcomeId: this.loadRecord<{
+        requiredOutcome: { outcomeId: string };
+      }>(program.goal_contract_ref).requiredOutcome.outcomeId,
     };
     if (!program.accepted_plan_ref || !program.planning_review_ref) {
-      return { ...authority, planningState: "unplanned" };
+      return {
+        ...authority,
+        planningState: "unplanned",
+        ...(program.active_deferral_ref
+          ? { activeDeferral: this.loadManagedDeferral(program.active_deferral_ref) }
+          : {}),
+      };
     }
     const plan = this.loadRecord<ReviewedProgram["plan"]>(program.accepted_plan_ref);
     const works = this.loadWorks(programId);
@@ -78,6 +91,17 @@ export class SqliteWorkLedgerProgramReader {
         : latestAttempt?.correctionPlanRef
           ? { correctionPlanRef: latestAttempt.correctionPlanRef }
           : {}),
+      ...(program.active_deferral_ref
+        ? { activeDeferral: this.loadManagedDeferral(program.active_deferral_ref) }
+        : {}),
+      ...(program.promotion_deferral_ref && program.active_deferral_ref
+        ? {
+            promotionDeferral: this.loadPromotionDeferral(
+              program.promotion_deferral_ref,
+              program.active_deferral_ref,
+            ),
+          }
+        : {}),
     };
   }
 
@@ -86,7 +110,7 @@ export class SqliteWorkLedgerProgramReader {
       SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
         planning_review_ref, frontier, ledger_id, manifest_revision,
         pending_correction_plan_ref, promotion_assembly_refs_json,
-        promotion_authorization_ref
+        promotion_authorization_ref, active_deferral_ref, promotion_deferral_ref
       FROM btcc_programs WHERE program_id = ?
     `).get(programId);
   }
@@ -103,6 +127,25 @@ export class SqliteWorkLedgerProgramReader {
       candidate: this.loadRecord(item.candidateRef.id),
       resolution: this.loadRecord(item.resolutionRef.id),
     })) as ReviewedProgram["promotionAssemblies"];
+  }
+
+  private loadManagedDeferral(anchorId: string): ManagedDeferralProduct {
+    const anchor = this.loadRecord<ManagedDeferralProduct["anchor"]>(anchorId);
+    const blocker = this.loadRecord<ManagedDeferralProduct["blocker"]>(anchor.blockerRef.id);
+    return { kind: "managed_deferral", blocker, anchor };
+  }
+
+  private loadPromotionDeferral(
+    deferralId: string,
+    anchorId: string,
+  ): PromotionDeferralProduct {
+    const base = this.loadManagedDeferral(anchorId);
+    return {
+      kind: "promotion_deferral",
+      deferral: this.loadRecord(deferralId),
+      blocker: base.blocker,
+      anchor: base.anchor,
+    };
   }
 
   private loadWorks(programId: string): ReviewedProgram["works"] {

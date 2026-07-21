@@ -1,4 +1,5 @@
 import type { ContentRef } from "../core/index.ts";
+import type { ContinuationBinding } from "../continuation/index.ts";
 
 export type TaskArtifactPolicy =
   | { kind: "non_artifact"; targetScopeRefs: string[] }
@@ -96,7 +97,14 @@ export type PlanningCandidate = {
   authorityRef: ContentRef;
   revisionOrigin:
     | { kind: "initial" }
+    | {
+        kind: "deferred_continuation";
+        continuationBindingRef: ContentRef;
+        sourceTurnId: string;
+        deferredAnchorRef: ContentRef;
+      }
     | { kind: "review_revision"; previousCandidateRef: ContentRef; findingSetRef: ContentRef };
+  resolvedDeferralAnchorRefs: ContentRef[];
   plan: ManagedPlan;
   works: ManagedWork[];
   tasks: ManagedTask[];
@@ -111,6 +119,8 @@ export type PlanningCandidateProduct = {
   kind: "plan_candidate";
   candidate: PlanningCandidate;
 };
+
+export type PlanningContinuation = Extract<ContinuationBinding, { kind: "deferred_goal" }>;
 
 export type PlanningReview = {
   ref: ContentRef;
@@ -158,7 +168,7 @@ type CorrectionPlan = {
   ref: ContentRef;
   kind: "correction_plan";
   governingWorkPlanRef: ContentRef;
-  targetTaskRef: ContentRef;
+  targetTaskRefs: [ContentRef, ...ContentRef[]];
   correctionAction: string;
   artifactLifecycleRef: ContentRef;
 };

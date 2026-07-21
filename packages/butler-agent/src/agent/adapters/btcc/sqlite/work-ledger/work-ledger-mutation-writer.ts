@@ -1,21 +1,24 @@
 import type { Database } from "bun:sqlite";
 import type {
   WorkLedgerCommit,
-} from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
 import { SqlitePromotionFrontierWriter } from "./promotion-frontier-writer.ts";
+import { SqliteProgramAuthorityWriter } from "./program-authority-writer.ts";
 
 export class SqliteWorkLedgerMutationWriter {
   private readonly journal: WorkLedgerCommitJournal;
   private readonly graphRevisions: SqliteReviewedGraphInstaller;
   private readonly promotionFrontier: SqlitePromotionFrontierWriter;
+  private readonly programAuthority: SqliteProgramAuthorityWriter;
 
   constructor(private readonly db: Database) {
     this.journal = new WorkLedgerCommitJournal(db);
     this.graphRevisions = new SqliteReviewedGraphInstaller(db);
     this.promotionFrontier = new SqlitePromotionFrontierWriter(db);
+    this.programAuthority = new SqliteProgramAuthorityWriter(db);
   }
 
   commitAtomically(input: WorkLedgerCommit): void {
@@ -31,10 +34,10 @@ export class SqliteWorkLedgerMutationWriter {
     const mutation = input.mutation;
     switch (mutation.kind) {
       case "bind_program":
-        this.bindProgram(mutation);
+        this.programAuthority.bindProgram(mutation);
         return;
       case "install_reviewed_plan":
-        this.installReviewedPlan(mutation.product);
+        this.programAuthority.installReviewedPlan(mutation.product);
         return;
       case "select_attempt":
         this.selectAttempt(mutation.cursor.programId, mutation.attempt);
@@ -57,73 +60,15 @@ export class SqliteWorkLedgerMutationWriter {
       case "close_promotion_frontier":
         this.promotionFrontier.close(mutation);
         return;
-    }
-  }
-
-  private bindProgram(
-    mutation: Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>,
-  ): void {
-    const authority = mutation.product.authority;
-    const binding = authority.managedBinding;
-    const scopeId = authority.ledgerScope.kind === "project"
-      ? authority.ledgerScope.projectRef
-      : authority.ledgerScope.sessionId;
-    this.db.query(`
-      INSERT INTO btcc_programs (
-        program_id, ledger_id, scope_kind, scope_id, session_id,
-        goal_contract_ref, authority_ref, frontier, manifest_revision
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'unplanned', 1)
-    `).run(
-      binding.programId,
-      binding.ledgerId,
-      authority.ledgerScope.kind,
-      scopeId,
-      mutation.sessionId,
-      mutation.product.goalContract.ref.id,
-      authority.ref.id,
-    );
-  }
-
-  private installReviewedPlan(
-    product: Extract<WorkLedgerCommit["mutation"], {
-      kind: "install_reviewed_plan";
-    }>["product"],
-  ): void {
-    const candidate = product.candidate;
-    const activated = this.db.query(`
-      UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
-        frontier = 'implementation_open', manifest_revision = manifest_revision + 1
-      WHERE program_id = ? AND frontier = 'unplanned' AND manifest_revision = ?
-    `).run(
-      candidate.plan.ref.id,
-      product.review.ref.id,
-      candidate.programId,
-      candidate.observedManifestRevision,
-    );
-    if (activated.changes !== 1) throw new Error("Work Ledger Plan base changed");
-    const insertWork = this.db.query(`
-      INSERT INTO btcc_work_items (work_id, program_id, work_ref, status)
-      VALUES (?, ?, ?, 'planned')
-    `);
-    for (const work of candidate.works) {
-      insertWork.run(work.ref.id, candidate.programId, stableJson(work.ref));
-    }
-    const workRefs = new Map(candidate.works.map((work) => [work.workLogicalId, work.ref]));
-    const insertTask = this.db.query(`
-      INSERT INTO btcc_tasks (
-        task_id, program_id, work_id, task_ref, task_kind, status
-      ) VALUES (?, ?, ?, ?, ?, 'planned')
-    `);
-    for (const task of candidate.tasks) {
-      const workRef = workRefs.get(task.workLogicalId);
-      if (!workRef) throw new Error("Reviewed Task has no Work");
-      insertTask.run(
-        task.ref.id,
-        candidate.programId,
-        workRef.id,
-        stableJson(task.ref),
-        task.artifactPolicy.kind,
-      );
+      case "accept_managed_deferral":
+        this.acceptManagedDeferral(mutation);
+        return;
+      case "accept_promotion_deferral":
+        this.promotionFrontier.defer(mutation);
+        return;
+      case "close_deferred_promotion_frontier":
+        this.promotionFrontier.closeDeferred(mutation);
+        return;
     }
   }
 
@@ -214,22 +159,42 @@ export class SqliteWorkLedgerMutationWriter {
       kind: "accept_feedback_plan";
     }>["product"],
   ): void {
-    const taskId = product.candidate.correctionPlan.targetTaskRef.id;
-    const task = this.db.query<{ program_id: string; current_attempt_id: string }, [string]>(`
-      SELECT program_id, current_attempt_id FROM btcc_tasks
-      WHERE task_id = ? AND status = 'review_failed' AND is_active = 1
-    `).get(taskId);
-    if (!task) throw new Error("Implementation repair requires the failed current Task");
-    const closed = this.db.query(`
-      UPDATE btcc_attempts SET status = 'closed_unaccepted'
-      WHERE attempt_id = ? AND status = 'review_failed'
-    `).run(task.current_attempt_id);
-    if (closed.changes !== 1) throw new Error("Implementation repair lost its failed Attempt");
-    this.db.query("UPDATE btcc_tasks SET status = 'planned' WHERE task_id = ?").run(taskId);
+    const targets = product.candidate.correctionPlan.targetTaskRefs;
+    const programIds = new Set(targets.map((target) => this.reopenRepairTarget(target.id)));
+    if (programIds.size !== 1) throw new Error("Implementation repair crossed Program authority");
+    const programId = [...programIds][0]!;
     this.db.query(`
-      UPDATE btcc_programs SET pending_correction_plan_ref = ? WHERE program_id = ?
-    `).run(product.candidate.correctionPlan.ref.id, task.program_id);
-    this.bumpManifest(task.program_id);
+      UPDATE btcc_programs SET pending_correction_plan_ref = ?, frontier = 'implementation_open'
+      WHERE program_id = ?
+    `).run(product.candidate.correctionPlan.ref.id, programId);
+    this.bumpManifest(programId);
+  }
+
+  private reopenRepairTarget(taskId: string): string {
+    const task = this.db.query<{
+      program_id: string;
+      work_id: string;
+      current_attempt_id: string | null;
+      status: string;
+    }, [string]>(`
+      SELECT program_id, work_id, current_attempt_id, status FROM btcc_tasks
+      WHERE task_id = ? AND status IN ('review_failed', 'accepted') AND is_active = 1
+    `).get(taskId);
+    if (!task) throw new Error("Implementation repair target is not reviewable");
+    if (task.status === "review_failed") {
+      const closed = this.db.query(`
+        UPDATE btcc_attempts SET status = 'closed_unaccepted'
+        WHERE attempt_id = ? AND status = 'review_failed'
+      `).run(task.current_attempt_id);
+      if (closed.changes !== 1) throw new Error("Implementation repair lost its failed Attempt");
+    }
+    this.db.query(`
+      UPDATE btcc_tasks SET status = 'planned', current_attempt_id = NULL,
+        result_ref = NULL, review_ref = NULL WHERE task_id = ?
+    `).run(taskId);
+    this.db.query("UPDATE btcc_work_items SET status = 'planned' WHERE work_id = ?")
+      .run(task.work_id);
+    return task.program_id;
   }
 
   private acceptFeedbackPlan(
@@ -240,6 +205,23 @@ export class SqliteWorkLedgerMutationWriter {
       return;
     }
     this.graphRevisions.install(product);
+  }
+
+  private acceptManagedDeferral(
+    mutation: Extract<WorkLedgerCommit["mutation"], { kind: "accept_managed_deferral" }>,
+  ): void {
+    const updated = this.db.query(`
+      UPDATE btcc_programs SET active_deferral_ref = ?, active_deferral_turn_id = ?,
+        manifest_revision = manifest_revision + 1
+      WHERE program_id = ? AND manifest_revision = ?
+        AND active_deferral_ref IS NULL
+    `).run(
+      mutation.product.anchor.ref.id,
+      mutation.product.anchor.sourceTurnId,
+      mutation.cursor.programId,
+      mutation.cursor.expectedManifestRevision,
+    );
+    if (updated.changes !== 1) throw new Error("Work Ledger deferral base changed");
   }
 
   private bumpManifest(programId: string): void {

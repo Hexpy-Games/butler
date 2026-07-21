@@ -50,7 +50,9 @@ export type ManagedAttempt = {
         };
   };
   workspaceProvision?: WorkspaceProvision;
-  status: "ready" | "result_submitted" | "review_failed" | "accepted" | "closed_unaccepted";
+  status:
+    | "ready" | "result_submitted" | "review_failed" | "accepted"
+    | "promotion_deferred" | "closed_unaccepted";
 };
 
 export type WorkFrontierDecision =
@@ -59,4 +61,5 @@ export type WorkFrontierDecision =
       task: ReviewedManagedProgramState["tasks"][number];
     }
   | { kind: "close_frontier"; promotionAssemblies: ReviewedPromotionAssembly[] }
-  | { kind: "complete_promotion"; product: FinalDossierProduct };
+  | { kind: "complete_promotion"; product: FinalDossierProduct }
+  | { kind: "defer_promotion"; product: FinalDossierProduct };

@@ -1,4 +1,5 @@
 import type { AdmittedModelSelection } from "../contracts.ts";
+import type { DeferredContinuationCandidate } from "../continuation/index.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -34,6 +35,7 @@ export type OpeningContext = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
+  continuationCandidates?: DeferredContinuationCandidate[];
   stateInput?: unknown;
 };
 
@@ -167,6 +169,13 @@ export type OperationResult = {
   commitJournalRef?: { id: string; sha256: string };
   promotionReceiptRef?: { id: string; sha256: string };
   promotedSnapshotRef?: { id: string; sha256: string };
+  promotionRecords?: {
+    transaction: { ref: { id: string; sha256: string }; [key: string]: unknown };
+    journals: Array<{ ref: { id: string; sha256: string }; state: string; [key: string]: unknown }>;
+    commitReceipt: { ref: { id: string; sha256: string }; [key: string]: unknown };
+    promotedSnapshot: { ref: { id: string; sha256: string }; [key: string]: unknown };
+    cleanupReceipt: { ref: { id: string; sha256: string }; [key: string]: unknown };
+  };
 };
 
 export type ObservationResult = Omit<OperationResult, "request">;

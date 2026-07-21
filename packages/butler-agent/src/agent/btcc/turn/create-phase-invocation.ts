@@ -22,6 +22,7 @@ export function createPhaseInvocation(
       originalMessageId: turn.originalMessageId,
       originalMessage: turn.originalMessage,
       ...turn.context,
+      continuationCandidates: turn.continuationCandidates,
     },
     store: dependencies.phaseConversations,
     model: dependencies.model,

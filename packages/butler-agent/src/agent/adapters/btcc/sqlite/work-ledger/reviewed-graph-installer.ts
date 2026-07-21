@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { WorkLedgerCommit } from "../../../../btcc/index.ts";
+import type { WorkLedgerCommit } from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
 
 type FeedbackProduct = Extract<

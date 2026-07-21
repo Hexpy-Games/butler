@@ -1,5 +1,6 @@
 import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
+import { isManagedDeferral, withManagedDeferralState } from "../deferral/index.ts";
 import {
   requireManagedProgram,
   requireManagedState,
@@ -18,7 +19,9 @@ type InitialConceptionEvent = Extract<TurnEvent, {
     | "GoalContractCandidateSubmitted"
     | "GoalContractReviewAccepted";
 }>;
-type FeedbackConceptionEvent = Extract<TurnEvent, { kind: "FeedbackIntentAccepted" }>;
+type FeedbackConceptionEvent = Extract<TurnEvent, {
+  kind: "FeedbackIntentAccepted" | "ManagedDeferralAccepted";
+}>;
 type ConceptionCommand = {
   cycle: "initial" | "review_feedback";
   turn: TurnRecord;
@@ -63,6 +66,7 @@ async function conceiveInitialGoal(command: {
         inboxId: command.turn.inboxId,
         sessionId: command.turn.sessionId,
         projectRef: command.turn.context.projectRef,
+        continuationCandidates: command.turn.continuationCandidates,
         goalCandidate: requireManagedState(command.turn).goalCandidate,
       }));
       return { kind: "GoalContractReviewAccepted", product };
@@ -77,14 +81,38 @@ async function conceiveReviewFeedback(command: {
   phase: PhaseInvocation;
 }): Promise<FeedbackConceptionEvent> {
   const program = requireManagedProgram(command.turn);
-  const review = program.currentTask.currentReview;
-  if (!review || review.review.verdict !== "not_passed") {
-    throw new Error("Feedback Conception requires a failed Task Review");
-  }
-  const product = await conceiveCorrection(withPhaseState(command.phase, {
-    correctionScopeRef: review.review.correctionScopeRef,
+  const source = feedbackSource(command.turn, program);
+  const product = await conceiveCorrection(withManagedDeferralState(command.phase, command.turn, {
+    correctionScopeRef: source.correctionScopeRef,
+    correctionOrigin: source.origin,
+    affectedTaskRefs: source.affectedTaskRefs,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
   }));
-  return { kind: "FeedbackIntentAccepted", product };
+  return isManagedDeferral(product)
+    ? { kind: "ManagedDeferralAccepted", product }
+    : { kind: "FeedbackIntentAccepted", product };
+}
+
+function feedbackSource(
+  turn: TurnRecord,
+  program: ReturnType<typeof requireManagedProgram>,
+) {
+  const repair = requireManagedState(turn).consolidationRepair?.repair;
+  if (repair) {
+    return {
+      origin: "consolidation" as const,
+      correctionScopeRef: repair.correctionScope.ref,
+      affectedTaskRefs: repair.correctionScope.affectedTaskRefs,
+    };
+  }
+  const review = program.currentTask.currentReview;
+  if (!review || review.review.verdict !== "not_passed") {
+    throw new Error("Feedback Conception requires a failed Task Review or Consolidation repair");
+  }
+  return {
+    origin: "task_review" as const,
+    correctionScopeRef: review.review.correctionScopeRef,
+    affectedTaskRefs: [program.currentTask.task.ref],
+  };
 }

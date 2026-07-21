@@ -3,12 +3,16 @@ import type {
   PhaseConversationStore,
   SelectedModel,
 } from "./core/index.ts";
-import type { CanonicalMessageStore } from "./delivery/index.ts";
+import type {
+  CanonicalMessageStore,
+  LearningSourceScheduler,
+} from "./delivery/index.ts";
 import type {
   TurnAdmissionRepository,
   TurnStateRepository,
 } from "./turn/index.ts";
 import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
+import type { DeferredContinuationCandidate } from "./continuation/index.ts";
 
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
@@ -28,6 +32,7 @@ export type ButlerContextInput = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
+  continuationCandidates?: DeferredContinuationCandidate[];
 };
 
 export type BtccTurnCommand =
@@ -60,4 +65,5 @@ export type BtccRuntimeDependencies = {
   operations: OperationExecutor;
   artifacts: ArtifactWorkspaceRuntime;
   messages: CanonicalMessageStore;
+  learning: LearningSourceScheduler;
 };

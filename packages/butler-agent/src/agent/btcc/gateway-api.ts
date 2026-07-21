@@ -10,6 +10,16 @@ import type {
   TurnSemanticState,
 } from "./turn/index.ts";
 import type { ManagedAttempt } from "./work/index.ts";
+import type { DeferredContinuationCandidate } from "./continuation/index.ts";
+
+export { createWorkLedger } from "./work-ledger/index.ts";
+export type {
+  WorkLedger,
+  WorkLedgerCommit,
+  WorkLedgerStorage,
+} from "./work-ledger/index.ts";
+export type { LearningSourceScheduler } from "./delivery/index.ts";
+export type { BtccRuntimeDependencies, BtccTurnCommand } from "./contracts.ts";
 
 export type BtccPersistenceTypes = {
   transition: AcceptedTurnTransition;
@@ -22,4 +32,5 @@ export type BtccPersistenceTypes = {
   planningAcceptedProduct: PlanningAcceptedProduct;
   resultCandidateProduct: ResultCandidateProduct;
   taskReviewProduct: TaskReviewProduct;
+  deferredContinuationCandidate: DeferredContinuationCandidate;
 };

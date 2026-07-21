@@ -3,7 +3,7 @@ import type {
   BtccPersistenceTypes,
   WorkLedgerCommit,
   WorkLedgerStorage,
-} from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
 import { SqliteWorkLedgerMutationWriter } from "./work-ledger-mutation-writer.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger-program-reader.ts";
 

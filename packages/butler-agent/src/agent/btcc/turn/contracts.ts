@@ -10,7 +10,7 @@ import type {
   GoalContractCandidateProduct,
   OpeningContinuationProduct,
 } from "../conception/index.ts";
-import type { FinalDossierProduct } from "../consolidation/index.ts";
+import type { ConsolidationRepairProduct, FinalDossierProduct } from "../consolidation/index.ts";
 import type { PromotionAuthorizationProduct } from "../consolidation/index.ts";
 import type { ContentRef } from "../core/index.ts";
 import type { ResultCandidateProduct } from "../execution/index.ts";
@@ -28,6 +28,9 @@ import type { ManagedAttempt } from "../work/index.ts";
 import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
 import type { WorkLedgerCommit, WorkLedgerMutation } from "../work-ledger/index.ts";
 import type { ManagedTurnState } from "./managed-turn-state.ts";
+import type { ManagedDeferralProduct } from "../deferral/index.ts";
+import type { PromotionDeferralProduct } from "../deferral/index.ts";
+import type { DeferredContinuationCandidate } from "../continuation/index.ts";
 
 export type TurnSemanticState =
   | "admitted"
@@ -72,6 +75,7 @@ export type TurnRecord = {
   originalMessage: string;
   modelSelection: AdmittedModelSelection;
   context: ButlerContextInput;
+  continuationCandidates: DeferredContinuationCandidate[];
   semanticState: TurnSemanticState;
   checkpoint?: TurnCheckpoint;
   route?: "direct" | "assisted" | "managed";
@@ -86,7 +90,7 @@ export type TurnRecord = {
   canonicalAssistantMessageId?: string;
   revision: number;
   executionFence: number;
-  finalDisposition?: "completed" | "cancelled";
+  finalDisposition?: "completed" | "deferred" | "cancelled";
 };
 
 export type AdmissionInbox = {
@@ -132,8 +136,12 @@ export type TurnEvent =
       kind: "FeedbackPlanningRevisionRequested";
       product: FeedbackPlanningRevisionRequiredProduct;
     }
+  | { kind: "ManagedDeferralAccepted"; product: ManagedDeferralProduct }
+  | { kind: "PromotionDeferralAccepted"; product: PromotionDeferralProduct }
+  | { kind: "ConsolidationRepairRequired"; product: ConsolidationRepairProduct }
   | { kind: "FinalDossierAccepted"; product: FinalDossierProduct }
   | { kind: "PromotedWorkCompleted"; product: FinalDossierProduct }
+  | { kind: "PromotedWorkDeferred"; product: FinalDossierProduct }
   | { kind: "PromotionAuthorized"; product: PromotionAuthorizationProduct }
   | { kind: "PreparedReportAccepted"; product: PreparedReportProduct }
   | { kind: "DeliveryObserved"; assistantMessageId: string };
@@ -234,6 +242,27 @@ export type AcceptedTurnTransition =
         mutation: Extract<WorkLedgerMutation, { kind: "accept_feedback_plan" }>;
       };
     }
+  | {
+      kind: "accept_managed_deferral";
+      successor: "consolidation";
+      product: ManagedDeferralProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "accept_managed_deferral" }>;
+      };
+    }
+  | {
+      kind: "accept_promotion_deferral";
+      successor: "work_frontier";
+      product: PromotionDeferralProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "accept_promotion_deferral" }>;
+      };
+    }
+  | {
+      kind: "require_consolidation_repair";
+      successor: "feedback_conception";
+      product: ConsolidationRepairProduct;
+    }
   | { kind: "accept_final_dossier"; successor: "reporting"; product: FinalDossierProduct }
   | {
       kind: "complete_promoted_work";
@@ -241,6 +270,14 @@ export type AcceptedTurnTransition =
       product: FinalDossierProduct;
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "close_promotion_frontier" }>;
+      };
+    }
+  | {
+      kind: "defer_promoted_work";
+      successor: "reporting";
+      product: FinalDossierProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "close_deferred_promotion_frontier" }>;
       };
     }
   | {

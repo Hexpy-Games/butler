@@ -14,6 +14,7 @@ import type {
   TargetStateRevision,
   WorkspaceRevision,
 } from "./contracts.ts";
+import { withTaskExecutionDeferral } from "../deferral/index.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_execution",
@@ -29,7 +30,7 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec: PhaseCodec<ResultCandidateProduct> = {
+const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Execution state");
     const value = requireRecord(submission, "Task Execution submission");
@@ -70,7 +71,7 @@ const codec: PhaseCodec<ResultCandidateProduct> = {
       result: { ref: contentRef("result-candidate", resultBody), ...resultBody },
     };
   },
-};
+});
 
 export function performTask(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
@@ -86,6 +87,24 @@ function promotionResult(
     throw new Error("Promotion Execution requires one exact promotion receipt");
   }
   const result = promoted[0]!;
+  if (!result.promotionRecords) {
+    throw new Error("Promotion Execution requires its durable transaction journal records");
+  }
+  assertSameRef(result.promotionRecords.transaction.ref, result.transactionRef, "transaction");
+  assertSameRef(
+    result.promotionRecords.commitReceipt.ref,
+    result.promotionReceiptRef,
+    "promotion receipt",
+  );
+  assertSameRef(
+    result.promotionRecords.promotedSnapshot.ref,
+    result.promotedSnapshotRef,
+    "promoted snapshot",
+  );
+  const closedJournal = result.promotionRecords.journals.at(-1);
+  if (!closedJournal || closedJournal.state !== "closed") {
+    throw new Error("Promotion Execution requires a closed forward journal");
+  }
   return {
     ...common,
     kind: "repository_promotion" as const,
@@ -94,8 +113,20 @@ function promotionResult(
     commitJournalRef: requireContentRef(result.commitJournalRef, "commitJournalRef"),
     promotionReceiptRef: requireContentRef(result.promotionReceiptRef, "promotionReceiptRef"),
     promotedSnapshotRef: requireContentRef(result.promotedSnapshotRef, "promotedSnapshotRef"),
+    promotionRecords: result.promotionRecords,
     artifactRevisionRefs: [] as ContentRef[],
   };
+}
+
+function assertSameRef(
+  actual: { id: string; sha256: string },
+  expected: unknown,
+  label: string,
+): void {
+  const ref = requireContentRef(expected, label);
+  if (actual.id !== ref.id || actual.sha256 !== ref.sha256) {
+    throw new Error(`Promotion ${label} record does not match its operation receipt`);
+  }
 }
 
 function workspaceResult(

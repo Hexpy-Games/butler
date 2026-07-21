@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   admission_snapshot_ref TEXT NOT NULL,
   model_selection_json TEXT NOT NULL,
   context_json TEXT NOT NULL,
+  continuation_snapshot_json TEXT NOT NULL,
   semantic_state TEXT NOT NULL,
   active_checkpoint_id TEXT,
   route TEXT,
@@ -118,6 +119,19 @@ CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (
   inserted_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS btcc_learning_sources (
+  source_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL UNIQUE,
+  final_payload_ref TEXT NOT NULL,
+  source_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_learning_candidate_outbox (
+  outbox_id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS btcc_opening_projections (
   turn_id TEXT PRIMARY KEY,
   projection_ref TEXT NOT NULL UNIQUE,
@@ -138,6 +152,9 @@ CREATE TABLE IF NOT EXISTS btcc_programs (
   pending_correction_plan_ref TEXT,
   promotion_assembly_refs_json TEXT,
   promotion_authorization_ref TEXT,
+  active_deferral_ref TEXT,
+  active_deferral_turn_id TEXT,
+  promotion_deferral_ref TEXT,
   frontier TEXT NOT NULL,
   manifest_revision INTEGER NOT NULL
 );
