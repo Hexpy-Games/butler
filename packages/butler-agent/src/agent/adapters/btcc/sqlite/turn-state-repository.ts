@@ -6,6 +6,7 @@ import { createWorkLedger, type WorkLedger } from "../../../btcc/gateway-api.ts"
 import { digest } from "./identity.ts";
 import { SqliteTransitionWriter } from "./transition-writer.ts";
 import { SqliteWorkLedgerStorage } from "./work-ledger/index.ts";
+import { SqliteStopController } from "./sqlite-stop-controller.ts";
 
 type TurnStateRepository = BtccRuntimeDependencies["turns"];
 type TurnRecord = NonNullable<Awaited<ReturnType<TurnStateRepository["findTurn"]>>>;
@@ -49,6 +50,7 @@ type CheckpointRow = {
 export class SqliteTurnStateRepository implements TurnStateRepository {
   private readonly transitions: SqliteTransitionWriter;
   private readonly workLedger: WorkLedger;
+  private readonly stops: SqliteStopController;
 
   constructor(
     private readonly db: Database,
@@ -56,6 +58,7 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
   ) {
     this.workLedger = createWorkLedger(new SqliteWorkLedgerStorage(db));
     this.transitions = new SqliteTransitionWriter(db, this.workLedger);
+    this.stops = new SqliteStopController(db);
   }
 
   async findTurn(turnId: string): Promise<TurnRecord | null> {
@@ -202,6 +205,10 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
 
   async commitTransition(input: CommitInput): Promise<void> {
     this.transitions.commit(input);
+  }
+
+  async stopTurn(turnId: string) {
+    return this.stops.stop(turnId);
   }
 
   private reloadManagedProgram(

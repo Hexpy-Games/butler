@@ -4,18 +4,23 @@ import type {
   PhaseConversationCommand,
   PhaseEnvelope,
 } from "./contracts.ts";
+import { OperationalInterruptionError } from "../recovery/index.ts";
 
 export async function runPhaseConversation<Product>(
   command: PhaseConversationCommand<Product>,
 ): Promise<Product> {
+  command.executionPermit.assertActive();
   const accepted = await command.store.loadAcceptedProduct<Product>(command.binding);
+  command.executionPermit.assertActive();
   if (accepted) return accepted;
 
   while (true) {
     const envelope = await assembleEnvelope(command);
-    const round = await command.model.runRound(envelope);
+    command.executionPermit.assertActive();
+    const round = await command.model.runRound(envelope, command.executionPermit.signal);
+    command.executionPermit.assertActive();
     if (round.kind === "interruption") {
-      throw new Error(`BTCC operational interruption: ${round.code}`);
+      throw new OperationalInterruptionError(round.code, command.binding);
     }
     assertActualModel(command.modelSelection, round.actualIdentity);
     if (round.kind === "operation_requests") {
@@ -23,11 +28,13 @@ export async function runPhaseConversation<Product>(
       continue;
     }
     const product = command.codec.decode(round.submission, envelope);
+    command.executionPermit.assertActive();
     await command.store.persistAcceptedProduct({
       binding: command.binding,
       product,
       actualIdentity: round.actualIdentity,
     });
+    command.executionPermit.assertActive();
     return product;
   }
 }
@@ -57,6 +64,7 @@ async function performRequestedObservations<Product>(
     envelope.operationResults.map((result) => [result.requestId, result.request]),
   );
   for (const request of requests) {
+    command.executionPermit.assertActive();
     assertAuthorizedOperation(request, command.operationAuthority);
     const existing = existingRequests.get(request.requestId);
     if (existing) {
@@ -65,7 +73,12 @@ async function performRequestedObservations<Product>(
       }
       continue;
     }
-    const observation = await command.operations.perform({ request, envelope });
+    const observation = await command.operations.perform({
+      request,
+      envelope,
+      signal: command.executionPermit.signal,
+    });
+    command.executionPermit.assertActive();
     if (observation.requestId !== request.requestId) {
       throw new Error("BTCC observation result does not match its request");
     }
@@ -75,6 +88,7 @@ async function performRequestedObservations<Product>(
       request,
       result,
     });
+    command.executionPermit.assertActive();
     existingRequests.set(request.requestId, request);
   }
 }

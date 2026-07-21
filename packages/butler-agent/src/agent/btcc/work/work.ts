@@ -1,5 +1,5 @@
-import { conception } from "../conception/index.ts";
 import type { ArtifactWorkspaceRuntime } from "../artifact/index.ts";
+import { conception } from "../conception/index.ts";
 import type { PhaseInvocation } from "../core/index.ts";
 import { execution } from "../execution/index.ts";
 import { planning } from "../planning/index.ts";
@@ -9,10 +9,10 @@ import {
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
-import { selectNextTaskOrClose } from "./select-next-task-or-close.ts";
 import { prepareTaskAttempt } from "./prepare-task-attempt.ts";
+import { selectNextTaskOrClose } from "./select-next-task-or-close.ts";
 
-type WorkCycleEvent = Extract<TurnEvent, {
+type WorkEvent = Extract<TurnEvent, {
   kind:
     | "WorkTaskSelected"
     | "WorkFrontierClosed"
@@ -29,24 +29,25 @@ type WorkCycleEvent = Extract<TurnEvent, {
     | "PromotionDeferralAccepted";
 }>;
 
-export function runWorkCycle(command: {
+export function work(command: {
   turn: TurnRecord;
   phase?: PhaseInvocation;
   artifacts: ArtifactWorkspaceRuntime;
-}): Promise<WorkCycleEvent> | WorkCycleEvent {
+}): Promise<WorkEvent> | WorkEvent {
   return command.turn.semanticState === "work_frontier"
-    ? advanceWorkFrontier(command.turn, command.artifacts)
-    : continueTaskFeedbackLoop({ turn: command.turn, phase: requirePhase(command) });
+    ? selectTaskOrCompleteWork(command.turn, command.artifacts)
+    : continueTaskCycle({ turn: command.turn, phase: requirePhase(command) });
 }
 
-async function advanceWorkFrontier(
+async function selectTaskOrCompleteWork(
   turn: TurnRecord,
   artifacts: ArtifactWorkspaceRuntime,
-): Promise<WorkCycleEvent> {
+): Promise<WorkEvent> {
+  const program = requireManagedProgram(turn);
   const decision = selectNextTaskOrClose({
     turnId: turn.turnId,
     turnRevision: turn.revision,
-    program: requireManagedProgram(turn),
+    program,
   });
   if (decision.kind === "close_frontier") {
     return { kind: "WorkFrontierClosed", promotionAssemblies: decision.promotionAssemblies };
@@ -60,17 +61,17 @@ async function advanceWorkFrontier(
   const attempt = await prepareTaskAttempt({
     turnId: turn.turnId,
     turnRevision: turn.revision,
-    program: requireManagedProgram(turn),
+    program,
     task: decision.task,
     artifacts,
   });
   return { kind: "WorkTaskSelected", attempt };
 }
 
-async function continueTaskFeedbackLoop(command: {
+async function continueTaskCycle(command: {
   turn: TurnRecord;
   phase: PhaseInvocation;
-}): Promise<WorkCycleEvent> {
+}): Promise<WorkEvent> {
   switch (command.turn.semanticState) {
     case "task_execution":
       return execution(command);
@@ -82,7 +83,7 @@ async function continueTaskFeedbackLoop(command: {
     case "feedback_planning_review":
       return planning({ ...command, cycle: "review_feedback" });
     default:
-      throw new Error(`Work Cycle cannot advance ${command.turn.semanticState}`);
+      throw new Error(`Work cannot advance ${command.turn.semanticState}`);
   }
 }
 
@@ -91,7 +92,7 @@ function requirePhase(command: {
   phase?: PhaseInvocation;
 }): PhaseInvocation {
   if (!command.phase) {
-    throw new Error(`Work Cycle phase is missing at ${command.turn.semanticState}`);
+    throw new Error(`Work phase is missing at ${command.turn.semanticState}`);
   }
   return command.phase;
 }

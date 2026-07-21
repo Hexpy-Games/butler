@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { BtccRuntimeDependencies } from "../../agent/btcc/index.ts";
 import { contentRef } from "../../agent/btcc/core/index.ts";
 
@@ -8,11 +10,26 @@ type OperationResult = Awaited<ReturnType<OperationExecutor["perform"]>>;
 
 export class HarnessOperationExecutor implements OperationExecutor {
   callCount = 0;
+  private readonly workspaceArtifacts = new Map<string, string>();
+  private promotedArtifact?: string;
+
+  constructor(private readonly dataRoot: string) {
+    this.restoreArtifactState();
+  }
+
+  artifactSnapshot() {
+    return {
+      workspace: Object.fromEntries(this.workspaceArtifacts),
+      promoted: this.promotedArtifact,
+    };
+  }
 
   async perform({ request }: PerformInput): Promise<OperationResult> {
     this.callCount += 1;
     if (request.kind === "repository_promotion") {
-      const content = "journaled complete-target promotion committed";
+      const content = this.requirePromotionCandidate();
+      this.promotedArtifact = content;
+      this.persistArtifactState();
       const transaction = record("repository-promotion-transaction", {
         requestId: request.requestId,
         authorizationRef: request.authorizationRef,
@@ -65,7 +82,9 @@ export class HarnessOperationExecutor implements OperationExecutor {
       };
     }
     if (request.kind === "workspace_artifact_action") {
-      const content = `workspace artifact: ${request.relativeTarget}`;
+      const content = request.input;
+      this.workspaceArtifacts.set(request.relativeTarget, content);
+      this.persistArtifactState();
       return {
         requestId: request.requestId,
         outcome: "workspace_artifact_applied",
@@ -76,7 +95,8 @@ export class HarnessOperationExecutor implements OperationExecutor {
       };
     }
     if (request.kind === "review_validation") {
-      const content = "isolated review validation passed";
+      const artifact = this.requireReviewSource();
+      const content = `validated artifact sha256:${digest(artifact)}`;
       return {
         requestId: request.requestId,
         outcome: "review_validated",
@@ -92,6 +112,43 @@ export class HarnessOperationExecutor implements OperationExecutor {
       observationRef: ref("harness-observation", request.requestId, content),
       content,
     };
+  }
+
+  private requireReviewSource(): string {
+    const artifact = [...this.workspaceArtifacts.values()].at(-1);
+    if (!artifact) throw new Error("Harness Review requires a materialized artifact");
+    return artifact;
+  }
+
+  private requirePromotionCandidate(): string {
+    const artifact = this.requireReviewSource();
+    if (artifact.length === 0) throw new Error("Harness promotion candidate is empty");
+    return artifact;
+  }
+
+  private restoreArtifactState(): void {
+    const path = this.statePath();
+    if (!existsSync(path)) return;
+    const state = JSON.parse(readFileSync(path, "utf8")) as {
+      workspace: Record<string, string>;
+      promoted?: string;
+    };
+    for (const [target, content] of Object.entries(state.workspace)) {
+      this.workspaceArtifacts.set(target, content);
+    }
+    this.promotedArtifact = state.promoted;
+  }
+
+  private persistArtifactState(): void {
+    const path = this.statePath();
+    const pending = `${path}.pending`;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(pending, JSON.stringify(this.artifactSnapshot()), "utf8");
+    renameSync(pending, path);
+  }
+
+  private statePath(): string {
+    return join(this.dataRoot, "runtime", "harness-artifacts.json");
   }
 }
 

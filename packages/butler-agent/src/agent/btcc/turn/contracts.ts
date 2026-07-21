@@ -322,7 +322,14 @@ export interface TurnStateRepository {
     claim: StateExecutionClaim;
     transition: AcceptedTurnTransition;
   }): Promise<void>;
+  stopTurn(turnId: string): Promise<StopPersistenceOutcome>;
 }
+
+export type StopPersistenceOutcome =
+  | { kind: "cancelled"; turnId: string }
+  | { kind: "already_cancelled"; turnId: string }
+  | { kind: "already_finalizing"; turnId: string }
+  | { kind: "already_delivered"; turnId: string; messageId: string; content: string };
 
 export type {
   ManagedTurnState,

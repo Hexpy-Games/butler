@@ -1,5 +1,6 @@
 import type { AdmittedModelSelection } from "../contracts.ts";
 import type { DeferredContinuationCandidate } from "../continuation/index.ts";
+import type { ExecutionPermit } from "../recovery/index.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -95,7 +96,7 @@ export type ProviderRoundValue =
     };
 
 export interface SelectedModel {
-  runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue>;
+  runRound(envelope: PhaseEnvelope, signal?: AbortSignal): Promise<ProviderRoundValue>;
 }
 
 export interface PhaseConversationStore {
@@ -184,6 +185,7 @@ export interface OperationExecutor {
   perform(input: {
     request: OperationRequest;
     envelope: PhaseEnvelope;
+    signal?: AbortSignal;
   }): Promise<ObservationResult>;
 }
 
@@ -201,6 +203,7 @@ export type PhaseConversationCommand<Product> = {
   model: SelectedModel;
   operations: OperationExecutor;
   operationAuthority: OperationAuthority;
+  executionPermit: ExecutionPermit;
 };
 
 export type PhaseInvocation = Pick<
@@ -212,4 +215,5 @@ export type PhaseInvocation = Pick<
   | "model"
   | "operations"
   | "operationAuthority"
+  | "executionPermit"
 >;

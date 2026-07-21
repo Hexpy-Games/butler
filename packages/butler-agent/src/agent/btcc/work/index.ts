@@ -1,2 +1,2 @@
-export { runWorkCycle } from "./run-work-cycle.ts";
+export { work } from "./work.ts";
 export type { ManagedAttempt } from "./contracts.ts";

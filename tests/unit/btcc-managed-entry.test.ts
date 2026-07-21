@@ -301,8 +301,33 @@ describe("BTCC managed executable ingress", () => {
       new Response(first.stdout).text(),
     ]);
     expect(firstExit).toBe(1);
-    expect(firstError).toContain("simulated process interruption");
+    expect(firstError).toContain("BTCC operational interruption: simulated_provider_unavailable");
     expect(firstOutput).toBe("");
+
+    const interruptedDb = new Database(
+      join(dataRoot, "runtime", "btcc-successor.sqlite"),
+      { readonly: true },
+    );
+    try {
+      const interruptedTurn = interruptedDb.query<{
+        semantic_state: string;
+        active_checkpoint_id: string;
+      }, []>(`
+        SELECT semantic_state, active_checkpoint_id FROM btcc_turns
+      `).get();
+      const activeClaims = interruptedDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_state_claims WHERE status = 'active'
+      `).get();
+      const waitingStates = interruptedDb.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_turns WHERE semantic_state = 'waiting_runtime'
+      `).get();
+      expect(interruptedTurn?.semantic_state).toBe("task_execution");
+      expect(interruptedTurn?.active_checkpoint_id).toBeTruthy();
+      expect(activeClaims?.count).toBe(1);
+      expect(waitingStates?.count).toBe(0);
+    } finally {
+      interruptedDb.close();
+    }
 
     const resumed = Bun.spawn(args, {
       cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",

@@ -16,7 +16,10 @@ export class RestartingManagedHarnessModel extends ManagedHarnessModel {
   override runRound(envelope: PhaseEnvelope) {
     if (envelope.phase === "task_execution" && !existsSync(this.marker)) {
       writeFileSync(this.marker, "interrupted\n", "utf8");
-      throw new Error("simulated process interruption before Task Execution");
+      return Promise.resolve({
+        kind: "interruption" as const,
+        code: "simulated_provider_unavailable",
+      });
     }
     return super.runRound(envelope);
   }

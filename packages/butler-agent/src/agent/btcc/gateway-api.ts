@@ -20,6 +20,7 @@ export type {
 } from "./work-ledger/index.ts";
 export type { LearningSourceScheduler } from "./delivery/index.ts";
 export type { BtccRuntimeDependencies, BtccTurnCommand } from "./contracts.ts";
+export type { StopPersistenceOutcome } from "./turn/index.ts";
 
 export type BtccPersistenceTypes = {
   transition: AcceptedTurnTransition;

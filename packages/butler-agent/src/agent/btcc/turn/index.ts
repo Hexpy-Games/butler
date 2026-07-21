@@ -27,3 +27,4 @@ export type {
   ManagedTurnState,
   ManagedProgramState,
 } from "./contracts.ts";
+export type { StopPersistenceOutcome } from "./contracts.ts";

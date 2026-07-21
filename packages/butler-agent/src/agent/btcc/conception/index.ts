@@ -3,6 +3,7 @@ export type {
   FeedbackIntentProduct,
   GoalContractAcceptedProduct,
   GoalContractCandidateProduct,
+  GoalContractRecord,
 } from "./managed-contracts.ts";
 export type {
   OpeningAnswerProduct,
