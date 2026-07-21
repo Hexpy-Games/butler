@@ -85,7 +85,10 @@ async function runHarness(options: HarnessOptions): Promise<void> {
       recentFeedbackRefs: options.feedbackRefs,
       mandatoryHotCacheRefs: options.hotCacheRefs,
       optionalHotCacheRefs: [],
-      baselineObservationScopeRefs: options.observationScopeRefs,
+      baselineObservationScopeRefs: [
+        `workspace:${options.data}`,
+        ...options.observationScopeRefs,
+      ],
     },
   };
   let initial;

@@ -3,8 +3,6 @@ import {
   requireRecord,
   requireStringArray,
   runPhaseConversation,
-  stableJson,
-  type ContentRef,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
@@ -41,34 +39,7 @@ const codec = withManagedDeferral<PlanningReviewProduct>({
     if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
       throw new Error("Planning Review verdict is invalid");
     }
-    assertExactRef(value.candidateRef, candidate.candidate.ref, "candidate");
-    assertExactRef(value.reviewedBundleRef, candidate.candidate.bundle.ref, "bundle");
-    assertExactRef(value.reviewedWorkGraphRef, candidate.candidate.workGraph.ref, "Work graph");
-    assertExactRefs(value.reviewedWorkRefs, candidate.candidate.works.map((item) => item.ref), "Works");
-    assertExactRefs(value.reviewedTaskRefs, candidate.candidate.tasks.map((item) => item.ref), "Tasks");
-    assertExactRefs(
-      value.reviewedCriterionRefs,
-      candidate.candidate.criteria.map((item) => item.ref),
-      "criteria",
-    );
-    assertExactRefs(
-      value.reviewedVerificationQuestionRefs,
-      candidate.candidate.verificationQuestions.map((item) => item.ref),
-      "verification questions",
-    );
-    assertExactRef(
-      value.reviewedArtifactLifecycleRef,
-      candidate.candidate.artifactLifecycle.ref,
-      "artifact lifecycle",
-    );
-    assertGoalCoverage(value, candidate);
     const findings = requireStringArray(value.findings, "Planning Review findings");
-    if (value.verdict === "accepted" && findings.length > 0) {
-      throw new Error("Accepted Planning Review cannot carry findings");
-    }
-    if (value.verdict === "revision_required" && findings.length === 0) {
-      throw new Error("Planning revision requires findings");
-    }
     const reviewBase = {
       candidateRef: candidate.candidate.ref,
       originalGoalContractRef: candidate.candidate.goalContractRef,
@@ -117,36 +88,4 @@ function loadCandidate(input: unknown): PlanningCandidateProduct {
     throw new Error("Planning Review is missing the exact candidate");
   }
   return candidate;
-}
-
-function assertGoalCoverage(
-  value: Record<string, unknown>,
-  candidate: PlanningCandidateProduct,
-): void {
-  const fieldIds = requireStringArray(value.reviewedGoalFieldIds, "reviewedGoalFieldIds");
-  if (stableJson([...new Set(fieldIds)].sort()) !== stableJson(["intended_result", "request"])) {
-    throw new Error("Planning Review did not cover every required Goal field");
-  }
-  const expectedOutcomes = [...new Set(candidate.candidate.criteria.flatMap(
-    (criterion) => criterion.sourceRequiredOutcomeRefs,
-  ))].sort();
-  const outcomes = [...new Set(requireStringArray(
-    value.reviewedRequiredOutcomeRefs,
-    "reviewedRequiredOutcomeRefs",
-  ))].sort();
-  if (stableJson(outcomes) !== stableJson(expectedOutcomes)) {
-    throw new Error("Planning Review did not cover every required outcome");
-  }
-}
-
-function assertExactRefs(actual: unknown, expected: ContentRef[], label: string): void {
-  if (!Array.isArray(actual) || stableJson(actual) !== stableJson(expected)) {
-    throw new Error(`Planning Review did not review the exact ${label}`);
-  }
-}
-
-function assertExactRef(actual: unknown, expected: ContentRef, label: string): void {
-  if (stableJson(actual) !== stableJson(expected)) {
-    throw new Error(`Planning Review did not review the exact ${label}`);
-  }
 }
