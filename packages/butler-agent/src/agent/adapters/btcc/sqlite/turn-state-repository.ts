@@ -27,6 +27,8 @@ type TurnRow = {
   active_checkpoint_id: string | null;
   route: string | null;
   opening_answer_json: string | null;
+  managed_state_json: string | null;
+  final_payload_json: string | null;
   delivery_outbox_id: string | null;
   canonical_assistant_message_id: string | null;
   revision: number;
@@ -84,10 +86,22 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
       context: JSON.parse(row.context_json),
       semanticState: row.semantic_state as TurnSemanticState,
       ...(checkpoint ? { checkpoint: hydrateCheckpoint(checkpoint) } : {}),
-      ...(row.route === "direct" ? { route: "direct" as const } : {}),
+      ...(row.route === "direct"
+        ? { route: "direct" as const }
+        : row.route === "managed"
+          ? { route: "managed" as const }
+          : {}),
       ...(row.opening_answer_json
         ? { openingAnswer: JSON.parse(row.opening_answer_json) }
         : {}),
+      ...(row.managed_state_json
+        ? { managed: JSON.parse(row.managed_state_json) }
+        : {}),
+      ...(row.final_payload_json
+        ? { finalPayload: JSON.parse(row.final_payload_json) }
+        : row.opening_answer_json
+          ? { finalPayload: JSON.parse(row.opening_answer_json).finalPayload }
+          : {}),
       ...(outbox
         ? {
             deliveryOutbox: {

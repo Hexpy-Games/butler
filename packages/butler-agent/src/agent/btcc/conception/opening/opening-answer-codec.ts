@@ -1,17 +1,20 @@
-import { createHash } from "node:crypto";
 import type {
   OpeningContext,
   PhaseCodec,
 } from "../../core/index.ts";
+import { contentRef, digest } from "../../core/index.ts";
 import type {
-  ContentRef,
   DirectAnswerSubmission,
-  OpeningAnswerProduct,
+  OpeningContinuationProduct,
+  OpeningProduct,
   PersonalizationApplication,
 } from "./contracts.ts";
 
-export const openingAnswerCodec: PhaseCodec<OpeningAnswerProduct> = {
+export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
   decode(submission, envelope) {
+    if (isRecord(submission) && submission.kind === "opening_continuation") {
+      return decodeOpeningContinuation(submission, envelope.binding.turnId);
+    }
     const answer = decodeDirectAnswer(submission);
     const expectedPersonalization = personalizationRefs(envelope.context);
     assertExactPersonalization(answer.personalizationApplications, expectedPersonalization);
@@ -94,6 +97,29 @@ export const openingAnswerCodec: PhaseCodec<OpeningAnswerProduct> = {
     };
   },
 };
+
+function decodeOpeningContinuation(
+  value: Record<string, unknown>,
+  turnId: string,
+): OpeningContinuationProduct {
+  if (!isNonEmptyString(value.message)) {
+    throw new Error("Opening continuation message is invalid");
+  }
+  const body = {
+    turnId,
+    content: value.message,
+    contentSha256: digest(value.message),
+  };
+  return {
+    kind: "opening_continuation",
+    route: "managed",
+    projection: {
+      ref: contentRef("opening-projection", body),
+      content: value.message,
+      contentSha256: body.contentSha256,
+    },
+  };
+}
 
 function decodeDirectAnswer(value: unknown): DirectAnswerSubmission {
   if (!isRecord(value) || value.kind !== "direct_answer") {
@@ -196,15 +222,6 @@ function assertExactPersonalization(
   if (new Set(actual).size !== actual.length || JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error("Opening answer did not account for the exact Butler context");
   }
-}
-
-function contentRef(kind: string, body: unknown): ContentRef {
-  const sha256 = digest(JSON.stringify(body));
-  return { id: digest(`btcc-${kind}.v1\0${sha256}`), sha256 };
-}
-
-function digest(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

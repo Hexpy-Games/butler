@@ -1,12 +1,11 @@
 import type { AdmittedModelSelection } from "../../contracts.ts";
 import type {
+  ContentRef,
   OpeningContext,
   PhaseConversationStore,
   PhaseRunBinding,
   SelectedModel,
 } from "../../core/index.ts";
-
-export type ContentRef = { id: string; sha256: string };
 
 export type OpeningAnswerProduct = {
   kind: "opening_answer";
@@ -52,6 +51,18 @@ export type OpeningAnswerProduct = {
   };
 };
 
+export type OpeningContinuationProduct = {
+  kind: "opening_continuation";
+  route: "managed";
+  projection: {
+    ref: ContentRef;
+    content: string;
+    contentSha256: string;
+  };
+};
+
+export type OpeningProduct = OpeningAnswerProduct | OpeningContinuationProduct;
+
 export type PersonalizationApplication = {
   ref: string;
   decision: "applied" | "not_applicable";
@@ -75,6 +86,11 @@ export type DirectAnswerSubmission = {
     personalizationVerdicts: PersonalizationVerdict[];
     verdict: "accepted";
   };
+};
+
+export type OpeningContinuationSubmission = {
+  kind: "opening_continuation";
+  message: string;
 };
 
 export type OpenConceptionCommand = {

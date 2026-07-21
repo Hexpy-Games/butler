@@ -12,4 +12,5 @@ export type {
   TurnAdmissionRepository,
   TurnStateRepository,
   TurnSemanticState,
+  ManagedTurnState,
 } from "./contracts.ts";

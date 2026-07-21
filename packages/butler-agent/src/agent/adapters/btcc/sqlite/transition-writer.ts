@@ -4,6 +4,7 @@ import type {
 } from "../../../btcc/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
+import { SqliteManagedTransitionWriter } from "./managed-transition-writer.ts";
 
 type TurnStateRepository = BtccRuntimeDependencies["turns"];
 type CommitInput = Parameters<TurnStateRepository["commitTransition"]>[0];
@@ -15,9 +16,11 @@ type TurnSemanticState = TurnRecord["semanticState"];
 
 export class SqliteTransitionWriter {
   private readonly records: SqliteImmutableRecordStore;
+  private readonly managed: SqliteManagedTransitionWriter;
 
   constructor(private readonly db: Database) {
     this.records = new SqliteImmutableRecordStore(db);
+    this.managed = new SqliteManagedTransitionWriter(db);
   }
 
   commit(input: CommitInput): void {
@@ -35,6 +38,9 @@ export class SqliteTransitionWriter {
           return;
         case "observe_delivery":
           this.observeDelivery(input.turn, nextRevision, input.transition);
+          return;
+        default:
+          this.managed.commit(input.turn, nextRevision, input.transition);
           return;
       }
     });
@@ -70,13 +76,14 @@ export class SqliteTransitionWriter {
     );
     const updated = this.db.query(`
       UPDATE btcc_turns SET semantic_state = ?, active_checkpoint_id = ?,
-        route = 'direct', opening_answer_json = ?, delivery_outbox_id = ?,
-        revision = ?, final_disposition = 'completed'
+        route = 'direct', opening_answer_json = ?, final_payload_json = ?,
+        delivery_outbox_id = ?, revision = ?, final_disposition = 'completed'
       WHERE turn_id = ? AND revision = ?
     `).run(
       transition.successor,
       checkpoint.checkpointId,
       stableJson(transition.product),
+      stableJson(transition.product.finalPayload),
       outbox.outboxId,
       nextRevision,
       turn.turnId,
