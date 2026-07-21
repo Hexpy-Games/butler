@@ -51,3 +51,30 @@ export type ManagedTurnState = {
   finalDossier?: FinalDossierProduct;
   preparedReport?: PreparedReportProduct;
 };
+
+export function requireManagedState(turn: {
+  semanticState: string;
+  managed?: ManagedTurnState;
+}): ManagedTurnState {
+  if (!turn.managed) {
+    throw new Error(`Managed BTCC state is missing at ${turn.semanticState}`);
+  }
+  return turn.managed;
+}
+
+export function requireManagedProgram(turn: {
+  semanticState: string;
+  managed?: ManagedTurnState;
+}): ManagedProgramState {
+  const program = requireManagedState(turn).program;
+  if (!program) throw new Error(`Managed Program is missing at ${turn.semanticState}`);
+  return program;
+}
+
+export function requireCurrentAttempt(program: ManagedProgramState): ManagedAttempt {
+  const attempt = program.attempts.at(-1);
+  if (!attempt || attempt.status !== "ready") {
+    throw new Error("Task Execution requires the current ready Attempt");
+  }
+  return attempt;
+}

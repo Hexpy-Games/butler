@@ -1,4 +1,5 @@
 import type {
+  ObservationExecutor,
   PhaseConversationStore,
   SelectedModel,
 } from "./core/index.ts";
@@ -25,6 +26,7 @@ export type ButlerContextInput = {
   recentFeedbackRefs: string[];
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
+  baselineObservationScopeRefs: string[];
 };
 
 export type BtccTurnCommand =
@@ -54,5 +56,6 @@ export type BtccRuntimeDependencies = {
   turns: TurnStateRepository;
   phaseConversations: PhaseConversationStore;
   model: SelectedModel;
+  operations: ObservationExecutor;
   messages: CanonicalMessageStore;
 };

@@ -86,8 +86,8 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
       context: JSON.parse(row.context_json),
       semanticState: row.semantic_state as TurnSemanticState,
       ...(checkpoint ? { checkpoint: hydrateCheckpoint(checkpoint) } : {}),
-      ...(row.route === "direct"
-        ? { route: "direct" as const }
+      ...(row.route === "direct" || row.route === "assisted"
+        ? { route: row.route }
         : row.route === "managed"
           ? { route: "managed" as const }
           : {}),

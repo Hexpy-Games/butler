@@ -1,4 +1,5 @@
 export { runPhaseConversation } from "./run-phase-conversation.ts";
+export { withPhaseState } from "./with-phase-state.ts";
 export {
   contentRef,
   digest,
@@ -21,6 +22,11 @@ export type {
   PhaseInvocation,
   PhaseRunBinding,
   ModelPhaseState,
+  ObservationExecutor,
+  ObservationResult,
+  OperationAuthority,
+  OperationRequest,
+  OperationResult,
   ProviderRoundValue,
   SelectedModel,
 } from "./contracts.ts";

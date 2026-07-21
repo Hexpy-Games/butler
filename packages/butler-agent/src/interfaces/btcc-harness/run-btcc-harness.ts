@@ -7,7 +7,12 @@ import type {
   ReasoningEffort,
 } from "../../agent/btcc/index.ts";
 import { DirectHarnessModel } from "./direct-harness-model.ts";
+import { HarnessObservationExecutor } from "./harness-observation-executor.ts";
 import { ManagedHarnessModel } from "./managed-harness-model.ts";
+import {
+  NoLedgerHarnessModel,
+  type NoLedgerScenario,
+} from "./no-ledger-harness-model.ts";
 
 type HarnessOptions = {
   data: string;
@@ -18,19 +23,21 @@ type HarnessOptions = {
   model: string;
   effort: ReasoningEffort;
   profileRefs: string[];
+  feedbackRefs: string[];
   hotCacheRefs: string[];
+  observationScopeRefs: string[];
   replay: boolean;
-  scenario: "direct" | "managed-pass" | "managed-review-repair";
+  scenario: "direct" | "managed-pass" | "managed-review-repair" | NoLedgerScenario;
 };
 
 async function runHarness(options: HarnessOptions): Promise<void> {
-  const model = options.scenario === "direct"
-    ? new DirectHarnessModel()
-    : new ManagedHarnessModel(options.scenario === "managed-review-repair");
+  const model = createHarnessModel(options.scenario);
+  const operations = new HarnessObservationExecutor();
   const runtime = createBtccComposition({
     dbPath: join(options.data, "runtime", "btcc-successor.sqlite"),
     ownerId: `btcc-harness:${process.pid}`,
     model,
+    operations,
   });
   const controls = { reasoningEffort: options.effort };
   const messageId = digest(`btcc-user-message.v1\0${options.sessionId}\0${options.message}`);
@@ -50,9 +57,10 @@ async function runHarness(options: HarnessOptions): Promise<void> {
     context: {
       userRef: "user:off-production-harness",
       profileRefs: options.profileRefs,
-      recentFeedbackRefs: [],
+      recentFeedbackRefs: options.feedbackRefs,
       mandatoryHotCacheRefs: options.hotCacheRefs,
       optionalHotCacheRefs: [],
+      baselineObservationScopeRefs: options.observationScopeRefs,
     },
   };
   const initial = await runtime.handle(command);
@@ -61,6 +69,7 @@ async function runHarness(options: HarnessOptions): Promise<void> {
     initial,
     replay,
     modelCalls: model.callCount,
+    operationCalls: operations.callCount,
     phases: model.phases,
     selectedModel: {
       provider: command.modelSelection.provider,
@@ -99,7 +108,9 @@ function parseOptions(argv: string[]): HarnessOptions {
     model: required(values, "--model"),
     effort,
     profileRefs: optionalMany(values, "--profile-ref"),
+    feedbackRefs: optionalMany(values, "--feedback-ref"),
     hotCacheRefs: optionalMany(values, "--hot-cache-ref"),
+    observationScopeRefs: optionalMany(values, "--observation-scope"),
     replay,
     scenario: parseScenario(values.get("--scenario")),
   };
@@ -108,7 +119,21 @@ function parseOptions(argv: string[]): HarnessOptions {
 function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
   if (value === undefined || value === "direct") return "direct";
   if (value === "managed-pass" || value === "managed-review-repair") return value;
+  if (
+    value === "direct-greeting" ||
+    value === "direct-translation" ||
+    value === "assisted-weather" ||
+    value === "assisted-research"
+  ) return value;
   throw new Error(`Invalid BTCC harness scenario: ${value}`);
+}
+
+function createHarnessModel(scenario: HarnessOptions["scenario"]) {
+  if (scenario === "direct") return new DirectHarnessModel();
+  if (scenario === "managed-pass" || scenario === "managed-review-repair") {
+    return new ManagedHarnessModel(scenario === "managed-review-repair");
+  }
+  return new NoLedgerHarnessModel(scenario);
 }
 
 function required(values: Map<string, string>, key: string): string {

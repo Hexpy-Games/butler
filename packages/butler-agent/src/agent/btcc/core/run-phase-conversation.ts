@@ -1,4 +1,6 @@
 import type {
+  OperationAuthority,
+  OperationRequest,
   PhaseConversationCommand,
   PhaseEnvelope,
 } from "./contracts.ts";
@@ -9,24 +11,95 @@ export async function runPhaseConversation<Product>(
   const accepted = await command.store.loadAcceptedProduct<Product>(command.binding);
   if (accepted) return accepted;
 
-  const envelope: PhaseEnvelope = {
+  while (true) {
+    const envelope = await assembleEnvelope(command);
+    const round = await command.model.runRound(envelope);
+    if (round.kind === "interruption") {
+      throw new Error(`BTCC operational interruption: ${round.code}`);
+    }
+    assertActualModel(command.modelSelection, round.actualIdentity);
+    if (round.kind === "operation_requests") {
+      await performRequestedObservations(command, envelope, round.requests);
+      continue;
+    }
+    const product = command.codec.decode(round.submission, envelope);
+    await command.store.persistAcceptedProduct({
+      binding: command.binding,
+      product,
+      actualIdentity: round.actualIdentity,
+    });
+    return product;
+  }
+}
+
+async function assembleEnvelope<Product>(
+  command: PhaseConversationCommand<Product>,
+): Promise<PhaseEnvelope> {
+  return {
     binding: command.binding,
     ...command.phaseContract,
     modelSelection: command.modelSelection,
     context: command.context,
+    operationAuthority: command.operationAuthority,
+    operationResults: await command.store.loadOperationResults(command.binding),
   };
-  const round = await command.model.runRound(envelope);
-  if (round.kind === "interruption") {
-    throw new Error(`BTCC operational interruption: ${round.code}`);
+}
+
+async function performRequestedObservations<Product>(
+  command: PhaseConversationCommand<Product>,
+  envelope: PhaseEnvelope,
+  requests: OperationRequest[],
+): Promise<void> {
+  if (requests.length === 0) {
+    throw new Error("BTCC operation request carrier must not be empty");
   }
-  assertActualModel(command.modelSelection, round.actualIdentity);
-  const product = command.codec.decode(round.submission, envelope);
-  await command.store.persistAcceptedProduct({
-    binding: command.binding,
-    product,
-    actualIdentity: round.actualIdentity,
-  });
-  return product;
+  const existingRequests = new Map(
+    envelope.operationResults.map((result) => [result.requestId, result.request]),
+  );
+  for (const request of requests) {
+    assertAuthorizedObservation(request, command.operationAuthority);
+    const existing = existingRequests.get(request.requestId);
+    if (existing) {
+      if (!sameRequest(existing, request)) {
+        throw new Error("BTCC operation request identity conflict");
+      }
+      continue;
+    }
+    const observation = await command.operations.perform({ request, envelope });
+    if (observation.requestId !== request.requestId) {
+      throw new Error("BTCC observation result does not match its request");
+    }
+    const result = { ...observation, request };
+    await command.store.appendOperationResult({
+      binding: command.binding,
+      request,
+      result,
+    });
+    existingRequests.set(request.requestId, request);
+  }
+}
+
+function sameRequest(
+  left: OperationRequest,
+  right: OperationRequest,
+): boolean {
+  return left.requestId === right.requestId &&
+    left.kind === right.kind &&
+    left.capabilityRef === right.capabilityRef &&
+    left.scopeRef === right.scopeRef &&
+    left.input === right.input;
+}
+
+function assertAuthorizedObservation(
+  request: OperationRequest,
+  authority: OperationAuthority,
+): void {
+  if (
+    request.kind !== "observe" ||
+    !authority.observationScopeRefs.includes(request.scopeRef)
+  ) {
+    throw new Error("BTCC phase requested an operation outside its admitted authority");
+  }
 }
 
 function assertActualModel(

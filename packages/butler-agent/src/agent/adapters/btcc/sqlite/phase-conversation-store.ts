@@ -2,12 +2,16 @@ import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
 } from "../../../btcc/index.ts";
-import { stableJson } from "./identity.ts";
+import { digest, stableJson } from "./identity.ts";
 
 type PhaseConversationStore = BtccRuntimeDependencies["phaseConversations"];
 type PhaseRunBinding = Parameters<PhaseConversationStore["loadAcceptedProduct"]>[0];
 type PersistInput = Parameters<PhaseConversationStore["persistAcceptedProduct"]>[0];
 type ActualModelIdentity = PersistInput["actualIdentity"];
+type OperationResult = Awaited<
+  ReturnType<PhaseConversationStore["loadOperationResults"]>
+>[number];
+type AppendOperationInput = Parameters<PhaseConversationStore["appendOperationResult"]>[0];
 
 type ProductRow = {
   accepted_product_json: string | null;
@@ -54,6 +58,55 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         input.binding.checkpointRevision,
         input.binding.claimId,
       );
+    });
+    transaction();
+  }
+
+  async loadOperationResults(binding: PhaseRunBinding): Promise<OperationResult[]> {
+    this.loadCheckpoint(binding);
+    return this.db.query<{ result_json: string }, [string, number]>(`
+      SELECT result_json FROM btcc_phase_operation_results
+      WHERE checkpoint_id = ? AND checkpoint_revision = ?
+      ORDER BY rowid
+    `).all(binding.checkpointId, binding.checkpointRevision)
+      .map(({ result_json }) => JSON.parse(result_json) as OperationResult);
+  }
+
+  async appendOperationResult(input: AppendOperationInput): Promise<void> {
+    const requestJson = stableJson(input.request);
+    const resultJson = stableJson(input.result);
+    if (stableJson(input.result.request) !== requestJson) {
+      throw new Error("BTCC operation result embeds a different request");
+    }
+    const operationId = digest(
+      `btcc-phase-operation.v1\0${input.binding.checkpointId}` +
+      `\0${input.binding.checkpointRevision}\0${input.request.requestId}`,
+    );
+    const transaction = this.db.transaction(() => {
+      this.loadCheckpoint(input.binding);
+      this.db.query(`
+        INSERT OR IGNORE INTO btcc_phase_operation_results (
+          operation_id, checkpoint_id, checkpoint_revision,
+          request_id, request_json, result_json
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        operationId,
+        input.binding.checkpointId,
+        input.binding.checkpointRevision,
+        input.request.requestId,
+        requestJson,
+        resultJson,
+      );
+      const row = this.db.query<{
+        request_json: string;
+        result_json: string;
+      }, [string]>(`
+        SELECT request_json, result_json FROM btcc_phase_operation_results
+        WHERE operation_id = ?
+      `).get(operationId);
+      if (row?.request_json !== requestJson || row.result_json !== resultJson) {
+        throw new Error("BTCC operation request identity conflict");
+      }
     });
     transaction();
   }

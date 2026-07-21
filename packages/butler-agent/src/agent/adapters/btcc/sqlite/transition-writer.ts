@@ -76,12 +76,13 @@ export class SqliteTransitionWriter {
     );
     const updated = this.db.query(`
       UPDATE btcc_turns SET semantic_state = ?, active_checkpoint_id = ?,
-        route = 'direct', opening_answer_json = ?, final_payload_json = ?,
+        route = ?, opening_answer_json = ?, final_payload_json = ?,
         delivery_outbox_id = ?, revision = ?, final_disposition = 'completed'
       WHERE turn_id = ? AND revision = ?
     `).run(
       transition.successor,
       checkpoint.checkpointId,
+      transition.product.route,
       stableJson(transition.product),
       stableJson(transition.product.finalPayload),
       outbox.outboxId,

@@ -90,6 +90,16 @@ CREATE TABLE IF NOT EXISTS btcc_state_claims (
   UNIQUE(turn_id, turn_revision, semantic_state)
 );
 
+CREATE TABLE IF NOT EXISTS btcc_phase_operation_results (
+  operation_id TEXT PRIMARY KEY,
+  checkpoint_id TEXT NOT NULL,
+  checkpoint_revision INTEGER NOT NULL,
+  request_id TEXT NOT NULL,
+  request_json TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  UNIQUE(checkpoint_id, checkpoint_revision, request_id)
+);
+
 CREATE TABLE IF NOT EXISTS btcc_delivery_outbox (
   outbox_id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL UNIQUE,

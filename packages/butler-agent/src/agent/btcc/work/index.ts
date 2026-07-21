@@ -1,2 +1,2 @@
-export { selectNextTaskOrClose } from "./select-next-task-or-close.ts";
-export type { ManagedAttempt, WorkFrontierDecision } from "./contracts.ts";
+export { runWorkCycle } from "./run-work-cycle.ts";
+export type { ManagedAttempt } from "./contracts.ts";

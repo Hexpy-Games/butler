@@ -4,11 +4,11 @@ import type { PlanningAcceptedProduct } from "./planning/index.ts";
 import type { TaskReviewProduct } from "./review/index.ts";
 import type {
   AcceptedTurnTransition,
+  ManagedProgramState,
   ManagedTurnState,
   TurnRecord,
   TurnSemanticState,
 } from "./turn/index.ts";
-import type { ManagedProgramState } from "./turn/managed-turn-state.ts";
 import type { ManagedAttempt } from "./work/index.ts";
 
 export type BtccPersistenceTypes = {

@@ -69,7 +69,7 @@ export type TurnRecord = {
   context: ButlerContextInput;
   semanticState: TurnSemanticState;
   checkpoint?: TurnCheckpoint;
-  route?: "direct" | "managed";
+  route?: "direct" | "assisted" | "managed";
   openingAnswer?: OpeningAnswerProduct;
   managed?: ManagedTurnState;
   finalPayload?: {
@@ -193,4 +193,7 @@ export interface TurnStateRepository {
   }): Promise<void>;
 }
 
-export type { ManagedTurnState } from "./managed-turn-state.ts";
+export type {
+  ManagedProgramState,
+  ManagedTurnState,
+} from "./managed-turn-state.ts";
