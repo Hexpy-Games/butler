@@ -2,8 +2,10 @@ import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
 } from "../../../btcc/index.ts";
+import { createWorkLedger, type WorkLedger } from "../../../btcc/index.ts";
 import { digest } from "./identity.ts";
 import { SqliteTransitionWriter } from "./transition-writer.ts";
+import { SqliteWorkLedgerStorage } from "./work-ledger/index.ts";
 
 type TurnStateRepository = BtccRuntimeDependencies["turns"];
 type TurnRecord = NonNullable<Awaited<ReturnType<TurnStateRepository["findTurn"]>>>;
@@ -45,12 +47,14 @@ type CheckpointRow = {
 
 export class SqliteTurnStateRepository implements TurnStateRepository {
   private readonly transitions: SqliteTransitionWriter;
+  private readonly workLedger: WorkLedger;
 
   constructor(
     private readonly db: Database,
     private readonly ownerId: string,
   ) {
-    this.transitions = new SqliteTransitionWriter(db);
+    this.workLedger = createWorkLedger(new SqliteWorkLedgerStorage(db));
+    this.transitions = new SqliteTransitionWriter(db, this.workLedger);
   }
 
   async findTurn(turnId: string): Promise<TurnRecord | null> {
@@ -75,6 +79,9 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
         }, [string]>("SELECT * FROM btcc_delivery_outbox WHERE outbox_id = ?")
           .get(row.delivery_outbox_id)
       : null;
+    const managed = row.managed_state_json
+      ? this.reloadManagedProgram(JSON.parse(row.managed_state_json))
+      : undefined;
     return {
       turnId: row.turn_id,
       sessionId: row.session_id,
@@ -94,9 +101,7 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
       ...(row.opening_answer_json
         ? { openingAnswer: JSON.parse(row.opening_answer_json) }
         : {}),
-      ...(row.managed_state_json
-        ? { managed: JSON.parse(row.managed_state_json) }
-        : {}),
+      ...(managed ? { managed } : {}),
       ...(row.final_payload_json
         ? { finalPayload: JSON.parse(row.final_payload_json) }
         : row.opening_answer_json
@@ -195,6 +200,17 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
 
   async commitTransition(input: CommitInput): Promise<void> {
     this.transitions.commit(input);
+  }
+
+  private reloadManagedProgram(
+    managed: NonNullable<TurnRecord["managed"]>,
+  ): NonNullable<TurnRecord["managed"]> {
+    const programId = managed.programId
+      ?? managed.program?.programId
+      ?? managed.planningAcceptance?.candidate.programId;
+    if (!programId) return managed;
+    const program = this.workLedger.loadProgram(programId);
+    return program ? { ...managed, programId, program } : managed;
   }
 }
 

@@ -128,11 +128,14 @@ CREATE TABLE IF NOT EXISTS btcc_opening_projections (
 CREATE TABLE IF NOT EXISTS btcc_programs (
   program_id TEXT PRIMARY KEY,
   ledger_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   goal_contract_ref TEXT NOT NULL,
   authority_ref TEXT NOT NULL,
   accepted_plan_ref TEXT,
   planning_review_ref TEXT,
+  pending_correction_plan_ref TEXT,
   frontier TEXT NOT NULL,
   manifest_revision INTEGER NOT NULL
 );
@@ -163,8 +166,33 @@ CREATE TABLE IF NOT EXISTS btcc_attempts (
   previous_attempt_id TEXT,
   correction_plan_ref TEXT,
   execution_target_ref TEXT NOT NULL,
+  execution_target_binding_ref TEXT NOT NULL,
   status TEXT NOT NULL,
   result_ref TEXT,
   review_ref TEXT
+);
+
+CREATE TABLE IF NOT EXISTS btcc_ledger_claims (
+  claim_id TEXT PRIMARY KEY,
+  ledger_id TEXT NOT NULL,
+  program_id TEXT NOT NULL,
+  base_manifest_revision INTEGER NOT NULL,
+  turn_id TEXT NOT NULL,
+  turn_revision INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  UNIQUE(ledger_id, program_id, base_manifest_revision)
+);
+
+CREATE TABLE IF NOT EXISTS btcc_ledger_mutations (
+  mutation_id TEXT PRIMARY KEY,
+  ledger_id TEXT NOT NULL,
+  program_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  turn_revision INTEGER NOT NULL,
+  mutation_kind TEXT NOT NULL,
+  mutation_json TEXT NOT NULL,
+  base_manifest_revision INTEGER NOT NULL,
+  next_manifest_revision INTEGER NOT NULL,
+  UNIQUE(ledger_id, program_id, next_manifest_revision)
 );
 `;

@@ -59,15 +59,23 @@ const codec: PhaseCodec<GoalContractAcceptedProduct> = {
       reviewedOutcomeIds,
       verdict: "accepted" as const,
     };
+    const inboxId = requireStringState(envelope.context.stateInput, "inboxId");
     const sessionId = requireStringState(envelope.context.stateInput, "sessionId");
+    const projectRef = optionalStringState(envelope.context.stateInput, "projectRef");
+    const ledgerScope = projectRef
+      ? { kind: "project" as const, projectRef }
+      : { kind: "session" as const, sessionId };
+    const ledgerId = projectRef
+      ? digest(`btcc-project-ledger.v1\0${projectRef}`)
+      : digest(`btcc-session-ledger.v1\0${sessionId}`);
     const authorityBody = {
       goalContractRef: candidate.candidate.proposedContract.ref,
       route: "managed" as const,
-      ledgerScope: { kind: "session" as const, sessionId },
+      ledgerScope,
       managedBinding: {
-        ledgerId: digest(`btcc-session-ledger.v1\0${sessionId}`),
+        ledgerId,
         programId: digest(
-          `btcc-program.v1\0${envelope.binding.turnId}\0${candidate.candidate.proposedContract.ref.sha256}`,
+          `btcc-program.v1\0${ledgerId}\0${inboxId}\0${envelope.binding.turnId}\0${candidate.candidate.proposedContract.ref.sha256}`,
         ),
       },
     };
@@ -111,6 +119,15 @@ function requireStringState(input: unknown, key: string): string {
   const value = requireRecord(input, "Contract Review state input")[key];
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`Contract Review state input is missing ${key}`);
+  }
+  return value;
+}
+
+function optionalStringState(input: unknown, key: string): string | undefined {
+  const value = requireRecord(input, "Contract Review state input")[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Contract Review state input has an invalid ${key}`);
   }
   return value;
 }

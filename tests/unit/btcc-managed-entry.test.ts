@@ -93,20 +93,33 @@ describe("BTCC managed executable ingress", () => {
         route: string;
         goal_contract_ref: string;
         final_dossier_ref: string;
+        managed_state_json: string;
       }, [string]>(`
-        SELECT semantic_state, route, goal_contract_ref, final_dossier_ref
+        SELECT semantic_state, route, goal_contract_ref, final_dossier_ref,
+          managed_state_json
         FROM btcc_turns WHERE turn_id = ?
       `).get(turnId);
       const program = db.query<{
         goal_contract_ref: string;
         frontier: string;
-      }, []>("SELECT goal_contract_ref, frontier FROM btcc_programs").get();
+        scope_kind: string;
+        manifest_revision: number;
+      }, []>(`
+        SELECT goal_contract_ref, frontier, scope_kind, manifest_revision
+        FROM btcc_programs
+      `).get();
       const task = db.query<{ status: string }, []>(
         "SELECT status FROM btcc_tasks",
       ).get();
       const attempts = db.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_attempts",
       ).get();
+      const ledgerMutations = db.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_ledger_mutations",
+      ).get();
+      const promotedClaims = db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_ledger_claims WHERE status = 'promoted'
+      `).get();
       const openingProjection = db.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_opening_projections",
       ).get();
@@ -129,7 +142,15 @@ describe("BTCC managed executable ingress", () => {
       expect(turn?.route).toBe("managed");
       expect(turn?.goal_contract_ref).toBe(program?.goal_contract_ref);
       expect(turn?.final_dossier_ref).toBeTruthy();
+      const persistedManaged = JSON.parse(turn!.managed_state_json);
+      expect(persistedManaged.program).toBeUndefined();
+      expect(persistedManaged.programId).toBeTruthy();
       expect(program?.frontier).toBe("closed");
+      expect(program?.scope_kind).toBe("session");
+      const expectedManifestRevision = scenario === "managed-pass" ? 6 : 10;
+      expect(program?.manifest_revision).toBe(expectedManifestRevision);
+      expect(ledgerMutations?.count).toBe(expectedManifestRevision);
+      expect(promotedClaims?.count).toBe(expectedManifestRevision);
       expect(task?.status).toBe("accepted");
       expect(attempts?.count).toBe(expectedAttempts);
       expect(openingProjection?.count).toBe(1);
@@ -142,6 +163,118 @@ describe("BTCC managed executable ingress", () => {
         expect(attemptRows[1]?.previous_attempt_id).toBe(attemptRows[0]?.attempt_id);
         expect(attemptRows[1]?.correction_plan_ref).toBeTruthy();
       }
+    } finally {
+      db.close();
+    }
+  });
+
+  test("binds project work from structural context without changing the algorithm", async () => {
+    const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-project-ledger-"));
+    temporaryRoots.push(dataRoot);
+    const harness = resolve(
+      import.meta.dir,
+      "../../packages/butler-agent/src/interfaces/btcc-harness/run-btcc-harness.ts",
+    );
+    const child = Bun.spawn([
+      process.execPath,
+      "run",
+      harness,
+      "--data", dataRoot,
+      "--turn", "turn-project-managed",
+      "--session", "session-project-managed",
+      "--project-ref", "project:sandybot",
+      "--message", "운영 가이드를 조사해서 작성해줘.",
+      "--provider", "harness",
+      "--model", "managed-v1",
+      "--effort", "medium",
+      "--scenario", "managed-pass",
+    ], { cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe" });
+    const [exitCode, stderr, stdout] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
+    ]);
+    expect(stderr).toBe("");
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('"kind":"delivered"');
+
+    const db = new Database(join(dataRoot, "runtime", "btcc-successor.sqlite"), {
+      readonly: true,
+    });
+    try {
+      const program = db.query<{
+        scope_kind: string;
+        scope_id: string;
+        manifest_revision: number;
+      }, []>(`
+        SELECT scope_kind, scope_id, manifest_revision FROM btcc_programs
+      `).get();
+      expect(program).toEqual({
+        scope_kind: "project",
+        scope_id: "project:sandybot",
+        manifest_revision: 6,
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  test("restarts from the selected Attempt without duplicating Ledger mutation", async () => {
+    const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-ledger-restart-"));
+    temporaryRoots.push(dataRoot);
+    const harness = resolve(
+      import.meta.dir,
+      "../../packages/butler-agent/src/interfaces/btcc-harness/run-btcc-harness.ts",
+    );
+    const args = [
+      process.execPath,
+      "run",
+      harness,
+      "--data", dataRoot,
+      "--turn", "turn-ledger-restart",
+      "--session", "session-ledger-restart",
+      "--message", "운영 가이드를 조사해서 작성해줘.",
+      "--provider", "harness",
+      "--model", "managed-v1",
+      "--effort", "medium",
+      "--scenario", "managed-restart-once",
+    ];
+    const first = Bun.spawn(args, {
+      cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
+    });
+    const [firstExit, firstError, firstOutput] = await Promise.all([
+      first.exited,
+      new Response(first.stderr).text(),
+      new Response(first.stdout).text(),
+    ]);
+    expect(firstExit).toBe(1);
+    expect(firstError).toContain("simulated process interruption");
+    expect(firstOutput).toBe("");
+
+    const resumed = Bun.spawn(args, {
+      cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
+    });
+    const [resumedExit, resumedOutput, resumedError] = await Promise.all([
+      resumed.exited,
+      new Response(resumed.stdout).text(),
+      new Response(resumed.stderr).text(),
+    ]);
+    expect(resumedError).toBe("");
+    expect(resumedExit).toBe(0);
+    expect(resumedOutput).toContain('"kind":"delivered"');
+
+    const db = new Database(join(dataRoot, "runtime", "btcc-successor.sqlite"), {
+      readonly: true,
+    });
+    try {
+      const attempts = db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_attempts
+      `).get();
+      const mutations = db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_ledger_mutations
+      `).get();
+      expect(attempts?.count).toBe(1);
+      expect(mutations?.count).toBe(6);
     } finally {
       db.close();
     }

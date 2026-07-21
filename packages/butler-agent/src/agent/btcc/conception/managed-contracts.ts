@@ -57,7 +57,9 @@ export type GoalContractAcceptedProduct = {
     ref: ContentRef;
     goalContractRef: ContentRef;
     route: "managed";
-    ledgerScope: { kind: "session"; sessionId: string };
+    ledgerScope:
+      | { kind: "project"; projectRef: string }
+      | { kind: "session"; sessionId: string };
     managedBinding: { ledgerId: string; programId: string };
   };
 };

@@ -1,9 +1,7 @@
 import type { Database } from "bun:sqlite";
-import type { BtccPersistenceTypes } from "../../../btcc/index.ts";
+import type { BtccPersistenceTypes, WorkLedger, WorkLedgerCommit } from "../../../btcc/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
-import { SqliteManagedLedgerWriter } from "./managed-ledger-writer.ts";
-
 type ManagedTransition = Exclude<
   BtccPersistenceTypes["transition"],
   { kind: "activate_opening" | "accept_opening_answer" | "observe_delivery" }
@@ -11,16 +9,11 @@ type ManagedTransition = Exclude<
 type ManagedTurnState = BtccPersistenceTypes["managedTurnState"];
 type TurnRecord = BtccPersistenceTypes["turn"];
 type TurnSemanticState = BtccPersistenceTypes["semanticState"];
-
 export class SqliteManagedTransitionWriter {
   private readonly records: SqliteImmutableRecordStore;
-  private readonly ledger: SqliteManagedLedgerWriter;
-
-  constructor(private readonly db: Database) {
+  constructor(private readonly db: Database, private readonly ledger: WorkLedger) {
     this.records = new SqliteImmutableRecordStore(db);
-    this.ledger = new SqliteManagedLedgerWriter(db);
   }
-
   commit(turn: TurnRecord, nextRevision: number, transition: ManagedTransition): void {
     switch (transition.kind) {
       case "accept_opening_continuation": {
@@ -87,7 +80,7 @@ export class SqliteManagedTransitionWriter {
         this.acceptFeedbackPlan(turn, nextRevision, transition);
         return;
       case "close_work_frontier":
-        this.closeFrontier(turn, nextRevision, transition.successor);
+        this.closeFrontier(turn, nextRevision, transition);
         return;
       case "accept_final_dossier":
         this.insert("final_dossier", transition.product.dossier);
@@ -110,7 +103,7 @@ export class SqliteManagedTransitionWriter {
     this.insert("goal_contract", goalContract);
     this.insert("authority_revision", authority);
     this.insert("goal_contract_review", review);
-    this.ledger.createProgram(turn.sessionId, transition.product);
+    this.commitLedger(transition.ledgerCommit);
     this.advance(turn, nextRevision, transition.successor, {
       ...requiredManaged(turn), goalAcceptance: transition.product,
     }, { goalContractRef: goalContract.ref.id });
@@ -121,26 +114,10 @@ export class SqliteManagedTransitionWriter {
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "accept_plan" }>,
   ): void {
-    const candidate = transition.product.candidate;
     this.insert("planning_review", transition.product.review);
-    this.ledger.activatePlan(transition.product);
-    const program = {
-      ledgerId: candidate.ledgerId,
-      programId: candidate.programId,
-      goalContractRef: candidate.goalContractRef,
-      authorityRef: candidate.authorityRef,
-      plan: candidate.plan,
-      planningReviewRef: transition.product.review.ref,
-      work: candidate.work,
-      task: candidate.task,
-      criterion: candidate.criterion,
-      verificationQuestion: candidate.verificationQuestion,
-      artifactLifecycle: candidate.artifactLifecycle,
-      frontier: "implementation_open" as const,
-      workStatus: "planned" as const,
-      taskStatus: "planned" as const,
-      attempts: [],
-    };
+    const program = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit),
+    );
     this.advance(turn, nextRevision, transition.successor, {
       ...requiredManaged(turn), planningAcceptance: transition.product, program,
     });
@@ -152,7 +129,6 @@ export class SqliteManagedTransitionWriter {
     transition: Extract<ManagedTransition, { kind: "select_work_task" }>,
   ): void {
     const managed = requiredManaged(turn);
-    const program = requiredProgram(managed);
     const attempt = transition.attempt;
     this.insert("attempt", {
       ref: attempt.ref,
@@ -164,14 +140,12 @@ export class SqliteManagedTransitionWriter {
     });
     this.insert("task_execution_target", attempt.executionTarget);
     this.insert("attempt_execution_target_binding", attempt.executionTargetBinding);
-    this.ledger.selectAttempt(program, attempt);
+    const committed = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit),
+    );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed,
-      program: {
-        ...program, workStatus: "active", taskStatus: "selected",
-        attempts: [...program.attempts, attempt], currentResult: undefined,
-        currentReview: undefined,
-      },
+      program: committed,
     });
   }
 
@@ -181,15 +155,14 @@ export class SqliteManagedTransitionWriter {
     transition: Extract<ManagedTransition, { kind: "submit_result" }>,
   ): void {
     const managed = requiredManaged(turn);
-    const program = requiredProgram(managed);
     const result = transition.product;
     this.insert("result_candidate", result.result);
     this.insert("target_state_revision", result.result.observedState);
-    this.ledger.submitResult(program, result);
-    const attempts = replaceLastAttempt(program, { status: "result_submitted" });
+    const committed = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit),
+    );
     this.advance(turn, nextRevision, transition.successor, {
-      ...managed,
-      program: { ...program, taskStatus: "result_submitted", attempts, currentResult: result },
+      ...managed, program: committed,
     });
   }
 
@@ -199,17 +172,14 @@ export class SqliteManagedTransitionWriter {
     transition: Extract<ManagedTransition, { kind: "pass_task_review" | "fail_task_review" }>,
   ): void {
     const managed = requiredManaged(turn);
-    const program = requiredProgram(managed);
     const review = transition.product;
     this.insert("task_review", review.review);
     this.insert("review_observation", review.review.observation);
-    const passed = transition.kind === "pass_task_review";
-    const status = passed ? "accepted" : "review_failed";
-    this.ledger.recordReview(program, review);
-    const attempts = replaceLastAttempt(program, { status });
+    const committed = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit),
+    );
     this.advance(turn, nextRevision, transition.successor, {
-      ...managed,
-      program: { ...program, taskStatus: status, attempts, currentReview: review },
+      ...managed, program: committed,
     });
   }
 
@@ -219,29 +189,28 @@ export class SqliteManagedTransitionWriter {
     transition: Extract<ManagedTransition, { kind: "accept_feedback_plan" }>,
   ): void {
     const managed = requiredManaged(turn);
-    const program = requiredProgram(managed);
     this.insert("feedback_planning_review", transition.product.review);
-    this.ledger.acceptImplementationRepair(program);
-    const attempts = replaceLastAttempt(program, { status: "closed_unaccepted" });
+    const committed = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit),
+    );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed,
       feedbackAcceptance: transition.product,
-      program: {
-        ...program, taskStatus: "planned", attempts,
-        correctionPlanRef: transition.product.candidate.correctionPlan.ref,
-      },
+      program: committed,
     });
   }
 
-  private closeFrontier(turn: TurnRecord, nextRevision: number, successor: "consolidation"): void {
+  private closeFrontier(
+    turn: TurnRecord,
+    nextRevision: number,
+    transition: Extract<ManagedTransition, { kind: "close_work_frontier" }>,
+  ): void {
     const managed = requiredManaged(turn);
-    const program = requiredProgram(managed);
-    if (program.taskStatus !== "accepted") {
-      throw new Error("Work Frontier cannot close before the Task is accepted");
-    }
-    this.ledger.closeFrontier(program);
-    this.advance(turn, nextRevision, successor, {
-      ...managed, program: { ...program, frontier: "closed", workStatus: "closed" },
+    const committed = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit),
+    );
+    this.advance(turn, nextRevision, transition.successor, {
+      ...managed, program: committed,
     });
   }
 
@@ -292,7 +261,7 @@ export class SqliteManagedTransitionWriter {
         delivery_outbox_id = COALESCE(?, delivery_outbox_id)
       WHERE turn_id = ? AND revision = ?
     `).run(
-      successor, checkpointId, stableJson(managed), nextRevision,
+      successor, checkpointId, stableJson(persistedManagedState(managed)), nextRevision,
       extra.route ?? null, extra.goalContractRef ?? null, extra.finalDossierRef ?? null,
       extra.finalPayload ? stableJson(extra.finalPayload) : null,
       extra.finalDisposition ?? null, extra.outboxId ?? null, turn.turnId, turn.revision,
@@ -320,28 +289,28 @@ export class SqliteManagedTransitionWriter {
   private insert<T extends { ref: { id: string; sha256: string } }>(kind: string, value: T): void {
     this.records.insert(value.ref.id, kind, value.ref.sha256, stableJson(value));
   }
-}
 
+  private commitLedger(commit: WorkLedgerCommit) {
+    return this.ledger.commitAcceptedBoundary(commit);
+  }
+
+  private requireCommittedProgram<T>(program: T | null): T {
+    if (!program) throw new Error("Work Ledger boundary did not return its Program");
+    return program;
+  }
+}
 function requiredManaged(turn: TurnRecord): ManagedTurnState {
   if (!turn.managed) throw new Error(`Managed state is missing at ${turn.semanticState}`);
   return turn.managed;
 }
 
-function requiredProgram(managed: ManagedTurnState) {
-  if (!managed.program) throw new Error("Managed Program is missing");
-  return managed.program;
-}
-
-function replaceLastAttempt(
-  program: ReturnType<typeof requiredProgram>,
-  patch: Partial<ReturnType<typeof requiredProgram>["attempts"][number]>,
-) {
-  if (program.attempts.length === 0) throw new Error("Managed Program has no Attempt");
-  return program.attempts.map((attempt, index) =>
-    index === program.attempts.length - 1 ? { ...attempt, ...patch } : attempt,
-  );
-}
-
 function checkpointKind(state: TurnSemanticState): "runtime" | "phase" {
   return state === "work_frontier" || state === "delivery_committed" ? "runtime" : "phase";
+}
+
+function persistedManagedState(managed: ManagedTurnState): ManagedTurnState {
+  if (!managed.program) return managed;
+  const phaseState = { ...managed };
+  delete phaseState.program;
+  return { ...phaseState, programId: managed.program.programId };
 }
