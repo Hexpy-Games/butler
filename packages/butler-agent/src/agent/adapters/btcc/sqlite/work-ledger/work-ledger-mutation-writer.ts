@@ -3,17 +3,21 @@ import type {
   WorkLedgerCommit,
 } from "../../../../btcc/index.ts";
 import { stableJson } from "../identity.ts";
+import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 
 export class SqliteWorkLedgerMutationWriter {
-  constructor(private readonly db: Database) {}
+  private readonly journal: WorkLedgerCommitJournal;
+
+  constructor(private readonly db: Database) {
+    this.journal = new WorkLedgerCommitJournal(db);
+  }
 
   commitAtomically(input: WorkLedgerCommit): void {
     this.db.transaction(() => {
-      if (this.isCommitted(input)) return;
-      const baseRevision = this.currentManifestRevision(input);
-      this.acquireClaim(input, baseRevision);
+      const boundary = this.journal.open(input);
+      if (boundary.kind === "replayed") return;
       this.apply(input);
-      this.recordCommit(input, baseRevision, baseRevision + 1);
+      this.journal.close(input, boundary.baseRevision);
     })();
   }
 
@@ -77,22 +81,31 @@ export class SqliteWorkLedgerMutationWriter {
     const activated = this.db.query(`
       UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
         frontier = 'implementation_open', manifest_revision = manifest_revision + 1
-      WHERE program_id = ? AND frontier = 'unplanned'
-    `).run(candidate.plan.ref.id, product.review.ref.id, candidate.programId);
+      WHERE program_id = ? AND frontier = 'unplanned' AND manifest_revision = ?
+    `).run(
+      candidate.plan.ref.id,
+      product.review.ref.id,
+      candidate.programId,
+      candidate.observedManifestRevision,
+    );
     if (activated.changes !== 1) throw new Error("Work Ledger Plan base changed");
-    this.db.query(`
+    const insertWork = this.db.query(`
       INSERT INTO btcc_work_items (work_id, program_id, work_ref, status)
       VALUES (?, ?, ?, 'planned')
-    `).run(candidate.work.ref.id, candidate.programId, stableJson(candidate.work.ref));
-    this.db.query(`
+    `);
+    for (const work of candidate.works) {
+      insertWork.run(work.ref.id, candidate.programId, stableJson(work.ref));
+    }
+    const workRefs = new Map(candidate.works.map((work) => [work.workLogicalId, work.ref]));
+    const insertTask = this.db.query(`
       INSERT INTO btcc_tasks (task_id, program_id, work_id, task_ref, status)
       VALUES (?, ?, ?, ?, 'planned')
-    `).run(
-      candidate.task.ref.id,
-      candidate.programId,
-      candidate.work.ref.id,
-      stableJson(candidate.task.ref),
-    );
+    `);
+    for (const task of candidate.tasks) {
+      const workRef = workRefs.get(task.workLogicalId);
+      if (!workRef) throw new Error("Reviewed Task has no Work");
+      insertTask.run(task.ref.id, candidate.programId, workRef.id, stableJson(task.ref));
+    }
   }
 
   private selectAttempt(
@@ -163,7 +176,16 @@ export class SqliteWorkLedgerMutationWriter {
       product.review.attemptRef.id,
     );
     if (updated.changes !== 1) throw new Error("Work Ledger Review lost its submitted Task");
-    this.bumpManifest(this.programIdForTask(product.review.taskRef.id));
+    const task = this.taskOwner(product.review.taskRef.id);
+    if (status === "accepted") {
+      this.db.query(`
+        UPDATE btcc_work_items SET status = 'closed'
+        WHERE work_id = ? AND NOT EXISTS (
+          SELECT 1 FROM btcc_tasks WHERE work_id = ? AND status != 'accepted'
+        )
+      `).run(task.workId, task.workId);
+    }
+    this.bumpManifest(task.programId);
   }
 
   private acceptRepair(
@@ -203,79 +225,6 @@ export class SqliteWorkLedgerMutationWriter {
       .run(programId);
   }
 
-  private currentManifestRevision(input: WorkLedgerCommit): number {
-    if (input.mutation.kind === "bind_program") return 0;
-    const programId = programIdOf(input);
-    const row = this.db.query<{ manifest_revision: number }, [string]>(`
-      SELECT manifest_revision FROM btcc_programs WHERE program_id = ?
-    `).get(programId);
-    if (!row) throw new Error(`Work Ledger Program is missing: ${programId}`);
-    const projected = projectedManifestRevision(input);
-    if (projected !== undefined && projected !== row.manifest_revision) {
-      throw new Error("Work Ledger boundary used a stale Program manifest");
-    }
-    return row.manifest_revision;
-  }
-
-  private acquireClaim(input: WorkLedgerCommit, baseRevision: number): void {
-    this.db.query(`
-      INSERT INTO btcc_ledger_claims (
-        claim_id, ledger_id, program_id, base_manifest_revision, turn_id,
-        turn_revision, status
-      ) VALUES (?, ?, ?, ?, ?, ?, 'held')
-    `).run(
-      input.mutationId,
-      ledgerIdOf(input),
-      programIdOf(input),
-      baseRevision,
-      input.turnId,
-      input.expectedTurnRevision,
-    );
-  }
-
-  private recordCommit(input: WorkLedgerCommit, baseRevision: number, nextRevision: number): void {
-    this.db.query(`
-      INSERT INTO btcc_ledger_mutations (
-        mutation_id, ledger_id, program_id, turn_id, turn_revision,
-        mutation_kind, mutation_json, base_manifest_revision, next_manifest_revision
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      input.mutationId,
-      ledgerIdOf(input),
-      programIdOf(input),
-      input.turnId,
-      input.expectedTurnRevision,
-      input.mutation.kind,
-      stableJson(input.mutation),
-      baseRevision,
-      nextRevision,
-    );
-    this.db.query("UPDATE btcc_ledger_claims SET status = 'promoted' WHERE claim_id = ?")
-      .run(input.mutationId);
-  }
-
-  private isCommitted(input: WorkLedgerCommit): boolean {
-    const row = this.db.query<{
-      mutation_kind: string;
-      mutation_json: string;
-      turn_id: string;
-      turn_revision: number;
-    }, [string]>(`
-      SELECT mutation_kind, mutation_json, turn_id, turn_revision FROM btcc_ledger_mutations
-      WHERE mutation_id = ?
-    `).get(input.mutationId);
-    if (!row) return false;
-    if (
-      row.mutation_kind !== input.mutation.kind ||
-      row.mutation_json !== stableJson(input.mutation) ||
-      row.turn_id !== input.turnId ||
-      row.turn_revision !== input.expectedTurnRevision
-    ) {
-      throw new Error("Work Ledger mutation identity conflict");
-    }
-    return true;
-  }
-
   private bumpManifest(programId: string): void {
     const result = this.db.query(`
       UPDATE btcc_programs SET manifest_revision = manifest_revision + 1 WHERE program_id = ?
@@ -304,30 +253,12 @@ export class SqliteWorkLedgerMutationWriter {
     if (!task) throw new Error("Work Ledger Task disappeared");
     return task.program_id;
   }
-}
 
-function programIdOf(input: WorkLedgerCommit): string {
-  const mutation = input.mutation;
-  if (mutation.kind === "bind_program") {
-    return mutation.product.authority.managedBinding.programId;
+  private taskOwner(taskId: string): { programId: string; workId: string } {
+    const task = this.db.query<{ program_id: string; work_id: string }, [string]>(`
+      SELECT program_id, work_id FROM btcc_tasks WHERE task_id = ?
+    `).get(taskId);
+    if (!task) throw new Error("Work Ledger Task disappeared");
+    return { programId: task.program_id, workId: task.work_id };
   }
-  if (mutation.kind === "install_reviewed_plan") return mutation.product.candidate.programId;
-  return mutation.cursor.programId;
-}
-
-function ledgerIdOf(input: WorkLedgerCommit): string {
-  const mutation = input.mutation;
-  if (mutation.kind === "bind_program") {
-    return mutation.product.authority.managedBinding.ledgerId;
-  }
-  if (mutation.kind === "install_reviewed_plan") return mutation.product.candidate.ledgerId;
-  return mutation.cursor.ledgerId;
-}
-
-function projectedManifestRevision(input: WorkLedgerCommit): number | undefined {
-  const mutation = input.mutation;
-  if (mutation.kind === "bind_program" || mutation.kind === "install_reviewed_plan") {
-    return undefined;
-  }
-  return mutation.cursor.expectedManifestRevision;
 }

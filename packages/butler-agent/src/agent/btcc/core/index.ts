@@ -12,6 +12,7 @@ export {
 } from "./record-codec.ts";
 export type { ContentRef } from "./record-codec.ts";
 export type {
+  AuthoringContractBinding,
   ActualModelIdentity,
   OpeningContext,
   PhaseCodec,

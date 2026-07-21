@@ -15,19 +15,19 @@ export async function consolidation(command: {
     throw new Error(`Consolidation cannot advance ${command.turn.semanticState}`);
   }
   const program = requireManagedProgram(command.turn);
-  const review = program.currentReview;
-  if (!review || review.review.verdict !== "passed") {
-    throw new Error("Consolidation requires the current passed Task Review");
+  const reviews = program.tasks.map((task) => task.currentReview);
+  if (reviews.some((review) => !review || review.review.verdict !== "passed")) {
+    throw new Error("Consolidation requires every passed Task Review");
   }
   const product = await assureOriginalGoal(withPhaseState(command.phase, {
     frontier: program.frontier,
-    taskStatus: program.taskStatus,
+    taskStatuses: program.tasks.map((task) => task.status),
     programId: program.programId,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
     planRef: program.plan.ref,
     planningReviewRef: program.planningReviewRef,
-    taskReviewRef: review.review.ref,
+    taskReviewRefs: reviews.map((review) => review!.review.ref),
   }));
   return { kind: "FinalDossierAccepted", product };
 }

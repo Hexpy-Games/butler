@@ -16,8 +16,10 @@ import type { ResultCandidateProduct } from "../execution/index.ts";
 import type {
   FeedbackPlanProduct,
   FeedbackPlanningAcceptedProduct,
+  FeedbackPlanningRevisionRequiredProduct,
   PlanningAcceptedProduct,
   PlanningCandidateProduct,
+  PlanningRevisionRequiredProduct,
 } from "../planning/index.ts";
 import type { PreparedReportProduct } from "../reporting/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
@@ -115,6 +117,7 @@ export type TurnEvent =
   | { kind: "GoalContractReviewAccepted"; product: GoalContractAcceptedProduct }
   | { kind: "PlanCandidateSubmitted"; product: PlanningCandidateProduct }
   | { kind: "PlanningReviewAccepted"; product: PlanningAcceptedProduct }
+  | { kind: "PlanningRevisionRequested"; product: PlanningRevisionRequiredProduct }
   | { kind: "WorkTaskSelected"; attempt: ManagedAttempt }
   | { kind: "WorkFrontierClosed" }
   | { kind: "ResultCandidateSubmitted"; product: ResultCandidateProduct }
@@ -123,6 +126,10 @@ export type TurnEvent =
   | { kind: "FeedbackIntentAccepted"; product: FeedbackIntentProduct }
   | { kind: "FeedbackPlanCandidateSubmitted"; product: FeedbackPlanProduct }
   | { kind: "FeedbackPlanningReviewAccepted"; product: FeedbackPlanningAcceptedProduct }
+  | {
+      kind: "FeedbackPlanningRevisionRequested";
+      product: FeedbackPlanningRevisionRequiredProduct;
+    }
   | { kind: "FinalDossierAccepted"; product: FinalDossierProduct }
   | { kind: "PreparedReportAccepted"; product: PreparedReportProduct }
   | { kind: "DeliveryObserved"; assistantMessageId: string };
@@ -155,6 +162,11 @@ export type AcceptedTurnTransition =
       };
     }
   | { kind: "submit_plan_candidate"; successor: "planning_review"; product: PlanningCandidateProduct }
+  | {
+      kind: "request_plan_revision";
+      successor: "planning";
+      product: PlanningRevisionRequiredProduct;
+    }
   | {
       kind: "accept_plan";
       successor: "work_frontier";
@@ -204,6 +216,11 @@ export type AcceptedTurnTransition =
     }
   | { kind: "accept_feedback_intent"; successor: "feedback_planning"; product: FeedbackIntentProduct }
   | { kind: "submit_feedback_plan"; successor: "feedback_planning_review"; product: FeedbackPlanProduct }
+  | {
+      kind: "request_feedback_plan_revision";
+      successor: "feedback_planning";
+      product: FeedbackPlanningRevisionRequiredProduct;
+    }
   | {
       kind: "accept_feedback_plan";
       successor: "work_frontier";

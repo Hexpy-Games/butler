@@ -2,6 +2,7 @@ import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
 import {
   requireManagedProgram,
+  requireManagedPlanningAuthority,
   requireManagedState,
   type TurnEvent,
   type TurnRecord,
@@ -14,10 +15,14 @@ import { reviewPlan } from "./review-plan.ts";
 type InitialPlanningEvent = Extract<TurnEvent, {
   kind:
     | "PlanCandidateSubmitted"
-    | "PlanningReviewAccepted";
+    | "PlanningReviewAccepted"
+    | "PlanningRevisionRequested";
 }>;
 type FeedbackPlanningEvent = Extract<TurnEvent, {
-  kind: "FeedbackPlanCandidateSubmitted" | "FeedbackPlanningReviewAccepted";
+  kind:
+    | "FeedbackPlanCandidateSubmitted"
+    | "FeedbackPlanningReviewAccepted"
+    | "FeedbackPlanningRevisionRequested";
 }>;
 type PlanningCommand = {
   cycle: "initial" | "review_feedback";
@@ -51,12 +56,21 @@ async function planInitialWork(command: {
   if (command.turn.semanticState === "planning") {
     const accepted = managed.goalAcceptance;
     if (!accepted) throw new Error("Planning is missing accepted Goal authority");
+    const authority = requireManagedPlanningAuthority(command.turn);
+    const previous = managed.planningRevision;
     const product = await proposePlan(withPhaseState(command.phase, {
-      goalContractRef: accepted.goalContract.ref,
-      authorityRef: accepted.authority.ref,
+      goalContractRef: authority.goalContractRef,
+      authorityRef: authority.authorityRef,
       requiredOutcomeId: accepted.goalContract.requiredOutcome.outcomeId,
-      ledgerId: accepted.authority.managedBinding.ledgerId,
-      programId: accepted.authority.managedBinding.programId,
+      ledgerId: authority.ledgerId,
+      programId: authority.programId,
+      observedManifestRevision: authority.manifestRevision,
+      ...(previous
+        ? {
+            previousCandidateRef: previous.candidate.ref,
+            findingSetRef: previous.review.findingSetRef,
+          }
+        : {}),
     }));
     return { kind: "PlanCandidateSubmitted", product };
   }
@@ -64,7 +78,9 @@ async function planInitialWork(command: {
     const product = await reviewPlan(withPhaseState(command.phase, {
       planCandidate: managed.planCandidate,
     }));
-    return { kind: "PlanningReviewAccepted", product };
+    return product.kind === "planning_accepted"
+      ? { kind: "PlanningReviewAccepted", product }
+      : { kind: "PlanningRevisionRequested", product };
   }
   throw new Error(`Initial Planning cannot advance ${command.turn.semanticState}`);
 }
@@ -76,11 +92,18 @@ async function planReviewFeedback(command: {
   const managed = requireManagedState(command.turn);
   const program = requireManagedProgram(command.turn);
   if (command.turn.semanticState === "feedback_planning") {
+    const previous = managed.feedbackPlanningRevision;
     const product = await proposeCorrectionOrRevision(withPhaseState(command.phase, {
       feedbackIntent: managed.feedbackIntent,
       workPlanRef: program.plan.ref,
-      taskRef: program.task.ref,
+      taskRef: program.currentTask.task.ref,
       artifactLifecycleRef: program.artifactLifecycle.ref,
+      ...(previous
+        ? {
+            previousCandidateRef: previous.candidate.ref,
+            findingSetRef: previous.review.findingSetRef,
+          }
+        : {}),
     }));
     return { kind: "FeedbackPlanCandidateSubmitted", product };
   }
@@ -89,7 +112,9 @@ async function planReviewFeedback(command: {
       feedbackPlan: managed.feedbackPlan,
       goalContractRef: program.goalContractRef,
     }));
-    return { kind: "FeedbackPlanningReviewAccepted", product };
+    return product.kind === "feedback_planning_accepted"
+      ? { kind: "FeedbackPlanningReviewAccepted", product }
+      : { kind: "FeedbackPlanningRevisionRequested", product };
   }
   throw new Error(`Feedback Planning cannot advance ${command.turn.semanticState}`);
 }

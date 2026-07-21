@@ -63,6 +63,9 @@ export function decideTransition(
   if (turn.semanticState === "planning" && event.kind === "PlanCandidateSubmitted") {
     return { kind: "submit_plan_candidate", successor: "planning_review", product: event.product };
   }
+  if (turn.semanticState === "planning_review" && event.kind === "PlanningRevisionRequested") {
+    return { kind: "request_plan_revision", successor: "planning", product: event.product };
+  }
   if (turn.semanticState === "planning_review" && event.kind === "PlanningReviewAccepted") {
     return {
       kind: "accept_plan",
@@ -137,6 +140,16 @@ export function decideTransition(
   }
   if (turn.semanticState === "feedback_planning" && event.kind === "FeedbackPlanCandidateSubmitted") {
     return { kind: "submit_feedback_plan", successor: "feedback_planning_review", product: event.product };
+  }
+  if (
+    turn.semanticState === "feedback_planning_review" &&
+    event.kind === "FeedbackPlanningRevisionRequested"
+  ) {
+    return {
+      kind: "request_feedback_plan_revision",
+      successor: "feedback_planning",
+      product: event.product,
+    };
   }
   if (turn.semanticState === "feedback_planning_review" && event.kind === "FeedbackPlanningReviewAccepted") {
     return {

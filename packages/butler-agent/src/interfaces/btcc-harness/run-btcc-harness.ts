@@ -33,6 +33,8 @@ type HarnessOptions = {
     | "direct"
     | "managed-pass"
     | "managed-review-repair"
+    | "managed-planning-revision"
+    | "managed-feedback-planning-revision"
     | "managed-restart-once"
     | NoLedgerScenario;
 };
@@ -130,6 +132,8 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
   if (
     value === "managed-pass" ||
     value === "managed-review-repair" ||
+    value === "managed-planning-revision" ||
+    value === "managed-feedback-planning-revision" ||
     value === "managed-restart-once"
   ) return value;
   if (
@@ -147,8 +151,17 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     if (!dataRoot) throw new Error("Restart scenario requires a data root");
     return new RestartingManagedHarnessModel(dataRoot);
   }
-  if (scenario === "managed-pass" || scenario === "managed-review-repair") {
-    return new ManagedHarnessModel(scenario === "managed-review-repair");
+  if (
+    scenario === "managed-pass" ||
+    scenario === "managed-review-repair" ||
+    scenario === "managed-planning-revision" ||
+    scenario === "managed-feedback-planning-revision"
+  ) {
+    return new ManagedHarnessModel(
+      scenario === "managed-review-repair" || scenario === "managed-feedback-planning-revision",
+      scenario === "managed-planning-revision",
+      scenario === "managed-feedback-planning-revision",
+    );
   }
   return new NoLedgerHarnessModel(scenario);
 }

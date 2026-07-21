@@ -8,26 +8,48 @@ import type {
 import type { TaskReviewProduct } from "../review/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
 
-export type ManagedProgramState = {
+export type ManagedProgramAuthority = {
   ledgerId: string;
   programId: string;
   manifestRevision: number;
   goalContractRef: ContentRef;
   authorityRef: ContentRef;
+};
+
+export type UnplannedManagedProgramState = ManagedProgramAuthority & {
+  planningState: "unplanned";
+};
+
+export type ReviewedManagedProgramState = ManagedProgramAuthority & {
+  planningState: "reviewed";
   plan: PlanningAcceptedProduct["candidate"]["plan"];
   planningReviewRef: ContentRef;
-  work: PlanningAcceptedProduct["candidate"]["work"];
-  task: PlanningAcceptedProduct["candidate"]["task"];
-  criterion: PlanningAcceptedProduct["candidate"]["criterion"];
-  verificationQuestion: PlanningAcceptedProduct["candidate"]["verificationQuestion"];
+  works: ManagedWorkState[];
+  tasks: ManagedTaskState[];
+  currentWork: ManagedWorkState;
+  currentTask: ManagedTaskState;
+  criteria: PlanningAcceptedProduct["candidate"]["criteria"];
+  verificationQuestions: PlanningAcceptedProduct["candidate"]["verificationQuestions"];
   artifactLifecycle: PlanningAcceptedProduct["candidate"]["artifactLifecycle"];
   frontier: "implementation_open" | "closed";
-  workStatus: "planned" | "active" | "closed";
-  taskStatus: "planned" | "selected" | "result_submitted" | "review_failed" | "accepted";
+  correctionPlanRef?: ContentRef;
+};
+
+export type ManagedProgramState =
+  | UnplannedManagedProgramState
+  | ReviewedManagedProgramState;
+
+export type ManagedWorkState = {
+  work: PlanningAcceptedProduct["candidate"]["works"][number];
+  status: "planned" | "active" | "closed";
+};
+
+export type ManagedTaskState = {
+  task: PlanningAcceptedProduct["candidate"]["tasks"][number];
+  status: "planned" | "selected" | "result_submitted" | "review_failed" | "accepted";
   attempts: ManagedAttempt[];
   currentResult?: ResultCandidateProduct;
   currentReview?: TaskReviewProduct;
-  correctionPlanRef?: ContentRef;
 };
 
 export type WorkLedgerCursor = {

@@ -3,6 +3,8 @@ import type { BtccPersistenceTypes } from "../../../../btcc/index.ts";
 
 type ManagedProgramState = BtccPersistenceTypes["managedProgramState"];
 type ContentRef = ManagedProgramState["goalContractRef"];
+type ReviewedProgram = Extract<ManagedProgramState, { planningState: "reviewed" }>;
+type ManagedTaskState = ReviewedProgram["tasks"][number];
 
 type ProgramRow = {
   goal_contract_ref: string;
@@ -19,101 +21,109 @@ export class SqliteWorkLedgerProgramReader {
   constructor(private readonly db: Database) {}
 
   load(programId: string): ManagedProgramState | null {
-    const program = this.db.query<ProgramRow, [string]>(`
-      SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
-        planning_review_ref, frontier, ledger_id, manifest_revision,
-        pending_correction_plan_ref
-      FROM btcc_programs WHERE program_id = ?
-    `).get(programId);
-    if (!program?.accepted_plan_ref || !program.planning_review_ref) return null;
-
-    const plan = this.loadRecord<Record<string, unknown>>(program.accepted_plan_ref);
-    const work = this.loadCurrentWork(programId);
-    const task = this.loadCurrentTask(programId);
-    const attempts = this.loadAttempts(programId, task.ref.id);
-    const currentResult = task.resultRef
-      ? {
-          kind: "result_candidate" as const,
-          result: this.loadRecord(task.resultRef),
-        }
-      : undefined;
-    const currentReview = task.reviewRef
-      ? {
-          kind: "task_review" as const,
-          review: this.loadRecord(task.reviewRef),
-        }
-      : undefined;
-    const latest = attempts.at(-1);
-
-    return {
+    const program = this.loadProgramRow(programId);
+    if (!program) return null;
+    const authority = {
       ledgerId: program.ledger_id,
       programId,
       manifestRevision: program.manifest_revision,
       goalContractRef: this.loadRef(program.goal_contract_ref),
       authorityRef: this.loadRef(program.authority_ref),
-      plan: plan as ManagedProgramState["plan"],
+    };
+    if (!program.accepted_plan_ref || !program.planning_review_ref) {
+      return { ...authority, planningState: "unplanned" };
+    }
+    const plan = this.loadRecord<ReviewedProgram["plan"]>(program.accepted_plan_ref);
+    const works = this.loadWorks(programId);
+    const tasks = this.loadTasks(programId);
+    const currentTask = selectCurrentTask(tasks);
+    const currentWork = works.find(
+      (candidate) => candidate.work.workLogicalId === currentTask.task.workLogicalId,
+    );
+    if (!currentWork) throw new Error("Work Ledger current Task has no Work");
+    const latestAttempt = currentTask.attempts.at(-1);
+    return {
+      ...authority,
+      planningState: "reviewed",
+      plan,
       planningReviewRef: this.loadRef(program.planning_review_ref),
-      work: work.record as ManagedProgramState["work"],
-      task: task.record as ManagedProgramState["task"],
-      criterion: this.loadRecord(refId(plan.criterionRef)) as ManagedProgramState["criterion"],
-      verificationQuestion: this.loadRecord(
-        refId(plan.verificationQuestionRef),
-      ) as ManagedProgramState["verificationQuestion"],
+      works,
+      tasks,
+      currentWork,
+      currentTask,
+      criteria: plan.criterionRefs.map((ref) =>
+        this.loadRecord(ref.id)) as ReviewedProgram["criteria"],
+      verificationQuestions: plan.verificationQuestionRefs.map((ref) =>
+        this.loadRecord(ref.id)) as ReviewedProgram["verificationQuestions"],
       artifactLifecycle: this.loadRecord(
-        refId(plan.artifactLifecycleRef),
-      ) as ManagedProgramState["artifactLifecycle"],
+        plan.artifactLifecycleRef.id,
+      ) as ReviewedProgram["artifactLifecycle"],
       frontier: program.frontier === "closed" ? "closed" : "implementation_open",
-      workStatus: work.status,
-      taskStatus: task.status,
-      attempts,
-      ...(currentResult ? { currentResult: currentResult as ManagedProgramState["currentResult"] } : {}),
-      ...(currentReview ? { currentReview: currentReview as ManagedProgramState["currentReview"] } : {}),
       ...(program.pending_correction_plan_ref
         ? { correctionPlanRef: this.loadRef(program.pending_correction_plan_ref) }
-        : latest?.correctionPlanRef
-          ? { correctionPlanRef: latest.correctionPlanRef }
+        : latestAttempt?.correctionPlanRef
+          ? { correctionPlanRef: latestAttempt.correctionPlanRef }
           : {}),
     };
   }
 
-  private loadCurrentWork(programId: string) {
-    const row = this.db.query<{
-      work_ref: string;
-      status: "planned" | "active" | "closed";
-    }, [string]>(`
-      SELECT work_ref, status FROM btcc_work_items WHERE program_id = ?
+  private loadProgramRow(programId: string): ProgramRow | null {
+    return this.db.query<ProgramRow, [string]>(`
+      SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
+        planning_review_ref, frontier, ledger_id, manifest_revision,
+        pending_correction_plan_ref
+      FROM btcc_programs WHERE program_id = ?
     `).get(programId);
-    if (!row) throw new Error("Work Ledger Program has no Work");
-    const ref = JSON.parse(row.work_ref) as ContentRef;
-    return { record: this.loadRecord(ref.id), status: row.status };
   }
 
-  private loadCurrentTask(programId: string) {
-    const row = this.db.query<{
+  private loadWorks(programId: string): ReviewedProgram["works"] {
+    const rows = this.db.query<{
+      work_ref: string;
+      status: ReviewedProgram["works"][number]["status"];
+    }, [string]>(`
+      SELECT work_ref, status FROM btcc_work_items WHERE program_id = ? ORDER BY rowid
+    `).all(programId);
+    if (rows.length === 0) throw new Error("Work Ledger Program has no Work");
+    return rows.map((row) => {
+      const ref = JSON.parse(row.work_ref) as ContentRef;
+      return { work: this.loadRecord(ref.id), status: row.status };
+    }) as ReviewedProgram["works"];
+  }
+
+  private loadTasks(programId: string): ReviewedProgram["tasks"] {
+    const rows = this.db.query<{
       task_ref: string;
-      status: ManagedProgramState["taskStatus"];
+      status: ManagedTaskState["status"];
       result_ref: string | null;
       review_ref: string | null;
     }, [string]>(`
-      SELECT task_ref, status, result_ref, review_ref FROM btcc_tasks WHERE program_id = ?
-    `).get(programId);
-    if (!row) throw new Error("Work Ledger Program has no Task");
-    const ref = JSON.parse(row.task_ref) as ContentRef;
-    return {
-      record: this.loadRecord(ref.id),
-      status: row.status,
-      resultRef: row.result_ref,
-      reviewRef: row.review_ref,
-      ref,
-    };
+      SELECT task_ref, status, result_ref, review_ref
+      FROM btcc_tasks WHERE program_id = ? ORDER BY rowid
+    `).all(programId);
+    if (rows.length === 0) throw new Error("Work Ledger Program has no Task");
+    return rows.map((row) => {
+      const ref = JSON.parse(row.task_ref) as ContentRef;
+      const task = this.loadRecord<ManagedTaskState["task"]>(ref.id);
+      return {
+        task,
+        status: row.status,
+        attempts: this.loadAttempts(programId, task.ref.id),
+        ...(row.result_ref
+          ? { currentResult: { kind: "result_candidate" as const, result: this.loadRecord(row.result_ref) } }
+          : {}),
+        ...(row.review_ref
+          ? { currentReview: { kind: "task_review" as const, review: this.loadRecord(row.review_ref) } }
+          : {}),
+      } as ManagedTaskState;
+    });
   }
 
-  private loadAttempts(programId: string, taskId: string): ManagedProgramState["attempts"] {
+  private loadAttempts(programId: string, taskId: string): ManagedTaskState["attempts"] {
     const rows = this.db.query<{
       attempt_ref: string;
       execution_target_ref: string;
       execution_target_binding_ref: string;
-      status: ManagedProgramState["attempts"][number]["status"];
+      status: ManagedTaskState["attempts"][number]["status"];
     }, [string, string]>(`
       SELECT attempt_ref, execution_target_ref, execution_target_binding_ref, status
       FROM btcc_attempts WHERE program_id = ? AND task_id = ? ORDER BY rowid
@@ -130,7 +140,7 @@ export class SqliteWorkLedgerProgramReader {
         executionTarget: this.loadRecord(targetRef.id),
         executionTargetBinding: this.loadRecord(bindingRef.id),
         status: row.status,
-      } as ManagedProgramState["attempts"][number];
+      } as ManagedTaskState["attempts"][number];
     });
   }
 
@@ -149,14 +159,16 @@ export class SqliteWorkLedgerProgramReader {
     if (!row) throw new Error(`Work Ledger immutable record is missing: ${id}`);
     return JSON.parse(row.content_json) as T;
   }
-
 }
 
-function refId(value: unknown): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Work Ledger record has an invalid ref");
-  }
-  const id = (value as { id?: unknown }).id;
-  if (typeof id !== "string") throw new Error("Work Ledger record ref has no id");
-  return id;
+function selectCurrentTask(tasks: ManagedTaskState[]): ManagedTaskState {
+  const active = tasks.find((task) =>
+    task.status === "selected" ||
+    task.status === "result_submitted" ||
+    task.status === "review_failed");
+  if (active) return active;
+  const planned = tasks
+    .filter((task) => task.status === "planned")
+    .sort((left, right) => left.task.executionOrdinal - right.task.executionOrdinal)[0];
+  return planned ?? tasks.at(-1)!;
 }

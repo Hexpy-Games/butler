@@ -77,7 +77,7 @@ async function conceiveReviewFeedback(command: {
   phase: PhaseInvocation;
 }): Promise<FeedbackConceptionEvent> {
   const program = requireManagedProgram(command.turn);
-  const review = program.currentReview;
+  const review = program.currentTask.currentReview;
   if (!review || review.review.verdict !== "not_passed") {
     throw new Error("Feedback Conception requires a failed Task Review");
   }
