@@ -23,6 +23,7 @@ export type ManagedAttempt = {
           provisionOutcomeRef: ContentRef;
           workspaceRef: ContentRef;
           baselineRef: ContentRef;
+          baselineSnapshotRef: ContentRef;
           acceptedBaseRevisionRefs: ContentRef[];
         }
       | {
