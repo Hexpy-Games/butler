@@ -4,7 +4,6 @@ import {
   requireRecord,
   requireString,
   runPhaseConversation,
-  stableJson,
   type ContentRef,
   type PhaseCodec,
   type PhaseContract,
@@ -98,9 +97,6 @@ const codec: PhaseCodec<ConsolidationProduct> = {
     requireLiteral(value.kind, "final_dossier", "Consolidation kind");
     requireLiteral(value.goalCoverage, "fulfilled", "goal coverage");
     requireLiteral(value.semanticFidelity, "faithful", "semantic fidelity");
-    if (stableJson(value.originalGoalContractRef) !== stableJson(goalContractRef)) {
-      throw new Error("Consolidation did not assess the immutable original GoalContract");
-    }
     const body = {
       programId: requireString(state.programId, "programId"),
       originalGoalContractRef: goalContractRef,
@@ -133,7 +129,7 @@ function decodeRepair(
   taskRefs: [ContentRef, ...ContentRef[]],
 ): ConsolidationProduct {
   const findings = requireStringList(value.findings, "Consolidation findings");
-  const affectedTaskRefs = requireExactTaskSubset(value.affectedTaskRefs, taskRefs);
+  const affectedTaskRefs = requireExactTaskSubset(value.affectedTaskIds, taskRefs);
   const findingSet = {
     findings,
     ref: contentRef("consolidation-finding-set", { findings }),
@@ -178,7 +174,6 @@ function decodeDeferredDossier(
       verdict: "deferred",
     })),
     taskCompatibility: {
-      reviewedTaskRefs: Array.isArray(state.taskReviewRefs) ? state.taskReviewRefs : [],
       verdict: Array.isArray(state.taskReviewRefs) && state.taskReviewRefs.length > 0
         ? "deferred"
         : "compatible",
@@ -251,11 +246,11 @@ function requireExactTaskSubset(
   value: unknown,
   available: [ContentRef, ...ContentRef[]],
 ): [ContentRef, ...ContentRef[]] {
-  const selected = requireContentRefs(value, "affectedTaskRefs");
-  const availableIds = new Set(available.map((ref) => ref.id));
-  const selectedIds = selected.map((ref) => ref.id);
-  if (new Set(selectedIds).size !== selectedIds.length || selectedIds.some((id) => !availableIds.has(id))) {
+  const selectedIds = requireStringList(value, "affectedTaskIds");
+  const availableById = new Map(available.map((ref) => [ref.id, ref]));
+  if (new Set(selectedIds).size !== selectedIds.length ||
+    selectedIds.some((id) => !availableById.has(id))) {
     throw new Error("Consolidation repair affected Tasks are not an exact current subset");
   }
-  return selected;
+  return selectedIds.map((id) => availableById.get(id)!) as [ContentRef, ...ContentRef[]];
 }
