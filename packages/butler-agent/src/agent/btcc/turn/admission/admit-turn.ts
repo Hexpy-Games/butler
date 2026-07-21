@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { BtccTurnCommand } from "../../contracts.ts";
+import type { FreshBtccTurnCommand } from "../../contracts.ts";
 import type {
   TurnAdmissionRepository,
   TurnRecord,
@@ -7,7 +7,7 @@ import type {
 } from "../contracts.ts";
 
 export async function admitTurn(
-  command: Extract<BtccTurnCommand, { kind: "run" }>,
+  command: FreshBtccTurnCommand,
   admission: TurnAdmissionRepository,
   turns: TurnStateRepository,
 ): Promise<TurnRecord> {
@@ -15,7 +15,7 @@ export async function admitTurn(
     turnId: command.turnId,
     sessionId: command.sessionId,
     triggerKey: command.triggerKey,
-    message: command.message,
+    source: command.kind === "run" ? command.message : command.trigger,
     modelSelection: command.modelSelection,
     context: command.context,
   }));

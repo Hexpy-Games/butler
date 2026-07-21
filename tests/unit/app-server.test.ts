@@ -77,6 +77,11 @@ import type {
   RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { startRegisteredBackgroundCommand } from "../../packages/butler-agent/src/runtime/command/background-command-registry.ts";
+import {
+  ScriptedBtccGatewayRuntime,
+  StoppableBtccGatewayRuntime,
+} from "./support/fake-btcc-gateway-runtime.ts";
+import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -2702,7 +2707,7 @@ test("native butler-main default provider generates app transport session titles
     await runNativeButlerMain({
       butlerHome: process.cwd(),
       butlerData: tempDir,
-      runtime: new ScriptedRuntime("비 예보를 확인해볼게요."),
+      btcc: new ScriptedBtccGatewayRuntime("비 예보를 확인해볼게요."),
       shutdownSignal: controller.signal,
       shutdownPollMs: 10,
       workerResultPollMs: 10,
@@ -2720,10 +2725,10 @@ test("native butler-main default provider generates app transport session titles
   }
 });
 
-test("App Stop falls back to the existing native tick and preserves its public snapshot", async () => {
+test("App Stop reaches the BTCC stop reconciler and preserves its public snapshot", async () => {
   const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
   mkdirSync(join(tempDir, "app-server"), { recursive: true });
-  const runtime = new AbortSettlingRuntime();
+  const runtime = new StoppableBtccGatewayRuntime();
   const shutdown = new AbortController();
   const server = createAppServer({
     dbPath,
@@ -2734,7 +2739,7 @@ test("App Stop falls back to the existing native tick and preserves its public s
   const nativeMain = runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData: tempDir,
-    runtime,
+    btcc: runtime,
     provider: fakeProvider,
     shutdownSignal: shutdown.signal,
     shutdownPollMs: 10,
@@ -2767,6 +2772,22 @@ test("App Stop falls back to the existing native tick and preserves its public s
     const messageId = "msg-native-stop-snapshot";
     const createdAt = "2026-07-13T03:00:00.000Z";
     try {
+      db.exec(BTCC_SUCCESSOR_SCHEMA);
+      db.query(`
+        INSERT INTO btcc_turns (
+          turn_id, session_id, inbox_id, trigger_key, original_message_id,
+          original_message, admission_snapshot_ref, model_selection_json,
+          context_json, continuation_snapshot_json, semantic_state,
+          revision, execution_fence
+        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}', '[]',
+          'conception_opening', 1, 1)
+      `).run(
+        turnId,
+        `inbox:${turnId}`,
+        `trigger:${turnId}`,
+        `message:${turnId}`,
+        `admission:${turnId}`,
+      );
       db.query(`
         INSERT INTO messages (
           id, chat_id, turn_id, role, text, status, created_at, updated_at,
@@ -2789,7 +2810,7 @@ test("App Stop falls back to the existing native tick and preserves its public s
       {},
     );
     expect(cancel.data.turn).toMatchObject({ id: turnId, state: "cancelling" });
-    await waitForCondition(() => runtime.aborted);
+    await waitForCondition(() => runtime.stopped);
     await waitForCondition(() => {
       const stateDb = new Database(dbPath, { readonly: true });
       try {
@@ -15152,44 +15173,6 @@ class HangingRuntime implements AgentRuntimeAdapter {
       this.aborted = true;
     });
     return await new Promise<never>(() => undefined);
-  }
-}
-
-class AbortSettlingRuntime implements AgentRuntimeAdapter {
-  readonly id = "app-abort-settling-runtime";
-  aborted = false;
-  private markStarted: (() => void) | undefined;
-  readonly started = new Promise<void>((resolve) => {
-    this.markStarted = resolve;
-  });
-  readonly capabilities = {
-    supportsSessionResume: false,
-    supportsCompaction: false,
-    supportsToolStreaming: false,
-    supportsParallelToolCalls: false,
-  } as const;
-
-  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
-    return {
-      sessionId: input.sessionId,
-      role: input.role,
-      runtimeAdapterId: this.id,
-      runtimeSessionRef: `app-abort-settling:${input.sessionId}`,
-    };
-  }
-
-  async runTurn(input: RuntimeTurnInput): Promise<never> {
-    this.markStarted?.();
-    return await new Promise<never>((_resolve, reject) => {
-      input.signal?.addEventListener(
-        "abort",
-        () => {
-          this.aborted = true;
-          reject(input.signal?.reason);
-        },
-        { once: true },
-      );
-    });
   }
 }
 

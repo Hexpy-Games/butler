@@ -11,6 +11,17 @@ export {
   stableJson,
 } from "./record-codec.ts";
 export type { ContentRef } from "./record-codec.ts";
+export {
+  arraySchema,
+  contentRefSchema,
+  enumSchema,
+  integerSchema,
+  literalSchema,
+  objectSchema,
+  textSchema,
+  variantsSchema,
+} from "./submission-schema.ts";
+export type { SubmissionSchema } from "./submission-schema.ts";
 export type {
   AuthoringContractBinding,
   ActualModelIdentity,

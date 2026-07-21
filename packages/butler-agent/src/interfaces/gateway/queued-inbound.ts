@@ -22,6 +22,7 @@ import {
   markPrincipalTurnCancellationDelivery,
 } from "../../agent/turn/principal-turn-cancellation-registry.ts";
 import { runtimeTurnAbortError } from "../../agent/turn/native/policy/turn-errors.ts";
+import { isBtccOperationalInterruption } from "../../agent/btcc/index.ts";
 
 export interface QueuedInboundServer {
   handleInbound(envelope: InboundEnvelope): Promise<GatewayDispatchResult>;
@@ -431,6 +432,7 @@ async function processClaimedQueuedInboundItem(input: {
                   schedulerItemId: item.queueId,
                 }
                 : {}),
+              ...(item.metadata.btccResume === true ? { btccResume: true } : {}),
             },
           }),
       },
@@ -495,6 +497,25 @@ async function processClaimedQueuedInboundItem(input: {
     const turnId = item.envelope.routingHints?.turnId?.trim();
     if (principalCancellationRecordedForItem(options, item)) {
       completePrincipalCancelledQueueClaim(options, item);
+      return summary;
+    }
+    if (isBtccOperationalInterruption(error) && sessionId && turnId) {
+      const scheduled = scheduleBtccOperationalResume({
+        queue: options.queue,
+        item,
+        turnId,
+        interruptionCode: error.code,
+        now: options.now?.(),
+      });
+      if (!scheduled) return summary;
+      const terminalRecorded = completeQueueClaim(options, item, {
+        dispatchStatus: "btcc-operational-resume",
+        handled: true,
+        continuationScheduled: true,
+        schedulerItemId: scheduled.queueId,
+      });
+      if (!terminalRecorded) return summary;
+      summary.handled += 1;
       return summary;
     }
     if (isTurnSchedulerContinuationYieldError(error) && sessionId && turnId) {
@@ -659,6 +680,48 @@ function scheduleSameLogicalTurnContinuation(input: {
         notBefore: backoff.notBefore,
         continuationBackoffMs: backoff.delayMs,
         continuationFailureCode: input.sourceErrorCode,
+      } : {}),
+    }, now);
+  } catch {
+    return null;
+  }
+}
+
+function scheduleBtccOperationalResume(input: {
+  queue: NativeInboundQueue;
+  item: ClaimedInboundEvent;
+  turnId: string;
+  interruptionCode: string;
+  now?: Date;
+}): QueuedInboundEvent | null {
+  try {
+    if (principalTurnCancellationRecorded({
+      butlerData: input.queue.butlerData,
+      turnId: input.turnId,
+    })) return null;
+    const retryStreak = Number(input.item.metadata.btccOperationalRetryStreak ?? 0) + 1;
+    const now = input.now ?? new Date();
+    const backoff = continuationBackoffForFailure({
+      sourceErrorCode: input.interruptionCode,
+      retryStreak,
+      now,
+    });
+    return input.queue.enqueue({
+      ...input.item.envelope,
+      routingHints: {
+        ...input.item.envelope.routingHints,
+        turnId: input.turnId,
+      },
+    }, {
+      source: "gateway/queued-inbound.ts#btcc-operational-resume",
+      continuationForQueueId: input.item.queueId,
+      continuationTurnId: input.turnId,
+      btccResume: true,
+      btccOperationalRetryStreak: retryStreak,
+      interruptionCode: input.interruptionCode,
+      ...(backoff ? {
+        notBefore: backoff.notBefore,
+        continuationBackoffMs: backoff.delayMs,
       } : {}),
     }, now);
   } catch {

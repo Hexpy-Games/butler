@@ -23,6 +23,7 @@ export function createPhaseInvocation(
     context: {
       originalMessageId: turn.originalMessageId,
       originalMessage: turn.originalMessage,
+      sessionId: turn.sessionId,
       ...turn.context,
       continuationCandidates: turn.continuationCandidates,
     },

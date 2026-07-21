@@ -20,6 +20,17 @@ CREATE TABLE IF NOT EXISTS btcc_inbound_inbox (
   UNIQUE(session_id, trigger_key)
 );
 
+CREATE TABLE IF NOT EXISTS btcc_continuation_triggers (
+  trigger_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  source_turn_id TEXT NOT NULL,
+  authorization_ref TEXT NOT NULL,
+  content TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS btcc_admission_claims (
   claim_id TEXT PRIMARY KEY,
   inbox_id TEXT NOT NULL UNIQUE,
@@ -139,6 +150,19 @@ CREATE TABLE IF NOT EXISTS btcc_learning_candidate_outbox (
   outbox_id TEXT PRIMARY KEY,
   source_id TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_context_documents (
+  context_ref TEXT PRIMARY KEY,
+  content_sha256 TEXT NOT NULL,
+  scope_kind TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  projection_class TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  source_revision TEXT NOT NULL,
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(scope_kind, scope_id, projection_class, source_id, source_revision)
 );
 
 CREATE TABLE IF NOT EXISTS btcc_opening_projections (

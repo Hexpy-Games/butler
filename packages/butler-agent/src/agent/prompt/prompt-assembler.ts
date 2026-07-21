@@ -360,6 +360,7 @@ function buildRuntimeStateSection(input: {
   liveConfigHash: string;
   butlerData: string;
   projectMemoryStatus?: ProjectCapsuleStatus;
+  includeLegacyWorkState: boolean;
 }): PromptSection {
   const lines = [
     `Live Configuration Hash: ${input.liveConfigHash}`,
@@ -378,11 +379,13 @@ function buildRuntimeStateSection(input: {
     }
   }
   lines.push(`Workspace Path: ${input.binding.workspacePath}`);
-  lines.push(...activeWorkStateLines({
-    butlerData: input.butlerData,
-    sessionId: input.binding.sessionId,
-    projectId: input.binding.projectId ?? null,
-  }));
+  if (input.includeLegacyWorkState) {
+    lines.push(...activeWorkStateLines({
+      butlerData: input.butlerData,
+      sessionId: input.binding.sessionId,
+      projectId: input.binding.projectId ?? null,
+    }));
+  }
 
   return {
     id: "runtime-state",
@@ -804,6 +807,22 @@ export class PromptAssembler {
     envelope: InboundEnvelope;
     route?: GatewayRoute;
   }): ContextAssembly {
+    return this.buildContextAssemblyForRuntime(input, true);
+  }
+
+  buildButlerContextAssembly(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+  }): ContextAssembly {
+    return this.buildContextAssemblyForRuntime(input, false);
+  }
+
+  private buildContextAssemblyForRuntime(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+  }, includeLegacyWorkState: boolean): ContextAssembly {
     const config = readPromptButlerConfig(this.butlerData);
     const liveConfiguration = buildLiveConfigurationSections({
       butlerHome: this.butlerHome,
@@ -826,6 +845,7 @@ export class PromptAssembler {
         liveConfigHash,
         butlerData: this.butlerData,
         projectMemoryStatus: this.projectCapsuleStatus(input.binding),
+        includeLegacyWorkState,
       }),
       ...personalization.filter((section) => section.region === "runtime_state"),
     ];

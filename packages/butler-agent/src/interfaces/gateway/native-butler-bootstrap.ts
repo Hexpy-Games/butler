@@ -3,9 +3,9 @@ import { homedir } from "os";
 import { join } from "path";
 import { Database } from "bun:sqlite";
 import type {
-  AgentRuntimeAdapter,
   DeliveryResult,
   InboundEnvelope,
+  ModelRef,
   ModelProviderAdapter,
   OutboundAction,
   RuntimeTurnEventInput,
@@ -20,19 +20,14 @@ import { registerRuntimeSession } from "../../test-support/harness/session-runti
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { GatewayRouter } from "../../gateways/core/router.ts";
 import { createGatewayServer } from "../../gateways/core/server.ts";
-import { PolicyEngine, type PolicyApprovalMode } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
-import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
-import { createLifecycleGatewayHandlers, SessionLifecycleService } from "./session-lifecycle.ts";
+import { createLifecycleGatewayHandlers } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
 import {
   BOOTSTRAP_RECOVERY_DEADLINE_MS,
   reconcilePendingWorkStreamTransactions,
 } from "../../agent/work/work-stream-transaction-recovery.ts";
-import { NativeToolLoopRuntime, type NativeToolLoopRuntimeOptions } from "../../agent/turn/native-tool-loop.ts";
-import { DeveloperLogStore } from "../../operations/diagnostics/developer-log-store.ts";
-import { readDeveloperDiagnosticsEnabled } from "../../operations/diagnostics/developer-log-settings.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { APP_TRANSPORT, createAppTransportAdapter } from "../transport/app/adapter.ts";
@@ -54,7 +49,13 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
 import { QueuedInboundDispatcher } from "./queued-inbound.ts";
-import { reconcileNonTerminalTurnContracts } from "../../agent/turn/turn-contract.ts";
+import { createProductionBtccComposition } from "../../agent/composition/index.ts";
+import {
+  BtccGatewayLifecycleService,
+  BtccStopRequestReconciler,
+  bindBtccGatewayRuntime,
+  type BtccGatewayRuntime,
+} from "./btcc/index.ts";
 import {
   startPrincipalTurnCancellationServer,
   type PrincipalTurnCancellationServer,
@@ -78,15 +79,13 @@ interface ButlerConfig {
 export interface NativeButlerMainOptions {
   butlerHome?: string;
   butlerData?: string;
-  runtime?: AgentRuntimeAdapter;
-  runtimeFactory?: (options: NativeToolLoopRuntimeOptions) => AgentRuntimeAdapter;
+  btcc?: BtccGatewayRuntime;
   provider?: ModelProviderAdapter;
   sendTelegram?: (input: {
     chatId: string;
     text: string;
     threadId?: string;
   }) => Promise<DeliveryResult>;
-  approvalMode?: PolicyApprovalMode;
   shutdownSignal?: AbortSignal;
   shutdownPollMs?: number;
   workerResultPollMs?: number;
@@ -401,7 +400,7 @@ function ensureButlerSession(input: {
   sessionId: string;
   butlerHome: string;
   butlerData: string;
-  runtime: AgentRuntimeAdapter;
+  runtimeAdapterId: string;
   provider: ModelProviderAdapter;
 }): StoredSessionBinding {
   const existing = input.store.getBySessionId(input.sessionId);
@@ -410,7 +409,7 @@ function ensureButlerSession(input: {
       sessionId: input.sessionId,
       role: "butler",
       workspacePath: input.butlerHome,
-      runtimeAdapterId: input.runtime.id,
+      runtimeAdapterId: input.runtimeAdapterId,
       modelProviderId: input.provider.id,
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
@@ -423,7 +422,7 @@ function ensureButlerSession(input: {
     role: existing.role,
     projectId: existing.projectId,
     workspacePath: existing.workspacePath,
-    runtimeAdapterId: input.runtime.id,
+    runtimeAdapterId: input.runtimeAdapterId,
     modelProviderId: providerIdFromModelRef(
       existing.modelRef,
       input.provider.id,
@@ -443,6 +442,12 @@ function providerIdFromModelRef(
   fallback: string,
 ): string {
   return modelRef?.split("/", 1)[0]?.trim() || fallback;
+}
+
+function requireModelRef(modelRef: string | undefined): ModelRef {
+  if (!modelRef?.trim()) throw new Error("Stored Butler session has no model binding");
+  if (!modelRef.includes("/")) throw new Error("Stored Butler model binding is not canonical");
+  return modelRef as ModelRef;
 }
 
 function countRunningTasks(butlerData: string): number {
@@ -583,16 +588,15 @@ export async function runNativeButlerMain(
     butlerData,
     compatibilityConfig: config as Record<string, any>,
   });
-  const runtimeOptions: NativeToolLoopRuntimeOptions = {
+  const appMessageDbPath = appTurnStateDbPath(butlerData);
+  reconcilePendingWorkStreamTransactions({ butlerData, maxDurationMs: BOOTSTRAP_RECOVERY_DEADLINE_MS });
+  const btcc = input.btcc ?? createProductionBtccComposition({
     butlerHome,
     butlerData,
-    appMessageDbPath: join(butlerData, "app-server", "butler-client.sqlite"),
-  };
-  reconcilePendingWorkStreamTransactions({ butlerData, maxDurationMs: BOOTSTRAP_RECOVERY_DEADLINE_MS });
-  reconcileNonTerminalTurnContracts({ butlerData });
-  const runtime = input.runtime ?? input.runtimeFactory?.(runtimeOptions) ?? new NativeToolLoopRuntime(runtimeOptions);
+    appMessageDbPath,
+    ownerId: `native-butler:${process.pid}`,
+  });
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
-  const developerLogStore = new DeveloperLogStore({ butlerData });
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
@@ -603,6 +607,7 @@ export async function runNativeButlerMain(
   let workerResultMonitor: Promise<void> | undefined;
   let appWorkerResultMonitor: Promise<void> | undefined;
   let cancellationServer: PrincipalTurnCancellationServer | undefined;
+  let stopReconciler: BtccStopRequestReconciler | undefined;
   const inboundDispatcher = new QueuedInboundDispatcher();
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
@@ -625,7 +630,7 @@ export async function runNativeButlerMain(
       sessionId,
       butlerHome,
       butlerData,
-      runtime,
+      runtimeAdapterId: "btcc-turn-runtime",
       provider,
     });
     writeButlerSessionPointer(butlerData, binding.sessionId);
@@ -636,7 +641,6 @@ export async function runNativeButlerMain(
       sendTelegram: input.sendTelegram,
     });
     const appAdapter = createAppTransportAdapter();
-    const conversationWriter = new AgentConversationStore({ butlerData });
     const deliveryGuard = new DeliveryGuard({
       adapters: [telegramAdapter, appAdapter],
     });
@@ -653,31 +657,19 @@ export async function runNativeButlerMain(
       }
       return await deliveryGuard.deliver(activeSessionId, action, metadata);
     };
-    const lifecycle = new SessionLifecycleService({
+    const lifecycle = new BtccGatewayLifecycleService({
       store,
-      runtime,
-      provider,
+      ...bindBtccGatewayRuntime(btcc),
       promptAssembler: new PromptAssembler({
         butlerHome,
         butlerData,
       }),
-      policyEngine: new PolicyEngine(),
-      sessionTitleGenerator: (titleInput) =>
-        generateSessionTitleWithProvider(provider, titleInput),
-      approvalMode: input.approvalMode ?? "default",
-      conversationWriter,
-      conversationMetricsButlerData: butlerData,
-      developerLogStore,
-      developerDiagnosticsEnabled: () =>
-        readDeveloperDiagnosticsEnabled({
-          dbPath: appTurnStateDbPath(butlerData),
+      generateSessionTitle: ({ binding: activeBinding, envelope }) =>
+        generateSessionTitleWithProvider(provider, {
+          text: envelope.message.text ?? "",
+          model: requireModelRef(activeBinding.modelRef),
+          signal: envelope.signal,
         }),
-      deliverIntermediate: async ({ binding: activeBinding, action, metadata }) => {
-        await deliverThroughEnabledGate(activeBinding.sessionId, action, {
-          source: "gateway/native-butler-bootstrap.ts#intermediate",
-          ...(metadata ?? {}),
-        });
-      },
       deliverTurnEvent: async ({ binding: activeBinding, envelope, event }) => {
         const action = appTurnEventAction({
           sessionId: activeBinding.sessionId,
@@ -695,6 +687,8 @@ export async function runNativeButlerMain(
         }
       },
     });
+    stopReconciler = new BtccStopRequestReconciler(appMessageDbPath, btcc.runtime);
+    await stopReconciler.reconcile();
     await lifecycle.getOrCreate(binding.sessionId, "butler");
     const server = createGatewayServer({
       router,
@@ -880,6 +874,7 @@ export async function runNativeButlerMain(
         signal: input.shutdownSignal,
         pollMs,
         onPoll: async () => {
+          await stopReconciler?.reconcile();
           if (activePrincipalTurnExecutionCount(butlerData) > 0) {
             abortDurablyCancelledPrincipalTurnExecutions(butlerData);
           }
@@ -964,7 +959,9 @@ export async function runNativeButlerMain(
     throw error;
   } finally {
     stopTelegramPolling = true;
+    stopReconciler?.close();
     await cancellationServer?.close();
+    btcc.close();
     store.close();
   }
 }

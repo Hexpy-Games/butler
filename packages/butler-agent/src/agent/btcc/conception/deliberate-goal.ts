@@ -14,6 +14,7 @@ import type {
   ConceptionLensId,
   GoalContractCandidateProduct,
 } from "./managed-contracts.ts";
+import { goalCandidateSubmissionSchema } from "./submission-schemas.ts";
 
 const LENSES: ConceptionLensId[] = [
   "requested_content",
@@ -39,6 +40,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec: PhaseCodec<GoalContractCandidateProduct> = {
+  submissionSchema: goalCandidateSubmissionSchema,
   decode(submission, envelope) {
     const value = requireRecord(submission, "Conception submission");
     requireLiteral(value.kind, "goal_contract_candidate", "Conception kind");

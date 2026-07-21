@@ -1,1 +1,4 @@
-export { createBtccComposition } from "./create-btcc-composition.ts";
+export {
+  createBtccComposition,
+  createProductionBtccComposition,
+} from "./create-btcc-composition.ts";

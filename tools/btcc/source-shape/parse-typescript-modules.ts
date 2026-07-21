@@ -1,11 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 import ts from "typescript";
-import {
-  LEGACY_DOMAIN_PATHS,
-  type ModuleReference,
-  type ParsedTypeScriptModule,
-} from "./contracts.ts";
+import type { ModuleReference, ParsedTypeScriptModule } from "./contracts.ts";
 
 function compilerOptions(repositoryRoot: string): ts.CompilerOptions {
   const defaults: ts.CompilerOptions = {
@@ -70,23 +66,8 @@ export function parseTypeScriptModules(
   filePaths: readonly string[],
 ): ParsedTypeScriptModule[] {
   const options = compilerOptions(repositoryRoot);
-  const root = resolve(repositoryRoot);
-  const legacyRoots = LEGACY_DOMAIN_PATHS.map((path) => resolve(root, path));
   const pending = [...filePaths];
   const parsed = new Map<string, ParsedTypeScriptModule>();
-
-  const isRepositoryDependency = (path: string): boolean => {
-    const pathFromRoot = relative(root, path);
-    return pathFromRoot !== ".."
-      && !pathFromRoot.startsWith(`..${sep}`)
-      && !pathFromRoot.split(sep).includes("node_modules")
-      && !legacyRoots.some((legacyRoot) => {
-        const pathFromLegacy = relative(legacyRoot, path);
-        return pathFromLegacy === ""
-          || (!pathFromLegacy.startsWith(`..${sep}`) && pathFromLegacy !== "..");
-      })
-      && [".cts", ".mts", ".ts", ".tsx"].some((extension) => path.endsWith(extension));
-  };
 
   while (pending.length > 0) {
     const path = resolve(pending.shift()!);
@@ -159,11 +140,6 @@ export function parseTypeScriptModules(
       hasWildcardExport,
     };
     parsed.set(path, module);
-    for (const reference of references) {
-      if (reference.resolvedPath && isRepositoryDependency(reference.resolvedPath)) {
-        pending.push(reference.resolvedPath);
-      }
-    }
   }
 
   return [...parsed.values()].sort((left, right) => left.path.localeCompare(right.path));

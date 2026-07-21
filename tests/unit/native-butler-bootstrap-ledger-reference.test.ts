@@ -1,9 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
-import type { NativeToolLoopRuntimeOptions } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
 import { compileTurnContract, TURN_CONTRACT_DECISION_SCHEMA } from "../../packages/butler-agent/src/agent/turn/turn-contract.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { WorkStreamClaimStore } from "../../packages/butler-agent/src/agent/work/work-stream-claim-store.ts";
@@ -11,36 +11,10 @@ import { WorkStreamPlanStore } from "../../packages/butler-agent/src/agent/work/
 import { completeReportingWorkStreamForSession, WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import type { ReportingCompletionJournal } from "../../packages/butler-agent/src/agent/work/work-stream-reporting-store.ts";
 import { BOOTSTRAP_RECOVERY_DEADLINE_MS } from "../../packages/butler-agent/src/agent/work/work-stream-transaction-recovery.ts";
-import type {
-  AgentRuntimeAdapter,
-  ModelProviderAdapter,
-  RuntimeSessionHandle,
-  RuntimeSessionInit,
-  RuntimeTurnInput,
-} from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
+import type { ModelProviderAdapter } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
-
-class CapturingRuntime implements AgentRuntimeAdapter {
-  readonly id = "capturing-runtime";
-  readonly capabilities = {
-    supportsSessionResume: false,
-    supportsCompaction: false,
-    supportsToolStreaming: false,
-    supportsParallelToolCalls: false,
-  } as const;
-
-  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
-    return { sessionId: input.sessionId, role: input.role, runtimeAdapterId: this.id, runtimeSessionRef: input.sessionId };
-  }
-
-  async runTurn(input: RuntimeTurnInput) {
-    return { text: "unused", runtimeSessionRef: input.handle.runtimeSessionRef };
-  }
-
-  async closeSession(): Promise<void> {}
-}
 
 const provider: ModelProviderAdapter = {
   id: "test-provider",
@@ -58,30 +32,29 @@ const provider: ModelProviderAdapter = {
   },
 };
 
-test("production native bootstrap passes the App project database path to its default runtime factory", async () => {
+test("production native bootstrap opens BTCC stores in the App message database", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-bootstrap-ledger-"));
   roots.push(butlerData);
   mkdirSync(join(butlerData, "app-server"), { recursive: true });
-  let captured: NativeToolLoopRuntimeOptions | null = null;
-
   const result = await runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData,
     provider,
-    runtimeFactory: (options) => {
-      captured = options;
-      return new CapturingRuntime();
-    },
     enableTelegramPolling: false,
     waitForShutdown: false,
   });
 
   expect(result.shutdownReason).toBe("bootstrap-only");
-  expect(captured).toMatchObject({
-    butlerHome: process.cwd(),
-    butlerData,
-    appMessageDbPath: join(butlerData, "app-server", "butler-client.sqlite"),
+  const db = new Database(join(butlerData, "app-server", "butler-client.sqlite"), {
+    readonly: true,
   });
+  try {
+    expect(db.query<{ name: string }, []>(`
+      SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'btcc_turns'
+    `).get()?.name).toBe("btcc_turns");
+  } finally {
+    db.close();
+  }
 });
 
 test("production native bootstrap reconciles a prepared plan transaction", async () => {
@@ -139,7 +112,6 @@ test("production native bootstrap reconciles a prepared plan transaction", async
     butlerHome: process.cwd(),
     butlerData,
     provider,
-    runtime: new CapturingRuntime(),
     enableTelegramPolling: false,
     waitForShutdown: false,
   });
@@ -183,7 +155,6 @@ test("production bootstrap applies one short recovery deadline across many pendi
     butlerHome: process.cwd(),
     butlerData,
     provider,
-    runtime: new CapturingRuntime(),
     enableTelegramPolling: false,
     waitForShutdown: false,
   });

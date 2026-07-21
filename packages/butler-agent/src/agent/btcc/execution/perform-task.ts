@@ -15,6 +15,7 @@ import type {
   WorkspaceRevision,
 } from "./contracts.ts";
 import { withTaskExecutionDeferral } from "../deferral/index.ts";
+import { taskExecutionSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_execution",
@@ -31,6 +32,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
+  submissionSchema: taskExecutionSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Execution state");
     const value = requireRecord(submission, "Task Execution submission");

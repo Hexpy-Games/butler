@@ -2,8 +2,6 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readConversationContext } from "../../packages/butler-agent/src/agent/context/conversation-context.ts";
-import { conversationSessionIdForDurableSession } from "../../packages/butler-agent/src/agent/conversation/session-admission.ts";
 import { AgentConversationStore } from "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { handleNativeStewardTelegramTurn } from "../../packages/butler-agent/src/interfaces/gateway/native-steward-bootstrap.ts";
 import { SessionLifecycleService } from "../../packages/butler-agent/src/interfaces/gateway/session-lifecycle.ts";
@@ -20,6 +18,7 @@ import type {
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { TurnSchedulerContinuationYieldError } from "../../packages/butler-agent/src/agent/turn/turn-continuation-context.ts";
 import { memorySyncQueueFile } from "../../packages/butler-agent/src/agent/cognition/memory/scripts/queue.ts";
+import { ScriptedBtccGatewayRuntime } from "./support/fake-btcc-gateway-runtime.ts";
 
 let tempDir = "";
 let originalButlerData: string | undefined;
@@ -209,29 +208,6 @@ class UnsafeFinalizedToolRuntime implements AgentRuntimeAdapter {
   }
 }
 
-class StewardBootstrapRuntime implements AgentRuntimeAdapter {
-  readonly id = "steward-bootstrap-runtime";
-  readonly capabilities = {
-    supportsSessionResume: false,
-    supportsCompaction: false,
-    supportsToolStreaming: false,
-    supportsParallelToolCalls: false,
-  } as const;
-
-  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
-    return {
-      sessionId: input.sessionId,
-      role: input.role,
-      runtimeAdapterId: this.id,
-    };
-  }
-
-  async runTurn(input: RuntimeTurnInput) {
-    expect(input.handle.role).toBe("steward");
-    return { text: "steward final answer" };
-  }
-}
-
 class CheckpointYieldRuntime implements AgentRuntimeAdapter {
   readonly id = "checkpoint-yield-runtime";
   readonly capabilities = {
@@ -316,11 +292,6 @@ function inbound(
     routingHints: { turnId: `turn-${id}` },
     raw: input.raw,
   };
-}
-
-function textPartContent(value: unknown): unknown {
-  if (!value || typeof value !== "object") return undefined;
-  return (value as { text?: unknown }).text;
 }
 
 beforeEach(() => {
@@ -522,7 +493,7 @@ test("cross-gateway turns share one canonical conversation session", async () =>
   bindingStore.close();
 });
 
-test("standalone steward bootstrap writes semantic rows to canonical conversation store", async () => {
+test("standalone steward bootstrap routes one project-bound turn through BTCC", async () => {
   const workspacePath = join(tempDir, "workspace");
   mkdirSync(workspacePath, { recursive: true });
   writeFileSync(
@@ -535,6 +506,7 @@ test("standalone steward bootstrap writes semantic rows to canonical conversatio
     }),
   );
 
+  const btcc = new ScriptedBtccGatewayRuntime("steward final answer");
   const result = await handleNativeStewardTelegramTurn({
     projectName: "butler",
     workspacePath,
@@ -545,7 +517,7 @@ test("standalone steward bootstrap writes semantic rows to canonical conversatio
     senderId: "principal-1",
     butlerHome: tempDir,
     butlerData: tempDir,
-    runtime: new StewardBootstrapRuntime(),
+    btcc,
     provider,
     sendTelegram: async ({ text }) => ({
       ok: true,
@@ -561,45 +533,13 @@ test("standalone steward bootstrap writes semantic rows to canonical conversatio
     },
   });
 
-  const conversationStore = new AgentConversationStore({ butlerData: tempDir });
-  const canonicalSessionId = conversationSessionIdForDurableSession(result.sessionId);
-  const session = conversationStore.getSessionByGatewayBinding("telegram", result.sessionId);
-  expect(session).toMatchObject({
-    id: canonicalSessionId,
-    project_id: "butler",
+  expect(btcc.commands).toHaveLength(1);
+  expect(btcc.commands[0]).toMatchObject({
+    kind: "run",
+    sessionId: "steward/butler",
+    message: { content: "steward bootstrap question" },
+    context: { projectRef: "butler" },
   });
-  expect(conversationStore.readSemanticTail(canonicalSessionId, 10).map((message) => ({
-    role: message.role,
-    text: textPartContent(message.parts[0]?.content_json),
-    sourceGateway: message.source_gateway,
-  }))).toEqual([
-    {
-      role: "user",
-      text: "steward bootstrap question",
-      sourceGateway: "telegram",
-    },
-    {
-      role: "assistant",
-      text: "steward final answer",
-      sourceGateway: "telegram",
-    },
-  ]);
-
-  const context = readConversationContext({
-    butlerData: tempDir,
-    sessionId: result.sessionId,
-    query: "bootstrap",
-    limit: 5,
-    maxChars: 1000,
-  });
-  expect(context.ok).toBe(true);
-  expect(context.session_id).toBe(canonicalSessionId);
-  expect(context.messages.map((message) => message.text)).toEqual([
-    "steward bootstrap question",
-    "steward final answer",
-  ]);
-
-  conversationStore.close();
 });
 
 test("system worker completion envelopes remain audit-only", async () => {

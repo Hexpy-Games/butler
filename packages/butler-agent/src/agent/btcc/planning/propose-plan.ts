@@ -12,6 +12,7 @@ import type { PlanningContinuation } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
+import { planCandidateSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -37,6 +38,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withManagedDeferral<PlanningCandidateProduct>({
+  submissionSchema: planCandidateSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Planning state");
     const value = requireRecord(submission, "Planning submission");

@@ -6,7 +6,7 @@ export type TaskArtifactPolicy =
   | {
       kind: "workspace_artifact";
       targetScopeRef: string;
-      baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+      baselinePolicy: "capture_at_workspace_provision";
     }
   | { kind: "repository_promotion"; targetScopeRef: string };
 
@@ -66,7 +66,7 @@ export type ManagedArtifactLifecycle = {
     implementationTaskRefs: ContentRef[];
     integrationTaskRef: ContentRef;
     promotionTaskRef: ContentRef;
-    baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+    baselinePolicy: "capture_at_workspace_provision";
     promotionProtocol: "journaled_complete_target_exchange_v1";
   }>;
   promotionTaskRefs: ContentRef[];

@@ -32,6 +32,7 @@ export type ManagedAttempt = {
           candidateRef: ContentRef;
           resolutionRef: ContentRef;
           baselineRef: ContentRef;
+          finalSnapshotRef: ContentRef;
         };
   };
   executionTargetBinding: {

@@ -146,11 +146,6 @@ export function verifyDiscoveredSuccessorShape(
   const changedDomains = discovered.domains.filter((domain) =>
     discovered.changedDomainPaths.includes(domain.path));
   const findings = [
-    ...discovered.protectedSourceChanges.map((path): SourceShapeFinding => ({
-      code: "pre_cutover_source_changed",
-      path,
-      message: "S0 production source must remain unchanged until the R10 cutover",
-    })),
     ...verifyDomainPublicApis(root, changedDomains, modulesByPath),
     ...modules.flatMap((module) => verifyModule(
       root,

@@ -1,6 +1,7 @@
 import type { AdmittedModelSelection } from "../contracts.ts";
 import type { DeferredContinuationCandidate } from "../continuation/index.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
+import type { SubmissionSchema } from "./submission-schema.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -29,6 +30,7 @@ export type ModelPhaseState =
 export type OpeningContext = {
   originalMessageId: string;
   originalMessage: string;
+  sessionId: string;
   userRef: string;
   projectRef?: string;
   profileRefs: string[];
@@ -53,6 +55,7 @@ export type PhaseEnvelope = {
   context: OpeningContext;
   operationAuthority: OperationAuthority;
   operationResults: OperationResult[];
+  submissionSchema: SubmissionSchema;
 };
 
 export type AuthoringContractBinding = {
@@ -120,7 +123,14 @@ export type OperationAuthority = {
     | { kind: "forbidden" }
     | { kind: "workspace_only"; workspaceRef: { id: string; sha256: string } }
     | { kind: "validation_overlay_only"; reviewSourceRef: { id: string; sha256: string } }
-    | { kind: "repository_promotion_only"; authorizationRef: { id: string; sha256: string } };
+    | {
+        kind: "repository_promotion_only";
+        authorizationRef: { id: string; sha256: string };
+        candidateRef: { id: string; sha256: string };
+        resolutionRef: { id: string; sha256: string };
+        baselineRef: { id: string; sha256: string };
+        finalSnapshotRef: { id: string; sha256: string };
+      };
 };
 
 export type OperationRequest =
@@ -154,6 +164,7 @@ export type OperationRequest =
       candidateRef: { id: string; sha256: string };
       resolutionRef: { id: string; sha256: string };
       baselineRef: { id: string; sha256: string };
+      finalSnapshotRef: { id: string; sha256: string };
       input: string;
     };
 
@@ -190,6 +201,7 @@ export interface OperationExecutor {
 }
 
 export type PhaseCodec<Product> = {
+  submissionSchema: SubmissionSchema;
   decode(submission: unknown, envelope: PhaseEnvelope): Product;
 };
 

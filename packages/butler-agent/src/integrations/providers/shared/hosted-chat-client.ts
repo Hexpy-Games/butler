@@ -208,10 +208,12 @@ export async function createHostedChatCompletion(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  retryAttempts?: number,
 ): Promise<Record<string, any>> {
   return await withModelApiRetry(
     async () => await createHostedChatCompletionOnce(config, body, signal, budgetContext),
     signal,
+    retryAttempts,
   );
 }
 

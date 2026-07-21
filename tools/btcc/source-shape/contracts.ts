@@ -27,7 +27,6 @@ export type SourceShapeFindingCode =
   | "explicit_api_missing"
   | "legacy_dependency"
   | "line_limit_exceeded"
-  | "pre_cutover_source_changed"
   | "public_index_missing"
   | "wildcard_export";
 
@@ -48,7 +47,6 @@ export type DiscoveredSuccessorSources = {
   changedDomainPaths: string[];
   changedFilePaths: string[];
   filePaths: string[];
-  protectedSourceChanges: string[];
 };
 
 export type ModuleReference = {

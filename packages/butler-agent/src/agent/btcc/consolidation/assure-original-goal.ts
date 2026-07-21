@@ -13,6 +13,7 @@ import {
 import type { ConsolidationProduct } from "./contracts.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import { decodeAssessment, isRepairableAssessment } from "./decode-assessment.ts";
+import { consolidationSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "consolidation",
@@ -30,6 +31,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec: PhaseCodec<ConsolidationProduct> = {
+  submissionSchema: consolidationSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Consolidation state");
     const sourceDeferral = state.sourceDeferral as ManagedDeferralProduct | undefined;

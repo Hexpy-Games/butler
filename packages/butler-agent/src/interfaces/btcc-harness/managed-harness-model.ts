@@ -143,6 +143,7 @@ export class ManagedHarnessModel implements SelectedModel {
               candidateRef: target.candidateRef,
               resolutionRef: target.resolutionRef,
               baselineRef: target.baselineRef,
+              finalSnapshotRef: target.finalSnapshotRef,
               input: "승인된 후보를 완전 대상 교환으로 반영한다",
             }],
           };

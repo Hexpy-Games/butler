@@ -10,3 +10,9 @@ export class OperationalInterruptionError extends Error {
     super(`BTCC operational interruption: ${code}`);
   }
 }
+
+export function isBtccOperationalInterruption(
+  error: unknown,
+): error is OperationalInterruptionError {
+  return error instanceof OperationalInterruptionError;
+}

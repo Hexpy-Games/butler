@@ -63,7 +63,6 @@ interface TurnActionStoreInput {
     options: SendMessageOptions;
   }) => Promise<TurnActionResult>;
   cancelResponder: (turnId: string) => void;
-  cancelPersistedRuntimeTurn: (turnId: string) => void;
   signalPrincipalTurnCancellation: (turnId: string) => Promise<unknown>;
   principalTurnCancellationTargetForTurn: (
     turnId: string,
@@ -205,11 +204,7 @@ export class AppTurnActionStore {
     const cancellationTarget =
       this.input.principalTurnCancellationTargetForTurn(turnId);
     this.recordCancellationDecision(row, cancellationTarget);
-    try {
-      this.input.cancelPersistedRuntimeTurn(turnId);
-    } finally {
-      this.input.cancelResponder(turnId);
-    }
+    this.input.cancelResponder(turnId);
     const delivery = await this.input.signalPrincipalTurnCancellation(turnId);
     if (
       delivery &&

@@ -11,7 +11,7 @@ export type DraftArtifactPolicy =
   | {
       kind: "workspace_artifact";
       targetScopeRef: string;
-      baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+      baselinePolicy: "capture_at_workspace_provision";
     }
   | { kind: "repository_promotion"; targetScopeRef: string };
 
@@ -28,10 +28,9 @@ export function readArtifactPolicy(
   );
   if (kind === "workspace_artifact") {
     const baselinePolicy = requireString(policy.baselinePolicy, "baselinePolicy");
-    if (
-      baselinePolicy !== "capture_at_workspace_provision" &&
-      baselinePolicy !== "exact_planned_revision"
-    ) throw new Error("Artifact baseline policy is invalid");
+    if (baselinePolicy !== "capture_at_workspace_provision") {
+      throw new Error("Artifact baseline policy is invalid");
+    }
     return { kind, targetScopeRef, baselinePolicy };
   }
   if (kind === "repository_promotion") return { kind, targetScopeRef };
@@ -91,18 +90,15 @@ function materializePromotionSelectors(
     }
     const targetScopeRef = requireString(draft.targetScopeRef, "targetScopeRef");
     const baselinePolicy = requireString(draft.baselinePolicy, "baselinePolicy");
-    if (
-      baselinePolicy !== "capture_at_workspace_provision" &&
-      baselinePolicy !== "exact_planned_revision"
-    ) throw new Error("Promotion selector baseline policy is invalid");
+    if (baselinePolicy !== "capture_at_workspace_provision") {
+      throw new Error("Promotion selector baseline policy is invalid");
+    }
     const body = {
       targetScopeRef,
       implementationTaskRefs,
       integrationTaskRef,
       promotionTaskRef,
-      baselinePolicy: baselinePolicy as
-        | "capture_at_workspace_provision"
-        | "exact_planned_revision",
+      baselinePolicy: "capture_at_workspace_provision" as const,
       promotionProtocol: "journaled_complete_target_exchange_v1" as const,
     };
     return { ref: contentRef("promotion-selector", body), ...body };

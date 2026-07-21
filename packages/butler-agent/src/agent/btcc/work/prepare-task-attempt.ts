@@ -101,6 +101,7 @@ function createPromotionTarget(
       candidateRef: assembly.candidate.ref,
       resolutionRef: assembly.resolution.ref,
       baselineRef: assembly.resolution.baselineRef,
+      finalSnapshotRef: assembly.candidate.finalSnapshotRef,
     },
   };
   const executionTarget = { ref: contentRef("task-execution-target", targetBody), ...targetBody };
