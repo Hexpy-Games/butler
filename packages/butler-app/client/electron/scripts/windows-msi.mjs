@@ -32,7 +32,7 @@ export function butlerPerUserMsiWix({ version }) {
     <CustomAction Id="InstallButler" FileKey="ButlerBootstrapper" ExeCommand="--silent" Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="UninstallButler" FileKey="ButlerBootstrapper" ExeCommand="--uninstall -s" Execute="deferred" Impersonate="yes" Return="ignore" />
     <InstallExecuteSequence>
-      <Custom Action="UninstallButler" Before="RemoveFiles">REMOVE=&quot;ALL&quot;</Custom>
+      <Custom Action="UninstallButler" Before="RemoveFiles">REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE</Custom>
       <Custom Action="InstallButler" After="InstallFiles">NOT REMOVE</Custom>
     </InstallExecuteSequence>
   </Product>
