@@ -29,7 +29,7 @@ export class NoLedgerHarnessModel implements SelectedModel {
         kind: "observe",
         capabilityRef: "weather:seoul-current",
         scopeRef: "public-current-information",
-        input: "현재 서울 날씨",
+        input: { location: "서울" },
       }]);
     }
     if (this.scenario === "assisted-research" && envelope.operationResults.length < 2) {
@@ -39,7 +39,7 @@ export class NoLedgerHarnessModel implements SelectedModel {
         kind: "observe",
         capabilityRef: ordinal === 1 ? "meme:current-first" : "meme:current-second",
         scopeRef: "public-current-information",
-        input: `현재 유행 밈 ${ordinal}`,
+        input: { query: `현재 유행 밈 ${ordinal}` },
       }]);
     }
     return answer(envelope, this.scenario);

@@ -81,6 +81,14 @@ describe("production BTCC selected model", () => {
     expect(calls[0]?.signal).toBe(signal);
     expect(calls[0]?.cacheScope).toBe("btcc:planning");
     expect(calls[0]?.responseSchema).toMatchObject({ type: "object" });
+    expect(calls[0]?.carrierFunctions.map((entry) => entry.carrierKind)).toEqual([
+      "phase_submission",
+      "operation_requests",
+    ]);
+    expect(calls[0]?.carrierFunctions[0]?.parameters).toMatchObject({
+      required: ["submission"],
+      additionalProperties: false,
+    });
 
     const prompt = JSON.parse(calls[0]!.prompt) as Record<string, any>;
     expect(prompt.originalRequest).toEqual({
@@ -148,7 +156,7 @@ describe("production BTCC selected model", () => {
       kind: "observe" as const,
       capabilityRef: "weather:current",
       scopeRef: "web:current",
-      input: "Current Seoul weather",
+      input: { location: "Seoul" },
     };
     let calls = 0;
     const model = createProductionSelectedModel({

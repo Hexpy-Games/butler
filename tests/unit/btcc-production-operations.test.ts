@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { contentRef, type OperationRequest } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
+import {
+  OperationRejectedError,
+  contentRef,
+  type OperationRequest,
+} from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import {
   cleanupProductionOperationsFixtures,
   createDirectoryFixture,
@@ -118,7 +122,7 @@ describe("production BTCC artifact operations", () => {
       kind: "observe",
       capabilityRef: "web_search",
       scopeRef: "public-web",
-      input: JSON.stringify({ query: "structured runtime" }),
+      input: { query: "structured runtime" },
     };
     const first = createRuntime(fixture);
     const observed = await first.operations.perform({ request, envelope: envelope() });
@@ -140,14 +144,43 @@ describe("production BTCC artifact operations", () => {
       kind: "observe",
       capabilityRef: "web_read",
       scopeRef: "public-web",
-      input: "{\"url\":\"https://example.com\"}",
+      input: { url: "https://example.com" },
     };
     await createRuntime(fixture).operations.perform({ request, envelope: envelope() });
 
     expect(received).toMatchObject({
       name: "web_read",
       args: { url: "https://example.com" },
-      rawArguments: request.input,
+      rawArguments: JSON.stringify(request.input),
+    });
+  });
+
+  test("returns a typed result when an admitted capability rejects its target", async () => {
+    const fixture = createFixture();
+    fixture.observe = () => {
+      throw new OperationRejectedError(
+        "sensitive_path_blocked",
+        "The requested path is outside the admitted workspace safety policy.",
+      );
+    };
+    const request: Extract<OperationRequest, { kind: "observe" }> = {
+      requestId: "observe-rejected",
+      kind: "observe",
+      capabilityRef: "read_file",
+      scopeRef: "workspace:test",
+      input: { path: "/private/secret" },
+    };
+
+    const result = await createRuntime(fixture).operations.perform({
+      request,
+      envelope: envelope(),
+    });
+
+    expect(result.outcome).toBe("operation_rejected");
+    expect(JSON.parse(result.content)).toEqual({
+      status: "rejected",
+      code: "sensitive_path_blocked",
+      message: "The requested path is outside the admitted workspace safety policy.",
     });
   });
 
@@ -171,7 +204,7 @@ describe("production BTCC artifact operations", () => {
     expect(received).toMatchObject({
       name: "write_file",
       args: { content: "delegated bytes\n" },
-      rawArguments: request.input,
+      rawArguments: JSON.stringify(request.input),
     });
     expect(readFileSync(fixture.targetPath, "utf8")).toBe(fixture.original);
   });

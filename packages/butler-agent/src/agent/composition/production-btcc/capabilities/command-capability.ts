@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
+import { OperationRejectedError } from "../../../btcc/index.ts";
 
 export async function executeCommandCapability(
   args: Record<string, unknown>,
@@ -48,7 +49,10 @@ async function resolveCommandDirectory(workspaceRoot: string, value: unknown): P
     allowDirectories: true,
   });
   if (!guarded.ok || !guarded.absolutePath) {
-    throw new Error(`Command cwd rejected: ${guarded.reason ?? "unknown"}`);
+    throw new OperationRejectedError(
+      guarded.reason ?? "command_cwd_rejected",
+      "The requested command directory is outside the admitted workspace safety policy.",
+    );
   }
   return guarded.absolutePath;
 }

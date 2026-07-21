@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  OperationRejectedError,
   contentRef,
   digest,
   type ObservationResult,
@@ -16,7 +17,6 @@ import { exchangeCompleteTarget } from "./atomic-target-exchange.ts";
 import {
   assertActive,
   operationContent,
-  parseToolInput,
   sameRef,
 } from "./operation-helpers.ts";
 import {
@@ -47,22 +47,27 @@ export async function performWorkspaceAction(input: {
   afterBoundary?: (boundary: WorkspaceActionBoundary) => void;
 }): Promise<ObservationResult> {
   assertActive(input.signal);
+  const scopeId = input.envelope.binding.checkpointId;
   const workspace = requireWorkspace(input.store, input.request);
-  let journal = input.store.loadWorkspaceAction(input.request);
+  let journal = input.store.loadWorkspaceAction(scopeId, input.request);
   if (!journal) journal = reserveAction(input, workspace);
 
   let shouldDispatch = false;
   if (journal.status === "reserved") {
     materializeActionOverlay(input.store, journal);
-    const args = parseToolInput(input.request.input);
-    input.options.validateOperationInput({
-      envelope: input.envelope,
-      request: input.request,
-      args,
-    });
+    const args = input.request.input;
+    try {
+      input.options.validateOperationInput({
+        envelope: input.envelope,
+        request: input.request,
+        args,
+      });
+    } catch (error) {
+      throw capabilityRejection(error);
+    }
     assertActive(input.signal);
     journal = { ...journal, status: "dispatching" };
-    input.store.saveWorkspaceAction(journal);
+    input.store.saveWorkspaceAction(scopeId, journal);
     shouldDispatch = true;
   }
 
@@ -72,8 +77,8 @@ export async function performWorkspaceAction(input: {
       try {
         content = await dispatchWorkspaceCapability(input, journal);
       } catch (error) {
-        resetInterruptedDispatch(input.store, journal);
-        throw error;
+        resetInterruptedDispatch(input.store, scopeId, journal);
+        throw capabilityRejection(error);
       }
       input.afterBoundary?.("tool_mutated");
     }
@@ -93,11 +98,21 @@ export async function performWorkspaceAction(input: {
   return journal.result;
 }
 
+function capabilityRejection(error: unknown): Error {
+  if (error instanceof OperationRejectedError ||
+    (error instanceof Error && error.name === "AbortError")) return error;
+  return new OperationRejectedError(
+    "capability_execution_failed",
+    error instanceof Error ? error.message : "The workspace capability could not execute its input.",
+  );
+}
+
 export function cleanupWorkspaceAction(
   store: ArtifactStore,
+  scopeId: string,
   request: WorkspaceRequest,
 ): void {
-  const journal = store.loadWorkspaceAction(request);
+  const journal = store.loadWorkspaceAction(scopeId, request);
   if (journal?.status === "workspace_exchanged") removeOwnedRoot(journal.overlayRoot);
 }
 
@@ -105,7 +120,7 @@ async function dispatchWorkspaceCapability(
   input: Parameters<typeof performWorkspaceAction>[0],
   journal: WorkspaceActionJournal,
 ): Promise<string> {
-  const args = parseToolInput(input.request.input);
+  const args = input.request.input;
   const execute = input.options.createWorkspaceToolExecutor({
     workspacePath: workspaceContentRoot(journal.overlayRoot),
     envelope: input.envelope,
@@ -114,15 +129,19 @@ async function dispatchWorkspaceCapability(
   const output = await execute({
     name: input.request.capabilityRef,
     args,
-    rawArguments: input.request.input,
+    rawArguments: JSON.stringify(input.request.input),
     signal: input.signal,
   });
   return operationContent(output);
 }
 
-function resetInterruptedDispatch(store: ArtifactStore, journal: WorkspaceActionJournal): void {
+function resetInterruptedDispatch(
+  store: ArtifactStore,
+  scopeId: string,
+  journal: WorkspaceActionJournal,
+): void {
   removeOwnedRoot(journal.overlayRoot);
-  store.saveWorkspaceAction({
+  store.saveWorkspaceAction(scopeId, {
     ...journal,
     status: "reserved",
     candidateSnapshotRef: undefined,
@@ -144,12 +163,12 @@ function reserveAction(
       "runtime",
       "btcc-artifacts",
       "workspace-actions",
-      digest(input.request.requestId),
+      digest(`${input.envelope.binding.checkpointId}\0${input.request.requestId}`),
     ),
     beforeSnapshotRef: before.ref,
     status: "reserved",
   };
-  input.store.saveWorkspaceAction(journal);
+  input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, journal);
   return journal;
 }
 
@@ -206,7 +225,7 @@ function prepareCandidate(
     candidateSnapshotRef: candidate.ref,
     result,
   };
-  input.store.saveWorkspaceAction(prepared);
+  input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, prepared);
   return prepared;
 }
 
@@ -231,7 +250,7 @@ function exchangePreparedCandidate(
   }
   requireWorkspaceCandidate(workspace, journal);
   const exchanged = { ...journal, status: "workspace_exchanged" as const };
-  input.store.saveWorkspaceAction(exchanged);
+  input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, exchanged);
   return exchanged;
 }
 

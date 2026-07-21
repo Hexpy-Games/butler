@@ -7,6 +7,7 @@ import type {
 } from "./contracts.ts";
 import { resolveAvailableCapabilities } from "./available-capabilities.ts";
 import { providerCarrierSchema } from "./provider-carrier-schema.ts";
+import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
 
 export async function renderPhasePrompt(
   envelope: PhaseEnvelope,
@@ -24,6 +25,7 @@ export async function renderPhasePrompt(
     instructions: [
       "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
       "Do not add prose outside the carrier and do not choose a successor phase or model.",
+      "Choose semantic operations only; the runtime binds immutable authority references.",
     ].join(" "),
     prompt: JSON.stringify({
       binding: envelope.binding,
@@ -56,7 +58,10 @@ export async function renderPhasePrompt(
     }),
     responseSchema: providerCarrierSchema(
       availableCapabilities,
-      envelope.operationAuthority,
+      envelope.submissionSchema,
+    ),
+    carrierFunctions: providerCarrierFunctions(
+      availableCapabilities,
       envelope.submissionSchema,
     ),
   };

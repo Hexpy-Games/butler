@@ -139,7 +139,7 @@ export type OperationRequest =
       kind: "observe";
       capabilityRef: string;
       scopeRef: string;
-      input: string;
+      input: Record<string, unknown>;
     }
   | {
       requestId: string;
@@ -147,14 +147,14 @@ export type OperationRequest =
       capabilityRef: string;
       workspaceRef: { id: string; sha256: string };
       relativeTarget: string;
-      input: string;
+      input: Record<string, unknown>;
     }
   | {
       requestId: string;
       kind: "review_validation";
       capabilityRef: string;
       reviewSourceRef: { id: string; sha256: string };
-      input: string;
+      input: Record<string, unknown>;
     }
   | {
       requestId: string;
@@ -165,13 +165,18 @@ export type OperationRequest =
       resolutionRef: { id: string; sha256: string };
       baselineRef: { id: string; sha256: string };
       finalSnapshotRef: { id: string; sha256: string };
-      input: string;
+      input: Record<string, unknown>;
     };
 
 export type OperationResult = {
   requestId: string;
   request: OperationRequest;
-  outcome: "observed" | "workspace_artifact_applied" | "review_validated" | "promoted";
+  outcome:
+    | "observed"
+    | "operation_rejected"
+    | "workspace_artifact_applied"
+    | "review_validated"
+    | "promoted";
   observationRef: { id: string; sha256: string };
   content: string;
   artifactRevisionRef?: { id: string; sha256: string };

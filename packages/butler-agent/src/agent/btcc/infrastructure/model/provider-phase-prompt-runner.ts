@@ -5,6 +5,7 @@ import {
   runPromptTextWithUsage,
 } from "../../../../integrations/providers/runtime.ts";
 import type {
+  ProviderCarrierFunction,
   ProviderPhasePrompt,
   ProviderPhasePromptResult,
   ProviderPhasePromptRunner,
@@ -17,7 +18,6 @@ export function createProviderPhasePromptRunner(): ProviderPhasePromptRunner {
 async function runProviderPhasePrompt(
   input: ProviderPhasePrompt,
 ): Promise<ProviderPhasePromptResult> {
-  assertSerializableControls(input);
   const modelRef = exactModelRef(input);
   const transport = modelStructuredDecisionTransport(modelRef);
   if (transport === "json_schema") return runJsonSchemaRound(input, modelRef);
@@ -37,7 +37,7 @@ async function runJsonSchemaRound(
     responseFormat: {
       type: "json_schema",
       name: "btcc_provider_carrier",
-      schema: input.responseSchema,
+      schema: jsonSchemaTransportSchema(input.responseSchema),
       strict: true,
     },
     cacheScope: input.cacheScope,
@@ -47,7 +47,7 @@ async function runJsonSchemaRound(
   const actual = parseModelRef(result.model);
   const exactIdentityObserved = actual.canonicalRef === modelRef;
   return {
-    carrier: parseJsonCarrier(result.text),
+    carrier: unwrapJsonSchemaCarrier(parseJsonCarrier(result.text)),
     actualIdentity: {
       provider: exactIdentityObserved ? input.modelSelection.provider : actual.providerId,
       model: exactIdentityObserved ? input.modelSelection.model : actual.modelId,
@@ -63,26 +63,25 @@ async function runFunctionToolRound(
 ): Promise<ProviderPhasePromptResult> {
   let carrier: unknown;
   let carrierCount = 0;
+  const functions = new Map(input.carrierFunctions.map((entry) => [entry.name, entry]));
   await runFunctionToolPromptText({
     prompt: input.prompt,
-    instructions: input.instructions,
+    instructions: `${input.instructions} Call exactly one supplied BTCC carrier function.`,
     model: modelRef,
     reasoningEffort: input.modelSelection.reasoningEffort,
     cacheScope: input.cacheScope,
     signal: input.signal,
     providerRetryAttempts: 1,
-    tools: [{
-      type: "function",
-      name: "submit_btcc_provider_carrier",
-      description: "Submit the one closed carrier for this BTCC phase round.",
-      parameters: input.responseSchema,
-    }],
+    tools: input.carrierFunctions.map(asFunctionTool),
     toolChoice: "required",
     maxToolRounds: 1,
     handoffAfterToolBatch: true,
     executeTool(call) {
       carrierCount += 1;
-      if (carrierCount === 1) carrier = call.args;
+      const definition = functions.get(call.name);
+      if (carrierCount === 1 && definition) {
+        carrier = { kind: definition.carrierKind, ...call.args };
+      }
       return Promise.resolve({ accepted: true });
     },
     finalTextFromToolResult() {
@@ -103,6 +102,15 @@ async function runFunctionToolRound(
   };
 }
 
+function asFunctionTool(definition: ProviderCarrierFunction) {
+  return {
+    type: "function" as const,
+    name: definition.name,
+    description: definition.description,
+    parameters: definition.parameters,
+  };
+}
+
 function exactModelRef(input: ProviderPhasePrompt): string {
   const selected = input.modelSelection;
   const parsed = parseModelRef(
@@ -114,20 +122,21 @@ function exactModelRef(input: ProviderPhasePrompt): string {
   return parsed.canonicalRef;
 }
 
-function assertSerializableControls(input: ProviderPhasePrompt): void {
-  const controls = input.modelSelection.controls;
-  const keys = Object.keys(controls);
-  if (keys.some((key) => key !== "reasoningEffort")) {
-    throw new Error("provider_controls_not_serializable");
-  }
-  if (
-    controls.reasoningEffort !== undefined &&
-    controls.reasoningEffort !== input.modelSelection.reasoningEffort
-  ) {
-    throw new Error("provider_reasoning_control_mismatch");
-  }
-}
-
 function parseJsonCarrier(text: string): unknown {
   return JSON.parse(text) as unknown;
+}
+
+function jsonSchemaTransportSchema(carrierSchema: Record<string, unknown>) {
+  return {
+    type: "object",
+    properties: { carrier: carrierSchema },
+    required: ["carrier"],
+    additionalProperties: false,
+  };
+}
+
+function unwrapJsonSchemaCarrier(value: unknown): unknown {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>).carrier
+    : undefined;
 }

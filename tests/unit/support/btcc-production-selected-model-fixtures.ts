@@ -58,7 +58,7 @@ export function phaseEnvelope(options: { emptyContext?: boolean } = {}): PhaseEn
         kind: "observe",
         capabilityRef: "web:search",
         scopeRef: "web:current",
-        input: "Current trust policy research",
+        input: { query: "Current trust policy research" },
       },
       outcome: "observed",
       observationRef: { id: "observation:1", sha256: "observation-hash" },

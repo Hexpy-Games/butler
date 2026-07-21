@@ -42,3 +42,4 @@ export type {
   ProviderRoundValue,
   SelectedModel,
 } from "./contracts.ts";
+export { OperationRejectedError } from "./operation-rejection.ts";

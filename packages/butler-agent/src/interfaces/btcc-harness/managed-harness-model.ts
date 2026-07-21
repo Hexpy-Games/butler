@@ -144,7 +144,7 @@ export class ManagedHarnessModel implements SelectedModel {
               resolutionRef: target.resolutionRef,
               baselineRef: target.baselineRef,
               finalSnapshotRef: target.finalSnapshotRef,
-              input: "승인된 후보를 완전 대상 교환으로 반영한다",
+              input: { operation: "승인된 후보를 완전 대상 교환으로 반영한다" },
             }],
           };
         }
@@ -160,7 +160,7 @@ export class ManagedHarnessModel implements SelectedModel {
                 state, "executionTarget", "target", "workspaceRef",
               ),
               relativeTarget: "guide.md",
-              input: "승인된 작업 내용을 격리 작업공간에 작성한다",
+              input: { content: "승인된 작업 내용을 격리 작업공간에 작성한다" },
             }],
           };
         }
@@ -184,7 +184,7 @@ export class ManagedHarnessModel implements SelectedModel {
               kind: "review_validation",
               capabilityRef: "harness:validate-artifact",
               reviewSourceRef: state.reviewSourceRef,
-              input: "격리 복제본에서 결과를 검증한다",
+              input: { command: "격리 복제본에서 결과를 검증한다" },
             }],
           };
         }
