@@ -14,12 +14,28 @@ export function digest(value: string): string {
 export function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (isRecord(value)) {
-    return `{${Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+    return `{${canonicalEntries(value)
       .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
       .join(",")}}`;
   }
-  return JSON.stringify(value) ?? "undefined";
+  if (typeof value === "string") return JSON.stringify(value.normalize("NFC"));
+  if (typeof value === "number" && !Number.isFinite(value)) {
+    throw new Error("BTCC canonical JSON rejects non-finite numbers");
+  }
+  const encoded = JSON.stringify(value);
+  if (encoded === undefined) throw new Error("BTCC canonical JSON rejects undefined values");
+  return encoded;
+}
+
+function canonicalEntries(value: Record<string, unknown>): Array<[string, unknown]> {
+  const entries = Object.entries(value).map(([key, child]) => [
+    key.normalize("NFC"), child,
+  ] as [string, unknown]);
+  const keys = new Set(entries.map(([key]) => key));
+  if (keys.size !== entries.length) {
+    throw new Error("BTCC canonical JSON rejects duplicate normalized keys");
+  }
+  return entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
 }
 
 export function requireRecord(value: unknown, label: string): Record<string, unknown> {

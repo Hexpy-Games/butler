@@ -22,6 +22,7 @@ import type {
 import type { PreparedReportProduct } from "../reporting/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
+import type { WorkLedgerCommit, WorkLedgerMutation } from "../work-ledger/index.ts";
 import type { ManagedTurnState } from "./managed-turn-state.ts";
 
 export type TurnSemanticState =
@@ -145,17 +146,72 @@ export type AcceptedTurnTransition =
       product: OpeningContinuationProduct;
     }
   | { kind: "submit_goal_candidate"; successor: "contract_review"; product: GoalContractCandidateProduct }
-  | { kind: "accept_goal_contract"; successor: "planning"; product: GoalContractAcceptedProduct }
+  | {
+      kind: "accept_goal_contract";
+      successor: "planning";
+      product: GoalContractAcceptedProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "bind_program" }>;
+      };
+    }
   | { kind: "submit_plan_candidate"; successor: "planning_review"; product: PlanningCandidateProduct }
-  | { kind: "accept_plan"; successor: "work_frontier"; product: PlanningAcceptedProduct }
-  | { kind: "select_work_task"; successor: "task_execution"; attempt: ManagedAttempt }
-  | { kind: "close_work_frontier"; successor: "consolidation" }
-  | { kind: "submit_result"; successor: "task_review"; product: ResultCandidateProduct }
-  | { kind: "pass_task_review"; successor: "work_frontier"; product: TaskReviewProduct }
-  | { kind: "fail_task_review"; successor: "feedback_conception"; product: TaskReviewProduct }
+  | {
+      kind: "accept_plan";
+      successor: "work_frontier";
+      product: PlanningAcceptedProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "install_reviewed_plan" }>;
+      };
+    }
+  | {
+      kind: "select_work_task";
+      successor: "task_execution";
+      attempt: ManagedAttempt;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "select_attempt" }>;
+      };
+    }
+  | {
+      kind: "close_work_frontier";
+      successor: "consolidation";
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "close_implementation_frontier" }>;
+      };
+    }
+  | {
+      kind: "submit_result";
+      successor: "task_review";
+      product: ResultCandidateProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "attach_result" }>;
+      };
+    }
+  | {
+      kind: "pass_task_review";
+      successor: "work_frontier";
+      product: TaskReviewProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "attach_review" }>;
+      };
+    }
+  | {
+      kind: "fail_task_review";
+      successor: "feedback_conception";
+      product: TaskReviewProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "attach_review" }>;
+      };
+    }
   | { kind: "accept_feedback_intent"; successor: "feedback_planning"; product: FeedbackIntentProduct }
   | { kind: "submit_feedback_plan"; successor: "feedback_planning_review"; product: FeedbackPlanProduct }
-  | { kind: "accept_feedback_plan"; successor: "work_frontier"; product: FeedbackPlanningAcceptedProduct }
+  | {
+      kind: "accept_feedback_plan";
+      successor: "work_frontier";
+      product: FeedbackPlanningAcceptedProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "accept_implementation_repair" }>;
+      };
+    }
   | { kind: "accept_final_dossier"; successor: "reporting"; product: FinalDossierProduct }
   | {
       kind: "accept_prepared_report";
@@ -194,6 +250,6 @@ export interface TurnStateRepository {
 }
 
 export type {
-  ManagedProgramState,
   ManagedTurnState,
 } from "./managed-turn-state.ts";
+export type { ManagedProgramState } from "../work-ledger/index.ts";

@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
+  WorkLedger,
 } from "../../../btcc/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
@@ -18,9 +19,12 @@ export class SqliteTransitionWriter {
   private readonly records: SqliteImmutableRecordStore;
   private readonly managed: SqliteManagedTransitionWriter;
 
-  constructor(private readonly db: Database) {
+  constructor(
+    private readonly db: Database,
+    workLedger: WorkLedger,
+  ) {
     this.records = new SqliteImmutableRecordStore(db);
-    this.managed = new SqliteManagedTransitionWriter(db);
+    this.managed = new SqliteManagedTransitionWriter(db, workLedger);
   }
 
   commit(input: CommitInput): void {

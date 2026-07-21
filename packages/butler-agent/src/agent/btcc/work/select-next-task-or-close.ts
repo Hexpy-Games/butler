@@ -1,5 +1,5 @@
 import { contentRef } from "../core/index.ts";
-import type { ManagedProgramState } from "../turn/managed-turn-state.ts";
+import type { ManagedProgramState } from "../work-ledger/index.ts";
 import type { WorkFrontierDecision } from "./contracts.ts";
 
 export function selectNextTaskOrClose(input: {
