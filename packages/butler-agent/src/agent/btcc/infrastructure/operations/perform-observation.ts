@@ -1,6 +1,6 @@
 import { contentRef, type ObservationResult, type PhaseEnvelope } from "../../core/index.ts";
 import type { ProductionOperationRuntimeOptions } from "./contracts.ts";
-import { assertActive, operationContent, parseToolInput } from "./operation-helpers.ts";
+import { assertActive, operationContent } from "./operation-helpers.ts";
 
 export async function performObservation(input: {
   request: Extract<import("../../core/index.ts").OperationRequest, { kind: "observe" }>;
@@ -9,7 +9,7 @@ export async function performObservation(input: {
   signal?: AbortSignal;
 }): Promise<ObservationResult> {
   assertActive(input.signal);
-  const args = parseToolInput(input.request.input);
+  const args = input.request.input;
   input.options.validateOperationInput({
     envelope: input.envelope,
     request: input.request,
@@ -22,7 +22,7 @@ export async function performObservation(input: {
   const output = await execute({
     name: input.request.capabilityRef,
     args,
-    rawArguments: input.request.input,
+    rawArguments: JSON.stringify(input.request.input),
     signal: input.signal,
   });
   assertActive(input.signal);

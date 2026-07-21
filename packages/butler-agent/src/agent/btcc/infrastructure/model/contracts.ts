@@ -38,8 +38,16 @@ export type ProviderPhasePrompt = {
   instructions: string;
   prompt: string;
   responseSchema: Record<string, unknown>;
+  carrierFunctions: readonly ProviderCarrierFunction[];
   cacheScope: string;
   signal?: AbortSignal;
+};
+
+export type ProviderCarrierFunction = {
+  name: string;
+  description: string;
+  carrierKind: "phase_submission" | "operation_requests";
+  parameters: Record<string, unknown>;
 };
 
 export type ProviderPhasePromptResult = {
@@ -61,6 +69,7 @@ export type RenderedPhasePrompt = {
   instructions: string;
   prompt: string;
   responseSchema: Record<string, unknown>;
+  carrierFunctions: readonly ProviderCarrierFunction[];
 };
 
 export type ResolveAvailableCapabilitiesInput = {

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
+import { OperationRejectedError } from "../../../btcc/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 
 type FileCapabilityName = "read_file" | "write_file" | "grep_files";
@@ -102,7 +103,10 @@ async function requireWorkspacePath(root: string, path: string, allowMissingLeaf
     rejectProtectedProjectLedgerWrites: allowMissingLeaf,
   });
   if (!guarded.ok || !guarded.absolutePath) {
-    throw new Error(`Workspace path rejected: ${guarded.reason ?? "unknown"}`);
+    throw new OperationRejectedError(
+      guarded.reason ?? "workspace_path_rejected",
+      "The requested path is outside the admitted workspace safety policy.",
+    );
   }
   return guarded.absolutePath;
 }

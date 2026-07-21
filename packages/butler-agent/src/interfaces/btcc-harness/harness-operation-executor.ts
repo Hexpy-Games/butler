@@ -82,14 +82,16 @@ export class HarnessOperationExecutor implements OperationExecutor {
       };
     }
     if (request.kind === "workspace_artifact_action") {
-      const content = request.input;
+      const content = typeof request.input.content === "string"
+        ? request.input.content
+        : JSON.stringify(request.input);
       this.workspaceArtifacts.set(request.relativeTarget, content);
       this.persistArtifactState();
       return {
         requestId: request.requestId,
         outcome: "workspace_artifact_applied",
         observationRef: ref("workspace-operation", request.requestId, content),
-        artifactRevisionRef: ref("artifact-revision", request.requestId, request.input),
+        artifactRevisionRef: ref("artifact-revision", request.requestId, content),
         targetSnapshotRef: ref("materializable-snapshot", request.requestId, content),
         content,
       };

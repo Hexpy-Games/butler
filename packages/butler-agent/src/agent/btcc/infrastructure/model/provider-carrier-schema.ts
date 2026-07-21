@@ -1,22 +1,43 @@
-import type { OperationAuthority } from "../../core/index.ts";
 import type { AvailablePhaseCapability } from "./contracts.ts";
+import type { ProviderCarrierFunction } from "./contracts.ts";
 
 export function providerCarrierSchema(
   capabilities: readonly AvailablePhaseCapability[],
-  authority: OperationAuthority,
   submissionSchema: Record<string, unknown>,
 ): Record<string, unknown> {
   const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
   if (capabilities.length > 0) {
-    carrierVariants.push(operationRequestsSchema(capabilities, authority));
+    carrierVariants.push(operationRequestsSchema(capabilities));
   }
   return { type: "object", anyOf: carrierVariants };
+}
+
+export function providerCarrierFunctions(
+  capabilities: readonly AvailablePhaseCapability[],
+  submissionSchema: Record<string, unknown>,
+): ProviderCarrierFunction[] {
+  const functions: ProviderCarrierFunction[] = [{
+    name: "submit_btcc_phase_submission",
+    description: "Submit the one phase product allowed by the current BTCC phase.",
+    carrierKind: "phase_submission",
+    parameters: objectParameters({ submission: submissionSchema }, ["submission"]),
+  }];
+  if (capabilities.length > 0) {
+    const requests = operationRequestsSchema(capabilities).properties as Record<string, unknown>;
+    functions.push({
+      name: "submit_btcc_operation_requests",
+      description: "Request one or more operations allowed by the current BTCC phase.",
+      carrierKind: "operation_requests",
+      parameters: objectParameters({ requests: requests.requests }, ["requests"]),
+    });
+  }
+  return functions;
 }
 
 function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Record<string, unknown> {
   return {
     properties: {
-      kind: { const: "phase_submission" },
+      kind: stringConstant("phase_submission"),
       submission: submissionSchema,
     },
     required: ["kind", "submission"],
@@ -26,15 +47,14 @@ function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Recor
 
 function operationRequestsSchema(
   capabilities: readonly AvailablePhaseCapability[],
-  authority: OperationAuthority,
 ): Record<string, unknown> {
   return {
     properties: {
-      kind: { const: "operation_requests" },
+      kind: stringConstant("operation_requests"),
       requests: {
         type: "array",
         minItems: 1,
-        items: { anyOf: capabilities.map((capability) => operationSchema(capability, authority)) },
+        items: { anyOf: capabilities.map(operationSchema) },
       },
     },
     required: ["kind", "requests"],
@@ -44,45 +64,30 @@ function operationRequestsSchema(
 
 function operationSchema(
   capability: AvailablePhaseCapability,
-  authority: OperationAuthority,
 ): Record<string, unknown> {
   const common = {
-    capabilityRef: { const: capability.capabilityRef },
-    input: {
-      type: "string",
-      description: "JSON text matching the cataloged inputSchema for this capability.",
-    },
+    capabilityRef: stringConstant(capability.capabilityRef),
+    input: capability.inputSchema,
   };
   switch (capability.operationKind) {
     case "observe":
       return operationShape("observe", {
         ...common,
-        scopeRef: { enum: capability.observationScopeRefs },
+        scopeRef: { type: "string", enum: capability.observationScopeRefs },
       });
     case "workspace_artifact_action":
       return operationShape("workspace_artifact_action", {
         ...common,
-        workspaceRef: { const: requireMutation(authority, "workspace_only").workspaceRef },
         relativeTarget: { type: "string" },
       });
     case "review_validation":
       return operationShape("review_validation", {
         ...common,
-        reviewSourceRef: {
-          const: requireMutation(authority, "validation_overlay_only").reviewSourceRef,
-        },
       });
-    case "repository_promotion": {
-      const mutation = requireMutation(authority, "repository_promotion_only");
+    case "repository_promotion":
       return operationShape("repository_promotion", {
         ...common,
-        authorizationRef: { const: mutation.authorizationRef },
-        candidateRef: { const: mutation.candidateRef },
-        resolutionRef: { const: mutation.resolutionRef },
-        baselineRef: { const: mutation.baselineRef },
-        finalSnapshotRef: { const: mutation.finalSnapshotRef },
       });
-    }
   }
 }
 
@@ -94,7 +99,7 @@ function operationShape(
     type: "object",
     properties: {
       requestId: { type: "string" },
-      kind: { const: kind },
+      kind: stringConstant(kind),
       ...properties,
     },
     required: ["requestId", "kind", ...Object.keys(properties)],
@@ -102,12 +107,13 @@ function operationShape(
   };
 }
 
-function requireMutation<Kind extends OperationAuthority["mutation"]["kind"]>(
-  authority: OperationAuthority,
-  kind: Kind,
-): Extract<OperationAuthority["mutation"], { kind: Kind }> {
-  if (authority.mutation.kind !== kind) {
-    throw new Error(`capability_authority_mismatch:${kind}`);
-  }
-  return authority.mutation as Extract<OperationAuthority["mutation"], { kind: Kind }>;
+function stringConstant(value: string): Record<string, unknown> {
+  return { type: "string", const: value };
+}
+
+function objectParameters(
+  properties: Record<string, unknown>,
+  required: string[],
+): Record<string, unknown> {
+  return { type: "object", properties, required, additionalProperties: false };
 }

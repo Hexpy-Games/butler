@@ -135,7 +135,7 @@ export function workspaceRequest(
     capabilityRef: "write_file",
     workspaceRef,
     relativeTarget,
-    input: JSON.stringify({ content }),
+    input: { content },
   };
 }
 
@@ -147,7 +147,7 @@ export function reviewRequest(
     kind: "review_validation",
     capabilityRef: "run_command",
     reviewSourceRef,
-    input: JSON.stringify({ command: "check" }),
+    input: { command: "check" },
   };
 }
 
@@ -167,7 +167,7 @@ export function promotionRequest(
     kind: "repository_promotion",
     capabilityRef: "repository_promotion",
     ...refs,
-    input: JSON.stringify({ operation: "promote" }),
+    input: { operation: "promote" },
   };
   return {
     request,

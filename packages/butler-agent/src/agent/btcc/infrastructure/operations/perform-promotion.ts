@@ -29,6 +29,7 @@ export function performPromotion(input: {
   signal?: AbortSignal;
 }): ObservationResult {
   assertActive(input.signal);
+  const scopeId = input.envelope.binding.checkpointId;
   const target = resolvePromotionTarget(input.envelope, input.request);
   const workspace = input.store.loadWorkspaceByRef(target.workspaceRef.id);
   if (!workspace || !sameRef(workspace.provision.workspace.ref, target.workspaceRef)) {
@@ -49,13 +50,13 @@ export function performPromotion(input: {
     throw new Error("BTCC workspace changed after the reviewed candidate was accepted");
   }
   const targetSnapshot = captureTargetSnapshot(workspace.targetPath);
-  let intent = input.store.loadPromotion(input.request);
+  let intent = input.store.loadPromotion(scopeId, input.request);
   if (!intent) {
     if (!sameRef(targetSnapshot.ref, workspace.baselineSnapshotRef)) {
       throw new Error("BTCC promotion target drifted from its accepted baseline");
     }
     intent = preparePromotion(input.request, workspace);
-    input.store.savePromotion(intent);
+    input.store.savePromotion(scopeId, intent);
   }
   if (intent.status === "committed" && !sameRef(targetSnapshot.ref, candidate.ref)) {
     throw new Error("BTCC committed promotion requires authoritative reconciliation");
@@ -64,18 +65,18 @@ export function performPromotion(input: {
     if (!sameRef(targetSnapshot.ref, workspace.baselineSnapshotRef)) {
       throw new Error("BTCC reserved promotion target requires authoritative reconciliation");
     }
-    intent = stageCandidate(intent, candidate, input.store);
+    intent = stageCandidate(scopeId, intent, candidate, input.store);
   }
   if (sameRef(targetSnapshot.ref, candidate.ref)) {
     requireDisplacedBaseline(intent, workspace.baselineSnapshotRef);
     intent = { ...intent, status: "committed" };
-    input.store.savePromotion(intent);
+    input.store.savePromotion(scopeId, intent);
   } else if (sameRef(targetSnapshot.ref, workspace.baselineSnapshotRef)) {
     requireStagedCandidate(intent, candidate.ref);
     assertActive(input.signal);
     if (intent.status === "prepared") {
       intent = { ...intent, status: "commit_intent_durable" };
-      input.store.savePromotion(intent);
+      input.store.savePromotion(scopeId, intent);
     }
     exchangeCompleteTarget(intent.stagedPath, workspace.targetPath);
     const observed = captureTargetSnapshot(workspace.targetPath);
@@ -84,7 +85,7 @@ export function performPromotion(input: {
     }
     requireDisplacedBaseline(intent, workspace.baselineSnapshotRef);
     intent = { ...intent, status: "committed" };
-    input.store.savePromotion(intent);
+    input.store.savePromotion(scopeId, intent);
   } else {
     throw new Error("BTCC promotion target drifted from its accepted baseline");
   }
@@ -122,6 +123,7 @@ function preparePromotion(
 }
 
 function stageCandidate(
+  scopeId: string,
   intent: PromotionIntent,
   candidate: NonNullable<ReturnType<ArtifactStore["loadSnapshot"]>>,
   store: ArtifactStore,
@@ -138,7 +140,7 @@ function stageCandidate(
   }
   syncCompleteTarget(intent.stagedPath);
   const prepared = { ...intent, status: "prepared" as const };
-  store.savePromotion(prepared);
+  store.savePromotion(scopeId, prepared);
   return prepared;
 }
 

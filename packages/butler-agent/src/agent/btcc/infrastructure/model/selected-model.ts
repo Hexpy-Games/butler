@@ -1,5 +1,6 @@
 import type {
   ActualModelIdentity,
+  OperationAuthority,
   OperationRequest,
   ProviderRoundValue,
   SelectedModel,
@@ -33,7 +34,11 @@ export function createProductionSelectedModel(
         if (!sameIdentity(envelope.modelSelection, result.actualIdentity)) {
           throw new Error("BTCC provider returned a different selected-model identity");
         }
-        return decodeCarrier(result.carrier, result.actualIdentity);
+        return decodeCarrier(
+          result.carrier,
+          envelope.operationAuthority,
+          result.actualIdentity,
+        );
       } catch (error) {
         if (signal?.aborted || isAbortError(error)) return interruption("provider_aborted");
         if (error instanceof ModelProviderRequestError) return interruption(error.code);
@@ -45,6 +50,7 @@ export function createProductionSelectedModel(
 
 function decodeCarrier(
   carrier: unknown,
+  authority: OperationAuthority,
   actualIdentity: ActualModelIdentity,
 ): ProviderRoundValue {
   if (!isRecord(carrier)) throw new Error("BTCC provider carrier is not an object");
@@ -63,11 +69,39 @@ function decodeCarrier(
   ) {
     return {
       kind: "operation_requests",
-      requests: carrier.requests as OperationRequest[],
+      requests: carrier.requests.map((request) => bindOperationAuthority(request, authority)),
       actualIdentity,
     };
   }
   throw new Error("BTCC provider carrier violates the closed protocol");
+}
+
+function bindOperationAuthority(
+  value: Record<string, unknown>,
+  authority: OperationAuthority,
+): OperationRequest {
+  if (value.kind === "observe") return value as OperationRequest;
+  if (value.kind === "workspace_artifact_action" && authority.mutation.kind === "workspace_only") {
+    return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
+  }
+  if (value.kind === "review_validation" &&
+    authority.mutation.kind === "validation_overlay_only"
+  ) {
+    return { ...value, reviewSourceRef: authority.mutation.reviewSourceRef } as OperationRequest;
+  }
+  if (value.kind === "repository_promotion" &&
+    authority.mutation.kind === "repository_promotion_only"
+  ) {
+    return {
+      ...value,
+      authorizationRef: authority.mutation.authorizationRef,
+      candidateRef: authority.mutation.candidateRef,
+      resolutionRef: authority.mutation.resolutionRef,
+      baselineRef: authority.mutation.baselineRef,
+      finalSnapshotRef: authority.mutation.finalSnapshotRef,
+    } as OperationRequest;
+  }
+  throw new Error("BTCC provider requested an operation without matching runtime authority");
 }
 
 function sameIdentity(

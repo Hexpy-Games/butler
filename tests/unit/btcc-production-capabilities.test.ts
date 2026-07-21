@@ -24,9 +24,9 @@ describe("production BTCC capabilities", () => {
       capabilityRef: "write_file",
       workspaceRef: { id: "workspace-1", sha256: "workspace-hash" },
       relativeTarget: "result.txt",
-      input: JSON.stringify({ path: "result.txt", content: "clean BTCC\n", overwrite: false }),
+      input: { path: "result.txt", content: "clean BTCC\n", overwrite: false },
     };
-    const args = JSON.parse(request.input) as Record<string, unknown>;
+    const args = request.input;
 
     runtime.validateOperationInput({ envelope: envelope(), request, args });
     const execute = runtime.createWorkspaceToolExecutor({
@@ -34,7 +34,7 @@ describe("production BTCC capabilities", () => {
       envelope: envelope(),
       request,
     });
-    await execute({ name: "write_file", args, rawArguments: request.input });
+    await execute({ name: "write_file", args, rawArguments: JSON.stringify(request.input) });
 
     expect(readFileSync(join(workspacePath, "result.txt"), "utf8")).toBe("clean BTCC\n");
     expect(() => runtime.validateOperationInput({
@@ -57,7 +57,7 @@ describe("production BTCC capabilities", () => {
       capabilityRef: "read_file",
       workspaceRef: { id: "workspace-1", sha256: "workspace-hash" },
       relativeTarget: "result.txt",
-      input: JSON.stringify({ path: "result.txt" }),
+      input: { path: "result.txt" },
     };
 
     expect(() => runtime.validateOperationInput({

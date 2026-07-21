@@ -12,7 +12,6 @@ import { ArtifactStore } from "./artifact-store.ts";
 import {
   assertActive,
   operationContent,
-  parseToolInput,
   sameRef,
 } from "./operation-helpers.ts";
 import {
@@ -52,7 +51,7 @@ export async function performReviewValidation(input: {
     throw new Error("BTCC Review overlay does not match its immutable source");
   }
   try {
-    const args = parseToolInput(input.request.input);
+    const args = input.request.input;
     input.options.validateOperationInput({
       envelope: input.envelope,
       request: input.request,
@@ -66,7 +65,7 @@ export async function performReviewValidation(input: {
     const output = await execute({
       name: input.request.capabilityRef,
       args,
-      rawArguments: input.request.input,
+      rawArguments: JSON.stringify(input.request.input),
       signal: input.signal,
     });
     assertActive(input.signal);
