@@ -49,6 +49,7 @@ const codec = withManagedDeferral<PlanningCandidateProduct>({
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+        workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
         ledgerId: requireString(state.ledgerId, "ledgerId"),
         programId: requireString(state.programId, "programId"),
         observedManifestRevision: requirePositiveInteger(
@@ -71,6 +72,12 @@ const codec = withManagedDeferral<PlanningCandidateProduct>({
 
 export function proposePlan(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function requireWorkspaceScope(scopeRefs: readonly string[]): string {
+  const workspaceScopeRef = scopeRefs.find((scopeRef) => scopeRef.startsWith("workspace:"));
+  if (!workspaceScopeRef) throw new Error("Planning requires an admitted workspace scope");
+  return workspaceScopeRef;
 }
 
 function requirePositiveInteger(value: unknown, label: string): number {

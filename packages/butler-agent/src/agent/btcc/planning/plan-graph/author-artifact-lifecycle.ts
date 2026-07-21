@@ -18,22 +18,21 @@ export type DraftArtifactPolicy =
 export function readArtifactPolicy(
   value: unknown,
   label: string,
+  workspaceScopeRef: string,
 ): DraftArtifactPolicy | undefined {
   if (value === undefined) return undefined;
   const policy = requireRecord(value, `${label}.artifactPolicy`);
   const kind = requireString(policy.kind, `${label}.artifactPolicy.kind`);
-  const targetScopeRef = requireString(
-    policy.targetScopeRef,
-    `${label}.artifactPolicy.targetScopeRef`,
-  );
   if (kind === "workspace_artifact") {
-    const baselinePolicy = requireString(policy.baselinePolicy, "baselinePolicy");
-    if (baselinePolicy !== "capture_at_workspace_provision") {
-      throw new Error("Artifact baseline policy is invalid");
-    }
-    return { kind, targetScopeRef, baselinePolicy };
+    return {
+      kind,
+      targetScopeRef: workspaceScopeRef,
+      baselinePolicy: "capture_at_workspace_provision",
+    };
   }
-  if (kind === "repository_promotion") return { kind, targetScopeRef };
+  if (kind === "repository_promotion") {
+    return { kind, targetScopeRef: workspaceScopeRef };
+  }
   throw new Error("Task artifact policy is invalid");
 }
 
@@ -88,13 +87,8 @@ function materializePromotionSelectors(
     if (promotionTask.artifactPolicy.kind !== "repository_promotion") {
       throw new Error("Promotion selector names a non-promotion Task");
     }
-    const targetScopeRef = requireString(draft.targetScopeRef, "targetScopeRef");
-    const baselinePolicy = requireString(draft.baselinePolicy, "baselinePolicy");
-    if (baselinePolicy !== "capture_at_workspace_provision") {
-      throw new Error("Promotion selector baseline policy is invalid");
-    }
     const body = {
-      targetScopeRef,
+      targetScopeRef: promotionTask.artifactPolicy.targetScopeRef,
       implementationTaskRefs,
       integrationTaskRef,
       promotionTaskRef,

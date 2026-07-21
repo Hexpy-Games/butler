@@ -25,6 +25,7 @@ type AuthoringState = {
   goalContractRef: ContentRef;
   authorityRef: ContentRef;
   requiredOutcomeId: string;
+  workspaceScopeRef: string;
   previousCandidateRef?: ContentRef;
   findingSetRef?: ContentRef;
   continuation?: import("../contracts.ts").PlanningContinuation;
@@ -58,7 +59,11 @@ export function authorPlanCandidate(
   submission: Record<string, unknown>,
   state: AuthoringState,
 ): PlanningCandidate {
-  const drafts = readWorkDrafts(submission.works);
+  const drafts = readWorkDrafts(
+    submission.works,
+    state.workspaceScopeRef,
+    state.requiredOutcomeId,
+  );
   const orderedTasks = drafts.flatMap((work) => work.tasks)
     .sort((left, right) => left.executionOrdinal - right.executionOrdinal);
   validateGraph(drafts, orderedTasks, state.requiredOutcomeId);
@@ -211,8 +216,13 @@ function materializeWorks(
   });
 }
 
-function readWorkDrafts(value: unknown): WorkDraft[] {
+function readWorkDrafts(
+  value: unknown,
+  workspaceScopeRef: string,
+  requiredOutcomeId: string,
+): WorkDraft[] {
   if (!Array.isArray(value) || value.length === 0) throw new Error("Planning requires Works");
+  let executionOrdinal = 0;
   return value.map((item, workIndex) => {
     const work = requireRecord(item, `works[${workIndex}]`);
     const tasks = work.tasks;
@@ -223,25 +233,35 @@ function readWorkDrafts(value: unknown): WorkDraft[] {
       logicalId: requireString(work.logicalId, `works[${workIndex}].logicalId`),
       outcome: requireString(work.outcome, `works[${workIndex}].outcome`),
       dependencyWorkIds: requireStringArray(work.dependencyWorkIds, "dependencyWorkIds"),
-      tasks: tasks.map((item, taskIndex) => readTaskDraft(item, workIndex, taskIndex)),
+      tasks: tasks.map((item, taskIndex) => readTaskDraft(
+        item,
+        workIndex,
+        taskIndex,
+        ++executionOrdinal,
+        workspaceScopeRef,
+        requiredOutcomeId,
+      )),
     };
   });
 }
 
-function readTaskDraft(value: unknown, workIndex: number, taskIndex: number): TaskDraft {
+function readTaskDraft(
+  value: unknown,
+  workIndex: number,
+  taskIndex: number,
+  executionOrdinal: number,
+  workspaceScopeRef: string,
+  requiredOutcomeId: string,
+): TaskDraft {
   const label = `works[${workIndex}].tasks[${taskIndex}]`;
   const task = requireRecord(value, label);
   const criteria = task.criteria;
   if (!Array.isArray(criteria) || criteria.length === 0) throw new Error(`${label} requires criteria`);
-  const executionOrdinal = task.executionOrdinal;
-  if (!Number.isInteger(executionOrdinal) || Number(executionOrdinal) < 1) {
-    throw new Error(`${label}.executionOrdinal must be a positive integer`);
-  }
-  const artifactPolicy = readArtifactPolicy(task.artifactPolicy, label);
+  const artifactPolicy = readArtifactPolicy(task.artifactPolicy, label, workspaceScopeRef);
   return {
     logicalId: requireString(task.logicalId, `${label}.logicalId`),
     intendedOutcome: requireString(task.intendedOutcome, `${label}.intendedOutcome`),
-    executionOrdinal: Number(executionOrdinal),
+    executionOrdinal,
     dependencyTaskIds: requireStringArray(task.dependencyTaskIds, "dependencyTaskIds"),
     targetScopeRefs: artifactPolicy
       ? artifactPolicy.kind === "workspace_artifact"
@@ -259,10 +279,7 @@ function readTaskDraft(value: unknown, workIndex: number, taskIndex: number): Ta
         statement: requireString(criterion.statement, "criterion.statement"),
         question: requireString(criterion.question, "criterion.question"),
         sourceGoalFieldIds: fields as Array<"request" | "intended_result">,
-        sourceRequiredOutcomeRefs: requireStringArray(
-          criterion.sourceRequiredOutcomeRefs,
-          "sourceRequiredOutcomeRefs",
-        ),
+        sourceRequiredOutcomeRefs: [requiredOutcomeId],
       };
     }),
   };
@@ -271,7 +288,6 @@ function readTaskDraft(value: unknown, workIndex: number, taskIndex: number): Ta
 function validateGraph(drafts: WorkDraft[], tasks: TaskDraft[], requiredOutcomeId: string): void {
   assertUnique(drafts.map((work) => work.logicalId), "Work logical id");
   assertUnique(tasks.map((task) => task.logicalId), "Task logical id");
-  assertUnique(tasks.map((task) => String(task.executionOrdinal)), "Task execution ordinal");
   const workIds = new Set<string>();
   for (const work of drafts) {
     if (work.dependencyWorkIds.some((id) => !workIds.has(id))) {

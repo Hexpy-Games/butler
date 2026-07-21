@@ -87,6 +87,7 @@ const codec = withManagedDeferral<FeedbackPlanProduct>({
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: proposedAuthority?.ref ?? currentAuthorityRef,
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+        workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
       },
     );
     const currentTasks = requireManagedTasks(state.currentTasks);
@@ -118,6 +119,12 @@ const codec = withManagedDeferral<FeedbackPlanProduct>({
 
 export function proposeCorrectionOrRevision(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function requireWorkspaceScope(scopeRefs: readonly string[]): string {
+  const workspaceScopeRef = scopeRefs.find((scopeRef) => scopeRef.startsWith("workspace:"));
+  if (!workspaceScopeRef) throw new Error("Feedback Planning requires an admitted workspace scope");
+  return workspaceScopeRef;
 }
 
 function authorityRevision(previousAuthorityRef: ContentRef, change: unknown) {

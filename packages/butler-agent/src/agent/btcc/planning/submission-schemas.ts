@@ -2,7 +2,6 @@ import {
   arraySchema,
   contentRefSchema,
   enumSchema,
-  integerSchema,
   literalSchema,
   objectSchema,
   textSchema,
@@ -11,18 +10,14 @@ import {
 } from "../core/index.ts";
 
 const textList = () => arraySchema(textSchema());
-const refList = () => arraySchema(contentRefSchema());
-
 const criterion = objectSchema({
   statement: textSchema(),
   question: textSchema(),
   sourceGoalFieldIds: arraySchema(enumSchema("request", "intended_result"), { minItems: 1 }),
-  sourceRequiredOutcomeRefs: textList(),
 });
 const taskFields = {
   logicalId: textSchema(),
   intendedOutcome: textSchema(),
-  executionOrdinal: integerSchema(),
   dependencyTaskIds: textList(),
   targetScopeRefs: textList(),
   criteria: arraySchema(criterion, { minItems: 1 }),
@@ -33,15 +28,12 @@ const task = variantsSchema(
     ...taskFields,
     artifactPolicy: objectSchema({
       kind: literalSchema("workspace_artifact"),
-      targetScopeRef: textSchema(),
-      baselinePolicy: literalSchema("capture_at_workspace_provision"),
     }),
   }),
   objectSchema({
     ...taskFields,
     artifactPolicy: objectSchema({
       kind: literalSchema("repository_promotion"),
-      targetScopeRef: textSchema(),
     }),
   }),
 );
@@ -56,11 +48,9 @@ const planFields = {
   works: arraySchema(work, { minItems: 1 }),
 };
 const promotionSelector = objectSchema({
-  targetScopeRef: textSchema(),
   implementationTaskIds: textList(),
   integrationTaskId: textSchema(),
   promotionTaskId: textSchema(),
-  baselinePolicy: literalSchema("capture_at_workspace_provision"),
 });
 
 export const revisedPlanSubmissionSchema = variantsSchema(
@@ -77,21 +67,18 @@ export const planCandidateSubmissionSchema = variantsSchema(
   }),
 );
 
-export const planReviewSubmissionSchema = objectSchema({
-  kind: literalSchema("planning_review"),
-  candidateRef: contentRefSchema(),
-  reviewedBundleRef: contentRefSchema(),
-  reviewedWorkGraphRef: contentRefSchema(),
-  reviewedWorkRefs: refList(),
-  reviewedTaskRefs: refList(),
-  reviewedCriterionRefs: refList(),
-  reviewedVerificationQuestionRefs: refList(),
-  reviewedArtifactLifecycleRef: contentRefSchema(),
-  reviewedGoalFieldIds: textList(),
-  reviewedRequiredOutcomeRefs: textList(),
-  verdict: enumSchema("accepted", "revision_required"),
-  findings: textList(),
-});
+export const planReviewSubmissionSchema = variantsSchema(
+  objectSchema({
+    kind: literalSchema("planning_review"),
+    verdict: literalSchema("accepted"),
+    findings: arraySchema(textSchema(), { maxItems: 0 }),
+  }),
+  objectSchema({
+    kind: literalSchema("planning_review"),
+    verdict: literalSchema("revision_required"),
+    findings: arraySchema(textSchema(), { minItems: 1 }),
+  }),
+);
 
 const impact = variantsSchema(
   objectSchema({
