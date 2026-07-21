@@ -41,8 +41,7 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
     const target = requireRecord(executionTarget.target, "executionTarget.target");
     const observedStates = target.kind === "repository_promotion"
       ? []
-      : decodeObservedStates(
-          value.observedStates,
+      : observeTargetStates(
           requireStringList(state.targetScopeRefs, "targetScopeRefs"),
           envelope,
         );
@@ -139,15 +138,11 @@ function workspaceResult(
   const applied = envelope.operationResults.filter(
     (result) => result.outcome === "workspace_artifact_applied",
   );
-  if (applied.length === 0) {
-    throw new Error("Artifact Execution requires a workspace artifact operation");
-  }
   const artifactRevisionRefs = applied.map((result, index) =>
     requireContentRef(result.artifactRevisionRef, `artifactRevisionRef[${index}]`));
-  const targetSnapshotRef = requireContentRef(
-    applied.at(-1)!.targetSnapshotRef,
-    "targetSnapshotRef",
-  );
+  const targetSnapshotRef = applied.length > 0
+    ? requireContentRef(applied.at(-1)!.targetSnapshotRef, "targetSnapshotRef")
+    : requireContentRef(target.baselineSnapshotRef, "baselineSnapshotRef");
   const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
   const body = {
     workspaceRef,
@@ -175,29 +170,24 @@ function workspaceResult(
   };
 }
 
-function decodeObservedStates(
-  value: unknown,
+function observeTargetStates(
   targetScopes: string[],
   envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
 ): TargetStateRevision[] {
-  if (!Array.isArray(value) || value.length !== targetScopes.length) {
-    throw new Error("Task Execution must record every exact target scope");
-  }
-  return value.map((item, index) => {
-    const observed = requireRecord(item, `observedStates[${index}]`);
-    const targetScopeRef = requireString(observed.targetScopeRef, "targetScopeRef");
-    if (targetScopeRef !== targetScopes[index]) {
-      throw new Error("Task Execution target state order does not match the accepted target");
-    }
-    if (observed.state !== "present" && observed.state !== "absent") {
-      throw new Error("Task Execution target state is invalid");
-    }
-    const observedState = observed.state as "present" | "absent";
+  const operationRefs = envelope.operationResults.map((result) => result.observationRef);
+  const changed = envelope.operationResults.some(
+    (result) => result.outcome === "workspace_artifact_applied" || result.outcome === "promoted",
+  );
+  const observed = envelope.operationResults.some((result) => result.outcome === "observed");
+  return targetScopes.map((targetScopeRef) => {
+    const state = changed || observed ? "present" as const : "absent" as const;
     const body = {
       targetScopeRef,
-      state: observedState,
-      description: requireString(observed.description, "observedState.description"),
-      observedByOperationRefs: envelope.operationResults.map((result) => result.observationRef),
+      state,
+      description: state === "present"
+        ? "The execution operations observed or changed the accepted target."
+        : "The execution operations did not observe or change the accepted target.",
+      observedByOperationRefs: operationRefs,
     };
     return { ref: contentRef("target-state-revision", body), ...body };
   });

@@ -1,6 +1,5 @@
 import {
   arraySchema,
-  contentRefSchema,
   enumSchema,
   literalSchema,
   objectSchema,
@@ -9,8 +8,6 @@ import {
 } from "../core/index.ts";
 
 const commonCriterionFields = {
-  criterionRef: contentRefSchema(),
-  verificationQuestionRefs: arraySchema(contentRefSchema()),
   observation: textSchema(),
 };
 const criterionVerdict = variantsSchema(
@@ -36,7 +33,5 @@ const criterionVerdict = variantsSchema(
 
 export const taskReviewSubmissionSchema = objectSchema({
   kind: literalSchema("task_review"),
-  resultCandidateRef: contentRefSchema(),
-  verdict: enumSchema("passed", "not_passed"),
   criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),
 });

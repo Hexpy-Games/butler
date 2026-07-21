@@ -45,12 +45,7 @@ const codec = withManagedDeferral<TaskReviewProduct>({
     const criteria = requireRecords(state.criteria, "criteria");
     const questions = requireRecords(state.verificationQuestions, "verificationQuestions");
     const value = requireRecord(submission, "Task Review submission");
-    if (value.kind !== "task_review" || (value.verdict !== "passed" && value.verdict !== "not_passed")) {
-      throw new Error("Task Review submission has an invalid branch");
-    }
-    if (stableJson(value.resultCandidateRef) !== stableJson(result.result.ref)) {
-      throw new Error("Task Review did not inspect the exact ResultCandidate");
-    }
+    if (value.kind !== "task_review") throw new Error("Task Review submission has an invalid kind");
     const decoded = decodeCriterionVerdicts({
       submitted: value.criterionVerdicts,
       criteria,
@@ -60,9 +55,6 @@ const codec = withManagedDeferral<TaskReviewProduct>({
       operationRefs: envelope.operationResults.map((operation) => operation.observationRef),
     });
     const passed = decoded.verdicts.every((verdict) => verdict.verdict === "satisfied");
-    if ((value.verdict === "passed") !== passed) {
-      throw new Error("Task Review top verdict disagrees with its criterion verdicts");
-    }
     if (result.result.kind === "repository_promotion" && !passed) {
       throw new Error("Promotion Review is identity-only and cannot fail semantically");
     }
@@ -143,15 +135,9 @@ function decodeCriterionVerdicts(input: {
   const verdicts = input.submitted.map((item, index) => {
     const submitted = requireRecord(item, `criterionVerdicts[${index}]`);
     const criterionRef = requireContentRef(input.criteria[index]!.ref, "criterion.ref");
-    if (stableJson(submitted.criterionRef) !== stableJson(criterionRef)) {
-      throw new Error("Task Review criterion order does not match the accepted Task");
-    }
     const questionRefs = input.questions
       .filter((question) => stableJson(question.criterionRef) === stableJson(criterionRef))
       .map((question) => requireContentRef(question.ref, "question.ref"));
-    if (stableJson(submitted.verificationQuestionRefs) !== stableJson(questionRefs)) {
-      throw new Error("Task Review did not inspect the exact verification questions");
-    }
     if (submitted.verdict !== "satisfied" && submitted.verdict !== "not_satisfied") {
       throw new Error("Task Review criterion verdict is invalid");
     }

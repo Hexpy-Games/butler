@@ -52,6 +52,7 @@ export async function prepareTaskAttempt(input: {
       provisionOutcomeRef: provision.outcome.ref,
       workspaceRef: provision.workspace.ref,
       baselineRef: provision.baseline.ref,
+      baselineSnapshotRef: provision.baseline.snapshotRef,
       acceptedBaseRevisionRefs: acceptedWorkspaceRevisions(input.program, input.task),
     },
   };
