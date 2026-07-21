@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
-  BtccTurnCommand,
+  FreshBtccTurnCommand,
 } from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
@@ -36,7 +36,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   }
 
   async recordInbound(input: {
-    command: Extract<BtccTurnCommand, { kind: "run" }>;
+    command: FreshBtccTurnCommand;
     admissionInputHash: string;
   }): Promise<AdmissionInbox> {
     const transaction = this.db.transaction(() => {
@@ -50,7 +50,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       const inboxId = digest(
         `btcc-inbox.v1\0${input.command.sessionId}\0${input.command.triggerKey}`,
       );
-      this.insertCanonicalUserMessage(input.command);
+      this.insertCanonicalTrigger(input.command);
       this.db.query(`
         INSERT INTO btcc_inbound_inbox (
           inbox_id, session_id, trigger_key, turn_id,
@@ -127,10 +127,10 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   }
 
   private insertInitialTurn(inboxId: string, commandJson: string): void {
-    const command = JSON.parse(commandJson) as Extract<
-      BtccTurnCommand,
-      { kind: "run" }
-    >;
+    const command = JSON.parse(commandJson) as FreshBtccTurnCommand;
+    const source = command.kind === "run"
+      ? command.message
+      : { messageId: command.trigger.triggerId, content: command.trigger.content };
     const continuationCandidates = this.discoverContinuationCandidates(command);
     const contextJson = stableJson(command.context);
     const snapshotJson = stableJson({
@@ -153,8 +153,8 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       command.sessionId,
       inboxId,
       command.triggerKey,
-      command.message.messageId,
-      command.message.content,
+      source.messageId,
+      source.content,
       snapshotRef,
       stableJson(command.modelSelection),
       contextJson,
@@ -170,7 +170,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   }
 
   private discoverContinuationCandidates(
-    command: Extract<BtccTurnCommand, { kind: "run" }>,
+    command: FreshBtccTurnCommand,
   ): DeferredContinuationCandidate[] {
     type CandidateRow = {
       ledger_id: string;
@@ -230,9 +230,33 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     return JSON.parse(row.content_json) as T;
   }
 
-  private insertCanonicalUserMessage(
-    command: Extract<BtccTurnCommand, { kind: "run" }>,
-  ): void {
+  private insertCanonicalTrigger(command: FreshBtccTurnCommand): void {
+    if (command.kind === "wake") {
+      const existing = this.db.query<{ content: string }, [string]>(`
+        SELECT content FROM btcc_continuation_triggers WHERE trigger_id = ?
+      `).get(command.trigger.triggerId);
+      if (existing && existing.content !== command.trigger.content) {
+        throw new Error("BTCC continuation trigger identity conflict");
+      }
+      if (!existing) {
+        this.db.query(`
+          INSERT INTO btcc_continuation_triggers (
+            trigger_id, session_id, turn_id, source_turn_id, authorization_ref,
+            content, idempotency_key, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          command.trigger.triggerId,
+          command.sessionId,
+          command.turnId,
+          command.trigger.sourceTurnId,
+          command.trigger.authorizationRef,
+          command.trigger.content,
+          `wake:${command.sessionId}:${command.triggerKey}`,
+          new Date().toISOString(),
+        );
+      }
+      return;
+    }
     const existing = this.db.query<{ content: string }, [string]>(`
       SELECT content FROM btcc_messages WHERE message_id = ?
     `).get(command.message.messageId);

@@ -21,6 +21,7 @@ export async function createOpenAIResponse(
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
   budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
   providerRoundPolicy?: Partial<ProviderRoundPolicy>,
+  retryAttempts?: number,
 ): Promise<OpenAIResponse> {
   const guard = createProviderRoundGuard({ signal, policy: providerRoundPolicy });
   let auth = authOverride;
@@ -38,6 +39,7 @@ export async function createOpenAIResponse(
           () => guard.start(),
         ),
         guard.signal,
+        retryAttempts,
       ),
       guard.signal,
     );

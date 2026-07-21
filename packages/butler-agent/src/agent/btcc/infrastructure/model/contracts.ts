@@ -1,0 +1,69 @@
+import type {
+  ActualModelIdentity,
+  OperationAuthority,
+  OperationRequest,
+} from "../../core/index.ts";
+import type { AdmittedModelSelection } from "../../contracts.ts";
+
+export type ResolvedContextDocument = {
+  ref: string;
+  content: string;
+};
+
+export interface ButlerContextResolver {
+  resolve(ref: string): Promise<string> | string;
+}
+
+export type StructuralCapabilityDefinition = {
+  capabilityRef: string;
+  name: string;
+  description: string;
+  operationKinds: readonly OperationRequest["kind"][];
+  inputSchema: Record<string, unknown>;
+  observationScopeRefs?: readonly string[];
+};
+
+export interface StructuralCapabilityCatalog {
+  list(): Promise<readonly StructuralCapabilityDefinition[]> |
+    readonly StructuralCapabilityDefinition[];
+}
+
+export type AvailablePhaseCapability = Omit<StructuralCapabilityDefinition, "operationKinds"> & {
+  operationKind: OperationRequest["kind"];
+  observationScopeRefs: readonly string[];
+};
+
+export type ProviderPhasePrompt = {
+  modelSelection: AdmittedModelSelection;
+  instructions: string;
+  prompt: string;
+  responseSchema: Record<string, unknown>;
+  cacheScope: string;
+  signal?: AbortSignal;
+};
+
+export type ProviderPhasePromptResult = {
+  carrier: unknown;
+  actualIdentity: ActualModelIdentity;
+};
+
+export interface ProviderPhasePromptRunner {
+  run(input: ProviderPhasePrompt): Promise<ProviderPhasePromptResult>;
+}
+
+export type ProductionSelectedModelDependencies = {
+  context: ButlerContextResolver;
+  capabilities: StructuralCapabilityCatalog;
+  promptRunner?: ProviderPhasePromptRunner;
+};
+
+export type RenderedPhasePrompt = {
+  instructions: string;
+  prompt: string;
+  responseSchema: Record<string, unknown>;
+};
+
+export type ResolveAvailableCapabilitiesInput = {
+  authority: OperationAuthority;
+  catalog: StructuralCapabilityCatalog;
+};

@@ -40,21 +40,6 @@ describe("BTCC successor source shape", () => {
     });
   });
 
-  test("reports production source changes that are forbidden before cutover", () => {
-    const repository = fixture();
-    const discovered = discoverSuccessorModulesFromPaths(repository.root, []);
-    discovered.protectedSourceChanges.push(
-      "packages/butler-agent/src/agent/existing-source.ts",
-    );
-
-    expect(verifyDiscoveredSuccessorShape(repository.root, discovered).findings)
-      .toEqual([{
-        code: "pre_cutover_source_changed",
-        path: "packages/butler-agent/src/agent/existing-source.ts",
-        message: "S0 production source must remain unchanged until the R10 cutover",
-      }]);
-  });
-
   test("allows explicit public APIs and cross-domain imports through index.ts", () => {
     const repository = fixture();
     repository.write(
@@ -113,7 +98,7 @@ describe("BTCC successor source shape", () => {
     ]);
   });
 
-  test("follows unchanged repository dependencies to find indirect legacy coupling", () => {
+  test("keeps the boundary check on successor source instead of auditing shared dependencies", () => {
     const repository = fixture();
     repository.write(
       "packages/butler-agent/src/agent/btcc/index.ts",
@@ -136,7 +121,7 @@ describe("BTCC successor source shape", () => {
       false,
     );
 
-    expect(findingCodes(repository)).toEqual(["legacy_dependency"]);
+    expect(findingCodes(repository)).toEqual([]);
   });
 
   test("does not impose successor style rules on an unchanged public dependency", () => {

@@ -18,6 +18,7 @@ import type {
   ContinuationBinding,
   DeferredContinuationCandidate,
 } from "../continuation/index.ts";
+import { goalReviewSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "contract_review",
@@ -31,6 +32,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec: PhaseCodec<GoalContractAcceptedProduct> = {
+  submissionSchema: goalReviewSubmissionSchema,
   decode(submission, envelope) {
     const candidate = loadCandidate(envelope.context.stateInput);
     const value = requireRecord(submission, "Goal Contract Review submission");

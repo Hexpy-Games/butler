@@ -17,6 +17,7 @@ import type {
   TaskReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
+import { taskReviewSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_review",
@@ -34,6 +35,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withManagedDeferral<TaskReviewProduct>({
+  submissionSchema: taskReviewSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Review state");
     const result = state.resultCandidate as ResultCandidateProduct | undefined;

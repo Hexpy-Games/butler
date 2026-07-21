@@ -3,11 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs"
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
-  AgentRuntimeAdapter,
   ModelProviderAdapter,
-  RuntimeSessionHandle,
-  RuntimeSessionInit,
-  RuntimeTurnInput,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/router.ts";
@@ -19,6 +15,7 @@ import {
   resolveTelegramGatewayRuntimeConfig,
   writeGatewaySettings,
 } from "../../packages/butler-agent/src/operations/gateway/registry.ts";
+import { ScriptedBtccGatewayRuntime } from "./support/fake-btcc-gateway-runtime.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -27,40 +24,6 @@ let originalTelegramToken: string | undefined;
 const packageVersion = JSON.parse(
   readFileSync(join(process.cwd(), "package.json"), "utf8"),
 ).version as string;
-
-class FakeRuntime implements AgentRuntimeAdapter {
-  readonly id = "fake-native-runtime";
-  readonly capabilities = {
-    supportsSessionResume: false,
-    supportsCompaction: false,
-    supportsToolStreaming: false,
-    supportsParallelToolCalls: false,
-  } as const;
-
-  readonly turns: RuntimeTurnInput[] = [];
-
-  async createSession(input: RuntimeSessionInit): Promise<RuntimeSessionHandle> {
-    return {
-      sessionId: input.sessionId,
-      role: input.role,
-      runtimeAdapterId: this.id,
-      runtimeSessionRef: `fake:${input.sessionId}`,
-    };
-  }
-
-  async runTurn(input: RuntimeTurnInput) {
-    this.turns.push(input);
-    const turnText = ("message" in input.input ? input.input.message.text : input.input.text) ?? "";
-    return {
-      text: turnText.includes("background worker task completed")
-        ? "작업 보고입니다. 차트가 준비되었습니다: chart is ready"
-        : "runtime reply",
-      runtimeSessionRef: input.handle.runtimeSessionRef,
-    };
-  }
-
-  async closeSession() {}
-}
 
 const fakeProvider: ModelProviderAdapter = {
   id: "fake-openai",
@@ -146,7 +109,6 @@ test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runt
     },
   }), "utf8");
 
-  const runtime = new FakeRuntime();
   const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
   const controller = new AbortController();
   let getUpdatesCalls = 0;
@@ -180,10 +142,11 @@ test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runt
     throw new Error(`unexpected fetch URL: ${url}`);
   }) as unknown as typeof fetch;
 
+  const btcc = new ScriptedBtccGatewayRuntime("runtime reply");
   const result = await runNativeButlerMain({
     butlerHome: "fixtures/butler-project",
     butlerData,
-    runtime,
+    btcc,
     provider: fakeProvider,
     shutdownSignal: controller.signal,
     shutdownPollMs: 10,
@@ -202,12 +165,10 @@ test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runt
 
   expect(result.shutdownReason).toBe("signal");
   expect(getUpdatesCalls).toBeGreaterThanOrEqual(1);
-  expect(runtime.turns).toHaveLength(1);
-  expect(runtime.turns[0]!.input).toMatchObject({
-    transport: "telegram",
-    message: {
-      text: "hello butler",
-    },
+  expect(btcc.commands).toHaveLength(1);
+  expect(btcc.commands[0]).toMatchObject({
+    kind: "run",
+    message: { content: "hello butler" },
   });
   expect(deliveries.map((delivery) => delivery.text)).toContain("runtime reply");
 });
@@ -233,7 +194,6 @@ test("native butler-main leaves Telegram idle when gateway is not enabled", asyn
   const result = await runNativeButlerMain({
     butlerHome: "fixtures/butler-project",
     butlerData,
-    runtime: new FakeRuntime(),
     provider: fakeProvider,
     waitForShutdown: false,
     sendTelegram: async (input) => {
@@ -353,10 +313,16 @@ test("native butler-main proactively delivers worker completion through delivery
   const controller = new AbortController();
   const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
 
+  const btcc = new ScriptedBtccGatewayRuntime((command) => {
+    const content = command.kind === "run" ? command.message.content : "";
+    return content.includes("background worker task completed")
+      ? "작업 보고입니다. 차트가 준비되었습니다: chart is ready"
+      : "runtime reply";
+  });
   const result = await runNativeButlerMain({
     butlerHome: "fixtures/butler-project",
     butlerData,
-    runtime: new FakeRuntime(),
+    btcc,
     provider: fakeProvider,
     shutdownSignal: controller.signal,
     shutdownPollMs: 10,

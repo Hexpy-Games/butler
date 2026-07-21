@@ -1,7 +1,7 @@
 import type {
   AdmittedModelSelection,
-  BtccTurnCommand,
   ButlerContextInput,
+  FreshBtccTurnCommand,
 } from "../contracts.ts";
 import type { OpeningAnswerProduct } from "../conception/index.ts";
 import type {
@@ -302,7 +302,7 @@ export type AcceptedTurnTransition =
 
 export interface TurnAdmissionRepository {
   recordInbound(input: {
-    command: Extract<BtccTurnCommand, { kind: "run" }>;
+    command: FreshBtccTurnCommand;
     admissionInputHash: string;
   }): Promise<AdmissionInbox>;
   acquireAdmissionConstructionClaim(

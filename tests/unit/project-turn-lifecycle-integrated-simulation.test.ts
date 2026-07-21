@@ -816,7 +816,6 @@ function retryActionStore(
       return { turn: retrying, replies: [], next_cursor: 1 };
     },
     cancelResponder() {},
-    cancelPersistedRuntimeTurn() {},
     async signalPrincipalTurnCancellation() {},
     principalTurnCancellationTargetForTurn: () => null,
     settlePrincipalDeadOwnerCancellation: () => "pending_claim",

@@ -1,7 +1,6 @@
 import { homedir } from "os";
 import { join } from "path";
 import type {
-  AgentRuntimeAdapter,
   DeliveryResult,
   OutboundAction,
   InboundEnvelope,
@@ -11,13 +10,16 @@ import type {
 } from "../../test-support/harness/contracts.ts";
 import { getStewardSessionPointer, registerRuntimeSession } from "../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
-import { PolicyEngine, type PolicyApprovalMode, type PolicyToolDefinition } from "../../agent/policy/policy-engine.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
-import { AgentConversationStore } from "../../agent/conversation/store.ts";
-import { SessionLifecycleService } from "./session-lifecycle.ts";
-import { NativeToolLoopRuntime } from "../../agent/turn/native-tool-loop.ts";
+import { createProductionBtccComposition } from "../../agent/composition/index.ts";
+import {
+  BtccGatewayLifecycleService,
+  bindBtccGatewayRuntime,
+  type BtccGatewayRuntime,
+} from "./btcc/index.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { createTelegramTransportAdapter } from "../transport/telegram/adapter.ts";
+import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
 
 export interface NativeStewardTelegramTurnInput {
   projectName: string;
@@ -30,14 +32,13 @@ export interface NativeStewardTelegramTurnInput {
   senderDisplayName?: string;
   butlerHome?: string;
   butlerData?: string;
-  runtime?: AgentRuntimeAdapter;
+  btcc?: BtccGatewayRuntime;
   provider?: ModelProviderAdapter;
   sendTelegram?: (input: {
     chatId: string;
     text: string;
     threadId?: string;
   }) => Promise<DeliveryResult>;
-  approvalMode?: PolicyApprovalMode;
 }
 
 export interface NativeStewardTelegramTurnResult {
@@ -45,34 +46,6 @@ export interface NativeStewardTelegramTurnResult {
   text: string;
   delivery: DeliveryResult;
 }
-
-const STEWARD_NATIVE_TOOLS: PolicyToolDefinition[] = [
-  {
-    name: "reply",
-    description: "Reply to the principal.",
-    inputSchema: {},
-    roles: ["butler", "steward"],
-  },
-  {
-    name: "list_tasks",
-    description: "List worker tasks.",
-    inputSchema: {},
-    roles: ["butler", "steward"],
-  },
-  {
-    name: "get_task_result",
-    description: "Get a worker task result.",
-    inputSchema: {},
-    roles: ["butler", "steward"],
-  },
-  {
-    name: "project_memory_search",
-    description: "Search project-local memory.",
-    inputSchema: {},
-    roles: ["steward"],
-    requiresProject: true,
-  },
-];
 
 function getButlerHome(explicit?: string): string {
   return explicit || process.env.BUTLER_HOME || process.cwd();
@@ -122,7 +95,7 @@ function ensureStewardSession(input: {
   sessionId: string;
   projectName: string;
   workspacePath: string;
-  runtime: AgentRuntimeAdapter;
+  runtimeAdapterId: string;
   provider: ModelProviderAdapter;
   butlerHome: string;
   butlerData: string;
@@ -133,7 +106,7 @@ function ensureStewardSession(input: {
       sessionId: input.sessionId,
       role: "steward",
       workspacePath: input.workspacePath,
-      runtimeAdapterId: input.runtime.id,
+      runtimeAdapterId: input.runtimeAdapterId,
       modelProviderId: input.provider.id,
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
@@ -146,7 +119,7 @@ function ensureStewardSession(input: {
     role: existing.role,
     projectId: existing.projectId,
     workspacePath: existing.workspacePath,
-    runtimeAdapterId: input.runtime.id,
+    runtimeAdapterId: input.runtimeAdapterId,
     modelProviderId: providerIdFromModelRef(
       existing.modelRef,
       input.provider.id,
@@ -207,10 +180,20 @@ export async function handleNativeStewardTelegramTurn(
 ): Promise<NativeStewardTelegramTurnResult> {
   const butlerHome = getButlerHome(input.butlerHome);
   const butlerData = getButlerData(butlerHome, input.butlerData);
-  const runtime = input.runtime ?? new NativeToolLoopRuntime();
   const provider = input.provider ?? defaultProvider();
+  const appGateway = resolveAppGatewayRuntimeConfig({ butlerData });
+  const appMessageDbPath = appGateway.dbPath ?? join(
+    butlerData,
+    "app-server",
+    "butler-client.sqlite",
+  );
+  const btcc = input.btcc ?? createProductionBtccComposition({
+    butlerHome,
+    butlerData,
+    appMessageDbPath,
+    ownerId: `native-steward:${process.pid}`,
+  });
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
-  const conversationWriter = new AgentConversationStore({ butlerData });
 
   try {
     const sessionId = resolveSessionId(store, butlerData, input.projectName);
@@ -219,25 +202,19 @@ export async function handleNativeStewardTelegramTurn(
       sessionId,
       projectName: input.projectName,
       workspacePath: input.workspacePath,
-      runtime,
+      runtimeAdapterId: "btcc-turn-runtime",
       provider,
       butlerHome,
       butlerData,
     });
 
-    const lifecycle = new SessionLifecycleService({
+    const lifecycle = new BtccGatewayLifecycleService({
       store,
-      runtime,
-      provider,
+      ...bindBtccGatewayRuntime(btcc),
       promptAssembler: new PromptAssembler({
         butlerHome,
         butlerData,
       }),
-      policyEngine: new PolicyEngine(),
-      tools: STEWARD_NATIVE_TOOLS,
-      approvalMode: input.approvalMode ?? "default",
-      conversationWriter,
-      conversationMetricsButlerData: butlerData,
     });
 
     const actor = await lifecycle.getOrCreate(sessionId, "steward");
@@ -294,7 +271,7 @@ export async function handleNativeStewardTelegramTurn(
       delivery,
     };
   } finally {
-    conversationWriter.close();
+    btcc.close();
     store.close();
   }
 }

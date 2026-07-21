@@ -10,6 +10,7 @@ import {
 } from "../core/index.ts";
 import type { FeedbackIntentProduct } from "./managed-contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
+import { feedbackIntentSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_conception",
@@ -26,6 +27,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withManagedDeferral<FeedbackIntentProduct>({
+  submissionSchema: feedbackIntentSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Conception state");
     const correctionScopeRef = requireContentRef(state.correctionScopeRef, "correctionScopeRef");

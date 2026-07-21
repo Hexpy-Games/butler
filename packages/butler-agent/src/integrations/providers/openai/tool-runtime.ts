@@ -89,7 +89,7 @@ export async function runOpenAIFunctionToolPromptText(
       }, options.signal, authOverride, options.onProviderStreamEvent, {
         attribution: options.usageAttribution,
         roundIndex: modelCallRound,
-      });
+      }, undefined, options.providerRetryAttempts);
       afterAttributedModelResponse({
         attribution: options.usageAttribution,
         model,
@@ -177,7 +177,7 @@ export async function runOpenAIFunctionToolPromptText(
         }, options.signal, authOverride, options.onProviderStreamEvent, {
           attribution: options.usageAttribution,
           roundIndex: modelCallRound,
-        });
+        }, undefined, options.providerRetryAttempts);
         afterAttributedModelResponse({
           attribution: options.usageAttribution,
           model,

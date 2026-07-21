@@ -11,29 +11,29 @@ export async function loadOrAdmitTurn(
   command: ContinuingTurnCommand,
   dependencies: BtccRuntimeDependencies,
 ): Promise<TurnRecord> {
-  if (command.kind === "wake") {
-    throw new Error("BTCC fresh continuation wake admission is not implemented");
-  }
   const existing = await dependencies.turns.findTurn(command.turnId);
   if (existing) {
-    if (command.kind === "run") assertExactRunReplay(existing, command);
+    if (command.kind !== "resume") assertExactFreshReplay(existing, command);
     return existing;
   }
-  if (command.kind !== "run") {
+  if (command.kind === "resume") {
     throw new Error(`BTCC Turn is not admitted: ${command.turnId}`);
   }
   return admitTurn(command, dependencies.admission, dependencies.turns);
 }
 
-function assertExactRunReplay(
+function assertExactFreshReplay(
   turn: TurnRecord,
-  command: Extract<BtccTurnCommand, { kind: "run" }>,
+  command: Extract<BtccTurnCommand, { kind: "run" | "wake" }>,
 ): void {
+  const source = command.kind === "run"
+    ? command.message
+    : { messageId: command.trigger.triggerId, content: command.trigger.content };
   if (
     turn.sessionId !== command.sessionId ||
     turn.triggerKey !== command.triggerKey ||
-    turn.originalMessageId !== command.message.messageId ||
-    turn.originalMessage !== command.message.content ||
+    turn.originalMessageId !== source.messageId ||
+    turn.originalMessage !== source.content ||
     canonicalJson(turn.modelSelection) !== canonicalJson(command.modelSelection) ||
     canonicalJson(turn.context) !== canonicalJson(command.context)
   ) {

@@ -56,19 +56,6 @@ function changedSuccessorPaths(repositoryRoot: string): string[] {
   ])].sort();
 }
 
-function changedProtectedSourcePaths(repositoryRoot: string): string[] {
-  return readNullSeparatedGitPaths(repositoryRoot, [
-    "diff",
-    "--name-only",
-    "--no-renames",
-    "--diff-filter=DMT",
-    "-z",
-    SOURCE_BASELINE_COMMIT,
-    "--",
-    "packages/butler-agent/src",
-  ]).sort();
-}
-
 export function discoverSuccessorModulesFromPaths(
   repositoryRoot: string,
   changedPaths: readonly string[],
@@ -112,7 +99,6 @@ export function discoverSuccessorModulesFromPaths(
     changedDomainPaths,
     changedFilePaths: changedFilePaths.sort(),
     filePaths: [...filePaths].sort(),
-    protectedSourceChanges: [],
   };
 }
 
@@ -123,8 +109,5 @@ export function discoverChangedSuccessorModules(
     repositoryRoot,
     changedSuccessorPaths(repositoryRoot),
   );
-  return {
-    ...discovered,
-    protectedSourceChanges: changedProtectedSourcePaths(repositoryRoot),
-  };
+  return discovered;
 }

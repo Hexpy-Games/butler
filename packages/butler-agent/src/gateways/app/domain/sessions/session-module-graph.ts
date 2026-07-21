@@ -1,5 +1,4 @@
 import { Database } from "bun:sqlite";
-import { cancelPersistedRuntimeTurn } from "../../../../agent/turn/principal-turn-cancellation.ts";
 import { AppMessageFileStore } from "../message-files/message-file-store.ts";
 import { AppSessionRecordStore } from "./session-record-store.ts";
 import { AppAssistantMessageStore } from "./assistant-message-store.ts";
@@ -144,10 +143,8 @@ export function createAppSessionModuleGraph(input: {
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
     markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
       host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
-    finalizeCancelledTurn: (chatId, turnId) => {
-      cancelPersistedRuntimeTurn({ butlerData, turnId });
-      return host.finalizeCancelledTurn(chatId, turnId);
-    },
+    finalizeCancelledTurn: (chatId, turnId) =>
+      host.finalizeCancelledTurn(chatId, turnId),
     hasTurnEventKind: (turnId, kind) => host.hasTurnEventKind(turnId, kind),
     insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) =>
       host.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),

@@ -269,7 +269,11 @@ export class SessionLifecycleService {
   }
 }
 
-export function createLifecycleGatewayHandlers(lifecycle: SessionLifecycleService): GatewayRoleHandlers {
+type GatewayActorLifecycle = {
+  actorForRoute(route: GatewayRoute): Promise<GatewaySessionActor>;
+};
+
+export function createLifecycleGatewayHandlers(lifecycle: GatewayActorLifecycle): GatewayRoleHandlers {
   const resultMetadata = async (
     route: GatewayRoute,
     envelope: InboundEnvelope,
@@ -283,7 +287,7 @@ export function createLifecycleGatewayHandlers(lifecycle: SessionLifecycleServic
     deliveryCount: result.deliveries?.length ?? 0,
     runtimeSessionRef: result.runtimeSessionRef ?? null,
     providerThreadRef: result.providerThreadRef ?? null,
-    durableFinalRecorded: true,
+    durableFinalRecorded: durableFinalRecordedByActor(result),
     generatedSessionTitle: result.generatedSessionTitle ?? null,
     loadedSkillNames: result.loadedSkillNames ?? [],
   });
@@ -307,4 +311,11 @@ export function createLifecycleGatewayHandlers(lifecycle: SessionLifecycleServic
       };
     },
   };
+}
+
+function durableFinalRecordedByActor(
+  result: Awaited<ReturnType<GatewaySessionActor["handleInbound"]>>,
+): boolean {
+  if (!result.raw || typeof result.raw !== "object" || Array.isArray(result.raw)) return true;
+  return (result.raw as Record<string, unknown>).durableFinalRecorded !== false;
 }

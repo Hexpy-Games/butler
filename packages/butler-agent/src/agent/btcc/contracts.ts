@@ -15,7 +15,7 @@ import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
 import type { DeferredContinuationCandidate } from "./continuation/index.ts";
 import type { StopPersistenceOutcome } from "./turn/index.ts";
 
-export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export type AdmittedModelSelection = {
   provider: string;
@@ -47,8 +47,23 @@ export type BtccTurnCommand =
       context: ButlerContextInput;
     }
   | { kind: "resume"; turnId: string }
-  | { kind: "wake"; turnId: string; triggerId: string }
+  | {
+      kind: "wake";
+      turnId: string;
+      sessionId: string;
+      triggerKey: string;
+      trigger: {
+        triggerId: string;
+        sourceTurnId: string;
+        authorizationRef: string;
+        content: string;
+      };
+      modelSelection: AdmittedModelSelection;
+      context: ButlerContextInput;
+    }
   | { kind: "stop"; turnId: string };
+
+export type FreshBtccTurnCommand = Extract<BtccTurnCommand, { kind: "run" | "wake" }>;
 
 export type BtccTurnOutcome =
   | { kind: "delivered"; turnId: string; messageId: string; content: string }
@@ -62,6 +77,14 @@ export interface BtccTurnRuntime {
   handle(command: BtccTurnCommand): Promise<BtccTurnOutcome>;
 }
 
+export interface BtccTurnProgressObserver {
+  stateChanged(update: {
+    turnId: string;
+    semanticState: string;
+    turnRevision: number;
+  }): void | Promise<void>;
+}
+
 export type BtccRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
@@ -71,4 +94,5 @@ export type BtccRuntimeDependencies = {
   artifacts: ArtifactWorkspaceRuntime;
   messages: CanonicalMessageStore;
   learning: LearningSourceScheduler;
+  progress?: BtccTurnProgressObserver;
 };

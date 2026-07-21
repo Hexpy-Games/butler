@@ -14,6 +14,7 @@ import type {
   FeedbackPlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
+import { feedbackPlanReviewSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning_review",
@@ -31,6 +32,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withManagedDeferral<FeedbackPlanningReviewProduct>({
+  submissionSchema: feedbackPlanReviewSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Planning Review state");
     const candidate = state.feedbackPlan as FeedbackPlanProduct | undefined;

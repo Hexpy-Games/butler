@@ -30,7 +30,7 @@ export async function runOpenAIPromptWithUsage(
   }, options.signal, authOverride, options.onProviderStreamEvent, {
     attribution: options.usageAttribution,
     roundIndex: options.usageAttribution?.roundIndex ?? 0,
-  });
+  }, undefined, options.providerRetryAttempts);
   afterAttributedModelResponse({
     attribution: options.usageAttribution,
     model,

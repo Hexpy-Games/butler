@@ -178,8 +178,11 @@ export function isTransientModelApiError(error: unknown): boolean {
 export async function withModelApiRetry<T>(
   operation: (attempt: number) => Promise<T>,
   signal?: AbortSignal,
+  attemptsOverride?: number,
 ): Promise<T> {
-  const attempts = modelApiRetryAttempts();
+  const attempts = attemptsOverride === undefined
+    ? modelApiRetryAttempts()
+    : Math.max(1, Math.trunc(attemptsOverride));
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {

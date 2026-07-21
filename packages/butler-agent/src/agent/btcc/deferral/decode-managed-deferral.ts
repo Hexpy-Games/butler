@@ -11,11 +11,16 @@ import type {
   ManagedReadinessCondition,
   PromotionDeferralProduct,
 } from "./contracts.ts";
+import {
+  withManagedDeferralSchema,
+  withTaskExecutionDeferralSchema,
+} from "./submission-schema.ts";
 
 export function withManagedDeferral<Product>(
   phaseCodec: PhaseCodec<Product>,
 ): PhaseCodec<Product | ManagedDeferralProduct> {
   return {
+    submissionSchema: withManagedDeferralSchema(phaseCodec.submissionSchema),
     decode(submission, envelope) {
       const value = requireRecord(submission, "Managed phase submission");
       return value.kind === "managed_deferral"
@@ -30,6 +35,7 @@ export function withTaskExecutionDeferral<Product>(
 ): PhaseCodec<Product | ManagedDeferralProduct | PromotionDeferralProduct> {
   const managed = withManagedDeferral(phaseCodec);
   return {
+    submissionSchema: withTaskExecutionDeferralSchema(phaseCodec.submissionSchema),
     decode(submission, envelope) {
       const value = requireRecord(submission, "Task Execution submission");
       if (value.kind !== "promotion_deferral") {

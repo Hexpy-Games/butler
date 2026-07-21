@@ -5,8 +5,10 @@ import type {
   OpeningProduct,
 } from "./contracts.ts";
 import { decodeOpeningAnswer } from "./decode-opening-answer.ts";
+import { openingSubmissionSchema } from "../submission-schemas.ts";
 
 export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
+  submissionSchema: openingSubmissionSchema,
   decode(submission, envelope) {
     if (isRecord(submission) && submission.kind === "opening_continuation") {
       return decodeOpeningContinuation(submission, envelope.binding.turnId);

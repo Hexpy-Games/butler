@@ -4,6 +4,7 @@ import type {
   BtccRuntimeDependencies,
   BtccTurnCommand,
   BtccTurnOutcome,
+  BtccTurnProgressObserver,
   BtccTurnRuntime,
 } from "./contracts.ts";
 import { insertCanonicalMessage, scheduleLearningSource } from "./delivery/index.ts";
@@ -52,6 +53,7 @@ async function runBtccTurn(
   supervisor: TurnExecutionSupervisor,
 ): Promise<BtccTurnOutcome> {
   let turn = await loadOrAdmitTurn(command, dependencies);
+  await publishProgress(dependencies.progress, turn);
   while (!isTerminal(turn)) {
     const permit = supervisor.enter({
       turnId: turn.turnId,
@@ -76,9 +78,26 @@ async function runBtccTurn(
       permit.close();
     }
     turn = await activateCommittedSuccessor(turn.turnId, dependencies);
+    await publishProgress(dependencies.progress, turn);
   }
   scheduleLearningSource({ turn, scheduler: dependencies.learning });
   return projectTerminalOutcome(turn);
+}
+
+async function publishProgress(
+  observer: BtccTurnProgressObserver | undefined,
+  turn: TurnRecord,
+): Promise<void> {
+  if (!observer) return;
+  try {
+    await observer.stateChanged({
+      turnId: turn.turnId,
+      semanticState: turn.semanticState,
+      turnRevision: turn.revision,
+    });
+  } catch {
+    // User-visible projection is operational and cannot veto a committed semantic transition.
+  }
 }
 
 async function advanceBtccAlgorithm(

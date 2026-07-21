@@ -9,7 +9,6 @@ import { AppSessionViewStore } from "./session-view-store.ts";
 import { AppSystemResponderTurnStore } from "./system-responder-turn-store.ts";
 import { AppTurnActionStore } from "./turn-action-store.ts";
 import { settlePrincipalDeadOwnerCancellation } from "./dead-owner-cancellation-settlement.ts";
-import { cancelPersistedRuntimeTurn } from "../../../../agent/turn/principal-turn-cancellation.ts";
 import {
   principalTurnCancellationTargetForTurn,
   signalPrincipalTurnCancellation,
@@ -76,7 +75,6 @@ export function createAppSessionInteractionModuleGraph(input: {
       host.dispatchDeferredResponderTurn(turnInput),
     completeResponderTurn: (turnInput) => host.completeResponderTurn(turnInput),
     cancelResponder: (turnId) => responderRuntime.cancel(turnId),
-    cancelPersistedRuntimeTurn: (turnId) => cancelPersistedRuntimeTurn({ butlerData, turnId }),
     signalPrincipalTurnCancellation: (turnId) =>
       signalPrincipalTurnCancellation({ butlerData, turnId }),
     principalTurnCancellationTargetForTurn: (turnId) =>
@@ -182,7 +180,7 @@ function createSystemResponderTurns(input: {
   messageFiles: AppMessageFileStore;
   host: any;
 }): AppSystemResponderTurnStore {
-  const { butlerData, messageFiles, host } = input;
+  const { messageFiles, host } = input;
   return new AppSystemResponderTurnStore({
     ensureChat: (chatId) => host.ensureChat(chatId),
     getSessionControls: (chatId) => host.getSessionControls(chatId),
@@ -228,10 +226,8 @@ function createSystemResponderTurns(input: {
       messageFiles.createResponderFiles(chatId, files ?? []),
     insertOrReplaceAssistantReplies: (chatId, turnId, texts, files) =>
       host.insertOrReplaceAssistantReplies(chatId, turnId, texts, files),
-    finalizeCancelledTurn: (chatId, turnId) => {
-      cancelPersistedRuntimeTurn({ butlerData, turnId });
-      return host.finalizeCancelledTurn(chatId, turnId);
-    },
+    finalizeCancelledTurn: (chatId, turnId) =>
+      host.finalizeCancelledTurn(chatId, turnId),
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
     markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>

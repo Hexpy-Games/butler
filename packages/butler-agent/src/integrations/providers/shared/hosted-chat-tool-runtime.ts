@@ -37,7 +37,7 @@ export async function runHostedOpenAICompatiblePromptText(
   }, options.signal, {
     attribution: options.usageAttribution,
     roundIndex: options.usageAttribution?.roundIndex ?? 0,
-  });
+  }, options.providerRetryAttempts);
   recordHostedOpenAICompatibleUsage({
     config,
     options,
@@ -87,7 +87,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       tool_choice: options.toolChoice ?? "auto",
       stream: false,
       ...hostedChatReasoningParams(config, options.reasoningEffort),
-    }, options.signal, { attribution: options.usageAttribution, roundIndex: round });
+    }, options.signal, { attribution: options.usageAttribution, roundIndex: round }, options.providerRetryAttempts);
     recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: round });
     const assistant = firstHostedChatMessage(response);
     const text = hostedChatText(assistant);
@@ -204,7 +204,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     messages,
     stream: false,
     ...hostedChatReasoningParams(config, options.reasoningEffort),
-  }, options.signal, { attribution: options.usageAttribution, roundIndex: maxRounds });
+  }, options.signal, { attribution: options.usageAttribution, roundIndex: maxRounds }, options.providerRetryAttempts);
   recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: maxRounds });
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {

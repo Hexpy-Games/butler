@@ -1,0 +1,116 @@
+import { existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import {
+  contentRef,
+  digest,
+  requireRecord,
+  type ObservationResult,
+  type PhaseEnvelope,
+} from "../../core/index.ts";
+import type { ProductionOperationRuntimeOptions } from "./contracts.ts";
+import { ArtifactStore } from "./artifact-store.ts";
+import {
+  assertActive,
+  operationContent,
+  parseToolInput,
+  sameRef,
+} from "./operation-helpers.ts";
+import {
+  captureWorkspaceSnapshot,
+  materializeSnapshot,
+  removeOwnedRoot,
+  snapshotSha256,
+  workspaceContentRoot,
+} from "./target-snapshot.ts";
+
+export async function performReviewValidation(input: {
+  request: Extract<import("../../core/index.ts").OperationRequest, { kind: "review_validation" }>;
+  envelope: PhaseEnvelope;
+  options: ProductionOperationRuntimeOptions;
+  store: ArtifactStore;
+  signal?: AbortSignal;
+}): Promise<ObservationResult> {
+  assertActive(input.signal);
+  const source = resolveReviewSource(input.envelope, input.request.reviewSourceRef);
+  const snapshotValue = input.store.loadSnapshot(source.targetSnapshotRef.id);
+  if (!snapshotValue || !sameRef(snapshotValue.ref, source.targetSnapshotRef)) {
+    throw new Error("BTCC Review source has no exact durable snapshot");
+  }
+  const root = join(
+    input.options.butlerData,
+    "runtime",
+    "btcc-artifacts",
+    "review-overlays",
+    digest(input.request.requestId),
+  );
+  if (existsSync(root)) removeOwnedRoot(root);
+  mkdirSync(root, { recursive: true });
+  materializeSnapshot(snapshotValue, workspaceContentRoot(root));
+  const before = captureWorkspaceSnapshot(root, snapshotValue.targetKind);
+  if (snapshotSha256(before) !== snapshotSha256(snapshotValue)) {
+    removeOwnedRoot(root);
+    throw new Error("BTCC Review overlay does not match its immutable source");
+  }
+  try {
+    const args = parseToolInput(input.request.input);
+    input.options.validateOperationInput({
+      envelope: input.envelope,
+      request: input.request,
+      args,
+    });
+    const execute = input.options.createIsolatedValidationExecutor({
+      workspacePath: workspaceContentRoot(root),
+      envelope: input.envelope,
+      request: input.request,
+    });
+    const output = await execute({
+      name: input.request.capabilityRef,
+      args,
+      rawArguments: input.request.input,
+      signal: input.signal,
+    });
+    assertActive(input.signal);
+    const after = captureWorkspaceSnapshot(root, snapshotValue.targetKind);
+    const content = operationContent(output);
+    const validationReceiptRef = contentRef("review-validation-receipt", {
+      requestId: input.request.requestId,
+      reviewSourceRef: input.request.reviewSourceRef,
+      beforeSnapshotRef: before.ref,
+      afterSnapshotRef: after.ref,
+      output: content,
+    });
+    return {
+      requestId: input.request.requestId,
+      outcome: "review_validated",
+      observationRef: contentRef("review-validation-observation", {
+        requestId: input.request.requestId,
+        validationReceiptRef,
+      }),
+      validationReceiptRef,
+      content,
+    };
+  } finally {
+    removeOwnedRoot(root);
+  }
+}
+
+function resolveReviewSource(
+  envelope: PhaseEnvelope,
+  expectedRef: { id: string; sha256: string },
+): { targetSnapshotRef: { id: string; sha256: string } } {
+  const state = requireRecord(envelope.context.stateInput, "Task Review state");
+  const resultCandidate = requireRecord(state.resultCandidate, "Task Review ResultCandidate");
+  const result = requireRecord(resultCandidate.result, "Task Review result");
+  const revision = requireRecord(result.workspaceRevision, "Task Review workspace revision");
+  const ref = requireRef(revision.ref, "Task Review workspace revision ref");
+  if (!sameRef(ref, expectedRef)) throw new Error("BTCC Review request changed its source revision");
+  return { targetSnapshotRef: requireRef(revision.targetSnapshotRef, "Review target snapshot") };
+}
+
+function requireRef(value: unknown, label: string): { id: string; sha256: string } {
+  const ref = requireRecord(value, label);
+  if (typeof ref.id !== "string" || typeof ref.sha256 !== "string") {
+    throw new Error(`${label} is invalid`);
+  }
+  return { id: ref.id, sha256: ref.sha256 };
+}

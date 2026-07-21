@@ -76,6 +76,10 @@ function executionAuthority(
       mutation: {
         kind: "repository_promotion_only" as const,
         authorizationRef: target.authorizationRef,
+        candidateRef: target.candidateRef,
+        resolutionRef: target.resolutionRef,
+        baselineRef: target.baselineRef,
+        finalSnapshotRef: target.finalSnapshotRef,
       },
     };
   }

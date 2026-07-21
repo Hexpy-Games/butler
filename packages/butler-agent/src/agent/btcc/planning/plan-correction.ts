@@ -18,6 +18,7 @@ import type {
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
+import { feedbackPlanSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -38,6 +39,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withManagedDeferral<FeedbackPlanProduct>({
+  submissionSchema: feedbackPlanSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
     const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;

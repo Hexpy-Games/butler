@@ -1,0 +1,112 @@
+import type {
+  OperationRequest,
+  PhaseEnvelope,
+  ProductionOperationRuntimeOptions,
+} from "../../btcc/index.ts";
+import { validateJsonObjectSchema } from "../../tools/tool-bridge/schema-validation.ts";
+import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
+
+type ToolRuntimeOptions = {
+  butlerHome: string;
+  butlerData: string;
+  appMessageDbPath: string;
+};
+
+export function createProductionToolRuntime(
+  options: ToolRuntimeOptions,
+): Pick<
+  ProductionOperationRuntimeOptions,
+  | "createToolExecutor"
+  | "createWorkspaceToolExecutor"
+  | "createIsolatedValidationExecutor"
+  | "validateOperationInput"
+> {
+  return {
+    createToolExecutor: ({ envelope, request }) =>
+      toolExecutor(
+        options,
+        envelope,
+        workspaceForObservation(envelope, request, options.butlerHome),
+        request,
+      ),
+    createWorkspaceToolExecutor: ({ workspacePath, envelope, request }) =>
+      toolExecutor(options, envelope, workspacePath, request),
+    createIsolatedValidationExecutor: ({ workspacePath, envelope, request }) =>
+      toolExecutor(options, envelope, workspacePath, request),
+    validateOperationInput: ({ request, args }) => validateInput(request, args),
+  };
+}
+
+function toolExecutor(
+  options: ToolRuntimeOptions,
+  envelope: PhaseEnvelope,
+  workspacePath: string,
+  request: OperationRequest,
+) {
+  return async (call: {
+    name: string;
+    args: Record<string, unknown>;
+    signal?: AbortSignal;
+  }) => {
+    const capability = requireCapability(request);
+    if (call.name !== capability.name) {
+      throw new Error(`BTCC requested ${request.capabilityRef} but provider invoked ${call.name}`);
+    }
+    return capability.execute(call.args, {
+      butlerData: options.butlerData,
+      workspacePath,
+      originalRequest: envelope.context.originalMessage,
+      signal: call.signal,
+    });
+  };
+}
+
+function workspaceForObservation(
+  envelope: PhaseEnvelope,
+  request: Extract<OperationRequest, { kind: "observe" }>,
+  defaultWorkspace: string,
+): string {
+  if (request.scopeRef.startsWith("workspace:")) {
+    return request.scopeRef.slice("workspace:".length);
+  }
+  const workspaceScope = envelope.context.baselineObservationScopeRefs.find(
+    (scope) => scope.startsWith("workspace:"),
+  );
+  return workspaceScope?.slice("workspace:".length) || defaultWorkspace;
+}
+
+function validateInput(
+  request: OperationRequest,
+  args: Record<string, unknown>,
+): void {
+  if (request.kind === "repository_promotion") {
+    if (Object.keys(args).length === 0) return;
+    throw new Error("BTCC promotion capability accepts no model-authored arguments");
+  }
+  const capability = requireCapability(request);
+  const result = validateJsonObjectSchema(args, capability.inputSchema);
+  if (!result.ok) {
+    throw new Error(`BTCC capability input is invalid at ${result.path}: ${result.message}`);
+  }
+  if (
+    request.kind === "workspace_artifact_action" &&
+    request.capabilityRef === "write_file" &&
+    args.path !== request.relativeTarget
+  ) {
+    throw new Error("BTCC write_file path must equal the planned relative target");
+  }
+}
+
+function requireCapability(request: OperationRequest) {
+  if (request.kind === "repository_promotion") {
+    throw new Error("BTCC promotion is executed by the artifact runtime");
+  }
+  const capability = PRODUCTION_CAPABILITIES.find(
+    (candidate) => candidate.capabilityRef === request.capabilityRef &&
+      candidate.operationKinds.includes(request.kind),
+  );
+  if (!capability) {
+    throw new Error(`BTCC capability is unavailable for ${request.kind}: ${request.capabilityRef}`);
+  }
+  return capability;
+}

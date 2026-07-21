@@ -10,7 +10,7 @@ export type WorkspaceProvision = {
     taskRef: ContentRef;
     attemptRef: ContentRef;
     targetScopeRef: string;
-    baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+    baselinePolicy: "capture_at_workspace_provision";
   };
   baseline: {
     ref: ContentRef;
@@ -48,7 +48,7 @@ export type ProvisionWorkspaceCommand = {
   taskRef: ContentRef;
   attemptRef: ContentRef;
   targetScopeRef: string;
-  baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+  baselinePolicy: "capture_at_workspace_provision";
 };
 
 export interface ArtifactWorkspaceRuntime {

@@ -49,6 +49,7 @@ async function assembleEnvelope<Product>(
     context: command.context,
     operationAuthority: command.operationAuthority,
     operationResults: await command.store.loadOperationResults(command.binding),
+    submissionSchema: command.codec.submissionSchema,
   };
 }
 
@@ -119,7 +120,11 @@ function assertAuthorizedOperation(
   } else if (
     request.kind === "repository_promotion" &&
     authority.mutation.kind === "repository_promotion_only" &&
-    sameRef(request.authorizationRef, authority.mutation.authorizationRef)
+    sameRef(request.authorizationRef, authority.mutation.authorizationRef) &&
+    sameRef(request.candidateRef, authority.mutation.candidateRef) &&
+    sameRef(request.resolutionRef, authority.mutation.resolutionRef) &&
+    sameRef(request.baselineRef, authority.mutation.baselineRef) &&
+    sameRef(request.finalSnapshotRef, authority.mutation.finalSnapshotRef)
   ) {
     return;
   }

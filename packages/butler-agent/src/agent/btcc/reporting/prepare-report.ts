@@ -12,6 +12,7 @@ import {
 } from "../core/index.ts";
 import type { FinalDossierProduct } from "../consolidation/index.ts";
 import type { PreparedReportProduct } from "./contracts.ts";
+import { reportingSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "reporting",
@@ -29,6 +30,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec: PhaseCodec<PreparedReportProduct> = {
+  submissionSchema: reportingSubmissionSchema,
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Reporting state");
     const dossier = state.finalDossier as FinalDossierProduct | undefined;

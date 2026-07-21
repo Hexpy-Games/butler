@@ -10,6 +10,12 @@ export {
   withTaskExecutionDeferral,
 } from "./decode-managed-deferral.ts";
 export { withManagedDeferralState } from "./managed-deferral-state.ts";
+export {
+  managedDeferralSubmissionSchema,
+  promotionDeferralSubmissionSchema,
+  withManagedDeferralSchema,
+  withTaskExecutionDeferralSchema,
+} from "./submission-schema.ts";
 
 import type { ManagedDeferralProduct } from "./contracts.ts";
 
