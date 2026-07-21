@@ -33,6 +33,7 @@ export type OpeningContext = {
   recentFeedbackRefs: string[];
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
+  baselineObservationScopeRefs: string[];
   stateInput?: unknown;
 };
 
@@ -46,6 +47,8 @@ export type PhaseEnvelope = {
   authoringContractRefs?: readonly string[];
   modelSelection: AdmittedModelSelection;
   context: OpeningContext;
+  operationAuthority: OperationAuthority;
+  operationResults: OperationResult[];
 };
 
 export type PhaseContract = Pick<
@@ -72,6 +75,11 @@ export type ProviderRoundValue =
       actualIdentity: ActualModelIdentity;
     }
   | {
+      kind: "operation_requests";
+      requests: OperationRequest[];
+      actualIdentity: ActualModelIdentity;
+    }
+  | {
       kind: "interruption";
       code: string;
     };
@@ -87,6 +95,42 @@ export interface PhaseConversationStore {
     product: Product;
     actualIdentity: ActualModelIdentity;
   }): Promise<void>;
+  loadOperationResults(binding: PhaseRunBinding): Promise<OperationResult[]>;
+  appendOperationResult(input: {
+    binding: PhaseRunBinding;
+    request: OperationRequest;
+    result: OperationResult;
+  }): Promise<void>;
+}
+
+export type OperationAuthority = {
+  observationScopeRefs: string[];
+  mutation: "forbidden";
+};
+
+export type OperationRequest = {
+  requestId: string;
+  kind: "observe";
+  capabilityRef: string;
+  scopeRef: string;
+  input: string;
+};
+
+export type OperationResult = {
+  requestId: string;
+  request: OperationRequest;
+  outcome: "observed";
+  observationRef: { id: string; sha256: string };
+  content: string;
+};
+
+export type ObservationResult = Omit<OperationResult, "request">;
+
+export interface ObservationExecutor {
+  perform(input: {
+    request: OperationRequest;
+    envelope: PhaseEnvelope;
+  }): Promise<ObservationResult>;
 }
 
 export type PhaseCodec<Product> = {
@@ -101,9 +145,17 @@ export type PhaseConversationCommand<Product> = {
   codec: PhaseCodec<Product>;
   store: PhaseConversationStore;
   model: SelectedModel;
+  operations: ObservationExecutor;
+  operationAuthority: OperationAuthority;
 };
 
 export type PhaseInvocation = Pick<
   PhaseConversationCommand<unknown>,
-  "binding" | "modelSelection" | "context" | "store" | "model"
+  | "binding"
+  | "modelSelection"
+  | "context"
+  | "store"
+  | "model"
+  | "operations"
+  | "operationAuthority"
 >;

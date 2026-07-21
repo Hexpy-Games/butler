@@ -1,2 +1,2 @@
-export { reviewTask } from "./review-task.ts";
+export { review } from "./review.ts";
 export type { TaskReviewProduct } from "./contracts.ts";

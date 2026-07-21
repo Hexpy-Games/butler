@@ -1,11 +1,9 @@
 import {
   runPhaseConversation,
   type PhaseContract,
+  type PhaseInvocation,
 } from "../../core/index.ts";
-import type {
-  OpenConceptionCommand,
-  OpeningProduct,
-} from "./contracts.ts";
+import type { OpeningProduct } from "./contracts.ts";
 import { openingAnswerCodec } from "./opening-answer-codec.ts";
 
 const OPENING_PHASE_CONTRACT: PhaseContract = {
@@ -24,6 +22,12 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
       "guard_fast_output",
       "apply_accepted_output_preferences",
     ],
+    assisted_answer: [
+      "use_only_admitted_observations",
+      "cite_public_claim_sources",
+      "guard_fast_output",
+      "apply_accepted_output_preferences",
+    ],
     opening_continuation: ["publish_truthful_continuation"],
   },
   prohibitions: [
@@ -38,15 +42,11 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
 };
 
 export async function openConception(
-  command: OpenConceptionCommand,
+  command: PhaseInvocation,
 ): Promise<OpeningProduct> {
   return runPhaseConversation({
-    binding: command.binding,
-    modelSelection: command.modelSelection,
-    context: command.context,
+    ...command,
     phaseContract: OPENING_PHASE_CONTRACT,
     codec: openingAnswerCodec,
-    store: command.conversations,
-    model: command.model,
   });
 }

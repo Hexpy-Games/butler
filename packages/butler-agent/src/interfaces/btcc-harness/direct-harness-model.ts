@@ -33,12 +33,14 @@ export class DirectHarnessModel implements SelectedModel {
         nonGoals: ["관리 작업이나 Work Ledger를 만들지 않는다"],
         answer: "안녕하세요. 반갑습니다.",
         personalizationApplications,
+        publicClaims: [],
         guard: {
           responseVerdict: "responsive",
           personalizationVerdicts: personalizationApplications.map(({ ref }) => ({
             ref,
             verdict: "faithful_and_public_safe",
           })),
+          publicClaimVerdicts: [],
           verdict: "accepted",
         },
       },

@@ -1,15 +1,10 @@
-import type { AdmittedModelSelection } from "../../contracts.ts";
 import type {
   ContentRef,
-  OpeningContext,
-  PhaseConversationStore,
-  PhaseRunBinding,
-  SelectedModel,
 } from "../../core/index.ts";
 
 export type OpeningAnswerProduct = {
   kind: "opening_answer";
-  route: "direct";
+  route: "direct" | "assisted";
   goalContract: {
     ref: ContentRef;
     originalMessageId: string;
@@ -32,12 +27,14 @@ export type OpeningAnswerProduct = {
       contentPartId: string;
     };
     personalizationApplications: PersonalizationApplication[];
+    publicClaims: PublicClaim[];
   };
   outputGuard: {
     ref: ContentRef;
     draftRef: ContentRef;
     responseVerdict: "responsive" | "truthfully_limited";
     personalizationVerdicts: PersonalizationVerdict[];
+    publicClaimVerdicts: PublicClaimVerdict[];
     verdict: "accepted";
   };
   finalPayload: {
@@ -45,7 +42,7 @@ export type OpeningAnswerProduct = {
     draftRef: ContentRef;
     guardReceiptRef: ContentRef;
     contentSha256: string;
-    route: "direct";
+    route: "direct" | "assisted";
     disposition: "answered";
     content: string;
   };
@@ -73,17 +70,29 @@ export type PersonalizationVerdict = {
   verdict: "faithful_and_public_safe";
 };
 
-export type DirectAnswerSubmission = {
-  kind: "direct_answer";
+export type PublicClaim = {
+  claim: string;
+  sourceRefs: ContentRef[];
+};
+
+export type PublicClaimVerdict = {
+  claimIndex: number;
+  verdict: "supported_or_not_observation_dependent";
+};
+
+export type OpeningAnswerSubmission = {
+  kind: "direct_answer" | "assisted_answer";
   interpretedIntent: string;
   requiredOutcome: string;
   requiredOutcomeResolution: "fulfilled" | "truthfully_limited";
   nonGoals: string[];
   answer: string;
   personalizationApplications: PersonalizationApplication[];
+  publicClaims: PublicClaim[];
   guard: {
     responseVerdict: "responsive" | "truthfully_limited";
     personalizationVerdicts: PersonalizationVerdict[];
+    publicClaimVerdicts: PublicClaimVerdict[];
     verdict: "accepted";
   };
 };
@@ -91,12 +100,4 @@ export type DirectAnswerSubmission = {
 export type OpeningContinuationSubmission = {
   kind: "opening_continuation";
   message: string;
-};
-
-export type OpenConceptionCommand = {
-  binding: PhaseRunBinding;
-  modelSelection: AdmittedModelSelection;
-  context: OpeningContext;
-  conversations: PhaseConversationStore;
-  model: SelectedModel;
 };

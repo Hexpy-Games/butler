@@ -9,6 +9,7 @@ export function createBtccComposition(input: {
   dbPath: string;
   ownerId: string;
   model: BtccRuntimeDependencies["model"];
+  operations: BtccRuntimeDependencies["operations"];
 }): BtccTurnRuntime {
   const stores = openBtccSqliteStores({ dbPath: input.dbPath, ownerId: input.ownerId });
   return createBtccTurnRuntime({
@@ -16,6 +17,7 @@ export function createBtccComposition(input: {
     turns: stores.turns,
     phaseConversations: stores.phaseConversations,
     model: input.model,
+    operations: input.operations,
     messages: stores.messages,
   });
 }
