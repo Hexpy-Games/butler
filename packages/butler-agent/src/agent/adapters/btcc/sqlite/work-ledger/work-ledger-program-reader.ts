@@ -11,10 +11,12 @@ type ProgramRow = {
   authority_ref: string;
   accepted_plan_ref: string | null;
   planning_review_ref: string | null;
-  frontier: "unplanned" | "implementation_open" | "closed";
+  frontier: "unplanned" | "implementation_open" | "awaiting_consolidation" | "promotion_open" | "closed";
   ledger_id: string;
   manifest_revision: number;
   pending_correction_plan_ref: string | null;
+  promotion_assembly_refs_json: string | null;
+  promotion_authorization_ref: string | null;
 };
 
 export class SqliteWorkLedgerProgramReader {
@@ -58,7 +60,19 @@ export class SqliteWorkLedgerProgramReader {
       artifactLifecycle: this.loadRecord(
         plan.artifactLifecycleRef.id,
       ) as ReviewedProgram["artifactLifecycle"],
-      frontier: program.frontier === "closed" ? "closed" : "implementation_open",
+      promotionAssemblies: this.loadPromotionAssemblies(
+        program.promotion_assembly_refs_json,
+      ),
+      ...(program.promotion_authorization_ref
+        ? { promotionAuthorization: this.loadRecord(program.promotion_authorization_ref) }
+        : {}),
+      frontier: program.frontier === "closed"
+        ? "closed"
+        : program.frontier === "awaiting_consolidation"
+          ? "awaiting_consolidation"
+          : program.frontier === "promotion_open"
+            ? "promotion_open"
+            : "implementation_open",
       ...(program.pending_correction_plan_ref
         ? { correctionPlanRef: this.loadRef(program.pending_correction_plan_ref) }
         : latestAttempt?.correctionPlanRef
@@ -71,9 +85,24 @@ export class SqliteWorkLedgerProgramReader {
     return this.db.query<ProgramRow, [string]>(`
       SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
         planning_review_ref, frontier, ledger_id, manifest_revision,
-        pending_correction_plan_ref
+        pending_correction_plan_ref, promotion_assembly_refs_json,
+        promotion_authorization_ref
       FROM btcc_programs WHERE program_id = ?
     `).get(programId);
+  }
+
+  private loadPromotionAssemblies(
+    value: string | null,
+  ): ReviewedProgram["promotionAssemblies"] {
+    if (!value) return [];
+    const refs = JSON.parse(value) as Array<{
+      candidateRef: ContentRef;
+      resolutionRef: ContentRef;
+    }>;
+    return refs.map((item) => ({
+      candidate: this.loadRecord(item.candidateRef.id),
+      resolution: this.loadRecord(item.resolutionRef.id),
+    })) as ReviewedProgram["promotionAssemblies"];
   }
 
   private loadWorks(programId: string): ReviewedProgram["works"] {
@@ -81,7 +110,8 @@ export class SqliteWorkLedgerProgramReader {
       work_ref: string;
       status: ReviewedProgram["works"][number]["status"];
     }, [string]>(`
-      SELECT work_ref, status FROM btcc_work_items WHERE program_id = ? ORDER BY rowid
+      SELECT work_ref, status FROM btcc_work_items
+      WHERE program_id = ? AND is_active = 1 ORDER BY rowid
     `).all(programId);
     if (rows.length === 0) throw new Error("Work Ledger Program has no Work");
     return rows.map((row) => {
@@ -98,7 +128,7 @@ export class SqliteWorkLedgerProgramReader {
       review_ref: string | null;
     }, [string]>(`
       SELECT task_ref, status, result_ref, review_ref
-      FROM btcc_tasks WHERE program_id = ? ORDER BY rowid
+      FROM btcc_tasks WHERE program_id = ? AND is_active = 1 ORDER BY rowid
     `).all(programId);
     if (rows.length === 0) throw new Error("Work Ledger Program has no Task");
     return rows.map((row) => {

@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS btcc_programs (
   accepted_plan_ref TEXT,
   planning_review_ref TEXT,
   pending_correction_plan_ref TEXT,
+  promotion_assembly_refs_json TEXT,
+  promotion_authorization_ref TEXT,
   frontier TEXT NOT NULL,
   manifest_revision INTEGER NOT NULL
 );
@@ -144,7 +146,8 @@ CREATE TABLE IF NOT EXISTS btcc_work_items (
   work_id TEXT PRIMARY KEY,
   program_id TEXT NOT NULL,
   work_ref TEXT NOT NULL,
-  status TEXT NOT NULL
+  status TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS btcc_tasks (
@@ -152,7 +155,9 @@ CREATE TABLE IF NOT EXISTS btcc_tasks (
   program_id TEXT NOT NULL,
   work_id TEXT NOT NULL,
   task_ref TEXT NOT NULL,
+  task_kind TEXT NOT NULL DEFAULT 'non_artifact',
   status TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
   current_attempt_id TEXT,
   result_ref TEXT,
   review_ref TEXT

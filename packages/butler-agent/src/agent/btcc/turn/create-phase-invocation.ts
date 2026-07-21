@@ -28,7 +28,7 @@ export function createPhaseInvocation(
     operations: dependencies.operations,
     operationAuthority: {
       observationScopeRefs: turn.context.baselineObservationScopeRefs,
-      mutation: "forbidden",
+      mutation: { kind: "forbidden" },
     },
   };
 }

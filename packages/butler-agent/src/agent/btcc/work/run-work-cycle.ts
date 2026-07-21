@@ -1,4 +1,5 @@
 import { conception } from "../conception/index.ts";
+import type { ArtifactWorkspaceRuntime } from "../artifact/index.ts";
 import type { PhaseInvocation } from "../core/index.ts";
 import { execution } from "../execution/index.ts";
 import { planning } from "../planning/index.ts";
@@ -9,6 +10,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { selectNextTaskOrClose } from "./select-next-task-or-close.ts";
+import { prepareTaskAttempt } from "./prepare-task-attempt.ts";
 
 type WorkCycleEvent = Extract<TurnEvent, {
   kind:
@@ -20,27 +22,43 @@ type WorkCycleEvent = Extract<TurnEvent, {
     | "FeedbackIntentAccepted"
     | "FeedbackPlanCandidateSubmitted"
     | "FeedbackPlanningReviewAccepted"
-    | "FeedbackPlanningRevisionRequested";
+    | "FeedbackPlanningRevisionRequested"
+    | "PromotedWorkCompleted";
 }>;
 
 export function runWorkCycle(command: {
   turn: TurnRecord;
   phase?: PhaseInvocation;
+  artifacts: ArtifactWorkspaceRuntime;
 }): Promise<WorkCycleEvent> | WorkCycleEvent {
   return command.turn.semanticState === "work_frontier"
-    ? advanceWorkFrontier(command.turn)
+    ? advanceWorkFrontier(command.turn, command.artifacts)
     : continueTaskFeedbackLoop({ turn: command.turn, phase: requirePhase(command) });
 }
 
-function advanceWorkFrontier(turn: TurnRecord): WorkCycleEvent {
+async function advanceWorkFrontier(
+  turn: TurnRecord,
+  artifacts: ArtifactWorkspaceRuntime,
+): Promise<WorkCycleEvent> {
   const decision = selectNextTaskOrClose({
     turnId: turn.turnId,
     turnRevision: turn.revision,
     program: requireManagedProgram(turn),
   });
-  return decision.kind === "select_task"
-    ? { kind: "WorkTaskSelected", attempt: decision.attempt }
-    : { kind: "WorkFrontierClosed" };
+  if (decision.kind === "close_frontier") {
+    return { kind: "WorkFrontierClosed", promotionAssemblies: decision.promotionAssemblies };
+  }
+  if (decision.kind === "complete_promotion") {
+    return { kind: "PromotedWorkCompleted", product: decision.product };
+  }
+  const attempt = await prepareTaskAttempt({
+    turnId: turn.turnId,
+    turnRevision: turn.revision,
+    program: requireManagedProgram(turn),
+    task: decision.task,
+    artifacts,
+  });
+  return { kind: "WorkTaskSelected", attempt };
 }
 
 async function continueTaskFeedbackLoop(command: {

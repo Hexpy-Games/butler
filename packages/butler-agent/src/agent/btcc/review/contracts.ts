@@ -1,23 +1,72 @@
 import type { ContentRef } from "../core/index.ts";
 
+export type ReviewFindingCategory =
+  | "implementation_nonconformance"
+  | "authority_contradiction"
+  | "goal_drift"
+  | "task_decomposition"
+  | "dependency_invalid"
+  | "verification_incomplete"
+  | "missing_observation";
+
+export type CriterionVerdict = {
+  criterionRef: ContentRef;
+  verificationQuestionRefs: ContentRef[];
+  currentTargetRevisionRefs: ContentRef[];
+  observationRefs: ContentRef[];
+  verdict: "satisfied" | "not_satisfied";
+  findingRefs: ContentRef[];
+};
+
+export type ReviewObservation = {
+  ref: ContentRef;
+  taskRef: ContentRef;
+  attemptRef: ContentRef;
+  executionTargetRef: ContentRef;
+  targetRevisionRefs: ContentRef[];
+  description: string;
+  observationOperationRefs: ContentRef[];
+  reviewCheckpointRef: string;
+};
+
+export type ReviewFinding = {
+  ref: ContentRef;
+  taskRef: ContentRef;
+  attemptRef: ContentRef;
+  category: ReviewFindingCategory;
+  statement: string;
+  targetRevisionRefs: ContentRef[];
+};
+
 export type TaskReviewProduct = {
   kind: "task_review";
   review: {
     ref: ContentRef;
+    kind: "non_artifact" | "workspace_artifact" | "repository_promotion";
+    turnId: string;
     goalContractRef: ContentRef;
     authorityRef: ContentRef;
     resultCandidateRef: ContentRef;
+    workRef: ContentRef;
     taskRef: ContentRef;
+    taskRevisionSha256: string;
     attemptRef: ContentRef;
-    criterionRef: ContentRef;
-    observation: { ref: ContentRef; observedStateRef: ContentRef; description: string };
+    executionTargetRef: ContentRef;
+    reviewCheckpointRef: string;
+    criterionVerdicts: CriterionVerdict[];
+    observations: ReviewObservation[];
+    findings: ReviewFinding[];
+    reviewedTargetStateRevisionRefs: ContentRef[];
+    reviewedArtifactRevisionRefs: ContentRef[];
+    reviewedEffectReceiptRefs: [];
+    reviewValidationReceiptSetRefs: ContentRef[];
+    reviewSourceRef?: ContentRef;
   } & (
     | { verdict: "passed"; findingSetRef?: never; correctionScopeRef?: never }
     | {
         verdict: "not_passed";
         findingSetRef: ContentRef;
         correctionScopeRef: ContentRef;
-        finding: { ref: ContentRef; category: "implementation_nonconformance"; statement: string };
       }
   );
 };

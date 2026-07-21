@@ -33,12 +33,12 @@ const codec: PhaseCodec<FeedbackIntentProduct> = {
     const authorityRef = requireContentRef(state.authorityRef, "authorityRef");
     const value = requireRecord(submission, "Feedback Conception submission");
     requireLiteral(value.kind, "feedback_intent", "Feedback Conception kind");
-    requireLiteral(value.correctionKind, "implementation_repair", "correction kind");
+    const correctionKind = requireCorrectionKind(value.correctionKind);
     const body = {
       correctionScopeRef,
       originalGoalContractRef: goalRef,
       currentAuthorityRef: authorityRef,
-      correctionKind: "implementation_repair" as const,
+      correctionKind,
       intendedCorrection: requireString(value.intendedCorrection, "intendedCorrection"),
     };
     return {
@@ -50,6 +50,20 @@ const codec: PhaseCodec<FeedbackIntentProduct> = {
 
 export function conceiveCorrection(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function requireCorrectionKind(value: unknown):
+  | "implementation_repair"
+  | "governing_revision"
+  | "authority_scope_revision" {
+  if (
+    value !== "implementation_repair" &&
+    value !== "governing_revision" &&
+    value !== "authority_scope_revision"
+  ) {
+    throw new Error("Feedback Conception correction kind is invalid");
+  }
+  return value;
 }
 
 function requireContentRef(value: unknown, label: string): ContentRef {

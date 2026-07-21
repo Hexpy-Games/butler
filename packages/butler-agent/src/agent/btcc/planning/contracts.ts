@@ -1,9 +1,13 @@
 import type { ContentRef } from "../core/index.ts";
 
-export type TaskArtifactPolicy = {
-  kind: "non_artifact";
-  targetScopeRefs: string[];
-};
+export type TaskArtifactPolicy =
+  | { kind: "non_artifact"; targetScopeRefs: string[] }
+  | {
+      kind: "workspace_artifact";
+      targetScopeRef: string;
+      baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+    }
+  | { kind: "repository_promotion"; targetScopeRef: string };
 
 export type ManagedCriterion = {
   ref: ContentRef;
@@ -55,11 +59,19 @@ export type ManagedArtifactLifecycle = {
   ref: ContentRef;
   programId: string;
   taskPolicies: Array<{ taskRef: ContentRef; policy: TaskArtifactPolicy }>;
-  promotionSelectors: [];
-  promotionTaskRefs: [];
+  promotionSelectors: Array<{
+    ref: ContentRef;
+    targetScopeRef: string;
+    implementationTaskRefs: ContentRef[];
+    integrationTaskRef: ContentRef;
+    promotionTaskRef: ContentRef;
+    baselinePolicy: "capture_at_workspace_provision" | "exact_planned_revision";
+    promotionProtocol: "journaled_complete_target_exchange_v1";
+  }>;
+  promotionTaskRefs: ContentRef[];
   effectIntentRefs: [];
   integrationCriteria: [];
-  promotionProtocol: "not_applicable";
+  promotionProtocol: "not_applicable" | "journaled_complete_target_exchange_v1";
 };
 
 export type ManagedPlan = {
@@ -136,31 +148,67 @@ export type PlanningReviewProduct =
   | PlanningAcceptedProduct
   | PlanningRevisionRequiredProduct;
 
+export type TaskImpact = {
+  priorTaskRef: ContentRef;
+  disposition: "unaffected" | "revalidate" | "rework" | "replan";
+  successorTaskRef?: ContentRef;
+};
+
+type CorrectionPlan = {
+  ref: ContentRef;
+  kind: "correction_plan";
+  governingWorkPlanRef: ContentRef;
+  targetTaskRef: ContentRef;
+  correctionAction: string;
+  artifactLifecycleRef: ContentRef;
+};
+
+type FeedbackCandidateBase = {
+  ref: ContentRef;
+  revisionOrigin:
+    | { kind: "initial" }
+    | { kind: "review_revision"; previousCandidateRef: ContentRef; findingSetRef: ContentRef };
+  feedbackIntentRef: ContentRef;
+  correctionScopeRef: ContentRef;
+  correctionPlan: CorrectionPlan;
+};
+
 export type FeedbackPlanProduct = {
   kind: "feedback_plan_candidate";
-  candidate: {
-    ref: ContentRef;
-    revisionOrigin:
-      | { kind: "initial" }
-      | { kind: "review_revision"; previousCandidateRef: ContentRef; findingSetRef: ContentRef };
-    feedbackIntentRef: ContentRef;
-    correctionScopeRef: ContentRef;
-    correctionPlan: {
-      ref: ContentRef;
-      kind: "correction_plan";
-      governingWorkPlanRef: ContentRef;
-      targetTaskRef: ContentRef;
-      correctionAction: string;
-      artifactLifecycleRef: ContentRef;
-    };
-  };
+  candidate: FeedbackCandidateBase & (
+    | {
+        correctionKind: "implementation_repair";
+        impactMap?: never;
+        nextPlanCandidate?: never;
+        proposedAuthority?: never;
+      }
+    | {
+        correctionKind: "governing_revision";
+        impactMap: TaskImpact[];
+        nextPlanCandidate: PlanningCandidate;
+        proposedAuthority?: never;
+      }
+    | {
+        correctionKind: "authority_scope_revision";
+        impactMap: TaskImpact[];
+        nextPlanCandidate: PlanningCandidate;
+        proposedAuthority: {
+          ref: ContentRef;
+          previousAuthorityRef: ContentRef;
+          change: string;
+        };
+      }
+  );
 };
 
 export type FeedbackPlanningReview = {
   ref: ContentRef;
   candidateRef: ContentRef;
   originalGoalContractRef: ContentRef;
-  correctionKind: "implementation_repair";
+  correctionKind:
+    | "implementation_repair"
+    | "governing_revision"
+    | "authority_scope_revision";
   verdict: "accepted" | "revision_required";
   findings: string[];
   findingSetRef?: ContentRef;

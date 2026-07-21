@@ -7,7 +7,8 @@ import type {
   ReasoningEffort,
 } from "../../agent/btcc/index.ts";
 import { DirectHarnessModel } from "./direct-harness-model.ts";
-import { HarnessObservationExecutor } from "./harness-observation-executor.ts";
+import { HarnessArtifactWorkspace } from "./harness-artifact-workspace.ts";
+import { HarnessOperationExecutor } from "./harness-operation-executor.ts";
 import { ManagedHarnessModel } from "./managed-harness-model.ts";
 import { RestartingManagedHarnessModel } from "./restarting-managed-harness-model.ts";
 import {
@@ -35,18 +36,22 @@ type HarnessOptions = {
     | "managed-review-repair"
     | "managed-planning-revision"
     | "managed-feedback-planning-revision"
+    | "managed-governing-revision"
+    | "managed-authority-revision"
+    | "managed-artifact"
     | "managed-restart-once"
     | NoLedgerScenario;
 };
 
 async function runHarness(options: HarnessOptions): Promise<void> {
   const model = createHarnessModel(options.scenario, options.data);
-  const operations = new HarnessObservationExecutor();
+  const operations = new HarnessOperationExecutor();
   const runtime = createBtccComposition({
     dbPath: join(options.data, "runtime", "btcc-successor.sqlite"),
     ownerId: `btcc-harness:${options.turnId}`,
     model,
     operations,
+    artifacts: new HarnessArtifactWorkspace(),
   });
   const controls = { reasoningEffort: options.effort };
   const messageId = digest(`btcc-user-message.v1\0${options.sessionId}\0${options.message}`);
@@ -134,6 +139,9 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-review-repair" ||
     value === "managed-planning-revision" ||
     value === "managed-feedback-planning-revision" ||
+    value === "managed-governing-revision" ||
+    value === "managed-authority-revision" ||
+    value === "managed-artifact" ||
     value === "managed-restart-once"
   ) return value;
   if (
@@ -155,12 +163,21 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     scenario === "managed-pass" ||
     scenario === "managed-review-repair" ||
     scenario === "managed-planning-revision" ||
-    scenario === "managed-feedback-planning-revision"
+    scenario === "managed-feedback-planning-revision" ||
+    scenario === "managed-governing-revision" ||
+    scenario === "managed-authority-revision"
+    || scenario === "managed-artifact"
   ) {
     return new ManagedHarnessModel(
-      scenario === "managed-review-repair" || scenario === "managed-feedback-planning-revision",
+      scenario !== "managed-pass" && scenario !== "managed-planning-revision",
       scenario === "managed-planning-revision",
       scenario === "managed-feedback-planning-revision",
+      scenario === "managed-governing-revision"
+        ? "governing_revision"
+        : scenario === "managed-authority-revision"
+          ? "authority_scope_revision"
+          : "implementation_repair",
+      scenario === "managed-artifact",
     );
   }
   return new NoLedgerHarnessModel(scenario);

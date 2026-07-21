@@ -74,7 +74,7 @@ async function advanceBtccCycle(
       });
 
     case "work_frontier":
-      return runWorkCycle({ turn });
+      return runWorkCycle({ turn, artifacts: dependencies.artifacts });
     case "task_execution":
     case "task_review":
     case "feedback_conception":
@@ -83,6 +83,7 @@ async function advanceBtccCycle(
       return runWorkCycle({
         turn,
         phase: createPhaseInvocation(turn, claim, dependencies),
+        artifacts: dependencies.artifacts,
       });
 
     case "consolidation":

@@ -9,19 +9,23 @@ import {
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
-import type { ResultCandidateProduct } from "./contracts.ts";
+import type {
+  ResultCandidateProduct,
+  TargetStateRevision,
+  WorkspaceRevision,
+} from "./contracts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_execution",
-  objective: "execute_the_exact_accepted_task_and_record_its_result",
+  objective: "execute_the_exact_accepted_task_and_record_its_concrete_result",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "execute_accepted_task", "record_concrete_result",
+    "execute_accepted_task", "record_concrete_result", "bind_current_target_revisions",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
-    "no_self_review",
+    "no_self_review", "no_unaccepted_sibling_work",
   ],
 };
 
@@ -30,26 +34,37 @@ const codec: PhaseCodec<ResultCandidateProduct> = {
     const state = requireRecord(envelope.context.stateInput, "Task Execution state");
     const value = requireRecord(submission, "Task Execution submission");
     requireLiteral(value.kind, "result_candidate", "Task Execution kind");
-    const goalContractRef = requireContentRef(state.goalContractRef, "goalContractRef");
-    const authorityRef = requireContentRef(state.authorityRef, "authorityRef");
-    const workRef = requireContentRef(state.workRef, "workRef");
-    const taskRef = requireContentRef(state.taskRef, "taskRef");
-    const attemptRef = requireContentRef(state.attemptRef, "attemptRef");
-    const executionTargetRef = requireContentRef(state.executionTargetRef, "executionTargetRef");
-    const observedBody = {
-      attemptRef,
-      executionTargetRef,
-      state: "present" as const,
-      description: requireString(value.observedState, "observedState"),
+    const executionTarget = requireRecord(state.executionTarget, "executionTarget");
+    const target = requireRecord(executionTarget.target, "executionTarget.target");
+    const observedStates = target.kind === "repository_promotion"
+      ? []
+      : decodeObservedStates(
+          value.observedStates,
+          requireStringList(state.targetScopeRefs, "targetScopeRefs"),
+          envelope,
+        );
+    const resultSummary = requireString(value.resultSummary, "resultSummary");
+    const common = {
+      turnId: envelope.binding.turnId,
+      goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
+      authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
+      workRef: requireContentRef(state.workRef, "workRef"),
+      taskRef: requireContentRef(state.taskRef, "taskRef"),
+      taskRevisionSha256: requireString(state.taskRevisionSha256, "taskRevisionSha256"),
+      attemptRef: requireContentRef(state.attemptRef, "attemptRef"),
+      executionTargetRef: requireContentRef(state.executionTargetRef, "executionTargetRef"),
+      executionCheckpointRef: envelope.binding.checkpointId,
+      resultSummaryRef: contentRef("result-summary", { resultSummary }),
+      operationResultRefs: envelope.operationResults.map((result) => result.observationRef),
+      unresolvedConditionRefs: [] as [],
+      targetStateRevisions: observedStates,
+      effectReceiptRefs: [] as [],
     };
-    const observedState = {
-      ref: contentRef("target-state-revision", observedBody), ...observedBody,
-    };
-    const resultBody = {
-      goalContractRef, authorityRef, workRef, taskRef, attemptRef, executionTargetRef,
-      resultSummary: requireString(value.resultSummary, "resultSummary"),
-      observedState, artifactRevisionRefs: [] as [], effectReceiptRefs: [] as [],
-    };
+    const resultBody = target.kind === "provisioned_workspace"
+      ? workspaceResult(common, target, envelope)
+      : target.kind === "repository_promotion"
+        ? promotionResult(common, target, envelope)
+        : { ...common, kind: "non_artifact" as const, artifactRevisionRefs: [] as [] };
     return {
       kind: "result_candidate",
       result: { ref: contentRef("result-candidate", resultBody), ...resultBody },
@@ -61,7 +76,117 @@ export function performTask(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
 }
 
+function promotionResult(
+  common: Omit<ResultCandidateProduct["result"], "ref" | "kind" | "artifactRevisionRefs">,
+  target: Record<string, unknown>,
+  envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
+) {
+  const promoted = envelope.operationResults.filter((result) => result.outcome === "promoted");
+  if (promoted.length !== 1) {
+    throw new Error("Promotion Execution requires one exact promotion receipt");
+  }
+  const result = promoted[0]!;
+  return {
+    ...common,
+    kind: "repository_promotion" as const,
+    authorizationRef: requireContentRef(target.authorizationRef, "authorizationRef"),
+    transactionRef: requireContentRef(result.transactionRef, "transactionRef"),
+    commitJournalRef: requireContentRef(result.commitJournalRef, "commitJournalRef"),
+    promotionReceiptRef: requireContentRef(result.promotionReceiptRef, "promotionReceiptRef"),
+    promotedSnapshotRef: requireContentRef(result.promotedSnapshotRef, "promotedSnapshotRef"),
+    artifactRevisionRefs: [] as ContentRef[],
+  };
+}
+
+function workspaceResult(
+  common: Omit<ResultCandidateProduct["result"], "ref" | "kind" | "artifactRevisionRefs">,
+  target: Record<string, unknown>,
+  envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
+) {
+  const applied = envelope.operationResults.filter(
+    (result) => result.outcome === "workspace_artifact_applied",
+  );
+  if (applied.length === 0) {
+    throw new Error("Artifact Execution requires a workspace artifact operation");
+  }
+  const artifactRevisionRefs = applied.map((result, index) =>
+    requireContentRef(result.artifactRevisionRef, `artifactRevisionRef[${index}]`));
+  const targetSnapshotRef = requireContentRef(
+    applied.at(-1)!.targetSnapshotRef,
+    "targetSnapshotRef",
+  );
+  const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
+  const body = {
+    workspaceRef,
+    producingWorkRef: common.workRef,
+    producingTaskRef: common.taskRef,
+    producingAttemptRef: common.attemptRef,
+    baseAcceptedRevisionRefs: requireContentRefs(
+      target.acceptedBaseRevisionRefs,
+      "acceptedBaseRevisionRefs",
+    ),
+    artifactRevisionRefs,
+    targetSnapshotRef,
+    producedByOperationRefs: applied.map((result) => result.observationRef),
+  };
+  const revision: WorkspaceRevision = {
+    ref: contentRef("workspace-revision", body), ...body,
+  };
+  return {
+    ...common,
+    kind: "workspace_artifact" as const,
+    workspaceRef,
+    workspaceRevisionRef: revision.ref,
+    workspaceRevision: revision,
+    artifactRevisionRefs,
+  };
+}
+
+function decodeObservedStates(
+  value: unknown,
+  targetScopes: string[],
+  envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
+): TargetStateRevision[] {
+  if (!Array.isArray(value) || value.length !== targetScopes.length) {
+    throw new Error("Task Execution must record every exact target scope");
+  }
+  return value.map((item, index) => {
+    const observed = requireRecord(item, `observedStates[${index}]`);
+    const targetScopeRef = requireString(observed.targetScopeRef, "targetScopeRef");
+    if (targetScopeRef !== targetScopes[index]) {
+      throw new Error("Task Execution target state order does not match the accepted target");
+    }
+    if (observed.state !== "present" && observed.state !== "absent") {
+      throw new Error("Task Execution target state is invalid");
+    }
+    const observedState = observed.state as "present" | "absent";
+    const body = {
+      targetScopeRef,
+      state: observedState,
+      description: requireString(observed.description, "observedState.description"),
+      observedByOperationRefs: envelope.operationResults.map((result) => result.observationRef),
+    };
+    return { ref: contentRef("target-state-revision", body), ...body };
+  });
+}
+
+function requireStringList(value: unknown, label: string): string[] {
+  if (!Array.isArray(value) || value.length === 0 ||
+      !value.every((item) => typeof item === "string" && item.length > 0)) {
+    throw new Error(`${label} must be a non-empty string array`);
+  }
+  return value;
+}
+
 function requireContentRef(value: unknown, label: string): ContentRef {
   const record = requireRecord(value, label);
-  return { id: requireString(record.id, `${label}.id`), sha256: requireString(record.sha256, `${label}.sha256`) };
+  return {
+    id: requireString(record.id, `${label}.id`),
+    sha256: requireString(record.sha256, `${label}.sha256`),
+  };
+}
+
+function requireContentRefs(value: unknown, label: string): ContentRef[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
 }

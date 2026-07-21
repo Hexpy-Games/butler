@@ -23,7 +23,7 @@ export type {
   PhaseInvocation,
   PhaseRunBinding,
   ModelPhaseState,
-  ObservationExecutor,
+  OperationExecutor,
   ObservationResult,
   OperationAuthority,
   OperationRequest,

@@ -31,8 +31,10 @@ function programIdOf(input: WorkLedgerCommit): string {
     case "select_attempt":
     case "attach_result":
     case "attach_review":
-    case "accept_implementation_repair":
+    case "accept_feedback_plan":
     case "close_implementation_frontier":
+    case "authorize_promotion":
+    case "close_promotion_frontier":
       return input.mutation.cursor.programId;
   }
 }
