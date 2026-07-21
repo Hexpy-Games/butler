@@ -57,7 +57,7 @@ async function performRequestedObservations<Product>(
     envelope.operationResults.map((result) => [result.requestId, result.request]),
   );
   for (const request of requests) {
-    assertAuthorizedObservation(request, command.operationAuthority);
+    assertAuthorizedOperation(request, command.operationAuthority);
     const existing = existingRequests.get(request.requestId);
     if (existing) {
       if (!sameRequest(existing, request)) {
@@ -83,23 +83,40 @@ function sameRequest(
   left: OperationRequest,
   right: OperationRequest,
 ): boolean {
-  return left.requestId === right.requestId &&
-    left.kind === right.kind &&
-    left.capabilityRef === right.capabilityRef &&
-    left.scopeRef === right.scopeRef &&
-    left.input === right.input;
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function assertAuthorizedObservation(
+function assertAuthorizedOperation(
   request: OperationRequest,
   authority: OperationAuthority,
 ): void {
-  if (
-    request.kind !== "observe" ||
-    !authority.observationScopeRefs.includes(request.scopeRef)
+  if (request.kind === "observe") {
+    if (authority.observationScopeRefs.includes(request.scopeRef)) return;
+  } else if (request.kind === "workspace_artifact_action") {
+    if (
+      authority.mutation.kind === "workspace_only" &&
+      sameRef(request.workspaceRef, authority.mutation.workspaceRef)
+    ) return;
+  } else if (request.kind === "review_validation" &&
+    authority.mutation.kind === "validation_overlay_only" &&
+    sameRef(request.reviewSourceRef, authority.mutation.reviewSourceRef)
   ) {
-    throw new Error("BTCC phase requested an operation outside its admitted authority");
+    return;
+  } else if (
+    request.kind === "repository_promotion" &&
+    authority.mutation.kind === "repository_promotion_only" &&
+    sameRef(request.authorizationRef, authority.mutation.authorizationRef)
+  ) {
+    return;
   }
+  throw new Error("BTCC phase requested an operation outside its admitted authority");
+}
+
+function sameRef(
+  left: { id: string; sha256: string },
+  right: { id: string; sha256: string },
+): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function assertActualModel(

@@ -6,7 +6,9 @@ import type {
   PlanningAcceptedProduct,
 } from "../planning/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
+import type { PromotionAuthorizationProduct } from "../consolidation/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
+import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
 
 export type ManagedProgramAuthority = {
   ledgerId: string;
@@ -31,7 +33,9 @@ export type ReviewedManagedProgramState = ManagedProgramAuthority & {
   criteria: PlanningAcceptedProduct["candidate"]["criteria"];
   verificationQuestions: PlanningAcceptedProduct["candidate"]["verificationQuestions"];
   artifactLifecycle: PlanningAcceptedProduct["candidate"]["artifactLifecycle"];
-  frontier: "implementation_open" | "closed";
+  promotionAssemblies: ReviewedPromotionAssembly[];
+  promotionAuthorization?: PromotionAuthorizationProduct["authorization"];
+  frontier: "implementation_open" | "awaiting_consolidation" | "promotion_open" | "closed";
   correctionPlanRef?: ContentRef;
 };
 
@@ -77,11 +81,24 @@ export type WorkLedgerMutation =
       product: TaskReviewProduct;
     }
   | {
-      kind: "accept_implementation_repair";
+      kind: "accept_feedback_plan";
       cursor: WorkLedgerCursor;
       product: FeedbackPlanningAcceptedProduct;
     }
-  | { kind: "close_implementation_frontier"; cursor: WorkLedgerCursor };
+  | {
+      kind: "close_implementation_frontier";
+      cursor: WorkLedgerCursor;
+      promotionAssemblies: ReviewedPromotionAssembly[];
+    }
+  | {
+      kind: "authorize_promotion";
+      cursor: WorkLedgerCursor;
+      product: PromotionAuthorizationProduct;
+    }
+  | {
+      kind: "close_promotion_frontier";
+      cursor: WorkLedgerCursor;
+    };
 
 export type WorkLedgerCommit = {
   mutationId: string;

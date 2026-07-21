@@ -11,6 +11,7 @@ import type {
   OpeningContinuationProduct,
 } from "../conception/index.ts";
 import type { FinalDossierProduct } from "../consolidation/index.ts";
+import type { PromotionAuthorizationProduct } from "../consolidation/index.ts";
 import type { ContentRef } from "../core/index.ts";
 import type { ResultCandidateProduct } from "../execution/index.ts";
 import type {
@@ -24,6 +25,7 @@ import type {
 import type { PreparedReportProduct } from "../reporting/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
+import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
 import type { WorkLedgerCommit, WorkLedgerMutation } from "../work-ledger/index.ts";
 import type { ManagedTurnState } from "./managed-turn-state.ts";
 
@@ -119,7 +121,7 @@ export type TurnEvent =
   | { kind: "PlanningReviewAccepted"; product: PlanningAcceptedProduct }
   | { kind: "PlanningRevisionRequested"; product: PlanningRevisionRequiredProduct }
   | { kind: "WorkTaskSelected"; attempt: ManagedAttempt }
-  | { kind: "WorkFrontierClosed" }
+  | { kind: "WorkFrontierClosed"; promotionAssemblies: ReviewedPromotionAssembly[] }
   | { kind: "ResultCandidateSubmitted"; product: ResultCandidateProduct }
   | { kind: "TaskReviewPassed"; product: TaskReviewProduct }
   | { kind: "TaskReviewFailed"; product: TaskReviewProduct }
@@ -131,6 +133,8 @@ export type TurnEvent =
       product: FeedbackPlanningRevisionRequiredProduct;
     }
   | { kind: "FinalDossierAccepted"; product: FinalDossierProduct }
+  | { kind: "PromotedWorkCompleted"; product: FinalDossierProduct }
+  | { kind: "PromotionAuthorized"; product: PromotionAuthorizationProduct }
   | { kind: "PreparedReportAccepted"; product: PreparedReportProduct }
   | { kind: "DeliveryObserved"; assistantMessageId: string };
 
@@ -186,6 +190,7 @@ export type AcceptedTurnTransition =
   | {
       kind: "close_work_frontier";
       successor: "consolidation";
+      promotionAssemblies: ReviewedPromotionAssembly[];
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "close_implementation_frontier" }>;
       };
@@ -226,10 +231,26 @@ export type AcceptedTurnTransition =
       successor: "work_frontier";
       product: FeedbackPlanningAcceptedProduct;
       ledgerCommit: WorkLedgerCommit & {
-        mutation: Extract<WorkLedgerMutation, { kind: "accept_implementation_repair" }>;
+        mutation: Extract<WorkLedgerMutation, { kind: "accept_feedback_plan" }>;
       };
     }
   | { kind: "accept_final_dossier"; successor: "reporting"; product: FinalDossierProduct }
+  | {
+      kind: "complete_promoted_work";
+      successor: "reporting";
+      product: FinalDossierProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "close_promotion_frontier" }>;
+      };
+    }
+  | {
+      kind: "authorize_promotion";
+      successor: "work_frontier";
+      product: PromotionAuthorizationProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "authorize_promotion" }>;
+      };
+    }
   | {
       kind: "accept_prepared_report";
       successor: "delivery_committed";

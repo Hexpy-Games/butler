@@ -12,6 +12,11 @@ import type {
   ManagedWork,
   PlanningCandidate,
 } from "../contracts.ts";
+import {
+  authorArtifactLifecycle,
+  readArtifactPolicy,
+  type DraftArtifactPolicy,
+} from "./author-artifact-lifecycle.ts";
 
 type AuthoringState = {
   ledgerId: string;
@@ -30,6 +35,7 @@ type TaskDraft = {
   executionOrdinal: number;
   dependencyTaskIds: string[];
   targetScopeRefs: string[];
+  artifactPolicy?: DraftArtifactPolicy;
   criteria: CriterionDraft[];
 };
 
@@ -71,9 +77,8 @@ export function authorPlanCandidate(
       intendedOutcome: draft.intendedOutcome,
       executionOrdinal: draft.executionOrdinal,
       dependencyTaskRefs: draft.dependencyTaskIds.map((id) => requiredRef(taskRefs, id, "Task")),
-      artifactPolicy: {
-        kind: "non_artifact" as const,
-        targetScopeRefs: draft.targetScopeRefs,
+      artifactPolicy: draft.artifactPolicy ?? {
+        kind: "non_artifact" as const, targetScopeRefs: draft.targetScopeRefs,
       },
       criterionRefs: taskCriteria.criteria.map((criterion) => criterion.ref),
       verificationQuestionRefs: taskCriteria.questions.map((question) => question.ref),
@@ -95,18 +100,7 @@ export function authorPlanCandidate(
     dependencyEdges,
   };
   const workGraph = { ref: contentRef("work-graph", graphBody), ...graphBody };
-  const lifecycleBody = {
-    programId: state.programId,
-    taskPolicies: tasks.map((task) => ({ taskRef: task.ref, policy: task.artifactPolicy })),
-    promotionSelectors: [] as [],
-    promotionTaskRefs: [] as [],
-    effectIntentRefs: [] as [],
-    integrationCriteria: [] as [],
-    promotionProtocol: "not_applicable" as const,
-  };
-  const artifactLifecycle = {
-    ref: contentRef("artifact-lifecycle", lifecycleBody), ...lifecycleBody,
-  };
+  const artifactLifecycle = authorArtifactLifecycle(submission, tasks, state.programId);
   const planBody = {
     programId: state.programId,
     goalContractRef: state.goalContractRef,
@@ -234,12 +228,18 @@ function readTaskDraft(value: unknown, workIndex: number, taskIndex: number): Ta
   if (!Number.isInteger(executionOrdinal) || Number(executionOrdinal) < 1) {
     throw new Error(`${label}.executionOrdinal must be a positive integer`);
   }
+  const artifactPolicy = readArtifactPolicy(task.artifactPolicy, label);
   return {
     logicalId: requireString(task.logicalId, `${label}.logicalId`),
     intendedOutcome: requireString(task.intendedOutcome, `${label}.intendedOutcome`),
     executionOrdinal: Number(executionOrdinal),
     dependencyTaskIds: requireStringArray(task.dependencyTaskIds, "dependencyTaskIds"),
-    targetScopeRefs: requireStringArray(task.targetScopeRefs, "targetScopeRefs"),
+    targetScopeRefs: artifactPolicy
+      ? artifactPolicy.kind === "workspace_artifact"
+        ? [artifactPolicy.targetScopeRef]
+        : []
+      : requireStringArray(task.targetScopeRefs, "targetScopeRefs"),
+    ...(artifactPolicy ? { artifactPolicy } : {}),
     criteria: criteria.map((item, criterionIndex) => {
       const criterion = requireRecord(item, `${label}.criteria[${criterionIndex}]`);
       const fields = requireStringArray(criterion.sourceGoalFieldIds, "sourceGoalFieldIds");
@@ -272,7 +272,9 @@ function validateGraph(drafts: WorkDraft[], tasks: TaskDraft[], requiredOutcomeI
   }
   const taskOrdinals = new Map(tasks.map((task) => [task.logicalId, task.executionOrdinal]));
   for (const task of tasks) {
-    if (task.targetScopeRefs.length === 0) throw new Error("Every Task requires a target scope");
+    if (task.artifactPolicy?.kind !== "repository_promotion" && task.targetScopeRefs.length === 0) {
+      throw new Error("Every executable implementation Task requires a target scope");
+    }
     for (const dependency of task.dependencyTaskIds) {
       const ordinal = taskOrdinals.get(dependency);
       if (!ordinal || ordinal >= task.executionOrdinal) {

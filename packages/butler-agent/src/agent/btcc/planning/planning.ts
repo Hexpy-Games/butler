@@ -92,12 +92,21 @@ async function planReviewFeedback(command: {
   const managed = requireManagedState(command.turn);
   const program = requireManagedProgram(command.turn);
   if (command.turn.semanticState === "feedback_planning") {
+    const accepted = managed.goalAcceptance;
+    if (!accepted) throw new Error("Feedback Planning is missing Goal authority");
     const previous = managed.feedbackPlanningRevision;
     const product = await proposeCorrectionOrRevision(withPhaseState(command.phase, {
       feedbackIntent: managed.feedbackIntent,
       workPlanRef: program.plan.ref,
       taskRef: program.currentTask.task.ref,
       artifactLifecycleRef: program.artifactLifecycle.ref,
+      goalContractRef: program.goalContractRef,
+      authorityRef: program.authorityRef,
+      requiredOutcomeId: accepted.goalContract.requiredOutcome.outcomeId,
+      ledgerId: program.ledgerId,
+      programId: program.programId,
+      observedManifestRevision: program.manifestRevision,
+      currentTasks: program.tasks.map((task) => task.task),
       ...(previous
         ? {
             previousCandidateRef: previous.candidate.ref,

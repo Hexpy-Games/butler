@@ -4,12 +4,18 @@ import type {
 } from "../../../../btcc/index.ts";
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
+import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
+import { SqlitePromotionFrontierWriter } from "./promotion-frontier-writer.ts";
 
 export class SqliteWorkLedgerMutationWriter {
   private readonly journal: WorkLedgerCommitJournal;
+  private readonly graphRevisions: SqliteReviewedGraphInstaller;
+  private readonly promotionFrontier: SqlitePromotionFrontierWriter;
 
   constructor(private readonly db: Database) {
     this.journal = new WorkLedgerCommitJournal(db);
+    this.graphRevisions = new SqliteReviewedGraphInstaller(db);
+    this.promotionFrontier = new SqlitePromotionFrontierWriter(db);
   }
 
   commitAtomically(input: WorkLedgerCommit): void {
@@ -39,11 +45,17 @@ export class SqliteWorkLedgerMutationWriter {
       case "attach_review":
         this.attachReview(mutation.product);
         return;
-      case "accept_implementation_repair":
-        this.acceptRepair(mutation.product);
+      case "accept_feedback_plan":
+        this.acceptFeedbackPlan(mutation.product);
         return;
       case "close_implementation_frontier":
-        this.closeFrontier(mutation.cursor.programId);
+        this.promotionFrontier.closeImplementation(mutation);
+        return;
+      case "authorize_promotion":
+        this.promotionFrontier.authorize(mutation);
+        return;
+      case "close_promotion_frontier":
+        this.promotionFrontier.close(mutation);
         return;
     }
   }
@@ -98,13 +110,20 @@ export class SqliteWorkLedgerMutationWriter {
     }
     const workRefs = new Map(candidate.works.map((work) => [work.workLogicalId, work.ref]));
     const insertTask = this.db.query(`
-      INSERT INTO btcc_tasks (task_id, program_id, work_id, task_ref, status)
-      VALUES (?, ?, ?, ?, 'planned')
+      INSERT INTO btcc_tasks (
+        task_id, program_id, work_id, task_ref, task_kind, status
+      ) VALUES (?, ?, ?, ?, ?, 'planned')
     `);
     for (const task of candidate.tasks) {
       const workRef = workRefs.get(task.workLogicalId);
       if (!workRef) throw new Error("Reviewed Task has no Work");
-      insertTask.run(task.ref.id, candidate.programId, workRef.id, stableJson(task.ref));
+      insertTask.run(
+        task.ref.id,
+        candidate.programId,
+        workRef.id,
+        stableJson(task.ref),
+        task.artifactPolicy.kind,
+      );
     }
   }
 
@@ -113,7 +132,8 @@ export class SqliteWorkLedgerMutationWriter {
     attempt: Extract<WorkLedgerCommit["mutation"], { kind: "select_attempt" }>["attempt"],
   ): void {
     const task = this.db.query<{ work_id: string }, [string, string]>(`
-      SELECT work_id FROM btcc_tasks WHERE program_id = ? AND task_id = ? AND status = 'planned'
+      SELECT work_id FROM btcc_tasks
+      WHERE program_id = ? AND task_id = ? AND status = 'planned' AND is_active = 1
     `).get(programId, attempt.taskRef.id);
     if (!task) throw new Error("Work Ledger selected Task is not planned");
     this.db.query(`
@@ -181,7 +201,8 @@ export class SqliteWorkLedgerMutationWriter {
       this.db.query(`
         UPDATE btcc_work_items SET status = 'closed'
         WHERE work_id = ? AND NOT EXISTS (
-          SELECT 1 FROM btcc_tasks WHERE work_id = ? AND status != 'accepted'
+          SELECT 1 FROM btcc_tasks
+          WHERE work_id = ? AND is_active = 1 AND status != 'accepted'
         )
       `).run(task.workId, task.workId);
     }
@@ -190,13 +211,13 @@ export class SqliteWorkLedgerMutationWriter {
 
   private acceptRepair(
     product: Extract<WorkLedgerCommit["mutation"], {
-      kind: "accept_implementation_repair";
+      kind: "accept_feedback_plan";
     }>["product"],
   ): void {
     const taskId = product.candidate.correctionPlan.targetTaskRef.id;
     const task = this.db.query<{ program_id: string; current_attempt_id: string }, [string]>(`
       SELECT program_id, current_attempt_id FROM btcc_tasks
-      WHERE task_id = ? AND status = 'review_failed'
+      WHERE task_id = ? AND status = 'review_failed' AND is_active = 1
     `).get(taskId);
     if (!task) throw new Error("Implementation repair requires the failed current Task");
     const closed = this.db.query(`
@@ -211,18 +232,14 @@ export class SqliteWorkLedgerMutationWriter {
     this.bumpManifest(task.program_id);
   }
 
-  private closeFrontier(programId: string): void {
-    const closed = this.db.query(`
-      UPDATE btcc_programs SET frontier = 'closed',
-        manifest_revision = manifest_revision + 1
-      WHERE program_id = ? AND frontier = 'implementation_open'
-        AND NOT EXISTS (
-          SELECT 1 FROM btcc_tasks WHERE program_id = ? AND status != 'accepted'
-        )
-    `).run(programId, programId);
-    if (closed.changes !== 1) throw new Error("Work Ledger frontier changed");
-    this.db.query("UPDATE btcc_work_items SET status = 'closed' WHERE program_id = ?")
-      .run(programId);
+  private acceptFeedbackPlan(
+    product: Extract<WorkLedgerCommit["mutation"], { kind: "accept_feedback_plan" }>["product"],
+  ): void {
+    if (product.candidate.correctionKind === "implementation_repair") {
+      this.acceptRepair(product);
+      return;
+    }
+    this.graphRevisions.install(product);
   }
 
   private bumpManifest(programId: string): void {
@@ -231,6 +248,7 @@ export class SqliteWorkLedgerMutationWriter {
     `).run(programId);
     if (result.changes !== 1) throw new Error("Work Ledger Program disappeared");
   }
+
 
   private updateAttempt(
     attemptId: string,
@@ -248,7 +266,7 @@ export class SqliteWorkLedgerMutationWriter {
 
   private programIdForTask(taskId: string): string {
     const task = this.db.query<{ program_id: string }, [string]>(`
-      SELECT program_id FROM btcc_tasks WHERE task_id = ?
+      SELECT program_id FROM btcc_tasks WHERE task_id = ? AND is_active = 1
     `).get(taskId);
     if (!task) throw new Error("Work Ledger Task disappeared");
     return task.program_id;
@@ -256,7 +274,7 @@ export class SqliteWorkLedgerMutationWriter {
 
   private taskOwner(taskId: string): { programId: string; workId: string } {
     const task = this.db.query<{ program_id: string; work_id: string }, [string]>(`
-      SELECT program_id, work_id FROM btcc_tasks WHERE task_id = ?
+      SELECT program_id, work_id FROM btcc_tasks WHERE task_id = ? AND is_active = 1
     `).get(taskId);
     if (!task) throw new Error("Work Ledger Task disappeared");
     return { programId: task.program_id, workId: task.work_id };

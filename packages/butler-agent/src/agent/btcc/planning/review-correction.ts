@@ -40,13 +40,16 @@ const codec: PhaseCodec<FeedbackPlanningReviewProduct> = {
     const goalRef = requireContentRef(state.goalContractRef, "goalContractRef");
     const value = requireRecord(submission, "Feedback Planning Review submission");
     requireLiteral(value.kind, "feedback_planning_review", "Feedback Planning Review kind");
-    requireLiteral(value.correctionKind, "implementation_repair", "correction kind");
+    if (value.correctionKind !== candidate.candidate.correctionKind) {
+      throw new Error("Feedback Planning Review changed the correction kind");
+    }
     if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
       throw new Error("Feedback Planning Review verdict is invalid");
     }
     if (stableJson(value.candidateRef) !== stableJson(candidate.candidate.ref)) {
       throw new Error("Feedback Planning Review did not review the exact candidate");
     }
+    assertReviewedRevision(value, candidate);
     const findings = requireStringArray(value.findings, "Feedback Planning Review findings");
     if (value.verdict === "accepted" && findings.length > 0) {
       throw new Error("Accepted Feedback Planning Review cannot carry findings");
@@ -57,7 +60,7 @@ const codec: PhaseCodec<FeedbackPlanningReviewProduct> = {
     const reviewBase = {
       candidateRef: candidate.candidate.ref,
       originalGoalContractRef: goalRef,
-      correctionKind: "implementation_repair" as const,
+      correctionKind: candidate.candidate.correctionKind,
     };
     if (value.verdict === "accepted") {
       const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
@@ -87,6 +90,29 @@ const codec: PhaseCodec<FeedbackPlanningReviewProduct> = {
 
 export function reviewCorrection(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function assertReviewedRevision(
+  value: Record<string, unknown>,
+  candidate: FeedbackPlanProduct,
+): void {
+  if (stableJson(value.reviewedCorrectionPlanRef) !== stableJson(candidate.candidate.correctionPlan.ref)) {
+    throw new Error("Feedback Planning Review did not review the exact correction Plan");
+  }
+  if (candidate.candidate.correctionKind === "implementation_repair") return;
+  if (
+    stableJson(value.reviewedNextPlanCandidateRef) !==
+      stableJson(candidate.candidate.nextPlanCandidate.ref) ||
+    stableJson(value.reviewedImpactMap) !== stableJson(candidate.candidate.impactMap)
+  ) {
+    throw new Error("Feedback Planning Review did not review the exact graph impact");
+  }
+  if (
+    candidate.candidate.correctionKind === "authority_scope_revision" &&
+    stableJson(value.reviewedAuthorityRef) !== stableJson(candidate.candidate.proposedAuthority.ref)
+  ) {
+    throw new Error("Feedback Planning Review did not review the exact Authority revision");
+  }
 }
 
 function requireContentRef(value: unknown, label: string): ContentRef {

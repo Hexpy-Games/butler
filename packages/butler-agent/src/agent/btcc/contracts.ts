@@ -1,5 +1,5 @@
 import type {
-  ObservationExecutor,
+  OperationExecutor,
   PhaseConversationStore,
   SelectedModel,
 } from "./core/index.ts";
@@ -8,6 +8,7 @@ import type {
   TurnAdmissionRepository,
   TurnStateRepository,
 } from "./turn/index.ts";
+import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
 
 export type ReasoningEffort = "low" | "medium" | "high" | "xhigh";
 
@@ -56,6 +57,7 @@ export type BtccRuntimeDependencies = {
   turns: TurnStateRepository;
   phaseConversations: PhaseConversationStore;
   model: SelectedModel;
-  operations: ObservationExecutor;
+  operations: OperationExecutor;
+  artifacts: ArtifactWorkspaceRuntime;
   messages: CanonicalMessageStore;
 };

@@ -1,4 +1,12 @@
 import type { BtccRuntimeDependencies } from "../../agent/btcc/index.ts";
+import {
+  submitFeedbackPlan,
+  submitFeedbackPlanningReview,
+  submitArtifactPlan,
+  submitInitialPlan,
+  submitPlanningReview,
+  type HarnessCorrectionKind,
+} from "./managed-harness-planning.ts";
 
 type SelectedModel = BtccRuntimeDependencies["model"];
 type PhaseEnvelope = Parameters<SelectedModel["runRound"]>[0];
@@ -15,20 +23,31 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly failFirstReview: boolean,
     private readonly reviseFirstPlan = false,
     private readonly reviseFirstCorrection = false,
+    private readonly correctionKind: HarnessCorrectionKind = "implementation_repair",
+    private readonly artifactPlan = false,
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
     this.callCount += 1;
     this.phases.push(envelope.phase);
+    const submission = this.submissionFor(envelope);
+    const identity = {
+      provider: envelope.modelSelection.provider,
+      model: envelope.modelSelection.model,
+      reasoningEffort: envelope.modelSelection.reasoningEffort,
+      controlsHash: envelope.modelSelection.controlsHash,
+    };
+    if (asRecord(submission).kind === "operation_requests") {
+      return {
+        kind: "operation_requests",
+        requests: asArray(asRecord(submission).requests) as never,
+        actualIdentity: identity,
+      };
+    }
     return {
       kind: "phase_submission",
-      submission: this.submissionFor(envelope),
-      actualIdentity: {
-        provider: envelope.modelSelection.provider,
-        model: envelope.modelSelection.model,
-        reasoningEffort: envelope.modelSelection.reasoningEffort,
-        controlsHash: envelope.modelSelection.controlsHash,
-      },
+      submission,
+      actualIdentity: identity,
     };
   }
 
@@ -82,121 +101,148 @@ export class ManagedHarnessModel implements SelectedModel {
           verdict: "accepted",
         };
       case "planning":
-        return {
-          kind: "plan_candidate",
-          strategy: "조사와 가이드 완성을 독립적으로 검토 가능한 두 Task로 구성한다",
-          works: [{
-            logicalId: "customer-service-guide",
-            outcome: "고객 응대 운영 가이드 완성",
-            dependencyWorkIds: [],
-            tasks: [
-              {
-                logicalId: "research-principles",
-                intendedOutcome: "고객 응대 핵심 원칙을 조사하고 정리",
-                executionOrdinal: 1,
-                dependencyTaskIds: [],
-                targetScopeRefs: ["session:managed-guide"],
-                criteria: [{
-                  statement: "요청한 고객 응대 원칙이 조사 결과에 포함된다",
-                  question: "조사 결과가 원래 요청의 핵심 원칙을 충족하는가?",
-                  sourceGoalFieldIds: ["request"],
-                  sourceRequiredOutcomeRefs: [state.requiredOutcomeId],
-                }],
-              },
-              {
-                logicalId: "write-guide",
-                intendedOutcome: "조사 결과를 짧고 실행 가능한 가이드로 작성",
-                executionOrdinal: 2,
-                dependencyTaskIds: ["research-principles"],
-                targetScopeRefs: ["session:managed-guide"],
-                criteria: [{
-                  statement: "가이드가 짧고 실행 가능한 적용 지침을 제공한다",
-                  question: "최종 가이드가 의도한 결과와 완료 조건을 충족하는가?",
-                  sourceGoalFieldIds: ["intended_result"],
-                  sourceRequiredOutcomeRefs: [state.requiredOutcomeId],
-                }],
-              },
-            ],
-          }],
-        };
+        return this.artifactPlan ? submitArtifactPlan(state) : submitInitialPlan(state);
       case "planning_review":
         this.planningReviewCount += 1;
-        return {
-          kind: "planning_review",
-          candidateRef: nestedRef(state, "planCandidate", "candidate"),
-          reviewedBundleRef: nestedValue(state, "planCandidate", "candidate", "bundle", "ref"),
-          reviewedWorkGraphRef: nestedValue(
-            state, "planCandidate", "candidate", "workGraph", "ref",
-          ),
-          reviewedWorkRefs: nestedRecords(state, "works"),
-          reviewedTaskRefs: nestedRecords(state, "tasks"),
-          reviewedCriterionRefs: nestedRecords(state, "criteria"),
-          reviewedVerificationQuestionRefs: nestedRecords(state, "verificationQuestions"),
-          reviewedArtifactLifecycleRef: nestedValue(
-            state, "planCandidate", "candidate", "artifactLifecycle", "ref",
-          ),
-          reviewedGoalFieldIds: ["request", "intended_result"],
-          reviewedRequiredOutcomeRefs: [firstCriterionOutcome(state)],
-          verdict: this.reviseFirstPlan && this.planningReviewCount === 1
-            ? "revision_required"
-            : "accepted",
-          findings: this.reviseFirstPlan && this.planningReviewCount === 1
-            ? ["두 번째 Task의 완료 조건을 더 명확히 표현해야 한다"]
-            : [],
-        };
+        return submitPlanningReview(
+          state,
+          this.reviseFirstPlan,
+          this.planningReviewCount,
+        );
       case "task_execution":
+        if (this.artifactPlan && executionTargetKind(state) === "repository_promotion" &&
+            envelope.operationResults.length === 0) {
+          const target = asRecord(nestedValue(state, "executionTarget", "target"));
+          return {
+            kind: "operation_requests",
+            requests: [{
+              requestId: `repository-promotion:${envelope.binding.checkpointId}`,
+              kind: "repository_promotion",
+              capabilityRef: "harness:promote-artifact",
+              authorizationRef: target.authorizationRef,
+              candidateRef: target.candidateRef,
+              resolutionRef: target.resolutionRef,
+              baselineRef: target.baselineRef,
+              input: "승인된 후보를 완전 대상 교환으로 반영한다",
+            }],
+          };
+        }
+        if (this.artifactPlan && executionTargetKind(state) === "provisioned_workspace" &&
+            envelope.operationResults.length === 0) {
+          return {
+            kind: "operation_requests",
+            requests: [{
+              requestId: `workspace-action:${envelope.binding.checkpointId}`,
+              kind: "workspace_artifact_action",
+              capabilityRef: "harness:write-artifact",
+              workspaceRef: nestedValue(
+                state, "executionTarget", "target", "workspaceRef",
+              ),
+              relativeTarget: "guide.md",
+              input: "승인된 작업 내용을 격리 작업공간에 작성한다",
+            }],
+          };
+        }
         return {
           kind: "result_candidate",
           resultSummary: this.reviewCount === 0 && this.failFirstReview
             ? "고객 응대의 기본 원칙만 초안으로 정리했다"
             : "고객 응대 원칙과 실행 지침을 함께 정리했다",
-          observedState: "요청 범위에 맞는 운영 가이드 본문이 존재한다",
+          observedStates: asArray(state.targetScopeRefs).map((targetScopeRef) => ({
+            targetScopeRef,
+            state: "present",
+            description: "요청 범위에 맞는 운영 가이드 본문이 존재한다",
+          })),
         };
       case "task_review": {
+        if (this.artifactPlan && state.reviewSourceRef && envelope.operationResults.length === 0) {
+          return {
+            kind: "operation_requests",
+            requests: [{
+              requestId: `review-validation:${envelope.binding.checkpointId}`,
+              kind: "review_validation",
+              capabilityRef: "harness:validate-artifact",
+              reviewSourceRef: state.reviewSourceRef,
+              input: "격리 복제본에서 결과를 검증한다",
+            }],
+          };
+        }
         this.reviewCount += 1;
         const resultCandidateRef = nestedRef(state, "resultCandidate", "result");
+        const criteria = asArray(state.criteria);
+        const questions = asArray(state.verificationQuestions);
         if (this.failFirstReview && this.reviewCount === 1) {
           return {
             kind: "task_review",
             resultCandidateRef,
             verdict: "not_passed",
-            observation: "초안에 실제 적용 지침이 빠져 있다",
-            finding: "수용 기준이 요구한 실행 지침을 구현하지 않았다",
+            criterionVerdicts: criteria.map((criterion, index) => ({
+              criterionRef: asRecord(criterion).ref,
+              verificationQuestionRefs: questions
+                .filter((question) => stableEqual(
+                  asRecord(question).criterionRef,
+                  asRecord(criterion).ref,
+                ))
+                .map((question) => asRecord(question).ref),
+              verdict: index === 0 ? "not_satisfied" : "satisfied",
+              observation: index === 0
+                ? "초안에 실제 적용 지침이 빠져 있다"
+                : "해당 기준은 충족한다",
+              ...(index === 0
+                ? {
+                    findingCategory: this.correctionKind === "implementation_repair"
+                      ? "implementation_nonconformance"
+                      : this.correctionKind === "governing_revision"
+                        ? "task_decomposition"
+                        : "authority_contradiction",
+                    finding: "수용 기준이 요구한 실행 지침을 구현하지 않았다",
+                  }
+                : {}),
+            })),
           };
         }
         return {
           kind: "task_review",
           resultCandidateRef,
           verdict: "passed",
-          observation: "원칙과 실행 지침이 모두 포함되어 수용 기준을 충족한다",
+          criterionVerdicts: criteria.map((criterion) => ({
+            criterionRef: asRecord(criterion).ref,
+            verificationQuestionRefs: questions
+              .filter((question) => stableEqual(
+                asRecord(question).criterionRef,
+                asRecord(criterion).ref,
+              ))
+              .map((question) => asRecord(question).ref),
+            verdict: "satisfied",
+            observation: "원칙과 실행 지침이 모두 포함되어 수용 기준을 충족한다",
+          })),
         };
       }
       case "feedback_conception":
         return {
           kind: "feedback_intent",
-          correctionKind: "implementation_repair",
+          correctionKind: this.correctionKind,
           intendedCorrection: "누락된 실행 지침만 보완한다",
         };
       case "feedback_planning":
-        return {
-          kind: "feedback_plan_candidate",
-          correctionKind: "implementation_repair",
-          correctionAction: "같은 Task에서 고객 응대 원칙별 실행 지침을 추가한다",
-        };
+        return submitFeedbackPlan(state, this.correctionKind);
       case "feedback_planning_review":
         this.feedbackPlanningReviewCount += 1;
-        return {
-          kind: "feedback_planning_review",
-          candidateRef: nestedRef(state, "feedbackPlan", "candidate"),
-          correctionKind: "implementation_repair",
-          verdict: this.reviseFirstCorrection && this.feedbackPlanningReviewCount === 1
-            ? "revision_required"
-            : "accepted",
-          findings: this.reviseFirstCorrection && this.feedbackPlanningReviewCount === 1
-            ? ["보완 행동을 실패한 Task 범위로 더 명확히 제한해야 한다"]
-            : [],
-        };
+        return submitFeedbackPlanningReview(
+          state,
+          this.correctionKind,
+          this.reviseFirstCorrection,
+          this.feedbackPlanningReviewCount,
+        );
       case "consolidation":
+        if (asArray(state.promotionAssemblies).length > 0) {
+          return {
+            kind: "promotion_authorization",
+            originalGoalContractRef: state.goalContractRef,
+            goalCoverage: "fulfilled",
+            semanticFidelity: "faithful",
+          };
+        }
         return {
           kind: "final_dossier",
           originalGoalContractRef: state.goalContractRef,
@@ -215,17 +261,8 @@ export class ManagedHarnessModel implements SelectedModel {
   }
 }
 
-function nestedRecords(state: Record<string, unknown>, key: string): unknown[] {
-  const records = nestedValue(state, "planCandidate", "candidate", key);
-  if (!Array.isArray(records)) return [];
-  return records.map((record) => asRecord(record).ref);
-}
-
-function firstCriterionOutcome(state: Record<string, unknown>): unknown {
-  const criteria = nestedValue(state, "planCandidate", "candidate", "criteria");
-  if (!Array.isArray(criteria)) return undefined;
-  const refs = asRecord(criteria[0]).sourceRequiredOutcomeRefs;
-  return Array.isArray(refs) ? refs[0] : undefined;
+function executionTargetKind(state: Record<string, unknown>): unknown {
+  return nestedValue(state, "executionTarget", "target", "kind");
 }
 
 function adopted(assessment: string, adoptedGoalFieldIds: string[]) {
@@ -239,6 +276,14 @@ function nonApplicable(assessment: string) {
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return value as Record<string, unknown>;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function stableEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function nestedRef(

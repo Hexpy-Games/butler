@@ -113,28 +113,65 @@ export interface PhaseConversationStore {
 
 export type OperationAuthority = {
   observationScopeRefs: string[];
-  mutation: "forbidden";
+  mutation:
+    | { kind: "forbidden" }
+    | { kind: "workspace_only"; workspaceRef: { id: string; sha256: string } }
+    | { kind: "validation_overlay_only"; reviewSourceRef: { id: string; sha256: string } }
+    | { kind: "repository_promotion_only"; authorizationRef: { id: string; sha256: string } };
 };
 
-export type OperationRequest = {
-  requestId: string;
-  kind: "observe";
-  capabilityRef: string;
-  scopeRef: string;
-  input: string;
-};
+export type OperationRequest =
+  | {
+      requestId: string;
+      kind: "observe";
+      capabilityRef: string;
+      scopeRef: string;
+      input: string;
+    }
+  | {
+      requestId: string;
+      kind: "workspace_artifact_action";
+      capabilityRef: string;
+      workspaceRef: { id: string; sha256: string };
+      relativeTarget: string;
+      input: string;
+    }
+  | {
+      requestId: string;
+      kind: "review_validation";
+      capabilityRef: string;
+      reviewSourceRef: { id: string; sha256: string };
+      input: string;
+    }
+  | {
+      requestId: string;
+      kind: "repository_promotion";
+      capabilityRef: string;
+      authorizationRef: { id: string; sha256: string };
+      candidateRef: { id: string; sha256: string };
+      resolutionRef: { id: string; sha256: string };
+      baselineRef: { id: string; sha256: string };
+      input: string;
+    };
 
 export type OperationResult = {
   requestId: string;
   request: OperationRequest;
-  outcome: "observed";
+  outcome: "observed" | "workspace_artifact_applied" | "review_validated" | "promoted";
   observationRef: { id: string; sha256: string };
   content: string;
+  artifactRevisionRef?: { id: string; sha256: string };
+  targetSnapshotRef?: { id: string; sha256: string };
+  validationReceiptRef?: { id: string; sha256: string };
+  transactionRef?: { id: string; sha256: string };
+  commitJournalRef?: { id: string; sha256: string };
+  promotionReceiptRef?: { id: string; sha256: string };
+  promotedSnapshotRef?: { id: string; sha256: string };
 };
 
 export type ObservationResult = Omit<OperationResult, "request">;
 
-export interface ObservationExecutor {
+export interface OperationExecutor {
   perform(input: {
     request: OperationRequest;
     envelope: PhaseEnvelope;
@@ -153,7 +190,7 @@ export type PhaseConversationCommand<Product> = {
   codec: PhaseCodec<Product>;
   store: PhaseConversationStore;
   model: SelectedModel;
-  operations: ObservationExecutor;
+  operations: OperationExecutor;
   operationAuthority: OperationAuthority;
 };
 

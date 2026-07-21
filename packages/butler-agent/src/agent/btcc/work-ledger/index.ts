@@ -7,6 +7,8 @@ export type {
   ManagedProgramState,
   ManagedProgramAuthority,
   ReviewedManagedProgramState,
+  ManagedTaskState,
+  ManagedWorkState,
   UnplannedManagedProgramState,
   WorkLedgerCursor,
 } from "./contracts.ts";

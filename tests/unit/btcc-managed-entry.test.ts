@@ -18,6 +18,8 @@ describe("BTCC managed executable ingress", () => {
     ["managed-review-repair", 16, 3],
     ["managed-planning-revision", 13, 2],
     ["managed-feedback-planning-revision", 18, 3],
+    ["managed-governing-revision", 16, 3],
+    ["managed-authority-revision", 16, 3],
   ] as const)("completes %s through the same Turn entry", async (
     scenario,
     expectedModelCalls,
@@ -84,7 +86,9 @@ describe("BTCC managed executable ingress", () => {
         ]
       : ["feedback_conception", "feedback_planning", "feedback_planning_review"];
     const needsRepair = scenario === "managed-review-repair" ||
-      scenario === "managed-feedback-planning-revision";
+      scenario === "managed-feedback-planning-revision" ||
+      scenario === "managed-governing-revision" ||
+      scenario === "managed-authority-revision";
     expect(result.phases).toEqual([
       ...firstTask,
       ...(needsRepair ? repairCycle : []),
@@ -122,7 +126,7 @@ describe("BTCC managed executable ingress", () => {
         FROM btcc_programs
       `).get();
       const tasks = db.query<{ status: string }, []>(
-        "SELECT status FROM btcc_tasks ORDER BY rowid",
+        "SELECT status FROM btcc_tasks WHERE is_active = 1 ORDER BY rowid",
       ).all();
       const attempts = db.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_attempts",
@@ -181,7 +185,7 @@ describe("BTCC managed executable ingress", () => {
         .toBe(turn!.goal_contract_ref);
       expect(planningCandidates.at(-1)?.works).toHaveLength(1);
       expect(planningCandidates.at(-1)?.tasks).toHaveLength(2);
-      expect(planningCandidates.at(-1)?.observedManifestRevision).toBe(1);
+      expect(planningCandidates[0]?.observedManifestRevision).toBe(1);
       if (scenario === "managed-planning-revision") {
         expect(planningCandidates).toHaveLength(2);
         expect(planningCandidates[1]?.revisionOrigin).toEqual({
@@ -194,8 +198,22 @@ describe("BTCC managed executable ingress", () => {
         expect(feedbackCandidates).toHaveLength(2);
         expect(feedbackCandidates[1]?.revisionOrigin.kind).toBe("review_revision");
       }
-      if (needsRepair) {
+      if (scenario === "managed-governing-revision" || scenario === "managed-authority-revision") {
+        expect(planningCandidates.at(-1)?.observedManifestRevision).toBe(5);
+        expect(feedbackCandidates.at(-1)?.impactMap).toHaveLength(2);
+        expect(feedbackCandidates.at(-1)?.nextPlanCandidate.tasks).toHaveLength(2);
+        const inactive = db.query<{ count: number }, []>(`
+          SELECT COUNT(*) AS count FROM btcc_tasks WHERE is_active = 0
+        `).get();
+        expect(inactive?.count).toBeGreaterThan(0);
+      }
+      if (needsRepair && scenario !== "managed-governing-revision" &&
+          scenario !== "managed-authority-revision") {
         expect(attemptRows[1]?.previous_attempt_id).toBe(attemptRows[0]?.attempt_id);
+        expect(attemptRows[1]?.correction_plan_ref).toBeTruthy();
+      }
+      if (scenario === "managed-governing-revision" || scenario === "managed-authority-revision") {
+        expect(attemptRows[1]?.previous_attempt_id).toBeNull();
         expect(attemptRows[1]?.correction_plan_ref).toBeTruthy();
       }
     } finally {

@@ -1,4 +1,8 @@
 import type { ContentRef } from "../core/index.ts";
+import type { WorkspaceProvision } from "../artifact/index.ts";
+import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
+import type { FinalDossierProduct } from "../consolidation/index.ts";
+import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 
 export type ManagedAttempt = {
   ref: ContentRef;
@@ -12,7 +16,23 @@ export type ManagedAttempt = {
     ref: ContentRef;
     taskRef: ContentRef;
     attemptRef: ContentRef;
-    target: { kind: "non_artifact"; targetScopeRefs: string[] };
+    target:
+      | { kind: "non_artifact"; targetScopeRefs: string[] }
+      | {
+          kind: "provisioned_workspace";
+          provisionOutcomeRef: ContentRef;
+          workspaceRef: ContentRef;
+          baselineRef: ContentRef;
+          acceptedBaseRevisionRefs: ContentRef[];
+        }
+      | {
+          kind: "repository_promotion";
+          authorizationRef: ContentRef;
+          workspaceRef: ContentRef;
+          candidateRef: ContentRef;
+          resolutionRef: ContentRef;
+          baselineRef: ContentRef;
+        };
   };
   executionTargetBinding: {
     ref: ContentRef;
@@ -20,11 +40,23 @@ export type ManagedAttempt = {
     taskRef: ContentRef;
     attemptRef: ContentRef;
     executionTargetRef: ContentRef;
-    creation: "accepted_non_artifact_selection";
+    creation:
+      | { kind: "accepted_non_artifact_selection" }
+      | { kind: "observed_workspace_provision"; provisionOutcomeRef: ContentRef }
+      | {
+          kind: "authorized_promotion_selection";
+          authorizationRef: ContentRef;
+          resolutionRef: ContentRef;
+        };
   };
+  workspaceProvision?: WorkspaceProvision;
   status: "ready" | "result_submitted" | "review_failed" | "accepted" | "closed_unaccepted";
 };
 
 export type WorkFrontierDecision =
-  | { kind: "select_task"; attempt: ManagedAttempt }
-  | { kind: "close_frontier" };
+  | {
+      kind: "select_task";
+      task: ReviewedManagedProgramState["tasks"][number];
+    }
+  | { kind: "close_frontier"; promotionAssemblies: ReviewedPromotionAssembly[] }
+  | { kind: "complete_promotion"; product: FinalDossierProduct };

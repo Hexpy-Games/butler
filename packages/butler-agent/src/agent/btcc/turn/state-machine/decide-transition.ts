@@ -93,9 +93,11 @@ export function decideTransition(
     return {
       kind: "close_work_frontier",
       successor: "consolidation",
+      promotionAssemblies: event.promotionAssemblies,
       ledgerCommit: ledgerCommit(turn, {
         kind: "close_implementation_frontier",
         cursor: ledgerCursor(turn),
+        promotionAssemblies: event.promotionAssemblies,
       }),
     };
   }
@@ -157,7 +159,7 @@ export function decideTransition(
       successor: "work_frontier",
       product: event.product,
       ledgerCommit: ledgerCommit(turn, {
-        kind: "accept_implementation_repair",
+        kind: "accept_feedback_plan",
         cursor: ledgerCursor(turn),
         product: event.product,
       }),
@@ -165,6 +167,29 @@ export function decideTransition(
   }
   if (turn.semanticState === "consolidation" && event.kind === "FinalDossierAccepted") {
     return { kind: "accept_final_dossier", successor: "reporting", product: event.product };
+  }
+  if (turn.semanticState === "consolidation" && event.kind === "PromotionAuthorized") {
+    return {
+      kind: "authorize_promotion",
+      successor: "work_frontier",
+      product: event.product,
+      ledgerCommit: ledgerCommit(turn, {
+        kind: "authorize_promotion",
+        cursor: ledgerCursor(turn),
+        product: event.product,
+      }),
+    };
+  }
+  if (turn.semanticState === "work_frontier" && event.kind === "PromotedWorkCompleted") {
+    return {
+      kind: "complete_promoted_work",
+      successor: "reporting",
+      product: event.product,
+      ledgerCommit: ledgerCommit(turn, {
+        kind: "close_promotion_frontier",
+        cursor: ledgerCursor(turn),
+      }),
+    };
   }
   if (turn.semanticState === "reporting" && event.kind === "PreparedReportAccepted") {
     const committedRevision = turn.revision + 1;

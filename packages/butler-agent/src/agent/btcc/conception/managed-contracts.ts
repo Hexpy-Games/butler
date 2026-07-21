@@ -71,7 +71,10 @@ export type FeedbackIntentProduct = {
     correctionScopeRef: ContentRef;
     originalGoalContractRef: ContentRef;
     currentAuthorityRef: ContentRef;
-    correctionKind: "implementation_repair";
+    correctionKind:
+      | "implementation_repair"
+      | "governing_revision"
+      | "authority_scope_revision";
     intendedCorrection: string;
   };
 };
