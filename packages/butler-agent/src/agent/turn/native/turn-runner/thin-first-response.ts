@@ -11,15 +11,23 @@ export interface ThinFirstResponsePrompt {
   promptSections: PromptUsageSectionAttribution[];
 }
 
+const FULL_PROMPT_REQUIRED_SECTION_IDS = new Set([
+  "first_chat_onboarding",
+]);
+
 export function shouldUseThinFirstResponse(input: {
   turnInput: RuntimeTurnInput;
   session: NativeStoredSessionConfig;
   plannedReview: PlannedReviewTurnContext | null;
+  promptContextSectionIds?: Iterable<string>;
 }): boolean {
   if (input.session.init.role !== "butler") return false;
   if (input.plannedReview) return false;
   if (hasSchedulerContinuation(input.turnInput.metadata)) return false;
   if (hasExplicitRequiredTools(input.turnInput.metadata)) return false;
+  if ([...(input.promptContextSectionIds ?? [])].some((id) =>
+    FULL_PROMPT_REQUIRED_SECTION_IDS.has(id),
+  )) return false;
   const camel = metadataPolicyValue(input.turnInput.metadata, "thinFirstResponse");
   const snake = metadataPolicyValue(input.turnInput.metadata, "thin_first_response");
   const value = camel ?? snake;

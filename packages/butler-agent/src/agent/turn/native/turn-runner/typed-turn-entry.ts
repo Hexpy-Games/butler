@@ -134,6 +134,7 @@ export async function runTypedTurnEntry(input: {
     turnInput: input.turnInput,
     session: input.session,
     plannedReview: input.context.plannedReview,
+    promptContextSectionIds: input.context.promptSections.map((section) => section.id),
   });
   const baseDecisionPrompt = thin
     ? buildThinFirstResponsePrompt({
