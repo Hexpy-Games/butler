@@ -1,7 +1,3 @@
-export async function openConception(): Promise<never> {
-  throw new Error("BTCC Conception Opening is not implemented");
-}
-
 export async function deliberateGoal(): Promise<never> {
   throw new Error("BTCC Conception Deliberation is not implemented");
 }

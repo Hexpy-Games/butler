@@ -1,6 +1,10 @@
 export {
   conceiveCorrection,
   deliberateGoal,
-  openConception,
   reviewGoalContract,
 } from "./conception.ts";
+export { openConception } from "./opening/index.ts";
+export type {
+  OpenConceptionCommand,
+  OpeningAnswerProduct,
+} from "./opening/index.ts";
