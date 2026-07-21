@@ -5,11 +5,11 @@ import {
   requireString,
   runPhaseConversation,
   type ContentRef,
-  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
 import type { FeedbackIntentProduct } from "./managed-contracts.ts";
+import { withManagedDeferral } from "../deferral/index.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_conception",
@@ -25,7 +25,7 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec: PhaseCodec<FeedbackIntentProduct> = {
+const codec = withManagedDeferral<FeedbackIntentProduct>({
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Conception state");
     const correctionScopeRef = requireContentRef(state.correctionScopeRef, "correctionScopeRef");
@@ -46,7 +46,7 @@ const codec: PhaseCodec<FeedbackIntentProduct> = {
       feedbackIntent: { ref: contentRef("feedback-intent", body), ...body },
     };
   },
-};
+});
 
 export function conceiveCorrection(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });

@@ -1,22 +1,32 @@
 import type { Database } from "bun:sqlite";
-import type { BtccPersistenceTypes, WorkLedger, WorkLedgerCommit } from "../../../btcc/index.ts";
-import { digest, stableJson } from "./identity.ts";
+import type { BtccPersistenceTypes, WorkLedger, WorkLedgerCommit } from "../../../btcc/gateway-api.ts";
+import { stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
-import { checkpointKind, persistedManagedState } from "./managed-state-projection.ts";
 import { ManagedArtifactRecordWriter } from "./managed-artifact-record-writer.ts";
+import { ManagedDeliveryOutboxWriter } from "./managed-delivery-outbox-writer.ts";
+import { ConsolidationRepairWriter } from "./consolidation-repair-writer.ts";
+import { ManagedPlanningRecordWriter } from "./managed-planning-record-writer.ts";
+import { ManagedTurnProjectionWriter } from "./managed-turn-projection-writer.ts";
 type ManagedTransition = Exclude<
   BtccPersistenceTypes["transition"],
   { kind: "activate_opening" | "accept_opening_answer" | "observe_delivery" }
 >;
 type ManagedTurnState = BtccPersistenceTypes["managedTurnState"];
 type TurnRecord = BtccPersistenceTypes["turn"];
-type TurnSemanticState = BtccPersistenceTypes["semanticState"];
 export class SqliteManagedTransitionWriter {
   private readonly records: SqliteImmutableRecordStore;
   private readonly artifactRecords: ManagedArtifactRecordWriter;
+  private readonly delivery: ManagedDeliveryOutboxWriter;
+  private readonly consolidationRepairs: ConsolidationRepairWriter;
+  private readonly planningRecords: ManagedPlanningRecordWriter;
+  private readonly turnProjection: ManagedTurnProjectionWriter;
   constructor(private readonly db: Database, private readonly ledger: WorkLedger) {
     this.records = new SqliteImmutableRecordStore(db);
     this.artifactRecords = new ManagedArtifactRecordWriter(this.records);
+    this.delivery = new ManagedDeliveryOutboxWriter(db, this.records);
+    this.consolidationRepairs = new ConsolidationRepairWriter(this.records);
+    this.planningRecords = new ManagedPlanningRecordWriter(this.records);
+    this.turnProjection = new ManagedTurnProjectionWriter(db);
   }
   commit(turn: TurnRecord, nextRevision: number, transition: ManagedTransition): void {
     switch (transition.kind) {
@@ -49,7 +59,7 @@ export class SqliteManagedTransitionWriter {
         this.acceptGoalContract(turn, nextRevision, transition);
         return;
       case "submit_plan_candidate":
-        this.insertPlanningCandidate(transition.product.candidate);
+        this.planningRecords.record(transition.product.candidate);
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), planCandidate: transition.product,
         });
@@ -83,7 +93,7 @@ export class SqliteManagedTransitionWriter {
         this.insert("feedback_plan_candidate", transition.product.candidate);
         this.insert("plan", transition.product.candidate.correctionPlan);
         if (transition.product.candidate.correctionKind !== "implementation_repair") {
-          this.insertPlanningCandidate(transition.product.candidate.nextPlanCandidate);
+          this.planningRecords.record(transition.product.candidate.nextPlanCandidate);
           if (transition.product.candidate.correctionKind === "authority_scope_revision") {
             this.insert("authority_revision", transition.product.candidate.proposedAuthority);
           }
@@ -101,10 +111,42 @@ export class SqliteManagedTransitionWriter {
       case "accept_feedback_plan":
         this.acceptFeedbackPlan(turn, nextRevision, transition);
         return;
+      case "accept_managed_deferral": {
+        this.insert("managed_blocker", transition.product.blocker);
+        this.insert("deferral_anchor", transition.product.anchor);
+        const program = this.requireCommittedProgram(
+          this.commitLedger(transition.ledgerCommit),
+        );
+        this.advance(turn, nextRevision, transition.successor, {
+          ...requiredManaged(turn), deferral: transition.product, program,
+        });
+        return;
+      }
+      case "accept_promotion_deferral": {
+        this.insert("managed_blocker", transition.product.blocker);
+        this.insert("deferral_anchor", transition.product.anchor);
+        this.insert("promotion_deferral", transition.product.deferral);
+        const program = this.requireCommittedProgram(
+          this.commitLedger(transition.ledgerCommit),
+        );
+        this.advance(turn, nextRevision, transition.successor, {
+          ...requiredManaged(turn), program,
+        });
+        return;
+      }
+      case "require_consolidation_repair": {
+        this.insert("consolidation_assessment", transition.product.assessment);
+        this.consolidationRepairs.record(transition);
+        this.advance(turn, nextRevision, transition.successor, {
+          ...requiredManaged(turn), consolidationRepair: transition.product,
+        });
+        return;
+      }
       case "close_work_frontier":
         this.closeFrontier(turn, nextRevision, transition);
         return;
       case "authorize_promotion": {
+        this.insert("consolidation_assessment", transition.product.assessment);
         this.insert("promotion_authorization", transition.product.authorization);
         const program = this.requireCommittedProgram(
           this.commitLedger(transition.ledgerCommit),
@@ -115,12 +157,16 @@ export class SqliteManagedTransitionWriter {
         return;
       }
       case "accept_final_dossier":
+        if (transition.product.assessment) {
+          this.insert("consolidation_assessment", transition.product.assessment);
+        }
         this.insert("final_dossier", transition.product.dossier);
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), finalDossier: transition.product,
         }, { finalDossierRef: transition.product.dossier.ref.id });
         return;
-      case "complete_promoted_work": {
+      case "complete_promoted_work":
+      case "defer_promoted_work": {
         this.insert("final_dossier", transition.product.dossier);
         const program = this.requireCommittedProgram(
           this.commitLedger(transition.ledgerCommit),
@@ -131,11 +177,17 @@ export class SqliteManagedTransitionWriter {
         return;
       }
       case "accept_prepared_report":
-        this.acceptPreparedReport(turn, nextRevision, transition);
+        this.delivery.prepare(turn.turnId, nextRevision, transition);
+        this.advance(turn, nextRevision, transition.successor, {
+          ...requiredManaged(turn), preparedReport: transition.product,
+        }, {
+          finalPayload: transition.product.finalPayload,
+          finalDisposition: transition.product.finalPayload.disposition,
+          outboxId: transition.deliveryOutbox.outboxId,
+        });
         return;
     }
   }
-
   private acceptGoalContract(
     turn: TurnRecord,
     nextRevision: number,
@@ -150,7 +202,6 @@ export class SqliteManagedTransitionWriter {
       ...requiredManaged(turn), goalAcceptance: transition.product, program,
     }, { goalContractRef: goalContract.ref.id });
   }
-
   private acceptPlan(
     turn: TurnRecord,
     nextRevision: number,
@@ -246,79 +297,10 @@ export class SqliteManagedTransitionWriter {
     });
   }
 
-  private acceptPreparedReport(
-    turn: TurnRecord,
-    nextRevision: number,
-    transition: Extract<ManagedTransition, { kind: "accept_prepared_report" }>,
-  ): void {
-    this.insert("prepared_report", transition.product.report);
-    this.insert("final_payload", transition.product.finalPayload);
-    const outbox = transition.deliveryOutbox;
-    this.db.query(`
-      INSERT INTO btcc_delivery_outbox (
-        outbox_id, turn_id, committed_turn_revision, payload_id, payload_sha256,
-        expected_message_id, content, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
-    `).run(
-      outbox.outboxId, turn.turnId, nextRevision, outbox.finalPayloadRef.id,
-      outbox.finalPayloadRef.sha256, outbox.expectedMessageId, outbox.content,
-    );
-    this.advance(turn, nextRevision, transition.successor, {
-      ...requiredManaged(turn), preparedReport: transition.product,
-    }, { finalPayload: transition.product.finalPayload, finalDisposition: "completed", outboxId: outbox.outboxId });
-  }
-
   private advance(
-    turn: TurnRecord,
-    nextRevision: number,
-    successor: TurnSemanticState,
-    managed: ManagedTurnState,
-    extra: {
-      route?: "managed";
-      goalContractRef?: string;
-      finalDossierRef?: string;
-      finalPayload?: unknown;
-      finalDisposition?: "completed";
-      outboxId?: string;
-    } = {},
+    ...input: Parameters<ManagedTurnProjectionWriter["advance"]>
   ): void {
-    const checkpointId = digest(`btcc-checkpoint.v1\0${turn.turnId}\0${nextRevision}\0${successor}`);
-    const updated = this.db.query(`
-      UPDATE btcc_turns SET semantic_state = ?, active_checkpoint_id = ?,
-        managed_state_json = ?, revision = ?, route = COALESCE(?, route),
-        goal_contract_ref = COALESCE(?, goal_contract_ref),
-        final_dossier_ref = COALESCE(?, final_dossier_ref),
-        final_payload_json = COALESCE(?, final_payload_json),
-        final_disposition = COALESCE(?, final_disposition),
-        delivery_outbox_id = COALESCE(?, delivery_outbox_id)
-      WHERE turn_id = ? AND revision = ?
-    `).run(
-      successor, checkpointId, stableJson(persistedManagedState(managed)), nextRevision,
-      extra.route ?? null, extra.goalContractRef ?? null, extra.finalDossierRef ?? null,
-      extra.finalPayload ? stableJson(extra.finalPayload) : null,
-      extra.finalDisposition ?? null, extra.outboxId ?? null, turn.turnId, turn.revision,
-    );
-    if (updated.changes !== 1) throw new Error("BTCC managed transition lost Turn CAS");
-    this.db.query(`
-      INSERT INTO btcc_checkpoints (
-        checkpoint_id, turn_id, turn_revision, semantic_state, kind,
-        checkpoint_revision, is_active
-      ) VALUES (?, ?, ?, ?, ?, 1, 1)
-    `).run(checkpointId, turn.turnId, nextRevision, successor, checkpointKind(successor));
-  }
-
-  private insertPlanningCandidate(candidate: Extract<ManagedTransition, { kind: "submit_plan_candidate" }>["product"]["candidate"]): void {
-    this.insert("plan_candidate", candidate);
-    this.insert("plan", candidate.plan);
-    for (const work of candidate.works) this.insert("work", work);
-    for (const task of candidate.tasks) this.insert("task", task);
-    for (const criterion of candidate.criteria) this.insert("acceptance_criterion", criterion);
-    for (const question of candidate.verificationQuestions) {
-      this.insert("verification_question", question);
-    }
-    this.insert("work_graph", candidate.workGraph);
-    this.insert("artifact_lifecycle_relation", candidate.artifactLifecycle);
-    this.insert("planning_candidate_bundle", candidate.bundle);
+    this.turnProjection.advance(...input);
   }
 
   private insert<T extends { ref: { id: string; sha256: string } }>(kind: string, value: T): void {

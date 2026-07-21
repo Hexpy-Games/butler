@@ -225,6 +225,29 @@ describe("BTCC successor source shape", () => {
     expect(findingCodes(repository)).toEqual(["cross_domain_deep_import"]);
   });
 
+  test("allows adapters to consume the explicit BTCC gateway boundary", () => {
+    const repository = fixture();
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/index.ts",
+      'export { runTurn } from "./run-turn.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/gateway-api.ts",
+      "export type GatewayPort = { readonly kind: 'gateway' };\n",
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/adapters/index.ts",
+      'export { adapter } from "./adapter.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/adapters/adapter.ts",
+      'import type { GatewayPort } from "../btcc/gateway-api.ts";\n'
+        + "export const adapter: GatewayPort = { kind: 'gateway' };\n",
+    );
+
+    expect(findingCodes(repository)).toEqual([]);
+  });
+
   test("enforces the physical line limit in successor source and test roots", () => {
     const repository = fixture();
     repository.write(

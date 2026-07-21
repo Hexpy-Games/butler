@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 
 type PhaseConversationStore = BtccRuntimeDependencies["phaseConversations"];

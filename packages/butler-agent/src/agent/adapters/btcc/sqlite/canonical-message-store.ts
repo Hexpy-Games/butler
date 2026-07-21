@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { BtccRuntimeDependencies } from "../../../btcc/index.ts";
+import type { BtccRuntimeDependencies } from "../../../btcc/gateway-api.ts";
 
 type CanonicalMessageStore = BtccRuntimeDependencies["messages"];
 

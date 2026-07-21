@@ -75,6 +75,10 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       const operationRequests = db.query<{ request_json: string }, []>(`
         SELECT request_json FROM btcc_phase_operation_results ORDER BY rowid
       `).all().map((row) => JSON.parse(row.request_json));
+      const journalStates = db.query<{ content_json: string }, []>(`
+        SELECT content_json FROM btcc_records
+        WHERE kind = 'repository_promotion_journal' ORDER BY rowid
+      `).all().map((row) => JSON.parse(row.content_json).state);
 
       expect(program).toEqual({ frontier: "closed", manifest_revision: 18 });
       expect(tasks).toEqual([
@@ -100,6 +104,10 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       expect(operationRequests.filter((request) =>
         request.kind === "review_validation")).toHaveLength(3);
       expect(operationRequests.at(-1)?.kind).toBe("repository_promotion");
+      expect(journalStates).toEqual([
+        "prepared", "baseline_verified", "commit_intent_durable",
+        "commit_observed", "closed",
+      ]);
     } finally {
       db.close();
     }

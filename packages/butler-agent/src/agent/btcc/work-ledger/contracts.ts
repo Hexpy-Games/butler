@@ -9,6 +9,8 @@ import type { TaskReviewProduct } from "../review/index.ts";
 import type { PromotionAuthorizationProduct } from "../consolidation/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
 import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
+import type { ManagedDeferralProduct } from "../deferral/index.ts";
+import type { PromotionDeferralProduct } from "../deferral/index.ts";
 
 export type ManagedProgramAuthority = {
   ledgerId: string;
@@ -16,10 +18,12 @@ export type ManagedProgramAuthority = {
   manifestRevision: number;
   goalContractRef: ContentRef;
   authorityRef: ContentRef;
+  requiredOutcomeId: string;
 };
 
 export type UnplannedManagedProgramState = ManagedProgramAuthority & {
   planningState: "unplanned";
+  activeDeferral?: ManagedDeferralProduct;
 };
 
 export type ReviewedManagedProgramState = ManagedProgramAuthority & {
@@ -37,6 +41,8 @@ export type ReviewedManagedProgramState = ManagedProgramAuthority & {
   promotionAuthorization?: PromotionAuthorizationProduct["authorization"];
   frontier: "implementation_open" | "awaiting_consolidation" | "promotion_open" | "closed";
   correctionPlanRef?: ContentRef;
+  activeDeferral?: ManagedDeferralProduct;
+  promotionDeferral?: PromotionDeferralProduct;
 };
 
 export type ManagedProgramState =
@@ -50,7 +56,9 @@ export type ManagedWorkState = {
 
 export type ManagedTaskState = {
   task: PlanningAcceptedProduct["candidate"]["tasks"][number];
-  status: "planned" | "selected" | "result_submitted" | "review_failed" | "accepted";
+  status:
+    | "planned" | "selected" | "result_submitted" | "review_failed"
+    | "accepted" | "promotion_deferred";
   attempts: ManagedAttempt[];
   currentResult?: ResultCandidateProduct;
   currentReview?: TaskReviewProduct;
@@ -98,6 +106,21 @@ export type WorkLedgerMutation =
   | {
       kind: "close_promotion_frontier";
       cursor: WorkLedgerCursor;
+    }
+  | {
+      kind: "accept_managed_deferral";
+      cursor: WorkLedgerCursor;
+      product: ManagedDeferralProduct;
+    }
+  | {
+      kind: "accept_promotion_deferral";
+      cursor: WorkLedgerCursor;
+      product: PromotionDeferralProduct;
+    }
+  | {
+      kind: "close_deferred_promotion_frontier";
+      cursor: WorkLedgerCursor;
+      product: import("../consolidation/index.ts").FinalDossierProduct;
     };
 
 export type WorkLedgerCommit = {

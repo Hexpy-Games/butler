@@ -1,4 +1,4 @@
-import type { BtccPersistenceTypes } from "../../../btcc/index.ts";
+import type { BtccPersistenceTypes } from "../../../btcc/gateway-api.ts";
 
 type ManagedTurnState = BtccPersistenceTypes["managedTurnState"];
 type TurnSemanticState = BtccPersistenceTypes["semanticState"];

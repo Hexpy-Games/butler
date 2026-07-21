@@ -1,4 +1,5 @@
 import type { ContentRef } from "../core/index.ts";
+import type { ContinuationBinding } from "../continuation/index.ts";
 
 export type GoalContractRecord = {
   ref: ContentRef;
@@ -50,6 +51,7 @@ export type GoalContractAcceptedProduct = {
     reviewedLensIds: ConceptionLensId[];
     reviewedFieldIds: ["request", "intended_result"];
     reviewedOutcomeIds: [string];
+    continuationBindingRef: ContentRef;
     verdict: "accepted";
   };
   goalContract: GoalContractRecord;
@@ -60,7 +62,13 @@ export type GoalContractAcceptedProduct = {
     ledgerScope:
       | { kind: "project"; projectRef: string }
       | { kind: "session"; sessionId: string };
-    managedBinding: { ledgerId: string; programId: string };
+    managedBinding: {
+      ledgerId: string;
+      programId: string;
+      expectedManifestRevision: number;
+      source: "new_program" | "deferred_goal";
+      continuationBinding: ContinuationBinding;
+    };
   };
 };
 

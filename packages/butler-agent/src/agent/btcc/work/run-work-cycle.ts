@@ -23,7 +23,10 @@ type WorkCycleEvent = Extract<TurnEvent, {
     | "FeedbackPlanCandidateSubmitted"
     | "FeedbackPlanningReviewAccepted"
     | "FeedbackPlanningRevisionRequested"
-    | "PromotedWorkCompleted";
+    | "PromotedWorkCompleted"
+    | "PromotedWorkDeferred"
+    | "ManagedDeferralAccepted"
+    | "PromotionDeferralAccepted";
 }>;
 
 export function runWorkCycle(command: {
@@ -50,6 +53,9 @@ async function advanceWorkFrontier(
   }
   if (decision.kind === "complete_promotion") {
     return { kind: "PromotedWorkCompleted", product: decision.product };
+  }
+  if (decision.kind === "defer_promotion") {
+    return { kind: "PromotedWorkDeferred", product: decision.product };
   }
   const attempt = await prepareTaskAttempt({
     turnId: turn.turnId,

@@ -32,6 +32,17 @@ function displayPath(repositoryRoot: string, path: string): string {
   return relative(repositoryRoot, path) || ".";
 }
 
+function isPublicDomainBoundary(
+  sourceDomain: MaterializedDomain,
+  targetDomain: MaterializedDomain,
+  targetPath: string,
+): boolean {
+  if (resolve(targetPath) === resolve(targetDomain.indexPath)) return true;
+  return sourceDomain.name === "adapters"
+    && targetDomain.name === "btcc"
+    && resolve(targetPath) === resolve(targetDomain.path, "gateway-api.ts");
+}
+
 function verifyDomainPublicApis(
   repositoryRoot: string,
   domains: readonly MaterializedDomain[],
@@ -104,7 +115,7 @@ function verifyModule(
       && targetDomain
       && sourceDomain.path !== targetDomain.path
       && existsSync(targetDomain.indexPath)
-      && resolve(targetPath) !== resolve(targetDomain.indexPath)) {
+      && !isPublicDomainBoundary(sourceDomain, targetDomain, targetPath)) {
       findings.push({
         code: "cross_domain_deep_import",
         path,

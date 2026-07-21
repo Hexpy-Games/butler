@@ -4,11 +4,12 @@ import {
   requireString,
   runPhaseConversation,
   type ContentRef,
-  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
 import type { PlanningCandidateProduct } from "./contracts.ts";
+import type { PlanningContinuation } from "./contracts.ts";
+import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
 
@@ -35,7 +36,7 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-const codec: PhaseCodec<PlanningCandidateProduct> = {
+const codec = withManagedDeferral<PlanningCandidateProduct>({
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Planning state");
     const value = requireRecord(submission, "Planning submission");
@@ -58,10 +59,13 @@ const codec: PhaseCodec<PlanningCandidateProduct> = {
         ...(state.findingSetRef
           ? { findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef") }
           : {}),
+        ...(state.continuation
+          ? { continuation: state.continuation as PlanningContinuation }
+          : {}),
       }),
     };
   },
-};
+});
 
 export function proposePlan(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });

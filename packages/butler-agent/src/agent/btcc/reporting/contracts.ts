@@ -15,7 +15,7 @@ export type PreparedReportProduct = {
     finalDossierRef: ContentRef;
     contentSha256: string;
     route: "managed";
-    disposition: "completed";
+    disposition: "completed" | "deferred";
     content: string;
   };
 };

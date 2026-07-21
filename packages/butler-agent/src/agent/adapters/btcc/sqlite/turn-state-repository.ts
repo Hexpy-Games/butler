@@ -1,8 +1,8 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
-} from "../../../btcc/index.ts";
-import { createWorkLedger, type WorkLedger } from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
+import { createWorkLedger, type WorkLedger } from "../../../btcc/gateway-api.ts";
 import { digest } from "./identity.ts";
 import { SqliteTransitionWriter } from "./transition-writer.ts";
 import { SqliteWorkLedgerStorage } from "./work-ledger/index.ts";
@@ -25,6 +25,7 @@ type TurnRow = {
   original_message: string;
   model_selection_json: string;
   context_json: string;
+  continuation_snapshot_json: string;
   semantic_state: string;
   active_checkpoint_id: string | null;
   route: string | null;
@@ -91,6 +92,7 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
       originalMessage: row.original_message,
       modelSelection: JSON.parse(row.model_selection_json),
       context: JSON.parse(row.context_json),
+      continuationCandidates: JSON.parse(row.continuation_snapshot_json),
       semanticState: row.semantic_state as TurnSemanticState,
       ...(checkpoint ? { checkpoint: hydrateCheckpoint(checkpoint) } : {}),
       ...(row.route === "direct" || row.route === "assisted"
@@ -123,8 +125,8 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
         : {}),
       revision: row.revision,
       executionFence: row.execution_fence,
-      ...(row.final_disposition === "completed"
-        ? { finalDisposition: "completed" as const }
+      ...(row.final_disposition === "completed" || row.final_disposition === "deferred"
+        ? { finalDisposition: row.final_disposition }
         : row.final_disposition === "cancelled"
           ? { finalDisposition: "cancelled" as const }
           : {}),

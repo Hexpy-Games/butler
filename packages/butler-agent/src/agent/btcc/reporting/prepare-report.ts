@@ -55,7 +55,7 @@ const codec: PhaseCodec<PreparedReportProduct> = {
       finalDossierRef: dossier.dossier.ref,
       contentSha256: report.contentSha256,
       route: "managed" as const,
-      disposition: "completed" as const,
+      disposition: dossier.dossier.disposition,
       content,
     };
     return {

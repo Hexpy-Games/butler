@@ -1,5 +1,5 @@
 import type { PhaseInvocation } from "../core/index.ts";
-import { withPhaseState } from "../core/index.ts";
+import { isManagedDeferral, withManagedDeferralState } from "../deferral/index.ts";
 import {
   requireManagedProgram,
   requireManagedPlanningAuthority,
@@ -16,13 +16,15 @@ type InitialPlanningEvent = Extract<TurnEvent, {
   kind:
     | "PlanCandidateSubmitted"
     | "PlanningReviewAccepted"
-    | "PlanningRevisionRequested";
+    | "PlanningRevisionRequested"
+    | "ManagedDeferralAccepted";
 }>;
 type FeedbackPlanningEvent = Extract<TurnEvent, {
   kind:
     | "FeedbackPlanCandidateSubmitted"
     | "FeedbackPlanningReviewAccepted"
-    | "FeedbackPlanningRevisionRequested";
+    | "FeedbackPlanningRevisionRequested"
+    | "ManagedDeferralAccepted";
 }>;
 type PlanningCommand = {
   cycle: "initial" | "review_feedback";
@@ -58,13 +60,16 @@ async function planInitialWork(command: {
     if (!accepted) throw new Error("Planning is missing accepted Goal authority");
     const authority = requireManagedPlanningAuthority(command.turn);
     const previous = managed.planningRevision;
-    const product = await proposePlan(withPhaseState(command.phase, {
+    const product = await proposePlan(withManagedDeferralState(command.phase, command.turn, {
       goalContractRef: authority.goalContractRef,
       authorityRef: authority.authorityRef,
-      requiredOutcomeId: accepted.goalContract.requiredOutcome.outcomeId,
+      requiredOutcomeId: authority.requiredOutcomeId,
       ledgerId: authority.ledgerId,
       programId: authority.programId,
       observedManifestRevision: authority.manifestRevision,
+      ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
+        ? { continuation: accepted.authority.managedBinding.continuationBinding }
+        : {}),
       ...(previous
         ? {
             previousCandidateRef: previous.candidate.ref,
@@ -72,12 +77,15 @@ async function planInitialWork(command: {
           }
         : {}),
     }));
-    return { kind: "PlanCandidateSubmitted", product };
+    return isManagedDeferral(product)
+      ? { kind: "ManagedDeferralAccepted", product }
+      : { kind: "PlanCandidateSubmitted", product };
   }
   if (command.turn.semanticState === "planning_review") {
-    const product = await reviewPlan(withPhaseState(command.phase, {
+    const product = await reviewPlan(withManagedDeferralState(command.phase, command.turn, {
       planCandidate: managed.planCandidate,
     }));
+    if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
     return product.kind === "planning_accepted"
       ? { kind: "PlanningReviewAccepted", product }
       : { kind: "PlanningRevisionRequested", product };
@@ -95,14 +103,19 @@ async function planReviewFeedback(command: {
     const accepted = managed.goalAcceptance;
     if (!accepted) throw new Error("Feedback Planning is missing Goal authority");
     const previous = managed.feedbackPlanningRevision;
-    const product = await proposeCorrectionOrRevision(withPhaseState(command.phase, {
+    const affectedTaskRefs = managed.consolidationRepair?.repair.correctionScope.affectedTaskRefs
+      ?? [program.currentTask.task.ref];
+    const product = await proposeCorrectionOrRevision(withManagedDeferralState(
+      command.phase,
+      command.turn,
+      {
       feedbackIntent: managed.feedbackIntent,
       workPlanRef: program.plan.ref,
-      taskRef: program.currentTask.task.ref,
+      affectedTaskRefs,
       artifactLifecycleRef: program.artifactLifecycle.ref,
       goalContractRef: program.goalContractRef,
       authorityRef: program.authorityRef,
-      requiredOutcomeId: accepted.goalContract.requiredOutcome.outcomeId,
+      requiredOutcomeId: program.requiredOutcomeId,
       ledgerId: program.ledgerId,
       programId: program.programId,
       observedManifestRevision: program.manifestRevision,
@@ -113,14 +126,18 @@ async function planReviewFeedback(command: {
             findingSetRef: previous.review.findingSetRef,
           }
         : {}),
-    }));
-    return { kind: "FeedbackPlanCandidateSubmitted", product };
+      },
+    ));
+    return isManagedDeferral(product)
+      ? { kind: "ManagedDeferralAccepted", product }
+      : { kind: "FeedbackPlanCandidateSubmitted", product };
   }
   if (command.turn.semanticState === "feedback_planning_review") {
-    const product = await reviewCorrection(withPhaseState(command.phase, {
+    const product = await reviewCorrection(withManagedDeferralState(command.phase, command.turn, {
       feedbackPlan: managed.feedbackPlan,
       goalContractRef: program.goalContractRef,
     }));
+    if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
     return product.kind === "feedback_planning_accepted"
       ? { kind: "FeedbackPlanningReviewAccepted", product }
       : { kind: "FeedbackPlanningRevisionRequested", product };

@@ -6,7 +6,6 @@ import {
   runPhaseConversation,
   stableJson,
   type ContentRef,
-  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
@@ -14,6 +13,7 @@ import type {
   FeedbackPlanProduct,
   FeedbackPlanningReviewProduct,
 } from "./contracts.ts";
+import { withManagedDeferral } from "../deferral/index.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning_review",
@@ -30,7 +30,7 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec: PhaseCodec<FeedbackPlanningReviewProduct> = {
+const codec = withManagedDeferral<FeedbackPlanningReviewProduct>({
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Planning Review state");
     const candidate = state.feedbackPlan as FeedbackPlanProduct | undefined;
@@ -86,7 +86,7 @@ const codec: PhaseCodec<FeedbackPlanningReviewProduct> = {
       review: { ref: contentRef("feedback-planning-review", body), ...body },
     };
   },
-};
+});
 
 export function reviewCorrection(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });

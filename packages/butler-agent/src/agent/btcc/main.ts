@@ -6,7 +6,7 @@ import type {
   BtccTurnOutcome,
   BtccTurnRuntime,
 } from "./contracts.ts";
-import { insertCanonicalMessage } from "./delivery/index.ts";
+import { insertCanonicalMessage, scheduleLearningSource } from "./delivery/index.ts";
 import { planning } from "./planning/index.ts";
 import { reporting } from "./reporting/index.ts";
 import {
@@ -44,6 +44,7 @@ async function runBtccTurn(
     await dependencies.turns.commitTransition({ turn, claim, transition });
     turn = await reloadTurn(turn.turnId, dependencies);
   }
+  scheduleLearningSource({ turn, scheduler: dependencies.learning });
   return projectTerminalOutcome(turn);
 }
 

@@ -39,6 +39,10 @@ type HarnessOptions = {
     | "managed-governing-revision"
     | "managed-authority-revision"
     | "managed-artifact"
+    | "managed-deferral"
+    | "managed-promotion-deferral"
+    | "managed-continuation"
+    | "managed-consolidation-repair"
     | "managed-restart-once"
     | NoLedgerScenario;
 };
@@ -142,6 +146,10 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-governing-revision" ||
     value === "managed-authority-revision" ||
     value === "managed-artifact" ||
+    value === "managed-deferral" ||
+    value === "managed-promotion-deferral" ||
+    value === "managed-continuation" ||
+    value === "managed-consolidation-repair" ||
     value === "managed-restart-once"
   ) return value;
   if (
@@ -167,9 +175,15 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     scenario === "managed-governing-revision" ||
     scenario === "managed-authority-revision"
     || scenario === "managed-artifact"
+    || scenario === "managed-deferral"
+    || scenario === "managed-promotion-deferral"
+    || scenario === "managed-continuation"
+    || scenario === "managed-consolidation-repair"
   ) {
     return new ManagedHarnessModel(
-      scenario !== "managed-pass" && scenario !== "managed-planning-revision",
+      scenario !== "managed-pass" &&
+        scenario !== "managed-planning-revision" &&
+        scenario !== "managed-consolidation-repair",
       scenario === "managed-planning-revision",
       scenario === "managed-feedback-planning-revision",
       scenario === "managed-governing-revision"
@@ -177,7 +191,14 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
         : scenario === "managed-authority-revision"
           ? "authority_scope_revision"
           : "implementation_repair",
-      scenario === "managed-artifact",
+      scenario === "managed-artifact" || scenario === "managed-promotion-deferral",
+      scenario === "managed-deferral"
+        ? "planning"
+        : scenario === "managed-promotion-deferral"
+          ? "promotion"
+          : undefined,
+      scenario === "managed-continuation",
+      scenario === "managed-consolidation-repair",
     );
   }
   return new NoLedgerHarnessModel(scenario);

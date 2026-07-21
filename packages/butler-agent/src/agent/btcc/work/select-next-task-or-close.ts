@@ -2,6 +2,7 @@ import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 import type { WorkFrontierDecision } from "./contracts.ts";
 import { assemblePromotionCandidates } from "./assemble-promotion-candidates.ts";
 import { finalizePromotedWork } from "./finalize-promoted-work.ts";
+import { finalizeDeferredPromotion } from "./finalize-deferred-promotion.ts";
 
 export function selectNextTaskOrClose(input: {
   turnId: string;
@@ -14,6 +15,9 @@ export function selectNextTaskOrClose(input: {
     );
     if (promotionTasks.every((task) => task.status === "accepted")) {
       return { kind: "complete_promotion", product: finalizePromotedWork(input.program) };
+    }
+    if (promotionTasks.some((task) => task.status === "promotion_deferred")) {
+      return { kind: "defer_promotion", product: finalizeDeferredPromotion(input.program) };
     }
     const nextPromotion = promotionTasks.find((task) => task.status === "planned");
     if (!nextPromotion) throw new Error("Authorized promotion has no ready Task");

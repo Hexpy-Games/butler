@@ -1,5 +1,5 @@
 import type { PhaseInvocation } from "../core/index.ts";
-import { withPhaseState } from "../core/index.ts";
+import { isManagedDeferral, withManagedDeferralState } from "../deferral/index.ts";
 import {
   requireManagedProgram,
   type TurnEvent,
@@ -8,7 +8,7 @@ import {
 import { reviewTask } from "./review-task.ts";
 
 type ReviewEvent = Extract<TurnEvent, {
-  kind: "TaskReviewPassed" | "TaskReviewFailed";
+  kind: "TaskReviewPassed" | "TaskReviewFailed" | "ManagedDeferralAccepted";
 }>;
 
 export async function review(command: {
@@ -31,7 +31,7 @@ export async function review(command: {
   });
   const result = program.currentTask.currentResult;
   if (!result) throw new Error("Review requires the current ResultCandidate");
-  const invocation = withPhaseState(command.phase, {
+  const invocation = withManagedDeferralState(command.phase, command.turn, {
     resultCandidate: result,
     criteria,
     verificationQuestions,
@@ -51,6 +51,7 @@ export async function review(command: {
         }
       : invocation.operationAuthority,
   });
+  if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.review.verdict === "passed"
     ? { kind: "TaskReviewPassed", product }
     : { kind: "TaskReviewFailed", product };

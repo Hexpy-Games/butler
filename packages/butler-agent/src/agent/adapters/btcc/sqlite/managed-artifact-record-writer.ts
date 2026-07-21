@@ -1,4 +1,4 @@
-import type { BtccPersistenceTypes } from "../../../btcc/index.ts";
+import type { BtccPersistenceTypes } from "../../../btcc/gateway-api.ts";
 import { stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 
@@ -38,6 +38,16 @@ export class ManagedArtifactRecordWriter {
     this.insert("result_candidate", product.result);
     if (product.result.kind === "workspace_artifact") {
       this.insert("workspace_revision", product.result.workspaceRevision);
+    }
+    if (product.result.kind === "repository_promotion") {
+      const promotion = product.result.promotionRecords;
+      this.insert("repository_promotion_transaction", promotion.transaction);
+      for (const journal of promotion.journals) {
+        this.insert("repository_promotion_journal", journal);
+      }
+      this.insert("promotion_commit_receipt", promotion.commitReceipt);
+      this.insert("promoted_target_snapshot", promotion.promotedSnapshot);
+      this.insert("promotion_cleanup_receipt", promotion.cleanupReceipt);
     }
     for (const revision of product.result.targetStateRevisions) {
       this.insert("target_state_revision", revision);

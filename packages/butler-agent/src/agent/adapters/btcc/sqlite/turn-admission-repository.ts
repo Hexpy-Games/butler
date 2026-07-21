@@ -2,9 +2,10 @@ import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
   BtccTurnCommand,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
+import type { BtccPersistenceTypes } from "../../../btcc/gateway-api.ts";
 
 type TurnAdmissionRepository = BtccRuntimeDependencies["admission"];
 type TurnStateRepository = BtccRuntimeDependencies["turns"];
@@ -13,6 +14,7 @@ type AdmissionConstructionClaim = Awaited<
   ReturnType<TurnAdmissionRepository["acquireAdmissionConstructionClaim"]>
 >;
 type TurnRecord = NonNullable<Awaited<ReturnType<TurnStateRepository["findTurn"]>>>;
+type DeferredContinuationCandidate = BtccPersistenceTypes["deferredContinuationCandidate"];
 
 type InboxRow = {
   inbox_id: string;
@@ -129,7 +131,12 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       BtccTurnCommand,
       { kind: "run" }
     >;
-    const snapshotJson = stableJson(command.context);
+    const continuationCandidates = this.discoverContinuationCandidates(command);
+    const contextJson = stableJson(command.context);
+    const snapshotJson = stableJson({
+      context: command.context,
+      continuationCandidates,
+    });
     const snapshotSha = digest(snapshotJson);
     const snapshotRef = digest(`btcc-admission-snapshot.v1\0${snapshotSha}`);
     const checkpointId = digest(`btcc-checkpoint.v1\0${command.turnId}\0${0}\0admitted`);
@@ -138,8 +145,9 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       INSERT INTO btcc_turns (
         turn_id, session_id, inbox_id, trigger_key, original_message_id,
         original_message, admission_snapshot_ref, model_selection_json,
-        context_json, semantic_state, active_checkpoint_id, revision, execution_fence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, 0, 0)
+        context_json, continuation_snapshot_json, semantic_state,
+        active_checkpoint_id, revision, execution_fence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, 0, 0)
     `).run(
       command.turnId,
       command.sessionId,
@@ -149,7 +157,8 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       command.message.content,
       snapshotRef,
       stableJson(command.modelSelection),
-      snapshotJson,
+      contextJson,
+      stableJson(continuationCandidates),
       checkpointId,
     );
     this.db.query(`
@@ -158,6 +167,67 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
         checkpoint_revision, is_active
       ) VALUES (?, ?, 0, 'admitted', 'runtime', 1, 1)
     `).run(checkpointId, command.turnId);
+  }
+
+  private discoverContinuationCandidates(
+    command: Extract<BtccTurnCommand, { kind: "run" }>,
+  ): DeferredContinuationCandidate[] {
+    type CandidateRow = {
+      ledger_id: string;
+      program_id: string;
+      manifest_revision: number;
+      goal_contract_ref: string;
+      active_deferral_ref: string;
+      active_deferral_turn_id: string;
+    };
+    const scopeKind = command.context.projectRef ? "project" : "session";
+    const scopeId = command.context.projectRef ?? command.sessionId;
+    const rows = this.db.query<CandidateRow, [string, string]>(`
+      SELECT p.ledger_id, p.program_id, p.manifest_revision,
+        p.goal_contract_ref, p.active_deferral_ref, p.active_deferral_turn_id
+      FROM btcc_programs p
+      JOIN btcc_turns t ON t.turn_id = p.active_deferral_turn_id
+      WHERE p.scope_kind = ? AND p.scope_id = ?
+        AND p.active_deferral_ref IS NOT NULL
+        AND t.semantic_state = 'delivered' AND t.final_disposition = 'deferred'
+      ORDER BY p.program_id
+    `).all(scopeKind, scopeId);
+    return rows.map((row) => {
+      const anchor = this.loadRecord<{ blockerRef: { id: string; sha256: string } }>(
+        row.active_deferral_ref,
+      );
+      const originalGoalContractRef = this.loadRef(row.goal_contract_ref);
+      const anchorRef = this.loadRef(row.active_deferral_ref);
+      const candidateBody = {
+        ledgerId: row.ledger_id,
+        programId: row.program_id,
+        expectedManifestRevision: row.manifest_revision,
+        sourceTurnId: row.active_deferral_turn_id,
+        originalGoalContractRef,
+        anchorRef,
+        blockerRef: anchor.blockerRef,
+      };
+      return {
+        candidateId: digest(`btcc-continuation-candidate.v1\0${stableJson(candidateBody)}`),
+        ...candidateBody,
+      };
+    });
+  }
+
+  private loadRef(id: string): { id: string; sha256: string } {
+    const row = this.db.query<{ sha256: string }, [string]>(
+      "SELECT sha256 FROM btcc_records WHERE record_id = ?",
+    ).get(id);
+    if (!row) throw new Error(`BTCC continuation record is missing: ${id}`);
+    return { id, sha256: row.sha256 };
+  }
+
+  private loadRecord<T>(id: string): T {
+    const row = this.db.query<{ content_json: string }, [string]>(
+      "SELECT content_json FROM btcc_records WHERE record_id = ?",
+    ).get(id);
+    if (!row) throw new Error(`BTCC continuation record is missing: ${id}`);
+    return JSON.parse(row.content_json) as T;
   }
 
   private insertCanonicalUserMessage(

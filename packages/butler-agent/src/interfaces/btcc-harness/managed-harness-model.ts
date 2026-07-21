@@ -7,6 +7,7 @@ import {
   submitPlanningReview,
   type HarnessCorrectionKind,
 } from "./managed-harness-planning.ts";
+import { submitConsolidation, submitReport } from "./managed-harness-finalization.ts";
 
 type SelectedModel = BtccRuntimeDependencies["model"];
 type PhaseEnvelope = Parameters<SelectedModel["runRound"]>[0];
@@ -18,6 +19,8 @@ export class ManagedHarnessModel implements SelectedModel {
   private reviewCount = 0;
   private planningReviewCount = 0;
   private feedbackPlanningReviewCount = 0;
+  private deferralSubmitted = false;
+  private consolidationRepairSubmitted = false;
 
   constructor(
     private readonly failFirstReview: boolean,
@@ -25,6 +28,9 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly reviseFirstCorrection = false,
     private readonly correctionKind: HarnessCorrectionKind = "implementation_repair",
     private readonly artifactPlan = false,
+    private readonly deferralPhase?: "planning" | "promotion",
+    private readonly chooseContinuation = false,
+    private readonly repairConsolidation = false,
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
@@ -99,8 +105,15 @@ export class ManagedHarnessModel implements SelectedModel {
             "goalCandidate", "candidate", "proposedContract", "requiredOutcome", "outcomeId",
           )],
           verdict: "accepted",
+          ...(this.chooseContinuation
+            ? { continuationCandidateId: firstContinuationCandidateId(state) }
+            : {}),
         };
       case "planning":
+        if (this.deferralPhase === "planning" && !this.deferralSubmitted) {
+          this.deferralSubmitted = true;
+          return deferredForUserAuthority();
+        }
         return this.artifactPlan ? submitArtifactPlan(state) : submitInitialPlan(state);
       case "planning_review":
         this.planningReviewCount += 1;
@@ -110,6 +123,13 @@ export class ManagedHarnessModel implements SelectedModel {
           this.planningReviewCount,
         );
       case "task_execution":
+        if (
+          this.deferralPhase === "promotion" && !this.deferralSubmitted &&
+          executionTargetKind(state) === "repository_promotion"
+        ) {
+          this.deferralSubmitted = true;
+          return deferredForUserAuthority("promotion_deferral");
+        }
         if (this.artifactPlan && executionTargetKind(state) === "repository_promotion" &&
             envelope.operationResults.length === 0) {
           const target = asRecord(nestedValue(state, "executionTarget", "target"));
@@ -235,30 +255,33 @@ export class ManagedHarnessModel implements SelectedModel {
           this.feedbackPlanningReviewCount,
         );
       case "consolidation":
-        if (asArray(state.promotionAssemblies).length > 0) {
-          return {
-            kind: "promotion_authorization",
-            originalGoalContractRef: state.goalContractRef,
-            goalCoverage: "fulfilled",
-            semanticFidelity: "faithful",
-          };
+        if (this.repairConsolidation && !this.consolidationRepairSubmitted) {
+          this.consolidationRepairSubmitted = true;
+          return submitConsolidation(state, true);
         }
-        return {
-          kind: "final_dossier",
-          originalGoalContractRef: state.goalContractRef,
-          goalCoverage: "fulfilled",
-          semanticFidelity: "faithful",
-          summary: "원래 요청에 맞는 고객 응대 운영 가이드가 완성되었다",
-        };
+        return submitConsolidation(state, false);
       case "reporting":
-        return {
-          kind: "prepared_report",
-          finalDossierRef: nestedRef(state, "finalDossier", "dossier"),
-          guardVerdict: "accepted",
-          content: "고객 응대 운영 가이드를 완성했습니다. 핵심은 경청, 명확한 확인, 실행 가능한 안내, 후속 확인입니다.",
-        };
+        return submitReport(state);
     }
   }
+}
+
+function deferredForUserAuthority(kind = "managed_deferral") {
+  return {
+    kind,
+    reason: "다음 단계에는 사용자의 명시적 승인이 필요하다",
+    readiness: {
+      kind: "user_authority",
+      requiredAuthorityScopeRefs: ["authority:user-approval"],
+    },
+  };
+}
+
+function firstContinuationCandidateId(state: Record<string, unknown>): string {
+  const candidate = asRecord(asArray(state.continuationCandidates)[0]);
+  const id = candidate.candidateId;
+  if (typeof id !== "string") throw new Error("Harness continuation candidate is missing");
+  return id;
 }
 
 function executionTargetKind(state: Record<string, unknown>): unknown {

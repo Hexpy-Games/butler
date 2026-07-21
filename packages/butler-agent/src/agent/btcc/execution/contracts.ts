@@ -1,4 +1,5 @@
 import type { ContentRef } from "../core/index.ts";
+import type { OperationResult } from "../core/index.ts";
 
 export type TargetStateRevision = {
   ref: ContentRef;
@@ -57,6 +58,7 @@ export type ResultCandidateProduct = {
         commitJournalRef: ContentRef;
         promotionReceiptRef: ContentRef;
         promotedSnapshotRef: ContentRef;
+        promotionRecords: NonNullable<OperationResult["promotionRecords"]>;
         artifactRevisionRefs: ContentRef[];
       }
   );

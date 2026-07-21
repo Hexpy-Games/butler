@@ -6,7 +6,7 @@ import type {
   TurnEvent,
   TurnRecord,
 } from "../contracts.ts";
-import { requireManagedProgram } from "../managed-turn-state.ts";
+import { requireManagedPlanningAuthority } from "../managed-turn-state.ts";
 
 export function decideTransition(
   turn: TurnRecord,
@@ -113,6 +113,18 @@ export function decideTransition(
       }),
     };
   }
+  if (turn.semanticState === "task_execution" && event.kind === "PromotionDeferralAccepted") {
+    return {
+      kind: "accept_promotion_deferral",
+      successor: "work_frontier",
+      product: event.product,
+      ledgerCommit: ledgerCommit(turn, {
+        kind: "accept_promotion_deferral",
+        cursor: ledgerCursor(turn),
+        product: event.product,
+      }),
+    };
+  }
   if (turn.semanticState === "task_review" && event.kind === "TaskReviewPassed") {
     return {
       kind: "pass_task_review",
@@ -165,8 +177,27 @@ export function decideTransition(
       }),
     };
   }
+  if (isManagedDeferralState(turn.semanticState) && event.kind === "ManagedDeferralAccepted") {
+    return {
+      kind: "accept_managed_deferral",
+      successor: "consolidation",
+      product: event.product,
+      ledgerCommit: ledgerCommit(turn, {
+        kind: "accept_managed_deferral",
+        cursor: ledgerCursor(turn),
+        product: event.product,
+      }),
+    };
+  }
   if (turn.semanticState === "consolidation" && event.kind === "FinalDossierAccepted") {
     return { kind: "accept_final_dossier", successor: "reporting", product: event.product };
+  }
+  if (turn.semanticState === "consolidation" && event.kind === "ConsolidationRepairRequired") {
+    return {
+      kind: "require_consolidation_repair",
+      successor: "feedback_conception",
+      product: event.product,
+    };
   }
   if (turn.semanticState === "consolidation" && event.kind === "PromotionAuthorized") {
     return {
@@ -188,6 +219,18 @@ export function decideTransition(
       ledgerCommit: ledgerCommit(turn, {
         kind: "close_promotion_frontier",
         cursor: ledgerCursor(turn),
+      }),
+    };
+  }
+  if (turn.semanticState === "work_frontier" && event.kind === "PromotedWorkDeferred") {
+    return {
+      kind: "defer_promoted_work",
+      successor: "reporting",
+      product: event.product,
+      ledgerCommit: ledgerCommit(turn, {
+        kind: "close_deferred_promotion_frontier",
+        cursor: ledgerCursor(turn),
+        product: event.product,
       }),
     };
   }
@@ -224,12 +267,19 @@ export function decideTransition(
   throw new Error(`BTCC state/event mismatch: ${turn.semanticState}/${event.kind}`);
 }
 
+function isManagedDeferralState(state: TurnRecord["semanticState"]): boolean {
+  return state === "planning" || state === "planning_review" ||
+    state === "task_execution" || state === "task_review" ||
+    state === "feedback_conception" || state === "feedback_planning" ||
+    state === "feedback_planning_review";
+}
+
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
 function ledgerCursor(turn: TurnRecord) {
-  const program = requireManagedProgram(turn);
+  const program = requireManagedPlanningAuthority(turn);
   return {
     ledgerId: program.ledgerId,
     programId: program.programId,

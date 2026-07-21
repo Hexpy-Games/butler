@@ -4,7 +4,10 @@ import type {
   GoalContractCandidateProduct,
   OpeningContinuationProduct,
 } from "../conception/index.ts";
-import type { FinalDossierProduct } from "../consolidation/index.ts";
+import type {
+  ConsolidationRepairProduct,
+  FinalDossierProduct,
+} from "../consolidation/index.ts";
 import type {
   FeedbackPlanProduct,
   FeedbackPlanningAcceptedProduct,
@@ -19,6 +22,7 @@ import type {
   ReviewedManagedProgramState,
 } from "../work-ledger/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
+import type { ManagedDeferralProduct } from "../deferral/index.ts";
 
 export type ManagedTurnState = {
   programId?: string;
@@ -33,6 +37,8 @@ export type ManagedTurnState = {
   feedbackPlan?: FeedbackPlanProduct;
   feedbackPlanningRevision?: FeedbackPlanningRevisionRequiredProduct;
   feedbackAcceptance?: FeedbackPlanningAcceptedProduct;
+  deferral?: ManagedDeferralProduct;
+  consolidationRepair?: ConsolidationRepairProduct;
   finalDossier?: FinalDossierProduct;
   preparedReport?: PreparedReportProduct;
 };

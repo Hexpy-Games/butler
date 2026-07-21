@@ -14,6 +14,10 @@ import type {
   GoalContractAcceptedProduct,
   GoalContractCandidateProduct,
 } from "./managed-contracts.ts";
+import type {
+  ContinuationBinding,
+  DeferredContinuationCandidate,
+} from "../continuation/index.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "contract_review",
@@ -51,32 +55,49 @@ const codec: PhaseCodec<GoalContractAcceptedProduct> = {
       [candidate.candidate.proposedContract.requiredOutcome.outcomeId],
       "reviewedOutcomeIds",
     ) as [string];
+    const inboxId = requireStringState(envelope.context.stateInput, "inboxId");
+    const sessionId = requireStringState(envelope.context.stateInput, "sessionId");
+    const projectRef = optionalStringState(envelope.context.stateInput, "projectRef");
+    const continuation = selectContinuation(
+      value.continuationCandidateId,
+      envelope.context.stateInput,
+      inboxId,
+    );
     const reviewBody = {
       candidateRef: candidate.candidate.ref,
       originalGoalContractRef: candidate.candidate.proposedContract.ref,
       reviewedLensIds,
       reviewedFieldIds,
       reviewedOutcomeIds,
+      continuationBindingRef: continuation.ref,
       verdict: "accepted" as const,
     };
-    const inboxId = requireStringState(envelope.context.stateInput, "inboxId");
-    const sessionId = requireStringState(envelope.context.stateInput, "sessionId");
-    const projectRef = optionalStringState(envelope.context.stateInput, "projectRef");
     const ledgerScope = projectRef
       ? { kind: "project" as const, projectRef }
       : { kind: "session" as const, sessionId };
-    const ledgerId = projectRef
+    const defaultLedgerId = projectRef
       ? digest(`btcc-project-ledger.v1\0${projectRef}`)
       : digest(`btcc-session-ledger.v1\0${sessionId}`);
+    const ledgerId = continuation.kind === "deferred_goal"
+      ? continuation.ledgerId
+      : defaultLedgerId;
+    const programId = continuation.kind === "deferred_goal"
+      ? continuation.programId
+      : digest(
+          `btcc-program.v1\0${ledgerId}\0${inboxId}\0${envelope.binding.turnId}\0${candidate.candidate.proposedContract.ref.sha256}`,
+        );
     const authorityBody = {
       goalContractRef: candidate.candidate.proposedContract.ref,
       route: "managed" as const,
       ledgerScope,
       managedBinding: {
         ledgerId,
-        programId: digest(
-          `btcc-program.v1\0${ledgerId}\0${inboxId}\0${envelope.binding.turnId}\0${candidate.candidate.proposedContract.ref.sha256}`,
-        ),
+        programId,
+        expectedManifestRevision: continuation.kind === "deferred_goal"
+          ? continuation.expectedManifestRevision
+          : 0,
+        source: continuation.kind === "deferred_goal" ? "deferred_goal" as const : "new_program" as const,
+        continuationBinding: continuation,
       },
     };
     return {
@@ -90,6 +111,37 @@ const codec: PhaseCodec<GoalContractAcceptedProduct> = {
 
 export function reviewGoalContract(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function selectContinuation(
+  submittedCandidateId: unknown,
+  input: unknown,
+  inboxId: string,
+): ContinuationBinding {
+  const candidates = requireRecord(input, "Contract Review state input")
+    .continuationCandidates;
+  const available = Array.isArray(candidates)
+    ? candidates as DeferredContinuationCandidate[]
+    : [];
+  if (submittedCandidateId === undefined || submittedCandidateId === null) {
+    const body = { kind: "new_request" as const, inboxId };
+    return { kind: "new_request", ref: contentRef("continuation-binding", body) };
+  }
+  if (typeof submittedCandidateId !== "string") {
+    throw new Error("Continuation candidate id must be a string");
+  }
+  const candidate = available.find((item) => item.candidateId === submittedCandidateId);
+  if (!candidate) throw new Error("Conception selected an unavailable continuation candidate");
+  const body = {
+    kind: "deferred_goal" as const,
+    inboxId,
+    ...candidate,
+  };
+  return {
+    kind: "deferred_goal",
+    ref: contentRef("continuation-binding", body),
+    ...candidate,
+  };
 }
 
 function requireExactStringArray(

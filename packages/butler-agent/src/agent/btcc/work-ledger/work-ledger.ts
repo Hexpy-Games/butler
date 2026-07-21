@@ -35,6 +35,9 @@ function programIdOf(input: WorkLedgerCommit): string {
     case "close_implementation_frontier":
     case "authorize_promotion":
     case "close_promotion_frontier":
+    case "accept_managed_deferral":
+    case "accept_promotion_deferral":
+    case "close_deferred_promotion_frontier":
       return input.mutation.cursor.programId;
   }
 }

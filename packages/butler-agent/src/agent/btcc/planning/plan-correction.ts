@@ -6,7 +6,6 @@ import {
   runPhaseConversation,
   stableJson,
   type ContentRef,
-  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
@@ -17,6 +16,7 @@ import type {
   ManagedTask,
   TaskImpact,
 } from "./contracts.ts";
+import { withManagedDeferral } from "../deferral/index.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
 
 const CONTRACT: PhaseContract = {
@@ -37,7 +37,7 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-const codec: PhaseCodec<FeedbackPlanProduct> = {
+const codec = withManagedDeferral<FeedbackPlanProduct>({
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
     const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;
@@ -50,13 +50,13 @@ const codec: PhaseCodec<FeedbackPlanProduct> = {
       throw new Error("Feedback Planning changed the accepted correction kind");
     }
     const currentPlanRef = requireContentRef(state.workPlanRef, "workPlanRef");
-    const taskRef = requireContentRef(state.taskRef, "taskRef");
+    const affectedTaskRefs = requireContentRefs(state.affectedTaskRefs, "affectedTaskRefs");
     const lifecycleRef = requireContentRef(state.artifactLifecycleRef, "artifactLifecycleRef");
     const revisionOrigin = revisionOriginFrom(state);
     if (value.correctionKind === "implementation_repair") {
       const correctionPlan = correctionPlanFor(
         currentPlanRef,
-        taskRef,
+        affectedTaskRefs,
         lifecycleRef,
         value.correctionAction,
       );
@@ -91,7 +91,7 @@ const codec: PhaseCodec<FeedbackPlanProduct> = {
     const impactMap = decodeImpactMap(value.impactMap, currentTasks, revisedPlan.tasks);
     const correctionPlan = correctionPlanFor(
       revisedPlan.plan.ref,
-      taskRef,
+      affectedTaskRefs,
       revisedPlan.artifactLifecycle.ref,
       value.correctionAction,
     );
@@ -112,7 +112,7 @@ const codec: PhaseCodec<FeedbackPlanProduct> = {
       proposedAuthority: proposedAuthority!,
     });
   },
-};
+});
 
 export function proposeCorrectionOrRevision(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
@@ -128,14 +128,14 @@ function authorityRevision(previousAuthorityRef: ContentRef, change: unknown) {
 
 function correctionPlanFor(
   governingWorkPlanRef: ContentRef,
-  targetTaskRef: ContentRef,
+  targetTaskRefs: [ContentRef, ...ContentRef[]],
   artifactLifecycleRef: ContentRef,
   action: unknown,
 ) {
   const body = {
     kind: "correction_plan" as const,
     governingWorkPlanRef,
-    targetTaskRef,
+    targetTaskRefs,
     correctionAction: requireString(action, "correctionAction"),
     artifactLifecycleRef,
   };
@@ -209,4 +209,10 @@ function requireContentRef(value: unknown, label: string): ContentRef {
     id: requireString(record.id, `${label}.id`),
     sha256: requireString(record.sha256, `${label}.sha256`),
   };
+}
+
+function requireContentRefs(value: unknown, label: string): [ContentRef, ...ContentRef[]] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} is empty`);
+  return value.map((item, index) =>
+    requireContentRef(item, `${label}[${index}]`)) as [ContentRef, ...ContentRef[]];
 }
