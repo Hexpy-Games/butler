@@ -16,7 +16,7 @@ import type {
   ReviewObservation,
   TaskReviewProduct,
 } from "./contracts.ts";
-import { withManagedDeferral } from "../deferral/index.ts";
+import { withManagedDeferral, withManagedDeferralSchema } from "../deferral/index.ts";
 import { taskReviewSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
@@ -34,7 +34,7 @@ const CONTRACT: PhaseContract = {
 };
 
 const codec = withManagedDeferral<TaskReviewProduct>({
-  submissionSchema: taskReviewSubmissionSchema,
+  submissionSchema: taskReviewSubmissionSchema("semantic"),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Review state");
     const result = state.resultCandidate as ResultCandidateProduct | undefined;
@@ -126,8 +126,24 @@ const codec = withManagedDeferral<TaskReviewProduct>({
   },
 });
 
+const promotionCodec = {
+  ...codec,
+  submissionSchema: withManagedDeferralSchema(
+    taskReviewSubmissionSchema("promotion_identity"),
+  ),
+};
+
 export function reviewTask(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = requireRecord(command.context.stateInput, "Task Review state");
+  const result = state.resultCandidate as ResultCandidateProduct | undefined;
+  if (result?.kind !== "result_candidate") {
+    throw new Error("Task Review is missing its exact ResultCandidate");
+  }
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: result.result.kind === "repository_promotion" ? promotionCodec : codec,
+  });
 }
 
 function decodeCriterionVerdicts(input: {

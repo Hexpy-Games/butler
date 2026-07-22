@@ -10,11 +10,12 @@ import {
 const commonCriterionFields = {
   observation: textSchema(),
 };
-const criterionVerdict = variantsSchema(
-  objectSchema({
-    ...commonCriterionFields,
-    verdict: literalSchema("satisfied"),
-  }),
+const satisfiedCriterionVerdict = objectSchema({
+  ...commonCriterionFields,
+  verdict: literalSchema("satisfied"),
+});
+const semanticCriterionVerdict = variantsSchema(
+  satisfiedCriterionVerdict,
   objectSchema({
     ...commonCriterionFields,
     verdict: literalSchema("not_satisfied"),
@@ -31,7 +32,14 @@ const criterionVerdict = variantsSchema(
   }),
 );
 
-export const taskReviewSubmissionSchema = objectSchema({
-  kind: literalSchema("task_review"),
-  criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),
-});
+export type TaskReviewMode = "semantic" | "promotion_identity";
+
+export function taskReviewSubmissionSchema(mode: TaskReviewMode) {
+  const criterionVerdict = mode === "promotion_identity"
+    ? satisfiedCriterionVerdict
+    : semanticCriterionVerdict;
+  return objectSchema({
+    kind: literalSchema("task_review"),
+    criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),
+  });
+}
