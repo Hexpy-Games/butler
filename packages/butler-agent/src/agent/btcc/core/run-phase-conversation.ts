@@ -102,7 +102,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
     if (round.kind === "interruption") {
       throw new OperationalInterruptionError(
         round.code,
-        command.binding,
+        envelope.binding,
         round.activation,
       );
     }
@@ -144,7 +144,7 @@ function decodePhaseSubmission<Product>(
   } catch (error) {
     throw new OperationalInterruptionError(
       "provider_phase_submission_invalid",
-      command.binding,
+      envelope.binding,
       { kind: "automatic_provider_recovery" },
       error,
     );
