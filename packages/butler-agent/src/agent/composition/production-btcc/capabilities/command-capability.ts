@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
 import { OperationRejectedError } from "../../../btcc/index.ts";
+import { isolatedCommandInvocation } from "./command-sandbox.ts";
 
 export async function executeCommandCapability(
   args: Record<string, unknown>,
@@ -11,10 +12,10 @@ export async function executeCommandCapability(
   const cwd = await resolveCommandDirectory(context.workspacePath, args.cwd);
   const timeoutMs = number(args.timeout_ms, 120_000);
   const maxOutput = number(args.max_output_tokens, 20_000) * 4;
+  const invocation = isolatedCommandInvocation(command, context);
   return new Promise((resolve, reject) => {
-    const child = spawn(command, {
+    const child = spawn(invocation.executable, invocation.args, {
       cwd,
-      shell: true,
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });

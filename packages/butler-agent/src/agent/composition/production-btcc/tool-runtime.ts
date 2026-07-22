@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type {
   OperationRequest,
   PhaseEnvelope,
@@ -31,9 +32,9 @@ export function createProductionToolRuntime(
         request,
       ),
     createWorkspaceToolExecutor: ({ workspacePath, envelope, request }) =>
-      toolExecutor(options, envelope, workspacePath, request),
+      toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
     createIsolatedValidationExecutor: ({ workspacePath, envelope, request }) =>
-      toolExecutor(options, envelope, workspacePath, request),
+      toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
     validateOperationInput: ({ request, args }) => validateInput(request, args),
   };
 }
@@ -43,6 +44,10 @@ function toolExecutor(
   envelope: PhaseEnvelope,
   workspacePath: string,
   request: OperationRequest,
+  commandFilesystemBoundary?: {
+    kind: "isolated_workspace";
+    deniedReadWriteRoots: string[];
+  },
 ) {
   return async (call: {
     name: string;
@@ -62,8 +67,19 @@ function toolExecutor(
         ? { resolveProjectLedgerRoot: options.resolveProjectLedgerRoot }
         : {}),
       originalRequest: envelope.context.originalMessage,
+      ...(commandFilesystemBoundary ? { commandFilesystemBoundary } : {}),
       signal: call.signal,
     });
+  };
+}
+
+function isolatedBoundary(envelope: PhaseEnvelope) {
+  const deniedReadWriteRoots = envelope.context.baselineObservationScopeRefs
+    .filter((scope) => scope.startsWith("workspace:"))
+    .map((scope) => resolve(scope.slice("workspace:".length)));
+  return {
+    kind: "isolated_workspace" as const,
+    deniedReadWriteRoots: [...new Set(deniedReadWriteRoots)],
   };
 }
 
