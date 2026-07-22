@@ -11,6 +11,18 @@ import type {
   ManagedTask,
   PlanningCandidate,
 } from "../contracts.ts";
+import {
+  assertExactStrings,
+  readGoalFields,
+  readRequiredOutcomeRefs,
+  requireArray,
+  requiredTaskRecord,
+  taskByRef,
+  taskMap,
+  uniqueRefs,
+  uniqueStrings,
+} from "./lifecycle-record-rules.ts";
+import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
 
 type PromotionSelector = PlanningCandidate["artifactLifecycle"]["promotionSelectors"][number];
 
@@ -27,7 +39,8 @@ export function materializePromotionSelectors(
       "Promotion implementation Task",
     ).map((id) => requiredTask(byId, id, "implementation", "workspace_artifact"));
     if (implementationTaskRefs.length === 0) {
-      throw new Error("Promotion selector requires implementation Tasks");
+      rejectPlanningProposal("promotion_implementation_missing",
+        "Promotion selector requires implementation Tasks");
     }
     const integrationTaskRef = requiredTask(
       byId, requireString(draft.integrationTaskId, "integrationTaskId"),
@@ -74,7 +87,8 @@ export function materializeEffectIntents(
     const draft = requireRecord(item, `effectIntents[${index}]`);
     const task = requiredTaskRecord(byId, requireString(draft.taskId, "effect.taskId"));
     if (task.effectClass !== "external_effect") {
-      throw new Error("EffectIntent names a Task without an external-effect boundary");
+      rejectPlanningProposal("effect_boundary_missing",
+        "EffectIntent names a Task without an external-effect boundary");
     }
     const actionKind = requireString(draft.actionKind, "effect.actionKind");
     const action = actionKind === "repository_promotion"
@@ -127,7 +141,10 @@ export function materializeIntegrationCriteria(
     const selector = selectors.find((candidate) =>
       candidate.integrationTaskRef.id === integrationTask.ref.id &&
       candidate.promotionTaskRef.id === promotionTask.ref.id);
-    if (!selector) throw new Error("IntegrationCriterion has no matching promotion selector");
+    if (!selector) {
+      rejectPlanningProposal("integration_selector_missing",
+        "IntegrationCriterion has no matching promotion selector");
+    }
     const participatingTaskRefs = uniqueStrings(
       requireStringArray(draft.participatingTaskIds, "participatingTaskIds"),
       "Integration participating Task",
@@ -162,11 +179,13 @@ export function materializeIntegrationCriteria(
     if (!criteria.some((criterion) =>
       criterion.integrationTaskRef.id === selector.integrationTaskRef.id &&
       criterion.promotionTaskRef.id === selector.promotionTaskRef.id)) {
-      throw new Error("Promotion selector has no IntegrationCriterion");
+      rejectPlanningProposal("selector_integration_criterion_missing",
+        "Promotion selector has no IntegrationCriterion");
     }
   }
   if (selectors.length === 0 && criteria.length !== 0) {
-    throw new Error("IntegrationCriterion requires a promotion selector");
+    rejectPlanningProposal("integration_selector_required",
+      "IntegrationCriterion requires a promotion selector");
   }
   return criteria;
 }
@@ -175,24 +194,17 @@ function validateTaskEffects(task: ManagedTask, effects: ManagedEffectIntent[]):
   const owned = effects.filter((effect) =>
     effect.owningTaskKey.taskLogicalId === task.taskLogicalId);
   if (task.effectClass === "external_effect" && owned.length === 0) {
-    throw new Error(`External-effect Task has no EffectIntent: ${task.taskLogicalId}`);
+    rejectPlanningProposal("effect_intent_missing",
+      `External-effect Task has no EffectIntent: ${task.taskLogicalId}`);
   }
   if (task.effectClass === "none" && owned.length !== 0) {
-    throw new Error(`Effect-free Task has EffectIntents: ${task.taskLogicalId}`);
+    rejectPlanningProposal("unexpected_effect_intent",
+      `Effect-free Task has EffectIntents: ${task.taskLogicalId}`);
   }
   if (task.artifactPolicy.kind === "repository_promotion" && owned.length !== 1) {
-    throw new Error(`Promotion Task requires exactly one EffectIntent: ${task.taskLogicalId}`);
+    rejectPlanningProposal("promotion_effect_intent_count",
+      `Promotion Task requires exactly one EffectIntent: ${task.taskLogicalId}`);
   }
-}
-
-function taskMap(tasks: ManagedTask[]): Map<string, ManagedTask> {
-  return new Map(tasks.map((task) => [task.taskLogicalId, task]));
-}
-
-function requiredTaskRecord(tasks: Map<string, ManagedTask>, logicalId: string): ManagedTask {
-  const task = tasks.get(logicalId);
-  if (!task) throw new Error(`Planning reference has no Task: ${logicalId}`);
-  return task;
 }
 
 function requiredTask(
@@ -201,15 +213,10 @@ function requiredTask(
 ): ContentRef {
   const task = requiredTaskRecord(tasks, logicalId);
   if (task.artifactPolicy.kind !== policyKind) {
-    throw new Error(`Promotion selector ${role} Task has incompatible artifact policy`);
+    rejectPlanningProposal("promotion_task_policy_incompatible",
+      `Promotion selector ${role} Task has incompatible artifact policy`);
   }
   return task.ref;
-}
-
-function taskByRef(tasks: ManagedTask[], ref: ContentRef): ManagedTask {
-  const task = tasks.find((candidate) => candidate.ref.id === ref.id);
-  if (!task) throw new Error(`Planning reference has no Task: ${ref.id}`);
-  return task;
 }
 
 function effectTarget(task: ManagedTask): string {
@@ -217,17 +224,22 @@ function effectTarget(task: ManagedTask): string {
     return task.artifactPolicy.targetScopeRef;
   }
   if (task.artifactPolicy.kind !== "non_artifact" || task.artifactPolicy.targetScopeRefs.length !== 1) {
-    throw new Error("External EffectIntent requires one exact non-workspace target");
+    rejectPlanningProposal("external_effect_target_invalid",
+      "External EffectIntent requires one exact non-workspace target");
   }
   return task.artifactPolicy.targetScopeRefs[0]!;
 }
 
 function repositoryPromotionAction(task: ManagedTask, selectors: PromotionSelector[]) {
   if (task.artifactPolicy.kind !== "repository_promotion") {
-    throw new Error("Repository promotion EffectIntent names a non-promotion Task");
+    rejectPlanningProposal("promotion_effect_task_invalid",
+      "Repository promotion EffectIntent names a non-promotion Task");
   }
   const selector = selectors.find((candidate) => candidate.promotionTaskRef.id === task.ref.id);
-  if (!selector) throw new Error("Repository promotion EffectIntent has no selector");
+  if (!selector) {
+    rejectPlanningProposal("promotion_effect_selector_missing",
+      "Repository promotion EffectIntent has no selector");
+  }
   return {
     kind: "repository_promotion" as const,
     selectorRef: selector.ref,
@@ -237,14 +249,15 @@ function repositoryPromotionAction(task: ManagedTask, selectors: PromotionSelect
 
 function externalOperationAction(task: ManagedTask, action: string) {
   if (task.artifactPolicy.kind !== "non_artifact") {
-    throw new Error("External operation EffectIntent has incompatible artifact policy");
+    rejectPlanningProposal("external_operation_policy_incompatible",
+      "External operation EffectIntent has incompatible artifact policy");
   }
   return { kind: "external_operation" as const, action };
 }
 
 function promotionTarget(task: ManagedTask): string {
   if (task.artifactPolicy.kind !== "repository_promotion") {
-    throw new Error("Promotion Task policy is invalid");
+    rejectPlanningProposal("promotion_policy_invalid", "Promotion Task policy is invalid");
   }
   return task.artifactPolicy.targetScopeRef;
 }
@@ -256,44 +269,16 @@ function assertArtifactTarget(tasks: ManagedTask[], refs: ContentRef[], targetSc
       task.artifactPolicy.kind !== "workspace_artifact" ||
       task.artifactPolicy.targetScopeRef !== targetScopeRef
     ) {
-      throw new Error("Promotion selector Tasks do not share the exact artifact target");
+      rejectPlanningProposal("promotion_target_mismatch",
+        "Promotion selector Tasks do not share the exact artifact target");
     }
   }
 }
 
-function readGoalFields(value: unknown): Array<"request" | "intended_result"> {
-  const fields = uniqueStrings(requireStringArray(value, "sourceGoalFieldIds"), "Goal field");
-  if (fields.length === 0 || fields.some((field) => field !== "request" && field !== "intended_result")) {
-    throw new Error("Planning record references an unknown or empty Goal field set");
-  }
-  return fields as Array<"request" | "intended_result">;
-}
-
-function readRequiredOutcomeRefs(value: unknown, requiredOutcomeId: string): string[] {
-  const refs = uniqueStrings(requireStringArray(value, "sourceRequiredOutcomeRefs"), "Outcome ref");
-  if (refs.length !== 1 || refs[0] !== requiredOutcomeId) {
-    throw new Error("Planning record does not bind the accepted required outcome");
-  }
-  return refs;
-}
-
-function requireArray(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
-  return value;
-}
-
-function uniqueStrings(values: string[], label: string): string[] {
-  if (new Set(values).size !== values.length) throw new Error(`${label} is not unique`);
-  return values;
-}
-
-function uniqueRefs(refs: ContentRef[]): ContentRef[] {
-  return [...new Map(refs.map((ref) => [ref.id, ref])).values()];
-}
-
 function assertDirectDependency(required: ContentRef, actual: ContentRef[]): void {
   if (!actual.some((ref) => ref.id === required.id)) {
-    throw new Error("Promotion Task must directly depend on its integration Task");
+    rejectPlanningProposal("promotion_direct_dependency_missing",
+      "Promotion Task must directly depend on its integration Task");
   }
 }
 
@@ -310,20 +295,18 @@ function assertDependencyClosure(
     if (reachable.has(ref.id)) continue;
     reachable.add(ref.id);
     const task = byRef.get(ref.id);
-    if (!task) throw new Error(`Promotion dependency has no Task: ${ref.id}`);
+    if (!task) {
+      rejectPlanningProposal("promotion_dependency_unknown",
+        `Promotion dependency has no Task: ${ref.id}`);
+    }
     frontier.push(...task.dependencyTaskRefs);
   }
   if (required.some((ref) => !reachable.has(ref.id))) {
-    throw new Error("Promotion dependency closure is missing");
-  }
-}
-
-function assertExactStrings(actual: string[], expected: string[], label: string): void {
-  if (actual.length !== expected.length || actual.some((id) => !expected.includes(id))) {
-    throw new Error(`${label} does not match the planned graph`);
+    rejectPlanningProposal("promotion_dependency_closure_missing",
+      "Promotion dependency closure is missing");
   }
 }
 
 function invalidAction(): never {
-  throw new Error("EffectIntent action kind is invalid");
+  rejectPlanningProposal("effect_action_invalid", "EffectIntent action kind is invalid");
 }

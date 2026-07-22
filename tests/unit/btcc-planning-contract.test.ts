@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { authorPlanCandidate } from "../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
+import {
+  authorPlanCandidate,
+  authorPlanningProposal,
+} from "../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
 import { reviewPlan } from "../../packages/butler-agent/src/agent/btcc/planning/review-plan.ts";
-import { attestReviewedPlanReferences } from "../../packages/butler-agent/src/agent/btcc/planning/review-plan-attestation.ts";
-import { OperationalInterruptionError } from "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import type { PlanningCandidate } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
 import { planCandidateSubmissionSchema } from
@@ -114,37 +115,34 @@ describe("BTCC Planning contract", () => {
     }
   });
 
-  test("Planning Review accepts only exact effect and integration ref attestations", async () => {
+  test("binds runtime-owned refs without asking the reviewer to echo them", async () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
     const accepted = await reviewPlan(reviewInvocation(candidate, {
-      reviewedEffectIntentRefs: candidate.effectIntents.map((effect) => effect.ref),
-      reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
+      kind: "planning_review", verdict: "accepted", findings: [],
     }));
     expect(accepted.kind).toBe("planning_accepted");
+    if (accepted.kind !== "planning_accepted") throw new Error("expected accepted plan");
+    expect(accepted.review.reviewedEffectIntentRefs)
+      .toEqual(candidate.effectIntents.map((effect) => effect.ref));
+    expect(accepted.review.reviewedIntegrationCriterionRefs)
+      .toEqual(candidate.integrationCriteria.map((item) => item.ref));
+  });
 
-    expect(() => attestReviewedPlanReferences({
-      reviewedEffectIntentRefs: [],
-      reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
-    }, candidate)).toThrow("EffectIntent refs do not match the exact candidate set");
+  test("routes a structurally invalid proposal through Planning Review revision", async () => {
+    const submission = artifactPlan();
+    submission.integrationCriteria[0]!.participatingTaskIds = ["implement"];
+    const draft = authorPlanningProposal(submission, authoringState());
+    expect("validationFindings" in draft).toBe(true);
+    if (!("validationFindings" in draft)) throw new Error("expected Planning draft");
 
-    expect(() => attestReviewedPlanReferences({
-      reviewedEffectIntentRefs: [candidate.effectIntents[0]!.ref, candidate.effectIntents[0]!.ref],
-      reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
-    }, candidate)).toThrow("EffectIntent refs contain duplicates");
-
-    try {
-      await reviewPlan(reviewInvocation(candidate, {
-        reviewedEffectIntentRefs: [],
-        reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
-      }));
-      throw new Error("expected Planning Review contract interruption");
-    } catch (error) {
-      expect(error).toBeInstanceOf(OperationalInterruptionError);
-      expect((error as OperationalInterruptionError).code).toBe("phase_contract_interruption");
-      expect((error as OperationalInterruptionError).activation).toEqual({
-        kind: "runtime_remediation",
-      });
-    }
+    const reviewed = await reviewPlan(reviewInvocation(draft, {
+      kind: "planning_review",
+      verdict: "revision_required",
+      findings: ["Align the participating Task set with the promotion selector."],
+    }));
+    expect(reviewed.kind).toBe("planning_revision_required");
+    if (reviewed.kind !== "planning_revision_required") throw new Error("expected revision");
+    expect(reviewed.review.findings.join("\n")).toContain("planned_graph_mismatch");
   });
 });
 
@@ -238,11 +236,8 @@ function artifactTask(
 }
 
 function reviewInvocation(
-  candidate: PlanningCandidate,
-  refs: {
-    reviewedEffectIntentRefs: Array<{ id: string; sha256: string }>;
-    reviewedIntegrationCriterionRefs: Array<{ id: string; sha256: string }>;
-  },
+  candidate: PlanningCandidate | ReturnType<typeof authorPlanningProposal>,
+  submission: Record<string, unknown>,
 ) {
   const modelSelection = {
     provider: "openai",
@@ -281,7 +276,7 @@ function reviewInvocation(
     model: {
       runRound: async () => ({
         kind: "phase_submission" as const,
-        submission: { kind: "planning_review", verdict: "accepted", findings: [], ...refs },
+        submission,
         actualIdentity: modelSelection,
       }),
     },

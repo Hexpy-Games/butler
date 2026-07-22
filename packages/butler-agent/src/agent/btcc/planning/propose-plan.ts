@@ -11,7 +11,7 @@ import type { PlanningCandidateProduct } from "./contracts.ts";
 import type { PlanningContinuation } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
-import { authorPlanCandidate } from "./plan-graph/index.ts";
+import { authorPlanningProposal } from "./plan-graph/index.ts";
 import { planCandidateSubmissionSchema } from "./submission-schemas.ts";
 import { decodeAvailableSpecs } from "./decode-available-specs.ts";
 
@@ -48,7 +48,7 @@ function planningCodec(availableSpecIds: string[]) {
       requireLiteral(value.kind, "plan_candidate", "Planning kind");
       return {
       kind: "plan_candidate",
-      candidate: authorPlanCandidate(value, {
+      candidate: authorPlanningProposal(value, {
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
