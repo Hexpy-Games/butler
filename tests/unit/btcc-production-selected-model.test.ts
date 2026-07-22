@@ -284,7 +284,7 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "provider_protocol_interruption",
-      activation: { kind: "runtime_remediation" },
+      activation: { kind: "automatic_provider_recovery" },
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
@@ -392,7 +392,7 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "provider_empty_response",
-      activation: { kind: "runtime_remediation" },
+      activation: { kind: "automatic_provider_recovery" },
     });
   });
 });

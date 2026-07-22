@@ -84,7 +84,8 @@ async function runPhaseConversationAtCheckpoint<Product>(
     }
     if (conversation.pendingSubmissionRound) {
       assertActualModel(command.modelSelection, conversation.pendingSubmissionRound.actualIdentity);
-      const product = command.codec.decode(
+      const product = decodePhaseSubmission(
+        command,
         conversation.pendingSubmissionRound.submission,
         envelope,
       );
@@ -119,6 +120,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
       };
       continue;
     }
+    decodePhaseSubmission(command, round.submission, envelope);
     conversation = {
       ...conversation,
       binding: await command.store.appendPhaseSubmission({
@@ -129,6 +131,23 @@ async function runPhaseConversationAtCheckpoint<Product>(
       }),
       pendingSubmissionRound: round,
     };
+  }
+}
+
+function decodePhaseSubmission<Product>(
+  command: PhaseConversationCommand<Product>,
+  submission: unknown,
+  envelope: PhaseEnvelope,
+): Product {
+  try {
+    return command.codec.decode(submission, envelope);
+  } catch (error) {
+    throw new OperationalInterruptionError(
+      "provider_phase_submission_invalid",
+      command.binding,
+      { kind: "automatic_provider_recovery" },
+      error,
+    );
   }
 }
 
