@@ -11,6 +11,7 @@ import type {
   ScenarioFixture,
 } from "../contracts.ts";
 import type { LoadedFixtureCatalog } from "./fixture-catalog.ts";
+import { canonicalLocalMessage } from "./canonical-conversation.ts";
 
 export function materializeScenario(input: {
   scenario: LiveScenario;
@@ -71,7 +72,11 @@ export function materializeScenario(input: {
         context.mandatoryHotCache.push(content);
         for (const turn of input.scenario.turns) {
           if (turn.inbound.kind === "canonical_local_ref") {
-            canonicalMessages.set(turn.inbound.messageRef, content);
+            const message = canonicalLocalMessage(turn.inbound.messageRef);
+            if (!message) {
+              throw new Error(`Missing canonical local message: ${turn.inbound.messageRef}`);
+            }
+            canonicalMessages.set(turn.inbound.messageRef, message);
           }
         }
         break;

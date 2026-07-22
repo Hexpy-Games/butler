@@ -57,6 +57,11 @@ describe("BTCC live diagnostic readiness", () => {
         const content = fixture.canonicalMessages.get(turn.inbound.messageRef);
         expect(content).toBeDefined();
         expect(sha256(content!)).toBe(turn.inbound.contentSha256);
+        if (scenario.scenarioId === "LIVE-SANDY-PREVIOUS-FAILURE") {
+          expect(fixture.context.mandatoryHotCache).toHaveLength(1);
+          expect(fixture.context.mandatoryHotCache[0]).toContain("Messaging transport: Discord");
+          expect(fixture.context.mandatoryHotCache[0]).not.toBe(content);
+        }
       }
     }
   });
