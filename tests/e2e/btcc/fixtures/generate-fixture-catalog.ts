@@ -14,9 +14,7 @@ import type {
 } from "../contracts.ts";
 import { REPOSITORY_ROOT } from "../environment/live-run-environment.ts";
 import { hashDirectory } from "./fixture-digest.ts";
-
-const PRIOR_SANDY_MESSAGE =
-  "이제 잘된다! 잘했어. 그런데 이제 음성이 Wav파일이라 그런지 그냥 첨부파일로 붙어버리네. 물론재생 컨트롤은 나오지만 파일이름 없이 재생컨트롤만 나오는 그런 음성메시지로 보낼 수 있는 방법은 없는지 알아봐줄래";
+import { priorConversationFixture } from "./canonical-conversation.ts";
 
 export function ensureRepoLocalFixtureCatalog(scenarios: LiveScenario[]): string {
   const fixtures = fixtureRequirements(scenarios);
@@ -211,7 +209,11 @@ function writeLedgerFixture(root: string, ref: string): void {
 }
 
 function textFixture(ref: string, setupKind: string): string {
-  if (setupKind === "bind_prior_conversation") return PRIOR_SANDY_MESSAGE;
+  if (setupKind === "bind_prior_conversation") {
+    const conversation = priorConversationFixture(ref);
+    if (!conversation) throw new Error(`Missing prior conversation fixture: ${ref}`);
+    return conversation;
+  }
   if (ref.includes("sandy-access-supersession")) {
     return [
       "# Mandatory fixture access convention",
