@@ -22,7 +22,7 @@ const CONTRACT: PhaseContract = {
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
     "review_correction_exactly", "review_dependencies", "review_verification_integration",
-    "review_effect_authority", "review_artifact_lifecycle", "request_revision_when_needed",
+    "review_effect_authority", "review_artifact_lifecycle",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",

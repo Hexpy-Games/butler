@@ -10,6 +10,10 @@ import { providerCarrierSchema } from "./provider-carrier-schema.ts";
 import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
 import type { PhaseGuidanceReader } from "../../guidance/index.ts";
 import { loadBasePrompt } from "./base-phase-prompts.ts";
+import {
+  resolveDutyInstructions,
+  resolveProhibitionInstructions,
+} from "./prompt-duty-catalog.ts";
 
 export async function renderPhasePrompt(
   envelope: PhaseEnvelope,
@@ -86,9 +90,14 @@ function exactPhaseContract(envelope: PhaseEnvelope) {
   return {
     phase: envelope.phase,
     objective: envelope.objective,
-    duties: envelope.duties,
-    prohibitions: envelope.prohibitions,
-    ...(envelope.exitDuties ? { exitDuties: envelope.exitDuties } : {}),
+    duties: resolveDutyInstructions(envelope.duties),
+    prohibitions: resolveProhibitionInstructions(envelope.prohibitions),
+    ...(envelope.exitDuties
+      ? {
+          exitDuties: Object.fromEntries(Object.entries(envelope.exitDuties)
+            .map(([exit, duties]) => [exit, resolveDutyInstructions(duties)])),
+        }
+      : {}),
     ...(envelope.authoringContractRefs
       ? { authoringContractRefs: envelope.authoringContractRefs }
       : {}),

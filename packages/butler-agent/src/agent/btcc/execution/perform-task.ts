@@ -22,12 +22,12 @@ const CONTRACT: PhaseContract = {
   objective: "execute_the_exact_accepted_task_and_record_its_concrete_result",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "execute_accepted_task", "record_concrete_result", "bind_current_target_revisions",
+    "execute_accepted_task", "record_concrete_result",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
-    "no_self_review", "no_unaccepted_sibling_work",
+    "no_self_review",
   ],
 };
 

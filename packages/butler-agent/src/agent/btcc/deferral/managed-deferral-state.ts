@@ -10,6 +10,7 @@ export function withManagedDeferralState(
 ): PhaseInvocation {
   return {
     ...phase,
+    duties: appendManagedDeferralDuty(phase.duties),
     context: {
       ...phase.context,
       stateInput: {
@@ -18,6 +19,12 @@ export function withManagedDeferralState(
       },
     },
   };
+}
+
+function appendManagedDeferralDuty(duties: readonly string[]): string[] {
+  return duties.includes("author_managed_deferral")
+    ? [...duties]
+    : [...duties, "author_managed_deferral"];
 }
 
 function deferralContextFor(turn: TurnRecord): ManagedDeferralContext {

@@ -117,9 +117,32 @@ describe("production BTCC selected model", () => {
     expect(hierarchy.immutablePhaseContract).toEqual({
       phase: "planning",
       objective: "Author the smallest sufficient plan.",
-      duties: ["preserve_original_goal", "author_smallest_sufficient_plan"],
-      prohibitions: ["no_model_substitution", "no_hidden_retry_loop"],
-      exitDuties: { PlanCandidate: ["declare_verification_integration"] },
+      duties: [
+        {
+          id: "preserve_original_goal",
+          instruction: expect.stringContaining("immutable GoalContract"),
+        },
+        {
+          id: "author_smallest_sufficient_plan",
+          instruction: expect.stringContaining("fewest cohesive Works"),
+        },
+      ],
+      prohibitions: [
+        {
+          id: "no_model_substitution",
+          instruction: expect.stringContaining("switch models"),
+        },
+        {
+          id: "no_hidden_retry_loop",
+          instruction: expect.stringContaining("unchanged semantic output"),
+        },
+      ],
+      exitDuties: {
+        PlanCandidate: [{
+          id: "declare_verification_integration",
+          instruction: expect.stringContaining("observable criteria"),
+        }],
+      },
       authoringContractRefs: ["spec-authoring@1"],
       authoringContracts: [{
         contractId: "spec-authoring",
