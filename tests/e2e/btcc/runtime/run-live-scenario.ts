@@ -23,6 +23,7 @@ import {
   seedProviderConfiguration,
   type LiveRunEnvironment,
 } from "../environment/live-run-environment.ts";
+import { observeLiveOperationalStall } from "./live-operational-watch.ts";
 
 export async function runLiveScenario(input: {
   environment: LiveRunEnvironment;
@@ -40,7 +41,10 @@ export async function runLiveScenario(input: {
     scenarioRoot,
     catalog: input.catalog,
   });
-  seedProviderConfiguration(input.environment.sourceButlerData, fixture.butlerData);
+  seedProviderConfiguration(
+    input.environment.sourceButlerData,
+    fixture.butlerData,
+  );
   process.env.BUTLER_DATA = fixture.butlerData;
   const dbPath = join(fixture.butlerData, "runtime", "btcc-live.sqlite");
   seedAppProjectBinding({ dbPath, fixture });
@@ -59,19 +63,37 @@ export async function runLiveScenario(input: {
       const turnId = `${input.environment.runId}:${input.modelCell.id}:${step.stepId}`;
       let stopPromise: Promise<unknown> | undefined;
       let stopIssued = false;
+      let operationalFailure: unknown;
+      const operationalWatch = observeLiveOperationalStall({
+        dbPath,
+        turnId,
+        onStalled(error) {
+          if (stopIssued) return;
+          stopIssued = true;
+          operationalFailure = error;
+          stopPromise = composition.runtime.handle({ kind: "stop", turnId });
+        },
+      });
       const stopObserving = composition.observeTurn(turnId, {
         stateChanged(update) {
+          void operationalWatch.observer.stateChanged(update);
           if (
             !stopIssued &&
-            step.appActions.some((action) => action.kind === "ui_stop_active_turn") &&
+            step.appActions.some(
+              (action) => action.kind === "ui_stop_active_turn",
+            ) &&
             update.semanticState === "reporting"
           ) {
             stopIssued = true;
             stopPromise = composition.runtime.handle({ kind: "stop", turnId });
           }
         },
+        operationalNoticeChanged:
+          operationalWatch.observer.operationalNoticeChanged,
       });
-      let outcome: Awaited<ReturnType<typeof composition.runtime.handle>> | undefined;
+      let outcome:
+        | Awaited<ReturnType<typeof composition.runtime.handle>>
+        | undefined;
       let failure: unknown;
       try {
         const command = turnCommand({
@@ -84,34 +106,53 @@ export async function runLiveScenario(input: {
         });
         outcome = await composition.runtime.handle(command);
         await stopPromise;
+        if (operationalFailure) throw operationalFailure;
       } catch (error) {
         failure = error;
       } finally {
         stopObserving();
+        operationalWatch.close();
       }
       const workspaceAfter = snapshotFiles(fixture.workspacePath);
-      if (!existsSync(dbPath)) throw failure ?? new Error("BTCC production composition did not create its SQLite store");
-      observations.push(readTurnObservation({
-        dbPath,
-        turnId,
-        step,
-        modelCell: input.modelCell,
-        workspaceBefore,
-        workspaceAfter,
-        ...(outcome
-          ? { outcome: { kind: outcome.kind, ...(outcome.kind === "delivered" ? { content: outcome.content } : {}) } }
-          : {}),
-        ...(failure ? { error: failure } : {}),
-      }));
+      if (!existsSync(dbPath))
+        throw (
+          failure ??
+          new Error(
+            "BTCC production composition did not create its SQLite store",
+          )
+        );
+      observations.push(
+        readTurnObservation({
+          dbPath,
+          turnId,
+          step,
+          modelCell: input.modelCell,
+          workspaceBefore,
+          workspaceAfter,
+          ...(outcome
+            ? {
+                outcome: {
+                  kind: outcome.kind,
+                  ...(outcome.kind === "delivered"
+                    ? { content: outcome.content }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(failure ? { error: failure } : {}),
+        }),
+      );
       workspaceBefore = workspaceAfter;
       previousTurnId = turnId;
     }
   } finally {
     composition.close();
   }
-  const runtimeStatus = observations.every((turn) =>
-    !turn.error && turn.runtimeChecks.every((check) => check.passed),
-  ) ? "observed" : "failed";
+  const runtimeStatus = observations.every(
+    (turn) => !turn.error && turn.runtimeChecks.every((check) => check.passed),
+  )
+    ? "observed"
+    : "failed";
   return {
     schema: "butler.btcc.live-diagnostic-row.v1",
     runId: input.environment.runId,
@@ -122,34 +163,54 @@ export async function runLiveScenario(input: {
     turns: observations,
     runtimeStatus,
     proofEligible: false,
-    proofGaps: [...new Set(observations.flatMap((turn) => turn.proofGaps))].sort(),
+    proofGaps: [
+      ...new Set(observations.flatMap((turn) => turn.proofGaps)),
+    ].sort(),
     preservedRoot: scenarioRoot,
   };
 }
 
 function persistContext(
   fixture: ScenarioFixture,
-  documents: ReturnType<typeof createProductionBtccComposition>["contextDocuments"],
+  documents: ReturnType<
+    typeof createProductionBtccComposition
+  >["contextDocuments"],
 ): ButlerContextInput {
   const userRef = "btcc-live-e2e-user";
   const persist = (
-    projectionClass: "profile" | "recent_feedback" | "mandatory_hot_cache" | "optional_hot_cache",
+    projectionClass:
+      | "profile"
+      | "recent_feedback"
+      | "mandatory_hot_cache"
+      | "optional_hot_cache",
     contents: string[],
-  ) => contents.map((content, index) => documents.persist({
-    scopeKind: "user",
-    scopeId: userRef,
-    projectionClass,
-    sourceId: `btcc-live:${projectionClass}:${index}`,
-    sourceRevision: digest(content),
-    content,
-  }));
+  ) =>
+    contents.map((content, index) =>
+      documents.persist({
+        scopeKind: "user",
+        scopeId: userRef,
+        projectionClass,
+        sourceId: `btcc-live:${projectionClass}:${index}`,
+        sourceRevision: digest(content),
+        content,
+      }),
+    );
   return {
     userRef,
     ...(fixture.projectRef ? { projectRef: fixture.projectRef } : {}),
     profileRefs: persist("profile", fixture.context.profile),
-    recentFeedbackRefs: persist("recent_feedback", fixture.context.recentFeedback),
-    mandatoryHotCacheRefs: persist("mandatory_hot_cache", fixture.context.mandatoryHotCache),
-    optionalHotCacheRefs: persist("optional_hot_cache", fixture.context.optionalHotCache),
+    recentFeedbackRefs: persist(
+      "recent_feedback",
+      fixture.context.recentFeedback,
+    ),
+    mandatoryHotCacheRefs: persist(
+      "mandatory_hot_cache",
+      fixture.context.mandatoryHotCache,
+    ),
+    optionalHotCacheRefs: persist(
+      "optional_hot_cache",
+      fixture.context.optionalHotCache,
+    ),
     baselineObservationScopeRefs: [
       `workspace:${fixture.workspacePath}`,
       "web:current",
@@ -175,7 +236,8 @@ function turnCommand(input: {
     controlsHash: digest({ source: "btcc_live_e2e_exact_cell" }),
   };
   if (input.step.inbound.kind === "authorized_continuation_wake") {
-    if (!input.previousTurnId) throw new Error("Continuation wake has no source Turn");
+    if (!input.previousTurnId)
+      throw new Error("Continuation wake has no source Turn");
     return {
       kind: "wake",
       turnId: input.turnId,
@@ -207,15 +269,23 @@ function turnCommand(input: {
   };
 }
 
-function inboundText(step: LiveScenario["turns"][number], fixture: ScenarioFixture): string {
+function inboundText(
+  step: LiveScenario["turns"][number],
+  fixture: ScenarioFixture,
+): string {
   if (step.inbound.kind === "inline_utf8") return step.inbound.text;
   if (step.inbound.kind === "authorized_continuation_wake") {
     throw new Error("Authorized wake is not an inline message");
   }
   const content = fixture.canonicalMessages.get(step.inbound.messageRef);
-  if (!content) throw new Error(`Canonical fixture message is missing: ${step.inbound.messageRef}`);
+  if (!content)
+    throw new Error(
+      `Canonical fixture message is missing: ${step.inbound.messageRef}`,
+    );
   if (digest(content) !== step.inbound.contentSha256) {
-    throw new Error(`Canonical fixture message hash mismatch: ${step.inbound.messageRef}`);
+    throw new Error(
+      `Canonical fixture message hash mismatch: ${step.inbound.messageRef}`,
+    );
   }
   return content;
 }
