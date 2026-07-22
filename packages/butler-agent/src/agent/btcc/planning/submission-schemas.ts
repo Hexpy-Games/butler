@@ -175,26 +175,41 @@ export function feedbackPlanSubmissionSchema(logicalIds: string[]): SubmissionSc
   );
 }
 
-const feedbackReviewFields = {
+const feedbackReviewIdentity = {
   kind: literalSchema("feedback_planning_review"),
   candidateRef: contentRefSchema(),
   reviewedCorrectionPlanRef: contentRefSchema(),
-  verdict: enumSchema("accepted", "revision_required"),
-  findings: textList(),
 };
+
+const acceptedFeedbackReview = {
+  ...feedbackReviewIdentity,
+  verdict: literalSchema("accepted"),
+  findings: arraySchema(textSchema(), { maxItems: 0 }),
+};
+
+const revisionFeedbackReview = {
+  ...feedbackReviewIdentity,
+  verdict: literalSchema("revision_required"),
+  findings: arraySchema(textSchema(), { minItems: 1 }),
+};
+
+function feedbackReviewVariants(fields: Record<string, SubmissionSchema>) {
+  return [
+    objectSchema({ ...acceptedFeedbackReview, ...fields }),
+    objectSchema({ ...revisionFeedbackReview, ...fields }),
+  ];
+}
+
 export const feedbackPlanReviewSubmissionSchema = variantsSchema(
-  objectSchema({
-    ...feedbackReviewFields,
+  ...feedbackReviewVariants({
     correctionKind: literalSchema("implementation_repair"),
   }),
-  objectSchema({
-    ...feedbackReviewFields,
+  ...feedbackReviewVariants({
     correctionKind: literalSchema("governing_revision"),
     reviewedNextPlanCandidateRef: contentRefSchema(),
     reviewedImpactMap: arraySchema(impact, { minItems: 1 }),
   }),
-  objectSchema({
-    ...feedbackReviewFields,
+  ...feedbackReviewVariants({
     correctionKind: literalSchema("authority_scope_revision"),
     reviewedNextPlanCandidateRef: contentRefSchema(),
     reviewedImpactMap: arraySchema(impact, { minItems: 1 }),
