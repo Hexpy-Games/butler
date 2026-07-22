@@ -141,17 +141,23 @@ describe("production BTCC capabilities", () => {
       args: {
         kinds: ["spec"],
         query: "unmatched architecture Sandy voice",
-        include_body: true,
+        include_body: false,
       },
       rawArguments: JSON.stringify({
         kinds: ["spec"],
         query: "unmatched architecture Sandy voice",
-        include_body: true,
+        include_body: false,
       }),
     });
     expect((searched as { records: unknown[] }).records).toContainEqual(
       expect.objectContaining({ id: "SPEC-SANDY-TRUST", kind: "spec" }),
     );
+    expect(JSON.stringify(searched)).not.toContain("Preserve Sandy's voice");
+    await expect(execute({
+      name: "project_ledger_read",
+      args: { query: "Sandy voice", include_body: true },
+      rawArguments: JSON.stringify({ query: "Sandy voice", include_body: true }),
+    })).rejects.toThrow("require explicit record_ids");
 
     const reviewRequest: Extract<OperationRequest, { kind: "review_validation" }> = {
       requestId: "ledger-review-1",

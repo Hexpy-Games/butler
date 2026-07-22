@@ -10,7 +10,7 @@ import { compileCompletedToolEvidencePointers } from "../../../agent/context/com
 import type { PromptUsageAttribution } from "../runtime-contracts.ts";
 import { estimateTokensForModel } from "../model-catalog.ts";
 
-export type RequestContextMeasurement = "serialized_utf8_upper_bound";
+export type RequestContextMeasurement = "model_token_estimate";
 export type RequestContextAdmission = "admitted" | "reduce" | "cannot_fit_required";
 
 export interface ContextAtomRef {
@@ -134,11 +134,14 @@ export function admitSerializedProviderRequest(
   );
   const compiledBody = compileCompletedToolEvidencePointers({
     body: input.body,
-    maxSerializedBytes: Math.max(0, inputCapacityTokens - providerEnvelopeTokens),
+    maxSerializedTokens: Math.max(0, inputCapacityTokens - providerEnvelopeTokens),
+    measureSerializedTokens: (value) =>
+      estimateTokensForModel(JSON.stringify(value), capacity.modelRef).tokens,
   });
   const serializedRequest = JSON.stringify(compiledBody);
   const serializedRequestHash = sha256(serializedRequest);
-  const compiledInputTokens = Buffer.byteLength(serializedRequest, "utf8") + providerEnvelopeTokens;
+  const estimatedInputTokens = estimateTokensForModel(serializedRequest, capacity.modelRef).tokens;
+  const compiledInputTokens = estimatedInputTokens + providerEnvelopeTokens;
   const plan: ModelRequestContextPlan = {
     request_id: `request-${serializedRequestHash.slice(0, 24)}`,
     turn_id: input.turnId?.trim() || "unattributed",
@@ -149,7 +152,7 @@ export function admitSerializedProviderRequest(
     max_input_tokens: configuredInputCapacity,
     provider_envelope_tokens: providerEnvelopeTokens,
     input_capacity_tokens: Math.max(0, inputCapacityTokens),
-    measurement: "serialized_utf8_upper_bound",
+    measurement: "model_token_estimate",
     required_atoms: [...(input.requiredAtoms ?? [])],
     optional_atoms: [...(input.optionalAtoms ?? [])],
     tool_schema_tokens: Math.max(0, Math.trunc(
@@ -175,8 +178,7 @@ export function admitSerializedProviderRequest(
       plan,
     });
   }
-  plan.budget_input_tokens = estimateTokensForModel(serializedRequest, capacity.modelRef).tokens +
-    providerEnvelopeTokens;
+  plan.budget_input_tokens = compiledInputTokens;
   input.usageAttribution?.beforeAdmittedModelRequest?.({
     roundIndex: Math.max(0, Math.trunc(input.roundIndex ?? input.usageAttribution.roundIndex ?? 0)),
     phase: input.usageAttribution.phase,

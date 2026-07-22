@@ -7,6 +7,9 @@ import {
   toolResultPayloadForProvider,
 } from "../../packages/butler-agent/src/agent/context/completed-tool-evidence.ts";
 
+const measureSerializedBytes = (value: Record<string, unknown>) =>
+  Buffer.byteLength(JSON.stringify(value), "utf8");
+
 test("completed tool evidence retains exact raw output while exposing only safe packet data", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-completed-evidence-"));
   try {
@@ -331,7 +334,8 @@ test("request compilation admits a fresh provider-safe result inline when the ex
     const fullCapacity = Buffer.byteLength(JSON.stringify(body), "utf8");
     const compiled = compileCompletedToolEvidencePointers({
       body,
-      maxSerializedBytes: fullCapacity,
+      maxSerializedTokens: fullCapacity,
+      measureSerializedTokens: measureSerializedBytes,
     });
     const content = JSON.parse((compiled.messages as Array<{ content: string }>)[0]!.content);
 
@@ -387,7 +391,8 @@ test("capacity admission keeps bounded conversation messages inline without evid
     };
     const compiled = compileCompletedToolEvidencePointers({
       body,
-      maxSerializedBytes: Buffer.byteLength(JSON.stringify(body), "utf8"),
+      maxSerializedTokens: Buffer.byteLength(JSON.stringify(body), "utf8"),
+      measureSerializedTokens: measureSerializedBytes,
     });
     const serialized = JSON.stringify(compiled);
 
@@ -424,7 +429,8 @@ test("request compilation keeps a non-fitting result pointer-only without losing
     const pointerCapacity = Buffer.byteLength(JSON.stringify(pointer), "utf8");
     const compiled = compileCompletedToolEvidencePointers({
       body,
-      maxSerializedBytes: pointerCapacity,
+      maxSerializedTokens: pointerCapacity,
+      measureSerializedTokens: measureSerializedBytes,
     });
     const content = JSON.parse((compiled.messages as Array<{ content: string }>)[0]!.content);
 
@@ -473,7 +479,8 @@ test("capacity admission prioritizes the newest completed result without content
     const newestOnlyCapacity = Buffer.byteLength(JSON.stringify(newestOnlyBody), "utf8");
     const compiled = compileCompletedToolEvidencePointers({
       body,
-      maxSerializedBytes: newestOnlyCapacity,
+      maxSerializedTokens: newestOnlyCapacity,
+      measureSerializedTokens: measureSerializedBytes,
     });
     const messages = compiled.messages as Array<{ content: string }>;
     const compiledOlder = JSON.parse(messages[0]!.content);
@@ -513,7 +520,8 @@ test("capacity admission never re-inlines evidence older than the newest semanti
     const body = { messages };
     const compiled = compileCompletedToolEvidencePointers({
       body,
-      maxSerializedBytes: Buffer.byteLength(JSON.stringify(body), "utf8"),
+      maxSerializedTokens: Buffer.byteLength(JSON.stringify(body), "utf8"),
+      measureSerializedTokens: measureSerializedBytes,
     });
     const outputs = (compiled.messages as Array<{ content: string }>)
       .map((message) => JSON.parse(message.content).output);
@@ -537,7 +545,8 @@ test("capacity compilation leaves unrelated JSON text byte-stable", () => {
   };
   const compiled = compileCompletedToolEvidencePointers({
     body,
-    maxSerializedBytes: 100_000,
+    maxSerializedTokens: 100_000,
+    measureSerializedTokens: measureSerializedBytes,
   });
 
   expect((compiled.messages as Array<{ content: string }>)[0]!.content).toBe(userJson);
