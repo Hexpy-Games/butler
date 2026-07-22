@@ -193,6 +193,7 @@ export async function handleNativeStewardTelegramTurn(
     appMessageDbPath,
     ownerId: `native-steward:${process.pid}`,
   });
+  if ("ready" in btcc && btcc.ready) await btcc.ready;
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
 
   try {

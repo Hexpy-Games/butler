@@ -29,6 +29,7 @@ export type {
   PhaseCodec,
   PhaseContract,
   PhaseConversationCommand,
+  PhaseConversationSnapshot,
   PhaseConversationStore,
   PhaseEnvelope,
   PhaseInvocation,

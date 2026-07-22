@@ -6,12 +6,20 @@ import {
   type BtccTurnProgressObserver,
   type BtccTurnRuntime,
 } from "../btcc/index.ts";
-import { openBtccSqliteStores } from "../adapters/index.ts";
+import {
+  createProjectWorkLedgerPublicationAdapter,
+  decodeProjectLedgerBinding,
+  openBtccSqliteStores,
+  type BtccProjectLedgerRuntime,
+} from "../adapters/index.ts";
 import {
   createProductionCapabilityCatalog,
   createProductionToolRuntime,
   BtccTurnProgressHub,
 } from "./production-btcc/index.ts";
+import { join } from "node:path";
+import { ActiveProjectLedgerResolver } from
+  "../../integrations/project-ledger/active-project-ledger-reference.ts";
 
 export function createBtccComposition(input: {
   dbPath: string;
@@ -19,8 +27,13 @@ export function createBtccComposition(input: {
   model: BtccRuntimeDependencies["model"];
   operations: BtccRuntimeDependencies["operations"];
   artifacts: BtccRuntimeDependencies["artifacts"];
+  projectLedger?: BtccProjectLedgerRuntime;
 }): BtccTurnRuntime {
-  const stores = openBtccSqliteStores({ dbPath: input.dbPath, ownerId: input.ownerId });
+  const stores = openBtccSqliteStores({
+    dbPath: input.dbPath,
+    ownerId: input.ownerId,
+    ...(input.projectLedger ? { projectLedger: input.projectLedger } : {}),
+  });
   return createBtccTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
@@ -39,18 +52,43 @@ export function createProductionBtccComposition(input: {
   appMessageDbPath: string;
   ownerId: string;
 }) {
+  const projectLedgerResolver = new ActiveProjectLedgerResolver();
+  const resolveProjectRoot = (projectRef: string): string => {
+    const binding = decodeProjectLedgerBinding(projectRef);
+    const reference = binding.kind === "canonical_ledger_id"
+      ? projectLedgerResolver.resolve({
+          butlerData: input.butlerData,
+          explicitRef: binding.ledgerProjectId,
+        })
+      : projectLedgerResolver.resolve({
+          butlerData: input.butlerData,
+          appMessageDbPath: input.appMessageDbPath,
+          appProjectId: binding.appProjectId,
+        });
+    if (!reference.initialized) {
+      throw new Error("Project-bound BTCC work requires an initialized Project Ledger");
+    }
+    return reference.ledger_root;
+  };
   const stores = openBtccSqliteStores({
     dbPath: input.appMessageDbPath,
     ownerId: input.ownerId,
+    projectLedger: {
+      publications: createProjectWorkLedgerPublicationAdapter({
+        stagingRoot: join(input.butlerData, "runtime", "btcc-project-ledger-publications"),
+      }),
+      resolveProjectRoot,
+    },
   });
   const operationRuntime = createProductionOperationRuntime({
     butlerData: input.butlerData,
     resolveTargetScope: async (targetScopeRef) => ({
       targetPath: resolveWorkspaceTargetScope(targetScopeRef),
     }),
-    ...createProductionToolRuntime(input),
+    ...createProductionToolRuntime({ ...input, resolveProjectLedgerRoot: resolveProjectRoot }),
   });
   const progress = new BtccTurnProgressHub();
+  const ready = stores.turns.recoverPendingProjectLedgerPromotions();
   const runtime = createBtccTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
@@ -72,6 +110,7 @@ export function createProductionBtccComposition(input: {
     observeTurn: (turnId: string, observer: BtccTurnProgressObserver) =>
       progress.observe(turnId, observer),
     close: stores.close,
+    ready,
   };
 }
 

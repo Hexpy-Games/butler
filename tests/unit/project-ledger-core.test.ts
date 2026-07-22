@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
+import { hostname, tmpdir } from "os";
 import { join } from "path";
 import { pathToFileURL } from "url";
 
@@ -87,6 +87,32 @@ test("Project Ledger core modules can be imported and used without spawning the 
     expect(status.counts.work).toBe(1);
     expect(queryIndex(loadIndex(project), "recent-completed").map((item: any) => item.id)).toContain("W-CORE");
     expect(existsSync(join(ledgerProjectRoot(project), "work", "W-CORE", "work.md"))).toBe(true);
+  } finally {
+    restoreButlerData();
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test("Project Ledger mutations recover an exact dead process claim", async () => {
+  const project = tempProject();
+  const restoreButlerData = useTestButlerData(project);
+  try {
+    const { handle } = await importModule("commands.js");
+    const { mutationLockPath, withProjectLedgerMutation } =
+      await importModule("mutation-lock.js");
+    handle("init", [], { project, id: "demo", name: "Demo Project" });
+    const lockPath = mutationLockPath(project);
+    mkdirSync(join(lockPath, ".."), { recursive: true });
+    writeFileSync(lockPath, `${JSON.stringify({
+      schema: "project-ledger.mutation-claim.v1",
+      claimId: "dead-claim",
+      hostId: hostname(),
+      processId: 2_147_483_647,
+      processStartedAtMs: 1,
+    })}\n`, "utf8");
+
+    expect(withProjectLedgerMutation(project, () => "recovered")).toBe("recovered");
+    expect(existsSync(lockPath)).toBe(false);
   } finally {
     restoreButlerData();
     rmSync(project, { recursive: true, force: true });

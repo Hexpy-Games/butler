@@ -104,19 +104,43 @@ export interface SelectedModel {
   runRound(envelope: PhaseEnvelope, signal?: AbortSignal): Promise<ProviderRoundValue>;
 }
 
+export type PhaseConversationSnapshot<Product> = {
+  binding: PhaseRunBinding;
+  acceptedProduct: Product | null;
+  acceptedActualIdentity?: ActualModelIdentity;
+  operationResults: OperationResult[];
+  pendingOperationRound?: {
+    requests: OperationRequest[];
+    actualIdentity: ActualModelIdentity;
+  };
+  pendingSubmissionRound?: {
+    submission: unknown;
+    actualIdentity: ActualModelIdentity;
+  };
+};
+
 export interface PhaseConversationStore {
-  loadAcceptedProduct<Product>(binding: PhaseRunBinding): Promise<Product | null>;
-  persistAcceptedProduct<Product>(input: {
+  restore<Product>(binding: PhaseRunBinding): Promise<PhaseConversationSnapshot<Product>>;
+  appendOperationRound(input: {
+    binding: PhaseRunBinding;
+    envelope: PhaseEnvelope;
+    requests: OperationRequest[];
+    actualIdentity: ActualModelIdentity;
+  }): Promise<PhaseRunBinding>;
+  appendOperationResults(input: {
+    binding: PhaseRunBinding;
+    results: Array<{ request: OperationRequest; result: OperationResult }>;
+  }): Promise<PhaseRunBinding>;
+  appendPhaseSubmission(input: {
+    binding: PhaseRunBinding;
+    envelope: PhaseEnvelope;
+    submission: unknown;
+    actualIdentity: ActualModelIdentity;
+  }): Promise<PhaseRunBinding>;
+  acceptPhaseProduct<Product>(input: {
     binding: PhaseRunBinding;
     product: Product;
-    actualIdentity: ActualModelIdentity;
-  }): Promise<void>;
-  loadOperationResults(binding: PhaseRunBinding): Promise<OperationResult[]>;
-  appendOperationResult(input: {
-    binding: PhaseRunBinding;
-    request: OperationRequest;
-    result: OperationResult;
-  }): Promise<void>;
+  }): Promise<PhaseRunBinding>;
 }
 
 export type OperationAuthority = {

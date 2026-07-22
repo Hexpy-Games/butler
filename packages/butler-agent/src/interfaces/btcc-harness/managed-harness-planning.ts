@@ -6,6 +6,7 @@ export type HarnessCorrectionKind =
 export function submitInitialPlan(state: Record<string, unknown>) {
   return {
     kind: "plan_candidate",
+    ...governingSelection(state),
     strategy: "조사와 가이드 완성을 독립적으로 검토 가능한 두 Task로 구성한다",
     works: [{
       logicalId: "customer-service-guide",
@@ -110,11 +111,13 @@ export function submitArtifactPlan(state: Record<string, unknown>) {
       payload: targetScopeRef,
       desiredOutcome: "the target equals the reviewed isolated candidate",
       sourceGoalFieldIds: ["intended_result"],
+      sourceRequiredOutcomeRefs: [state.requiredOutcomeId],
     }],
     integrationCriteria: [{
       logicalId: "artifact-candidate-integration",
       statement: "the complete isolated candidate remains compatible before promotion",
       sourceGoalFieldIds: ["request", "intended_result"],
+      sourceRequiredOutcomeRefs: [state.requiredOutcomeId],
       participatingTaskIds: ["implement-artifact", "integrate-artifact"],
       integrationTaskId: "integrate-artifact",
       promotionTaskId: "promote-artifact",
@@ -211,6 +214,7 @@ export function submitFeedbackPlanningReview(
 
 function revisedPlanSubmission(state: Record<string, unknown>) {
   return {
+    ...governingSelection(state),
     strategy: "리뷰 피드백에 따라 조사와 가이드 작성 경계를 명확히 다시 구성한다",
     works: [{
       logicalId: "customer-service-guide",
@@ -241,6 +245,14 @@ function revisedPlanSubmission(state: Record<string, unknown>) {
     }],
     ...emptyPlanningConsiderations(),
   };
+}
+
+function governingSelection(state: Record<string, unknown>): Record<string, unknown> {
+  const available = asArray(state.availableSpecs);
+  const logicalIds = available
+    .map((spec) => asRecord(spec).logicalId)
+    .filter((logicalId): logicalId is string => typeof logicalId === "string");
+  return logicalIds.length > 0 ? { governingSpecSelections: logicalIds } : {};
 }
 
 function taskSubmission(input: {

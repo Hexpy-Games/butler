@@ -11,8 +11,8 @@ composition reached the observed route, trace, final disposition, and accepted
 product model identities.
 
 It intentionally does **not** emit a canonical live-matrix pass. The current
-production surface does not expose installed-App/UI driving, every provider
-round identity, or the canonical semantic assertion resolvers required by
+production surface does not expose installed-App/UI driving or the canonical
+semantic assertion resolvers required by
 `SPEC-BTCC-PROOF-REGISTRY-AND-LIVE-MATRIX`. Reports therefore use
 `butler.btcc.live-diagnostic-*.v1` and set `proofEligible: false`. The live
 commands exit successfully when every row satisfies the declared diagnostic

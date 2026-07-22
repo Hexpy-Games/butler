@@ -12,6 +12,7 @@ import { planning } from "./planning/index.ts";
 import { reporting } from "./reporting/index.ts";
 import {
   createTurnExecutionSupervisor,
+  LedgerContentionInterruption,
   OperationalInterruptionError,
   type OperationalCheckpointAnchor,
   type ExecutionPermit,
@@ -55,6 +56,7 @@ async function runBtccTurn(
   supervisor: TurnExecutionSupervisor,
 ): Promise<BtccTurnOutcome> {
   let turn = await loadOrAdmitTurn(command, dependencies);
+  turn = await dependencies.turns.activateCommittedSuccessor(turn.turnId);
   await publishProgress(dependencies.progress, turn);
   while (!isTerminal(turn)) {
     const permit = supervisor.enter({
@@ -77,6 +79,22 @@ async function runBtccTurn(
       await dependencies.turns.commitTransition({ turn, claim, transition });
       permit.assertActive();
     } catch (error) {
+      if (error instanceof LedgerContentionInterruption) {
+        try {
+          await error.waitForRelease(permit.signal);
+        } catch (waitError) {
+          const stopped = await dependencies.turns.findTurn(turn.turnId);
+          if (stopped && isTerminal(stopped)) {
+            turn = stopped;
+            continue;
+          }
+          throw waitError;
+        }
+        const reloaded = await dependencies.turns.findTurn(turn.turnId);
+        if (!reloaded) throw new Error("Contended BTCC Turn disappeared", { cause: error });
+        turn = reloaded;
+        continue;
+      }
       const observed = await dependencies.turns.findTurn(turn.turnId);
       if (observed && isTerminal(observed)) {
         turn = observed;
@@ -189,9 +207,7 @@ async function activateCommittedSuccessor(
   turnId: string,
   dependencies: BtccRuntimeDependencies,
 ): Promise<TurnRecord> {
-  const turn = await dependencies.turns.findTurn(turnId);
-  if (!turn) throw new Error(`BTCC Turn disappeared after commit: ${turnId}`);
-  return turn;
+  return dependencies.turns.activateCommittedSuccessor(turnId);
 }
 
 export function createBtccTurnRuntime(
