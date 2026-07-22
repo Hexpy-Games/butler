@@ -1,5 +1,6 @@
 export { createTurnExecutionSupervisor } from "./turn-execution-supervisor.ts";
 export { shouldScheduleAutomaticRecovery } from "./automatic-recovery-policy.ts";
+export { LedgerContentionInterruption } from "./ledger-contention-interruption.ts";
 export {
   isBtccOperationalInterruption,
   OperationalInterruptionError,

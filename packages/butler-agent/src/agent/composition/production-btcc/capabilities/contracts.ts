@@ -7,6 +7,7 @@ export type CapabilityExecutionContext = {
   butlerData: string;
   workspacePath: string;
   observationScopeRef?: string;
+  resolveProjectLedgerRoot?(projectRef: string): string;
   originalRequest: string;
   signal?: AbortSignal;
 };

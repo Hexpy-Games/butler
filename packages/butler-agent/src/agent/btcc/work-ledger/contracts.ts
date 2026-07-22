@@ -11,6 +11,7 @@ import type { ManagedAttempt } from "../work/index.ts";
 import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import type { PromotionDeferralProduct } from "../deferral/index.ts";
+import type { AvailableSpecRevision } from "../planning/contracts.ts";
 
 export type ManagedProgramAuthority = {
   ledgerId: string;
@@ -18,6 +19,9 @@ export type ManagedProgramAuthority = {
   manifestRevision: number;
   goalContractRef: ContentRef;
   authorityRef: ContentRef;
+  availableSpecRefs: ContentRef[];
+  availableSpecs: AvailableSpecRevision[];
+  governingSpecRefs: ContentRef[];
   requiredOutcomeId: string;
 };
 

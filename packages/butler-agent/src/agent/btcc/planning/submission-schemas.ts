@@ -86,20 +86,41 @@ const promotionSelector = objectSchema({
   integrationTaskId: textSchema(),
   promotionTaskId: textSchema(),
 });
+const specifications = arraySchema(objectSchema({
+  logicalId: textSchema(),
+  title: textSchema(),
+  body: textSchema(),
+}), { minItems: 1 });
+const promotionSelectors = arraySchema(promotionSelector, { minItems: 1 });
 
-export const revisedPlanSubmissionSchema = variantsSchema(
-  objectSchema(planFields),
-  objectSchema({ ...planFields, promotionSelectors: arraySchema(promotionSelector, { minItems: 1 }) }),
-);
+export function revisedPlanSubmissionSchema(logicalIds: string[]): SubmissionSchema {
+  return variantsSchema(...planVariants({}, logicalIds));
+}
 
-export const planCandidateSubmissionSchema = variantsSchema(
-  objectSchema({ kind: literalSchema("plan_candidate"), ...planFields }),
-  objectSchema({
-    kind: literalSchema("plan_candidate"),
-    ...planFields,
-    promotionSelectors: arraySchema(promotionSelector, { minItems: 1 }),
-  }),
-);
+export function planCandidateSubmissionSchema(logicalIds: string[]): SubmissionSchema {
+  return variantsSchema(...planVariants({ kind: literalSchema("plan_candidate") }, logicalIds));
+}
+
+function planVariants(
+  prefix: Record<string, SubmissionSchema>,
+  logicalIds: string[],
+): SubmissionSchema[] {
+  const base = { ...prefix, ...planFields };
+  const variants = [
+    objectSchema(base),
+    objectSchema({ ...base, specifications }),
+    objectSchema({ ...base, promotionSelectors }),
+    objectSchema({ ...base, specifications, promotionSelectors }),
+  ];
+  if (logicalIds.length === 0) return variants;
+  const governingSpecSelections = arraySchema(enumSchema(...logicalIds), { minItems: 1 });
+  return [...variants,
+    objectSchema({ ...base, governingSpecSelections }),
+    objectSchema({ ...base, specifications, governingSpecSelections }),
+    objectSchema({ ...base, governingSpecSelections, promotionSelectors }),
+    objectSchema({ ...base, specifications, governingSpecSelections, promotionSelectors }),
+  ];
+}
 
 export const planReviewSubmissionSchema = variantsSchema(
   objectSchema({
@@ -108,6 +129,14 @@ export const planReviewSubmissionSchema = variantsSchema(
     findings: arraySchema(textSchema(), { maxItems: 0 }),
     reviewedEffectIntentRefs: arraySchema(contentRefSchema()),
     reviewedIntegrationCriterionRefs: arraySchema(contentRefSchema()),
+  }),
+  objectSchema({
+    kind: literalSchema("planning_review"),
+    verdict: literalSchema("accepted"),
+    findings: arraySchema(textSchema(), { maxItems: 0 }),
+    reviewedEffectIntentRefs: arraySchema(contentRefSchema()),
+    reviewedIntegrationCriterionRefs: arraySchema(contentRefSchema()),
+    reviewedSpecRevisionRefs: arraySchema(contentRefSchema(), { minItems: 1 }),
   }),
   objectSchema({
     kind: literalSchema("planning_review"),
@@ -128,7 +157,9 @@ const impact = variantsSchema(
   }),
 );
 
-export const feedbackPlanSubmissionSchema: SubmissionSchema = variantsSchema(
+export function feedbackPlanSubmissionSchema(logicalIds: string[]): SubmissionSchema {
+  const revisedPlan = revisedPlanSubmissionSchema(logicalIds);
+  return variantsSchema(
   objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
     correctionKind: literalSchema("implementation_repair"),
@@ -138,18 +169,19 @@ export const feedbackPlanSubmissionSchema: SubmissionSchema = variantsSchema(
     kind: literalSchema("feedback_plan_candidate"),
     correctionKind: literalSchema("governing_revision"),
     correctionAction: textSchema(),
-    revisedPlan: revisedPlanSubmissionSchema,
+    revisedPlan,
     impactMap: arraySchema(impact, { minItems: 1 }),
   }),
   objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
     correctionKind: literalSchema("authority_scope_revision"),
     correctionAction: textSchema(),
-    revisedPlan: revisedPlanSubmissionSchema,
+    revisedPlan,
     impactMap: arraySchema(impact, { minItems: 1 }),
     authorityChange: textSchema(),
   }),
-);
+  );
+}
 
 const feedbackReviewFields = {
   kind: literalSchema("feedback_planning_review"),

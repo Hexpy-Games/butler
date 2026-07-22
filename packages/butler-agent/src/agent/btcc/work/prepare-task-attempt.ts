@@ -1,5 +1,6 @@
 import type { ArtifactWorkspaceRuntime } from "../artifact/index.ts";
 import { contentRef } from "../core/index.ts";
+import { ledgerAttemptRef } from "../work-ledger/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 import type { ManagedAttempt } from "./contracts.ts";
 
@@ -20,7 +21,14 @@ export async function prepareTaskAttempt(input: {
       ? { correctionPlanRef: input.program.correctionPlanRef }
       : {}),
   };
-  const attemptRef = contentRef("attempt", attemptBody);
+  const attemptRef = ledgerAttemptRef({
+    ledgerId: input.program.ledgerId,
+    programId: input.program.programId,
+    turnId: input.turnId,
+    expectedTurnRevision: input.turnRevision + 1,
+    taskRef: input.task.task.ref,
+    record: attemptBody,
+  });
   const common = { ...attemptBody, ref: attemptRef, status: "ready" as const };
   const policy = input.task.task.artifactPolicy;
   if (policy.kind === "non_artifact") {

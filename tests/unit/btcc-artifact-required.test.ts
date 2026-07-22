@@ -151,10 +151,17 @@ function invocation(
       stateInput,
     },
     store: {
-      loadAcceptedProduct: async () => null,
-      persistAcceptedProduct: async () => undefined,
-      loadOperationResults: async () => results,
-      appendOperationResult: async () => undefined,
+      restore: async (binding) => ({ binding, acceptedProduct: null, operationResults: results }),
+      appendOperationRound: async () => { throw new Error("unexpected operation round"); },
+      appendOperationResults: async () => { throw new Error("unexpected operation results"); },
+      appendPhaseSubmission: async ({ binding }) => ({
+        ...binding,
+        checkpointRevision: binding.checkpointRevision + 1,
+      }),
+      acceptPhaseProduct: async ({ binding }) => ({
+        ...binding,
+        checkpointRevision: binding.checkpointRevision + 1,
+      }),
     },
     model: {
       runRound: async () => ({

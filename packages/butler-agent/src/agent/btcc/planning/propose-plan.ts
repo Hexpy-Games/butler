@@ -13,6 +13,7 @@ import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
 import { planCandidateSubmissionSchema } from "./submission-schemas.ts";
+import { decodeAvailableSpecs } from "./decode-available-specs.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -23,6 +24,7 @@ const CONTRACT: PhaseContract = {
     "bind_normative_goal_sets", "declare_work_task_dependencies",
     "declare_verification_integration", "declare_effects_risks_assumptions",
     "author_artifact_lifecycle", "candidate_revision_lineage",
+    "author_managed_deferral",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -37,13 +39,14 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-const codec = withManagedDeferral<PlanningCandidateProduct>({
-  submissionSchema: planCandidateSubmissionSchema,
-  decode(submission, envelope) {
-    const state = requireRecord(envelope.context.stateInput, "Planning state");
-    const value = requireRecord(submission, "Planning submission");
-    requireLiteral(value.kind, "plan_candidate", "Planning kind");
-    return {
+function planningCodec(availableSpecIds: string[]) {
+  return withManagedDeferral<PlanningCandidateProduct>({
+    submissionSchema: planCandidateSubmissionSchema(availableSpecIds),
+    decode(submission, envelope) {
+      const state = requireRecord(envelope.context.stateInput, "Planning state");
+      const value = requireRecord(submission, "Planning submission");
+      requireLiteral(value.kind, "plan_candidate", "Planning kind");
+      return {
       kind: "plan_candidate",
       candidate: authorPlanCandidate(value, {
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
@@ -56,6 +59,9 @@ const codec = withManagedDeferral<PlanningCandidateProduct>({
           state.observedManifestRevision,
           "observedManifestRevision",
         ),
+        governingSpecRefs: requireContentRefs(state.governingSpecRefs, "governingSpecRefs"),
+        availableSpecs: decodeAvailableSpecs(state.availableSpecs),
+        requireGoverningSpec: Boolean(state.requireGoverningSpec),
         ...(state.previousCandidateRef
           ? { previousCandidateRef: requireContentRef(state.previousCandidateRef, "previousCandidateRef") }
           : {}),
@@ -66,12 +72,19 @@ const codec = withManagedDeferral<PlanningCandidateProduct>({
           ? { continuation: state.continuation as PlanningContinuation }
           : {}),
       }),
-    };
-  },
-});
+      };
+    },
+  });
+}
 
 export function proposePlan(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = requireRecord(command.context.stateInput, "Planning state");
+  const availableSpecs = decodeAvailableSpecs(state.availableSpecs);
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: planningCodec(availableSpecs.map((spec) => spec.logicalId)),
+  });
 }
 
 function requireWorkspaceScope(scopeRefs: readonly string[]): string {
@@ -93,4 +106,9 @@ function requireContentRef(value: unknown, label: string): ContentRef {
     id: requireString(record.id, `${label}.id`),
     sha256: requireString(record.sha256, `${label}.sha256`),
   };
+}
+
+function requireContentRefs(value: unknown, label: string): ContentRef[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
 }

@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
-import { stableJson } from "../../core/index.ts";
-import type { WorkLedgerMutation } from "../../work-ledger/index.ts";
 import type {
   AcceptedTurnTransition,
   TurnEvent,
   TurnRecord,
   TurnTransitionDecision,
 } from "../contracts.ts";
-import { requireManagedPlanningAuthority } from "../managed-turn-state.ts";
+import { ledgerCommit, ledgerCursor } from "./ledger-transition.ts";
 
 export function decideTransition(
   turn: TurnRecord,
@@ -303,25 +301,4 @@ function isManagedDeferralState(state: TurnRecord["semanticState"]): boolean {
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
-}
-
-function ledgerCursor(turn: TurnRecord) {
-  const program = requireManagedPlanningAuthority(turn);
-  return {
-    ledgerId: program.ledgerId,
-    programId: program.programId,
-    expectedManifestRevision: program.manifestRevision,
-  };
-}
-
-function ledgerCommit<M extends WorkLedgerMutation>(turn: TurnRecord, mutation: M) {
-  const expectedTurnRevision = turn.revision + 1;
-  return {
-    mutationId: digest(
-      `btcc-ledger-mutation.v1\0${turn.turnId}\0${expectedTurnRevision}\0${stableJson(mutation)}`,
-    ),
-    turnId: turn.turnId,
-    expectedTurnRevision,
-    mutation,
-  } as const;
 }

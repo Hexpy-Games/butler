@@ -8,7 +8,7 @@ import {
   type PhaseEnvelope,
 } from "../../core/index.ts";
 import { ArtifactStore, type PromotionIntent } from "./artifact-store.ts";
-import { exchangeCompleteTarget } from "./atomic-target-exchange.ts";
+import { exchangeCompleteRoots } from "../../../../foundation/atomic-root-exchange.ts";
 import { assertActive, sameRef } from "./operation-helpers.ts";
 import {
   captureTargetSnapshot,
@@ -85,7 +85,7 @@ export function performPromotion(input: {
       intent = { ...intent, status: "commit_intent_durable" };
       input.store.savePromotion(scopeId, intent);
     }
-    exchangeCompleteTarget(intent.stagedPath, workspace.targetPath);
+    exchangeCompleteRoots(intent.stagedPath, workspace.targetPath);
     const observed = captureTargetSnapshot(workspace.targetPath);
     if (!sameRef(observed.ref, candidate.ref)) {
       throw new Error("BTCC promoted target does not equal the reviewed candidate");

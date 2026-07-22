@@ -3,7 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProductionToolRuntime } from "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
-import type { OperationRequest } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { OperationRequest } from
+  "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import { envelope } from "./support/btcc-production-operations-fixture.ts";
 
 const roots: string[] = [];
@@ -89,6 +90,10 @@ describe("production BTCC capabilities", () => {
       butlerHome: root,
       butlerData: root,
       appMessageDbPath: join(root, "app.sqlite"),
+      resolveProjectLedgerRoot(projectRef) {
+        expect(projectRef).toBe("sandy");
+        return projectRoot;
+      },
     });
     const request: Extract<OperationRequest, { kind: "observe" }> = {
       requestId: "ledger-read-1",

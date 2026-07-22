@@ -35,6 +35,9 @@ export class SqliteWorkLedgerProgramReader {
       manifestRevision: program.manifest_revision,
       goalContractRef: this.loadRef(program.goal_contract_ref),
       authorityRef: this.loadRef(program.authority_ref),
+      availableSpecRefs: [],
+      availableSpecs: [],
+      governingSpecRefs: [],
       requiredOutcomeId: this.loadRecord<{
         requiredOutcome: { outcomeId: string };
       }>(program.goal_contract_ref).requiredOutcome.outcomeId,
@@ -148,32 +151,32 @@ export class SqliteWorkLedgerProgramReader {
     };
   }
 
-  private loadWorks(programId: string): ReviewedProgram["works"] {
+  private loadWorks(programId: string, active = true): ReviewedProgram["works"] {
     const rows = this.db.query<{
       work_ref: string;
       status: ReviewedProgram["works"][number]["status"];
-    }, [string]>(`
+    }, [string, number]>(`
       SELECT work_ref, status FROM btcc_work_items
-      WHERE program_id = ? AND is_active = 1 ORDER BY rowid
-    `).all(programId);
-    if (rows.length === 0) throw new Error("Work Ledger Program has no Work");
+      WHERE program_id = ? AND is_active = ? ORDER BY rowid
+    `).all(programId, active ? 1 : 0);
+    if (active && rows.length === 0) throw new Error("Work Ledger Program has no Work");
     return rows.map((row) => {
       const ref = JSON.parse(row.work_ref) as ContentRef;
       return { work: this.loadRecord(ref.id), status: row.status };
     }) as ReviewedProgram["works"];
   }
 
-  private loadTasks(programId: string): ReviewedProgram["tasks"] {
+  private loadTasks(programId: string, active = true): ReviewedProgram["tasks"] {
     const rows = this.db.query<{
       task_ref: string;
       status: ManagedTaskState["status"];
       result_ref: string | null;
       review_ref: string | null;
-    }, [string]>(`
+    }, [string, number]>(`
       SELECT task_ref, status, result_ref, review_ref
-      FROM btcc_tasks WHERE program_id = ? AND is_active = 1 ORDER BY rowid
-    `).all(programId);
-    if (rows.length === 0) throw new Error("Work Ledger Program has no Task");
+      FROM btcc_tasks WHERE program_id = ? AND is_active = ? ORDER BY rowid
+    `).all(programId, active ? 1 : 0);
+    if (active && rows.length === 0) throw new Error("Work Ledger Program has no Task");
     return rows.map((row) => {
       const ref = JSON.parse(row.task_ref) as ContentRef;
       const task = this.loadRecord<ManagedTaskState["task"]>(ref.id);

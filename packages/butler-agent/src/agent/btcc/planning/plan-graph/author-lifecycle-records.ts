@@ -39,7 +39,8 @@ export function materializePromotionSelectors(
     );
     const promotionTask = taskByRef(tasks, promotionTaskRef);
     const requiredPredecessors = uniqueRefs([...implementationTaskRefs, integrationTaskRef]);
-    assertRefSubset(requiredPredecessors, promotionTask.dependencyTaskRefs, "Promotion dependency");
+    assertDirectDependency(integrationTaskRef, promotionTask.dependencyTaskRefs);
+    assertDependencyClosure(requiredPredecessors, promotionTask, tasks);
     const targetScopeRef = promotionTarget(promotionTask);
     assertArtifactTarget(tasks, requiredPredecessors, targetScopeRef);
     const body = {
@@ -290,9 +291,31 @@ function uniqueRefs(refs: ContentRef[]): ContentRef[] {
   return [...new Map(refs.map((ref) => [ref.id, ref])).values()];
 }
 
-function assertRefSubset(required: ContentRef[], actual: ContentRef[], label: string): void {
-  const actualIds = new Set(actual.map((ref) => ref.id));
-  if (required.some((ref) => !actualIds.has(ref.id))) throw new Error(`${label} is missing`);
+function assertDirectDependency(required: ContentRef, actual: ContentRef[]): void {
+  if (!actual.some((ref) => ref.id === required.id)) {
+    throw new Error("Promotion Task must directly depend on its integration Task");
+  }
+}
+
+function assertDependencyClosure(
+  required: ContentRef[],
+  successor: ManagedTask,
+  tasks: ManagedTask[],
+): void {
+  const byRef = new Map(tasks.map((task) => [task.ref.id, task]));
+  const reachable = new Set<string>();
+  const frontier = [...successor.dependencyTaskRefs];
+  while (frontier.length > 0) {
+    const ref = frontier.pop()!;
+    if (reachable.has(ref.id)) continue;
+    reachable.add(ref.id);
+    const task = byRef.get(ref.id);
+    if (!task) throw new Error(`Promotion dependency has no Task: ${ref.id}`);
+    frontier.push(...task.dependencyTaskRefs);
+  }
+  if (required.some((ref) => !reachable.has(ref.id))) {
+    throw new Error("Promotion dependency closure is missing");
+  }
 }
 
 function assertExactStrings(actual: string[], expected: string[], label: string): void {

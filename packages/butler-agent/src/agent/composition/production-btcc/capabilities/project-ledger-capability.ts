@@ -21,14 +21,11 @@ export async function readProjectLedger(
   args: Record<string, unknown>,
   context: CapabilityExecutionContext,
 ): Promise<unknown> {
-  const projectId = projectIdFromScope(context.observationScopeRef);
-  const projectRoot = resolve(
-    context.butlerData,
-    "project-ledger",
-    "projects",
-    projectId,
-  );
-  assertContained(resolve(context.butlerData, "project-ledger", "projects"), projectRoot);
+  const projectId = projectRefFromScope(context.observationScopeRef);
+  if (!context.resolveProjectLedgerRoot) {
+    throw new Error("Project Ledger capability has no active binding resolver");
+  }
+  const projectRoot = context.resolveProjectLedgerRoot(projectId);
   const indexPath = resolve(projectRoot, "index", "project.json");
   if (!existsSync(indexPath)) {
     return { projectId, available: false, records: [] };
@@ -53,15 +50,13 @@ export async function readProjectLedger(
   };
 }
 
-function projectIdFromScope(scopeRef: string | undefined): string {
+function projectRefFromScope(scopeRef: string | undefined): string {
   if (!scopeRef?.startsWith("ledger:")) {
     throw new Error("Project Ledger capability requires an admitted ledger scope");
   }
-  const projectId = scopeRef.slice("ledger:".length);
-  if (!/^[A-Za-z0-9._-]+$/u.test(projectId)) {
-    throw new Error("Project Ledger scope contains an invalid project id");
-  }
-  return projectId;
+  const projectRef = scopeRef.slice("ledger:".length);
+  if (!projectRef) throw new Error("Project Ledger scope has no project binding");
+  return projectRef;
 }
 
 function selectRecords(records: LedgerRecord[], args: Record<string, unknown>): LedgerRecord[] {

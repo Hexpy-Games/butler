@@ -7,10 +7,10 @@ import { ManagedDeliveryOutboxWriter } from "./managed-delivery-outbox-writer.ts
 import { ConsolidationRepairWriter } from "./consolidation-repair-writer.ts";
 import { ManagedPlanningRecordWriter } from "./managed-planning-record-writer.ts";
 import { ManagedTurnProjectionWriter } from "./managed-turn-projection-writer.ts";
-type ManagedTransition = Exclude<
-  BtccPersistenceTypes["transition"],
-  { kind: "activate_opening" | "accept_opening_answer" | "observe_delivery" }
->;
+import type { ProjectLedgerBoundaryContext } from "./project-ledger-promotion-writer.ts";
+import { ProjectManagedBoundary } from "./project-managed-boundary.ts";
+type ManagedTransition = Exclude<BtccPersistenceTypes["transition"],
+  { kind: "activate_opening" | "accept_opening_answer" | "observe_delivery" }>;
 type ManagedTurnState = BtccPersistenceTypes["managedTurnState"];
 type TurnRecord = BtccPersistenceTypes["turn"];
 export class SqliteManagedTransitionWriter {
@@ -20,15 +20,23 @@ export class SqliteManagedTransitionWriter {
   private readonly consolidationRepairs: ConsolidationRepairWriter;
   private readonly planningRecords: ManagedPlanningRecordWriter;
   private readonly turnProjection: ManagedTurnProjectionWriter;
-  constructor(private readonly db: Database, private readonly ledger: WorkLedger) {
+  private readonly projectBoundary: ProjectManagedBoundary;
+  constructor(private readonly db: Database, ledger: WorkLedger) {
     this.records = new SqliteImmutableRecordStore(db);
     this.artifactRecords = new ManagedArtifactRecordWriter(this.records);
     this.delivery = new ManagedDeliveryOutboxWriter(db, this.records);
     this.consolidationRepairs = new ConsolidationRepairWriter(this.records);
     this.planningRecords = new ManagedPlanningRecordWriter(this.records);
     this.turnProjection = new ManagedTurnProjectionWriter(db);
+    this.projectBoundary = new ProjectManagedBoundary(db, ledger);
   }
-  commit(turn: TurnRecord, nextRevision: number, transition: ManagedTransition): void {
+  commit(
+    turn: TurnRecord,
+    nextRevision: number,
+    transition: ManagedTransition,
+    projectLedger: ProjectLedgerBoundaryContext = {},
+  ): void {
+    this.prepareProjectPromotion(turn, nextRevision, transition, projectLedger);
     switch (transition.kind) {
       case "accept_opening_continuation": {
         this.insert("opening_projection", transition.product.projection);
@@ -56,10 +64,11 @@ export class SqliteManagedTransitionWriter {
         return;
       }
       case "accept_goal_contract":
-        this.acceptGoalContract(turn, nextRevision, transition);
+        this.acceptGoalContract(turn, nextRevision, transition, projectLedger);
         return;
       case "submit_plan_candidate":
         this.planningRecords.record(transition.product.candidate);
+        this.projectBoundary.recordPlanningBase(projectLedger);
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), planCandidate: transition.product,
         });
@@ -71,17 +80,17 @@ export class SqliteManagedTransitionWriter {
         });
         return;
       case "accept_plan":
-        this.acceptPlan(turn, nextRevision, transition);
+        this.acceptPlan(turn, nextRevision, transition, projectLedger);
         return;
       case "select_work_task":
-        this.selectTask(turn, nextRevision, transition);
+        this.selectTask(turn, nextRevision, transition, projectLedger);
         return;
       case "submit_result":
-        this.submitResult(turn, nextRevision, transition);
+        this.submitResult(turn, nextRevision, transition, projectLedger);
         return;
       case "pass_task_review":
       case "fail_task_review":
-        this.recordTaskReview(turn, nextRevision, transition);
+        this.recordTaskReview(turn, nextRevision, transition, projectLedger);
         return;
       case "accept_feedback_intent":
         this.insert("feedback_intent", transition.product.feedbackIntent);
@@ -109,13 +118,13 @@ export class SqliteManagedTransitionWriter {
         });
         return;
       case "accept_feedback_plan":
-        this.acceptFeedbackPlan(turn, nextRevision, transition);
+        this.acceptFeedbackPlan(turn, nextRevision, transition, projectLedger);
         return;
       case "accept_managed_deferral": {
         this.insert("managed_blocker", transition.product.blocker);
         this.insert("deferral_anchor", transition.product.anchor);
         const program = this.requireCommittedProgram(
-          this.commitLedger(transition.ledgerCommit),
+          this.commitLedger(transition.ledgerCommit, projectLedger),
         );
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), deferral: transition.product, program,
@@ -127,7 +136,7 @@ export class SqliteManagedTransitionWriter {
         this.insert("deferral_anchor", transition.product.anchor);
         this.insert("promotion_deferral", transition.product.deferral);
         const program = this.requireCommittedProgram(
-          this.commitLedger(transition.ledgerCommit),
+          this.commitLedger(transition.ledgerCommit, projectLedger),
         );
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), program,
@@ -143,13 +152,13 @@ export class SqliteManagedTransitionWriter {
         return;
       }
       case "close_work_frontier":
-        this.closeFrontier(turn, nextRevision, transition);
+        this.closeFrontier(turn, nextRevision, transition, projectLedger);
         return;
       case "authorize_promotion": {
         this.insert("consolidation_assessment", transition.product.assessment);
         this.insert("promotion_authorization", transition.product.authorization);
         const program = this.requireCommittedProgram(
-          this.commitLedger(transition.ledgerCommit),
+          this.commitLedger(transition.ledgerCommit, projectLedger),
         );
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), program,
@@ -169,7 +178,7 @@ export class SqliteManagedTransitionWriter {
       case "defer_promoted_work": {
         this.insert("final_dossier", transition.product.dossier);
         const program = this.requireCommittedProgram(
-          this.commitLedger(transition.ledgerCommit),
+          this.commitLedger(transition.ledgerCommit, projectLedger),
         );
         this.advance(turn, nextRevision, transition.successor, {
           ...requiredManaged(turn), finalDossier: transition.product, program,
@@ -192,12 +201,15 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "accept_goal_contract" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     const { goalContract, authority, review } = transition.product;
     this.insert("goal_contract", goalContract);
     this.insert("authority_revision", authority);
     this.insert("goal_contract_review", review);
-    const program = this.requireCommittedProgram(this.commitLedger(transition.ledgerCommit));
+    const program = this.requireCommittedProgram(
+      this.commitLedger(transition.ledgerCommit, projectLedger),
+    );
     this.advance(turn, nextRevision, transition.successor, {
       ...requiredManaged(turn), goalAcceptance: transition.product, program,
     }, { goalContractRef: goalContract.ref.id });
@@ -206,10 +218,11 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "accept_plan" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     this.insert("planning_review", transition.product.review);
     const program = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit),
+      this.commitLedger(transition.ledgerCommit, projectLedger),
     );
     this.advance(turn, nextRevision, transition.successor, {
       ...requiredManaged(turn), planningAcceptance: transition.product, program,
@@ -220,12 +233,13 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "select_work_task" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     const managed = requiredManaged(turn);
     const attempt = transition.attempt;
     this.artifactRecords.recordAttempt(attempt);
     const committed = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit),
+      this.commitLedger(transition.ledgerCommit, projectLedger),
     );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed,
@@ -237,12 +251,13 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "submit_result" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     const managed = requiredManaged(turn);
     const result = transition.product;
     this.artifactRecords.recordResult(result);
     const committed = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit),
+      this.commitLedger(transition.ledgerCommit, projectLedger),
     );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed, program: committed,
@@ -253,12 +268,13 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "pass_task_review" | "fail_task_review" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     const managed = requiredManaged(turn);
     const review = transition.product;
     this.artifactRecords.recordReview(review);
     const committed = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit),
+      this.commitLedger(transition.ledgerCommit, projectLedger),
     );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed, program: committed,
@@ -269,11 +285,12 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "accept_feedback_plan" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     const managed = requiredManaged(turn);
     this.insert("feedback_planning_review", transition.product.review);
     const committed = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit),
+      this.commitLedger(transition.ledgerCommit, projectLedger),
     );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed,
@@ -286,29 +303,40 @@ export class SqliteManagedTransitionWriter {
     turn: TurnRecord,
     nextRevision: number,
     transition: Extract<ManagedTransition, { kind: "close_work_frontier" }>,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
     const managed = requiredManaged(turn);
     this.artifactRecords.recordPromotionAssemblies(transition.promotionAssemblies);
     const committed = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit),
+      this.commitLedger(transition.ledgerCommit, projectLedger),
     );
     this.advance(turn, nextRevision, transition.successor, {
       ...managed, program: committed,
     });
   }
 
-  private advance(
-    ...input: Parameters<ManagedTurnProjectionWriter["advance"]>
+  private prepareProjectPromotion(
+    turn: TurnRecord,
+    nextRevision: number,
+    transition: ManagedTransition,
+    projectLedger: ProjectLedgerBoundaryContext,
   ): void {
+    this.projectBoundary.bindTurnCommit({
+      turnId: turn.turnId,
+      nextRevision,
+      ...("ledgerCommit" in transition ? { commit: transition.ledgerCommit } : {}),
+      context: projectLedger,
+    });
+  }
+  private advance(...input: Parameters<ManagedTurnProjectionWriter["advance"]>): void {
     this.turnProjection.advance(...input);
   }
-
   private insert<T extends { ref: { id: string; sha256: string } }>(kind: string, value: T): void {
     this.records.insert(value.ref.id, kind, value.ref.sha256, stableJson(value));
   }
 
-  private commitLedger(commit: WorkLedgerCommit) {
-    return this.ledger.commitAcceptedBoundary(commit);
+  private commitLedger(commit: WorkLedgerCommit, projectLedger: ProjectLedgerBoundaryContext) {
+    return this.projectBoundary.commitProgram(commit, projectLedger);
   }
 
   private requireCommittedProgram<T>(program: T | null): T {

@@ -1,4 +1,15 @@
 export { createWorkLedger } from "./work-ledger.ts";
+export {
+  createLogicalLedgerBundle,
+  assertLogicalLedgerMutationId,
+  assertLogicalLedgerRecordBytes,
+  ledgerAttemptRef,
+  ledgerManifestContentHash,
+  ledgerMutationId,
+  ledgerRecordSha256,
+  logicalLedgerRecords,
+} from "./logical-codec.ts";
+export type { LogicalLedgerBundle, LogicalLedgerRecord } from "./logical-codec.ts";
 export type {
   WorkLedger,
   WorkLedgerCommit,

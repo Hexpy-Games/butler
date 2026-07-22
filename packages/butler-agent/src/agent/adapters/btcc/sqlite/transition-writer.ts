@@ -6,6 +6,7 @@ import type {
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 import { SqliteManagedTransitionWriter } from "./managed-transition-writer.ts";
+import type { ProjectLedgerBoundaryContext } from "./project-ledger-promotion-writer.ts";
 
 type TurnStateRepository = BtccRuntimeDependencies["turns"];
 type CommitInput = Parameters<TurnStateRepository["commitTransition"]>[0];
@@ -27,7 +28,7 @@ export class SqliteTransitionWriter {
     this.managed = new SqliteManagedTransitionWriter(db, workLedger);
   }
 
-  commit(input: CommitInput): void {
+  commit(input: CommitInput, projectLedger: ProjectLedgerBoundaryContext = {}): void {
     const transaction = this.db.transaction(() => {
       this.assertCurrentClaim(input.turn, input.claim);
       this.consumeClaim(input.claim);
@@ -44,7 +45,7 @@ export class SqliteTransitionWriter {
           this.observeDelivery(input.turn, nextRevision, input.transition);
           return;
         default:
-          this.managed.commit(input.turn, nextRevision, input.transition);
+          this.managed.commit(input.turn, nextRevision, input.transition, projectLedger);
           return;
       }
     });

@@ -65,7 +65,9 @@ async function conceiveInitialGoal(command: {
       const product = await reviewGoalContract(withPhaseState(command.phase, {
         inboxId: command.turn.inboxId,
         sessionId: command.turn.sessionId,
-        projectRef: command.turn.context.projectRef,
+        ...(command.turn.context.projectRef
+          ? { projectRef: command.turn.context.projectRef }
+          : {}),
         continuationCandidates: command.turn.continuationCandidates,
         goalCandidate: requireManagedState(command.turn).goalCandidate,
       }));

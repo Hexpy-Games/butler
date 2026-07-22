@@ -48,6 +48,7 @@ export const goalCandidateSubmissionSchema = objectSchema({
   acceptanceIntent: textSchema(),
   nonGoals: textList(),
   personalizationRefs: textList(),
+  governingSpecLogicalIds: textList(),
   lensAssessments: objectSchema({
     requested_content: lensAssessment,
     related_memory: lensAssessment,

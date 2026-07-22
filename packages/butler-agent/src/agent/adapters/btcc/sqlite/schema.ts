@@ -1,3 +1,5 @@
+import { BTCC_PHASE_CONVERSATION_SCHEMA } from "./schema/phase-conversation-schema.ts";
+
 export const BTCC_SUCCESSOR_SCHEMA = `
 CREATE TABLE IF NOT EXISTS btcc_messages (
   message_id TEXT PRIMARY KEY,
@@ -38,6 +40,17 @@ CREATE TABLE IF NOT EXISTS btcc_admission_claims (
   owner_generation INTEGER NOT NULL,
   lease_generation INTEGER NOT NULL,
   status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_runtime_owners (
+  owner_id TEXT PRIMARY KEY,
+  host_id TEXT NOT NULL,
+  process_id INTEGER NOT NULL,
+  process_started_at_ms INTEGER NOT NULL,
+  owner_generation INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  registered_at TEXT NOT NULL,
+  closed_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS btcc_records (
@@ -111,15 +124,7 @@ CREATE TABLE IF NOT EXISTS btcc_stop_requests (
   updated_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS btcc_phase_operation_results (
-  operation_id TEXT PRIMARY KEY,
-  checkpoint_id TEXT NOT NULL,
-  checkpoint_revision INTEGER NOT NULL,
-  request_id TEXT NOT NULL,
-  request_json TEXT NOT NULL,
-  result_json TEXT NOT NULL,
-  UNIQUE(checkpoint_id, checkpoint_revision, request_id)
-);
+${BTCC_PHASE_CONVERSATION_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_delivery_outbox (
   outbox_id TEXT PRIMARY KEY,
@@ -285,5 +290,31 @@ CREATE TABLE IF NOT EXISTS btcc_ledger_mutations (
   base_manifest_revision INTEGER NOT NULL,
   next_manifest_revision INTEGER NOT NULL,
   UNIQUE(ledger_id, program_id, next_manifest_revision)
+);
+
+CREATE TABLE IF NOT EXISTS btcc_project_planning_bases (
+  candidate_ref TEXT PRIMARY KEY,
+  program_id TEXT NOT NULL,
+  project_ref TEXT NOT NULL,
+  head_json TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_project_program_projections (
+  program_id TEXT PRIMARY KEY,
+  project_ref TEXT NOT NULL,
+  ledger_id TEXT NOT NULL,
+  manifest_revision INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_ledger_promotion_outbox (
+  outbox_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  committed_turn_revision INTEGER NOT NULL,
+  mutation_id TEXT NOT NULL UNIQUE,
+  ledger_id TEXT NOT NULL,
+  program_id TEXT NOT NULL,
+  publication_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  UNIQUE(turn_id, committed_turn_revision)
 );
 `;

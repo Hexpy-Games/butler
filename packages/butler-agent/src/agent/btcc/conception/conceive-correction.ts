@@ -17,7 +17,7 @@ const CONTRACT: PhaseContract = {
   objective: "understand_the_review_finding_and_scope_the_correction",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "conceive_scoped_correction", "classify_correction_kind",
+    "conceive_scoped_correction", "classify_correction_kind", "author_managed_deferral",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
