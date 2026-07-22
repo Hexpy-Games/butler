@@ -6,7 +6,7 @@ import { SqlitePhaseConversationStore } from "./phase-conversation-store.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "./schema.ts";
 import { SqliteTurnAdmissionRepository } from "./turn-admission-repository.ts";
 import { SqliteTurnStateRepository } from "./turn-state-repository.ts";
-import { SqliteLearningSourceScheduler } from "./learning-source-scheduler.ts";
+import { SqliteRetrospectiveScheduler } from "./retrospective-scheduler.ts";
 import { SqliteContextDocumentStore } from "./context/index.ts";
 import { SqlitePhaseGuidanceStore } from "./phase-guidance-store.ts";
 
@@ -24,7 +24,7 @@ export function openBtccSqliteStores(input: { dbPath: string; ownerId: string })
     turns,
     phaseConversations: new SqlitePhaseConversationStore(db),
     messages: new SqliteCanonicalMessageStore(db),
-    learning: new SqliteLearningSourceScheduler(db),
+    retrospective: new SqliteRetrospectiveScheduler(db),
     phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     close: () => db.close(),

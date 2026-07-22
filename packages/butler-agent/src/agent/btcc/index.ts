@@ -14,9 +14,15 @@ export type {
   ReasoningEffort,
 } from "./contracts.ts";
 export type {
+  ModelPhaseState,
   OperationRequest,
   PhaseEnvelope,
 } from "./core/index.ts";
+export type {
+  AcceptedPhaseGuidance,
+  PhaseGuidanceRepository,
+  PhaseGuidanceScope,
+} from "./guidance/index.ts";
 export type {
   StructuralCapabilityCatalog,
   StructuralCapabilityDefinition,

@@ -169,6 +169,25 @@ CREATE TABLE IF NOT EXISTS btcc_phase_guidance (
 CREATE INDEX IF NOT EXISTS idx_btcc_phase_guidance_lookup
 ON btcc_phase_guidance(phase, scope_kind, scope_id, status);
 
+CREATE TABLE IF NOT EXISTS btcc_retrospectives (
+  source_id TEXT PRIMARY KEY,
+  retrospective_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_retrospective_decisions (
+  source_id TEXT PRIMARY KEY,
+  decisions_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_learning_diagnostics (
+  outbox_id TEXT PRIMARY KEY,
+  attempt_count INTEGER NOT NULL,
+  last_error TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS btcc_context_documents (
   context_ref TEXT PRIMARY KEY,
   content_sha256 TEXT NOT NULL,

@@ -132,6 +132,7 @@ test("consolidation cycle runs all cognition phases with raw-text-free summaries
     expect(result.phases.map((phase) => phase.phase)).toEqual([
       "preflight",
       "feedback_triage",
+      "btcc_retrospective",
       "profile_consolidation",
       "new_chat_briefing",
       "box_index",
@@ -601,7 +602,7 @@ test("consolidation cycle pauses on mid-run rate limit and resumes from checkpoi
       rateLimitBudget: () => ({ remainingRatio: 0.9 }),
     });
     expect(resumed.status).toBe("completed");
-    expect(readConsolidationCheckpoint(butlerData, "cr_resume")?.next_phase_index).toBe(11);
+    expect(readConsolidationCheckpoint(butlerData, "cr_resume")?.next_phase_index).toBe(12);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

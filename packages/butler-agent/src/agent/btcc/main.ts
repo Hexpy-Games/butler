@@ -7,7 +7,7 @@ import type {
   BtccTurnProgressObserver,
   BtccTurnRuntime,
 } from "./contracts.ts";
-import { insertCanonicalMessage, scheduleLearningSource } from "./delivery/index.ts";
+import { insertCanonicalMessage, scheduleRetrospective } from "./delivery/index.ts";
 import { planning } from "./planning/index.ts";
 import { reporting } from "./reporting/index.ts";
 import {
@@ -80,7 +80,7 @@ async function runBtccTurn(
     turn = await activateCommittedSuccessor(turn.turnId, dependencies);
     await publishProgress(dependencies.progress, turn);
   }
-  scheduleLearningSource({ turn, scheduler: dependencies.learning });
+  scheduleRetrospective({ turn, scheduler: dependencies.retrospective });
   return projectTerminalOutcome(turn);
 }
 

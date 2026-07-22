@@ -1,11 +1,11 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccPersistenceTypes,
-  LearningSourceScheduler,
+  RetrospectiveScheduler,
 } from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 
-export class SqliteLearningSourceScheduler implements LearningSourceScheduler {
+export class SqliteRetrospectiveScheduler implements RetrospectiveScheduler {
   constructor(private readonly db: Database) {}
 
   schedule(turn: TurnRecord): void {
@@ -21,6 +21,9 @@ export class SqliteLearningSourceScheduler implements LearningSourceScheduler {
   private project(turn: TurnRecord): void {
     if (turn.semanticState !== "delivered" || !turn.finalPayload) return;
     const finalPayload = turn.finalPayload;
+    const goalContractRef = turn.managed?.goalAcceptance?.goalContract.ref ??
+      turn.openingAnswer?.goalContract.ref;
+    const finalDossierRef = turn.managed?.finalDossier?.dossier.ref;
     const sourceId = digest(
       `btcc-learning-source.v1\0${turn.turnId}\0${finalPayload.ref.sha256}`,
     );
@@ -28,8 +31,8 @@ export class SqliteLearningSourceScheduler implements LearningSourceScheduler {
       sourceId,
       turnId: turn.turnId,
       finalPayloadRef: finalPayload.ref,
-      goalContractRef: turn.managed?.goalAcceptance?.goalContract.ref,
-      finalDossierRef: turn.managed?.finalDossier?.dossier.ref,
+      ...(goalContractRef ? { goalContractRef } : {}),
+      ...(finalDossierRef ? { finalDossierRef } : {}),
       reviewReceiptRefs: turn.managed?.program?.planningState === "reviewed"
         ? turn.managed.program.tasks.flatMap((task) =>
             task.currentReview ? [task.currentReview.review.ref] : [])
