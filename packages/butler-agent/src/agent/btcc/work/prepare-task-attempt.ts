@@ -62,6 +62,7 @@ export async function prepareTaskAttempt(input: {
       baselineRef: provision.baseline.ref,
       baselineSnapshotRef: provision.baseline.snapshotRef,
       acceptedBaseRevisionRefs: acceptedWorkspaceRevisions(input.program, input.task),
+      operationRoot: provision.workspace.operationRoot,
     },
   };
   const executionTarget = { ref: contentRef("task-execution-target", targetBody), ...targetBody };

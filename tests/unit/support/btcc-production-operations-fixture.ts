@@ -6,7 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import {
   contentRef,
   type OperationRequest,
@@ -133,7 +133,7 @@ export function workspaceRequest(
   workspaceRef: { id: string; sha256: string },
   targetPath: string,
   content: string,
-  relativeTarget = basename(targetPath),
+  relativeTarget = "target",
 ): Extract<OperationRequest, { kind: "workspace_artifact_action" }> {
   return {
     requestId: `workspace:${relativeTarget}:${content}`,

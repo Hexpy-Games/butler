@@ -141,6 +141,14 @@ function bindOperationAuthority(
 ): OperationRequest {
   if (value.kind === "observe") return value as OperationRequest;
   if (value.kind === "workspace_artifact_action" && authority.mutation.kind === "workspace_only") {
+    if (
+      authority.mutation.operationRoot.kind === "file" &&
+      value.relativeTarget !== authority.mutation.operationRoot.relativeTarget
+    ) {
+      throw new ProviderCarrierProtocolError(
+        "BTCC provider requested a path outside the single-file operation root",
+      );
+    }
     return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
   }
   if (value.kind === "review_validation" &&

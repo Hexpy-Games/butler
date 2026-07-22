@@ -44,7 +44,7 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
     const targetPath = existsSync(requestedPath)
       ? realpathSync(requestedPath)
       : requestedPath;
-    const provision = createProvision(command, baselineSnapshot.ref);
+    const provision = createProvision(command, baselineSnapshot.ref, baselineSnapshot.targetKind);
     const workspaceRoot = join(
       this.options.butlerData,
       "runtime",
@@ -70,6 +70,7 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
 function createProvision(
   command: ProvisionWorkspaceCommand,
   snapshotRef: { id: string; sha256: string },
+  targetKind: "file" | "directory",
 ): WorkspaceProvision {
   const outbox = record("workspace-provision-outbox", command);
   const baseline = record("target-baseline", {
@@ -86,6 +87,9 @@ function createProvision(
     provisionOutboxRef: outbox.ref,
     targetBaselineRef: baseline.ref,
     ownedRootRef,
+    operationRoot: targetKind === "file"
+      ? { kind: "file" as const, relativeTarget: "target" as const }
+      : { kind: "directory" as const, relativeTarget: "." as const },
   });
   const receipt = record("workspace-provision-receipt", {
     workspaceRef: workspace.ref,

@@ -236,7 +236,9 @@ function assertAuthorizedOperation(
   } else if (request.kind === "workspace_artifact_action") {
     if (
       authority.mutation.kind === "workspace_only" &&
-      sameRef(request.workspaceRef, authority.mutation.workspaceRef)
+      sameRef(request.workspaceRef, authority.mutation.workspaceRef) &&
+      (authority.mutation.operationRoot.kind === "directory" ||
+        request.relativeTarget === authority.mutation.operationRoot.relativeTarget)
     ) return;
   } else if (request.kind === "review_validation" &&
     authority.mutation.kind === "validation_overlay_only" &&
