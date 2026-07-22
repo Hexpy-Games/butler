@@ -8,7 +8,7 @@ export async function readProjectLedger(
   args: Record<string, unknown>,
   context: CapabilityExecutionContext,
 ): Promise<unknown> {
-  const projectId = projectRefFromScope(context.observationScopeRef);
+  const projectId = projectRefFromContext(context);
   if (!context.resolveProjectLedgerRoot) {
     throw new Error("Project Ledger capability has no active binding resolver");
   }
@@ -32,13 +32,13 @@ export async function readProjectLedger(
   };
 }
 
-function projectRefFromScope(scopeRef: string | undefined): string {
-  if (!scopeRef?.startsWith("ledger:")) {
-    throw new Error("Project Ledger capability requires an admitted ledger scope");
+function projectRefFromContext(context: CapabilityExecutionContext): string {
+  if (context.observationScopeRef?.startsWith("ledger:")) {
+    const projectRef = context.observationScopeRef.slice("ledger:".length);
+    if (projectRef) return projectRef;
   }
-  const projectRef = scopeRef.slice("ledger:".length);
-  if (!projectRef) throw new Error("Project Ledger scope has no project binding");
-  return projectRef;
+  if (context.projectRef) return context.projectRef;
+  throw new Error("Project Ledger capability requires an admitted project binding");
 }
 
 function selectRecords(

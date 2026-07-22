@@ -57,6 +57,7 @@ function toolExecutor(
       butlerData: options.butlerData,
       workspacePath,
       ...(request.kind === "observe" ? { observationScopeRef: request.scopeRef } : {}),
+      ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
       ...(options.resolveProjectLedgerRoot
         ? { resolveProjectLedgerRoot: options.resolveProjectLedgerRoot }
         : {}),
