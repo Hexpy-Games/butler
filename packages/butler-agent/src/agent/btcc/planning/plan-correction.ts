@@ -32,7 +32,7 @@ const CONTRACT: PhaseContract = {
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
-    "no_mutation", "no_self_review", "no_implicit_prior_task_invalidation",
+    "no_mutation", "no_self_review",
   ],
   authoringContractRefs: PLANNING_AUTHORING_CONTRACTS.map((contract) => contract.contractId),
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,

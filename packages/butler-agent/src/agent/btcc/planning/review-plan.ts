@@ -19,16 +19,14 @@ const CONTRACT: PhaseContract = {
   objective: "independently_review_the_exact_complete_plan_graph",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "review_exact_candidate_bytes", "review_goal_coverage",
-    "review_work_cohesion", "review_task_executability", "review_dependencies",
-    "review_verification_completeness", "review_effect_authority",
-    "review_every_task_artifact_policy", "review_risks_assumptions",
-    "review_integration_criteria", "request_revision_when_needed",
+    "review_plan_exactly", "review_work_cohesion", "review_executability",
+    "review_dependencies", "review_verification_integration",
+    "review_effect_authority", "review_artifact_lifecycle",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
-    "no_mutation", "no_repair", "no_partial_graph_acceptance",
+    "no_mutation", "no_repair",
   ],
 };
 

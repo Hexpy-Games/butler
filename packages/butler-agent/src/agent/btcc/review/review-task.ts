@@ -24,13 +24,12 @@ const CONTRACT: PhaseContract = {
   objective: "independently_compare_every_task_criterion_with_current_targets",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "review_task_independently", "review_every_accepted_criterion",
-    "bind_current_target_revisions", "classify_each_finding",
+    "review_task_independently",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
-    "no_mutation", "no_repair", "no_partial_criterion_review",
+    "no_mutation", "no_repair",
   ],
 };
 

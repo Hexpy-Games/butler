@@ -20,14 +20,14 @@ const CONTRACT: PhaseContract = {
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
     "author_smallest_sufficient_plan", "apply_authoring_contracts",
-    "bind_every_required_goal_field", "declare_complete_work_task_graph",
-    "declare_verification_questions", "declare_effects_risks_assumptions",
-    "author_exact_task_artifact_policies", "candidate_revision_lineage",
+    "bind_normative_goal_sets", "declare_work_task_dependencies",
+    "declare_verification_integration", "declare_effects_risks_assumptions",
+    "author_artifact_lifecycle", "candidate_revision_lineage",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
-    "no_mutation", "no_self_review", "no_phase_or_file_tasks",
+    "no_mutation", "no_self_review",
   ],
   authoringContractRefs: [
     "SPEC-BTCC-WORK-AUTHORING-CONTRACT",
