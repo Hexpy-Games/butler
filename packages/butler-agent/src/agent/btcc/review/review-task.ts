@@ -5,6 +5,7 @@ import {
   runPhaseConversation,
   stableJson,
   type ContentRef,
+  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
@@ -16,7 +17,7 @@ import type {
   ReviewObservation,
   TaskReviewProduct,
 } from "./contracts.ts";
-import { withManagedDeferral, withManagedDeferralSchema } from "../deferral/index.ts";
+import { withManagedDeferral } from "../deferral/index.ts";
 import { taskReviewSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
@@ -33,7 +34,7 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec = withManagedDeferral<TaskReviewProduct>({
+const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
   submissionSchema: taskReviewSubmissionSchema("semantic"),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Review state");
@@ -124,13 +125,13 @@ const codec = withManagedDeferral<TaskReviewProduct>({
     };
     return { kind: "task_review", review: { ref: contentRef("task-review", body), ...body } };
   },
-});
+};
+
+const codec = withManagedDeferral(semanticReviewCodec);
 
 const promotionCodec = {
-  ...codec,
-  submissionSchema: withManagedDeferralSchema(
-    taskReviewSubmissionSchema("promotion_identity"),
-  ),
+  ...semanticReviewCodec,
+  submissionSchema: taskReviewSubmissionSchema("promotion_identity"),
 };
 
 export function reviewTask(command: PhaseInvocation) {
