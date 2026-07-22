@@ -36,11 +36,20 @@ export function createProductionSelectedModel(
         if (!sameIdentity(envelope.modelSelection, result.actualIdentity)) {
           throw new Error("BTCC provider returned a different selected-model identity");
         }
-        return decodeCarrier(
-          result.carrier,
-          envelope.operationAuthority,
-          result.actualIdentity,
-        );
+        try {
+          return decodeCarrier(
+            result.carrier,
+            envelope.operationAuthority,
+            result.actualIdentity,
+          );
+        } catch (error) {
+          if (error instanceof ProviderCarrierProtocolError) {
+            return interruption("provider_protocol_interruption", {
+              kind: "automatic_provider_recovery",
+            });
+          }
+          throw error;
+        }
       } catch (error) {
         if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
           const diagnostic = error instanceof ModelProviderRequestError
@@ -74,7 +83,9 @@ function decodeCarrier(
   authority: OperationAuthority,
   actualIdentity: ActualModelIdentity,
 ): ProviderRoundValue {
-  if (!isRecord(carrier)) throw new Error("BTCC provider carrier is not an object");
+  if (!isRecord(carrier)) {
+    throw new ProviderCarrierProtocolError("BTCC provider carrier is not an object");
+  }
   if (carrier.kind === "phase_submission" && isRecord(carrier.submission)) {
     return {
       kind: "phase_submission",
@@ -94,7 +105,11 @@ function decodeCarrier(
       actualIdentity,
     };
   }
-  throw new Error("BTCC provider carrier violates the closed protocol");
+  throw new ProviderCarrierProtocolError("BTCC provider carrier violates the closed protocol");
+}
+
+class ProviderCarrierProtocolError extends Error {
+  override readonly name = "ProviderCarrierProtocolError";
 }
 
 function bindOperationAuthority(
@@ -152,6 +167,7 @@ function activationForProviderFailure(
   if (
     error.code === "provider_network_error" ||
     error.code === "provider_transport_interruption" ||
+    error.code === "provider_empty_response" ||
     error.code === "provider_round_timeout" ||
     error.statusCode === 429 ||
     (error.statusCode !== undefined && error.statusCode >= 500)

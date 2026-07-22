@@ -114,6 +114,60 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
   expect(modelRounds).toEqual(["operation_requests", "operation_requests"]);
 });
 
+test("does not checkpoint a malformed provider phase submission", async () => {
+  let appended = false;
+  const run = runPhaseConversation({
+    binding,
+    modelSelection: selectedModel(),
+    context: openingContext(),
+    phaseContract: {
+      phase: "conception_deliberation" as const,
+      objective: "produce_one_candidate",
+      duties: [],
+      prohibitions: [],
+    },
+    codec: {
+      submissionSchema: objectSchema({}),
+      decode: () => { throw new Error("malformed submission"); },
+    },
+    store: {
+      restore: async (current) => ({
+        binding: current,
+        acceptedProduct: null,
+        operationResults: [],
+      }),
+      appendOperationRound: async () => { throw new Error("unexpected operation"); },
+      appendOperationResults: async () => { throw new Error("unexpected result"); },
+      appendPhaseSubmission: async ({ binding: current }) => {
+        appended = true;
+        return nextBinding(current);
+      },
+      acceptPhaseProduct: async () => { throw new Error("unexpected product"); },
+    },
+    model: {
+      runRound: async () => ({
+        kind: "phase_submission" as const,
+        submission: { malformed: true },
+        actualIdentity: selectedModel(),
+      }),
+    },
+    operations: {
+      perform: async () => { throw new Error("unexpected operation"); },
+    },
+    operationAuthority: {
+      observationScopeRefs: [],
+      mutation: { kind: "forbidden" as const },
+    },
+    executionPermit: activePermit(),
+  });
+
+  await expect(run).rejects.toMatchObject({
+    code: "provider_phase_submission_invalid",
+    activation: { kind: "automatic_provider_recovery" },
+  });
+  expect(appended).toBe(false);
+});
+
 function selectedModel() {
   return {
     provider: "openai",
