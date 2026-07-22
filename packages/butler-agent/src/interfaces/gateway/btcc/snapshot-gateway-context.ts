@@ -32,7 +32,14 @@ function contextSections(assembly: ContextAssembly) {
   return sections.map((section) => ({
     id: section.id,
     content: renderSection(section),
-    sourceRevision: digest({ id: section.id, content: section.content }),
+    projectionClass: section.projectionClass,
+    scopeKind: section.scopeKind,
+    sourceRevision: digest({
+      id: section.id,
+      content: section.content,
+      projectionClass: section.projectionClass,
+      scopeKind: section.scopeKind,
+    }),
   }));
 }
 

@@ -31,14 +31,13 @@ function projectSection(
   command: ButlerContextSnapshotCommand,
   section: ButlerContextSection,
 ) {
-  const classification = classifySection(section.id);
-  const scope = scopeFor(command, classification.scope);
+  const scope = scopeFor(command, section.scopeKind);
   return {
-    target: classification.target,
+    target: targetFor(section.projectionClass),
     document: {
       scopeKind: scope.kind,
       scopeId: scope.id,
-      projectionClass: classification.projectionClass,
+      projectionClass: section.projectionClass,
       sourceId: section.id,
       sourceRevision: section.sourceRevision,
       content: section.content,
@@ -46,44 +45,29 @@ function projectSection(
   } as const;
 }
 
-function classifySection(id: string) {
-  switch (id) {
-    case "feedback-buffer":
-      return classification("recentFeedbackRefs", "recent_feedback", "session");
-    case "rules":
-    case "hot-cache":
-    case "project-hot-cache":
-      return classification("mandatoryHotCacheRefs", "mandatory_hot_cache", "structural");
-    case "personalization-profile":
-    case "profile-projection":
-    case "active-persona-reminder":
-    case "first-chat-onboarding":
-    case "eol":
-    case "role":
-    case "runtime-system-contract":
-      return classification("profileRefs", "profile", "user");
-    default:
-      return classification("optionalHotCacheRefs", "optional_hot_cache", "structural");
+function targetFor(projectionClass: ButlerContextSection["projectionClass"]) {
+  switch (projectionClass) {
+    case "profile":
+      return "profileRefs" as const;
+    case "recent_feedback":
+      return "recentFeedbackRefs" as const;
+    case "mandatory_hot_cache":
+      return "mandatoryHotCacheRefs" as const;
+    case "optional_hot_cache":
+      return "optionalHotCacheRefs" as const;
   }
-}
-
-function classification(
-  target: "profileRefs" | "recentFeedbackRefs" | "mandatoryHotCacheRefs" | "optionalHotCacheRefs",
-  projectionClass: "profile" | "recent_feedback" | "mandatory_hot_cache" | "optional_hot_cache",
-  scope: "user" | "session" | "structural",
-) {
-  return { target, projectionClass, scope } as const;
 }
 
 function scopeFor(
   command: ButlerContextSnapshotCommand,
-  requested: "user" | "session" | "structural",
+  requested: ButlerContextSection["scopeKind"],
 ) {
   if (requested === "user") return { kind: "user" as const, id: command.userRef };
   if (requested === "session") return { kind: "session" as const, id: command.sessionId };
-  return command.projectRef
-    ? { kind: "project" as const, id: command.projectRef }
-    : { kind: "session" as const, id: command.sessionId };
+  if (!command.projectRef) {
+    throw new Error("BTCC project context section requires a project binding");
+  }
+  return { kind: "project" as const, id: command.projectRef };
 }
 
 function observationScopes(command: ButlerContextSnapshotCommand): string[] {

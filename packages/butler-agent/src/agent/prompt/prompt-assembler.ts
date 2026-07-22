@@ -10,6 +10,10 @@ import {
   stablePromptPrefixHash,
   stablePromptSections,
 } from "../context/prompt-cache-policy.ts";
+import type {
+  ContextProjectionClass,
+  ContextScopeKind,
+} from "../context/context-projection.ts";
 import { cognitionMemoryRoot } from "../cognition/paths.ts";
 import { renderFeedbackBufferContext } from "../cognition/feedback/buffer.ts";
 import { projectMemoryPath, refreshProjectCapsule } from "../cognition/memory/project-memory.ts";
@@ -38,6 +42,8 @@ export interface PromptSection {
   title: string;
   content: string;
   region?: ContextRegion;
+  projectionClass: ContextProjectionClass;
+  scopeKind: ContextScopeKind;
 }
 
 export interface AssembledPrompt {
@@ -154,18 +160,10 @@ function buildRulesContent(rulesDir: string): string | null {
 
 function pushSection(
   sections: PromptSection[],
-  id: string,
-  title: string,
-  content: string | null,
-  region?: ContextRegion,
+  section: Omit<PromptSection, "content"> & { content: string | null },
 ): void {
-  if (!content) return;
-  sections.push({
-    id,
-    title,
-    content,
-    region,
-  });
+  if (!section.content) return;
+  sections.push({ ...section, content: section.content });
 }
 
 function joinSections(sections: PromptSection[]): string {
@@ -185,34 +183,38 @@ function buildDynamicMemorySections(input: {
     butlerData: input.butlerData,
     projectId: input.projectId,
   });
-  pushSection(
-    sections,
-    "hot-cache",
-    "Hot Cache",
-    readTextIfExists(join(memoryRoot, "hot", "cache.md")),
-    "retrieved_context",
-  );
-  pushSection(
-    sections,
-    "session-continuity",
-    "Session Continuity",
-    readTextIfExists(sessionContinuityPath(input.butlerData, input.sessionId)),
-    "retrieved_context",
-  );
-  pushSection(
-    sections,
-    "project-memory",
-    "Project Memory",
-    projectMemoryFile ? readTextIfExists(projectMemoryFile) : null,
-    "retrieved_context",
-  );
-  pushSection(
-    sections,
-    "project-hot-cache",
-    "Project Hot Cache",
-    readTextIfExists(join(input.workspacePath, ".butler", "hot-cache.md")),
-    "retrieved_context",
-  );
+  pushSection(sections, {
+    id: "hot-cache",
+    title: "Hot Cache",
+    content: readTextIfExists(join(memoryRoot, "hot", "cache.md")),
+    region: "retrieved_context",
+    projectionClass: "mandatory_hot_cache",
+    scopeKind: "user",
+  });
+  pushSection(sections, {
+    id: "session-continuity",
+    title: "Session Continuity",
+    content: readTextIfExists(sessionContinuityPath(input.butlerData, input.sessionId)),
+    region: "retrieved_context",
+    projectionClass: "optional_hot_cache",
+    scopeKind: "session",
+  });
+  pushSection(sections, {
+    id: "project-memory",
+    title: "Project Memory",
+    content: projectMemoryFile ? readTextIfExists(projectMemoryFile) : null,
+    region: "retrieved_context",
+    projectionClass: "optional_hot_cache",
+    scopeKind: "project",
+  });
+  pushSection(sections, {
+    id: "project-hot-cache",
+    title: "Project Hot Cache",
+    content: readTextIfExists(join(input.workspacePath, ".butler", "hot-cache.md")),
+    region: "retrieved_context",
+    projectionClass: "mandatory_hot_cache",
+    scopeKind: input.projectId ? "project" : "session",
+  });
   return sections;
 }
 
@@ -226,38 +228,41 @@ function buildDynamicPersonalizationSections(input: {
 }): PromptSection[] {
   const sections: PromptSection[] = [];
   if (input.role === "butler") {
-    pushSection(
-      sections,
-      "first-chat-onboarding",
-      "First-Chat Onboarding",
-      renderFirstChatOnboardingPrompt({
+    pushSection(sections, {
+      id: "first-chat-onboarding",
+      title: "First-Chat Onboarding",
+      content: renderFirstChatOnboardingPrompt({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
         locale: input.locale,
       }),
-      "runtime_state",
-    );
+      region: "runtime_state",
+      projectionClass: "profile",
+      scopeKind: "user",
+    });
   }
-  pushSection(
-    sections,
-    "feedback-buffer",
-    "Active Feedback Buffer",
-    renderFeedbackBufferContext({
+  pushSection(sections, {
+    id: "feedback-buffer",
+    title: "Active Feedback Buffer",
+    content: renderFeedbackBufferContext({
       butlerData: input.butlerData,
       sessionId: input.sessionId,
       projectId: input.projectId,
     }),
-    "live_configuration",
-  );
-  pushSection(
-    sections,
-    "profile-projection",
-    "Profile Projection",
-    renderRuntimeProfileProjectionPrompt(
+    region: "live_configuration",
+    projectionClass: "recent_feedback",
+    scopeKind: "session",
+  });
+  pushSection(sections, {
+    id: "profile-projection",
+    title: "Profile Projection",
+    content: renderRuntimeProfileProjectionPrompt(
       readRuntimeProfileProjection(input.butlerData),
     ),
-    "live_configuration",
-  );
+    region: "live_configuration",
+    projectionClass: "profile",
+    scopeKind: "user",
+  });
   return sections;
 }
 
@@ -268,22 +273,24 @@ function buildLiveConfigurationSections(input: {
 }): PromptSection[] {
   const sections: PromptSection[] = [];
   if (input.binding.role === "butler") {
-    pushSection(
-      sections,
-      "eol",
-      "Butler Operating Ethos / EOL",
-      readTextIfExists(join(input.butlerData, "eol.md")) ??
+    pushSection(sections, {
+      id: "eol",
+      title: "Butler Operating Ethos / EOL",
+      content: readTextIfExists(join(input.butlerData, "eol.md")) ??
         readTextIfExists(butlerAgentResourcesPath(input.butlerHome, "eol.md")),
-      "live_configuration",
-    );
+      region: "live_configuration",
+      projectionClass: "profile",
+      scopeKind: "user",
+    });
   } else {
-    pushSection(
-      sections,
-      "steward-config",
-      "Steward Prompt",
-      readTextIfExists(join(input.butlerData, "config", "steward.md")),
-      "live_configuration",
-    );
+    pushSection(sections, {
+      id: "steward-config",
+      title: "Steward Prompt",
+      content: readTextIfExists(join(input.butlerData, "config", "steward.md")),
+      region: "live_configuration",
+      projectionClass: "optional_hot_cache",
+      scopeKind: input.binding.projectId ? "project" : "session",
+    });
   }
 
   const personaReminder = input.binding.role === "butler"
@@ -293,22 +300,24 @@ function buildLiveConfigurationSections(input: {
     sections.push({ ...personaReminder, region: "live_configuration" });
   }
 
-  pushSection(
-    sections,
-    "personalization-profile",
-    "Personalization Profile",
-    renderPersonalizationProfilePrompt(
+  pushSection(sections, {
+    id: "personalization-profile",
+    title: "Personalization Profile",
+    content: renderPersonalizationProfilePrompt(
       readPersonalizationProfile(input.butlerData),
     ),
-    "live_configuration",
-  );
-  pushSection(
-    sections,
-    "rules",
-    "Active Rules",
-    buildRulesContent(join(cognitionMemoryRoot(input.butlerData), "rules")),
-    "live_configuration",
-  );
+    region: "live_configuration",
+    projectionClass: "profile",
+    scopeKind: "user",
+  });
+  pushSection(sections, {
+    id: "rules",
+    title: "Active Rules",
+    content: buildRulesContent(join(cognitionMemoryRoot(input.butlerData), "rules")),
+    region: "live_configuration",
+    projectionClass: "mandatory_hot_cache",
+    scopeKind: "user",
+  });
   return sections;
 }
 
@@ -318,6 +327,8 @@ function hashSections(sections: PromptSection[]): string {
       id: section.id,
       title: section.title,
       content: section.content,
+      projectionClass: section.projectionClass,
+      scopeKind: section.scopeKind,
     }))))
     .digest("hex")
     .slice(0, 16);
@@ -340,6 +351,8 @@ function buildActivePersonaReminderSection(butlerData: string): PromptSection | 
     id: "active-persona-reminder",
     title: "Active Persona Reminder",
     region: "live_configuration",
+    projectionClass: "profile",
+    scopeKind: "user",
     content: [
       "Use this current persona for every user-facing answer in this turn.",
       "Use the configured Assistant Response Language from the Turn Environment for every final answer and visible status text.",
@@ -392,6 +405,8 @@ function buildRuntimeStateSection(input: {
     title: "Runtime State",
     content: lines.join("\n"),
     region: "runtime_state",
+    projectionClass: "optional_hot_cache",
+    scopeKind: input.binding.projectId ? "project" : "session",
   };
 }
 
@@ -550,6 +565,8 @@ function buildCurrentInputSection(input: {
     title: "Current User Input",
     content: lines.join("\n"),
     region: "current_input",
+    projectionClass: "optional_hot_cache",
+    scopeKind: "session",
   };
 }
 
@@ -572,7 +589,11 @@ function attachmentReferencesFromEnvelope(envelope: InboundEnvelope): ContextRef
     }));
 }
 
-function buildCurrentAttachmentReferenceSection(envelope: InboundEnvelope): PromptSection | null {
+function buildCurrentAttachmentReferenceSection(input: {
+  envelope: InboundEnvelope;
+  binding: StoredSessionBinding;
+}): PromptSection | null {
+  const envelope = input.envelope;
   const attachments = Array.isArray(envelope.message.attachments)
     ? envelope.message.attachments
     : [];
@@ -592,6 +613,8 @@ function buildCurrentAttachmentReferenceSection(envelope: InboundEnvelope): Prom
     title: "Current Attachment References",
     content: lines.join("\n"),
     region: "working_context",
+    projectionClass: "optional_hot_cache",
+    scopeKind: input.binding.projectId ? "project" : "session",
   };
 }
 
@@ -691,30 +714,33 @@ export class PromptAssembler {
   private buildStaticContextSections(binding: StoredSessionBinding): PromptSection[] {
     const sections: PromptSection[] = [];
 
-    pushSection(
-      sections,
-      "runtime-system-contract",
-      "Runtime System Contract",
-      readTextIfExists(butlerAgentResourcesPath(this.butlerHome, "prompts", "runtime-system-contract.md")),
-      "static_context",
-    );
+    pushSection(sections, {
+      id: "runtime-system-contract",
+      title: "Runtime System Contract",
+      content: readTextIfExists(butlerAgentResourcesPath(this.butlerHome, "prompts", "runtime-system-contract.md")),
+      region: "static_context",
+      projectionClass: "profile",
+      scopeKind: "user",
+    });
 
     if (binding.role === "butler") {
-      pushSection(
-        sections,
-        "role",
-        "Butler Role Rules",
-        readTextIfExists(butlerAgentResourcesPath(this.butlerHome, "prompts", "butler.md")),
-        "static_context",
-      );
+      pushSection(sections, {
+        id: "role",
+        title: "Butler Role Rules",
+        content: readTextIfExists(butlerAgentResourcesPath(this.butlerHome, "prompts", "butler.md")),
+        region: "static_context",
+        projectionClass: "profile",
+        scopeKind: "user",
+      });
     } else {
-      pushSection(
-        sections,
-        "role",
-        "Steward Role Rules",
-        readTextIfExists(butlerAgentResourcesPath(this.butlerHome, "prompts", "steward.md")),
-        "static_context",
-      );
+      pushSection(sections, {
+        id: "role",
+        title: "Steward Role Rules",
+        content: readTextIfExists(butlerAgentResourcesPath(this.butlerHome, "prompts", "steward.md")),
+        region: "static_context",
+        projectionClass: "profile",
+        scopeKind: "user",
+      });
     }
 
     return sections;
@@ -858,7 +884,7 @@ export class PromptAssembler {
       }),
     ];
     const livePersonalization = personalization.filter((section) => section.region === "live_configuration");
-    const currentAttachmentReferences = buildCurrentAttachmentReferenceSection(input.envelope);
+    const currentAttachmentReferences = buildCurrentAttachmentReferenceSection(input);
     return {
       staticContext: this.buildStaticContextSections(input.binding),
       liveConfiguration: [
