@@ -28,7 +28,10 @@ test("provider-round deadline configuration accepts only positive integer millis
 
   process.env.BUTLER_PROVIDER_ROUND_TIMEOUT_MS = "321";
   process.env.BUTLER_PROVIDER_ROUND_IDLE_TIMEOUT_MS = "123";
-  expect(resolveProviderRoundPolicy()).toEqual({ totalTimeoutMs: 321, idleTimeoutMs: 123 });
+  expect(resolveProviderRoundPolicy()).toEqual({
+    totalTimeoutMs: 321,
+    idleTimeoutMs: 123,
+  });
 });
 
 test("a Codex stream whose body ignores abort still fails on the idle provider-round deadline", async () => {
@@ -38,18 +41,22 @@ test("a Codex stream whose body ignores abort still fails on the idle provider-r
   });
   process.env.BUTLER_MODEL_API_RETRY_ATTEMPTS = "3";
 
-  const error = await captureFailure(() => createTestResponse({
-    totalTimeoutMs: 200,
-    idleTimeoutMs: 20,
-  }));
+  const error = await captureFailure(() =>
+    createTestResponse({
+      totalTimeoutMs: 200,
+      idleTimeoutMs: 20,
+    }),
+  );
 
   expect(error).toBeInstanceOf(ModelProviderRequestError);
   const diagnostic = (error as ModelProviderRequestError).diagnostic();
   expect(diagnostic).toMatchObject({
     code: "provider_round_timeout",
-    retryable: false,
+    retryable: true,
     timeoutKind: "idle",
   });
+  expect(diagnostic.message).toContain("preserved the current turn checkpoint");
+  expect(diagnostic.message).not.toContain("Send a new message");
   expect(JSON.stringify(diagnostic)).not.toContain("test");
   expect(JSON.stringify(diagnostic)).not.toContain("account");
   expect(fetchCalls).toBe(1);
@@ -69,19 +76,21 @@ test("a hosted chat request that never returns enters provider recovery through 
     apiKey: "test",
   };
 
-  const error = await captureFailure(() => createHostedChatCompletion(
-    config,
-    { messages: [{ role: "user", content: "test" }] },
-    undefined,
-    { roundIndex: 0 },
-    3,
-    { totalTimeoutMs: 200, idleTimeoutMs: 20 },
-  ));
+  const error = await captureFailure(() =>
+    createHostedChatCompletion(
+      config,
+      { messages: [{ role: "user", content: "test" }] },
+      undefined,
+      { roundIndex: 0 },
+      3,
+      { totalTimeoutMs: 200, idleTimeoutMs: 20 },
+    ),
+  );
 
   expect(error).toBeInstanceOf(ModelProviderRequestError);
   expect((error as ModelProviderRequestError).diagnostic()).toMatchObject({
     code: "provider_round_timeout",
-    retryable: false,
+    retryable: true,
     timeoutKind: "idle",
   });
   expect(fetchCalls).toBe(1);
@@ -94,10 +103,12 @@ test("valid JSON SSE events reset idle time until response completion", async ()
     { afterMs: 10, event: completedEvent("ok") },
   ]);
 
-  await expect(createTestResponse({
-    totalTimeoutMs: 100,
-    idleTimeoutMs: 18,
-  })).resolves.toMatchObject({ id: "response-complete", output_text: "x" });
+  await expect(
+    createTestResponse({
+      totalTimeoutMs: 100,
+      idleTimeoutMs: 18,
+    }),
+  ).resolves.toMatchObject({ id: "response-complete", output_text: "x" });
 });
 
 test("valid progress cannot extend the absolute provider-round deadline", async () => {
@@ -108,10 +119,12 @@ test("valid progress cannot extend the absolute provider-round deadline", async 
     { afterMs: 8, event: completedEvent("late") },
   ]);
 
-  const error = await captureFailure(() => createTestResponse({
-    totalTimeoutMs: 22,
-    idleTimeoutMs: 15,
-  }));
+  const error = await captureFailure(() =>
+    createTestResponse({
+      totalTimeoutMs: 22,
+      idleTimeoutMs: 15,
+    }),
+  );
 
   expect((error as ModelProviderRequestError).diagnostic()).toMatchObject({
     code: "provider_round_timeout",
@@ -132,15 +145,21 @@ test("empty chunks yield to the deadline and do not count as progress", async ()
         value.enqueue(new Uint8Array());
       },
     });
-    init?.signal?.addEventListener("abort", () => controller?.error(init.signal?.reason), { once: true });
+    init?.signal?.addEventListener(
+      "abort",
+      () => controller?.error(init.signal?.reason),
+      { once: true },
+    );
     return new Response(stream, { status: 200 });
   }) as typeof fetch;
 
   const startedAt = performance.now();
-  const error = await captureFailure(() => createTestResponse({
-    totalTimeoutMs: 200,
-    idleTimeoutMs: 20,
-  }));
+  const error = await captureFailure(() =>
+    createTestResponse({
+      totalTimeoutMs: 200,
+      idleTimeoutMs: 20,
+    }),
+  );
 
   expect((error as ModelProviderRequestError).diagnostic()).toMatchObject({
     code: "provider_round_timeout",
@@ -155,10 +174,15 @@ test("external user cancellation wins over a provider-round timeout", async () =
   const controller = new AbortController();
   setTimeout(() => controller.abort(), 10);
 
-  const error = await captureFailure(() => createTestResponse({
-    totalTimeoutMs: 200,
-    idleTimeoutMs: 100,
-  }, controller.signal));
+  const error = await captureFailure(() =>
+    createTestResponse(
+      {
+        totalTimeoutMs: 200,
+        idleTimeoutMs: 100,
+      },
+      controller.signal,
+    ),
+  );
 
   expect(error).toBeInstanceOf(Error);
   expect((error as Error).name).toBe("AbortError");
@@ -205,15 +229,21 @@ function codexFetchFromSchedule(
             return;
           }
           timer = setTimeout(() => {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(item.event)}\n\n`));
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(item.event)}\n\n`),
+            );
             emitNext();
           }, item.afterMs);
         };
         emitNext();
-        init?.signal?.addEventListener("abort", () => {
-          if (timer) clearTimeout(timer);
-          controller.error(init.signal?.reason);
-        }, { once: true });
+        init?.signal?.addEventListener(
+          "abort",
+          () => {
+            if (timer) clearTimeout(timer);
+            controller.error(init.signal?.reason);
+          },
+          { once: true },
+        );
       },
     });
     return new Response(stream, { status: 200 });
@@ -233,13 +263,16 @@ function completedEvent(text: string): Record<string, unknown> {
 }
 
 function fakeAuthorization(): string {
-  const encode = (value: Record<string, unknown>) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const encode = (value: Record<string, unknown>) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
   return `Bearer ${encode({ alg: "none" })}.${encode({
     "https://api.openai.com/auth": { chatgpt_account_id: "account" },
   })}.signature`;
 }
 
-async function captureFailure(operation: () => Promise<unknown>): Promise<unknown> {
+async function captureFailure(
+  operation: () => Promise<unknown>,
+): Promise<unknown> {
   try {
     await operation();
   } catch (error) {
