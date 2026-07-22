@@ -11,6 +11,10 @@ export class ManagedPlanningRecordWriter {
   constructor(private readonly records: SqliteImmutableRecordStore) {}
 
   record(candidate: PlanningCandidate): void {
+    if ("validationFindings" in candidate) {
+      this.insert("plan_candidate_draft", candidate);
+      return;
+    }
     this.insert("plan_candidate", candidate);
     this.insert("plan", candidate.plan);
     for (const work of candidate.works) this.insert("work", work);

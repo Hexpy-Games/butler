@@ -22,8 +22,9 @@ import {
   type TaskDraft,
   type WorkDraft,
 } from "./read-plan-drafts.ts";
+import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
 
-type AuthoringState = {
+export type AuthoringState = {
   ledgerId: string;
   programId: string;
   observedManifestRevision: number;
@@ -50,7 +51,10 @@ export function authorPlanCandidate(
     authoredSpecs,
   );
   if (state.requireGoverningSpec && governingSpecRefs.length === 0) {
-    throw new Error("Project Planning must reuse or author a governing Spec revision");
+    rejectPlanningProposal(
+      "governing_spec_missing",
+      "Project Planning must reuse or author a governing Spec revision",
+    );
   }
   state = { ...state, governingSpecRefs };
   const drafts = readWorkDrafts(
@@ -227,7 +231,9 @@ function recordKindForRef(recordKind: string): string {
 
 function authorSpecs(value: unknown) {
   if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new Error("Planning specifications must be an array");
+  if (!Array.isArray(value)) {
+    rejectPlanningProposal("specifications_invalid", "Planning specifications must be an array");
+  }
   const specs = value.map((item, index) => {
     const draft = item as Record<string, unknown>;
     const body = {
@@ -238,7 +244,10 @@ function authorSpecs(value: unknown) {
     return { ref: contentRef("spec-revision", body), ...body };
   });
   if (new Set(specs.map((spec) => spec.logicalId)).size !== specs.length) {
-    throw new Error("Planning specifications contain duplicate logical IDs");
+    rejectPlanningProposal(
+      "specification_id_duplicate",
+      "Planning specifications contain duplicate logical IDs",
+    );
   }
   return specs;
 }
@@ -250,18 +259,29 @@ function selectGoverningSpecs(
 ): ContentRef[] {
   if (value === undefined) return authored.map((spec) => spec.ref);
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    throw new Error("governingSpecSelections must be a string array");
+    rejectPlanningProposal(
+      "governing_spec_selection_invalid",
+      "governingSpecSelections must be a string array",
+    );
   }
   const selections = value as string[];
   if (new Set(selections).size !== selections.length) {
-    throw new Error("governingSpecSelections contains duplicates");
+    rejectPlanningProposal(
+      "governing_spec_selection_duplicate",
+      "governingSpecSelections contains duplicates",
+    );
   }
   const candidates = new Map(
     available.map((spec) => [spec.logicalId, spec.revisionRef] as const),
   );
   const selected = selections.map((selection) => {
     const ref = candidates.get(selection);
-    if (!ref) throw new Error(`governingSpecSelections contains an unavailable Spec: ${selection}`);
+    if (!ref) {
+      rejectPlanningProposal(
+        "governing_spec_unavailable",
+        `governingSpecSelections contains an unavailable Spec: ${selection}`,
+      );
+    }
     return ref;
   });
   const authoredIds = new Set(authored.map((spec) => spec.logicalId));
@@ -320,6 +340,11 @@ function materializeWorks(
 
 function requiredRef(refs: Map<string, ContentRef>, id: string, kind: string): ContentRef {
   const ref = refs.get(id);
-  if (!ref) throw new Error(`${kind} dependency is not materialized: ${id}`);
+  if (!ref) {
+    rejectPlanningProposal(
+      "dependency_not_materialized",
+      `${kind} dependency is not materialized: ${id}`,
+    );
+  }
   return ref;
 }

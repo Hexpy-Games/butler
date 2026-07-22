@@ -10,6 +10,7 @@ import {
   materializeIntegrationCriteria,
   materializePromotionSelectors,
 } from "./author-lifecycle-records.ts";
+import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
 
 export type DraftArtifactPolicy =
   | {
@@ -41,7 +42,7 @@ export function readArtifactPolicy(
     };
   }
   if (kind === "repository_promotion") return { kind, targetScopeRef, targetPath };
-  throw new Error("Task artifact policy is invalid");
+  rejectPlanningProposal("artifact_policy_invalid", "Task artifact policy is invalid");
 }
 
 export function authorArtifactLifecycle(
@@ -92,11 +93,17 @@ function requireContainedTargetPath(value: string): string {
     normalized.startsWith("/") || normalized.length === 0 || normalized === "." ||
     normalized.includes("\0") || normalized[1] === ":"
   ) {
-    throw new Error("Artifact targetPath must name a workspace-relative contained target");
+    rejectPlanningProposal(
+      "artifact_target_invalid",
+      "Artifact targetPath must name a workspace-relative contained target",
+    );
   }
   const segments = normalized.split("/");
   if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
-    throw new Error("Artifact targetPath escapes or ambiguously names the workspace");
+    rejectPlanningProposal(
+      "artifact_target_escapes",
+      "Artifact targetPath escapes or ambiguously names the workspace",
+    );
   }
   return segments.join("/");
 }

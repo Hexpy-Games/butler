@@ -7,12 +7,17 @@ import {
   type PhaseInvocation,
 } from "../core/index.ts";
 import type {
+  PlanningCandidate,
   PlanningCandidateProduct,
+  PlanningDraftCandidate,
   PlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
-import { planReviewSubmissionSchema } from "./submission-schemas.ts";
-import { attestReviewedPlanReferences } from "./review-plan-attestation.ts";
+import {
+  planReviewSubmissionSchema,
+  planRevisionReviewSubmissionSchema,
+} from "./submission-schemas.ts";
+import { attestCandidateBundle } from "./review-plan-attestation.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
@@ -31,61 +36,121 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec = withManagedDeferral<PlanningReviewProduct>({
-  submissionSchema: planReviewSubmissionSchema,
-  decode(submission, envelope) {
-    const candidate = loadCandidate(envelope.context.stateInput);
-    const value = requireRecord(submission, "Planning Review submission");
-    if (value.kind !== "planning_review") throw new Error("Planning Review kind is invalid");
-    if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
-      throw new Error("Planning Review verdict is invalid");
-    }
-    const findings = requireStringArray(value.findings, "Planning Review findings");
-    if (value.verdict === "accepted") {
-      attestReviewedPlanReferences(value, candidate.candidate);
-    }
-    const reviewBase = {
-      candidateRef: candidate.candidate.ref,
-      originalGoalContractRef: candidate.candidate.goalContractRef,
-      reviewedBundleRef: candidate.candidate.bundle.ref,
-      reviewedWorkGraphRef: candidate.candidate.workGraph.ref,
-      reviewedWorkRefs: candidate.candidate.works.map((item) => item.ref),
-      reviewedTaskRefs: candidate.candidate.tasks.map((item) => item.ref),
-      reviewedCriterionRefs: candidate.candidate.criteria.map((item) => item.ref),
-      reviewedVerificationQuestionRefs: candidate.candidate.verificationQuestions.map((item) => item.ref),
-      reviewedEffectIntentRefs: candidate.candidate.effectIntents.map((item) => item.ref),
-      reviewedIntegrationCriterionRefs: candidate.candidate.integrationCriteria.map((item) => item.ref),
-      reviewedArtifactLifecycleRef: candidate.candidate.artifactLifecycle.ref,
-      reviewedSpecRevisionRefs: candidate.candidate.authoredSpecRevisionRefs,
-    };
-    if (value.verdict === "accepted") {
-      const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
-      return {
-        kind: "planning_accepted",
-        candidate: candidate.candidate,
-        review: { ref: contentRef("planning-review", body), ...body },
-      };
-    }
-    const findingSetRef = contentRef("planning-finding-set", {
-      candidateRef: candidate.candidate.ref,
-      findings,
-    });
-    const body = {
-      ...reviewBase,
-      verdict: "revision_required" as const,
-      findings: findings as [string, ...string[]],
-      findingSetRef,
-    };
-    return {
-      kind: "planning_revision_required",
-      candidate: candidate.candidate,
-      review: { ref: contentRef("planning-review", body), ...body },
-    };
-  },
-});
+function reviewCodec(candidate: PlanningCandidateProduct) {
+  return withManagedDeferral<PlanningReviewProduct>({
+    submissionSchema: isDraft(candidate.candidate)
+      ? planRevisionReviewSubmissionSchema
+      : planReviewSubmissionSchema,
+    decode(submission, envelope) {
+      const loaded = loadCandidate(envelope.context.stateInput);
+      const value = requireRecord(submission, "Planning Review submission");
+      if (value.kind !== "planning_review") throw new Error("Planning Review kind is invalid");
+      if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
+        throw new Error("Planning Review verdict is invalid");
+      }
+      const submittedFindings = requireStringArray(value.findings, "Planning Review findings");
+      if (isDraft(loaded.candidate)) {
+        return requireDraftRevision(loaded.candidate, submittedFindings);
+      }
+      const materialized = loaded.candidate;
+      const reviewBase = exactReviewBase(materialized);
+      if (value.verdict === "accepted") {
+        attestCandidateBundle(materialized);
+        const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
+        return {
+          kind: "planning_accepted" as const,
+          candidate: materialized,
+          review: { ref: contentRef("planning-review", body), ...body },
+        };
+      }
+      return requireMaterializedRevision(materialized, reviewBase, submittedFindings);
+    },
+  });
+}
+
+function exactReviewBase(candidate: PlanningCandidate) {
+  return {
+    candidateRef: candidate.ref,
+    originalGoalContractRef: candidate.goalContractRef,
+    reviewedBundleRef: candidate.bundle.ref,
+    reviewedWorkGraphRef: candidate.workGraph.ref,
+    reviewedWorkRefs: candidate.works.map((item) => item.ref),
+    reviewedTaskRefs: candidate.tasks.map((item) => item.ref),
+    reviewedCriterionRefs: candidate.criteria.map((item) => item.ref),
+    reviewedVerificationQuestionRefs: candidate.verificationQuestions.map((item) => item.ref),
+    reviewedEffectIntentRefs: candidate.effectIntents.map((item) => item.ref),
+    reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
+    reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
+    reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+  };
+}
+
+function requireMaterializedRevision(
+  candidate: PlanningCandidate,
+  reviewBase: ReturnType<typeof exactReviewBase>,
+  submittedFindings: string[],
+): PlanningReviewProduct {
+  const findings = requireFindings(submittedFindings);
+  const findingSetRef = contentRef("planning-finding-set", {
+    candidateRef: candidate.ref,
+    findings,
+  });
+  const body = {
+    ...reviewBase,
+    verdict: "revision_required" as const,
+    findings: findings as [string, ...string[]],
+    findingSetRef,
+  };
+  return {
+    kind: "planning_revision_required",
+    candidate,
+    review: { ref: contentRef("planning-review", body), ...body },
+  };
+}
+
+function requireDraftRevision(
+  candidate: PlanningDraftCandidate,
+  submittedFindings: string[],
+): PlanningReviewProduct {
+  const findings = requireFindings([
+    ...candidate.validationFindings.map((finding) => `${finding.code}: ${finding.message}`),
+    ...submittedFindings,
+  ]);
+  const findingSetRef = contentRef("planning-finding-set", {
+    candidateRef: candidate.ref,
+    findings,
+  });
+  const body = {
+    candidateRef: candidate.ref,
+    originalGoalContractRef: candidate.goalContractRef,
+    verdict: "revision_required" as const,
+    findings,
+    findingSetRef,
+  };
+  return {
+    kind: "planning_revision_required",
+    candidate,
+    review: { ref: contentRef("planning-review", body), ...body },
+  };
+}
+
+function requireFindings(findings: string[]): [string, ...string[]] {
+  const unique = [...new Set(findings.map((finding) => finding.trim()).filter(Boolean))];
+  if (unique.length === 0) throw new Error("Planning revision requires findings");
+  return unique as [string, ...string[]];
+}
+
+function isDraft(candidate: PlanningCandidateProduct["candidate"]): candidate is PlanningDraftCandidate {
+  return "kind" in candidate && candidate.kind === "planning_draft";
+}
 
 export function reviewPlan(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const candidate = loadCandidate(command.context.stateInput);
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: reviewCodec(candidate),
+  });
 }
 
 function loadCandidate(input: unknown): PlanningCandidateProduct {

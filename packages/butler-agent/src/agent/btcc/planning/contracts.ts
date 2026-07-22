@@ -213,6 +213,21 @@ export type PlanningCandidate = {
   };
 };
 
+export type PlanningDraftCandidate = {
+  kind: "planning_draft";
+  ref: ContentRef;
+  ledgerId: string;
+  programId: string;
+  observedManifestRevision: number;
+  goalContractRef: ContentRef;
+  authorityRef: ContentRef;
+  governingSpecRefs: ContentRef[];
+  submission: Record<string, unknown>;
+  validationFindings: Array<{ code: string; message: string }>;
+};
+
+export type PlanningProposal = PlanningCandidate | PlanningDraftCandidate;
+
 export type PlanningCandidateBundleEntry = {
   recordKind: string;
   ref: ContentRef;
@@ -221,7 +236,7 @@ export type PlanningCandidateBundleEntry = {
 
 export type PlanningCandidateProduct = {
   kind: "plan_candidate";
-  candidate: PlanningCandidate;
+  candidate: PlanningProposal;
 };
 
 export type PlanningContinuation = Extract<ContinuationBinding, { kind: "deferred_goal" }>;
@@ -253,8 +268,12 @@ export type PlanningAcceptedProduct = {
 
 export type PlanningRevisionRequiredProduct = {
   kind: "planning_revision_required";
-  candidate: PlanningCandidate;
-  review: PlanningReview & {
+  candidate: PlanningProposal;
+  review: Pick<PlanningReview,
+    "ref" | "candidateRef" | "originalGoalContractRef"
+  > & Partial<Omit<PlanningReview,
+    "ref" | "candidateRef" | "originalGoalContractRef" | "verdict" | "findings" | "findingSetRef"
+  >> & {
     verdict: "revision_required";
     findings: [string, ...string[]];
     findingSetRef: ContentRef;

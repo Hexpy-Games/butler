@@ -10,6 +10,7 @@ import type {
   ManagedPlanningRisk,
   ManagedTask,
 } from "../contracts.ts";
+import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
 
 export function authorPlanningConsiderations(
   submission: Record<string, unknown>,
@@ -59,21 +60,29 @@ export function authorPlanningConsiderations(
 
 function taskRefs(value: unknown, tasks: ManagedTask[], label: string): ContentRef[] {
   const ids = requireStringArray(value, `${label}.affectedTaskIds`);
-  if (ids.length === 0) throw new Error(`${label} requires affected Tasks`);
+  if (ids.length === 0) {
+    rejectPlanningProposal("affected_tasks_missing", `${label} requires affected Tasks`);
+  }
   assertUnique(ids, `${label} affected Task`);
   const byId = new Map(tasks.map((task) => [task.taskLogicalId, task.ref]));
   return ids.map((id) => {
     const ref = byId.get(id);
-    if (!ref) throw new Error(`${label} names an unknown Task: ${id}`);
+    if (!ref) {
+      rejectPlanningProposal("affected_task_unknown", `${label} names an unknown Task: ${id}`);
+    }
     return ref;
   });
 }
 
 function requireArray(value: unknown, label: string): unknown[] {
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  if (!Array.isArray(value)) {
+    rejectPlanningProposal("planning_list_invalid", `${label} must be an array`);
+  }
   return value;
 }
 
 function assertUnique(values: string[], label: string): void {
-  if (new Set(values).size !== values.length) throw new Error(`${label} is not unique`);
+  if (new Set(values).size !== values.length) {
+    rejectPlanningProposal("planning_id_duplicate", `${label} is not unique`);
+  }
 }

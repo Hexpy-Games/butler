@@ -122,27 +122,19 @@ function planVariants(
   ];
 }
 
+const acceptedPlanReview = objectSchema({
+  kind: literalSchema("planning_review"),
+  verdict: literalSchema("accepted"),
+  findings: arraySchema(textSchema(), { maxItems: 0 }),
+});
+export const planRevisionReviewSubmissionSchema = objectSchema({
+  kind: literalSchema("planning_review"),
+  verdict: literalSchema("revision_required"),
+  findings: arraySchema(textSchema(), { minItems: 1 }),
+});
 export const planReviewSubmissionSchema = variantsSchema(
-  objectSchema({
-    kind: literalSchema("planning_review"),
-    verdict: literalSchema("accepted"),
-    findings: arraySchema(textSchema(), { maxItems: 0 }),
-    reviewedEffectIntentRefs: arraySchema(contentRefSchema()),
-    reviewedIntegrationCriterionRefs: arraySchema(contentRefSchema()),
-  }),
-  objectSchema({
-    kind: literalSchema("planning_review"),
-    verdict: literalSchema("accepted"),
-    findings: arraySchema(textSchema(), { maxItems: 0 }),
-    reviewedEffectIntentRefs: arraySchema(contentRefSchema()),
-    reviewedIntegrationCriterionRefs: arraySchema(contentRefSchema()),
-    reviewedSpecRevisionRefs: arraySchema(contentRefSchema(), { minItems: 1 }),
-  }),
-  objectSchema({
-    kind: literalSchema("planning_review"),
-    verdict: literalSchema("revision_required"),
-    findings: arraySchema(textSchema(), { minItems: 1 }),
-  }),
+  acceptedPlanReview,
+  planRevisionReviewSubmissionSchema,
 );
 
 const impact = variantsSchema(
