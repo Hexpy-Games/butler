@@ -33,6 +33,27 @@ describe("BTCC operational re-entry", () => {
     controller.abort();
     await expect(waiting).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  test("resumes a ready durable interruption without another cooldown or activation", async () => {
+    const events: string[] = [];
+    const durable = interruption("provider_phase_submission_invalid");
+    const store: OperationalRecoveryStore = {
+      async record() {
+        events.push("record");
+        return { interruptionId: "interruption-1", activationCount: 1 };
+      },
+      async markReady() { events.push("mark-ready"); },
+      async pending() { return { interruption: durable, status: "ready" }; },
+      async resolve() { return true; },
+      async pendingTurnIds() { return [checkpoint.turnId]; },
+    };
+    const recovery = createOperationalRecoveryBoundary(store, {
+      async wait() { events.push("wait"); },
+    });
+
+    expect(await recovery.resume(checkpoint, new AbortController().signal)).toBe(durable);
+    expect(events).toEqual([]);
+  });
 });
 
 function recoveryStore(events: string[]): OperationalRecoveryStore {

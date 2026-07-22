@@ -25,10 +25,15 @@ export type OperationalRecoveryReceipt = {
   activationCount: number;
 };
 
+export type OperationalRecoveryRecord = {
+  interruption: OperationalInterruptionError;
+  status: "interrupted" | "ready";
+};
+
 export interface OperationalRecoveryStore {
   record(interruption: OperationalInterruptionError): Promise<OperationalRecoveryReceipt>;
   markReady(receipt: OperationalRecoveryReceipt): Promise<void>;
-  pending(anchor: OperationalCheckpointAnchor): Promise<OperationalInterruptionError | null>;
+  pending(anchor: OperationalCheckpointAnchor): Promise<OperationalRecoveryRecord | null>;
   resolve(anchor: OperationalCheckpointAnchor): Promise<boolean>;
   pendingTurnIds(): Promise<string[]>;
 }
@@ -46,7 +51,10 @@ export interface OperationalRecoveryBoundary {
     interruption: OperationalInterruptionError,
     signal: AbortSignal,
   ): Promise<void>;
-  pending(anchor: OperationalCheckpointAnchor): Promise<OperationalInterruptionError | null>;
+  resume(
+    anchor: OperationalCheckpointAnchor,
+    signal: AbortSignal,
+  ): Promise<OperationalInterruptionError | null>;
   resolve(anchor: OperationalCheckpointAnchor): Promise<boolean>;
   pendingTurnIds(): Promise<string[]>;
 }

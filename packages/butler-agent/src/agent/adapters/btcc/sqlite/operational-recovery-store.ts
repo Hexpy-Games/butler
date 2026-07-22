@@ -10,6 +10,7 @@ type ReceiptRow = { interruption_id: string; activation_count: number };
 type InterruptionRow = {
   code: string;
   activation_kind: OperationalInterruptionError["activation"]["kind"];
+  status: "interrupted" | "ready";
 };
 
 export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore {
@@ -64,12 +65,12 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
 
   async pending(
     anchor: OperationalCheckpointAnchor,
-  ): Promise<OperationalInterruptionError | null> {
+  ) {
     const row = this.db.query<InterruptionRow, [string, string, number, string, number, number]>(`
-      SELECT code, activation_kind FROM btcc_operational_interruptions
+      SELECT code, activation_kind, status FROM btcc_operational_interruptions
       WHERE claim_id = ? AND turn_id = ? AND turn_revision = ?
         AND checkpoint_id = ? AND checkpoint_revision = ?
-        AND execution_fence = ? AND status = 'interrupted'
+        AND execution_fence = ? AND status IN ('interrupted', 'ready')
       ORDER BY interrupted_at DESC LIMIT 1
     `).get(
       anchor.claimId,
@@ -79,13 +80,14 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       anchor.checkpointRevision,
       anchor.executionFence,
     );
-    return row
-      ? new OperationalInterruptionError(
-          row.code,
-          anchor,
-          { kind: row.activation_kind },
-        )
-      : null;
+    return row ? {
+      interruption: new OperationalInterruptionError(
+        row.code,
+        anchor,
+        { kind: row.activation_kind },
+      ),
+      status: row.status,
+    } : null;
   }
 
   async resolve(anchor: OperationalCheckpointAnchor): Promise<boolean> {
@@ -113,7 +115,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       FROM btcc_operational_interruptions interruption
       JOIN btcc_state_claims claim ON claim.claim_id = interruption.claim_id
       JOIN btcc_turns turn ON turn.turn_id = interruption.turn_id
-      WHERE interruption.status = 'interrupted' AND claim.status = 'active'
+      WHERE interruption.status IN ('interrupted', 'ready') AND claim.status = 'active'
         AND turn.semantic_state NOT IN ('delivered', 'cancelled')
       ORDER BY interruption.interrupted_at
     `).all().map((row) => row.turn_id);

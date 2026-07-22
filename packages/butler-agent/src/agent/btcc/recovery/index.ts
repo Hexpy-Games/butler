@@ -4,6 +4,7 @@ export {
   createProviderRecoveryReadiness,
 } from "./operational-recovery.ts";
 export { shouldScheduleAutomaticRecovery } from "./automatic-recovery-policy.ts";
+export { correctionForOperationalInterruption } from "./provider-correction.ts";
 export { LedgerContentionInterruption } from "./ledger-contention-interruption.ts";
 export {
   isBtccOperationalInterruption,
@@ -17,6 +18,7 @@ export type {
   ExecutionPermit,
   OperationalRecoveryBoundary,
   OperationalRecoveryReceipt,
+  OperationalRecoveryRecord,
   OperationalRecoveryStore,
   ProviderRecoveryReadiness,
   TurnExecutionSupervisor,

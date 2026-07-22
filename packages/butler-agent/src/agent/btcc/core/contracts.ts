@@ -58,6 +58,12 @@ export type PhaseEnvelope = {
   operationAuthority: OperationAuthority;
   operationResults: OperationResult[];
   submissionSchema: SubmissionSchema;
+  providerCorrection?: ProviderCorrection;
+};
+
+export type ProviderCorrection = {
+  kind: "previous_provider_product_rejected";
+  code: "provider_protocol_interruption" | "provider_phase_submission_invalid";
 };
 
 export type AuthoringContractBinding = {
@@ -248,6 +254,7 @@ export type PhaseConversationCommand<Product> = {
   operations: OperationExecutor;
   operationAuthority: OperationAuthority;
   executionPermit: ExecutionPermit;
+  providerCorrection?: ProviderCorrection;
 };
 
 export type PhaseInvocation = Pick<
@@ -260,4 +267,5 @@ export type PhaseInvocation = Pick<
   | "operations"
   | "operationAuthority"
   | "executionPermit"
+  | "providerCorrection"
 >;

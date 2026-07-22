@@ -12,6 +12,7 @@ import { planning } from "./planning/index.ts";
 import { reporting } from "./reporting/index.ts";
 import {
   createTurnExecutionSupervisor,
+  correctionForOperationalInterruption,
   LedgerContentionInterruption,
   isBtccOperationalInterruption,
   OperationalInterruptionError,
@@ -19,6 +20,7 @@ import {
   type ExecutionPermit,
   type TurnExecutionSupervisor,
 } from "./recovery/index.ts";
+import type { ProviderCorrection } from "./core/index.ts";
 import {
   createPhaseInvocation,
   decideTransition,
@@ -57,6 +59,7 @@ async function runBtccTurn(
   supervisor: TurnExecutionSupervisor,
 ): Promise<BtccTurnOutcome> {
   let turn = await loadOrAdmitTurn(command, dependencies);
+  let providerCorrection: ProviderCorrection | undefined;
   turn = await dependencies.turns.activateCommittedSuccessor(turn.turnId);
   await publishProgress(dependencies.progress, turn);
   while (!isTerminal(turn)) {
@@ -67,12 +70,19 @@ async function runBtccTurn(
     });
     try {
       const claim = await dependencies.turns.acquireStateExecutionClaim(turn);
-      await recoverPersistedInterruption(
+      const recovered = await recoverPersistedInterruption(
         dependencies,
         currentCheckpointBinding(claim),
         permit,
       );
-      const event = await advanceBtccAlgorithm(turn, claim, dependencies, permit);
+      providerCorrection = correctionForOperationalInterruption(recovered) ?? providerCorrection;
+      const event = await advanceBtccAlgorithm(
+        turn,
+        claim,
+        dependencies,
+        permit,
+        providerCorrection,
+      );
       permit.assertActive();
       const decision = decideTransition(turn, event);
       if (decision.kind === "rejected_unchanged") {
@@ -84,6 +94,7 @@ async function runBtccTurn(
       const transition = decision.transition;
       await dependencies.turns.commitTransition({ turn, claim, transition });
       await resolveOperationalInterruption(dependencies, currentCheckpointBinding(claim));
+      providerCorrection = undefined;
       permit.assertActive();
     } catch (error) {
       if (error instanceof LedgerContentionInterruption) {
@@ -122,6 +133,7 @@ async function runBtccTurn(
         const reloaded = await dependencies.turns.findTurn(turn.turnId);
         if (!reloaded) throw new Error("Interrupted BTCC Turn disappeared", { cause: error });
         assertSameOperationalCheckpoint(reloaded, error.anchor);
+        providerCorrection = correctionForOperationalInterruption(error);
         turn = reloaded;
         continue;
       }
@@ -145,17 +157,17 @@ async function recoverPersistedInterruption(
   dependencies: BtccRuntimeDependencies,
   anchor: OperationalCheckpointAnchor,
   permit: ExecutionPermit,
-): Promise<void> {
-  const interruption = await dependencies.operationalRecovery?.pending(anchor);
-  if (!interruption) return;
+): Promise<OperationalInterruptionError | null> {
+  const interruption = await dependencies.operationalRecovery?.resume(anchor, permit.signal);
+  if (!interruption) return null;
   await publishOperationalNotice(dependencies.progress, {
     turnId: anchor.turnId,
     status: "recovering",
     code: interruption.code,
     activationKind: interruption.activation.kind,
   });
-  await dependencies.operationalRecovery?.awaitReentry(interruption, permit.signal);
   permit.assertActive();
+  return interruption;
 }
 
 async function publishOperationalNotice(
@@ -231,8 +243,15 @@ async function advanceBtccAlgorithm(
   claim: StateExecutionClaim,
   dependencies: BtccRuntimeDependencies,
   executionPermit: ExecutionPermit,
+  providerCorrection?: ProviderCorrection,
 ): Promise<TurnEvent> {
-  const phase = () => createPhaseInvocation(turn, claim, dependencies, executionPermit);
+  const phase = () => createPhaseInvocation(
+    turn,
+    claim,
+    dependencies,
+    executionPermit,
+    providerCorrection,
+  );
   switch (turn.semanticState) {
     case "admitted":
       return { kind: "TurnActivated" };
