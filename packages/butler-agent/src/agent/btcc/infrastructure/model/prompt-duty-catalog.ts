@@ -1,3 +1,8 @@
+import type {
+  PromptDutyId,
+  PromptProhibitionId,
+} from "../../core/prompt-contract.ts";
+
 const DUTIES = {
   preserve_original_goal: "Treat the immutable GoalContract, required outcomes, constraints, non-goals, and acceptance intent as completion authority; never replace it with a later Plan, Task, finding, or local convenience.",
   preserve_selected_model: "Use the admitted model and controls for this Turn; never select, compare, substitute, downgrade, or fall back to another model.",
@@ -16,6 +21,7 @@ const DUTIES = {
   user_preferences_and_resolution_style: "Check accepted preferences, recent feedback, and usual resolution style; classify them as constraints, guidance, or presentation preferences rather than artificial Task outcomes.",
   expert_perspective: "Identify the professional perspective required for faithful reasoning and adopt only concrete guidance or constraints that affect this request.",
   intended_result_and_acceptance: "State the result the user should receive and how they would recognize success without expanding scope.",
+  select_exact_governing_spec_logical_ids: "Select only exact logical ids of governing Specs resolved from admitted Project or Session Work Ledger authority; use an empty list when no governing Spec applies.",
   review_goal_contract_exactly: "Compare all six lens assessments, adopted fields and roles, required outcomes, non-goals, acceptance intent, authority, personalization, provenance, strategy, and continuation with the immutable request.",
   author_smallest_sufficient_plan: "Author the fewest cohesive Works and independently executable Tasks that satisfy every RequiredOutcome while preserving constraints; never split by file, tool, phase, or arbitrary size.",
   apply_authoring_contracts: "Apply every injected Spec, Plan, Work, and Task authoring contract exactly and cite their accepted revisions.",
@@ -49,7 +55,7 @@ const DUTIES = {
   guard_public_claims: "Bind every factual public claim to concrete accepted sources and cover every response obligation or dossier statement.",
   guard_model_identity_privacy_omissions: "Use immutable selected-model projection, expose no private prompt, profile, diagnostic, path, or secret content, and state material limitations.",
   author_managed_deferral: "Defer only for concrete user authority, external readiness, or scheduled time, binding the exact goal, authority, model, manifest, frontier, and resumable anchor; internal faults are forbidden.",
-} as const;
+} as const satisfies Record<PromptDutyId, string>;
 
 const PROHIBITIONS = {
   no_successor_choice: "Do not choose, name, or activate a semantic successor; submit only an available typed exit.",
@@ -62,13 +68,13 @@ const PROHIBITIONS = {
   no_self_review: "Do not certify your own candidate where an explicit review phase owns that decision.",
   no_repair: "Do not implement or mutate a correction while reviewing or consolidating.",
   no_learning_on_delivery_path: "Do not generate learning or profile mutations before canonical answer delivery.",
-} as const;
+} as const satisfies Record<PromptProhibitionId, string>;
 
-export function resolveDutyInstructions(ids: readonly string[]) {
+export function resolveDutyInstructions(ids: readonly PromptDutyId[]) {
   return ids.map((id) => ({ id, instruction: requireInstruction(DUTIES, id, "duty") }));
 }
 
-export function resolveProhibitionInstructions(ids: readonly string[]) {
+export function resolveProhibitionInstructions(ids: readonly PromptProhibitionId[]) {
   return ids.map((id) => ({
     id,
     instruction: requireInstruction(PROHIBITIONS, id, "prohibition"),
@@ -77,7 +83,7 @@ export function resolveProhibitionInstructions(ids: readonly string[]) {
 
 function requireInstruction(
   catalog: Readonly<Record<string, string>>,
-  id: string,
+  id: PromptDutyId | PromptProhibitionId,
   kind: string,
 ): string {
   const instruction = catalog[id];
