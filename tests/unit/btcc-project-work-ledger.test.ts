@@ -17,6 +17,7 @@ import {
   successfulResult,
   successfulReview,
 } from "./support/btcc-project-ledger-fixture.ts";
+import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 
 afterEach(clearProjectFixtures);
 
@@ -136,6 +137,69 @@ describe("BTCC Project Work Ledger prepared publication", () => {
     await adapter.promoteAndObserve(install.publication);
     expect(fixture.core.resolveRecord(fixture.ledgerRoot, { kind: "spec", id: "new-spec" }).record.id)
       .toBe("new-spec");
+  });
+
+  test("persists a Planning-stage deferral before any Plan or Work exists", async () => {
+    const fixture = await projectFixture();
+    const adapter = createProjectWorkLedgerPublicationAdapter({
+      stagingRoot: join(fixture.root, "staging"),
+    });
+    const binding = projectBindingCommit();
+    const bound = await adapter.prepareCommit({
+      projectRoot: fixture.ledgerRoot,
+      expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
+      commit: binding.commit,
+    });
+    await adapter.promoteAndObserve(bound.publication);
+    const blockerBody = {
+      programId: bound.program.programId,
+      sourceState: "planning" as const,
+      sourceGoalFieldIds: ["request", "intended_result"] as const,
+      sourceRequiredOutcomeRefs: [bound.program.requiredOutcomeId] as [string],
+      reason: "Fixture user authority is required.",
+      readiness: {
+        kind: "user_authority" as const,
+        requiredAuthorityScopeRefs: ["authority:fixture"] as [string],
+      },
+    };
+    const blocker = { ref: contentRef("managed-blocker", blockerBody), ...blockerBody };
+    const anchorBody = {
+      programId: bound.program.programId,
+      goalContractRef: bound.program.goalContractRef,
+      authorityRef: bound.program.authorityRef,
+      planAuthority: {
+        kind: "pre_plan" as const,
+        sourcePhaseEnvelopeRef: contentRef("phase-envelope", "planning"),
+      },
+      openWorkRefs: [], openTaskRefs: [], workspaceRefs: [], workspaceRevisionRefs: [],
+      promotionContext: { kind: "not_promotion" as const },
+      blockerRef: blocker.ref,
+      sourceTurnId: "turn-project-deferral",
+      sourceTurnRevision: 5,
+    };
+    const product = {
+      kind: "managed_deferral" as const,
+      blocker,
+      anchor: { ref: contentRef("deferral-anchor", anchorBody), ...anchorBody },
+    };
+    const deferred = await commitMutation(adapter, fixture.ledgerRoot, {
+      mutationId: "mutation-project-deferral", turnId: "turn-project-deferral",
+      expectedTurnRevision: 5,
+      mutation: {
+        kind: "accept_managed_deferral",
+        cursor: cursor(bound.program),
+        product,
+      },
+    });
+
+    expect(deferred.program).toMatchObject({
+      planningState: "unplanned",
+      manifestRevision: 2,
+      activeDeferral: product,
+    });
+    await adapter.promoteAndObserve(deferred.publication);
+    expect(await adapter.loadProgram(fixture.ledgerRoot, bound.program.programId))
+      .toEqual(deferred.program);
   });
 
   test("rejects a changed canonical base instead of rebasing reviewed meaning", async () => {
