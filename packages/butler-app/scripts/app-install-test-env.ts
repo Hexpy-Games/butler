@@ -38,6 +38,7 @@ type Options = {
   keepInstall: boolean;
   keepService: boolean;
   profile?: string;
+  remoteDebuggingPort?: number;
   reset: boolean;
   serverPort?: number;
   serviceLabel?: string;
@@ -75,6 +76,7 @@ function usage(): string {
     "  --data <path>               Use an explicit Butler data directory.",
     "  --electron-profile <path>   Use an explicit Electron user-data-dir.",
     "  --port <number>             Use an explicit app-server port.",
+    "  --remote-debugging-port <n> Enable Chromium DevTools on an isolated port.",
     "  --service-label <label>     LaunchAgent label for the installed test app.",
     "  --systemd-unit <unit>       systemd user unit for the installed test app.",
     "  --keep-install              Leave the test DMG install root after the app exits.",
@@ -151,6 +153,18 @@ function parseOptions(args: string[]): Options {
       }
       options.serverPort = port;
       if (arg === "--port") index += 1;
+      continue;
+    }
+    if (
+      arg === "--remote-debugging-port" ||
+      arg.startsWith("--remote-debugging-port=")
+    ) {
+      const port = Number(takeValue(args, index, "--remote-debugging-port"));
+      if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+        throw new Error("--remote-debugging-port must be a number from 1 to 65535.");
+      }
+      options.remoteDebuggingPort = port;
+      if (arg === "--remote-debugging-port") index += 1;
       continue;
     }
     if (arg === "--service-label" || arg.startsWith("--service-label=")) {
@@ -522,6 +536,10 @@ assertNotRealButlerData(dataDir);
 assertNotRealElectronProfile(electronProfileDir);
 assertNativeServiceTestNamespace({ serviceLabel, systemdUnit, serverPort });
 assertPortAvailable(serverPort);
+if (options.remoteDebuggingPort !== undefined) {
+  assert(options.remoteDebuggingPort !== serverPort, "DevTools and app-server ports must differ.");
+  assertPortAvailable(options.remoteDebuggingPort);
+}
 
 if (options.validateOnly) {
   console.log("Butler App install test environment validation passed.");
@@ -602,13 +620,20 @@ console.log(`Installed app: ${installedApp}`);
 console.log(`Data: ${dataDir}`);
 console.log(`Electron profile: ${electronProfileDir}`);
 console.log(`App server: http://127.0.0.1:${serverPort}/`);
+if (options.remoteDebuggingPort !== undefined) {
+  console.log(`Chromium DevTools: http://127.0.0.1:${options.remoteDebuggingPort}/`);
+}
 console.log(`Native service label: ${serviceLabel}`);
 console.log(`Native systemd unit: ${systemdUnit}`);
 console.log(options.keepInstall ? "Install/package cleanup: disabled" : "Install/package cleanup: on exit");
 console.log(options.keepService ? "Native test service cleanup: disabled" : "Native test service cleanup: on exit");
 console.log("Quit Butler from the app/tray, or press Ctrl-C here to stop.");
 
-const appProcess = spawn(executable, [`--user-data-dir=${electronProfileDir}`], {
+const electronArgs = [`--user-data-dir=${electronProfileDir}`];
+if (options.remoteDebuggingPort !== undefined) {
+  electronArgs.push(`--remote-debugging-port=${options.remoteDebuggingPort}`);
+}
+const appProcess = spawn(executable, electronArgs, {
   cwd: dirname(executable),
   env,
   stdio: "inherit",
