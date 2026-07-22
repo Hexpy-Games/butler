@@ -47,12 +47,15 @@ function selectRecords(
 ): CanonicalLedgerRecord[] {
   const ids = stringSet(args.record_ids, "record_ids");
   const kinds = stringSet(args.kinds, "kinds");
-  const query = typeof args.query === "string" ? args.query.trim().toLocaleLowerCase() : "";
+  const queryTerms = typeof args.query === "string"
+    ? args.query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean)
+    : [];
   const limit = Number.isInteger(args.max_records) ? Number(args.max_records) : 20;
   return records
     .filter((record) => ids.size === 0 || ids.has(record.id))
     .filter((record) => kinds.size === 0 || kinds.has(record.kind))
-    .filter((record) => !query || searchableText(record).includes(query))
+    .filter((record) => queryTerms.length === 0 ||
+      queryTerms.some((term) => searchableText(record).includes(term)))
     .sort((left, right) => left.id.localeCompare(right.id))
     .slice(0, limit);
 }
@@ -66,7 +69,7 @@ function stringSet(value: unknown, label: string): Set<string> {
 }
 
 function searchableText(record: CanonicalLedgerRecord): string {
-  return [record.id, record.kind, record.title, record.status]
+  return [record.id, record.kind, record.title, record.status, record.body]
     .filter((value): value is string => typeof value === "string")
     .join("\n")
     .toLocaleLowerCase();

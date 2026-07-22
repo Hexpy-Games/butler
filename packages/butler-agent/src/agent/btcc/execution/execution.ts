@@ -7,6 +7,7 @@ import {
 import {
   requireCurrentAttempt,
   requireManagedProgram,
+  requireManagedState,
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
@@ -22,9 +23,18 @@ export async function execution(command: {
     throw new Error(`Execution cannot advance ${command.turn.semanticState}`);
   }
   const program = requireManagedProgram(command.turn);
+  const accepted = requireManagedState(command.turn).goalAcceptance;
+  if (!accepted) throw new Error("Execution is missing accepted Goal authority");
   const attempt = requireCurrentAttempt(program);
   const target = attempt.executionTarget.target;
   const invocation = withManagedDeferralState(command.phase, command.turn, {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
+    acceptedPlan: program.plan,
+    currentWork: program.currentWork.work,
+    currentTask: program.currentTask.task,
+    currentCriteria: criteriaForCurrentTask(program),
+    currentVerificationQuestions: questionsForCurrentTask(program),
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
     workRef: program.currentWork.work.ref,
@@ -43,6 +53,16 @@ export async function execution(command: {
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "ResultCandidateSubmitted", product };
+}
+
+function criteriaForCurrentTask(program: ReturnType<typeof requireManagedProgram>) {
+  const ids = new Set(program.currentTask.task.criterionRefs.map((ref) => ref.id));
+  return program.criteria.filter((criterion) => ids.has(criterion.ref.id));
+}
+
+function questionsForCurrentTask(program: ReturnType<typeof requireManagedProgram>) {
+  const ids = new Set(program.currentTask.task.verificationQuestionRefs.map((ref) => ref.id));
+  return program.verificationQuestions.filter((question) => ids.has(question.ref.id));
 }
 
 function executionScopeRefs(

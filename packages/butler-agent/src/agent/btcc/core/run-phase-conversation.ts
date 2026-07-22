@@ -18,6 +18,7 @@ export async function runPhaseConversation<Product>(
     return await runPhaseConversationAtCheckpoint(command);
   } catch (error) {
     if (isBtccOperationalInterruption(error)) throw error;
+    reportPhaseContractInterruption(command, error);
     throw new OperationalInterruptionError(
       "phase_contract_interruption",
       command.binding,
@@ -25,6 +26,22 @@ export async function runPhaseConversation<Product>(
       error,
     );
   }
+}
+
+function reportPhaseContractInterruption<Product>(
+  command: PhaseConversationCommand<Product>,
+  error: unknown,
+): void {
+  if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS !== "1") return;
+  console.error(JSON.stringify({
+    event: "btcc_phase_contract_interruption",
+    phase: command.phaseContract.phase,
+    checkpointId: command.binding.checkpointId,
+    cause: {
+      name: error instanceof Error ? error.name : "UnknownError",
+      message: error instanceof Error ? error.message : String(error),
+    },
+  }));
 }
 
 async function runPhaseConversationAtCheckpoint<Product>(

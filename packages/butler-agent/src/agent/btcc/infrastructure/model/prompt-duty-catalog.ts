@@ -9,7 +9,7 @@ const DUTIES = {
   state_input_only: "Use the exact current state input and referenced accepted records as authority; working context cannot silently replace those revisions.",
   understand_request: "Identify what the user asked, uncertainty that matters, and the intended result without adding an unrequested goal.",
   apply_profile_feedback_cache: "Apply only relevant accepted profile, recent-feedback, and mandatory hot-cache context without exposing private source content.",
-  choose_direct_assisted_or_deepen: "Choose Direct only from accepted context, Assisted only for bounded read-only observation, or continue to deliberation for managed obligations; never route by keywords or model capability.",
+  choose_direct_assisted_or_deepen: "Choose Direct when accepted context already fulfills the request, Assisted only when the requested result itself needs bounded read-only observation, or continue to deliberation for managed obligations. Do not add unrequested observation merely to enrich a complete Direct answer, and never route by keywords or model capability.",
   author_minimal_goal: "Author the opening GoalContract with the exact request, intended result, acceptance intent, non-goals, authority, provenance, continuation binding, and relevant personalization without claiming full deliberation occurred.",
   guard_fast_output: "Complete the response obligation, personalization applications, public claims, output guard, and final payload in this round; make every limitation truthful.",
   apply_accepted_output_preferences: "Apply each relevant accepted presentation preference and public-safe personalization reference, or record a public-safe not-applicable reason.",

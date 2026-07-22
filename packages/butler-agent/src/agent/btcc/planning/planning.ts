@@ -88,6 +88,8 @@ async function authorInitialPlan(command: {
   const authority = requireManagedPlanningAuthority(command.turn);
   const previous = managed.planningRevision;
   const product = await proposePlan(withManagedDeferralState(command.phase, command.turn, {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
     goalContractRef: authority.goalContractRef,
     authorityRef: authority.authorityRef,
     requiredOutcomeId: authority.requiredOutcomeId,
@@ -116,8 +118,13 @@ async function reviewInitialPlan(command: {
   turn: TurnRecord;
   phase: PhaseInvocation;
 }): Promise<InitialPlanningEvent> {
+  const managed = requireManagedState(command.turn);
+  const accepted = managed.goalAcceptance;
+  if (!accepted) throw new Error("Planning Review is missing accepted Goal authority");
   const product = await reviewPlan(withManagedDeferralState(command.phase, command.turn, {
-    planCandidate: requireManagedState(command.turn).planCandidate,
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
+    planCandidate: managed.planCandidate,
   }));
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.kind === "planning_accepted"
@@ -139,6 +146,8 @@ async function authorFeedbackPlan(command: {
     command.phase,
     command.turn,
     {
+      acceptedGoalContract: managed.goalAcceptance.goalContract,
+      acceptedAuthority: managed.goalAcceptance.authority,
       feedbackIntent: managed.feedbackIntent,
       workPlanRef: program.plan.ref,
       affectedTaskRefs,
@@ -172,7 +181,11 @@ async function reviewFeedbackPlan(command: {
 }): Promise<FeedbackPlanningEvent> {
   const managed = requireManagedState(command.turn);
   const program = requireManagedProgram(command.turn);
+  const accepted = managed.goalAcceptance;
+  if (!accepted) throw new Error("Feedback Planning Review is missing accepted Goal authority");
   const product = await reviewCorrection(withManagedDeferralState(command.phase, command.turn, {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
     feedbackPlan: managed.feedbackPlan,
     goalContractRef: program.goalContractRef,
   }));
