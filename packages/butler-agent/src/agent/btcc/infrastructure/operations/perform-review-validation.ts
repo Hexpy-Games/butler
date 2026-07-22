@@ -21,6 +21,7 @@ import {
   snapshotSha256,
   workspaceContentRoot,
 } from "./target-snapshot.ts";
+import { operationRoundScope } from "../../core/operation-identity.ts";
 
 export async function performReviewValidation(input: {
   request: Extract<import("../../core/index.ts").OperationRequest, { kind: "review_validation" }>;
@@ -40,7 +41,7 @@ export async function performReviewValidation(input: {
     "runtime",
     "btcc-artifacts",
     "review-overlays",
-    digest(input.request.requestId),
+    digest(`${operationRoundScope(input.envelope.binding)}\0${input.request.requestId}`),
   );
   if (existsSync(root)) removeOwnedRoot(root);
   mkdirSync(root, { recursive: true });

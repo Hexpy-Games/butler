@@ -19,6 +19,7 @@ import {
   performWorkspaceAction,
   type WorkspaceActionBoundary,
 } from "./perform-workspace-action.ts";
+import { operationRoundScope } from "../../core/operation-identity.ts";
 
 export type OperationRuntimeBoundary = WorkspaceActionBoundary | "before_result_persist";
 
@@ -39,7 +40,7 @@ export function createOperationExecutor(
 ): OperationExecutor {
   return {
     async perform(input) {
-      const scopeId = input.envelope.binding.checkpointId;
+      const scopeId = operationRoundScope(input.envelope.binding);
       const existing = store.loadOperation(scopeId, input.request);
       if (existing) {
         if (input.request.kind === "workspace_artifact_action") {

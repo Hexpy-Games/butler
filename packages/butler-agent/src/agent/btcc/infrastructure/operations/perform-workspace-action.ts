@@ -28,6 +28,7 @@ import {
   syncCompleteTarget,
   workspaceContentRoot,
 } from "./target-snapshot.ts";
+import { operationRoundScope } from "../../core/operation-identity.ts";
 
 type WorkspaceRequest = Extract<import("../../core/index.ts").OperationRequest, {
   kind: "workspace_artifact_action";
@@ -47,7 +48,7 @@ export async function performWorkspaceAction(input: {
   afterBoundary?: (boundary: WorkspaceActionBoundary) => void;
 }): Promise<ObservationResult> {
   assertActive(input.signal);
-  const scopeId = input.envelope.binding.checkpointId;
+  const scopeId = operationRoundScope(input.envelope.binding);
   const workspace = requireWorkspace(input.store, input.request);
   let journal = input.store.loadWorkspaceAction(scopeId, input.request);
   if (!journal) journal = reserveAction(input, workspace);
@@ -184,12 +185,12 @@ function reserveAction(
       "runtime",
       "btcc-artifacts",
       "workspace-actions",
-      digest(`${input.envelope.binding.checkpointId}\0${input.request.requestId}`),
+      digest(`${operationRoundScope(input.envelope.binding)}\0${input.request.requestId}`),
     ),
     beforeSnapshotRef: before.ref,
     status: "reserved",
   };
-  input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, journal);
+  input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), journal);
   return journal;
 }
 
@@ -232,7 +233,7 @@ function prepareCandidate(
       content,
     };
     const observed = { ...journal, status: "workspace_observed" as const, result };
-    input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, observed);
+    input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), observed);
     return observed;
   }
   if (!existsSync(target)) {
@@ -269,7 +270,7 @@ function prepareCandidate(
     candidateSnapshotRef: candidate.ref,
     result,
   };
-  input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, prepared);
+  input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), prepared);
   return prepared;
 }
 
@@ -298,7 +299,7 @@ function exchangePreparedCandidate(
   }
   requireWorkspaceCandidate(workspace, journal);
   const exchanged = { ...journal, status: "workspace_exchanged" as const };
-  input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, exchanged);
+  input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), exchanged);
   return exchanged;
 }
 

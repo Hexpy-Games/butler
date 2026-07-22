@@ -7,6 +7,7 @@ import { BTCC_SUCCESSOR_SCHEMA } from
 import {
   objectSchema,
   runPhaseConversation,
+  type OperationRequest,
   type PhaseEnvelope,
   type PhaseRunBinding,
 } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
@@ -127,7 +128,39 @@ describe("BTCC phase checkpoint persistence", () => {
     expect(modelCalls).toBe(0);
   });
 
-  test("persists a malformed phase submission before decode without replaying the model", async () => {
+  test("stores the same local request ID independently in later provider rounds", async () => {
+    const { db, store, binding } = fixture();
+    const first = observationRequest();
+    const firstRound = await store.appendOperationRound({
+      binding,
+      envelope: phaseEnvelope(binding),
+      requests: [first],
+      actualIdentity: selectedModel(),
+    });
+    const afterFirst = await store.appendOperationResults({
+      binding: firstRound,
+      results: [{ request: first, result: observation(first, "first") }],
+    });
+    const corrected = { ...first, input: { query: "corrected" } };
+    const secondRound = await store.appendOperationRound({
+      binding: afterFirst,
+      envelope: phaseEnvelope(afterFirst),
+      requests: [corrected],
+      actualIdentity: selectedModel(),
+    });
+    await store.appendOperationResults({
+      binding: secondRound,
+      results: [{ request: corrected, result: observation(corrected, "second") }],
+    });
+
+    expect(db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM btcc_phase_operation_results
+    `).get()?.count).toBe(2);
+    expect((await store.restore(binding)).operationResults.map((item) => item.content))
+      .toEqual(["first", "second"]);
+  });
+
+  test("does not persist a malformed phase submission as a resumable boundary", async () => {
     const { store, binding } = fixture();
     let modelCalls = 0;
     const command = {
@@ -158,13 +191,30 @@ describe("BTCC phase checkpoint persistence", () => {
       operationAuthority: { observationScopeRefs: [], mutation: { kind: "forbidden" as const } },
       executionPermit: activePermit(),
     };
-    await expect(runPhaseConversation(command)).rejects.toThrow("phase_contract_interruption");
-    await expect(runPhaseConversation(command)).rejects.toThrow("phase_contract_interruption");
-    expect(modelCalls).toBe(1);
+    await expect(runPhaseConversation(command)).rejects.toMatchObject({
+      code: "provider_phase_submission_invalid",
+    });
+    await expect(runPhaseConversation(command)).rejects.toMatchObject({
+      code: "provider_phase_submission_invalid",
+    });
+    expect(modelCalls).toBe(2);
     const restored = await store.restore(binding);
-    expect(restored.pendingSubmissionRound?.submission).toEqual({ malformed: true });
+    expect(restored.pendingSubmissionRound).toBeUndefined();
   });
 });
+
+function observation(
+  request: Extract<OperationRequest, { kind: "observe" }>,
+  content: string,
+) {
+  return {
+    requestId: request.requestId,
+    request,
+    outcome: "observed" as const,
+    observationRef: { id: `observation-${content}`, sha256: `sha-${content}` },
+    content,
+  };
+}
 
 function fixture() {
   const db = new Database(":memory:");

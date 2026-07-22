@@ -20,6 +20,7 @@ import {
   removeOwnedRoot,
   syncCompleteTarget,
 } from "./target-snapshot.ts";
+import { operationRoundScope } from "../../core/operation-identity.ts";
 
 type PromotionRequest = Extract<import("../../core/index.ts").OperationRequest, {
   kind: "repository_promotion";
@@ -32,7 +33,7 @@ export function performPromotion(input: {
   signal?: AbortSignal;
 }): ObservationResult {
   assertActive(input.signal);
-  const scopeId = input.envelope.binding.checkpointId;
+  const scopeId = operationRoundScope(input.envelope.binding);
   const target = resolvePromotionTarget(input.envelope, input.request);
   const workspace = input.store.loadWorkspaceByRef(target.workspaceRef.id);
   if (!workspace || !sameRef(workspace.provision.workspace.ref, target.workspaceRef)) {
