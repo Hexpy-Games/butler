@@ -1,6 +1,11 @@
 import type { ModelPhaseState } from "../../btcc/core/index.ts";
+import type {
+  PhaseGuidanceRevisionRef,
+  PhaseGuidanceScope,
+} from "../../btcc/guidance/index.ts";
 import {
   RETROSPECTIVE_DIMENSIONS,
+  GUIDANCE_DECISION_CONTRACT_REVISION,
   type BtccRetrospective,
   type GuidanceDecision,
   type GuidanceDisposition,
@@ -9,6 +14,7 @@ import {
   type RetrospectiveDimension,
   type RetrospectiveFinding,
 } from "./contracts.ts";
+import { RETROSPECTIVE_RUBRIC_REVISION } from "./evaluation-rubric.ts";
 
 const PHASES = new Set<ModelPhaseState>([
   "conception_opening", "conception_deliberation", "contract_review",
@@ -19,6 +25,7 @@ const PHASES = new Set<ModelPhaseState>([
 const DISPOSITIONS = new Set<GuidanceDisposition>([
   "promote", "merge", "supersede", "defer", "reject", "outside_learning_surface",
 ]);
+const ACCEPTED_DISPOSITIONS = new Set<GuidanceDisposition>(["promote", "merge", "supersede"]);
 
 export function decodeRetrospective(text: string, sourceId: string): BtccRetrospective {
   const value = record(parseJson(text), "retrospective");
@@ -34,13 +41,19 @@ export function decodeRetrospective(text: string, sourceId: string): BtccRetrosp
       sourceRefs: strings(finding.sourceRefs, `${dimension} sourceRefs`),
     };
   }
+  const candidates = array(value.candidates, "retrospective candidates").map(decodeCandidate);
+  rejectDuplicateCandidateIds(candidates);
+  if (value.rubricRevision !== RETROSPECTIVE_RUBRIC_REVISION) {
+    throw new Error("Retrospective rubric revision does not match the requested rubric");
+  }
   return {
     sourceId,
+    rubricRevision: RETROSPECTIVE_RUBRIC_REVISION,
     summary: string(value.summary, "retrospective summary"),
     dimensions,
     strengths: strings(value.strengths, "retrospective strengths"),
     misses: strings(value.misses, "retrospective misses"),
-    candidates: array(value.candidates, "retrospective candidates").map(decodeCandidate),
+    candidates,
     outsideLearningSurface: array(
       value.outsideLearningSurface,
       "outside learning surface",
@@ -57,6 +70,9 @@ export function decodeRetrospective(text: string, sourceId: string): BtccRetrosp
 
 export function decodeDecisionSet(text: string, sourceId: string): RetrospectiveDecisionSet {
   const value = record(parseJson(text), "guidance decision set");
+  if (value.contractRevision !== GUIDANCE_DECISION_CONTRACT_REVISION) {
+    throw new Error("Guidance decision contract revision does not match");
+  }
   const decisions = array(value.decisions, "guidance decisions").map(decodeDecision);
   const seen = new Set<string>();
   for (const decision of decisions) {
@@ -65,7 +81,7 @@ export function decodeDecisionSet(text: string, sourceId: string): Retrospective
     }
     seen.add(decision.candidateId);
   }
-  return { sourceId, decisions };
+  return { sourceId, contractRevision: GUIDANCE_DECISION_CONTRACT_REVISION, decisions };
 }
 
 function decodeCandidate(value: unknown): PhaseGuidanceCandidate {
@@ -78,10 +94,18 @@ function decodeCandidate(value: unknown): PhaseGuidanceCandidate {
   }
   const confidence = number(candidate.confidence, "candidate confidence");
   if (confidence < 0 || confidence > 1) throw new Error("Candidate confidence must be 0..1");
+  const scopeSourceRefs = strings(candidate.scopeSourceRefs, "candidate scopeSourceRefs");
+  if (scopeSourceRefs.length === 0) throw new Error("Candidate scope requires exact source refs");
   return {
     candidateId: string(candidate.candidateId, "candidate id"),
     phase: phase as ModelPhaseState,
     scopeKind,
+    scopeRationale: string(candidate.scopeRationale, "candidate scopeRationale"),
+    scopeSourceRefs,
+    generalityBoundary: guidanceBoundary(
+      candidate.generalityBoundary,
+      "candidate generalityBoundary",
+    ),
     problem: string(candidate.problem, "candidate problem"),
     guidance: string(candidate.guidance, "candidate guidance"),
     appliesWhen: strings(candidate.appliesWhen, "candidate appliesWhen"),
@@ -99,12 +123,103 @@ function decodeDecision(value: unknown): GuidanceDecision {
   if (!DISPOSITIONS.has(disposition as GuidanceDisposition)) {
     throw new Error(`Unknown guidance disposition: ${disposition}`);
   }
-  return {
+  const base = {
     candidateId: string(decision.candidateId, "decision candidate id"),
-    disposition: disposition as GuidanceDisposition,
     guidanceId: string(decision.guidanceId, "decision guidance id"),
     rationale: string(decision.rationale, "decision rationale"),
   };
+  if (!ACCEPTED_DISPOSITIONS.has(disposition as GuidanceDisposition)) {
+    return { ...base, disposition: disposition as "defer" | "reject" | "outside_learning_surface" };
+  }
+  const acceptedScopeKind = guidanceScopeKind(decision.acceptedScopeKind, "accepted scopeKind");
+  const accepted = {
+    acceptedScopeKind,
+    acceptedScopeRationale: string(
+      decision.acceptedScopeRationale,
+      "accepted scopeRationale",
+    ),
+    acceptedScopeSourceRefs: strings(
+      decision.acceptedScopeSourceRefs,
+      "accepted scopeSourceRefs",
+    ),
+    acceptedGeneralityBoundary: guidanceBoundary(
+      decision.acceptedGeneralityBoundary,
+      "accepted generalityBoundary",
+    ),
+    acceptedGuidance: string(decision.acceptedGuidance, "accepted guidance"),
+    acceptedAppliesWhen: strings(decision.acceptedAppliesWhen, "accepted appliesWhen"),
+    acceptedDoesNotApplyWhen: strings(
+      decision.acceptedDoesNotApplyWhen,
+      "accepted doesNotApplyWhen",
+    ),
+  };
+  if (disposition === "promote") return { ...base, disposition, ...accepted };
+  return {
+    ...base,
+    disposition: disposition as "merge" | "supersede",
+    targetRevision: decodeRevisionRef(decision.targetRevision),
+    ...accepted,
+  };
+}
+
+function decodeRevisionRef(value: unknown): PhaseGuidanceRevisionRef {
+  const target = record(value, "target guidance revision");
+  const phase = string(target.phase, "target revision phase");
+  if (!PHASES.has(phase as ModelPhaseState)) {
+    throw new Error(`Unknown target guidance phase: ${phase}`);
+  }
+  const revision = number(target.revision, "target revision number");
+  if (!Number.isInteger(revision) || revision < 1) {
+    throw new Error("Target guidance revision must be a positive integer");
+  }
+  return {
+    guidanceId: string(target.guidanceId, "target guidance id"),
+    phase: phase as ModelPhaseState,
+    scope: decodeGuidanceScope(target.scope),
+    revision,
+    contentSha256: string(target.contentSha256, "target guidance content hash"),
+  };
+}
+
+function decodeGuidanceScope(value: unknown): PhaseGuidanceScope {
+  const scope = record(value, "target guidance scope");
+  const kind = string(scope.kind, "target guidance scope kind");
+  if (kind === "user") {
+    return { kind, userRef: string(scope.userRef, "target guidance user ref") };
+  }
+  if (kind === "project") {
+    return { kind, projectRef: string(scope.projectRef, "target guidance project ref") };
+  }
+  throw new Error(`Unknown target guidance scope: ${kind}`);
+}
+
+function rejectDuplicateCandidateIds(candidates: PhaseGuidanceCandidate[]): void {
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate.candidateId)) {
+      throw new Error(`Duplicate guidance candidate: ${candidate.candidateId}`);
+    }
+    seen.add(candidate.candidateId);
+  }
+}
+
+function guidanceBoundary(
+  value: unknown,
+  label: string,
+): PhaseGuidanceCandidate["generalityBoundary"] {
+  const boundary = string(value, label);
+  if (boundary !== "cross_project_user_preference" && boundary !== "project_bound_strategy") {
+    throw new Error(`Unknown guidance generality boundary: ${boundary}`);
+  }
+  return boundary;
+}
+
+function guidanceScopeKind(value: unknown, label: string): "user" | "project" {
+  const scope = string(value, label);
+  if (scope !== "user" && scope !== "project") {
+    throw new Error(`Unknown accepted guidance scope: ${scope}`);
+  }
+  return scope;
 }
 
 function parseJson(text: string): unknown {

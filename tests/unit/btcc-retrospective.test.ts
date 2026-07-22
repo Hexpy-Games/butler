@@ -3,14 +3,23 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBtccComposition } from "../../packages/butler-agent/src/agent/composition/index.ts";
+import { createProjectWorkLedgerPublicationAdapter } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
+import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { phaseGuidanceRevisionRef } from "../../packages/butler-agent/src/agent/btcc/guidance/index.ts";
 import { runBtccRetrospective } from "../../packages/butler-agent/src/agent/cognition/retrospective/index.ts";
+import { createBtccComposition } from "../../packages/butler-agent/src/agent/composition/index.ts";
 import { DirectHarnessModel } from "../../packages/butler-agent/src/interfaces/btcc-harness/direct-harness-model.ts";
 import { HarnessArtifactWorkspace } from "../../packages/butler-agent/src/interfaces/btcc-harness/harness-artifact-workspace.ts";
 import { HarnessOperationExecutor } from "../../packages/butler-agent/src/interfaces/btcc-harness/harness-operation-executor.ts";
+import {
+  clearProjectFixtures,
+  projectFixture,
+} from "./support/btcc-project-ledger-fixture.ts";
 
 test("delivered BTCC trajectories are evaluated, consolidated, and published asynchronously", async () => {
-  const root = mkdtempSync(join(tmpdir(), "btcc-retrospective-"));
+  const project = await projectFixture();
+  const root = project.root;
   const dbPath = join(root, "btcc.sqlite");
   const runtime = createBtccComposition({
     dbPath,
@@ -18,6 +27,12 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
     model: new DirectHarnessModel(),
     operations: new HarnessOperationExecutor(root),
     artifacts: new HarnessArtifactWorkspace(),
+    projectLedger: {
+      publications: createProjectWorkLedgerPublicationAdapter({
+        stagingRoot: join(root, "project-publications"),
+      }),
+      resolveProjectRoot: () => project.ledgerRoot,
+    },
   });
   try {
     const outcome = await runtime.handle({
@@ -35,6 +50,7 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
       },
       context: {
         userRef: "user-1",
+        projectRef: "project-1",
         profileRefs: [],
         recentFeedbackRefs: [],
         mandatoryHotCacheRefs: [],
@@ -49,10 +65,44 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
       expect(projectionGap.query<{ count: number }, []>(
         "SELECT COUNT(*) AS count FROM btcc_learning_sources",
       ).get()).toEqual({ count: 1 });
+      const source = projectionGap.query<{ source_id: string }, []>(
+        "SELECT source_id FROM btcc_learning_sources",
+      ).get()!;
+      projectionGap.query(`
+        INSERT INTO btcc_retrospective_decisions (source_id, decisions_json, created_at)
+        VALUES (?, ?, ?)
+      `).run(
+        source.source_id,
+        JSON.stringify({ decisions: [] }),
+        new Date().toISOString(),
+      );
+      expect(projectionGap.query<{ count: number }, []>(
+        "SELECT COUNT(*) AS count FROM btcc_phase_model_rounds",
+      ).get()!.count).toBeGreaterThan(0);
       projectionGap.exec("DELETE FROM btcc_learning_candidate_outbox; DELETE FROM btcc_learning_sources;");
     } finally {
       projectionGap.close();
     }
+    const guidanceStores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "retrospective-guidance",
+    });
+    const existingGuidance = guidanceStores.phaseGuidance.publish({
+      disposition: "promote",
+      guidance: {
+        guidanceId: "opening-understand-before-answering",
+        phase: "conception_opening",
+        scope: { kind: "project", projectRef: "project-1" },
+        scopeRationale: "The initial guidance was project-bound.",
+        scopeSourceRefs: ["prior-source"],
+        generalityBoundary: "project_bound_strategy",
+        guidance: "Check intent before answering.",
+        appliesWhen: ["a project request begins"],
+        doesNotApplyWhen: [],
+        sourceIds: ["prior-source"],
+      },
+    });
+    guidanceStores.close();
 
     const calls: Array<{ kind: string; prompt: string }> = [];
     const result = await runBtccRetrospective({
@@ -63,11 +113,21 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
         return input.kind === "evaluate"
           ? JSON.stringify(retrospectiveOutput())
           : JSON.stringify({
+              contractRevision: "btcc.guidance-decision.v1",
               decisions: [{
                 candidateId: "candidate-opening-care",
-                disposition: "promote",
+                disposition: "merge",
                 guidanceId: "opening-understand-before-answering",
                 rationale: "The lesson is phase-local and reusable.",
+                targetRevision: phaseGuidanceRevisionRef(existingGuidance),
+                acceptedScopeKind: "project",
+                acceptedScopeRationale: "Consolidation narrowed the lesson to this project.",
+                acceptedScopeSourceRefs: ["turn-retrospective"],
+                acceptedGeneralityBoundary: "project_bound_strategy",
+                acceptedGuidance:
+                  "Confirm the user's intended result without slowing a direct answer.",
+                acceptedAppliesWhen: ["the request needs a concise opening"],
+                acceptedDoesNotApplyWhen: ["the intent is genuinely ambiguous"],
               }],
             });
       },
@@ -89,14 +149,33 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
       expect(db.query<{ status: string }, []>(
         "SELECT status FROM btcc_learning_candidate_outbox",
       ).get()).toEqual({ status: "processed" });
-      const guidance = db.query<{ phase: string; scope_kind: string; revision: number }, []>(`
-        SELECT phase, scope_kind, revision FROM btcc_phase_guidance WHERE status = 'active'
+      const guidance = db.query<{
+        phase: string;
+        scope_kind: string;
+        revision: number;
+        guidance_json: string;
+      }, []>(`
+        SELECT phase, scope_kind, revision, guidance_json
+        FROM btcc_phase_guidance WHERE status = 'active'
       `).get();
-      expect(guidance).toEqual({
+      expect(guidance).toMatchObject({
         phase: "conception_opening",
-        scope_kind: "user",
-        revision: 1,
+        scope_kind: "project",
+        revision: 2,
       });
+      const storedGuidance = JSON.parse(guidance!.guidance_json);
+      expect(storedGuidance).toMatchObject({
+        guidance: "Confirm the user's intended result without slowing a direct answer.",
+        scopeRationale: "Consolidation narrowed the lesson to this project.",
+        scopeSourceRefs: ["prior-source", "turn-retrospective"],
+        generalityBoundary: "project_bound_strategy",
+        revisionKind: "merge",
+        predecessor: phaseGuidanceRevisionRef(existingGuidance),
+        appliesWhen: ["the request needs a concise opening"],
+        doesNotApplyWhen: ["the intent is genuinely ambiguous"],
+      });
+      expect(storedGuidance.sourceIds).toContain("prior-source");
+      expect(storedGuidance.sourceIds).toHaveLength(2);
     } finally {
       db.close();
     }
@@ -110,7 +189,7 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
     });
     expect(replay.pending_count).toBe(0);
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    clearProjectFixtures();
   }
 });
 
@@ -144,9 +223,70 @@ test("retrospective model failure stays pending and cannot reopen the delivered 
   }
 });
 
-function retrospectiveOutput() {
-  const finding = { score: 4, assessment: "Adequate with a reusable improvement.", sourceRefs: ["turn-retrospective"] };
+test("invalid retrospective candidate identity and source refs stay pending", async () => {
+  for (const invalid of [
+    "duplicate_candidate",
+    "dangling_source_ref",
+    "missing_revision_target",
+  ] as const) {
+    const root = mkdtempSync(join(tmpdir(), `btcc-retrospective-${invalid}-`));
+    const dbPath = join(root, "btcc.sqlite");
+    seedDeliveredSource(dbPath);
+    try {
+      const output = retrospectiveOutput("turn-failure");
+      if (invalid === "duplicate_candidate") output.candidates.push({ ...output.candidates[0]! });
+      if (invalid === "dangling_source_ref") {
+        output.candidates[0]!.scopeSourceRefs = ["unknown-trajectory-ref"];
+      }
+      const result = await runBtccRetrospective({
+        butlerData: root,
+        dbPath,
+        modelRunner: async (input) => {
+          if (input.kind === "evaluate") return JSON.stringify(output);
+          return JSON.stringify({
+            contractRevision: "btcc.guidance-decision.v1",
+            decisions: [{
+              candidateId: "candidate-opening-care",
+              disposition: "merge",
+              guidanceId: "missing-guidance",
+              rationale: "This target was not supplied as active guidance.",
+              targetRevision: {
+                guidanceId: "missing-guidance",
+                phase: "conception_opening",
+                scope: { kind: "user", userRef: "user-1" },
+                revision: 1,
+                contentSha256: "missing-hash",
+              },
+              acceptedScopeKind: "user",
+              acceptedScopeRationale: "The source supports a user preference.",
+              acceptedScopeSourceRefs: ["turn-failure"],
+              acceptedGeneralityBoundary: "cross_project_user_preference",
+              acceptedGuidance: "Use a deliberate opening.",
+              acceptedAppliesWhen: ["a deliberate opening is useful"],
+              acceptedDoesNotApplyWhen: [],
+            }],
+          });
+        },
+      });
+      expect(result).toMatchObject({ processed_count: 0, failed_count: 1 });
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        expect(db.query<{ status: string }, []>(
+          "SELECT status FROM btcc_learning_candidate_outbox",
+        ).get()).toEqual({ status: "pending" });
+      } finally {
+        db.close();
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+function retrospectiveOutput(sourceRef = "turn-retrospective") {
+  const finding = { score: 4, assessment: "Adequate with a reusable improvement.", sourceRefs: [sourceRef] };
   return {
+    rubricRevision: "btcc.retrospective-rubric.v1" as const,
     summary: "The turn completed faithfully.",
     dimensions: {
       goal_fidelity: finding,
@@ -165,6 +305,9 @@ function retrospectiveOutput() {
       candidateId: "candidate-opening-care",
       phase: "conception_opening",
       scopeKind: "user",
+      scopeRationale: "The user's requested interaction style applies across projects.",
+      scopeSourceRefs: [sourceRef],
+      generalityBoundary: "cross_project_user_preference",
       problem: "The opening can miss a deliberate intent check.",
       guidance: "Confirm the user's intended result before composing a direct answer.",
       appliesWhen: ["a direct answer is appropriate"],
@@ -172,7 +315,7 @@ function retrospectiveOutput() {
       expectedBenefit: "More faithful direct answers.",
       risks: ["Do not make the first answer slower."],
       confidence: 0.8,
-      sourceRefs: ["turn-retrospective"],
+      sourceRefs: [sourceRef],
     }],
     outsideLearningSurface: [],
   };
