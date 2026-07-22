@@ -7,6 +7,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { reviewTask } from "./review-task.ts";
+import { artifactReviewAuthority } from "./source-authority.ts";
 
 type ReviewEvent = Extract<TurnEvent, {
   kind: "TaskReviewPassed" | "TaskReviewFailed" | "ManagedDeferralAccepted";
@@ -40,13 +41,10 @@ export async function review(command: {
   const product = await reviewTask({
     ...invocation,
     operationAuthority: result.result.kind === "workspace_artifact"
-      ? {
-          observationScopeRefs: command.phase.operationAuthority.observationScopeRefs,
-          mutation: {
-            kind: "validation_overlay_only",
-            reviewSourceRef: result.result.workspaceRevisionRef,
-          },
-        }
+      ? artifactReviewAuthority({
+          baseline: command.phase.operationAuthority,
+          reviewSourceRef: result.result.workspaceRevisionRef,
+        })
       : invocation.operationAuthority,
   });
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
