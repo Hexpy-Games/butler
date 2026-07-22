@@ -152,6 +152,29 @@ describe("production BTCC capabilities", () => {
     expect((searched as { records: unknown[] }).records).toContainEqual(
       expect.objectContaining({ id: "SPEC-SANDY-TRUST", kind: "spec" }),
     );
+
+    const reviewRequest: Extract<OperationRequest, { kind: "review_validation" }> = {
+      requestId: "ledger-review-1",
+      kind: "review_validation",
+      capabilityRef: "project_ledger_read",
+      reviewSourceRef: { id: "review-source", sha256: "review-source-sha" },
+      input: { record_ids: ["SPEC-SANDY-TRUST"], include_body: true },
+    };
+    const reviewEnvelope = envelope();
+    reviewEnvelope.context.projectRef = "sandy";
+    const review = runtime.createIsolatedValidationExecutor({
+      workspacePath: root,
+      envelope: reviewEnvelope,
+      request: reviewRequest,
+    });
+    expect(await review({
+      name: "project_ledger_read",
+      args: reviewRequest.input,
+      rawArguments: JSON.stringify(reviewRequest.input),
+    })).toMatchObject({
+      projectId: "sandy",
+      records: [{ id: "SPEC-SANDY-TRUST", kind: "spec" }],
+    });
   });
 });
 
