@@ -66,11 +66,10 @@ export async function handleCodexSseEvent(
     accumulator.fallbackStreamId;
 
   if (event.type === "error") {
-    throw new Error(`Codex backend error: ${event.message || event.code || JSON.stringify(event)}`);
+    throw codexBackendEventError(event.error ?? event);
   }
   if (event.type === "response.failed") {
-    const error = event.response?.error;
-    throw new Error(`Codex backend error: ${error?.message || error?.code || JSON.stringify(event.response)}`);
+    throw codexBackendEventError(event.response?.error ?? event.response ?? event);
   }
   if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
     accumulator.fallbackText += event.delta;
@@ -137,6 +136,31 @@ export async function handleCodexSseEvent(
       raw: event,
     });
   }
+}
+
+function codexBackendEventError(value: unknown) {
+  const error = value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : {};
+  const type = stringFromUnknown(error.type) ?? "";
+  const code = stringFromUnknown(error.code) ?? "";
+  const message = stringFromUnknown(error.message) || code || type || "unknown backend error";
+  return providerHttpError({
+    provider: "openai-codex",
+    api: "codex_responses",
+    statusCode: codexBackendStatus(type, code),
+    detail: message,
+  });
+}
+
+function codexBackendStatus(type: string, code: string): number {
+  const identity = `${type}:${code}`.toLocaleLowerCase("en-US");
+  if (/rate.?limit|too_many_requests/u.test(identity)) return 429;
+  if (/auth|unauthorized/u.test(identity)) return 401;
+  if (/permission|forbidden/u.test(identity)) return 403;
+  if (/invalid|bad_request/u.test(identity)) return 400;
+  if (/service_unavailable|overload/u.test(identity)) return 503;
+  return 502;
 }
 
 
