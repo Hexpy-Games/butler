@@ -43,7 +43,6 @@ const codec: PhaseCodec<PreparedReportProduct> = {
       finalDossierRef: dossier.dossier.ref,
       content,
       contentSha256: digest(content),
-      guardVerdict: "accepted" as const,
     };
     const report = { ref: contentRef("prepared-report", reportBody), ...reportBody };
     const payloadBody = {

@@ -34,15 +34,6 @@ export class DirectHarnessModel implements SelectedModel {
         answer: "안녕하세요. 반갑습니다.",
         personalizationApplications,
         publicClaims: [],
-        guard: {
-          responseVerdict: "responsive",
-          personalizationVerdicts: personalizationApplications.map(({ ref }) => ({
-            ref,
-            verdict: "faithful_and_public_safe",
-          })),
-          publicClaimVerdicts: [],
-          verdict: "accepted",
-        },
       },
       actualIdentity: {
         provider: envelope.modelSelection.provider,

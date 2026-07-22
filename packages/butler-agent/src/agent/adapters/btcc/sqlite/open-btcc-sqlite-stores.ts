@@ -8,6 +8,7 @@ import { SqliteTurnAdmissionRepository } from "./turn-admission-repository.ts";
 import { SqliteTurnStateRepository } from "./turn-state-repository.ts";
 import { SqliteLearningSourceScheduler } from "./learning-source-scheduler.ts";
 import { SqliteContextDocumentStore } from "./context/index.ts";
+import { SqlitePhaseGuidanceStore } from "./phase-guidance-store.ts";
 
 export function openBtccSqliteStores(input: { dbPath: string; ownerId: string }) {
   mkdirSync(dirname(input.dbPath), { recursive: true });
@@ -24,6 +25,7 @@ export function openBtccSqliteStores(input: { dbPath: string; ownerId: string })
     phaseConversations: new SqlitePhaseConversationStore(db),
     messages: new SqliteCanonicalMessageStore(db),
     learning: new SqliteLearningSourceScheduler(db),
+    phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     close: () => db.close(),
   };

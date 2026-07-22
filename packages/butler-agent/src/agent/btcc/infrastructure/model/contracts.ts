@@ -4,6 +4,7 @@ import type {
   OperationRequest,
 } from "../../core/index.ts";
 import type { AdmittedModelSelection } from "../../contracts.ts";
+import type { PhaseGuidanceReader } from "../../guidance/index.ts";
 
 export type ResolvedContextDocument = {
   ref: string;
@@ -62,6 +63,7 @@ export interface ProviderPhasePromptRunner {
 export type ProductionSelectedModelDependencies = {
   context: ButlerContextResolver;
   capabilities: StructuralCapabilityCatalog;
+  guidance: PhaseGuidanceReader;
   promptRunner?: ProviderPhasePromptRunner;
 };
 

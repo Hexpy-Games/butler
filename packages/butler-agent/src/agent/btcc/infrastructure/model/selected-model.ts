@@ -23,6 +23,7 @@ export function createProductionSelectedModel(
           envelope,
           dependencies.context,
           dependencies.capabilities,
+          dependencies.guidance,
         );
         if (signal?.aborted) return interruption("provider_aborted");
         const result = await promptRunner.run({

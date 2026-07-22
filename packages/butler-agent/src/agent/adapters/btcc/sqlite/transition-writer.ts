@@ -206,7 +206,6 @@ export class SqliteTransitionWriter {
       [product.goalContract.ref, "goal_contract", product.goalContract],
       [product.authority.ref, "authority_revision", product.authority],
       [product.outputDraft.ref, "output_draft", product.outputDraft],
-      [product.outputGuard.ref, "output_guard", product.outputGuard],
       [product.finalPayload.ref, "final_payload", product.finalPayload],
     ] as const;
     for (const [ref, kind, value] of records) {

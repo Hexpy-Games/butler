@@ -18,17 +18,6 @@ export function decodeOpeningAnswer(value: unknown, envelope: PhaseEnvelope) {
     ...submitted,
     personalizationApplications,
     publicClaims,
-    guard: {
-      ...submitted.guard,
-      personalizationVerdicts: personalizationApplications.map(({ ref }) => ({
-        ref,
-        verdict: "faithful_and_public_safe" as const,
-      })),
-      publicClaimVerdicts: publicClaims.map((_, claimIndex) => ({
-        claimIndex,
-        verdict: "supported_or_not_observation_dependent" as const,
-      })),
-    },
   };
   const personalizationRefs = answer.personalizationApplications.map(({ ref }) => ref);
   return { answer, route, personalizationRefs } as const;
@@ -67,12 +56,6 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     answer: value.answer,
     personalizationApplications,
     publicClaims,
-    guard: decodeGuard(
-      value.guard,
-      personalizationApplications,
-      publicClaims,
-      value.requiredOutcomeResolution,
-    ),
   };
 }
 
@@ -100,62 +83,6 @@ function decodePersonalizationApplication(value: unknown): PersonalizationApplic
     throw new Error("Opening personalization application is invalid");
   }
   return { ref: value.ref, decision: value.decision };
-}
-
-function decodeGuard(
-  value: unknown,
-  applications: OpeningAnswerSubmission["personalizationApplications"],
-  publicClaims: OpeningAnswerSubmission["publicClaims"],
-  resolution: OpeningAnswerSubmission["requiredOutcomeResolution"],
-): OpeningAnswerSubmission["guard"] {
-  if (
-    !isRecord(value) ||
-    value.verdict !== "accepted" ||
-    !Array.isArray(value.personalizationVerdicts) ||
-    !Array.isArray(value.publicClaimVerdicts) ||
-    (value.responseVerdict !== "responsive" && value.responseVerdict !== "truthfully_limited")
-  ) {
-    throw new Error("Opening output guard is invalid");
-  }
-  const expectedResponseVerdict = resolution === "fulfilled" ? "responsive" : "truthfully_limited";
-  if (value.responseVerdict !== expectedResponseVerdict) {
-    throw new Error("Opening output guard does not match outcome coverage");
-  }
-  const personalizationVerdicts = value.personalizationVerdicts.map((item) => {
-    if (!isRecord(item) || !isNonEmptyString(item.ref) ||
-      item.verdict !== "faithful_and_public_safe") {
-      throw new Error("Opening personalization guard verdict is invalid");
-    }
-    return { ref: item.ref, verdict: "faithful_and_public_safe" as const };
-  });
-  if (!sameArray(
-    personalizationVerdicts.map(({ ref }) => ref),
-    applications.map(({ ref }) => ref),
-  )) {
-    throw new Error("Opening output guard subjects do not match personalization applications");
-  }
-  const publicClaimVerdicts = value.publicClaimVerdicts.map((item) => {
-    if (!isRecord(item) || !Number.isInteger(item.claimIndex) ||
-      item.verdict !== "supported_or_not_observation_dependent") {
-      throw new Error("Opening public claim guard verdict is invalid");
-    }
-    return {
-      claimIndex: item.claimIndex as number,
-      verdict: "supported_or_not_observation_dependent" as const,
-    };
-  });
-  if (!sameArray(
-    publicClaimVerdicts.map(({ claimIndex }) => claimIndex),
-    publicClaims.map((_, index) => index),
-  )) {
-    throw new Error("Opening output guard subjects do not match public claims");
-  }
-  return {
-    responseVerdict: value.responseVerdict,
-    personalizationVerdicts,
-    publicClaimVerdicts,
-    verdict: "accepted",
-  };
 }
 
 function admitPublicClaimSources(
@@ -198,10 +125,6 @@ function admitPersonalization(
 
 function successfulObservations(envelope: PhaseEnvelope) {
   return envelope.operationResults.filter(({ outcome }) => outcome === "observed");
-}
-
-function sameArray(left: unknown[], right: unknown[]): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

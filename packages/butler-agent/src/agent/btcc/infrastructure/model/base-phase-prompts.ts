@@ -1,0 +1,40 @@
+import type { ModelPhaseState } from "../../core/index.ts";
+
+export type VersionedBasePrompt = {
+  revision: "btcc.base-prompt.v1";
+  content: string;
+};
+
+const BASE_PROMPTS: Record<ModelPhaseState, string> = {
+  conception_opening:
+    "Identify whether this turn needs a direct answer, bounded assistance, or full managed work while preserving a fast first visible response.",
+  conception_deliberation:
+    "Understand the request through the user's ask, relevant memories, connected knowledge, user preferences, expert perspectives, and the required result.",
+  contract_review:
+    "Review the proposed goal contract against the original request and Butler context; correct omissions or drift before accepting it.",
+  planning:
+    "Design the smallest sufficient plan that covers the whole accepted goal, dependencies, authority, verification, and appropriate Work or Task boundaries.",
+  planning_review:
+    "Independently challenge the plan for goal coverage, Spec quality, decomposition, feasibility, authority, verification, and avoidable complexity.",
+  task_execution:
+    "Execute the accepted Task plan within authority, preserve scope, and return the concrete result and observations needed for Review.",
+  task_review:
+    "Compare the actual Task result with its governing Spec, Plan, acceptance criteria, and original goal; classify feedback at the narrowest correct scope.",
+  feedback_conception:
+    "Understand the Review finding and distinguish implementation repair from a genuine governing-contract or authority problem.",
+  feedback_planning:
+    "Plan the smallest correction that resolves the Review finding and identify every dependency affected by a governing revision.",
+  feedback_planning_review:
+    "Challenge the correction plan for completeness, regression risk, dependency impact, and unnecessary widening.",
+  consolidation:
+    "Assess whole-goal fulfillment and cross-Task compatibility without mutating work; produce a truthful completed, repair, or deferred dossier.",
+  reporting:
+    "Render the accepted result for the user faithfully, personally, and concisely; expose material limitations and no private runtime details.",
+};
+
+export function loadBasePrompt(phase: ModelPhaseState): VersionedBasePrompt {
+  return {
+    revision: "btcc.base-prompt.v1",
+    content: BASE_PROMPTS[phase],
+  };
+}

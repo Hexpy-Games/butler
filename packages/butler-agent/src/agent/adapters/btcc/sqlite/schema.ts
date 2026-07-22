@@ -152,6 +152,23 @@ CREATE TABLE IF NOT EXISTS btcc_learning_candidate_outbox (
   status TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS btcc_phase_guidance (
+  guidance_revision_id TEXT PRIMARY KEY,
+  guidance_id TEXT NOT NULL,
+  phase TEXT NOT NULL,
+  scope_kind TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  content_sha256 TEXT NOT NULL,
+  guidance_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(guidance_id, phase, scope_kind, scope_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_phase_guidance_lookup
+ON btcc_phase_guidance(phase, scope_kind, scope_id, status);
+
 CREATE TABLE IF NOT EXISTS btcc_context_documents (
   context_ref TEXT PRIMARY KEY,
   content_sha256 TEXT NOT NULL,

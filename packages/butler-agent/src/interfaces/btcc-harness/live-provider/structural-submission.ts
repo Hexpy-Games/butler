@@ -153,8 +153,8 @@ function isStructuralEnum(key: string | undefined): boolean {
   return key === "kind" || key === "verdict" || key === "decision" ||
     key === "disposition" || key === "route" || key === "status" ||
     key === "correctionKind" || key === "findingCategory" ||
-    key === "requiredOutcomeResolution" || key === "responseVerdict" ||
-    key === "goalCoverage" || key === "semanticFidelity" || key === "guardVerdict";
+    key === "requiredOutcomeResolution" || key === "goalCoverage" ||
+    key === "semanticFidelity";
 }
 
 function isIdentityString(key: string | undefined): boolean {

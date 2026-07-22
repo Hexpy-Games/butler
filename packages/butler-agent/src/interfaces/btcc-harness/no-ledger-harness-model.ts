@@ -76,18 +76,6 @@ function answer(envelope: PhaseEnvelope, scenario: NoLedgerScenario): ProviderRo
       answer: answerFor(scenario),
       personalizationApplications,
       publicClaims: claims,
-      guard: {
-        responseVerdict: "responsive",
-        personalizationVerdicts: personalizationApplications.map(({ ref }) => ({
-          ref,
-          verdict: "faithful_and_public_safe",
-        })),
-        publicClaimVerdicts: claims.map((_, claimIndex) => ({
-          claimIndex,
-          verdict: "supported_or_not_observation_dependent",
-        })),
-        verdict: "accepted",
-      },
     },
     actualIdentity: identity(envelope),
   };
