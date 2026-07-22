@@ -50,7 +50,7 @@ async function writeWorkspaceFile(
     const actual = current ? sha256(current) : "missing";
     if (actual !== args.expected_sha256) throw new Error("write_file expected_sha256 does not match");
   }
-  if (args.create_parents === true) await mkdir(dirname(target), { recursive: true });
+  await mkdir(dirname(target), { recursive: true });
   const temporary = `${target}.btcc-${process.pid}-${Date.now()}`;
   try {
     await writeFile(temporary, text(args.content), "utf8");

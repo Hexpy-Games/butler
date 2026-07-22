@@ -75,7 +75,7 @@ export async function performWorkspaceAction(input: {
     let content = "workspace capability recovered from its durable operation overlay";
     if (shouldDispatch) {
       try {
-        content = await dispatchWorkspaceCapability(input, journal);
+        content = await dispatchWorkspaceCapability(input, workspace, journal);
       } catch (error) {
         resetInterruptedDispatch(input.store, scopeId, journal);
         throw capabilityRejection(error);
@@ -124,9 +124,10 @@ export function cleanupWorkspaceAction(
 
 async function dispatchWorkspaceCapability(
   input: Parameters<typeof performWorkspaceAction>[0],
+  workspace: StoredWorkspace,
   journal: WorkspaceActionJournal,
 ): Promise<string> {
-  const args = input.request.input;
+  const args = workspaceCapabilityInput(input.request, workspace);
   const execute = input.options.createWorkspaceToolExecutor({
     workspacePath: workspaceContentRoot(journal.overlayRoot),
     envelope: input.envelope,
@@ -135,10 +136,20 @@ async function dispatchWorkspaceCapability(
   const output = await execute({
     name: input.request.capabilityRef,
     args,
-    rawArguments: JSON.stringify(input.request.input),
+    rawArguments: JSON.stringify(args),
     signal: input.signal,
   });
   return operationContent(output);
+}
+
+function workspaceCapabilityInput(
+  request: WorkspaceRequest,
+  workspace: StoredWorkspace,
+): Record<string, unknown> {
+  if (request.capabilityRef !== "write_file" || workspace.targetKind !== "file") {
+    return request.input;
+  }
+  return { ...request.input, path: "target", create_parents: true };
 }
 
 function resetInterruptedDispatch(
@@ -200,7 +211,6 @@ function prepareCandidate(
   const target = resolveWorkspaceTarget({
     workspaceRoot: journal.overlayRoot,
     targetKind: workspace.targetKind,
-    originalTargetPath: workspace.targetPath,
     relativeTarget: input.request.relativeTarget,
   });
   const candidate = captureWorkspaceSnapshot(

@@ -14,7 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { contentRef, type ContentRef } from "../../core/index.ts";
 
 export type TargetKind = "file" | "directory";
@@ -116,11 +116,10 @@ export function syncCompleteTarget(targetPath: string): void {
 export function resolveWorkspaceTarget(input: {
   workspaceRoot: string;
   targetKind: TargetKind;
-  originalTargetPath: string;
   relativeTarget: string;
 }): string {
   const logicalTarget = input.targetKind === "file"
-    ? resolveFileTarget(input.relativeTarget, input.originalTargetPath)
+    ? resolveFileTarget(input.relativeTarget)
     : input.relativeTarget;
   if (isAbsolute(logicalTarget)) throw new Error("BTCC artifact target must be relative");
   const contentRoot = workspaceContentRoot(input.workspaceRoot);
@@ -215,9 +214,12 @@ function snapshotEntryPath(root: string, targetKind: TargetKind, path: string): 
   return target;
 }
 
-function resolveFileTarget(relativeTarget: string, originalTargetPath: string): string {
-  if (relativeTarget === "." || relativeTarget === basename(originalTargetPath)) return "target";
-  throw new Error("BTCC file workspace action must address the exact target file");
+function resolveFileTarget(relativeTarget: string): string {
+  const parts = relativeTarget.split(/[\\/]+/u);
+  if (!relativeTarget || isAbsolute(relativeTarget) || parts.includes("..")) {
+    throw new Error("BTCC file workspace target label must be contained");
+  }
+  return "target";
 }
 
 function assertContained(root: string, candidate: string): void {
