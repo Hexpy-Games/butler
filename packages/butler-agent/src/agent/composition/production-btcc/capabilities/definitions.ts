@@ -114,7 +114,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
     capabilityRef: "project_ledger_read",
     name: "project_ledger_read",
-    description: "Read canonical Project Ledger specs, plans, work, tasks, and reports for the bound project.",
+    description: "Read canonical Project Ledger specs, plans, work, tasks, and reports for the bound project. Query terms use case-insensitive any-term matching across record metadata and body.",
     operationKinds: ["observe"],
     observationScopeKinds: ["ledger"],
     inputSchema: object({

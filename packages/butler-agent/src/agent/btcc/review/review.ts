@@ -2,6 +2,7 @@ import type { PhaseInvocation } from "../core/index.ts";
 import { isManagedDeferral, withManagedDeferralState } from "../deferral/index.ts";
 import {
   requireManagedProgram,
+  requireManagedState,
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
@@ -19,9 +20,16 @@ export async function review(command: {
     throw new Error(`Review cannot advance ${command.turn.semanticState}`);
   }
   const program = requireManagedProgram(command.turn);
+  const accepted = requireManagedState(command.turn).goalAcceptance;
+  if (!accepted) throw new Error("Review is missing accepted Goal authority");
   const result = program.currentTask.currentResult;
   if (!result) throw new Error("Review requires the current ResultCandidate");
   const invocation = withManagedDeferralState(command.phase, command.turn, {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
+    acceptedPlan: program.plan,
+    currentWork: program.currentWork.work,
+    currentTask: program.currentTask.task,
     resultCandidate: result,
     criteria: resolveCriteria(program),
     verificationQuestions: resolveVerificationQuestions(program),

@@ -1,6 +1,6 @@
 import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
-import type { GoalContractRecord } from "../conception/index.ts";
+import type { GoalContractAcceptedProduct } from "../conception/index.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import {
   requireManagedPlanningAuthority,
@@ -21,17 +21,17 @@ export async function consolidation(command: {
     throw new Error(`Consolidation cannot advance ${command.turn.semanticState}`);
   }
   const managed = requireManagedState(command.turn);
-  const goalContract = managed.goalAcceptance?.goalContract;
-  if (!goalContract) throw new Error("Consolidation is missing the accepted GoalContract");
+  const accepted = managed.goalAcceptance;
+  if (!accepted) throw new Error("Consolidation is missing the accepted GoalContract");
   if (managed.deferral) {
-    return consolidateDeferredTurn(command, goalContract.fields, managed.deferral);
+    return consolidateDeferredTurn(command, accepted, managed.deferral);
   }
-  return consolidateCompletedWork(command, goalContract.fields);
+  return consolidateCompletedWork(command, accepted);
 }
 
 async function consolidateDeferredTurn(
   command: { turn: TurnRecord; phase: PhaseInvocation },
-  goalFields: GoalContractRecord["fields"],
+  accepted: GoalContractAcceptedProduct,
   sourceDeferral: ManagedDeferralProduct,
 ): Promise<Extract<TurnEvent, { kind: "FinalDossierAccepted" }>> {
   const authority = requireManagedPlanningAuthority(command.turn);
@@ -40,9 +40,11 @@ async function consolidateDeferredTurn(
     frontier: "deferred",
     taskStatuses: [],
     programId: authority.programId,
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
     goalContractRef: authority.goalContractRef,
     authorityRef: authority.authorityRef,
-    goalFields,
+    goalFields: accepted.goalContract.fields,
     taskReviewRefs: reviewed?.tasks.flatMap((task) =>
       task.currentReview?.review.verdict === "passed" ? [task.currentReview.review.ref] : []) ?? [],
     candidateRefs: reviewed?.promotionAssemblies.map((assembly) => assembly.candidate.ref) ?? [],
@@ -59,7 +61,7 @@ async function consolidateDeferredTurn(
 
 async function consolidateCompletedWork(
   command: { turn: TurnRecord; phase: PhaseInvocation },
-  goalFields: GoalContractRecord["fields"],
+  accepted: GoalContractAcceptedProduct,
 ): Promise<Extract<TurnEvent, {
   kind: "ConsolidationRepairRequired" | "FinalDossierAccepted" | "PromotionAuthorized";
 }>> {
@@ -72,10 +74,18 @@ async function consolidateCompletedWork(
     throw new Error("Consolidation requires every passed Task Review");
   }
   const product = await assureOriginalGoal(withPhaseState(command.phase, {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
+    acceptedPlan: program.plan,
+    managedWorks: program.works,
+    managedTasks: program.tasks,
+    criteria: program.criteria,
+    integrationCriteria: program.plan.integrationCriterionRefs,
+    artifactLifecycle: program.artifactLifecycle,
     frontier: program.frontier,
     taskStatuses: implementationTasks.map((task) => task.status),
     taskRefs: implementationTasks.map((task) => task.task.ref),
-    goalFields,
+    goalFields: accepted.goalContract.fields,
     programId: program.programId,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,

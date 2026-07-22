@@ -163,6 +163,20 @@ describe("BTCC managed executable ingress", () => {
         SELECT content_json FROM btcc_records
         WHERE kind = 'feedback_plan_candidate' ORDER BY rowid
       `).all().map((row) => JSON.parse(row.content_json));
+      const phaseInputs = new Map(db.query<{
+        semantic_state: string;
+        phase_envelope_json: string;
+      }, [string]>(`
+        SELECT checkpoint.semantic_state, revision.phase_envelope_json
+        FROM btcc_phase_checkpoint_revisions revision
+        JOIN btcc_checkpoints checkpoint
+          ON checkpoint.checkpoint_id = revision.checkpoint_id
+        WHERE checkpoint.turn_id = ? AND revision.phase_envelope_json IS NOT NULL
+        ORDER BY checkpoint.turn_revision, revision.checkpoint_revision
+      `).all(turnId).map((row) => [
+        row.semantic_state,
+        JSON.parse(row.phase_envelope_json).context.stateInput,
+      ]));
 
       expect(turn?.semantic_state).toBe("delivered");
       expect(turn?.route).toBe("managed");
@@ -188,6 +202,25 @@ describe("BTCC managed executable ingress", () => {
       expect(planningCandidates.at(-1)?.works).toHaveLength(1);
       expect(planningCandidates.at(-1)?.tasks).toHaveLength(2);
       expect(planningCandidates[0]?.observedManifestRevision).toBe(1);
+      expect(phaseInputs.get("planning")).toMatchObject({
+        acceptedGoalContract: { request: expect.any(String) },
+        acceptedAuthority: { route: "managed" },
+      });
+      expect(phaseInputs.get("task_execution")).toMatchObject({
+        acceptedGoalContract: { request: expect.any(String) },
+        acceptedPlan: { strategy: expect.any(String) },
+        currentTask: { intendedOutcome: expect.any(String) },
+      });
+      expect(phaseInputs.get("task_review")).toMatchObject({
+        acceptedGoalContract: { request: expect.any(String) },
+        currentWork: { outcome: expect.any(String) },
+        currentTask: { intendedOutcome: expect.any(String) },
+      });
+      expect(phaseInputs.get("consolidation")).toMatchObject({
+        acceptedGoalContract: { request: expect.any(String) },
+        acceptedPlan: { strategy: expect.any(String) },
+        managedTasks: expect.any(Array),
+      });
       if (scenario === "managed-planning-revision") {
         expect(planningCandidates).toHaveLength(2);
         expect(planningCandidates[1]?.revisionOrigin).toEqual({

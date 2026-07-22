@@ -72,20 +72,28 @@ describe("production BTCC capabilities", () => {
     const root = fixtureRoot();
     const projectRoot = join(root, "project-ledger", "projects", "sandy");
     const specPath = join(projectRoot, "specs", "trust.md");
-    mkdirSync(join(projectRoot, "index"), { recursive: true });
     mkdirSync(join(projectRoot, "specs"), { recursive: true });
-    writeFileSync(specPath, "# Trust profiling\n\nPreserve Sandy's voice.\n");
-    writeFileSync(join(projectRoot, "index", "project.json"), JSON.stringify({
-      project: { id: "sandy", name: "Sandy" },
-      records: [{
-        id: "SPEC-SANDY-TRUST",
-        kind: "spec",
-        title: "Trust profiling",
-        status: "specified",
-        path: "project-ledger/projects/sandy/specs/trust.md",
-      }],
-      issues: [],
+    writeFileSync(join(projectRoot, "project.json"), JSON.stringify({
+      schema: "project-ledger.project.v1",
+      id: "sandy",
+      name: "Sandy",
+      status: "active",
     }));
+    writeFileSync(join(projectRoot, "ledger.jsonl"), "");
+    writeFileSync(specPath, [
+      "---",
+      'schema: "project-ledger.spec.v1"',
+      'kind: "spec"',
+      'id: "SPEC-SANDY-TRUST"',
+      'title: "Trust profiling"',
+      'status: "specified"',
+      "---",
+      "",
+      "# Trust profiling",
+      "",
+      "Preserve Sandy's voice.",
+      "",
+    ].join("\n"));
     const runtime = createProductionToolRuntime({
       butlerHome: root,
       butlerData: root,
@@ -116,6 +124,21 @@ describe("production BTCC capabilities", () => {
       records: [{ id: "SPEC-SANDY-TRUST", kind: "spec" }],
     });
     expect(JSON.stringify(result)).toContain("Preserve Sandy's voice");
+
+    const searched = await execute({
+      name: "project_ledger_read",
+      args: {
+        query: "unmatched architecture Sandy voice",
+        include_body: true,
+      },
+      rawArguments: JSON.stringify({
+        query: "unmatched architecture Sandy voice",
+        include_body: true,
+      }),
+    });
+    expect((searched as { records: unknown[] }).records).toContainEqual(
+      expect.objectContaining({ id: "SPEC-SANDY-TRUST", kind: "spec" }),
+    );
   });
 });
 

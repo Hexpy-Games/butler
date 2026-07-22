@@ -83,8 +83,16 @@ async function conceiveReviewFeedback(command: {
   phase: PhaseInvocation;
 }): Promise<FeedbackConceptionEvent> {
   const program = requireManagedProgram(command.turn);
+  const accepted = requireManagedState(command.turn).goalAcceptance;
+  if (!accepted) throw new Error("Feedback Conception is missing accepted Goal authority");
   const source = feedbackSource(command.turn, program);
   const product = await conceiveCorrection(withManagedDeferralState(command.phase, command.turn, {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
+    acceptedPlan: program.plan,
+    currentWork: program.currentWork.work,
+    currentTask: program.currentTask.task,
+    correctionSource: source.record,
     correctionScopeRef: source.correctionScopeRef,
     correctionOrigin: source.origin,
     affectedTaskRefs: source.affectedTaskRefs,
@@ -104,6 +112,7 @@ function feedbackSource(
   if (repair) {
     return {
       origin: "consolidation" as const,
+      record: repair,
       correctionScopeRef: repair.correctionScope.ref,
       affectedTaskRefs: repair.correctionScope.affectedTaskRefs,
     };
@@ -114,6 +123,7 @@ function feedbackSource(
   }
   return {
     origin: "task_review" as const,
+    record: review,
     correctionScopeRef: review.review.correctionScopeRef,
     affectedTaskRefs: [program.currentTask.task.ref],
   };
