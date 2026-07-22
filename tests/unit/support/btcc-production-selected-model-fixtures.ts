@@ -7,6 +7,7 @@ import type {
   ProviderPhasePromptRunner,
   StructuralCapabilityDefinition,
 } from "../../../packages/butler-agent/src/agent/btcc/infrastructure/model/index.ts";
+import type { AcceptedPhaseGuidance } from "../../../packages/butler-agent/src/agent/btcc/guidance/index.ts";
 
 export function phaseEnvelope(options: { emptyContext?: boolean } = {}): PhaseEnvelope {
   return {
@@ -114,6 +115,10 @@ export function capabilityCatalog(
 
 export function emptyCapabilityCatalog() {
   return capabilityCatalog([]);
+}
+
+export function guidanceReader(entries: AcceptedPhaseGuidance[] = []) {
+  return { list: () => entries };
 }
 
 export function abortError(): Error {

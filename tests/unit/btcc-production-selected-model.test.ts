@@ -11,6 +11,7 @@ import {
   capabilityCatalog,
   emptyCapabilityCatalog,
   emptyContextResolver,
+  guidanceReader,
   modelSelection,
   phaseEnvelope,
   promptRunner,
@@ -65,6 +66,17 @@ describe("production BTCC selected model", () => {
           inputSchema: { type: "object" },
         },
       ]),
+      guidance: guidanceReader([{
+        guidanceId: "planning-check-original-goal",
+        phase: "planning",
+        scope: { kind: "project", projectRef: "project-1" },
+        revision: 2,
+        guidance: "Trace every Task to the immutable original goal.",
+        appliesWhen: ["managed project work"],
+        doesNotApplyWhen: ["direct answer"],
+        sourceIds: ["source-1"],
+        contentSha256: "guidance-hash",
+      }]),
       promptRunner: runner,
     });
     const signal = new AbortController().signal;
@@ -91,11 +103,18 @@ describe("production BTCC selected model", () => {
     });
 
     const prompt = JSON.parse(calls[0]!.prompt) as Record<string, any>;
-    expect(prompt.originalRequest).toEqual({
+    const hierarchy = prompt.promptHierarchy;
+    expect(Object.keys(hierarchy)).toEqual([
+      "immutablePhaseContract",
+      "versionedBasePrompt",
+      "acceptedPhaseGuidance",
+      "currentTurnContext",
+    ]);
+    expect(hierarchy.currentTurnContext.originalRequest).toEqual({
       messageId: "message-1",
       content: "Improve Sandy's trust profiling without changing her voice.",
     });
-    expect(prompt.phaseContract).toEqual({
+    expect(hierarchy.immutablePhaseContract).toEqual({
       phase: "planning",
       objective: "Author the smallest sufficient plan.",
       duties: ["preserve_original_goal", "author_smallest_sufficient_plan"],
@@ -108,13 +127,27 @@ describe("production BTCC selected model", () => {
         applicableRules: ["one-concern-per-spec"],
       }],
     });
-    expect(prompt.stateInput).toEqual({
+    expect(hierarchy.versionedBasePrompt).toMatchObject({
+      revision: "btcc.base-prompt.v1",
+    });
+    expect(hierarchy.acceptedPhaseGuidance).toEqual([{
+      guidanceId: "planning-check-original-goal",
+      phase: "planning",
+      scope: { kind: "project", projectRef: "project-1" },
+      revision: 2,
+      guidance: "Trace every Task to the immutable original goal.",
+      appliesWhen: ["managed project work"],
+      doesNotApplyWhen: ["direct answer"],
+      sourceIds: ["source-1"],
+      contentSha256: "guidance-hash",
+    }]);
+    expect(hierarchy.currentTurnContext.stateInput).toEqual({
       acceptedGoalRef: "goal:1",
       managedLedgerBindingRef: "ledger:1",
     });
-    expect(prompt.priorOperationResults).toEqual(phaseEnvelope().operationResults);
-    expect(prompt.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
-    expect(prompt.butlerContext).toEqual({
+    expect(hierarchy.currentTurnContext.priorOperationResults).toEqual(phaseEnvelope().operationResults);
+    expect(hierarchy.currentTurnContext.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
+    expect(hierarchy.currentTurnContext.butlerContext).toEqual({
       sessionId: "session-1",
       userRef: "user-1",
       projectRef: "project-1",
@@ -125,7 +158,7 @@ describe("production BTCC selected model", () => {
       continuationCandidates: [],
       baselineObservationScopeRefs: ["web:current"],
     });
-    expect(prompt.availableCapabilities).toEqual([{
+    expect(hierarchy.currentTurnContext.availableCapabilities).toEqual([{
       capabilityRef: "weather:current",
       name: "current_weather",
       description: "Read current weather for one location.",
@@ -169,6 +202,7 @@ describe("production BTCC selected model", () => {
         observationScopeRefs: ["web:current"],
         inputSchema: { type: "object" },
       }]),
+      guidance: guidanceReader(),
       promptRunner: promptRunner(async () => {
         calls += 1;
         return {
@@ -198,6 +232,7 @@ describe("production BTCC selected model", () => {
     const model = createProductionSelectedModel({
       context: emptyContextResolver(),
       capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
       promptRunner: promptRunner(async () => responses[calls++]!),
     });
 
@@ -222,6 +257,7 @@ describe("production BTCC selected model", () => {
     const model = createProductionSelectedModel({
       context: emptyContextResolver(),
       capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
       promptRunner: promptRunner(async () => {
         const failure = failures[calls++];
         throw failure;

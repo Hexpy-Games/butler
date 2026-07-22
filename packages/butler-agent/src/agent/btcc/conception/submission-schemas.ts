@@ -2,7 +2,6 @@ import {
   arraySchema,
   contentRefSchema,
   enumSchema,
-  integerSchema,
   literalSchema,
   objectSchema,
   textSchema,
@@ -20,18 +19,6 @@ const publicClaim = objectSchema({
   claim: textSchema(),
   sourceRefs: refList(),
 });
-const answerGuard = objectSchema({
-  responseVerdict: enumSchema("responsive", "truthfully_limited"),
-  personalizationVerdicts: arraySchema(objectSchema({
-    ref: textSchema(),
-    verdict: literalSchema("faithful_and_public_safe"),
-  })),
-  publicClaimVerdicts: arraySchema(objectSchema({
-    claimIndex: integerSchema(),
-    verdict: literalSchema("supported_or_not_observation_dependent"),
-  })),
-  verdict: literalSchema("accepted"),
-});
 const answerFields = {
   interpretedIntent: textSchema(),
   requiredOutcome: textSchema(),
@@ -40,7 +27,6 @@ const answerFields = {
   answer: textSchema(),
   personalizationApplications: arraySchema(personalizationApplication),
   publicClaims: arraySchema(publicClaim),
-  guard: answerGuard,
 };
 
 export const openingSubmissionSchema = variantsSchema(

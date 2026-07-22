@@ -7,7 +7,6 @@ export type PreparedReportProduct = {
     finalDossierRef: ContentRef;
     content: string;
     contentSha256: string;
-    guardVerdict: "accepted";
   };
   finalPayload: {
     ref: ContentRef;

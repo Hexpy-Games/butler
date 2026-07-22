@@ -58,6 +58,7 @@ export function createProductionBtccComposition(input: {
     model: createProductionSelectedModel({
       context: stores.contextDocuments,
       capabilities: createProductionCapabilityCatalog(),
+      guidance: stores.phaseGuidance,
     }),
     operations: operationRuntime.operations,
     artifacts: operationRuntime.artifacts,

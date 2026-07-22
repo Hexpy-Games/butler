@@ -29,18 +29,9 @@ export type OpeningAnswerProduct = {
     personalizationApplications: PersonalizationApplication[];
     publicClaims: PublicClaim[];
   };
-  outputGuard: {
-    ref: ContentRef;
-    draftRef: ContentRef;
-    responseVerdict: "responsive" | "truthfully_limited";
-    personalizationVerdicts: PersonalizationVerdict[];
-    publicClaimVerdicts: PublicClaimVerdict[];
-    verdict: "accepted";
-  };
   finalPayload: {
     ref: ContentRef;
     draftRef: ContentRef;
-    guardReceiptRef: ContentRef;
     contentSha256: string;
     route: "direct" | "assisted";
     disposition: "answered";
@@ -65,19 +56,9 @@ export type PersonalizationApplication = {
   decision: "applied" | "not_applicable";
 };
 
-export type PersonalizationVerdict = {
-  ref: string;
-  verdict: "faithful_and_public_safe";
-};
-
 export type PublicClaim = {
   claim: string;
   sourceRefs: ContentRef[];
-};
-
-export type PublicClaimVerdict = {
-  claimIndex: number;
-  verdict: "supported_or_not_observation_dependent";
 };
 
 export type OpeningAnswerSubmission = {
@@ -89,12 +70,6 @@ export type OpeningAnswerSubmission = {
   answer: string;
   personalizationApplications: PersonalizationApplication[];
   publicClaims: PublicClaim[];
-  guard: {
-    responseVerdict: "responsive" | "truthfully_limited";
-    personalizationVerdicts: PersonalizationVerdict[];
-    publicClaimVerdicts: PublicClaimVerdict[];
-    verdict: "accepted";
-  };
 };
 
 export type OpeningContinuationSubmission = {

@@ -54,18 +54,9 @@ export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
       personalizationApplications: answer.personalizationApplications,
       publicClaims: answer.publicClaims,
     };
-    const outputGuard = {
-      ref: contentRef("guard", {
-        draftRef: outputDraft.ref,
-        ...answer.guard,
-      }),
-      draftRef: outputDraft.ref,
-      ...answer.guard,
-    };
     const finalPayloadBody = {
       turnId: envelope.binding.turnId,
       draftRef: outputDraft.ref,
-      guardReceiptRef: outputGuard.ref,
       contentSha256: outputDraft.contentSha256,
       route,
       disposition: "answered",
@@ -82,11 +73,9 @@ export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
         bindingId: digest(`new-request\0${envelope.binding.turnId}`),
       },
       outputDraft,
-      outputGuard,
       finalPayload: {
         ref: contentRef("payload", finalPayloadBody),
         draftRef: outputDraft.ref,
-        guardReceiptRef: outputGuard.ref,
         contentSha256: outputDraft.contentSha256,
         route,
         disposition: "answered",
