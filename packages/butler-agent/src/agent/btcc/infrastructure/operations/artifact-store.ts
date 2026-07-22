@@ -22,7 +22,8 @@ export type PromotionIntent = {
   stagedPath: string;
   baselineSnapshotRef: { id: string; sha256: string };
   finalSnapshotRef: { id: string; sha256: string };
-  status: "reserved" | "prepared" | "commit_intent_durable" | "committed";
+  status: "reserved" | "prepared" | "commit_intent_durable" | "committed" | "closed";
+  cleanupRootRef?: { id: string; sha256: string };
 };
 
 export type WorkspaceActionJournal = {

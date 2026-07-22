@@ -6,16 +6,72 @@ export type TaskArtifactPolicy =
   | {
       kind: "workspace_artifact";
       targetScopeRef: string;
+      targetPath: string;
       baselinePolicy: "capture_at_workspace_provision";
     }
-  | { kind: "repository_promotion"; targetScopeRef: string };
+  | { kind: "repository_promotion"; targetScopeRef: string; targetPath: string };
 
 export type ManagedCriterion = {
   ref: ContentRef;
+  ordinal: number;
   taskLogicalId: string;
   statement: string;
   sourceGoalFieldIds: Array<"request" | "intended_result">;
   sourceRequiredOutcomeRefs: string[];
+};
+
+export type ManagedPlanningRisk = {
+  ref: ContentRef;
+  logicalId: string;
+  programId: string;
+  statement: string;
+  affectedTaskRefs: ContentRef[];
+  mitigation: string;
+  residualRisk?: string;
+};
+
+export type ManagedPlanningAssumption = {
+  ref: ContentRef;
+  logicalId: string;
+  programId: string;
+  statement: string;
+  affectedTaskRefs: ContentRef[];
+  validationQuestion: string;
+  invalidationConsequence: string;
+};
+
+export type ManagedEffectIntent = {
+  ref: ContentRef;
+  programId: string;
+  occurrenceKey: string;
+  owningTaskKey: { programId: string; taskLogicalId: string };
+  sourceGoalFieldIds: Array<"request" | "intended_result">;
+  sourceRequiredOutcomeRefs: string[];
+  targetScopeRef: string;
+  action:
+    | { kind: "external_operation"; action: string }
+    | {
+        kind: "repository_promotion";
+        selectorRef: ContentRef;
+        promotionProtocol: "journaled_complete_target_exchange_v1";
+      };
+  normalizedPayloadSha256: string;
+  desiredOutcomeSha256: string;
+  authorityRef: ContentRef;
+};
+
+export type ManagedIntegrationCriterion = {
+  ref: ContentRef;
+  logicalId: string;
+  programId: string;
+  statement: string;
+  sourceGoalFieldIds: Array<"request" | "intended_result">;
+  sourceRequiredOutcomeRefs: string[];
+  participatingTaskRefs: ContentRef[];
+  integrationTaskRef: ContentRef;
+  promotionTaskRef: ContentRef;
+  targetScopeRefs: string[];
+  observableCompatibility: string;
 };
 
 export type ManagedVerificationQuestion = {
@@ -33,6 +89,7 @@ export type ManagedTask = {
   intendedOutcome: string;
   executionOrdinal: number;
   dependencyTaskRefs: ContentRef[];
+  effectClass: "none" | "external_effect";
   artifactPolicy: TaskArtifactPolicy;
   criterionRefs: ContentRef[];
   verificationQuestionRefs: ContentRef[];
@@ -53,13 +110,19 @@ export type ManagedWorkGraph = {
   programId: string;
   workRefs: ContentRef[];
   taskRefs: ContentRef[];
+  integrationCriterionRefs: ContentRef[];
+  effectIntentRefs: ContentRef[];
   dependencyEdges: Array<{ predecessorTaskRef: ContentRef; successorTaskRef: ContentRef }>;
 };
 
 export type ManagedArtifactLifecycle = {
   ref: ContentRef;
   programId: string;
-  taskPolicies: Array<{ taskRef: ContentRef; policy: TaskArtifactPolicy }>;
+  taskPolicies: Array<{
+    taskRef: ContentRef;
+    policy: TaskArtifactPolicy;
+    effectIntentRefs: ContentRef[];
+  }>;
   promotionSelectors: Array<{
     ref: ContentRef;
     targetScopeRef: string;
@@ -70,8 +133,8 @@ export type ManagedArtifactLifecycle = {
     promotionProtocol: "journaled_complete_target_exchange_v1";
   }>;
   promotionTaskRefs: ContentRef[];
-  effectIntentRefs: [];
-  integrationCriteria: [];
+  effectIntentRefs: ContentRef[];
+  integrationCriterionRefs: ContentRef[];
   promotionProtocol: "not_applicable" | "journaled_complete_target_exchange_v1";
 };
 
@@ -85,6 +148,10 @@ export type ManagedPlan = {
   taskRefs: ContentRef[];
   criterionRefs: ContentRef[];
   verificationQuestionRefs: ContentRef[];
+  integrationCriterionRefs: ContentRef[];
+  effectIntentRefs: ContentRef[];
+  riskRefs: ContentRef[];
+  assumptionRefs: ContentRef[];
   artifactLifecycleRef: ContentRef;
 };
 
@@ -110,9 +177,19 @@ export type PlanningCandidate = {
   tasks: ManagedTask[];
   criteria: ManagedCriterion[];
   verificationQuestions: ManagedVerificationQuestion[];
+  integrationCriteria: ManagedIntegrationCriterion[];
+  effectIntents: ManagedEffectIntent[];
+  risks: ManagedPlanningRisk[];
+  assumptions: ManagedPlanningAssumption[];
   workGraph: ManagedWorkGraph;
   artifactLifecycle: ManagedArtifactLifecycle;
-  bundle: { ref: ContentRef; recordRefs: ContentRef[] };
+  bundle: {
+    ref: ContentRef;
+    ledgerId: string;
+    programId: string;
+    observedManifestRevision: number;
+    recordRefs: ContentRef[];
+  };
 };
 
 export type PlanningCandidateProduct = {
@@ -132,6 +209,8 @@ export type PlanningReview = {
   reviewedTaskRefs: ContentRef[];
   reviewedCriterionRefs: ContentRef[];
   reviewedVerificationQuestionRefs: ContentRef[];
+  reviewedEffectIntentRefs: ContentRef[];
+  reviewedIntegrationCriterionRefs: ContentRef[];
   reviewedArtifactLifecycleRef: ContentRef;
   verdict: "accepted" | "revision_required";
   findings: string[];

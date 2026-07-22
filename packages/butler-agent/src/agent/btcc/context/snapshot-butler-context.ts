@@ -75,6 +75,6 @@ function observationScopes(command: ButlerContextSnapshotCommand): string[] {
     `workspace:${command.workspacePath}`,
     "web:current",
     `memory:${command.userRef}`,
-    `ledger:${command.projectRef ?? command.sessionId}`,
+    ...(command.projectRef ? [`ledger:${command.projectRef}`] : []),
   ];
 }

@@ -1,19 +1,24 @@
+import { contentRef, requireRecord, requireString, type ContentRef } from "../../core/index.ts";
+import type {
+  ManagedEffectIntent,
+  ManagedIntegrationCriterion,
+  ManagedTask,
+  PlanningCandidate,
+} from "../contracts.ts";
 import {
-  contentRef,
-  requireRecord,
-  requireString,
-  requireStringArray,
-  type ContentRef,
-} from "../../core/index.ts";
-import type { ManagedTask, PlanningCandidate } from "../contracts.ts";
+  materializeEffectIntents,
+  materializeIntegrationCriteria,
+  materializePromotionSelectors,
+} from "./author-lifecycle-records.ts";
 
 export type DraftArtifactPolicy =
   | {
       kind: "workspace_artifact";
       targetScopeRef: string;
+      targetPath: string;
       baselinePolicy: "capture_at_workspace_provision";
     }
-  | { kind: "repository_promotion"; targetScopeRef: string };
+  | { kind: "repository_promotion"; targetScopeRef: string; targetPath: string };
 
 export function readArtifactPolicy(
   value: unknown,
@@ -23,88 +28,80 @@ export function readArtifactPolicy(
   if (value === undefined) return undefined;
   const policy = requireRecord(value, `${label}.artifactPolicy`);
   const kind = requireString(policy.kind, `${label}.artifactPolicy.kind`);
+  const targetPath = requireContainedTargetPath(
+    requireString(policy.targetPath, `${label}.artifactPolicy.targetPath`),
+  );
+  const targetScopeRef = containedWorkspaceScope(workspaceScopeRef, targetPath);
   if (kind === "workspace_artifact") {
     return {
       kind,
-      targetScopeRef: workspaceScopeRef,
+      targetScopeRef,
+      targetPath,
       baselinePolicy: "capture_at_workspace_provision",
     };
   }
-  if (kind === "repository_promotion") {
-    return { kind, targetScopeRef: workspaceScopeRef };
-  }
+  if (kind === "repository_promotion") return { kind, targetScopeRef, targetPath };
   throw new Error("Task artifact policy is invalid");
 }
 
 export function authorArtifactLifecycle(
   submission: Record<string, unknown>,
   tasks: ManagedTask[],
-  programId: string,
-): PlanningCandidate["artifactLifecycle"] {
-  const promotionSelectors = materializePromotionSelectors(submission, tasks);
+  authority: {
+    programId: string;
+    requiredOutcomeId: string;
+    authorityRef: ContentRef;
+  },
+): {
+  lifecycle: PlanningCandidate["artifactLifecycle"];
+  effectIntents: ManagedEffectIntent[];
+  integrationCriteria: ManagedIntegrationCriterion[];
+} {
+  const selectors = materializePromotionSelectors(submission, tasks);
+  const effects = materializeEffectIntents(submission, tasks, selectors, authority);
+  const integration = materializeIntegrationCriteria(submission, tasks, selectors, authority);
   const body = {
-    programId,
-    taskPolicies: tasks.map((task) => ({ taskRef: task.ref, policy: task.artifactPolicy })),
-    promotionSelectors,
+    programId: authority.programId,
+    taskPolicies: tasks.map((task) => ({
+      taskRef: task.ref,
+      policy: task.artifactPolicy,
+      effectIntentRefs: effects
+        .filter((effect) => effect.owningTaskKey.taskLogicalId === task.taskLogicalId)
+        .map((effect) => effect.ref),
+    })),
+    promotionSelectors: selectors,
     promotionTaskRefs: tasks
       .filter((task) => task.artifactPolicy.kind === "repository_promotion")
       .map((task) => task.ref),
-    effectIntentRefs: [] as [],
-    integrationCriteria: [] as [],
-    promotionProtocol: promotionSelectors.length === 0
+    effectIntentRefs: effects.map((effect) => effect.ref),
+    integrationCriterionRefs: integration.map((criterion) => criterion.ref),
+    promotionProtocol: selectors.length === 0
       ? "not_applicable" as const
       : "journaled_complete_target_exchange_v1" as const,
   };
-  return { ref: contentRef("artifact-lifecycle", body), ...body };
+  return {
+    lifecycle: { ref: contentRef("artifact-lifecycle", body), ...body },
+    effectIntents: effects,
+    integrationCriteria: integration,
+  };
 }
 
-function materializePromotionSelectors(
-  submission: Record<string, unknown>,
-  tasks: ManagedTask[],
-) {
-  if (submission.promotionSelectors === undefined) return [];
-  if (!Array.isArray(submission.promotionSelectors)) {
-    throw new Error("promotionSelectors must be an array");
+function requireContainedTargetPath(value: string): string {
+  const normalized = value.replaceAll("\\", "/");
+  if (
+    normalized.startsWith("/") || normalized.length === 0 || normalized === "." ||
+    normalized.includes("\0") || normalized[1] === ":"
+  ) {
+    throw new Error("Artifact targetPath must name a workspace-relative contained target");
   }
-  const byLogicalId = new Map(tasks.map((task) => [task.taskLogicalId, task]));
-  return submission.promotionSelectors.map((item, index) => {
-    const draft = requireRecord(item, `promotionSelectors[${index}]`);
-    const implementationTaskRefs = requireStringArray(
-      draft.implementationTaskIds,
-      "implementationTaskIds",
-    ).map((id) => requiredTask(byLogicalId, id, "implementation"));
-    const integrationTaskRef = requiredTask(
-      byLogicalId,
-      requireString(draft.integrationTaskId, "integrationTaskId"),
-      "integration",
-    );
-    const promotionTaskRef = requiredTask(
-      byLogicalId,
-      requireString(draft.promotionTaskId, "promotionTaskId"),
-      "promotion",
-    );
-    const promotionTask = tasks.find((task) => task.ref.id === promotionTaskRef.id)!;
-    if (promotionTask.artifactPolicy.kind !== "repository_promotion") {
-      throw new Error("Promotion selector names a non-promotion Task");
-    }
-    const body = {
-      targetScopeRef: promotionTask.artifactPolicy.targetScopeRef,
-      implementationTaskRefs,
-      integrationTaskRef,
-      promotionTaskRef,
-      baselinePolicy: "capture_at_workspace_provision" as const,
-      promotionProtocol: "journaled_complete_target_exchange_v1" as const,
-    };
-    return { ref: contentRef("promotion-selector", body), ...body };
-  });
+  const segments = normalized.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+    throw new Error("Artifact targetPath escapes or ambiguously names the workspace");
+  }
+  return segments.join("/");
 }
 
-function requiredTask(
-  tasks: Map<string, ManagedTask>,
-  logicalId: string,
-  role: string,
-): ContentRef {
-  const task = tasks.get(logicalId);
-  if (!task) throw new Error(`Promotion selector has no ${role} Task: ${logicalId}`);
-  return task.ref;
+function containedWorkspaceScope(workspaceScopeRef: string, targetPath: string): string {
+  const scope = workspaceScopeRef.endsWith("/") ? workspaceScopeRef.slice(0, -1) : workspaceScopeRef;
+  return `${scope}/${targetPath}`;
 }

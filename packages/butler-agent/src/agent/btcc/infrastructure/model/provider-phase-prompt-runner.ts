@@ -63,6 +63,7 @@ async function runFunctionToolRound(
 ): Promise<ProviderPhasePromptResult> {
   let carrier: unknown;
   let carrierCount = 0;
+  let observedModel = "";
   const functions = new Map(input.carrierFunctions.map((entry) => [entry.name, entry]));
   await runFunctionToolPromptText({
     prompt: input.prompt,
@@ -76,6 +77,20 @@ async function runFunctionToolRound(
     toolChoice: "required",
     maxToolRounds: 1,
     handoffAfterToolBatch: true,
+    onProviderResponseIdentity(identity) {
+      if (identity.provider !== input.modelSelection.provider) {
+        throw new Error("provider_response_provider_mismatch");
+      }
+      const reported = parseModelRef(
+        identity.reportedModel.includes("/")
+          ? identity.reportedModel
+          : `${identity.provider}/${identity.reportedModel}`,
+      ).canonicalRef;
+      if (observedModel && observedModel !== reported) {
+        throw new Error("provider_response_model_changed_within_round");
+      }
+      observedModel = reported;
+    },
     executeTool(call) {
       carrierCount += 1;
       const definition = functions.get(call.name);
@@ -91,11 +106,13 @@ async function runFunctionToolRound(
   if (carrierCount !== 1 || carrier === undefined) {
     throw new Error("provider_protocol_invalid_carrier_count");
   }
+  if (!observedModel) throw new Error("provider_response_model_unobserved");
+  const observed = parseModelRef(observedModel);
   return {
     carrier,
     actualIdentity: {
-      provider: input.modelSelection.provider,
-      model: input.modelSelection.model,
+      provider: observed.providerId,
+      model: observed.modelId,
       reasoningEffort: input.modelSelection.reasoningEffort,
       controlsHash: input.modelSelection.controlsHash,
     },

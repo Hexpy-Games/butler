@@ -1,6 +1,7 @@
 import type { OperationAuthority } from "../../core/index.ts";
 import type {
   AvailablePhaseCapability,
+  ObservationScopeKind,
   ResolveAvailableCapabilitiesInput,
   StructuralCapabilityDefinition,
 } from "./contracts.ts";
@@ -39,9 +40,26 @@ function admittedObservationScopes(
   authorizedScopes: readonly string[],
 ): string[] {
   if (operationKind !== "observe") return [];
-  if (definition.observationScopeRefs === undefined) return [...authorizedScopes];
-  const declared = new Set(definition.observationScopeRefs);
-  return authorizedScopes.filter((scopeRef) => declared.has(scopeRef));
+  if (definition.observationScopeRefs !== undefined) {
+    const declared = new Set(definition.observationScopeRefs);
+    return authorizedScopes.filter((scopeRef) => declared.has(scopeRef));
+  }
+  if (definition.observationScopeKinds !== undefined) {
+    const declared = new Set(definition.observationScopeKinds);
+    return authorizedScopes.filter((scopeRef) => {
+      const kind = scopeKind(scopeRef);
+      return kind !== undefined && declared.has(kind);
+    });
+  }
+  return [];
+}
+
+function scopeKind(scopeRef: string): ObservationScopeKind | undefined {
+  const separator = scopeRef.indexOf(":");
+  const kind = separator > 0 ? scopeRef.slice(0, separator) : "";
+  return kind === "workspace" || kind === "web" || kind === "memory" || kind === "ledger"
+    ? kind
+    : undefined;
 }
 
 function mutationIsAuthorized(

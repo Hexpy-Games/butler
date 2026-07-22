@@ -6,6 +6,7 @@ import type {
 export type CapabilityExecutionContext = {
   butlerData: string;
   workspacePath: string;
+  observationScopeRef?: string;
   originalRequest: string;
   signal?: AbortSignal;
 };

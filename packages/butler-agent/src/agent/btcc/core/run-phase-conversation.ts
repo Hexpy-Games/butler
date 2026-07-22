@@ -4,9 +4,27 @@ import type {
   PhaseConversationCommand,
   PhaseEnvelope,
 } from "./contracts.ts";
-import { OperationalInterruptionError } from "../recovery/index.ts";
+import {
+  isBtccOperationalInterruption,
+  OperationalInterruptionError,
+} from "../recovery/index.ts";
 
 export async function runPhaseConversation<Product>(
+  command: PhaseConversationCommand<Product>,
+): Promise<Product> {
+  try {
+    return await runPhaseConversationAtCheckpoint(command);
+  } catch (error) {
+    if (isBtccOperationalInterruption(error)) throw error;
+    throw new OperationalInterruptionError(
+      "phase_contract_interruption",
+      command.binding,
+      { kind: "runtime_remediation" },
+    );
+  }
+}
+
+async function runPhaseConversationAtCheckpoint<Product>(
   command: PhaseConversationCommand<Product>,
 ): Promise<Product> {
   command.executionPermit.assertActive();
@@ -20,11 +38,25 @@ export async function runPhaseConversation<Product>(
     const round = await command.model.runRound(envelope, command.executionPermit.signal);
     command.executionPermit.assertActive();
     if (round.kind === "interruption") {
-      throw new OperationalInterruptionError(round.code, command.binding);
+      throw new OperationalInterruptionError(
+        round.code,
+        command.binding,
+        round.activation,
+      );
     }
     assertActualModel(command.modelSelection, round.actualIdentity);
     if (round.kind === "operation_requests") {
-      await performRequestedObservations(command, envelope, round.requests);
+      const appendedResults = await performRequestedObservations(
+        command,
+        envelope,
+        round.requests,
+      );
+      if (appendedResults === 0) {
+        throw new OperationalInterruptionError(
+          "operation_batch_no_progress",
+          command.binding,
+        );
+      }
       continue;
     }
     const product = command.codec.decode(round.submission, envelope);
@@ -57,13 +89,14 @@ async function performRequestedObservations<Product>(
   command: PhaseConversationCommand<Product>,
   envelope: PhaseEnvelope,
   requests: OperationRequest[],
-): Promise<void> {
+): Promise<number> {
   if (requests.length === 0) {
     throw new Error("BTCC operation request carrier must not be empty");
   }
   const existingRequests = new Map(
     envelope.operationResults.map((result) => [result.requestId, result.request]),
   );
+  let appendedResults = 0;
   for (const request of requests) {
     command.executionPermit.assertActive();
     assertAuthorizedOperation(request, command.operationAuthority);
@@ -91,7 +124,9 @@ async function performRequestedObservations<Product>(
     });
     command.executionPermit.assertActive();
     existingRequests.set(request.requestId, request);
+    appendedResults += 1;
   }
+  return appendedResults;
 }
 
 function sameRequest(

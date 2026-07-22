@@ -58,7 +58,14 @@ export function performPromotion(input: {
     intent = preparePromotion(input.request, workspace);
     input.store.savePromotion(scopeId, intent);
   }
-  if (intent.status === "committed" && !sameRef(targetSnapshot.ref, candidate.ref)) {
+  if (intent.status === "closed") {
+    if (!sameRef(targetSnapshot.ref, candidate.ref)) {
+      throw new Error("BTCC closed promotion requires authoritative reconciliation");
+    }
+    return promotionResult(intent, candidate.ref);
+  }
+  if (intent.status === "committed" &&
+    !sameRef(targetSnapshot.ref, candidate.ref)) {
     throw new Error("BTCC committed promotion requires authoritative reconciliation");
   }
   if (intent.status === "reserved") {
@@ -89,7 +96,33 @@ export function performPromotion(input: {
   } else {
     throw new Error("BTCC promotion target drifted from its accepted baseline");
   }
+  intent = closePromotionStage(scopeId, intent, input.store);
   return promotionResult(intent, candidate.ref);
+}
+
+function closePromotionStage(
+  scopeId: string,
+  intent: PromotionIntent,
+  store: ArtifactStore,
+): PromotionIntent {
+  if (intent.status === "closed") {
+    if (!intent.cleanupRootRef || existsSync(intent.stagedPath)) {
+      throw new Error("BTCC closed promotion has inconsistent owned-stage cleanup");
+    }
+    return intent;
+  }
+  if (intent.status !== "committed") {
+    throw new Error("BTCC promotion cannot clean up before commit observation");
+  }
+  requireDisplacedBaseline(intent, intent.baselineSnapshotRef);
+  const cleanupRootRef = contentRef("owned-promotion-stage", {
+    transactionId: intent.transactionId,
+    workspaceRef: intent.workspaceRef,
+  });
+  removeOwnedRoot(intent.stagedPath);
+  const closed = { ...intent, status: "closed" as const, cleanupRootRef };
+  store.savePromotion(scopeId, closed);
+  return closed;
 }
 
 function preparePromotion(
@@ -168,6 +201,9 @@ function promotionResult(
   intent: PromotionIntent,
   exactSnapshotRef: ContentRef,
 ): ObservationResult {
+  if (intent.status !== "closed" || !intent.cleanupRootRef) {
+    throw new Error("BTCC promotion result requires completed owned-stage cleanup");
+  }
   const request = intent.request;
   const transaction = record("repository-promotion-transaction", {
     requestId: request.requestId,
@@ -202,7 +238,7 @@ function promotionResult(
   const cleanupReceipt = record("promotion-cleanup-receipt", {
     transactionRef: transaction.ref,
     commitObservedJournalRef: observed.ref,
-    removedOwnedRootRefs: [],
+    removedOwnedRootRefs: [intent.cleanupRootRef],
     preservedBaselineSnapshotRef: intent.baselineSnapshotRef,
   });
   const closed = journal(transaction.ref, observed.ref, "closed", {

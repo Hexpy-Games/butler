@@ -58,6 +58,28 @@ const codec = withManagedDeferral<TaskReviewProduct>({
     if (result.result.kind === "repository_promotion" && !passed) {
       throw new Error("Promotion Review is identity-only and cannot fail semantically");
     }
+    const validationReceiptRefs = envelope.operationResults
+      .filter((operation) =>
+        operation.outcome === "review_validated" &&
+        operation.request.kind === "review_validation" &&
+        result.result.kind === "workspace_artifact" &&
+        sameContentRef(
+          operation.request.reviewSourceRef,
+          result.result.workspaceRevisionRef,
+        ))
+      .map((operation, index) => requireContentRef(
+        operation.validationReceiptRef,
+        `validationReceiptRef[${index}]`,
+      ));
+    if (
+      result.result.kind === "workspace_artifact" &&
+      passed &&
+      validationReceiptRefs.length === 0
+    ) {
+      throw new Error(
+        "Workspace artifact Review requires successful disposable validation before passing",
+      );
+    }
     const reviewBase = {
       kind: result.result.kind,
       turnId: envelope.binding.turnId,
@@ -76,12 +98,7 @@ const codec = withManagedDeferral<TaskReviewProduct>({
       reviewedTargetStateRevisionRefs: result.result.targetStateRevisions.map((item) => item.ref),
       reviewedArtifactRevisionRefs: result.result.artifactRevisionRefs,
       reviewedEffectReceiptRefs: [] as [],
-      reviewValidationReceiptSetRefs: envelope.operationResults
-        .filter((operation) => operation.outcome === "review_validated")
-        .map((operation, index) => requireContentRef(
-          operation.validationReceiptRef,
-          `validationReceiptRef[${index}]`,
-        )),
+      reviewValidationReceiptSetRefs: validationReceiptRefs,
       ...(result.result.kind === "workspace_artifact"
         ? { reviewSourceRef: result.result.workspaceRevisionRef }
         : result.result.kind === "repository_promotion"
@@ -204,4 +221,8 @@ function requireContentRef(value: unknown, label: string): ContentRef {
     id: requireString(record.id, `${label}.id`),
     sha256: requireString(record.sha256, `${label}.sha256`),
   };
+}
+
+function sameContentRef(left: ContentRef, right: ContentRef): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }

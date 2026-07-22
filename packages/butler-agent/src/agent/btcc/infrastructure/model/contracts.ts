@@ -22,14 +22,20 @@ export type StructuralCapabilityDefinition = {
   operationKinds: readonly OperationRequest["kind"][];
   inputSchema: Record<string, unknown>;
   observationScopeRefs?: readonly string[];
+  observationScopeKinds?: readonly ObservationScopeKind[];
 };
+
+export type ObservationScopeKind = "workspace" | "web" | "memory" | "ledger";
 
 export interface StructuralCapabilityCatalog {
   list(): Promise<readonly StructuralCapabilityDefinition[]> |
     readonly StructuralCapabilityDefinition[];
 }
 
-export type AvailablePhaseCapability = Omit<StructuralCapabilityDefinition, "operationKinds"> & {
+export type AvailablePhaseCapability = Omit<
+  StructuralCapabilityDefinition,
+  "operationKinds" | "observationScopeKinds"
+> & {
   operationKind: OperationRequest["kind"];
   observationScopeRefs: readonly string[];
 };

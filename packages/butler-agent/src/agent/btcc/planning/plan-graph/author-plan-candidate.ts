@@ -1,8 +1,6 @@
 import {
   contentRef,
-  requireRecord,
   requireString,
-  requireStringArray,
   type ContentRef,
 } from "../../core/index.ts";
 import type {
@@ -12,11 +10,15 @@ import type {
   ManagedWork,
   PlanningCandidate,
 } from "../contracts.ts";
+import { authorArtifactLifecycle } from "./author-artifact-lifecycle.ts";
+import { authorPlanningConsiderations } from "./author-planning-considerations.ts";
 import {
-  authorArtifactLifecycle,
-  readArtifactPolicy,
-  type DraftArtifactPolicy,
-} from "./author-artifact-lifecycle.ts";
+  owningWork,
+  readWorkDrafts,
+  validateGraph,
+  type TaskDraft,
+  type WorkDraft,
+} from "./read-plan-drafts.ts";
 
 type AuthoringState = {
   ledgerId: string;
@@ -31,30 +33,6 @@ type AuthoringState = {
   continuation?: import("../contracts.ts").PlanningContinuation;
 };
 
-type TaskDraft = {
-  logicalId: string;
-  intendedOutcome: string;
-  executionOrdinal: number;
-  dependencyTaskIds: string[];
-  targetScopeRefs: string[];
-  artifactPolicy?: DraftArtifactPolicy;
-  criteria: CriterionDraft[];
-};
-
-type CriterionDraft = {
-  statement: string;
-  question: string;
-  sourceGoalFieldIds: Array<"request" | "intended_result">;
-  sourceRequiredOutcomeRefs: string[];
-};
-
-type WorkDraft = {
-  logicalId: string;
-  outcome: string;
-  dependencyWorkIds: string[];
-  tasks: TaskDraft[];
-};
-
 export function authorPlanCandidate(
   submission: Record<string, unknown>,
   state: AuthoringState,
@@ -62,7 +40,6 @@ export function authorPlanCandidate(
   const drafts = readWorkDrafts(
     submission.works,
     state.workspaceScopeRef,
-    state.requiredOutcomeId,
   );
   const orderedTasks = drafts.flatMap((work) => work.tasks)
     .sort((left, right) => left.executionOrdinal - right.executionOrdinal);
@@ -83,6 +60,7 @@ export function authorPlanCandidate(
       intendedOutcome: draft.intendedOutcome,
       executionOrdinal: draft.executionOrdinal,
       dependencyTaskRefs: draft.dependencyTaskIds.map((id) => requiredRef(taskRefs, id, "Task")),
+      effectClass: draft.effectClass,
       artifactPolicy: draft.artifactPolicy ?? {
         kind: "non_artifact" as const, targetScopeRefs: draft.targetScopeRefs,
       },
@@ -95,6 +73,17 @@ export function authorPlanCandidate(
   }
 
   const works = materializeWorks(drafts, tasks, state);
+  const authoredLifecycle = authorArtifactLifecycle(submission, tasks, {
+    programId: state.programId,
+    requiredOutcomeId: state.requiredOutcomeId,
+    authorityRef: state.authorityRef,
+  });
+  const artifactLifecycle = authoredLifecycle.lifecycle;
+  const { risks, assumptions } = authorPlanningConsiderations(
+    submission,
+    tasks,
+    state.programId,
+  );
   const dependencyEdges = tasks.flatMap((task) => task.dependencyTaskRefs.map((predecessorTaskRef) => ({
     predecessorTaskRef,
     successorTaskRef: task.ref,
@@ -103,10 +92,11 @@ export function authorPlanCandidate(
     programId: state.programId,
     workRefs: works.map((work) => work.ref),
     taskRefs: tasks.map((task) => task.ref),
+    integrationCriterionRefs: authoredLifecycle.integrationCriteria.map((item) => item.ref),
+    effectIntentRefs: authoredLifecycle.effectIntents.map((item) => item.ref),
     dependencyEdges,
   };
   const workGraph = { ref: contentRef("work-graph", graphBody), ...graphBody };
-  const artifactLifecycle = authorArtifactLifecycle(submission, tasks, state.programId);
   const planBody = {
     programId: state.programId,
     goalContractRef: state.goalContractRef,
@@ -116,27 +106,33 @@ export function authorPlanCandidate(
     taskRefs: tasks.map((task) => task.ref),
     criterionRefs: criteria.map((criterion) => criterion.ref),
     verificationQuestionRefs: questions.map((question) => question.ref),
+    integrationCriterionRefs: authoredLifecycle.integrationCriteria.map((item) => item.ref),
+    effectIntentRefs: authoredLifecycle.effectIntents.map((item) => item.ref),
+    riskRefs: risks.map((item) => item.ref),
+    assumptionRefs: assumptions.map((item) => item.ref),
     artifactLifecycleRef: artifactLifecycle.ref,
   };
   const plan = { ref: contentRef("work-plan", planBody), ...planBody };
   const recordRefs = [
     ...criteria.map((record) => record.ref),
     ...questions.map((record) => record.ref),
+    ...authoredLifecycle.effectIntents.map((record) => record.ref),
+    ...authoredLifecycle.integrationCriteria.map((record) => record.ref),
+    ...risks.map((record) => record.ref),
+    ...assumptions.map((record) => record.ref),
     ...tasks.map((record) => record.ref),
     ...works.map((record) => record.ref),
     artifactLifecycle.ref,
     workGraph.ref,
     plan.ref,
   ];
-  const bundle = {
-    ref: contentRef("planning-candidate-bundle", {
-      ledgerId: state.ledgerId,
-      programId: state.programId,
-      observedManifestRevision: state.observedManifestRevision,
-      recordRefs,
-    }),
+  const bundleBody = {
+    ledgerId: state.ledgerId,
+    programId: state.programId,
+    observedManifestRevision: state.observedManifestRevision,
     recordRefs,
   };
+  const bundle = { ref: contentRef("planning-candidate-bundle", bundleBody), ...bundleBody };
   const revisionOrigin = state.previousCandidateRef && state.findingSetRef
     ? {
         kind: "review_revision" as const,
@@ -164,6 +160,10 @@ export function authorPlanCandidate(
     tasks,
     criteria,
     verificationQuestions: questions,
+    integrationCriteria: authoredLifecycle.integrationCriteria,
+    effectIntents: authoredLifecycle.effectIntents,
+    risks,
+    assumptions,
     workGraph,
     artifactLifecycle,
     bundle,
@@ -179,12 +179,13 @@ function materializeCriteria(
 ) {
   const criteria = task.criteria.map((draft, ordinal) => {
     const body = {
+      ordinal,
       taskLogicalId: task.logicalId,
       statement: draft.statement,
       sourceGoalFieldIds: draft.sourceGoalFieldIds,
       sourceRequiredOutcomeRefs: draft.sourceRequiredOutcomeRefs,
     };
-    return { ref: contentRef("acceptance-criterion", { ...body, ordinal }), ...body };
+    return { ref: contentRef("acceptance-criterion", body), ...body };
   });
   const questions = criteria.map((criterion, ordinal) => {
     const body = { criterionRef: criterion.ref, question: task.criteria[ordinal]!.question };
@@ -216,125 +217,8 @@ function materializeWorks(
   });
 }
 
-function readWorkDrafts(
-  value: unknown,
-  workspaceScopeRef: string,
-  requiredOutcomeId: string,
-): WorkDraft[] {
-  if (!Array.isArray(value) || value.length === 0) throw new Error("Planning requires Works");
-  let executionOrdinal = 0;
-  return value.map((item, workIndex) => {
-    const work = requireRecord(item, `works[${workIndex}]`);
-    const tasks = work.tasks;
-    if (!Array.isArray(tasks) || tasks.length === 0) {
-      throw new Error(`works[${workIndex}] requires Tasks`);
-    }
-    return {
-      logicalId: requireString(work.logicalId, `works[${workIndex}].logicalId`),
-      outcome: requireString(work.outcome, `works[${workIndex}].outcome`),
-      dependencyWorkIds: requireStringArray(work.dependencyWorkIds, "dependencyWorkIds"),
-      tasks: tasks.map((item, taskIndex) => readTaskDraft(
-        item,
-        workIndex,
-        taskIndex,
-        ++executionOrdinal,
-        workspaceScopeRef,
-        requiredOutcomeId,
-      )),
-    };
-  });
-}
-
-function readTaskDraft(
-  value: unknown,
-  workIndex: number,
-  taskIndex: number,
-  executionOrdinal: number,
-  workspaceScopeRef: string,
-  requiredOutcomeId: string,
-): TaskDraft {
-  const label = `works[${workIndex}].tasks[${taskIndex}]`;
-  const task = requireRecord(value, label);
-  const criteria = task.criteria;
-  if (!Array.isArray(criteria) || criteria.length === 0) throw new Error(`${label} requires criteria`);
-  const artifactPolicy = readArtifactPolicy(task.artifactPolicy, label, workspaceScopeRef);
-  return {
-    logicalId: requireString(task.logicalId, `${label}.logicalId`),
-    intendedOutcome: requireString(task.intendedOutcome, `${label}.intendedOutcome`),
-    executionOrdinal,
-    dependencyTaskIds: requireStringArray(task.dependencyTaskIds, "dependencyTaskIds"),
-    targetScopeRefs: artifactPolicy
-      ? artifactPolicy.kind === "workspace_artifact"
-        ? [artifactPolicy.targetScopeRef]
-        : []
-      : requireStringArray(task.targetScopeRefs, "targetScopeRefs"),
-    ...(artifactPolicy ? { artifactPolicy } : {}),
-    criteria: criteria.map((item, criterionIndex) => {
-      const criterion = requireRecord(item, `${label}.criteria[${criterionIndex}]`);
-      const fields = requireStringArray(criterion.sourceGoalFieldIds, "sourceGoalFieldIds");
-      if (fields.some((field) => field !== "request" && field !== "intended_result")) {
-        throw new Error("Planning criterion references an unknown Goal field");
-      }
-      return {
-        statement: requireString(criterion.statement, "criterion.statement"),
-        question: requireString(criterion.question, "criterion.question"),
-        sourceGoalFieldIds: fields as Array<"request" | "intended_result">,
-        sourceRequiredOutcomeRefs: [requiredOutcomeId],
-      };
-    }),
-  };
-}
-
-function validateGraph(drafts: WorkDraft[], tasks: TaskDraft[], requiredOutcomeId: string): void {
-  assertUnique(drafts.map((work) => work.logicalId), "Work logical id");
-  assertUnique(tasks.map((task) => task.logicalId), "Task logical id");
-  const workIds = new Set<string>();
-  for (const work of drafts) {
-    if (work.dependencyWorkIds.some((id) => !workIds.has(id))) {
-      throw new Error("Work dependencies must name an earlier Work");
-    }
-    workIds.add(work.logicalId);
-  }
-  const taskOrdinals = new Map(tasks.map((task) => [task.logicalId, task.executionOrdinal]));
-  for (const task of tasks) {
-    if (task.artifactPolicy?.kind !== "repository_promotion" && task.targetScopeRefs.length === 0) {
-      throw new Error("Every executable implementation Task requires a target scope");
-    }
-    for (const dependency of task.dependencyTaskIds) {
-      const ordinal = taskOrdinals.get(dependency);
-      if (!ordinal || ordinal >= task.executionOrdinal) {
-        throw new Error("Task dependencies must name an earlier Task");
-      }
-    }
-    for (const criterion of task.criteria) {
-      if (criterion.sourceGoalFieldIds.length === 0) throw new Error("Criterion Goal trace is empty");
-      if (
-        criterion.sourceRequiredOutcomeRefs.length !== 1 ||
-        criterion.sourceRequiredOutcomeRefs[0] !== requiredOutcomeId
-      ) {
-        throw new Error("Criterion does not trace the accepted required outcome");
-      }
-    }
-  }
-  const coveredFields = new Set(tasks.flatMap((task) =>
-    task.criteria.flatMap((criterion) => criterion.sourceGoalFieldIds)));
-  if (!coveredFields.has("request") || !coveredFields.has("intended_result")) {
-    throw new Error("Planning graph does not cover every required Goal field");
-  }
-}
-
-function owningWork(drafts: WorkDraft[], taskId: string): WorkDraft {
-  const work = drafts.find((candidate) => candidate.tasks.some((task) => task.logicalId === taskId));
-  if (!work) throw new Error(`Task has no Work: ${taskId}`);
-  return work;
-}
-
 function requiredRef(refs: Map<string, ContentRef>, id: string, kind: string): ContentRef {
   const ref = refs.get(id);
   if (!ref) throw new Error(`${kind} dependency is not materialized: ${id}`);
   return ref;
-}
-
-function assertUnique(values: string[], label: string): void {
-  if (new Set(values).size !== values.length) throw new Error(`${label} is not unique`);
 }

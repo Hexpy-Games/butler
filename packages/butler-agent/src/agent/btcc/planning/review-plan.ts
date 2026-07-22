@@ -12,6 +12,7 @@ import type {
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { planReviewSubmissionSchema } from "./submission-schemas.ts";
+import { attestReviewedPlanReferences } from "./review-plan-attestation.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
@@ -21,7 +22,8 @@ const CONTRACT: PhaseContract = {
     "review_exact_candidate_bytes", "review_goal_coverage",
     "review_work_cohesion", "review_task_executability", "review_dependencies",
     "review_verification_completeness", "review_effect_authority",
-    "review_every_task_artifact_policy", "request_revision_when_needed",
+    "review_every_task_artifact_policy", "review_risks_assumptions",
+    "review_integration_criteria", "request_revision_when_needed",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -40,6 +42,9 @@ const codec = withManagedDeferral<PlanningReviewProduct>({
       throw new Error("Planning Review verdict is invalid");
     }
     const findings = requireStringArray(value.findings, "Planning Review findings");
+    if (value.verdict === "accepted") {
+      attestReviewedPlanReferences(value, candidate.candidate);
+    }
     const reviewBase = {
       candidateRef: candidate.candidate.ref,
       originalGoalContractRef: candidate.candidate.goalContractRef,
@@ -49,6 +54,8 @@ const codec = withManagedDeferral<PlanningReviewProduct>({
       reviewedTaskRefs: candidate.candidate.tasks.map((item) => item.ref),
       reviewedCriterionRefs: candidate.candidate.criteria.map((item) => item.ref),
       reviewedVerificationQuestionRefs: candidate.candidate.verificationQuestions.map((item) => item.ref),
+      reviewedEffectIntentRefs: candidate.candidate.effectIntents.map((item) => item.ref),
+      reviewedIntegrationCriterionRefs: candidate.candidate.integrationCriteria.map((item) => item.ref),
       reviewedArtifactLifecycleRef: candidate.candidate.artifactLifecycle.ref,
     };
     if (value.verdict === "accepted") {
