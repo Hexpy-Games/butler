@@ -16,7 +16,20 @@ export function createOperationalRecoveryBoundary(
       await readiness.wait({ interruption, receipt, signal });
       await store.markReady(receipt);
     },
-    pending: (anchor) => store.pending(anchor),
+    async resume(anchor, signal) {
+      const record = await store.pending(anchor);
+      if (!record) return null;
+      if (record.status === "interrupted") {
+        const receipt = await store.record(record.interruption);
+        await readiness.wait({
+          interruption: record.interruption,
+          receipt,
+          signal,
+        });
+        await store.markReady(receipt);
+      }
+      return record.interruption;
+    },
     resolve: (anchor) => store.resolve(anchor),
     pendingTurnIds: () => store.pendingTurnIds(),
   };

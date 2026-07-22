@@ -174,6 +174,9 @@ function assembleEnvelope<Product>(
     operationAuthority: command.operationAuthority,
     operationResults: conversation.operationResults,
     submissionSchema: command.codec.submissionSchema,
+    ...(command.providerCorrection
+      ? { providerCorrection: command.providerCorrection }
+      : {}),
   };
 }
 

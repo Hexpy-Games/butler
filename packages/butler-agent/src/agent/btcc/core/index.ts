@@ -48,6 +48,7 @@ export type {
   OperationAuthority,
   OperationRequest,
   OperationResult,
+  ProviderCorrection,
   ProviderRoundValue,
   SelectedModel,
 } from "./contracts.ts";

@@ -265,6 +265,32 @@ describe("production BTCC selected model", () => {
     expect(calls).toBe(1);
   });
 
+  test("projects a durable provider-product rejection into the exact phase prompt", async () => {
+    let prompt = "";
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async (input) => {
+        prompt = input.prompt;
+        return {
+          carrier: { kind: "phase_submission", submission: { kind: "plan" } },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.providerCorrection = {
+      kind: "previous_provider_product_rejected",
+      code: "provider_phase_submission_invalid",
+    };
+
+    await model.runRound(envelope);
+
+    expect(prompt).toContain('"providerCorrection"');
+    expect(prompt).toContain('"provider_phase_submission_invalid"');
+  });
+
   test("rejects an operation that was not offered by the exact phase capability schema", async () => {
     const model = createProductionSelectedModel({
       context: emptyContextResolver(),

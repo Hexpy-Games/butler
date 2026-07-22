@@ -38,6 +38,9 @@ export async function renderPhasePrompt(
       "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
       "Do not add prose outside the carrier and do not choose a successor phase or model.",
       "Choose semantic operations only; the runtime binds immutable authority references.",
+      ...(envelope.providerCorrection
+        ? ["The previous provider product was rejected before semantic acceptance. Correct it against the exact current schema and capability list; do not repeat the rejected shape."]
+        : []),
       "Follow promptHierarchy in order: earlier layers override later layers.",
     ].join(" "),
     prompt: JSON.stringify({
@@ -67,6 +70,7 @@ export async function renderPhasePrompt(
           priorOperationResults: envelope.operationResults,
           operationAuthority: envelope.operationAuthority,
           availableCapabilities,
+          providerCorrection: envelope.providerCorrection ?? null,
         },
       },
       outputSchemaGuidance: {

@@ -2,12 +2,14 @@ import type { BtccRuntimeDependencies } from "../contracts.ts";
 import type { PhaseInvocation } from "../core/index.ts";
 import type { StateExecutionClaim, TurnRecord } from "./contracts.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
+import type { ProviderCorrection } from "../core/index.ts";
 
 export function createPhaseInvocation(
   turn: TurnRecord,
   claim: StateExecutionClaim,
   dependencies: BtccRuntimeDependencies,
   executionPermit: ExecutionPermit,
+  providerCorrection?: ProviderCorrection,
 ): PhaseInvocation {
   return {
     binding: {
@@ -35,5 +37,6 @@ export function createPhaseInvocation(
       mutation: { kind: "forbidden" },
     },
     executionPermit,
+    ...(providerCorrection ? { providerCorrection } : {}),
   };
 }
