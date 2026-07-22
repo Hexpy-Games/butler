@@ -17,6 +17,8 @@ const COMPACT_CONTRACTS = [
       "Author one complete acyclic Work and Task graph with exact dependency order.",
       "Bind every criterion and verification question to its Goal fields and required outcome.",
       "Give every Task one exact artifact policy and bind the complete Task set to one lifecycle.",
+      "Declare task-bound external EffectIntents, structured risks and assumptions, and exact integration criteria.",
+      "Artifact targets are explicit contained workspace-relative paths; never select the whole workspace by default.",
       "Planning Review judges the exact materialized candidate bytes and may require revision.",
     ],
   },

@@ -12,6 +12,8 @@ import { planning } from "./planning/index.ts";
 import { reporting } from "./reporting/index.ts";
 import {
   createTurnExecutionSupervisor,
+  OperationalInterruptionError,
+  type OperationalCheckpointAnchor,
   type ExecutionPermit,
   type TurnExecutionSupervisor,
 } from "./recovery/index.ts";
@@ -64,7 +66,14 @@ async function runBtccTurn(
       const claim = await dependencies.turns.acquireStateExecutionClaim(turn);
       const event = await advanceBtccAlgorithm(turn, claim, dependencies, permit);
       permit.assertActive();
-      const transition = decideTransition(turn, event);
+      const decision = decideTransition(turn, event);
+      if (decision.kind === "rejected_unchanged") {
+        throw new OperationalInterruptionError(
+          `turn_transition_rejected_${decision.reason.kind}`,
+          currentCheckpointBinding(claim),
+        );
+      }
+      const transition = decision.transition;
       await dependencies.turns.commitTransition({ turn, claim, transition });
       permit.assertActive();
     } catch (error) {
@@ -160,6 +169,20 @@ async function advanceBtccAlgorithm(
 
 function isTerminal(turn: TurnRecord): boolean {
   return turn.semanticState === "delivered" || turn.semanticState === "cancelled";
+}
+
+function currentCheckpointBinding(
+  claim: StateExecutionClaim,
+): OperationalCheckpointAnchor {
+  return {
+    turnId: claim.turnId,
+    turnRevision: claim.turnRevision,
+    semanticState: claim.semanticState,
+    checkpointId: claim.checkpointId,
+    checkpointRevision: claim.checkpointRevision,
+    claimId: claim.claimId,
+    executionFence: claim.executionFence,
+  };
 }
 
 async function activateCommittedSuccessor(

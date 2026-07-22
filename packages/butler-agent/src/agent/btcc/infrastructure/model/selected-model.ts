@@ -8,6 +8,7 @@ import type {
 import type { AdmittedModelSelection } from "../../contracts.ts";
 import type { ProductionSelectedModelDependencies } from "./contracts.ts";
 import { ModelProviderRequestError } from "../../../../integrations/providers/provider-errors.ts";
+import type { OperationalActivation } from "../../recovery/index.ts";
 import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.ts";
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
 
@@ -17,7 +18,7 @@ export function createProductionSelectedModel(
   const promptRunner = dependencies.promptRunner ?? createProviderPhasePromptRunner();
   return {
     async runRound(envelope, signal) {
-      if (signal?.aborted) return interruption("provider_aborted");
+      if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
       try {
         const rendered = await renderPhasePrompt(
           envelope,
@@ -25,7 +26,7 @@ export function createProductionSelectedModel(
           dependencies.capabilities,
           dependencies.guidance,
         );
-        if (signal?.aborted) return interruption("provider_aborted");
+        if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
         const result = await promptRunner.run({
           modelSelection: envelope.modelSelection,
           ...rendered,
@@ -41,9 +42,15 @@ export function createProductionSelectedModel(
           result.actualIdentity,
         );
       } catch (error) {
-        if (signal?.aborted || isAbortError(error)) return interruption("provider_aborted");
-        if (error instanceof ModelProviderRequestError) return interruption(error.code);
-        throw error;
+        if (signal?.aborted || isAbortError(error)) {
+          return interruption("provider_aborted", { kind: "cancelled" });
+        }
+        if (error instanceof ModelProviderRequestError) {
+          return interruption(error.code, activationForProviderFailure(error));
+        }
+        return interruption("provider_protocol_interruption", {
+          kind: "runtime_remediation",
+        });
       }
     },
   };
@@ -119,8 +126,35 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-function interruption(code: string): ProviderRoundValue {
-  return { kind: "interruption", code };
+function interruption(
+  code: string,
+  activation: OperationalActivation,
+): ProviderRoundValue {
+  return { kind: "interruption", code, activation };
+}
+
+function activationForProviderFailure(
+  error: ModelProviderRequestError,
+): OperationalActivation {
+  if (
+    error.code === "provider_network_error" ||
+    error.code === "provider_transport_interruption" ||
+    error.code === "provider_round_timeout" ||
+    error.statusCode === 429 ||
+    (error.statusCode !== undefined && error.statusCode >= 500)
+  ) {
+    return { kind: "automatic_provider_recovery" };
+  }
+  if (
+    error.code === "provider_auth_error" ||
+    error.code === "provider_context_limit_exceeded" ||
+    error.statusCode === 400 ||
+    error.statusCode === 401 ||
+    error.statusCode === 403
+  ) {
+    return { kind: "provider_action_required" };
+  }
+  return { kind: "runtime_remediation" };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

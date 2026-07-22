@@ -236,12 +236,16 @@ describe("production BTCC selected model", () => {
       promptRunner: promptRunner(async () => responses[calls++]!),
     });
 
-    await expect(model.runRound(phaseEnvelope({ emptyContext: true }))).rejects.toThrow(
-      "BTCC provider carrier violates the closed protocol",
-    );
-    await expect(model.runRound(phaseEnvelope({ emptyContext: true }))).rejects.toThrow(
-      "BTCC provider returned a different selected-model identity",
-    );
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_protocol_interruption",
+      activation: { kind: "runtime_remediation" },
+    });
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_protocol_interruption",
+      activation: { kind: "runtime_remediation" },
+    });
     expect(calls).toBe(2);
   });
 
@@ -267,10 +271,12 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "provider_aborted",
+      activation: { kind: "cancelled" },
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "provider_transport_interruption",
+      activation: { kind: "automatic_provider_recovery" },
     });
     expect(calls).toBe(2);
 
@@ -279,8 +285,46 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }), controller.signal)).toEqual({
       kind: "interruption",
       code: "provider_aborted",
+      activation: { kind: "cancelled" },
     });
     expect(calls).toBe(2);
+  });
+
+  test("holds provider action and protocol defects without automatic replay", async () => {
+    const failures = [
+      new ModelProviderRequestError({
+        code: "provider_auth_error",
+        message: "credentials rejected",
+        provider: "zai",
+        api: "chat_completions",
+        statusCode: 401,
+        retryable: false,
+      }),
+      new ModelProviderRequestError({
+        code: "provider_empty_response",
+        message: "carrier missing",
+        provider: "zai",
+        api: "chat_completions",
+        retryable: true,
+      }),
+    ];
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => { throw failures.shift()!; }),
+    });
+
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_auth_error",
+      activation: { kind: "provider_action_required" },
+    });
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_empty_response",
+      activation: { kind: "runtime_remediation" },
+    });
   });
 });
 

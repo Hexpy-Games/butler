@@ -1,7 +1,10 @@
 export { createBtccTurnRuntime } from "./main.ts";
 export { createProductionSelectedModel } from "./infrastructure/model/index.ts";
 export { createProductionOperationRuntime } from "./infrastructure/operations/index.ts";
-export { isBtccOperationalInterruption } from "./recovery/index.ts";
+export {
+  isBtccOperationalInterruption,
+  shouldScheduleAutomaticRecovery,
+} from "./recovery/index.ts";
 export { OperationRejectedError } from "./core/index.ts";
 export type {
   AdmittedModelSelection,

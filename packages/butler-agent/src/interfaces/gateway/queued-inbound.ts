@@ -22,7 +22,10 @@ import {
   markPrincipalTurnCancellationDelivery,
 } from "../../agent/turn/principal-turn-cancellation-registry.ts";
 import { runtimeTurnAbortError } from "../../agent/turn/native/policy/turn-errors.ts";
-import { isBtccOperationalInterruption } from "../../agent/btcc/index.ts";
+import {
+  isBtccOperationalInterruption,
+  shouldScheduleAutomaticRecovery,
+} from "../../agent/btcc/index.ts";
 
 export interface QueuedInboundServer {
   handleInbound(envelope: InboundEnvelope): Promise<GatewayDispatchResult>;
@@ -500,6 +503,15 @@ async function processClaimedQueuedInboundItem(input: {
       return summary;
     }
     if (isBtccOperationalInterruption(error) && sessionId && turnId) {
+      if (!shouldScheduleAutomaticRecovery(error)) {
+        const held = completeQueueClaim(options, item, {
+          dispatchStatus: "btcc-operational-hold",
+          handled: true,
+          continuationScheduled: false,
+        });
+        if (held) summary.handled += 1;
+        return summary;
+      }
       const scheduled = scheduleBtccOperationalResume({
         queue: options.queue,
         item,

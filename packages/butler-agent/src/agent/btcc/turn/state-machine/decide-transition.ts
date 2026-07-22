@@ -5,13 +5,40 @@ import type {
   AcceptedTurnTransition,
   TurnEvent,
   TurnRecord,
+  TurnTransitionDecision,
 } from "../contracts.ts";
 import { requireManagedPlanningAuthority } from "../managed-turn-state.ts";
 
 export function decideTransition(
   turn: TurnRecord,
   event: TurnEvent,
-): AcceptedTurnTransition {
+): TurnTransitionDecision {
+  const transition = acceptedTransition(turn, event);
+  if (transition) return { kind: "accepted", transition };
+  if (turn.semanticState === "delivery_committed" && event.kind === "DeliveryObserved") {
+    return {
+      kind: "rejected_unchanged",
+      reason: {
+        kind: "delivery_message_mismatch",
+        expectedMessageId: turn.deliveryOutbox?.expectedMessageId,
+        observedMessageId: event.assistantMessageId,
+      },
+    };
+  }
+  return {
+    kind: "rejected_unchanged",
+    reason: {
+      kind: "state_event_mismatch",
+      state: turn.semanticState,
+      event: event.kind,
+    },
+  };
+}
+
+function acceptedTransition(
+  turn: TurnRecord,
+  event: TurnEvent,
+): AcceptedTurnTransition | undefined {
   if (turn.semanticState === "admitted" && event.kind === "TurnActivated") {
     return {
       kind: "activate_opening",
@@ -264,7 +291,7 @@ export function decideTransition(
       assistantMessageId: event.assistantMessageId,
     };
   }
-  throw new Error(`BTCC state/event mismatch: ${turn.semanticState}/${event.kind}`);
+  return undefined;
 }
 
 function isManagedDeferralState(state: TurnRecord["semanticState"]): boolean {

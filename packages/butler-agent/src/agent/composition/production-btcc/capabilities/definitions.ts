@@ -2,6 +2,7 @@ import type { ProductionCapability } from "./contracts.ts";
 import { executeFileCapability } from "./file-capabilities.ts";
 import { executeCommandCapability } from "./command-capability.ts";
 import { executeWebCapability } from "./web-capabilities.ts";
+import { readProjectLedger } from "./project-ledger-capability.ts";
 
 const object = (
   properties: Record<string, unknown>,
@@ -26,6 +27,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     name: "read_file",
     description: "Read bounded UTF-8 text inside the admitted workspace.",
     operationKinds: ["observe", "review_validation"],
+    observationScopeKinds: ["workspace"],
     inputSchema: object({
       path: string("Workspace-relative path."),
       start_line: integer(1),
@@ -53,6 +55,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     name: "grep_files",
     description: "Search bounded workspace text in deterministic source-first order.",
     operationKinds: ["observe", "review_validation"],
+    observationScopeKinds: ["workspace"],
     inputSchema: object({
       pattern: string(),
       regex: { type: "boolean" },
@@ -82,6 +85,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     name: "web_search",
     description: "Search the public web for current or external information.",
     operationKinds: ["observe"],
+    observationScopeKinds: ["web"],
     inputSchema: object({
       query: string(),
       allowed_domains: strings(),
@@ -96,6 +100,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     name: "web_read",
     description: "Read a bounded public http(s) page.",
     operationKinds: ["observe"],
+    observationScopeKinds: ["web"],
     inputSchema: object({
       url: string(),
       max_chars: integer(500, 8_000),
@@ -105,5 +110,20 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
       },
     }, ["url"]),
     execute: (args, context) => executeWebCapability("web_read", args, context),
+  },
+  {
+    capabilityRef: "project_ledger_read",
+    name: "project_ledger_read",
+    description: "Read canonical Project Ledger specs, plans, work, tasks, and reports for the bound project.",
+    operationKinds: ["observe"],
+    observationScopeKinds: ["ledger"],
+    inputSchema: object({
+      record_ids: strings(),
+      kinds: strings(),
+      query: string(),
+      include_body: { type: "boolean" },
+      max_records: integer(1, 50),
+    }, []),
+    execute: readProjectLedger,
   },
 ];

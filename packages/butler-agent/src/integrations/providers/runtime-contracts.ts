@@ -81,6 +81,11 @@ export interface PromptOptions {
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
+  onProviderResponseIdentity?: (identity: {
+    provider: string;
+    configuredModel: string;
+    reportedModel: string;
+  }) => void;
   providerRetryAttempts?: number;
 }
 
@@ -255,6 +260,11 @@ export interface FunctionToolPromptOptions {
   butlerData?: string;
   usageAttribution?: PromptUsageAttribution;
   onProviderStreamEvent?: ProviderStreamProjectionHandler;
+  onProviderResponseIdentity?: (identity: {
+    provider: string;
+    configuredModel: string;
+    reportedModel: string;
+  }) => void;
   providerRetryAttempts?: number;
   tools: FunctionToolDefinition[];
   dynamicTools?: () => readonly FunctionToolDefinition[];

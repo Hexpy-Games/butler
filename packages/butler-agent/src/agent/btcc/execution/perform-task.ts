@@ -135,15 +135,24 @@ function workspaceResult(
   target: Record<string, unknown>,
   envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
 ) {
+  const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
   const applied = envelope.operationResults.filter(
-    (result) => result.outcome === "workspace_artifact_applied",
+    (result) =>
+      result.outcome === "workspace_artifact_applied" &&
+      result.request.kind === "workspace_artifact_action" &&
+      sameContentRef(result.request.workspaceRef, workspaceRef),
   );
+  if (applied.length === 0) {
+    throw new Error(
+      "Workspace artifact Execution requires an applied workspace artifact result",
+    );
+  }
   const artifactRevisionRefs = applied.map((result, index) =>
     requireContentRef(result.artifactRevisionRef, `artifactRevisionRef[${index}]`));
-  const targetSnapshotRef = applied.length > 0
-    ? requireContentRef(applied.at(-1)!.targetSnapshotRef, "targetSnapshotRef")
-    : requireContentRef(target.baselineSnapshotRef, "baselineSnapshotRef");
-  const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
+  const targetSnapshotRef = requireContentRef(
+    applied.at(-1)!.targetSnapshotRef,
+    "targetSnapshotRef",
+  );
   const body = {
     workspaceRef,
     producingWorkRef: common.workRef,
@@ -168,6 +177,10 @@ function workspaceResult(
     workspaceRevision: revision,
     artifactRevisionRefs,
   };
+}
+
+function sameContentRef(left: ContentRef, right: ContentRef): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function observeTargetStates(

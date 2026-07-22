@@ -88,6 +88,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       stream: false,
       ...hostedChatReasoningParams(config, options.reasoningEffort),
     }, options.signal, { attribution: options.usageAttribution, roundIndex: round }, options.providerRetryAttempts);
+    observeProviderIdentity(config, options, response);
     recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: round });
     const assistant = firstHostedChatMessage(response);
     const text = hostedChatText(assistant);
@@ -205,6 +206,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     stream: false,
     ...hostedChatReasoningParams(config, options.reasoningEffort),
   }, options.signal, { attribution: options.usageAttribution, roundIndex: maxRounds }, options.providerRetryAttempts);
+  observeProviderIdentity(config, options, response);
   recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: maxRounds });
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
@@ -216,6 +218,23 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     });
   }
   return text;
+}
+
+function observeProviderIdentity(
+  config: HostedRuntimeConfig,
+  options: FunctionToolPromptOptions,
+  response: Record<string, any>,
+): void {
+  if (!options.onProviderResponseIdentity) return;
+  const reportedModel = typeof response.model === "string" ? response.model.trim() : "";
+  if (!reportedModel) {
+    throw new Error(`provider_response_model_missing:${config.modelRef}`);
+  }
+  options.onProviderResponseIdentity({
+    provider: config.providerId,
+    configuredModel: config.modelRef,
+    reportedModel,
+  });
 }
 
 

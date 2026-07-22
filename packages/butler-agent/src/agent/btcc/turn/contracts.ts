@@ -300,6 +300,18 @@ export type AcceptedTurnTransition =
       assistantMessageId: string;
     };
 
+export type TurnTransitionRejection =
+  | { kind: "state_event_mismatch"; state: TurnSemanticState; event: TurnEvent["kind"] }
+  | {
+      kind: "delivery_message_mismatch";
+      expectedMessageId?: string;
+      observedMessageId: string;
+    };
+
+export type TurnTransitionDecision =
+  | { kind: "accepted"; transition: AcceptedTurnTransition }
+  | { kind: "rejected_unchanged"; reason: TurnTransitionRejection };
+
 export interface TurnAdmissionRepository {
   recordInbound(input: {
     command: FreshBtccTurnCommand;
@@ -331,7 +343,5 @@ export type StopPersistenceOutcome =
   | { kind: "already_finalizing"; turnId: string }
   | { kind: "already_delivered"; turnId: string; messageId: string; content: string };
 
-export type {
-  ManagedTurnState,
-} from "./managed-turn-state.ts";
+export type { ManagedTurnState } from "./managed-turn-state.ts";
 export type { ManagedProgramState } from "../work-ledger/index.ts";

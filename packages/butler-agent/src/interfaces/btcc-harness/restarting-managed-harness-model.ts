@@ -19,6 +19,7 @@ export class RestartingManagedHarnessModel extends ManagedHarnessModel {
       return Promise.resolve({
         kind: "interruption" as const,
         code: "simulated_provider_unavailable",
+        activation: { kind: "automatic_provider_recovery" as const },
       });
     }
     return super.runRound(envelope);

@@ -34,15 +34,16 @@ export function submitInitialPlan(state: Record<string, unknown>) {
         }),
       ],
     }],
+    ...emptyPlanningConsiderations(),
   };
 }
 
 export function submitArtifactPlan(state: Record<string, unknown>) {
   const targetScopeRef = "repository:harness-artifact-target";
+  const targetPath = "harness-artifact-target";
   const artifactPolicy = {
     kind: "workspace_artifact",
-    targetScopeRef,
-    baselinePolicy: "capture_at_workspace_provision",
+    targetPath,
   };
   return {
     kind: "plan_candidate",
@@ -89,16 +90,35 @@ export function submitArtifactPlan(state: Record<string, unknown>) {
             goalField: "intended_result",
             outcome: state.requiredOutcomeId,
           }),
-          artifactPolicy: { kind: "repository_promotion", targetScopeRef },
+          effectClass: "external_effect",
+          artifactPolicy: { kind: "repository_promotion", targetPath },
         },
       ],
     }],
     promotionSelectors: [{
-      targetScopeRef,
       implementationTaskIds: ["implement-artifact"],
       integrationTaskId: "integrate-artifact",
       promotionTaskId: "promote-artifact",
-      baselinePolicy: "capture_at_workspace_provision",
+    }],
+    risks: [],
+    assumptions: [],
+    effectIntents: [{
+      occurrenceKey: "promote-harness-artifact-v1",
+      taskId: "promote-artifact",
+      actionKind: "repository_promotion",
+      action: "replace the complete approved target",
+      payload: targetScopeRef,
+      desiredOutcome: "the target equals the reviewed isolated candidate",
+      sourceGoalFieldIds: ["intended_result"],
+    }],
+    integrationCriteria: [{
+      logicalId: "artifact-candidate-integration",
+      statement: "the complete isolated candidate remains compatible before promotion",
+      sourceGoalFieldIds: ["request", "intended_result"],
+      participatingTaskIds: ["implement-artifact", "integrate-artifact"],
+      integrationTaskId: "integrate-artifact",
+      promotionTaskId: "promote-artifact",
+      observableCompatibility: "disposable validation passes against the complete candidate",
     }],
   };
 }
@@ -109,26 +129,19 @@ export function submitPlanningReview(
   reviewCount: number,
 ) {
   const revisionRequired = reviseFirst && reviewCount === 1;
+  if (revisionRequired) {
+    return {
+      kind: "planning_review",
+      verdict: "revision_required",
+      findings: ["두 번째 Task의 완료 조건을 더 명확히 표현해야 한다"],
+    };
+  }
   return {
     kind: "planning_review",
-    candidateRef: nestedRef(state, "planCandidate", "candidate"),
-    reviewedBundleRef: nestedValue(state, "planCandidate", "candidate", "bundle", "ref"),
-    reviewedWorkGraphRef: nestedValue(
-      state, "planCandidate", "candidate", "workGraph", "ref",
-    ),
-    reviewedWorkRefs: nestedRecordRefs(state, "works"),
-    reviewedTaskRefs: nestedRecordRefs(state, "tasks"),
-    reviewedCriterionRefs: nestedRecordRefs(state, "criteria"),
-    reviewedVerificationQuestionRefs: nestedRecordRefs(state, "verificationQuestions"),
-    reviewedArtifactLifecycleRef: nestedValue(
-      state, "planCandidate", "candidate", "artifactLifecycle", "ref",
-    ),
-    reviewedGoalFieldIds: ["request", "intended_result"],
-    reviewedRequiredOutcomeRefs: [firstCriterionOutcome(state)],
-    verdict: revisionRequired ? "revision_required" : "accepted",
-    findings: revisionRequired
-      ? ["두 번째 Task의 완료 조건을 더 명확히 표현해야 한다"]
-      : [],
+    reviewedEffectIntentRefs: nestedRecordRefs(state, "effectIntents"),
+    reviewedIntegrationCriterionRefs: nestedRecordRefs(state, "integrationCriteria"),
+    verdict: "accepted",
+    findings: [],
   };
 }
 
@@ -226,6 +239,7 @@ function revisedPlanSubmission(state: Record<string, unknown>) {
         }),
       ],
     }],
+    ...emptyPlanningConsiderations(),
   };
 }
 
@@ -244,6 +258,7 @@ function taskSubmission(input: {
     intendedOutcome: input.intendedOutcome,
     executionOrdinal: input.executionOrdinal,
     dependencyTaskIds: input.dependencyTaskIds,
+    effectClass: "none",
     targetScopeRefs: ["session:managed-guide"],
     criteria: [{
       statement: input.criterion,
@@ -254,16 +269,18 @@ function taskSubmission(input: {
   };
 }
 
+function emptyPlanningConsiderations() {
+  return {
+    risks: [],
+    assumptions: [],
+    effectIntents: [],
+    integrationCriteria: [],
+  };
+}
+
 function nestedRecordRefs(state: Record<string, unknown>, key: string): unknown[] {
   return asArray(nestedValue(state, "planCandidate", "candidate", key))
     .map((record) => asRecord(record).ref);
-}
-
-function firstCriterionOutcome(state: Record<string, unknown>): unknown {
-  const criterion = asRecord(asArray(nestedValue(
-    state, "planCandidate", "candidate", "criteria",
-  ))[0]);
-  return asArray(criterion.sourceRequiredOutcomeRefs)[0];
 }
 
 function nestedRef(

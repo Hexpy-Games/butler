@@ -1,6 +1,7 @@
 import type { AdmittedModelSelection } from "../contracts.ts";
 import type { DeferredContinuationCandidate } from "../continuation/index.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
+import type { OperationalActivation } from "../recovery/index.ts";
 import type { SubmissionSchema } from "./submission-schema.ts";
 
 export type PhaseRunBinding = {
@@ -96,6 +97,7 @@ export type ProviderRoundValue =
   | {
       kind: "interruption";
       code: string;
+      activation: OperationalActivation;
     };
 
 export interface SelectedModel {

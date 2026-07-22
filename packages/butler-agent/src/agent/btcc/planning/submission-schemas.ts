@@ -14,6 +14,7 @@ const criterion = objectSchema({
   statement: textSchema(),
   question: textSchema(),
   sourceGoalFieldIds: arraySchema(enumSchema("request", "intended_result"), { minItems: 1 }),
+  sourceRequiredOutcomeRefs: arraySchema(textSchema(), { minItems: 1 }),
 });
 const taskFields = {
   logicalId: textSchema(),
@@ -23,17 +24,21 @@ const taskFields = {
   criteria: arraySchema(criterion, { minItems: 1 }),
 };
 const task = variantsSchema(
-  objectSchema(taskFields),
+  objectSchema({ ...taskFields, effectClass: enumSchema("none", "external_effect") }),
   objectSchema({
     ...taskFields,
+    effectClass: literalSchema("none"),
     artifactPolicy: objectSchema({
       kind: literalSchema("workspace_artifact"),
+      targetPath: textSchema(),
     }),
   }),
   objectSchema({
     ...taskFields,
+    effectClass: literalSchema("external_effect"),
     artifactPolicy: objectSchema({
       kind: literalSchema("repository_promotion"),
+      targetPath: textSchema(),
     }),
   }),
 );
@@ -46,6 +51,35 @@ const work = objectSchema({
 const planFields = {
   strategy: textSchema(),
   works: arraySchema(work, { minItems: 1 }),
+  risks: arraySchema(variantsSchema(
+    objectSchema({
+      logicalId: textSchema(), statement: textSchema(), affectedTaskIds: textList(),
+      mitigation: textSchema(),
+    }),
+    objectSchema({
+      logicalId: textSchema(), statement: textSchema(), affectedTaskIds: textList(),
+      mitigation: textSchema(), residualRisk: textSchema(),
+    }),
+  )),
+  assumptions: arraySchema(objectSchema({
+    logicalId: textSchema(), statement: textSchema(), affectedTaskIds: textList(),
+    validationQuestion: textSchema(), invalidationConsequence: textSchema(),
+  })),
+  effectIntents: arraySchema(objectSchema({
+    occurrenceKey: textSchema(), taskId: textSchema(),
+    actionKind: enumSchema("external_operation", "repository_promotion"),
+    action: textSchema(), payload: textSchema(), desiredOutcome: textSchema(),
+    sourceGoalFieldIds: arraySchema(enumSchema("request", "intended_result"), { minItems: 1 }),
+    sourceRequiredOutcomeRefs: arraySchema(textSchema(), { minItems: 1 }),
+  })),
+  integrationCriteria: arraySchema(objectSchema({
+    logicalId: textSchema(), statement: textSchema(),
+    sourceGoalFieldIds: arraySchema(enumSchema("request", "intended_result"), { minItems: 1 }),
+    sourceRequiredOutcomeRefs: arraySchema(textSchema(), { minItems: 1 }),
+    participatingTaskIds: arraySchema(textSchema(), { minItems: 1 }),
+    integrationTaskId: textSchema(), promotionTaskId: textSchema(),
+    observableCompatibility: textSchema(),
+  })),
 };
 const promotionSelector = objectSchema({
   implementationTaskIds: textList(),
@@ -72,6 +106,8 @@ export const planReviewSubmissionSchema = variantsSchema(
     kind: literalSchema("planning_review"),
     verdict: literalSchema("accepted"),
     findings: arraySchema(textSchema(), { maxItems: 0 }),
+    reviewedEffectIntentRefs: arraySchema(contentRefSchema()),
+    reviewedIntegrationCriterionRefs: arraySchema(contentRefSchema()),
   }),
   objectSchema({
     kind: literalSchema("planning_review"),

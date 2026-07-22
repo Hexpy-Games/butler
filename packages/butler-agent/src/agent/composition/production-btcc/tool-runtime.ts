@@ -55,6 +55,7 @@ function toolExecutor(
     return capability.execute(call.args, {
       butlerData: options.butlerData,
       workspacePath,
+      ...(request.kind === "observe" ? { observationScopeRef: request.scopeRef } : {}),
       originalRequest: envelope.context.originalMessage,
       signal: call.signal,
     });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProductionToolRuntime } from "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
@@ -65,6 +65,52 @@ describe("production BTCC capabilities", () => {
       request,
       args: { path: "result.txt" },
     })).toThrow("unavailable for workspace_artifact_action");
+  });
+
+  test("reads only the canonical Ledger bound by the observation scope", async () => {
+    const root = fixtureRoot();
+    const projectRoot = join(root, "project-ledger", "projects", "sandy");
+    const specPath = join(projectRoot, "specs", "trust.md");
+    mkdirSync(join(projectRoot, "index"), { recursive: true });
+    mkdirSync(join(projectRoot, "specs"), { recursive: true });
+    writeFileSync(specPath, "# Trust profiling\n\nPreserve Sandy's voice.\n");
+    writeFileSync(join(projectRoot, "index", "project.json"), JSON.stringify({
+      project: { id: "sandy", name: "Sandy" },
+      records: [{
+        id: "SPEC-SANDY-TRUST",
+        kind: "spec",
+        title: "Trust profiling",
+        status: "specified",
+        path: "project-ledger/projects/sandy/specs/trust.md",
+      }],
+      issues: [],
+    }));
+    const runtime = createProductionToolRuntime({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: join(root, "app.sqlite"),
+    });
+    const request: Extract<OperationRequest, { kind: "observe" }> = {
+      requestId: "ledger-read-1",
+      kind: "observe",
+      capabilityRef: "project_ledger_read",
+      scopeRef: "ledger:sandy",
+      input: { record_ids: ["SPEC-SANDY-TRUST"], include_body: true },
+    };
+    const execute = runtime.createToolExecutor({ envelope: envelope(), request });
+
+    const result = await execute({
+      name: "project_ledger_read",
+      args: request.input,
+      rawArguments: JSON.stringify(request.input),
+    });
+
+    expect(result).toMatchObject({
+      projectId: "sandy",
+      available: true,
+      records: [{ id: "SPEC-SANDY-TRUST", kind: "spec" }],
+    });
+    expect(JSON.stringify(result)).toContain("Preserve Sandy's voice");
   });
 });
 

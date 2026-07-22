@@ -48,7 +48,11 @@ export class LiveProviderHarnessModel implements SelectedModel {
       );
     } catch (error) {
       if (signal?.aborted) throw error;
-      return { kind: "interruption", code: interruptionCode(error) };
+      return {
+        kind: "interruption",
+        code: interruptionCode(error),
+        activation: { kind: "runtime_remediation" },
+      };
     }
   }
 

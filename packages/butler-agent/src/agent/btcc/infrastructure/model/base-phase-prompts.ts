@@ -9,11 +9,11 @@ const BASE_PROMPTS: Record<ModelPhaseState, string> = {
   conception_opening:
     "Identify whether this turn needs a direct answer, bounded assistance, or full managed work while preserving a fast first visible response.",
   conception_deliberation:
-    "Understand the request through the user's ask, relevant memories, connected knowledge, user preferences, expert perspectives, and the required result.",
+    "Understand the request through the user's ask, relevant memories, connected knowledge, user preferences, expert perspectives, and the required result. For a project-bound request, inspect the canonical Project Ledger before proposing the GoalContract.",
   contract_review:
     "Review the proposed goal contract against the original request and Butler context; correct omissions or drift before accepting it.",
   planning:
-    "Design the smallest sufficient plan that covers the whole accepted goal, dependencies, authority, verification, and appropriate Work or Task boundaries.",
+    "Design the smallest sufficient plan that covers the whole accepted goal, dependencies, authority, verification, and appropriate Work or Task boundaries. For a project-bound request, read the governing canonical Project Ledger records before authoring the plan.",
   planning_review:
     "Independently challenge the plan for goal coverage, Spec quality, decomposition, feasibility, authority, verification, and avoidable complexity.",
   task_execution:

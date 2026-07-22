@@ -1,4 +1,6 @@
 import type { BtccTurnOutcome } from "../../../agent/btcc/index.ts";
+import { isBtccOperationalInterruption } from "../../../agent/btcc/index.ts";
+import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import type {
   GatewayActorTurnResult,
   GatewayRoute,
@@ -46,7 +48,15 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       turnId,
       projectTurnProgress((event) => this.publish(envelope, route, event)),
     );
-    const outcome = await this.handleCommand(command, stopObserving);
+    let outcome: BtccTurnOutcome;
+    try {
+      outcome = await this.handleCommand(command, stopObserving);
+    } catch (error) {
+      if (isBtccOperationalInterruption(error)) {
+        await this.publish(envelope, route, operationalNotice(error.activation.kind));
+      }
+      throw error;
+    }
     const result = projectTurnOutcome(outcome);
     const generatedSessionTitle = result.text
       ? await this.options.generateSessionTitle?.({ binding, envelope, route }) ?? null
@@ -90,4 +100,16 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       event: { visibility: "public", ...event },
     });
   }
+}
+
+function operationalNotice(
+  activation: import("../../../agent/btcc/recovery/index.ts").OperationalActivation["kind"],
+): RuntimeTurnEventInput {
+  if (activation === "cancelled") return { kind: "turn.cancelled" };
+  const note = activation === "automatic_provider_recovery"
+    ? "모델 연결이 복구되면 저장된 지점부터 이어서 진행합니다"
+    : activation === "provider_action_required"
+      ? "선택한 모델 연결 설정을 확인하면 저장된 지점부터 이어갈 수 있습니다"
+      : "버틀러가 현재 작업을 안전하게 보류했습니다. 중지 기능은 계속 사용할 수 있습니다";
+  return { kind: "assistant.public_note", payload: { note, operational: true } };
 }
