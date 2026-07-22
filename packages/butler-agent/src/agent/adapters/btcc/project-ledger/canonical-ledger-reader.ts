@@ -1,0 +1,42 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadProjectLedgerCore } from "./project-ledger-core.ts";
+
+export type CanonicalLedgerRecord = {
+  id: string;
+  kind: string;
+  title: string;
+  status: string;
+  spec: string | null;
+  parentId: string | null;
+  body: string | null;
+};
+
+export async function readCanonicalProjectLedger(projectRoot: string) {
+  const core = await loadProjectLedgerCore();
+  const index = core.buildIndex(projectRoot);
+  const records = index.records.map((record): CanonicalLedgerRecord => {
+    const resolved = core.resolveRecord(projectRoot, {
+      id: record.id,
+      kind: record.kind,
+    });
+    const data = core.readRecordData(resolved.filePath) ?? {};
+    return {
+      id: record.id,
+      kind: record.kind,
+      title: record.title,
+      status: record.status,
+      spec: stringValue(data.spec),
+      parentId: stringValue(data.parentId),
+      body: core.readRecordBody(resolved.filePath),
+    };
+  });
+  return {
+    project: JSON.parse(readFileSync(join(projectRoot, "project.json"), "utf8")) as unknown,
+    records,
+  };
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value ? value : null;
+}
