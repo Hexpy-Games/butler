@@ -86,6 +86,10 @@ export async function performWorkspaceAction(input: {
     input.afterBoundary?.("candidate_prepared");
   }
 
+  if (journal.status === "workspace_observed" && journal.result) {
+    return journal.result;
+  }
+
   if (journal.status === "candidate_prepared") {
     assertActive(input.signal);
     journal = exchangePreparedCandidate(input, workspace, journal);
@@ -113,7 +117,9 @@ export function cleanupWorkspaceAction(
   request: WorkspaceRequest,
 ): void {
   const journal = store.loadWorkspaceAction(scopeId, request);
-  if (journal?.status === "workspace_exchanged") removeOwnedRoot(journal.overlayRoot);
+  if (journal?.status === "workspace_exchanged" || journal?.status === "workspace_observed") {
+    removeOwnedRoot(journal.overlayRoot);
+  }
 }
 
 async function dispatchWorkspaceCapability(
@@ -197,22 +203,42 @@ function prepareCandidate(
     originalTargetPath: workspace.targetPath,
     relativeTarget: input.request.relativeTarget,
   });
-  if (!existsSync(target) || !lstatSync(target).isFile()) {
-    throw new Error("BTCC workspace capability did not materialize its declared file target");
-  }
   const candidate = captureWorkspaceSnapshot(
     journal.overlayRoot,
     workspace.targetKind,
     workspace.baselineTargetState,
   );
   input.store.saveSnapshot(candidate);
+  if (sameRef(candidate.ref, journal.beforeSnapshotRef)) {
+    const result: ObservationResult = {
+      requestId: input.request.requestId,
+      outcome: "observed",
+      observationRef: contentRef("workspace-observation", {
+        requestId: input.request.requestId,
+        workspaceRef: workspace.provision.workspace.ref,
+        targetSnapshotRef: candidate.ref,
+      }),
+      targetSnapshotRef: candidate.ref,
+      content,
+    };
+    const observed = { ...journal, status: "workspace_observed" as const, result };
+    input.store.saveWorkspaceAction(input.envelope.binding.checkpointId, observed);
+    return observed;
+  }
+  if (!existsSync(target)) {
+    throw new Error("BTCC workspace capability did not materialize its declared target");
+  }
   syncCompleteTarget(workspaceContentRoot(journal.overlayRoot));
+  const stat = lstatSync(target);
+  const contentSha256 = stat.isFile()
+    ? bytesSha256(readFileSync(target))
+    : candidate.ref.sha256;
   const artifactRevisionRef = contentRef("artifact-revision", {
     workspaceRef: workspace.provision.workspace.ref,
     relativeTarget: input.request.relativeTarget,
     capabilityRef: input.request.capabilityRef,
     previousSnapshotRef: journal.beforeSnapshotRef,
-    contentSha256: bytesSha256(readFileSync(target)),
+    contentSha256,
     requestId: input.request.requestId,
   });
   const result: ObservationResult = {

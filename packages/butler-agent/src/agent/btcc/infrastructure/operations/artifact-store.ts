@@ -33,7 +33,9 @@ export type WorkspaceActionJournal = {
   workspaceRef: { id: string; sha256: string };
   overlayRoot: string;
   beforeSnapshotRef: { id: string; sha256: string };
-  status: "reserved" | "dispatching" | "candidate_prepared" | "workspace_exchanged";
+  status:
+    | "reserved" | "dispatching" | "workspace_observed"
+    | "candidate_prepared" | "workspace_exchanged";
   candidateSnapshotRef?: { id: string; sha256: string };
   result?: ObservationResult;
 };

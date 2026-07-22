@@ -8,6 +8,7 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import {
   cleanupProductionOperationsFixtures,
+  createAbsentDirectoryFixture,
   createDirectoryFixture,
   createFaultableRuntime,
   createFixture,
@@ -88,6 +89,46 @@ describe("production BTCC artifact operations", () => {
     await runtime.operations.perform({ request: promotion.request, envelope: promotion.envelope });
 
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(changed);
+  });
+
+  test("keeps no-change workspace commands as observations", async () => {
+    const fixture = createDirectoryFixture();
+    fixture.workspace = () => ({ stdout: "inspected without changes" });
+    const runtime = createRuntime(fixture);
+    const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
+    const request = workspaceRequest(
+      provision.workspace.ref, fixture.targetPath, "unused", ".",
+    );
+    const result = await runtime.operations.perform({ request, envelope: envelope() });
+
+    expect(result.outcome).toBe("observed");
+    expect(result.artifactRevisionRef).toBeUndefined();
+    expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8"))
+      .toBe(fixture.original);
+  });
+
+  test("records and promotes a complete directory created from an absent baseline", async () => {
+    const fixture = createAbsentDirectoryFixture();
+    fixture.workspace = (call) => {
+      writeFileSync(join(call.workspacePath, "index.ts"), "export const ready = true;\n");
+      return { changed: "." };
+    };
+    const runtime = createRuntime(fixture);
+    const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
+    const request = workspaceRequest(
+      provision.workspace.ref, fixture.targetPath, "unused", ".",
+    );
+    const applied = await runtime.operations.perform({ request, envelope: envelope() });
+    const promotion = promotionRequest(provision, applied.targetSnapshotRef!);
+    const promoted = await runtime.operations.perform({
+      request: promotion.request,
+      envelope: promotion.envelope,
+    });
+
+    expect(applied.outcome).toBe("workspace_artifact_applied");
+    expect(promoted.outcome).toBe("promoted");
+    expect(readFileSync(join(fixture.targetPath, "index.ts"), "utf8"))
+      .toBe("export const ready = true;\n");
   });
 
   test("rehydrates workspace and idempotent operation results after restart", async () => {

@@ -61,6 +61,12 @@ export function createDirectoryFixture(): ProductionOperationsFixture {
   return { ...fixture, targetPath };
 }
 
+export function createAbsentDirectoryFixture(): ProductionOperationsFixture {
+  const fixture = createFixture();
+  rmSync(fixture.targetPath);
+  return { ...fixture, targetPath: join(fixture.root, "new-target") };
+}
+
 export function createRuntime(fixture: ProductionOperationsFixture) {
   return createProductionOperationRuntime(runtimeOptions(fixture));
 }
