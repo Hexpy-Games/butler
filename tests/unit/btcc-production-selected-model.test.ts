@@ -265,6 +265,51 @@ describe("production BTCC selected model", () => {
     expect(calls).toBe(1);
   });
 
+  test("rejects an operation that was not offered by the exact phase capability schema", async () => {
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: capabilityCatalog([{
+        capabilityRef: "workspace:read",
+        name: "read_file",
+        description: "Read one workspace file.",
+        operationKinds: ["review_validation"],
+        inputSchema: {
+          type: "object",
+          properties: { path: { type: "string" } },
+          required: ["path"],
+          additionalProperties: false,
+        },
+      }]),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => ({
+        carrier: {
+          kind: "operation_requests",
+          requests: [{
+            requestId: "invalid-review-operation",
+            kind: "review_validation",
+            capabilityRef: "project_ledger_read",
+            input: { record_ids: ["SPEC-1"] },
+          }],
+        },
+        actualIdentity: actualIdentity(),
+      })),
+    });
+
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.operationAuthority = {
+      observationScopeRefs: [],
+      mutation: {
+        kind: "validation_overlay_only",
+        reviewSourceRef: { id: "review-source", sha256: "review-source-sha" },
+      },
+    };
+    expect(await model.runRound(envelope)).toEqual({
+      kind: "interruption",
+      code: "provider_protocol_interruption",
+      activation: { kind: "automatic_provider_recovery" },
+    });
+  });
+
   test("rejects malformed output and identity mismatch without retry or fallback", async () => {
     let calls = 0;
     const responses: ProviderPhasePromptResult[] = [

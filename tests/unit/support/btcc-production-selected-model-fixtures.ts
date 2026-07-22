@@ -67,7 +67,10 @@ export function phaseEnvelope(options: { emptyContext?: boolean } = {}): PhaseEn
     }],
     submissionSchema: {
       type: "object",
-      properties: { kind: { type: "string" } },
+      properties: {
+        kind: { type: "string" },
+        message: { type: "string" },
+      },
       required: ["kind"],
       additionalProperties: false,
     },
