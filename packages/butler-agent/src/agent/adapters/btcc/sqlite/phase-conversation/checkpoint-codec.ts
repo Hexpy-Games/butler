@@ -1,0 +1,50 @@
+import type {
+  ActualModelIdentity,
+  OperationRequest,
+} from "../../../../btcc/gateway-api.ts";
+import { digest, stableJson } from "../identity.ts";
+
+export function decodePendingOperation(value: string): {
+  requests: OperationRequest[];
+  actualIdentity: ActualModelIdentity;
+} {
+  const parsed = JSON.parse(value) as {
+    kind?: string;
+    requests?: OperationRequest[];
+    actualIdentity?: ActualModelIdentity;
+  };
+  if (
+    parsed.kind !== "operation_requests" || !Array.isArray(parsed.requests) ||
+    !parsed.actualIdentity
+  ) {
+    throw new Error("BTCC pending operation carrier is invalid");
+  }
+  return { requests: parsed.requests, actualIdentity: parsed.actualIdentity };
+}
+
+export function decodePendingSubmission(value: string): {
+  submission: unknown;
+  actualIdentity: ActualModelIdentity;
+} {
+  const parsed = JSON.parse(value) as {
+    kind?: string;
+    submission?: unknown;
+    actualIdentity?: ActualModelIdentity;
+  };
+  if (parsed.kind !== "phase_submission" || !("submission" in parsed) || !parsed.actualIdentity) {
+    throw new Error("BTCC pending phase submission carrier is invalid");
+  }
+  return { submission: parsed.submission, actualIdentity: parsed.actualIdentity };
+}
+
+export function optionalJson(value: unknown): string | null {
+  return value === undefined ? null : stableJson(value);
+}
+
+export function contentRefId(kind: string, json: string | null): string | null {
+  return json === null ? null : digest(`btcc-${kind}.v1\0${json}`);
+}
+
+export function revisionRef(checkpointId: string, revision: number): string {
+  return digest(`btcc-phase-checkpoint-revision.v1\0${checkpointId}\0${revision}`);
+}

@@ -94,6 +94,7 @@ test("runtime hands a rejected internal event to recovery without committing it"
   let commits = 0;
   const turns: TurnStateRepository = {
     async findTurn() { return turn; },
+    async activateCommittedSuccessor() { return turn; },
     async acquireStateExecutionClaim() { return claim; },
     async commitTransition() { commits += 1; },
     async stopTurn() { throw new Error("not used"); },

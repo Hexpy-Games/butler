@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { mkdirSync } from "node:fs";
 import { createBtccComposition } from "../../agent/composition/index.ts";
 import type {
   BtccTurnCommand,
@@ -16,6 +17,10 @@ import {
   NoLedgerHarnessModel,
   type NoLedgerScenario,
 } from "./no-ledger-harness-model.ts";
+import { createProjectWorkLedgerPublicationAdapter } from
+  "../../agent/adapters/btcc/project-ledger/index.ts";
+import { loadProjectLedgerCore } from
+  "../../agent/adapters/btcc/project-ledger/project-ledger-core.ts";
 
 type HarnessOptions = {
   data: string;
@@ -56,12 +61,16 @@ async function runHarness(options: HarnessOptions): Promise<void> {
     ? new LiveProviderHarnessModel(structuralAuthor, (entry) => liveTrace.push(entry))
     : structuralAuthor;
   const operations = new HarnessOperationExecutor(options.data);
+  const projectLedger = options.projectRef
+    ? await createHarnessProjectLedger(options.data, options.projectRef)
+    : undefined;
   const runtime = createBtccComposition({
     dbPath: join(options.data, "runtime", "btcc-successor.sqlite"),
     ownerId: `btcc-harness:${options.turnId}`,
     model,
     operations,
     artifacts: new HarnessArtifactWorkspace(),
+    ...(projectLedger ? { projectLedger } : {}),
   });
   const controls = { reasoningEffort: options.effort };
   const messageId = digest(`btcc-user-message.v1\0${options.sessionId}\0${options.message}`);
@@ -118,6 +127,37 @@ async function runHarness(options: HarnessOptions): Promise<void> {
       reasoningEffort: command.modelSelection.reasoningEffort,
     },
   })}\n`);
+}
+
+async function createHarnessProjectLedger(dataRoot: string, projectRef: string) {
+  const core = await loadProjectLedgerCore();
+  const workspace = join(dataRoot, "project-workspace");
+  mkdirSync(workspace, { recursive: true });
+  process.env.BUTLER_DATA = dataRoot;
+  core.initProject({ project: workspace, id: "harness-project", name: "Harness Project" });
+  const ledgerRoot = core.ledgerRoot(workspace);
+  const hasFixtureSpec = core.buildIndex(ledgerRoot).records.some(
+    (record) => record.kind === "spec" && record.id === "SPEC-HARNESS",
+  );
+  if (!hasFixtureSpec) {
+    core.createRecord(ledgerRoot, {
+      kind: "spec",
+      id: "SPEC-HARNESS",
+      title: "Harness behavior",
+      status: "active",
+      parentId: "SPEC-HARNESS-PARENT",
+      body: "# Harness behavior\nPreserve the original request through completion.\n",
+    });
+  }
+  return {
+    publications: createProjectWorkLedgerPublicationAdapter({
+      stagingRoot: join(dataRoot, "runtime", "btcc-project-ledger-publications"),
+    }),
+    resolveProjectRoot(candidateRef: string) {
+      if (candidateRef !== projectRef) throw new Error("Harness Project authority changed");
+      return ledgerRoot;
+    },
+  };
 }
 
 function parseOptions(argv: string[]): HarnessOptions {
@@ -251,6 +291,13 @@ if (import.meta.main) {
   runHarness(parseOptions(process.argv.slice(2))).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${message}\n`);
+    if (process.env.BUTLER_BTCC_DEBUG === "1" && error instanceof Error) {
+      process.stderr.write(`${error.stack ?? error.message}\n`);
+      if (error.cause) {
+        const cause = error.cause;
+        process.stderr.write(`${cause instanceof Error ? cause.stack : String(cause)}\n`);
+      }
+    }
     process.exitCode = 1;
   });
 }

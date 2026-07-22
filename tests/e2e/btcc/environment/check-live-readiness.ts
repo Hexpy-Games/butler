@@ -17,7 +17,6 @@ import {
 const CANONICAL_PROOF_GAPS = [
   "generated_diagnostic_fixtures_are_not_canonical_fixture_snapshots",
   "installed_app_ui_driver_is_not_bound_to_this_runner",
-  "production_composition_does_not_expose_every_provider_call_identity",
   "canonical_goal_effect_artifact_checkpoint_assertion_resolvers_are_absent",
 ] as const;
 

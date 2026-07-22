@@ -596,6 +596,7 @@ export async function runNativeButlerMain(
     appMessageDbPath,
     ownerId: `native-butler:${process.pid}`,
   });
+  if ("ready" in btcc && btcc.ready) await btcc.ready;
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");

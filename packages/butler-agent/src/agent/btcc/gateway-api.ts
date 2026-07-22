@@ -11,9 +11,36 @@ import type {
 } from "./turn/index.ts";
 import type { ManagedAttempt } from "./work/index.ts";
 import type { DeferredContinuationCandidate } from "./continuation/index.ts";
+import type {
+  AcceptedPhaseGuidance,
+  PhaseGuidanceDraft,
+  PhaseGuidanceRepository,
+  PhaseGuidanceRevisionRef,
+  PhaseGuidanceScope,
+  PublishPhaseGuidanceCommand,
+} from "./guidance/index.ts";
+import type {
+  ActualModelIdentity,
+  OperationRequest,
+  OperationResult,
+  PhaseEnvelope,
+  PhaseRunBinding,
+} from "./core/index.ts";
 
-export { createWorkLedger } from "./work-ledger/index.ts";
+export {
+  assertLogicalLedgerMutationId,
+  assertLogicalLedgerRecordBytes,
+  createLogicalLedgerBundle,
+  createWorkLedger,
+  ledgerAttemptRef,
+  ledgerManifestContentHash,
+  ledgerMutationId,
+  ledgerRecordSha256,
+  logicalLedgerRecords,
+} from "./work-ledger/index.ts";
 export type {
+  LogicalLedgerBundle,
+  LogicalLedgerRecord,
   WorkLedger,
   WorkLedgerCommit,
   WorkLedgerStorage,
@@ -26,6 +53,19 @@ export type {
   FreshBtccTurnCommand,
 } from "./contracts.ts";
 export type { StopPersistenceOutcome } from "./turn/index.ts";
+export type {
+  AcceptedPhaseGuidance,
+  ActualModelIdentity,
+  OperationRequest,
+  OperationResult,
+  PhaseEnvelope,
+  PhaseGuidanceDraft,
+  PhaseGuidanceRepository,
+  PhaseGuidanceRevisionRef,
+  PhaseGuidanceScope,
+  PhaseRunBinding,
+  PublishPhaseGuidanceCommand,
+};
 
 export type BtccPersistenceTypes = {
   transition: AcceptedTurnTransition;

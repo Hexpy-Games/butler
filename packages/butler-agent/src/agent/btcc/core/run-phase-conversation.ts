@@ -2,7 +2,9 @@ import type {
   OperationAuthority,
   OperationRequest,
   PhaseConversationCommand,
+  PhaseConversationSnapshot,
   PhaseEnvelope,
+  OperationResult,
 } from "./contracts.ts";
 import {
   isBtccOperationalInterruption,
@@ -20,6 +22,7 @@ export async function runPhaseConversation<Product>(
       "phase_contract_interruption",
       command.binding,
       { kind: "runtime_remediation" },
+      error,
     );
   }
 }
@@ -28,13 +31,54 @@ async function runPhaseConversationAtCheckpoint<Product>(
   command: PhaseConversationCommand<Product>,
 ): Promise<Product> {
   command.executionPermit.assertActive();
-  const accepted = await command.store.loadAcceptedProduct<Product>(command.binding);
+  let conversation = await command.store.restore<Product>(command.binding);
   command.executionPermit.assertActive();
-  if (accepted) return accepted;
+  if (conversation.acceptedProduct) {
+    if (!conversation.acceptedActualIdentity) {
+      throw new Error("BTCC accepted phase product has no actual model identity");
+    }
+    assertActualModel(command.modelSelection, conversation.acceptedActualIdentity);
+    return conversation.acceptedProduct;
+  }
 
   while (true) {
-    const envelope = await assembleEnvelope(command);
+    const envelope = assembleEnvelope(command, conversation);
     command.executionPermit.assertActive();
+    if (conversation.pendingOperationRound) {
+      assertActualModel(
+        command.modelSelection,
+        conversation.pendingOperationRound.actualIdentity,
+      );
+      const results = await performRequestedObservations(
+        command,
+        envelope,
+        conversation.pendingOperationRound.requests,
+      );
+      conversation = {
+        ...conversation,
+        binding: await command.store.appendOperationResults({
+          binding: conversation.binding,
+          results,
+        }),
+        operationResults: [...conversation.operationResults, ...results.map((item) => item.result)],
+        pendingOperationRound: undefined,
+      };
+      continue;
+    }
+    if (conversation.pendingSubmissionRound) {
+      assertActualModel(command.modelSelection, conversation.pendingSubmissionRound.actualIdentity);
+      const product = command.codec.decode(
+        conversation.pendingSubmissionRound.submission,
+        envelope,
+      );
+      command.executionPermit.assertActive();
+      await command.store.acceptPhaseProduct({
+        binding: conversation.binding,
+        product,
+      });
+      command.executionPermit.assertActive();
+      return product;
+    }
     const round = await command.model.runRound(envelope, command.executionPermit.signal);
     command.executionPermit.assertActive();
     if (round.kind === "interruption") {
@@ -46,41 +90,42 @@ async function runPhaseConversationAtCheckpoint<Product>(
     }
     assertActualModel(command.modelSelection, round.actualIdentity);
     if (round.kind === "operation_requests") {
-      const appendedResults = await performRequestedObservations(
-        command,
-        envelope,
-        round.requests,
-      );
-      if (appendedResults === 0) {
-        throw new OperationalInterruptionError(
-          "operation_batch_no_progress",
-          command.binding,
-        );
-      }
+      conversation = {
+        ...conversation,
+        binding: await command.store.appendOperationRound({
+          binding: conversation.binding,
+          envelope,
+          requests: round.requests,
+          actualIdentity: round.actualIdentity,
+        }),
+        pendingOperationRound: round,
+      };
       continue;
     }
-    const product = command.codec.decode(round.submission, envelope);
-    command.executionPermit.assertActive();
-    await command.store.persistAcceptedProduct({
-      binding: command.binding,
-      product,
-      actualIdentity: round.actualIdentity,
-    });
-    command.executionPermit.assertActive();
-    return product;
+    conversation = {
+      ...conversation,
+      binding: await command.store.appendPhaseSubmission({
+        binding: conversation.binding,
+        envelope,
+        submission: round.submission,
+        actualIdentity: round.actualIdentity,
+      }),
+      pendingSubmissionRound: round,
+    };
   }
 }
 
-async function assembleEnvelope<Product>(
+function assembleEnvelope<Product>(
   command: PhaseConversationCommand<Product>,
-): Promise<PhaseEnvelope> {
+  conversation: PhaseConversationSnapshot<Product>,
+): PhaseEnvelope {
   return {
-    binding: command.binding,
+    binding: conversation.binding,
     ...command.phaseContract,
     modelSelection: command.modelSelection,
     context: command.context,
     operationAuthority: command.operationAuthority,
-    operationResults: await command.store.loadOperationResults(command.binding),
+    operationResults: conversation.operationResults,
     submissionSchema: command.codec.submissionSchema,
   };
 }
@@ -89,14 +134,17 @@ async function performRequestedObservations<Product>(
   command: PhaseConversationCommand<Product>,
   envelope: PhaseEnvelope,
   requests: OperationRequest[],
-): Promise<number> {
+): Promise<Array<{ request: OperationRequest; result: OperationResult }>> {
   if (requests.length === 0) {
     throw new Error("BTCC operation request carrier must not be empty");
   }
   const existingRequests = new Map(
     envelope.operationResults.map((result) => [result.requestId, result.request]),
   );
-  let appendedResults = 0;
+  const results: Array<{
+    request: OperationRequest;
+    result: OperationResult;
+  }> = [];
   for (const request of requests) {
     command.executionPermit.assertActive();
     assertAuthorizedOperation(request, command.operationAuthority);
@@ -117,16 +165,17 @@ async function performRequestedObservations<Product>(
       throw new Error("BTCC observation result does not match its request");
     }
     const result = { ...observation, request };
-    await command.store.appendOperationResult({
-      binding: command.binding,
-      request,
-      result,
-    });
-    command.executionPermit.assertActive();
     existingRequests.set(request.requestId, request);
-    appendedResults += 1;
+    results.push({ request, result });
   }
-  return appendedResults;
+  if (results.length === 0) {
+    throw new OperationalInterruptionError(
+      "operation_batch_no_progress",
+      envelope.binding,
+    );
+  }
+  command.executionPermit.assertActive();
+  return results;
 }
 
 function sameRequest(

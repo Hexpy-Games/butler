@@ -3,6 +3,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createProjectWorkLedgerPublicationAdapter } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 
 const temporaryRoots: string[] = [];
 
@@ -211,6 +213,10 @@ describe("BTCC managed executable ingress", () => {
           scenario !== "managed-authority-revision") {
         expect(attemptRows[1]?.previous_attempt_id).toBe(attemptRows[0]?.attempt_id);
         expect(attemptRows[1]?.correction_plan_ref).toBeTruthy();
+        const inactive = db.query<{ count: number }, []>(`
+          SELECT COUNT(*) AS count FROM btcc_tasks WHERE is_active = 0
+        `).get();
+        expect(inactive?.count).toBe(0);
       }
       if (scenario === "managed-governing-revision" || scenario === "managed-authority-revision") {
         expect(attemptRows[1]?.previous_attempt_id).toBeNull();
@@ -255,18 +261,25 @@ describe("BTCC managed executable ingress", () => {
       readonly: true,
     });
     try {
-      const program = db.query<{
-        scope_kind: string;
-        scope_id: string;
+      const projection = db.query<{
+        program_id: string;
+        project_ref: string;
         manifest_revision: number;
       }, []>(`
-        SELECT scope_kind, scope_id, manifest_revision FROM btcc_programs
+        SELECT program_id, project_ref, manifest_revision
+        FROM btcc_project_program_projections
       `).get();
-      expect(program).toEqual({
-        scope_kind: "project",
-        scope_id: "project:sandybot",
-        manifest_revision: 9,
+      expect(projection?.project_ref).toBe("project:sandybot");
+      expect(projection?.manifest_revision).toBe(9);
+      const adapter = createProjectWorkLedgerPublicationAdapter({
+        stagingRoot: join(dataRoot, "runtime", "btcc-project-ledger-publications"),
       });
+      const canonical = await adapter.loadProgram(
+        join(dataRoot, "project-ledger", "projects", "project-workspace"),
+        projection!.program_id,
+      );
+      expect(canonical?.manifestRevision).toBe(9);
+      expect(canonical?.planningState).toBe("reviewed");
     } finally {
       db.close();
     }

@@ -125,6 +125,12 @@ export type TurnObservation = {
   stepId: string;
   turnId: string;
   selected: ModelCell;
+  providerRoundActualIdentities: Array<{
+    provider: string;
+    model: string;
+    reasoningEffort: string;
+    controlsHash: string;
+  }>;
   acceptedProductActualIdentities: Array<{
     provider: string;
     model: string;

@@ -79,6 +79,7 @@ export class ManagedHarnessModel implements SelectedModel {
           acceptanceIntent: "원래 요청을 빠뜨리지 않은 운영 가이드가 완성된다",
           nonGoals: ["프로젝트 파일이나 외부 시스템을 변경하지 않는다"],
           personalizationRefs,
+          governingSpecLogicalIds: envelope.context.projectRef ? ["SPEC-HARNESS"] : [],
           lensAssessments: {
             requested_content: adopted("고객 응대 원칙 조사와 가이드 작성", ["request"]),
             related_memory: adopted("원래 의도를 끝까지 보존한다", ["intended_result"]),
@@ -92,18 +93,7 @@ export class ManagedHarnessModel implements SelectedModel {
       case "contract_review":
         return {
           kind: "goal_contract_review",
-          candidateRef: nestedRef(state, "goalCandidate", "candidate"),
           strategy: "managed",
-          reviewedLensIds: [
-            "requested_content", "related_memory", "connected_current_knowledge",
-            "user_preferences_and_resolution_style", "expert_perspective",
-            "intended_result_and_acceptance",
-          ],
-          reviewedFieldIds: ["request", "intended_result"],
-          reviewedOutcomeIds: [nestedValue(
-            state,
-            "goalCandidate", "candidate", "proposedContract", "requiredOutcome", "outcomeId",
-          )],
           verdict: "accepted",
           ...(this.chooseContinuation
             ? { continuationCandidateId: firstContinuationCandidateId(state) }

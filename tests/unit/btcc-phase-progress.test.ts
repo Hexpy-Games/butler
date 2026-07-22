@@ -29,6 +29,7 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
   };
   let modelCalls = 0;
   let operationCalls = 0;
+  const modelRounds: string[] = [];
 
   try {
     await runPhaseConversation({
@@ -46,11 +47,24 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
         decode: () => ({ kind: "unreachable" }),
       },
       store: {
-        loadAcceptedProduct: async () => null,
-        persistAcceptedProduct: async () => undefined,
-        loadOperationResults: async () => [...results],
-        appendOperationResult: async ({ result }) => {
-          results.push(result);
+        restore: async (current) => ({
+          binding: current,
+          acceptedProduct: null,
+          operationResults: [...results],
+        }),
+        appendOperationRound: async ({ binding: current }) => {
+          modelRounds.push("operation_requests");
+          return nextBinding(current);
+        },
+        appendOperationResults: async ({ binding: current, results: appended }) => {
+          results.push(...appended.map((item) => item.result));
+          return nextBinding(current);
+        },
+        appendPhaseSubmission: async () => {
+          throw new Error("unexpected phase submission");
+        },
+        acceptPhaseProduct: async () => {
+          throw new Error("unexpected phase product");
         },
       },
       model: {
@@ -85,7 +99,10 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
     expect(error).toBeInstanceOf(OperationalInterruptionError);
     expect((error as OperationalInterruptionError).code)
       .toBe("operation_batch_no_progress");
-    expect((error as OperationalInterruptionError).anchor).toEqual(binding);
+    expect((error as OperationalInterruptionError).anchor).toEqual({
+      ...binding,
+      checkpointRevision: 5,
+    });
     expect((error as OperationalInterruptionError).activation).toEqual({
       kind: "runtime_remediation",
     });
@@ -94,6 +111,7 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
   expect(modelCalls).toBe(2);
   expect(operationCalls).toBe(1);
   expect(results).toHaveLength(1);
+  expect(modelRounds).toEqual(["operation_requests", "operation_requests"]);
 });
 
 function selectedModel() {
@@ -104,6 +122,10 @@ function selectedModel() {
     controls: { reasoningEffort: "low" },
     controlsHash: "controls-sha",
   };
+}
+
+function nextBinding(current: PhaseRunBinding): PhaseRunBinding {
+  return { ...current, checkpointRevision: current.checkpointRevision + 1 };
 }
 
 function openingContext() {

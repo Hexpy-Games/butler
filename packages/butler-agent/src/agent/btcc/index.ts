@@ -1,11 +1,24 @@
 export { createBtccTurnRuntime } from "./main.ts";
-export { createProductionSelectedModel } from "./infrastructure/model/index.ts";
-export { createProductionOperationRuntime } from "./infrastructure/operations/index.ts";
+export {
+  assertLogicalLedgerMutationId,
+  assertLogicalLedgerRecordBytes,
+  createLogicalLedgerBundle,
+  createWorkLedger,
+  ledgerAttemptRef,
+  ledgerManifestContentHash,
+  ledgerMutationId,
+  ledgerRecordSha256,
+  logicalLedgerRecords,
+} from "./gateway-api.ts";
+export { contentRef, stableJson } from "./core/index.ts";
 export {
   isBtccOperationalInterruption,
+  LedgerContentionInterruption,
   shouldScheduleAutomaticRecovery,
 } from "./recovery/index.ts";
 export { OperationRejectedError } from "./core/index.ts";
+export { createProductionSelectedModel } from "./infrastructure/model/index.ts";
+export { createProductionOperationRuntime } from "./infrastructure/operations/index.ts";
 export type {
   AdmittedModelSelection,
   BtccRuntimeDependencies,
@@ -17,15 +30,17 @@ export type {
   ReasoningEffort,
 } from "./contracts.ts";
 export type {
-  ModelPhaseState,
+  BtccPersistenceTypes,
+  LogicalLedgerBundle,
+  LogicalLedgerRecord,
+  WorkLedger,
+  WorkLedgerCommit,
+} from "./gateway-api.ts";
+export type { AvailableSpecRevision } from "./planning/contracts.ts";
+export type {
   OperationRequest,
   PhaseEnvelope,
 } from "./core/index.ts";
-export type {
-  AcceptedPhaseGuidance,
-  PhaseGuidanceRepository,
-  PhaseGuidanceScope,
-} from "./guidance/index.ts";
 export type {
   StructuralCapabilityCatalog,
   StructuralCapabilityDefinition,

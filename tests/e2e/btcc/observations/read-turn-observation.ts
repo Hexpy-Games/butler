@@ -54,6 +54,16 @@ export function readTurnObservation(input: {
     const actualIdentities = checkpoints
       .filter((row) => row.actual_identity_json)
       .map((row) => JSON.parse(row.actual_identity_json!) as TurnObservation["acceptedProductActualIdentities"][number]);
+    const providerRoundActualIdentities = db.query<{
+      actual_identity_json: string;
+    }, [string]>(`
+      SELECT model_round.actual_identity_json
+      FROM btcc_phase_model_rounds model_round
+      JOIN btcc_checkpoints checkpoint ON checkpoint.checkpoint_id = model_round.checkpoint_id
+      WHERE checkpoint.turn_id = ?
+      ORDER BY checkpoint.turn_revision, model_round.round_ordinal
+    `).all(input.turnId).map((row) =>
+      JSON.parse(row.actual_identity_json) as TurnObservation["providerRoundActualIdentities"][number]);
     const operations = readOperations(db, input.turnId);
     const checks = runtimeChecks({
       step: input.step,
@@ -61,12 +71,13 @@ export function readTurnObservation(input: {
       route: turn?.route ?? null,
       finalDisposition: turn?.final_disposition ?? null,
       trace,
-      actualIdentities,
+      actualIdentities: providerRoundActualIdentities,
     });
     return {
       stepId: input.step.stepId,
       turnId: input.turnId,
       selected: input.modelCell,
+      providerRoundActualIdentities,
       acceptedProductActualIdentities: actualIdentities,
       route: turn?.route ?? null,
       trace,
@@ -178,7 +189,7 @@ function runtimeChecks(input: {
   route: string | null;
   finalDisposition: string | null;
   trace: TraceObservation[];
-  actualIdentities: TurnObservation["acceptedProductActualIdentities"];
+  actualIdentities: TurnObservation["providerRoundActualIdentities"];
 }) {
   const requiredTrace = traceContains(input.trace, input.step.requiredTrace);
   const forbidden = input.trace.filter((actual) => input.step.forbiddenStates.includes(actual.state));
@@ -196,7 +207,7 @@ function runtimeChecks(input: {
     },
     { check: "required_trace", passed: requiredTrace },
     { check: "forbidden_states_absent", passed: forbidden.length === 0, detail: forbidden.map((row) => row.state).join(",") },
-    { check: "accepted_product_actual_identity", passed: exactActual, detail: `${input.actualIdentities.length} accepted products` },
+    { check: "provider_round_actual_identity", passed: exactActual, detail: `${input.actualIdentities.length} provider rounds` },
   ];
 }
 
@@ -213,7 +224,6 @@ function proofGaps(step: LiveTurnStep): string[] {
   return [
     "generated_diagnostic_fixtures_are_not_canonical_fixture_snapshots",
     "app_ui_ingress_and_projection_not_observed",
-    "every_provider_call_identity_not_persisted_by_production_composition",
     "goal_field_semantic_assertions_have_no_canonical_evaluator",
     ...(step.expectedEffects.length ? ["typed_effect_receipt_assertions_have_no_test_projection"] : []),
     ...(step.expectedArtifacts.length ? ["manifest_artifact_assertions_have_no_canonical_resolver"] : []),
