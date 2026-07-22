@@ -276,7 +276,7 @@ const firstRunSetupBridge = createFirstRunSetupBridge({
   gatewayProfile: "electron",
   readSettings: readSetupSettings,
   readRuntimeDiagnostics: readFirstRunRuntimeDiagnostics,
-  serviceControl: agentServiceControl,
+  serviceControl: usesAppForegroundLifecycle ? null : agentServiceControl,
 });
 app.setName(appDisplayName);
 if (isMenuBarHelperProcess || isQuitMenuBarHelperSignalProcess) {

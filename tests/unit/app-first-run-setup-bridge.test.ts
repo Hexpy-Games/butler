@@ -104,6 +104,9 @@ test("Electron first-run setup bridge exposes status start cancel and diagnostic
   expect(main).toContain("OAuth callback state mismatch.");
   expect(main).toContain("waitForOAuthCompletion");
   expect(main).toContain("createFirstRunSetupBridge");
+  expect(main).toContain(
+    "serviceControl: usesAppForegroundLifecycle ? null : agentServiceControl",
+  );
   expect(main).toContain("readRuntimeDiagnostics");
   expect(main).toContain("readLatestAppManagedRuntimeFailure");
   expect(setupBridge).toContain("createFirstRunSetupBridge");
