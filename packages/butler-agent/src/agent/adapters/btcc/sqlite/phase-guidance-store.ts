@@ -1,10 +1,10 @@
 import type { Database } from "bun:sqlite";
-import type { ModelPhaseState } from "../../../btcc/core/index.ts";
 import type {
   AcceptedPhaseGuidance,
+  ModelPhaseState,
   PhaseGuidanceRepository,
   PhaseGuidanceScope,
-} from "../../../btcc/guidance/index.ts";
+} from "../../../btcc/index.ts";
 import { digest, stableJson } from "./identity.ts";
 
 type GuidanceRow = {

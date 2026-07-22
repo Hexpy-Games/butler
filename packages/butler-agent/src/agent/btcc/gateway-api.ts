@@ -18,7 +18,7 @@ export type {
   WorkLedgerCommit,
   WorkLedgerStorage,
 } from "./work-ledger/index.ts";
-export type { LearningSourceScheduler } from "./delivery/index.ts";
+export type { RetrospectiveScheduler } from "./delivery/index.ts";
 export type {
   BtccRuntimeDependencies,
   BtccTurnCommand,

@@ -29,7 +29,7 @@ export function createBtccComposition(input: {
     operations: input.operations,
     artifacts: input.artifacts,
     messages: stores.messages,
-    learning: stores.learning,
+    retrospective: stores.retrospective,
   });
 }
 
@@ -63,7 +63,7 @@ export function createProductionBtccComposition(input: {
     operations: operationRuntime.operations,
     artifacts: operationRuntime.artifacts,
     messages: stores.messages,
-    learning: stores.learning,
+    retrospective: stores.retrospective,
     progress,
   });
   return {

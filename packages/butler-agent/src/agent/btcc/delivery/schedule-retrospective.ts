@@ -1,12 +1,12 @@
 import type { TurnRecord } from "../turn/index.ts";
 
-export interface LearningSourceScheduler {
+export interface RetrospectiveScheduler {
   schedule(turn: TurnRecord): void;
 }
 
-export function scheduleLearningSource(input: {
+export function scheduleRetrospective(input: {
   turn: TurnRecord;
-  scheduler: LearningSourceScheduler;
+  scheduler: RetrospectiveScheduler;
 }): void {
   if (input.turn.semanticState !== "delivered" || !input.turn.finalPayload) return;
   input.scheduler.schedule(input.turn);

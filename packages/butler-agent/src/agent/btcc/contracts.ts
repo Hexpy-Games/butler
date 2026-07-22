@@ -5,7 +5,7 @@ import type {
 } from "./core/index.ts";
 import type {
   CanonicalMessageStore,
-  LearningSourceScheduler,
+  RetrospectiveScheduler,
 } from "./delivery/index.ts";
 import type {
   TurnAdmissionRepository,
@@ -93,6 +93,6 @@ export type BtccRuntimeDependencies = {
   operations: OperationExecutor;
   artifacts: ArtifactWorkspaceRuntime;
   messages: CanonicalMessageStore;
-  learning: LearningSourceScheduler;
+  retrospective: RetrospectiveScheduler;
   progress?: BtccTurnProgressObserver;
 };
