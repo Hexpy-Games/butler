@@ -12,9 +12,16 @@ export {
 } from "./gateway-api.ts";
 export { contentRef, stableJson } from "./core/index.ts";
 export {
+  createOperationalRecoveryBoundary,
   isBtccOperationalInterruption,
   LedgerContentionInterruption,
+  OperationalInterruptionError,
   shouldScheduleAutomaticRecovery,
+} from "./recovery/index.ts";
+export type {
+  OperationalCheckpointAnchor,
+  OperationalRecoveryReceipt,
+  OperationalRecoveryStore,
 } from "./recovery/index.ts";
 export { OperationRejectedError } from "./core/index.ts";
 export { createProductionSelectedModel } from "./infrastructure/model/index.ts";

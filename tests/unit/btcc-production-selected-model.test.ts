@@ -294,12 +294,26 @@ describe("production BTCC selected model", () => {
     expect(calls).toBe(2);
   });
 
-  test("maps abort and network failures to operational interruptions with one call", async () => {
+  test("maps abort, transport, 429, and 5xx to operational recovery", async () => {
     const failures = [abortError(), new ModelProviderRequestError({
       code: "provider_transport_interruption",
       message: "network unavailable",
       provider: "openai",
       api: "responses",
+      retryable: true,
+    }), new ModelProviderRequestError({
+      code: "provider_rate_limited",
+      message: "rate limited",
+      provider: "openai",
+      api: "responses",
+      statusCode: 429,
+      retryable: true,
+    }), new ModelProviderRequestError({
+      code: "provider_api_error",
+      message: "service unavailable",
+      provider: "zai",
+      api: "chat_completions",
+      statusCode: 502,
       retryable: true,
     })];
     let calls = 0;
@@ -323,7 +337,17 @@ describe("production BTCC selected model", () => {
       code: "provider_transport_interruption",
       activation: { kind: "automatic_provider_recovery" },
     });
-    expect(calls).toBe(2);
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_rate_limited",
+      activation: { kind: "automatic_provider_recovery" },
+    });
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_api_error",
+      activation: { kind: "automatic_provider_recovery" },
+    });
+    expect(calls).toBe(4);
 
     const controller = new AbortController();
     controller.abort();
@@ -332,7 +356,7 @@ describe("production BTCC selected model", () => {
       code: "provider_aborted",
       activation: { kind: "cancelled" },
     });
-    expect(calls).toBe(2);
+    expect(calls).toBe(4);
   });
 
   test("holds provider action and protocol defects without automatic replay", async () => {

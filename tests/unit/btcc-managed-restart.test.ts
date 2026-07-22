@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("BTCC managed restart", () => {
-  test("resumes the selected Attempt without duplicating Ledger mutation", async () => {
+  test("re-enters the exact interrupted Attempt without a process restart", async () => {
     const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-ledger-restart-"));
     temporaryRoots.push(dataRoot);
     const harness = resolve(
@@ -33,58 +33,86 @@ describe("BTCC managed restart", () => {
       "--effort", "medium",
       "--scenario", "managed-restart-once",
     ];
+    const run = Bun.spawn(args, {
+      cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
+    });
+    const [exit, error, output] = await Promise.all([
+      run.exited,
+      new Response(run.stderr).text(),
+      new Response(run.stdout).text(),
+    ]);
+    expect(error).toBe("");
+    expect(exit).toBe(0);
+    expect(output).toContain('"kind":"delivered"');
+
+    assertResumedTurn(dataRoot);
+  });
+
+  test("adopts a durable interruption after the owning process exits", async () => {
+    const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-process-restart-"));
+    temporaryRoots.push(dataRoot);
+    const args = harnessArgs(dataRoot, "turn-process-restart");
     const first = Bun.spawn(args, {
       cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
     });
-    const [firstExit, firstError, firstOutput] = await Promise.all([
-      first.exited,
-      new Response(first.stderr).text(),
-      new Response(first.stdout).text(),
-    ]);
-    expect(firstExit).toBe(1);
-    expect(firstError).toContain("BTCC operational interruption: simulated_provider_unavailable");
-    expect(firstOutput).toBe("");
-
-    assertInterruptedTurn(dataRoot);
+    await waitForInterruption(dataRoot);
+    first.kill();
+    await first.exited;
 
     const resumed = Bun.spawn(args, {
       cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
     });
-    const [resumedExit, resumedOutput, resumedError] = await Promise.all([
+    const [exit, output, error] = await Promise.all([
       resumed.exited,
       new Response(resumed.stdout).text(),
       new Response(resumed.stderr).text(),
     ]);
-    expect(resumedError).toBe("");
-    expect(resumedExit).toBe(0);
-    expect(resumedOutput).toContain('"kind":"delivered"');
-
+    expect(error).toBe("");
+    expect(exit).toBe(0);
+    expect(output).toContain('"kind":"delivered"');
     assertResumedTurn(dataRoot);
   });
 });
 
-function assertInterruptedTurn(dataRoot: string): void {
-  const db = new Database(join(dataRoot, "runtime", "btcc-successor.sqlite"), {
-    readonly: true,
-  });
-  try {
-    const turn = db.query<{
-      semantic_state: string;
-      active_checkpoint_id: string;
-    }, []>("SELECT semantic_state, active_checkpoint_id FROM btcc_turns").get();
-    const claims = db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_state_claims WHERE status = 'active'
-    `).get();
-    const waiting = db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_turns WHERE semantic_state = 'waiting_runtime'
-    `).get();
-    expect(turn?.semantic_state).toBe("task_execution");
-    expect(turn?.active_checkpoint_id).toBeTruthy();
-    expect(claims?.count).toBe(1);
-    expect(waiting?.count).toBe(0);
-  } finally {
-    db.close();
+function harnessArgs(dataRoot: string, turnId: string): string[] {
+  return [
+    process.execPath,
+    "run",
+    resolve(
+      import.meta.dir,
+      "../../packages/butler-agent/src/interfaces/btcc-harness/run-btcc-harness.ts",
+    ),
+    "--data", dataRoot,
+    "--turn", turnId,
+    "--session", `session-${turnId}`,
+    "--message", "운영 가이드를 조사해서 작성해줘.",
+    "--provider", "harness",
+    "--model", "managed-v1",
+    "--effort", "medium",
+    "--scenario", "managed-restart-once",
+  ];
+}
+
+async function waitForInterruption(dataRoot: string): Promise<void> {
+  const dbPath = join(dataRoot, "runtime", "btcc-successor.sqlite");
+  for (let index = 0; index < 100; index += 1) {
+    if (existsSync(dbPath)) {
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        const record = db.query<{ count: number }, []>(`
+          SELECT COUNT(*) AS count FROM btcc_operational_interruptions
+          WHERE status = 'interrupted'
+        `).get();
+        if ((record?.count ?? 0) > 0) return;
+      } catch {
+        // Schema creation may still be in progress.
+      } finally {
+        db.close();
+      }
+    }
+    await Bun.sleep(10);
   }
+  throw new Error("Timed out waiting for durable BTCC interruption ownership");
 }
 
 function assertResumedTurn(dataRoot: string): void {
@@ -98,8 +126,16 @@ function assertResumedTurn(dataRoot: string): void {
     const mutations = db.query<{ count: number }, []>(`
       SELECT COUNT(*) AS count FROM btcc_ledger_mutations
     `).get();
+    const recoveries = db.query<{ status: string; activation_count: number }, []>(`
+      SELECT status, activation_count FROM btcc_operational_interruptions
+    `).all();
+    const waiting = db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM btcc_turns WHERE semantic_state = 'waiting_runtime'
+    `).get();
     expect(attempts?.count).toBe(2);
     expect(mutations?.count).toBe(9);
+    expect(recoveries).toEqual([{ status: "resolved", activation_count: 1 }]);
+    expect(waiting?.count).toBe(0);
   } finally {
     db.close();
   }

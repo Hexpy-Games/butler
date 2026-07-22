@@ -20,8 +20,9 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-stop-"));
   try {
     const model = new BlockingModel();
+    const dbPath = join(dataRoot, "btcc.sqlite");
     const runtime = createBtccComposition({
-      dbPath: join(dataRoot, "btcc.sqlite"),
+      dbPath,
       ownerId: "btcc-stop-test",
       model,
       operations: neverOperations(),
@@ -44,7 +45,7 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
     expect(model.signalWasAborted).toBe(true);
     expect(model.callCount).toBe(1);
 
-    const db = new Database(join(dataRoot, "btcc.sqlite"), { readonly: true });
+    const db = new Database(dbPath, { readonly: true });
     try {
       const turn = db.query<{
         semantic_state: string;

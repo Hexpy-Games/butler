@@ -115,6 +115,27 @@ CREATE TABLE IF NOT EXISTS btcc_state_claims (
   UNIQUE(turn_id, turn_revision, semantic_state)
 );
 
+CREATE TABLE IF NOT EXISTS btcc_operational_interruptions (
+  interruption_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  turn_revision INTEGER NOT NULL,
+  semantic_state TEXT NOT NULL,
+  checkpoint_id TEXT NOT NULL,
+  checkpoint_revision INTEGER NOT NULL,
+  claim_id TEXT NOT NULL,
+  execution_fence INTEGER NOT NULL,
+  code TEXT NOT NULL,
+  activation_kind TEXT NOT NULL,
+  activation_count INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  interrupted_at TEXT NOT NULL,
+  resolved_at TEXT,
+  UNIQUE(claim_id, code, activation_kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_operational_interruption_turn
+ON btcc_operational_interruptions(turn_id, status);
+
 CREATE TABLE IF NOT EXISTS btcc_stop_requests (
   stop_request_id TEXT PRIMARY KEY,
   turn_id TEXT NOT NULL UNIQUE,

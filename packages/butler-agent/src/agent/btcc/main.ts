@@ -13,6 +13,7 @@ import { reporting } from "./reporting/index.ts";
 import {
   createTurnExecutionSupervisor,
   LedgerContentionInterruption,
+  isBtccOperationalInterruption,
   OperationalInterruptionError,
   type OperationalCheckpointAnchor,
   type ExecutionPermit,
@@ -66,6 +67,11 @@ async function runBtccTurn(
     });
     try {
       const claim = await dependencies.turns.acquireStateExecutionClaim(turn);
+      await recoverPersistedInterruption(
+        dependencies,
+        currentCheckpointBinding(claim),
+        permit,
+      );
       const event = await advanceBtccAlgorithm(turn, claim, dependencies, permit);
       permit.assertActive();
       const decision = decideTransition(turn, event);
@@ -77,6 +83,7 @@ async function runBtccTurn(
       }
       const transition = decision.transition;
       await dependencies.turns.commitTransition({ turn, claim, transition });
+      await resolveOperationalInterruption(dependencies, currentCheckpointBinding(claim));
       permit.assertActive();
     } catch (error) {
       if (error instanceof LedgerContentionInterruption) {
@@ -95,6 +102,29 @@ async function runBtccTurn(
         turn = reloaded;
         continue;
       }
+      if (isBtccOperationalInterruption(error) && dependencies.operationalRecovery) {
+        await publishOperationalNotice(dependencies.progress, {
+          turnId: turn.turnId,
+          status: "recovering",
+          code: error.code,
+          activationKind: error.activation.kind,
+        });
+        try {
+          await dependencies.operationalRecovery.awaitReentry(error, permit.signal);
+        } catch (recoveryError) {
+          const stopped = await dependencies.turns.findTurn(turn.turnId);
+          if (stopped && isTerminal(stopped)) {
+            turn = stopped;
+            continue;
+          }
+          throw recoveryError;
+        }
+        const reloaded = await dependencies.turns.findTurn(turn.turnId);
+        if (!reloaded) throw new Error("Interrupted BTCC Turn disappeared", { cause: error });
+        assertSameOperationalCheckpoint(reloaded, error.anchor);
+        turn = reloaded;
+        continue;
+      }
       const observed = await dependencies.turns.findTurn(turn.turnId);
       if (observed && isTerminal(observed)) {
         turn = observed;
@@ -109,6 +139,75 @@ async function runBtccTurn(
   }
   scheduleRetrospective({ turn, scheduler: dependencies.retrospective });
   return projectTerminalOutcome(turn);
+}
+
+async function recoverPersistedInterruption(
+  dependencies: BtccRuntimeDependencies,
+  anchor: OperationalCheckpointAnchor,
+  permit: ExecutionPermit,
+): Promise<void> {
+  const interruption = await dependencies.operationalRecovery?.pending(anchor);
+  if (!interruption) return;
+  await publishOperationalNotice(dependencies.progress, {
+    turnId: anchor.turnId,
+    status: "recovering",
+    code: interruption.code,
+    activationKind: interruption.activation.kind,
+  });
+  await dependencies.operationalRecovery?.awaitReentry(interruption, permit.signal);
+  permit.assertActive();
+}
+
+async function publishOperationalNotice(
+  observer: BtccTurnProgressObserver | undefined,
+  update: {
+    turnId: string;
+    status: "recovering" | "cleared";
+    code?: string;
+    activationKind?: import("./recovery/index.ts").OperationalActivation["kind"];
+  },
+): Promise<void> {
+  if (!observer?.operationalNoticeChanged) return;
+  try {
+    await observer.operationalNoticeChanged(update);
+  } catch {
+    // Projection cannot change durable recovery ownership.
+  }
+}
+
+async function resolveOperationalInterruption(
+  dependencies: BtccRuntimeDependencies,
+  anchor: OperationalCheckpointAnchor,
+): Promise<void> {
+  if (!dependencies.operationalRecovery) return;
+  try {
+    const resolved = await dependencies.operationalRecovery.resolve(anchor);
+    if (resolved) {
+      await publishOperationalNotice(dependencies.progress, {
+        turnId: anchor.turnId,
+        status: "cleared",
+      });
+    }
+  } catch {
+    // A consumed claim prevents stale interruption records from being reactivated.
+  }
+}
+
+function assertSameOperationalCheckpoint(
+  turn: TurnRecord,
+  anchor: OperationalCheckpointAnchor,
+): void {
+  const checkpoint = turn.checkpoint;
+  if (
+    turn.turnId !== anchor.turnId ||
+    turn.revision !== anchor.turnRevision ||
+    turn.semanticState !== anchor.semanticState ||
+    turn.executionFence !== anchor.executionFence ||
+    checkpoint?.checkpointId !== anchor.checkpointId ||
+    checkpoint.checkpointRevision !== anchor.checkpointRevision
+  ) {
+    throw new Error("BTCC operational recovery lost its exact checkpoint binding");
+  }
 }
 
 async function publishProgress(

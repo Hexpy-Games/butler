@@ -27,7 +27,31 @@ export function projectTurnProgress(
         },
       });
     },
+    async operationalNoticeChanged(update) {
+      if (update.status === "cleared") return;
+      await publish({
+        kind: "assistant.public_note",
+        payload: {
+          note: operationalProgressLabel(update.activationKind),
+          operational: true,
+          recoveryStatus: update.status,
+        },
+      });
+    },
   };
+}
+
+function operationalProgressLabel(
+  activation: "automatic_provider_recovery" | "provider_action_required" |
+    "runtime_remediation" | "cancelled" | undefined,
+): string {
+  if (activation === "automatic_provider_recovery") {
+    return "모델 연결을 복구하고 있습니다. 현재 작업은 안전하게 보존되어 있으며 중지할 수 있습니다";
+  }
+  if (activation === "provider_action_required") {
+    return "선택한 모델 연결 설정을 확인하면 저장된 지점부터 이어갈 수 있습니다";
+  }
+  return "현재 작업은 안전하게 보존되어 있으며 중지할 수 있습니다";
 }
 
 function progressLabel(state: string): string {
