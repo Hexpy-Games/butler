@@ -1,6 +1,6 @@
-import { activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { providerEmptyResponseError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
@@ -12,6 +12,7 @@ import {
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import { toolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
+import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
 export async function createGeminiContent(
@@ -19,11 +20,23 @@ export async function createGeminiContent(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
 ): Promise<Record<string, any>> {
-  return await withModelApiRetry(
-    async () => await createGeminiContentOnce(config, body, signal, budgetContext),
+  return await runGuardedProviderRound({
     signal,
-  );
+    policy: providerRoundPolicy,
+    operation: async (guardedSignal) => await withModelApiRetry(
+      async () => await createGeminiContentOnce(config, body, guardedSignal, budgetContext),
+      guardedSignal,
+    ),
+    timeoutError: (timeoutKind) => providerRoundTimeoutError({
+      provider: "google",
+      api: "generate_content",
+      timeoutKind,
+      model: config.modelId,
+    }),
+    externalAbortError: abortError,
+  });
 }
 
 

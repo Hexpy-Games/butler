@@ -1,12 +1,13 @@
 import type { FunctionToolDefinition, PromptUsageAttribution } from "../runtime-contracts.ts";
 import type { LocalModelConfig } from "./models.ts";
-import { ModelProviderRequestError, providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
-import { withModelApiRetry } from "../shared/runtime-support.ts";
+import { ModelProviderRequestError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
+import { abortError, withModelApiRetry } from "../shared/runtime-support.ts";
 import { localChatUrl } from "./protocol.ts";
 import {
   admitSerializedProviderRequest,
   ModelRequestAdmissionError,
 } from "../shared/request-context-admission.ts";
+import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
 
@@ -15,11 +16,23 @@ export async function createLocalChatCompletion(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
+  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
 ): Promise<Record<string, any>> {
-  return await withModelApiRetry(
-    async () => await createLocalChatCompletionOnce(config, body, signal, budgetContext),
+  return await runGuardedProviderRound({
     signal,
-  );
+    policy: providerRoundPolicy,
+    operation: async (guardedSignal) => await withModelApiRetry(
+      async () => await createLocalChatCompletionOnce(config, body, guardedSignal, budgetContext),
+      guardedSignal,
+    ),
+    timeoutError: (timeoutKind) => providerRoundTimeoutError({
+      provider: "local",
+      api: "chat_completions",
+      timeoutKind,
+      model: config.model_id,
+    }),
+    externalAbortError: abortError,
+  });
 }
 
 

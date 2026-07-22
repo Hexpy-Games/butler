@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { createOpenAIResponse } from "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { createHostedChatCompletion } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-client.ts";
+import type { HostedRuntimeConfig } from "../../packages/butler-agent/src/integrations/providers/shared/model-routing.ts";
 import {
   DEFAULT_PROVIDER_ROUND_IDLE_TIMEOUT_MS,
   DEFAULT_PROVIDER_ROUND_TIMEOUT_MS,
@@ -50,6 +52,38 @@ test("a Codex stream whose body ignores abort still fails on the idle provider-r
   });
   expect(JSON.stringify(diagnostic)).not.toContain("test");
   expect(JSON.stringify(diagnostic)).not.toContain("account");
+  expect(fetchCalls).toBe(1);
+});
+
+test("a hosted chat request that never returns enters provider recovery through the same deadline", async () => {
+  let fetchCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    return await new Promise<Response>(() => {});
+  }) as unknown as typeof fetch;
+  const config: HostedRuntimeConfig = {
+    providerId: "zai",
+    modelId: "glm-5.2",
+    modelRef: "zai/glm-5.2",
+    authType: "api_key",
+    apiKey: "test",
+  };
+
+  const error = await captureFailure(() => createHostedChatCompletion(
+    config,
+    { messages: [{ role: "user", content: "test" }] },
+    undefined,
+    { roundIndex: 0 },
+    3,
+    { totalTimeoutMs: 200, idleTimeoutMs: 20 },
+  ));
+
+  expect(error).toBeInstanceOf(ModelProviderRequestError);
+  expect((error as ModelProviderRequestError).diagnostic()).toMatchObject({
+    code: "provider_round_timeout",
+    retryable: false,
+    timeoutKind: "idle",
+  });
   expect(fetchCalls).toBe(1);
 });
 
