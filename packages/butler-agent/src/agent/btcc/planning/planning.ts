@@ -106,6 +106,8 @@ async function authorInitialPlan(command: {
       ? {
           previousCandidateRef: previous.candidate.ref,
           findingSetRef: previous.review.findingSetRef,
+          previousPlanCandidate: previous.candidate,
+          planningReviewFindings: previous.review.findings,
         }
       : {}),
   }));
@@ -166,6 +168,8 @@ async function authorFeedbackPlan(command: {
         ? {
             previousCandidateRef: previous.candidate.ref,
             findingSetRef: previous.review.findingSetRef,
+            previousFeedbackPlan: previous.candidate,
+            feedbackPlanningReviewFindings: previous.review.findings,
           }
         : {}),
     },

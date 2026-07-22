@@ -24,6 +24,7 @@ const CONTRACT: PhaseContract = {
     "bind_normative_goal_sets", "declare_work_task_dependencies",
     "declare_verification_integration", "declare_effects_risks_assumptions",
     "author_artifact_lifecycle", "candidate_revision_lineage",
+    "apply_exact_review_findings",
     "author_managed_deferral",
   ],
   prohibitions: [

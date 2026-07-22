@@ -29,6 +29,7 @@ const CONTRACT: PhaseContract = {
     "author_scoped_correction", "classify_correction_kind",
     "author_complete_impact_map", "apply_authoring_contracts",
     "author_artifact_lifecycle", "candidate_revision_lineage",
+    "apply_exact_review_findings",
     "author_managed_deferral",
   ],
   prohibitions: [
