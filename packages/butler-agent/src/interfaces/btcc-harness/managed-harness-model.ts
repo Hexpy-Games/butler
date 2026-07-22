@@ -240,8 +240,6 @@ export class ManagedHarnessModel implements SelectedModel {
       case "feedback_planning_review":
         this.feedbackPlanningReviewCount += 1;
         return submitFeedbackPlanningReview(
-          state,
-          this.correctionKind,
           this.reviseFirstCorrection,
           this.feedbackPlanningReviewCount,
         );

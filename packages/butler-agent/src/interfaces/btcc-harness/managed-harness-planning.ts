@@ -175,36 +175,12 @@ export function submitFeedbackPlan(
 }
 
 export function submitFeedbackPlanningReview(
-  state: Record<string, unknown>,
-  correctionKind: HarnessCorrectionKind,
   reviseFirst: boolean,
   reviewCount: number,
 ) {
   const revisionRequired = reviseFirst && reviewCount === 1;
   return {
     kind: "feedback_planning_review",
-    candidateRef: nestedRef(state, "feedbackPlan", "candidate"),
-    reviewedCorrectionPlanRef: nestedValue(
-      state, "feedbackPlan", "candidate", "correctionPlan", "ref",
-    ),
-    correctionKind,
-    ...(correctionKind !== "implementation_repair"
-      ? {
-          reviewedNextPlanCandidateRef: nestedValue(
-            state, "feedbackPlan", "candidate", "nextPlanCandidate", "ref",
-          ),
-          reviewedImpactMap: nestedValue(
-            state, "feedbackPlan", "candidate", "impactMap",
-          ),
-        }
-      : {}),
-    ...(correctionKind === "authority_scope_revision"
-      ? {
-          reviewedAuthorityRef: nestedValue(
-            state, "feedbackPlan", "candidate", "proposedAuthority", "ref",
-          ),
-        }
-      : {}),
     verdict: revisionRequired ? "revision_required" : "accepted",
     findings: revisionRequired
       ? ["보완 행동을 실패한 Task 범위로 더 명확히 제한해야 한다"]
@@ -293,14 +269,6 @@ function emptyPlanningConsiderations() {
 function nestedRecordRefs(state: Record<string, unknown>, key: string): unknown[] {
   return asArray(nestedValue(state, "planCandidate", "candidate", key))
     .map((record) => asRecord(record).ref);
-}
-
-function nestedRef(
-  state: Record<string, unknown>,
-  productKey: string,
-  recordKey: string,
-): unknown {
-  return asRecord(asRecord(state[productKey])[recordKey]).ref;
 }
 
 function nestedValue(state: Record<string, unknown>, ...path: string[]): unknown {

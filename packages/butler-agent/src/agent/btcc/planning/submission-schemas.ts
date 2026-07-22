@@ -177,8 +177,6 @@ export function feedbackPlanSubmissionSchema(logicalIds: string[]): SubmissionSc
 
 const feedbackReviewIdentity = {
   kind: literalSchema("feedback_planning_review"),
-  candidateRef: contentRefSchema(),
-  reviewedCorrectionPlanRef: contentRefSchema(),
 };
 
 const acceptedFeedbackReview = {
@@ -201,18 +199,5 @@ function feedbackReviewVariants(fields: Record<string, SubmissionSchema>) {
 }
 
 export const feedbackPlanReviewSubmissionSchema = variantsSchema(
-  ...feedbackReviewVariants({
-    correctionKind: literalSchema("implementation_repair"),
-  }),
-  ...feedbackReviewVariants({
-    correctionKind: literalSchema("governing_revision"),
-    reviewedNextPlanCandidateRef: contentRefSchema(),
-    reviewedImpactMap: arraySchema(impact, { minItems: 1 }),
-  }),
-  ...feedbackReviewVariants({
-    correctionKind: literalSchema("authority_scope_revision"),
-    reviewedNextPlanCandidateRef: contentRefSchema(),
-    reviewedImpactMap: arraySchema(impact, { minItems: 1 }),
-    reviewedAuthorityRef: contentRefSchema(),
-  }),
+  ...feedbackReviewVariants({}),
 );
