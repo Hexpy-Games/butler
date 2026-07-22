@@ -210,6 +210,7 @@ export function createBundledAgentSupervisor({
       localAuth,
     });
     try {
+      gateway.publishLaunchPointer?.();
       child = spawnProcess(gateway.command, gateway.args, {
         ...(gateway.cwd ? { cwd: gateway.cwd } : {}),
         env,

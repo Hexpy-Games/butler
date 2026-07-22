@@ -459,6 +459,7 @@ export function prepareAppManagedAgentRuntime({
       pointerPath: currentPointerPath,
       activated: false,
       previousRuntimePath: existingPointer.previous?.runtime_home ?? null,
+      publishLaunchPointer() {},
       commitActivation() {},
       rollbackActivation() {},
     };
@@ -541,6 +542,7 @@ export function prepareAppManagedAgentRuntime({
     renameWithRetrySync(stagingHome, runtimeHome, { platform });
     notifyProgress(onProgress, "runtime_prepared");
     let rolledBack = false;
+    let launchPointerPublished = false;
     let activationCommitted = false;
     const activation = {
       runtimeHome,
@@ -549,6 +551,23 @@ export function prepareAppManagedAgentRuntime({
       pointerPath: currentPointerPath,
       activated: false,
       previousRuntimePath: previousSelectablePointer?.runtime_home ?? null,
+      publishLaunchPointer() {
+        if (rolledBack || launchPointerPublished) return;
+        atomicWriteJson(currentPointerPath, {
+          schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
+          product: "butler-app",
+          bundled_agent_product: "butler-agent",
+          bundled_agent_version: artifact.version,
+          gateway_profile: "electron",
+          version: artifact.version,
+          runtime_home: runtimeHomeLabel,
+          payload_path: payloadLabel,
+          selected_at: null,
+          previous: previousSelectablePointer,
+          raw_text_included: false,
+        });
+        launchPointerPublished = true;
+      },
       commitActivation() {
         if (rolledBack) return;
         const selectedAt = now().toISOString();
@@ -602,7 +621,7 @@ export function prepareAppManagedAgentRuntime({
         rolledBack = true;
         let restoreError = null;
         try {
-          if (activationCommitted) {
+          if (launchPointerPublished || activationCommitted) {
             if (previousSelectablePointer) {
               atomicWriteJson(currentPointerPath, previousSelectablePointer);
             } else {
@@ -713,6 +732,7 @@ export function resolveAppManagedGatewayCommand({
       BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
     },
     commitActivation: activation.commitActivation,
+    publishLaunchPointer: activation.publishLaunchPointer,
     rollbackActivation: activation.rollbackActivation,
   };
 }
@@ -783,6 +803,7 @@ export function resolveAppManagedForegroundCommand({
         BUTLER_APP_FOREGROUND_LEASE: "1",
       },
       commitActivation: activation.commitActivation,
+      publishLaunchPointer: activation.publishLaunchPointer,
       rollbackActivation: activation.rollbackActivation,
     };
   }
@@ -822,6 +843,7 @@ export function resolveAppManagedForegroundCommand({
       BUTLER_APP_FOREGROUND_LEASE: "1",
     },
     commitActivation: activation.commitActivation,
+    publishLaunchPointer: activation.publishLaunchPointer,
     rollbackActivation: activation.rollbackActivation,
   };
 }
