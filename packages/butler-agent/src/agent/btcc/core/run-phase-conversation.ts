@@ -142,6 +142,17 @@ function decodePhaseSubmission<Product>(
   try {
     return command.codec.decode(submission, envelope);
   } catch (error) {
+    if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
+      console.error(JSON.stringify({
+        event: "btcc_phase_submission_rejected",
+        phase: envelope.phase,
+        checkpointId: envelope.binding.checkpointId,
+        cause: {
+          name: error instanceof Error ? error.name : "UnknownError",
+          message: error instanceof Error ? error.message : String(error),
+        },
+      }));
+    }
     throw new OperationalInterruptionError(
       "provider_phase_submission_invalid",
       envelope.binding,
