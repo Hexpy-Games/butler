@@ -20,12 +20,7 @@ export function createProductionSelectedModel(
     async runRound(envelope, signal) {
       if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
       try {
-        const rendered = await renderPhasePrompt(
-          envelope,
-          dependencies.context,
-          dependencies.capabilities,
-          dependencies.guidance,
-        );
+        const rendered = await renderProviderPrompt(envelope, dependencies);
         if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
         const result = await promptRunner.run({
           modelSelection: envelope.modelSelection,
@@ -34,7 +29,9 @@ export function createProductionSelectedModel(
           signal,
         });
         if (!sameIdentity(envelope.modelSelection, result.actualIdentity)) {
-          throw new Error("BTCC provider returned a different selected-model identity");
+          return interruption("selected_model_identity_mismatch", {
+            kind: "runtime_remediation",
+          });
         }
         try {
           return decodeCarrier(
@@ -70,8 +67,13 @@ export function createProductionSelectedModel(
         if (error instanceof ModelProviderRequestError) {
           return interruption(error.code, activationForProviderFailure(error));
         }
-        return interruption("provider_protocol_interruption", {
-          kind: "runtime_remediation",
+        if (error instanceof PhasePromptRenderError) {
+          return interruption("phase_prompt_render_interruption", {
+            kind: "runtime_remediation",
+          });
+        }
+        return interruption("provider_adapter_interruption", {
+          kind: "automatic_provider_recovery",
         });
       }
     },
@@ -112,6 +114,10 @@ class ProviderCarrierProtocolError extends Error {
   override readonly name = "ProviderCarrierProtocolError";
 }
 
+class PhasePromptRenderError extends Error {
+  override readonly name = "PhasePromptRenderError";
+}
+
 function bindOperationAuthority(
   value: Record<string, unknown>,
   authority: OperationAuthority,
@@ -137,7 +143,25 @@ function bindOperationAuthority(
       finalSnapshotRef: authority.mutation.finalSnapshotRef,
     } as OperationRequest;
   }
-  throw new Error("BTCC provider requested an operation without matching runtime authority");
+  throw new ProviderCarrierProtocolError(
+    "BTCC provider requested an operation without matching runtime authority",
+  );
+}
+
+async function renderProviderPrompt(
+  envelope: Parameters<SelectedModel["runRound"]>[0],
+  dependencies: ProductionSelectedModelDependencies,
+) {
+  try {
+    return await renderPhasePrompt(
+      envelope,
+      dependencies.context,
+      dependencies.capabilities,
+      dependencies.guidance,
+    );
+  } catch (error) {
+    throw new PhasePromptRenderError("BTCC phase prompt rendering failed", { cause: error });
+  }
 }
 
 function sameIdentity(

@@ -288,7 +288,7 @@ describe("production BTCC selected model", () => {
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
-      code: "provider_protocol_interruption",
+      code: "selected_model_identity_mismatch",
       activation: { kind: "runtime_remediation" },
     });
     expect(calls).toBe(2);
