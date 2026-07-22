@@ -50,6 +50,7 @@ export async function performWorkspaceAction(input: {
   assertActive(input.signal);
   const scopeId = operationRoundScope(input.envelope.binding);
   const workspace = requireWorkspace(input.store, input.request);
+  requireWorkspaceOperationRoot(workspace, input.request);
   let journal = input.store.loadWorkspaceAction(scopeId, input.request);
   if (!journal) journal = reserveAction(input, workspace);
 
@@ -101,6 +102,17 @@ export async function performWorkspaceAction(input: {
   }
   requireWorkspaceCandidate(workspace, journal);
   return journal.result;
+}
+
+function requireWorkspaceOperationRoot(
+  workspace: StoredWorkspace,
+  request: WorkspaceRequest,
+): void {
+  if (workspace.targetKind === "directory" || request.relativeTarget === "target") return;
+  throw new OperationRejectedError(
+    "workspace_target_mismatch",
+    "A single-file workspace accepts only its declared target path.",
+  );
 }
 
 function capabilityRejection(error: unknown): Error {

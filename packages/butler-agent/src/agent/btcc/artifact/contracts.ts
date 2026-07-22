@@ -1,4 +1,4 @@
-import type { ContentRef } from "../core/index.ts";
+import type { ContentRef, WorkspaceOperationRoot } from "../core/index.ts";
 
 export type WorkspaceProvision = {
   outbox: {
@@ -24,6 +24,7 @@ export type WorkspaceProvision = {
     provisionOutboxRef: ContentRef;
     targetBaselineRef: ContentRef;
     ownedRootRef: ContentRef;
+    operationRoot: WorkspaceOperationRoot;
   };
   receipt: {
     ref: ContentRef;

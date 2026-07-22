@@ -87,7 +87,11 @@ function executionAuthority(
   if (target.kind === "provisioned_workspace") {
     return {
       observationScopeRefs,
-      mutation: { kind: "workspace_only" as const, workspaceRef: target.workspaceRef },
+      mutation: {
+        kind: "workspace_only" as const,
+        workspaceRef: target.workspaceRef,
+        operationRoot: target.operationRoot,
+      },
     };
   }
   if (target.kind === "repository_promotion") {

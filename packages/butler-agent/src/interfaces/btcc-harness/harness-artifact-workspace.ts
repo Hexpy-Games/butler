@@ -31,6 +31,7 @@ export class HarnessArtifactWorkspace implements ArtifactWorkspaceRuntime {
       provisionOutboxRef: outbox.ref,
       targetBaselineRef: baseline.ref,
       ownedRootRef,
+      operationRoot: { kind: "directory" as const, relativeTarget: "." as const },
     });
     const receipt = record("workspace-provision-receipt", {
       workspaceRef: workspace.ref,

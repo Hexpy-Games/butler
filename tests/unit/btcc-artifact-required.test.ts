@@ -201,7 +201,14 @@ function invocation(
       },
     },
     operationAuthority: semanticState === "task_execution"
-      ? { observationScopeRefs: [], mutation: { kind: "workspace_only", workspaceRef } }
+      ? {
+          observationScopeRefs: [],
+          mutation: {
+            kind: "workspace_only",
+            workspaceRef,
+            operationRoot: { kind: "file", relativeTarget: "target" },
+          },
+        }
       : {
           observationScopeRefs: [],
           mutation: {

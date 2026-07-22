@@ -154,7 +154,11 @@ export type OperationAuthority = {
   observationScopeRefs: string[];
   mutation:
     | { kind: "forbidden" }
-    | { kind: "workspace_only"; workspaceRef: { id: string; sha256: string } }
+    | {
+        kind: "workspace_only";
+        workspaceRef: { id: string; sha256: string };
+        operationRoot: WorkspaceOperationRoot;
+      }
     | { kind: "validation_overlay_only"; reviewSourceRef: { id: string; sha256: string } }
     | {
         kind: "repository_promotion_only";
@@ -165,6 +169,10 @@ export type OperationAuthority = {
         finalSnapshotRef: { id: string; sha256: string };
       };
 };
+
+export type WorkspaceOperationRoot =
+  | { kind: "file"; relativeTarget: "target" }
+  | { kind: "directory"; relativeTarget: "." };
 
 export type OperationRequest =
   | {
