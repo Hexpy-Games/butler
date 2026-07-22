@@ -1,14 +1,7 @@
 import { expect, test } from "bun:test";
 import { readRepoOrLedgerFile, repoOrLedgerExists } from "../support/project-ledger-root.ts";
 
-const capabilitySpecs = [
-  {
-    id: "AC-1",
-    spec: "project-ledger/projects/butler/specs/agentic-core-todo-lists.md",
-    legacySpec: "docs/specs/agentic-core-todo-lists.md",
-    criteria: ["AC1-SC01", "AC1-SC06"],
-    tests: ["tests/unit/todo-list.test.ts", "tests/unit/prompt-assembler.test.ts"],
-  },
+const dedicatedCapabilitySpecs = [
   {
     id: "AC-2",
     spec: "project-ledger/projects/butler/specs/agentic-core-context-monitoring.md",
@@ -44,28 +37,34 @@ const capabilitySpecs = [
     criteria: ["AC6-SC01", "AC6-SC06"],
     tests: ["tests/unit/butler-tools.test.ts", "tests/unit/native-tool-loop-runtime.test.ts"],
   },
+];
+
+const btccSubordinateCapabilities = [
+  {
+    id: "AC-1",
+    spec: "project-ledger/projects/butler/specs/spec-btcc-event-and-projection-contract.md",
+    governingId: "SPEC-BTCC-EVENT-AND-PROJECTION-CONTRACT",
+  },
   {
     id: "AC-7",
-    spec: "project-ledger/projects/butler/specs/agentic-core-work-orchestration.md",
-    legacySpec: "docs/specs/agentic-core-work-orchestration.md",
-    criteria: ["AC7-SC01", "AC7-SC06"],
-    tests: ["tests/unit/work-orchestration.test.ts", "tests/unit/native-tool-loop-runtime.test.ts"],
+    spec: "project-ledger/projects/butler/specs/spec-btcc-domain-module-architecture.md",
+    governingId: "SPEC-BTCC-DOMAIN-MODULE-ARCHITECTURE",
   },
 ];
 
-test("Agentic Core capabilities have dedicated governing specs", () => {
+test("Agentic Core capabilities resolve to current governing specs", () => {
   const index = readRepoOrLedgerFile("project-ledger/projects/butler/specs/agentic-core-capabilities.md");
 
   expect(index).toContain("index and trace hub");
   expect(index).toContain("no longer the governing behavior spec");
 
-  for (const capability of capabilitySpecs) {
+  for (const capability of dedicatedCapabilitySpecs) {
     expect(repoOrLedgerExists(capability.spec)).toBe(true);
     expect(index).toContain(capability.legacySpec);
 
     const spec = readRepoOrLedgerFile(capability.spec);
     expect(spec).toContain(`${capability.id}`);
-    expect(spec).toContain("source of truth");
+    expect(spec).toMatch(/source of truth|owns .* only/);
     expect(spec).toContain("## Required Behavior");
     expect(spec).toContain("## Success Criteria");
     expect(spec).toContain("## Trace Tests");
@@ -77,6 +76,13 @@ test("Agentic Core capabilities have dedicated governing specs", () => {
       expect(spec).toContain(traceTest);
     }
   }
+
+  for (const capability of btccSubordinateCapabilities) {
+    expect(repoOrLedgerExists(capability.spec)).toBe(true);
+    expect(index).toContain(`| ${capability.id} |`);
+    expect(index).toContain(capability.governingId);
+    expect(readRepoOrLedgerFile(capability.spec)).toContain(capability.governingId);
+  }
 });
 
 test("Agentic Core plan references the dedicated governing specs", () => {
@@ -84,7 +90,7 @@ test("Agentic Core plan references the dedicated governing specs", () => {
     "project-ledger/projects/butler/plans/plan-agentic-core-capabilities.md",
   );
 
-  for (const capability of capabilitySpecs) {
+  for (const capability of dedicatedCapabilitySpecs) {
     expect(plan).toContain(capability.id);
     expect(plan).toContain(capability.legacySpec);
   }

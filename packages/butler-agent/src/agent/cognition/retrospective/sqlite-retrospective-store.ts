@@ -108,7 +108,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
-      })
+      }),
     );
   }
 
