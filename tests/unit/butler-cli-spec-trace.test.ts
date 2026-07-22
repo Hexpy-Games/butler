@@ -77,9 +77,8 @@ const expectedCommands = [
   "butler work dashboard [--json] [--debug]",
   "butler work list [--json] [--status STATUS]",
   "butler work show <id> [--json]",
-  "butler work resume <id|latest>",
-  "butler work cancel <id> [--yes]",
-  "butler work retry <id>",
+  "butler work continue <id|latest> --message TEXT",
+  "butler turn stop <turn-id> [--yes]",
   "butler cognition memory status [--json]",
   "butler cognition memory recall <cue> [--json]",
   "butler cognition memory project inspect <project-id> [--json]",
@@ -135,15 +134,15 @@ test("command-level specs include necessity privacy and tests", () => {
   }
 });
 
-test("completed CLI parent spec has consistent child spec statuses", () => {
+test("active CLI specs remain subordinate to adaptive BTCC lifecycle contracts", () => {
   const parent = readRepoOrLedgerFile("project-ledger/projects/butler/specs/butler-cli.md");
-  expect(parent).toContain("Status: Complete.");
+  expect(parent).toContain("Status: Active under the adaptive BTCC contracts.");
 
   expect(readRepoOrLedgerFile("project-ledger/projects/butler/specs/cli/core-commands.md")).toContain(
     "Status: Implemented.",
   );
   expect(readRepoOrLedgerFile("project-ledger/projects/butler/specs/cli/operator-commands.md")).toContain(
-    "Status: Implemented.",
+    "Status: Active; BTCC lifecycle semantics are subordinate to the adaptive contracts.",
   );
   expect(readRepoOrLedgerFile("project-ledger/projects/butler/specs/cli/advanced-deferred-commands.md")).toContain(
     "Status: Advanced implemented; Deferred commands remain unimplemented.",

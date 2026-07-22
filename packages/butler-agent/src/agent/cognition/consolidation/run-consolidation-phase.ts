@@ -159,7 +159,7 @@ function reviseKnowHow(butlerData: string): Record<string, unknown> {
     let next: KnowHowEntry = entry;
     const targeted = feedback.filter((item) =>
       item.target_ref === `knowhow:${entry.knowhow_id}` ||
-      entry.strategy.preferred_sources.some((source) => item.target_ref === `source:${source}`)
+      entry.strategy.preferred_sources.some((source) => item.target_ref === `source:${source}`),
     );
     if (targeted.length > 0) {
       next = reviseFromFeedback(entry, targeted);
