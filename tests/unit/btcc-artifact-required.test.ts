@@ -20,7 +20,7 @@ const workspaceRequest = {
   input: { content: "updated" },
 };
 
-test("workspace execution rejects a candidate without an applied artifact result", async () => {
+test("workspace execution rejects a candidate without a successful workspace snapshot", async () => {
   const rejected: OperationResult = {
     requestId: workspaceRequest.requestId,
     request: workspaceRequest,
@@ -30,7 +30,7 @@ test("workspace execution rejects a candidate without an applied artifact result
   };
 
   await expect(performTask(executionInvocation([rejected]))).rejects.toThrow(
-    "BTCC operational interruption: phase_contract_interruption",
+    "BTCC operational interruption: provider_phase_submission_invalid",
   );
 });
 
@@ -52,6 +52,23 @@ test("workspace execution binds the final successfully applied snapshot", async 
   ]);
 });
 
+test("workspace execution records a snapshot-only revision after validation", async () => {
+  const validation = observedWorkspaceResult("validation", "snapshot-validated");
+  const product = await performTask(executionInvocation([validation]));
+
+  expect(product.kind).toBe("result_candidate");
+  if (product.kind !== "result_candidate" || product.result.kind !== "workspace_artifact") {
+    throw new Error("expected snapshot-only workspace revision");
+  }
+  expect(product.result.artifactRevisionRefs).toEqual([]);
+  expect(product.result.workspaceRevision.targetSnapshotRef).toEqual(
+    ref("snapshot-validated"),
+  );
+  expect(product.result.workspaceRevision.producedByOperationRefs).toEqual([
+    ref("observation-validation"),
+  ]);
+});
+
 test("workspace review cannot pass when validation was rejected", async () => {
   const rejectedValidation: OperationResult = {
     requestId: "review-validation",
@@ -62,7 +79,7 @@ test("workspace review cannot pass when validation was rejected", async () => {
   };
 
   await expect(reviewTask(reviewInvocation([rejectedValidation]))).rejects.toThrow(
-    "BTCC operational interruption: phase_contract_interruption",
+    "BTCC operational interruption: provider_phase_submission_invalid",
   );
 });
 
@@ -244,6 +261,22 @@ function appliedResult(suffix: string, snapshot: string): OperationResult {
     artifactRevisionRef: ref(`artifact-${suffix}`),
     targetSnapshotRef: ref(snapshot),
     content: `applied ${suffix}`,
+  };
+}
+
+function observedWorkspaceResult(suffix: string, snapshot: string): OperationResult {
+  return {
+    requestId: `${workspaceRequest.requestId}-${suffix}`,
+    request: {
+      ...workspaceRequest,
+      requestId: `${workspaceRequest.requestId}-${suffix}`,
+      capabilityRef: "run-command",
+      input: { command: "bun test" },
+    },
+    outcome: "observed",
+    observationRef: ref(`observation-${suffix}`),
+    targetSnapshotRef: ref(snapshot),
+    content: "validation passed without changing artifact bytes",
   };
 }
 
