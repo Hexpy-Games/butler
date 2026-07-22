@@ -3,6 +3,7 @@ import type {
   WorkLedgerCommit,
   AvailableSpecRevision,
 } from "../../../btcc/index.ts";
+import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Reviewed = Extract<Program, { planningState: "reviewed" }>;
@@ -17,6 +18,9 @@ export function reduceProjectProgram(
   if (mutation.kind === "bind_program") return bindProgram(current, mutation, availableSpecs);
   const program = requireProgram(current, mutation);
   if (mutation.kind === "install_reviewed_plan") return installPlan(program, mutation.product);
+  if (mutation.kind === "accept_managed_deferral") {
+    return acceptManagedDeferral(program, mutation);
+  }
   const reviewed = requireReviewed(program, mutation.cursor.expectedManifestRevision);
   const next = structuredClone(reviewed);
   switch (mutation.kind) {
@@ -45,10 +49,6 @@ export function reduceProjectProgram(
       }
       next.frontier = "closed";
       next.works.forEach((work) => { work.status = "closed"; });
-      break;
-    case "accept_managed_deferral":
-      if (next.activeDeferral) throw changed("managed deferral");
-      next.activeDeferral = mutation.product;
       break;
     case "accept_promotion_deferral":
       acceptPromotionDeferral(next, mutation.product);
