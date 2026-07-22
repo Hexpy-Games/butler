@@ -122,7 +122,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
     capabilityRef: "project_ledger_read",
     name: "project_ledger_read",
-    description: "Read canonical Project Ledger specs, plans, work, tasks, and reports for the bound project. Query terms use case-insensitive any-term matching across record metadata and body.",
+    description: "Discover canonical Project Ledger records by metadata, then read bodies by explicit record_ids. include_body=true requires non-empty record_ids. Query terms use case-insensitive any-term matching across record metadata and body but return metadata unless exact IDs are supplied.",
     operationKinds: ["observe", "review_validation"],
     observationScopeKinds: ["ledger"],
     inputSchema: object({

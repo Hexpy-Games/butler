@@ -16,6 +16,9 @@ export async function readProjectLedger(
   const ledger = await readCanonicalProjectLedger(projectRoot);
   const selected = selectRecords(ledger.records, args);
   const includeBody = args.include_body === true;
+  if (includeBody && explicitRecordIds(args).size === 0) {
+    throw new Error("Project Ledger body reads require explicit record_ids; discover metadata first");
+  }
   return {
     projectId,
     available: true,
@@ -45,7 +48,7 @@ function selectRecords(
   records: CanonicalLedgerRecord[],
   args: Record<string, unknown>,
 ): CanonicalLedgerRecord[] {
-  const ids = stringSet(args.record_ids, "record_ids");
+  const ids = explicitRecordIds(args);
   const kinds = stringSet(args.kinds, "kinds");
   const queryTerms = typeof args.query === "string"
     ? args.query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean)
@@ -58,6 +61,10 @@ function selectRecords(
       queryTerms.some((term) => searchableText(record).includes(term)))
     .sort((left, right) => left.id.localeCompare(right.id))
     .slice(0, limit);
+}
+
+function explicitRecordIds(args: Record<string, unknown>): Set<string> {
+  return stringSet(args.record_ids, "record_ids");
 }
 
 function stringSet(value: unknown, label: string): Set<string> {

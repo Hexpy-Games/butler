@@ -191,14 +191,15 @@ function record(value: unknown): Record<string, unknown> | null {
  */
 export function compileCompletedToolEvidencePointers(input: {
   body: Record<string, unknown>;
-  maxSerializedBytes?: number;
+  maxSerializedTokens?: number;
+  measureSerializedTokens?: (value: Record<string, unknown>) => number;
 }): Record<string, unknown> {
   const source = JSON.parse(JSON.stringify(input.body)) as Record<string, unknown>;
   const inlineCount = countCompletedToolEvidenceInlineOutputs(source);
   const selected = new Set<number>();
   let compiled = compileCompletedToolEvidenceSelection(source, selected);
-  const capacity = finiteSerializedByteCapacity(input.maxSerializedBytes);
-  if (capacity === null || inlineCount === 0) return compiled;
+  const capacity = finiteSerializedTokenCapacity(input.maxSerializedTokens);
+  if (capacity === null || !input.measureSerializedTokens || inlineCount === 0) return compiled;
 
   // Only the newest semantic block can contain results the model has not yet
   // observed. Older results already crossed a provider boundary and stay as
@@ -212,7 +213,7 @@ export function compileCompletedToolEvidencePointers(input: {
   for (let index = inlineCount - 1; index >= oldestUnobservedIndex; index -= 1) {
     const candidateSelection = new Set(selected).add(index);
     const candidate = compileCompletedToolEvidenceSelection(source, candidateSelection);
-    if (serializedBytes(candidate) <= capacity) {
+    if (input.measureSerializedTokens(candidate) <= capacity) {
       selected.add(index);
       compiled = candidate;
     }
@@ -324,12 +325,8 @@ function isCompletedToolEvidenceRecord(
     packet?.schema === EVIDENCE_PACKET_SCHEMA;
 }
 
-function finiteSerializedByteCapacity(value: number | undefined): number | null {
+function finiteSerializedTokenCapacity(value: number | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.max(0, Math.floor(value))
     : null;
-}
-
-function serializedBytes(value: unknown): number {
-  return Buffer.byteLength(JSON.stringify(value), "utf8");
 }

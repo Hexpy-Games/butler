@@ -22,7 +22,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test("serialized UTF-8 admission is deterministic and bound to the exact request hash", () => {
+test("model-token admission is deterministic and bound to the exact request hash", () => {
   const input = {
     providerId: "openai" as const,
     modelRef: "openai/gpt-5.4-mini",
@@ -42,11 +42,12 @@ test("serialized UTF-8 admission is deterministic and bound to the exact request
   const second = admitSerializedProviderRequest(input);
 
   expect(first).toEqual(second);
-  expect(first.plan.measurement).toBe("serialized_utf8_upper_bound");
-  expect(first.plan.compiled_input_tokens).toBe(
+  expect(first.plan.measurement).toBe("model_token_estimate");
+  expect(first.plan.budget_input_tokens).not.toBeNull();
+  expect(first.plan.compiled_input_tokens).toBe(first.plan.budget_input_tokens!);
+  expect(first.plan.compiled_input_tokens).toBeLessThan(
     Buffer.byteLength(first.serialized_request, "utf8") + 17,
   );
-  expect(first.plan.budget_input_tokens).toBeLessThan(first.plan.compiled_input_tokens);
   expect(first.plan.admission).toBe("admitted");
   expect(first.plan.tool_schema_tokens).toBeGreaterThan(0);
   expect(first.plan.turn_id).toBe("turn-admission");
@@ -198,7 +199,11 @@ test("every provider client blocks an oversized serialized request before fetch"
     return Response.json({});
   }) as unknown as typeof fetch;
 
-  const oversized = "x".repeat(1_100_000);
+  const openAiOversized = Array.from(
+    { length: 100_000 },
+    (_, index) => `field_${index}:value_${index % 997}`,
+  ).join(" ");
+  const characterEstimatedOversized = "abcd ".repeat(900_000);
   const hostedConfig: HostedRuntimeConfig = {
     providerId: "xai",
     modelId: "grok-4.3",
@@ -250,18 +255,27 @@ test("every provider client blocks an oversized serialized request before fetch"
       { mode: "api_key", authorization: "Bearer test" },
     ),
     () => createOpenAIResponseOnce(
-      { model: "gpt-5.4-mini", input: oversized },
+      { model: "gpt-5.4-mini", input: openAiOversized },
       undefined,
       { mode: "api_key", authorization: "Bearer test" },
     ),
     () => createCodexResponse(
-      { model: "gpt-5.4-mini", input: oversized },
+      { model: "gpt-5.4-mini", input: openAiOversized },
       fakeCodexAuthorization,
     ),
-    () => createHostedChatCompletion(hostedConfig, { messages: [{ role: "user", content: oversized }] }),
-    () => createAnthropicMessage(anthropicConfig, { messages: [{ role: "user", content: oversized }] }),
-    () => createGeminiContent(googleConfig, { contents: [{ role: "user", parts: [{ text: oversized }] }] }),
-    () => createLocalChatCompletion(localConfig, { model: "test-model", messages: [{ role: "user", content: oversized }] }),
+    () => createHostedChatCompletion(hostedConfig, {
+      messages: [{ role: "user", content: characterEstimatedOversized }],
+    }),
+    () => createAnthropicMessage(anthropicConfig, {
+      messages: [{ role: "user", content: characterEstimatedOversized }],
+    }),
+    () => createGeminiContent(googleConfig, {
+      contents: [{ role: "user", parts: [{ text: characterEstimatedOversized }] }],
+    }),
+    () => createLocalChatCompletion(localConfig, {
+      model: "test-model",
+      messages: [{ role: "user", content: characterEstimatedOversized }],
+    }),
   ];
 
   for (const call of calls) {
@@ -299,7 +313,7 @@ test("provider overflow after successful admission is a safe invariant violation
   }
 });
 
-test("serialized upper-bound measurements do not under-report provider usage fixtures", () => {
+test("serialized model-token estimates do not under-report provider usage fixtures", () => {
   const fixtures = [
     { providerId: "openai" as const, modelRef: "openai/gpt-5.5", reportedInputTokens: 19_245 },
     { providerId: "anthropic" as const, modelRef: "anthropic/claude-opus-4-7", reportedInputTokens: 18_991 },
