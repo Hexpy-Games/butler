@@ -10,6 +10,10 @@ import type {
   ProviderPhasePromptResult,
   ProviderPhasePromptRunner,
 } from "./contracts.ts";
+import {
+  normalizeStrictTransportSchema,
+  restoreTransportOmissions,
+} from "./strict-json-schema.ts";
 
 export function createProviderPhasePromptRunner(): ProviderPhasePromptRunner {
   return { run: runProviderPhasePrompt };
@@ -37,7 +41,9 @@ async function runJsonSchemaRound(
     responseFormat: {
       type: "json_schema",
       name: "btcc_provider_carrier",
-      schema: jsonSchemaTransportSchema(input.responseSchema),
+      schema: normalizeStrictTransportSchema(
+        jsonSchemaTransportSchema(input.responseSchema),
+      ),
       strict: true,
     },
     cacheScope: input.cacheScope,
@@ -47,7 +53,9 @@ async function runJsonSchemaRound(
   const actual = parseModelRef(result.model);
   const exactIdentityObserved = actual.canonicalRef === modelRef;
   return {
-    carrier: unwrapJsonSchemaCarrier(parseJsonCarrier(result.text)),
+    carrier: restoreTransportOmissions(
+      unwrapJsonSchemaCarrier(parseJsonCarrier(result.text)),
+    ),
     actualIdentity: {
       provider: exactIdentityObserved ? input.modelSelection.provider : actual.providerId,
       model: exactIdentityObserved ? input.modelSelection.model : actual.modelId,
