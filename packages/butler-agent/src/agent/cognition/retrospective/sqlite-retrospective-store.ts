@@ -2,7 +2,10 @@ import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { ModelPhaseState } from "../../btcc/core/index.ts";
-import type { AcceptedPhaseGuidance } from "../../btcc/guidance/index.ts";
+import type {
+  AcceptedPhaseGuidance,
+  PublishPhaseGuidanceCommand,
+} from "../../btcc/guidance/index.ts";
 import { SqlitePhaseGuidanceStore } from "../../adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../adapters/btcc/sqlite/schema.ts";
 import { digest, stableJson } from "../../adapters/btcc/sqlite/identity.ts";
@@ -12,6 +15,7 @@ import type {
   BtccTrajectory,
   RetrospectiveDecisionSet,
 } from "./contracts.ts";
+import { decodeDecisionSet } from "./decode-model-output.ts";
 
 type PendingRow = {
   outbox_id: string;
@@ -80,10 +84,17 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
   }
 
   loadDecisions(sourceId: string): RetrospectiveDecisionSet | null {
-    return this.loadJson<RetrospectiveDecisionSet>(
+    const stored = this.loadJson<Record<string, unknown>>(
       "SELECT decisions_json AS value FROM btcc_retrospective_decisions WHERE source_id = ?",
       sourceId,
     );
+    if (!stored) return null;
+    try {
+      return decodeDecisionSet(JSON.stringify(stored), sourceId);
+    } catch {
+      this.discardDecisions(sourceId);
+      return null;
+    }
   }
 
   saveDecisions(value: RetrospectiveDecisionSet): void {
@@ -91,6 +102,10 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
       INSERT OR IGNORE INTO btcc_retrospective_decisions (source_id, decisions_json, created_at)
       VALUES (?, ?, ?)
     `).run(value.sourceId, JSON.stringify(value), new Date().toISOString());
+  }
+
+  discardDecisions(sourceId: string): void {
+    this.db.query("DELETE FROM btcc_retrospective_decisions WHERE source_id = ?").run(sourceId);
   }
 
   loadAcceptedGuidance(
@@ -113,7 +128,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
   }
 
   publishGuidance(
-    input: Omit<AcceptedPhaseGuidance, "revision" | "contentSha256">,
+    input: PublishPhaseGuidanceCommand,
   ): AcceptedPhaseGuidance {
     return this.guidance.publish(input);
   }

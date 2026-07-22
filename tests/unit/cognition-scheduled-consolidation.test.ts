@@ -8,6 +8,7 @@ import { runScheduledCognitionConsolidation } from "../../packages/butler-agent/
 
 test("scheduled cognition consolidation runs generic cycle before legacy memory maintenance", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-scheduled-cognition-"));
+  const btccDbPath = join(butlerData, "operational", "butler.sqlite");
   const legacyCalls: string[] = [];
   try {
     const knowhow = createKnowHowEntry(butlerData, {
@@ -29,6 +30,7 @@ test("scheduled cognition consolidation runs generic cycle before legacy memory 
     const result = await runScheduledCognitionConsolidation({
       butlerHome: process.cwd(),
       butlerData,
+      btccDbPath,
       runId: "cr_scheduled_test",
       runLegacyMemoryCycle: () => {
         legacyCalls.push(readKnowHowEntry(butlerData, knowhow.knowhow_id)?.status ?? "missing");
@@ -51,6 +53,8 @@ test("scheduled cognition consolidation runs generic cycle before legacy memory 
     expect(readKnowHowEntry(butlerData, knowhow.knowhow_id)?.status).toBe("disabled");
     expect(existsSync(result.generic.checkpoint_path)).toBe(true);
     expect(existsSync(result.generic.summary_path)).toBe(true);
+    expect(existsSync(btccDbPath)).toBe(true);
+    expect(existsSync(join(butlerData, "app-server", "butler-client.sqlite"))).toBe(false);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

@@ -1,5 +1,9 @@
 import type { ModelPhaseState } from "../../btcc/core/index.ts";
-import type { AcceptedPhaseGuidance } from "../../btcc/guidance/index.ts";
+import type {
+  AcceptedPhaseGuidance,
+  PhaseGuidanceRevisionRef,
+  PublishPhaseGuidanceCommand,
+} from "../../btcc/guidance/index.ts";
 import type { PromptUsageReport } from "../../../integrations/providers/provider.ts";
 import type { ConsolidationModelUsageSummary } from "../consolidation/usage.ts";
 
@@ -14,6 +18,7 @@ export const RETROSPECTIVE_DIMENSIONS = [
   "user_stewardship",
   "learning_calibration",
 ] as const;
+export const GUIDANCE_DECISION_CONTRACT_REVISION = "btcc.guidance-decision.v1" as const;
 
 export type RetrospectiveDimension = typeof RETROSPECTIVE_DIMENSIONS[number];
 
@@ -45,6 +50,9 @@ export type PhaseGuidanceCandidate = {
   candidateId: string;
   phase: ModelPhaseState;
   scopeKind: "user" | "project";
+  scopeRationale: string;
+  scopeSourceRefs: string[];
+  generalityBoundary: "cross_project_user_preference" | "project_bound_strategy";
   problem: string;
   guidance: string;
   appliesWhen: string[];
@@ -57,6 +65,7 @@ export type PhaseGuidanceCandidate = {
 
 export type BtccRetrospective = {
   sourceId: string;
+  rubricRevision: "btcc.retrospective-rubric.v1";
   summary: string;
   dimensions: Record<RetrospectiveDimension, RetrospectiveFinding>;
   strengths: string[];
@@ -77,15 +86,40 @@ export type GuidanceDisposition =
   | "reject"
   | "outside_learning_surface";
 
-export type GuidanceDecision = {
+type GuidanceDecisionBase = {
   candidateId: string;
-  disposition: GuidanceDisposition;
   guidanceId: string;
   rationale: string;
 };
 
+export type GuidanceDecision = GuidanceDecisionBase & (
+  | {
+      disposition: "promote";
+      acceptedScopeKind: "user" | "project";
+      acceptedScopeRationale: string;
+      acceptedScopeSourceRefs: string[];
+      acceptedGeneralityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+      acceptedGuidance: string;
+      acceptedAppliesWhen: string[];
+      acceptedDoesNotApplyWhen: string[];
+    }
+  | {
+      disposition: "merge" | "supersede";
+      targetRevision: PhaseGuidanceRevisionRef;
+      acceptedScopeKind: "user" | "project";
+      acceptedScopeRationale: string;
+      acceptedScopeSourceRefs: string[];
+      acceptedGeneralityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+      acceptedGuidance: string;
+      acceptedAppliesWhen: string[];
+      acceptedDoesNotApplyWhen: string[];
+    }
+  | { disposition: "defer" | "reject" | "outside_learning_surface" }
+);
+
 export type RetrospectiveDecisionSet = {
   sourceId: string;
+  contractRevision: typeof GUIDANCE_DECISION_CONTRACT_REVISION;
   decisions: GuidanceDecision[];
 };
 
@@ -112,8 +146,9 @@ export interface BtccRetrospectiveStore {
   saveRetrospective(value: BtccRetrospective): void;
   loadDecisions(sourceId: string): RetrospectiveDecisionSet | null;
   saveDecisions(value: RetrospectiveDecisionSet): void;
+  discardDecisions(sourceId: string): void;
   loadAcceptedGuidance(trajectory: BtccTrajectory, phases: ModelPhaseState[]): AcceptedPhaseGuidance[];
-  publishGuidance(input: Omit<AcceptedPhaseGuidance, "revision" | "contentSha256">): AcceptedPhaseGuidance;
+  publishGuidance(input: PublishPhaseGuidanceCommand): AcceptedPhaseGuidance;
   markProcessed(outboxId: string): void;
   recordFailure(outboxId: string, error: string): void;
   close(): void;

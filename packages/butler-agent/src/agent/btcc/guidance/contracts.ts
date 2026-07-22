@@ -4,10 +4,23 @@ export type PhaseGuidanceScope =
   | { kind: "user"; userRef: string }
   | { kind: "project"; projectRef: string };
 
+export type PhaseGuidanceRevisionRef = {
+  guidanceId: string;
+  phase: ModelPhaseState;
+  scope: PhaseGuidanceScope;
+  revision: number;
+  contentSha256: string;
+};
+
 export type AcceptedPhaseGuidance = {
   guidanceId: string;
   phase: ModelPhaseState;
   scope: PhaseGuidanceScope;
+  scopeRationale: string;
+  scopeSourceRefs: string[];
+  generalityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+  revisionKind: "promote" | "merge" | "supersede";
+  predecessor?: PhaseGuidanceRevisionRef;
   revision: number;
   guidance: string;
   appliesWhen: string[];
@@ -15,6 +28,19 @@ export type AcceptedPhaseGuidance = {
   sourceIds: string[];
   contentSha256: string;
 };
+
+export type PhaseGuidanceDraft = Omit<
+  AcceptedPhaseGuidance,
+  "revisionKind" | "predecessor" | "revision" | "contentSha256"
+>;
+
+export type PublishPhaseGuidanceCommand =
+  | { disposition: "promote"; guidance: PhaseGuidanceDraft }
+  | {
+      disposition: "merge" | "supersede";
+      target: PhaseGuidanceRevisionRef;
+      guidance: PhaseGuidanceDraft;
+    };
 
 export interface PhaseGuidanceReader {
   list(input: {
@@ -25,5 +51,5 @@ export interface PhaseGuidanceReader {
 }
 
 export interface PhaseGuidanceRepository extends PhaseGuidanceReader {
-  publish(input: Omit<AcceptedPhaseGuidance, "revision" | "contentSha256">): AcceptedPhaseGuidance;
+  publish(input: PublishPhaseGuidanceCommand): AcceptedPhaseGuidance;
 }

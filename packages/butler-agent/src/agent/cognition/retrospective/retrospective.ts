@@ -12,6 +12,10 @@ import type {
 import { evaluateTrajectory } from "./evaluate-trajectory.ts";
 import { defaultRetrospectiveModelRunner } from "./model.ts";
 import { SqliteBtccRetrospectiveStore } from "./sqlite-retrospective-store.ts";
+import {
+  isAcceptedGuidanceDecision,
+  validateGuidanceDecisions,
+} from "./validate-guidance-decisions.ts";
 import { usageFromPromptUsageReports } from "../consolidation/usage.ts";
 
 export async function runBtccRetrospective(input: {
@@ -92,11 +96,23 @@ async function loadOrConsolidate(input: {
   cacheScopePrefix: string;
 }) {
   const stored = input.store.loadDecisions(input.trajectory.sourceId);
-  if (stored) return stored.decisions;
   const acceptedGuidance = input.store.loadAcceptedGuidance(
     input.trajectory,
     input.retrospective.candidates.map(({ phase }) => phase),
   );
+  if (stored) {
+    try {
+      validateGuidanceDecisions({
+        decisions: stored,
+        trajectory: input.trajectory,
+        candidates: input.retrospective.candidates,
+        acceptedGuidance,
+      });
+      return stored.decisions;
+    } catch {
+      input.store.discardDecisions(input.trajectory.sourceId);
+    }
+  }
   const consolidated = await consolidateCandidates({ ...input, acceptedGuidance });
   if (consolidated.model?.usage) input.usage.push(consolidated.model.usage);
   input.store.saveDecisions(consolidated.value);
@@ -114,27 +130,24 @@ function publishAcceptedGuidance(
   );
   let published = 0;
   for (const decision of decisions) {
-    if (!isAccepted(decision)) continue;
+    if (!isAcceptedGuidanceDecision(decision)) continue;
     const candidate = candidates.get(decision.candidateId);
     if (!candidate) throw new Error(`Guidance candidate disappeared: ${decision.candidateId}`);
-    store.publishGuidance(acceptedGuidance(trajectory, candidate, decision));
+    const guidance = acceptedGuidance(trajectory, candidate, decision);
+    store.publishGuidance(decision.disposition === "promote"
+      ? { disposition: "promote", guidance }
+      : { disposition: decision.disposition, target: decision.targetRevision, guidance });
     published += 1;
   }
   return published;
 }
 
-function isAccepted(decision: GuidanceDecision): boolean {
-  return decision.disposition === "promote" ||
-    decision.disposition === "merge" ||
-    decision.disposition === "supersede";
-}
-
 function acceptedGuidance(
   trajectory: BtccTrajectory,
   candidate: PhaseGuidanceCandidate,
-  decision: GuidanceDecision,
+  decision: Extract<GuidanceDecision, { disposition: "promote" | "merge" | "supersede" }>,
 ) {
-  const scope = candidate.scopeKind === "project"
+  const scope = decision.acceptedScopeKind === "project"
     ? trajectory.projectRef
       ? { kind: "project" as const, projectRef: trajectory.projectRef }
       : null
@@ -144,9 +157,12 @@ function acceptedGuidance(
     guidanceId: decision.guidanceId,
     phase: candidate.phase,
     scope,
-    guidance: candidate.guidance,
-    appliesWhen: candidate.appliesWhen,
-    doesNotApplyWhen: candidate.doesNotApplyWhen,
+    scopeRationale: decision.acceptedScopeRationale,
+    scopeSourceRefs: decision.acceptedScopeSourceRefs,
+    generalityBoundary: decision.acceptedGeneralityBoundary,
+    guidance: decision.acceptedGuidance,
+    appliesWhen: decision.acceptedAppliesWhen,
+    doesNotApplyWhen: decision.acceptedDoesNotApplyWhen,
     sourceIds: [trajectory.sourceId],
   };
 }
