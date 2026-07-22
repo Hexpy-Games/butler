@@ -168,6 +168,67 @@ test("does not checkpoint a malformed provider phase submission", async () => {
   expect(appended).toBe(false);
 });
 
+test("anchors provider recovery after the latest operation checkpoint", async () => {
+  const request = {
+    requestId: "request-before-interruption",
+    kind: "observe" as const,
+    capabilityRef: "capability-1",
+    scopeRef: "scope-1",
+    input: {},
+  };
+  let calls = 0;
+  const run = runPhaseConversation({
+    binding,
+    modelSelection: selectedModel(),
+    context: openingContext(),
+    phaseContract: {
+      phase: "conception_deliberation" as const,
+      objective: "recover_exactly",
+      duties: [],
+      prohibitions: [],
+    },
+    codec: { submissionSchema: objectSchema({}), decode: () => ({}) },
+    store: {
+      restore: async (current) => ({
+        binding: current,
+        acceptedProduct: null,
+        operationResults: [],
+      }),
+      appendOperationRound: async ({ binding: current }) => nextBinding(current),
+      appendOperationResults: async ({ binding: current }) => nextBinding(current),
+      appendPhaseSubmission: async () => { throw new Error("unexpected submission"); },
+      acceptPhaseProduct: async () => { throw new Error("unexpected product"); },
+    },
+    model: {
+      runRound: async () => calls++ === 0
+        ? { kind: "operation_requests", requests: [request], actualIdentity: selectedModel() }
+        : {
+            kind: "interruption",
+            code: "provider_api_error",
+            activation: { kind: "automatic_provider_recovery" },
+          },
+    },
+    operations: {
+      perform: async () => ({
+        requestId: request.requestId,
+        outcome: "observed" as const,
+        observationRef: { id: "observation", sha256: "observation-sha" },
+        content: "observed",
+      }),
+    },
+    operationAuthority: {
+      observationScopeRefs: [request.scopeRef],
+      mutation: { kind: "forbidden" as const },
+    },
+    executionPermit: activePermit(),
+  });
+
+  await expect(run).rejects.toMatchObject({
+    code: "provider_api_error",
+    anchor: { checkpointRevision: binding.checkpointRevision + 2 },
+  });
+});
+
 function selectedModel() {
   return {
     provider: "openai",
