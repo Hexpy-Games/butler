@@ -112,6 +112,17 @@ describe("production BTCC capabilities", () => {
     };
     const execute = runtime.createToolExecutor({ envelope: envelope(), request });
 
+    expect(() => runtime.validateOperationInput({
+      envelope: envelope(),
+      request: { ...request, input: { kinds: ["Spec"] } },
+      args: { kinds: ["Spec"] },
+    })).toThrow();
+    runtime.validateOperationInput({
+      envelope: envelope(),
+      request: { ...request, input: { kinds: ["spec"] } },
+      args: { kinds: ["spec"] },
+    });
+
     const result = await execute({
       name: "project_ledger_read",
       args: request.input,
@@ -128,10 +139,12 @@ describe("production BTCC capabilities", () => {
     const searched = await execute({
       name: "project_ledger_read",
       args: {
+        kinds: ["spec"],
         query: "unmatched architecture Sandy voice",
         include_body: true,
       },
       rawArguments: JSON.stringify({
+        kinds: ["spec"],
         query: "unmatched architecture Sandy voice",
         include_body: true,
       }),

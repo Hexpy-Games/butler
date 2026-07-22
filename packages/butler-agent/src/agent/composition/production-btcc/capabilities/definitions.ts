@@ -20,6 +20,14 @@ const integer = (minimum?: number, maximum?: number) => ({
   ...(maximum === undefined ? {} : { maximum }),
 });
 const strings = () => ({ type: "array", items: { type: "string" } });
+const PROJECT_LEDGER_RECORD_KINDS = [
+  "initiative", "decision", "risk", "spec", "report", "plan", "handoff",
+  "reference", "roadmap", "work", "task", "attempt",
+] as const;
+const projectLedgerKinds = () => ({
+  type: "array",
+  items: { type: "string", enum: PROJECT_LEDGER_RECORD_KINDS },
+});
 
 export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
@@ -119,7 +127,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     observationScopeKinds: ["ledger"],
     inputSchema: object({
       record_ids: strings(),
-      kinds: strings(),
+      kinds: projectLedgerKinds(),
       query: string(),
       include_body: { type: "boolean" },
       max_records: integer(1, 50),
