@@ -74,6 +74,7 @@ export function validateGraph(
   }
   const taskOrdinals = new Map(tasks.map((task) => [task.logicalId, task.executionOrdinal]));
   for (const task of tasks) validateTask(task, taskOrdinals, requiredOutcomeId);
+  validateArtifactDependencyContinuity(tasks);
   const coveredFields = new Set(tasks.flatMap((task) =>
     task.criteria.flatMap((criterion) => criterion.sourceGoalFieldIds)));
   if (!coveredFields.has("request") || !coveredFields.has("intended_result")) {
@@ -81,6 +82,32 @@ export function validateGraph(
       "goal_coverage_incomplete",
       "Planning graph does not cover every required Goal field",
     );
+  }
+}
+
+function validateArtifactDependencyContinuity(tasks: TaskDraft[]): void {
+  const tasksById = new Map(tasks.map((task) => [task.logicalId, task]));
+  for (const successor of tasks) {
+    for (const dependencyId of successor.dependencyTaskIds) {
+      const predecessor = tasksById.get(dependencyId);
+      if (predecessor?.artifactPolicy?.kind !== "workspace_artifact") continue;
+      const successorPolicy = successor.artifactPolicy;
+      if (
+        successorPolicy?.kind !== "workspace_artifact" &&
+        successorPolicy?.kind !== "repository_promotion"
+      ) {
+        rejectPlanningProposal(
+          "artifact_dependency_not_materialized",
+          "A Task that depends on workspace bytes must continue on an artifact target",
+        );
+      }
+      if (successorPolicy.targetScopeRef !== predecessor.artifactPolicy.targetScopeRef) {
+        rejectPlanningProposal(
+          "artifact_dependency_target_mismatch",
+          "Dependent artifact Tasks must share the exact workspace target",
+        );
+      }
+    }
   }
 }
 

@@ -112,11 +112,11 @@ describe("BTCC Planning contract", () => {
       integration.artifactPolicy.targetPath = "packages/other";
     }
     expect(() => authorPlanCandidate(mismatched, authoringState()))
-      .toThrow("Promotion selector Tasks do not share the exact artifact target");
+      .toThrow("Dependent artifact Tasks must share the exact workspace target");
   });
 
-  test("rejects absolute, workspace-root, and escaping artifact targets", () => {
-    for (const targetPath of ["/tmp/outside", ".", "../outside", "safe/../outside"]) {
+  test("rejects absolute and escaping artifact targets", () => {
+    for (const targetPath of ["/tmp/outside", "../outside", "safe/../outside"]) {
       const submission = artifactPlan();
       const task = submission.works[0]!.tasks[0]!;
       if (task.artifactPolicy?.kind === "workspace_artifact") {
@@ -124,6 +124,34 @@ describe("BTCC Planning contract", () => {
       }
       expect(() => authorPlanCandidate(submission, authoringState())).toThrow("targetPath");
     }
+  });
+
+  test("accepts the exact admitted workspace root for one cohesive lifecycle", () => {
+    const submission = artifactPlan();
+    for (const task of submission.works[0]!.tasks) {
+      if (task.artifactPolicy) task.artifactPolicy.targetPath = ".";
+    }
+    const candidate = authorPlanCandidate(submission, authoringState());
+
+    expect(candidate.tasks.map((task) => task.artifactPolicy)).toEqual([
+      expect.objectContaining({ targetScopeRef: "workspace:/repo", targetPath: "." }),
+      expect.objectContaining({ targetScopeRef: "workspace:/repo", targetPath: "." }),
+      expect.objectContaining({ targetScopeRef: "workspace:/repo", targetPath: "." }),
+    ]);
+  });
+
+  test("rejects dependency edges that cannot materialize predecessor workspace bytes", () => {
+    const differentTarget = artifactPlan();
+    differentTarget.works[0]!.tasks[1]!.artifactPolicy!.targetPath = "packages/other";
+    expect(() => authorPlanCandidate(differentTarget, authoringState()))
+      .toThrow("Dependent artifact Tasks must share the exact workspace target");
+
+    const nonArtifactSuccessor = artifactPlan();
+    const integration = nonArtifactSuccessor.works[0]!.tasks[1]!;
+    Reflect.deleteProperty(integration, "artifactPolicy");
+    Reflect.set(integration, "targetScopeRefs", ["workspace:/repo"]);
+    expect(() => authorPlanCandidate(nonArtifactSuccessor, authoringState()))
+      .toThrow("must continue on an artifact target");
   });
 
   test("binds runtime-owned refs without asking the reviewer to echo them", async () => {
