@@ -487,6 +487,42 @@ test("supervisor rolls back prepared App-managed runtime on health timeout", asy
   }
 });
 
+test("supervisor publishes the candidate runtime pointer before spawning its host", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-pointer-order-"));
+  try {
+    let pointerPublished = false;
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => ({
+        command: "/runtime/bun",
+        args: ["/runtime/native-service-daemon.ts"],
+        publishLaunchPointer: () => { pointerPublished = true; },
+        commitActivation: () => undefined,
+      }),
+      spawnProcess: () => {
+        expect(pointerPublished).toBe(true);
+        return new FakeChildProcess(9350, []);
+      },
+      healthCheck: () => true,
+      readinessCheck: () => true,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+      baseEnv: {},
+    });
+
+    await supervisor.ensureReady();
+    expect(pointerPublished).toBe(true);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("supervisor startup deadline overrides a shorter attempt count", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-deadline-"));
   try {

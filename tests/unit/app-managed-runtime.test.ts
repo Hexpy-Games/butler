@@ -205,7 +205,7 @@ test("App-managed runtime activation preserves previous pointer on failed activa
   }
 });
 
-test("App-managed runtime preparation flips pointer only after readiness commit", () => {
+test("App-managed runtime publishes a launch pointer before readiness and finalizes it after", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-commit-"));
   try {
     const butlerData = join(tempDir, "data");
@@ -238,6 +238,18 @@ test("App-managed runtime preparation flips pointer only after readiness commit"
     expect(readJson(join(prepared.runtimeHome, "runtime.json"))).toMatchObject({
       activation_status: "prepared",
       selected_at: null,
+    });
+
+    expect("publishLaunchPointer" in prepared).toBe(true);
+    (prepared as typeof prepared & { publishLaunchPointer(): void }).publishLaunchPointer();
+    expect(readJson(appManagedAgentPointerPath(butlerData))).toMatchObject({
+      version: "2.0.0",
+      runtime_home: join("app", "runtime", "agent", "versions", "2.0.0"),
+      selected_at: null,
+      previous: {
+        version: "1.0.0",
+        runtime_home: previousRuntime,
+      },
     });
 
     prepared.commitActivation();
