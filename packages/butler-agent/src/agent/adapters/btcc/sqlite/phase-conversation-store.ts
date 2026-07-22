@@ -15,6 +15,7 @@ import {
   optionalJson,
   revisionRef,
 } from "./phase-conversation/checkpoint-codec.ts";
+import { operationRoundScope } from "../../../btcc/core/operation-identity.ts";
 
 type PhaseConversationStore = BtccRuntimeDependencies["phaseConversations"];
 type CheckpointHead = {
@@ -263,7 +264,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       throw new Error("BTCC operation result embeds a different request");
     }
     const operationId = digest(
-      `btcc-phase-operation.v1\0${binding.checkpointId}\0${input.request.requestId}`,
+      `btcc-phase-operation.v2\0${operationRoundScope(binding)}\0${input.request.requestId}`,
     );
     this.db.query(`
       INSERT OR IGNORE INTO btcc_phase_operation_results (

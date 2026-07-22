@@ -188,9 +188,7 @@ async function performRequestedObservations<Product>(
   if (requests.length === 0) {
     throw new Error("BTCC operation request carrier must not be empty");
   }
-  const existingRequests = new Map(
-    envelope.operationResults.map((result) => [result.requestId, result.request]),
-  );
+  const roundRequests = new Map<string, OperationRequest>();
   const results: Array<{
     request: OperationRequest;
     result: OperationResult;
@@ -198,13 +196,14 @@ async function performRequestedObservations<Product>(
   for (const request of requests) {
     command.executionPermit.assertActive();
     assertAuthorizedOperation(request, command.operationAuthority);
-    const existing = existingRequests.get(request.requestId);
+    const existing = roundRequests.get(request.requestId);
     if (existing) {
       if (!sameRequest(existing, request)) {
-        throw new Error("BTCC operation request identity conflict");
+        throw new Error("BTCC provider round reused one request ID for different operations");
       }
-      continue;
+      throw new Error("BTCC provider round contains a duplicate operation request ID");
     }
+    roundRequests.set(request.requestId, request);
     const observation = await command.operations.perform({
       request,
       envelope,
@@ -215,14 +214,7 @@ async function performRequestedObservations<Product>(
       throw new Error("BTCC observation result does not match its request");
     }
     const result = { ...observation, request };
-    existingRequests.set(request.requestId, request);
     results.push({ request, result });
-  }
-  if (results.length === 0) {
-    throw new OperationalInterruptionError(
-      "operation_batch_no_progress",
-      envelope.binding,
-    );
   }
   command.executionPermit.assertActive();
   return results;

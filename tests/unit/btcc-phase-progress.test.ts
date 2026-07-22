@@ -5,9 +5,6 @@ import {
   type OperationResult,
   type PhaseRunBinding,
 } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
-import { OperationalInterruptionError } from
-  "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
-
 const binding: PhaseRunBinding = {
   turnId: "turn-phase-progress",
   turnRevision: 4,
@@ -18,21 +15,21 @@ const binding: PhaseRunBinding = {
   executionFence: 7,
 };
 
-test("interrupts a replayed operation batch at its unchanged checkpoint", async () => {
+test("accepts a corrected request that reuses its local ID in a later model round", async () => {
   const results: OperationResult[] = [];
-  const request = {
+  const firstRequest = {
     requestId: "request-1",
     kind: "observe" as const,
     capabilityRef: "capability-1",
     scopeRef: "scope-1",
     input: { query: "current state" },
   };
+  const correctedRequest = { ...firstRequest, input: { query: "corrected state" } };
   let modelCalls = 0;
   let operationCalls = 0;
   const modelRounds: string[] = [];
 
-  try {
-    await runPhaseConversation({
+  const product = await runPhaseConversation({
       binding,
       modelSelection: selectedModel(),
       context: openingContext(),
@@ -44,7 +41,7 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
       },
       codec: {
         submissionSchema: objectSchema({}),
-        decode: () => ({ kind: "unreachable" }),
+        decode: (submission) => submission as { kind: string },
       },
       store: {
         restore: async (current) => ({
@@ -60,19 +57,17 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
           results.push(...appended.map((item) => item.result));
           return nextBinding(current);
         },
-        appendPhaseSubmission: async () => {
-          throw new Error("unexpected phase submission");
-        },
-        acceptPhaseProduct: async () => {
-          throw new Error("unexpected phase product");
-        },
+        appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
+        acceptPhaseProduct: async ({ binding: current }) => nextBinding(current),
       },
       model: {
         runRound: async () => {
           modelCalls += 1;
+          if (modelCalls === 1) return operationRound(firstRequest);
+          if (modelCalls === 2) return operationRound(correctedRequest);
           return {
-            kind: "operation_requests" as const,
-            requests: [request],
+            kind: "phase_submission" as const,
+            submission: { kind: "complete" },
             actualIdentity: selectedModel(),
           };
         },
@@ -81,38 +76,43 @@ test("interrupts a replayed operation batch at its unchanged checkpoint", async 
         perform: async () => {
           operationCalls += 1;
           return {
-            requestId: request.requestId,
+            requestId: firstRequest.requestId,
             outcome: "observed" as const,
-            observationRef: { id: "observation-1", sha256: "observation-sha" },
+            observationRef: {
+              id: `observation-${operationCalls}`,
+              sha256: `observation-sha-${operationCalls}`,
+            },
             content: "observed once",
           };
         },
       },
       operationAuthority: {
-        observationScopeRefs: [request.scopeRef],
+        observationScopeRefs: [firstRequest.scopeRef],
         mutation: { kind: "forbidden" },
       },
       executionPermit: activePermit(),
     });
-    throw new Error("expected phase interruption");
-  } catch (error) {
-    expect(error).toBeInstanceOf(OperationalInterruptionError);
-    expect((error as OperationalInterruptionError).code)
-      .toBe("operation_batch_no_progress");
-    expect((error as OperationalInterruptionError).anchor).toEqual({
-      ...binding,
-      checkpointRevision: 5,
-    });
-    expect((error as OperationalInterruptionError).activation).toEqual({
-      kind: "runtime_remediation",
-    });
-  }
 
-  expect(modelCalls).toBe(2);
-  expect(operationCalls).toBe(1);
-  expect(results).toHaveLength(1);
+  expect(product).toEqual({ kind: "complete" });
+  expect(modelCalls).toBe(3);
+  expect(operationCalls).toBe(2);
+  expect(results).toHaveLength(2);
   expect(modelRounds).toEqual(["operation_requests", "operation_requests"]);
 });
+
+function operationRound(request: {
+  requestId: string;
+  kind: "observe";
+  capabilityRef: string;
+  scopeRef: string;
+  input: Record<string, unknown>;
+}) {
+  return {
+    kind: "operation_requests" as const,
+    requests: [request],
+    actualIdentity: selectedModel(),
+  };
+}
 
 test("does not checkpoint a malformed provider phase submission", async () => {
   let appended = false;
