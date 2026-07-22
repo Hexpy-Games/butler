@@ -42,6 +42,19 @@ export function createProductionSelectedModel(
           result.actualIdentity,
         );
       } catch (error) {
+        if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
+          const diagnostic = error instanceof ModelProviderRequestError
+            ? error.diagnostic()
+            : {
+                name: error instanceof Error ? error.name : "UnknownError",
+                message: error instanceof Error ? error.message : String(error),
+              };
+          console.error(JSON.stringify({
+            event: "btcc_provider_round_interruption",
+            phase: envelope.phase,
+            diagnostic,
+          }));
+        }
         if (signal?.aborted || isAbortError(error)) {
           return interruption("provider_aborted", { kind: "cancelled" });
         }
