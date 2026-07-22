@@ -18,6 +18,7 @@ import {
   planRevisionReviewSubmissionSchema,
 } from "./submission-schemas.ts";
 import { attestCandidateBundle } from "./review-plan-attestation.ts";
+import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
@@ -34,6 +35,8 @@ const CONTRACT: PhaseContract = {
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
     "no_mutation", "no_repair",
   ],
+  authoringContractRefs: PLANNING_AUTHORING_CONTRACTS.map((contract) => contract.contractId),
+  authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
 function reviewCodec(candidate: PlanningCandidateProduct) {
