@@ -545,6 +545,8 @@ test("app server gates developer model logs behind developer mode", async () => 
           title: "Runtime State",
           region: "runtime_state",
           content: "Authorization: Bearer abc123",
+          projectionClass: "optional_hot_cache",
+          scopeKind: "session",
         }],
         workingContext: [],
         retrievedContext: [],

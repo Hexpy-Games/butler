@@ -1,9 +1,15 @@
 import type { ButlerContextInput } from "../contracts.ts";
+import type {
+  ContextProjectionClass,
+  ContextScopeKind,
+} from "../../context/context-projection.ts";
 
 export type ButlerContextSection = {
   id: string;
   content: string;
   sourceRevision: string;
+  projectionClass: ContextProjectionClass;
+  scopeKind: ContextScopeKind;
 };
 
 export type ButlerContextSnapshotCommand = {
@@ -16,13 +22,9 @@ export type ButlerContextSnapshotCommand = {
 
 export interface ContextDocumentWriter {
   persist(input: {
-    scopeKind: "project" | "session" | "user";
+    scopeKind: ContextScopeKind;
     scopeId: string;
-    projectionClass:
-      | "profile"
-      | "recent_feedback"
-      | "mandatory_hot_cache"
-      | "optional_hot_cache";
+    projectionClass: ContextProjectionClass;
     sourceId: string;
     sourceRevision: string;
     content: string;
