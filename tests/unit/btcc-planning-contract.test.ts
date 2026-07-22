@@ -6,7 +6,10 @@ import {
 import { reviewPlan } from "../../packages/butler-agent/src/agent/btcc/planning/review-plan.ts";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import type { PlanningCandidate } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
-import { planCandidateSubmissionSchema } from
+import {
+  feedbackPlanReviewSubmissionSchema,
+  planCandidateSubmissionSchema,
+} from
   "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
 
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
@@ -40,6 +43,14 @@ describe("BTCC Planning contract", () => {
 
     const schema = JSON.stringify(planCandidateSubmissionSchema(["SPEC-EXISTING"]));
     expect(schema).toContain('"enum":["SPEC-EXISTING"]');
+  });
+
+  test("constrains feedback review findings by verdict before decoding", () => {
+    const schema = JSON.stringify(feedbackPlanReviewSubmissionSchema);
+    expect(schema).toContain('"const":"accepted"');
+    expect(schema).toContain('"maxItems":0');
+    expect(schema).toContain('"const":"revision_required"');
+    expect(schema).toContain('"minItems":1');
   });
   test("authors exact risks, assumptions, effects, integration, and contained artifact targets", () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
