@@ -90,7 +90,7 @@ export function authorArtifactLifecycle(
 function requireContainedTargetPath(value: string): string {
   const normalized = value.replaceAll("\\", "/");
   if (
-    normalized.startsWith("/") || normalized.length === 0 || normalized === "." ||
+    normalized.startsWith("/") || normalized.length === 0 ||
     normalized.includes("\0") || normalized[1] === ":"
   ) {
     rejectPlanningProposal(
@@ -98,6 +98,7 @@ function requireContainedTargetPath(value: string): string {
       "Artifact targetPath must name a workspace-relative contained target",
     );
   }
+  if (normalized === ".") return normalized;
   const segments = normalized.split("/");
   if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
     rejectPlanningProposal(
@@ -110,5 +111,6 @@ function requireContainedTargetPath(value: string): string {
 
 function containedWorkspaceScope(workspaceScopeRef: string, targetPath: string): string {
   const scope = workspaceScopeRef.endsWith("/") ? workspaceScopeRef.slice(0, -1) : workspaceScopeRef;
+  if (targetPath === ".") return scope;
   return `${scope}/${targetPath}`;
 }
