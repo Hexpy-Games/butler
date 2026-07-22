@@ -24,7 +24,7 @@ const CONTRACT: PhaseContract = {
   objective: "independently_compare_every_task_criterion_with_current_targets",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "review_task_independently",
+    "review_task_independently", "author_managed_deferral",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",

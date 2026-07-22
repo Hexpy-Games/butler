@@ -16,8 +16,13 @@ import { handleNestedCommand } from "./lifecycle-commands.js";
 import { render } from "./renderer.js";
 import { installSkill } from "./distribution.js";
 import { migrateDocs } from "./docs-migration.js";
+import { withProjectLedgerMutation } from "./mutation-lock.js";
 
 export function initProject(options) {
+  return withProjectLedgerMutation(projectRoot(options), () => initProjectLocked(options));
+}
+
+function initProjectLocked(options) {
   const project = projectRoot(options);
   const id = requiredOption(options, "id");
   const name = requiredOption(options, "name");

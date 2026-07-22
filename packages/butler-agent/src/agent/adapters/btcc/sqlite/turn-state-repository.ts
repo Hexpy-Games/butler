@@ -1,12 +1,28 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
-} from "../../../btcc/gateway-api.ts";
-import { createWorkLedger, type WorkLedger } from "../../../btcc/gateway-api.ts";
-import { digest } from "./identity.ts";
+} from "../../../btcc/index.ts";
+import {
+  createWorkLedger,
+  LedgerContentionInterruption,
+  type WorkLedger,
+} from "../../../btcc/index.ts";
 import { SqliteTransitionWriter } from "./transition-writer.ts";
 import { SqliteWorkLedgerStorage } from "./work-ledger/index.ts";
 import { SqliteStopController } from "./sqlite-stop-controller.ts";
+import {
+  ProjectLedgerMutationClaimConflictError,
+  ProjectLedgerPublicationClaimConflictError,
+  ProjectLedgerHeadConflictError,
+  type ProjectWorkLedgerPublicationAdapter,
+} from "../project-ledger/index.ts";
+import {
+  ProjectLedgerPromotionWriter,
+} from "./project-ledger-promotion-writer.ts";
+import { ProjectLedgerBoundaryPreparer } from "./project-ledger-boundary-preparer.ts";
+import { SqliteLedgerContentionRuntime } from "./ledger-contention/index.ts";
+import { SqliteStateExecutionClaims } from "./state-execution-claims.ts";
+import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
 
 type TurnStateRepository = BtccRuntimeDependencies["turns"];
 type TurnRecord = NonNullable<Awaited<ReturnType<TurnStateRepository["findTurn"]>>>;
@@ -51,14 +67,26 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
   private readonly transitions: SqliteTransitionWriter;
   private readonly workLedger: WorkLedger;
   private readonly stops: SqliteStopController;
+  private readonly projectPromotions: ProjectLedgerPromotionWriter;
+  private readonly projectBoundaries: ProjectLedgerBoundaryPreparer;
+  private readonly contentions: SqliteLedgerContentionRuntime;
+  private readonly stateClaims: SqliteStateExecutionClaims;
 
   constructor(
     private readonly db: Database,
-    private readonly ownerId: string,
+    owner: RuntimeOwnerAuthority,
+    private readonly projectLedger?: {
+      publications: ProjectWorkLedgerPublicationAdapter;
+      resolveProjectRoot(projectRef: string): string;
+    },
   ) {
     this.workLedger = createWorkLedger(new SqliteWorkLedgerStorage(db));
     this.transitions = new SqliteTransitionWriter(db, this.workLedger);
     this.stops = new SqliteStopController(db);
+    this.projectPromotions = new ProjectLedgerPromotionWriter(db);
+    this.projectBoundaries = new ProjectLedgerBoundaryPreparer(db, projectLedger);
+    this.contentions = new SqliteLedgerContentionRuntime(db, projectLedger);
+    this.stateClaims = new SqliteStateExecutionClaims(db, owner);
   }
 
   async findTurn(turnId: string): Promise<TurnRecord | null> {
@@ -84,7 +112,7 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
           .get(row.delivery_outbox_id)
       : null;
     const managed = row.managed_state_json
-      ? this.reloadManagedProgram(JSON.parse(row.managed_state_json))
+      ? await this.reloadManagedProgram(JSON.parse(row.managed_state_json))
       : undefined;
     return {
       turnId: row.turn_id,
@@ -137,90 +165,95 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
   }
 
   async acquireStateExecutionClaim(turn: TurnRecord): Promise<StateExecutionClaim> {
-    if (!turn.checkpoint) throw new Error("Nonterminal BTCC Turn has no active checkpoint");
-    const claimId = digest(
-      `btcc-state-claim.v1\0${turn.turnId}\0${turn.revision}\0${turn.semanticState}\0${turn.checkpoint.checkpointId}`,
-    );
-    const transaction = this.db.transaction(() => {
-      const current = this.db.query<{
-        semantic_state: string;
-        revision: number;
-        execution_fence: number;
-        active_checkpoint_id: string;
-      }, [string]>(`
-        SELECT semantic_state, revision, execution_fence, active_checkpoint_id
-        FROM btcc_turns WHERE turn_id = ?
-      `).get(turn.turnId);
-      if (
-        !current ||
-        current.semantic_state !== turn.semanticState ||
-        current.revision !== turn.revision ||
-        current.execution_fence !== turn.executionFence ||
-        current.active_checkpoint_id !== turn.checkpoint!.checkpointId
-      ) {
-        throw new Error("BTCC StateExecutionClaim lost its exact Turn revision");
-      }
-      this.db.query(`
-        INSERT OR IGNORE INTO btcc_state_claims (
-          claim_id, turn_id, turn_revision, semantic_state, checkpoint_id,
-          checkpoint_revision, execution_fence, owner_id, owner_generation,
-          lease_generation, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, 'active')
-      `).run(
-        claimId,
-        turn.turnId,
-        turn.revision,
-        turn.semanticState,
-        turn.checkpoint!.checkpointId,
-        turn.checkpoint!.checkpointRevision,
-        turn.executionFence,
-        this.ownerId,
-      );
-      const claim = this.db.query<{ status: string; owner_id: string }, [string]>(`
-        SELECT status, owner_id FROM btcc_state_claims WHERE claim_id = ?
-      `).get(claimId);
-      if (claim?.status !== "active" || claim.owner_id !== this.ownerId) {
-        throw new Error("BTCC state is not actively owned by this runtime");
-      }
-      const checkpoint = this.db.query(`
-        UPDATE btcc_checkpoints SET active_claim_id = ?
-        WHERE checkpoint_id = ? AND is_active = 1
-          AND (active_claim_id IS NULL OR active_claim_id = ?)
-      `).run(claimId, turn.checkpoint!.checkpointId, claimId);
-      if (checkpoint.changes !== 1) {
-        throw new Error("BTCC checkpoint is already claimed by another runtime");
-      }
-    });
-    transaction();
-    return {
-      claimId,
-      turnId: turn.turnId,
-      turnRevision: turn.revision,
-      semanticState: turn.semanticState,
-      checkpointId: turn.checkpoint.checkpointId,
-      checkpointRevision: turn.checkpoint.checkpointRevision,
-      executionFence: turn.executionFence,
-    };
+    if (this.projectPromotions.loadPending(turn.turnId)?.status === "pending") {
+      throw new Error("BTCC successor is gated by an unobserved Project Ledger promotion");
+    }
+    return this.stateClaims.acquire(turn);
   }
 
   async commitTransition(input: CommitInput): Promise<void> {
-    this.transitions.commit(input);
+    let projectLedger;
+    try {
+      projectLedger = await this.projectBoundaries.prepare(input.transition);
+    } catch (error) {
+      if (error instanceof ProjectLedgerPublicationClaimConflictError ||
+        error instanceof ProjectLedgerMutationClaimConflictError ||
+        error instanceof ProjectLedgerHeadConflictError) {
+        const contentionId = this.contentions.relinquishBoundary(input, error);
+        throw new LedgerContentionInterruption(contentionId, (signal) =>
+          this.contentions.waitUntilResolved(contentionId, signal));
+      }
+      throw error;
+    }
+    try {
+      this.transitions.commit(input, projectLedger);
+    } catch (error) {
+      if (projectLedger.preparedPublication && this.projectLedger) {
+        await this.projectLedger.publications.abort(projectLedger.preparedPublication);
+        await this.contentions.scan();
+      }
+      throw error;
+    }
+  }
+
+  async activateCommittedSuccessor(turnId: string): Promise<TurnRecord> {
+    const pending = this.projectPromotions.loadPending(turnId);
+    if (pending?.status === "pending") {
+      if (!this.projectLedger) {
+        throw new Error("Project Ledger promotion runtime is not composed");
+      }
+      await this.projectLedger.publications.promoteAndObserve(pending.publication);
+      this.projectPromotions.observe(pending.outboxId);
+      await this.contentions.scan();
+    }
+    const turn = await this.findTurn(turnId);
+    if (!turn) throw new Error(`BTCC Turn disappeared after commit: ${turnId}`);
+    return turn;
+  }
+
+  async recoverPendingProjectLedgerPromotions(): Promise<void> {
+    if (this.projectLedger) {
+      await this.projectLedger.publications.reconcileOrphanedPublications(
+        this.projectPromotions.referencedPublicationIds(),
+      );
+    }
+    for (const pending of this.projectPromotions.listPending()) {
+      await this.activateCommittedSuccessor(pending.turnId);
+    }
+    await this.contentions.scan();
   }
 
   async stopTurn(turnId: string) {
-    return this.stops.stop(turnId);
+    const outcome = this.stops.stop(turnId);
+    if (this.projectPromotions.loadPending(turnId)?.status === "pending") {
+      void this.activateCommittedSuccessor(turnId).catch(() => {
+        // Stop is already durable. Startup reconciliation retains promotion ownership.
+      });
+    }
+    return outcome;
   }
 
-  private reloadManagedProgram(
+  private async reloadManagedProgram(
     managed: NonNullable<TurnRecord["managed"]>,
-  ): NonNullable<TurnRecord["managed"]> {
+  ): Promise<NonNullable<TurnRecord["managed"]>> {
     const programId = managed.programId
       ?? managed.program?.programId
       ?? managed.planningAcceptance?.candidate.programId;
     if (!programId) return managed;
+    const projection = this.db.query<{ project_ref: string }, [string]>(`
+      SELECT project_ref FROM btcc_project_program_projections WHERE program_id = ?
+    `).get(programId);
+    if (projection) {
+      if (!this.projectLedger) throw new Error("Project Work Ledger authority is not composed");
+      const projectRoot = this.projectLedger.resolveProjectRoot(projection.project_ref);
+      const program = await this.projectLedger.publications.loadProgram(projectRoot, programId);
+      if (!program) throw new Error("Project Work Ledger authoritative Program is missing");
+      return { ...managed, programId, program };
+    }
     const program = this.workLedger.loadProgram(programId);
     return program ? { ...managed, programId, program } : managed;
   }
+
 }
 
 function hydrateCheckpoint(row: CheckpointRow): TurnCheckpoint {

@@ -22,6 +22,7 @@ export type GoalContractRecord = {
     adoptedGoalFieldIds: string[];
   }>;
   personalizationRefs: string[];
+  governingSpecLogicalIds: string[];
   nonGoals: string[];
 };
 

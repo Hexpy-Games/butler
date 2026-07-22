@@ -5,6 +5,7 @@ import { appendLedgerEvent, ensureDir, projectPath, projectRelative } from "./fs
 import { loadIndex, queryIndex, sortRecords } from "./indexer.js";
 import { recordReference } from "./records.js";
 import { writeFileSync } from "node:fs";
+import { withProjectLedgerMutation } from "./mutation-lock.js";
 
 function formatRefs(items) {
   if (items.length === 0) return ["- None"];
@@ -99,6 +100,13 @@ export function renderMarkdown(project, viewName) {
 }
 
 export function render(project, viewName, options) {
+  if (options.write) {
+    return withProjectLedgerMutation(project, () => renderUnlocked(project, viewName, options));
+  }
+  return renderUnlocked(project, viewName, options);
+}
+
+function renderUnlocked(project, viewName, options) {
   if (!VIEW_NAMES.includes(viewName)) {
     throw new CliError(`Unsupported render view: ${viewName}`, "invalid_render_view");
   }

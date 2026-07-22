@@ -22,6 +22,7 @@ const CONTRACT: PhaseContract = {
     "review_plan_exactly", "review_work_cohesion", "review_executability",
     "review_dependencies", "review_verification_integration",
     "review_effect_authority", "review_artifact_lifecycle",
+    "author_managed_deferral",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -55,6 +56,7 @@ const codec = withManagedDeferral<PlanningReviewProduct>({
       reviewedEffectIntentRefs: candidate.candidate.effectIntents.map((item) => item.ref),
       reviewedIntegrationCriterionRefs: candidate.candidate.integrationCriteria.map((item) => item.ref),
       reviewedArtifactLifecycleRef: candidate.candidate.artifactLifecycle.ref,
+      reviewedSpecRevisionRefs: candidate.candidate.authoredSpecRevisionRefs,
     };
     if (value.verdict === "accepted") {
       const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };

@@ -21,8 +21,9 @@ export class OperationalInterruptionError extends Error {
     readonly code: string,
     readonly anchor: OperationalCheckpointAnchor,
     readonly activation: OperationalActivation = { kind: "runtime_remediation" },
+    cause?: unknown,
   ) {
-    super(`BTCC operational interruption: ${code}`);
+    super(`BTCC operational interruption: ${code}`, { cause });
   }
 }
 

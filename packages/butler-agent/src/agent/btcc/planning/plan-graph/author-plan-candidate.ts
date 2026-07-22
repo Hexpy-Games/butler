@@ -1,13 +1,16 @@
 import {
   contentRef,
   requireString,
+  stableJson,
   type ContentRef,
 } from "../../core/index.ts";
 import type {
   ManagedCriterion,
+  AvailableSpecRevision,
   ManagedTask,
   ManagedVerificationQuestion,
   ManagedWork,
+  PlanningCandidateBundleEntry,
   PlanningCandidate,
 } from "../contracts.ts";
 import { authorArtifactLifecycle } from "./author-artifact-lifecycle.ts";
@@ -26,17 +29,30 @@ type AuthoringState = {
   observedManifestRevision: number;
   goalContractRef: ContentRef;
   authorityRef: ContentRef;
+  governingSpecRefs: ContentRef[];
+  availableSpecs?: AvailableSpecRevision[];
   requiredOutcomeId: string;
   workspaceScopeRef: string;
   previousCandidateRef?: ContentRef;
   findingSetRef?: ContentRef;
   continuation?: import("../contracts.ts").PlanningContinuation;
+  requireGoverningSpec?: boolean;
 };
 
 export function authorPlanCandidate(
   submission: Record<string, unknown>,
   state: AuthoringState,
 ): PlanningCandidate {
+  const authoredSpecs = authorSpecs(submission.specifications);
+  const governingSpecRefs = selectGoverningSpecs(
+    submission.governingSpecSelections,
+    state.availableSpecs ?? [],
+    authoredSpecs,
+  );
+  if (state.requireGoverningSpec && governingSpecRefs.length === 0) {
+    throw new Error("Project Planning must reuse or author a governing Spec revision");
+  }
+  state = { ...state, governingSpecRefs };
   const drafts = readWorkDrafts(
     submission.works,
     state.workspaceScopeRef,
@@ -57,6 +73,7 @@ export function authorPlanCandidate(
       programId: state.programId,
       workLogicalId: owningWork(drafts, draft.logicalId).logicalId,
       goalContractRef: state.goalContractRef,
+      governingSpecRefs: state.governingSpecRefs,
       intendedOutcome: draft.intendedOutcome,
       executionOrdinal: draft.executionOrdinal,
       dependencyTaskRefs: draft.dependencyTaskIds.map((id) => requiredRef(taskRefs, id, "Task")),
@@ -100,6 +117,7 @@ export function authorPlanCandidate(
   const planBody = {
     programId: state.programId,
     goalContractRef: state.goalContractRef,
+    governingSpecRefs: state.governingSpecRefs,
     strategy: requireString(submission.strategy, "strategy"),
     workGraphRef: workGraph.ref,
     workRefs: works.map((work) => work.ref),
@@ -113,24 +131,26 @@ export function authorPlanCandidate(
     artifactLifecycleRef: artifactLifecycle.ref,
   };
   const plan = { ref: contentRef("work-plan", planBody), ...planBody };
-  const recordRefs = [
-    ...criteria.map((record) => record.ref),
-    ...questions.map((record) => record.ref),
-    ...authoredLifecycle.effectIntents.map((record) => record.ref),
-    ...authoredLifecycle.integrationCriteria.map((record) => record.ref),
-    ...risks.map((record) => record.ref),
-    ...assumptions.map((record) => record.ref),
-    ...tasks.map((record) => record.ref),
-    ...works.map((record) => record.ref),
-    artifactLifecycle.ref,
-    workGraph.ref,
-    plan.ref,
+  const entries = [
+    ...bundleEntries("spec_revision", authoredSpecs),
+    ...bundleEntries("acceptance_criterion", criteria),
+    ...bundleEntries("verification_question", questions),
+    ...bundleEntries("effect_intent", authoredLifecycle.effectIntents),
+    ...bundleEntries("integration_criterion", authoredLifecycle.integrationCriteria),
+    ...bundleEntries("risk", risks),
+    ...bundleEntries("assumption", assumptions),
+    ...bundleEntries("task_revision", tasks),
+    ...bundleEntries("work_revision", works),
+    ...bundleEntries("artifact_lifecycle", [artifactLifecycle]),
+    ...bundleEntries("work_graph", [workGraph]),
+    ...bundleEntries("work_plan", [plan]),
   ];
   const bundleBody = {
     ledgerId: state.ledgerId,
     programId: state.programId,
     observedManifestRevision: state.observedManifestRevision,
-    recordRefs,
+    recordRefs: entries.map((entry) => entry.ref),
+    entries,
   };
   const bundle = { ref: contentRef("planning-candidate-bundle", bundleBody), ...bundleBody };
   const revisionOrigin = state.previousCandidateRef && state.findingSetRef
@@ -152,6 +172,9 @@ export function authorPlanCandidate(
     programId: state.programId,
     observedManifestRevision: state.observedManifestRevision,
     goalContractRef: state.goalContractRef,
+    governingSpecRefs: state.governingSpecRefs,
+    authoredSpecRevisionRefs: authoredSpecs.map((spec) => spec.ref),
+    authoredSpecs,
     authorityRef: state.authorityRef,
     revisionOrigin,
     resolvedDeferralAnchorRefs: state.continuation ? [state.continuation.anchorRef] : [],
@@ -169,6 +192,83 @@ export function authorPlanCandidate(
     bundle,
   };
   return { ref: contentRef("plan-candidate", candidateBody), ...candidateBody };
+}
+
+function bundleEntries(
+  recordKind: string,
+  records: Array<{ ref: ContentRef } & Record<string, unknown>>,
+): PlanningCandidateBundleEntry[] {
+  return records.map((record) => {
+    const { ref, ...semantic } = record;
+    const semanticBytes = stableJson(semantic);
+    if (contentRef(recordKindForRef(recordKind), semantic).sha256 !== ref.sha256) {
+      throw new Error(`Planning bundle ${recordKind} bytes do not match ${ref.id}`);
+    }
+    return { recordKind, ref, semanticBytes };
+  });
+}
+
+function recordKindForRef(recordKind: string): string {
+  return {
+    spec_revision: "spec-revision",
+    acceptance_criterion: "acceptance-criterion",
+    verification_question: "verification-question",
+    effect_intent: "effect-intent",
+    integration_criterion: "integration-criterion",
+    risk: "planning-risk",
+    assumption: "planning-assumption",
+    task_revision: "task",
+    work_revision: "work",
+    artifact_lifecycle: "artifact-lifecycle",
+    work_graph: "work-graph",
+    work_plan: "work-plan",
+  }[recordKind] ?? recordKind;
+}
+
+function authorSpecs(value: unknown) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("Planning specifications must be an array");
+  const specs = value.map((item, index) => {
+    const draft = item as Record<string, unknown>;
+    const body = {
+      logicalId: requireString(draft.logicalId, `specifications[${index}].logicalId`),
+      title: requireString(draft.title, `specifications[${index}].title`),
+      body: requireString(draft.body, `specifications[${index}].body`),
+    };
+    return { ref: contentRef("spec-revision", body), ...body };
+  });
+  if (new Set(specs.map((spec) => spec.logicalId)).size !== specs.length) {
+    throw new Error("Planning specifications contain duplicate logical IDs");
+  }
+  return specs;
+}
+
+function selectGoverningSpecs(
+  value: unknown,
+  available: AvailableSpecRevision[],
+  authored: Array<{ logicalId: string; ref: ContentRef }>,
+): ContentRef[] {
+  if (value === undefined) return authored.map((spec) => spec.ref);
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+    throw new Error("governingSpecSelections must be a string array");
+  }
+  const selections = value as string[];
+  if (new Set(selections).size !== selections.length) {
+    throw new Error("governingSpecSelections contains duplicates");
+  }
+  const candidates = new Map(
+    available.map((spec) => [spec.logicalId, spec.revisionRef] as const),
+  );
+  const selected = selections.map((selection) => {
+    const ref = candidates.get(selection);
+    if (!ref) throw new Error(`governingSpecSelections contains an unavailable Spec: ${selection}`);
+    return ref;
+  });
+  const authoredIds = new Set(authored.map((spec) => spec.logicalId));
+  return [
+    ...selected.filter((_ref, index) => !authoredIds.has(selections[index]!)),
+    ...authored.map((spec) => spec.ref),
+  ];
 }
 
 function materializeCriteria(
@@ -207,6 +307,7 @@ function materializeWorks(
       workLogicalId: draft.logicalId,
       programId: state.programId,
       goalContractRef: state.goalContractRef,
+      governingSpecRefs: state.governingSpecRefs,
       outcome: draft.outcome,
       dependencyWorkRefs: draft.dependencyWorkIds.map((id) => requiredRef(refs, id, "Work")),
       taskRefs: tasks.filter((task) => task.workLogicalId === draft.logicalId).map((task) => task.ref),

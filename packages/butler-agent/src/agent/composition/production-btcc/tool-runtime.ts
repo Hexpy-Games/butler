@@ -10,6 +10,7 @@ type ToolRuntimeOptions = {
   butlerHome: string;
   butlerData: string;
   appMessageDbPath: string;
+  resolveProjectLedgerRoot?: (projectRef: string) => string;
 };
 
 export function createProductionToolRuntime(
@@ -56,6 +57,9 @@ function toolExecutor(
       butlerData: options.butlerData,
       workspacePath,
       ...(request.kind === "observe" ? { observationScopeRef: request.scopeRef } : {}),
+      ...(options.resolveProjectLedgerRoot
+        ? { resolveProjectLedgerRoot: options.resolveProjectLedgerRoot }
+        : {}),
       originalRequest: envelope.context.originalMessage,
       signal: call.signal,
     });

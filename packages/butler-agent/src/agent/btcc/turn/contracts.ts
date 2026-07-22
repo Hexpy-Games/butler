@@ -328,6 +328,7 @@ export interface TurnAdmissionRepository {
 
 export interface TurnStateRepository {
   findTurn(turnId: string): Promise<TurnRecord | null>;
+  activateCommittedSuccessor(turnId: string): Promise<TurnRecord>;
   acquireStateExecutionClaim(turn: TurnRecord): Promise<StateExecutionClaim>;
   commitTransition(input: {
     turn: TurnRecord;

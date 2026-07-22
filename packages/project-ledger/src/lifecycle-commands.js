@@ -22,6 +22,7 @@ import {
 } from "./record-commands.js";
 import { assertTransition, assertValidState, completionGateIssues } from "./state-machine.js";
 import { refreshDerivedIndexAfterMutation } from "./indexer.js";
+import { withProjectLedgerMutation } from "./mutation-lock.js";
 
 function baseRecord(kind, options, defaults = {}) {
   return {
@@ -41,6 +42,10 @@ function findRecordPath(project, kind, id) {
 }
 
 export function createWork(project, options) {
+  return withProjectLedgerMutation(project, () => createWorkLocked(project, options));
+}
+
+function createWorkLocked(project, options) {
   const status = optionalString(options, "status") ?? "proposed";
   assertValidState("work", status, { action: "create", id: optionalString(options, "id") });
   const data = {
@@ -63,6 +68,10 @@ export function createWork(project, options) {
 }
 
 export function updateWork(project, options) {
+  return withProjectLedgerMutation(project, () => updateWorkLocked(project, options));
+}
+
+function updateWorkLocked(project, options) {
   const id = requiredOption(options, "id");
   const filePath = findRecordPath(project, "work", id);
   const current = readRecord(project, filePath);
@@ -93,6 +102,10 @@ export function updateWork(project, options) {
 }
 
 export function completeWork(project, options) {
+  return withProjectLedgerMutation(project, () => completeWorkLocked(project, options));
+}
+
+function completeWorkLocked(project, options) {
   const id = requiredOption(options, "id");
   const filePath = findRecordPath(project, "work", id);
   const current = readRecord(project, filePath);
@@ -156,6 +169,10 @@ function updatePlan(project, options) {
 }
 
 export function createTask(project, options) {
+  return withProjectLedgerMutation(project, () => createTaskLocked(project, options));
+}
+
+function createTaskLocked(project, options) {
   const workId = requiredOption(options, "work");
   resolveRecord(project, { kind: "work", id: workId });
   const status = optionalString(options, "status") ?? "todo";
@@ -170,6 +187,10 @@ export function createTask(project, options) {
 }
 
 export function updateTask(project, options, forcedStatus = null) {
+  return withProjectLedgerMutation(project, () => updateTaskLocked(project, options, forcedStatus));
+}
+
+function updateTaskLocked(project, options, forcedStatus = null) {
   const id = requiredOption(options, "id");
   const { filePath } = resolveRecord(project, { kind: "task", id });
   const current = readRecord(project, filePath);
@@ -185,6 +206,10 @@ export function updateTask(project, options, forcedStatus = null) {
 }
 
 export function createAttempt(project, options) {
+  return withProjectLedgerMutation(project, () => createAttemptLocked(project, options));
+}
+
+function createAttemptLocked(project, options) {
   const taskId = requiredOption(options, "task");
   const { record: task } = resolveRecord(project, { kind: "task", id: taskId });
   const workId = workIdFromTaskPath(task.path);
@@ -207,6 +232,10 @@ export function createAttempt(project, options) {
 }
 
 export function updateAttempt(project, options, forcedStatus) {
+  return withProjectLedgerMutation(project, () => updateAttemptLocked(project, options, forcedStatus));
+}
+
+function updateAttemptLocked(project, options, forcedStatus) {
   const id = requiredOption(options, "id");
   const { filePath, record } = resolveRecord(project, { kind: "attempt", id });
   const loc = taskIdFromAttemptPath(record.path);

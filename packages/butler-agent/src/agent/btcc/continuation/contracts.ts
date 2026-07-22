@@ -5,6 +5,7 @@ export type DeferredContinuationCandidate = {
   ledgerId: string;
   programId: string;
   expectedManifestRevision: number;
+  baseManifestHash: string;
   sourceTurnId: string;
   originalGoalContractRef: ContentRef;
   anchorRef: ContentRef;
@@ -12,14 +13,16 @@ export type DeferredContinuationCandidate = {
 };
 
 export type ContinuationBinding =
-  | { kind: "new_request"; ref: ContentRef }
+  | { kind: "new_request"; inboxId: string; ref: ContentRef }
   | {
       kind: "deferred_goal";
+      inboxId: string;
       ref: ContentRef;
       candidateId: string;
       ledgerId: string;
       programId: string;
       expectedManifestRevision: number;
+      baseManifestHash: string;
       sourceTurnId: string;
       originalGoalContractRef: ContentRef;
       anchorRef: ContentRef;

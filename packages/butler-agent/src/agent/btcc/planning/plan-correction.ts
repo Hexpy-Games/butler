@@ -19,6 +19,7 @@ import type {
 import { withManagedDeferral } from "../deferral/index.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
 import { feedbackPlanSubmissionSchema } from "./submission-schemas.ts";
+import { decodeAvailableSpecs } from "./decode-available-specs.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -28,6 +29,7 @@ const CONTRACT: PhaseContract = {
     "author_scoped_correction", "classify_correction_kind",
     "author_complete_impact_map", "apply_authoring_contracts",
     "author_artifact_lifecycle", "candidate_revision_lineage",
+    "author_managed_deferral",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -38,24 +40,25 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-const codec = withManagedDeferral<FeedbackPlanProduct>({
-  submissionSchema: feedbackPlanSubmissionSchema,
-  decode(submission, envelope) {
-    const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
-    const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;
-    if (intent?.kind !== "feedback_intent") {
-      throw new Error("Feedback Planning is missing its accepted intent");
-    }
-    const value = requireRecord(submission, "Feedback Planning submission");
-    requireLiteral(value.kind, "feedback_plan_candidate", "Feedback Planning kind");
-    if (value.correctionKind !== intent.feedbackIntent.correctionKind) {
-      throw new Error("Feedback Planning changed the accepted correction kind");
-    }
-    const currentPlanRef = requireContentRef(state.workPlanRef, "workPlanRef");
-    const affectedTaskRefs = requireContentRefs(state.affectedTaskRefs, "affectedTaskRefs");
-    const lifecycleRef = requireContentRef(state.artifactLifecycleRef, "artifactLifecycleRef");
-    const revisionOrigin = revisionOriginFrom(state);
-    if (value.correctionKind === "implementation_repair") {
+function feedbackPlanningCodec(availableSpecIds: string[]) {
+  return withManagedDeferral<FeedbackPlanProduct>({
+    submissionSchema: feedbackPlanSubmissionSchema(availableSpecIds),
+    decode(submission, envelope) {
+      const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
+      const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;
+      if (intent?.kind !== "feedback_intent") {
+        throw new Error("Feedback Planning is missing its accepted intent");
+      }
+      const value = requireRecord(submission, "Feedback Planning submission");
+      requireLiteral(value.kind, "feedback_plan_candidate", "Feedback Planning kind");
+      if (value.correctionKind !== intent.feedbackIntent.correctionKind) {
+        throw new Error("Feedback Planning changed the accepted correction kind");
+      }
+      const currentPlanRef = requireContentRef(state.workPlanRef, "workPlanRef");
+      const affectedTaskRefs = requireContentRefs(state.affectedTaskRefs, "affectedTaskRefs");
+      const lifecycleRef = requireContentRef(state.artifactLifecycleRef, "artifactLifecycleRef");
+      const revisionOrigin = revisionOriginFrom(state);
+      if (value.correctionKind === "implementation_repair") {
       const correctionPlan = correctionPlanFor(
         currentPlanRef,
         affectedTaskRefs,
@@ -69,7 +72,7 @@ const codec = withManagedDeferral<FeedbackPlanProduct>({
         correctionScopeRef: intent.feedbackIntent.correctionScopeRef,
         correctionPlan,
       });
-    }
+      }
 
     const currentAuthorityRef = requireContentRef(state.authorityRef, "authorityRef");
     const proposedAuthority = value.correctionKind === "authority_scope_revision"
@@ -86,6 +89,9 @@ const codec = withManagedDeferral<FeedbackPlanProduct>({
         ),
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: proposedAuthority?.ref ?? currentAuthorityRef,
+        governingSpecRefs: requireContentRefArray(state.governingSpecRefs, "governingSpecRefs"),
+        availableSpecs: decodeAvailableSpecs(state.availableSpecs),
+        requireGoverningSpec: Boolean(state.requireGoverningSpec),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
         workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
       },
@@ -114,11 +120,18 @@ const codec = withManagedDeferral<FeedbackPlanProduct>({
       correctionKind: "authority_scope_revision",
       proposedAuthority: proposedAuthority!,
     });
-  },
-});
+    },
+  });
+}
 
 export function proposeCorrectionOrRevision(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = requireRecord(command.context.stateInput, "Feedback Planning state");
+  const availableSpecs = decodeAvailableSpecs(state.availableSpecs);
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: feedbackPlanningCodec(availableSpecs.map((spec) => spec.logicalId)),
+  });
 }
 
 function requireWorkspaceScope(scopeRefs: readonly string[]): string {
@@ -224,4 +237,9 @@ function requireContentRefs(value: unknown, label: string): [ContentRef, ...Cont
   if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} is empty`);
   return value.map((item, index) =>
     requireContentRef(item, `${label}[${index}]`)) as [ContentRef, ...ContentRef[]];
+}
+
+function requireContentRefArray(value: unknown, label: string): ContentRef[] {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
 }

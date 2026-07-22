@@ -1,32 +1,49 @@
 import type { Database } from "bun:sqlite";
-import type {
-  WorkLedgerCommit,
-} from "../../../../btcc/gateway-api.ts";
+import {
+  assertLogicalLedgerMutationId,
+  createLogicalLedgerBundle,
+  logicalLedgerRecords,
+  type WorkLedgerCommit,
+} from "../../../../btcc/index.ts";
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
 import { SqlitePromotionFrontierWriter } from "./promotion-frontier-writer.ts";
 import { SqliteProgramAuthorityWriter } from "./program-authority-writer.ts";
+import { SqliteWorkLedgerProgramReader } from "./work-ledger-program-reader.ts";
 
 export class SqliteWorkLedgerMutationWriter {
   private readonly journal: WorkLedgerCommitJournal;
   private readonly graphRevisions: SqliteReviewedGraphInstaller;
   private readonly promotionFrontier: SqlitePromotionFrontierWriter;
   private readonly programAuthority: SqliteProgramAuthorityWriter;
+  private readonly programs: SqliteWorkLedgerProgramReader;
 
   constructor(private readonly db: Database) {
     this.journal = new WorkLedgerCommitJournal(db);
     this.graphRevisions = new SqliteReviewedGraphInstaller(db);
     this.promotionFrontier = new SqlitePromotionFrontierWriter(db);
     this.programAuthority = new SqliteProgramAuthorityWriter(db);
+    this.programs = new SqliteWorkLedgerProgramReader(db);
   }
 
   commitAtomically(input: WorkLedgerCommit): void {
     this.db.transaction(() => {
       const boundary = this.journal.open(input);
       if (boundary.kind === "replayed") return;
+      const previous = this.programs.load(programIdOf(input));
+      assertLogicalLedgerMutationId(input, previous);
       this.apply(input);
-      this.journal.close(input, boundary.baseRevision);
+      const next = input.mutation.kind === "bind_program"
+        ? boundProgram(input.mutation)
+        : this.programs.load(programIdOf(input));
+      if (!next) throw new Error("Work Ledger mutation did not materialize its next manifest");
+      this.journal.close(
+        input,
+        boundary.baseRevision,
+        createLogicalLedgerBundle({ commit: input, previous, next }),
+        logicalLedgerRecords(input.mutation, previous),
+      );
     })();
   }
 
@@ -261,4 +278,29 @@ export class SqliteWorkLedgerMutationWriter {
     if (!task) throw new Error("Work Ledger Task disappeared");
     return { programId: task.program_id, workId: task.work_id };
   }
+}
+
+function programIdOf(input: WorkLedgerCommit): string {
+  const mutation = input.mutation;
+  if (mutation.kind === "bind_program") return mutation.product.authority.managedBinding.programId;
+  if (mutation.kind === "install_reviewed_plan") return mutation.product.candidate.programId;
+  return mutation.cursor.programId;
+}
+
+function boundProgram(
+  mutation: Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>,
+) {
+  const binding = mutation.product.authority.managedBinding;
+  return {
+    ledgerId: binding.ledgerId,
+    programId: binding.programId,
+    manifestRevision: binding.expectedManifestRevision + 1,
+    goalContractRef: mutation.product.goalContract.ref,
+    authorityRef: mutation.product.authority.ref,
+    availableSpecRefs: [],
+    availableSpecs: [],
+    governingSpecRefs: [],
+    requiredOutcomeId: mutation.product.goalContract.requiredOutcome.outcomeId,
+    planningState: "unplanned" as const,
+  };
 }

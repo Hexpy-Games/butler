@@ -1,10 +1,22 @@
-import { requireRecord, requireString, type ContentRef } from "../core/index.ts";
+import {
+  contentRef,
+  requireRecord,
+  requireString,
+  stableJson,
+  type ContentRef,
+} from "../core/index.ts";
 import type { PlanningCandidate } from "./contracts.ts";
 
 export function attestReviewedPlanReferences(
   submission: Record<string, unknown>,
   candidate: PlanningCandidate,
 ): void {
+  attestExactBundle(candidate);
+  attestExactRefs(
+    submission.reviewedSpecRevisionRefs,
+    candidate.authoredSpecRevisionRefs,
+    "SpecRevision",
+  );
   attestExactRefs(
     submission.reviewedEffectIntentRefs,
     candidate.effectIntents.map((item) => item.ref),
@@ -17,7 +29,33 @@ export function attestReviewedPlanReferences(
   );
 }
 
+function attestExactBundle(candidate: PlanningCandidate): void {
+  for (const entry of candidate.bundle.entries) {
+    const semantic = JSON.parse(entry.semanticBytes) as unknown;
+    if (stableJson(semantic) !== entry.semanticBytes ||
+      contentRef(refKind(entry.recordKind), semantic).sha256 !== entry.ref.sha256) {
+      throw new Error(`Planning Review bundle entry changed: ${entry.ref.id}`);
+    }
+  }
+  const { ref: _ref, ...bundleBody } = candidate.bundle;
+  const expected = contentRef("planning-candidate-bundle", bundleBody);
+  if (expected.id !== candidate.bundle.ref.id || expected.sha256 !== candidate.bundle.ref.sha256) {
+    throw new Error("Planning Review bundle identity changed");
+  }
+}
+
+function refKind(recordKind: string): string {
+  return {
+    spec_revision: "spec-revision", acceptance_criterion: "acceptance-criterion",
+    verification_question: "verification-question", effect_intent: "effect-intent",
+    integration_criterion: "integration-criterion", risk: "planning-risk",
+    assumption: "planning-assumption", task_revision: "task", work_revision: "work",
+    artifact_lifecycle: "artifact-lifecycle", work_graph: "work-graph", work_plan: "work-plan",
+  }[recordKind] ?? recordKind;
+}
+
 function attestExactRefs(value: unknown, expected: ContentRef[], label: string): void {
+  if (value === undefined && expected.length === 0) return;
   if (!Array.isArray(value)) throw new Error(`Planning Review ${label} refs must be an array`);
   const actual = value.map((item, index) => {
     const ref = requireRecord(item, `${label}[${index}]`);

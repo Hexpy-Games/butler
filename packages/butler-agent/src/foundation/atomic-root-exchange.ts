@@ -1,15 +1,9 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 
-export function exchangeCompleteTarget(left: string, right: string): void {
-  if (process.platform === "darwin") {
-    exchangeOnDarwin(left, right);
-    return;
-  }
-  if (process.platform === "linux") {
-    exchangeOnLinux(left, right);
-    return;
-  }
-  throw new Error("BTCC complete-target atomic exchange is unavailable on this platform");
+export function exchangeCompleteRoots(left: string, right: string): void {
+  if (process.platform === "darwin") return exchangeOnDarwin(left, right);
+  if (process.platform === "linux") return exchangeOnLinux(left, right);
+  throw new Error("Complete-root atomic exchange is unavailable on this platform");
 }
 
 function exchangeOnDarwin(left: string, right: string): void {
@@ -23,13 +17,9 @@ function exchangeOnDarwin(left: string, right: string): void {
     const leftPath = Buffer.from(`${left}\0`);
     const rightPath = Buffer.from(`${right}\0`);
     const result = library.symbols.renameatx_np(
-      -2,
-      ptr(leftPath),
-      -2,
-      ptr(rightPath),
-      2,
+      -2, ptr(leftPath), -2, ptr(rightPath), 2,
     );
-    if (result !== 0) throw new Error("BTCC atomic root exchange failed");
+    if (result !== 0) throw new Error("Complete-root atomic exchange failed");
   } finally {
     library.close();
   }
@@ -46,13 +36,9 @@ function exchangeOnLinux(left: string, right: string): void {
     const leftPath = Buffer.from(`${left}\0`);
     const rightPath = Buffer.from(`${right}\0`);
     const result = library.symbols.renameat2(
-      -100,
-      ptr(leftPath),
-      -100,
-      ptr(rightPath),
-      2,
+      -100, ptr(leftPath), -100, ptr(rightPath), 2,
     );
-    if (result !== 0) throw new Error("BTCC atomic root exchange failed");
+    if (result !== 0) throw new Error("Complete-root atomic exchange failed");
   } finally {
     library.close();
   }

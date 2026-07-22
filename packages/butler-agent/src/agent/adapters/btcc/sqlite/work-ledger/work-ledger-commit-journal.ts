@@ -1,5 +1,10 @@
 import type { Database } from "bun:sqlite";
-import type { WorkLedgerCommit } from "../../../../btcc/gateway-api.ts";
+import type {
+  LogicalLedgerBundle,
+  LogicalLedgerRecord,
+  WorkLedgerCommit,
+} from "../../../../btcc/index.ts";
+import { assertLogicalLedgerRecordBytes } from "../../../../btcc/index.ts";
 import { stableJson } from "../identity.ts";
 
 type CommitBoundary =
@@ -16,7 +21,12 @@ export class WorkLedgerCommitJournal {
     return { kind: "opened", baseRevision };
   }
 
-  close(input: WorkLedgerCommit, baseRevision: number): void {
+  close(
+    input: WorkLedgerCommit,
+    baseRevision: number,
+    bundle: LogicalLedgerBundle,
+    records: LogicalLedgerRecord[],
+  ): void {
     this.db.query(`
       INSERT INTO btcc_ledger_mutations (
         mutation_id, ledger_id, program_id, turn_id, turn_revision,
@@ -33,8 +43,36 @@ export class WorkLedgerCommitJournal {
       baseRevision,
       baseRevision + 1,
     );
+    const { ref: _ref, ...bundleBody } = bundle;
+    this.db.query(`
+      INSERT OR IGNORE INTO btcc_records (record_id, kind, sha256, content_json)
+      VALUES (?, 'ledger_bundle', ?, ?)
+    `).run(bundle.ref.id, bundle.ref.sha256, stableJson(bundleBody));
+    for (const record of records) this.insertLogicalRecord(record);
+    const stored = this.db.query<{ sha256: string; content_json: string }, [string]>(`
+      SELECT sha256, content_json FROM btcc_records WHERE record_id = ?
+    `).get(bundle.ref.id);
+    if (!stored || stored.sha256 !== bundle.ref.sha256 ||
+      stored.content_json !== stableJson(bundleBody)) {
+      throw new Error("Work Ledger logical bundle identity conflict");
+    }
     this.db.query("UPDATE btcc_ledger_claims SET status = 'promoted' WHERE claim_id = ?")
       .run(input.mutationId);
+  }
+
+  private insertLogicalRecord(record: LogicalLedgerRecord): void {
+    assertLogicalLedgerRecordBytes(record.ref, record.semanticBytes);
+    this.db.query(`
+      INSERT OR IGNORE INTO btcc_records (record_id, kind, sha256, content_json)
+      VALUES (?, 'ledger_record', ?, ?)
+    `).run(record.ref.id, record.ref.sha256, record.semanticBytes);
+    const stored = this.db.query<{ sha256: string; content_json: string }, [string]>(`
+      SELECT sha256, content_json FROM btcc_records WHERE record_id = ?
+    `).get(record.ref.id);
+    if (!stored || stored.sha256 !== record.ref.sha256 ||
+      stored.content_json !== record.semanticBytes) {
+      throw new Error("Work Ledger logical record identity conflict");
+    }
   }
 
   private currentManifestRevision(input: WorkLedgerCommit): number {

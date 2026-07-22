@@ -21,6 +21,7 @@ import {
   validateRecord,
 } from "./records.js";
 import { queryIndex } from "./queries.js";
+import { withProjectLedgerMutation } from "./mutation-lock.js";
 
 export { queryIndex, sortRecords } from "./queries.js";
 
@@ -112,6 +113,10 @@ export function buildIndex(project) {
 }
 
 export function writeIndex(project) {
+  return withProjectLedgerMutation(project, () => writeIndexLocked(project));
+}
+
+function writeIndexLocked(project) {
   const index = buildIndex(project);
   const path = projectPath(project, INDEX_PATH);
   ensureDir(dirname(path));

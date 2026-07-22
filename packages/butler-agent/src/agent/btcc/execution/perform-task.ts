@@ -22,7 +22,7 @@ const CONTRACT: PhaseContract = {
   objective: "execute_the_exact_accepted_task_and_record_its_concrete_result",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
-    "execute_accepted_task", "record_concrete_result",
+    "execute_accepted_task", "record_concrete_result", "author_managed_deferral",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",

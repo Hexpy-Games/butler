@@ -13,7 +13,7 @@ import {
   type StoredWorkspace,
   type WorkspaceActionJournal,
 } from "./artifact-store.ts";
-import { exchangeCompleteTarget } from "./atomic-target-exchange.ts";
+import { exchangeCompleteRoots } from "../../../../foundation/atomic-root-exchange.ts";
 import {
   assertActive,
   operationContent,
@@ -239,7 +239,7 @@ function exchangePreparedCandidate(
   const overlaySnapshot = captureWorkspaceSnapshot(journal.overlayRoot, workspace.targetKind);
   if (sameRef(workspaceSnapshot.ref, journal.beforeSnapshotRef) &&
     sameRef(overlaySnapshot.ref, candidateRef)) {
-    exchangeCompleteTarget(
+    exchangeCompleteRoots(
       workspaceContentRoot(journal.overlayRoot),
       workspaceContentRoot(workspace.workspaceRoot),
     );

@@ -30,7 +30,7 @@ const CONTRACT: PhaseContract = {
   objective: "understand_the_full_request_and_author_a_goal_candidate",
   duties: [
     "preserve_selected_model", "state_input_only", "understand_request",
-    ...LENSES, "candidate_revision_lineage",
+    ...LENSES, "select_exact_governing_spec_logical_ids", "candidate_revision_lineage",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -98,6 +98,9 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
       },
       lensAssessments,
       personalizationRefs,
+      governingSpecLogicalIds: uniqueStrings(
+        requireStringArray(value.governingSpecLogicalIds, "governingSpecLogicalIds"),
+      ),
       nonGoals: requireStringArray(value.nonGoals, "nonGoals"),
     };
     const proposedContract = { ref: contentRef("goal-contract", body), ...body };
@@ -130,6 +133,13 @@ function canonicalLensBinding(
   return submittedDisposition === "adopted"
     ? { disposition: "adopted" as const, adoptedGoalFieldIds }
     : { disposition: "non_applicable" as const, adoptedGoalFieldIds: [] };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  if (new Set(values).size !== values.length) {
+    throw new Error("governingSpecLogicalIds contains duplicates");
+  }
+  return values;
 }
 
 export function deliberateGoal(command: PhaseInvocation) {

@@ -13,6 +13,7 @@ import {
 import { gitCommitEvidence } from "./git-evidence.js";
 import { assertTransition, completionGateIssues } from "./state-machine.js";
 import { refreshDerivedIndexAfterMutation } from "./indexer.js";
+import { withProjectLedgerMutation } from "./mutation-lock.js";
 
 export const TOP_LEVEL_RECORD_KINDS = new Set([
   "initiative",
@@ -54,6 +55,7 @@ const METADATA_FIELDS = [
   "acceptance",
   "codeCommits",
   "ledgerCommits",
+  "revisionRef",
 ];
 
 export function optionUpdates(options, fields = METADATA_FIELDS) {
@@ -74,6 +76,10 @@ export function optionUpdates(options, fields = METADATA_FIELDS) {
   if (options["requires-commit-evidence"]) updates.requiresCommitEvidence = true;
   const priority = optionalNumber(options, "priority");
   if (priority !== null) updates.priority = priority;
+  const revision = optionalNumber(options, "revision");
+  if (revision !== null) updates.revision = revision;
+  const supersedesRevision = optionalNumber(options, "supersedesRevision");
+  if (supersedesRevision !== null) updates.supersedesRevision = supersedesRevision;
   return updates;
 }
 
@@ -175,20 +181,26 @@ export function resolveRecord(project, options) {
 }
 
 export function writeAndReturn(project, filePath, data, body = null, eventType = null) {
-  writeMarkdownRecord(filePath, data, body);
-  const record = readRecord(project, filePath);
-  appendLedgerEvent(project, {
-    type: eventType ?? `${data.kind}_written`,
-    id: data.id,
-    kind: data.kind,
-    status: data.status,
-    path: projectRelative(project, filePath),
-    source: "project-ledger",
+  return withProjectLedgerMutation(project, () => {
+    writeMarkdownRecord(filePath, data, body);
+    const record = readRecord(project, filePath);
+    appendLedgerEvent(project, {
+      type: eventType ?? `${data.kind}_written`,
+      id: data.id,
+      kind: data.kind,
+      status: data.status,
+      path: projectRelative(project, filePath),
+      source: "project-ledger",
+    });
+    return refreshDerivedIndexAfterMutation(project, record);
   });
-  return refreshDerivedIndexAfterMutation(project, record);
 }
 
 export function createRecord(project, options) {
+  return withProjectLedgerMutation(project, () => createRecordLocked(project, options));
+}
+
+function createRecordLocked(project, options) {
   const kind = modeledRecordKind(requiredOption(options, "kind"));
   const data = baseRecord(kind, options);
   const filePath = topLevelRecordPath(project, kind, data.id);
@@ -206,6 +218,10 @@ export function showRecord(project, options) {
 }
 
 export function updateRecord(project, options) {
+  return withProjectLedgerMutation(project, () => updateRecordLocked(project, options));
+}
+
+function updateRecordLocked(project, options) {
   const { filePath, record } = resolveRecord(project, options);
   if (!SOURCE_RECORD_KINDS.has(record.kind)) {
     throw new CliError(`Record kind does not support generic update: ${record.kind}`, "invalid_input", 1);

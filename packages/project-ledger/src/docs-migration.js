@@ -18,6 +18,7 @@ import {
 } from "./fs.js";
 import { markdownWithFrontmatter, parseFrontmatter, frontmatterBody } from "./frontmatter.js";
 import { readRecordData } from "./records.js";
+import { withProjectLedgerMutation } from "./mutation-lock.js";
 
 const TOP_LEVEL_REFERENCES = new Set([
   "architecture.md",
@@ -167,6 +168,10 @@ export function migrateDocs(project, options = {}) {
   if (!options.write) {
     return { ...plan, written: false };
   }
+  return withProjectLedgerMutation(project, () => migrateDocsLocked(project, options, plan));
+}
+
+function migrateDocsLocked(project, _options, plan) {
 
   for (const item of plan.moves) {
     const sourcePath = join(project, item.source);

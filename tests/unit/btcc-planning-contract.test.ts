@@ -5,10 +5,41 @@ import { attestReviewedPlanReferences } from "../../packages/butler-agent/src/ag
 import { OperationalInterruptionError } from "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import type { PlanningCandidate } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
+import { planCandidateSubmissionSchema } from
+  "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
 
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
 
 describe("BTCC Planning contract", () => {
+  test("binds existing Specs by schema-constrained logical ID and governs authored Specs automatically", () => {
+    const existing = ref("spec-existing-revision");
+    const selected = authorPlanCandidate({
+      ...artifactPlan(),
+      governingSpecSelections: ["SPEC-EXISTING"],
+    }, {
+      ...authoringState(),
+      availableSpecs: [{
+        logicalId: "SPEC-EXISTING",
+        title: "Existing contract",
+        status: "specified",
+        revisionRef: existing,
+      }],
+    });
+    expect(selected.governingSpecRefs).toEqual([existing]);
+
+    const authored = authorPlanCandidate({
+      ...artifactPlan(),
+      specifications: [{
+        logicalId: "SPEC-AUTHORED",
+        title: "Authored contract",
+        body: "The requested behavior is normative.",
+      }],
+    }, authoringState());
+    expect(authored.governingSpecRefs).toEqual(authored.authoredSpecRevisionRefs);
+
+    const schema = JSON.stringify(planCandidateSubmissionSchema(["SPEC-EXISTING"]));
+    expect(schema).toContain('"enum":["SPEC-EXISTING"]');
+  });
   test("authors exact risks, assumptions, effects, integration, and contained artifact targets", () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
 
@@ -124,6 +155,7 @@ function authoringState() {
     observedManifestRevision: 1,
     goalContractRef: ref("goal"),
     authorityRef: ref("authority"),
+    governingSpecRefs: [ref("spec")],
     requiredOutcomeId: "required-outcome-1",
     workspaceScopeRef: "workspace:/repo",
   };
@@ -234,10 +266,17 @@ function reviewInvocation(
       stateInput: { planCandidate: { kind: "plan_candidate", candidate } },
     },
     store: {
-      loadAcceptedProduct: async () => null,
-      persistAcceptedProduct: async () => undefined,
-      loadOperationResults: async () => [],
-      appendOperationResult: async () => undefined,
+      restore: async (binding: any) => ({ binding, acceptedProduct: null, operationResults: [] }),
+      appendOperationRound: async () => { throw new Error("unexpected operation round"); },
+      appendOperationResults: async () => { throw new Error("unexpected operation results"); },
+      appendPhaseSubmission: async ({ binding }: any) => ({
+        ...binding,
+        checkpointRevision: binding.checkpointRevision + 1,
+      }),
+      acceptPhaseProduct: async ({ binding }: any) => ({
+        ...binding,
+        checkpointRevision: binding.checkpointRevision + 1,
+      }),
     },
     model: {
       runRound: async () => ({

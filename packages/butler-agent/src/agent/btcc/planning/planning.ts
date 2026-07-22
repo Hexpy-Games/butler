@@ -94,6 +94,9 @@ async function authorInitialPlan(command: {
     ledgerId: authority.ledgerId,
     programId: authority.programId,
     observedManifestRevision: authority.manifestRevision,
+    governingSpecRefs: authority.governingSpecRefs,
+    availableSpecs: authority.availableSpecs,
+    requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
     ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
       ? { continuation: accepted.authority.managedBinding.continuationBinding }
       : {}),
@@ -146,6 +149,9 @@ async function authorFeedbackPlan(command: {
       ledgerId: program.ledgerId,
       programId: program.programId,
       observedManifestRevision: program.manifestRevision,
+      governingSpecRefs: program.governingSpecRefs,
+      availableSpecs: program.availableSpecs,
+      requireGoverningSpec: managed.goalAcceptance.authority.ledgerScope.kind === "project",
       currentTasks: program.tasks.map((task) => task.task),
       ...(previous
         ? {

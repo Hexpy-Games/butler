@@ -117,7 +117,7 @@ function selectContinuation(
     : [];
   if (submittedCandidateId === undefined || submittedCandidateId === null) {
     const body = { kind: "new_request" as const, inboxId };
-    return { kind: "new_request", ref: contentRef("continuation-binding", body) };
+    return { kind: "new_request", inboxId, ref: contentRef("continuation-binding", body) };
   }
   if (typeof submittedCandidateId !== "string") {
     throw new Error("Continuation candidate id must be a string");
@@ -131,6 +131,7 @@ function selectContinuation(
   };
   return {
     kind: "deferred_goal",
+    inboxId,
     ref: contentRef("continuation-binding", body),
     ...candidate,
   };

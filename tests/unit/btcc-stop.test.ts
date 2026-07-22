@@ -126,6 +126,7 @@ test("Stop keeps the in-memory fence when durable persistence is unavailable", a
   };
   const turns: TurnStateRepository = {
     async findTurn() { return null; },
+    async activateCommittedSuccessor() { throw new Error("not used"); },
     async acquireStateExecutionClaim() { throw new Error("not used"); },
     async commitTransition() { throw new Error("not used"); },
     async stopTurn() { throw new Error("storage unavailable"); },
@@ -152,7 +153,7 @@ test("one runtime owns a persisted state while a concurrent runtime is excluded"
     const first = firstRuntime.handle(command);
     await owner.started;
     await expect(secondRuntime.handle(command)).rejects.toThrow(
-      "BTCC state is not actively owned by this runtime",
+      "BTCC state is actively owned by another live runtime",
     );
     owner.release();
     expect((await first).kind).toBe("delivered");
