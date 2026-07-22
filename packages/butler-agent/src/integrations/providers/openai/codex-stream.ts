@@ -1,12 +1,10 @@
 import type { CodexSseAccumulator, OpenAIResponse, PromptUsageAttribution, ProviderStreamProjectionHandler } from "../runtime-contracts.ts";
 import { codexAccountIdFromAuthorization, codexRequestBody } from "./responses-client.ts";
+import { codexSseResponseFromAccumulator } from "./codex-response-assembly.ts";
 import { emitProviderStreamProjectionBestEffort } from "../shared/runtime-support.ts";
 import { getCodexOriginator, getCodexResponsesUrl, getCodexUserAgent } from "./config.ts";
 import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-
-
-
 
 export function createCodexSseAccumulator(
   onProviderStreamEvent?: ProviderStreamProjectionHandler,
@@ -25,28 +23,7 @@ export function createCodexSseAccumulator(
 
 
 
-export function codexSseResponseFromAccumulator(accumulator: CodexSseAccumulator): OpenAIResponse {
-  if (accumulator.output.length === 0 && Array.isArray(accumulator.completed?.output)) {
-    accumulator.output.push(...accumulator.completed.output);
-  }
-
-  const usage = accumulator.completed?.usage;
-  return {
-    id: typeof accumulator.completed?.id === "string" ? accumulator.completed.id : `codex-${Date.now()}`,
-    output: accumulator.output,
-    output_text: accumulator.fallbackText || undefined,
-    usage: usage
-      ? {
-          input_tokens: usage.input_tokens,
-          prompt_tokens: usage.input_tokens,
-          total_tokens: usage.total_tokens,
-          prompt_tokens_details: {
-            cached_tokens: usage.input_tokens_details?.cached_tokens,
-          },
-        }
-      : undefined,
-  };
-}
+export { codexSseResponseFromAccumulator } from "./codex-response-assembly.ts";
 
 
 
