@@ -3,6 +3,7 @@ import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createProjectWorkLedgerPublicationAdapter,
+  readCanonicalProjectLedger,
   ProjectLedgerHeadConflictError,
   ProjectLedgerPublicationClaimConflictError,
 } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
@@ -38,6 +39,12 @@ describe("BTCC Project Work Ledger prepared publication", () => {
     });
     expect(bind.program.availableSpecRefs).toHaveLength(1);
     await adapter.promoteAndObserve(bind.publication);
+    const canonical = await readCanonicalProjectLedger(fixture.ledgerRoot);
+    expect(canonical.records.find((record) => record.id === "SPEC-FIXTURE")?.body)
+      .toContain("Fixture spec");
+    expect(canonical.records.some((record) =>
+      record.kind === "reference" && record.body?.includes(binding.goalContract.ref.id)
+    )).toBe(true);
 
     const accepted = reviewedPlan({
       goalContractRef: binding.goalContract.ref,

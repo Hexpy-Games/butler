@@ -1,21 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import {
+  readCanonicalProjectLedger,
+  type CanonicalLedgerRecord,
+} from "../../../adapters/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
-
-type LedgerRecord = {
-  id: string;
-  kind: string;
-  title?: string;
-  status?: string;
-  path?: string;
-  [key: string]: unknown;
-};
-
-type LedgerIndex = {
-  project?: { id?: string; name?: string };
-  records?: LedgerRecord[];
-  issues?: unknown[];
-};
 
 export async function readProjectLedger(
   args: Record<string, unknown>,
@@ -26,18 +13,13 @@ export async function readProjectLedger(
     throw new Error("Project Ledger capability has no active binding resolver");
   }
   const projectRoot = context.resolveProjectLedgerRoot(projectId);
-  const indexPath = resolve(projectRoot, "index", "project.json");
-  if (!existsSync(indexPath)) {
-    return { projectId, available: false, records: [] };
-  }
-  const index = JSON.parse(readFileSync(indexPath, "utf8")) as LedgerIndex;
-  const selected = selectRecords(index.records ?? [], args);
+  const ledger = await readCanonicalProjectLedger(projectRoot);
+  const selected = selectRecords(ledger.records, args);
   const includeBody = args.include_body === true;
   return {
     projectId,
     available: true,
-    project: index.project ?? null,
-    issues: Array.isArray(index.issues) ? index.issues.length : 0,
+    project: ledger.project,
     records: selected.map((record) => ({
       id: record.id,
       kind: record.kind,
@@ -45,7 +27,7 @@ export async function readProjectLedger(
       status: record.status ?? "",
       spec: record.spec ?? null,
       parentId: record.parentId ?? null,
-      ...(includeBody ? { body: readRecordBody(record, projectRoot, context.butlerData) } : {}),
+      ...(includeBody ? { body: record.body } : {}),
     })),
   };
 }
@@ -59,7 +41,10 @@ function projectRefFromScope(scopeRef: string | undefined): string {
   return projectRef;
 }
 
-function selectRecords(records: LedgerRecord[], args: Record<string, unknown>): LedgerRecord[] {
+function selectRecords(
+  records: CanonicalLedgerRecord[],
+  args: Record<string, unknown>,
+): CanonicalLedgerRecord[] {
   const ids = stringSet(args.record_ids, "record_ids");
   const kinds = stringSet(args.kinds, "kinds");
   const query = typeof args.query === "string" ? args.query.trim().toLocaleLowerCase() : "";
@@ -72,20 +57,6 @@ function selectRecords(records: LedgerRecord[], args: Record<string, unknown>): 
     .slice(0, limit);
 }
 
-function readRecordBody(
-  record: LedgerRecord,
-  projectRoot: string,
-  butlerData: string,
-): string | null {
-  if (typeof record.path !== "string" || !record.path) return null;
-  const candidates = [resolve(butlerData, record.path), resolve(projectRoot, record.path)];
-  const path = candidates.find((candidate) => {
-    assertContained(butlerData, candidate);
-    return existsSync(candidate);
-  });
-  return path ? readFileSync(path, "utf8") : null;
-}
-
 function stringSet(value: unknown, label: string): Set<string> {
   if (value === undefined) return new Set();
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
@@ -94,17 +65,9 @@ function stringSet(value: unknown, label: string): Set<string> {
   return new Set(value as string[]);
 }
 
-function searchableText(record: LedgerRecord): string {
+function searchableText(record: CanonicalLedgerRecord): string {
   return [record.id, record.kind, record.title, record.status]
     .filter((value): value is string => typeof value === "string")
     .join("\n")
     .toLocaleLowerCase();
-}
-
-function assertContained(root: string, candidate: string): void {
-  const child = relative(resolve(root), resolve(candidate));
-  if (child === "" || (!child.startsWith(`..${sep}`) && child !== ".." && !isAbsolute(child))) {
-    return;
-  }
-  throw new Error("Project Ledger path escapes the configured Butler data root");
 }
