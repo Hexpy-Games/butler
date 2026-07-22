@@ -11,6 +11,7 @@ import { ModelProviderRequestError } from "../../../../integrations/providers/pr
 import type { OperationalActivation } from "../../recovery/index.ts";
 import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.ts";
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
+import { validateJsonObjectSchema } from "../../../tools/tool-bridge/schema-validation.ts";
 
 export function createProductionSelectedModel(
   dependencies: ProductionSelectedModelDependencies,
@@ -34,6 +35,7 @@ export function createProductionSelectedModel(
           });
         }
         try {
+          assertCarrierMatchesRenderedSchema(result.carrier, rendered.responseSchema);
           return decodeCarrier(
             result.carrier,
             envelope.operationAuthority,
@@ -78,6 +80,21 @@ export function createProductionSelectedModel(
       }
     },
   };
+}
+
+function assertCarrierMatchesRenderedSchema(
+  carrier: unknown,
+  responseSchema: Record<string, unknown>,
+): asserts carrier is Record<string, unknown> {
+  if (!isRecord(carrier)) {
+    throw new ProviderCarrierProtocolError("BTCC provider carrier is not an object");
+  }
+  const validation = validateJsonObjectSchema(carrier, responseSchema);
+  if (!validation.ok) {
+    throw new ProviderCarrierProtocolError(
+      `BTCC provider carrier violates the rendered schema at ${validation.path}`,
+    );
+  }
 }
 
 function decodeCarrier(

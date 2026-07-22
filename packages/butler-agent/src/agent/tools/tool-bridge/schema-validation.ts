@@ -68,6 +68,20 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
       };
     }
   }
+  const anyOf = Array.isArray(record.anyOf) ? record.anyOf : null;
+  if (anyOf) {
+    const results = anyOf.map((variant) => validateJsonValue(value, variant, path));
+    if (!results.some((result) => result.ok)) {
+      const firstFailure = results.find((result) => !result.ok);
+      return {
+        ok: false,
+        message: firstFailure && !firstFailure.ok
+          ? `No schema variant matched: ${firstFailure.message}`
+          : `No schema variant matched at ${path}`,
+        path: firstFailure && !firstFailure.ok ? firstFailure.path : path,
+      };
+    }
+  }
   const types = schemaTypes(record.type);
   if (types.length > 0 && !types.some((type) => matchesType(value, type))) {
     return { ok: false, message: `Expected ${types.join(" or ")} at ${path}`, path };
