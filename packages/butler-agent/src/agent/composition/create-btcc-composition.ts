@@ -43,6 +43,7 @@ export function createBtccComposition(input: {
     artifacts: input.artifacts,
     messages: stores.messages,
     retrospective: stores.retrospective,
+    operationalRecovery: stores.operationalRecovery,
   });
 }
 
@@ -88,7 +89,6 @@ export function createProductionBtccComposition(input: {
     ...createProductionToolRuntime({ ...input, resolveProjectLedgerRoot: resolveProjectRoot }),
   });
   const progress = new BtccTurnProgressHub();
-  const ready = stores.turns.recoverPendingProjectLedgerPromotions();
   const runtime = createBtccTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
@@ -102,8 +102,10 @@ export function createProductionBtccComposition(input: {
     artifacts: operationRuntime.artifacts,
     messages: stores.messages,
     retrospective: stores.retrospective,
+    operationalRecovery: stores.operationalRecovery,
     progress,
   });
+  const ready = recoverOperationalOwnership(runtime, stores);
   return {
     runtime,
     contextDocuments: stores.contextDocuments,
@@ -112,6 +114,26 @@ export function createProductionBtccComposition(input: {
     close: stores.close,
     ready,
   };
+}
+
+async function recoverOperationalOwnership(
+  runtime: BtccTurnRuntime,
+  stores: ReturnType<typeof openBtccSqliteStores>,
+): Promise<void> {
+  await stores.turns.recoverPendingProjectLedgerPromotions();
+  const turnIds = await stores.operationalRecovery.pendingTurnIds();
+  for (const turnId of turnIds) {
+    void runtime.handle({ kind: "resume", turnId }).catch(reportRecoveryFailure);
+  }
+}
+
+function reportRecoveryFailure(error: unknown): void {
+  if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS !== "1") return;
+  console.error(JSON.stringify({
+    event: "btcc_operational_recovery_activation_failed",
+    name: error instanceof Error ? error.name : "UnknownError",
+    message: error instanceof Error ? error.message : String(error),
+  }));
 }
 
 function resolveWorkspaceTargetScope(targetScopeRef: string): string {

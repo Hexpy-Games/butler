@@ -14,6 +14,10 @@ import type {
 import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
 import type { DeferredContinuationCandidate } from "./continuation/index.ts";
 import type { StopPersistenceOutcome } from "./turn/index.ts";
+import type {
+  OperationalActivation,
+  OperationalRecoveryBoundary,
+} from "./recovery/index.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -83,6 +87,12 @@ export interface BtccTurnProgressObserver {
     semanticState: string;
     turnRevision: number;
   }): void | Promise<void>;
+  operationalNoticeChanged?(update: {
+    turnId: string;
+    status: "recovering" | "cleared";
+    code?: string;
+    activationKind?: OperationalActivation["kind"];
+  }): void | Promise<void>;
 }
 
 export type BtccRuntimeDependencies = {
@@ -94,5 +104,6 @@ export type BtccRuntimeDependencies = {
   artifacts: ArtifactWorkspaceRuntime;
   messages: CanonicalMessageStore;
   retrospective: RetrospectiveScheduler;
+  operationalRecovery?: OperationalRecoveryBoundary;
   progress?: BtccTurnProgressObserver;
 };
