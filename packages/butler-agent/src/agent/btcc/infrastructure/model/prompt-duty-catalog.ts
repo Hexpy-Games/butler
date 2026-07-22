@@ -15,6 +15,7 @@ const DUTIES = {
   apply_accepted_output_preferences: "Apply each relevant accepted presentation preference and public-safe personalization reference, or record a public-safe not-applicable reason.",
   publish_truthful_continuation: "State the current truthful activity without promising completion, inventing work, or selecting a later phase.",
   candidate_revision_lineage: "Bind the exact prior candidate, requesting review, and finding set; change content only to address those findings and never reuse an id for different bytes.",
+  apply_exact_review_findings: "Read the complete prior candidate and every supplied review finding, then return a revised candidate that explicitly resolves each finding while preserving unaffected accepted intent.",
   requested_content: "Check the literal request and its boundaries; adopt the exact request field and faithful constraints without reinterpretation.",
   related_memory: "Inspect relevant accepted memories and prior decisions; adopt only context that materially constrains or guides this request.",
   connected_current_knowledge: "Check connected knowledge and current facts needed for the result; use concrete operation provenance for external facts.",
