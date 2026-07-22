@@ -45,7 +45,9 @@ export async function performReviewValidation(input: {
   if (existsSync(root)) removeOwnedRoot(root);
   mkdirSync(root, { recursive: true });
   materializeSnapshot(snapshotValue, workspaceContentRoot(root));
-  const before = captureWorkspaceSnapshot(root, snapshotValue.targetKind);
+  const before = captureWorkspaceSnapshot(
+    root, snapshotValue.targetKind, snapshotValue.targetState,
+  );
   if (snapshotSha256(before) !== snapshotSha256(snapshotValue)) {
     removeOwnedRoot(root);
     throw new Error("BTCC Review overlay does not match its immutable source");
@@ -69,7 +71,9 @@ export async function performReviewValidation(input: {
       signal: input.signal,
     });
     assertActive(input.signal);
-    const after = captureWorkspaceSnapshot(root, snapshotValue.targetKind);
+    const after = captureWorkspaceSnapshot(
+      root, snapshotValue.targetKind, snapshotValue.targetState,
+    );
     const content = operationContent(output);
     const validationReceiptRef = contentRef("review-validation-receipt", {
       requestId: input.request.requestId,
