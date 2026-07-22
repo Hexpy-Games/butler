@@ -22,6 +22,14 @@ export {
   variantsSchema,
 } from "./submission-schema.ts";
 export type { SubmissionSchema } from "./submission-schema.ts";
+export {
+  PROMPT_DUTY_IDS,
+  PROMPT_PROHIBITION_IDS,
+} from "./prompt-contract.ts";
+export type {
+  PromptDutyId,
+  PromptProhibitionId,
+} from "./prompt-contract.ts";
 export type {
   AuthoringContractBinding,
   ActualModelIdentity,

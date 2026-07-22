@@ -3,6 +3,7 @@ import type { DeferredContinuationCandidate } from "../continuation/index.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
 import type { OperationalActivation } from "../recovery/index.ts";
 import type { SubmissionSchema } from "./submission-schema.ts";
+import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -47,9 +48,9 @@ export type PhaseEnvelope = {
   binding: PhaseRunBinding;
   phase: ModelPhaseState;
   objective: string;
-  duties: readonly string[];
-  prohibitions: readonly string[];
-  exitDuties?: Readonly<Record<string, readonly string[]>>;
+  duties: readonly PromptDutyId[];
+  prohibitions: readonly PromptProhibitionId[];
+  exitDuties?: Readonly<Record<string, readonly PromptDutyId[]>>;
   authoringContractRefs?: readonly string[];
   authoringContracts?: readonly AuthoringContractBinding[];
   modelSelection: AdmittedModelSelection;
