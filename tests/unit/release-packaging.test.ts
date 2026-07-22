@@ -143,7 +143,8 @@ test("service release manifest exposes Butler CLI entrypoint and service files o
     "packages/butler-agent/resources/cli/darwin-arm64/butler",
   );
   expect(manifest.appWebClientDist).toBe(SERVICE_APP_WEB_CLIENT_DIST);
-  expect(manifest.requiredFiles).toContain(
+  expect(manifest.requiredFiles).toContain("packages/butler-agent/src");
+  expect(manifest.requiredFiles).not.toContain(
     "packages/butler-agent/src/gateways",
   );
   expect(manifest.requiredFiles).toContain("bin/butler.js");
@@ -816,6 +817,9 @@ test("agent release packager creates an installable artifact with app web client
     expect(entries).toContain("./deploy/agent/templates/systemd.service.template");
     expect(entries).toContain(`./${currentCliLauncher}`);
     expect(entries).toContain("./packages/butler-agent/scripts/service-control.sh");
+    expect(entries).toContain(
+      "./packages/butler-agent/src/foundation/atomic-root-exchange.ts",
+    );
     expect(entries).toContain("./packages/project-ledger/bin/project-ledger");
     expect(entries).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/index.html`);
     expect(entries.some((entry) => entry.startsWith(`./${SERVICE_APP_WEB_CLIENT_DIST}/assets/`))).toBe(true);
