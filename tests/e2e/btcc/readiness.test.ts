@@ -2,6 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { resolveCanonicalSpecRevisions } from
+  "../../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/canonical-spec-resolver.ts";
+import { loadProjectLedgerCore } from
+  "../../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-ledger-core.ts";
 import { loadFixtureCatalog, requiredFixtureRefs } from "./fixtures/fixture-catalog.ts";
 import { materializeScenario } from "./fixtures/materialize-scenario.ts";
 import {
@@ -26,7 +30,7 @@ describe("BTCC live diagnostic readiness", () => {
     expect(selectModelCells("matrix")).toEqual([...EXACT_MODEL_CELLS]);
   });
 
-  test("materializes every declared fixture ref without a manual catalog", () => {
+  test("materializes every declared fixture ref without a manual catalog", async () => {
     const { manifest } = loadLiveManifest();
     const catalog = loadFixtureCatalog(manifest.scenarios);
     expect([...catalog.entries.keys()].sort()).toEqual(requiredFixtureRefs(manifest.scenarios));
@@ -38,7 +42,16 @@ describe("BTCC live diagnostic readiness", () => {
       });
       const dbPath = join(fixture.butlerData, "runtime", "btcc-live.sqlite");
       seedAppProjectBinding({ dbPath, fixture });
-      expect(resolveFixtureProjectLedger({ dbPath, fixture })?.initialized ?? true).toBe(true);
+      const ledger = resolveFixtureProjectLedger({ dbPath, fixture });
+      expect(ledger?.initialized ?? true).toBe(true);
+      if (ledger) {
+        const specs = resolveCanonicalSpecRevisions(
+          await loadProjectLedgerCore(),
+          ledger.ledgerRoot,
+          ["SPEC-LIVE-FIXTURE"],
+        );
+        expect(specs.map((spec) => spec.logicalId)).toEqual(["SPEC-LIVE-FIXTURE"]);
+      }
       for (const turn of scenario.turns) {
         if (turn.inbound.kind !== "canonical_local_ref") continue;
         const content = fixture.canonicalMessages.get(turn.inbound.messageRef);

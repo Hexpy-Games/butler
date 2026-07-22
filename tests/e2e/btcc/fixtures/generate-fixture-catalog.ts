@@ -149,7 +149,7 @@ function writeLedgerFixture(root: string, ref: string): void {
   ]) {
     mkdirSync(join(root, directory), { recursive: true });
   }
-  const spec = [
+  const specBody = [
     "# Governing live-fixture specification",
     "",
     `Fixture authority: ${ref}`,
@@ -160,8 +160,24 @@ function writeLedgerFixture(root: string, ref: string): void {
     "Review implementation behavior against this specification and the original request.",
     "",
   ].join("\n");
+  const spec = [
+    "---",
+    'schema: "project-ledger.spec.v1"',
+    'kind: "spec"',
+    'id: "SPEC-LIVE-FIXTURE"',
+    'logicalId: "SPEC-LIVE-FIXTURE"',
+    'concernId: "CONCERN-LIVE-FIXTURE"',
+    'parentId: "SPEC-LIVE-FIXTURE-ROOT"',
+    'title: "Governing live-fixture specification"',
+    'status: "specified"',
+    'createdAt: "2026-01-01T00:00:00.000Z"',
+    'updatedAt: "2026-01-01T00:00:00.000Z"',
+    "---",
+    "",
+    specBody,
+  ].join("\n");
   writeFileSync(join(root, "specs", "governing-spec.md"), spec);
-  writeFileSync(join(root, "ledger.md"), spec);
+  writeFileSync(join(root, "ledger.md"), specBody);
   writeFileSync(join(root, "project.json"), `${JSON.stringify({
     schema: "project-ledger.project.v1",
     id: "btcc-live-fixture",
@@ -177,18 +193,6 @@ function writeLedgerFixture(root: string, ref: string): void {
     projectId: "btcc-live-fixture",
     source: "btcc-live-diagnostic-fixture",
   })}\n`);
-  writeFileSync(join(root, "index", "project.json"), `${JSON.stringify({
-    schema: "project-ledger.index.v1",
-    project: { id: "btcc-live-fixture", name: "BTCC Live Fixture" },
-    issues: [],
-    records: [{
-      id: "SPEC-LIVE-FIXTURE",
-      kind: "spec",
-      title: "Governing live-fixture specification",
-      status: "accepted",
-      path: "specs/governing-spec.md",
-    }],
-  }, null, 2)}\n`);
 }
 
 function textFixture(ref: string, setupKind: string): string {
