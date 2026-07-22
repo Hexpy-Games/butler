@@ -26,11 +26,13 @@ export type SnapshotEntry =
 
 export type MaterializedSnapshot = {
   ref: ContentRef;
+  targetState: "present" | "absent";
   targetKind: TargetKind;
   entries: SnapshotEntry[];
 };
 
 export function captureTargetSnapshot(targetPath: string): MaterializedSnapshot {
+  if (!existsSync(targetPath)) return snapshot("directory", [], "absent");
   const stat = lstatSync(targetPath);
   if (stat.isSymbolicLink()) throw new Error("BTCC artifact target must not be a symlink");
   if (stat.isFile()) return snapshot("file", [fileEntry(targetPath, ".")]);
@@ -41,11 +43,17 @@ export function captureTargetSnapshot(targetPath: string): MaterializedSnapshot 
 export function captureWorkspaceSnapshot(
   workspaceRoot: string,
   targetKind: TargetKind,
+  emptyTargetState: "present" | "absent" = "present",
 ): MaterializedSnapshot {
   const contentRoot = workspaceContentRoot(workspaceRoot);
-  return targetKind === "file"
-    ? snapshot("file", [fileEntry(join(contentRoot, "target"), ".")])
-    : snapshot("directory", captureDirectory(contentRoot));
+  if (targetKind === "file") {
+    if (!existsSync(join(contentRoot, "target"))) return snapshot("file", [], emptyTargetState);
+    return snapshot("file", [fileEntry(join(contentRoot, "target"), ".")]);
+  }
+  const entries = captureDirectory(contentRoot);
+  return entries.length === 0
+    ? snapshot("directory", [], emptyTargetState)
+    : snapshot("directory", entries);
 }
 
 export function materializeSnapshot(
@@ -73,6 +81,9 @@ export function materializeCompleteTarget(
   snapshotValue: MaterializedSnapshot,
   targetPath: string,
 ): void {
+  if (snapshotValue.targetState === "absent") {
+    throw new Error("BTCC cannot materialize an absent candidate target");
+  }
   if (snapshotValue.targetKind === "directory") {
     mkdirSync(targetPath, { recursive: true });
     materializeSnapshot(snapshotValue, targetPath);
@@ -175,7 +186,11 @@ function fileEntry(path: string, relativePath: string): SnapshotEntry {
   };
 }
 
-function snapshot(targetKind: TargetKind, entries: SnapshotEntry[]): MaterializedSnapshot {
+function snapshot(
+  targetKind: TargetKind,
+  entries: SnapshotEntry[],
+  targetState: "present" | "absent" = "present",
+): MaterializedSnapshot {
   const identityEntries = entries.map((entry) => entry.kind === "file"
     ? {
         path: entry.path,
@@ -184,8 +199,13 @@ function snapshot(targetKind: TargetKind, entries: SnapshotEntry[]): Materialize
         contentSha256: entry.contentSha256,
       }
     : entry);
-  const body = { targetKind, entries: identityEntries };
-  return { ref: contentRef("materializable-target-snapshot", body), targetKind, entries };
+  const body = { targetState, targetKind, entries: identityEntries };
+  return {
+    ref: contentRef("materializable-target-snapshot", body),
+    targetState,
+    targetKind,
+    entries,
+  };
 }
 
 function snapshotEntryPath(root: string, targetKind: TargetKind, path: string): string {

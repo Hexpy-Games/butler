@@ -41,7 +41,9 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
     }
     const requestedPath = resolve(resolved.targetPath);
     const baselineSnapshot = captureTargetSnapshot(requestedPath);
-    const targetPath = realpathSync(requestedPath);
+    const targetPath = existsSync(requestedPath)
+      ? realpathSync(requestedPath)
+      : requestedPath;
     const provision = createProvision(command, baselineSnapshot.ref);
     const workspaceRoot = join(
       this.options.butlerData,
@@ -56,6 +58,7 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
       provision,
       targetPath,
       targetKind: baselineSnapshot.targetKind,
+      baselineTargetState: baselineSnapshot.targetState,
       workspaceRoot,
       baselineSnapshotRef: baselineSnapshot.ref,
     };

@@ -1,8 +1,32 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { installCompleteRoot } from
+  "../../packages/butler-agent/src/foundation/atomic-root-exchange.ts";
+import { captureTargetSnapshot } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/operations/target-snapshot.ts";
+
+test("represents an absent baseline and atomically installs its first complete target", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-btcc-absent-target-"));
+  try {
+    const target = join(root, "btcc");
+    const stage = join(root, ".btcc-stage");
+    expect(captureTargetSnapshot(target).targetState).toBe("absent");
+
+    mkdirSync(stage);
+    writeFileSync(join(stage, "index.ts"), "export const ready = true;\n");
+    const candidate = captureTargetSnapshot(stage);
+    installCompleteRoot(stage, target);
+
+    expect(captureTargetSnapshot(target)).toEqual(candidate);
+    expect(readFileSync(join(target, "index.ts"), "utf8"))
+      .toBe("export const ready = true;\n");
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
 
 test("keeps artifact work isolated until Consolidation authorizes promotion", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-artifact-"));

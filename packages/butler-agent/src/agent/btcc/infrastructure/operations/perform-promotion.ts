@@ -8,7 +8,10 @@ import {
   type PhaseEnvelope,
 } from "../../core/index.ts";
 import { ArtifactStore, type PromotionIntent } from "./artifact-store.ts";
-import { exchangeCompleteRoots } from "../../../../foundation/atomic-root-exchange.ts";
+import {
+  exchangeCompleteRoots,
+  installCompleteRoot,
+} from "../../../../foundation/atomic-root-exchange.ts";
 import { assertActive, sameRef } from "./operation-helpers.ts";
 import {
   captureTargetSnapshot,
@@ -45,7 +48,14 @@ export function performPromotion(input: {
   if (candidate.targetKind !== workspace.targetKind) {
     throw new Error("BTCC promotion candidate changed the complete target kind");
   }
-  const currentWorkspace = captureWorkspaceSnapshot(workspace.workspaceRoot, workspace.targetKind);
+  if (candidate.targetState !== "present") {
+    throw new Error("BTCC promotion candidate must materialize a present target");
+  }
+  const currentWorkspace = captureWorkspaceSnapshot(
+    workspace.workspaceRoot,
+    workspace.targetKind,
+    workspace.baselineTargetState,
+  );
   if (!sameRef(currentWorkspace.ref, candidate.ref)) {
     throw new Error("BTCC workspace changed after the reviewed candidate was accepted");
   }
@@ -85,7 +95,11 @@ export function performPromotion(input: {
       intent = { ...intent, status: "commit_intent_durable" };
       input.store.savePromotion(scopeId, intent);
     }
-    exchangeCompleteRoots(intent.stagedPath, workspace.targetPath);
+    if (targetSnapshot.targetState === "absent") {
+      installCompleteRoot(intent.stagedPath, workspace.targetPath);
+    } else {
+      exchangeCompleteRoots(intent.stagedPath, workspace.targetPath);
+    }
     const observed = captureTargetSnapshot(workspace.targetPath);
     if (!sameRef(observed.ref, candidate.ref)) {
       throw new Error("BTCC promoted target does not equal the reviewed candidate");
@@ -150,6 +164,7 @@ function preparePromotion(
     targetPath: workspace.targetPath,
     stagedPath,
     baselineSnapshotRef: workspace.baselineSnapshotRef,
+    baselineTargetState: workspace.baselineTargetState,
     finalSnapshotRef: request.finalSnapshotRef,
     status: "reserved",
   };
@@ -188,6 +203,7 @@ function requireStagedCandidate(intent: PromotionIntent, candidateRef: ContentRe
 }
 
 function requireDisplacedBaseline(intent: PromotionIntent, baselineRef: ContentRef): void {
+  if (intent.baselineTargetState === "absent" && !existsSync(intent.stagedPath)) return;
   if (!existsSync(intent.stagedPath)) {
     throw new Error("BTCC promotion lost its displaced baseline");
   }

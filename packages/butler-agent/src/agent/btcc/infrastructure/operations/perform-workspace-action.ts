@@ -153,7 +153,11 @@ function reserveAction(
   input: Parameters<typeof performWorkspaceAction>[0],
   workspace: StoredWorkspace,
 ): WorkspaceActionJournal {
-  const before = captureWorkspaceSnapshot(workspace.workspaceRoot, workspace.targetKind);
+  const before = captureWorkspaceSnapshot(
+    workspace.workspaceRoot,
+    workspace.targetKind,
+    workspace.baselineTargetState,
+  );
   input.store.saveSnapshot(before);
   const journal: WorkspaceActionJournal = {
     request: input.request,
@@ -196,7 +200,11 @@ function prepareCandidate(
   if (!existsSync(target) || !lstatSync(target).isFile()) {
     throw new Error("BTCC workspace capability did not materialize its declared file target");
   }
-  const candidate = captureWorkspaceSnapshot(journal.overlayRoot, workspace.targetKind);
+  const candidate = captureWorkspaceSnapshot(
+    journal.overlayRoot,
+    workspace.targetKind,
+    workspace.baselineTargetState,
+  );
   input.store.saveSnapshot(candidate);
   syncCompleteTarget(workspaceContentRoot(journal.overlayRoot));
   const artifactRevisionRef = contentRef("artifact-revision", {
@@ -235,8 +243,12 @@ function exchangePreparedCandidate(
   journal: WorkspaceActionJournal,
 ): WorkspaceActionJournal {
   const candidateRef = requireCandidateRef(journal);
-  const workspaceSnapshot = captureWorkspaceSnapshot(workspace.workspaceRoot, workspace.targetKind);
-  const overlaySnapshot = captureWorkspaceSnapshot(journal.overlayRoot, workspace.targetKind);
+  const workspaceSnapshot = captureWorkspaceSnapshot(
+    workspace.workspaceRoot, workspace.targetKind, workspace.baselineTargetState,
+  );
+  const overlaySnapshot = captureWorkspaceSnapshot(
+    journal.overlayRoot, workspace.targetKind, workspace.baselineTargetState,
+  );
   if (sameRef(workspaceSnapshot.ref, journal.beforeSnapshotRef) &&
     sameRef(overlaySnapshot.ref, candidateRef)) {
     exchangeCompleteRoots(
@@ -258,7 +270,11 @@ function requireWorkspaceCandidate(
   workspace: StoredWorkspace,
   journal: WorkspaceActionJournal,
 ): void {
-  const current = captureWorkspaceSnapshot(workspace.workspaceRoot, workspace.targetKind);
+  const current = captureWorkspaceSnapshot(
+    workspace.workspaceRoot,
+    workspace.targetKind,
+    workspace.baselineTargetState,
+  );
   if (!sameRef(current.ref, requireCandidateRef(journal))) {
     throw new Error("BTCC Program workspace does not equal its prepared candidate");
   }

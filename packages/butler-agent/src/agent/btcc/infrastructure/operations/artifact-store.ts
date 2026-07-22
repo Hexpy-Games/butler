@@ -10,6 +10,7 @@ export type StoredWorkspace = {
   provision: WorkspaceProvision;
   targetPath: string;
   targetKind: TargetKind;
+  baselineTargetState: "present" | "absent";
   workspaceRoot: string;
   baselineSnapshotRef: { id: string; sha256: string };
 };
@@ -21,6 +22,7 @@ export type PromotionIntent = {
   targetPath: string;
   stagedPath: string;
   baselineSnapshotRef: { id: string; sha256: string };
+  baselineTargetState: "present" | "absent";
   finalSnapshotRef: { id: string; sha256: string };
   status: "reserved" | "prepared" | "commit_intent_durable" | "committed" | "closed";
   cleanupRootRef?: { id: string; sha256: string };
