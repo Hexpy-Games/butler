@@ -193,6 +193,21 @@ function writeLedgerFixture(root: string, ref: string): void {
     projectId: "btcc-live-fixture",
     source: "btcc-live-diagnostic-fixture",
   })}\n`);
+  writeFileSync(join(root, "index", "project.json"), `${JSON.stringify({
+    schema: "project-ledger.index.v1",
+    project: { id: "btcc-live-fixture", name: "BTCC Live Fixture" },
+    issues: [],
+    records: [{
+      id: "SPEC-LIVE-FIXTURE",
+      kind: "spec",
+      title: "Governing live-fixture specification",
+      status: "specified",
+      path: "specs/governing-spec.md",
+      logicalId: "SPEC-LIVE-FIXTURE",
+      concernId: "CONCERN-LIVE-FIXTURE",
+      parentId: "SPEC-LIVE-FIXTURE-ROOT",
+    }],
+  }, null, 2)}\n`);
 }
 
 function textFixture(ref: string, setupKind: string): string {
