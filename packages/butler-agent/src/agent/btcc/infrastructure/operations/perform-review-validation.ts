@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, linkSync, mkdirSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   contentRef,
   digest,
@@ -36,6 +36,10 @@ export async function performReviewValidation(input: {
   if (!snapshotValue || !sameRef(snapshotValue.ref, source.targetSnapshotRef)) {
     throw new Error("BTCC Review source has no exact durable snapshot");
   }
+  const workspace = input.store.loadWorkspaceByRef(source.workspaceRef.id);
+  if (!workspace || !sameRef(workspace.provision.workspace.ref, source.workspaceRef)) {
+    throw new Error("BTCC Review source references an unknown artifact workspace");
+  }
   const root = join(
     input.options.butlerData,
     "runtime",
@@ -45,7 +49,9 @@ export async function performReviewValidation(input: {
   );
   if (existsSync(root)) removeOwnedRoot(root);
   mkdirSync(root, { recursive: true });
-  materializeSnapshot(snapshotValue, workspaceContentRoot(root));
+  const contentRoot = workspaceContentRoot(root);
+  materializeSnapshot(snapshotValue, contentRoot);
+  projectLogicalFileTarget(input.envelope, workspace, contentRoot);
   const before = captureWorkspaceSnapshot(
     root, snapshotValue.targetKind, snapshotValue.targetState,
   );
@@ -101,14 +107,65 @@ export async function performReviewValidation(input: {
 function resolveReviewSource(
   envelope: PhaseEnvelope,
   expectedRef: { id: string; sha256: string },
-): { targetSnapshotRef: { id: string; sha256: string } } {
+): {
+  targetSnapshotRef: { id: string; sha256: string };
+  workspaceRef: { id: string; sha256: string };
+} {
   const state = requireRecord(envelope.context.stateInput, "Task Review state");
   const resultCandidate = requireRecord(state.resultCandidate, "Task Review ResultCandidate");
   const result = requireRecord(resultCandidate.result, "Task Review result");
   const revision = requireRecord(result.workspaceRevision, "Task Review workspace revision");
   const ref = requireRef(revision.ref, "Task Review workspace revision ref");
   if (!sameRef(ref, expectedRef)) throw new Error("BTCC Review request changed its source revision");
-  return { targetSnapshotRef: requireRef(revision.targetSnapshotRef, "Review target snapshot") };
+  return {
+    targetSnapshotRef: requireRef(revision.targetSnapshotRef, "Review target snapshot"),
+    workspaceRef: requireRef(revision.workspaceRef, "Review workspace"),
+  };
+}
+
+function projectLogicalFileTarget(
+  envelope: PhaseEnvelope,
+  workspace: NonNullable<ReturnType<ArtifactStore["loadWorkspaceByRef"]>>,
+  contentRoot: string,
+): void {
+  if (workspace.targetKind !== "file") return;
+  const internalTarget = join(contentRoot, "target");
+  if (!existsSync(internalTarget)) return;
+  const admittedRoot = admittedWorkspaceRoots(envelope)
+    .filter((root) => containedRelativePath(root, workspace.targetPath) !== null)
+    .sort((left, right) => right.length - left.length)[0];
+  if (!admittedRoot) {
+    throw new Error("BTCC Review cannot project its logical target outside admitted workspace roots");
+  }
+  const logicalPath = containedRelativePath(admittedRoot, workspace.targetPath);
+  if (!logicalPath || logicalPath === "target") return;
+  const projectedTarget = resolve(contentRoot, logicalPath);
+  if (containedRelativePath(contentRoot, projectedTarget) === null) {
+    throw new Error("BTCC Review logical target escapes its owned overlay");
+  }
+  mkdirSync(dirname(projectedTarget), { recursive: true });
+  linkSync(internalTarget, projectedTarget);
+}
+
+function admittedWorkspaceRoots(envelope: PhaseEnvelope): string[] {
+  return envelope.context.baselineObservationScopeRefs
+    .filter((scope) => scope.startsWith("workspace:"))
+    .map((scope) => canonicalPath(scope.slice("workspace:".length)));
+}
+
+function canonicalPath(path: string): string {
+  try {
+    return realpathSync.native(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+function containedRelativePath(root: string, target: string): string | null {
+  const child = relative(resolve(root), resolve(target));
+  return child !== ".." && !child.startsWith(`..${sep}`) && !isAbsolute(child)
+    ? child
+    : null;
 }
 
 function requireRef(value: unknown, label: string): { id: string; sha256: string } {
