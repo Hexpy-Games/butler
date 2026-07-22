@@ -244,8 +244,12 @@ describe("production BTCC artifact operations", () => {
 
     expect(received).toMatchObject({
       name: "write_file",
-      args: { content: "delegated bytes\n" },
-      rawArguments: JSON.stringify(request.input),
+      args: { content: "delegated bytes\n", path: "target", create_parents: true },
+      rawArguments: JSON.stringify({
+        ...request.input,
+        path: "target",
+        create_parents: true,
+      }),
     });
     expect(readFileSync(fixture.targetPath, "utf8")).toBe(fixture.original);
   });
