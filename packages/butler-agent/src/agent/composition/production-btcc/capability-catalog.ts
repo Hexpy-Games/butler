@@ -9,7 +9,12 @@ const PROMOTION_CAPABILITY: StructuralCapabilityDefinition = {
   name: "promote_reviewed_candidate",
   description: "Atomically promote the exact reviewed candidate under its accepted authorization.",
   operationKinds: ["repository_promotion"],
-  inputSchema: { type: "object", additionalProperties: false },
+  inputSchema: {
+    type: "object",
+    properties: {},
+    required: [],
+    additionalProperties: false,
+  },
 };
 
 export function createProductionCapabilityCatalog(): StructuralCapabilityCatalog {

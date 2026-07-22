@@ -39,3 +39,15 @@ test("strict transport restoration removes only object null placeholders", () =>
     values: ["kept", null],
   });
 });
+
+test("strict transport schema closes property-free object inputs", () => {
+  expect(normalizeStrictTransportSchema({
+    type: "object",
+    additionalProperties: false,
+  })).toEqual({
+    type: "object",
+    properties: {},
+    required: [],
+    additionalProperties: false,
+  });
+});
