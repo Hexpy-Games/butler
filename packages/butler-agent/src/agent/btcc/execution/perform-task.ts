@@ -136,21 +136,25 @@ function workspaceResult(
   envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
 ) {
   const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
-  const applied = envelope.operationResults.filter(
+  const workspaceActions = envelope.operationResults.filter(
     (result) =>
-      result.outcome === "workspace_artifact_applied" &&
+      (result.outcome === "observed" || result.outcome === "workspace_artifact_applied") &&
       result.request.kind === "workspace_artifact_action" &&
-      sameContentRef(result.request.workspaceRef, workspaceRef),
+      sameContentRef(result.request.workspaceRef, workspaceRef) &&
+      result.targetSnapshotRef,
   );
-  if (applied.length === 0) {
+  if (workspaceActions.length === 0) {
     throw new Error(
-      "Workspace artifact Execution requires an applied workspace artifact result",
+      "Workspace artifact Execution requires a successful snapshot-bearing workspace action",
     );
   }
+  const applied = workspaceActions.filter(
+    (result) => result.outcome === "workspace_artifact_applied",
+  );
   const artifactRevisionRefs = applied.map((result, index) =>
     requireContentRef(result.artifactRevisionRef, `artifactRevisionRef[${index}]`));
   const targetSnapshotRef = requireContentRef(
-    applied.at(-1)!.targetSnapshotRef,
+    workspaceActions.at(-1)!.targetSnapshotRef,
     "targetSnapshotRef",
   );
   const body = {
@@ -164,7 +168,7 @@ function workspaceResult(
     ),
     artifactRevisionRefs,
     targetSnapshotRef,
-    producedByOperationRefs: applied.map((result) => result.observationRef),
+    producedByOperationRefs: workspaceActions.map((result) => result.observationRef),
   };
   const revision: WorkspaceRevision = {
     ref: contentRef("workspace-revision", body), ...body,
