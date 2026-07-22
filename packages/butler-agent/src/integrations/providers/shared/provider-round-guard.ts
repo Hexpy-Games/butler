@@ -16,6 +16,26 @@ export interface ProviderRoundGuard {
   dispose(): void;
 }
 
+export async function runGuardedProviderRound<T>(input: {
+  signal?: AbortSignal;
+  policy?: Partial<ProviderRoundPolicy>;
+  operation: (signal: AbortSignal) => Promise<T>;
+  timeoutError: (kind: ProviderRoundTimeoutKind) => unknown;
+  externalAbortError: () => unknown;
+}): Promise<T> {
+  const guard = createProviderRoundGuard({ signal: input.signal, policy: input.policy });
+  try {
+    guard.start();
+    return await raceProviderRoundWithSignal(input.operation(guard.signal), guard.signal);
+  } catch (error) {
+    if (input.signal?.aborted) throw input.externalAbortError();
+    if (guard.timeoutKind) throw input.timeoutError(guard.timeoutKind);
+    throw error;
+  } finally {
+    guard.dispose();
+  }
+}
+
 export function resolveProviderRoundPolicy(
   override: Partial<ProviderRoundPolicy> = {},
 ): ProviderRoundPolicy {

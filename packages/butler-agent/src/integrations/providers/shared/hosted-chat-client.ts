@@ -3,13 +3,18 @@ import type { HostedModelProviderId } from "./registered-models.ts";
 import type { HostedRuntimeConfig } from "./model-routing.ts";
 import { defaultHostedProviderApiBaseUrl, type HostedProviderApiShape } from "../model-catalog.ts";
 import {
+  abortError,
   normalizeLocalTextToolName,
   sanitizeResponseFinalAnswerText,
   withModelApiRetry,
 } from "./runtime-support.ts";
 import { promptWithAttachmentContext } from "../../../agent/context/attachment-context.ts";
-import { providerHttpError, providerNetworkError, safeEndpointLabel } from "../provider-errors.ts";
+import { providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import { admitSerializedProviderRequest } from "./request-context-admission.ts";
+import {
+  runGuardedProviderRound,
+  type ProviderRoundPolicy,
+} from "./provider-round-guard.ts";
 
 
 
@@ -209,12 +214,24 @@ export async function createHostedChatCompletion(
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
   retryAttempts?: number,
+  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
 ): Promise<Record<string, any>> {
-  return await withModelApiRetry(
-    async () => await createHostedChatCompletionOnce(config, body, signal, budgetContext),
+  return await runGuardedProviderRound({
     signal,
-    retryAttempts,
-  );
+    policy: providerRoundPolicy,
+    operation: async (guardedSignal) => await withModelApiRetry(
+      async () => await createHostedChatCompletionOnce(config, body, guardedSignal, budgetContext),
+      guardedSignal,
+      retryAttempts,
+    ),
+    timeoutError: (timeoutKind) => providerRoundTimeoutError({
+      provider: hostedProviderErrorLabel(config),
+      api: "chat_completions",
+      timeoutKind,
+      model: config.modelId,
+    }),
+    externalAbortError: abortError,
+  });
 }
 
 
