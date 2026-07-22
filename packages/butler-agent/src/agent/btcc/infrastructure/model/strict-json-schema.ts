@@ -21,15 +21,16 @@ function normalizeNode(value: unknown): unknown {
   const normalized = Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, normalizeNode(item)]),
   );
-  if (value.type !== "object" || !isRecord(value.properties)) return normalized;
+  if (value.type !== "object") return normalized;
 
   const required = new Set(
     Array.isArray(value.required)
       ? value.required.filter((item): item is string => typeof item === "string")
       : [],
   );
+  const declaredProperties = isRecord(value.properties) ? value.properties : {};
   const properties = Object.fromEntries(
-    Object.entries(value.properties).map(([key, property]) => [
+    Object.entries(declaredProperties).map(([key, property]) => [
       key,
       required.has(key) ? normalizeNode(property) : allowTransportNull(normalizeNode(property)),
     ]),
