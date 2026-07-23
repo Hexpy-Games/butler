@@ -196,7 +196,7 @@ async function performRequestedObservations<Product>(
   }> = [];
   for (const request of requests) {
     command.executionPermit.assertActive();
-    assertAuthorizedOperation(request, command.operationAuthority);
+    assertAuthorizedOperationKind(request, command.operationAuthority);
     const existing = roundRequests.get(request.requestId);
     if (existing) {
       if (!sameRequest(existing, request)) {
@@ -228,7 +228,7 @@ function sameRequest(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function assertAuthorizedOperation(
+function assertAuthorizedOperationKind(
   request: OperationRequest,
   authority: OperationAuthority,
 ): void {
@@ -242,10 +242,7 @@ function assertAuthorizedOperation(
   } else if (request.kind === "workspace_artifact_action") {
     if (
       authority.mutation.kind === "workspace_only" &&
-      sameRef(request.workspaceRef, authority.mutation.workspaceRef) &&
-      (authority.mutation.operationRoot.kind === "directory" ||
-        request.relativeTarget === authority.mutation.operationRoot.relativeTarget) &&
-      isAuthorizedMutationTarget(request.relativeTarget, authority.mutation.mutationScope)
+      sameRef(request.workspaceRef, authority.mutation.workspaceRef)
     ) return;
   } else if (request.kind === "review_validation" &&
     authority.mutation.kind === "validation_overlay_only" &&
@@ -264,18 +261,6 @@ function assertAuthorizedOperation(
     return;
   }
   throw new Error("BTCC phase requested an operation outside its admitted authority");
-}
-
-function isAuthorizedMutationTarget(
-  relativeTarget: string,
-  scope: Extract<OperationAuthority["mutation"], { kind: "workspace_only" }>["mutationScope"],
-): boolean {
-  if (scope.kind === "read_only") return true;
-  return scope.writablePaths.some((path) => containsRelativePath(path, relativeTarget));
-}
-
-function containsRelativePath(parent: string, child: string): boolean {
-  return parent === "." || child === parent || child.startsWith(`${parent}/`);
 }
 
 function sameRef(

@@ -8,6 +8,7 @@ import type {
 import { resolveAvailableCapabilities } from "./available-capabilities.ts";
 import { providerCarrierSchema } from "./provider-carrier-schema.ts";
 import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
+import { providerCarrierAdmissionSchema } from "./provider-carrier-schema.ts";
 import type { PhaseGuidanceReader } from "../../guidance/index.ts";
 import { loadBasePrompt } from "./base-phase-prompts.ts";
 import {
@@ -82,8 +83,14 @@ export async function renderPhasePrompt(
     responseSchema: providerCarrierSchema(
       availableCapabilities,
       envelope.submissionSchema,
+      envelope.operationAuthority,
     ),
     carrierFunctions: providerCarrierFunctions(
+      availableCapabilities,
+      envelope.submissionSchema,
+      envelope.operationAuthority,
+    ),
+    admissionSchema: providerCarrierAdmissionSchema(
       availableCapabilities,
       envelope.submissionSchema,
     ),
