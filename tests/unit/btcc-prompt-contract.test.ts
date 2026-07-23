@@ -16,4 +16,8 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toEqual([...PROMPT_PROHIBITION_IDS]);
   expect(resolveDutyInstructions(["select_exact_governing_spec_logical_ids"])[0]?.instruction)
     .toContain("governing Specs");
+  expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
+    .toContain("exactly one verdict per entry");
+  expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
+    .toContain("never introduce criteria from another Task");
 });

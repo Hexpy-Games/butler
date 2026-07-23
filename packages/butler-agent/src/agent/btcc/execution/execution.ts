@@ -30,7 +30,7 @@ export async function execution(command: {
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
-    acceptedPlan: program.plan,
+    acceptedPlanRef: program.plan.ref,
     currentWork: program.currentWork.work,
     currentTask: program.currentTask.task,
     currentCriteria: criteriaForCurrentTask(program),

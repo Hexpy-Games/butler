@@ -110,6 +110,47 @@ test("workspace review passes with a successful disposable validation receipt", 
   ]);
 });
 
+test("workspace review diagnoses a criterion outside the current Task", async () => {
+  const error = await reviewTask(reviewInvocation([], {
+    criterionVerdicts: [{
+      criterionRef: ref("another-task-criterion"),
+      reviewedResultRefs: [ref("result-summary")],
+      observation: "unrelated criterion",
+      verdict: "satisfied",
+    }],
+  })).catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).cause).toMatchObject({
+    message: "Task Review submitted a criterion outside stateInput.criteria",
+  });
+});
+
+test("workspace review diagnoses a duplicate current Task criterion", async () => {
+  const duplicateVerdict = {
+    criterionRef: ref("criterion"),
+    reviewedResultRefs: [ref("result-summary")],
+    observation: "duplicate criterion",
+    verdict: "satisfied",
+  };
+  const error = await reviewTask(reviewInvocation([], {
+    criteria: [{ ref: ref("criterion") }, { ref: ref("criterion-two") }],
+    verificationQuestions: [{
+      ref: ref("verification-question"),
+      criterionRef: ref("criterion"),
+    }, {
+      ref: ref("verification-question-two"),
+      criterionRef: ref("criterion-two"),
+    }],
+    criterionVerdicts: [duplicateVerdict, duplicateVerdict],
+  })).catch((caught: unknown) => caught);
+
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).cause).toMatchObject({
+    message: "Task Review repeated a current Task criterion",
+  });
+});
+
 function executionInvocation(results: OperationResult[]): PhaseInvocation {
   return invocation("task_execution", results, {
     goalContractRef: ref("goal"),
@@ -131,27 +172,38 @@ function executionInvocation(results: OperationResult[]): PhaseInvocation {
   });
 }
 
-function reviewInvocation(results: OperationResult[]): PhaseInvocation {
+function reviewInvocation(
+  results: OperationResult[],
+  overrides: {
+    criteria?: Array<{ ref: ReturnType<typeof ref> }>;
+    verificationQuestions?: Array<{
+      ref: ReturnType<typeof ref>;
+      criterionRef: ReturnType<typeof ref>;
+    }>;
+    criterionVerdicts?: unknown[];
+  } = {},
+): PhaseInvocation {
   const result = workspaceResult();
   if (result.result.kind !== "workspace_artifact") {
     throw new Error("expected workspace artifact result fixture");
   }
   return invocation("task_review", results, {
     resultCandidate: result,
-    criteria: [{ ref: ref("criterion") }],
-    verificationQuestions: [{
+    criteria: overrides.criteria ?? [{ ref: ref("criterion") }],
+    verificationQuestions: overrides.verificationQuestions ?? [{
       ref: ref("verification-question"),
       criterionRef: ref("criterion"),
     }],
     reviewAuthorityRef: ref("authority"),
     reviewSourceRef: result.result.workspaceRevisionRef,
-  });
+  }, overrides.criterionVerdicts);
 }
 
 function invocation(
   semanticState: "task_execution" | "task_review",
   results: OperationResult[],
   stateInput: Record<string, unknown>,
+  criterionVerdicts?: unknown[],
 ): PhaseInvocation {
   return {
     binding: {
@@ -196,7 +248,7 @@ function invocation(
           ? { kind: "result_candidate", resultSummary: "artifact updated" }
           : {
               kind: "task_review",
-              criterionVerdicts: [{
+              criterionVerdicts: criterionVerdicts ?? [{
                 criterionRef: ref("criterion"),
                 reviewedResultRefs: [ref("result-summary")],
                 observation: "the disposable validation passed",
