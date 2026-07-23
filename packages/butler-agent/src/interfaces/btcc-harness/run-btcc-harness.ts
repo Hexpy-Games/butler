@@ -45,6 +45,7 @@ type HarnessOptions = {
     | "managed-goal-revision"
     | "managed-feedback-planning-revision"
     | "managed-governing-revision"
+    | "managed-governing-revalidation"
     | "managed-authority-revision"
     | "managed-artifact"
     | "managed-deferral"
@@ -214,6 +215,7 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-goal-revision" ||
     value === "managed-feedback-planning-revision" ||
     value === "managed-governing-revision" ||
+    value === "managed-governing-revalidation" ||
     value === "managed-authority-revision" ||
     value === "managed-artifact" ||
     value === "managed-deferral" ||
@@ -244,6 +246,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     scenario === "managed-goal-revision" ||
     scenario === "managed-feedback-planning-revision" ||
     scenario === "managed-governing-revision" ||
+    scenario === "managed-governing-revalidation" ||
     scenario === "managed-authority-revision"
     || scenario === "managed-artifact"
     || scenario === "managed-deferral"
@@ -259,6 +262,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
       scenario === "managed-planning-revision",
       scenario === "managed-feedback-planning-revision",
       scenario === "managed-governing-revision"
+        || scenario === "managed-governing-revalidation"
         ? "governing_revision"
         : scenario === "managed-authority-revision"
           ? "authority_scope_revision"
@@ -272,6 +276,8 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
       scenario === "managed-continuation",
       scenario === "managed-consolidation-repair",
       scenario === "managed-goal-revision",
+      scenario === "managed-governing-revalidation" ? 2 : 1,
+      scenario === "managed-governing-revalidation",
     );
   }
   return new NoLedgerHarnessModel(scenario);

@@ -70,7 +70,7 @@ function deferralContextFor(turn: TurnRecord): ManagedDeferralContext {
     },
     currentWorkRef: authority.currentWork.work.ref,
     currentTaskRef: authority.currentTask.task.ref,
-    ...(currentAttempt ? { currentAttemptRef: currentAttempt.ref } : {}),
+    ...(currentAttempt ? { currentAttemptRef: currentAttempt.attemptRecord.ref } : {}),
     openWorkRefs: authority.works
       .filter((work) => work.status !== "closed")
       .map((work) => work.work.ref),

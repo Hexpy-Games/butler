@@ -29,7 +29,7 @@ const CONTRACT: PhaseContract = {
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
-    "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
+    "no_heuristic_route", "no_generic_assurance_layer", "no_hidden_retry_loop",
     "no_mutation", "no_repair",
   ],
 };
@@ -52,7 +52,7 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       questions,
       result,
       checkpointId: envelope.binding.checkpointId,
-      operationRefs: envelope.operationResults.map((operation) => operation.observationRef),
+      reviewOperationRefs: envelope.operationResults.map((operation) => operation.resultRef),
     });
     const passed = decoded.verdicts.every((verdict) => verdict.verdict === "satisfied");
     if (result.result.kind === "repository_promotion" && !passed) {
@@ -84,7 +84,8 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       kind: result.result.kind,
       turnId: envelope.binding.turnId,
       goalContractRef: result.result.goalContractRef,
-      authorityRef: result.result.authorityRef,
+      authorityRef: requireContentRef(state.reviewAuthorityRef, "reviewAuthorityRef"),
+      resultAuthorityRef: result.result.authorityRef,
       resultCandidateRef: result.result.ref,
       workRef: result.result.workRef,
       taskRef: result.result.taskRef,
@@ -95,6 +96,9 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       criterionVerdicts: decoded.verdicts,
       observations: decoded.observations,
       findings: decoded.findings,
+      reviewedResultRefs: uniqueRefs(
+        decoded.verdicts.flatMap((verdict) => verdict.reviewedResultRefs),
+      ),
       reviewedTargetStateRevisionRefs: result.result.targetStateRevisions.map((item) => item.ref),
       reviewedArtifactRevisionRefs: result.result.artifactRevisionRefs,
       reviewedEffectReceiptRefs: [] as [],
@@ -153,7 +157,7 @@ function decodeCriterionVerdicts(input: {
   questions: Record<string, unknown>[];
   result: ResultCandidateProduct;
   checkpointId: string;
-  operationRefs: ContentRef[];
+  reviewOperationRefs: ContentRef[];
 }): {
   verdicts: CriterionVerdict[];
   observations: ReviewObservation[];
@@ -162,12 +166,37 @@ function decodeCriterionVerdicts(input: {
   if (!Array.isArray(input.submitted) || input.submitted.length !== input.criteria.length) {
     throw new Error("Task Review must judge every accepted criterion exactly once");
   }
+  const criteria = new Map(input.criteria.map((criterion) => {
+    const ref = requireContentRef(criterion.ref, "criterion.ref");
+    return [refKey(ref), { criterion, ref }];
+  }));
+  const allowedResultRefs = new Map([
+    input.result.result.resultSummary.ref,
+    ...input.result.result.operationResults.map((result) => result.resultRef),
+    ...input.reviewOperationRefs,
+  ].map((ref) => [refKey(ref), ref]));
+  const reviewedCriteria = new Set<string>();
   const observations: ReviewObservation[] = [];
   const findings: ReviewFinding[] = [];
   const targetRevisionRefs = input.result.result.targetStateRevisions.map((item) => item.ref);
   const verdicts = input.submitted.map((item, index) => {
     const submitted = requireRecord(item, `criterionVerdicts[${index}]`);
-    const criterionRef = requireContentRef(input.criteria[index]!.ref, "criterion.ref");
+    const criterionRef = requireContentRef(
+      submitted.criterionRef,
+      `criterionVerdicts[${index}].criterionRef`,
+    );
+    const criterionKey = refKey(criterionRef);
+    if (!criteria.has(criterionKey) || reviewedCriteria.has(criterionKey)) {
+      throw new Error("Task Review changed or repeated an accepted criterion");
+    }
+    reviewedCriteria.add(criterionKey);
+    const reviewedResultRefs = requireContentRefs(
+      submitted.reviewedResultRefs,
+      `criterionVerdicts[${index}].reviewedResultRefs`,
+    );
+    if (reviewedResultRefs.some((ref) => !allowedResultRefs.has(refKey(ref)))) {
+      throw new Error("Task Review cited a result outside the current Execution or Review");
+    }
     const questionRefs = input.questions
       .filter((question) => stableJson(question.criterionRef) === stableJson(criterionRef))
       .map((question) => requireContentRef(question.ref, "question.ref"));
@@ -181,7 +210,7 @@ function decodeCriterionVerdicts(input: {
       executionTargetRef: input.result.result.executionTargetRef,
       targetRevisionRefs,
       description: requireString(submitted.observation, "criterion observation"),
-      observationOperationRefs: input.operationRefs,
+      reviewedResultRefs,
       reviewCheckpointRef: input.checkpointId,
     };
     const observation = {
@@ -206,11 +235,15 @@ function decodeCriterionVerdicts(input: {
       criterionRef,
       verificationQuestionRefs: questionRefs,
       currentTargetRevisionRefs: targetRevisionRefs,
+      reviewedResultRefs,
       observationRefs: [observation.ref],
       verdict: criterionVerdict,
       findingRefs,
     };
   });
+  if (reviewedCriteria.size !== criteria.size) {
+    throw new Error("Task Review did not cover every accepted criterion");
+  }
   return { verdicts, observations, findings };
 }
 
@@ -237,6 +270,21 @@ function requireContentRef(value: unknown, label: string): ContentRef {
     id: requireString(record.id, `${label}.id`),
     sha256: requireString(record.sha256, `${label}.sha256`),
   };
+}
+
+function requireContentRefs(value: unknown, label: string): ContentRef[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error(`${label} must be a non-empty reference array`);
+  }
+  return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
+}
+
+function refKey(ref: ContentRef): string {
+  return `${ref.id}\0${ref.sha256}`;
+}
+
+function uniqueRefs(refs: ContentRef[]): ContentRef[] {
+  return [...new Map(refs.map((ref) => [refKey(ref), ref])).values()];
 }
 
 function sameContentRef(left: ContentRef, right: ContentRef): boolean {

@@ -4,6 +4,7 @@ import type { PlanningCandidate } from "./contracts.ts";
 export type TaskImpact = {
   priorTaskRef: ContentRef;
   disposition: "unaffected" | "revalidate" | "rework" | "replan";
+  reason: string;
   successorTaskRef?: ContentRef;
 };
 

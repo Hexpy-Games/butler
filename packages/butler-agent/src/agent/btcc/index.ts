@@ -9,6 +9,12 @@ export {
   ledgerMutationId,
   ledgerRecordSha256,
   logicalLedgerRecords,
+  acceptFeedbackAuthority,
+  acceptReviewedPlanAuthority,
+  bindManagedProgram,
+  operationRoundScope,
+  projectEphemeralOperationResult,
+  READ_OPERATION_RESULT_CAPABILITY,
 } from "./gateway-api.ts";
 export { contentRef, stableJson } from "./core/index.ts";
 export {
@@ -42,6 +48,11 @@ export type {
   LogicalLedgerRecord,
   WorkLedger,
   WorkLedgerCommit,
+  ManagedProgramAuthority,
+  OperationResultProjection,
+  OperationResult,
+  PhaseRunBinding,
+  SpooledOperationOutput,
 } from "./gateway-api.ts";
 export type { AvailableSpecRevision } from "./planning/contracts.ts";
 export type {

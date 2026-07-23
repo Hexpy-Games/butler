@@ -1,5 +1,6 @@
 import {
   arraySchema,
+  contentRefSchema,
   enumSchema,
   literalSchema,
   objectSchema,
@@ -8,6 +9,8 @@ import {
 } from "../core/index.ts";
 
 const commonCriterionFields = {
+  criterionRef: contentRefSchema(),
+  reviewedResultRefs: arraySchema(contentRefSchema(), { minItems: 1 }),
   observation: textSchema(),
 };
 const satisfiedCriterionVerdict = objectSchema({

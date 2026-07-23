@@ -50,6 +50,14 @@ test("workspace execution binds the final successfully applied snapshot", async 
     ref("observation-first"),
     ref("observation-final"),
   ]);
+  expect(product.result.operationResults).toHaveLength(2);
+  expect(product.result.operationResultRefs).toEqual(
+    product.result.operationResults.map((result) => result.resultRef),
+  );
+  expect(product.result.targetStateRevisions.map((revision) => revision.target)).toEqual([
+    { kind: "workspace", workspaceRef },
+    { kind: "workspace", workspaceRef },
+  ]);
 });
 
 test("workspace execution records a snapshot-only revision after validation", async () => {
@@ -135,6 +143,7 @@ function reviewInvocation(results: OperationResult[]): PhaseInvocation {
       ref: ref("verification-question"),
       criterionRef: ref("criterion"),
     }],
+    reviewAuthorityRef: ref("authority"),
     reviewSourceRef: result.result.workspaceRevisionRef,
   });
 }
@@ -188,6 +197,8 @@ function invocation(
           : {
               kind: "task_review",
               criterionVerdicts: [{
+                criterionRef: ref("criterion"),
+                reviewedResultRefs: [ref("result-summary")],
                 observation: "the disposable validation passed",
                 verdict: "satisfied",
               }],
@@ -247,8 +258,9 @@ function workspaceResult(): ResultCandidateProduct {
       attemptRef: ref("attempt"),
       executionTargetRef: ref("execution-target"),
       executionCheckpointRef: "checkpoint-task_execution",
-      resultSummaryRef: ref("result-summary"),
+      resultSummary: { ref: ref("result-summary"), content: "artifact updated" },
       operationResultRefs: [ref("observation-final")],
+      operationResults: [],
       unresolvedConditionRefs: [],
       targetStateRevisions: [],
       effectReceiptRefs: [],

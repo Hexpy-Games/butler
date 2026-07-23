@@ -1,12 +1,22 @@
 import type { ContentRef } from "../core/index.ts";
 import type { OperationResult } from "../core/index.ts";
+import type { OperationResultProjection } from "../operation-result/index.ts";
 
 export type TargetStateRevision = {
   ref: ContentRef;
-  targetScopeRef: string;
-  state: "present" | "absent";
-  description: string;
-  observedByOperationRefs: ContentRef[];
+  target:
+    | { kind: "scope"; scopeRef: string }
+    | { kind: "workspace"; workspaceRef: ContentRef }
+    | { kind: "repository"; finalSnapshotRef: ContentRef };
+  operationResultRef: ContentRef;
+  observationRef: ContentRef;
+  outcome: OperationResultProjection["outcome"];
+  targetSnapshotRef?: ContentRef;
+};
+
+export type ResultSummary = {
+  ref: ContentRef;
+  content: string;
 };
 
 export type WorkspaceRevision = {
@@ -33,8 +43,9 @@ type ResultBase = {
   attemptRef: ContentRef;
   executionTargetRef: ContentRef;
   executionCheckpointRef: string;
-  resultSummaryRef: ContentRef;
+  resultSummary: ResultSummary;
   operationResultRefs: ContentRef[];
+  operationResults: OperationResultProjection[];
   unresolvedConditionRefs: [];
   targetStateRevisions: TargetStateRevision[];
   effectReceiptRefs: [];

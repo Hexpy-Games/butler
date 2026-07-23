@@ -1,6 +1,7 @@
 import type {
   AvailableSpecRevision,
   ManagedSpecRevision,
+  FeedbackPlanningAcceptedProduct,
   PlanningAcceptedProduct,
 } from "../planning/contracts.ts";
 import type {
@@ -84,6 +85,46 @@ export function acceptReviewedPlanAuthority(
   };
 }
 
+export function acceptFeedbackAuthority(
+  current: ManagedProgramState,
+  product: FeedbackPlanningAcceptedProduct,
+): ManagedProgramAuthority {
+  const candidate = product.candidate;
+  assertAcceptedFeedbackReview(current, product);
+  if (candidate.correctionKind === "implementation_repair") {
+    return { ...current, manifestRevision: current.manifestRevision + 1 };
+  }
+  const plan = candidate.nextPlanCandidate;
+  const authorityRef = candidate.correctionKind === "authority_scope_revision"
+    ? candidate.proposedAuthority.ref
+    : current.authorityRef;
+  if (
+    current.programId !== plan.programId ||
+    current.ledgerId !== plan.ledgerId ||
+    current.manifestRevision !== plan.observedManifestRevision ||
+    !sameRef(current.goalContractRef, plan.goalContractRef) ||
+    !sameRef(authorityRef, plan.authorityRef)
+  ) {
+    throw new Error("Work Ledger revised authority changed its accepted base");
+  }
+  const availableSpecs = mergeAvailableSpecs(current.availableSpecs, plan.authoredSpecs);
+  const availableRefs = new Set(availableSpecs.map((spec) => refKey(spec.revisionRef)));
+  if (plan.governingSpecRefs.some((ref) => !availableRefs.has(refKey(ref)))) {
+    throw new Error("Work Ledger revised Plan selected unavailable governing authority");
+  }
+  return {
+    ledgerId: current.ledgerId,
+    programId: current.programId,
+    manifestRevision: current.manifestRevision + 1,
+    goalContractRef: current.goalContractRef,
+    authorityRef,
+    availableSpecs,
+    availableSpecRefs: availableSpecs.map((spec) => spec.revisionRef),
+    governingSpecRefs: plan.governingSpecRefs,
+    requiredOutcomeId: current.requiredOutcomeId,
+  };
+}
+
 function assertNewProgramBinding(mutation: BindProgram): void {
   const binding = mutation.product.authority.managedBinding;
   if (
@@ -118,6 +159,22 @@ function assertAcceptedReview(product: PlanningAcceptedProduct): void {
     !sameRefs(review.reviewedSpecRevisionRefs, candidate.authoredSpecRevisionRefs)
   ) {
     throw new Error("Work Ledger reviewed Plan receipt changed");
+  }
+}
+
+function assertAcceptedFeedbackReview(
+  current: ManagedProgramState,
+  product: FeedbackPlanningAcceptedProduct,
+): void {
+  const { candidate, review } = product;
+  if (
+    review.verdict !== "accepted" ||
+    !sameRef(review.candidateRef, candidate.ref) ||
+    !sameRef(review.originalGoalContractRef, current.goalContractRef) ||
+    review.correctionKind !== candidate.correctionKind ||
+    review.findings.length !== 0
+  ) {
+    throw new Error("Work Ledger feedback Planning receipt changed");
   }
 }
 

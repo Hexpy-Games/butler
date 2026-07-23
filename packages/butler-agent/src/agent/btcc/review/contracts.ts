@@ -13,6 +13,7 @@ export type CriterionVerdict = {
   criterionRef: ContentRef;
   verificationQuestionRefs: ContentRef[];
   currentTargetRevisionRefs: ContentRef[];
+  reviewedResultRefs: ContentRef[];
   observationRefs: ContentRef[];
   verdict: "satisfied" | "not_satisfied";
   findingRefs: ContentRef[];
@@ -25,7 +26,7 @@ export type ReviewObservation = {
   executionTargetRef: ContentRef;
   targetRevisionRefs: ContentRef[];
   description: string;
-  observationOperationRefs: ContentRef[];
+  reviewedResultRefs: ContentRef[];
   reviewCheckpointRef: string;
 };
 
@@ -46,6 +47,7 @@ export type TaskReviewProduct = {
     turnId: string;
     goalContractRef: ContentRef;
     authorityRef: ContentRef;
+    resultAuthorityRef: ContentRef;
     resultCandidateRef: ContentRef;
     workRef: ContentRef;
     taskRef: ContentRef;
@@ -56,6 +58,7 @@ export type TaskReviewProduct = {
     criterionVerdicts: CriterionVerdict[];
     observations: ReviewObservation[];
     findings: ReviewFinding[];
+    reviewedResultRefs: ContentRef[];
     reviewedTargetStateRevisionRefs: ContentRef[];
     reviewedArtifactRevisionRefs: ContentRef[];
     reviewedEffectReceiptRefs: [];

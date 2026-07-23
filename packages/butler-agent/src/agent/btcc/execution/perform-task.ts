@@ -14,6 +14,8 @@ import type {
   TargetStateRevision,
   WorkspaceRevision,
 } from "./contracts.ts";
+import type { OperationResultProjection } from "../operation-result/index.ts";
+import { isResultReadRequest } from "../operation-result/index.ts";
 import { withTaskExecutionDeferral } from "../deferral/index.ts";
 import { taskExecutionSubmissionSchema } from "./submission-schema.ts";
 
@@ -26,7 +28,7 @@ const CONTRACT: PhaseContract = {
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
-    "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
+    "no_heuristic_route", "no_generic_assurance_layer", "no_hidden_retry_loop",
     "no_self_review",
   ],
 };
@@ -39,13 +41,11 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
     requireLiteral(value.kind, "result_candidate", "Task Execution kind");
     const executionTarget = requireRecord(state.executionTarget, "executionTarget");
     const target = requireRecord(executionTarget.target, "executionTarget.target");
-    const observedStates = target.kind === "repository_promotion"
-      ? []
-      : observeTargetStates(
-          requireStringList(state.targetScopeRefs, "targetScopeRefs"),
-          envelope,
-        );
     const resultSummary = requireString(value.resultSummary, "resultSummary");
+    const summary = {
+      ref: contentRef("result-summary", { content: resultSummary }),
+      content: resultSummary,
+    };
     const common = {
       turnId: envelope.binding.turnId,
       goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
@@ -56,10 +56,11 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
       attemptRef: requireContentRef(state.attemptRef, "attemptRef"),
       executionTargetRef: requireContentRef(state.executionTargetRef, "executionTargetRef"),
       executionCheckpointRef: envelope.binding.checkpointId,
-      resultSummaryRef: contentRef("result-summary", { resultSummary }),
-      operationResultRefs: envelope.operationResults.map((result) => result.observationRef),
+      resultSummary: summary,
+      operationResultRefs: envelope.operationResults.map((result) => result.resultRef),
+      operationResults: envelope.operationResults,
       unresolvedConditionRefs: [] as [],
-      targetStateRevisions: observedStates,
+      targetStateRevisions: targetStateRevisions(envelope.operationResults),
       effectReceiptRefs: [] as [],
     };
     const resultBody = target.kind === "provisioned_workspace"
@@ -187,35 +188,39 @@ function sameContentRef(left: ContentRef, right: ContentRef): boolean {
   return left.id === right.id && left.sha256 === right.sha256;
 }
 
-function observeTargetStates(
-  targetScopes: string[],
-  envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
+function targetStateRevisions(
+  results: OperationResultProjection[],
 ): TargetStateRevision[] {
-  const operationRefs = envelope.operationResults.map((result) => result.observationRef);
-  const changed = envelope.operationResults.some(
-    (result) => result.outcome === "workspace_artifact_applied" || result.outcome === "promoted",
-  );
-  const observed = envelope.operationResults.some((result) => result.outcome === "observed");
-  return targetScopes.map((targetScopeRef) => {
-    const state = changed || observed ? "present" as const : "absent" as const;
+  return results.flatMap((result) => {
+    if (result.outcome === "operation_rejected" || isResultReadRequest(result.request)) return [];
+    const target = targetOf(result);
+    if (!target) return [];
     const body = {
-      targetScopeRef,
-      state,
-      description: state === "present"
-        ? "The execution operations observed or changed the accepted target."
-        : "The execution operations did not observe or change the accepted target.",
-      observedByOperationRefs: operationRefs,
+      target,
+      operationResultRef: result.resultRef,
+      observationRef: result.observationRef,
+      outcome: result.outcome,
+      ...(result.targetSnapshotRef ? { targetSnapshotRef: result.targetSnapshotRef } : {}),
     };
-    return { ref: contentRef("target-state-revision", body), ...body };
+    return [{ ref: contentRef("target-state-revision", body), ...body }];
   });
 }
 
-function requireStringList(value: unknown, label: string): string[] {
-  if (!Array.isArray(value) || value.length === 0 ||
-      !value.every((item) => typeof item === "string" && item.length > 0)) {
-    throw new Error(`${label} must be a non-empty string array`);
+function targetOf(result: OperationResultProjection): TargetStateRevision["target"] | null {
+  const request = result.request;
+  if (request.kind === "observe") {
+    return { kind: "scope", scopeRef: request.scopeRef };
   }
-  return value;
+  if (
+    request.kind === "workspace_artifact_action" ||
+    request.kind === "workspace_artifact_observation"
+  ) {
+    return { kind: "workspace", workspaceRef: request.workspaceRef };
+  }
+  if (request.kind === "repository_promotion") {
+    return { kind: "repository", finalSnapshotRef: request.finalSnapshotRef };
+  }
+  return null;
 }
 
 function requireContentRef(value: unknown, label: string): ContentRef {

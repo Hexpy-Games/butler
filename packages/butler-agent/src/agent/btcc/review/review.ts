@@ -7,7 +7,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { reviewTask } from "./review-task.ts";
-import { artifactReviewAuthority } from "./source-authority.ts";
+import { taskReviewAuthority } from "./source-authority.ts";
 
 type ReviewEvent = Extract<TurnEvent, {
   kind: "TaskReviewPassed" | "TaskReviewFailed" | "ManagedDeferralAccepted";
@@ -25,6 +25,13 @@ export async function review(command: {
   if (!accepted) throw new Error("Review is missing accepted Goal authority");
   const result = program.currentTask.currentResult;
   if (!result) throw new Error("Review requires the current ResultCandidate");
+  if (
+    program.currentTask.status !== "result_submitted" ||
+    result.result.taskRef.id !== program.currentTask.task.ref.id ||
+    result.result.taskRevisionSha256 !== program.currentTask.task.ref.sha256
+  ) {
+    throw new Error("Review result is not bound to the exact current Task revision");
+  }
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -32,6 +39,7 @@ export async function review(command: {
     currentWork: program.currentWork.work,
     currentTask: program.currentTask.task,
     resultCandidate: result,
+    reviewAuthorityRef: program.authorityRef,
     criteria: resolveCriteria(program),
     verificationQuestions: resolveVerificationQuestions(program),
     ...(result.result.kind === "workspace_artifact"
@@ -40,12 +48,10 @@ export async function review(command: {
   });
   const product = await reviewTask({
     ...invocation,
-    operationAuthority: result.result.kind === "workspace_artifact"
-      ? artifactReviewAuthority({
-          baseline: command.phase.operationAuthority,
-          reviewSourceRef: result.result.workspaceRevisionRef,
-        })
-      : invocation.operationAuthority,
+    operationAuthority: taskReviewAuthority({
+      baseline: command.phase.operationAuthority,
+      result: result.result,
+    }),
   });
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.review.verdict === "passed"

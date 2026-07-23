@@ -7,13 +7,17 @@ import type { WorkspaceProvision } from "../artifact/index.ts";
 import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 
-export type ManagedAttempt = {
+export type AttemptRecord = {
   ref: ContentRef;
   taskRef: ContentRef;
   owningTurnId: string;
   createdByTurnRevision: number;
   previousAttemptRef?: ContentRef;
   correctionPlanRef?: ContentRef;
+};
+
+export type ManagedAttempt = {
+  attemptRecord: AttemptRecord;
   executionTargetRef: ContentRef;
   executionTarget: {
     ref: ContentRef;
@@ -65,6 +69,10 @@ export type ManagedAttempt = {
 export type WorkFrontierDecision =
   | {
       kind: "select_task";
+      task: ReviewedManagedProgramState["tasks"][number];
+    }
+  | {
+      kind: "revalidate_task";
       task: ReviewedManagedProgramState["tasks"][number];
     }
   | { kind: "close_frontier"; promotionAssemblies: ReviewedPromotionAssembly[] }

@@ -58,7 +58,7 @@ export type PhaseEnvelope = {
   modelSelection: AdmittedModelSelection;
   context: OpeningContext;
   operationAuthority: OperationAuthority;
-  operationResults: OperationResult[];
+  operationResults: OperationResultProjection[];
   submissionSchema: SubmissionSchema;
   providerCorrection?: ProviderCorrection;
 };

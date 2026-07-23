@@ -10,6 +10,7 @@ import { selectNextTaskOrClose } from "./select-next-task-or-close.ts";
 type WorkEvent = Extract<TurnEvent, {
   kind:
     | "WorkTaskSelected"
+    | "WorkTaskReadyForReview"
     | "WorkFrontierClosed"
     | "PromotionFrontierClosed";
 }>;
@@ -45,6 +46,9 @@ async function selectTaskOrCompleteWork(
       kind: "PromotionFrontierClosed",
       closure: { kind: "deferred", deferredAnchorRef: decision.deferredAnchorRef },
     };
+  }
+  if (decision.kind === "revalidate_task") {
+    return { kind: "WorkTaskReadyForReview" };
   }
   const attempt = await prepareTaskAttempt({
     turnId: turn.turnId,

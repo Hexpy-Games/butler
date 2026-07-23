@@ -40,7 +40,7 @@ export async function execution(command: {
     workRef: program.currentWork.work.ref,
     taskRef: program.currentTask.task.ref,
     taskRevisionSha256: program.currentTask.task.ref.sha256,
-    attemptRef: attempt.ref,
+    attemptRef: attempt.attemptRecord.ref,
     executionTargetRef: attempt.executionTargetRef,
     executionTarget: attempt.executionTarget,
     targetScopeRefs: executionScopeRefs(program, target),

@@ -3,8 +3,9 @@ import type {
   WorkLedgerCommit,
   AvailableSpecRevision,
 } from "../../../btcc/index.ts";
-import { bindManagedProgram } from "../../../btcc/work-ledger/program-authority.ts";
+import { bindManagedProgram } from "../../../btcc/index.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
+import { acceptProjectFeedback } from "./revise-program.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Reviewed = Extract<Program, { planningState: "reviewed" }>;
@@ -37,7 +38,7 @@ export function reduceProjectProgram(
       attachReview(next, mutation.product);
       break;
     case "accept_feedback_plan":
-      return acceptFeedback(next, mutation.product);
+      return acceptProjectFeedback(next, mutation.product);
     case "close_implementation_frontier":
       closeImplementation(next, mutation.promotionAssemblies);
       break;
@@ -100,7 +101,7 @@ function installPlan(program: Program, product: Extract<Mutation, {
 
 function selectAttempt(program: Reviewed, attempt: Extract<Mutation, { kind: "select_attempt" }>[
   "attempt"]): void {
-  const task = taskById(program, attempt.taskRef.id);
+  const task = taskById(program, attempt.attemptRecord.taskRef.id);
   if (task.status !== "planned") throw changed("selected Task");
   task.status = "selected";
   task.attempts.push({ ...attempt, status: "ready" });
@@ -133,72 +134,6 @@ function attachReview(program: Reviewed, product: Extract<Mutation, { kind: "att
   task.currentReview = product;
   const work = workByLogicalId(program, task.task.workLogicalId);
   if (tasksFor(program, work).every((item) => item.status === "accepted")) work.status = "closed";
-}
-
-function acceptFeedback(program: Reviewed, product: Extract<Mutation, {
-  kind: "accept_feedback_plan";
-}>["product"]): Reviewed {
-  const candidate = product.candidate;
-  if (candidate.correctionKind === "implementation_repair") {
-    for (const ref of candidate.correctionPlan.targetTaskRefs) {
-      const task = taskById(program, ref.id);
-      if (task.status !== "review_failed" && task.status !== "accepted") throw changed("repair target");
-      if (task.status === "review_failed") {
-        const attempt = task.attempts.at(-1);
-        if (!attempt || attempt.status !== "review_failed") throw changed("failed repair Attempt");
-        attempt.status = "closed_unaccepted";
-      }
-      task.status = "planned";
-      delete task.currentResult;
-      delete task.currentReview;
-      workByLogicalId(program, task.task.workLogicalId).status = "planned";
-    }
-    program.correctionPlanRef = candidate.correctionPlan.ref;
-    program.frontier = "implementation_open";
-    program.manifestRevision += 1;
-    return selectCurrent(program);
-  }
-  return installRevisedGraph(program, product);
-}
-
-function installRevisedGraph(program: Reviewed, product: Exclude<Extract<Mutation, {
-  kind: "accept_feedback_plan";
-}>["product"]["candidate"], { correctionKind: "implementation_repair" }> extends never
-  ? never : Extract<Mutation, { kind: "accept_feedback_plan" }>["product"]): Reviewed {
-  const candidate = product.candidate;
-  if (candidate.correctionKind === "implementation_repair") return program;
-  const plan = candidate.nextPlanCandidate;
-  if (program.manifestRevision !== plan.observedManifestRevision) throw changed("revised graph base");
-  const previous = new Map(program.tasks.map((task) => [task.task.ref.id, task]));
-  const impact = new Map(candidate.impactMap.filter((item) => item.successorTaskRef)
-    .map((item) => [item.successorTaskRef!.id, item]));
-  const works = plan.works.map((work) => ({ work, status: "planned" as const }));
-  const tasks = plan.tasks.map((task) => {
-    const existing = previous.get(task.ref.id);
-    return impact.get(task.ref.id)?.disposition === "unaffected" && existing
-      ? { ...existing, task }
-      : { task, status: "planned" as const, attempts: [] };
-  });
-  const next: Reviewed = {
-    ...program,
-    manifestRevision: program.manifestRevision + 1,
-    authorityRef: candidate.correctionKind === "authority_scope_revision"
-      ? candidate.proposedAuthority.ref : plan.authorityRef,
-    plan: plan.plan,
-    planningReviewRef: product.review.ref,
-    works,
-    tasks,
-    criteria: plan.criteria,
-    verificationQuestions: plan.verificationQuestions,
-    artifactLifecycle: plan.artifactLifecycle,
-    promotionAssemblies: [],
-    frontier: "implementation_open",
-    correctionPlanRef: candidate.correctionPlan.ref,
-  };
-  for (const work of next.works) {
-    if (tasksFor(next, work).every((task) => task.status === "accepted")) work.status = "closed";
-  }
-  return selectCurrent(next);
 }
 
 function closeImplementation(program: Reviewed, assemblies: Reviewed["promotionAssemblies"]): void {
@@ -251,7 +186,7 @@ function taskById(program: Reviewed, id: string) {
 }
 
 function attemptById(task: Reviewed["tasks"][number], id: string) {
-  const attempt = task.attempts.find((item) => item.ref.id === id);
+  const attempt = task.attempts.find((item) => item.attemptRecord.ref.id === id);
   if (!attempt) throw changed("Attempt");
   return attempt;
 }

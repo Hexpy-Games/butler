@@ -201,7 +201,7 @@ function validateInput(
     throw new Error("BTCC phase guidance requires an id and guidance text");
   }
   if (!input.scopeRationale.trim() || input.scopeSourceRefs.length === 0) {
-    throw new Error("BTCC phase guidance requires reviewed scope evidence");
+    throw new Error("BTCC phase guidance requires reviewed scope authority");
   }
   if (
     input.scope.kind === "user" &&

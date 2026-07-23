@@ -182,6 +182,7 @@ async function authorFeedbackPlan(command: {
       availableSpecs: program.availableSpecs,
       requireGoverningSpec: managed.goalAcceptance.authority.ledgerScope.kind === "project",
       currentTasks: program.tasks.map((task) => task.task),
+      currentTaskStates: program.tasks,
       ...(previous
         ? {
             previousCandidateRef: previous.candidate.ref,

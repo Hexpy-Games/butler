@@ -37,6 +37,7 @@ export type TurnEvent =
   | { kind: "PlanningReviewAccepted"; product: PlanningAcceptedProduct }
   | { kind: "PlanningRevisionRequested"; product: PlanningRevisionRequiredProduct }
   | { kind: "WorkTaskSelected"; attempt: ManagedAttempt }
+  | { kind: "WorkTaskReadyForReview" }
   | { kind: "WorkFrontierClosed"; promotionAssemblies: ReviewedPromotionAssembly[] }
   | { kind: "ResultCandidateSubmitted"; product: ResultCandidateProduct }
   | { kind: "TaskReviewPassed"; product: TaskReviewProduct }
