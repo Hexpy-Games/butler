@@ -14,7 +14,7 @@ import type {
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 import { loadProjectProgram, materializeProjectProgram } from "./materialize-program.ts";
 import { reduceProjectProgram } from "./reduce-program.ts";
-import { resolveCanonicalSpecRevisions } from "./canonical-spec-resolver.ts";
+import { resolveCanonicalSpecCatalog } from "./canonical-spec-resolver.ts";
 
 export async function prepareProjectCommit(
   stagingRoot: string,
@@ -25,11 +25,8 @@ export async function prepareProjectCommit(
   const current = loadProjectProgram(core, input.projectRoot, programId);
   assertLogicalLedgerMutationId(input.commit, current);
   const availableSpecs = input.commit.mutation.kind === "bind_program"
-    ? resolveCanonicalSpecRevisions(
-        core,
-        input.projectRoot,
-        input.commit.mutation.product.goalContract.governingSpecLogicalIds,
-      ).map(({ body: _body, ...spec }) => spec)
+    ? resolveCanonicalSpecCatalog(core, input.projectRoot)
+      .map(({ body: _body, ...spec }) => spec)
     : current?.availableSpecs ?? [];
   const program = reduceProjectProgram(
     current,

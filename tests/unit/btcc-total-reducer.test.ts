@@ -153,6 +153,105 @@ test("runtime hands a rejected internal event to recovery without committing it"
   expect(turn.revision).toBe(7);
 });
 
+test("runtime normalizes a post-claim persistence defect before it reaches ingress", async () => {
+  const turn = turnIn("admitted");
+  const claim: StateExecutionClaim = {
+    claimId: "claim-persistence",
+    turnId: turn.turnId,
+    turnRevision: turn.revision,
+    semanticState: turn.semanticState,
+    checkpointId: turn.checkpoint!.checkpointId,
+    checkpointRevision: turn.checkpoint!.checkpointRevision,
+    executionFence: turn.executionFence,
+  };
+  const turns: TurnStateRepository = {
+    async findTurn() { return turn; },
+    async activateCommittedSuccessor() { return turn; },
+    async acquireStateExecutionClaim() { return claim; },
+    async commitTransition() { throw new Error("project publication defect"); },
+    async stopTurn() { throw new Error("not used"); },
+  };
+  const dependencies = {
+    turns,
+    admission: null as never,
+    phaseConversations: null as never,
+    model: null as never,
+    operations: null as never,
+    artifacts: null as never,
+    messages: null as never,
+    retrospective: null as never,
+  } satisfies BtccRuntimeDependencies;
+
+  await expect(createBtccTurnRuntime(dependencies).handle({
+    kind: "resume",
+    turnId: turn.turnId,
+  })).rejects.toMatchObject({
+    name: "OperationalInterruptionError",
+    code: "runtime_unclassified_interruption",
+    activation: { kind: "runtime_remediation" },
+    anchor: { claimId: claim.claimId, checkpointId: claim.checkpointId },
+  });
+});
+
+test("a normalized persistence interruption retains canonical Stop ownership", async () => {
+  const turn = turnIn("admitted");
+  const claim: StateExecutionClaim = {
+    claimId: "claim-owned-persistence",
+    turnId: turn.turnId,
+    turnRevision: turn.revision,
+    semanticState: turn.semanticState,
+    checkpointId: turn.checkpoint!.checkpointId,
+    checkpointRevision: turn.checkpoint!.checkpointRevision,
+    executionFence: turn.executionFence,
+  };
+  let capturedCode = "";
+  let recoveryStarted!: () => void;
+  const started = new Promise<void>((resolve) => { recoveryStarted = resolve; });
+  const turns: TurnStateRepository = {
+    async findTurn() { return turn; },
+    async activateCommittedSuccessor() { return turn; },
+    async acquireStateExecutionClaim() { return claim; },
+    async commitTransition() { throw new Error("project publication defect"); },
+    async stopTurn() {
+      turn.semanticState = "cancelled";
+      turn.revision += 1;
+      return { kind: "cancelled", turnId: turn.turnId };
+    },
+  };
+  const dependencies = {
+    turns,
+    operationalRecovery: {
+      async awaitReentry(interruption, signal) {
+        capturedCode = interruption.code;
+        recoveryStarted();
+        await new Promise((_, reject) => signal.addEventListener(
+          "abort", () => reject(new Error("stopped")), { once: true },
+        ));
+      },
+      async resume() { return null; },
+      async resolve() { return false; },
+      async pendingTurnIds() { return []; },
+    },
+    admission: null as never,
+    phaseConversations: null as never,
+    model: null as never,
+    operations: null as never,
+    artifacts: null as never,
+    messages: null as never,
+    retrospective: null as never,
+  } satisfies BtccRuntimeDependencies;
+  const runtime = createBtccTurnRuntime(dependencies);
+  const running = runtime.handle({ kind: "resume", turnId: turn.turnId });
+
+  await started;
+  expect(capturedCode).toBe("runtime_unclassified_interruption");
+  expect(await runtime.handle({ kind: "stop", turnId: turn.turnId })).toEqual({
+    kind: "cancelled",
+    turnId: turn.turnId,
+  });
+  expect(await running).toEqual({ kind: "cancelled", turnId: turn.turnId });
+});
+
 function turnIn(semanticState: TurnSemanticState): TurnRecord {
   return {
     turnId: "turn-total-reducer",

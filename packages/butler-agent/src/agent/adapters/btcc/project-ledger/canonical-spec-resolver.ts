@@ -50,6 +50,19 @@ export function resolveCanonicalSpecRevisions(
   return selected.map((spec) => hydrateSelectedSpec(core, spec));
 }
 
+export function resolveCanonicalSpecCatalog(
+  core: ProjectLedgerCore,
+  projectRoot: string,
+): CanonicalSpecRevision[] {
+  const index = buildMetadataIndex(core, projectRoot);
+  const logicalIds = [...new Set(
+    [...index.values()].map((spec) => spec.logicalId ?? spec.physicalId),
+  )].sort();
+  const selected = logicalIds.map((logicalId) => resolveRequestedChain(index, logicalId));
+  rejectCompetingConcernOwners(index, selected);
+  return selected.map((spec) => hydrateSelectedSpec(core, spec));
+}
+
 export function normalizeSpecBody(body: string): string {
   return `${body.normalize("NFC").replace(/\r\n?|\n/gu, "\n").replace(/\n+$/u, "")}\n`;
 }

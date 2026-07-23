@@ -16,6 +16,7 @@ import {
   LedgerContentionInterruption,
   isBtccOperationalInterruption,
   OperationalInterruptionError,
+  runtimeInterruption,
   type OperationalCheckpointAnchor,
   type ExecutionPermit,
   type TurnExecutionSupervisor,
@@ -68,8 +69,9 @@ async function runBtccTurn(
       executionFence: turn.executionFence,
       semanticState: turn.semanticState,
     });
+    let claim: StateExecutionClaim | undefined;
     try {
-      const claim = await dependencies.turns.acquireStateExecutionClaim(turn);
+      claim = await dependencies.turns.acquireStateExecutionClaim(turn);
       const recovered = await recoverPersistedInterruption(
         dependencies,
         currentCheckpointBinding(claim),
@@ -113,15 +115,18 @@ async function runBtccTurn(
         turn = reloaded;
         continue;
       }
-      if (isBtccOperationalInterruption(error) && dependencies.operationalRecovery) {
+      const interruption = claim
+        ? runtimeInterruption(error, currentCheckpointBinding(claim))
+        : isBtccOperationalInterruption(error) ? error : undefined;
+      if (interruption && dependencies.operationalRecovery) {
         await publishOperationalNotice(dependencies.progress, {
           turnId: turn.turnId,
           status: "recovering",
-          code: error.code,
-          activationKind: error.activation.kind,
+          code: interruption.code,
+          activationKind: interruption.activation.kind,
         });
         try {
-          await dependencies.operationalRecovery.awaitReentry(error, permit.signal);
+          await dependencies.operationalRecovery.awaitReentry(interruption, permit.signal);
         } catch (recoveryError) {
           const stopped = await dependencies.turns.findTurn(turn.turnId);
           if (stopped && isTerminal(stopped)) {
@@ -132,8 +137,8 @@ async function runBtccTurn(
         }
         const reloaded = await dependencies.turns.findTurn(turn.turnId);
         if (!reloaded) throw new Error("Interrupted BTCC Turn disappeared", { cause: error });
-        assertSameOperationalCheckpoint(reloaded, error.anchor);
-        providerCorrection = correctionForOperationalInterruption(error);
+        assertSameOperationalCheckpoint(reloaded, interruption.anchor);
+        providerCorrection = correctionForOperationalInterruption(interruption);
         turn = reloaded;
         continue;
       }
@@ -142,7 +147,7 @@ async function runBtccTurn(
         turn = observed;
         continue;
       }
-      throw error;
+      throw interruption ?? error;
     } finally {
       permit.close();
     }

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   CanonicalSpecSupersessionCycleError,
   normalizeSpecBody,
+  resolveCanonicalSpecCatalog,
   resolveCanonicalSpecRevisions,
 } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/canonical-spec-resolver.ts";
 
@@ -120,6 +121,16 @@ describe("BTCC canonical Spec resolver", () => {
     expect(() => resolveCanonicalSpecRevisions(
       core as never, "/ledger", ["SPEC-REQUESTED"],
     )).toThrow("competing current authority");
+  });
+
+  test("catalogs every current Spec authority before Planning", () => {
+    const catalog = resolveCanonicalSpecCatalog(fakeCore([
+      spec("SPEC-B", "B", { parentId: "PARENT" }),
+      spec("SPEC-A", "A", { parentId: "PARENT" }),
+    ]) as never, "/ledger");
+
+    expect(catalog.map((item) => item.logicalId)).toEqual(["SPEC-A", "SPEC-B"]);
+    expect(catalog.map((item) => item.body)).toEqual(["A\n", "B\n"]);
   });
 });
 
