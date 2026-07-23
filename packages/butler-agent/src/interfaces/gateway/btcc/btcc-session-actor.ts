@@ -108,6 +108,8 @@ function operationalNotice(
   if (activation === "cancelled") return { kind: "turn.cancelled" };
   const note = activation === "automatic_provider_recovery"
     ? "모델 연결이 복구되면 저장된 지점부터 이어서 진행합니다"
+    : activation === "automatic_storage_recovery"
+      ? "저장소 쓰기 순서가 확보되면 저장된 지점부터 이어서 진행합니다"
     : activation === "provider_action_required"
       ? "선택한 모델 연결 설정을 확인하면 저장된 지점부터 이어갈 수 있습니다"
       : "버틀러가 현재 작업을 안전하게 보류했습니다. 중지 기능은 계속 사용할 수 있습니다";

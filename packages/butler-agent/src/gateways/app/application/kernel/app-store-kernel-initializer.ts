@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { coordinateSharedSqliteWriter } from "../../../../foundation/sqlite-writer-coordination.ts";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { AppAutomationStore } from "../../domain/automations/automation-store.ts";
@@ -78,8 +79,7 @@ export function initializeAppStoreKernel(
   kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
   kernel.db = new Database(options.dbPath ?? ":memory:", { create: true });
-  kernel.db.run("PRAGMA journal_mode = WAL");
-  kernel.db.run("PRAGMA foreign_keys = ON");
+  coordinateSharedSqliteWriter(kernel.db);
   kernel.events = new AppEventStore(kernel.db);
   kernel.turns = new AppTurnRecordStore(kernel.db, (turnId, kind) =>
     kernel.hasTurnEventKind(turnId, kind),

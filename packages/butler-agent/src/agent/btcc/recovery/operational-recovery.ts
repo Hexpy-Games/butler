@@ -38,7 +38,10 @@ export function createOperationalRecoveryBoundary(
 export function createProviderRecoveryReadiness(): ProviderRecoveryReadiness {
   return {
     async wait({ interruption, receipt, signal }) {
-      if (interruption.activation.kind === "automatic_provider_recovery") {
+      if (
+        interruption.activation.kind === "automatic_provider_recovery" ||
+        interruption.activation.kind === "automatic_storage_recovery"
+      ) {
         await waitForCooldown(providerCooldown(receipt.activationCount), signal);
         return;
       }
