@@ -19,7 +19,11 @@ const integer = (minimum?: number, maximum?: number) => ({
   ...(minimum === undefined ? {} : { minimum }),
   ...(maximum === undefined ? {} : { maximum }),
 });
-const strings = () => ({ type: "array", items: { type: "string" } });
+const strings = (description?: string) => ({
+  type: "array",
+  items: { type: "string" },
+  ...(description ? { description } : {}),
+});
 const PROJECT_LEDGER_RECORD_KINDS = [
   "initiative", "decision", "risk", "spec", "report", "plan", "handoff",
   "reference", "roadmap", "work", "task", "attempt",
@@ -68,8 +72,8 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
       pattern: string(),
       regex: { type: "boolean" },
       case_sensitive: { type: "boolean" },
-      include: strings(),
-      exclude: strings(),
+      include_globs: strings("Optional workspace-relative globs. A basename glob such as *.ts matches at any depth."),
+      exclude_globs: strings("Optional workspace-relative globs to exclude."),
       context: integer(0, 10),
       max_matches: integer(1, 1_000),
     }, ["pattern"]),

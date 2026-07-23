@@ -4,6 +4,7 @@ import { dirname, relative } from "node:path";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
 import { OperationRejectedError } from "../../../btcc/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
+import { pathMatchesFilters } from "./path-glob-filter.ts";
 
 type FileCapabilityName = "read_file" | "write_file" | "grep_files";
 
@@ -126,10 +127,10 @@ async function collectFiles(root: string): Promise<string[]> {
 }
 
 function selected(path: string, args: Record<string, unknown>): boolean {
-  const includes = stringArray(args.include);
-  const excludes = stringArray(args.exclude);
-  return (includes.length === 0 || includes.some((value) => path.includes(value))) &&
-    !excludes.some((value) => path.includes(value));
+  return pathMatchesFilters(path, {
+    includeGlobs: stringArray(args.include_globs),
+    excludeGlobs: stringArray(args.exclude_globs),
+  });
 }
 
 function sourceRank(path: string): number {
