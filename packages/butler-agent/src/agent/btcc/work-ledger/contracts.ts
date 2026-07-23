@@ -6,9 +6,11 @@ import type {
   PlanningAcceptedProduct,
 } from "../planning/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
-import type { PromotionAuthorizationProduct } from "../consolidation/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
-import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
+import type {
+  PromotionPermit,
+  ReviewedPromotionAssembly,
+} from "../artifact/index.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import type { PromotionDeferralProduct } from "../deferral/index.ts";
 import type { AvailableSpecRevision } from "../planning/contracts.ts";
@@ -42,8 +44,8 @@ export type ReviewedManagedProgramState = ManagedProgramAuthority & {
   verificationQuestions: PlanningAcceptedProduct["candidate"]["verificationQuestions"];
   artifactLifecycle: PlanningAcceptedProduct["candidate"]["artifactLifecycle"];
   promotionAssemblies: ReviewedPromotionAssembly[];
-  promotionAuthorization?: PromotionAuthorizationProduct["authorization"];
-  frontier: "implementation_open" | "awaiting_consolidation" | "promotion_open" | "closed";
+  promotionPermit?: PromotionPermit;
+  frontier: "implementation_open" | "promotion_open" | "closed";
   correctionPlanRef?: ContentRef;
   activeDeferral?: ManagedDeferralProduct;
   promotionDeferral?: PromotionDeferralProduct;
@@ -101,11 +103,7 @@ export type WorkLedgerMutation =
       kind: "close_implementation_frontier";
       cursor: WorkLedgerCursor;
       promotionAssemblies: ReviewedPromotionAssembly[];
-    }
-  | {
-      kind: "authorize_promotion";
-      cursor: WorkLedgerCursor;
-      product: PromotionAuthorizationProduct;
+      promotionPermit?: PromotionPermit;
     }
   | {
       kind: "close_promotion_frontier";

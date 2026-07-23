@@ -158,17 +158,6 @@ export class SqliteManagedTransitionWriter {
       case "close_work_frontier":
         this.closeFrontier(turn, nextRevision, transition, projectLedger);
         return;
-      case "authorize_promotion": {
-        this.insert("consolidation_assessment", transition.product.assessment);
-        this.insert("promotion_authorization", transition.product.authorization);
-        const program = this.requireCommittedProgram(
-          this.commitLedger(transition.ledgerCommit, projectLedger),
-        );
-        this.advance(turn, nextRevision, transition.successor, {
-          ...requiredManaged(turn), program,
-        });
-        return;
-      }
       case "accept_final_dossier":
         if (transition.product.assessment) {
           this.insert("consolidation_assessment", transition.product.assessment);
@@ -293,6 +282,9 @@ export class SqliteManagedTransitionWriter {
   ): void {
     const managed = requiredManaged(turn);
     this.artifactRecords.recordPromotionAssemblies(transition.promotionAssemblies);
+    if (transition.promotionPermit) {
+      this.insert("promotion_permit", transition.promotionPermit);
+    }
     const committed = this.requireCommittedProgram(
       this.commitLedger(transition.ledgerCommit, projectLedger),
     );

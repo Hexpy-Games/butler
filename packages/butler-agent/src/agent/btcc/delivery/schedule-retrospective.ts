@@ -9,5 +9,9 @@ export function scheduleRetrospective(input: {
   scheduler: RetrospectiveScheduler;
 }): void {
   if (input.turn.semanticState !== "delivered" || !input.turn.finalPayload) return;
-  input.scheduler.schedule(input.turn);
+  try {
+    input.scheduler.schedule(input.turn);
+  } catch {
+    // Delivery is authoritative; durable reconciliation discovers a missed source later.
+  }
 }

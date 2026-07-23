@@ -36,7 +36,11 @@ async function selectTaskOrCompleteWork(
     program,
   });
   if (decision.kind === "close_frontier") {
-    return { kind: "WorkFrontierClosed", promotionAssemblies: decision.promotionAssemblies };
+    return {
+      kind: "WorkFrontierClosed",
+      promotionAssemblies: decision.promotionAssemblies,
+      ...(decision.promotionPermit ? { promotionPermit: decision.promotionPermit } : {}),
+    };
   }
   if (decision.kind === "complete_promotion") {
     return { kind: "PromotionFrontierClosed", closure: { kind: "promoted" } };

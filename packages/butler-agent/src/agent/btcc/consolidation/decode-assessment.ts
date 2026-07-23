@@ -52,9 +52,15 @@ function decodeGoalFieldVerdicts(
   const fields = goalFields.map((item, index) =>
     requireString(requireRecord(item, `goalFields[${index}]`).fieldId, `goalFields[${index}].fieldId`));
   if (value.length !== fields.length) throw new Error("Consolidation Goal field verdict set changed");
+  const acceptedFields = new Set(fields);
+  const reviewedFields = new Set<string>();
   const verdicts = value.map((item, index) => {
     const record = requireRecord(item, `goalFieldVerdicts[${index}]`);
-    const fieldId = fields[index]!;
+    const fieldId = requireString(record.fieldId, `goalFieldVerdicts[${index}].fieldId`);
+    if (!acceptedFields.has(fieldId) || reviewedFields.has(fieldId)) {
+      throw new Error("Consolidation changed or repeated an original Goal field");
+    }
+    reviewedFields.add(fieldId);
     const verdict = record.verdict;
     if (verdict !== "fulfilled" && verdict !== "deferred" && verdict !== "not_fulfilled") {
       throw new Error("Consolidation Goal field verdict does not match the original contract");
@@ -64,8 +70,8 @@ function decodeGoalFieldVerdicts(
       verdict: verdict as ConsolidationAssessment["goalFieldVerdicts"][number]["verdict"],
     };
   });
-  if (new Set(verdicts.map((verdict) => verdict.fieldId)).size !== verdicts.length) {
-    throw new Error("Consolidation Goal field verdicts contain duplicates");
+  if (reviewedFields.size !== acceptedFields.size) {
+    throw new Error("Consolidation omitted an original Goal field");
   }
   return verdicts;
 }

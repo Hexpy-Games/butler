@@ -36,8 +36,13 @@ test("isolated commands cannot read or write the original project root", async (
     await expect(run).rejects.toMatchObject({ code: "command_filesystem_isolation_unavailable" });
     return;
   }
-  const result = await run as { stdout: string; stderr: string };
-  expect(result.stdout).toBe("reviewed bytes\n");
-  expect(result.stderr).toContain("Operation not permitted");
+  const result = await run as {
+    payloadSource: { path: string };
+    summary: { exitCode: number | null };
+  };
+  const payload = readFileSync(result.payloadSource.path, "utf8");
+  expect(payload).toContain("\n--- stdout ---\nreviewed bytes\n\n--- stderr ---\n");
+  expect(payload).toContain("Operation not permitted");
+  expect(result.summary.exitCode).not.toBe(0);
   expect(readFileSync(join(original, "source.ts"), "utf8")).toBe("stale bytes\n");
 });

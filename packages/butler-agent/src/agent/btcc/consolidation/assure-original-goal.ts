@@ -38,7 +38,7 @@ const codec: PhaseCodec<ConsolidationProduct> = {
     if (sourceDeferral?.kind === "managed_deferral") {
       return decodeDeferredDossier(submission, state, sourceDeferral);
     }
-    if (state.frontier !== "closed" && state.frontier !== "awaiting_consolidation") {
+    if (state.frontier !== "closed") {
       throw new Error("Consolidation requires a closed implementation frontier");
     }
     if (!Array.isArray(state.taskStatuses) || state.taskStatuses.some((status) => status !== "accepted")) {
@@ -59,42 +59,6 @@ const codec: PhaseCodec<ConsolidationProduct> = {
     }
     if (isRepairableAssessment(assessment)) {
       throw new Error("Consolidation cannot close a repairable whole-goal finding");
-    }
-    const promotionAssemblies = Array.isArray(state.promotionAssemblies)
-      ? state.promotionAssemblies.map((item, index) =>
-          requireRecord(item, `promotionAssemblies[${index}]`))
-      : [];
-    if (promotionAssemblies.length > 0) {
-      requireLiteral(value.kind, "promotion_authorization", "Consolidation kind");
-      requireLiteral(value.goalCoverage, "fulfilled", "goal coverage");
-      requireLiteral(value.semanticFidelity, "faithful", "semantic fidelity");
-      const candidateRefs = promotionAssemblies.map((assembly) =>
-        requireContentRef(requireRecord(assembly.candidate, "candidate").ref, "candidate.ref"));
-      const resolutionRefs = promotionAssemblies.map((assembly) =>
-        requireContentRef(requireRecord(assembly.resolution, "resolution").ref, "resolution.ref"));
-      const promotionTaskRefs = promotionAssemblies.map((assembly) =>
-        requireContentRef(
-          requireRecord(assembly.candidate, "candidate").promotionTaskRef,
-          "promotionTaskRef",
-        ));
-      const body = {
-        programId: requireString(state.programId, "programId"),
-        originalGoalContractRef: goalContractRef,
-        currentAuthorityRef: authorityRef,
-        assessmentRef: assessment.ref,
-        acceptedPlanRef: planRef,
-        planningReviewRef,
-        candidateRefs,
-        resolutionRefs,
-        promotionTaskRefs,
-        assessment: "authorized" as const,
-        userReport: decodeUserReportFacts(value.userReport),
-      };
-      return {
-        kind: "promotion_authorization",
-        assessment,
-        authorization: { ref: contentRef("promotion-authorization", body), ...body },
-      };
     }
     requireLiteral(value.kind, "final_dossier", "Consolidation kind");
     requireLiteral(value.goalCoverage, "fulfilled", "goal coverage");

@@ -247,7 +247,7 @@ CREATE TABLE IF NOT EXISTS btcc_programs (
   planning_review_ref TEXT,
   pending_correction_plan_ref TEXT,
   promotion_assembly_refs_json TEXT,
-  promotion_authorization_ref TEXT,
+  promotion_permit_ref TEXT,
   active_deferral_ref TEXT,
   active_deferral_turn_id TEXT,
   promotion_deferral_ref TEXT,

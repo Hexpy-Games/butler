@@ -12,7 +12,6 @@ import type {
   OpeningContinuationProduct,
 } from "../conception/index.ts";
 import type { ConsolidationRepairProduct, FinalDossierProduct } from "../consolidation/index.ts";
-import type { PromotionAuthorizationProduct } from "../consolidation/index.ts";
 import type { ContentRef } from "../core/index.ts";
 import type { ResultCandidateProduct } from "../execution/index.ts";
 import type {
@@ -26,7 +25,10 @@ import type {
 import type { PreparedReportProduct } from "../reporting/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
-import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
+import type {
+  PromotionPermit,
+  ReviewedPromotionAssembly,
+} from "../artifact/index.ts";
 import type { WorkLedgerCommit, WorkLedgerMutation } from "../work-ledger/index.ts";
 import type { ManagedTurnState } from "./managed-turn-state.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
@@ -179,8 +181,9 @@ export type AcceptedTurnTransition =
     }
   | {
       kind: "close_work_frontier";
-      successor: "consolidation";
+      successor: "work_frontier" | "consolidation";
       promotionAssemblies: ReviewedPromotionAssembly[];
+      promotionPermit?: PromotionPermit;
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "close_implementation_frontier" }>;
       };
@@ -258,14 +261,6 @@ export type AcceptedTurnTransition =
       successor: "consolidation";
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "close_deferred_promotion_frontier" }>;
-      };
-    }
-  | {
-      kind: "authorize_promotion";
-      successor: "work_frontier";
-      product: PromotionAuthorizationProduct;
-      ledgerCommit: WorkLedgerCommit & {
-        mutation: Extract<WorkLedgerMutation, { kind: "authorize_promotion" }>;
       };
     }
   | {

@@ -97,10 +97,10 @@ function createPromotionTarget(
   attemptRef: ReturnType<typeof contentRef>,
   task: ReviewedManagedProgramState["tasks"][number],
 ) {
-  const authorization = program.promotionAuthorization;
-  if (!authorization || !authorization.promotionTaskRefs.some(
+  const permit = program.promotionPermit;
+  if (!permit || !permit.promotionTaskRefs.some(
     (ref) => ref.id === task.task.ref.id,
-  )) throw new Error("Promotion Task is not named by the active authorization");
+  )) throw new Error("Promotion Task is not named by the active permit");
   const assembly = program.promotionAssemblies.find(
     (candidate) => candidate.candidate.promotionTaskRef.id === task.task.ref.id,
   );
@@ -110,7 +110,7 @@ function createPromotionTarget(
     attemptRef,
     target: {
       kind: "repository_promotion" as const,
-      authorizationRef: authorization.ref,
+      authorizationRef: permit.ref,
       workspaceRef: assembly.candidate.workspaceRef,
       candidateRef: assembly.candidate.ref,
       resolutionRef: assembly.resolution.ref,
@@ -121,7 +121,7 @@ function createPromotionTarget(
   const executionTarget = { ref: contentRef("task-execution-target", targetBody), ...targetBody };
   const creation = {
     kind: "authorized_promotion_selection" as const,
-    authorizationRef: authorization.ref,
+    authorizationRef: permit.ref,
     resolutionRef: assembly.resolution.ref,
   };
   const bindingBody = {

@@ -11,6 +11,14 @@ export function migrateBtccSchema(db: Database): void {
 function ensureProgramAuthorityProjection(db: Database): void {
   ensureColumn(db, "btcc_programs", "available_specs_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "btcc_programs", "governing_spec_refs_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "btcc_programs", "promotion_permit_ref", "TEXT");
+  const columns = db.query<ColumnRow, []>("PRAGMA table_info(btcc_programs)").all();
+  if (columns.some((candidate) => candidate.name === "promotion_authorization_ref")) {
+    db.exec(`
+      UPDATE btcc_programs SET promotion_permit_ref = promotion_authorization_ref
+      WHERE promotion_permit_ref IS NULL AND promotion_authorization_ref IS NOT NULL
+    `);
+  }
 }
 
 function ensureColumn(

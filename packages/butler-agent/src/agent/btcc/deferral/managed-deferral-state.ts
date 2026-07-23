@@ -79,10 +79,10 @@ function deferralContextFor(turn: TurnRecord): ManagedDeferralContext {
       .map((task) => task.task.ref),
     workspaceRefs: uniqueRefs(workspaceRefs),
     workspaceRevisionRefs: uniqueRefs(workspaceRevisionRefs),
-    promotionContext: authority.frontier === "promotion_open" && authority.promotionAuthorization
+    promotionContext: authority.frontier === "promotion_open" && authority.promotionPermit
       ? {
           kind: "pre_commit_before_transaction",
-          authorizationRef: authority.promotionAuthorization.ref,
+          authorizationRef: authority.promotionPermit.ref,
           promotionTaskRef: authority.currentTask.task.ref,
         }
       : { kind: "not_promotion" },

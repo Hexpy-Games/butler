@@ -1,5 +1,6 @@
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 import type { WorkFrontierDecision } from "./contracts.ts";
+import { createPromotionPermit } from "../artifact/index.ts";
 import { assemblePromotionCandidates } from "./assemble-promotion-candidates.ts";
 
 export function selectNextTaskOrClose(input: {
@@ -30,9 +31,18 @@ export function selectNextTaskOrClose(input: {
     (task) => task.task.artifactPolicy.kind !== "repository_promotion",
   );
   if (implementationTasks.every((task) => task.status === "accepted")) {
+    const promotionAssemblies = assemblePromotionCandidates(input.program);
+    const promotionPermit = createPromotionPermit({
+      programId: input.program.programId,
+      currentAuthorityRef: input.program.authorityRef,
+      acceptedPlanRef: input.program.plan.ref,
+      planningReviewRef: input.program.planningReviewRef,
+      assemblies: promotionAssemblies,
+    });
     return {
       kind: "close_frontier",
-      promotionAssemblies: assemblePromotionCandidates(input.program),
+      promotionAssemblies,
+      ...(promotionPermit ? { promotionPermit } : {}),
     };
   }
 

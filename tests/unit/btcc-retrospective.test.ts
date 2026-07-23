@@ -7,6 +7,7 @@ import { createProjectWorkLedgerPublicationAdapter } from
   "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { phaseGuidanceRevisionRef } from "../../packages/butler-agent/src/agent/btcc/guidance/index.ts";
+import { scheduleRetrospective } from "../../packages/butler-agent/src/agent/btcc/delivery/index.ts";
 import { runBtccRetrospective } from "../../packages/butler-agent/src/agent/cognition/retrospective/index.ts";
 import { createBtccComposition } from "../../packages/butler-agent/src/agent/composition/index.ts";
 import { DirectHarnessModel } from "../../packages/butler-agent/src/interfaces/btcc-harness/direct-harness-model.ts";
@@ -16,6 +17,20 @@ import {
   clearProjectFixtures,
   projectFixture,
 } from "./support/btcc-project-ledger-fixture.ts";
+
+test("retrospective scheduling failure cannot revoke an already delivered Turn", () => {
+  expect(() => scheduleRetrospective({
+    turn: {
+      semanticState: "delivered",
+      finalPayload: { content: "delivered" },
+    } as never,
+    scheduler: {
+      schedule() {
+        throw new Error("scheduler unavailable");
+      },
+    },
+  })).not.toThrow();
+});
 
 test("delivered BTCC trajectories are evaluated, consolidated, and published asynchronously", async () => {
   const project = await projectFixture();

@@ -130,12 +130,14 @@ function acceptedTransition(
   if (turn.semanticState === "work_frontier" && event.kind === "WorkFrontierClosed") {
     return {
       kind: "close_work_frontier",
-      successor: "consolidation",
+      successor: event.promotionPermit ? "work_frontier" : "consolidation",
       promotionAssemblies: event.promotionAssemblies,
+      ...(event.promotionPermit ? { promotionPermit: event.promotionPermit } : {}),
       ledgerCommit: ledgerCommit(turn, {
         kind: "close_implementation_frontier",
         cursor: ledgerCursor(turn),
         promotionAssemblies: event.promotionAssemblies,
+        ...(event.promotionPermit ? { promotionPermit: event.promotionPermit } : {}),
       }),
     };
   }
@@ -235,18 +237,6 @@ function acceptedTransition(
       kind: "require_consolidation_repair",
       successor: "feedback_conception",
       product: event.product,
-    };
-  }
-  if (turn.semanticState === "consolidation" && event.kind === "PromotionAuthorized") {
-    return {
-      kind: "authorize_promotion",
-      successor: "work_frontier",
-      product: event.product,
-      ledgerCommit: ledgerCommit(turn, {
-        kind: "authorize_promotion",
-        cursor: ledgerCursor(turn),
-        product: event.product,
-      }),
     };
   }
   if (turn.semanticState === "work_frontier" &&
