@@ -202,8 +202,10 @@ export class SqliteWorkLedgerProgramReader {
       execution_target_ref: string;
       execution_target_binding_ref: string;
       status: ManagedTaskState["attempts"][number]["status"];
+      review_ref: string | null;
     }, [string, string]>(`
-      SELECT attempt_ref, execution_target_ref, execution_target_binding_ref, status
+      SELECT attempt_ref, execution_target_ref, execution_target_binding_ref, status,
+        review_ref
       FROM btcc_attempts WHERE program_id = ? AND task_id = ? ORDER BY rowid
     `).all(programId, taskId);
     return rows.map((row) => {
@@ -216,6 +218,14 @@ export class SqliteWorkLedgerProgramReader {
         executionTargetRef: targetRef,
         executionTarget: this.loadRecord(targetRef.id),
         executionTargetBinding: this.loadRecord(bindingRef.id),
+        ...(row.review_ref
+          ? {
+              review: {
+                kind: "task_review" as const,
+                review: this.loadRecord(row.review_ref),
+              },
+            }
+          : {}),
         status: row.status,
       } as ManagedTaskState["attempts"][number];
     });

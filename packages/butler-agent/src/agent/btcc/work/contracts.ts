@@ -8,6 +8,7 @@ import type {
   ReviewedPromotionAssembly,
   WorkspaceProvision,
 } from "../artifact/index.ts";
+import type { TaskReviewProduct } from "../review/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 
 export type AttemptRecord = {
@@ -64,6 +65,7 @@ export type ManagedAttempt = {
         };
   };
   workspaceProvision?: WorkspaceProvision;
+  review?: TaskReviewProduct;
   status:
     | "ready" | "result_submitted" | "review_failed" | "accepted"
     | "promotion_deferred" | "closed_unaccepted";

@@ -38,4 +38,6 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("verification-ownership defect");
   expect(resolveDutyInstructions(["classify_correction_kind"])[0]?.instruction)
     .toContain("materially equivalent implementation findings recur");
+  expect(resolveDutyInstructions(["conceive_scoped_correction"])[0]?.instruction)
+    .toContain("stateInput.priorTaskReviewFindings");
 });
