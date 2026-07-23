@@ -9,12 +9,17 @@ import {
   withModelApiRetry,
 } from "./runtime-support.ts";
 import { promptWithAttachmentContext } from "../../../agent/context/attachment-context.ts";
-import { providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
+import { ModelProviderRequestError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import { admitSerializedProviderRequest } from "./request-context-admission.ts";
 import {
   runGuardedProviderRound,
   type ProviderRoundPolicy,
 } from "./provider-round-guard.ts";
+import {
+  HostedChatStreamProtocolError,
+  isHostedChatSseResponse,
+  readHostedChatSseResponse,
+} from "./hosted-chat-stream.ts";
 
 
 
@@ -219,8 +224,14 @@ export async function createHostedChatCompletion(
   return await runGuardedProviderRound({
     signal,
     policy: providerRoundPolicy,
-    operation: async (guardedSignal) => await withModelApiRetry(
-      async () => await createHostedChatCompletionOnce(config, body, guardedSignal, budgetContext),
+    operation: async (guardedSignal, recordProgress) => await withModelApiRetry(
+      async () => await createHostedChatCompletionOnce(
+        config,
+        body,
+        guardedSignal,
+        budgetContext,
+        recordProgress,
+      ),
       guardedSignal,
       retryAttempts,
     ),
@@ -241,6 +252,7 @@ async function createHostedChatCompletionOnce(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
+  recordProgress: () => void = () => {},
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(hostedChatCompletionsUrl(config));
   const requestBody: Record<string, unknown> = {
@@ -268,6 +280,7 @@ async function createHostedChatCompletionOnce(
       headers: {
         Authorization: hostedAuthHeader(config),
         "Content-Type": "application/json",
+        ...(requestBody.stream === true ? { Accept: "text/event-stream" } : {}),
       },
       body: admittedRequest.serialized_request,
       signal,
@@ -280,6 +293,32 @@ async function createHostedChatCompletionOnce(
       model: config.modelId,
       error,
     });
+  }
+  if (response.ok && requestBody.stream === true && isHostedChatSseResponse(response)) {
+    try {
+      return await readHostedChatSseResponse(response, recordProgress);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      if (error instanceof HostedChatStreamProtocolError) {
+        throw new ModelProviderRequestError({
+          code: "provider_protocol_error",
+          message: "Model provider returned an invalid Chat Completions stream.",
+          provider: hostedProviderErrorLabel(config),
+          api: "chat_completions",
+          endpoint,
+          model: config.modelId,
+          retryable: false,
+          cause: error.message,
+        });
+      }
+      throw providerNetworkError({
+        provider: hostedProviderErrorLabel(config),
+        api: "chat_completions",
+        endpoint,
+        model: config.modelId,
+        error,
+      });
+    }
   }
   const raw = await response.text();
   let parsed: Record<string, any> = {};
@@ -299,8 +338,6 @@ async function createHostedChatCompletionOnce(
   }
   return parsed;
 }
-
-
 
 export function firstHostedChatMessage(response: Record<string, any>): Record<string, any> {
   const message = response.choices?.[0]?.message;
