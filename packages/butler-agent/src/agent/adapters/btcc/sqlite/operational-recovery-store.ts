@@ -10,6 +10,7 @@ type ReceiptRow = { interruption_id: string; activation_count: number };
 type InterruptionRow = {
   code: string;
   activation_kind: OperationalInterruptionError["activation"]["kind"];
+  diagnostic_message: string | null;
   status: "interrupted" | "ready";
 };
 
@@ -70,7 +71,8 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
     anchor: OperationalCheckpointAnchor,
   ) {
     const row = this.db.query<InterruptionRow, [string, string, number, string, number, number]>(`
-      SELECT code, activation_kind, status FROM btcc_operational_interruptions
+      SELECT code, activation_kind, diagnostic_message, status
+      FROM btcc_operational_interruptions
       WHERE claim_id = ? AND turn_id = ? AND turn_revision = ?
         AND checkpoint_id = ? AND checkpoint_revision = ?
         AND execution_fence = ? AND status IN ('interrupted', 'ready')
@@ -88,6 +90,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
         row.code,
         anchor,
         { kind: row.activation_kind },
+        row.diagnostic_message ? new Error(row.diagnostic_message) : undefined,
       ),
       status: row.status,
     } : null;
@@ -127,7 +130,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
 
 function diagnosticMessage(interruption: OperationalInterruptionError): string | null {
   const cause = interruption.cause;
-  if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
+  if (cause instanceof Error) return cause.message;
   return cause === undefined ? null : String(cause);
 }
 

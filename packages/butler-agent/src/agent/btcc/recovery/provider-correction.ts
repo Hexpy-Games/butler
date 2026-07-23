@@ -10,8 +10,14 @@ export function correctionForOperationalInterruption(
   ) {
     return undefined;
   }
+  const diagnostic = diagnosticMessage(interruption);
   return {
     kind: "previous_provider_product_rejected",
     code: interruption.code,
+    ...(diagnostic ? { diagnosticMessage: diagnostic } : {}),
   };
+}
+
+function diagnosticMessage(interruption: OperationalInterruptionError): string | undefined {
+  return interruption.cause instanceof Error ? interruption.cause.message : undefined;
 }

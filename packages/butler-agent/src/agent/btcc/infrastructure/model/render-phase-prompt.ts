@@ -39,7 +39,7 @@ export async function renderPhasePrompt(
       "Do not add prose outside the carrier and do not choose a successor phase or model.",
       "Choose semantic operations only; the runtime binds immutable authority references.",
       ...(envelope.providerCorrection
-        ? ["The previous provider product was rejected before semantic acceptance. Correct it against the exact current schema and capability list; do not repeat the rejected shape."]
+        ? [providerCorrectionInstruction(envelope.providerCorrection)]
         : []),
       "Follow promptHierarchy in order: earlier layers override later layers.",
     ].join(" "),
@@ -88,6 +88,17 @@ export async function renderPhasePrompt(
       envelope.submissionSchema,
     ),
   };
+}
+
+function providerCorrectionInstruction(
+  correction: NonNullable<PhaseEnvelope["providerCorrection"]>,
+): string {
+  const diagnostic = correction.diagnosticMessage
+    ? ` Rejection reason: ${correction.diagnosticMessage}.`
+    : "";
+  return "The previous provider product was rejected before semantic acceptance." +
+    diagnostic +
+    " Correct it against the exact current schema and capability list; do not repeat the rejected shape.";
 }
 
 function exactPhaseContract(envelope: PhaseEnvelope) {

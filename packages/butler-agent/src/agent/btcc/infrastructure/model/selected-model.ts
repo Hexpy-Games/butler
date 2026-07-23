@@ -45,7 +45,7 @@ export function createProductionSelectedModel(
           if (error instanceof ProviderCarrierProtocolError) {
             return interruption("provider_protocol_interruption", {
               kind: "automatic_provider_recovery",
-            });
+            }, error.message);
           }
           throw error;
         }
@@ -222,8 +222,14 @@ function isAbortError(error: unknown): boolean {
 function interruption(
   code: string,
   activation: OperationalActivation,
+  diagnosticMessage?: string,
 ): ProviderRoundValue {
-  return { kind: "interruption", code, activation };
+  return {
+    kind: "interruption",
+    code,
+    activation,
+    ...(diagnosticMessage ? { diagnosticMessage } : {}),
+  };
 }
 
 function activationForProviderFailure(
