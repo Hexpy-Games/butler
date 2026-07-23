@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import {
   PRIVATE_CONTENT_PATTERNS,
   VALID_ATTEMPT_STATES,
@@ -37,8 +37,8 @@ export function inferKind(relPath, data) {
   const ledgerPath = ledgerContentPath(relPath);
   if (typeof data.kind === "string" && data.kind) return data.kind;
   if (ledgerPath === "project.json") return "project";
-  if (ledgerPath.includes("/attempts/")) return "attempt";
-  if (ledgerPath.includes("/tasks/")) return "task";
+  if (/^work\/[^/]+\/tasks\/[^/]+\/attempts\//u.test(ledgerPath)) return "attempt";
+  if (/^work\/[^/]+\/tasks\//u.test(ledgerPath)) return "task";
   if (ledgerPath.startsWith("work/")) return "work";
   if (ledgerPath.startsWith("initiatives/")) return "initiative";
   if (ledgerPath.startsWith("decisions/")) return "decision";
@@ -67,7 +67,8 @@ export function readRecord(project, filePath) {
   const data = readRecordData(filePath);
   if (!data) return null;
 
-  const kind = inferKind(relPath, data);
+  const semanticPath = relative(ledgerRoot(project), filePath).split("\\").join("/");
+  const kind = inferKind(semanticPath, data);
   const id = typeof data.id === "string" && data.id.trim()
     ? data.id.trim()
     : basename(filePath).replace(/\.(json|md)$/u, "");

@@ -14,7 +14,12 @@ export function inspectPublicationRoot(project) {
   const validation = check(root);
   const errors = validation.issues.filter((issue) => issue.severity === "error");
   if (errors.length > 0) {
-    throw new Error(`Project Ledger publication check failed: ${errors[0].code}`);
+    const issue = errors[0];
+    throw new Error([
+      `Project Ledger publication check failed: ${issue.code}`,
+      issue.message,
+      issue.path,
+    ].filter(Boolean).join(": "));
   }
   return observeProjectLedgerSourceHead(root);
 }
