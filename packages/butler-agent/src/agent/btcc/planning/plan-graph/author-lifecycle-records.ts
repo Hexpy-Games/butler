@@ -223,11 +223,15 @@ function effectTarget(task: ManagedTask): string {
   if (task.artifactPolicy.kind === "repository_promotion") {
     return task.artifactPolicy.targetScopeRef;
   }
-  if (task.artifactPolicy.kind !== "non_artifact" || task.artifactPolicy.targetScopeRefs.length !== 1) {
+  const workspaceScope = task.artifactPolicy.kind === "workspace_artifact"
+    ? task.artifactPolicy.workspaceScopeRef
+    : null;
+  const targets = task.targetScopeRefs.filter((scopeRef) => scopeRef !== workspaceScope);
+  if (targets.length !== 1 || targets[0]!.startsWith("workspace:")) {
     rejectPlanningProposal("external_effect_target_invalid",
       "External EffectIntent requires one exact non-workspace target");
   }
-  return task.artifactPolicy.targetScopeRefs[0]!;
+  return targets[0]!;
 }
 
 function repositoryPromotionAction(task: ManagedTask, selectors: PromotionSelector[]) {
@@ -248,7 +252,9 @@ function repositoryPromotionAction(task: ManagedTask, selectors: PromotionSelect
 }
 
 function externalOperationAction(task: ManagedTask, action: string) {
-  if (task.artifactPolicy.kind !== "non_artifact") {
+  if (task.artifactPolicy.kind === "repository_promotion" ||
+    (task.artifactPolicy.kind === "workspace_artifact" &&
+      task.artifactPolicy.mutationScope.kind !== "read_only")) {
     rejectPlanningProposal("external_operation_policy_incompatible",
       "External operation EffectIntent has incompatible artifact policy");
   }

@@ -17,11 +17,20 @@ export class ManagedPlanningRecordWriter {
     }
     this.insert("plan_candidate", candidate);
     this.insert("plan", candidate.plan);
+    for (const spec of candidate.authoredSpecs) this.insert("spec_revision", spec);
     for (const work of candidate.works) this.insert("work", work);
     for (const task of candidate.tasks) this.insert("task", task);
     for (const criterion of candidate.criteria) this.insert("acceptance_criterion", criterion);
     for (const question of candidate.verificationQuestions) {
       this.insert("verification_question", question);
+    }
+    for (const effect of candidate.effectIntents) this.insert("effect_intent", effect);
+    for (const criterion of candidate.integrationCriteria) {
+      this.insert("integration_criterion", criterion);
+    }
+    for (const risk of candidate.risks) this.insert("planning_risk", risk);
+    for (const assumption of candidate.assumptions) {
+      this.insert("planning_assumption", assumption);
     }
     this.insert("work_graph", candidate.workGraph);
     this.insert("artifact_lifecycle_relation", candidate.artifactLifecycle);

@@ -27,6 +27,20 @@ export function decodeAvailableSpecs(
   });
 }
 
+export function selectableGoverningSpecIds(
+  available: AvailableSpecRevision[],
+  admittedRefs: ContentRef[],
+): string[] {
+  const admitted = new Set(admittedRefs.map(contentRefKey));
+  return available
+    .filter((spec) => admitted.has(contentRefKey(spec.revisionRef)))
+    .map((spec) => spec.logicalId);
+}
+
+function contentRefKey(ref: ContentRef): string {
+  return `${ref.id}\0${ref.sha256}`;
+}
+
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }

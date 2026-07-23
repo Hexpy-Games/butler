@@ -52,6 +52,7 @@ export function authorPlanCandidate(
     submission.specifications,
     submission.governingSpecSelections,
     state.availableSpecs ?? [],
+    state.governingSpecRefs,
     state.specParentRootId,
   );
   if (state.requireGoverningSpec && governingSpecRefs.length === 0) {
@@ -86,6 +87,7 @@ export function authorPlanCandidate(
       executionOrdinal: draft.executionOrdinal,
       dependencyTaskRefs: draft.dependencyTaskIds.map((id) => requiredRef(taskRefs, id, "Task")),
       effectClass: draft.effectClass,
+      targetScopeRefs: draft.targetScopeRefs,
       artifactPolicy: draft.artifactPolicy ?? {
         kind: "non_artifact" as const, targetScopeRefs: draft.targetScopeRefs,
       },

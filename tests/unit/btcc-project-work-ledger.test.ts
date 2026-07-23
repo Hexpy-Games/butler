@@ -35,7 +35,9 @@ describe("BTCC Project Work Ledger prepared publication", () => {
       commit: binding.commit,
     });
     expect(bind.program).toMatchObject({
-      planningState: "unplanned", manifestRevision: 1, governingSpecRefs: [],
+      planningState: "unplanned",
+      manifestRevision: 1,
+      governingSpecRefs: [bind.program.availableSpecRefs[0]],
     });
     expect(bind.program.availableSpecRefs).toHaveLength(1);
     await adapter.promoteAndObserve(bind.publication);

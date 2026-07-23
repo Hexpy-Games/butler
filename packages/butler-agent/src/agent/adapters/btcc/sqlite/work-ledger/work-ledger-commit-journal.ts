@@ -60,6 +60,10 @@ export class WorkLedgerCommitJournal {
       .run(input.mutationId);
   }
 
+  materializeSourceRecords(records: LogicalLedgerRecord[]): void {
+    for (const record of records) this.insertSourceRecord(record);
+  }
+
   private insertLogicalRecord(record: LogicalLedgerRecord): void {
     assertLogicalLedgerRecordBytes(record.ref, record.semanticBytes);
     this.db.query(`
@@ -72,6 +76,31 @@ export class WorkLedgerCommitJournal {
     if (!stored || stored.sha256 !== record.ref.sha256 ||
       stored.content_json !== record.semanticBytes) {
       throw new Error("Work Ledger logical record identity conflict");
+    }
+  }
+
+  private insertSourceRecord(record: LogicalLedgerRecord): void {
+    assertLogicalLedgerRecordBytes(record.ref, record.semanticBytes);
+    const logical = JSON.parse(record.semanticBytes) as {
+      sourceId: string;
+      record: Record<string, unknown>;
+    };
+    if (logical.sourceId !== record.sourceRef.id) {
+      throw new Error("Work Ledger logical record changed its source identity");
+    }
+    if (!logical.record || typeof logical.record !== "object" || Array.isArray(logical.record)) {
+      throw new Error("Work Ledger logical source record is not an object");
+    }
+    const content = stableJson({ ...logical.record, ref: record.sourceRef });
+    this.db.query(`
+      INSERT OR IGNORE INTO btcc_records (record_id, kind, sha256, content_json)
+      VALUES (?, 'ledger_source_record', ?, ?)
+    `).run(record.sourceRef.id, record.sourceRef.sha256, content);
+    const stored = this.db.query<{ sha256: string; content_json: string }, [string]>(`
+      SELECT sha256, content_json FROM btcc_records WHERE record_id = ?
+    `).get(record.sourceRef.id);
+    if (!stored || stored.sha256 !== record.sourceRef.sha256 || stored.content_json !== content) {
+      throw new Error(`Work Ledger source record identity conflict: ${record.sourceRef.id}`);
     }
   }
 

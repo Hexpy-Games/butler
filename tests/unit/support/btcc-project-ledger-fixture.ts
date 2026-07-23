@@ -106,7 +106,7 @@ export function reviewedPlan(options: {
     observedManifestRevision: 1,
     goalContractRef,
     authorityRef,
-    governingSpecRefs: [],
+    governingSpecRefs: options.availableSpecRefs ?? [],
     availableSpecs: (options.availableSpecRefs ?? []).map((revisionRef) => ({
       logicalId: "SPEC-FIXTURE",
       parentId: "SPEC-FIXTURE-PARENT",

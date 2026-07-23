@@ -27,7 +27,7 @@ const task = variantsSchema(
   objectSchema({ ...taskFields, effectClass: enumSchema("none", "external_effect") }),
   objectSchema({
     ...taskFields,
-    effectClass: literalSchema("none"),
+    effectClass: enumSchema("none", "external_effect"),
     artifactPolicy: objectSchema({
       kind: literalSchema("workspace_artifact"),
       workspacePath: textSchema(),

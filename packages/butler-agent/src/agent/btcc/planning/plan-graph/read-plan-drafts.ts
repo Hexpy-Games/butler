@@ -139,10 +139,11 @@ function readTaskDraft(
   if (effectClass !== "none" && effectClass !== "external_effect") {
     rejectPlanningProposal("effect_class_invalid", `${label}.effectClass is invalid`);
   }
-  if (artifactPolicy?.kind === "workspace_artifact" && effectClass !== "none") {
+  if (artifactPolicy?.kind === "workspace_artifact" && effectClass === "external_effect" &&
+    artifactPolicy.mutationScope.kind !== "read_only") {
     rejectPlanningProposal(
       "workspace_artifact_effect_conflict",
-      "Workspace artifact Task cannot declare an external effect",
+      "External-effect Task may observe workspace bytes only through a read-only artifact policy",
     );
   }
   if (artifactPolicy?.kind === "repository_promotion" && effectClass !== "external_effect") {
@@ -151,15 +152,19 @@ function readTaskDraft(
       "Repository promotion Task requires an external effect",
     );
   }
+  const declaredTargetScopes = requireStringArray(task.targetScopeRefs, "targetScopeRefs");
+  const targetScopeRefs = artifactPolicy?.kind === "workspace_artifact"
+    ? [...new Set([artifactPolicy.workspaceScopeRef, ...declaredTargetScopes])]
+    : artifactPolicy?.kind === "repository_promotion"
+      ? [artifactPolicy.targetScopeRef]
+      : declaredTargetScopes;
   return {
     logicalId: requireString(task.logicalId, `${label}.logicalId`),
     intendedOutcome: requireString(task.intendedOutcome, `${label}.intendedOutcome`),
     executionOrdinal,
     dependencyTaskIds: requireStringArray(task.dependencyTaskIds, "dependencyTaskIds"),
     effectClass,
-    targetScopeRefs: artifactPolicy
-      ? artifactPolicy.kind === "workspace_artifact" ? [artifactPolicy.workspaceScopeRef] : []
-      : requireStringArray(task.targetScopeRefs, "targetScopeRefs"),
+    targetScopeRefs,
     ...(artifactPolicy ? { artifactPolicy } : {}),
     criteria: criteria.map((item, criterionIndex) => {
       const criterion = requireRecord(item, `${label}.criteria[${criterionIndex}]`);

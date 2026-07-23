@@ -114,6 +114,7 @@ export type ManagedTask = {
   executionOrdinal: number;
   dependencyTaskRefs: ContentRef[];
   effectClass: "none" | "external_effect";
+  targetScopeRefs: string[];
   artifactPolicy: TaskArtifactPolicy;
   criterionRefs: ContentRef[];
   verificationQuestionRefs: ContentRef[];

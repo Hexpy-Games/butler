@@ -18,8 +18,11 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import {
   assertLogicalLedgerRecordBytes,
+  contentRef,
   stableJson,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import { authorPlanCandidate } from
+  "../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
 
 afterEach(clearProjectFixtures);
 
@@ -43,7 +46,58 @@ describe("BTCC Session Work Ledger selection", () => {
     db.close();
   });
 
-  test("persists identical logical bundle bytes through Project and SQLite adapters", async () => {
+  test("atomically publishes and reloads one independently reviewed Session Program", () => {
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const storage = new SqliteWorkLedgerStorage(db);
+    const bind = sessionProgramCommit();
+    if (bind.mutation.kind !== "bind_program") throw new Error("Session bind fixture expected");
+    storage.commit(bind);
+    const bound = storage.loadProgram("program-session");
+    if (!bound) throw new Error("bound Session Program expected");
+    const candidate = sessionPlan(bound);
+    const reviewBody = {
+      candidateRef: candidate.ref,
+      originalGoalContractRef: candidate.goalContractRef,
+      reviewedBundleRef: candidate.bundle.ref,
+      reviewedWorkGraphRef: candidate.workGraph.ref,
+      reviewedWorkRefs: candidate.works.map((work) => work.ref),
+      reviewedTaskRefs: candidate.tasks.map((task) => task.ref),
+      reviewedCriterionRefs: candidate.criteria.map((criterion) => criterion.ref),
+      reviewedVerificationQuestionRefs: candidate.verificationQuestions.map((item) => item.ref),
+      reviewedEffectIntentRefs: candidate.effectIntents.map((item) => item.ref),
+      reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
+      reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
+      reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+      verdict: "accepted" as const,
+      findings: [] as [],
+    };
+    const review = { ref: contentRef("planning-review", reviewBody), ...reviewBody };
+    const product = { kind: "planning_accepted" as const, candidate, review };
+    const commit: WorkLedgerCommit = {
+      mutationId: "",
+      turnId: "turn-session-plan",
+      expectedTurnRevision: 4,
+      mutation: { kind: "install_reviewed_plan", product },
+    };
+    commit.mutationId = canonicalMutationId(commit, bound);
+
+    storage.commit(commit);
+
+    expect(storage.loadProgram("program-session")).toMatchObject({
+      planningState: "reviewed",
+      manifestRevision: 2,
+      goalContractRef: bound.goalContractRef,
+      authorityRef: bound.authorityRef,
+      governingSpecRefs: [],
+      works: [{ status: "planned" }],
+      tasks: [{ status: "planned" }],
+      frontier: "implementation_open",
+    });
+    db.close();
+  });
+
+  test("keeps Project publication out of the Session Ledger adapter", async () => {
     const fixture = await projectFixture();
     const adapter = createProjectWorkLedgerPublicationAdapter({
       stagingRoot: join(fixture.root, "staging"),
@@ -54,21 +108,14 @@ describe("BTCC Session Work Ledger selection", () => {
       expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
       commit,
     });
-    const projectRecord = fixture.core.resolveRecord(prepared.publication.stagedLedgerRoot, {
-      kind: "reference",
-      id: prepared.publication.logicalBundleRef.id,
-    });
-    const projectBytes = fixture.core.readRecordBody(projectRecord.filePath);
-
     const db = new Database(":memory:");
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    new SqliteWorkLedgerStorage(db).commit(commit);
-    const sqlite = db.query<{ sha256: string; content_json: string }, [string]>(`
-      SELECT sha256, content_json FROM btcc_records WHERE record_id = ?
-    `).get(prepared.publication.logicalBundleRef.id);
-
-    expect(sqlite?.sha256).toBe(prepared.publication.logicalBundleRef.sha256);
-    expect(sqlite?.content_json).toBe(projectBytes);
+    expect(() => new SqliteWorkLedgerStorage(db).commit(commit))
+      .toThrow("Session Work Ledger received a Project-bound Program");
+    expect(prepared.program.ledgerId).toBe("project:fixture-project");
+    expect(db.query<{ count: number }, []>(
+      "SELECT COUNT(*) AS count FROM btcc_programs",
+    ).get()?.count).toBe(0);
     db.close();
   });
 
@@ -82,6 +129,22 @@ describe("BTCC Session Work Ledger selection", () => {
       .toThrow("mutationId does not match");
     expect(db.query<{ count: number }, []>(
       "SELECT COUNT(*) AS count FROM btcc_ledger_claims",
+    ).get()?.count).toBe(0);
+    db.close();
+  });
+
+  test("rejects a fresh Session Program with a nonzero manifest base", () => {
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const commit = sessionProgramCommit();
+    if (commit.mutation.kind !== "bind_program") throw new Error("Session bind fixture expected");
+    commit.mutation.product.authority.managedBinding.expectedManifestRevision = 1;
+    commit.mutationId = canonicalMutationId(commit, null);
+
+    expect(() => new SqliteWorkLedgerStorage(db).commit(commit))
+      .toThrow("new Program binding is invalid");
+    expect(db.query<{ count: number }, []>(
+      "SELECT COUNT(*) AS count FROM btcc_programs",
     ).get()?.count).toBe(0);
     db.close();
   });
@@ -160,4 +223,46 @@ function sessionProgramCommit(): WorkLedgerCommit {
   };
   commit.mutationId = canonicalMutationId(commit, null);
   return commit;
+}
+
+function sessionPlan(
+  authority: NonNullable<ReturnType<SqliteWorkLedgerStorage["loadProgram"]>>,
+) {
+  return authorPlanCandidate({
+    strategy: "Research once, then review the complete report.",
+    works: [{
+      logicalId: "research-report",
+      outcome: "The requested report is complete.",
+      dependencyWorkIds: [],
+      tasks: [{
+        logicalId: "write-report",
+        intendedOutcome: "Produce the reviewed report.",
+        dependencyTaskIds: [],
+        targetScopeRefs: ["session:session-fixture"],
+        effectClass: "none",
+        criteria: [{
+          statement: "The report answers the accepted request.",
+          question: "Does the report answer the accepted request?",
+          sourceGoalFieldIds: ["request", "intended_result"],
+          sourceRequiredOutcomeRefs: [authority.requiredOutcomeId],
+        }],
+      }],
+    }],
+    risks: [],
+    assumptions: [],
+    effectIntents: [],
+    integrationCriteria: [],
+    promotionSelectors: [],
+  }, {
+    ledgerId: authority.ledgerId,
+    programId: authority.programId,
+    observedManifestRevision: authority.manifestRevision,
+    goalContractRef: authority.goalContractRef,
+    authorityRef: authority.authorityRef,
+    governingSpecRefs: authority.governingSpecRefs,
+    availableSpecs: authority.availableSpecs,
+    requiredOutcomeId: authority.requiredOutcomeId,
+    artifactPersistence: "not_required",
+    workspaceScopeRef: "workspace:/session-fixture",
+  });
 }

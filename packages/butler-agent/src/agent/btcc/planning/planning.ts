@@ -127,9 +127,19 @@ async function reviewInitialPlan(command: {
   const managed = requireManagedState(command.turn);
   const accepted = managed.goalAcceptance;
   if (!accepted) throw new Error("Planning Review is missing accepted Goal authority");
+  const current = requireManagedPlanningAuthority(command.turn);
   const product = await reviewPlan(withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
+    currentPlanningAuthority: {
+      goalContractRef: current.goalContractRef,
+      authorityRef: current.authorityRef,
+      requiredOutcomeId: current.requiredOutcomeId,
+      ledgerId: current.ledgerId,
+      programId: current.programId,
+      manifestRevision: current.manifestRevision,
+      governingSpecRefs: current.governingSpecRefs,
+    },
     planCandidate: managed.planCandidate,
   }));
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };

@@ -252,7 +252,9 @@ CREATE TABLE IF NOT EXISTS btcc_programs (
   active_deferral_turn_id TEXT,
   promotion_deferral_ref TEXT,
   frontier TEXT NOT NULL,
-  manifest_revision INTEGER NOT NULL
+  manifest_revision INTEGER NOT NULL,
+  available_specs_json TEXT NOT NULL DEFAULT '[]',
+  governing_spec_refs_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE TABLE IF NOT EXISTS btcc_work_items (
