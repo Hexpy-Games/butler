@@ -283,12 +283,14 @@ describe("production BTCC selected model", () => {
     envelope.providerCorrection = {
       kind: "previous_provider_product_rejected",
       code: "provider_phase_submission_invalid",
+      diagnosticMessage: "submission omitted the required verdict",
     };
 
     await model.runRound(envelope);
 
-    expect(prompt).toContain('"providerCorrection"');
-    expect(prompt).toContain('"provider_phase_submission_invalid"');
+    expect(prompt).toContain("\"providerCorrection\"");
+    expect(prompt).toContain("\"provider_phase_submission_invalid\"");
+    expect(prompt).toContain("submission omitted the required verdict");
   });
 
   test("rejects an operation that was not offered by the exact phase capability schema", async () => {
@@ -333,6 +335,7 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
+      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission",
     });
   });
 
@@ -356,6 +359,7 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
+      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission",
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",

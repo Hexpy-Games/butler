@@ -64,6 +64,7 @@ export type PhaseEnvelope = {
 export type ProviderCorrection = {
   kind: "previous_provider_product_rejected";
   code: "provider_protocol_interruption" | "provider_phase_submission_invalid";
+  diagnosticMessage?: string;
 };
 
 export type AuthoringContractBinding = {
@@ -105,6 +106,7 @@ export type ProviderRoundValue =
       kind: "interruption";
       code: string;
       activation: OperationalActivation;
+      diagnosticMessage?: string;
     };
 
 export interface SelectedModel {
