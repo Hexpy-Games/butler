@@ -209,10 +209,10 @@ function eventForProduct(product: Record<string, unknown>): string | null {
 
 function readOperations(db: Database, turnId: string): OperationObservation[] {
   return db
-    .query<{ request_json: string; result_json: string }, [string]>(
+    .query<{ request_json: string; projection_json: string }, [string]>(
       `
-    SELECT operation.request_json, operation.result_json
-    FROM btcc_phase_operation_results operation
+    SELECT operation.request_json, operation.projection_json
+    FROM btcc_phase_operation_result_links operation
     JOIN btcc_checkpoints checkpoint ON checkpoint.checkpoint_id = operation.checkpoint_id
     WHERE checkpoint.turn_id = ? ORDER BY operation.rowid
   `,
@@ -220,7 +220,7 @@ function readOperations(db: Database, turnId: string): OperationObservation[] {
     .all(turnId)
     .map((row) => {
       const request = JSON.parse(row.request_json) as Record<string, unknown>;
-      const result = JSON.parse(row.result_json) as Record<string, unknown>;
+      const result = JSON.parse(row.projection_json) as Record<string, unknown>;
       return {
         requestId: String(request.requestId ?? ""),
         kind: String(request.kind ?? ""),
