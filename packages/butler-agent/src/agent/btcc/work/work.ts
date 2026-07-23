@@ -23,8 +23,7 @@ type WorkEvent = Extract<TurnEvent, {
     | "FeedbackPlanCandidateSubmitted"
     | "FeedbackPlanningReviewAccepted"
     | "FeedbackPlanningRevisionRequested"
-    | "PromotedWorkCompleted"
-    | "PromotedWorkDeferred"
+    | "PromotionFrontierClosed"
     | "ManagedDeferralAccepted"
     | "PromotionDeferralAccepted";
 }>;
@@ -53,10 +52,13 @@ async function selectTaskOrCompleteWork(
     return { kind: "WorkFrontierClosed", promotionAssemblies: decision.promotionAssemblies };
   }
   if (decision.kind === "complete_promotion") {
-    return { kind: "PromotedWorkCompleted", product: decision.product };
+    return { kind: "PromotionFrontierClosed", closure: { kind: "promoted" } };
   }
   if (decision.kind === "defer_promotion") {
-    return { kind: "PromotedWorkDeferred", product: decision.product };
+    return {
+      kind: "PromotionFrontierClosed",
+      closure: { kind: "deferred", deferredAnchorRef: decision.deferredAnchorRef },
+    };
   }
   const attempt = await prepareTaskAttempt({
     turnId: turn.turnId,

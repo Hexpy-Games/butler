@@ -2,6 +2,7 @@ import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
 import type { GoalContractAcceptedProduct } from "../conception/index.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
+import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 import {
   requireManagedPlanningAuthority,
   requireManagedProgram,
@@ -26,6 +27,13 @@ export async function consolidation(command: {
   if (managed.deferral) {
     return consolidateDeferredTurn(command, accepted, managed.deferral);
   }
+  const program = requireManagedProgram(command.turn);
+  if (program.frontier === "closed" && program.promotionDeferral) {
+    if (!program.activeDeferral) {
+      throw new Error("Deferred promotion has no active deferral context");
+    }
+    return consolidateDeferredTurn(command, accepted, program.activeDeferral, program);
+  }
   return consolidateCompletedWork(command, accepted);
 }
 
@@ -33,9 +41,12 @@ async function consolidateDeferredTurn(
   command: { turn: TurnRecord; phase: PhaseInvocation },
   accepted: GoalContractAcceptedProduct,
   sourceDeferral: ManagedDeferralProduct,
+  sourceProgram?: ReviewedManagedProgramState,
 ): Promise<Extract<TurnEvent, { kind: "FinalDossierAccepted" }>> {
   const authority = requireManagedPlanningAuthority(command.turn);
-  const reviewed = authority.planningState === "reviewed" ? authority : undefined;
+  const reviewed = sourceProgram ?? (authority.planningState === "reviewed" ? authority : undefined);
+  const passedReviews = reviewed?.tasks.flatMap((task) =>
+    task.currentReview?.review.verdict === "passed" ? [task.currentReview.review.ref] : []) ?? [];
   const product = await assureOriginalGoal(withPhaseState(command.phase, {
     frontier: "deferred",
     taskStatuses: [],
@@ -45,9 +56,9 @@ async function consolidateDeferredTurn(
     goalContractRef: authority.goalContractRef,
     authorityRef: authority.authorityRef,
     goalFields: accepted.goalContract.fields,
-    taskReviewRefs: reviewed?.tasks.flatMap((task) =>
-      task.currentReview?.review.verdict === "passed" ? [task.currentReview.review.ref] : []) ?? [],
+    taskReviewRefs: passedReviews,
     candidateRefs: reviewed?.promotionAssemblies.map((assembly) => assembly.candidate.ref) ?? [],
+    promotionClosure: sourceProgram ? "deferred" : "not_required",
     ...(reviewed
       ? { planRef: reviewed.plan.ref, planningReviewRef: reviewed.planningReviewRef }
       : {}),
@@ -69,7 +80,9 @@ async function consolidateCompletedWork(
   const implementationTasks = program.tasks.filter(
     (task) => task.task.artifactPolicy.kind !== "repository_promotion",
   );
-  const reviews = implementationTasks.map((task) => task.currentReview);
+  const promotionIsClosed = program.frontier === "closed" && Boolean(program.promotionAuthorization);
+  const reviewedTasks = promotionIsClosed ? program.tasks : implementationTasks;
+  const reviews = reviewedTasks.map((task) => task.currentReview);
   if (reviews.some((review) => !review || review.review.verdict !== "passed")) {
     throw new Error("Consolidation requires every passed Task Review");
   }
@@ -83,8 +96,8 @@ async function consolidateCompletedWork(
     integrationCriteria: program.plan.integrationCriterionRefs,
     artifactLifecycle: program.artifactLifecycle,
     frontier: program.frontier,
-    taskStatuses: implementationTasks.map((task) => task.status),
-    taskRefs: implementationTasks.map((task) => task.task.ref),
+    taskStatuses: reviewedTasks.map((task) => task.status),
+    taskRefs: reviewedTasks.map((task) => task.task.ref),
     goalFields: accepted.goalContract.fields,
     programId: program.programId,
     goalContractRef: program.goalContractRef,
@@ -92,7 +105,9 @@ async function consolidateCompletedWork(
     planRef: program.plan.ref,
     planningReviewRef: program.planningReviewRef,
     taskReviewRefs: reviews.map((review) => review!.review.ref),
-    promotionAssemblies: program.promotionAssemblies,
+    promotionAssemblies: program.frontier === "awaiting_consolidation"
+      ? program.promotionAssemblies : [],
+    promotionClosure: promotionIsClosed ? "promoted" : "not_required",
     candidateRefs: program.promotionAssemblies.map((assembly) => assembly.candidate.ref),
   }));
   return product.kind === "consolidation_repair"

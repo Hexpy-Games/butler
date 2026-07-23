@@ -95,6 +95,38 @@ test("Goal Contract Review returns a typed revision to Conception", () => {
   });
 });
 
+test("a closed promotion frontier returns to final Consolidation", () => {
+  const turn = turnIn("work_frontier");
+  turn.managed = {
+    program: {
+      ledgerId: "ledger-final-promotion",
+      programId: "program-final-promotion",
+      manifestRevision: 12,
+    } as never,
+  };
+
+  expect(decideTransition(turn, {
+    kind: "PromotionFrontierClosed",
+    closure: { kind: "promoted" },
+  })).toMatchObject({
+    kind: "accepted",
+    transition: {
+      kind: "complete_promoted_work",
+      successor: "consolidation",
+      ledgerCommit: {
+        mutation: {
+          kind: "close_promotion_frontier",
+          cursor: {
+            ledgerId: "ledger-final-promotion",
+            programId: "program-final-promotion",
+            expectedManifestRevision: 12,
+          },
+        },
+      },
+    },
+  });
+});
+
 test("runtime hands a rejected internal event to recovery without committing it", async () => {
   const turn = turnIn("delivery_committed");
   const claim: StateExecutionClaim = {

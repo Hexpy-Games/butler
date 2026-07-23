@@ -42,9 +42,15 @@ export function submitInitialPlan(state: Record<string, unknown>) {
 export function submitArtifactPlan(state: Record<string, unknown>) {
   const targetScopeRef = "repository:harness-artifact-target";
   const targetPath = "harness-artifact-target";
-  const artifactPolicy = {
+  const mutatingArtifactPolicy = {
     kind: "workspace_artifact",
-    targetPath,
+    workspacePath: targetPath,
+    mutationScope: { kind: "contained_paths", writablePaths: ["guide.md"] },
+  };
+  const observingArtifactPolicy = {
+    kind: "workspace_artifact",
+    workspacePath: targetPath,
+    mutationScope: { kind: "read_only" },
   };
   return {
     kind: "plan_candidate",
@@ -65,7 +71,7 @@ export function submitArtifactPlan(state: Record<string, unknown>) {
             goalField: "request",
             outcome: state.requiredOutcomeId,
           }),
-          artifactPolicy,
+          artifactPolicy: mutatingArtifactPolicy,
         },
         {
           ...taskSubmission({
@@ -78,7 +84,7 @@ export function submitArtifactPlan(state: Record<string, unknown>) {
             goalField: "intended_result",
             outcome: state.requiredOutcomeId,
           }),
-          artifactPolicy,
+          artifactPolicy: observingArtifactPolicy,
         },
         {
           ...taskSubmission({

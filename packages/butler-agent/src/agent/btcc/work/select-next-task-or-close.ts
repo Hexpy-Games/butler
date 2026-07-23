@@ -1,8 +1,6 @@
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 import type { WorkFrontierDecision } from "./contracts.ts";
 import { assemblePromotionCandidates } from "./assemble-promotion-candidates.ts";
-import { finalizePromotedWork } from "./finalize-promoted-work.ts";
-import { finalizeDeferredPromotion } from "./finalize-deferred-promotion.ts";
 
 export function selectNextTaskOrClose(input: {
   turnId: string;
@@ -14,10 +12,12 @@ export function selectNextTaskOrClose(input: {
       (task) => task.task.artifactPolicy.kind === "repository_promotion",
     );
     if (promotionTasks.every((task) => task.status === "accepted")) {
-      return { kind: "complete_promotion", product: finalizePromotedWork(input.program) };
+      return { kind: "complete_promotion" };
     }
     if (promotionTasks.some((task) => task.status === "promotion_deferred")) {
-      return { kind: "defer_promotion", product: finalizeDeferredPromotion(input.program) };
+      const deferredAnchorRef = input.program.promotionDeferral?.anchor.ref;
+      if (!deferredAnchorRef) throw new Error("Deferred promotion has no continuation anchor");
+      return { kind: "defer_promotion", deferredAnchorRef };
     }
     const nextPromotion = promotionTasks.find((task) => task.status === "planned");
     if (!nextPromotion) throw new Error("Authorized promotion has no ready Task");
