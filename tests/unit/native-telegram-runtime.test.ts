@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
@@ -150,7 +150,6 @@ test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runt
     provider: fakeProvider,
     shutdownSignal: controller.signal,
     shutdownPollMs: 10,
-    workerResultPollMs: 10,
     sendTelegram: async (input) => {
       deliveries.push(input);
       if (input.text === "runtime reply") {
@@ -261,87 +260,6 @@ test("native Telegram /update command checks service updates without model routi
     else process.env.BUTLER_UPDATE_MANIFEST = previousUpdateManifest;
     store.close();
   }
-});
-
-test("native butler-main proactively delivers worker completion through delivery layer", async () => {
-  const butlerData = tempDir;
-  writeFileSync(join(butlerData, ".env"), "TELEGRAM_BOT_TOKEN=test-token\n", "utf8");
-  writeGatewaySettings(butlerData, "telegram", {
-    enabled: true,
-    config: { chatId: "123" },
-  });
-  writeFileSync(join(butlerData, "butler.config.json"), JSON.stringify({
-    system: {
-      runtime: "codex-api",
-      defaultModel: "openai/auto:codex-latest",
-    },
-    telegram: {
-      groupId: "123",
-    },
-  }), "utf8");
-  const taskDir = join(butlerData, "tasks", "task-1");
-  mkdirSync(taskDir, { recursive: true });
-  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
-  writeFileSync(join(taskDir, "request.md"), "build chart\n", "utf8");
-  writeFileSync(join(taskDir, "result.md"), "chart is ready\n", "utf8");
-  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), [
-    JSON.stringify({
-      semantic_phase: "executing",
-      action_kind: "edit_file",
-      status_line: "Created chart output.",
-      evidence_refs: ["result.md"],
-    }),
-    JSON.stringify({
-      semantic_phase: "verifying",
-      action_kind: "test",
-      status_line: "Verified chart output.",
-      evidence_refs: ["result.md"],
-    }),
-  ].join("\n") + "\n", "utf8");
-
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
-    const url = String(input);
-    if (url.endsWith("/deleteWebhook")) {
-      return Response.json({ ok: true, result: true });
-    }
-    if (url.endsWith("/getUpdates")) {
-      return Response.json({ ok: true, result: [] });
-    }
-    throw new Error(`unexpected fetch URL: ${url}`);
-  }) as unknown as typeof fetch;
-
-  const controller = new AbortController();
-  const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
-
-  const btcc = new ScriptedBtccGatewayRuntime((command) => {
-    const content = command.kind === "run" ? command.message.content : "";
-    return content.includes("background worker task completed")
-      ? "작업 보고입니다. 차트가 준비되었습니다: chart is ready"
-      : "runtime reply";
-  });
-  const result = await runNativeButlerMain({
-    butlerHome: "fixtures/butler-project",
-    butlerData,
-    btcc,
-    provider: fakeProvider,
-    shutdownSignal: controller.signal,
-    shutdownPollMs: 10,
-    workerResultPollMs: 10,
-    sendTelegram: async (input) => {
-      deliveries.push(input);
-      if (input.text.includes("chart is ready")) {
-        controller.abort();
-      }
-      return {
-        ok: true,
-        transportMessageId: String(deliveries.length),
-      };
-    },
-  });
-
-  expect(result.shutdownReason).toBe("signal");
-  expect(deliveries.some((delivery) => delivery.text.includes("Task ID:"))).toBe(false);
-  expect(deliveries.some((delivery) => delivery.text.includes("chart is ready"))).toBe(true);
 });
 
 test("Telegram polling exits before handling updates after gateway disable", async () => {

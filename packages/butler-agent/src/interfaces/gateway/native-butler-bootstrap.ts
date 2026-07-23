@@ -1,85 +1,57 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
-import { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type {
   DeliveryResult,
-  InboundEnvelope,
-  ModelRef,
   ModelProviderAdapter,
   OutboundAction,
-  RuntimeTurnEventInput,
-  SessionLifecycleState,
-  StoredSessionBinding,
 } from "../../test-support/harness/contracts.ts";
 import {
   recordSessionLifecycle,
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
-import { registerRuntimeSession } from "../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { GatewayRouter } from "../../gateways/core/router.ts";
 import { createGatewayServer } from "../../gateways/core/server.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
-import { createAgentTurnEvent } from "../../agent/events/turn-events.ts";
-import { createLifecycleGatewayHandlers } from "./session-lifecycle.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
-import {
-  BOOTSTRAP_RECOVERY_DEADLINE_MS,
-  reconcilePendingWorkStreamTransactions,
-} from "../../agent/work/work-stream-transaction-recovery.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
-import { APP_TRANSPORT, createAppTransportAdapter } from "../transport/app/adapter.ts";
+import { createAppTransportAdapter } from "../transport/app/adapter.ts";
 import { createTelegramTransportAdapter } from "../transport/telegram/adapter.ts";
 import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts";
 import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
-import { runWorkerResultMonitor } from "./worker-result-monitor.ts";
-import { runPromptText } from "../../integrations/providers/provider.ts";
+import { NativeInboundQueue } from "../../gateways/core/inbound-queue.ts";
 import {
-  providerCapabilitiesForModel,
-  resolveProviderAdapterDefinition,
-} from "../../integrations/providers/registry.ts";
-import { resolveModelMetadata } from "../../integrations/providers/model-catalog.ts";
-import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
-import type { TaskRecord } from "../../agent/work/task-store.ts";
-import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
-import { NativeInboundQueue, type ClaimedInboundEvent } from "../../gateways/core/inbound-queue.ts";
-import {
-  resolveAppGatewayRuntimeConfig,
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
-import { QueuedInboundDispatcher } from "./queued-inbound.ts";
 import { createProductionBtccComposition } from "../../agent/composition/index.ts";
 import {
+  BtccInboundDispatcher,
   BtccGatewayLifecycleService,
   BtccStopRequestReconciler,
   bindBtccGatewayRuntime,
+  createBtccGatewayHandlers,
   type BtccGatewayRuntime,
 } from "./btcc/index.ts";
 import {
-  archiveWakeResult,
-  renderWakeResult,
-} from "./btcc/archive-wake-result.ts";
-import {
-  startPrincipalTurnCancellationServer,
-  type PrincipalTurnCancellationServer,
-} from "../../agent/turn/principal-turn-cancellation-control.ts";
-import {
-  abortDurablyCancelledPrincipalTurnExecutions,
-  activePrincipalTurnExecutionCount,
-} from "../../agent/turn/principal-turn-cancellation-registry.ts";
+  appTurnEventAction,
+  appTurnStateDbPath,
+  bindButlerSession,
+  createNativeButlerDefaultProvider,
+  persistButlerSessionPointer,
+  readButlerConfig,
+  requireModelRef,
+  resolveButlerData,
+  resolveButlerHome,
+  resolveButlerSession,
+  sendStartupNotification,
+  shouldEnterBtcc,
+  startupMessage,
+  statusText,
+  waitForShutdown,
+  writeStartupGraceMarker,
+} from "./native-butler/index.ts";
 
-interface ButlerConfig {
-  system?: {
-    runtime?: string;
-    butlerModel?: string;
-    defaultModel?: string;
-  };
-  telegram?: {
-    groupId?: string;
-  };
-}
 
 export interface NativeButlerMainOptions {
   butlerHome?: string;
@@ -93,7 +65,6 @@ export interface NativeButlerMainOptions {
   }) => Promise<DeliveryResult>;
   shutdownSignal?: AbortSignal;
   shutdownPollMs?: number;
-  workerResultPollMs?: number;
   enableTelegramPolling?: boolean;
   waitForShutdown?: boolean;
 }
@@ -105,549 +76,19 @@ export interface NativeButlerMainResult {
   shutdownReason: "signal" | "flag" | "bootstrap-only";
 }
 
-const DEFAULT_BUTLER_SESSION_ID = "butler/main";
-
-function getButlerHome(explicit?: string): string {
-  return explicit || process.env.BUTLER_HOME || process.cwd();
-}
-
-function getButlerData(_butlerHome: string, explicit?: string): string {
-  return explicit || process.env.BUTLER_DATA || join(homedir(), ".butler");
-}
-
-function readButlerConfig(butlerData: string): ButlerConfig {
-  const path = join(butlerData, "butler.config.json");
-  if (!existsSync(path)) return {};
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as ButlerConfig;
-  } catch {
-    return {};
-  }
-}
-
-type PromptTextRunner = typeof runPromptText;
-
-export function createNativeButlerDefaultProvider(
-  config: ButlerConfig = {},
-  promptRunner: PromptTextRunner = runPromptText,
-): ModelProviderAdapter {
-  const configuredModel = config.system?.butlerModel || config.system?.defaultModel || "";
-  const invoke: ModelProviderAdapter["invoke"] = async (input) => {
-    const prompt = input.messages
-      .map((message) => `${message.role}: ${message.content}`)
-      .join("\n\n");
-    const text = await promptRunner({
-      prompt,
-      model: input.model,
-      instructions: input.systemPrompt,
-      responseFormat: input.responseFormat,
-      reasoningEffort: input.reasoning?.effort,
-      signal: input.signal,
-      cacheScope: "native-butler-title-provider",
-    });
-    return { text };
-  };
-  const forModel = (model: string): ModelProviderAdapter => ({
-    id: resolveProviderAdapterDefinition(model).providerId,
-    capabilities: providerCapabilitiesForModel(model),
-    capabilitiesFor: providerCapabilitiesForModel,
-    forModel,
-    invoke,
-  });
-  return forModel(configuredModel);
-}
-
-export function appTurnEventAction(input: {
-  sessionId: string;
-  envelope: InboundEnvelope;
-  event: RuntimeTurnEventInput;
-}): OutboundAction | null {
-  if (input.envelope.transport !== APP_TRANSPORT) return null;
-  const turnId = input.envelope.routingHints?.turnId?.trim();
-  if (!turnId) return null;
-  return {
-    actionId: `app-turn-event:${turnId}:${input.event.kind}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
-    transport: APP_TRANSPORT,
-    accountId: input.envelope.accountId,
-    peer: appTurnEventPeer(input.envelope),
-    message: {
-      text: "",
-      replyToMessageId: input.envelope.message.id,
-    },
-    metadata: {
-      kind: "turn_event",
-      turnId,
-      event: appPublicTurnEvent({
-        sessionId: input.sessionId,
-        turnId,
-        event: input.event,
-      }),
-      source: "gateway/native-butler-bootstrap.ts#turn-event",
-    },
-  };
-}
-
-function appPublicTurnEvent(input: {
-  sessionId: string;
-  turnId: string;
-  event: RuntimeTurnEventInput;
-}): RuntimeTurnEventInput {
-  const normalized = createAgentTurnEvent({
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    sessionSequence: 1,
-    turnSequence: 1,
-    kind: input.event.kind,
-    visibility: input.event.visibility ?? "public",
-    payload: input.event.payload ?? {},
-    createdAt: input.event.createdAt,
-  });
-  return {
-    kind: normalized.kind,
-    visibility: normalized.visibility,
-    createdAt: normalized.createdAt,
-    payload: normalized.payload,
-  };
-}
-
-function appTurnEventPeer(envelope: InboundEnvelope): OutboundAction["peer"] {
-  if (envelope.peer.kind === "thread") {
-    return {
-      kind: "thread",
-      id: envelope.peer.parentId ?? envelope.peer.id,
-      threadId: envelope.peer.id,
-    };
-  }
-  return {
-    kind: envelope.peer.kind,
-    id: envelope.peer.id,
-  };
-}
-
-function buildWorkerCompletionEnvelope(input: {
-  accountId: string;
-  peerId: string;
-  task: TaskRecord;
-  butlerData: string;
-  contextWindowTokens: number;
-}): InboundEnvelope {
-  const resultContent = input.task.observedResult?.trim() ||
-    "No result.md was produced and no worker log summary was available.";
-  const sourceTurnId = input.task.origin?.origin_inbound_event_id ??
-    input.task.origin?.origin_message_id ??
-    input.task.origin?.origin_session_id ??
-    input.task.taskId;
-  const triggerId = `worker-complete:${input.task.taskId}`;
-  const result = archiveWakeResult({
-    butlerData: input.butlerData,
-    sourceTurnId,
-    triggerId,
-    capabilityRef: "background_worker_completion",
-    sourceScopeRef: `worker-task:${input.task.taskId}`,
-    content: resultContent,
-    contextWindowTokens: input.contextWindowTokens,
-  });
-  const origin = (input.task.origin?.task_summary ?? input.task.request)?.trim() ?? "";
-  const orchestrationLink = new WorkOrchestrationStore(input.butlerData).findByWorkerTaskId(input.task.taskId);
-  const orchestrationInstructions = orchestrationLink
-    ? [
-        "",
-        "Orchestration continuation:",
-        `- Orchestration ID: ${orchestrationLink.record.id}`,
-        `- Completed stream ID: ${orchestrationLink.stream.id}`,
-        "- First call `sync_work_orchestration` for this orchestration id.",
-        "- If dependency-ready streams remain, call `run_ready_work_streams` and do not produce a final completion report yet.",
-        "- Only call `write_work_orchestration_report` and deliver a user-facing report after every orchestration stream is terminal.",
-      ]
-    : [];
-  const text = [
-    "System event: a background worker task completed.",
-    "This is not a user request to start new work.",
-    orchestrationLink
-      ? "Continue the linked work orchestration from durable state before reporting to the user."
-      : "Read the worker result and produce a concise user-facing completion report in the active Butler persona and response language.",
-    "Do not dump raw internal fields. Do not include the full request unless it is necessary. Mention clear next steps when useful.",
-    ...orchestrationInstructions,
-    "",
-    `Task ID: ${input.task.taskId}`,
-    `Status: ${input.task.status}`,
-    `Project: ${input.task.project ?? input.task.origin?.project ?? "unknown"}`,
-    "",
-    "Original request summary:",
-    origin || "unknown",
-    "",
-    "Worker result:",
-    renderWakeResult(result),
-  ].join("\n");
-
-  return {
-    eventId: `system:worker-complete:${input.task.taskId}:${input.task.status}`,
-    transport: "system",
-    accountId: input.accountId,
-    peer: {
-      kind: "dm",
-      id: input.peerId,
-    },
-    sender: {
-      id: "butler-worker-monitor",
-      displayName: "Butler Worker Monitor",
-    },
-    message: {
-      id: `worker-complete:${input.task.taskId}`,
-      text,
-      timestamp: new Date().toISOString(),
-    },
-    raw: {
-      btccWake: {
-        triggerId,
-        sourceTurnId,
-        authorizationRef: `worker-task:${input.task.taskId}`,
-        resultScopeRef: result.readScopeRef,
-      },
-      workerCompletion: {
-        taskId: input.task.taskId,
-        status: input.task.status,
-      },
-    },
-  };
-}
-
-function buildPlannedReviewEnvelope(input: {
-  accountId: string;
-  peerId: string;
-  butlerData: string;
-  plannedTaskId: string;
-  workerTaskId: string;
-  attempt: number;
-  reviewEventId: string;
-  status: string;
-  contextWindowTokens: number;
-}): InboundEnvelope {
-  const planned = new PlannedTaskStore(input.butlerData).read(input.plannedTaskId);
-  const plan = planned?.plan;
-  const resultContent = planned?.latestResult?.trim() ||
-    "No linked worker result was available.";
-  const sourceTurnId = plan?.origin_session_id ?? input.plannedTaskId;
-  const result = archiveWakeResult({
-    butlerData: input.butlerData,
-    sourceTurnId,
-    triggerId: input.reviewEventId,
-    capabilityRef: "planned_worker_completion",
-    sourceScopeRef: `planned-task:${input.plannedTaskId}:attempt-${input.attempt}`,
-    content: resultContent,
-    contextWindowTokens: input.contextWindowTokens,
-  });
-  const criteria = plan?.acceptance_criteria.map((criterion, index) => `- AC${index + 1}: ${criterion}`).join("\n") ||
-    "- No criteria found; mark review inconclusive.";
-  const text = [
-    "System event: a planned background worker attempt completed.",
-    "This is not a user request and must not be reported as raw worker success.",
-    "Review the result against every acceptance criterion and the internal GOAL, then call `review_planned_task` before any public completion report.",
-    "When calling `review_planned_task`, include `criterion_index` for each AC number so coverage is structural, not text-match dependent.",
-    "Also include `goal_review` with PASS/FAIL/INCONCLUSIVE and concise evidence for whether the GOAL is complete.",
-    "If evidence is missing, use INCONCLUSIVE or FAIL with a repair recommendation.",
-    "",
-    `Planned task ID: ${input.plannedTaskId}`,
-    `Attempt: ${input.attempt}`,
-    `Worker task ID: ${input.workerTaskId}`,
-    `Review event ID: ${input.reviewEventId}`,
-    `Status: ${input.status || planned?.status || "unknown"}`,
-    `GOAL: ${plan ? plannedInternalGoal(plan) : "unknown"}`,
-    `User-facing objective: ${plan?.goal ?? "unknown"}`,
-    `Project: ${plan?.project ?? "unknown"}`,
-    "",
-    "Acceptance criteria:",
-    criteria,
-    "",
-    "Worker result:",
-    renderWakeResult(result),
-  ].join("\n");
-
-  return {
-    eventId: `system:planned-review:${input.plannedTaskId}:attempt-${input.attempt}:${input.reviewEventId}`,
-    transport: "system",
-    accountId: input.accountId,
-    peer: {
-      kind: "dm",
-      id: input.peerId,
-    },
-    sender: {
-      id: "butler-worker-monitor",
-      displayName: "Butler Worker Monitor",
-    },
-    message: {
-      id: `planned-review:${input.plannedTaskId}`,
-      text,
-      timestamp: new Date().toISOString(),
-    },
-    raw: {
-      btccWake: {
-        triggerId: input.reviewEventId,
-        sourceTurnId,
-        authorizationRef: `planned-worker-review:${input.plannedTaskId}:attempt-${input.attempt}`,
-        resultScopeRef: result.readScopeRef,
-      },
-      plannedWorkerCompletion: {
-        plannedTaskId: input.plannedTaskId,
-        workerTaskId: input.workerTaskId,
-        attempt: input.attempt,
-        status: input.status,
-      },
-    },
-  };
-}
-
-function completionTargetSessionIdForTask(input: {
-  task: TaskRecord;
-  butlerData: string;
-  fallbackSessionId: string;
-}): string {
-  const taskOriginSessionId = input.task.origin?.origin_session_id?.trim();
-  if (taskOriginSessionId) return taskOriginSessionId;
-  const link = new WorkOrchestrationStore(input.butlerData).findByWorkerTaskId(input.task.taskId);
-  return link?.record.origin_session_id?.trim() || input.fallbackSessionId;
-}
-
-function sessionPointerPath(butlerData: string): string {
-  return join(butlerData, "config", "session-id.txt");
-}
-
-function writeButlerSessionPointer(butlerData: string, sessionId: string): void {
-  const path = sessionPointerPath(butlerData);
-  mkdirSync(join(butlerData, "config"), { recursive: true });
-  writeFileSync(path, `${sessionId}\n`, "utf8");
-}
-
-function contextWindowTokensForBinding(binding: StoredSessionBinding): number {
-  const configured = binding.metadata?.context_window_tokens;
-  return typeof configured === "number" && Number.isFinite(configured) && configured > 0
-    ? Math.trunc(configured)
-    : resolveModelMetadata(binding.modelRef).context_window_tokens;
-}
-
-function readButlerSessionPointer(butlerData: string): string | null {
-  const path = sessionPointerPath(butlerData);
-  if (!existsSync(path)) return null;
-  try {
-    const value = readFileSync(path, "utf8").trim();
-    return value || null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveSessionId(store: SessionBindingStore, butlerData: string): string {
-  const pointer = readButlerSessionPointer(butlerData);
-  if (pointer) return pointer;
-
-  const existing = store
-    .listSessions({ lifecycleState: ["active", "closing"] satisfies SessionLifecycleState[] })
-    .filter((session) => session.role === "butler")
-    .sort((a, b) => {
-      const left = a.lastActiveAt ?? a.updatedAt;
-      const right = b.lastActiveAt ?? b.updatedAt;
-      return right.localeCompare(left);
-    })[0];
-  if (existing) return existing.sessionId;
-
-  return DEFAULT_BUTLER_SESSION_ID;
-}
-
-function ensureButlerSession(input: {
-  store: SessionBindingStore;
-  sessionId: string;
-  butlerHome: string;
-  butlerData: string;
-  runtimeAdapterId: string;
-  provider: ModelProviderAdapter;
-}): StoredSessionBinding {
-  const existing = input.store.getBySessionId(input.sessionId);
-  if (!existing || existing.lifecycleState === "closed" || existing.lifecycleState === "crashed") {
-    return registerRuntimeSession({
-      sessionId: input.sessionId,
-      role: "butler",
-      workspacePath: input.butlerHome,
-      runtimeAdapterId: input.runtimeAdapterId,
-      modelProviderId: input.provider.id,
-      butlerHome: input.butlerHome,
-      butlerData: input.butlerData,
-      source: "native-butler-bootstrap",
-    });
-  }
-
-  return input.store.upsert({
-    sessionId: existing.sessionId,
-    role: existing.role,
-    projectId: existing.projectId,
-    workspacePath: existing.workspacePath,
-    runtimeAdapterId: input.runtimeAdapterId,
-    modelProviderId: providerIdFromModelRef(
-      existing.modelRef,
-      input.provider.id,
-    ),
-    modelRef: existing.modelRef,
-    runtimeSessionRef: existing.runtimeSessionRef,
-    providerThreadRef: existing.providerThreadRef,
-    transportBindings: existing.transportBindings,
-    metadata: existing.metadata,
-    lifecycleState: "active",
-    createdAt: existing.createdAt,
-  });
-}
-
-function providerIdFromModelRef(
-  modelRef: string | undefined,
-  fallback: string,
-): string {
-  return modelRef?.split("/", 1)[0]?.trim() || fallback;
-}
-
-function requireModelRef(modelRef: string | undefined): ModelRef {
-  if (!modelRef?.trim()) throw new Error("Stored Butler session has no model binding");
-  if (!modelRef.includes("/")) throw new Error("Stored Butler model binding is not canonical");
-  return modelRef as ModelRef;
-}
-
-function countRunningTasks(butlerData: string): number {
-  const tasksDir = join(butlerData, "tasks");
-  if (!existsSync(tasksDir)) return 0;
-
-  let count = 0;
-  for (const taskId of readdirSync(tasksDir)) {
-    const taskDir = join(tasksDir, taskId);
-    if (!statSync(taskDir, { throwIfNoEntry: false })?.isDirectory()) continue;
-    const statusPath = join(taskDir, "status");
-    if (!existsSync(statusPath)) continue;
-    const status = readFileSync(statusPath, "utf8").trim();
-    if (status === "RUNNING") count += 1;
-  }
-  return count;
-}
-
-function buildStartupMessage(modelRef: string, runningTaskCount: number): string {
-  const model = modelRef.includes("/") ? modelRef.split("/", 2)[1] : modelRef;
-  let message = `🔄 Butler started (model: ${model})`;
-  if (runningTaskCount > 0) {
-    message += ` — ${runningTaskCount} incomplete task(s) found`;
-  }
-  return message;
-}
-
-function buildStatusText(input: {
-  sessionId: string;
-  modelRef: string;
-  butlerData: string;
-}): string {
-  return [
-    "Butler status: online",
-    `session: ${input.sessionId}`,
-    `model: ${input.modelRef}`,
-    `data: ${input.butlerData}`,
-  ].join("\n");
-}
-
-function appTurnStateDbPath(butlerData: string): string {
-  const config = resolveAppGatewayRuntimeConfig({ butlerData });
-  return config.dbPath ?? join(butlerData, "app-server", "butler-client.sqlite");
-}
-
-function shouldHandleAppInboundTurn(butlerData: string): (item: ClaimedInboundEvent) => boolean {
-  const dbPath = appTurnStateDbPath(butlerData);
-  return (item) => {
-    const turnId = item.envelope.routingHints?.turnId?.trim();
-    if (!turnId || !existsSync(dbPath)) return true;
-    let db: Database | null = null;
-    try {
-      db = new Database(dbPath, { readonly: true });
-      const row = db
-        .query<{ state: string }, [string]>("SELECT state FROM turns WHERE id = ?")
-        .get(turnId);
-      return !row || !["cancelled", "delivered", "failed"].includes(row.state);
-    } catch {
-      return true;
-    } finally {
-      db?.close();
-    }
-  };
-}
-
-function writeStartupGraceMarker(butlerData: string): void {
-  mkdirSync(join(butlerData, "state"), { recursive: true });
-  writeFileSync(join(butlerData, "state", "startup-grace-until"), `${Date.now() / 1000 + 45}\n`, "utf8");
-}
-
-async function sendStartupNotification(input: {
-  butlerHome: string;
-  chatId?: string;
-  sessionId: string;
-  startupMessage: string;
-  sendTelegram?: NativeButlerMainOptions["sendTelegram"];
-}): Promise<DeliveryResult | undefined> {
-  const chatId = input.chatId?.trim();
-  if (!chatId) return undefined;
-
-  const action: OutboundAction = {
-    actionId: `telegram-out:${input.sessionId}:startup`,
-    transport: "telegram",
-    accountId: "default",
-    peer: {
-      kind: "group",
-      id: chatId,
-    },
-    message: {
-      text: input.startupMessage,
-    },
-    metadata: {
-      source: "gateway/native-butler-bootstrap.ts",
-      type: "startup-notification",
-    },
-  };
-  const guard = new DeliveryGuard({
-    adapters: [
-      createTelegramTransportAdapter({
-        butlerHome: input.butlerHome,
-        sendTelegram: input.sendTelegram,
-      }),
-    ],
-  });
-  const result = await guard.deliver(input.sessionId, action, {
-    source: "gateway/native-butler-bootstrap.ts",
-    type: "startup-notification",
-  });
-  return {
-    ok: result.ok,
-    error: result.error,
-    raw: result.raw,
-    transportMessageId: result.transportMessageId,
-  };
-}
-
-async function waitForShutdown(input: {
-  shutdownFlagPath: string;
-  signal?: AbortSignal;
-  pollMs: number;
-  onPoll?: () => Promise<void>;
-}): Promise<"signal" | "flag"> {
-  while (true) {
-    if (input.signal?.aborted) return "signal";
-    if (existsSync(input.shutdownFlagPath)) return "flag";
-    await input.onPoll?.();
-    await new Promise((resolve) => setTimeout(resolve, input.pollMs));
-  }
-}
+export { appTurnEventAction, createNativeButlerDefaultProvider };
 
 export async function runNativeButlerMain(
   input: NativeButlerMainOptions = {},
 ): Promise<NativeButlerMainResult> {
-  const butlerHome = getButlerHome(input.butlerHome);
-  const butlerData = getButlerData(butlerHome, input.butlerData);
+  const butlerHome = resolveButlerHome(input.butlerHome);
+  const butlerData = resolveButlerData(input.butlerData);
   const config = readButlerConfig(butlerData);
   const telegramGateway = resolveTelegramGatewayRuntimeConfig({
     butlerData,
     compatibilityConfig: config as Record<string, any>,
   });
   const appMessageDbPath = appTurnStateDbPath(butlerData);
-  reconcilePendingWorkStreamTransactions({ butlerData, maxDurationMs: BOOTSTRAP_RECOVERY_DEADLINE_MS });
   const btcc = input.btcc ?? createProductionBtccComposition({
     butlerHome,
     butlerData,
@@ -663,11 +104,8 @@ export async function runNativeButlerMain(
   let sessionId: string | null = null;
   let stopTelegramPolling = false;
   let telegramPolling: Promise<void> | undefined;
-  let workerResultMonitor: Promise<void> | undefined;
-  let appWorkerResultMonitor: Promise<void> | undefined;
-  let cancellationServer: PrincipalTurnCancellationServer | undefined;
   let stopReconciler: BtccStopRequestReconciler | undefined;
-  const inboundDispatcher = new QueuedInboundDispatcher();
+  const inboundDispatcher = new BtccInboundDispatcher();
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
   const currentTelegramGateway = () =>
@@ -676,23 +114,16 @@ export async function runNativeButlerMain(
       compatibilityConfig: readButlerConfig(butlerData) as Record<string, any>,
     });
   const telegramShouldStop = () => serviceShouldStop() || !currentTelegramGateway().enabled;
-  const currentTelegramChatId = () => {
-    const current = currentTelegramGateway();
-    return current.enabled ? current.chatId ?? undefined : undefined;
-  };
-
   try {
-    cancellationServer = await startPrincipalTurnCancellationServer(butlerData);
-    sessionId = resolveSessionId(store, butlerData);
-    const binding = ensureButlerSession({
+    sessionId = resolveButlerSession(store, butlerData);
+    const binding = bindButlerSession({
       store,
       sessionId,
       butlerHome,
       butlerData,
-      runtimeAdapterId: "btcc-turn-runtime",
       provider,
     });
-    writeButlerSessionPointer(butlerData, binding.sessionId);
+    persistButlerSessionPointer(butlerData, binding.sessionId);
 
     const router = new GatewayRouter({ store });
     const telegramAdapter = createTelegramTransportAdapter({
@@ -751,14 +182,14 @@ export async function runNativeButlerMain(
     await lifecycle.getOrCreate(binding.sessionId, "butler");
     const server = createGatewayServer({
       router,
-      handlers: createLifecycleGatewayHandlers(lifecycle),
+      handlers: createBtccGatewayHandlers(lifecycle),
       butlerData,
     });
     const gateway = createTelegramLiveGateway({
       adapter: telegramAdapter,
       router,
       server,
-      renderStatus: () => buildStatusText({
+      renderStatus: () => statusText({
         sessionId: binding.sessionId,
         modelRef: binding.modelRef,
         butlerData,
@@ -775,158 +206,13 @@ export async function runNativeButlerMain(
             process.stdout.write(`[telegram] ${line}\n`);
           },
         });
-    workerResultMonitor = telegramGateway.enabled ? runWorkerResultMonitor({
-      butlerHome,
-      butlerData,
-      sessionId: binding.sessionId,
-      chatId: telegramGateway.chatId ?? undefined,
-      pollMs: input.workerResultPollMs,
-      renderNotificationText: async ({ task }) => {
-        const targetSessionId = completionTargetSessionIdForTask({
-          task,
-          butlerData,
-          fallbackSessionId: binding.sessionId,
-        });
-        const targetBinding = store.getBySessionId(targetSessionId) ?? binding;
-        const actor = await lifecycle.actorForRoute({
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "butler-fallback",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-        const result = await actor.handleInbound(buildWorkerCompletionEnvelope({
-          accountId: "default",
-          peerId: currentTelegramChatId()?.trim() || targetBinding.sessionId,
-          task,
-          butlerData,
-          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
-        }), {
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "butler-fallback",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-        return result.text;
-      },
-      handlePlannedTaskReadyForReview: async (promotion) => {
-        if (promotion.status !== "WORKER_DONE") return;
-        const targetSessionId = promotion.originSessionId?.trim() || binding.sessionId;
-        const targetBinding = store.getBySessionId(targetSessionId) ?? binding;
-        const actor = await lifecycle.actorForRoute({
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "butler-fallback",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-        await actor.handleInbound(buildPlannedReviewEnvelope({
-          accountId: "default",
-          peerId: currentTelegramChatId()?.trim() || targetBinding.sessionId,
-          butlerData,
-          plannedTaskId: promotion.plannedTaskId,
-          workerTaskId: promotion.workerTaskId,
-          attempt: promotion.attempt,
-          reviewEventId: promotion.reviewEventId,
-          status: promotion.status,
-          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
-        }), {
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "butler-fallback",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-      },
-      deliverAction: async (activeSessionId, action, metadata) =>
-        await deliverThroughEnabledGate(activeSessionId, action, metadata),
-      shouldStop: telegramShouldStop,
-      log: (line) => {
-        process.stdout.write(`[worker-monitor] ${line}\n`);
-      },
-    }) : undefined;
-    appWorkerResultMonitor = runWorkerResultMonitor({
-      butlerHome,
-      butlerData,
-      sessionId: binding.sessionId,
-      deliveryTarget: {
-        transport: "app",
-        accountId: "local",
-        peerKind: "dm",
-        peerId: "general",
-      },
-      sessionStore: store,
-      pollMs: input.workerResultPollMs,
-      renderNotificationText: async ({ task }) => {
-        const targetSessionId = task.origin?.origin_session_id?.trim() || binding.sessionId;
-        const targetBinding = store.getBySessionId(targetSessionId) ?? binding;
-        const actor = await lifecycle.actorForRoute({
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "app-worker-result",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-        const result = await actor.handleInbound(buildWorkerCompletionEnvelope({
-          accountId: "local",
-          peerId: targetBinding.sessionId,
-          task,
-          butlerData,
-          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
-        }), {
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "app-worker-result",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-        return result.text;
-      },
-      handlePlannedTaskReadyForReview: async (promotion) => {
-        if (promotion.status !== "WORKER_DONE") return;
-        const targetSessionId = promotion.originSessionId?.trim() || binding.sessionId;
-        const targetBinding = store.getBySessionId(targetSessionId) ?? binding;
-        const actor = await lifecycle.actorForRoute({
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "app-planned-worker-review",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-        await actor.handleInbound(buildPlannedReviewEnvelope({
-          accountId: "local",
-          peerId: targetBinding.sessionId,
-          butlerData,
-          plannedTaskId: promotion.plannedTaskId,
-          workerTaskId: promotion.workerTaskId,
-          attempt: promotion.attempt,
-          reviewEventId: promotion.reviewEventId,
-          status: promotion.status,
-          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
-        }), {
-          sessionId: targetBinding.sessionId,
-          role: "butler",
-          reason: "app-planned-worker-review",
-          workspacePath: targetBinding.workspacePath,
-          projectId: targetBinding.projectId,
-        });
-      },
-      deliverAction: async (activeSessionId, action, metadata) =>
-        await deliverThroughEnabledGate(activeSessionId, action, metadata),
-      shouldStop: serviceShouldStop,
-      log: (line) => {
-        process.stdout.write(`[app-worker-monitor] ${line}\n`);
-      },
-    });
-
     writeStartupGraceMarker(butlerData);
-    const startupMessage = buildStartupMessage(binding.modelRef, countRunningTasks(butlerData));
+    const startupText = startupMessage(binding.modelRef);
     const startupDelivery = telegramGateway.enabled ? await sendStartupNotification({
       butlerHome,
       chatId: telegramGateway.chatId ?? undefined,
       sessionId: binding.sessionId,
-      startupMessage,
+      message: startupText,
       sendTelegram: input.sendTelegram,
     }) : undefined;
 
@@ -938,17 +224,13 @@ export async function runNativeButlerMain(
         pollMs,
         onPoll: async () => {
           await stopReconciler?.reconcile();
-          if (activePrincipalTurnExecutionCount(butlerData) > 0) {
-            abortDurablyCancelledPrincipalTurnExecutions(butlerData);
-          }
           const summary = inboundDispatcher.poll({
             queue: new NativeInboundQueue(butlerData),
             server,
             store,
             deliveryGuard,
             deliverAction: deliverThroughEnabledGate,
-            shouldHandleItem: shouldHandleAppInboundTurn(butlerData),
-            telegramGroupId: currentTelegramChatId(),
+            shouldHandleItem: shouldEnterBtcc(butlerData),
             limit: 5,
             maxConcurrentSessions: 5,
             onOutcome: (outcome) => {
@@ -971,20 +253,12 @@ export async function runNativeButlerMain(
         telegramPolling,
         new Promise((resolve) => setTimeout(resolve, 12_000)),
       ]);
-      await Promise.race([
-        workerResultMonitor,
-        new Promise((resolve) => setTimeout(resolve, 12_000)),
-      ]);
-      await Promise.race([
-        appWorkerResultMonitor,
-        new Promise((resolve) => setTimeout(resolve, 12_000)),
-      ]);
       await lifecycle.closeSession(binding.sessionId, shutdownReason === "flag" ? "controlled-stop" : "native-signal");
     }
 
     return {
       sessionId: binding.sessionId,
-      startupMessage,
+      startupMessage: startupText,
       startupDelivery,
       shutdownReason,
     };
@@ -1023,7 +297,6 @@ export async function runNativeButlerMain(
   } finally {
     stopTelegramPolling = true;
     stopReconciler?.close();
-    await cancellationServer?.close();
     btcc.close();
     store.close();
   }

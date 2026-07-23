@@ -5,7 +5,6 @@ import type { BtccTurnRuntime } from "../../../agent/btcc/index.ts";
 type PendingStopRow = {
   turn_id: string;
   state: string;
-  has_btcc_turn: number;
 };
 
 export class BtccStopRequestReconciler {
@@ -32,10 +31,7 @@ export class BtccStopRequestReconciler {
     try {
       if (!hasStopProjectionTables(db)) return;
       const rows = db.query<PendingStopRow, []>(`
-        SELECT app_turn_cancel_outbox.turn_id, app_turn_cancel_outbox.state,
-          EXISTS(
-            SELECT 1 FROM btcc_turns WHERE btcc_turns.turn_id = app_turn_cancel_outbox.turn_id
-          ) AS has_btcc_turn
+        SELECT app_turn_cancel_outbox.turn_id, app_turn_cancel_outbox.state
         FROM app_turn_cancel_outbox
         JOIN turns ON turns.id = app_turn_cancel_outbox.turn_id
         WHERE turns.state = 'cancelling'
@@ -43,10 +39,6 @@ export class BtccStopRequestReconciler {
         ORDER BY app_turn_cancel_outbox.created_at
       `).all();
       for (const row of rows) {
-        if (!row.has_btcc_turn) {
-          this.commitProjection(db, row.turn_id, "cancelled");
-          continue;
-        }
         const outcome = await this.runtime.handle({ kind: "stop", turnId: row.turn_id });
         if (outcome.kind === "fenced_pending_persistence") continue;
         this.commitProjection(db, row.turn_id, outcome.kind);

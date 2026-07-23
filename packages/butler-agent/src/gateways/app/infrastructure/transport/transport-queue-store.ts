@@ -224,7 +224,7 @@ export class AppTransportQueueStore {
         input.project?.workspace_path ??
         existing?.workspacePath ??
         this.butlerHome,
-      runtimeAdapterId: existing?.runtimeAdapterId ?? "native-tool-loop",
+      runtimeAdapterId: "btcc-turn-runtime",
       modelProviderId:
         modelRef.split("/", 1)[0] || existing?.modelProviderId || "openai",
       modelRef,

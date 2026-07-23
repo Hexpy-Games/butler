@@ -147,14 +147,17 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     const snapshotSha = digest(snapshotJson);
     const snapshotRef = digest(`btcc-admission-snapshot.v1\0${snapshotSha}`);
     const checkpointId = digest(`btcc-checkpoint.v1\0${command.turnId}\0${0}\0admitted`);
+    const stoppedBeforeAdmission = this.db.query<{ status: string }, [string]>(`
+      SELECT status FROM btcc_stop_requests WHERE turn_id = ?
+    `).get(command.turnId)?.status === "cancelled_before_admission";
     this.records.insert(snapshotRef, "admission_snapshot", snapshotSha, snapshotJson);
     this.db.query(`
       INSERT INTO btcc_turns (
         turn_id, session_id, inbox_id, trigger_key, original_message_id,
         original_message, admission_snapshot_ref, model_selection_json,
         context_json, continuation_snapshot_json, semantic_state,
-        active_checkpoint_id, revision, execution_fence
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'admitted', ?, 0, 0)
+        active_checkpoint_id, revision, execution_fence, final_disposition
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     `).run(
       command.turnId,
       command.sessionId,
@@ -166,8 +169,12 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       stableJson(command.modelSelection),
       contextJson,
       stableJson(continuationCandidates),
-      checkpointId,
+      stoppedBeforeAdmission ? "cancelled" : "admitted",
+      stoppedBeforeAdmission ? null : checkpointId,
+      stoppedBeforeAdmission ? 1 : 0,
+      stoppedBeforeAdmission ? "cancelled" : null,
     );
+    if (stoppedBeforeAdmission) return;
     this.db.query(`
       INSERT INTO btcc_checkpoints (
         checkpoint_id, turn_id, turn_revision, semantic_state, kind,

@@ -8,12 +8,6 @@ import { AppSessionQueueStore } from "./session-queue-store.ts";
 import { AppSessionViewStore } from "./session-view-store.ts";
 import { AppSystemResponderTurnStore } from "./system-responder-turn-store.ts";
 import { AppTurnActionStore } from "./turn-action-store.ts";
-import { settlePrincipalDeadOwnerCancellation } from "./dead-owner-cancellation-settlement.ts";
-import {
-  principalTurnCancellationTargetForTurn,
-  signalPrincipalTurnCancellation,
-  type PrincipalTurnCancellationTarget,
-} from "../../../../agent/turn/principal-turn-cancellation-control.ts";
 
 export interface AppSessionInteractionModuleGraph {
   generatedSessionTitles: AppGeneratedSessionTitleStore;
@@ -75,11 +69,6 @@ export function createAppSessionInteractionModuleGraph(input: {
       host.dispatchDeferredResponderTurn(turnInput),
     completeResponderTurn: (turnInput) => host.completeResponderTurn(turnInput),
     cancelResponder: (turnId) => responderRuntime.cancel(turnId),
-    signalPrincipalTurnCancellation: (turnId) =>
-      signalPrincipalTurnCancellation({ butlerData, turnId }),
-    principalTurnCancellationTargetForTurn: (turnId) =>
-      cancellationTargetForTurn({ db, butlerData, turnId }),
-    settlePrincipalDeadOwnerCancellation,
     finalizeCancelledTurn: (chatId, turnId) =>
       host.finalizeCancelledTurn(chatId, turnId),
     cleanupTurnEventSequences: (chatId, turnId) =>
@@ -148,30 +137,6 @@ export function createAppSessionInteractionModuleGraph(input: {
     sessionViews,
     sessionQueue,
     sessionQueueDispatcher,
-  };
-}
-
-function cancellationTargetForTurn(input: {
-  db: Database;
-  butlerData: string;
-  turnId: string;
-}): PrincipalTurnCancellationTarget | null {
-  const activeTarget = principalTurnCancellationTargetForTurn(input);
-  if (activeTarget) return activeTarget;
-  const outbox = input.db.query<{
-    queue_id: string;
-    dispatch_claim_id: string | null;
-  }, [string]>(`
-    SELECT queue_id, dispatch_claim_id
-    FROM app_turn_cancel_outbox
-    WHERE turn_id = ? AND state != 'completed'
-  `).get(input.turnId);
-  if (!outbox?.queue_id) return null;
-  return {
-    butlerData: input.butlerData,
-    turnId: input.turnId,
-    queueId: outbox.queue_id,
-    dispatchClaimId: outbox.dispatch_claim_id,
   };
 }
 
