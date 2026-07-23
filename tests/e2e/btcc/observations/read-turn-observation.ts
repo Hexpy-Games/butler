@@ -137,7 +137,7 @@ function reconstructTrace(
       ordinal: index + 1,
       turnRevision: row.turn_revision,
       state: row.semantic_state,
-      acceptedEvent: acceptedEvent(row, nextState),
+      acceptedEvent: acceptedEvent(row, nextState, rows.slice(0, index)),
       source: "persisted_transition_reconstruction",
     };
   });
@@ -146,6 +146,7 @@ function reconstructTrace(
 function acceptedEvent(
   row: CheckpointRow,
   nextState: string | null,
+  previousRows: CheckpointRow[],
 ): string | null {
   if (row.semantic_state === "admitted") return "TurnActivated";
   if (
@@ -156,7 +157,10 @@ function acceptedEvent(
   }
   if (row.semantic_state === "work_frontier") {
     if (nextState === "task_execution") return "WorkTaskSelected";
-    if (nextState === "consolidation") return "WorkFrontierClosed";
+    if (nextState === "consolidation") {
+      return previousRows.some(isPromotionAuthorization)
+        ? "PromotionFrontierClosed" : "WorkFrontierClosed";
+    }
   }
   if (!row.accepted_product_json) return null;
   const product = JSON.parse(row.accepted_product_json) as Record<
@@ -164,6 +168,12 @@ function acceptedEvent(
     unknown
   >;
   return eventForProduct(product);
+}
+
+function isPromotionAuthorization(row: CheckpointRow): boolean {
+  if (!row.accepted_product_json) return false;
+  const product = JSON.parse(row.accepted_product_json) as Record<string, unknown>;
+  return product.kind === "promotion_authorization";
 }
 
 function eventForProduct(product: Record<string, unknown>): string | null {

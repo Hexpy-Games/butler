@@ -244,16 +244,14 @@ export type AcceptedTurnTransition =
   | { kind: "accept_final_dossier"; successor: "reporting"; product: FinalDossierProduct }
   | {
       kind: "complete_promoted_work";
-      successor: "reporting";
-      product: FinalDossierProduct;
+      successor: "consolidation";
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "close_promotion_frontier" }>;
       };
     }
   | {
       kind: "defer_promoted_work";
-      successor: "reporting";
-      product: FinalDossierProduct;
+      successor: "consolidation";
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "close_deferred_promotion_frontier" }>;
       };

@@ -55,7 +55,7 @@ export function reduceProjectProgram(
       break;
     case "close_deferred_promotion_frontier":
       if (next.frontier !== "promotion_open" ||
-        next.activeDeferral?.anchor.ref.id !== mutation.product.dossier.deferredAnchorRef?.id ||
+        next.activeDeferral?.anchor.ref.id !== mutation.deferredAnchorRef.id ||
         !next.promotionDeferral) throw changed("deferred promotion frontier");
       next.frontier = "closed";
       break;

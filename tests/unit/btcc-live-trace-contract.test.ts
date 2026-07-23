@@ -114,8 +114,8 @@ function promotionFinalization() {
   return [
     point("consolidation", "PromotionAuthorized"),
     ...passedTask(),
-    point("reporting", "PreparedReportAccepted"),
-    point("delivery_committed", "DeliveryObserved"),
+    point("work_frontier", "PromotionFrontierClosed"),
+    ...directFinalization(),
   ];
 }
 

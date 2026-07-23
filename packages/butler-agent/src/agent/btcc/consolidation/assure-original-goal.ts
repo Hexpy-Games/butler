@@ -100,6 +100,7 @@ const codec: PhaseCodec<ConsolidationProduct> = {
     requireLiteral(value.goalCoverage, "fulfilled", "goal coverage");
     requireLiteral(value.semanticFidelity, "faithful", "semantic fidelity");
     const userReport = decodeUserReportFacts(value.userReport);
+    const promotionClosure = requirePromotionClosure(state.promotionClosure);
     const body = {
       programId: requireString(state.programId, "programId"),
       originalGoalContractRef: goalContractRef,
@@ -110,7 +111,7 @@ const codec: PhaseCodec<ConsolidationProduct> = {
       taskReviewRefs,
       goalCoverage: "fulfilled" as const,
       semanticFidelity: "faithful" as const,
-      promotionClosure: "not_required" as const,
+      promotionClosure,
       disposition: "completed" as const,
       summary: userReport.outcome,
       userReport,
@@ -191,16 +192,20 @@ function decodeDeferredDossier(
       }
     : {};
   const userReport = decodeUserReportFacts(value.userReport);
+  const promotionClosure = state.promotionClosure === "deferred"
+    ? "deferred" as const : "not_required" as const;
   const body = {
     programId: requireString(state.programId, "programId"),
     originalGoalContractRef: goalContractRef,
     currentAuthorityRef: authorityRef,
     consolidationAssessmentRef: assessment.ref,
     ...plan,
-    taskReviewRefs: [] as ContentRef[],
+    taskReviewRefs: Array.isArray(state.taskReviewRefs)
+      ? state.taskReviewRefs.map((ref, index) => requireContentRef(ref, `taskReviewRefs[${index}]`))
+      : [] as ContentRef[],
     goalCoverage: "deferred" as const,
     semanticFidelity: "faithful" as const,
-    promotionClosure: "not_required" as const,
+    promotionClosure,
     disposition: "deferred" as const,
     blockerRef: deferral.blocker.ref,
     deferredAnchorRef: deferral.anchor.ref,
@@ -214,6 +219,11 @@ function decodeDeferredDossier(
     assessment,
     dossier: { ref: contentRef("final-dossier", body), ...body },
   };
+}
+
+function requirePromotionClosure(value: unknown): "not_required" | "promoted" {
+  if (value === "not_required" || value === "promoted") return value;
+  throw new Error("Final Consolidation has no valid promotion closure");
 }
 
 function requireContentRefs(value: unknown, label: string): [ContentRef, ...ContentRef[]] {

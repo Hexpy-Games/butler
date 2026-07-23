@@ -66,7 +66,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
     expect(result.initial.content).toContain("변경:");
     expect(result.initial.content).toContain("검증:");
     expect(result.replay).toEqual(result.initial);
-    expect(result.modelCalls).toBe(25);
+    expect(result.modelCalls).toBe(26);
     expect(result.operationCalls).toBe(7);
     expect(result.artifactSnapshot.promoted).toBe(result.artifactSnapshot.workspace["guide.md"]);
     expect(result.artifactSnapshot.promoted).toContain("격리 작업공간");
@@ -76,7 +76,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       model: "gpt-5.6-sol",
       reasoningEffort: "low",
     });
-    expect(result.phases.filter((phase: string) => phase === "consolidation")).toHaveLength(1);
+    expect(result.phases.filter((phase: string) => phase === "consolidation")).toHaveLength(2);
 
     const db = new Database(join(dataRoot, "runtime", "btcc-successor.sqlite"), {
       readonly: true,
@@ -130,7 +130,8 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       const finalDossier = JSON.parse(dossier!.content_json);
       const promotionAuthorization = JSON.parse(authorization!.content_json);
       expect(finalDossier.promotionClosure).toBe("promoted");
-      expect(finalDossier.userReport).toEqual(promotionAuthorization.userReport);
+      expect(finalDossier.userReport).not.toEqual(promotionAuthorization.userReport);
+      expect(finalDossier.userReport.outcome).toContain("원본에 반영");
       expect(finalDossier.userReport.materialChanges).not.toBeEmpty();
       expect(finalDossier.userReport.validationResults).not.toBeEmpty();
       expect(mutationKinds.indexOf("close_implementation_frontier"))

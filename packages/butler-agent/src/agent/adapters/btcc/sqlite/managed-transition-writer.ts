@@ -177,13 +177,12 @@ export class SqliteManagedTransitionWriter {
         return;
       case "complete_promoted_work":
       case "defer_promoted_work": {
-        this.insert("final_dossier", transition.product.dossier);
         const program = this.requireCommittedProgram(
           this.commitLedger(transition.ledgerCommit, projectLedger),
         );
         this.advance(turn, nextRevision, transition.successor, {
-          ...requiredManaged(turn), finalDossier: transition.product, program,
-        }, { finalDossierRef: transition.product.dossier.ref.id });
+          ...requiredManaged(turn), program,
+        });
         return;
       }
       case "accept_prepared_report":

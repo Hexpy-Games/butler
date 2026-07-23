@@ -33,7 +33,8 @@ export function submitConsolidation(
     ...assessment,
     goalCoverage: "fulfilled",
     semanticFidelity: "faithful",
-    userReport: completedReportFacts(),
+    userReport: state.promotionClosure === "promoted"
+      ? promotedReportFacts() : completedReportFacts(),
   };
 }
 
@@ -67,6 +68,15 @@ function completedReportFacts() {
     outcome: "고객 응대 운영 가이드를 완성했다",
     materialChanges: ["경청, 명확한 확인, 실행 가능한 안내, 후속 확인 원칙을 정리했다"],
     validationResults: ["모든 Task Review가 수용 기준을 통과했다"],
+    limitations: [],
+  };
+}
+
+function promotedReportFacts() {
+  return {
+    outcome: "고객 응대 운영 가이드를 원본에 반영했다",
+    materialChanges: ["검토된 격리 결과를 승인된 대상에 정확히 반영했다"],
+    validationResults: ["프로모션 동일성 Review를 포함한 모든 Task Review가 통과했다"],
     limitations: [],
   };
 }

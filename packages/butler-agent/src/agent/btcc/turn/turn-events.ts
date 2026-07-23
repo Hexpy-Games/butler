@@ -49,8 +49,12 @@ export type TurnEvent =
   | { kind: "PromotionDeferralAccepted"; product: PromotionDeferralProduct }
   | { kind: "ConsolidationRepairRequired"; product: ConsolidationRepairProduct }
   | { kind: "FinalDossierAccepted"; product: FinalDossierProduct }
-  | { kind: "PromotedWorkCompleted"; product: FinalDossierProduct }
-  | { kind: "PromotedWorkDeferred"; product: FinalDossierProduct }
+  | {
+      kind: "PromotionFrontierClosed";
+      closure:
+        | { kind: "promoted" }
+        | { kind: "deferred"; deferredAnchorRef: import("../core/index.ts").ContentRef };
+    }
   | { kind: "PromotionAuthorized"; product: PromotionAuthorizationProduct }
   | { kind: "PreparedReportAccepted"; product: PreparedReportProduct }
   | { kind: "DeliveryObserved"; assistantMessageId: string };

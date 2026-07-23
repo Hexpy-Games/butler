@@ -5,7 +5,6 @@ import type {
 } from "../core/index.ts";
 import type { WorkspaceProvision } from "../artifact/index.ts";
 import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
-import type { FinalDossierProduct } from "../consolidation/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 
 export type ManagedAttempt = {
@@ -69,5 +68,5 @@ export type WorkFrontierDecision =
       task: ReviewedManagedProgramState["tasks"][number];
     }
   | { kind: "close_frontier"; promotionAssemblies: ReviewedPromotionAssembly[] }
-  | { kind: "complete_promotion"; product: FinalDossierProduct }
-  | { kind: "defer_promotion"; product: FinalDossierProduct };
+  | { kind: "complete_promotion" }
+  | { kind: "defer_promotion"; deferredAnchorRef: ContentRef };

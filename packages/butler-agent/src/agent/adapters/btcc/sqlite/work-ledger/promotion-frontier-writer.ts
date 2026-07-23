@@ -124,7 +124,6 @@ export class SqlitePromotionFrontierWriter {
   }
 
   closeDeferred(mutation: CloseDeferredPromotion): void {
-    const dossier = mutation.product.dossier;
     const updated = this.db.query(`
       UPDATE btcc_programs SET frontier = 'closed',
         manifest_revision = manifest_revision + 1
@@ -134,7 +133,7 @@ export class SqlitePromotionFrontierWriter {
     `).run(
       mutation.cursor.programId,
       mutation.cursor.expectedManifestRevision,
-      dossier.deferredAnchorRef?.id ?? "",
+      mutation.deferredAnchorRef.id,
     );
     if (updated.changes !== 1) throw new Error("Deferred promotion frontier changed");
   }

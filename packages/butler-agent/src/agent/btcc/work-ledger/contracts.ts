@@ -124,7 +124,7 @@ export type WorkLedgerMutation =
   | {
       kind: "close_deferred_promotion_frontier";
       cursor: WorkLedgerCursor;
-      product: import("../consolidation/index.ts").FinalDossierProduct;
+      deferredAnchorRef: ContentRef;
     };
 
 export type WorkLedgerCommit = {

@@ -51,6 +51,8 @@ const PROMOTION_FINALIZATION: TracePoint[] = [
   point("work_frontier", "WorkTaskSelected"),
   point("task_execution", "ResultCandidateSubmitted"),
   point("task_review", "TaskReviewPassed"),
+  point("work_frontier", "PromotionFrontierClosed"),
+  point("consolidation", "FinalDossierAccepted"),
   point("reporting", "PreparedReportAccepted"),
   point("delivery_committed", "DeliveryObserved"),
 ];

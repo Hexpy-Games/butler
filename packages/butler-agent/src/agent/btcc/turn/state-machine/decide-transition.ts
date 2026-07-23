@@ -243,26 +243,26 @@ function acceptedTransition(
       }),
     };
   }
-  if (turn.semanticState === "work_frontier" && event.kind === "PromotedWorkCompleted") {
+  if (turn.semanticState === "work_frontier" &&
+    event.kind === "PromotionFrontierClosed" && event.closure.kind === "promoted") {
     return {
       kind: "complete_promoted_work",
-      successor: "reporting",
-      product: event.product,
+      successor: "consolidation",
       ledgerCommit: ledgerCommit(turn, {
         kind: "close_promotion_frontier",
         cursor: ledgerCursor(turn),
       }),
     };
   }
-  if (turn.semanticState === "work_frontier" && event.kind === "PromotedWorkDeferred") {
+  if (turn.semanticState === "work_frontier" &&
+    event.kind === "PromotionFrontierClosed" && event.closure.kind === "deferred") {
     return {
       kind: "defer_promoted_work",
-      successor: "reporting",
-      product: event.product,
+      successor: "consolidation",
       ledgerCommit: ledgerCommit(turn, {
         kind: "close_deferred_promotion_frontier",
         cursor: ledgerCursor(turn),
-        product: event.product,
+        deferredAnchorRef: event.closure.deferredAnchorRef,
       }),
     };
   }
