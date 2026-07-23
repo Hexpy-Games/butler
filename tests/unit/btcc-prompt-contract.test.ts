@@ -30,6 +30,8 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("several separable");
   expect(resolveDutyInstructions(["author_smallest_sufficient_plan"])[0]?.instruction)
     .toContain("never collapse a layered feature");
+  expect(resolveDutyInstructions(["author_smallest_sufficient_plan"])[0]?.instruction)
+    .toContain("Never create a discovery Task inside a graph");
   expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
     .toContain("Do not choose or reproduce opaque");
   expect(resolveDutyInstructions(["classify_correction_kind"])[0]?.instruction)
