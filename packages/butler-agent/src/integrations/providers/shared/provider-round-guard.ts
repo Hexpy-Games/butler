@@ -19,14 +19,17 @@ export interface ProviderRoundGuard {
 export async function runGuardedProviderRound<T>(input: {
   signal?: AbortSignal;
   policy?: Partial<ProviderRoundPolicy>;
-  operation: (signal: AbortSignal) => Promise<T>;
+  operation: (signal: AbortSignal, recordProgress: () => void) => Promise<T>;
   timeoutError: (kind: ProviderRoundTimeoutKind) => unknown;
   externalAbortError: () => unknown;
 }): Promise<T> {
   const guard = createProviderRoundGuard({ signal: input.signal, policy: input.policy });
   try {
     guard.start();
-    return await raceProviderRoundWithSignal(input.operation(guard.signal), guard.signal);
+    return await raceProviderRoundWithSignal(
+      input.operation(guard.signal, () => guard.recordProgress()),
+      guard.signal,
+    );
   } catch (error) {
     if (input.signal?.aborted) throw input.externalAbortError();
     if (guard.timeoutKind) throw input.timeoutError(guard.timeoutKind);
