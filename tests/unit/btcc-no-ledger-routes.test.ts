@@ -87,12 +87,12 @@ describe("BTCC no-ledger executable routes", () => {
       const programs = count(db, "btcc_programs");
       const works = count(db, "btcc_work_items");
       const tasks = count(db, "btcc_tasks");
-      const operations = count(db, "btcc_phase_operation_results");
+      const operations = count(db, "btcc_phase_operation_result_links");
       const opening = db.query<{ content_json: string }, []>(
         "SELECT content_json FROM btcc_records WHERE kind = 'output_draft'",
       ).get();
-      const operationRows = db.query<{ result_json: string }, []>(
-        "SELECT result_json FROM btcc_phase_operation_results ORDER BY rowid",
+      const operationRows = db.query<{ projection_json: string }, []>(
+        "SELECT projection_json FROM btcc_phase_operation_result_links ORDER BY rowid",
       ).all();
       const draft = JSON.parse(opening!.content_json) as {
         personalizationApplications: Array<{ ref: string }>;
@@ -107,8 +107,10 @@ describe("BTCC no-ledger executable routes", () => {
         "feedback:lead-with-result",
         "cache:avoid-unnecessary-ledger",
       ]);
-      const observedRefs = operationRows.map(({ result_json }) =>
-        (JSON.parse(result_json) as { observationRef: { id: string; sha256: string } }).observationRef,
+      const observedRefs = operationRows.map(({ projection_json }) =>
+        (JSON.parse(projection_json) as {
+          observationRef: { id: string; sha256: string };
+        }).observationRef,
       );
       expect(draft.publicClaims.flatMap(({ sourceRefs }) => sourceRefs)).toEqual(observedRefs);
     } finally {

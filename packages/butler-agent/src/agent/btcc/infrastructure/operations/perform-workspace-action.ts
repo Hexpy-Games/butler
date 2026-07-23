@@ -83,10 +83,12 @@ export async function performWorkspaceAction(input: {
   }
 
   if (journal.status === "dispatching") {
-    let content = "workspace capability recovered from its durable operation overlay";
+    let payload: ReturnType<typeof operationContent> = {
+      content: "workspace capability recovered from its durable operation overlay",
+    };
     if (shouldDispatch) {
       try {
-        content = await dispatchWorkspaceCapability(input, workspace, journal);
+        payload = await dispatchWorkspaceCapability(input, workspace, journal);
       } catch (error) {
         resetInterruptedDispatch(input.store, scopeId, journal);
         throw workspaceCapabilityRejection(error);
@@ -94,7 +96,7 @@ export async function performWorkspaceAction(input: {
       input.afterBoundary?.("tool_mutated");
     }
     try {
-      journal = prepareCandidate(input, workspace, journal, content, mutationAuthority);
+      journal = prepareCandidate(input, workspace, journal, payload, mutationAuthority);
     } catch (error) {
       resetInterruptedDispatch(input.store, scopeId, journal);
       throw workspaceCapabilityRejection(error);
@@ -133,7 +135,7 @@ async function dispatchWorkspaceCapability(
   input: Parameters<typeof performWorkspaceAction>[0],
   workspace: StoredWorkspace,
   journal: WorkspaceActionJournal,
-): Promise<string> {
+): Promise<ReturnType<typeof operationContent>> {
   const args = workspaceCapabilityInput(input.request, workspace);
   const execute = input.options.createWorkspaceToolExecutor({
     workspacePath: workspaceContentRoot(journal.overlayRoot),
@@ -213,7 +215,7 @@ function prepareCandidate(
   input: Parameters<typeof performWorkspaceAction>[0],
   workspace: StoredWorkspace,
   journal: WorkspaceActionJournal,
-  content: string,
+  payload: ReturnType<typeof operationContent>,
   mutationAuthority: ReturnType<typeof requireWorkspaceMutationRequest>,
 ): WorkspaceActionJournal {
   const target = resolveWorkspaceTarget({
@@ -242,7 +244,8 @@ function prepareCandidate(
         targetSnapshotRef: candidate.ref,
       }),
       targetSnapshotRef: candidate.ref,
-      content,
+      content: payload.content,
+      ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
     };
     const observed = { ...journal, status: "workspace_observed" as const, result };
     input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), observed);
@@ -274,7 +277,8 @@ function prepareCandidate(
     }),
     artifactRevisionRef,
     targetSnapshotRef: candidate.ref,
-    content,
+    content: payload.content,
+    ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
   };
   const prepared: WorkspaceActionJournal = {
     ...journal,

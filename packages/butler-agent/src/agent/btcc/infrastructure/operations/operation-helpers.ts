@@ -1,7 +1,22 @@
-import { stableJson } from "../../core/index.ts";
+import {
+  isSpooledOperationOutput,
+  stableJson,
+  type OperationPayloadSource,
+} from "../../core/index.ts";
 
-export function operationContent(output: unknown): string {
-  return typeof output === "string" ? output : stableJson(output);
+export function operationContent(output: unknown): {
+  content: string;
+  payloadSource?: Exclude<OperationPayloadSource, string>;
+} {
+  if (isSpooledOperationOutput(output)) {
+    return {
+      content: stableJson(output.summary),
+      payloadSource: output.payloadSource,
+    };
+  }
+  return {
+    content: typeof output === "string" ? output : stableJson(output),
+  };
 }
 
 export function assertActive(signal?: AbortSignal): void {

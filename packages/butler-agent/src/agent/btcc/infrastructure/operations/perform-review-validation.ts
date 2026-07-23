@@ -81,13 +81,18 @@ export async function performReviewValidation(input: {
     const after = captureWorkspaceSnapshot(
       root, snapshotValue.targetKind, snapshotValue.targetState,
     );
-    const content = operationContent(output);
+    const payload = operationContent(output);
     const validationReceiptRef = contentRef("review-validation-receipt", {
       requestId: input.request.requestId,
       reviewSourceRef: input.request.reviewSourceRef,
       beforeSnapshotRef: before.ref,
       afterSnapshotRef: after.ref,
-      output: content,
+      output: payload.payloadSource
+        ? {
+            sha256: payload.payloadSource.sha256,
+            byteLength: payload.payloadSource.byteLength,
+          }
+        : payload.content,
     });
     return {
       requestId: input.request.requestId,
@@ -97,7 +102,8 @@ export async function performReviewValidation(input: {
         validationReceiptRef,
       }),
       validationReceiptRef,
-      content,
+      content: payload.content,
+      ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
     };
   } finally {
     removeOwnedRoot(root);

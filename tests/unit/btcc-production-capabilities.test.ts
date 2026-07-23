@@ -3,15 +3,71 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProductionToolRuntime } from "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+import { createProductionOperationRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/operations/index.ts";
 import type { OperationRequest } from
   "../../packages/butler-agent/src/agent/btcc/core/index.ts";
-import { envelope } from "./support/btcc-production-operations-fixture.ts";
+import {
+  envelope,
+  provisionWorkspace,
+  workspaceEnvelope,
+} from "./support/btcc-production-operations-fixture.ts";
 
 const roots: string[] = [];
 
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 describe("production BTCC capabilities", () => {
+  test("spools complete command output before projecting it", async () => {
+    const root = fixtureRoot();
+    const targetPath = join(root, "repository");
+    mkdirSync(targetPath);
+    writeFileSync(join(targetPath, "README.md"), "baseline\n");
+    const tools = createProductionToolRuntime({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: join(root, "app.sqlite"),
+    });
+    const runtime = createProductionOperationRuntime({
+      butlerData: root,
+      async resolveTargetScope() {
+        return { targetPath };
+      },
+      ...tools,
+    });
+    const provision = await provisionWorkspace(runtime.artifacts, targetPath);
+    const prefix = "PRESERVE-COMMAND-PREFIX";
+    const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
+      requestId: "command-large-output",
+      kind: "workspace_artifact_action",
+      capabilityRef: "run_command",
+      workspaceRef: provision.workspace.ref,
+      relativeTarget: ".",
+      input: {
+        command: `node -e 'process.stdout.write("${prefix}" + "x".repeat(120000) + "TAIL")'`,
+      },
+    };
+    const result = await runtime.operations.perform({
+      request,
+      envelope: workspaceEnvelope(provision, { kind: "read_only" }),
+    });
+
+    expect(result.byteLength).toBeGreaterThan(120_000);
+    expect(result.preview).toContain(prefix);
+    expect(result.content).toBeUndefined();
+    const read = await runtime.operations.perform({
+      request: {
+        requestId: "read-command-prefix",
+        kind: "observe",
+        capabilityRef: "read_operation_result",
+        scopeRef: result.readScopeRef!,
+        input: { selector: "search", query: prefix, max_matches: 1 },
+      },
+      envelope: workspaceEnvelope(provision, { kind: "read_only" }),
+    });
+    expect(read.view?.content).toContain(prefix);
+  });
+
   test("writes only the declared artifact target through the BTCC-owned registry", async () => {
     const workspacePath = fixtureRoot();
     const runtime = createProductionToolRuntime({

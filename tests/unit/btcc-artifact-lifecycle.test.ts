@@ -106,7 +106,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
         SELECT mutation_kind FROM btcc_ledger_mutations ORDER BY next_manifest_revision
       `).all().map((row) => row.mutation_kind);
       const operationRequests = db.query<{ request_json: string }, []>(`
-        SELECT request_json FROM btcc_phase_operation_results ORDER BY rowid
+        SELECT request_json FROM btcc_phase_operation_result_links ORDER BY rowid
       `).all().map((row) => JSON.parse(row.request_json));
       const journalStates = db.query<{ content_json: string }, []>(`
         SELECT content_json FROM btcc_records

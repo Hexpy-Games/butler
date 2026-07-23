@@ -1,11 +1,12 @@
 export const BTCC_PHASE_CONVERSATION_SCHEMA = `
-CREATE TABLE IF NOT EXISTS btcc_phase_operation_results (
+CREATE TABLE IF NOT EXISTS btcc_phase_operation_result_links (
   operation_id TEXT PRIMARY KEY,
   checkpoint_id TEXT NOT NULL,
   checkpoint_revision INTEGER NOT NULL,
   request_id TEXT NOT NULL,
+  result_id TEXT NOT NULL,
   request_json TEXT NOT NULL,
-  result_json TEXT NOT NULL,
+  projection_json TEXT NOT NULL,
   UNIQUE(checkpoint_id, checkpoint_revision, request_id)
 );
 

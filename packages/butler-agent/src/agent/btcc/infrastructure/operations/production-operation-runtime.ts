@@ -5,6 +5,11 @@ import {
   type OperationExecutor,
   type OperationRequest,
 } from "../../core/index.ts";
+import {
+  isResultReadRequest,
+  type OperationResultStore,
+} from "../../operation-result/index.ts";
+import { SqliteOperationResultStore } from "../operation-result/index.ts";
 import { ArtifactStore } from "./artifact-store.ts";
 import { ProductionArtifactWorkspaceRuntime } from "./artifact-workspace-runtime.ts";
 import type {
@@ -28,9 +33,10 @@ export function createProductionOperationRuntime(
   options: ProductionOperationRuntimeOptions,
 ): ProductionOperationRuntime {
   const store = new ArtifactStore(options.butlerData);
+  const results = new SqliteOperationResultStore(options.butlerData);
   return {
     artifacts: new ProductionArtifactWorkspaceRuntime(options, store),
-    operations: createOperationExecutor(options, store),
+    operations: createOperationExecutor(options, store, undefined, results),
   };
 }
 
@@ -38,11 +44,22 @@ export function createOperationExecutor(
   options: ProductionOperationRuntimeOptions,
   store: ArtifactStore,
   afterWorkspaceBoundary?: (boundary: OperationRuntimeBoundary) => void,
+  resultStore: OperationResultStore = new SqliteOperationResultStore(options.butlerData),
 ): OperationExecutor {
   return {
     async perform(input) {
+      if (isResultReadRequest(input.request)) {
+        return resultStore.read({
+          request: input.request,
+          modelSelection: input.envelope.modelSelection,
+        });
+      }
       const scopeId = operationRoundScope(input.envelope.binding);
-      const existing = store.loadOperation(scopeId, input.request);
+      const existing = await resultStore.find({
+        binding: input.envelope.binding,
+        request: input.request,
+        modelSelection: input.envelope.modelSelection,
+      });
       if (existing) {
         if (input.request.kind === "workspace_artifact_action") {
           cleanupWorkspaceAction(store, scopeId, input.request);
@@ -69,11 +86,16 @@ export function createOperationExecutor(
       if (input.request.kind === "workspace_artifact_action") {
         afterWorkspaceBoundary?.("before_result_persist");
       }
-      store.saveOperation(scopeId, input.request, result);
+      const projection = await resultStore.record({
+        binding: input.envelope.binding,
+        request: input.request,
+        result,
+        modelSelection: input.envelope.modelSelection,
+      });
       if (input.request.kind === "workspace_artifact_action") {
         cleanupWorkspaceAction(store, scopeId, input.request);
       }
-      return result;
+      return projection;
     },
   };
 }

@@ -58,11 +58,6 @@ export class ArtifactStore {
         snapshot_id TEXT PRIMARY KEY,
         value_json TEXT NOT NULL
       );
-      CREATE TABLE IF NOT EXISTS btcc_artifact_operations (
-        request_id TEXT PRIMARY KEY,
-        request_json TEXT NOT NULL,
-        result_json TEXT NOT NULL
-      );
       CREATE TABLE IF NOT EXISTS btcc_artifact_promotions (
         request_id TEXT PRIMARY KEY,
         request_json TEXT NOT NULL,
@@ -121,27 +116,6 @@ export class ArtifactStore {
     const accepted = this.loadSnapshot(snapshotValue.ref.id);
     if (!accepted || JSON.stringify(accepted) !== JSON.stringify(snapshotValue)) {
       throw new Error("BTCC snapshot identity conflicts with its materialized bytes");
-    }
-  }
-
-  loadOperation(scopeId: string, request: OperationRequest): ObservationResult | null {
-    const row = this.database.query(`
-      SELECT request_json, result_json FROM btcc_artifact_operations WHERE request_id = ?
-    `).get(scopedRequestId(scopeId, request)) as { request_json: string; result_json: string } | null;
-    if (!row) return null;
-    assertSameRequest(row.request_json, request);
-    return JSON.parse(row.result_json) as ObservationResult;
-  }
-
-  saveOperation(scopeId: string, request: OperationRequest, result: ObservationResult): void {
-    this.database.query(`
-      INSERT INTO btcc_artifact_operations(request_id, request_json, result_json)
-      VALUES (?, ?, ?)
-      ON CONFLICT(request_id) DO NOTHING
-    `).run(scopedRequestId(scopeId, request), JSON.stringify(request), JSON.stringify(result));
-    const accepted = this.loadOperation(scopeId, request);
-    if (!accepted || JSON.stringify(accepted) !== JSON.stringify(result)) {
-      throw new Error("BTCC operation request identity conflict");
     }
   }
 

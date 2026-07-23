@@ -25,14 +25,7 @@ export async function executeWebCapability(
     backend: args.backend as PageReaderBackendId | undefined,
     signal: context.signal,
   });
-  const maxChars = optionalNumber(args.max_chars) ?? 8_000;
-  return {
-    ...result,
-    text: result.text.slice(0, maxChars),
-    markdown: result.markdown.slice(0, maxChars),
-    document: result.document.slice(0, maxChars),
-    chunks: result.chunks.filter((chunk) => chunk.index * chunk.charCount < maxChars),
-  };
+  return result;
 }
 
 function requireHttpUrl(value: unknown): string {

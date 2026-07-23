@@ -40,6 +40,7 @@ import {
   providerCapabilitiesForModel,
   resolveProviderAdapterDefinition,
 } from "../../integrations/providers/registry.ts";
+import { resolveModelMetadata } from "../../integrations/providers/model-catalog.ts";
 import { plannedInternalGoal, PlannedTaskStore } from "../../agent/work/planned-task.ts";
 import type { TaskRecord } from "../../agent/work/task-store.ts";
 import { WorkOrchestrationStore } from "../../agent/work/work-orchestration.ts";
@@ -56,6 +57,10 @@ import {
   bindBtccGatewayRuntime,
   type BtccGatewayRuntime,
 } from "./btcc/index.ts";
+import {
+  archiveWakeResult,
+  renderWakeResult,
+} from "./btcc/archive-wake-result.ts";
 import {
   startPrincipalTurnCancellationServer,
   type PrincipalTurnCancellationServer,
@@ -219,21 +224,30 @@ function appTurnEventPeer(envelope: InboundEnvelope): OutboundAction["peer"] {
   };
 }
 
-function trimForCompletionEvent(value: string | null | undefined, limit: number): string {
-  const trimmed = value?.trim();
-  if (!trimmed) return "";
-  return trimmed.length > limit ? `${trimmed.slice(0, limit)}\n...[truncated]` : trimmed;
-}
-
 function buildWorkerCompletionEnvelope(input: {
   accountId: string;
   peerId: string;
   task: TaskRecord;
   butlerData: string;
+  contextWindowTokens: number;
 }): InboundEnvelope {
-  const result = trimForCompletionEvent(input.task.observedResult, 6_000) ||
+  const resultContent = input.task.observedResult?.trim() ||
     "No result.md was produced and no worker log summary was available.";
-  const origin = trimForCompletionEvent(input.task.origin?.task_summary ?? input.task.request, 1_200);
+  const sourceTurnId = input.task.origin?.origin_inbound_event_id ??
+    input.task.origin?.origin_message_id ??
+    input.task.origin?.origin_session_id ??
+    input.task.taskId;
+  const triggerId = `worker-complete:${input.task.taskId}`;
+  const result = archiveWakeResult({
+    butlerData: input.butlerData,
+    sourceTurnId,
+    triggerId,
+    capabilityRef: "background_worker_completion",
+    sourceScopeRef: `worker-task:${input.task.taskId}`,
+    content: resultContent,
+    contextWindowTokens: input.contextWindowTokens,
+  });
+  const origin = (input.task.origin?.task_summary ?? input.task.request)?.trim() ?? "";
   const orchestrationLink = new WorkOrchestrationStore(input.butlerData).findByWorkerTaskId(input.task.taskId);
   const orchestrationInstructions = orchestrationLink
     ? [
@@ -263,11 +277,11 @@ function buildWorkerCompletionEnvelope(input: {
     origin || "unknown",
     "",
     "Worker result:",
-    result,
+    renderWakeResult(result),
   ].join("\n");
 
   return {
-    eventId: `system:worker-complete:${input.task.taskId}:${Date.now()}`,
+    eventId: `system:worker-complete:${input.task.taskId}:${input.task.status}`,
     transport: "system",
     accountId: input.accountId,
     peer: {
@@ -283,6 +297,18 @@ function buildWorkerCompletionEnvelope(input: {
       text,
       timestamp: new Date().toISOString(),
     },
+    raw: {
+      btccWake: {
+        triggerId,
+        sourceTurnId,
+        authorizationRef: `worker-task:${input.task.taskId}`,
+        resultScopeRef: result.readScopeRef,
+      },
+      workerCompletion: {
+        taskId: input.task.taskId,
+        status: input.task.status,
+      },
+    },
   };
 }
 
@@ -295,11 +321,22 @@ function buildPlannedReviewEnvelope(input: {
   attempt: number;
   reviewEventId: string;
   status: string;
+  contextWindowTokens: number;
 }): InboundEnvelope {
   const planned = new PlannedTaskStore(input.butlerData).read(input.plannedTaskId);
   const plan = planned?.plan;
-  const result = trimForCompletionEvent(planned?.latestResult, 6_000) ||
+  const resultContent = planned?.latestResult?.trim() ||
     "No linked worker result was available.";
+  const sourceTurnId = plan?.origin_session_id ?? input.plannedTaskId;
+  const result = archiveWakeResult({
+    butlerData: input.butlerData,
+    sourceTurnId,
+    triggerId: input.reviewEventId,
+    capabilityRef: "planned_worker_completion",
+    sourceScopeRef: `planned-task:${input.plannedTaskId}:attempt-${input.attempt}`,
+    content: resultContent,
+    contextWindowTokens: input.contextWindowTokens,
+  });
   const criteria = plan?.acceptance_criteria.map((criterion, index) => `- AC${index + 1}: ${criterion}`).join("\n") ||
     "- No criteria found; mark review inconclusive.";
   const text = [
@@ -323,7 +360,7 @@ function buildPlannedReviewEnvelope(input: {
     criteria,
     "",
     "Worker result:",
-    result,
+    renderWakeResult(result),
   ].join("\n");
 
   return {
@@ -342,6 +379,20 @@ function buildPlannedReviewEnvelope(input: {
       id: `planned-review:${input.plannedTaskId}`,
       text,
       timestamp: new Date().toISOString(),
+    },
+    raw: {
+      btccWake: {
+        triggerId: input.reviewEventId,
+        sourceTurnId,
+        authorizationRef: `planned-worker-review:${input.plannedTaskId}:attempt-${input.attempt}`,
+        resultScopeRef: result.readScopeRef,
+      },
+      plannedWorkerCompletion: {
+        plannedTaskId: input.plannedTaskId,
+        workerTaskId: input.workerTaskId,
+        attempt: input.attempt,
+        status: input.status,
+      },
     },
   };
 }
@@ -365,6 +416,13 @@ function writeButlerSessionPointer(butlerData: string, sessionId: string): void 
   const path = sessionPointerPath(butlerData);
   mkdirSync(join(butlerData, "config"), { recursive: true });
   writeFileSync(path, `${sessionId}\n`, "utf8");
+}
+
+function contextWindowTokensForBinding(binding: StoredSessionBinding): number {
+  const configured = binding.metadata?.context_window_tokens;
+  return typeof configured === "number" && Number.isFinite(configured) && configured > 0
+    ? Math.trunc(configured)
+    : resolveModelMetadata(binding.modelRef).context_window_tokens;
 }
 
 function readButlerSessionPointer(butlerData: string): string | null {
@@ -742,6 +800,7 @@ export async function runNativeButlerMain(
           peerId: currentTelegramChatId()?.trim() || targetBinding.sessionId,
           task,
           butlerData,
+          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
         }), {
           sessionId: targetBinding.sessionId,
           role: "butler",
@@ -771,6 +830,7 @@ export async function runNativeButlerMain(
           attempt: promotion.attempt,
           reviewEventId: promotion.reviewEventId,
           status: promotion.status,
+          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
         }), {
           sessionId: targetBinding.sessionId,
           role: "butler",
@@ -813,6 +873,7 @@ export async function runNativeButlerMain(
           peerId: targetBinding.sessionId,
           task,
           butlerData,
+          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
         }), {
           sessionId: targetBinding.sessionId,
           role: "butler",
@@ -842,6 +903,7 @@ export async function runNativeButlerMain(
           attempt: promotion.attempt,
           reviewEventId: promotion.reviewEventId,
           status: promotion.status,
+          contextWindowTokens: contextWindowTokensForBinding(targetBinding),
         }), {
           sessionId: targetBinding.sessionId,
           role: "butler",

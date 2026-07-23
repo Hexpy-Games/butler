@@ -27,6 +27,7 @@ export type AdmittedModelSelection = {
   reasoningEffort: ReasoningEffort;
   controls: Readonly<Record<string, string | number | boolean>>;
   controlsHash: string;
+  contextWindowTokens?: number;
 };
 
 export type ButlerContextInput = {

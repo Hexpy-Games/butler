@@ -37,7 +37,7 @@ export async function performWorkspaceObservation(input: {
     signal: input.signal,
   });
   assertActive(input.signal);
-  const content = operationContent(output);
+  const payload = operationContent(output);
   return {
     requestId: input.request.requestId,
     outcome: "observed",
@@ -45,8 +45,14 @@ export async function performWorkspaceObservation(input: {
       requestId: input.request.requestId,
       capabilityRef: input.request.capabilityRef,
       workspaceRef: input.request.workspaceRef,
-      content,
+      payload: payload.payloadSource
+        ? {
+            sha256: payload.payloadSource.sha256,
+            byteLength: payload.payloadSource.byteLength,
+          }
+        : payload.content,
     }),
-    content,
+    content: payload.content,
+    ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
   };
 }

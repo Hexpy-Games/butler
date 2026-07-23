@@ -25,7 +25,12 @@ export type StructuralCapabilityDefinition = {
   observationScopeKinds?: readonly ObservationScopeKind[];
 };
 
-export type ObservationScopeKind = "workspace" | "web" | "memory" | "ledger";
+export type ObservationScopeKind =
+  | "workspace"
+  | "web"
+  | "memory"
+  | "ledger"
+  | "result";
 
 export interface StructuralCapabilityCatalog {
   list(): Promise<readonly StructuralCapabilityDefinition[]> |
