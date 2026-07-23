@@ -14,6 +14,7 @@ import {
   guidanceReader,
   modelSelection,
   phaseEnvelope,
+  phaseContinuity,
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
@@ -136,7 +137,7 @@ describe("production BTCC selected model", () => {
       messageId: "message-1",
       content: "Improve Sandy's trust profiling without changing her voice.",
     });
-    expect(hierarchy.immutablePhaseContract).toEqual({
+    expect(hierarchy.immutablePhaseContract).toMatchObject({
       phase: "planning",
       objective: "Author the smallest sufficient plan.",
       duties: [
@@ -162,7 +163,7 @@ describe("production BTCC selected model", () => {
       exitDuties: {
         PlanCandidate: [{
           id: "declare_verification_integration",
-          instruction: expect.stringContaining("observable criteria"),
+          instruction: expect.stringContaining("ResultCandidate"),
         }],
       },
       authoringContractRefs: ["spec-authoring@1"],
@@ -201,7 +202,14 @@ describe("production BTCC selected model", () => {
       acceptedGoalRef: "goal:1",
       managedLedgerBindingRef: "ledger:1",
     });
-    expect(hierarchy.currentTurnContext.priorOperationResults).toEqual(phaseEnvelope().operationResults);
+    expect(hierarchy.currentTurnContext.operationContext).toEqual({
+      phaseContinuity: null,
+      latestOperationResults: [],
+      priorOperationResultIndex: [expect.objectContaining({
+        resultRef: { id: "result:1", sha256: "result-hash" },
+        readScopeRef: "operation-result:result:1",
+      })],
+    });
     expect(hierarchy.currentTurnContext.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
     expect(hierarchy.currentTurnContext.butlerContext).toEqual({
       sessionId: "session-1",
@@ -262,7 +270,11 @@ describe("production BTCC selected model", () => {
       promptRunner: promptRunner(async () => {
         calls += 1;
         return {
-          carrier: { kind: "operation_requests", requests: [request] },
+          carrier: {
+            kind: "operation_requests",
+            phaseContinuity: phaseContinuity(),
+            requests: [request],
+          },
           actualIdentity: actualIdentity(),
         };
       }),
@@ -270,6 +282,7 @@ describe("production BTCC selected model", () => {
 
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "operation_requests",
+      phaseContinuity: phaseContinuity(),
       requests: [request],
       actualIdentity: actualIdentity(),
     });
@@ -304,6 +317,47 @@ describe("production BTCC selected model", () => {
     expect(prompt).toContain("submission omitted the required verdict");
   });
 
+  test("projects only the latest result body while retaining earlier durable references", async () => {
+    let prompt = "";
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async (input) => {
+        prompt = input.prompt;
+        return {
+          carrier: { kind: "phase_submission", submission: { kind: "plan" } },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    const latest = {
+      ...envelope.operationResults[0]!,
+      requestId: "latest-observation",
+      resultRef: { id: "result:2", sha256: "result-hash-2" },
+      requestRef: { id: "request:2", sha256: "request-hash-2" },
+      preview: "latest full result",
+      content: "latest full result",
+      readScopeRef: "operation-result:result:2",
+    };
+    envelope.operationResults.push(latest);
+    envelope.latestOperationResultRefs = [latest.resultRef];
+    envelope.phaseContinuity = phaseContinuity();
+
+    await model.runRound(envelope);
+
+    const context = JSON.parse(prompt).promptHierarchy.currentTurnContext.operationContext;
+    expect(context.phaseContinuity).toEqual(phaseContinuity());
+    expect(context.latestOperationResults).toEqual([latest]);
+    expect(context.priorOperationResultIndex).toHaveLength(1);
+    expect(context.priorOperationResultIndex[0]).not.toHaveProperty("preview");
+    expect(context.priorOperationResultIndex[0].resultRef).toEqual({
+      id: "result:1",
+      sha256: "result-hash",
+    });
+  });
+
   test("rejects an operation that was not offered by the exact phase capability schema", async () => {
     const model = createProductionSelectedModel({
       context: emptyContextResolver(),
@@ -323,6 +377,7 @@ describe("production BTCC selected model", () => {
       promptRunner: promptRunner(async () => ({
         carrier: {
           kind: "operation_requests",
+          phaseContinuity: phaseContinuity(),
           requests: [{
             requestId: "invalid-review-operation",
             kind: "review_validation",

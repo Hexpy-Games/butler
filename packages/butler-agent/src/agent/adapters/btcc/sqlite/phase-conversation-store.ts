@@ -4,6 +4,7 @@ import type {
   BtccRuntimeDependencies,
   OperationRequest,
   OperationResult,
+  PhaseContinuity,
   PhaseEnvelope,
   PhaseRunBinding,
 } from "../../../btcc/gateway-api.ts";
@@ -45,6 +46,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       WHERE checkpoint_id = ? AND checkpoint_revision = ?
     `).get(binding.checkpointId, head.checkpoint_revision);
     const currentBinding = { ...binding, checkpointRevision: head.checkpoint_revision };
+    const latestOperation = this.loadLatestOperation(currentBinding);
     return {
       binding: currentBinding,
       acceptedProduct: head.accepted_product_json
@@ -54,6 +56,10 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         ? { acceptedActualIdentity: JSON.parse(head.actual_identity_json) as ActualModelIdentity }
         : {}),
       operationResults: this.operationResults.load(currentBinding),
+      latestOperationResultRefs: this.operationResults.loadLatestRefs(currentBinding),
+      ...(latestOperation?.phaseContinuity
+        ? { phaseContinuity: latestOperation.phaseContinuity }
+        : {}),
       ...(revision?.pending_operation_json
         ? { pendingOperationRound: decodePendingOperation(revision.pending_operation_json) }
         : {}),
@@ -67,12 +73,14 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
     binding: PhaseRunBinding;
     envelope: PhaseEnvelope;
     requests: OperationRequest[];
+    phaseContinuity?: PhaseContinuity;
     actualIdentity: ActualModelIdentity;
   }): Promise<PhaseRunBinding> {
     if (input.requests.length === 0) throw new Error("BTCC operation round cannot be empty");
     const carrier = {
       kind: "operation_requests" as const,
       requests: input.requests,
+      ...(input.phaseContinuity ? { phaseContinuity: input.phaseContinuity } : {}),
       actualIdentity: input.actualIdentity,
     };
     return this.db.transaction(() => {
@@ -271,6 +279,17 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       throw new Error("BTCC accepted phase product has no pending provider submission");
     }
     return decodePendingSubmission(row.pending_submission_json);
+  }
+
+  private loadLatestOperation(binding: PhaseRunBinding) {
+    const row = this.db.query<{ pending_operation_json: string }, [string, number]>(`
+      SELECT pending_operation_json
+      FROM btcc_phase_checkpoint_revisions
+      WHERE checkpoint_id = ? AND checkpoint_revision <= ?
+        AND pending_operation_json IS NOT NULL
+      ORDER BY checkpoint_revision DESC LIMIT 1
+    `).get(binding.checkpointId, binding.checkpointRevision);
+    return row ? decodePendingOperation(row.pending_operation_json) : undefined;
   }
 
   private loadHead(binding: PhaseRunBinding, requireExactRevision: boolean): CheckpointHead {

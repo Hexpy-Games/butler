@@ -1,16 +1,19 @@
 import type {
   ActualModelIdentity,
   OperationRequest,
+  PhaseContinuity,
 } from "../../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "../identity.ts";
 
 export function decodePendingOperation(value: string): {
   requests: OperationRequest[];
+  phaseContinuity?: PhaseContinuity;
   actualIdentity: ActualModelIdentity;
 } {
   const parsed = JSON.parse(value) as {
     kind?: string;
     requests?: OperationRequest[];
+    phaseContinuity?: PhaseContinuity;
     actualIdentity?: ActualModelIdentity;
   };
   if (
@@ -19,7 +22,11 @@ export function decodePendingOperation(value: string): {
   ) {
     throw new Error("BTCC pending operation carrier is invalid");
   }
-  return { requests: parsed.requests, actualIdentity: parsed.actualIdentity };
+  return {
+    requests: parsed.requests,
+    ...(parsed.phaseContinuity ? { phaseContinuity: parsed.phaseContinuity } : {}),
+    actualIdentity: parsed.actualIdentity,
+  };
 }
 
 export function decodePendingSubmission(value: string): {

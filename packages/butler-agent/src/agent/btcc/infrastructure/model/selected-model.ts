@@ -2,6 +2,7 @@ import type {
   ActualModelIdentity,
   OperationAuthority,
   OperationRequest,
+  PhaseContinuity,
   ProviderRoundValue,
   SelectedModel,
 } from "../../core/index.ts";
@@ -115,6 +116,7 @@ function decodeCarrier(
   }
   if (
     carrier.kind === "operation_requests" &&
+    isRecord(carrier.phaseContinuity) &&
     Array.isArray(carrier.requests) &&
     carrier.requests.length > 0 &&
     carrier.requests.every(isRecord)
@@ -122,6 +124,7 @@ function decodeCarrier(
     return {
       kind: "operation_requests",
       requests: carrier.requests.map((request) => bindOperationAuthority(request, authority)),
+      phaseContinuity: carrier.phaseContinuity as PhaseContinuity,
       actualIdentity,
     };
   }

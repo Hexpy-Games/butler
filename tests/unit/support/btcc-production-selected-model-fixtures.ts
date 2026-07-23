@@ -104,6 +104,15 @@ export function actualIdentity() {
   };
 }
 
+export function phaseContinuity() {
+  return {
+    objectiveState: "The phase objective is active.",
+    decisions: [],
+    unresolved: ["The requested operation must be observed."],
+    nextOperationPurpose: "Resolve the remaining phase question.",
+  };
+}
+
 export function promptRunner(
   run: (input: ProviderPhasePrompt) => Promise<ProviderPhasePromptResult>,
 ): ProviderPhasePromptRunner {

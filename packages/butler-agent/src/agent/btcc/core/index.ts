@@ -39,6 +39,7 @@ export type {
   PhaseConversationCommand,
   PhaseConversationSnapshot,
   PhaseConversationStore,
+  PhaseContinuity,
   PhaseEnvelope,
   PhaseInvocation,
   PhaseRunBinding,

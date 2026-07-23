@@ -38,7 +38,11 @@ export class LiveProviderHarnessModel implements SelectedModel {
     }
     const structuralTemplate = template.kind === "phase_submission"
       ? template.submission
-      : { kind: "operation_requests", requests: template.requests };
+      : {
+          kind: "operation_requests",
+          phaseContinuity: template.phaseContinuity,
+          requests: template.requests,
+        };
     try {
       return await this.authorValidCarrier(
         envelope,
@@ -73,10 +77,15 @@ export class LiveProviderHarnessModel implements SelectedModel {
     if (carrierKind === "operation_requests") {
       const carrier = submission as {
         kind: "operation_requests";
+        phaseContinuity?: Extract<
+          ProviderRound,
+          { kind: "operation_requests" }
+        >["phaseContinuity"];
         requests: Extract<ProviderRound, { kind: "operation_requests" }>["requests"];
       };
       return {
         kind: "operation_requests",
+        phaseContinuity: carrier.phaseContinuity,
         requests: carrier.requests,
         actualIdentity: actualIdentity(envelope),
       };

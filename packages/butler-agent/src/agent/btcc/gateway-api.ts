@@ -24,6 +24,7 @@ import type {
   OperationRequest,
   OperationResult,
   PhaseEnvelope,
+  PhaseContinuity,
   PhaseRunBinding,
 } from "./core/index.ts";
 
@@ -75,6 +76,7 @@ export type {
   OperationRequest,
   OperationResult,
   PhaseEnvelope,
+  PhaseContinuity,
   PhaseGuidanceDraft,
   PhaseGuidanceRepository,
   PhaseGuidanceRevisionRef,

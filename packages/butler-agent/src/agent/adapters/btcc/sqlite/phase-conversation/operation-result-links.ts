@@ -61,6 +61,24 @@ export class PhaseOperationResultLinks {
       .map(({ projection_json }) =>
         JSON.parse(projection_json) as OperationResultProjection);
   }
+
+  loadLatestRefs(binding: PhaseRunBinding): OperationResultProjection["resultRef"][] {
+    const latest = this.db.query<{ checkpoint_revision: number }, [string, number]>(`
+      SELECT MAX(checkpoint_revision) AS checkpoint_revision
+      FROM btcc_phase_operation_result_links
+      WHERE checkpoint_id = ? AND checkpoint_revision <= ?
+    `).get(binding.checkpointId, binding.checkpointRevision);
+    if (latest?.checkpoint_revision === null || latest?.checkpoint_revision === undefined) {
+      return [];
+    }
+    return this.db.query<{ projection_json: string }, [string, number]>(`
+      SELECT projection_json FROM btcc_phase_operation_result_links
+      WHERE checkpoint_id = ? AND checkpoint_revision = ?
+      ORDER BY rowid
+    `).all(binding.checkpointId, latest.checkpoint_revision)
+      .map(({ projection_json }) =>
+        (JSON.parse(projection_json) as OperationResultProjection).resultRef);
+  }
 }
 
 function normalizeProjection(

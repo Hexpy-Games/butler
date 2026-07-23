@@ -59,6 +59,8 @@ export type PhaseEnvelope = {
   context: OpeningContext;
   operationAuthority: OperationAuthority;
   operationResults: OperationResultProjection[];
+  latestOperationResultRefs?: OperationResultProjection["resultRef"][];
+  phaseContinuity?: PhaseContinuity;
   submissionSchema: SubmissionSchema;
   providerCorrection?: ProviderCorrection;
 };
@@ -102,6 +104,7 @@ export type ProviderRoundValue =
   | {
       kind: "operation_requests";
       requests: OperationRequest[];
+      phaseContinuity?: PhaseContinuity;
       actualIdentity: ActualModelIdentity;
     }
   | {
@@ -120,8 +123,11 @@ export type PhaseConversationSnapshot<Product> = {
   acceptedProduct: Product | null;
   acceptedActualIdentity?: ActualModelIdentity;
   operationResults: OperationResult[];
+  latestOperationResultRefs?: OperationResultProjection["resultRef"][];
+  phaseContinuity?: PhaseContinuity;
   pendingOperationRound?: {
     requests: OperationRequest[];
+    phaseContinuity?: PhaseContinuity;
     actualIdentity: ActualModelIdentity;
   };
   pendingSubmissionRound?: {
@@ -136,6 +142,7 @@ export interface PhaseConversationStore {
     binding: PhaseRunBinding;
     envelope: PhaseEnvelope;
     requests: OperationRequest[];
+    phaseContinuity?: PhaseContinuity;
     actualIdentity: ActualModelIdentity;
   }): Promise<PhaseRunBinding>;
   appendOperationResults(input: {
@@ -173,6 +180,13 @@ export type OperationAuthority = {
         baselineRef: { id: string; sha256: string };
         finalSnapshotRef: { id: string; sha256: string };
       };
+};
+
+export type PhaseContinuity = {
+  objectiveState: string;
+  decisions: string[];
+  unresolved: string[];
+  nextOperationPurpose: string;
 };
 
 export type WorkspaceOperationRoot =
