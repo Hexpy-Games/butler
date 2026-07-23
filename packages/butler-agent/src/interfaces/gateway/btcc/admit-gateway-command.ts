@@ -9,6 +9,7 @@ import type {
   InboundEnvelope,
   StoredSessionBinding,
 } from "../../../test-support/harness/contracts.ts";
+import { resolveModelMetadata } from "../../../integrations/providers/model-catalog.ts";
 
 export function admitGatewayCommand(input: {
   binding: StoredSessionBinding;
@@ -45,6 +46,7 @@ function admitWakeCommand(
   },
   wake: Record<string, unknown>,
 ): BtccTurnCommand {
+  const resultScopeRef = optionalText(wake.resultScopeRef);
   return {
     kind: "wake",
     turnId: input.turnId,
@@ -57,7 +59,17 @@ function admitWakeCommand(
       content: requiredText(input.envelope.message.text, "BTCC wake content"),
     },
     modelSelection: admitModel(input.binding, input.envelope),
-    context: input.context,
+    context: resultScopeRef
+      ? {
+          ...input.context,
+          baselineObservationScopeRefs: [
+            ...new Set([
+              ...input.context.baselineObservationScopeRefs,
+              resultScopeRef,
+            ]),
+          ],
+        }
+      : input.context,
   };
 }
 
@@ -100,12 +112,32 @@ function admitModel(
     reasoningEffort,
     controls: admittedControls,
     controlsHash: controls?.integrity_hash ?? digest(admittedControls),
+    contextWindowTokens: admittedContextWindow(binding, modelRef),
   };
+}
+
+function admittedContextWindow(
+  binding: StoredSessionBinding,
+  modelRef: string,
+): number {
+  const configured = binding.metadata?.context_window_tokens;
+  if (
+    typeof configured === "number" &&
+    Number.isFinite(configured) &&
+    configured > 0
+  ) {
+    return Math.trunc(configured);
+  }
+  return resolveModelMetadata(modelRef).context_window_tokens;
 }
 
 function requiredText(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is missing`);
   return value;
+}
+
+function optionalText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> | null {

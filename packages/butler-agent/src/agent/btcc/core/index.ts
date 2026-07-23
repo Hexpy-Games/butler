@@ -45,6 +45,7 @@ export type {
   ModelPhaseState,
   OperationExecutor,
   ObservationResult,
+  OperationPayloadSource,
   OperationAuthority,
   OperationRequest,
   OperationResult,
@@ -55,3 +56,7 @@ export type {
   WorkspaceOperationRoot,
 } from "./contracts.ts";
 export { OperationRejectedError } from "./operation-rejection.ts";
+export {
+  isSpooledOperationOutput,
+  type SpooledOperationOutput,
+} from "./operation-payload.ts";

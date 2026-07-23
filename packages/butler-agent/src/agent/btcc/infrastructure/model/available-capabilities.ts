@@ -57,7 +57,8 @@ function admittedObservationScopes(
 function scopeKind(scopeRef: string): ObservationScopeKind | undefined {
   const separator = scopeRef.indexOf(":");
   const kind = separator > 0 ? scopeRef.slice(0, separator) : "";
-  return kind === "workspace" || kind === "web" || kind === "memory" || kind === "ledger"
+  return kind === "workspace" || kind === "web" || kind === "memory" ||
+      kind === "ledger" || kind === "result"
     ? kind
     : undefined;
 }

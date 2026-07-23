@@ -104,7 +104,7 @@ test("closes a pre-commit promotion deferral without mutating the target", async
         SELECT status FROM btcc_tasks WHERE task_kind = 'repository_promotion'
       `).get();
       const promotionCalls = db.query<{ count: number }, []>(`
-        SELECT COUNT(*) AS count FROM btcc_phase_operation_results
+        SELECT COUNT(*) AS count FROM btcc_phase_operation_result_links
         WHERE request_json LIKE '%repository_promotion%'
       `).get();
       const dossier = db.query<{ content_json: string }, []>(`

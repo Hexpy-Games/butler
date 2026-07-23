@@ -59,7 +59,14 @@ describe("BTCC phase checkpoint persistence", () => {
     const restored = await store.restore<typeof product>(binding);
     expect(restored.binding.checkpointRevision).toBe(5);
     expect(restored.acceptedProduct).toEqual(product);
-    expect(restored.operationResults).toEqual([observation]);
+    expect(restored.operationResults).toHaveLength(1);
+    expect(restored.operationResults[0]).toMatchObject({
+      request,
+      outcome: observation.outcome,
+      observationRef: observation.observationRef,
+      preview: observation.content,
+      omittedBytes: 0,
+    });
     expect(restored.pendingOperationRound).toBeUndefined();
 
     const final = db.query<{
@@ -154,9 +161,9 @@ describe("BTCC phase checkpoint persistence", () => {
     });
 
     expect(db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM btcc_phase_operation_results
+      SELECT COUNT(*) AS count FROM btcc_phase_operation_result_links
     `).get()?.count).toBe(2);
-    expect((await store.restore(binding)).operationResults.map((item) => item.content))
+    expect((await store.restore(binding)).operationResults.map((item) => item.preview))
       .toEqual(["first", "second"]);
   });
 

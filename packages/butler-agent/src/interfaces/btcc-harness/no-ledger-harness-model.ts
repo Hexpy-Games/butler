@@ -84,7 +84,7 @@ function answer(envelope: PhaseEnvelope, scenario: NoLedgerScenario): ProviderRo
 function answerClaims(envelope: PhaseEnvelope, scenario: NoLedgerScenario) {
   if (!isAssistedScenario(scenario)) return [];
   return envelope.operationResults.map((result) => ({
-    claim: result.content,
+    claim: result.view?.content ?? result.preview,
     sourceRefs: [result.observationRef],
   }));
 }

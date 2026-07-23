@@ -33,7 +33,7 @@ describe("BTCC Task mutation scope", () => {
     });
 
     expect(result.outcome).toBe("operation_rejected");
-    expect(result.content).toContain("task_mutation_target_denied");
+    expect(result.content ?? result.preview).toContain("task_mutation_target_denied");
     expect(dispatched).toBe(false);
   });
 
@@ -56,7 +56,7 @@ describe("BTCC Task mutation scope", () => {
     });
 
     expect(result.outcome).toBe("operation_rejected");
-    expect(result.content).toContain("task_mutation_scope_escaped");
+    expect(result.content ?? result.preview).toContain("task_mutation_scope_escaped");
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
   });
 
@@ -75,7 +75,7 @@ describe("BTCC Task mutation scope", () => {
     });
 
     expect(result.outcome).toBe("operation_rejected");
-    expect(result.content).toContain("read_only_task_mutated_workspace");
+    expect(result.content ?? result.preview).toContain("read_only_task_mutated_workspace");
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
   });
 });

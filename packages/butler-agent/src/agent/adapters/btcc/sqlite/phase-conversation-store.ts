@@ -7,7 +7,6 @@ import type {
   PhaseEnvelope,
   PhaseRunBinding,
 } from "../../../btcc/gateway-api.ts";
-import { operationRoundScope } from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 import {
   contentRefId,
@@ -16,6 +15,8 @@ import {
   optionalJson,
   revisionRef,
 } from "./phase-conversation/checkpoint-codec.ts";
+import { PhaseOperationResultLinks } from
+  "./phase-conversation/operation-result-links.ts";
 
 type PhaseConversationStore = BtccRuntimeDependencies["phaseConversations"];
 type CheckpointHead = {
@@ -27,7 +28,11 @@ type CheckpointHead = {
 };
 
 export class SqlitePhaseConversationStore implements PhaseConversationStore {
-  constructor(private readonly db: Database) {}
+  private readonly operationResults: PhaseOperationResultLinks;
+
+  constructor(private readonly db: Database) {
+    this.operationResults = new PhaseOperationResultLinks(db);
+  }
 
   async restore<Product>(binding: PhaseRunBinding) {
     const head = this.loadHead(binding, false);
@@ -48,7 +53,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       ...(head.actual_identity_json
         ? { acceptedActualIdentity: JSON.parse(head.actual_identity_json) as ActualModelIdentity }
         : {}),
-      operationResults: this.loadOperationResults(currentBinding),
+      operationResults: this.operationResults.load(currentBinding),
       ...(revision?.pending_operation_json
         ? { pendingOperationRound: decodePendingOperation(revision.pending_operation_json) }
         : {}),
@@ -91,11 +96,14 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
     if (input.results.length === 0) throw new Error("BTCC operation result append cannot be empty");
     return this.db.transaction(() => {
       this.loadHead(input.binding, true);
-      for (const item of input.results) this.insertOperationResult(input.binding, item);
+      const results = input.results.map((item) => ({
+        request: item.request,
+        result: this.operationResults.insert(input.binding, item),
+      }));
       return this.appendRevision({
         binding: input.binding,
         status: "operations_applied",
-        operationResultRefs: input.results.map(({ result }) => result.observationRef),
+        operationResultRefs: results.map(({ result }) => result.resultRef),
       });
     })();
   }
@@ -252,51 +260,6 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       round.kind,
       stableJson(round.actualIdentity),
     );
-  }
-
-  private insertOperationResult(
-    binding: PhaseRunBinding,
-    input: { request: OperationRequest; result: OperationResult },
-  ): void {
-    const requestJson = stableJson(input.request);
-    const resultJson = stableJson(input.result);
-    if (stableJson(input.result.request) !== requestJson) {
-      throw new Error("BTCC operation result embeds a different request");
-    }
-    const operationId = digest(
-      `btcc-phase-operation.v2\0${operationRoundScope(binding)}\0${input.request.requestId}`,
-    );
-    this.db.query(`
-      INSERT OR IGNORE INTO btcc_phase_operation_results (
-        operation_id, checkpoint_id, checkpoint_revision,
-        request_id, request_json, result_json
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      operationId,
-      binding.checkpointId,
-      binding.checkpointRevision + 1,
-      input.request.requestId,
-      requestJson,
-      resultJson,
-    );
-    const row = this.db.query<{
-      request_json: string;
-      result_json: string;
-    }, [string]>(`
-      SELECT request_json, result_json FROM btcc_phase_operation_results
-      WHERE operation_id = ?
-    `).get(operationId);
-    if (row?.request_json !== requestJson || row.result_json !== resultJson) {
-      throw new Error("BTCC operation request identity conflict");
-    }
-  }
-
-  private loadOperationResults(binding: PhaseRunBinding): OperationResult[] {
-    return this.db.query<{ result_json: string }, [string, number]>(`
-      SELECT result_json FROM btcc_phase_operation_results
-      WHERE checkpoint_id = ? AND checkpoint_revision <= ? ORDER BY checkpoint_revision, rowid
-    `).all(binding.checkpointId, binding.checkpointRevision)
-      .map(({ result_json }) => JSON.parse(result_json) as OperationResult);
   }
 
   private loadPendingSubmission(binding: PhaseRunBinding) {

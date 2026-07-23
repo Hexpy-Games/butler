@@ -234,7 +234,7 @@ describe("production BTCC artifact operations", () => {
     });
 
     expect(result.outcome).toBe("operation_rejected");
-    expect(JSON.parse(result.content)).toEqual({
+    expect(JSON.parse(result.content ?? result.preview ?? "")).toEqual({
       status: "rejected",
       code: "sensitive_path_blocked",
       message: "The requested path is outside the admitted workspace safety policy.",
@@ -280,7 +280,7 @@ describe("production BTCC artifact operations", () => {
       request, envelope: workspaceEnvelope(provision),
     });
     expect(result.outcome).toBe("operation_rejected");
-    expect(result.content).toContain("task_mutation_target_invalid");
+    expect(result.content ?? result.preview).toContain("task_mutation_target_invalid");
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
   });
 

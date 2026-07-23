@@ -26,6 +26,6 @@ test("a single-file workspace rejects a second logical target before dispatch", 
     request, envelope: workspaceEnvelope(provision),
   });
   expect(result.outcome).toBe("operation_rejected");
-  expect(result.content).toContain("workspace_target_mismatch");
+  expect(result.content ?? result.preview).toContain("workspace_target_mismatch");
   expect(readFileSync(fixture.targetPath, "utf8")).toBe(fixture.original);
 });

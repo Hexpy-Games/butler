@@ -45,7 +45,10 @@ describe("artifact workspace observation", () => {
       envelope: phase,
     });
 
-    expect(JSON.parse(observed.content)).toEqual({ content: changed, path: "guide.md" });
+    expect(JSON.parse(observed.content ?? observed.preview ?? "")).toEqual({
+      content: changed,
+      path: "guide.md",
+    });
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
     expect(observed.artifactRevisionRef).toBeUndefined();
   });

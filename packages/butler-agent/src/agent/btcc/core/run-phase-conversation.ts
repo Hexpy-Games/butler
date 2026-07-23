@@ -7,6 +7,10 @@ import type {
   OperationResult,
 } from "./contracts.ts";
 import {
+  projectEphemeralOperationResult,
+  type OperationResultProjection,
+} from "../operation-result/index.ts";
+import {
   isBtccOperationalInterruption,
   OperationalInterruptionError,
 } from "../recovery/index.ts";
@@ -167,13 +171,26 @@ function assembleEnvelope<Product>(
   command: PhaseConversationCommand<Product>,
   conversation: PhaseConversationSnapshot<Product>,
 ): PhaseEnvelope {
+  const operationResults = conversation.operationResults.map((result) =>
+    normalizeOperationResult(
+      result,
+      conversation.binding,
+      command.modelSelection,
+    ));
+  const operationAuthority = {
+    ...command.operationAuthority,
+    observationScopeRefs: [
+      ...command.operationAuthority.observationScopeRefs,
+      ...operationResults.map((result) => result.readScopeRef),
+    ],
+  };
   return {
     binding: conversation.binding,
     ...command.phaseContract,
     modelSelection: command.modelSelection,
     context: command.context,
-    operationAuthority: command.operationAuthority,
-    operationResults: conversation.operationResults,
+    operationAuthority,
+    operationResults,
     submissionSchema: command.codec.submissionSchema,
     ...(command.providerCorrection
       ? { providerCorrection: command.providerCorrection }
@@ -181,22 +198,39 @@ function assembleEnvelope<Product>(
   };
 }
 
+function normalizeOperationResult(
+  result: OperationResult,
+  binding: PhaseEnvelope["binding"],
+  modelSelection: PhaseEnvelope["modelSelection"],
+): OperationResultProjection {
+  if (isOperationResultProjection(result)) return result;
+  if (!result.content) {
+    throw new Error("BTCC operation result has neither a projection nor complete content");
+  }
+  return projectEphemeralOperationResult({
+    binding,
+    request: result.request,
+    result: { ...result, content: result.content },
+    modelSelection,
+  });
+}
+
 async function performRequestedObservations<Product>(
   command: PhaseConversationCommand<Product>,
   envelope: PhaseEnvelope,
   requests: OperationRequest[],
-): Promise<Array<{ request: OperationRequest; result: OperationResult }>> {
+): Promise<Array<{ request: OperationRequest; result: OperationResultProjection }>> {
   if (requests.length === 0) {
     throw new Error("BTCC operation request carrier must not be empty");
   }
   const roundRequests = new Map<string, OperationRequest>();
   const results: Array<{
     request: OperationRequest;
-    result: OperationResult;
+    result: OperationResultProjection;
   }> = [];
   for (const request of requests) {
     command.executionPermit.assertActive();
-    assertAuthorizedOperationKind(request, command.operationAuthority);
+    assertAuthorizedOperationKind(request, envelope.operationAuthority);
     const existing = roundRequests.get(request.requestId);
     if (existing) {
       if (!sameRequest(existing, request)) {
@@ -205,20 +239,35 @@ async function performRequestedObservations<Product>(
       throw new Error("BTCC provider round contains a duplicate operation request ID");
     }
     roundRequests.set(request.requestId, request);
-    const observation = await command.operations.perform({
+    const observed = await command.operations.perform({
       request,
       envelope,
       signal: command.executionPermit.signal,
     });
     command.executionPermit.assertActive();
-    if (observation.requestId !== request.requestId) {
+    if (observed.requestId !== request.requestId) {
       throw new Error("BTCC observation result does not match its request");
     }
-    const result = { ...observation, request };
+    const result = isOperationResultProjection(observed)
+      ? { ...observed, request }
+      : projectEphemeralOperationResult({
+          binding: envelope.binding,
+          request,
+          result: observed,
+          modelSelection: envelope.modelSelection,
+        });
     results.push({ request, result });
   }
   command.executionPermit.assertActive();
   return results;
+}
+
+function isOperationResultProjection(
+  result: OperationResult | Awaited<
+    ReturnType<PhaseConversationCommand<unknown>["operations"]["perform"]>
+  >,
+): result is OperationResultProjection {
+  return "resultRef" in result && "preview" in result && "readScopeRef" in result;
 }
 
 function sameRequest(

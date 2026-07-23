@@ -27,8 +27,8 @@ test("operation journals scope a model request ID to its provider round", async 
     },
   });
 
-  expect(firstResult.content).toContain("initial");
-  expect(correctedResult.content).toContain("corrected");
+  expect(firstResult.content ?? firstResult.preview).toContain("initial");
+  expect(correctedResult.content ?? correctedResult.preview).toContain("corrected");
 });
 
 function request(query: string) {

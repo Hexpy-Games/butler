@@ -3,6 +3,58 @@ import type {
   StructuralCapabilityDefinition,
 } from "../../btcc/index.ts";
 import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
+import { READ_OPERATION_RESULT_CAPABILITY } from "../../btcc/operation-result/index.ts";
+
+const RESULT_READ_CAPABILITY: StructuralCapabilityDefinition = {
+  capabilityRef: READ_OPERATION_RESULT_CAPABILITY,
+  name: READ_OPERATION_RESULT_CAPABILITY,
+  description: "Read an exact byte, line, search, or JSON-pointer view from a prior complete operation result without rerunning it.",
+  operationKinds: ["observe"],
+  observationScopeKinds: ["result"],
+  inputSchema: {
+    anyOf: [
+      {
+        type: "object",
+        properties: {
+          selector: { type: "string", const: "bytes" },
+          start: { type: "integer", minimum: 0 },
+          length: { type: "integer", minimum: 1 },
+        },
+        required: ["selector", "start", "length"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: {
+          selector: { type: "string", const: "lines" },
+          start_line: { type: "integer", minimum: 1 },
+          limit: { type: "integer", minimum: 1 },
+        },
+        required: ["selector", "start_line", "limit"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: {
+          selector: { type: "string", const: "search" },
+          query: { type: "string", minLength: 1 },
+          max_matches: { type: "integer", minimum: 1 },
+        },
+        required: ["selector", "query", "max_matches"],
+        additionalProperties: false,
+      },
+      {
+        type: "object",
+        properties: {
+          selector: { type: "string", const: "json_pointer" },
+          pointer: { type: "string" },
+        },
+        required: ["selector", "pointer"],
+        additionalProperties: false,
+      },
+    ],
+  },
+};
 
 const PROMOTION_CAPABILITY: StructuralCapabilityDefinition = {
   capabilityRef: "promote_reviewed_candidate",
@@ -18,5 +70,11 @@ const PROMOTION_CAPABILITY: StructuralCapabilityDefinition = {
 };
 
 export function createProductionCapabilityCatalog(): StructuralCapabilityCatalog {
-  return { list: () => [...PRODUCTION_CAPABILITIES, PROMOTION_CAPABILITY] };
+  return {
+    list: () => [
+      ...PRODUCTION_CAPABILITIES,
+      RESULT_READ_CAPABILITY,
+      PROMOTION_CAPABILITY,
+    ],
+  };
 }

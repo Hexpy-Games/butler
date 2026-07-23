@@ -101,7 +101,6 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
       command: string(),
       cwd: string(),
       timeout_ms: integer(1, 600_000),
-      max_output_tokens: integer(1, 100_000),
     }, ["command"]),
     execute: executeCommandCapability,
   },
@@ -128,7 +127,6 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     observationScopeKinds: ["web"],
     inputSchema: object({
       url: string(),
-      max_chars: integer(500, 8_000),
       backend: {
         type: "string",
         enum: ["auto", "lightpanda", "lightweight", "jina-hosted", "disabled"],

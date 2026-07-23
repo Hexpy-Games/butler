@@ -4,6 +4,8 @@ import type { ExecutionPermit } from "../recovery/index.ts";
 import type { OperationalActivation } from "../recovery/index.ts";
 import type { SubmissionSchema } from "./submission-schema.ts";
 import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
+import type { OperationResultProjection } from "../operation-result/contracts.ts";
+import type { OperationResultCompleteness } from "../operation-result/contracts.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -233,7 +235,16 @@ export type OperationResult = {
     | "review_validated"
     | "promoted";
   observationRef: { id: string; sha256: string };
-  content: string;
+  content?: string;
+  completeness?: OperationResultCompleteness;
+  resultRef?: OperationResultProjection["resultRef"];
+  requestRef?: OperationResultProjection["requestRef"];
+  capabilityRef?: string;
+  byteLength?: number;
+  preview?: string;
+  omittedBytes?: number;
+  readScopeRef?: string;
+  view?: OperationResultProjection["view"];
   artifactRevisionRef?: { id: string; sha256: string };
   targetSnapshotRef?: { id: string; sha256: string };
   validationReceiptRef?: { id: string; sha256: string };
@@ -250,14 +261,29 @@ export type OperationResult = {
   };
 };
 
-export type ObservationResult = Omit<OperationResult, "request">;
+export type OperationPayloadSource =
+  | string
+  | {
+      kind: "spooled_text";
+      path: string;
+      sha256: string;
+      byteLength: number;
+      mediaType: "text/plain; charset=utf-8";
+    };
+
+export type ObservationResult =
+  Omit<OperationResult, "request" | "content">
+  & {
+      content: string;
+      payloadSource?: OperationPayloadSource;
+    };
 
 export interface OperationExecutor {
   perform(input: {
     request: OperationRequest;
     envelope: PhaseEnvelope;
     signal?: AbortSignal;
-  }): Promise<ObservationResult>;
+  }): Promise<ObservationResult | OperationResultProjection>;
 }
 
 export type PhaseCodec<Product> = {
