@@ -52,6 +52,12 @@ export function releasePublicationClaim(path, transaction) {
 }
 
 export function reconcilePublicationClaim(path, transaction, referenced) {
+  if (transaction.status === "observed") {
+    if (!existsSync(path)) return;
+    assertPublicationClaim(path, transaction);
+    rmSync(path, { recursive: true, force: true });
+    return;
+  }
   if (!referenced) {
     if (!existsSync(path)) return;
     assertPublicationClaim(path, transaction);
