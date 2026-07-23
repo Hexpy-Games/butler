@@ -229,6 +229,90 @@ test("anchors provider recovery after the latest operation checkpoint", async ()
   });
 });
 
+test("returns a denied Task target to the same Phase conversation", async () => {
+  const results: OperationResult[] = [];
+  const workspaceRef = { id: "workspace-1", sha256: "workspace-sha" };
+  let calls = 0;
+  const product = await runPhaseConversation({
+    binding,
+    modelSelection: selectedModel(),
+    context: openingContext(),
+    phaseContract: {
+      phase: "task_execution",
+      objective: "execute_only_the_accepted_target",
+      duties: [],
+      prohibitions: [],
+    },
+    codec: {
+      submissionSchema: objectSchema({}),
+      decode: () => ({ kind: "complete" }),
+    },
+    store: {
+      restore: async (current) => ({
+        binding: current,
+        acceptedProduct: null,
+        operationResults: [...results],
+      }),
+      appendOperationRound: async ({ binding: current }) => nextBinding(current),
+      appendOperationResults: async ({ binding: current, results: appended }) => {
+        results.push(...appended.map((item) => item.result));
+        return nextBinding(current);
+      },
+      appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
+      acceptPhaseProduct: async ({ binding: current }) => nextBinding(current),
+    },
+    model: {
+      runRound: async (envelope) => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            kind: "operation_requests",
+            requests: [{
+              requestId: "denied-root",
+              kind: "workspace_artifact_action",
+              capabilityRef: "workspace:write",
+              workspaceRef,
+              relativeTarget: ".",
+              input: { action: "inspect" },
+            }],
+            actualIdentity: selectedModel(),
+          };
+        }
+        expect(envelope.operationResults).toMatchObject([{
+          requestId: "denied-root",
+          outcome: "operation_rejected",
+        }]);
+        return {
+          kind: "phase_submission",
+          submission: { kind: "complete" },
+          actualIdentity: selectedModel(),
+        };
+      },
+    },
+    operations: {
+      perform: async ({ request }) => ({
+        requestId: request.requestId,
+        outcome: "operation_rejected",
+        observationRef: { id: "denial", sha256: "denial-sha" },
+        content: "target is outside the accepted Task mutation scope",
+      }),
+    },
+    operationAuthority: {
+      observationScopeRefs: [],
+      mutation: {
+        kind: "workspace_only",
+        workspaceRef,
+        operationRoot: { kind: "directory", relativeTarget: "." },
+        mutationScope: { kind: "contained_paths", writablePaths: ["src/sample.ts"] },
+      },
+    },
+    executionPermit: activePermit(),
+  });
+
+  expect(product).toEqual({ kind: "complete" });
+  expect(calls).toBe(2);
+});
+
 function selectedModel() {
   return {
     provider: "openai",

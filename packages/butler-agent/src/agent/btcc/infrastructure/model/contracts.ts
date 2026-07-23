@@ -78,6 +78,7 @@ export type RenderedPhasePrompt = {
   prompt: string;
   responseSchema: Record<string, unknown>;
   carrierFunctions: readonly ProviderCarrierFunction[];
+  admissionSchema: Record<string, unknown>;
 };
 
 export type ResolveAvailableCapabilitiesInput = {

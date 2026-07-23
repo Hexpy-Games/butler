@@ -23,9 +23,10 @@ export function createProductionSelectedModel(
       try {
         const rendered = await renderProviderPrompt(envelope, dependencies);
         if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
+        const { admissionSchema, ...providerPrompt } = rendered;
         const result = await promptRunner.run({
           modelSelection: envelope.modelSelection,
-          ...rendered,
+          ...providerPrompt,
           cacheScope: `btcc:${envelope.phase}`,
           signal,
         });
@@ -35,7 +36,7 @@ export function createProductionSelectedModel(
           });
         }
         try {
-          assertCarrierMatchesRenderedSchema(result.carrier, rendered.responseSchema);
+          assertCarrierMatchesRenderedSchema(result.carrier, admissionSchema);
           return decodeCarrier(
             result.carrier,
             envelope.operationAuthority,
@@ -147,26 +148,6 @@ function bindOperationAuthority(
     return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
   }
   if (value.kind === "workspace_artifact_action" && authority.mutation.kind === "workspace_only") {
-    if (
-      authority.mutation.operationRoot.kind === "file" &&
-      value.relativeTarget !== authority.mutation.operationRoot.relativeTarget
-    ) {
-      throw new ProviderCarrierProtocolError(
-        `BTCC provider requested ${String(value.relativeTarget)}; ` +
-        `the single-file Task allows only ${authority.mutation.operationRoot.relativeTarget}`,
-      );
-    }
-    if (
-      authority.mutation.mutationScope.kind === "contained_paths" &&
-      !authority.mutation.mutationScope.writablePaths.some((path) =>
-        path === "." || value.relativeTarget === path ||
-        String(value.relativeTarget).startsWith(`${path}/`))
-    ) {
-      throw new ProviderCarrierProtocolError(
-        `BTCC provider requested ${String(value.relativeTarget)}; ` +
-        `the Task allows only ${authority.mutation.mutationScope.writablePaths.join(", ")}`,
-      );
-    }
     return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
   }
   if (value.kind === "review_validation" &&

@@ -1,7 +1,20 @@
 import type { AvailablePhaseCapability } from "./contracts.ts";
 import type { ProviderCarrierFunction } from "./contracts.ts";
+import type { OperationAuthority } from "../../core/index.ts";
 
 export function providerCarrierSchema(
+  capabilities: readonly AvailablePhaseCapability[],
+  submissionSchema: Record<string, unknown>,
+  authority: OperationAuthority,
+): Record<string, unknown> {
+  const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
+  if (capabilities.length > 0) {
+    carrierVariants.push(operationRequestsSchema(capabilities, authority));
+  }
+  return { type: "object", anyOf: carrierVariants };
+}
+
+export function providerCarrierAdmissionSchema(
   capabilities: readonly AvailablePhaseCapability[],
   submissionSchema: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -15,6 +28,7 @@ export function providerCarrierSchema(
 export function providerCarrierFunctions(
   capabilities: readonly AvailablePhaseCapability[],
   submissionSchema: Record<string, unknown>,
+  authority: OperationAuthority,
 ): ProviderCarrierFunction[] {
   const functions: ProviderCarrierFunction[] = [{
     name: "submit_btcc_phase_submission",
@@ -23,7 +37,7 @@ export function providerCarrierFunctions(
     parameters: objectParameters({ submission: submissionSchema }, ["submission"]),
   }];
   if (capabilities.length > 0) {
-    const requests = operationRequestsSchema(capabilities).properties as Record<string, unknown>;
+    const requests = operationRequestsSchema(capabilities, authority).properties as Record<string, unknown>;
     functions.push({
       name: "submit_btcc_operation_requests",
       description: "Request one or more operations allowed by the current BTCC phase.",
@@ -47,6 +61,7 @@ function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Recor
 
 function operationRequestsSchema(
   capabilities: readonly AvailablePhaseCapability[],
+  authority?: OperationAuthority,
 ): Record<string, unknown> {
   return {
     properties: {
@@ -54,7 +69,7 @@ function operationRequestsSchema(
       requests: {
         type: "array",
         minItems: 1,
-        items: { anyOf: capabilities.map(operationSchema) },
+        items: { anyOf: capabilities.map((capability) => operationSchema(capability, authority)) },
       },
     },
     required: ["kind", "requests"],
@@ -64,6 +79,7 @@ function operationRequestsSchema(
 
 function operationSchema(
   capability: AvailablePhaseCapability,
+  authority?: OperationAuthority,
 ): Record<string, unknown> {
   const common = {
     capabilityRef: stringConstant(capability.capabilityRef),
@@ -78,7 +94,9 @@ function operationSchema(
     case "workspace_artifact_action":
       return operationShape("workspace_artifact_action", {
         ...common,
-        relativeTarget: { type: "string" },
+        relativeTarget: authority
+          ? { type: "string", enum: workspaceTargets(authority) }
+          : { type: "string" },
       });
     case "workspace_artifact_observation":
       return operationShape("workspace_artifact_observation", common);
@@ -91,6 +109,16 @@ function operationSchema(
         ...common,
       });
   }
+}
+
+function workspaceTargets(authority: OperationAuthority): string[] {
+  if (authority.mutation.kind !== "workspace_only") return [];
+  if (authority.mutation.operationRoot.kind === "file") {
+    return [authority.mutation.operationRoot.relativeTarget];
+  }
+  return authority.mutation.mutationScope.kind === "contained_paths"
+    ? authority.mutation.mutationScope.writablePaths
+    : [authority.mutation.operationRoot.relativeTarget];
 }
 
 function operationShape(
