@@ -39,6 +39,7 @@ export function selectOperationResult(input: {
   payloadSha256: string;
   byteLength: number;
   selector: OperationResultSelector;
+  jsonDocument?: unknown;
 }): OperationResultView {
   if (input.selector.kind === "bytes") {
     const start = Math.min(input.selector.start, input.byteLength);
@@ -89,7 +90,10 @@ export function selectOperationResult(input: {
   return {
     selector: input.selector,
     content: JSON.stringify(
-      readJsonPointer(JSON.parse(content), input.selector.pointer),
+      readJsonPointer(
+        input.jsonDocument ?? JSON.parse(content),
+        input.selector.pointer,
+      ),
     ),
     byteStart: 0,
     byteEnd: input.byteLength,
