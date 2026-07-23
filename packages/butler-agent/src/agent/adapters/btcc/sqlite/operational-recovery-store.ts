@@ -24,11 +24,13 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       INSERT INTO btcc_operational_interruptions (
         interruption_id, turn_id, turn_revision, semantic_state,
         checkpoint_id, checkpoint_revision, claim_id, execution_fence,
-        code, activation_kind, activation_count, status, interrupted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'interrupted', ?)
+        code, activation_kind, diagnostic_message,
+        activation_count, status, interrupted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'interrupted', ?)
       ON CONFLICT(claim_id, code, activation_kind) DO UPDATE SET
         activation_count = CASE WHEN status = 'interrupted'
           THEN activation_count ELSE activation_count + 1 END,
+        diagnostic_message = excluded.diagnostic_message,
         status = 'interrupted', interrupted_at = excluded.interrupted_at,
         resolved_at = NULL
     `).run(
@@ -42,6 +44,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       anchor.executionFence,
       interruption.code,
       interruption.activation.kind,
+      diagnosticMessage(interruption),
       new Date().toISOString(),
     );
     const row = this.db.query<ReceiptRow, [string, string, string]>(`
@@ -120,6 +123,12 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       ORDER BY interruption.interrupted_at
     `).all().map((row) => row.turn_id);
   }
+}
+
+function diagnosticMessage(interruption: OperationalInterruptionError): string | null {
+  const cause = interruption.cause;
+  if (cause instanceof Error) return `${cause.name}: ${cause.message}`;
+  return cause === undefined ? null : String(cause);
 }
 
 function interruptionId(interruption: OperationalInterruptionError): string {
