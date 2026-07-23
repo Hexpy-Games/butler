@@ -108,13 +108,16 @@ test("workspace review passes with a successful disposable validation receipt", 
   expect(product.review.reviewValidationReceiptSetRefs).toEqual([
     ref("validation-receipt"),
   ]);
+  expect(product.review.reviewedResultRefs[0]).toEqual(ref("result-summary"));
+  expect(product.review.reviewedResultRefs).toHaveLength(2);
+  expect(product.review.criterionVerdicts[0]?.reviewedResultRefs)
+    .toEqual(product.review.reviewedResultRefs);
 });
 
 test("workspace review diagnoses a criterion outside the current Task", async () => {
   const error = await reviewTask(reviewInvocation([], {
     criterionVerdicts: [{
       criterionRef: ref("another-task-criterion"),
-      reviewedResultRefs: [ref("result-summary")],
       observation: "unrelated criterion",
       verdict: "satisfied",
     }],
@@ -129,7 +132,6 @@ test("workspace review diagnoses a criterion outside the current Task", async ()
 test("workspace review diagnoses a duplicate current Task criterion", async () => {
   const duplicateVerdict = {
     criterionRef: ref("criterion"),
-    reviewedResultRefs: [ref("result-summary")],
     observation: "duplicate criterion",
     verdict: "satisfied",
   };
@@ -250,7 +252,6 @@ function invocation(
               kind: "task_review",
               criterionVerdicts: criterionVerdicts ?? [{
                 criterionRef: ref("criterion"),
-                reviewedResultRefs: [ref("result-summary")],
                 observation: "the disposable validation passed",
                 verdict: "satisfied",
               }],

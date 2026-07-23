@@ -9,14 +9,12 @@ const COMPACT_CONTRACTS = [
       "When project work requires a governing Spec but none is admitted, author the smallest sufficient Spec under specParentRootId; never select an observed but unaccepted catalog Spec.",
       "Every authored Spec declares parentId and concernId in reviewed bytes; use specParentRootId for a project-root Spec and an exact Spec logical id for a child.",
       "A Work is a cohesive product outcome, never a phase, file bucket, or agent assignment.",
-      "A Task is the smallest independently executable and reviewable outcome.",
+      "A Task is the smallest independently executable and reviewable semantic contribution.",
+      "Split independently deliverable persistence, semantic evaluation, policy, product-path integration, and durable verification contributions by their real dependencies; never collapse a layered feature into one broad implementation Task.",
+      "Task granularity is never decided by file count, path count, token budget, tool calls, model rounds, or elapsed time.",
+      "Planning Review simulates each projected Task alone and rejects a boundary whose ordinary findings would reopen several separable correction programs.",
+      "Resolve uncertain production call paths before accepting mutation authority; do not combine call-path discovery with delivery of every feature layer.",
       "Every required Goal outcome is covered exactly by observable criteria and questions.",
-      "Implementation repair preserves the accepted graph; graph changes require governing review.",
-    ],
-  },
-  {
-    contractId: "SPEC-BTCC-PLANNING-RECORD-CONTRACT",
-    applicableRules: [
       "Author one complete acyclic Work and Task graph with exact dependency order.",
       "Bind every criterion and verification question to its Goal fields and required outcome.",
       "Give every Task one exact artifact policy and bind the complete Task set to one lifecycle.",
@@ -37,6 +35,7 @@ const COMPACT_CONTRACTS = [
       "The Plan declares the reviewed selector, target, baseline policy, and journaled_complete_target_exchange_v1 protocol; runtime contracts own workspace provisioning, journal storage and transitions, crash reconciliation, and snapshot canonicalization, so do not re-specify them per Plan.",
       "Planning Review compares runtime-owned candidate refs and observedManifestRevision with currentPlanningAuthority; acceptedAuthority.managedBinding.expectedManifestRevision is the pre-bind lineage base, not the candidate revision.",
       "Planning Review judges the exact materialized candidate bytes and may require revision.",
+      "Implementation repair preserves the accepted graph; graph changes require governing review.",
     ],
   },
   {
