@@ -21,6 +21,7 @@ const COMPACT_CONTRACTS = [
       "Implement the accepted Goal artifactPersistence exactly: required includes a repository-promotion Task and lifecycle; not_required includes neither.",
       "Declare task-bound external EffectIntents, structured risks and assumptions, and exact integration criteria.",
       "Separate the shared artifact workspace from each Task's mutation authority: workspacePath names the shared baseline and promotion root, while mutationScope is read_only or exact contained writable paths.",
+      "Plan paths are relative to the admitted workspace scope: use '.' for that exact root and never copy the absolute admitted workspace path into workspacePath, repository-promotion targetPath, or writablePaths.",
       "A Task that observes or extends a predecessor WorkspaceRevision remains workspace_artifact on the exact same workspacePath; dependent Tasks may and usually should have different mutationScope values.",
       "Use mutationScope read_only for verification that must inspect accepted workspace bytes without persisting changes. Use contained_paths for implementation and declare only the paths owned by that Task.",
       "The workspace or writable path '.' is valid only when one cohesive outcome truly owns that complete root; never widen to it by convenience.",

@@ -32,8 +32,9 @@ export function readArtifactPolicy(
   const policy = requireRecord(value, `${label}.artifactPolicy`);
   const kind = requireString(policy.kind, `${label}.artifactPolicy.kind`);
   if (kind === "workspace_artifact") {
-    const workspacePath = requireContainedTargetPath(
+    const workspacePath = requireContainedPath(
       requireString(policy.workspacePath, `${label}.artifactPolicy.workspacePath`),
+      "workspace_path",
     );
     return {
       kind,
@@ -43,8 +44,9 @@ export function readArtifactPolicy(
       baselinePolicy: "capture_at_workspace_provision",
     };
   }
-  const targetPath = requireContainedTargetPath(
+  const targetPath = requireContainedPath(
     requireString(policy.targetPath, `${label}.artifactPolicy.targetPath`),
+    "promotion_target",
   );
   const targetScopeRef = containedWorkspaceScope(workspaceScopeRef, targetPath);
   if (kind === "repository_promotion") return { kind, targetScopeRef, targetPath };
@@ -59,8 +61,9 @@ function readMutationScope(value: unknown, label: string): TaskMutationScope {
     if (!Array.isArray(scope.writablePaths) || scope.writablePaths.length === 0) {
       rejectPlanningProposal("artifact_mutation_scope_empty", "Writable mutation scope is empty");
     }
-    const writablePaths = scope.writablePaths.map((path, index) => requireContainedTargetPath(
+    const writablePaths = scope.writablePaths.map((path, index) => requireContainedPath(
       requireString(path, `${label}.artifactPolicy.mutationScope.writablePaths[${index}]`),
+      "writable_path",
     ));
     if (new Set(writablePaths).size !== writablePaths.length) {
       rejectPlanningProposal("artifact_mutation_scope_duplicate", "Writable paths must be unique");
@@ -112,23 +115,43 @@ export function authorArtifactLifecycle(
   };
 }
 
-function requireContainedTargetPath(value: string): string {
+type PathField = "workspace_path" | "promotion_target" | "writable_path";
+
+const PATH_FIELD = {
+  workspace_path: {
+    code: "artifact_workspace_path_invalid",
+    label: "workspacePath",
+  },
+  promotion_target: {
+    code: "artifact_promotion_target_invalid",
+    label: "repository-promotion targetPath",
+  },
+  writable_path: {
+    code: "artifact_writable_path_invalid",
+    label: "mutationScope writablePath",
+  },
+} as const;
+
+function requireContainedPath(value: string, field: PathField): string {
   const normalized = value.replaceAll("\\", "/");
+  const diagnostic = PATH_FIELD[field];
   if (
     normalized.startsWith("/") || normalized.length === 0 ||
     normalized.includes("\0") || normalized[1] === ":"
   ) {
     rejectPlanningProposal(
-      "artifact_target_invalid",
-      "Artifact targetPath must name a workspace-relative contained target",
+      diagnostic.code,
+      `${diagnostic.label} must be relative to the admitted workspace scope; ` +
+        "use \".\" for the exact admitted root",
     );
   }
   if (normalized === ".") return normalized;
   const segments = normalized.split("/");
   if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
     rejectPlanningProposal(
-      "artifact_target_escapes",
-      "Artifact targetPath escapes or ambiguously names the workspace",
+      diagnostic.code,
+      `${diagnostic.label} must be a normalized contained path and cannot escape ` +
+        "the admitted workspace scope",
     );
   }
   return segments.join("/");

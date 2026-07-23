@@ -145,7 +145,7 @@ describe("BTCC Planning contract", () => {
       if (task.artifactPolicy?.kind === "workspace_artifact") {
         task.artifactPolicy.workspacePath = targetPath;
       }
-      expect(() => authorPlanCandidate(submission, authoringState())).toThrow("targetPath");
+      expect(() => authorPlanCandidate(submission, authoringState())).toThrow("workspacePath");
     }
   });
 
