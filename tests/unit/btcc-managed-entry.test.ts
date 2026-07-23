@@ -218,14 +218,17 @@ describe("BTCC managed executable ingress", () => {
       });
       expect(phaseInputs.get("task_execution")).toMatchObject({
         acceptedGoalContract: { request: expect.any(String) },
-        acceptedPlan: { strategy: expect.any(String) },
+        acceptedPlanRef: { id: expect.any(String), sha256: expect.any(String) },
         currentTask: { intendedOutcome: expect.any(String) },
       });
+      expect(phaseInputs.get("task_execution")).not.toHaveProperty("acceptedPlan");
       expect(phaseInputs.get("task_review")).toMatchObject({
         acceptedGoalContract: { request: expect.any(String) },
+        acceptedPlanRef: { id: expect.any(String), sha256: expect.any(String) },
         currentWork: { outcome: expect.any(String) },
         currentTask: { intendedOutcome: expect.any(String) },
       });
+      expect(phaseInputs.get("task_review")).not.toHaveProperty("acceptedPlan");
       expect(phaseInputs.get("consolidation")).toMatchObject({
         acceptedGoalContract: { request: expect.any(String) },
         acceptedPlan: { strategy: expect.any(String) },

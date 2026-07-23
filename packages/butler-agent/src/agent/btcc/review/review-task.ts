@@ -164,7 +164,9 @@ function decodeCriterionVerdicts(input: {
   findings: ReviewFinding[];
 } {
   if (!Array.isArray(input.submitted) || input.submitted.length !== input.criteria.length) {
-    throw new Error("Task Review must judge every accepted criterion exactly once");
+    throw new Error(
+      "Task Review must submit exactly one verdict for each stateInput.criteria entry",
+    );
   }
   const criteria = new Map(input.criteria.map((criterion) => {
     const ref = requireContentRef(criterion.ref, "criterion.ref");
@@ -186,8 +188,11 @@ function decodeCriterionVerdicts(input: {
       `criterionVerdicts[${index}].criterionRef`,
     );
     const criterionKey = refKey(criterionRef);
-    if (!criteria.has(criterionKey) || reviewedCriteria.has(criterionKey)) {
-      throw new Error("Task Review changed or repeated an accepted criterion");
+    if (!criteria.has(criterionKey)) {
+      throw new Error("Task Review submitted a criterion outside stateInput.criteria");
+    }
+    if (reviewedCriteria.has(criterionKey)) {
+      throw new Error("Task Review repeated a current Task criterion");
     }
     reviewedCriteria.add(criterionKey);
     const reviewedResultRefs = requireContentRefs(
