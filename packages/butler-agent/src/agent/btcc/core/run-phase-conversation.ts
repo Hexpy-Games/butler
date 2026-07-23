@@ -82,6 +82,8 @@ async function runPhaseConversationAtCheckpoint<Product>(
           results,
         }),
         operationResults: [...conversation.operationResults, ...results.map((item) => item.result)],
+        latestOperationResultRefs: results.map(({ result }) => result.resultRef),
+        phaseContinuity: conversation.pendingOperationRound.phaseContinuity,
         pendingOperationRound: undefined,
       };
       continue;
@@ -119,6 +121,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
           binding: conversation.binding,
           envelope,
           requests: round.requests,
+          phaseContinuity: round.phaseContinuity,
           actualIdentity: round.actualIdentity,
         }),
         pendingOperationRound: round,
@@ -191,6 +194,10 @@ function assembleEnvelope<Product>(
     context: command.context,
     operationAuthority,
     operationResults,
+    latestOperationResultRefs: conversation.latestOperationResultRefs,
+    ...(conversation.phaseContinuity
+      ? { phaseContinuity: conversation.phaseContinuity }
+      : {}),
     submissionSchema: command.codec.submissionSchema,
     ...(command.providerCorrection
       ? { providerCorrection: command.providerCorrection }

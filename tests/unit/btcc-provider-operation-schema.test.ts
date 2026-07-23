@@ -9,6 +9,7 @@ import {
   emptyContextResolver,
   guidanceReader,
   phaseEnvelope,
+  phaseContinuity,
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
@@ -70,6 +71,7 @@ test("admits an out-of-scope target as a rejectable Phase proposal", async () =>
     promptRunner: promptRunner(async () => ({
       carrier: {
         kind: "operation_requests",
+        phaseContinuity: phaseContinuity(),
         requests: [{
           requestId: "broader-target",
           kind: "workspace_artifact_action",
@@ -94,6 +96,7 @@ test("admits an out-of-scope target as a rejectable Phase proposal", async () =>
 
   expect(await model.runRound(envelope)).toEqual({
     kind: "operation_requests",
+    phaseContinuity: phaseContinuity(),
     requests: [{
       requestId: "broader-target",
       kind: "workspace_artifact_action",

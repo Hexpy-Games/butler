@@ -22,15 +22,23 @@ describe("BTCC phase checkpoint persistence", () => {
     const envelope = phaseEnvelope(binding);
     const request = observationRequest();
     const identity = selectedModel();
+    const phaseContinuity = {
+      objectiveState: "Inspect the current repository state.",
+      decisions: ["Use the accepted workspace scope."],
+      unresolved: ["The current file content is unknown."],
+      nextOperationPurpose: "Read the current file once.",
+    };
 
     const operationRound = await store.appendOperationRound({
       binding,
       envelope,
       requests: [request],
+      phaseContinuity,
       actualIdentity: identity,
     });
     const pending = await store.restore(operationRound);
     expect(pending.pendingOperationRound?.requests).toEqual([request]);
+    expect(pending.pendingOperationRound?.phaseContinuity).toEqual(phaseContinuity);
 
     const observation = {
       requestId: request.requestId,
@@ -60,6 +68,10 @@ describe("BTCC phase checkpoint persistence", () => {
     expect(restored.binding.checkpointRevision).toBe(5);
     expect(restored.acceptedProduct).toEqual(product);
     expect(restored.operationResults).toHaveLength(1);
+    expect(restored.latestOperationResultRefs).toEqual([
+      restored.operationResults[0]?.resultRef,
+    ]);
+    expect(restored.phaseContinuity).toEqual(phaseContinuity);
     expect(restored.operationResults[0]).toMatchObject({
       request,
       outcome: observation.outcome,

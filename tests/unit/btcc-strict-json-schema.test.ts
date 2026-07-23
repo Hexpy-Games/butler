@@ -111,6 +111,12 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
   };
   const operationWitness = {
     kind: "operation_requests",
+    phaseContinuity: {
+      objectiveState: "Inspect the admitted workspace.",
+      decisions: [],
+      unresolved: ["The current status is unknown."],
+      nextOperationPurpose: "Read the current status.",
+    },
     requests: [{
       requestId: "request-1",
       kind: "observe",

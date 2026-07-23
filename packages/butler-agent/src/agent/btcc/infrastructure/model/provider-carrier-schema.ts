@@ -37,12 +37,18 @@ export function providerCarrierFunctions(
     parameters: objectParameters({ submission: submissionSchema }, ["submission"]),
   }];
   if (capabilities.length > 0) {
-    const requests = operationRequestsSchema(capabilities, authority).properties as Record<string, unknown>;
+    const carrier = operationRequestsSchema(
+      capabilities,
+      authority,
+    ).properties as Record<string, unknown>;
     functions.push({
       name: "submit_btcc_operation_requests",
       description: "Request one or more operations allowed by the current BTCC phase.",
       carrierKind: "operation_requests",
-      parameters: objectParameters({ requests: requests.requests }, ["requests"]),
+      parameters: objectParameters({
+        phaseContinuity: carrier.phaseContinuity,
+        requests: carrier.requests,
+      }, ["phaseContinuity", "requests"]),
     });
   }
   return functions;
@@ -68,14 +74,30 @@ function operationRequestsSchema(
     type: "object",
     properties: {
       kind: stringConstant("operation_requests"),
+      phaseContinuity: phaseContinuitySchema(),
       requests: {
         type: "array",
         minItems: 1,
         items: { anyOf: capabilities.map((capability) => operationSchema(capability, authority)) },
       },
     },
-    required: ["kind", "requests"],
+    required: ["kind", "phaseContinuity", "requests"],
     additionalProperties: false,
+  };
+}
+
+function phaseContinuitySchema(): Record<string, unknown> {
+  return {
+    ...objectParameters({
+    objectiveState: { type: "string" },
+    decisions: { type: "array", items: { type: "string" } },
+    unresolved: { type: "array", items: { type: "string" } },
+    nextOperationPurpose: { type: "string" },
+    }, ["objectiveState", "decisions", "unresolved", "nextOperationPurpose"]),
+    description: [
+      "Replaceable phase-local continuity for the next stateless model round.",
+      "Integrate conclusions, not raw operation output or a growing transcript.",
+    ].join(" "),
   };
 }
 

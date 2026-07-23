@@ -15,6 +15,7 @@ import {
   resolveDutyInstructions,
   resolveProhibitionInstructions,
 } from "./prompt-duty-catalog.ts";
+import { projectOperationContext } from "./project-operation-context.ts";
 
 export async function renderPhasePrompt(
   envelope: PhaseEnvelope,
@@ -34,6 +35,7 @@ export async function renderPhasePrompt(
       ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
     }),
   ]);
+  const operationContext = projectOperationContext(envelope);
   return {
     instructions: [
       "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
@@ -68,7 +70,7 @@ export async function renderPhasePrompt(
             continuationCandidates: envelope.context.continuationCandidates ?? [],
             baselineObservationScopeRefs: envelope.context.baselineObservationScopeRefs,
           },
-          priorOperationResults: envelope.operationResults,
+          operationContext,
           operationAuthority: envelope.operationAuthority,
           availableCapabilities,
           providerCorrection: envelope.providerCorrection ?? null,
@@ -77,7 +79,11 @@ export async function renderPhasePrompt(
       outputSchemaGuidance: {
         carrierKinds: ["phase_submission", "operation_requests"],
         phaseSubmission: "Use one submission object allowed by the exact phase exits.",
-        operationRequests: "Use a non-empty array of typed requests within authority.",
+        operationRequests: [
+          "Use a non-empty array of typed requests within authority.",
+          "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
+          "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
+        ].join(" "),
       },
     }),
     responseSchema: providerCarrierSchema(

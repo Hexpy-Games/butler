@@ -18,6 +18,7 @@ import {
   emptyContextResolver,
   guidanceReader,
   phaseEnvelope,
+  phaseContinuity,
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
@@ -74,6 +75,7 @@ test("binds the current workspace identity outside model-authored bytes", async 
     promptRunner: promptRunner(async () => ({
       carrier: {
         kind: "operation_requests",
+        phaseContinuity: phaseContinuity(),
         requests: [{
           requestId: "read-current",
           kind: "workspace_artifact_observation",
