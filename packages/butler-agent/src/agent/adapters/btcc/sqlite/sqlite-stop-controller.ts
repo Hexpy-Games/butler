@@ -21,8 +21,15 @@ export class SqliteStopController {
       SELECT semantic_state, revision, canonical_assistant_message_id, final_payload_json
       FROM btcc_turns WHERE turn_id = ?
     `).get(turnId);
-    if (!turn) throw new Error(`BTCC Stop target does not exist: ${turnId}`);
     const stopRequestId = digest(`btcc-stop-request.v1\0${turnId}`);
+    if (!turn) {
+      this.db.query(`
+        INSERT OR IGNORE INTO btcc_stop_requests (
+          stop_request_id, turn_id, status, observed_turn_revision, created_at, updated_at
+        ) VALUES (?, ?, 'cancelled_before_admission', -1, datetime('now'), datetime('now'))
+      `).run(stopRequestId, turnId);
+      return { kind: "cancelled", turnId };
+    }
     this.db.query(`
       INSERT OR IGNORE INTO btcc_stop_requests (
         stop_request_id, turn_id, status, observed_turn_revision, created_at, updated_at

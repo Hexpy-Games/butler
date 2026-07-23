@@ -75,6 +75,54 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
   }
 });
 
+test("Stop fences a Turn before Admission and the later inbound cannot start work", async () => {
+  const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-stop-before-admission-"));
+  try {
+    const dbPath = join(dataRoot, "btcc.sqlite");
+    const model = new NeverCalledModel();
+    const runtime = runtimeFor(dbPath, model, "pre-admission-stop-owner");
+    const command = {
+      ...runCommand(),
+      turnId: "turn-stopped-before-admission",
+      triggerKey: "message:stopped-before-admission",
+      message: {
+        messageId: "message-stopped-before-admission",
+        content: "이 요청은 입장 전에 취소됩니다",
+      },
+    };
+
+    expect(await runtime.handle({ kind: "stop", turnId: command.turnId })).toEqual({
+      kind: "cancelled",
+      turnId: command.turnId,
+    });
+    expect(await runtime.handle(command)).toEqual({
+      kind: "cancelled",
+      turnId: command.turnId,
+    });
+    expect(model.callCount).toBe(0);
+
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{
+        semantic_state: string;
+        final_disposition: string;
+        active_checkpoint_id: string | null;
+      }, [string]>(`
+        SELECT semantic_state, final_disposition, active_checkpoint_id
+        FROM btcc_turns WHERE turn_id = ?
+      `).get(command.turnId)).toEqual({
+        semantic_state: "cancelled",
+        final_disposition: "cancelled",
+        active_checkpoint_id: null,
+      });
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(dataRoot, { recursive: true, force: true });
+  }
+});
+
 test("Stop has one explicit outcome for every semantic state", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-stop-states-"));
   const dbPath = join(dataRoot, "btcc.sqlite");
@@ -198,6 +246,15 @@ class BlockingModel implements SelectedModel {
       }, { once: true });
     });
     throw new Error("unreachable model completion");
+  }
+}
+
+class NeverCalledModel implements SelectedModel {
+  callCount = 0;
+
+  async runRound(): ReturnType<SelectedModel["runRound"]> {
+    this.callCount += 1;
+    throw new Error("pre-admission Stop must prevent a model call");
   }
 }
 

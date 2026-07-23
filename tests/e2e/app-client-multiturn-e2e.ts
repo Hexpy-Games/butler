@@ -709,7 +709,6 @@ const nativeService = usesExternalButlerService
       butlerData: tempDir,
       shutdownSignal: nativeShutdown.signal,
       shutdownPollMs: 250,
-      workerResultPollMs: 500,
       enableTelegramPolling: false,
       waitForShutdown: true,
     })

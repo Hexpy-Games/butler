@@ -26,8 +26,11 @@ export class AppResponderRuntime {
     },
   ) {}
 
-  cancel(turnId: string): void {
-    this.activeTurnControllers.get(turnId)?.abort();
+  cancel(turnId: string): boolean {
+    const controller = this.activeTurnControllers.get(turnId);
+    if (!controller) return false;
+    controller.abort();
+    return true;
   }
 
   async run(input: {

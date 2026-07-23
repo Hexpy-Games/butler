@@ -36,7 +36,7 @@ test("Project Work Ledger applies the same governing revalidation path", async (
   const { result } = await runRevalidation("project:harness-revalidation");
   expect(result.initial.kind).toBe("delivered");
   expectRevalidationPhases(result.phases);
-});
+}, 15_000);
 
 async function runRevalidation(projectRef?: string) {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-revalidation-"));

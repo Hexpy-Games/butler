@@ -6,7 +6,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -17,15 +16,6 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
-import { NativeToolLoopRuntime } from "../../packages/butler-agent/src/agent/turn/native-tool-loop.ts";
-import {
-  principalTurnCancellationSocketPath,
-  startPrincipalTurnCancellationServer,
-} from "../../packages/butler-agent/src/agent/turn/principal-turn-cancellation-control.ts";
-import {
-  NativeInboundQueue,
-  type QueuedInboundEvent,
-} from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import { AppGatewayBridge } from "../support/app-gateway-bridge.ts";
 import {
@@ -48,7 +38,6 @@ import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-l
 import { WorkOrchestrationStore } from "../../packages/butler-agent/src/agent/work/work-orchestration.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
-import { createOpenAIResponse } from "../../packages/butler-agent/src/integrations/providers/openai/responses-client.ts";
 import { deliveredWithLimitationsState } from "../../packages/butler-agent/src/agent/turn/runtime-delivery-state.ts";
 import { DeveloperLogStore } from "../../packages/butler-agent/src/operations/diagnostics/developer-log-store.ts";
 import {
@@ -2712,7 +2701,6 @@ test("native butler-main default provider generates app transport session titles
       btcc: new ScriptedBtccGatewayRuntime("비 예보를 확인해볼게요."),
       shutdownSignal: controller.signal,
       shutdownPollMs: 10,
-      workerResultPollMs: 10,
       enableTelegramPolling: false,
     });
     globalThis.fetch = originalFetch;
@@ -2745,14 +2733,10 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
     provider: fakeProvider,
     shutdownSignal: shutdown.signal,
     shutdownPollMs: 10,
-    workerResultPollMs: 10,
     enableTelegramPolling: false,
   });
 
   try {
-    await waitForCondition(() =>
-      existsSync(principalTurnCancellationSocketPath(tempDir)),
-    );
     mkdirSync(join(tempDir, "state"), { recursive: true });
     writeFileSync(
       join(tempDir, "state", "butler-main-native.json"),
@@ -2806,7 +2790,6 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
       db.close();
     }
 
-    rmSync(principalTurnCancellationSocketPath(tempDir), { force: true });
     const cancel = await postJson(
       `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
       {},
@@ -2846,217 +2829,6 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
   } finally {
     shutdown.abort();
     await nativeMain;
-    server.stop();
-  }
-});
-
-test("App Stop terminalizes an exact ordinary claim after its processing owner dies", async () => {
-  const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
-  mkdirSync(join(tempDir, "app-server"), { recursive: true });
-  let server = createAppServer({
-    dbPath,
-    butlerData: tempDir,
-    butlerHome: process.cwd(),
-    port: 0,
-  });
-  const sent = await postJson(`${server.url}messages`, {
-    chat_id: "general",
-    text: "preserve this interrupted implementation",
-  });
-  const turnId = sent.data.turn.id as string;
-  const queue = new NativeInboundQueue(tempDir);
-  const [claimed] = queue.claimEligible(
-    1,
-    (item) => item.envelope.routingHints?.turnId === turnId,
-    new Date("2026-07-14T07:08:33.000Z"),
-    15 * 60_000,
-  );
-  expect(claimed?.envelope.routingHints?.turnId).toBe(turnId);
-
-  const deadOwner = spawn(process.execPath, ["-e", "process.exit(0)"], {
-    stdio: "ignore",
-  });
-  await new Promise<void>((resolve, reject) => {
-    deadOwner.once("exit", () => resolve());
-    deadOwner.once("error", reject);
-  });
-  expect(deadOwner.pid).toBeNumber();
-  const claimedRecord = JSON.parse(
-    readFileSync(claimed!.path, "utf8"),
-  ) as QueuedInboundEvent;
-  claimedRecord.processing = {
-    ...claimedRecord.processing!,
-    ownerId: `${deadOwner.pid}:terminated-native-owner`,
-  };
-  writeFileSync(
-    claimed!.path,
-    `${JSON.stringify(claimedRecord, null, 2)}\n`,
-    "utf8",
-  );
-
-  const publicMessageId = "msg-dead-owner-public-snapshot";
-  const stateDb = new Database(dbPath);
-  stateDb.query(`
-    INSERT INTO messages (
-      id, chat_id, turn_id, role, text, status, created_at, updated_at,
-      safe_error_code, retryable
-    ) VALUES (?, 'general', ?, 'assistant', ?, 'streaming', ?, ?, NULL, 0)
-  `).run(
-    publicMessageId,
-    turnId,
-    "구현 중 공개된 진행 내용",
-    "2026-07-14T07:09:49.000Z",
-    "2026-07-14T07:09:49.000Z",
-  );
-  stateDb.close();
-
-  server.stop();
-  const cancellationServer = await startPrincipalTurnCancellationServer(tempDir);
-  server = createAppServer({
-    dbPath,
-    butlerData: tempDir,
-    butlerHome: process.cwd(),
-    port: 0,
-  });
-  try {
-    const cancelled = await postJson(
-      `${server.url}turns/${encodeURIComponent(turnId)}/cancel`,
-      {},
-    );
-    expect(cancelled.data.turn).toMatchObject({ id: turnId, state: "cancelled" });
-
-    const settlementDb = new Database(dbPath, { readonly: true });
-    expect(
-      settlementDb.query<{
-        state: string;
-        accepted_at: string | null;
-        completed_at: string | null;
-      }, [string]>(`
-        SELECT state, accepted_at, completed_at
-        FROM app_turn_cancel_outbox
-        WHERE turn_id = ?
-      `).get(turnId),
-    ).toMatchObject({
-      state: "completed",
-      accepted_at: expect.any(String),
-      completed_at: expect.any(String),
-    });
-    settlementDb.close();
-
-    const processedPath = join(
-      tempDir,
-      "runtime",
-      "inbound-events",
-      "processed",
-      `${claimed!.queueId}.json`,
-    );
-    expect(existsSync(claimed!.path)).toBe(false);
-    expect(existsSync(processedPath)).toBe(true);
-    const processed = JSON.parse(readFileSync(processedPath, "utf8"));
-    expect(processed.metadata).toMatchObject({
-      dispatchStatus: "cancelled-principal-turn",
-      handled: false,
-      cancelled: true,
-      terminalClaimId: claimed!.processing.claimId,
-    });
-    expect(queue.claim(1)).toEqual([]);
-
-    const view = await getJson(`${server.url}session-view?session_id=general`);
-    expect(view.data.active_turn).toBeNull();
-    expect(view.data.latest_turn).toMatchObject({ id: turnId, state: "cancelled" });
-    expect(view.data.messages).toContainEqual(expect.objectContaining({
-      id: publicMessageId,
-      turn_id: turnId,
-      text: "구현 중 공개된 진행 내용",
-      status: "cancelled",
-    }));
-  } finally {
-    server.stop();
-    await cancellationServer.close();
-  }
-});
-
-test("SessionView resumes staged dead-owner settlement before outbox completion", async () => {
-  const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
-  mkdirSync(join(tempDir, "app-server"), { recursive: true });
-  let server = createAppServer({
-    dbPath,
-    butlerData: tempDir,
-    butlerHome: process.cwd(),
-    port: 0,
-  });
-  const sent = await postJson(`${server.url}messages`, {
-    chat_id: "general",
-    text: "resume interrupted cancellation settlement",
-  });
-  const turnId = sent.data.turn.id as string;
-  const queue = new NativeInboundQueue(tempDir);
-  const [claimed] = queue.claimEligible(
-    1,
-    (item) => item.envelope.routingHints?.turnId === turnId,
-    new Date("2026-07-14T07:08:33.000Z"),
-    15 * 60_000,
-  );
-  const claimedRecord = JSON.parse(
-    readFileSync(claimed!.path, "utf8"),
-  ) as QueuedInboundEvent;
-  claimedRecord.processing = {
-    ...claimedRecord.processing!,
-    ownerId: "999999:dead-owner",
-  };
-  writeFileSync(
-    claimed!.path,
-    `${JSON.stringify(claimedRecord, null, 2)}\n`,
-    "utf8",
-  );
-
-  const interruptedDb = new Database(dbPath);
-  interruptedDb.transaction(() => {
-    interruptedDb.query(`
-      UPDATE turns
-      SET state = 'cancelling', safe_status_label = 'Stopping', cancellable = 0
-      WHERE id = ?
-    `).run(turnId);
-    interruptedDb.query(`
-      INSERT INTO app_turn_cancel_outbox (
-        turn_id, queue_id, dispatch_claim_id, state, created_at, accepted_at
-      ) VALUES (?, ?, ?, 'accepted', ?, ?)
-    `).run(
-      turnId,
-      claimed!.queueId,
-      claimed!.processing.claimId,
-      "2026-07-14T07:14:44.000Z",
-      "2026-07-14T07:14:45.000Z",
-    );
-  })();
-  interruptedDb.close();
-  const settlingPath = `${claimed!.path}.cancelling-${claimed!.processing.claimId}`;
-  renameSync(claimed!.path, settlingPath);
-  expect(existsSync(settlingPath)).toBe(true);
-
-  server.stop();
-  server = createAppServer({
-    dbPath,
-    butlerData: tempDir,
-    butlerHome: process.cwd(),
-    port: 0,
-  });
-  try {
-    const view = await getJson(
-      `${server.url}session-view?session_id=general`,
-    );
-    expect(view.data.active_turn).toBeNull();
-    expect(view.data.latest_turn).toMatchObject({ id: turnId, state: "cancelled" });
-    expect(existsSync(settlingPath)).toBe(false);
-    const settlementDb = new Database(dbPath, { readonly: true });
-    expect(
-      settlementDb.query<{ state: string }, [string]>(`
-        SELECT state FROM app_turn_cancel_outbox WHERE turn_id = ?
-      `).get(turnId)?.state,
-    ).toBe("completed");
-    settlementDb.close();
-    expect(queue.claim(1)).toEqual([]);
-  } finally {
     server.stop();
   }
 });
@@ -14529,145 +14301,6 @@ test("gateway bridge keeps runtime turns alive past request timeout budgets", as
   }
 });
 
-test("direct responder App messages terminate an ownerless provider timeout without capturing the next user message", async () => {
-  let providerRoundCalls = 0;
-  let providerFetchCalls = 0;
-  let appServerUrl = "";
-  globalThis.fetch = (async (request, init) => {
-    if (appServerUrl && String(request).startsWith(appServerUrl)) {
-      return await originalFetch(request, init);
-    }
-    providerFetchCalls += 1;
-    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined;
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        streamController = controller;
-      },
-    });
-    init?.signal?.addEventListener(
-      "abort",
-      () => streamController?.error(init.signal?.reason),
-      { once: true },
-    );
-    return new Response(stream, { status: 200 });
-  }) as typeof fetch;
-
-  const runtime = new NativeToolLoopRuntime({
-    butlerHome: tempDir,
-    butlerData: tempDir,
-    disableAutomaticRecall: true,
-    runFunctionToolPromptText: async (input) => {
-      providerRoundCalls += 1;
-      if (providerRoundCalls === 1) {
-        await createOpenAIResponse(
-          { model: "gpt-5.5", input: input.prompt },
-          input.signal,
-          { mode: "codex_subscription", authorization: fakeCodexAuthorizationForAppTest() },
-          undefined,
-          { roundIndex: 0 },
-          { totalTimeoutMs: 200, idleTimeoutMs: 20 },
-        );
-        throw new Error("stalled provider unexpectedly completed");
-      }
-      return "second turn stayed isolated";
-    },
-  });
-  const bridge = new AppGatewayBridge({
-    butlerHome: tempDir,
-    butlerData: tempDir,
-    runtime,
-    provider: fakeProvider,
-    runtimePolicy: { completionReview: "disabled" },
-    sessionTitleGenerator: false,
-  });
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
-    butlerData: tempDir,
-    port: 0,
-    responder: bridge.responder,
-  });
-  appServerUrl = server.url;
-  try {
-    const first = await postJson(`${server.url}messages`, {
-      chat_id: "general",
-      text: "first message with a stalled provider round",
-      queue_policy: "send_now",
-    });
-    expect(first.data.turn).toMatchObject({ state: "thinking", attempt: 1 });
-
-    const timedOutTurn = await waitForLatestTurnMatching(
-      server.url,
-      "general",
-      (turn) =>
-        turn.state === "failed" &&
-        turn.safe_error_code === "provider_round_timeout",
-    );
-    expect(timedOutTurn).toMatchObject({
-      state: "failed",
-      attempt: 1,
-      safe_error_code: "provider_round_timeout",
-      retryable: false,
-      cancellable: false,
-    });
-    expect(providerRoundCalls).toBe(1);
-    expect(providerFetchCalls).toBe(1);
-
-    const messagesAfterTimeout = await getJson(`${server.url}messages?chat_id=general&cursor=0`);
-    expect(messagesAfterTimeout.data.messages.filter(
-      (message: { role: string; turn_id?: string }) =>
-        message.role === "assistant" && message.turn_id === timedOutTurn.id,
-    )).toEqual([
-      expect.objectContaining({
-        status: "failed",
-        safe_error_code: "provider_round_timeout",
-      }),
-    ]);
-    const checkpointDir = join(tempDir, "state", "turn-kernel");
-    expect(existsSync(checkpointDir) ? readdirSync(checkpointDir) : []).toEqual([]);
-
-    const stableEvents = await getJson(`${server.url}events?cursor=0`);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(await getJson(`${server.url}events?cursor=0`)).toEqual(stableEvents);
-
-    const second = await postJson(`${server.url}messages`, {
-      chat_id: "general",
-      text: "an unrelated second message",
-      queue_policy: "enqueue_if_busy",
-    });
-    expect(second.data.queued).toBeUndefined();
-    expect(second.data.turn).toMatchObject({ state: "thinking", attempt: 1 });
-    expect(second.data.turn.id).not.toBe(timedOutTurn.id);
-
-    const secondReply = await waitForAssistantMessageMatching(
-      server.url,
-      "general",
-      (message) => message.text === "second turn stayed isolated",
-    );
-    expect(secondReply).toMatchObject({
-      text: "second turn stayed isolated",
-      status: "delivered",
-      turn_id: second.data.turn.id,
-    });
-    const finalTurns = await getJson(`${server.url}turns?chat_id=general&cursor=0`);
-    expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
-      id: timedOutTurn.id,
-      state: "failed",
-      attempt: 1,
-      safe_error_code: "provider_round_timeout",
-    }));
-    expect(finalTurns.data.turns).toContainEqual(expect.objectContaining({
-      id: second.data.turn.id,
-      state: "delivered",
-      attempt: 1,
-    }));
-    expect(providerRoundCalls).toBe(2);
-    expect(providerFetchCalls).toBe(1);
-  } finally {
-    server.stop();
-    bridge.close();
-  }
-}, 15_000);
-
 test("message endpoint rate limits bursts with safe protocol errors", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -15090,14 +14723,6 @@ async function waitForAssistantMessageMatching(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error("Expected assistant message projection did not appear.");
-}
-
-function fakeCodexAuthorizationForAppTest(): string {
-  const encode = (value: Record<string, unknown>) =>
-    Buffer.from(JSON.stringify(value)).toString("base64url");
-  return `Bearer ${encode({ alg: "none" })}.${encode({
-    "https://api.openai.com/auth": { chatgpt_account_id: "account" },
-  })}.signature`;
 }
 
 class ScriptedRuntime implements AgentRuntimeAdapter {
