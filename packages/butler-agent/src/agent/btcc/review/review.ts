@@ -7,6 +7,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { reviewTask } from "./review-task.ts";
+import { projectDirectSuccessorHandoffs } from "./project-successor-handoffs.ts";
 import { taskReviewAuthority } from "./source-authority.ts";
 
 type ReviewEvent = Extract<TurnEvent, {
@@ -38,6 +39,7 @@ export async function review(command: {
     acceptedPlanRef: program.plan.ref,
     currentWork: program.currentWork.work,
     currentTask: program.currentTask.task,
+    directSuccessorHandoffs: projectDirectSuccessorHandoffs(program),
     resultCandidate: result,
     reviewAuthorityRef: program.authorityRef,
     criteria: resolveCriteria(program),
