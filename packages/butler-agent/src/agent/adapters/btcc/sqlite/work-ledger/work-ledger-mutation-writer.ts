@@ -5,6 +5,11 @@ import {
   logicalLedgerRecords,
   type WorkLedgerCommit,
 } from "../../../../btcc/index.ts";
+import type { ManagedProgramAuthority } from "../../../../btcc/work-ledger/contracts.ts";
+import {
+  acceptReviewedPlanAuthority,
+  bindManagedProgram,
+} from "../../../../btcc/work-ledger/program-authority.ts";
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
@@ -33,28 +38,36 @@ export class SqliteWorkLedgerMutationWriter {
       if (boundary.kind === "replayed") return;
       const previous = this.programs.load(programIdOf(input));
       assertLogicalLedgerMutationId(input, previous);
-      this.apply(input);
-      const next = input.mutation.kind === "bind_program"
-        ? boundProgram(input.mutation)
-        : this.programs.load(programIdOf(input));
+      const records = logicalLedgerRecords(input.mutation, previous);
+      this.journal.materializeSourceRecords(records);
+      const authority = plannedAuthority(previous, input);
+      this.apply(input, authority);
+      const next = this.programs.load(programIdOf(input));
       if (!next) throw new Error("Work Ledger mutation did not materialize its next manifest");
+      if (authority) assertAuthorityProjection(next, authority);
       this.journal.close(
         input,
         boundary.baseRevision,
         createLogicalLedgerBundle({ commit: input, previous, next }),
-        logicalLedgerRecords(input.mutation, previous),
+        records,
       );
     })();
   }
 
-  private apply(input: WorkLedgerCommit): void {
+  private apply(
+    input: WorkLedgerCommit,
+    authority?: ReturnType<typeof plannedAuthority>,
+  ): void {
     const mutation = input.mutation;
     switch (mutation.kind) {
       case "bind_program":
-        this.programAuthority.bindProgram(mutation);
+        this.programAuthority.bindProgram(mutation, requireAuthority(authority));
         return;
       case "install_reviewed_plan":
-        this.programAuthority.installReviewedPlan(mutation.product);
+        this.programAuthority.installReviewedPlan(
+          mutation.product,
+          requireAuthority(authority),
+        );
         return;
       case "select_attempt":
         this.selectAttempt(mutation.cursor.programId, mutation.attempt);
@@ -287,20 +300,43 @@ function programIdOf(input: WorkLedgerCommit): string {
   return mutation.cursor.programId;
 }
 
-function boundProgram(
-  mutation: Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>,
+function plannedAuthority(
+  previous: ReturnType<SqliteWorkLedgerProgramReader["load"]>,
+  input: WorkLedgerCommit,
 ) {
-  const binding = mutation.product.authority.managedBinding;
-  return {
-    ledgerId: binding.ledgerId,
-    programId: binding.programId,
-    manifestRevision: binding.expectedManifestRevision + 1,
-    goalContractRef: mutation.product.goalContract.ref,
-    authorityRef: mutation.product.authority.ref,
-    availableSpecRefs: [],
-    availableSpecs: [],
-    governingSpecRefs: [],
-    requiredOutcomeId: mutation.product.goalContract.requiredOutcome.outcomeId,
-    planningState: "unplanned" as const,
-  };
+  if (input.mutation.kind === "bind_program") {
+    return bindManagedProgram(previous, input.mutation, previous?.availableSpecs ?? []);
+  }
+  if (input.mutation.kind === "install_reviewed_plan") {
+    if (!previous) throw new Error("Work Ledger reviewed Plan has no Program");
+    return acceptReviewedPlanAuthority(previous, input.mutation.product);
+  }
+  return undefined;
+}
+
+function requireAuthority(
+  authority: ReturnType<typeof plannedAuthority>,
+) {
+  if (!authority) throw new Error("Work Ledger mutation lacks planned authority");
+  return authority;
+}
+
+function assertAuthorityProjection(
+  actual: ManagedProgramAuthority,
+  expected: ManagedProgramAuthority,
+): void {
+  const authority = (value: ManagedProgramAuthority) => ({
+    ledgerId: value.ledgerId,
+    programId: value.programId,
+    manifestRevision: value.manifestRevision,
+    goalContractRef: value.goalContractRef,
+    authorityRef: value.authorityRef,
+    availableSpecRefs: value.availableSpecRefs,
+    availableSpecs: value.availableSpecs,
+    governingSpecRefs: value.governingSpecRefs,
+    requiredOutcomeId: value.requiredOutcomeId,
+  });
+  if (stableJson(authority(actual)) !== stableJson(authority(expected))) {
+    throw new Error("Work Ledger authority projection changed after commit");
+  }
 }

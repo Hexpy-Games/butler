@@ -11,7 +11,7 @@ export function providerCarrierSchema(
   if (capabilities.length > 0) {
     carrierVariants.push(operationRequestsSchema(capabilities, authority));
   }
-  return { type: "object", anyOf: carrierVariants };
+  return { anyOf: carrierVariants };
 }
 
 export function providerCarrierAdmissionSchema(
@@ -22,7 +22,7 @@ export function providerCarrierAdmissionSchema(
   if (capabilities.length > 0) {
     carrierVariants.push(operationRequestsSchema(capabilities));
   }
-  return { type: "object", anyOf: carrierVariants };
+  return { anyOf: carrierVariants };
 }
 
 export function providerCarrierFunctions(
@@ -50,6 +50,7 @@ export function providerCarrierFunctions(
 
 function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Record<string, unknown> {
   return {
+    type: "object",
     properties: {
       kind: stringConstant("phase_submission"),
       submission: submissionSchema,
@@ -64,6 +65,7 @@ function operationRequestsSchema(
   authority?: OperationAuthority,
 ): Record<string, unknown> {
   return {
+    type: "object",
     properties: {
       kind: stringConstant("operation_requests"),
       requests: {

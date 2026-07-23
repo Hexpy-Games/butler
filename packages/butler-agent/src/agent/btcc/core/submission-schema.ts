@@ -23,7 +23,6 @@ export const objectSchema = (
   additionalProperties: false,
 });
 export const variantsSchema = (...variants: SubmissionSchema[]): SubmissionSchema => ({
-  type: "object",
   anyOf: variants,
 });
 export const contentRefSchema = (): SubmissionSchema => objectSchema({

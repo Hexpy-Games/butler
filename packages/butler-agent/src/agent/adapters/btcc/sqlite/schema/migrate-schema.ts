@@ -5,6 +5,23 @@ type ColumnRow = { name: string };
 export function migrateBtccSchema(db: Database): void {
   ensureLedgerContentionClaimPath(db);
   ensureOperationalDiagnostic(db);
+  ensureProgramAuthorityProjection(db);
+}
+
+function ensureProgramAuthorityProjection(db: Database): void {
+  ensureColumn(db, "btcc_programs", "available_specs_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "btcc_programs", "governing_spec_refs_json", "TEXT NOT NULL DEFAULT '[]'");
+}
+
+function ensureColumn(
+  db: Database,
+  table: string,
+  column: string,
+  declaration: string,
+): void {
+  const columns = db.query<ColumnRow, []>(`PRAGMA table_info(${table})`).all();
+  if (columns.some((candidate) => candidate.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
 }
 
 function ensureLedgerContentionClaimPath(db: Database): void {

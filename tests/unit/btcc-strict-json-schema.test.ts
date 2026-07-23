@@ -3,6 +3,20 @@ import {
   normalizeStrictTransportSchema,
   restoreTransportOmissions,
 } from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/strict-json-schema.ts";
+import {
+  providerCarrierAdmissionSchema,
+  providerCarrierSchema,
+} from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/provider-carrier-schema.ts";
+import {
+  literalSchema,
+  objectSchema,
+  textSchema,
+} from "../../packages/butler-agent/src/agent/btcc/core/submission-schema.ts";
+import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/tool-bridge/schema-validation.ts";
+import type {
+  AvailablePhaseCapability,
+} from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/contracts.ts";
+import type { OperationAuthority } from "../../packages/butler-agent/src/agent/btcc/core/contracts.ts";
 
 test("strict transport schema makes every object property required and nullable when optional", () => {
   const schema = normalizeStrictTransportSchema({
@@ -50,4 +64,68 @@ test("strict transport schema closes property-free object inputs", () => {
     required: [],
     additionalProperties: false,
   });
+});
+
+test("strict transport keeps carrier unions satisfiable and admission-equivalent", () => {
+  const submissionSchema = objectSchema({
+    kind: literalSchema("sample_submission"),
+    summary: textSchema(),
+  });
+  const capability = {
+    capabilityRef: "observe.workspace",
+    name: "Observe workspace",
+    description: "Read an admitted workspace scope.",
+    operationKind: "observe",
+    inputSchema: objectSchema({ query: textSchema() }),
+    observationScopeRefs: ["workspace"],
+  } as AvailablePhaseCapability;
+  const authority = {} as OperationAuthority;
+  const carrierSchema = providerCarrierSchema(
+    [capability],
+    submissionSchema,
+    authority,
+  );
+  const admissionSchema = providerCarrierAdmissionSchema(
+    [capability],
+    submissionSchema,
+  );
+  const normalized = normalizeStrictTransportSchema({
+    type: "object",
+    properties: { carrier: carrierSchema },
+    required: ["carrier"],
+    additionalProperties: false,
+  });
+  const normalizedCarrier = (normalized.properties as Record<string, unknown>).carrier;
+
+  expect(normalizedCarrier).not.toHaveProperty("type");
+  expect(normalizedCarrier).not.toHaveProperty("properties");
+  expect(normalizedCarrier).not.toHaveProperty("additionalProperties");
+  for (const variant of (normalizedCarrier as { anyOf: Record<string, unknown>[] }).anyOf) {
+    expect(variant.type).toBe("object");
+    expect(variant.additionalProperties).toBe(false);
+  }
+
+  const submissionWitness = {
+    kind: "phase_submission",
+    submission: { kind: "sample_submission", summary: "done" },
+  };
+  const operationWitness = {
+    kind: "operation_requests",
+    requests: [{
+      requestId: "request-1",
+      kind: "observe",
+      capabilityRef: "observe.workspace",
+      input: { query: "status" },
+      scopeRef: "workspace",
+    }],
+  };
+
+  expect(validateJsonObjectSchema({ carrier: submissionWitness }, normalized).ok).toBe(true);
+  expect(validateJsonObjectSchema({ carrier: operationWitness }, normalized).ok).toBe(true);
+  expect(validateJsonObjectSchema(submissionWitness, admissionSchema).ok).toBe(true);
+  expect(validateJsonObjectSchema(operationWitness, admissionSchema).ok).toBe(true);
+  expect(validateJsonObjectSchema({
+    ...submissionWitness,
+    requests: operationWitness.requests,
+  }, admissionSchema).ok).toBe(false);
 });

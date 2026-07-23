@@ -23,6 +23,7 @@ describe("BTCC Planning contract", () => {
       governingSpecSelections: ["SPEC-EXISTING"],
     }, {
       ...authoringState(),
+      governingSpecRefs: [existing],
       availableSpecs: [{
         logicalId: "SPEC-EXISTING",
         parentId: "project-1",
@@ -33,6 +34,22 @@ describe("BTCC Planning contract", () => {
       }],
     });
     expect(selected.governingSpecRefs).toEqual([existing]);
+
+    expect(() => authorPlanCandidate({
+      ...artifactPlan(),
+      governingSpecSelections: ["SPEC-EXISTING"],
+    }, {
+      ...authoringState(),
+      governingSpecRefs: [],
+      availableSpecs: [{
+        logicalId: "SPEC-EXISTING",
+        parentId: "project-1",
+        concernId: "existing-concern",
+        title: "Existing contract",
+        status: "specified",
+        revisionRef: existing,
+      }],
+    })).toThrow("governingSpecSelections contains an unavailable Spec");
 
     const authored = authorPlanCandidate({
       ...artifactPlan(),

@@ -6,12 +6,18 @@ export function authorGoverningSpecs(
   specifications: unknown,
   selections: unknown,
   available: AvailableSpecRevision[],
+  selectableRefs: ContentRef[],
   rootParentId?: string,
 ) {
   const authoredSpecs = authorSpecs(specifications, available, rootParentId);
   return {
     authoredSpecs,
-    governingSpecRefs: selectGoverningSpecs(selections, available, authoredSpecs),
+    governingSpecRefs: selectGoverningSpecs(
+      selections,
+      available,
+      selectableRefs,
+      authoredSpecs,
+    ),
   };
 }
 
@@ -126,6 +132,7 @@ function rejectParentCycles(
 function selectGoverningSpecs(
   value: unknown,
   available: AvailableSpecRevision[],
+  selectableRefs: ContentRef[],
   authored: Array<{ logicalId: string; ref: ContentRef }>,
 ): ContentRef[] {
   if (value === undefined) return authored.map((spec) => spec.ref);
@@ -142,7 +149,10 @@ function selectGoverningSpecs(
       "governingSpecSelections contains duplicates",
     );
   }
-  const candidates = new Map(available.map((spec) => [spec.logicalId, spec.revisionRef] as const));
+  const selectable = new Set(selectableRefs.map(refKey));
+  const candidates = new Map(available
+    .filter((spec) => selectable.has(refKey(spec.revisionRef)))
+    .map((spec) => [spec.logicalId, spec.revisionRef] as const));
   const selected = selections.map((selection) => {
     const ref = candidates.get(selection);
     if (!ref) {
@@ -158,4 +168,8 @@ function selectGoverningSpecs(
     ...selected.filter((_ref, index) => !authoredIds.has(selections[index]!)),
     ...authored.map((spec) => spec.ref),
   ];
+}
+
+function refKey(ref: ContentRef): string {
+  return `${ref.id}\0${ref.sha256}`;
 }

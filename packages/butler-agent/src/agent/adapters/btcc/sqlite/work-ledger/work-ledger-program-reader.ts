@@ -21,6 +21,8 @@ type ProgramRow = {
   promotion_authorization_ref: string | null;
   active_deferral_ref: string | null;
   promotion_deferral_ref: string | null;
+  available_specs_json: string;
+  governing_spec_refs_json: string;
 };
 
 export class SqliteWorkLedgerProgramReader {
@@ -35,9 +37,10 @@ export class SqliteWorkLedgerProgramReader {
       manifestRevision: program.manifest_revision,
       goalContractRef: this.loadRef(program.goal_contract_ref),
       authorityRef: this.loadRef(program.authority_ref),
-      availableSpecRefs: [],
-      availableSpecs: [],
-      governingSpecRefs: [],
+      availableSpecs: JSON.parse(program.available_specs_json),
+      availableSpecRefs: JSON.parse(program.available_specs_json)
+        .map((spec: { revisionRef: ContentRef }) => spec.revisionRef),
+      governingSpecRefs: JSON.parse(program.governing_spec_refs_json),
       requiredOutcomeId: this.loadRecord<{
         requiredOutcome: { outcomeId: string };
       }>(program.goal_contract_ref).requiredOutcome.outcomeId,
@@ -113,7 +116,8 @@ export class SqliteWorkLedgerProgramReader {
       SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
         planning_review_ref, frontier, ledger_id, manifest_revision,
         pending_correction_plan_ref, promotion_assembly_refs_json,
-        promotion_authorization_ref, active_deferral_ref, promotion_deferral_ref
+        promotion_authorization_ref, active_deferral_ref, promotion_deferral_ref,
+        available_specs_json, governing_spec_refs_json
       FROM btcc_programs WHERE program_id = ?
     `).get(programId);
   }

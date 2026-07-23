@@ -18,8 +18,15 @@ export type ProjectLedgerCore = {
   updateTask(project: string, options: Record<string, unknown>): unknown;
   updateWork(project: string, options: Record<string, unknown>): unknown;
   buildIndex(project: string): {
-    records: Array<{ id: string; kind: string; title: string; status: string }>;
+    records: Array<{
+      id: string;
+      kind: string;
+      title: string;
+      status: string;
+      path: string;
+    }>;
   };
+  projectPath(project: string, path: string): string;
   readRecordBody(filePath: string): string | null;
   readRecordData(filePath: string): Record<string, unknown> | null;
   resolveRecord(
@@ -75,6 +82,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
     updateTask: lifecycle.updateTask,
     updateWork: lifecycle.updateWork,
     buildIndex: indexer.buildIndex,
+    projectPath: filesystem.projectPath,
     readRecordBody: records.readRecordBody,
     readRecordData: records.readRecordData,
     resolveRecord: recordCommands.resolveRecord,

@@ -13,7 +13,10 @@ import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import { authorPlanningProposal } from "./plan-graph/index.ts";
 import { planCandidateSubmissionSchema } from "./submission-schemas.ts";
-import { decodeAvailableSpecs } from "./decode-available-specs.ts";
+import {
+  decodeAvailableSpecs,
+  selectableGoverningSpecIds,
+} from "./decode-available-specs.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -40,9 +43,9 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-function planningCodec(availableSpecIds: string[]) {
+function planningCodec(selectableSpecIds: string[]) {
   return withManagedDeferral<PlanningCandidateProduct>({
-    submissionSchema: planCandidateSubmissionSchema(availableSpecIds),
+    submissionSchema: planCandidateSubmissionSchema(selectableSpecIds),
     decode(submission, envelope) {
       const state = requireRecord(envelope.context.stateInput, "Planning state");
       const value = requireRecord(submission, "Planning submission");
@@ -95,10 +98,17 @@ export function proposePlan(command: PhaseInvocation) {
     state.availableSpecs,
     optionalString(state.specParentRootId),
   );
+  const admittedGoverningSpecRefs = requireContentRefs(
+    state.governingSpecRefs,
+    "governingSpecRefs",
+  );
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: planningCodec(availableSpecs.map((spec) => spec.logicalId)),
+    codec: planningCodec(selectableGoverningSpecIds(
+      availableSpecs,
+      admittedGoverningSpecRefs,
+    )),
   });
 }
 

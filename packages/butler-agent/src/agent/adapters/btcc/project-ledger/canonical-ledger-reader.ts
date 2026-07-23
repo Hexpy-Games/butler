@@ -16,11 +16,8 @@ export async function readCanonicalProjectLedger(projectRoot: string) {
   const core = await loadProjectLedgerCore();
   const index = core.buildIndex(projectRoot);
   const records = index.records.map((record): CanonicalLedgerRecord => {
-    const resolved = core.resolveRecord(projectRoot, {
-      id: record.id,
-      kind: record.kind,
-    });
-    const data = core.readRecordData(resolved.filePath) ?? {};
+    const sourcePath = core.projectPath(projectRoot, record.path);
+    const data = core.readRecordData(sourcePath) ?? {};
     return {
       id: record.id,
       kind: record.kind,
@@ -28,7 +25,7 @@ export async function readCanonicalProjectLedger(projectRoot: string) {
       status: record.status,
       spec: stringValue(data.spec),
       parentId: stringValue(data.parentId),
-      body: core.readRecordBody(resolved.filePath),
+      body: core.readRecordBody(sourcePath),
     };
   });
   return {

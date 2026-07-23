@@ -27,7 +27,7 @@ const DUTIES = {
   review_goal_contract_exactly: "Compare all six lens assessments, adopted fields and roles, required outcomes, non-goals, acceptance intent, authority, personalization, provenance, strategy, and continuation with the immutable request.",
   review_artifact_persistence: "Independently compare the exact artifactPersistence value with the immutable request and intended result; require revision when an isolated-only result would not satisfy the Goal or persistence was added without authority.",
   author_smallest_sufficient_plan: "Author the fewest cohesive Works and independently executable Tasks that satisfy every RequiredOutcome while preserving constraints; never split by file, tool, phase, or arbitrary size.",
-  apply_authoring_contracts: "Apply every injected Spec, Plan, Work, and Task authoring contract exactly and cite their accepted revisions.",
+  apply_authoring_contracts: "Apply every injected Spec, Plan, Work, and Task authoring contract exactly. Their accepted revision references are runtime-bound; do not echo or invent them.",
   bind_normative_goal_sets: "Bind criteria only to required-outcome fields and RequiredOutcomes; preserve constraints explicitly and do not fabricate Tasks for guidance or presentation preferences.",
   declare_work_task_dependencies: "Declare exact Work and Task membership, acyclic dependencies, unique execution ordinals, and the earliest executable frontier.",
   declare_verification_integration: "Give every Task observable criteria and verification questions and declare the smallest sufficient integration assurance for whole-goal completion.",

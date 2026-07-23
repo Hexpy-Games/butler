@@ -21,6 +21,16 @@ function normalizeNode(value: unknown): unknown {
   const normalized = Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, normalizeNode(item)]),
   );
+  if (isPureSchemaCombinator(value)) {
+    const {
+      type: _type,
+      properties: _properties,
+      required: _required,
+      additionalProperties: _additionalProperties,
+      ...combinator
+    } = normalized;
+    return combinator;
+  }
   if (value.type !== "object") return normalized;
 
   const required = new Set(
@@ -41,6 +51,11 @@ function normalizeNode(value: unknown): unknown {
     required: Object.keys(properties),
     additionalProperties: false,
   };
+}
+
+function isPureSchemaCombinator(value: Record<string, unknown>): boolean {
+  const hasVariants = Array.isArray(value.anyOf) || Array.isArray(value.oneOf);
+  return hasVariants && !isRecord(value.properties);
 }
 
 function allowTransportNull(schema: unknown): unknown {

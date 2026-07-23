@@ -3,6 +3,7 @@ import type {
   WorkLedgerCommit,
   AvailableSpecRevision,
 } from "../../../btcc/index.ts";
+import { bindManagedProgram } from "../../../btcc/work-ledger/program-authority.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
@@ -15,7 +16,9 @@ export function reduceProjectProgram(
   availableSpecs: AvailableSpecRevision[] = current?.availableSpecs ?? [],
 ): Program {
   const mutation = commit.mutation;
-  if (mutation.kind === "bind_program") return bindProgram(current, mutation, availableSpecs);
+  if (mutation.kind === "bind_program") {
+    return bindManagedProgram(current, mutation, availableSpecs);
+  }
   const program = requireProgram(current, mutation);
   if (mutation.kind === "install_reviewed_plan") return installPlan(program, mutation.product);
   if (mutation.kind === "accept_managed_deferral") {
@@ -62,36 +65,6 @@ export function reduceProjectProgram(
   }
   next.manifestRevision += 1;
   return selectCurrent(next);
-}
-
-function bindProgram(
-  current: Program | null,
-  mutation: Extract<Mutation, { kind: "bind_program" }>,
-  availableSpecs: AvailableSpecRevision[],
-): Program {
-  const { authority, goalContract } = mutation.product;
-  const binding = authority.managedBinding;
-  if (!current) {
-    return {
-      ledgerId: binding.ledgerId,
-      programId: binding.programId,
-      manifestRevision: 1,
-      goalContractRef: goalContract.ref,
-      authorityRef: authority.ref,
-      availableSpecs,
-      availableSpecRefs: availableSpecs.map((spec) => spec.revisionRef),
-      governingSpecRefs: [],
-      requiredOutcomeId: goalContract.requiredOutcome.outcomeId,
-      planningState: "unplanned",
-    };
-  }
-  if (binding.source !== "deferred_goal" || binding.continuationBinding.kind !== "deferred_goal" ||
-    current.programId !== binding.programId ||
-    current.manifestRevision !== binding.expectedManifestRevision ||
-    current.activeDeferral?.anchor.ref.id !== binding.continuationBinding.anchorRef.id) {
-    throw changed("deferred Program binding");
-  }
-  return { ...current, authorityRef: authority.ref, manifestRevision: current.manifestRevision + 1 };
 }
 
 function installPlan(program: Program, product: Extract<Mutation, {
