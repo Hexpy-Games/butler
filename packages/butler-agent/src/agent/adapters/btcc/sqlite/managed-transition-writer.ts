@@ -86,6 +86,9 @@ export class SqliteManagedTransitionWriter {
       case "select_work_task":
         this.selectTask(turn, nextRevision, transition, projectLedger);
         return;
+      case "resume_task_review":
+        this.advance(turn, nextRevision, transition.successor, requiredManaged(turn));
+        return;
       case "submit_result":
         this.submitResult(turn, nextRevision, transition, projectLedger);
         return;

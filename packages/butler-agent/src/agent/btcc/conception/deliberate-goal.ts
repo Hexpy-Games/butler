@@ -36,7 +36,7 @@ const CONTRACT: PhaseContract = {
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
-    "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
+    "no_heuristic_route", "no_generic_assurance_layer", "no_hidden_retry_loop",
     "no_mutation", "no_self_review",
   ],
 };

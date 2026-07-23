@@ -157,6 +157,7 @@ export function submitPlanningReview(
 export function submitFeedbackPlan(
   state: Record<string, unknown>,
   correctionKind: HarnessCorrectionKind,
+  revalidateAcceptedTask = false,
 ) {
   if (correctionKind === "implementation_repair") {
     return {
@@ -169,14 +170,36 @@ export function submitFeedbackPlan(
     kind: "feedback_plan_candidate",
     correctionKind,
     correctionAction: "리뷰 피드백에 맞춰 Task 경계와 의존 순서를 다시 승인한다",
-    revisedPlan: revisedPlanSubmission(state),
+    revisedPlan: revalidateAcceptedTask
+      ? unchangedTaskRevision(state)
+      : revisedPlanSubmission(state),
     impactMap: asArray(state.currentTasks).map((task, index) => ({
-      priorTaskRef: asRecord(task).ref,
-      disposition: index === 0 ? "rework" : "replan",
+      priorTaskLogicalId: asRecord(task).taskLogicalId,
+      disposition: revalidateAcceptedTask && index === 0
+        ? "revalidate"
+        : index === 0 || revalidateAcceptedTask
+          ? "rework"
+          : "replan",
+      ...(index === 0 || revalidateAcceptedTask
+        ? { successorTaskLogicalId: asRecord(task).taskLogicalId }
+        : {}),
+      reason: revalidateAcceptedTask && index === 0
+        ? "변경된 governing authority 아래에서 기존 통과 결과를 다시 검토해야 한다"
+        : index === 0
+        ? "리뷰에서 발견한 구현 누락을 같은 Task에서 다시 수행해야 한다"
+        : "변경된 Task 경계에 맞춰 후속 작업을 다시 계획해야 한다",
     })),
     ...(correctionKind === "authority_scope_revision"
       ? { authorityChange: "사용자가 승인한 확장 범위를 적용한다" }
       : {}),
+  };
+}
+
+function unchangedTaskRevision(state: Record<string, unknown>) {
+  const { kind: _kind, ...revision } = submitInitialPlan(state);
+  return {
+    ...revision,
+    strategy: "기존 Task 계약을 보존하고 변경된 governing authority 아래에서 재검토한다",
   };
 }
 

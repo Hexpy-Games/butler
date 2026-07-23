@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { artifactReviewAuthority } from
+import { taskReviewAuthority } from
   "../../packages/butler-agent/src/agent/btcc/review/source-authority.ts";
 
-test("artifact Review exposes only the immutable source for workspace inspection", () => {
+test("Task Review exposes exact result reads and only the immutable workspace source", () => {
   const reviewSourceRef = { id: "workspace-revision", sha256: "revision-sha" };
-  const authority = artifactReviewAuthority({
+  const authority = taskReviewAuthority({
     baseline: {
       observationScopeRefs: [
         "workspace:/stale/admission-snapshot",
@@ -13,11 +13,21 @@ test("artifact Review exposes only the immutable source for workspace inspection
       ],
       mutation: { kind: "forbidden" },
     },
-    reviewSourceRef,
+    result: {
+      kind: "workspace_artifact",
+      workspaceRevisionRef: reviewSourceRef,
+      operationResults: [{
+        readScopeRef: "operation-result:result-1",
+      }],
+    } as never,
   });
 
   expect(authority).toEqual({
-    observationScopeRefs: ["ledger:project", "web:public"],
+    observationScopeRefs: [
+      "ledger:project",
+      "web:public",
+      "operation-result:result-1",
+    ],
     mutation: { kind: "validation_overlay_only", reviewSourceRef },
   });
 });

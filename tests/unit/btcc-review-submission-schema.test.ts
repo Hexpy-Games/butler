@@ -9,10 +9,32 @@ test("promotion Review exposes only a satisfied criterion verdict", () => {
   expect(verdict).toEqual({
     type: "object",
     properties: {
+      criterionRef: {
+        type: "object",
+        properties: {
+          id: { type: "string", minLength: 1 },
+          sha256: { type: "string", minLength: 1 },
+        },
+        required: ["id", "sha256"],
+        additionalProperties: false,
+      },
+      reviewedResultRefs: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string", minLength: 1 },
+            sha256: { type: "string", minLength: 1 },
+          },
+          required: ["id", "sha256"],
+          additionalProperties: false,
+        },
+        minItems: 1,
+      },
       observation: { type: "string", minLength: 1 },
       verdict: { type: "string", const: "satisfied" },
     },
-    required: ["observation", "verdict"],
+    required: ["criterionRef", "reviewedResultRefs", "observation", "verdict"],
     additionalProperties: false,
   });
 });
@@ -20,7 +42,7 @@ test("promotion Review exposes only a satisfied criterion verdict", () => {
 test("ordinary Task Review retains satisfied and not-satisfied verdicts", () => {
   const verdict = criterionVerdictSchema(taskReviewSubmissionSchema("semantic"));
 
-  expect(verdict.type).toBe("object");
+  expect(verdict.type).toBeUndefined();
   expect(Array.isArray(verdict.anyOf)).toBe(true);
   expect(verdict.anyOf).toHaveLength(2);
 });

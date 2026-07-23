@@ -1,14 +1,12 @@
 import type { Database } from "bun:sqlite";
-import type {
-  OperationRequest,
-  OperationResult,
-  PhaseRunBinding,
-} from "../../../../btcc/gateway-api.ts";
 import {
   projectEphemeralOperationResult,
+  operationRoundScope,
+  type OperationRequest,
+  type OperationResult,
+  type PhaseRunBinding,
   type OperationResultProjection,
-} from "../../../../btcc/operation-result/index.ts";
-import { operationRoundScope } from "../../../../btcc/gateway-api.ts";
+} from "../../../../btcc/index.ts";
 import { digest, stableJson } from "../identity.ts";
 
 export class PhaseOperationResultLinks {

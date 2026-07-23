@@ -94,8 +94,8 @@ export class SqliteWorkLedgerProgramReader {
             : "implementation_open",
       ...(program.pending_correction_plan_ref
         ? { correctionPlanRef: this.loadRef(program.pending_correction_plan_ref) }
-        : latestAttempt?.correctionPlanRef
-          ? { correctionPlanRef: latestAttempt.correctionPlanRef }
+        : latestAttempt?.attemptRecord.correctionPlanRef
+          ? { correctionPlanRef: latestAttempt.attemptRecord.correctionPlanRef }
           : {}),
       ...(program.active_deferral_ref
         ? { activeDeferral: this.loadManagedDeferral(program.active_deferral_ref) }
@@ -214,8 +214,7 @@ export class SqliteWorkLedgerProgramReader {
       const bindingRef = JSON.parse(row.execution_target_binding_ref) as ContentRef;
       const attempt = this.loadRecord<Record<string, unknown>>(attemptRef.id);
       return {
-        ...attempt,
-        ref: attemptRef,
+        attemptRecord: { ...attempt, ref: attemptRef },
         executionTargetRef: targetRef,
         executionTarget: this.loadRecord(targetRef.id),
         executionTargetBinding: this.loadRecord(bindingRef.id),

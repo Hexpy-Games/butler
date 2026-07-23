@@ -3,13 +3,12 @@ import {
   assertLogicalLedgerMutationId,
   createLogicalLedgerBundle,
   logicalLedgerRecords,
-  type WorkLedgerCommit,
-} from "../../../../btcc/index.ts";
-import type { ManagedProgramAuthority } from "../../../../btcc/work-ledger/contracts.ts";
-import {
+  acceptFeedbackAuthority,
   acceptReviewedPlanAuthority,
   bindManagedProgram,
-} from "../../../../btcc/work-ledger/program-authority.ts";
+  type WorkLedgerCommit,
+  type ManagedProgramAuthority,
+} from "../../../../btcc/index.ts";
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
@@ -79,7 +78,7 @@ export class SqliteWorkLedgerMutationWriter {
         this.attachReview(mutation.product);
         return;
       case "accept_feedback_plan":
-        this.acceptFeedbackPlan(mutation.product);
+        this.acceptFeedbackPlan(mutation.product, requireAuthority(authority));
         return;
       case "close_implementation_frontier":
         this.promotionFrontier.closeImplementation(mutation);
@@ -109,7 +108,7 @@ export class SqliteWorkLedgerMutationWriter {
     const task = this.db.query<{ work_id: string }, [string, string]>(`
       SELECT work_id FROM btcc_tasks
       WHERE program_id = ? AND task_id = ? AND status = 'planned' AND is_active = 1
-    `).get(programId, attempt.taskRef.id);
+    `).get(programId, attempt.attemptRecord.taskRef.id);
     if (!task) throw new Error("Work Ledger selected Task is not planned");
     this.db.query(`
       INSERT INTO btcc_attempts (
@@ -117,12 +116,12 @@ export class SqliteWorkLedgerMutationWriter {
         correction_plan_ref, execution_target_ref, execution_target_binding_ref, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ready')
     `).run(
-      attempt.ref.id,
+      attempt.attemptRecord.ref.id,
       programId,
-      attempt.taskRef.id,
-      stableJson(attempt.ref),
-      attempt.previousAttemptRef?.id ?? null,
-      attempt.correctionPlanRef?.id ?? null,
+      attempt.attemptRecord.taskRef.id,
+      stableJson(attempt.attemptRecord.ref),
+      attempt.attemptRecord.previousAttemptRef?.id ?? null,
+      attempt.attemptRecord.correctionPlanRef?.id ?? null,
       stableJson(attempt.executionTargetRef),
       stableJson(attempt.executionTargetBinding.ref),
     );
@@ -130,7 +129,7 @@ export class SqliteWorkLedgerMutationWriter {
       .run(task.work_id);
     this.db.query(`
       UPDATE btcc_tasks SET status = 'selected', current_attempt_id = ? WHERE task_id = ?
-    `).run(attempt.ref.id, attempt.taskRef.id);
+    `).run(attempt.attemptRecord.ref.id, attempt.attemptRecord.taskRef.id);
     this.db.query(`
       UPDATE btcc_programs SET pending_correction_plan_ref = NULL WHERE program_id = ?
     `).run(programId);
@@ -229,12 +228,13 @@ export class SqliteWorkLedgerMutationWriter {
 
   private acceptFeedbackPlan(
     product: Extract<WorkLedgerCommit["mutation"], { kind: "accept_feedback_plan" }>["product"],
+    authority: ManagedProgramAuthority,
   ): void {
     if (product.candidate.correctionKind === "implementation_repair") {
       this.acceptRepair(product);
       return;
     }
-    this.graphRevisions.install(product);
+    this.graphRevisions.install(product, authority);
   }
 
   private acceptManagedDeferral(
@@ -310,6 +310,10 @@ function plannedAuthority(
   if (input.mutation.kind === "install_reviewed_plan") {
     if (!previous) throw new Error("Work Ledger reviewed Plan has no Program");
     return acceptReviewedPlanAuthority(previous, input.mutation.product);
+  }
+  if (input.mutation.kind === "accept_feedback_plan") {
+    if (!previous) throw new Error("Work Ledger feedback Plan has no Program");
+    return acceptFeedbackAuthority(previous, input.mutation.product);
   }
   return undefined;
 }

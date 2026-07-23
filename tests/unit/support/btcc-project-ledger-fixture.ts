@@ -21,13 +21,10 @@ import {
   ledgerMutationId,
   type ManagedProgramState,
 } from "../../../packages/butler-agent/src/agent/btcc/work-ledger/index.ts";
-
 const roots: string[] = [];
-
 export function clearProjectFixtures(): void {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 }
-
 export async function projectFixture() {
   const root = mkdtempSync(join(tmpdir(), "btcc-project-work-ledger-"));
   roots.push(root);
@@ -250,19 +247,24 @@ export function successfulResult(
   program: ReviewedManagedProgramState,
   attempt: ManagedAttempt,
 ): ResultCandidateProduct {
+  const resultSummary = {
+    ref: contentRef("result-summary", { content: "The Task completed." }),
+    content: "The Task completed.",
+  };
   const body = {
     kind: "non_artifact" as const,
-    turnId: attempt.owningTurnId,
+    turnId: attempt.attemptRecord.owningTurnId,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
     workRef: program.currentWork.work.ref,
     taskRef: program.currentTask.task.ref,
     taskRevisionSha256: program.currentTask.task.ref.sha256,
-    attemptRef: attempt.ref,
+    attemptRef: attempt.attemptRecord.ref,
     executionTargetRef: attempt.executionTargetRef,
     executionCheckpointRef: "checkpoint-execution",
-    resultSummaryRef: contentRef("result-summary", { status: "complete" }),
+    resultSummary,
     operationResultRefs: [],
+    operationResults: [],
     unresolvedConditionRefs: [] as [],
     targetStateRevisions: [],
     effectReceiptRefs: [] as [],
@@ -278,11 +280,11 @@ export function successfulReview(
 ): TaskReviewProduct {
   const observationBody = {
     taskRef: program.currentTask.task.ref,
-    attemptRef: attempt.ref,
+    attemptRef: attempt.attemptRecord.ref,
     executionTargetRef: attempt.executionTargetRef,
     targetRevisionRefs: [],
     description: "The requested result is complete.",
-    observationOperationRefs: [],
+    reviewedResultRefs: [result.result.resultSummary.ref],
     reviewCheckpointRef: "checkpoint-review",
   };
   const observation = {
@@ -290,14 +292,15 @@ export function successfulReview(
   };
   const reviewBody = {
     kind: "non_artifact" as const,
-    turnId: attempt.owningTurnId,
+    turnId: attempt.attemptRecord.owningTurnId,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
+    resultAuthorityRef: result.result.authorityRef,
     resultCandidateRef: result.result.ref,
     workRef: program.currentWork.work.ref,
     taskRef: program.currentTask.task.ref,
     taskRevisionSha256: program.currentTask.task.ref.sha256,
-    attemptRef: attempt.ref,
+    attemptRef: attempt.attemptRecord.ref,
     executionTargetRef: attempt.executionTargetRef,
     reviewCheckpointRef: "checkpoint-review",
     criterionVerdicts: program.criteria.map((criterion) => ({
@@ -306,12 +309,14 @@ export function successfulReview(
         .filter((question) => question.criterionRef.id === criterion.ref.id)
         .map((question) => question.ref),
       currentTargetRevisionRefs: [],
+      reviewedResultRefs: [result.result.resultSummary.ref],
       observationRefs: [observation.ref],
       verdict: "satisfied" as const,
       findingRefs: [],
     })),
     observations: [observation],
     findings: [],
+    reviewedResultRefs: [result.result.resultSummary.ref],
     reviewedTargetStateRevisionRefs: [],
     reviewedArtifactRevisionRefs: [],
     reviewedEffectReceiptRefs: [] as [],

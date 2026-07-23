@@ -42,10 +42,12 @@ export function selectNextTaskOrClose(input: {
       .map((task) => task.task.ref.id),
   );
   const next = implementationTasks
-    .filter((task) => task.status === "planned")
+    .filter((task) => task.status === "planned" || task.status === "result_submitted")
     .filter((task) => task.task.dependencyTaskRefs.every((ref) => acceptedTaskIds.has(ref.id)))
     .sort((left, right) => left.task.executionOrdinal - right.task.executionOrdinal)[0];
   if (!next) throw new Error("Reviewed Work graph has no dependency-ready Task");
 
-  return { kind: "select_task", task: next };
+  return next.status === "result_submitted"
+    ? { kind: "revalidate_task", task: next }
+    : { kind: "select_task", task: next };
 }

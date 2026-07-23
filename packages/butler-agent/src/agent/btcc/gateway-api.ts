@@ -39,13 +39,27 @@ export {
   logicalLedgerRecords,
 } from "./work-ledger/index.ts";
 export { operationRoundScope } from "./core/operation-identity.ts";
+export {
+  acceptFeedbackAuthority,
+  acceptReviewedPlanAuthority,
+  bindManagedProgram,
+} from "./work-ledger/program-authority.ts";
+export {
+  projectEphemeralOperationResult,
+  READ_OPERATION_RESULT_CAPABILITY,
+} from "./operation-result/index.ts";
 export type {
   LogicalLedgerBundle,
   LogicalLedgerRecord,
   WorkLedger,
   WorkLedgerCommit,
   WorkLedgerStorage,
+  ManagedProgramAuthority,
 } from "./work-ledger/index.ts";
+export type {
+  OperationResultProjection,
+} from "./operation-result/index.ts";
+export type { SpooledOperationOutput } from "./core/index.ts";
 export type { RetrospectiveScheduler } from "./delivery/index.ts";
 export type {
   BtccRuntimeDependencies,

@@ -16,7 +16,7 @@ export async function prepareTaskAttempt(input: {
     taskRef: input.task.task.ref,
     owningTurnId: input.turnId,
     createdByTurnRevision: input.turnRevision,
-    ...(previousAttempt ? { previousAttemptRef: previousAttempt.ref } : {}),
+    ...(previousAttempt ? { previousAttemptRef: previousAttempt.attemptRecord.ref } : {}),
     ...(input.program.correctionPlanRef
       ? { correctionPlanRef: input.program.correctionPlanRef }
       : {}),
@@ -29,7 +29,10 @@ export async function prepareTaskAttempt(input: {
     taskRef: input.task.task.ref,
     record: attemptBody,
   });
-  const common = { ...attemptBody, ref: attemptRef, status: "ready" as const };
+  const common = {
+    attemptRecord: { ...attemptBody, ref: attemptRef },
+    status: "ready" as const,
+  };
   const policy = input.task.task.artifactPolicy;
   if (policy.kind === "non_artifact") {
     const target = createNonArtifactTarget(input.program.programId, attemptRef, input.task);

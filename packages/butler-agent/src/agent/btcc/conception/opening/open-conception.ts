@@ -37,7 +37,7 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
     "no_runtime_semantic_judgment",
     "no_model_substitution",
     "no_heuristic_route",
-    "no_generic_evidence",
+    "no_generic_assurance_layer",
     "no_hidden_retry_loop",
     "no_mutation",
   ],

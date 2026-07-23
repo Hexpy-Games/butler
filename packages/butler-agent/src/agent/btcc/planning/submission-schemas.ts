@@ -1,6 +1,5 @@
 import {
   arraySchema,
-  contentRefSchema,
   enumSchema,
   literalSchema,
   objectSchema,
@@ -148,13 +147,15 @@ export const planReviewSubmissionSchema = variantsSchema(
 
 const impact = variantsSchema(
   objectSchema({
-    priorTaskRef: contentRefSchema(),
+    priorTaskLogicalId: textSchema(),
     disposition: enumSchema("unaffected", "revalidate", "rework", "replan"),
+    reason: textSchema(),
   }),
   objectSchema({
-    priorTaskRef: contentRefSchema(),
+    priorTaskLogicalId: textSchema(),
     disposition: enumSchema("unaffected", "revalidate", "rework", "replan"),
-    successorTaskRef: contentRefSchema(),
+    successorTaskLogicalId: textSchema(),
+    reason: textSchema(),
   }),
 );
 

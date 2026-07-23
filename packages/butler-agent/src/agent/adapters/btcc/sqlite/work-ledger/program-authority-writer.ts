@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
-import type { WorkLedgerCommit } from "../../../../btcc/gateway-api.ts";
-import type { ManagedProgramAuthority } from "../../../../btcc/work-ledger/contracts.ts";
+import type {
+  ManagedProgramAuthority,
+  WorkLedgerCommit,
+} from "../../../../btcc/index.ts";
 import { stableJson } from "../identity.ts";
 
 type BindProgram = Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>;

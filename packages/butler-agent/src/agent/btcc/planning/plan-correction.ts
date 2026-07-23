@@ -4,7 +4,6 @@ import {
   requireRecord,
   requireString,
   runPhaseConversation,
-  stableJson,
   type ContentRef,
   type PhaseContract,
   type PhaseInvocation,
@@ -14,12 +13,12 @@ import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import type {
   FeedbackPlanProduct,
   ManagedTask,
-  TaskImpact,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
 import { feedbackPlanSubmissionSchema } from "./submission-schemas.ts";
 import { decodeAvailableSpecs } from "./decode-available-specs.ts";
+import { decodeTaskImpact } from "./decode-task-impact.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -34,7 +33,7 @@ const CONTRACT: PhaseContract = {
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
-    "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
+    "no_heuristic_route", "no_generic_assurance_layer", "no_hidden_retry_loop",
     "no_mutation", "no_self_review",
   ],
   authoringContractRefs: PLANNING_AUTHORING_CONTRACTS.map((contract) => contract.contractId),
@@ -60,74 +59,83 @@ function feedbackPlanningCodec(availableSpecIds: string[]) {
       const lifecycleRef = requireContentRef(state.artifactLifecycleRef, "artifactLifecycleRef");
       const revisionOrigin = revisionOriginFrom(state);
       if (value.correctionKind === "implementation_repair") {
+        const correctionPlan = correctionPlanFor(
+          currentPlanRef,
+          affectedTaskRefs,
+          lifecycleRef,
+          value.correctionAction,
+        );
+        return feedbackProduct({
+          correctionKind: "implementation_repair",
+          revisionOrigin,
+          feedbackIntentRef: intent.feedbackIntent.ref,
+          correctionScopeRef: intent.feedbackIntent.correctionScopeRef,
+          correctionPlan,
+        });
+      }
+
+      const currentAuthorityRef = requireContentRef(state.authorityRef, "authorityRef");
+      const proposedAuthority = value.correctionKind === "authority_scope_revision"
+        ? authorityRevision(currentAuthorityRef, value.authorityChange)
+        : undefined;
+      const revisedPlan = authorPlanCandidate(
+        requireRecord(value.revisedPlan, "revisedPlan"),
+        {
+          ledgerId: requireString(state.ledgerId, "ledgerId"),
+          programId: requireString(state.programId, "programId"),
+          observedManifestRevision: requirePositiveInteger(
+            state.observedManifestRevision,
+            "observedManifestRevision",
+          ),
+          goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
+          authorityRef: proposedAuthority?.ref ?? currentAuthorityRef,
+          governingSpecRefs: requireContentRefArray(state.governingSpecRefs, "governingSpecRefs"),
+          availableSpecs: decodeAvailableSpecs(
+            state.availableSpecs,
+            optionalString(state.specParentRootId),
+          ),
+          ...(optionalString(state.specParentRootId) ? {
+            specParentRootId: optionalString(state.specParentRootId),
+          } : {}),
+          requireGoverningSpec: Boolean(state.requireGoverningSpec),
+          requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+          artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
+          workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
+        },
+      );
+      const impactMap = decodeTaskImpact({
+        submission: value.impactMap,
+        currentTasks: requireCurrentTaskStates(state.currentTaskStates),
+        nextTasks: revisedPlan.tasks,
+      });
+      const revisedTargets = impactMap
+        .filter((impact) => impact.disposition !== "unaffected")
+        .map((impact) => impact.priorTaskRef);
+      if (revisedTargets.length === 0) {
+        throw new Error("Governing revision must identify at least one affected Task");
+      }
       const correctionPlan = correctionPlanFor(
-        currentPlanRef,
-        affectedTaskRefs,
-        lifecycleRef,
+        revisedPlan.plan.ref,
+        revisedTargets as [ContentRef, ...ContentRef[]],
+        revisedPlan.artifactLifecycle.ref,
         value.correctionAction,
       );
-      return feedbackProduct({
-        correctionKind: "implementation_repair",
+      const common = {
         revisionOrigin,
         feedbackIntentRef: intent.feedbackIntent.ref,
         correctionScopeRef: intent.feedbackIntent.correctionScopeRef,
         correctionPlan,
-      });
+        impactMap,
+        nextPlanCandidate: revisedPlan,
+      };
+      if (value.correctionKind === "governing_revision") {
+        return feedbackProduct({ ...common, correctionKind: "governing_revision" });
       }
-
-    const currentAuthorityRef = requireContentRef(state.authorityRef, "authorityRef");
-    const proposedAuthority = value.correctionKind === "authority_scope_revision"
-      ? authorityRevision(currentAuthorityRef, value.authorityChange)
-      : undefined;
-    const revisedPlan = authorPlanCandidate(
-      requireRecord(value.revisedPlan, "revisedPlan"),
-      {
-        ledgerId: requireString(state.ledgerId, "ledgerId"),
-        programId: requireString(state.programId, "programId"),
-        observedManifestRevision: requirePositiveInteger(
-          state.observedManifestRevision,
-          "observedManifestRevision",
-        ),
-        goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
-        authorityRef: proposedAuthority?.ref ?? currentAuthorityRef,
-        governingSpecRefs: requireContentRefArray(state.governingSpecRefs, "governingSpecRefs"),
-        availableSpecs: decodeAvailableSpecs(
-          state.availableSpecs,
-          optionalString(state.specParentRootId),
-        ),
-        ...(optionalString(state.specParentRootId) ? {
-          specParentRootId: optionalString(state.specParentRootId),
-        } : {}),
-        requireGoverningSpec: Boolean(state.requireGoverningSpec),
-        requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
-        artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
-        workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
-      },
-    );
-    const currentTasks = requireManagedTasks(state.currentTasks);
-    const impactMap = decodeImpactMap(value.impactMap, currentTasks, revisedPlan.tasks);
-    const correctionPlan = correctionPlanFor(
-      revisedPlan.plan.ref,
-      affectedTaskRefs,
-      revisedPlan.artifactLifecycle.ref,
-      value.correctionAction,
-    );
-    const common = {
-      revisionOrigin,
-      feedbackIntentRef: intent.feedbackIntent.ref,
-      correctionScopeRef: intent.feedbackIntent.correctionScopeRef,
-      correctionPlan,
-      impactMap,
-      nextPlanCandidate: revisedPlan,
-    };
-    if (value.correctionKind === "governing_revision") {
-      return feedbackProduct({ ...common, correctionKind: "governing_revision" });
-    }
-    return feedbackProduct({
-      ...common,
-      correctionKind: "authority_scope_revision",
-      proposedAuthority: proposedAuthority!,
-    });
+      return feedbackProduct({
+        ...common,
+        correctionKind: "authority_scope_revision",
+        proposedAuthority: proposedAuthority!,
+      });
     },
   });
 }
@@ -186,36 +194,6 @@ function correctionPlanFor(
   return { ref: contentRef("correction-plan", body), ...body };
 }
 
-function decodeImpactMap(
-  value: unknown,
-  currentTasks: ManagedTask[],
-  nextTasks: ManagedTask[],
-): TaskImpact[] {
-  if (!Array.isArray(value) || value.length !== currentTasks.length) {
-    throw new Error("Feedback Planning impact map must cover every current Task");
-  }
-  return value.map((item, index) => {
-    const impact = requireRecord(item, `impactMap[${index}]`);
-    const priorTask = currentTasks[index]!;
-    if (stableJson(impact.priorTaskRef) !== stableJson(priorTask.ref)) {
-      throw new Error("Feedback Planning impact map changed Task order");
-    }
-    const disposition = impact.disposition;
-    if (
-      disposition !== "unaffected" && disposition !== "revalidate" &&
-      disposition !== "rework" && disposition !== "replan"
-    ) {
-      throw new Error("Feedback Planning impact disposition is invalid");
-    }
-    const successor = nextTasks.find((task) => task.taskLogicalId === priorTask.taskLogicalId);
-    return {
-      priorTaskRef: priorTask.ref,
-      disposition,
-      ...(successor ? { successorTaskRef: successor.ref } : {}),
-    };
-  });
-}
-
 function feedbackProduct(
   candidateBody: Omit<FeedbackPlanProduct["candidate"], "ref">,
 ): FeedbackPlanProduct {
@@ -235,9 +213,13 @@ function revisionOriginFrom(state: Record<string, unknown>) {
     : { kind: "initial" as const };
 }
 
-function requireManagedTasks(value: unknown): ManagedTask[] {
-  if (!Array.isArray(value) || value.length === 0) throw new Error("currentTasks is empty");
-  return value as ManagedTask[];
+function requireCurrentTaskStates(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) throw new Error("currentTaskStates is empty");
+  return value as Array<{
+    task: ManagedTask;
+    status: string;
+    currentResult?: unknown;
+  }>;
 }
 
 function requirePositiveInteger(value: unknown, label: string): number {

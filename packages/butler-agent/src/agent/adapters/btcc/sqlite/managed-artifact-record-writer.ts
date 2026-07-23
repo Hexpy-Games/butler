@@ -16,14 +16,7 @@ export class ManagedArtifactRecordWriter {
   constructor(private readonly records: SqliteImmutableRecordStore) {}
 
   recordAttempt(attempt: Attempt): void {
-    this.insert("attempt", {
-      ref: attempt.ref,
-      taskRef: attempt.taskRef,
-      owningTurnId: attempt.owningTurnId,
-      createdByTurnRevision: attempt.createdByTurnRevision,
-      ...(attempt.previousAttemptRef ? { previousAttemptRef: attempt.previousAttemptRef } : {}),
-      ...(attempt.correctionPlanRef ? { correctionPlanRef: attempt.correctionPlanRef } : {}),
-    });
+    this.insert("attempt", attempt.attemptRecord);
     this.insert("task_execution_target", attempt.executionTarget);
     this.insert("attempt_execution_target_binding", attempt.executionTargetBinding);
     if (!attempt.workspaceProvision) return;
@@ -36,6 +29,7 @@ export class ManagedArtifactRecordWriter {
 
   recordResult(product: Result): void {
     this.insert("result_candidate", product.result);
+    this.insert("result_summary", product.result.resultSummary);
     if (product.result.kind === "workspace_artifact") {
       this.insert("workspace_revision", product.result.workspaceRevision);
     }

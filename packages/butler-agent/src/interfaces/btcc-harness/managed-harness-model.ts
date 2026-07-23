@@ -33,6 +33,8 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly chooseContinuation = false,
     private readonly repairConsolidation = false,
     private readonly reviseFirstGoal = false,
+    private readonly failedReviewOrdinal = 1,
+    private readonly revalidateAcceptedTask = false,
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
@@ -176,11 +178,6 @@ export class ManagedHarnessModel implements SelectedModel {
           resultSummary: this.reviewCount === 0 && this.failFirstReview
             ? "고객 응대의 기본 원칙만 초안으로 정리했다"
             : "고객 응대 원칙과 실행 지침을 함께 정리했다",
-          observedStates: asArray(state.targetScopeRefs).map((targetScopeRef) => ({
-            targetScopeRef,
-            state: "present",
-            description: "요청 범위에 맞는 운영 가이드 본문이 존재한다",
-          })),
         };
       case "task_review": {
         if (this.artifactPlan && state.reviewSourceRef && envelope.operationResults.length === 0) {
@@ -196,22 +193,18 @@ export class ManagedHarnessModel implements SelectedModel {
           };
         }
         this.reviewCount += 1;
-        const resultCandidateRef = nestedRef(state, "resultCandidate", "result");
+        const result = asRecord(asRecord(state.resultCandidate).result);
+        const reviewedResultRefs = [
+          asRecord(result.resultSummary).ref,
+          ...envelope.operationResults.map((operation) => operation.resultRef),
+        ];
         const criteria = asArray(state.criteria);
-        const questions = asArray(state.verificationQuestions);
-        if (this.failFirstReview && this.reviewCount === 1) {
+        if (this.failFirstReview && this.reviewCount === this.failedReviewOrdinal) {
           return {
             kind: "task_review",
-            resultCandidateRef,
-            verdict: "not_passed",
             criterionVerdicts: criteria.map((criterion, index) => ({
               criterionRef: asRecord(criterion).ref,
-              verificationQuestionRefs: questions
-                .filter((question) => stableEqual(
-                  asRecord(question).criterionRef,
-                  asRecord(criterion).ref,
-                ))
-                .map((question) => asRecord(question).ref),
+              reviewedResultRefs,
               verdict: index === 0 ? "not_satisfied" : "satisfied",
               observation: index === 0
                 ? "초안에 실제 적용 지침이 빠져 있다"
@@ -231,16 +224,9 @@ export class ManagedHarnessModel implements SelectedModel {
         }
         return {
           kind: "task_review",
-          resultCandidateRef,
-          verdict: "passed",
           criterionVerdicts: criteria.map((criterion) => ({
             criterionRef: asRecord(criterion).ref,
-            verificationQuestionRefs: questions
-              .filter((question) => stableEqual(
-                asRecord(question).criterionRef,
-                asRecord(criterion).ref,
-              ))
-              .map((question) => asRecord(question).ref),
+            reviewedResultRefs,
             verdict: "satisfied",
             observation: "원칙과 실행 지침이 모두 포함되어 수용 기준을 충족한다",
           })),
@@ -253,7 +239,11 @@ export class ManagedHarnessModel implements SelectedModel {
           intendedCorrection: "누락된 실행 지침만 보완한다",
         };
       case "feedback_planning":
-        return submitFeedbackPlan(state, this.correctionKind);
+        return submitFeedbackPlan(
+          state,
+          this.correctionKind,
+          this.revalidateAcceptedTask,
+        );
       case "feedback_planning_review":
         this.feedbackPlanningReviewCount += 1;
         return submitFeedbackPlanningReview(
@@ -309,18 +299,6 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
-}
-
-function stableEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function nestedRef(
-  state: Record<string, unknown>,
-  productKey: string,
-  recordKey: string,
-): unknown {
-  return asRecord(asRecord(state[productKey])[recordKey]).ref;
 }
 
 function nestedValue(

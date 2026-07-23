@@ -121,6 +121,12 @@ function acceptedTransition(
       }),
     };
   }
+  if (turn.semanticState === "work_frontier" && event.kind === "WorkTaskReadyForReview") {
+    return {
+      kind: "resume_task_review",
+      successor: "task_review",
+    };
+  }
   if (turn.semanticState === "work_frontier" && event.kind === "WorkFrontierClosed") {
     return {
       kind: "close_work_frontier",

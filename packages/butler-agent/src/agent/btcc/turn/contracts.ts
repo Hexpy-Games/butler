@@ -174,6 +174,10 @@ export type AcceptedTurnTransition =
       };
     }
   | {
+      kind: "resume_task_review";
+      successor: "task_review";
+    }
+  | {
       kind: "close_work_frontier";
       successor: "consolidation";
       promotionAssemblies: ReviewedPromotionAssembly[];
