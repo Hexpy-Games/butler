@@ -37,6 +37,9 @@ export function materializeProjectProgram(
       ensureModeledRecord(core, root, "spec", identity.logicalId, spec.title,
         spec.body.normalize("NFC"), "specified", {
           revisionRef: identity.revisionRef.id,
+          logicalId: spec.logicalId,
+          parentId: spec.parentId,
+          concernId: spec.concernId,
         });
     }
   }

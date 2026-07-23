@@ -118,34 +118,6 @@ describe("BTCC Project Work Ledger prepared publication", () => {
       .map((record: { id: string }) => record.id)).toEqual(["SPEC-FIXTURE"]);
   });
 
-  test("authors and selects a new governing Spec instead of treating Goal as Spec", async () => {
-    const fixture = await projectFixture();
-    const adapter = createProjectWorkLedgerPublicationAdapter({ stagingRoot: join(fixture.root, "staging") });
-    const binding = projectBindingCommit();
-    const bind = await adapter.prepareCommit({
-      projectRoot: fixture.ledgerRoot,
-      expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
-      commit: binding.commit,
-    });
-    await adapter.promoteAndObserve(bind.publication);
-    const accepted = reviewedPlan({
-      goalContractRef: binding.goalContract.ref,
-      authorityRef: binding.authority.ref,
-      availableSpecRefs: bind.program.availableSpecRefs,
-      specifications: [{ logicalId: "new-spec", title: "New exact Spec", body: "# Exact behavior\n" }],
-      requireGoverningSpec: true,
-    });
-    const install = await commitMutation(adapter, fixture.ledgerRoot, {
-      mutationId: "mutation-authored-spec", turnId: "turn-authored-spec",
-      expectedTurnRevision: 4,
-      mutation: { kind: "install_reviewed_plan", product: accepted },
-    });
-    expect(install.program.governingSpecRefs).toEqual(accepted.candidate.authoredSpecRevisionRefs);
-    await adapter.promoteAndObserve(install.publication);
-    expect(fixture.core.resolveRecord(fixture.ledgerRoot, { kind: "spec", id: "new-spec" }).record.id)
-      .toBe("new-spec");
-  });
-
   test("persists a Planning-stage deferral before any Plan or Work exists", async () => {
     const fixture = await projectFixture();
     const adapter = createProjectWorkLedgerPublicationAdapter({

@@ -23,12 +23,16 @@ describe("BTCC canonical Spec resolver", () => {
     expect(normalizeSpecBody("A\rB\r\n\n")).toBe("A\nB\n");
   });
 
-  test("rejects absent parent lineage and ambiguous current revisions", () => {
-    expect(() => resolveCanonicalSpecRevisions(
+  test("roots legacy v1 Specs at the owning project and rejects ambiguous current revisions", () => {
+    const [legacy] = resolveCanonicalSpecRevisions(
       fakeCore([spec("SPEC-NO-PARENT", "body", {})]) as never,
       "/ledger",
       ["SPEC-NO-PARENT"],
-    )).toThrow("parentId is missing");
+    );
+    expect(legacy).toMatchObject({
+      parentId: "fixture-project",
+      concernId: "SPEC-NO-PARENT",
+    });
 
     const ambiguous = fakeCore([
       spec("SPEC-PHYSICAL-A", "A", { logicalId: "SPEC-LOGICAL", parentId: "PARENT" }),
@@ -139,12 +143,17 @@ function fakeCore(specs: FakeSpec[]) {
   const byId = new Map(specs.map((item) => [item.id, item]));
   return {
     buildIndex: () => ({
-      records: specs.map((item) => ({
+      records: [{
+        id: "fixture-project",
+        kind: "project",
+        title: "Fixture project",
+        status: "active",
+      }, ...specs.map((item) => ({
         id: item.id,
         kind: "spec",
         title: item.title,
         status: item.status,
-      })),
+      }))],
     }),
     resolveRecord: (_root: string, input: { id: string }) => {
       if (!byId.has(input.id)) throw new Error("missing");

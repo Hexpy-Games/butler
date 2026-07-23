@@ -5,6 +5,7 @@ const COMPACT_CONTRACTS = [
     contractId: "SPEC-BTCC-WORK-AUTHORING-CONTRACT",
     applicableRules: [
       "Preserve the immutable GoalContract and current governing authority.",
+      "Every authored Spec declares parentId and concernId in reviewed bytes; use specParentRootId for a project-root Spec and an exact Spec logical id for a child.",
       "A Work is a cohesive product outcome, never a phase, file bucket, or agent assignment.",
       "A Task is the smallest independently executable and reviewable outcome.",
       "Every required Goal outcome is covered exactly by observable criteria and questions.",

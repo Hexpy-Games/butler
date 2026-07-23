@@ -6,25 +6,38 @@ export function authorGoverningSpecs(
   specifications: unknown,
   selections: unknown,
   available: AvailableSpecRevision[],
+  rootParentId?: string,
 ) {
-  const authoredSpecs = authorSpecs(specifications);
+  const authoredSpecs = authorSpecs(specifications, available, rootParentId);
   return {
     authoredSpecs,
     governingSpecRefs: selectGoverningSpecs(selections, available, authoredSpecs),
   };
 }
 
-function authorSpecs(value: unknown) {
+function authorSpecs(
+  value: unknown,
+  available: AvailableSpecRevision[],
+  rootParentId?: string,
+) {
   if (value === undefined) return [];
+  if (!rootParentId) {
+    rejectPlanningProposal(
+      "specification_project_authority_missing",
+      "Planning cannot author a Project Spec without project authority",
+    );
+  }
   if (!Array.isArray(value)) {
     rejectPlanningProposal("specifications_invalid", "Planning specifications must be an array");
   }
   const specs = value.map((item, index) => {
     const draft = item as Record<string, unknown>;
     const body = {
-      logicalId: requireString(draft.logicalId, `specifications[${index}].logicalId`),
-      title: requireString(draft.title, `specifications[${index}].title`),
-      body: requireString(draft.body, `specifications[${index}].body`),
+      logicalId: planningString(draft.logicalId, `specifications[${index}].logicalId`),
+      parentId: planningString(draft.parentId, `specifications[${index}].parentId`),
+      concernId: planningString(draft.concernId, `specifications[${index}].concernId`),
+      title: planningString(draft.title, `specifications[${index}].title`),
+      body: planningString(draft.body, `specifications[${index}].body`),
     };
     return { ref: contentRef("spec-revision", body), ...body };
   });
@@ -34,7 +47,80 @@ function authorSpecs(value: unknown) {
       "Planning specifications contain duplicate logical IDs",
     );
   }
+  validateSpecHierarchy(specs, available, rootParentId);
   return specs;
+}
+
+function planningString(value: unknown, label: string): string {
+  try {
+    return requireString(value, label);
+  } catch {
+    rejectPlanningProposal("specification_field_invalid", `${label} must be a non-empty string`);
+  }
+}
+
+function validateSpecHierarchy(
+  authored: Array<{ logicalId: string; parentId: string; concernId: string }>,
+  available: AvailableSpecRevision[],
+  rootParentId: string,
+): void {
+  const authoredIds = new Set(authored.map((spec) => spec.logicalId));
+  const availableIds = new Set(available.map((spec) => spec.logicalId));
+  const validParents = new Set([rootParentId, ...availableIds, ...authoredIds]);
+  for (const spec of authored) {
+    if (!validParents.has(spec.parentId)) {
+      rejectPlanningProposal(
+        "specification_parent_unavailable",
+        `Planning Spec parent is unavailable: ${spec.parentId}`,
+      );
+    }
+    if (spec.parentId === spec.logicalId) {
+      rejectPlanningProposal(
+        "specification_parent_self_reference",
+        `Planning Spec cannot parent itself: ${spec.logicalId}`,
+      );
+    }
+  }
+  rejectConcernCollisions(authored, available);
+  rejectParentCycles(authored, authoredIds);
+}
+
+function rejectConcernCollisions(
+  authored: Array<{ logicalId: string; concernId: string }>,
+  available: AvailableSpecRevision[],
+): void {
+  const owners = new Map(available.map((spec) => [spec.concernId, spec.logicalId] as const));
+  for (const spec of authored) {
+    const owner = owners.get(spec.concernId);
+    if (owner && owner !== spec.logicalId) {
+      rejectPlanningProposal(
+        "specification_concern_conflict",
+        `Planning Specs claim competing authority for ${spec.concernId}`,
+      );
+    }
+    owners.set(spec.concernId, spec.logicalId);
+  }
+}
+
+function rejectParentCycles(
+  authored: Array<{ logicalId: string; parentId: string }>,
+  authoredIds: Set<string>,
+): void {
+  const parents = new Map(authored.map((spec) => [spec.logicalId, spec.parentId] as const));
+  for (const spec of authored) {
+    const visited = new Set<string>();
+    let cursor: string | undefined = spec.logicalId;
+    while (cursor && authoredIds.has(cursor)) {
+      if (visited.has(cursor)) {
+        rejectPlanningProposal(
+          "specification_parent_cycle",
+          `Planning Spec hierarchy contains a cycle at ${cursor}`,
+        );
+      }
+      visited.add(cursor);
+      cursor = parents.get(cursor);
+    }
+  }
 }
 
 function selectGoverningSpecs(

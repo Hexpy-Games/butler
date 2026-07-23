@@ -48,12 +48,16 @@ export type ManagedPlanningAssumption = {
 export type ManagedSpecRevision = {
   ref: ContentRef;
   logicalId: string;
+  parentId: string;
+  concernId: string;
   title: string;
   body: string;
 };
 
 export type AvailableSpecRevision = {
   logicalId: string;
+  parentId: string;
+  concernId: string;
   title: string;
   status: string;
   revisionRef: ContentRef;
