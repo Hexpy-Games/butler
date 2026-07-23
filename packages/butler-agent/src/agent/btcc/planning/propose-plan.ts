@@ -53,6 +53,7 @@ function planningCodec(availableSpecIds: string[]) {
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+        artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
         workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
         ledgerId: requireString(state.ledgerId, "ledgerId"),
         programId: requireString(state.programId, "programId"),
@@ -112,4 +113,11 @@ function requireContentRef(value: unknown, label: string): ContentRef {
 function requireContentRefs(value: unknown, label: string): ContentRef[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
+}
+
+function requireArtifactPersistence(value: unknown): "not_required" | "required" {
+  if (value !== "not_required" && value !== "required") {
+    throw new Error("Planning state has an invalid artifactPersistence");
+  }
+  return value;
 }

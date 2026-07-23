@@ -4,9 +4,9 @@ import {
   stableJson,
   type ContentRef,
 } from "../../core/index.ts";
+import type { GoalArtifactPersistence } from "../../conception/index.ts";
 import type {
   ManagedCriterion,
-  AvailableSpecRevision,
   ManagedTask,
   ManagedVerificationQuestion,
   ManagedWork,
@@ -14,6 +14,7 @@ import type {
   PlanningCandidate,
 } from "../contracts.ts";
 import { authorArtifactLifecycle } from "./author-artifact-lifecycle.ts";
+import { authorGoverningSpecs } from "./author-governing-specs.ts";
 import { authorPlanningConsiderations } from "./author-planning-considerations.ts";
 import {
   owningWork,
@@ -23,6 +24,7 @@ import {
   type WorkDraft,
 } from "./read-plan-drafts.ts";
 import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
+import { validateArtifactPersistence } from "./validate-artifact-persistence.ts";
 
 export type AuthoringState = {
   ledgerId: string;
@@ -31,8 +33,9 @@ export type AuthoringState = {
   goalContractRef: ContentRef;
   authorityRef: ContentRef;
   governingSpecRefs: ContentRef[];
-  availableSpecs?: AvailableSpecRevision[];
+  availableSpecs?: import("../contracts.ts").AvailableSpecRevision[];
   requiredOutcomeId: string;
+  artifactPersistence: GoalArtifactPersistence;
   workspaceScopeRef: string;
   previousCandidateRef?: ContentRef;
   findingSetRef?: ContentRef;
@@ -44,11 +47,10 @@ export function authorPlanCandidate(
   submission: Record<string, unknown>,
   state: AuthoringState,
 ): PlanningCandidate {
-  const authoredSpecs = authorSpecs(submission.specifications);
-  const governingSpecRefs = selectGoverningSpecs(
+  const { authoredSpecs, governingSpecRefs } = authorGoverningSpecs(
+    submission.specifications,
     submission.governingSpecSelections,
     state.availableSpecs ?? [],
-    authoredSpecs,
   );
   if (state.requireGoverningSpec && governingSpecRefs.length === 0) {
     rejectPlanningProposal(
@@ -100,6 +102,7 @@ export function authorPlanCandidate(
     authorityRef: state.authorityRef,
   });
   const artifactLifecycle = authoredLifecycle.lifecycle;
+  validateArtifactPersistence(state.artifactPersistence, artifactLifecycle);
   const { risks, assumptions } = authorPlanningConsiderations(
     submission,
     tasks,
@@ -227,68 +230,6 @@ function recordKindForRef(recordKind: string): string {
     work_graph: "work-graph",
     work_plan: "work-plan",
   }[recordKind] ?? recordKind;
-}
-
-function authorSpecs(value: unknown) {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    rejectPlanningProposal("specifications_invalid", "Planning specifications must be an array");
-  }
-  const specs = value.map((item, index) => {
-    const draft = item as Record<string, unknown>;
-    const body = {
-      logicalId: requireString(draft.logicalId, `specifications[${index}].logicalId`),
-      title: requireString(draft.title, `specifications[${index}].title`),
-      body: requireString(draft.body, `specifications[${index}].body`),
-    };
-    return { ref: contentRef("spec-revision", body), ...body };
-  });
-  if (new Set(specs.map((spec) => spec.logicalId)).size !== specs.length) {
-    rejectPlanningProposal(
-      "specification_id_duplicate",
-      "Planning specifications contain duplicate logical IDs",
-    );
-  }
-  return specs;
-}
-
-function selectGoverningSpecs(
-  value: unknown,
-  available: AvailableSpecRevision[],
-  authored: Array<{ logicalId: string; ref: ContentRef }>,
-): ContentRef[] {
-  if (value === undefined) return authored.map((spec) => spec.ref);
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    rejectPlanningProposal(
-      "governing_spec_selection_invalid",
-      "governingSpecSelections must be a string array",
-    );
-  }
-  const selections = value as string[];
-  if (new Set(selections).size !== selections.length) {
-    rejectPlanningProposal(
-      "governing_spec_selection_duplicate",
-      "governingSpecSelections contains duplicates",
-    );
-  }
-  const candidates = new Map(
-    available.map((spec) => [spec.logicalId, spec.revisionRef] as const),
-  );
-  const selected = selections.map((selection) => {
-    const ref = candidates.get(selection);
-    if (!ref) {
-      rejectPlanningProposal(
-        "governing_spec_unavailable",
-        `governingSpecSelections contains an unavailable Spec: ${selection}`,
-      );
-    }
-    return ref;
-  });
-  const authoredIds = new Set(authored.map((spec) => spec.logicalId));
-  return [
-    ...selected.filter((_ref, index) => !authoredIds.has(selections[index]!)),
-    ...authored.map((spec) => spec.ref),
-  ];
 }
 
 function materializeCriteria(

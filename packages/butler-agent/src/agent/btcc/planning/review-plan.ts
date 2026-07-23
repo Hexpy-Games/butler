@@ -28,6 +28,7 @@ const CONTRACT: PhaseContract = {
     "review_plan_exactly", "review_work_cohesion", "review_executability",
     "review_dependencies", "review_verification_integration",
     "review_effect_authority", "review_artifact_lifecycle",
+    "review_goal_artifact_persistence",
     "author_managed_deferral",
   ],
   prohibitions: [

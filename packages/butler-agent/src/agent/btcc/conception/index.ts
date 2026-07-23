@@ -2,6 +2,7 @@ export { conception } from "./conception.ts";
 export type {
   FeedbackIntentProduct,
   GoalContractAcceptedProduct,
+  GoalArtifactPersistence,
   GoalContractCandidateProduct,
   GoalContractRecord,
   GoalContractRevisionRequiredProduct,

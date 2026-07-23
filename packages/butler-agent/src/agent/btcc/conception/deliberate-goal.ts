@@ -32,7 +32,7 @@ const CONTRACT: PhaseContract = {
   duties: [
     "preserve_selected_model", "state_input_only", "understand_request",
     ...LENSES, "select_exact_governing_spec_logical_ids", "candidate_revision_lineage",
-    "apply_exact_review_findings",
+    "apply_exact_review_findings", "define_artifact_persistence",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -90,6 +90,7 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
       request,
       intendedResult,
       acceptanceIntent: requireString(value.acceptanceIntent, "acceptanceIntent"),
+      artifactPersistence: requireArtifactPersistence(value.artifactPersistence),
       fields: [
         { fieldId: "request", semanticRole: "required_outcome", statement: request },
         { fieldId: "intended_result", semanticRole: "required_outcome", statement: intendedResult },
@@ -179,6 +180,13 @@ function uniqueStrings(values: string[]): string[] {
     throw new Error("governingSpecLogicalIds contains duplicates");
   }
   return values;
+}
+
+function requireArtifactPersistence(value: unknown): "not_required" | "required" {
+  if (value !== "not_required" && value !== "required") {
+    throw new Error("artifactPersistence must be not_required or required");
+  }
+  return value;
 }
 
 export function deliberateGoal(command: PhaseInvocation) {

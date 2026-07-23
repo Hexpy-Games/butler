@@ -23,7 +23,10 @@ import { goalReviewSubmissionSchema } from "./submission-schemas.ts";
 const CONTRACT: PhaseContract = {
   phase: "contract_review",
   objective: "independently_review_the_exact_goal_candidate",
-  duties: ["preserve_selected_model", "state_input_only", "review_goal_contract_exactly"],
+  duties: [
+    "preserve_selected_model", "state_input_only", "review_goal_contract_exactly",
+    "review_artifact_persistence",
+  ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
     "no_heuristic_route", "no_generic_evidence", "no_hidden_retry_loop",
@@ -67,6 +70,7 @@ const codec: PhaseCodec<GoalContractReviewProduct> = {
       reviewedLensIds,
       reviewedFieldIds,
       reviewedOutcomeIds,
+      reviewedArtifactPersistence: candidate.candidate.proposedContract.artifactPersistence,
       continuationBindingRef: continuation.ref,
       verdict: "accepted" as const,
       findings: [] as [],

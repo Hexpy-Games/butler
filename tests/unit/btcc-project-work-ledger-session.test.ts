@@ -116,6 +116,7 @@ function sessionProgramCommit(): WorkLedgerCommit {
           reviewedLensIds: [],
           reviewedFieldIds: ["request", "intended_result"],
           reviewedOutcomeIds: ["required-outcome"],
+          reviewedArtifactPersistence: "not_required",
           continuationBindingRef: ref("continuation"),
           verdict: "accepted",
           findings: [],
@@ -127,6 +128,7 @@ function sessionProgramCommit(): WorkLedgerCommit {
           request: "Research products",
           intendedResult: "A report",
           acceptanceIntent: "Ranked products",
+          artifactPersistence: "not_required",
           fields: [
             { fieldId: "request", semanticRole: "required_outcome", statement: "Research" },
             { fieldId: "intended_result", semanticRole: "required_outcome", statement: "Report" },

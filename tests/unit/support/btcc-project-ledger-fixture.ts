@@ -107,6 +107,7 @@ export function reviewedPlan(options: {
     })),
     requireGoverningSpec: options.requireGoverningSpec,
     requiredOutcomeId: "required-outcome-fixture",
+    artifactPersistence: "not_required",
     workspaceScopeRef: "workspace:/fixture",
   });
   const reviewBody = {
@@ -147,6 +148,7 @@ export function projectBindingCommit(options: {
     request: "Produce the fixture result",
     intendedResult: "A verified fixture result",
     acceptanceIntent: "The canonical Spec and result are satisfied",
+    artifactPersistence: "not_required" as const,
     fields: [
       { fieldId: "request" as const, semanticRole: "required_outcome" as const, statement: "Produce" },
       { fieldId: "intended_result" as const, semanticRole: "required_outcome" as const, statement: "Verify" },
@@ -182,6 +184,7 @@ export function projectBindingCommit(options: {
     reviewedLensIds: [],
     reviewedFieldIds: ["request", "intended_result"] as ["request", "intended_result"],
     reviewedOutcomeIds: ["required-outcome-fixture"] as [string],
+    reviewedArtifactPersistence: goalContract.artifactPersistence,
     continuationBindingRef: continuation.ref,
     verdict: "accepted" as const,
     findings: [] as [],

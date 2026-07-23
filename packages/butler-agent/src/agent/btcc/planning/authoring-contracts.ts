@@ -17,6 +17,7 @@ const COMPACT_CONTRACTS = [
       "Author one complete acyclic Work and Task graph with exact dependency order.",
       "Bind every criterion and verification question to its Goal fields and required outcome.",
       "Give every Task one exact artifact policy and bind the complete Task set to one lifecycle.",
+      "Implement the accepted Goal artifactPersistence exactly: required includes a repository-promotion Task and lifecycle; not_required includes neither.",
       "Declare task-bound external EffectIntents, structured risks and assumptions, and exact integration criteria.",
       "Separate the shared artifact workspace from each Task's mutation authority: workspacePath names the shared baseline and promotion root, while mutationScope is read_only or exact contained writable paths.",
       "A Task that observes or extends a predecessor WorkspaceRevision remains workspace_artifact on the exact same workspacePath; dependent Tasks may and usually should have different mutationScope values.",

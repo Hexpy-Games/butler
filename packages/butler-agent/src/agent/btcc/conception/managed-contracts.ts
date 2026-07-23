@@ -8,6 +8,7 @@ export type GoalContractRecord = {
   request: string;
   intendedResult: string;
   acceptanceIntent: string;
+  artifactPersistence: GoalArtifactPersistence;
   fields: readonly [
     { fieldId: "request"; semanticRole: "required_outcome"; statement: string },
     { fieldId: "intended_result"; semanticRole: "required_outcome"; statement: string },
@@ -25,6 +26,8 @@ export type GoalContractRecord = {
   governingSpecLogicalIds: string[];
   nonGoals: string[];
 };
+
+export type GoalArtifactPersistence = "not_required" | "required";
 
 export type ConceptionLensId =
   | "requested_content"
@@ -78,6 +81,7 @@ export type GoalContractAcceptedProduct = {
     reviewedLensIds: ConceptionLensId[];
     reviewedFieldIds: ["request", "intended_result"];
     reviewedOutcomeIds: [string];
+    reviewedArtifactPersistence: GoalArtifactPersistence;
     continuationBindingRef: ContentRef;
     verdict: "accepted";
     findings: [];

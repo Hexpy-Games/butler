@@ -212,6 +212,7 @@ function authoringState() {
     authorityRef: ref("authority"),
     governingSpecRefs: [ref("spec")],
     requiredOutcomeId: "required-outcome-1",
+    artifactPersistence: "required" as const,
     workspaceScopeRef: "workspace:/repo",
   };
 }
