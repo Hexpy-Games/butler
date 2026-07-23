@@ -233,6 +233,11 @@ function assertAuthorizedOperation(
 ): void {
   if (request.kind === "observe") {
     if (authority.observationScopeRefs.includes(request.scopeRef)) return;
+  } else if (request.kind === "workspace_artifact_observation") {
+    if (
+      authority.mutation.kind === "workspace_only" &&
+      sameRef(request.workspaceRef, authority.mutation.workspaceRef)
+    ) return;
   } else if (request.kind === "workspace_artifact_action") {
     if (
       authority.mutation.kind === "workspace_only" &&

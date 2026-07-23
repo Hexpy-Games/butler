@@ -197,6 +197,13 @@ export type OperationRequest =
     }
   | {
       requestId: string;
+      kind: "workspace_artifact_observation";
+      capabilityRef: string;
+      workspaceRef: { id: string; sha256: string };
+      input: Record<string, unknown>;
+    }
+  | {
+      requestId: string;
       kind: "review_validation";
       capabilityRef: string;
       reviewSourceRef: { id: string; sha256: string };

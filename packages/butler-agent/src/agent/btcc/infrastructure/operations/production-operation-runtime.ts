@@ -19,6 +19,7 @@ import {
   performWorkspaceAction,
   type WorkspaceActionBoundary,
 } from "./perform-workspace-action.ts";
+import { performWorkspaceObservation } from "./perform-workspace-observation.ts";
 import { operationRoundScope } from "../../core/operation-identity.ts";
 
 export type OperationRuntimeBoundary = WorkspaceActionBoundary | "before_result_persist";
@@ -53,7 +54,10 @@ export function createOperationExecutor(
           return rejectedOperation(input.request, error);
         }
         if (isAbortError(error) || input.signal?.aborted) throw error;
-        if (input.request.kind !== "observe") throw error;
+        if (
+          input.request.kind !== "observe" &&
+          input.request.kind !== "workspace_artifact_observation"
+        ) throw error;
         return rejectedOperation(
           input.request,
           new OperationRejectedError(
@@ -100,6 +104,15 @@ async function performOperation(
       store,
       signal: input.signal,
       afterBoundary: afterWorkspaceBoundary,
+    });
+  }
+  if (input.request.kind === "workspace_artifact_observation") {
+    return performWorkspaceObservation({
+      request: input.request,
+      envelope: input.envelope,
+      options,
+      store,
+      signal: input.signal,
     });
   }
   if (input.request.kind === "review_validation") {

@@ -80,6 +80,8 @@ function operationSchema(
         ...common,
         relativeTarget: { type: "string" },
       });
+    case "workspace_artifact_observation":
+      return operationShape("workspace_artifact_observation", common);
     case "review_validation":
       return operationShape("review_validation", {
         ...common,

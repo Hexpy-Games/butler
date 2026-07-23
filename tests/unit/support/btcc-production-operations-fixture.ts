@@ -2,6 +2,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -106,6 +107,14 @@ function runtimeOptions(
         return { changed: request.relativeTarget };
       };
     },
+    createWorkspaceObservationExecutor({ workspacePath }) {
+      return async (call) => {
+        if (fixture.workspace) return fixture.workspace({ ...call, workspacePath });
+        if (call.name !== "read_file") return { workspacePath };
+        const path = String(call.args.path ?? "target");
+        return { content: readFileSync(join(workspacePath, path), "utf8"), path };
+      };
+    },
     createIsolatedValidationExecutor({ workspacePath }) {
       return async () => fixture.validate?.({ workspacePath }) ?? { valid: true };
     },
@@ -142,6 +151,19 @@ export function workspaceRequest(
     workspaceRef,
     relativeTarget,
     input: { content },
+  };
+}
+
+export function workspaceObservationRequest(
+  workspaceRef: { id: string; sha256: string },
+  path: string,
+): Extract<OperationRequest, { kind: "workspace_artifact_observation" }> {
+  return {
+    requestId: `workspace-observation:${path}`,
+    kind: "workspace_artifact_observation",
+    capabilityRef: "read_file",
+    workspaceRef,
+    input: { path },
   };
 }
 
