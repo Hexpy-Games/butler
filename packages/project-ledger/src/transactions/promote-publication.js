@@ -61,6 +61,9 @@ export function observeProjectLedgerPromotion(publication) {
   );
   if (journal.status === "observed") {
     rmSync(publication.candidateRoot, { recursive: true, force: true });
+    if (existsSync(publication.claimPath)) {
+      releasePublicationClaim(publication.claimPath, publication);
+    }
     return receipt(publication, "observed");
   }
   saveTransactionJournal(publication.journalPath, { ...journal, status: "observed" });

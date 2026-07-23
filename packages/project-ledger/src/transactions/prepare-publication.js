@@ -19,9 +19,12 @@ export function prepareProjectLedgerPublication(input) {
   const existing = loadTransactionJournal(input.journalPath);
   if (existing) {
     assertSameTransaction(existing, expected);
+    if (existing.status === "observed") {
+      return preparedFromJournal(existing);
+    }
     acquirePublicationClaim(expected.claimPath, expected);
     if (existing.status === "prepared" || existing.status === "committing" ||
-      existing.status === "promoted" || existing.status === "observed") {
+      existing.status === "promoted") {
       return preparedFromJournal(existing);
     }
   } else {
