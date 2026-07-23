@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { coordinateSharedSqliteWriter } from "../../../../foundation/sqlite-writer-coordination.ts";
 import { SqliteCanonicalMessageStore } from "./canonical-message-store.ts";
 import { SqlitePhaseConversationStore } from "./phase-conversation-store.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "./schema.ts";
@@ -35,9 +36,8 @@ export function openBtccSqliteStores(input: {
 }) {
   mkdirSync(dirname(input.dbPath), { recursive: true });
   const db = new Database(input.dbPath);
-  db.exec("PRAGMA journal_mode=WAL");
+  coordinateSharedSqliteWriter(db);
   db.exec("PRAGMA synchronous=NORMAL");
-  db.exec("PRAGMA foreign_keys=ON");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   migrateBtccSchema(db);
 

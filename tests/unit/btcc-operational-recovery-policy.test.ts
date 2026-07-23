@@ -6,9 +6,10 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 
 describe("BTCC operational recovery policy", () => {
-  test("only provider recovery conditions may schedule an automatic replay", () => {
+  test("only typed transient recovery conditions may schedule an automatic replay", () => {
     const cases: Array<[OperationalActivation, boolean]> = [
       [{ kind: "automatic_provider_recovery" }, true],
+      [{ kind: "automatic_storage_recovery" }, true],
       [{ kind: "provider_action_required" }, false],
       [{ kind: "runtime_remediation" }, false],
       [{ kind: "cancelled" }, false],

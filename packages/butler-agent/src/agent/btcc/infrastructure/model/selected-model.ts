@@ -152,7 +152,8 @@ function bindOperationAuthority(
       value.relativeTarget !== authority.mutation.operationRoot.relativeTarget
     ) {
       throw new ProviderCarrierProtocolError(
-        "BTCC provider requested a path outside the single-file operation root",
+        `BTCC provider requested ${String(value.relativeTarget)}; ` +
+        `the single-file Task allows only ${authority.mutation.operationRoot.relativeTarget}`,
       );
     }
     if (
@@ -162,7 +163,8 @@ function bindOperationAuthority(
         String(value.relativeTarget).startsWith(`${path}/`))
     ) {
       throw new ProviderCarrierProtocolError(
-        "BTCC provider requested a path outside the Task mutation scope",
+        `BTCC provider requested ${String(value.relativeTarget)}; ` +
+        `the Task allows only ${authority.mutation.mutationScope.writablePaths.join(", ")}`,
       );
     }
     return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;

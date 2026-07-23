@@ -15,7 +15,9 @@ type InterruptionRow = {
 };
 
 export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database) {
+    this.closeInterruptionsWhoseClaimsCompleted();
+  }
 
   async record(
     interruption: OperationalInterruptionError,
@@ -125,6 +127,18 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
         AND turn.semantic_state NOT IN ('delivered', 'cancelled')
       ORDER BY interruption.interrupted_at
     `).all().map((row) => row.turn_id);
+  }
+
+  private closeInterruptionsWhoseClaimsCompleted(): void {
+    this.db.query(`
+      UPDATE btcc_operational_interruptions
+      SET status = 'resolved', resolved_at = COALESCE(resolved_at, ?)
+      WHERE status IN ('interrupted', 'ready') AND EXISTS (
+        SELECT 1 FROM btcc_state_claims claim
+        WHERE claim.claim_id = btcc_operational_interruptions.claim_id
+          AND claim.status = 'consumed'
+      )
+    `).run(new Date().toISOString());
   }
 }
 
