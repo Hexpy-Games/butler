@@ -74,8 +74,11 @@ function validateSuccessor(input: {
     throw new Error(`${input.disposition} impact requires a current successor Task`);
   }
   if (!input.successor) return;
-  if (input.successor.taskLogicalId !== input.prior.task.taskLogicalId) {
-    throw new Error("Feedback Planning successor changed Task logical identity");
+  if (
+    (input.disposition === "unaffected" || input.disposition === "revalidate") &&
+    input.successor.taskLogicalId !== input.prior.task.taskLogicalId
+  ) {
+    throw new Error(`${input.disposition} impact must preserve Task logical identity`);
   }
   if (
     (input.disposition === "unaffected" || input.disposition === "revalidate") &&
