@@ -95,6 +95,9 @@ async function authorInitialPlan(command: {
     requiredOutcomeId: authority.requiredOutcomeId,
     artifactPersistence: accepted.goalContract.artifactPersistence,
     ledgerId: authority.ledgerId,
+    ...(specParentRootId(accepted.authority) ? {
+      specParentRootId: specParentRootId(accepted.authority),
+    } : {}),
     programId: authority.programId,
     observedManifestRevision: authority.manifestRevision,
     governingSpecRefs: authority.governingSpecRefs,
@@ -160,6 +163,9 @@ async function authorFeedbackPlan(command: {
       requiredOutcomeId: program.requiredOutcomeId,
       artifactPersistence: managed.goalAcceptance.goalContract.artifactPersistence,
       ledgerId: program.ledgerId,
+      ...(specParentRootId(managed.goalAcceptance.authority) ? {
+        specParentRootId: specParentRootId(managed.goalAcceptance.authority),
+      } : {}),
       programId: program.programId,
       observedManifestRevision: program.manifestRevision,
       governingSpecRefs: program.governingSpecRefs,
@@ -179,6 +185,14 @@ async function authorFeedbackPlan(command: {
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "FeedbackPlanCandidateSubmitted", product };
+}
+
+function specParentRootId(
+  authority: NonNullable<ReturnType<typeof requireManagedState>["goalAcceptance"]>["authority"],
+): string | undefined {
+  return authority.ledgerScope.kind === "project"
+    ? authority.ledgerScope.projectRef
+    : undefined;
 }
 
 async function reviewFeedbackPlan(command: {

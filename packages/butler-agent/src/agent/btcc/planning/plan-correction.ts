@@ -91,7 +91,13 @@ function feedbackPlanningCodec(availableSpecIds: string[]) {
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: proposedAuthority?.ref ?? currentAuthorityRef,
         governingSpecRefs: requireContentRefArray(state.governingSpecRefs, "governingSpecRefs"),
-        availableSpecs: decodeAvailableSpecs(state.availableSpecs),
+        availableSpecs: decodeAvailableSpecs(
+          state.availableSpecs,
+          optionalString(state.specParentRootId),
+        ),
+        ...(optionalString(state.specParentRootId) ? {
+          specParentRootId: optionalString(state.specParentRootId),
+        } : {}),
         requireGoverningSpec: Boolean(state.requireGoverningSpec),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
         artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
@@ -128,12 +134,19 @@ function feedbackPlanningCodec(availableSpecIds: string[]) {
 
 export function proposeCorrectionOrRevision(command: PhaseInvocation) {
   const state = requireRecord(command.context.stateInput, "Feedback Planning state");
-  const availableSpecs = decodeAvailableSpecs(state.availableSpecs);
+  const availableSpecs = decodeAvailableSpecs(
+    state.availableSpecs,
+    optionalString(state.specParentRootId),
+  );
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
     codec: feedbackPlanningCodec(availableSpecs.map((spec) => spec.logicalId)),
   });
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function requireWorkspaceScope(scopeRefs: readonly string[]): string {

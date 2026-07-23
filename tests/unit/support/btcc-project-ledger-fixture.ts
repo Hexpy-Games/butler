@@ -61,7 +61,13 @@ export function reviewedPlan(options: {
   authorityRef?: { id: string; sha256: string };
   availableSpecRefs?: Array<{ id: string; sha256: string }>;
   governingSpecSelections?: string[];
-  specifications?: Array<{ logicalId: string; title: string; body: string }>;
+  specifications?: Array<{
+    logicalId: string;
+    parentId: string;
+    concernId: string;
+    title: string;
+    body: string;
+  }>;
   requireGoverningSpec?: boolean;
 } = {}): PlanningAcceptedProduct {
   const goalContractRef = options.goalContractRef
@@ -102,13 +108,18 @@ export function reviewedPlan(options: {
     authorityRef,
     governingSpecRefs: [],
     availableSpecs: (options.availableSpecRefs ?? []).map((revisionRef) => ({
-      logicalId: "SPEC-FIXTURE", title: "Fixture spec", status: "specified",
+      logicalId: "SPEC-FIXTURE",
+      parentId: "SPEC-FIXTURE-PARENT",
+      concernId: "SPEC-FIXTURE",
+      title: "Fixture spec",
+      status: "specified",
       revisionRef,
     })),
     requireGoverningSpec: options.requireGoverningSpec,
     requiredOutcomeId: "required-outcome-fixture",
     artifactPersistence: "not_required",
     workspaceScopeRef: "workspace:/fixture",
+    specParentRootId: "fixture-project",
   });
   const reviewBody = {
     candidateRef: candidate.ref,
@@ -329,5 +340,6 @@ async function loadProjectLedgerCore() {
     migrateDocs: docs.migrateDocs,
     buildIndex: indexer.buildIndex,
     readRecordBody: records.readRecordBody,
+    readRecordData: records.readRecordData,
   };
 }

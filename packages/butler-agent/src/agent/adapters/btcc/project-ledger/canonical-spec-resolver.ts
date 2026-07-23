@@ -3,6 +3,8 @@ import type { ProjectLedgerCore } from "./project-ledger-core.ts";
 
 export type CanonicalSpecRevision = {
   logicalId: string;
+  parentId: string;
+  concernId: string;
   revisionRef: { id: string; sha256: string };
   title: string;
   status: string;
@@ -24,7 +26,7 @@ type SpecMetadata = {
   status: string;
   filePath: string;
   logicalId?: string;
-  parentId?: string;
+  parentId: string;
   concernId?: string;
   supersedesId?: string;
 };
@@ -57,7 +59,9 @@ function buildMetadataIndex(
   projectRoot: string,
 ): Map<string, SpecMetadata> {
   const index = new Map<string, SpecMetadata>();
-  for (const record of core.buildIndex(projectRoot).records) {
+  const records = core.buildIndex(projectRoot).records;
+  const rootParentId = projectRootAuthority(records);
+  for (const record of records) {
     if (record.kind !== "spec") continue;
     const found = core.resolveRecord(projectRoot, { kind: "spec", id: record.id });
     const data = core.readRecordData(found.filePath) ?? {};
@@ -68,7 +72,7 @@ function buildMetadataIndex(
       status: record.status,
       filePath: found.filePath,
       ...(stringField(data.logicalId) ? { logicalId: stringField(data.logicalId) } : {}),
-      ...(stringField(data.parentId) ? { parentId: stringField(data.parentId) } : {}),
+      parentId: stringField(data.parentId) ?? rootParentId,
       ...(stringField(data.concernId) ? { concernId: stringField(data.concernId) } : {}),
       ...(supersedesId ? { supersedesId } : {}),
     });
@@ -127,9 +131,6 @@ function validateChainMember(spec: SpecMetadata, requestedLogicalId: string): Va
   const logicalId = spec.logicalId ?? spec.physicalId;
   if (logicalId !== requestedLogicalId) {
     throw new Error(`Canonical Project Spec logicalId changed: ${spec.physicalId}`);
-  }
-  if (!spec.parentId) {
-    throw new Error(`Canonical Project Spec parentId is missing: ${spec.physicalId}`);
   }
   return {
     ...spec,
@@ -208,11 +209,23 @@ function hydrateSelectedSpec(
   const body = normalizeSpecBody(source);
   return {
     logicalId: spec.logicalId,
+    parentId: spec.parentId,
+    concernId: spec.concernId,
     revisionRef: { id: spec.logicalId, sha256: sha256(body) },
     title: spec.title,
     status: spec.status,
     body,
   };
+}
+
+function projectRootAuthority(
+  records: Array<{ id: string; kind: string }>,
+): string {
+  const projects = records.filter((record) => record.kind === "project");
+  if (projects.length !== 1) {
+    throw new Error("Canonical Project Ledger must contain exactly one project authority");
+  }
+  return projects[0]!.id;
 }
 
 function isActive(status: string): boolean {

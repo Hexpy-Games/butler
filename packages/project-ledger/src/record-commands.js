@@ -56,6 +56,9 @@ const METADATA_FIELDS = [
   "codeCommits",
   "ledgerCommits",
   "revisionRef",
+  "logicalId",
+  "concernId",
+  "supersedesSpecId",
 ];
 
 export function optionUpdates(options, fields = METADATA_FIELDS) {

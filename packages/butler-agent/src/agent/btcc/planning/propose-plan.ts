@@ -56,13 +56,19 @@ function planningCodec(availableSpecIds: string[]) {
         artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
         workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
         ledgerId: requireString(state.ledgerId, "ledgerId"),
+        ...(optionalString(state.specParentRootId) ? {
+          specParentRootId: optionalString(state.specParentRootId),
+        } : {}),
         programId: requireString(state.programId, "programId"),
         observedManifestRevision: requirePositiveInteger(
           state.observedManifestRevision,
           "observedManifestRevision",
         ),
         governingSpecRefs: requireContentRefs(state.governingSpecRefs, "governingSpecRefs"),
-        availableSpecs: decodeAvailableSpecs(state.availableSpecs),
+        availableSpecs: decodeAvailableSpecs(
+          state.availableSpecs,
+          optionalString(state.specParentRootId),
+        ),
         requireGoverningSpec: Boolean(state.requireGoverningSpec),
         ...(state.previousCandidateRef
           ? { previousCandidateRef: requireContentRef(state.previousCandidateRef, "previousCandidateRef") }
@@ -79,9 +85,16 @@ function planningCodec(availableSpecIds: string[]) {
   });
 }
 
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export function proposePlan(command: PhaseInvocation) {
   const state = requireRecord(command.context.stateInput, "Planning state");
-  const availableSpecs = decodeAvailableSpecs(state.availableSpecs);
+  const availableSpecs = decodeAvailableSpecs(
+    state.availableSpecs,
+    optionalString(state.specParentRootId),
+  );
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,

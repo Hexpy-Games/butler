@@ -25,6 +25,8 @@ describe("BTCC Planning contract", () => {
       ...authoringState(),
       availableSpecs: [{
         logicalId: "SPEC-EXISTING",
+        parentId: "project-1",
+        concernId: "existing-concern",
         title: "Existing contract",
         status: "specified",
         revisionRef: existing,
@@ -36,11 +38,17 @@ describe("BTCC Planning contract", () => {
       ...artifactPlan(),
       specifications: [{
         logicalId: "SPEC-AUTHORED",
+        parentId: "project-1",
+        concernId: "authored-concern",
         title: "Authored contract",
         body: "The requested behavior is normative.",
       }],
     }, authoringState());
     expect(authored.governingSpecRefs).toEqual(authored.authoredSpecRevisionRefs);
+    expect(authored.authoredSpecs[0]).toMatchObject({
+      parentId: "project-1",
+      concernId: "authored-concern",
+    });
 
     const schema = JSON.stringify(planCandidateSubmissionSchema(["SPEC-EXISTING"]));
     expect(schema).toContain('"enum":["SPEC-EXISTING"]');
@@ -214,6 +222,7 @@ function authoringState() {
     requiredOutcomeId: "required-outcome-1",
     artifactPersistence: "required" as const,
     workspaceScopeRef: "workspace:/repo",
+    specParentRootId: "project-1",
   };
 }
 

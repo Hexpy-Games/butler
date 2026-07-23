@@ -41,6 +41,7 @@ export type AuthoringState = {
   findingSetRef?: ContentRef;
   continuation?: import("../contracts.ts").PlanningContinuation;
   requireGoverningSpec?: boolean;
+  specParentRootId?: string;
 };
 
 export function authorPlanCandidate(
@@ -51,6 +52,7 @@ export function authorPlanCandidate(
     submission.specifications,
     submission.governingSpecSelections,
     state.availableSpecs ?? [],
+    state.specParentRootId,
   );
   if (state.requireGoverningSpec && governingSpecRefs.length === 0) {
     rejectPlanningProposal(

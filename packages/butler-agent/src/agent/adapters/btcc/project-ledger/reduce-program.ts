@@ -325,12 +325,20 @@ function selectedSpecsAvailable(
 
 function mergeAvailableSpecs(
   current: AvailableSpecRevision[],
-  authored: Array<{ logicalId: string; title: string; ref: { id: string; sha256: string } }>,
+  authored: Array<{
+    logicalId: string;
+    parentId: string;
+    concernId: string;
+    title: string;
+    ref: { id: string; sha256: string };
+  }>,
 ): AvailableSpecRevision[] {
   const byLogicalId = new Map(current.map((spec) => [spec.logicalId, spec]));
   for (const spec of authored) {
     byLogicalId.set(spec.logicalId, {
       logicalId: spec.logicalId,
+      parentId: spec.parentId,
+      concernId: spec.concernId,
       title: spec.title,
       status: "specified",
       revisionRef: spec.ref,

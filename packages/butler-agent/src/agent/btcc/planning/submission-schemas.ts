@@ -95,6 +95,8 @@ const promotionSelector = objectSchema({
 });
 const specifications = arraySchema(objectSchema({
   logicalId: textSchema(),
+  parentId: textSchema(),
+  concernId: textSchema(),
   title: textSchema(),
   body: textSchema(),
 }), { minItems: 1 });
