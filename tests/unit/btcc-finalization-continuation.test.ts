@@ -27,7 +27,9 @@ test("ends a managed deferral truthfully and continues it through a fresh Turn",
       scenario: "managed-continuation",
     });
     expect(continued.initial.kind).toBe("delivered");
-    expect(continued.initial.content).toContain("완성했습니다");
+    expect(continued.initial.content).toContain("완성");
+    expect(continued.initial.content).toContain("변경:");
+    expect(continued.initial.content).toContain("검증:");
 
     const db = openDatabase(dataRoot);
     try {
@@ -114,7 +116,11 @@ test("closes a pre-commit promotion deferral without mutating the target", async
       expect(program?.promotion_deferral_ref).toBeTruthy();
       expect(promotionTask?.status).toBe("promotion_deferred");
       expect(promotionCalls?.count).toBe(0);
-      expect(JSON.parse(dossier!.content_json).promotionClosure).toBe("deferred");
+      const finalDossier = JSON.parse(dossier!.content_json);
+      expect(finalDossier.promotionClosure).toBe("deferred");
+      expect(finalDossier.userReport.limitations).toContain(
+        "다음 단계에는 사용자의 명시적 승인이 필요하다",
+      );
       expect(learningOutboxCount(db)).toBe(1);
     } finally {
       db.close();

@@ -1,5 +1,12 @@
 import type { ContentRef } from "../core/index.ts";
 
+export type UserReportFacts = {
+  outcome: string;
+  materialChanges: [string, ...string[]];
+  validationResults: [string, ...string[]];
+  limitations: string[];
+};
+
 export type ConsolidationAssessment = {
   ref: ContentRef;
   programId: string;
@@ -41,6 +48,7 @@ export type FinalDossierProduct = {
     openWorkRefs?: ContentRef[];
     continuationOpenTaskRefs?: ContentRef[];
     summary: string;
+    userReport: UserReportFacts;
   };
 };
 
@@ -59,6 +67,7 @@ export type PromotionAuthorizationProduct = {
     resolutionRefs: ContentRef[];
     promotionTaskRefs: ContentRef[];
     assessment: "authorized";
+    userReport: UserReportFacts;
   };
 };
 

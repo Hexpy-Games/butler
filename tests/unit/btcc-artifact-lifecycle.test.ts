@@ -63,6 +63,8 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
     expect(exitCode).toBe(0);
     const result = JSON.parse(stdout.trim());
     expect(result.initial.kind).toBe("delivered");
+    expect(result.initial.content).toContain("변경:");
+    expect(result.initial.content).toContain("검증:");
     expect(result.replay).toEqual(result.initial);
     expect(result.modelCalls).toBe(25);
     expect(result.operationCalls).toBe(7);
@@ -97,6 +99,9 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       const dossier = db.query<{ content_json: string }, []>(`
         SELECT content_json FROM btcc_records WHERE kind = 'final_dossier'
       `).get();
+      const authorization = db.query<{ content_json: string }, []>(`
+        SELECT content_json FROM btcc_records WHERE kind = 'promotion_authorization'
+      `).get();
       const mutationKinds = db.query<{ mutation_kind: string }, []>(`
         SELECT mutation_kind FROM btcc_ledger_mutations ORDER BY next_manifest_revision
       `).all().map((row) => row.mutation_kind);
@@ -122,7 +127,12 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
         { kind: "reviewed_promotion_candidate", count: 1 },
         { kind: "workspace_revision", count: 3 },
       ]);
-      expect(JSON.parse(dossier!.content_json).promotionClosure).toBe("promoted");
+      const finalDossier = JSON.parse(dossier!.content_json);
+      const promotionAuthorization = JSON.parse(authorization!.content_json);
+      expect(finalDossier.promotionClosure).toBe("promoted");
+      expect(finalDossier.userReport).toEqual(promotionAuthorization.userReport);
+      expect(finalDossier.userReport.materialChanges).not.toBeEmpty();
+      expect(finalDossier.userReport.validationResults).not.toBeEmpty();
       expect(mutationKinds.indexOf("close_implementation_frontier"))
         .toBeLessThan(mutationKinds.indexOf("authorize_promotion"));
       expect(mutationKinds.indexOf("authorize_promotion"))
