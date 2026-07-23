@@ -24,14 +24,39 @@ test("BTCC grep_files applies explicit workspace glob filters", async () => {
   }
 });
 
+test("BTCC list_files discovers nested sources without searching file content", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "btcc-list-"));
+  try {
+    await mkdir(join(workspace, "src"));
+    await mkdir(join(workspace, "tests"));
+    await writeFile(join(workspace, "src", "sample.ts"), "");
+    await writeFile(join(workspace, "tests", "sample.test.ts"), "");
+    await writeFile(join(workspace, "README.md"), "");
+
+    const result = await executeFileCapability("list_files", {
+      include_globs: ["*.ts"],
+      exclude_globs: ["tests/**"],
+      max_files: 20,
+    }, context(workspace)) as { files: string[]; truncated: boolean };
+
+    expect(result).toEqual({ files: ["src/sample.ts"], truncated: false });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+});
+
 async function search(workspace: string, includeGlobs: string[], excludeGlobs: string[] = []) {
   return await executeFileCapability("grep_files", {
     pattern: "sample",
     include_globs: includeGlobs,
     exclude_globs: excludeGlobs,
-  }, {
+  }, context(workspace)) as { matches: Array<{ path: string }> };
+}
+
+function context(workspace: string) {
+  return {
     butlerData: join(workspace, ".butler"),
     workspacePath: workspace,
     originalRequest: "inspect the sample module",
-  }) as { matches: Array<{ path: string }> };
+  };
 }

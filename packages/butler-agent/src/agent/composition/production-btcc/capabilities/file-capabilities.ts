@@ -6,16 +6,31 @@ import { OperationRejectedError } from "../../../btcc/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { pathMatchesFilters } from "./path-glob-filter.ts";
 
-type FileCapabilityName = "read_file" | "write_file" | "grep_files";
+type FileCapabilityName = "list_files" | "read_file" | "write_file" | "grep_files";
 
 export async function executeFileCapability(
   capability: FileCapabilityName,
   args: Record<string, unknown>,
   context: CapabilityExecutionContext,
 ): Promise<unknown> {
+  if (capability === "list_files") return listWorkspaceFiles(args, context);
   if (capability === "read_file") return readWorkspaceFile(args, context);
   if (capability === "write_file") return writeWorkspaceFile(args, context);
   return searchWorkspaceFiles(args, context);
+}
+
+async function listWorkspaceFiles(
+  args: Record<string, unknown>,
+  context: CapabilityExecutionContext,
+) {
+  const maxFiles = number(args.max_files, 500);
+  const matching = (await collectFiles(context.workspacePath))
+    .map((path) => relative(context.workspacePath, path))
+    .filter((path) => selected(path, args));
+  return {
+    files: matching.slice(0, maxFiles),
+    truncated: matching.length > maxFiles,
+  };
 }
 
 async function readWorkspaceFile(
