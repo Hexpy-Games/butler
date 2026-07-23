@@ -149,6 +149,16 @@ function bindOperationAuthority(
         "BTCC provider requested a path outside the single-file operation root",
       );
     }
+    if (
+      authority.mutation.mutationScope.kind === "contained_paths" &&
+      !authority.mutation.mutationScope.writablePaths.some((path) =>
+        path === "." || value.relativeTarget === path ||
+        String(value.relativeTarget).startsWith(`${path}/`))
+    ) {
+      throw new ProviderCarrierProtocolError(
+        "BTCC provider requested a path outside the Task mutation scope",
+      );
+    }
     return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
   }
   if (value.kind === "review_validation" &&

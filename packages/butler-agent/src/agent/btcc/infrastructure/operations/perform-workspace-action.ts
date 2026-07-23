@@ -1,7 +1,6 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  OperationRejectedError,
   contentRef,
   digest,
   type ObservationResult,
@@ -29,6 +28,12 @@ import {
   workspaceContentRoot,
 } from "./target-snapshot.ts";
 import { operationRoundScope } from "../../core/operation-identity.ts";
+import {
+  requireAcceptedWorkspaceDelta,
+  requireWorkspaceOperationRoot,
+  requireWorkspaceMutationRequest,
+  workspaceCapabilityRejection,
+} from "./workspace-mutation-boundary.ts";
 
 type WorkspaceRequest = Extract<import("../../core/index.ts").OperationRequest, {
   kind: "workspace_artifact_action";
@@ -51,6 +56,10 @@ export async function performWorkspaceAction(input: {
   const scopeId = operationRoundScope(input.envelope.binding);
   const workspace = requireWorkspace(input.store, input.request);
   requireWorkspaceOperationRoot(workspace, input.request);
+  const mutationAuthority = requireWorkspaceMutationRequest(
+    input.envelope.operationAuthority,
+    input.request.relativeTarget,
+  );
   let journal = input.store.loadWorkspaceAction(scopeId, input.request);
   if (!journal) journal = reserveAction(input, workspace);
 
@@ -65,7 +74,7 @@ export async function performWorkspaceAction(input: {
         args,
       });
     } catch (error) {
-      throw capabilityRejection(error);
+      throw workspaceCapabilityRejection(error);
     }
     assertActive(input.signal);
     journal = { ...journal, status: "dispatching" };
@@ -80,11 +89,16 @@ export async function performWorkspaceAction(input: {
         content = await dispatchWorkspaceCapability(input, workspace, journal);
       } catch (error) {
         resetInterruptedDispatch(input.store, scopeId, journal);
-        throw capabilityRejection(error);
+        throw workspaceCapabilityRejection(error);
       }
       input.afterBoundary?.("tool_mutated");
     }
-    journal = prepareCandidate(input, workspace, journal, content);
+    try {
+      journal = prepareCandidate(input, workspace, journal, content, mutationAuthority);
+    } catch (error) {
+      resetInterruptedDispatch(input.store, scopeId, journal);
+      throw workspaceCapabilityRejection(error);
+    }
     input.afterBoundary?.("candidate_prepared");
   }
 
@@ -102,26 +116,6 @@ export async function performWorkspaceAction(input: {
   }
   requireWorkspaceCandidate(workspace, journal);
   return journal.result;
-}
-
-function requireWorkspaceOperationRoot(
-  workspace: StoredWorkspace,
-  request: WorkspaceRequest,
-): void {
-  if (workspace.targetKind === "directory" || request.relativeTarget === "target") return;
-  throw new OperationRejectedError(
-    "workspace_target_mismatch",
-    "A single-file workspace accepts only its declared target path.",
-  );
-}
-
-function capabilityRejection(error: unknown): Error {
-  if (error instanceof OperationRejectedError ||
-    (error instanceof Error && error.name === "AbortError")) return error;
-  return new OperationRejectedError(
-    "capability_execution_failed",
-    error instanceof Error ? error.message : "The workspace capability could not execute its input.",
-  );
 }
 
 export function cleanupWorkspaceAction(
@@ -220,6 +214,7 @@ function prepareCandidate(
   workspace: StoredWorkspace,
   journal: WorkspaceActionJournal,
   content: string,
+  mutationAuthority: ReturnType<typeof requireWorkspaceMutationRequest>,
 ): WorkspaceActionJournal {
   const target = resolveWorkspaceTarget({
     workspaceRoot: journal.overlayRoot,
@@ -231,6 +226,11 @@ function prepareCandidate(
     workspace.targetKind,
     workspace.baselineTargetState,
   );
+  const before = input.store.loadSnapshot(journal.beforeSnapshotRef.id);
+  if (!before || !sameRef(before.ref, journal.beforeSnapshotRef)) {
+    throw new Error("BTCC workspace action lost its exact starting snapshot");
+  }
+  requireAcceptedWorkspaceDelta(mutationAuthority, before, candidate);
   input.store.saveSnapshot(candidate);
   if (sameRef(candidate.ref, journal.beforeSnapshotRef)) {
     const result: ObservationResult = {

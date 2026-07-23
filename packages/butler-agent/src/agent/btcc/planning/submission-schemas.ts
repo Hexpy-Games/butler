@@ -30,7 +30,14 @@ const task = variantsSchema(
     effectClass: literalSchema("none"),
     artifactPolicy: objectSchema({
       kind: literalSchema("workspace_artifact"),
-      targetPath: textSchema(),
+      workspacePath: textSchema(),
+      mutationScope: variantsSchema(
+        objectSchema({ kind: literalSchema("read_only") }),
+        objectSchema({
+          kind: literalSchema("contained_paths"),
+          writablePaths: arraySchema(textSchema(), { minItems: 1 }),
+        }),
+      ),
     }),
   }),
   objectSchema({

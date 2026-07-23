@@ -5,11 +5,16 @@ export type TaskArtifactPolicy =
   | { kind: "non_artifact"; targetScopeRefs: string[] }
   | {
       kind: "workspace_artifact";
-      targetScopeRef: string;
-      targetPath: string;
+      workspaceScopeRef: string;
+      workspacePath: string;
+      mutationScope: TaskMutationScope;
       baselinePolicy: "capture_at_workspace_provision";
     }
   | { kind: "repository_promotion"; targetScopeRef: string; targetPath: string };
+
+export type TaskMutationScope =
+  | { kind: "read_only" }
+  | { kind: "contained_paths"; writablePaths: string[] };
 
 export type ManagedCriterion = {
   ref: ContentRef;

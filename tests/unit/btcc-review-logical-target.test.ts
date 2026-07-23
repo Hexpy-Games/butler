@@ -9,6 +9,7 @@ import {
   envelope,
   provisionWorkspace,
   reviewRequest,
+  workspaceEnvelope,
   workspaceRequest,
 } from "./support/btcc-production-operations-fixture.ts";
 
@@ -20,7 +21,7 @@ test("Review exposes immutable file bytes through the Task logical path", async 
   const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
   const applied = await runtime.operations.perform({
     request: workspaceRequest(provision.workspace.ref, fixture.targetPath, "reviewed bytes\n"),
-    envelope: envelope(),
+    envelope: workspaceEnvelope(provision),
   });
   const reviewSourceRef = contentRef("workspace-revision", {
     targetSnapshotRef: applied.targetSnapshotRef,

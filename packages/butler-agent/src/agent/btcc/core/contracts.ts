@@ -158,6 +158,7 @@ export type OperationAuthority = {
         kind: "workspace_only";
         workspaceRef: { id: string; sha256: string };
         operationRoot: WorkspaceOperationRoot;
+        mutationScope: WorkspaceMutationScope;
       }
     | { kind: "validation_overlay_only"; reviewSourceRef: { id: string; sha256: string } }
     | {
@@ -173,6 +174,10 @@ export type OperationAuthority = {
 export type WorkspaceOperationRoot =
   | { kind: "file"; relativeTarget: "target" }
   | { kind: "directory"; relativeTarget: "." };
+
+export type WorkspaceMutationScope =
+  | { kind: "read_only" }
+  | { kind: "contained_paths"; writablePaths: string[] };
 
 export type OperationRequest =
   | {

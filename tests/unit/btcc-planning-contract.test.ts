@@ -11,6 +11,7 @@ import {
   planCandidateSubmissionSchema,
 } from
   "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
+import { artifactTask } from "./support/btcc-planning-fixture.ts";
 
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
 
@@ -64,6 +65,20 @@ describe("BTCC Planning contract", () => {
     expect(candidate.artifactLifecycle.integrationCriterionRefs)
       .toEqual(candidate.integrationCriteria.map((criterion) => criterion.ref));
 
+    const implementation = candidate.tasks.find((task) => task.taskLogicalId === "implement")!;
+    const integration = candidate.tasks.find((task) => task.taskLogicalId === "integrate")!;
+    expect(implementation.artifactPolicy).toEqual(expect.objectContaining({
+      kind: "workspace_artifact",
+      workspacePath: "packages/feature",
+      workspaceScopeRef: "workspace:/repo/packages/feature",
+      mutationScope: { kind: "contained_paths", writablePaths: ["src/feature.ts"] },
+    }));
+    expect(integration.artifactPolicy).toEqual(expect.objectContaining({
+      kind: "workspace_artifact",
+      workspaceScopeRef: "workspace:/repo/packages/feature",
+      mutationScope: { kind: "read_only" },
+    }));
+
     const promotion = candidate.tasks.find((task) => task.taskLogicalId === "promote")!;
     expect(promotion.artifactPolicy).toEqual({
       kind: "repository_promotion",
@@ -109,10 +124,10 @@ describe("BTCC Planning contract", () => {
     const mismatched = artifactPlan();
     const integration = mismatched.works[0]!.tasks[1]!;
     if (integration.artifactPolicy?.kind === "workspace_artifact") {
-      integration.artifactPolicy.targetPath = "packages/other";
+      integration.artifactPolicy.workspacePath = "packages/other";
     }
     expect(() => authorPlanCandidate(mismatched, authoringState()))
-      .toThrow("Dependent artifact Tasks must share the exact workspace target");
+      .toThrow("Dependent artifact Tasks must share the exact artifact workspace root");
   });
 
   test("rejects absolute and escaping artifact targets", () => {
@@ -120,7 +135,7 @@ describe("BTCC Planning contract", () => {
       const submission = artifactPlan();
       const task = submission.works[0]!.tasks[0]!;
       if (task.artifactPolicy?.kind === "workspace_artifact") {
-        task.artifactPolicy.targetPath = targetPath;
+        task.artifactPolicy.workspacePath = targetPath;
       }
       expect(() => authorPlanCandidate(submission, authoringState())).toThrow("targetPath");
     }
@@ -129,22 +144,25 @@ describe("BTCC Planning contract", () => {
   test("accepts the exact admitted workspace root for one cohesive lifecycle", () => {
     const submission = artifactPlan();
     for (const task of submission.works[0]!.tasks) {
-      if (task.artifactPolicy) task.artifactPolicy.targetPath = ".";
+      if (task.artifactPolicy?.kind === "workspace_artifact") {
+        task.artifactPolicy.workspacePath = ".";
+      } else if (task.artifactPolicy) task.artifactPolicy.targetPath = ".";
     }
     const candidate = authorPlanCandidate(submission, authoringState());
 
     expect(candidate.tasks.map((task) => task.artifactPolicy)).toEqual([
-      expect.objectContaining({ targetScopeRef: "workspace:/repo", targetPath: "." }),
-      expect.objectContaining({ targetScopeRef: "workspace:/repo", targetPath: "." }),
+      expect.objectContaining({ workspaceScopeRef: "workspace:/repo", workspacePath: "." }),
+      expect.objectContaining({ workspaceScopeRef: "workspace:/repo", workspacePath: "." }),
       expect.objectContaining({ targetScopeRef: "workspace:/repo", targetPath: "." }),
     ]);
   });
 
   test("rejects dependency edges that cannot materialize predecessor workspace bytes", () => {
     const differentTarget = artifactPlan();
-    differentTarget.works[0]!.tasks[1]!.artifactPolicy!.targetPath = "packages/other";
+    const policy = differentTarget.works[0]!.tasks[1]!.artifactPolicy!;
+    if (policy.kind === "workspace_artifact") policy.workspacePath = "packages/other";
     expect(() => authorPlanCandidate(differentTarget, authoringState()))
-      .toThrow("Dependent artifact Tasks must share the exact workspace target");
+      .toThrow("Dependent artifact Tasks must share the exact artifact workspace root");
 
     const nonArtifactSuccessor = artifactPlan();
     const integration = nonArtifactSuccessor.works[0]!.tasks[1]!;
@@ -248,28 +266,6 @@ function artifactPlan() {
       implementationTaskIds: ["implement"],
       integrationTaskId: "integrate",
       promotionTaskId: "promote",
-    }],
-  };
-}
-
-function artifactTask(
-  logicalId: string,
-  dependencyTaskIds: string[],
-  goalField: "request" | "intended_result",
-  kind: "workspace_artifact" | "repository_promotion",
-) {
-  return {
-    logicalId,
-    intendedOutcome: `${logicalId} outcome`,
-    dependencyTaskIds,
-    targetScopeRefs: [],
-    effectClass: kind === "repository_promotion" ? "external_effect" as const : "none" as const,
-    artifactPolicy: { kind, targetPath: "packages/feature" },
-    criteria: [{
-      statement: `${logicalId} is complete.`,
-      question: `Is ${logicalId} complete?`,
-      sourceGoalFieldIds: [goalField],
-      sourceRequiredOutcomeRefs: ["required-outcome-1"],
     }],
   };
 }

@@ -51,6 +51,7 @@ export type {
   ProviderCorrection,
   ProviderRoundValue,
   SelectedModel,
+  WorkspaceMutationScope,
   WorkspaceOperationRoot,
 } from "./contracts.ts";
 export { OperationRejectedError } from "./operation-rejection.ts";

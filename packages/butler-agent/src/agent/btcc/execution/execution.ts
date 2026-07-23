@@ -75,7 +75,7 @@ function executionScopeRefs(
   if (policy.kind !== "workspace_artifact") {
     throw new Error("Provisioned workspace requires a workspace artifact Task");
   }
-  return [policy.targetScopeRef];
+  return [policy.workspaceScopeRef];
 }
 
 function executionAuthority(
@@ -91,6 +91,7 @@ function executionAuthority(
         kind: "workspace_only" as const,
         workspaceRef: target.workspaceRef,
         operationRoot: target.operationRoot,
+        mutationScope: target.mutationScope,
       },
     };
   }
