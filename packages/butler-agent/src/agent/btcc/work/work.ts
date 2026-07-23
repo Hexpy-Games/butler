@@ -1,9 +1,4 @@
 import type { ArtifactWorkspaceRuntime } from "../artifact/index.ts";
-import { conception } from "../conception/index.ts";
-import type { PhaseInvocation } from "../core/index.ts";
-import { execution } from "../execution/index.ts";
-import { planning } from "../planning/index.ts";
-import { review } from "../review/index.ts";
 import {
   requireManagedProgram,
   type TurnEvent,
@@ -16,26 +11,17 @@ type WorkEvent = Extract<TurnEvent, {
   kind:
     | "WorkTaskSelected"
     | "WorkFrontierClosed"
-    | "ResultCandidateSubmitted"
-    | "TaskReviewPassed"
-    | "TaskReviewFailed"
-    | "FeedbackIntentAccepted"
-    | "FeedbackPlanCandidateSubmitted"
-    | "FeedbackPlanningReviewAccepted"
-    | "FeedbackPlanningRevisionRequested"
-    | "PromotionFrontierClosed"
-    | "ManagedDeferralAccepted"
-    | "PromotionDeferralAccepted";
+    | "PromotionFrontierClosed";
 }>;
 
-export function work(command: {
+export async function work(command: {
   turn: TurnRecord;
-  phase?: PhaseInvocation;
   artifacts: ArtifactWorkspaceRuntime;
-}): Promise<WorkEvent> | WorkEvent {
-  return command.turn.semanticState === "work_frontier"
-    ? selectTaskOrCompleteWork(command.turn, command.artifacts)
-    : continueTaskCycle({ turn: command.turn, phase: requirePhase(command) });
+}): Promise<WorkEvent> {
+  if (command.turn.semanticState !== "work_frontier") {
+    throw new Error(`Work cannot advance ${command.turn.semanticState}`);
+  }
+  return selectTaskOrCompleteWork(command.turn, command.artifacts);
 }
 
 async function selectTaskOrCompleteWork(
@@ -68,33 +54,4 @@ async function selectTaskOrCompleteWork(
     artifacts,
   });
   return { kind: "WorkTaskSelected", attempt };
-}
-
-async function continueTaskCycle(command: {
-  turn: TurnRecord;
-  phase: PhaseInvocation;
-}): Promise<WorkEvent> {
-  switch (command.turn.semanticState) {
-    case "task_execution":
-      return execution(command);
-    case "task_review":
-      return review(command);
-    case "feedback_conception":
-      return conception({ ...command, cycle: "review_feedback" });
-    case "feedback_planning":
-    case "feedback_planning_review":
-      return planning({ ...command, cycle: "review_feedback" });
-    default:
-      throw new Error(`Work cannot advance ${command.turn.semanticState}`);
-  }
-}
-
-function requirePhase(command: {
-  turn: TurnRecord;
-  phase?: PhaseInvocation;
-}): PhaseInvocation {
-  if (!command.phase) {
-    throw new Error(`Work phase is missing at ${command.turn.semanticState}`);
-  }
-  return command.phase;
 }

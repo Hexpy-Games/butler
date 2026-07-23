@@ -4,6 +4,12 @@ export {
   type ContinuingTurnCommand,
 } from "./load-or-admit-turn.ts";
 export { projectTerminalOutcome } from "./project-terminal-outcome.ts";
+export {
+  deliverTurn,
+  openTurn,
+  runImmediateTurn,
+  runManagedTurn,
+} from "./run-turn.ts";
 export { decideTransition } from "./state-machine/index.ts";
 export { stopTurn } from "./stop-turn.ts";
 export {
@@ -28,3 +34,4 @@ export type {
   ManagedProgramState,
 } from "./contracts.ts";
 export type { StopPersistenceOutcome } from "./contracts.ts";
+export type { TurnExecutionSupervisor } from "../recovery/index.ts";
