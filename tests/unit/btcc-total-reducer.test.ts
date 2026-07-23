@@ -80,6 +80,21 @@ test("delivery observation accepts only the immutable Outbox message binding", (
   });
 });
 
+test("Goal Contract Review returns a typed revision to Conception", () => {
+  const product = {} as never;
+  expect(decideTransition(turnIn("contract_review"), {
+    kind: "GoalContractRevisionRequested",
+    product,
+  })).toEqual({
+    kind: "accepted",
+    transition: {
+      kind: "request_goal_revision",
+      successor: "conception_deliberation",
+      product,
+    },
+  });
+});
+
 test("runtime hands a rejected internal event to recovery without committing it", async () => {
   const turn = turnIn("delivery_committed");
   const claim: StateExecutionClaim = {

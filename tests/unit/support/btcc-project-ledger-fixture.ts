@@ -176,12 +176,15 @@ export function projectBindingCommit(options: {
   const authority = { ref: contentRef("authority-revision", authorityBody), ...authorityBody };
   const reviewBody = {
     candidateRef: contentRef("goal-candidate", { goalContractRef: goalContract.ref }),
+    originalMessageId: goalContract.originalMessageId,
+    originalMessageSha256: goalContract.originalMessageSha256,
     originalGoalContractRef: goalContract.ref,
     reviewedLensIds: [],
     reviewedFieldIds: ["request", "intended_result"] as ["request", "intended_result"],
     reviewedOutcomeIds: ["required-outcome-fixture"] as [string],
     continuationBindingRef: continuation.ref,
     verdict: "accepted" as const,
+    findings: [] as [],
   };
   const review = { ref: contentRef("goal-contract-review", reviewBody), ...reviewBody };
   const boundary = {

@@ -19,6 +19,7 @@ describe("BTCC managed executable ingress", () => {
     ["managed-pass", 11, 2],
     ["managed-review-repair", 16, 3],
     ["managed-planning-revision", 13, 2],
+    ["managed-goal-revision", 13, 2],
     ["managed-feedback-planning-revision", 18, 3],
     ["managed-governing-revision", 16, 3],
     ["managed-authority-revision", 16, 3],
@@ -79,7 +80,12 @@ describe("BTCC managed executable ingress", () => {
     ];
     const reviewedPlanning = scenario === "managed-planning-revision"
       ? [...initialPlanning, "planning", "planning_review"]
-      : initialPlanning;
+      : scenario === "managed-goal-revision"
+        ? [
+            "conception_opening", "conception_deliberation", "contract_review",
+            "conception_deliberation", "contract_review", "planning", "planning_review",
+          ]
+        : initialPlanning;
     const firstTask = [...reviewedPlanning, "task_execution", "task_review"];
     const repairCycle = scenario === "managed-feedback-planning-revision"
       ? [
@@ -159,6 +165,10 @@ describe("BTCC managed executable ingress", () => {
       const planningCandidates = db.query<{ content_json: string }, []>(`
         SELECT content_json FROM btcc_records WHERE kind = 'plan_candidate' ORDER BY rowid
       `).all().map((row) => JSON.parse(row.content_json));
+      const goalCandidates = db.query<{ content_json: string }, []>(`
+        SELECT content_json FROM btcc_records
+        WHERE kind = 'goal_contract_candidate' ORDER BY rowid
+      `).all().map((row) => JSON.parse(row.content_json));
       const feedbackCandidates = db.query<{ content_json: string }, []>(`
         SELECT content_json FROM btcc_records
         WHERE kind = 'feedback_plan_candidate' ORDER BY rowid
@@ -227,6 +237,21 @@ describe("BTCC managed executable ingress", () => {
           kind: "review_revision",
           previousCandidateRef: planningCandidates[0]?.ref,
           findingSetRef: expect.any(Object),
+        });
+      }
+      if (scenario === "managed-goal-revision") {
+        expect(goalCandidates).toHaveLength(2);
+        expect(goalCandidates[1]?.revisionOrigin).toEqual({
+          kind: "review_revision",
+          previousCandidateRef: goalCandidates[0]?.ref,
+          reviewRef: expect.any(Object),
+          findingSetRef: expect.any(Object),
+        });
+        expect(phaseInputs.get("conception_deliberation")).toMatchObject({
+          goalRevision: {
+            kind: "goal_contract_revision_required",
+            review: { findings: [expect.stringContaining("원래 요청")] },
+          },
         });
       }
       if (scenario === "managed-feedback-planning-revision") {

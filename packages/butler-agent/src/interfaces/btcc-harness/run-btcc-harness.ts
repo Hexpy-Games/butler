@@ -42,6 +42,7 @@ type HarnessOptions = {
     | "managed-pass"
     | "managed-review-repair"
     | "managed-planning-revision"
+    | "managed-goal-revision"
     | "managed-feedback-planning-revision"
     | "managed-governing-revision"
     | "managed-authority-revision"
@@ -210,6 +211,7 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-pass" ||
     value === "managed-review-repair" ||
     value === "managed-planning-revision" ||
+    value === "managed-goal-revision" ||
     value === "managed-feedback-planning-revision" ||
     value === "managed-governing-revision" ||
     value === "managed-authority-revision" ||
@@ -239,6 +241,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     scenario === "managed-pass" ||
     scenario === "managed-review-repair" ||
     scenario === "managed-planning-revision" ||
+    scenario === "managed-goal-revision" ||
     scenario === "managed-feedback-planning-revision" ||
     scenario === "managed-governing-revision" ||
     scenario === "managed-authority-revision"
@@ -250,6 +253,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
   ) {
     return new ManagedHarnessModel(
       scenario !== "managed-pass" &&
+        scenario !== "managed-goal-revision" &&
         scenario !== "managed-planning-revision" &&
         scenario !== "managed-consolidation-repair",
       scenario === "managed-planning-revision",
@@ -267,6 +271,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
           : undefined,
       scenario === "managed-continuation",
       scenario === "managed-consolidation-repair",
+      scenario === "managed-goal-revision",
     );
   }
   return new NoLedgerHarnessModel(scenario);

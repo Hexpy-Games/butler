@@ -38,6 +38,7 @@ export {
   ledgerRecordSha256,
   logicalLedgerRecords,
 } from "./work-ledger/index.ts";
+export { operationRoundScope } from "./core/operation-identity.ts";
 export type {
   LogicalLedgerBundle,
   LogicalLedgerRecord,

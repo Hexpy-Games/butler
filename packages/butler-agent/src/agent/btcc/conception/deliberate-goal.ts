@@ -13,6 +13,7 @@ import {
 import type {
   ConceptionLensId,
   GoalContractCandidateProduct,
+  GoalContractRevisionRequiredProduct,
 } from "./managed-contracts.ts";
 import { goalCandidateSubmissionSchema } from "./submission-schemas.ts";
 
@@ -31,6 +32,7 @@ const CONTRACT: PhaseContract = {
   duties: [
     "preserve_selected_model", "state_input_only", "understand_request",
     ...LENSES, "select_exact_governing_spec_logical_ids", "candidate_revision_lineage",
+    "apply_exact_review_findings",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
@@ -104,10 +106,15 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
       nonGoals: requireStringArray(value.nonGoals, "nonGoals"),
     };
     const proposedContract = { ref: contentRef("goal-contract", body), ...body };
+    const revisionOrigin = bindGoalRevision(
+      envelope.context.stateInput,
+      proposedContract.ref,
+    );
     const candidateBody = {
       turnId: envelope.binding.turnId,
       proposedContract,
       proposedStrategy: "managed" as const,
+      revisionOrigin,
     };
     return {
       kind: "goal_contract_candidate",
@@ -115,6 +122,38 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
     };
   },
 };
+
+export function bindGoalRevision(
+  input: unknown,
+  proposedContractRef: GoalContractCandidateProduct["candidate"]["proposedContract"]["ref"],
+): GoalContractCandidateProduct["candidate"]["revisionOrigin"] {
+  if (input === undefined) return { kind: "initial" };
+  const state = requireRecord(input, "Conception revision state");
+  if (state.goalRevision === undefined) return { kind: "initial" };
+  const revision = state.goalRevision as GoalContractRevisionRequiredProduct;
+  if (revision.kind !== "goal_contract_revision_required") {
+    throw new Error("Conception revision state has an invalid Goal review");
+  }
+  if (!sameRef(revision.review.candidateRef, revision.candidate.ref)) {
+    throw new Error("Goal review is not bound to its exact previous candidate");
+  }
+  if (sameRef(proposedContractRef, revision.candidate.proposedContract.ref)) {
+    throw new Error("Goal Contract revision did not change the proposed contract");
+  }
+  return {
+    kind: "review_revision",
+    previousCandidateRef: revision.candidate.ref,
+    reviewRef: revision.review.ref,
+    findingSetRef: revision.review.findingSetRef,
+  };
+}
+
+function sameRef(
+  left: { id: string; sha256: string },
+  right: { id: string; sha256: string },
+): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
+}
 
 function canonicalLensBinding(
   lens: ConceptionLensId,

@@ -18,6 +18,7 @@ export class ManagedHarnessModel implements SelectedModel {
   readonly phases: string[] = [];
   private reviewCount = 0;
   private planningReviewCount = 0;
+  private goalReviewCount = 0;
   private feedbackPlanningReviewCount = 0;
   private deferralSubmitted = false;
   private consolidationRepairSubmitted = false;
@@ -31,6 +32,7 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly deferralPhase?: "planning" | "promotion",
     private readonly chooseContinuation = false,
     private readonly repairConsolidation = false,
+    private readonly reviseFirstGoal = false,
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
@@ -66,6 +68,7 @@ export class ManagedHarnessModel implements SelectedModel {
           message: "요청의 목표와 완료 조건을 정리한 뒤 작업 계획을 세우겠습니다.",
         };
       case "conception_deliberation": {
+        const revision = asRecord(state.goalRevision);
         const personalizationRefs = [
           ...envelope.context.profileRefs,
           ...envelope.context.recentFeedbackRefs,
@@ -75,7 +78,11 @@ export class ManagedHarnessModel implements SelectedModel {
         return {
           kind: "goal_contract_candidate",
           request: "고객 응대 원칙을 조사한다",
-          intendedResult: "짧고 실행 가능한 운영 가이드를 제공한다",
+          intendedResult: revision.kind === "goal_contract_revision_required"
+            ? "조사 결과와 실행 지침을 모두 포함한 운영 가이드를 제공한다"
+            : this.reviseFirstGoal
+              ? "조사 없이 짧은 의견만 제공한다"
+              : "짧고 실행 가능한 운영 가이드를 제공한다",
           acceptanceIntent: "원래 요청을 빠뜨리지 않은 운영 가이드가 완성된다",
           nonGoals: ["프로젝트 파일이나 외부 시스템을 변경하지 않는다"],
           personalizationRefs,
@@ -91,6 +98,15 @@ export class ManagedHarnessModel implements SelectedModel {
         };
       }
       case "contract_review":
+        this.goalReviewCount += 1;
+        if (this.reviseFirstGoal && this.goalReviewCount === 1) {
+          return {
+            kind: "goal_contract_review",
+            strategy: "managed",
+            verdict: "revision_required",
+            findings: ["조사 수행과 실행 지침이라는 원래 요청의 필수 결과가 누락되었다"],
+          };
+        }
         return {
           kind: "goal_contract_review",
           strategy: "managed",

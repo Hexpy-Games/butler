@@ -5,6 +5,7 @@ import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 import { ManagedArtifactRecordWriter } from "./managed-artifact-record-writer.ts";
 import { ManagedDeliveryOutboxWriter } from "./managed-delivery-outbox-writer.ts";
 import { ConsolidationRepairWriter } from "./consolidation-repair-writer.ts";
+import { ManagedGoalTransitionWriter } from "./managed-goal-transition-writer.ts";
 import { ManagedPlanningRecordWriter } from "./managed-planning-record-writer.ts";
 import { ManagedTurnProjectionWriter } from "./managed-turn-projection-writer.ts";
 import type { ProjectLedgerBoundaryContext } from "./project-ledger-promotion-writer.ts";
@@ -21,6 +22,7 @@ export class SqliteManagedTransitionWriter {
   private readonly planningRecords: ManagedPlanningRecordWriter;
   private readonly turnProjection: ManagedTurnProjectionWriter;
   private readonly projectBoundary: ProjectManagedBoundary;
+  private readonly goals: ManagedGoalTransitionWriter;
   constructor(private readonly db: Database, ledger: WorkLedger) {
     this.records = new SqliteImmutableRecordStore(db);
     this.artifactRecords = new ManagedArtifactRecordWriter(this.records);
@@ -29,6 +31,11 @@ export class SqliteManagedTransitionWriter {
     this.planningRecords = new ManagedPlanningRecordWriter(this.records);
     this.turnProjection = new ManagedTurnProjectionWriter(db);
     this.projectBoundary = new ProjectManagedBoundary(db, ledger);
+    this.goals = new ManagedGoalTransitionWriter(
+      this.records,
+      this.turnProjection,
+      this.projectBoundary,
+    );
   }
   commit(
     turn: TurnRecord,
@@ -55,16 +62,10 @@ export class SqliteManagedTransitionWriter {
         }, { route: "managed" });
         return;
       }
-      case "submit_goal_candidate": {
-        this.insert("goal_contract_candidate", transition.product.candidate);
-        this.insert("goal_contract", transition.product.candidate.proposedContract);
-        this.advance(turn, nextRevision, transition.successor, {
-          ...requiredManaged(turn), goalCandidate: transition.product,
-        });
-        return;
-      }
+      case "submit_goal_candidate":
+      case "request_goal_revision":
       case "accept_goal_contract":
-        this.acceptGoalContract(turn, nextRevision, transition, projectLedger);
+        this.goals.commit(turn, nextRevision, transition, projectLedger);
         return;
       case "submit_plan_candidate":
         this.planningRecords.record(transition.product.candidate);
@@ -196,23 +197,6 @@ export class SqliteManagedTransitionWriter {
         });
         return;
     }
-  }
-  private acceptGoalContract(
-    turn: TurnRecord,
-    nextRevision: number,
-    transition: Extract<ManagedTransition, { kind: "accept_goal_contract" }>,
-    projectLedger: ProjectLedgerBoundaryContext,
-  ): void {
-    const { goalContract, authority, review } = transition.product;
-    this.insert("goal_contract", goalContract);
-    this.insert("authority_revision", authority);
-    this.insert("goal_contract_review", review);
-    const program = this.requireCommittedProgram(
-      this.commitLedger(transition.ledgerCommit, projectLedger),
-    );
-    this.advance(turn, nextRevision, transition.successor, {
-      ...requiredManaged(turn), goalAcceptance: transition.product, program,
-    }, { goalContractRef: goalContract.ref.id });
   }
   private acceptPlan(
     turn: TurnRecord,

@@ -3,6 +3,7 @@ import {
   digest,
   requireLiteral,
   requireRecord,
+  requireStringArray,
   runPhaseConversation,
   type PhaseCodec,
   type PhaseContract,
@@ -10,8 +11,8 @@ import {
 } from "../core/index.ts";
 import type {
   ConceptionLensId,
-  GoalContractAcceptedProduct,
   GoalContractCandidateProduct,
+  GoalContractReviewProduct,
 } from "./managed-contracts.ts";
 import type {
   ContinuationBinding,
@@ -30,14 +31,17 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec: PhaseCodec<GoalContractAcceptedProduct> = {
+const codec: PhaseCodec<GoalContractReviewProduct> = {
   submissionSchema: goalReviewSubmissionSchema,
   decode(submission, envelope) {
     const candidate = loadCandidate(envelope.context.stateInput);
     const value = requireRecord(submission, "Goal Contract Review submission");
     requireLiteral(value.kind, "goal_contract_review", "Goal Contract Review kind");
-    requireLiteral(value.verdict, "accepted", "Goal Contract Review verdict");
     requireLiteral(value.strategy, "managed", "Goal Contract Review strategy");
+    if (value.verdict === "revision_required") {
+      return requireRevision(candidate, requireStringArray(value.findings, "Goal Review findings"));
+    }
+    requireLiteral(value.verdict, "accepted", "Goal Contract Review verdict");
     const reviewedLensIds: ConceptionLensId[] = [
       "requested_content", "related_memory", "connected_current_knowledge",
       "user_preferences_and_resolution_style", "expert_perspective",
@@ -57,12 +61,15 @@ const codec: PhaseCodec<GoalContractAcceptedProduct> = {
     );
     const reviewBody = {
       candidateRef: candidate.candidate.ref,
+      originalMessageId: candidate.candidate.proposedContract.originalMessageId,
+      originalMessageSha256: candidate.candidate.proposedContract.originalMessageSha256,
       originalGoalContractRef: candidate.candidate.proposedContract.ref,
       reviewedLensIds,
       reviewedFieldIds,
       reviewedOutcomeIds,
       continuationBindingRef: continuation.ref,
       verdict: "accepted" as const,
+      findings: [] as [],
     };
     const ledgerScope = projectRef
       ? { kind: "project" as const, projectRef }
@@ -100,6 +107,32 @@ const codec: PhaseCodec<GoalContractAcceptedProduct> = {
     };
   },
 };
+
+function requireRevision(
+  product: GoalContractCandidateProduct,
+  submittedFindings: string[],
+): GoalContractReviewProduct {
+  const findings = [...new Set(submittedFindings.map((finding) => finding.trim()).filter(Boolean))];
+  if (findings.length === 0) throw new Error("Goal Contract revision requires findings");
+  const candidate = product.candidate;
+  const findingSetRef = contentRef("goal-finding-set", {
+    candidateRef: candidate.ref,
+    findings,
+  });
+  const body = {
+    candidateRef: candidate.ref,
+    originalMessageId: candidate.proposedContract.originalMessageId,
+    originalMessageSha256: candidate.proposedContract.originalMessageSha256,
+    verdict: "revision_required" as const,
+    findings: findings as [string, ...string[]],
+    findingSetRef,
+  };
+  return {
+    kind: "goal_contract_revision_required",
+    candidate,
+    review: { ref: contentRef("goal-review", body), ...body },
+  };
+}
 
 export function reviewGoalContract(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });

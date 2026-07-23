@@ -59,14 +59,20 @@ export const goalCandidateSubmissionSchema = objectSchema({
   }),
 });
 
-const goalReviewFields = {
+const acceptedGoalReviewFields = {
   kind: literalSchema("goal_contract_review"),
   strategy: literalSchema("managed"),
   verdict: literalSchema("accepted"),
 };
 export const goalReviewSubmissionSchema = variantsSchema(
-  objectSchema(goalReviewFields),
-  objectSchema({ ...goalReviewFields, continuationCandidateId: textSchema() }),
+  objectSchema(acceptedGoalReviewFields),
+  objectSchema({ ...acceptedGoalReviewFields, continuationCandidateId: textSchema() }),
+  objectSchema({
+    kind: literalSchema("goal_contract_review"),
+    strategy: literalSchema("managed"),
+    verdict: literalSchema("revision_required"),
+    findings: textList(),
+  }),
 );
 
 export const feedbackIntentSubmissionSchema = objectSchema({
