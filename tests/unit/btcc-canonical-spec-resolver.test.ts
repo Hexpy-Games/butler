@@ -132,6 +132,24 @@ describe("BTCC canonical Spec resolver", () => {
     expect(catalog.map((item) => item.logicalId)).toEqual(["SPEC-A", "SPEC-B"]);
     expect(catalog.map((item) => item.body)).toEqual(["A\n", "B\n"]);
   });
+
+  test("excludes inactive logical authorities from the Planning catalog", () => {
+    const cancelled = {
+      ...spec("SPEC-CANCELLED", null, { parentId: "PARENT" }),
+      status: "cancelled",
+    };
+    const catalog = resolveCanonicalSpecCatalog(fakeCore([
+      spec("SPEC-CURRENT", "current", { parentId: "PARENT" }),
+      cancelled,
+    ]) as never, "/ledger");
+
+    expect(catalog.map((item) => item.logicalId)).toEqual(["SPEC-CURRENT"]);
+    expect(() => resolveCanonicalSpecRevisions(
+      fakeCore([cancelled]) as never,
+      "/ledger",
+      ["SPEC-CANCELLED"],
+    )).toThrow("exactly one current revision");
+  });
 });
 
 type FakeSpec = {

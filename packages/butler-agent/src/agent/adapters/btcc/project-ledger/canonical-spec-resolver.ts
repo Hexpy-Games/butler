@@ -57,7 +57,7 @@ export function resolveCanonicalSpecCatalog(
   const index = buildMetadataIndex(core, projectRoot);
   const logicalIds = [...new Set(
     [...index.values()].map((spec) => spec.logicalId ?? spec.physicalId),
-  )].sort();
+  )].filter((logicalId) => hasCurrentAuthority(index, logicalId)).sort();
   const selected = logicalIds.map((logicalId) => resolveRequestedChain(index, logicalId));
   rejectCompetingConcernOwners(index, selected);
   return selected.map((spec) => hydrateSelectedSpec(core, spec));
@@ -209,6 +209,15 @@ function isCurrentMetadata(
   return ![...index.values()].some((candidate) =>
     (candidate.logicalId ?? candidate.physicalId) === logicalId &&
     candidate.supersedesId === spec.physicalId && isActive(candidate.status));
+}
+
+function hasCurrentAuthority(
+  index: Map<string, SpecMetadata>,
+  logicalId: string,
+): boolean {
+  return [...index.values()].some((spec) =>
+    (spec.logicalId ?? spec.physicalId) === logicalId &&
+    isCurrentMetadata(index, spec, logicalId));
 }
 
 function hydrateSelectedSpec(
