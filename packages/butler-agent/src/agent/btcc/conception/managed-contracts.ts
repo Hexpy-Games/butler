@@ -40,20 +40,47 @@ export type GoalContractCandidateProduct = {
     ref: ContentRef;
     proposedContract: GoalContractRecord;
     proposedStrategy: "managed";
+    revisionOrigin:
+      | { kind: "initial" }
+      | {
+          kind: "review_revision";
+          previousCandidateRef: ContentRef;
+          reviewRef: ContentRef;
+          findingSetRef: ContentRef;
+        };
+  };
+};
+
+export type GoalContractReview = {
+  ref: ContentRef;
+  candidateRef: ContentRef;
+  originalMessageId: string;
+  originalMessageSha256: string;
+  verdict: "accepted" | "revision_required";
+  findings: string[];
+  findingSetRef?: ContentRef;
+};
+
+export type GoalContractRevisionRequiredProduct = {
+  kind: "goal_contract_revision_required";
+  candidate: GoalContractCandidateProduct["candidate"];
+  review: GoalContractReview & {
+    verdict: "revision_required";
+    findings: [string, ...string[]];
+    findingSetRef: ContentRef;
   };
 };
 
 export type GoalContractAcceptedProduct = {
   kind: "goal_contract_accepted";
-  review: {
-    ref: ContentRef;
-    candidateRef: ContentRef;
+  review: GoalContractReview & {
     originalGoalContractRef: ContentRef;
     reviewedLensIds: ConceptionLensId[];
     reviewedFieldIds: ["request", "intended_result"];
     reviewedOutcomeIds: [string];
     continuationBindingRef: ContentRef;
     verdict: "accepted";
+    findings: [];
   };
   goalContract: GoalContractRecord;
   authority: {
@@ -72,6 +99,10 @@ export type GoalContractAcceptedProduct = {
     };
   };
 };
+
+export type GoalContractReviewProduct =
+  | GoalContractAcceptedProduct
+  | GoalContractRevisionRequiredProduct;
 
 export type FeedbackIntentProduct = {
   kind: "feedback_intent";

@@ -7,6 +7,7 @@ import type {
   PhaseEnvelope,
   PhaseRunBinding,
 } from "../../../btcc/gateway-api.ts";
+import { operationRoundScope } from "../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "./identity.ts";
 import {
   contentRefId,
@@ -15,7 +16,6 @@ import {
   optionalJson,
   revisionRef,
 } from "./phase-conversation/checkpoint-codec.ts";
-import { operationRoundScope } from "../../../btcc/core/operation-identity.ts";
 
 type PhaseConversationStore = BtccRuntimeDependencies["phaseConversations"];
 type CheckpointHead = {

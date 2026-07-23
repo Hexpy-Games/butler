@@ -4,6 +4,8 @@ export type {
   GoalContractAcceptedProduct,
   GoalContractCandidateProduct,
   GoalContractRecord,
+  GoalContractRevisionRequiredProduct,
+  GoalContractReviewProduct,
 } from "./managed-contracts.ts";
 export type {
   OpeningAnswerProduct,

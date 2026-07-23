@@ -110,12 +110,15 @@ function sessionProgramCommit(): WorkLedgerCommit {
         review: {
           ref: ref("review"),
           candidateRef: ref("candidate"),
+          originalMessageId: "message",
+          originalMessageSha256: "message-sha256",
           originalGoalContractRef: ref("goal"),
           reviewedLensIds: [],
           reviewedFieldIds: ["request", "intended_result"],
           reviewedOutcomeIds: ["required-outcome"],
           continuationBindingRef: ref("continuation"),
           verdict: "accepted",
+          findings: [],
         },
         goalContract: {
           ref: ref("goal"),

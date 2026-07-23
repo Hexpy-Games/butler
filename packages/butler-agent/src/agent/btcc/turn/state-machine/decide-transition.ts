@@ -85,6 +85,13 @@ function acceptedTransition(
       }),
     };
   }
+  if (turn.semanticState === "contract_review" && event.kind === "GoalContractRevisionRequested") {
+    return {
+      kind: "request_goal_revision",
+      successor: "conception_deliberation",
+      product: event.product,
+    };
+  }
   if (turn.semanticState === "planning" && event.kind === "PlanCandidateSubmitted") {
     return { kind: "submit_plan_candidate", successor: "planning_review", product: event.product };
   }

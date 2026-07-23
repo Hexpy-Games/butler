@@ -17,7 +17,8 @@ type InitialConceptionEvent = Extract<TurnEvent, {
     | "OpeningAnswerAccepted"
     | "OpeningContinuationAccepted"
     | "GoalContractCandidateSubmitted"
-    | "GoalContractReviewAccepted";
+    | "GoalContractReviewAccepted"
+    | "GoalContractRevisionRequested";
 }>;
 type FeedbackConceptionEvent = Extract<TurnEvent, {
   kind: "FeedbackIntentAccepted" | "ManagedDeferralAccepted";
@@ -58,7 +59,10 @@ async function conceiveInitialGoal(command: {
         : { kind: "OpeningContinuationAccepted", product };
     }
     case "conception_deliberation": {
-      const product = await deliberateGoal(command.phase);
+      const managed = requireManagedState(command.turn);
+      const product = await deliberateGoal(withPhaseState(command.phase, {
+        ...(managed.goalRevision ? { goalRevision: managed.goalRevision } : {}),
+      }));
       return { kind: "GoalContractCandidateSubmitted", product };
     }
     case "contract_review": {
@@ -71,7 +75,9 @@ async function conceiveInitialGoal(command: {
         continuationCandidates: command.turn.continuationCandidates,
         goalCandidate: requireManagedState(command.turn).goalCandidate,
       }));
-      return { kind: "GoalContractReviewAccepted", product };
+      return product.kind === "goal_contract_accepted"
+        ? { kind: "GoalContractReviewAccepted", product }
+        : { kind: "GoalContractRevisionRequested", product };
     }
     default:
       throw new Error(`Conception cannot advance ${command.turn.semanticState}`);

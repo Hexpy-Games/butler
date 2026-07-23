@@ -8,6 +8,7 @@ import type {
   FeedbackIntentProduct,
   GoalContractAcceptedProduct,
   GoalContractCandidateProduct,
+  GoalContractRevisionRequiredProduct,
   OpeningContinuationProduct,
 } from "../conception/index.ts";
 import type { ConsolidationRepairProduct, FinalDossierProduct } from "../consolidation/index.ts";
@@ -31,6 +32,9 @@ import type { ManagedTurnState } from "./managed-turn-state.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import type { PromotionDeferralProduct } from "../deferral/index.ts";
 import type { DeferredContinuationCandidate } from "../continuation/index.ts";
+import type { TurnEvent } from "./turn-events.ts";
+
+export type { TurnEvent } from "./turn-events.ts";
 
 export type TurnSemanticState =
   | "admitted"
@@ -115,37 +119,6 @@ export type StateExecutionClaim = {
   executionFence: number;
 };
 
-export type TurnEvent =
-  | { kind: "TurnActivated" }
-  | { kind: "OpeningAnswerAccepted"; product: OpeningAnswerProduct }
-  | { kind: "OpeningContinuationAccepted"; product: OpeningContinuationProduct }
-  | { kind: "GoalContractCandidateSubmitted"; product: GoalContractCandidateProduct }
-  | { kind: "GoalContractReviewAccepted"; product: GoalContractAcceptedProduct }
-  | { kind: "PlanCandidateSubmitted"; product: PlanningCandidateProduct }
-  | { kind: "PlanningReviewAccepted"; product: PlanningAcceptedProduct }
-  | { kind: "PlanningRevisionRequested"; product: PlanningRevisionRequiredProduct }
-  | { kind: "WorkTaskSelected"; attempt: ManagedAttempt }
-  | { kind: "WorkFrontierClosed"; promotionAssemblies: ReviewedPromotionAssembly[] }
-  | { kind: "ResultCandidateSubmitted"; product: ResultCandidateProduct }
-  | { kind: "TaskReviewPassed"; product: TaskReviewProduct }
-  | { kind: "TaskReviewFailed"; product: TaskReviewProduct }
-  | { kind: "FeedbackIntentAccepted"; product: FeedbackIntentProduct }
-  | { kind: "FeedbackPlanCandidateSubmitted"; product: FeedbackPlanProduct }
-  | { kind: "FeedbackPlanningReviewAccepted"; product: FeedbackPlanningAcceptedProduct }
-  | {
-      kind: "FeedbackPlanningRevisionRequested";
-      product: FeedbackPlanningRevisionRequiredProduct;
-    }
-  | { kind: "ManagedDeferralAccepted"; product: ManagedDeferralProduct }
-  | { kind: "PromotionDeferralAccepted"; product: PromotionDeferralProduct }
-  | { kind: "ConsolidationRepairRequired"; product: ConsolidationRepairProduct }
-  | { kind: "FinalDossierAccepted"; product: FinalDossierProduct }
-  | { kind: "PromotedWorkCompleted"; product: FinalDossierProduct }
-  | { kind: "PromotedWorkDeferred"; product: FinalDossierProduct }
-  | { kind: "PromotionAuthorized"; product: PromotionAuthorizationProduct }
-  | { kind: "PreparedReportAccepted"; product: PreparedReportProduct }
-  | { kind: "DeliveryObserved"; assistantMessageId: string };
-
 export type AcceptedTurnTransition =
   | {
       kind: "activate_opening";
@@ -165,6 +138,11 @@ export type AcceptedTurnTransition =
       product: OpeningContinuationProduct;
     }
   | { kind: "submit_goal_candidate"; successor: "contract_review"; product: GoalContractCandidateProduct }
+  | {
+      kind: "request_goal_revision";
+      successor: "conception_deliberation";
+      product: GoalContractRevisionRequiredProduct;
+    }
   | {
       kind: "accept_goal_contract";
       successor: "planning";
