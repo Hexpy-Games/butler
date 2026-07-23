@@ -43,7 +43,7 @@ describe("BTCC Project Work Ledger prepared publication", () => {
     expect(canonical.records.find((record) => record.id === "SPEC-FIXTURE")?.body)
       .toContain("Fixture spec");
     expect(canonical.records.some((record) =>
-      record.kind === "reference" && record.body?.includes(binding.goalContract.ref.id)
+      record.kind === "reference" && record.body?.includes(binding.goalContract.ref.id),
     )).toBe(true);
 
     const accepted = reviewedPlan({

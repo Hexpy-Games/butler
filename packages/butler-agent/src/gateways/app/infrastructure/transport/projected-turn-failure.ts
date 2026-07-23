@@ -8,6 +8,7 @@ import {
 } from "./turn-failure-projection.ts";
 import { timestampBefore } from "./app-transport-metadata.ts";
 import type { AppTransportProjectionStoreOptions } from "./transport-projection-contract.ts";
+import { btccRetainsTurnAuthority } from "./btcc-turn-projection-authority.ts";
 
 export function projectAppTurnFailure(input: {
   options: AppTransportProjectionStoreOptions;
@@ -20,6 +21,7 @@ export function projectAppTurnFailure(input: {
   const { options, chatId, turnId, message, metadata, eventTimestamp } = input;
   const turn = options.getTurnRow(turnId);
   if (!turn) return false;
+  if (btccRetainsTurnAuthority(options.db, turnId)) return false;
   if (turn.state === "delivered" || turn.state === "cancelled") return false;
   if (
     turn.state === "retrying" &&

@@ -31,6 +31,9 @@ import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
   AppTransportProjectionStoreOptions,
 } from "./transport-projection-contract.ts";
+import {
+  reconcileBtccTurnProjectionAuthority,
+} from "./btcc-turn-projection-authority.ts";
 
 interface PendingAppTurnEventOutbound {
   chatId: string;
@@ -63,16 +66,24 @@ export class AppTransportProjectionStore {
   }
 
   syncAll(): number {
+    const authorityReconciliationCount = reconcileBtccTurnProjectionAuthority(
+      this.options.db,
+    );
     const transcriptProjectionCount = this.transcriptSync.syncAll();
     return (
-      transcriptProjectionCount + this.reconcileDeferredQueuedFinalOutbounds()
+      authorityReconciliationCount + transcriptProjectionCount +
+      this.reconcileDeferredQueuedFinalOutbounds()
     );
   }
 
   syncChat(chatId: string): number {
+    const authorityReconciliationCount = reconcileBtccTurnProjectionAuthority(
+      this.options.db,
+      chatId,
+    );
     const transcriptProjectionCount = this.transcriptSync.syncChat(chatId);
     return (
-      transcriptProjectionCount +
+      authorityReconciliationCount + transcriptProjectionCount +
       this.reconcileDeferredQueuedFinalOutbounds(chatId)
     );
   }
