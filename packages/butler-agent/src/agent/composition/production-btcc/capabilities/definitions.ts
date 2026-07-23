@@ -35,6 +35,19 @@ const projectLedgerKinds = () => ({
 
 export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
+    capabilityRef: "list_files",
+    name: "list_files",
+    description: "List bounded workspace-relative file paths in deterministic source-first order.",
+    operationKinds: ["observe", "review_validation"],
+    observationScopeKinds: ["workspace"],
+    inputSchema: object({
+      include_globs: strings("Optional workspace-relative globs. A basename glob such as *.ts matches at any depth."),
+      exclude_globs: strings("Optional workspace-relative globs to exclude."),
+      max_files: integer(1, 1_000),
+    }, []),
+    execute: (args, context) => executeFileCapability("list_files", args, context),
+  },
+  {
     capabilityRef: "read_file",
     name: "read_file",
     description: "Read bounded UTF-8 text inside the admitted workspace.",
@@ -69,7 +82,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     operationKinds: ["observe", "review_validation"],
     observationScopeKinds: ["workspace"],
     inputSchema: object({
-      pattern: string(),
+      pattern: string("Literal search text unless regex is true."),
       regex: { type: "boolean" },
       case_sensitive: { type: "boolean" },
       include_globs: strings("Optional workspace-relative globs. A basename glob such as *.ts matches at any depth."),
