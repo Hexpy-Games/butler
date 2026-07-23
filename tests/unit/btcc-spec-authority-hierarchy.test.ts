@@ -36,6 +36,34 @@ describe("BTCC Spec authority hierarchy", () => {
     });
   });
 
+  test("rejects an authored Spec that competes with cataloged concern authority", () => {
+    const draft = authorPlanningProposal({
+      ...artifactPlan(),
+      specifications: [{
+        logicalId: "SPEC-DUPLICATE",
+        parentId: "project-1",
+        concernId: "SPEC-CURRENT",
+        title: "Duplicate authority",
+        body: "A second owner for the same concern.",
+      }],
+    }, {
+      ...authoringState(),
+      availableSpecs: [{
+        logicalId: "SPEC-CURRENT",
+        parentId: "project-1",
+        concernId: "SPEC-CURRENT",
+        title: "Current authority",
+        status: "specified",
+        revisionRef: ref("SPEC-CURRENT"),
+      }],
+    });
+
+    expect(draft).toMatchObject({
+      kind: "planning_draft",
+      validationFindings: [{ code: "specification_concern_conflict" }],
+    });
+  });
+
   test("persists the exact reviewed parent and concern metadata", async () => {
     const fixture = await projectFixture();
     const adapter = createProjectWorkLedgerPublicationAdapter({
