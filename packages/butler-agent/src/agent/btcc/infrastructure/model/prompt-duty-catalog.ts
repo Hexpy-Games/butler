@@ -89,7 +89,12 @@ const DUTIES = {
     "opaque operation, workspace, or result references; runtime binds the current result",
     "and this Review's exact reads to the accepted semantic receipt.",
   ].join(" "),
-  conceive_scoped_correction: "Derive the smallest correction intent from the exact accepted findings and immutable GoalContract without adding unrelated work.",
+  conceive_scoped_correction: [
+    "Derive the smallest correction intent from the exact accepted findings and",
+    "immutable GoalContract without adding unrelated work. Compare the current",
+    "correctionSource semantically with stateInput.priorTaskReviewFindings for this",
+    "exact Task; never compare by text equality, regex, category counts, or runtime judgment.",
+  ].join(" "),
   classify_correction_kind: [
     "Choose implementation repair, governing revision, authority-scope revision, or",
     "pre-plan repair from semantic cause, never runtime heuristics. A current criterion",
@@ -97,6 +102,8 @@ const DUTIES = {
     "Plan, Task-decomposition, or verification-ownership defect, not an implementation repair.",
     "If materially equivalent implementation findings recur after correction, reconsider",
     "Task boundary or authority through governing Planning instead of expanding the same local repair.",
+    "Use stateInput.priorTaskReviewFindings as the durable comparison input and choose",
+    "governing_revision or authority_scope_revision when the recurrence exposes that boundary.",
   ].join(" "),
   author_scoped_correction: "Author only records required by the accepted CorrectionScope and preserve unaffected history.",
   author_complete_impact_map: "For governing or authority revision, classify every prior Task as unaffected, revalidate, rework, or replan; implementation repair changes no governing revision.",

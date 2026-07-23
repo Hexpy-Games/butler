@@ -10,6 +10,7 @@ import {
 import { conceiveCorrection } from "./conceive-correction.ts";
 import { deliberateGoal } from "./deliberate-goal.ts";
 import { openConception } from "./opening/open-conception.ts";
+import { projectPriorTaskReviewFindings } from "./prior-task-review-findings.ts";
 import { reviewGoalContract } from "./review-goal-contract.ts";
 
 type InitialConceptionEvent = Extract<TurnEvent, {
@@ -102,6 +103,10 @@ async function conceiveReviewFeedback(command: {
     correctionScopeRef: source.correctionScopeRef,
     correctionOrigin: source.origin,
     affectedTaskRefs: source.affectedTaskRefs,
+    priorTaskReviewFindings: projectPriorTaskReviewFindings(
+      program.currentTask,
+      source.origin === "task_review" ? source.record.review.ref : undefined,
+    ),
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
   }));

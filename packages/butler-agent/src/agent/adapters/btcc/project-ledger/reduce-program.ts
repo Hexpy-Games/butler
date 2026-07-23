@@ -128,6 +128,7 @@ function attachReview(program: Reviewed, product: Extract<Mutation, { kind: "att
   }
   const status = review.verdict === "passed" ? "accepted" : "review_failed";
   attempt.status = status;
+  attempt.review = product;
   task.status = status;
   task.currentReview = product;
   const work = workByLogicalId(program, task.task.workLogicalId);
