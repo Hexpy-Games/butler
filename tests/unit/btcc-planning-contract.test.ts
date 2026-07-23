@@ -11,11 +11,22 @@ import {
   planCandidateSubmissionSchema,
 } from
   "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
+import { PLANNING_AUTHORING_CONTRACTS } from
+  "../../packages/butler-agent/src/agent/btcc/planning/authoring-contracts.ts";
 import { artifactTask } from "./support/btcc-planning-fixture.ts";
 
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
 
 describe("BTCC Planning contract", () => {
+  test("injects only current authoring contracts with semantic Task boundaries", () => {
+    expect(PLANNING_AUTHORING_CONTRACTS.map((contract) => contract.contractId)).toEqual([
+      "SPEC-BTCC-WORK-AUTHORING-CONTRACT",
+      "SPEC-BTCC-WORK-LEDGER-STATE-AND-MUTATION-CONTRACT",
+    ]);
+    expect(PLANNING_AUTHORING_CONTRACTS[0]?.applicableRules.join("\n"))
+      .toContain("never collapse a layered feature");
+  });
+
   test("binds existing Specs by schema-constrained logical ID and governs authored Specs automatically", () => {
     const existing = ref("spec-existing-revision");
     const selected = authorPlanCandidate({

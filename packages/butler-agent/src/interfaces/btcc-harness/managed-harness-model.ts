@@ -193,18 +193,12 @@ export class ManagedHarnessModel implements SelectedModel {
           };
         }
         this.reviewCount += 1;
-        const result = asRecord(asRecord(state.resultCandidate).result);
-        const reviewedResultRefs = [
-          asRecord(result.resultSummary).ref,
-          ...envelope.operationResults.map((operation) => operation.resultRef),
-        ];
         const criteria = asArray(state.criteria);
         if (this.failFirstReview && this.reviewCount === this.failedReviewOrdinal) {
           return {
             kind: "task_review",
             criterionVerdicts: criteria.map((criterion, index) => ({
               criterionRef: asRecord(criterion).ref,
-              reviewedResultRefs,
               verdict: index === 0 ? "not_satisfied" : "satisfied",
               observation: index === 0
                 ? "초안에 실제 적용 지침이 빠져 있다"
@@ -226,7 +220,6 @@ export class ManagedHarnessModel implements SelectedModel {
           kind: "task_review",
           criterionVerdicts: criteria.map((criterion) => ({
             criterionRef: asRecord(criterion).ref,
-            reviewedResultRefs,
             verdict: "satisfied",
             observation: "원칙과 실행 지침이 모두 포함되어 수용 기준을 충족한다",
           })),

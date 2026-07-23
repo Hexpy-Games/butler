@@ -52,7 +52,10 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       questions,
       result,
       checkpointId: envelope.binding.checkpointId,
-      reviewOperationRefs: envelope.operationResults.map((operation) => operation.resultRef),
+      runtimeBoundResultRefs: uniqueRefs([
+        result.result.resultSummary.ref,
+        ...envelope.operationResults.map((operation) => operation.resultRef),
+      ]),
     });
     const passed = decoded.verdicts.every((verdict) => verdict.verdict === "satisfied");
     if (result.result.kind === "repository_promotion" && !passed) {
@@ -157,7 +160,7 @@ function decodeCriterionVerdicts(input: {
   questions: Record<string, unknown>[];
   result: ResultCandidateProduct;
   checkpointId: string;
-  reviewOperationRefs: ContentRef[];
+  runtimeBoundResultRefs: ContentRef[];
 }): {
   verdicts: CriterionVerdict[];
   observations: ReviewObservation[];
@@ -172,11 +175,6 @@ function decodeCriterionVerdicts(input: {
     const ref = requireContentRef(criterion.ref, "criterion.ref");
     return [refKey(ref), { criterion, ref }];
   }));
-  const allowedResultRefs = new Map([
-    input.result.result.resultSummary.ref,
-    ...input.result.result.operationResults.map((result) => result.resultRef),
-    ...input.reviewOperationRefs,
-  ].map((ref) => [refKey(ref), ref]));
   const reviewedCriteria = new Set<string>();
   const observations: ReviewObservation[] = [];
   const findings: ReviewFinding[] = [];
@@ -195,13 +193,6 @@ function decodeCriterionVerdicts(input: {
       throw new Error("Task Review repeated a current Task criterion");
     }
     reviewedCriteria.add(criterionKey);
-    const reviewedResultRefs = requireContentRefs(
-      submitted.reviewedResultRefs,
-      `criterionVerdicts[${index}].reviewedResultRefs`,
-    );
-    if (reviewedResultRefs.some((ref) => !allowedResultRefs.has(refKey(ref)))) {
-      throw new Error("Task Review cited a result outside the current Execution or Review");
-    }
     const questionRefs = input.questions
       .filter((question) => stableJson(question.criterionRef) === stableJson(criterionRef))
       .map((question) => requireContentRef(question.ref, "question.ref"));
@@ -215,7 +206,7 @@ function decodeCriterionVerdicts(input: {
       executionTargetRef: input.result.result.executionTargetRef,
       targetRevisionRefs,
       description: requireString(submitted.observation, "criterion observation"),
-      reviewedResultRefs,
+      reviewedResultRefs: input.runtimeBoundResultRefs,
       reviewCheckpointRef: input.checkpointId,
     };
     const observation = {
@@ -240,7 +231,7 @@ function decodeCriterionVerdicts(input: {
       criterionRef,
       verificationQuestionRefs: questionRefs,
       currentTargetRevisionRefs: targetRevisionRefs,
-      reviewedResultRefs,
+      reviewedResultRefs: input.runtimeBoundResultRefs,
       observationRefs: [observation.ref],
       verdict: criterionVerdict,
       findingRefs,
@@ -275,13 +266,6 @@ function requireContentRef(value: unknown, label: string): ContentRef {
     id: requireString(record.id, `${label}.id`),
     sha256: requireString(record.sha256, `${label}.sha256`),
   };
-}
-
-function requireContentRefs(value: unknown, label: string): ContentRef[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${label} must be a non-empty reference array`);
-  }
-  return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
 }
 
 function refKey(ref: ContentRef): string {

@@ -18,23 +18,10 @@ test("promotion Review exposes only a satisfied criterion verdict", () => {
         required: ["id", "sha256"],
         additionalProperties: false,
       },
-      reviewedResultRefs: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            id: { type: "string", minLength: 1 },
-            sha256: { type: "string", minLength: 1 },
-          },
-          required: ["id", "sha256"],
-          additionalProperties: false,
-        },
-        minItems: 1,
-      },
       observation: { type: "string", minLength: 1 },
       verdict: { type: "string", const: "satisfied" },
     },
-    required: ["criterionRef", "reviewedResultRefs", "observation", "verdict"],
+    required: ["criterionRef", "observation", "verdict"],
     additionalProperties: false,
   });
 });
