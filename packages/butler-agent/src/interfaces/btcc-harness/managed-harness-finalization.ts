@@ -16,7 +16,7 @@ export function submitConsolidation(
       kind: "final_dossier",
       goalCoverage: "deferred",
       semanticFidelity: "faithful",
-      summary: "사용자 승인이 필요해 현재 결과와 열린 작업을 보존했다",
+      userReport: deferredReportFacts(),
     };
   }
   if (asArray(state.promotionAssemblies).length > 0) {
@@ -25,6 +25,7 @@ export function submitConsolidation(
       ...assessment,
       goalCoverage: "fulfilled",
       semanticFidelity: "faithful",
+      userReport: completedReportFacts(),
     };
   }
   return {
@@ -32,7 +33,7 @@ export function submitConsolidation(
     ...assessment,
     goalCoverage: "fulfilled",
     semanticFidelity: "faithful",
-    summary: "원래 요청에 맞는 고객 응대 운영 가이드가 완성되었다",
+    userReport: completedReportFacts(),
   };
 }
 
@@ -50,11 +51,32 @@ function assessmentVerdicts(state: Record<string, unknown>, repair: boolean) {
 
 export function submitReport(state: Record<string, unknown>): unknown {
   const dossier = asRecord(asRecord(state.finalDossier).dossier);
+  const report = asRecord(dossier.userReport);
+  const changes = asArray(report.materialChanges).map(String).join("\n- ");
+  const validation = asArray(report.validationResults).map(String).join("\n- ");
   return {
     kind: "prepared_report",
     content: dossier.disposition === "deferred"
       ? "현재까지의 결과를 보존했습니다. 다음 작업에는 사용자 승인이 필요합니다."
-      : "고객 응대 운영 가이드를 완성했습니다. 핵심은 경청, 명확한 확인, 실행 가능한 안내, 후속 확인입니다.",
+      : `${String(report.outcome)}\n\n변경:\n- ${changes}\n\n검증:\n- ${validation}`,
+  };
+}
+
+function completedReportFacts() {
+  return {
+    outcome: "고객 응대 운영 가이드를 완성했다",
+    materialChanges: ["경청, 명확한 확인, 실행 가능한 안내, 후속 확인 원칙을 정리했다"],
+    validationResults: ["모든 Task Review가 수용 기준을 통과했다"],
+    limitations: [],
+  };
+}
+
+function deferredReportFacts() {
+  return {
+    outcome: "현재까지 완료된 결과를 보존했다",
+    materialChanges: ["완료된 작업과 이어서 수행할 작업 경계를 기록했다"],
+    validationResults: ["완료된 Task Review만 최종 기록에 포함했다"],
+    limitations: ["다음 단계에는 사용자의 명시적 승인이 필요하다"],
   };
 }
 

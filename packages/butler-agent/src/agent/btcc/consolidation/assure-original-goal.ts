@@ -13,6 +13,7 @@ import type { ConsolidationProduct } from "./contracts.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import { decodeAssessment, isRepairableAssessment } from "./decode-assessment.ts";
 import { consolidationSubmissionSchema } from "./submission-schema.ts";
+import { decodeUserReportFacts } from "./user-report-facts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "consolidation",
@@ -87,6 +88,7 @@ const codec: PhaseCodec<ConsolidationProduct> = {
         resolutionRefs,
         promotionTaskRefs,
         assessment: "authorized" as const,
+        userReport: decodeUserReportFacts(value.userReport),
       };
       return {
         kind: "promotion_authorization",
@@ -97,6 +99,7 @@ const codec: PhaseCodec<ConsolidationProduct> = {
     requireLiteral(value.kind, "final_dossier", "Consolidation kind");
     requireLiteral(value.goalCoverage, "fulfilled", "goal coverage");
     requireLiteral(value.semanticFidelity, "faithful", "semantic fidelity");
+    const userReport = decodeUserReportFacts(value.userReport);
     const body = {
       programId: requireString(state.programId, "programId"),
       originalGoalContractRef: goalContractRef,
@@ -109,7 +112,8 @@ const codec: PhaseCodec<ConsolidationProduct> = {
       semanticFidelity: "faithful" as const,
       promotionClosure: "not_required" as const,
       disposition: "completed" as const,
-      summary: requireString(value.summary, "summary"),
+      summary: userReport.outcome,
+      userReport,
     };
     return {
       kind: "final_dossier",
@@ -186,6 +190,7 @@ function decodeDeferredDossier(
         planningReviewRef: deferral.anchor.planAuthority.planningReviewRef,
       }
     : {};
+  const userReport = decodeUserReportFacts(value.userReport);
   const body = {
     programId: requireString(state.programId, "programId"),
     originalGoalContractRef: goalContractRef,
@@ -201,7 +206,8 @@ function decodeDeferredDossier(
     deferredAnchorRef: deferral.anchor.ref,
     openWorkRefs: deferral.anchor.openWorkRefs,
     continuationOpenTaskRefs: deferral.anchor.openTaskRefs,
-    summary: requireString(value.summary, "summary"),
+    summary: userReport.outcome,
+    userReport,
   };
   return {
     kind: "final_dossier",

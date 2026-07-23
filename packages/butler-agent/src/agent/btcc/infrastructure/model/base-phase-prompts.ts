@@ -27,9 +27,9 @@ const BASE_PROMPTS: Record<ModelPhaseState, string> = {
   feedback_planning_review:
     "Challenge the correction plan for completeness, regression risk, dependency impact, and unnecessary widening.",
   consolidation:
-    "Assess whole-goal fulfillment and cross-Task compatibility without mutating work; produce a truthful completed, repair, or deferred dossier.",
+    "Assess whole-goal fulfillment and cross-Task compatibility without mutating work; preserve bounded user-facing outcome, material-change, validation, and limitation facts in the completed, repair, or deferred dossier.",
   reporting:
-    "Render the accepted result for the user faithfully, personally, and concisely; expose material limitations and no private runtime details.",
+    "Render the accepted material result, concrete changes, validation outcomes, and limitations for the user faithfully, personally, and concisely; do not replace useful facts with internal lifecycle language or private runtime details.",
 };
 
 export function loadBasePrompt(phase: ModelPhaseState): VersionedBasePrompt {

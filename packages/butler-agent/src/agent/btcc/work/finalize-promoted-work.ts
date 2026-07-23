@@ -24,7 +24,8 @@ export function finalizePromotedWork(
     semanticFidelity: "faithful" as const,
     promotionClosure: "promoted" as const,
     disposition: "completed" as const,
-    summary: "승인된 격리 후보가 정확한 프로모션 영수증으로 반영되었다",
+    summary: program.promotionAuthorization.userReport.outcome,
+    userReport: program.promotionAuthorization.userReport,
   };
   return {
     kind: "final_dossier",

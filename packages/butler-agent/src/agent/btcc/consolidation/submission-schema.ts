@@ -6,6 +6,7 @@ import {
   textSchema,
   variantsSchema,
 } from "../core/index.ts";
+import { userReportFactsSubmissionSchema } from "./user-report-facts.ts";
 
 const assessmentFields = {
   goalFieldVerdicts: arraySchema(objectSchema({
@@ -22,18 +23,19 @@ export const consolidationSubmissionSchema = variantsSchema(
     kind: literalSchema("final_dossier"),
     ...assessmentFields,
     goalCoverage: literalSchema("fulfilled"),
-    summary: textSchema(),
+    userReport: userReportFactsSubmissionSchema,
   }),
   objectSchema({
     kind: literalSchema("final_dossier"),
     goalCoverage: literalSchema("deferred"),
     semanticFidelity: literalSchema("faithful"),
-    summary: textSchema(),
+    userReport: userReportFactsSubmissionSchema,
   }),
   objectSchema({
     kind: literalSchema("promotion_authorization"),
     ...assessmentFields,
     goalCoverage: literalSchema("fulfilled"),
+    userReport: userReportFactsSubmissionSchema,
   }),
   objectSchema({
     kind: literalSchema("consolidation_repair"),

@@ -37,7 +37,11 @@ export function finalizeDeferredPromotion(
       .filter((work) => work.status !== "closed")
       .map((work) => work.work.ref),
     continuationOpenTaskRefs: openPromotionTasks,
-    summary: "승격 전 준비 조건이 충족되지 않아 검토된 후보와 열린 승격 작업을 보존했다",
+    summary: authorization.userReport.outcome,
+    userReport: {
+      ...authorization.userReport,
+      limitations: [...authorization.userReport.limitations, deferral.blocker.reason],
+    },
   };
   return {
     kind: "final_dossier",
