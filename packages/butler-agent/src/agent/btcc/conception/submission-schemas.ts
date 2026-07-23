@@ -46,6 +46,7 @@ export const goalCandidateSubmissionSchema = objectSchema({
   request: textSchema(),
   intendedResult: textSchema(),
   acceptanceIntent: textSchema(),
+  artifactPersistence: enumSchema("not_required", "required"),
   nonGoals: textList(),
   personalizationRefs: textList(),
   governingSpecLogicalIds: textList(),

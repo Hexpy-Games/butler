@@ -84,6 +84,7 @@ export class ManagedHarnessModel implements SelectedModel {
               ? "조사 없이 짧은 의견만 제공한다"
               : "짧고 실행 가능한 운영 가이드를 제공한다",
           acceptanceIntent: "원래 요청을 빠뜨리지 않은 운영 가이드가 완성된다",
+          artifactPersistence: "not_required",
           nonGoals: ["프로젝트 파일이나 외부 시스템을 변경하지 않는다"],
           personalizationRefs,
           governingSpecLogicalIds: envelope.context.projectRef ? ["SPEC-HARNESS"] : [],

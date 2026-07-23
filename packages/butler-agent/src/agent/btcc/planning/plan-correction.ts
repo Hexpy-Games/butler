@@ -94,6 +94,7 @@ function feedbackPlanningCodec(availableSpecIds: string[]) {
         availableSpecs: decodeAvailableSpecs(state.availableSpecs),
         requireGoverningSpec: Boolean(state.requireGoverningSpec),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+        artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
         workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
       },
     );
@@ -139,6 +140,13 @@ function requireWorkspaceScope(scopeRefs: readonly string[]): string {
   const workspaceScopeRef = scopeRefs.find((scopeRef) => scopeRef.startsWith("workspace:"));
   if (!workspaceScopeRef) throw new Error("Feedback Planning requires an admitted workspace scope");
   return workspaceScopeRef;
+}
+
+function requireArtifactPersistence(value: unknown): "not_required" | "required" {
+  if (value !== "not_required" && value !== "required") {
+    throw new Error("Feedback Planning state has an invalid artifactPersistence");
+  }
+  return value;
 }
 
 function authorityRevision(previousAuthorityRef: ContentRef, change: unknown) {
