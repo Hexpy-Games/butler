@@ -20,4 +20,12 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("exactly one verdict per entry");
   expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
     .toContain("never introduce criteria from another Task");
+  expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
+    .toContain("directSuccessorHandoffs");
+  expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
+    .toContain("successor-owned persistent test");
+  expect(resolveDutyInstructions(["review_executability"])[0]?.instruction)
+    .toContain("successor-owned path");
+  expect(resolveDutyInstructions(["classify_correction_kind"])[0]?.instruction)
+    .toContain("verification-ownership defect");
 });
