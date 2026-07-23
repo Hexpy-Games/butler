@@ -101,10 +101,14 @@ function validateArtifactDependencyContinuity(tasks: TaskDraft[]): void {
           "A Task that depends on workspace bytes must continue on an artifact target",
         );
       }
-      if (successorPolicy.targetScopeRef !== predecessor.artifactPolicy.targetScopeRef) {
+      const predecessorScope = predecessor.artifactPolicy.workspaceScopeRef;
+      const successorScope = successorPolicy.kind === "workspace_artifact"
+        ? successorPolicy.workspaceScopeRef
+        : successorPolicy.targetScopeRef;
+      if (successorScope !== predecessorScope) {
         rejectPlanningProposal(
           "artifact_dependency_target_mismatch",
-          "Dependent artifact Tasks must share the exact workspace target",
+          "Dependent artifact Tasks must share the exact artifact workspace root",
         );
       }
     }
@@ -154,7 +158,7 @@ function readTaskDraft(
     dependencyTaskIds: requireStringArray(task.dependencyTaskIds, "dependencyTaskIds"),
     effectClass,
     targetScopeRefs: artifactPolicy
-      ? artifactPolicy.kind === "workspace_artifact" ? [artifactPolicy.targetScopeRef] : []
+      ? artifactPolicy.kind === "workspace_artifact" ? [artifactPolicy.workspaceScopeRef] : []
       : requireStringArray(task.targetScopeRefs, "targetScopeRefs"),
     ...(artifactPolicy ? { artifactPolicy } : {}),
     criteria: criteria.map((item, criterionIndex) => {

@@ -1,4 +1,8 @@
-import type { ContentRef, WorkspaceOperationRoot } from "../core/index.ts";
+import type {
+  ContentRef,
+  WorkspaceMutationScope,
+  WorkspaceOperationRoot,
+} from "../core/index.ts";
 import type { WorkspaceProvision } from "../artifact/index.ts";
 import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
 import type { FinalDossierProduct } from "../consolidation/index.ts";
@@ -26,6 +30,7 @@ export type ManagedAttempt = {
           baselineSnapshotRef: ContentRef;
           acceptedBaseRevisionRefs: ContentRef[];
           operationRoot: WorkspaceOperationRoot;
+          mutationScope: WorkspaceMutationScope;
         }
       | {
           kind: "repository_promotion";

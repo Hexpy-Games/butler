@@ -229,3 +229,23 @@ export function envelope(stateInput: unknown = {}): PhaseEnvelope {
     },
   };
 }
+
+export function workspaceEnvelope(
+  provision: Awaited<ReturnType<typeof provisionWorkspace>>,
+  mutationScope: Extract<
+    PhaseEnvelope["operationAuthority"]["mutation"],
+    { kind: "workspace_only" }
+  >["mutationScope"] = { kind: "contained_paths", writablePaths: ["."] },
+): PhaseEnvelope {
+  const value = envelope();
+  value.operationAuthority = {
+    observationScopeRefs: [],
+    mutation: {
+      kind: "workspace_only",
+      workspaceRef: provision.workspace.ref,
+      operationRoot: provision.workspace.operationRoot,
+      mutationScope,
+    },
+  };
+  return value;
+}

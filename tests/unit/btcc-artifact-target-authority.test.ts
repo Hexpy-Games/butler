@@ -4,8 +4,8 @@ import {
   cleanupProductionOperationsFixtures,
   createFixture,
   createRuntime,
-  envelope,
   provisionWorkspace,
+  workspaceEnvelope,
   workspaceRequest,
 } from "./support/btcc-production-operations-fixture.ts";
 
@@ -22,7 +22,9 @@ test("a single-file workspace rejects a second logical target before dispatch", 
     "tests/other.test.ts",
   );
 
-  const result = await runtime.operations.perform({ request, envelope: envelope() });
+  const result = await runtime.operations.perform({
+    request, envelope: workspaceEnvelope(provision),
+  });
   expect(result.outcome).toBe("operation_rejected");
   expect(result.content).toContain("workspace_target_mismatch");
   expect(readFileSync(fixture.targetPath, "utf8")).toBe(fixture.original);

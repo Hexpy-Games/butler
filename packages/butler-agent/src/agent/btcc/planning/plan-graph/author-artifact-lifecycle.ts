@@ -4,6 +4,7 @@ import type {
   ManagedIntegrationCriterion,
   ManagedTask,
   PlanningCandidate,
+  TaskMutationScope,
 } from "../contracts.ts";
 import {
   materializeEffectIntents,
@@ -15,8 +16,9 @@ import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
 export type DraftArtifactPolicy =
   | {
       kind: "workspace_artifact";
-      targetScopeRef: string;
-      targetPath: string;
+      workspaceScopeRef: string;
+      workspacePath: string;
+      mutationScope: TaskMutationScope;
       baselinePolicy: "capture_at_workspace_provision";
     }
   | { kind: "repository_promotion"; targetScopeRef: string; targetPath: string };
@@ -29,20 +31,43 @@ export function readArtifactPolicy(
   if (value === undefined) return undefined;
   const policy = requireRecord(value, `${label}.artifactPolicy`);
   const kind = requireString(policy.kind, `${label}.artifactPolicy.kind`);
+  if (kind === "workspace_artifact") {
+    const workspacePath = requireContainedTargetPath(
+      requireString(policy.workspacePath, `${label}.artifactPolicy.workspacePath`),
+    );
+    return {
+      kind,
+      workspaceScopeRef: containedWorkspaceScope(workspaceScopeRef, workspacePath),
+      workspacePath,
+      mutationScope: readMutationScope(policy.mutationScope, label),
+      baselinePolicy: "capture_at_workspace_provision",
+    };
+  }
   const targetPath = requireContainedTargetPath(
     requireString(policy.targetPath, `${label}.artifactPolicy.targetPath`),
   );
   const targetScopeRef = containedWorkspaceScope(workspaceScopeRef, targetPath);
-  if (kind === "workspace_artifact") {
-    return {
-      kind,
-      targetScopeRef,
-      targetPath,
-      baselinePolicy: "capture_at_workspace_provision",
-    };
-  }
   if (kind === "repository_promotion") return { kind, targetScopeRef, targetPath };
   rejectPlanningProposal("artifact_policy_invalid", "Task artifact policy is invalid");
+}
+
+function readMutationScope(value: unknown, label: string): TaskMutationScope {
+  const scope = requireRecord(value, `${label}.artifactPolicy.mutationScope`);
+  const kind = requireString(scope.kind, `${label}.artifactPolicy.mutationScope.kind`);
+  if (kind === "read_only") return { kind };
+  if (kind === "contained_paths") {
+    if (!Array.isArray(scope.writablePaths) || scope.writablePaths.length === 0) {
+      rejectPlanningProposal("artifact_mutation_scope_empty", "Writable mutation scope is empty");
+    }
+    const writablePaths = scope.writablePaths.map((path, index) => requireContainedTargetPath(
+      requireString(path, `${label}.artifactPolicy.mutationScope.writablePaths[${index}]`),
+    ));
+    if (new Set(writablePaths).size !== writablePaths.length) {
+      rejectPlanningProposal("artifact_mutation_scope_duplicate", "Writable paths must be unique");
+    }
+    return { kind, writablePaths };
+  }
+  rejectPlanningProposal("artifact_mutation_scope_invalid", "Task mutation scope is invalid");
 }
 
 export function authorArtifactLifecycle(

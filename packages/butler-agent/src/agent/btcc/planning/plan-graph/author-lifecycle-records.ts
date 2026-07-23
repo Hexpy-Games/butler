@@ -267,7 +267,7 @@ function assertArtifactTarget(tasks: ManagedTask[], refs: ContentRef[], targetSc
     const task = taskByRef(tasks, ref);
     if (
       task.artifactPolicy.kind !== "workspace_artifact" ||
-      task.artifactPolicy.targetScopeRef !== targetScopeRef
+      task.artifactPolicy.workspaceScopeRef !== targetScopeRef
     ) {
       rejectPlanningProposal("promotion_target_mismatch",
         "Promotion selector Tasks do not share the exact artifact target");

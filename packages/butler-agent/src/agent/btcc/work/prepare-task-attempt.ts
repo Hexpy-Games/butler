@@ -49,7 +49,7 @@ export async function prepareTaskAttempt(input: {
     workRef: work.work.ref,
     taskRef: input.task.task.ref,
     attemptRef,
-    targetScopeRef: policy.targetScopeRef,
+    targetScopeRef: policy.workspaceScopeRef,
     baselinePolicy: policy.baselinePolicy,
   });
   const targetBody = {
@@ -63,6 +63,7 @@ export async function prepareTaskAttempt(input: {
       baselineSnapshotRef: provision.baseline.snapshotRef,
       acceptedBaseRevisionRefs: acceptedWorkspaceRevisions(input.program, input.task),
       operationRoot: provision.workspace.operationRoot,
+      mutationScope: policy.mutationScope,
     },
   };
   const executionTarget = { ref: contentRef("task-execution-target", targetBody), ...targetBody };

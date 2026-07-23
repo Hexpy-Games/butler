@@ -207,6 +207,7 @@ function invocation(
             kind: "workspace_only",
             workspaceRef,
             operationRoot: { kind: "file", relativeTarget: "target" },
+            mutationScope: { kind: "contained_paths", writablePaths: ["target"] },
           },
         }
       : {

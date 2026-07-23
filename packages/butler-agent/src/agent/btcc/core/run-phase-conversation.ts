@@ -238,7 +238,8 @@ function assertAuthorizedOperation(
       authority.mutation.kind === "workspace_only" &&
       sameRef(request.workspaceRef, authority.mutation.workspaceRef) &&
       (authority.mutation.operationRoot.kind === "directory" ||
-        request.relativeTarget === authority.mutation.operationRoot.relativeTarget)
+        request.relativeTarget === authority.mutation.operationRoot.relativeTarget) &&
+      isAuthorizedMutationTarget(request.relativeTarget, authority.mutation.mutationScope)
     ) return;
   } else if (request.kind === "review_validation" &&
     authority.mutation.kind === "validation_overlay_only" &&
@@ -257,6 +258,18 @@ function assertAuthorizedOperation(
     return;
   }
   throw new Error("BTCC phase requested an operation outside its admitted authority");
+}
+
+function isAuthorizedMutationTarget(
+  relativeTarget: string,
+  scope: Extract<OperationAuthority["mutation"], { kind: "workspace_only" }>["mutationScope"],
+): boolean {
+  if (scope.kind === "read_only") return true;
+  return scope.writablePaths.some((path) => containsRelativePath(path, relativeTarget));
+}
+
+function containsRelativePath(parent: string, child: string): boolean {
+  return parent === "." || child === parent || child.startsWith(`${parent}/`);
 }
 
 function sameRef(

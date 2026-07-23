@@ -17,6 +17,7 @@ import {
   promotionRequest,
   provisionWorkspace,
   reviewRequest,
+  workspaceEnvelope,
   workspaceRequest,
 } from "./support/btcc-production-operations-fixture.ts";
 
@@ -29,7 +30,9 @@ describe("production BTCC artifact operations", () => {
     const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
     const changed = "reviewed exact bytes\n";
     const action = workspaceRequest(provision.workspace.ref, fixture.targetPath, changed);
-    const applied = await runtime.operations.perform({ request: action, envelope: envelope() });
+    const applied = await runtime.operations.perform({
+      request: action, envelope: workspaceEnvelope(provision),
+    });
 
     expect(readFileSync(fixture.targetPath, "utf8")).toBe(fixture.original);
     let reviewedBytes = "";
@@ -67,7 +70,7 @@ describe("production BTCC artifact operations", () => {
     const changed = "authorized reviewed bytes\n";
     const applied = await runtime.operations.perform({
       request: workspaceRequest(provision.workspace.ref, fixture.targetPath, changed),
-      envelope: envelope(),
+      envelope: workspaceEnvelope(provision),
     });
     const promotion = promotionRequest(provision, applied.targetSnapshotRef!);
     const promoted = await runtime.operations.perform({
@@ -88,7 +91,7 @@ describe("production BTCC artifact operations", () => {
     const changed = "complete directory candidate\n";
     const applied = await runtime.operations.perform({
       request: workspaceRequest(provision.workspace.ref, fixture.targetPath, changed, "guide.md"),
-      envelope: envelope(),
+      envelope: workspaceEnvelope(provision),
     });
     const promotion = promotionRequest(provision, applied.targetSnapshotRef!);
     await runtime.operations.perform({ request: promotion.request, envelope: promotion.envelope });
@@ -104,7 +107,9 @@ describe("production BTCC artifact operations", () => {
     const request = workspaceRequest(
       provision.workspace.ref, fixture.targetPath, "unused", ".",
     );
-    const result = await runtime.operations.perform({ request, envelope: envelope() });
+    const result = await runtime.operations.perform({
+      request, envelope: workspaceEnvelope(provision, { kind: "read_only" }),
+    });
 
     expect(result.outcome).toBe("observed");
     expect(result.artifactRevisionRef).toBeUndefined();
@@ -123,7 +128,9 @@ describe("production BTCC artifact operations", () => {
     const request = workspaceRequest(
       provision.workspace.ref, fixture.targetPath, "unused", ".",
     );
-    const applied = await runtime.operations.perform({ request, envelope: envelope() });
+    const applied = await runtime.operations.perform({
+      request, envelope: workspaceEnvelope(provision),
+    });
     const promotion = promotionRequest(provision, applied.targetSnapshotRef!);
     const promoted = await runtime.operations.perform({
       request: promotion.request,
@@ -145,11 +152,15 @@ describe("production BTCC artifact operations", () => {
       fixture.targetPath,
       "restart-safe bytes\n",
     );
-    const firstResult = await first.operations.perform({ request, envelope: envelope() });
+    const firstResult = await first.operations.perform({
+      request, envelope: workspaceEnvelope(firstProvision),
+    });
 
     const restarted = createRuntime(fixture);
     const secondProvision = await provisionWorkspace(restarted.artifacts, fixture.targetPath);
-    const replayed = await restarted.operations.perform({ request, envelope: envelope() });
+    const replayed = await restarted.operations.perform({
+      request, envelope: workspaceEnvelope(secondProvision),
+    });
 
     expect(secondProvision).toEqual(firstProvision);
     expect(replayed).toEqual(firstResult);
@@ -245,7 +256,7 @@ describe("production BTCC artifact operations", () => {
       fixture.targetPath,
       "delegated bytes\n",
     );
-    await runtime.operations.perform({ request, envelope: envelope() });
+    await runtime.operations.perform({ request, envelope: workspaceEnvelope(provision) });
 
     expect(received).toMatchObject({
       name: "write_file",
@@ -265,9 +276,11 @@ describe("production BTCC artifact operations", () => {
     const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
     const request = workspaceRequest(provision.workspace.ref, fixture.targetPath, "escape", "../escape.txt");
 
-    await expect(runtime.operations.perform({ request, envelope: envelope() })).rejects.toThrow(
-      "escapes its owned workspace",
-    );
+    const result = await runtime.operations.perform({
+      request, envelope: workspaceEnvelope(provision),
+    });
+    expect(result.outcome).toBe("operation_rejected");
+    expect(result.content).toContain("task_mutation_target_invalid");
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
   });
 
@@ -281,7 +294,7 @@ describe("production BTCC artifact operations", () => {
 
     await expect(runtime.operations.perform({
       request,
-      envelope: envelope(),
+      envelope: workspaceEnvelope(provision),
       signal: controller.signal,
     })).rejects.toThrow("stopped");
     expect(readFileSync(fixture.targetPath, "utf8")).toBe(fixture.original);
@@ -314,11 +327,15 @@ describe("production BTCC artifact operations", () => {
         fixture.targetPath,
         `recovered ${boundary}\n`,
       );
-      await expect(interrupted.operations.perform({ request, envelope: envelope() }))
+      await expect(interrupted.operations.perform({
+        request, envelope: workspaceEnvelope(provision),
+      }))
         .rejects.toThrow(`fault:${boundary}`);
 
       const restarted = createRuntime(fixture);
-      const recovered = await restarted.operations.perform({ request, envelope: envelope() });
+      const recovered = await restarted.operations.perform({
+        request, envelope: workspaceEnvelope(provision),
+      });
       const promotion = promotionRequest(provision, recovered.targetSnapshotRef!);
       await restarted.operations.perform({
         request: promotion.request,
