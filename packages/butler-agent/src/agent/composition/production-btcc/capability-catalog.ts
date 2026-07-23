@@ -8,7 +8,12 @@ import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
 const RESULT_READ_CAPABILITY: StructuralCapabilityDefinition = {
   capabilityRef: READ_OPERATION_RESULT_CAPABILITY,
   name: READ_OPERATION_RESULT_CAPABILITY,
-  description: "Read an exact byte, line, search, or JSON-pointer view from a prior complete operation result without rerunning it.",
+  description: [
+    "Read an exact byte, line, search, or JSON-pointer view from a prior complete",
+    "operation result without rerunning it. JSON pointers address /request for the",
+    "durable source operation request, /result for parsed or raw payload, and",
+    "/record for canonical result metadata.",
+  ].join(" "),
   operationKinds: ["observe"],
   observationScopeKinds: ["result"],
   inputSchema: {

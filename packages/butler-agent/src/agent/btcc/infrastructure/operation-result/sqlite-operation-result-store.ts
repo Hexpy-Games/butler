@@ -136,6 +136,9 @@ export class SqliteOperationResultStore implements OperationResultStore {
       payloadSha256: stored.record.payloadRef.sha256,
       byteLength: stored.record.byteLength,
       selector,
+      ...(selector.kind === "json_pointer"
+        ? { jsonDocument: this.jsonPointerDocument(sourceRequest, stored.record) }
+        : {}),
     });
     const projection = projectRecord({
       record: stored.record,
@@ -156,6 +159,18 @@ export class SqliteOperationResultStore implements OperationResultStore {
       omittedBytes: Math.max(0, stored.record.byteLength - Buffer.byteLength(view.content)),
       view,
     } satisfies OperationResultProjection;
+  }
+
+  private jsonPointerDocument(
+    sourceRequest: OperationRequest,
+    record: OperationResultRecord,
+  ): Record<string, unknown> {
+    const content = this.payloads.readAll(record.payloadRef.sha256).toString("utf8");
+    return {
+      request: sourceRequest,
+      result: parsePayload(content),
+      record,
+    };
   }
 
   close(): void {
@@ -216,6 +231,14 @@ export class SqliteOperationResultStore implements OperationResultStore {
       ),
       maxPreviewBytes: projectionBudgetBytes(selection),
     });
+  }
+}
+
+function parsePayload(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return content;
   }
 }
 

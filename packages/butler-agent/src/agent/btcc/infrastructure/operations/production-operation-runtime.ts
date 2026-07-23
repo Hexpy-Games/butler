@@ -49,10 +49,28 @@ export function createOperationExecutor(
   return {
     async perform(input) {
       if (isResultReadRequest(input.request)) {
-        return resultStore.read({
-          request: input.request,
-          modelSelection: input.envelope.modelSelection,
-        });
+        try {
+          return await resultStore.read({
+            request: input.request,
+            modelSelection: input.envelope.modelSelection,
+          });
+        } catch (error) {
+          if (isAbortError(error) || input.signal?.aborted) throw error;
+          return resultStore.record({
+            binding: input.envelope.binding,
+            request: input.request,
+            result: rejectedOperation(
+              input.request,
+              new OperationRejectedError(
+                "operation_result_read_invalid",
+                error instanceof Error
+                  ? error.message
+                  : "The requested result selector could not be resolved.",
+              ),
+            ),
+            modelSelection: input.envelope.modelSelection,
+          });
+        }
       }
       const scopeId = operationRoundScope(input.envelope.binding);
       const existing = await resultStore.find({

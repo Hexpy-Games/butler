@@ -105,6 +105,48 @@ describe("BTCC operation result store", () => {
     expect(found?.preview).toBe("durable result");
     reopened.close();
   });
+
+  test("reads durable source request input through the documented JSON root", async () => {
+    const root = temporaryRoot();
+    const store = new SqliteOperationResultStore(root);
+    const request = observationRequest();
+    const projection = await store.record({
+      binding: binding(),
+      request,
+      result: {
+        requestId: request.requestId,
+        outcome: "operation_rejected",
+        observationRef: { id: "observation:rejected", sha256: "rejected" },
+        content: JSON.stringify({ status: "rejected", code: "stale_revision" }),
+      },
+      modelSelection: modelSelection(),
+    });
+
+    const requestContent = await store.read({
+      request: {
+        requestId: "recover-source-command",
+        kind: "observe",
+        capabilityRef: "read_operation_result",
+        scopeRef: projection.readScopeRef,
+        input: { selector: "json_pointer", pointer: "/request/input/command" },
+      },
+      modelSelection: modelSelection(),
+    });
+    const resultCode = await store.read({
+      request: {
+        requestId: "read-result-code",
+        kind: "observe",
+        capabilityRef: "read_operation_result",
+        scopeRef: projection.readScopeRef,
+        input: { selector: "json_pointer", pointer: "/result/code" },
+      },
+      modelSelection: modelSelection(),
+    });
+
+    expect(JSON.parse(requestContent.view?.content ?? "null")).toBe("produce output");
+    expect(JSON.parse(resultCode.view?.content ?? "null")).toBe("stale_revision");
+    store.close();
+  });
 });
 
 function temporaryRoot(): string {
