@@ -16,6 +16,7 @@ import {
   resolveProhibitionInstructions,
 } from "./prompt-duty-catalog.ts";
 import { projectOperationContext } from "./project-operation-context.ts";
+import { projectContinuationContext } from "./project-continuation-context.ts";
 
 export async function renderPhasePrompt(
   envelope: PhaseEnvelope,
@@ -67,7 +68,7 @@ export async function renderPhasePrompt(
             recentFeedback: resolvedContext.recentFeedback,
             mandatoryHotCache: resolvedContext.mandatoryHotCache,
             optionalHotCache: resolvedContext.optionalHotCache,
-            continuationCandidates: envelope.context.continuationCandidates ?? [],
+            continuation: projectContinuationContext(envelope),
             baselineObservationScopeRefs: envelope.context.baselineObservationScopeRefs,
           },
           operationContext,

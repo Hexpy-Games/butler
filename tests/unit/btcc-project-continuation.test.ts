@@ -4,6 +4,8 @@ import { discoverDeferredContinuationCandidates } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/continuation-candidate-discovery.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { projectContinuationContext } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/model/project-continuation-context.ts";
 
 test("Project continuation comes from the canonical Project Work Ledger manifest", async () => {
   const db = new Database(":memory:");
@@ -41,8 +43,21 @@ test("Project continuation comes from the canonical Project Work Ledger manifest
             manifestRevision: 7,
             goalContractRef,
             activeDeferral: {
-              blocker: { ref: blockerRef },
-              anchor: { ref: anchorRef, sourceTurnId: "source-turn" },
+              blocker: {
+                ref: blockerRef,
+                sourceState: "planning",
+                reason: "Wait for the user to provide repository access.",
+                readiness: {
+                  kind: "user_authority",
+                  requiredAuthorityScopeRefs: ["workspace:repository"],
+                },
+              },
+              anchor: {
+                ref: anchorRef,
+                sourceTurnId: "source-turn",
+                openWorkRefs: [],
+                openTaskRefs: [],
+              },
             },
           }] as never;
         },
@@ -59,7 +74,33 @@ test("Project continuation comes from the canonical Project Work Ledger manifest
     originalGoalContractRef: goalContractRef,
     anchorRef,
     blockerRef,
+    context: {
+      originalGoalContract: null,
+      blocker: {
+        sourceState: "planning",
+        reason: "Wait for the user to provide repository access.",
+        readiness: {
+          kind: "user_authority",
+          requiredAuthorityScopeRefs: ["workspace:repository"],
+        },
+      },
+      frontier: {
+        openWorkRefs: [],
+        openTaskRefs: [],
+      },
+    },
   }]);
+  expect(projectContinuationContext({
+    phase: "conception_deliberation",
+    context: { continuationCandidates: candidates },
+  } as never)).toMatchObject({
+    rule: expect.stringContaining("Opaque refs are identities"),
+    candidates,
+  });
+  expect(projectContinuationContext({
+    phase: "planning",
+    context: { continuationCandidates: candidates },
+  } as never)).toEqual({ candidates: [] });
   db.close();
 });
 

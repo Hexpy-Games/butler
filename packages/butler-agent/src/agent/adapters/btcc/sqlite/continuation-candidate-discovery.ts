@@ -4,6 +4,7 @@ import type {
   FreshBtccTurnCommand,
 } from "../../../btcc/gateway-api.ts";
 import { ledgerManifestContentHash } from "../../../btcc/gateway-api.ts";
+import type { ManagedDeferralProduct } from "../../../btcc/deferral/index.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger/work-ledger-program-reader.ts";
@@ -47,7 +48,10 @@ async function discoverProjectCandidates(
       originalGoalContractRef: program.goalContractRef,
       anchorRef: deferral.anchor.ref,
       blockerRef: deferral.blocker.ref,
-    }));
+    }, continuationContext(
+      tryLoadRecordByRef(db, program.goalContractRef),
+      deferral,
+    )));
   }
   return candidates;
 }
@@ -76,9 +80,13 @@ function discoverSessionCandidates(db: Database, sessionId: string): Candidate[]
     const program = programs.load(row.program_id);
     if (!program) throw new Error(`BTCC continuation Program is missing: ${row.program_id}`);
     const anchorRef = loadRef(db, row.active_deferral_ref);
-    const anchor = loadRecord<{ blockerRef: { id: string; sha256: string } }>(
+    const anchor = loadRecord<ManagedDeferralProduct["anchor"]>(
       db,
       row.active_deferral_ref,
+    );
+    const blocker = loadRecord<ManagedDeferralProduct["blocker"]>(
+      db,
+      anchor.blockerRef.id,
     );
     return candidate({
       ledgerId: row.ledger_id,
@@ -92,14 +100,45 @@ function discoverSessionCandidates(db: Database, sessionId: string): Candidate[]
       originalGoalContractRef: loadRef(db, row.goal_contract_ref),
       anchorRef,
       blockerRef: anchor.blockerRef,
-    });
+    }, continuationContext(
+      tryLoadRecordByRef(db, loadRef(db, row.goal_contract_ref)),
+      { blocker, anchor },
+    ));
   });
 }
 
-function candidate(body: Omit<Candidate, "candidateId">): Candidate {
+function candidate(
+  body: Omit<Candidate, "candidateId" | "context">,
+  context: NonNullable<Candidate["context"]>,
+): Candidate {
   return {
     candidateId: digest(`btcc-continuation-candidate.v1\0${stableJson(body)}`),
     ...body,
+    context,
+  };
+}
+
+function continuationContext(
+  originalGoalContract: Record<string, unknown> | null,
+  deferral: Pick<ManagedDeferralProduct, "blocker" | "anchor">,
+): NonNullable<Candidate["context"]> {
+  return {
+    originalGoalContract,
+    blocker: {
+      sourceState: deferral.blocker.sourceState,
+      reason: deferral.blocker.reason,
+      readiness: deferral.blocker.readiness,
+    },
+    frontier: {
+      ...(deferral.anchor.currentWorkRef
+        ? { currentWorkRef: deferral.anchor.currentWorkRef }
+        : {}),
+      ...(deferral.anchor.currentTaskRef
+        ? { currentTaskRef: deferral.anchor.currentTaskRef }
+        : {}),
+      openWorkRefs: deferral.anchor.openWorkRefs,
+      openTaskRefs: deferral.anchor.openTaskRefs,
+    },
   };
 }
 
@@ -124,4 +163,18 @@ function loadRecord<T>(db: Database, id: string): T {
   ).get(id);
   if (!row) throw new Error(`BTCC continuation record is missing: ${id}`);
   return JSON.parse(row.content_json) as T;
+}
+
+function tryLoadRecordByRef(
+  db: Database,
+  ref: { id: string; sha256: string },
+): Record<string, unknown> | null {
+  const row = db.query<{ sha256: string; content_json: string }, [string]>(
+    "SELECT sha256, content_json FROM btcc_records WHERE record_id = ?",
+  ).get(ref.id);
+  if (!row || row.sha256 !== ref.sha256) return null;
+  const value = JSON.parse(row.content_json) as unknown;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }

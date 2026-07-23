@@ -10,6 +10,22 @@ export type DeferredContinuationCandidate = {
   originalGoalContractRef: ContentRef;
   anchorRef: ContentRef;
   blockerRef: ContentRef;
+  context?: DeferredContinuationContext;
+};
+
+export type DeferredContinuationContext = {
+  originalGoalContract: Record<string, unknown> | null;
+  blocker: {
+    sourceState: string;
+    reason: string;
+    readiness: unknown;
+  };
+  frontier: {
+    currentWorkRef?: ContentRef;
+    currentTaskRef?: ContentRef;
+    openWorkRefs: ContentRef[];
+    openTaskRefs: ContentRef[];
+  };
 };
 
 export type ContinuationBinding =

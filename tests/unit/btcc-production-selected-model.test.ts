@@ -219,7 +219,7 @@ describe("production BTCC selected model", () => {
       recentFeedback: [{ ref: "feedback:1", content: resolved.get("feedback:1") }],
       mandatoryHotCache: [{ ref: "hot:mandatory", content: resolved.get("hot:mandatory") }],
       optionalHotCache: [{ ref: "hot:optional", content: resolved.get("hot:optional") }],
-      continuationCandidates: [],
+      continuation: { candidates: [] },
       baselineObservationScopeRefs: ["web:current"],
     });
     expect(hierarchy.currentTurnContext.availableCapabilities).toEqual([{
