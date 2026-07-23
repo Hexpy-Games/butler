@@ -38,7 +38,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     capabilityRef: "list_files",
     name: "list_files",
     description: "List bounded workspace-relative file paths in deterministic source-first order.",
-    operationKinds: ["observe", "review_validation"],
+    operationKinds: ["observe", "workspace_artifact_observation", "review_validation"],
     observationScopeKinds: ["workspace"],
     inputSchema: object({
       include_globs: strings("Optional workspace-relative globs. A basename glob such as *.ts matches at any depth."),
@@ -50,8 +50,8 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
     capabilityRef: "read_file",
     name: "read_file",
-    description: "Read bounded UTF-8 text inside the admitted workspace.",
-    operationKinds: ["observe", "review_validation"],
+    description: "Read bounded UTF-8 text inside the admitted or current artifact workspace.",
+    operationKinds: ["observe", "workspace_artifact_observation", "review_validation"],
     observationScopeKinds: ["workspace"],
     inputSchema: object({
       path: string("Workspace-relative path."),
@@ -79,7 +79,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     capabilityRef: "grep_files",
     name: "grep_files",
     description: "Search bounded workspace text in deterministic source-first order.",
-    operationKinds: ["observe", "review_validation"],
+    operationKinds: ["observe", "workspace_artifact_observation", "review_validation"],
     observationScopeKinds: ["workspace"],
     inputSchema: object({
       pattern: string("Literal search text unless regex is true."),

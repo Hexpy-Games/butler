@@ -69,6 +69,9 @@ function mutationIsAuthorized(
   if (operationKind === "workspace_artifact_action") {
     return mutation.kind === "workspace_only";
   }
+  if (operationKind === "workspace_artifact_observation") {
+    return mutation.kind === "workspace_only";
+  }
   if (operationKind === "review_validation") {
     return mutation.kind === "validation_overlay_only";
   }

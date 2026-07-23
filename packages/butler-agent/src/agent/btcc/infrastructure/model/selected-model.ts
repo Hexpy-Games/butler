@@ -140,6 +140,12 @@ function bindOperationAuthority(
   authority: OperationAuthority,
 ): OperationRequest {
   if (value.kind === "observe") return value as OperationRequest;
+  if (
+    value.kind === "workspace_artifact_observation" &&
+    authority.mutation.kind === "workspace_only"
+  ) {
+    return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
+  }
   if (value.kind === "workspace_artifact_action" && authority.mutation.kind === "workspace_only") {
     if (
       authority.mutation.operationRoot.kind === "file" &&

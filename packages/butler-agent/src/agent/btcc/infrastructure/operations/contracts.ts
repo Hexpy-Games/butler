@@ -20,6 +20,11 @@ export type ProductionOperationRuntimeOptions = {
     envelope: PhaseEnvelope;
     request: Extract<OperationRequest, { kind: "workspace_artifact_action" }>;
   }): ButlerOperationToolExecutor;
+  createWorkspaceObservationExecutor(input: {
+    workspacePath: string;
+    envelope: PhaseEnvelope;
+    request: Extract<OperationRequest, { kind: "workspace_artifact_observation" }>;
+  }): ButlerOperationToolExecutor;
   createIsolatedValidationExecutor(input: {
     workspacePath: string;
     envelope: PhaseEnvelope;

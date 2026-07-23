@@ -20,6 +20,7 @@ export function createProductionToolRuntime(
   ProductionOperationRuntimeOptions,
   | "createToolExecutor"
   | "createWorkspaceToolExecutor"
+  | "createWorkspaceObservationExecutor"
   | "createIsolatedValidationExecutor"
   | "validateOperationInput"
 > {
@@ -32,6 +33,8 @@ export function createProductionToolRuntime(
         request,
       ),
     createWorkspaceToolExecutor: ({ workspacePath, envelope, request }) =>
+      toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
+    createWorkspaceObservationExecutor: ({ workspacePath, envelope, request }) =>
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
     createIsolatedValidationExecutor: ({ workspacePath, envelope, request }) =>
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
