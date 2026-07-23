@@ -103,7 +103,18 @@ describe("production BTCC selected model", () => {
     expect(calls[0]?.modelSelection).toEqual(modelSelection());
     expect(calls[0]?.signal).toBe(signal);
     expect(calls[0]?.cacheScope).toBe("btcc:planning");
-    expect(calls[0]?.responseSchema).toMatchObject({ type: "object" });
+    expect(calls[0]?.responseSchema).toMatchObject({
+      anyOf: [
+        {
+          type: "object",
+          properties: { kind: { const: "phase_submission" } },
+        },
+        {
+          type: "object",
+          properties: { kind: { const: "operation_requests" } },
+        },
+      ],
+    });
     expect(calls[0]?.carrierFunctions.map((entry) => entry.carrierKind)).toEqual([
       "phase_submission",
       "operation_requests",

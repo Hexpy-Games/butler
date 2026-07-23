@@ -1,6 +1,12 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { installCompleteRoot } from
@@ -28,7 +34,7 @@ test("represents an absent baseline and atomically installs its first complete t
   }
 });
 
-test("keeps artifact work isolated until Consolidation authorizes promotion", async () => {
+test("keeps artifact work isolated until reviewed Work grants a promotion permit", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-artifact-"));
   try {
     const harness = resolve(
@@ -66,7 +72,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
     expect(result.initial.content).toContain("변경:");
     expect(result.initial.content).toContain("검증:");
     expect(result.replay).toEqual(result.initial);
-    expect(result.modelCalls).toBe(26);
+    expect(result.modelCalls).toBe(25);
     expect(result.operationCalls).toBe(7);
     expect(result.artifactSnapshot.promoted).toBe(result.artifactSnapshot.workspace["guide.md"]);
     expect(result.artifactSnapshot.promoted).toContain("격리 작업공간");
@@ -76,7 +82,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       model: "gpt-5.6-sol",
       reasoningEffort: "low",
     });
-    expect(result.phases.filter((phase: string) => phase === "consolidation")).toHaveLength(2);
+    expect(result.phases.filter((phase: string) => phase === "consolidation")).toHaveLength(1);
 
     const db = new Database(join(dataRoot, "runtime", "btcc-successor.sqlite"), {
       readonly: true,
@@ -93,14 +99,14 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
         WHERE kind IN (
           'program_artifact_workspace', 'workspace_revision',
           'reviewed_promotion_candidate', 'promotion_resolution_receipt',
-          'promotion_authorization', 'final_dossier'
+          'promotion_permit', 'final_dossier'
         ) GROUP BY kind ORDER BY kind
       `).all();
       const dossier = db.query<{ content_json: string }, []>(`
         SELECT content_json FROM btcc_records WHERE kind = 'final_dossier'
       `).get();
-      const authorization = db.query<{ content_json: string }, []>(`
-        SELECT content_json FROM btcc_records WHERE kind = 'promotion_authorization'
+      const permit = db.query<{ content_json: string }, []>(`
+        SELECT content_json FROM btcc_records WHERE kind = 'promotion_permit'
       `).get();
       const mutationKinds = db.query<{ mutation_kind: string }, []>(`
         SELECT mutation_kind FROM btcc_ledger_mutations ORDER BY next_manifest_revision
@@ -113,7 +119,7 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
         WHERE kind = 'repository_promotion_journal' ORDER BY rowid
       `).all().map((row) => JSON.parse(row.content_json).state);
 
-      expect(program).toEqual({ frontier: "closed", manifest_revision: 18 });
+      expect(program).toEqual({ frontier: "closed", manifest_revision: 17 });
       expect(tasks).toEqual([
         { task_kind: "workspace_artifact", status: "accepted" },
         { task_kind: "workspace_artifact", status: "accepted" },
@@ -122,22 +128,22 @@ test("keeps artifact work isolated until Consolidation authorizes promotion", as
       expect(recordCounts).toEqual([
         { kind: "final_dossier", count: 1 },
         { kind: "program_artifact_workspace", count: 1 },
-        { kind: "promotion_authorization", count: 1 },
+        { kind: "promotion_permit", count: 1 },
         { kind: "promotion_resolution_receipt", count: 1 },
         { kind: "reviewed_promotion_candidate", count: 1 },
         { kind: "workspace_revision", count: 3 },
       ]);
       const finalDossier = JSON.parse(dossier!.content_json);
-      const promotionAuthorization = JSON.parse(authorization!.content_json);
+      const promotionPermit = JSON.parse(permit!.content_json);
       expect(finalDossier.promotionClosure).toBe("promoted");
-      expect(finalDossier.userReport).not.toEqual(promotionAuthorization.userReport);
+      expect(promotionPermit.basis).toBe("accepted_implementation_and_integration_reviews");
+      expect(promotionPermit).not.toHaveProperty("userReport");
       expect(finalDossier.userReport.outcome).toContain("원본에 반영");
       expect(finalDossier.userReport.materialChanges).not.toBeEmpty();
       expect(finalDossier.userReport.validationResults).not.toBeEmpty();
       expect(mutationKinds.indexOf("close_implementation_frontier"))
-        .toBeLessThan(mutationKinds.indexOf("authorize_promotion"));
-      expect(mutationKinds.indexOf("authorize_promotion"))
         .toBeLessThan(mutationKinds.indexOf("close_promotion_frontier"));
+      expect(mutationKinds).not.toContain("authorize_promotion");
       expect(operationRequests.filter((request) =>
         request.kind === "workspace_artifact_action")).toHaveLength(3);
       expect(operationRequests.filter((request) =>

@@ -146,7 +146,7 @@ async function createHarnessProjectLedger(dataRoot: string, projectRef: string) 
       kind: "spec",
       id: "SPEC-HARNESS",
       title: "Harness behavior",
-      status: "active",
+      status: "specified",
       parentId: "SPEC-HARNESS-PARENT",
       body: "# Harness behavior\nPreserve the original request through completion.\n",
     });
@@ -299,7 +299,9 @@ function digest(value: string): string {
 }
 
 if (import.meta.main) {
-  runHarness(parseOptions(process.argv.slice(2))).catch((error: unknown) => {
+  try {
+    await runHarness(parseOptions(process.argv.slice(2)));
+  } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${message}\n`);
     if (process.env.BUTLER_BTCC_DEBUG === "1" && error instanceof Error) {
@@ -310,5 +312,5 @@ if (import.meta.main) {
       }
     }
     process.exitCode = 1;
-  });
+  }
 }

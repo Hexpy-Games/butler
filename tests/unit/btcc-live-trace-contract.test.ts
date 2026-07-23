@@ -112,7 +112,6 @@ function directFinalization() {
 
 function promotionFinalization() {
   return [
-    point("consolidation", "PromotionAuthorized"),
     ...passedTask(),
     point("work_frontier", "PromotionFrontierClosed"),
     ...directFinalization(),

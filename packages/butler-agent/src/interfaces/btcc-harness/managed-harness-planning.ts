@@ -54,6 +54,7 @@ export function submitArtifactPlan(state: Record<string, unknown>) {
   };
   return {
     kind: "plan_candidate",
+    ...governingSelection(state),
     strategy: "원본을 건드리지 않고 구현, 통합 검토, 승인 후 프로모션을 분리한다",
     works: [{
       logicalId: "artifact-change",

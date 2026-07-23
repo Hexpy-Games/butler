@@ -15,6 +15,7 @@ import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
 import { SqlitePromotionFrontierWriter } from "./promotion-frontier-writer.ts";
 import { SqliteProgramAuthorityWriter } from "./program-authority-writer.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger-program-reader.ts";
+import { validateFrontierMutation } from "./validate-frontier-mutation.ts";
 
 export class SqliteWorkLedgerMutationWriter {
   private readonly journal: WorkLedgerCommitJournal;
@@ -37,6 +38,7 @@ export class SqliteWorkLedgerMutationWriter {
       if (boundary.kind === "replayed") return;
       const previous = this.programs.load(programIdOf(input));
       assertLogicalLedgerMutationId(input, previous);
+      validateFrontierMutation(previous, input);
       const records = logicalLedgerRecords(input.mutation, previous);
       this.journal.materializeSourceRecords(records);
       const authority = plannedAuthority(previous, input);
@@ -82,9 +84,6 @@ export class SqliteWorkLedgerMutationWriter {
         return;
       case "close_implementation_frontier":
         this.promotionFrontier.closeImplementation(mutation);
-        return;
-      case "authorize_promotion":
-        this.promotionFrontier.authorize(mutation);
         return;
       case "close_promotion_frontier":
         this.promotionFrontier.close(mutation);

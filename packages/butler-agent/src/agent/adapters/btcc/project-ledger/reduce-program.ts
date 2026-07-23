@@ -3,7 +3,10 @@ import type {
   WorkLedgerCommit,
   AvailableSpecRevision,
 } from "../../../btcc/index.ts";
-import { bindManagedProgram } from "../../../btcc/index.ts";
+import {
+  assertPromotionPermit,
+  bindManagedProgram,
+} from "../../../btcc/index.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 import { acceptProjectFeedback } from "./revise-program.ts";
 
@@ -40,12 +43,7 @@ export function reduceProjectProgram(
     case "accept_feedback_plan":
       return acceptProjectFeedback(next, mutation.product);
     case "close_implementation_frontier":
-      closeImplementation(next, mutation.promotionAssemblies);
-      break;
-    case "authorize_promotion":
-      if (next.frontier !== "awaiting_consolidation") throw changed("promotion frontier");
-      next.frontier = "promotion_open";
-      next.promotionAuthorization = mutation.product.authorization;
+      closeImplementation(next, mutation.promotionAssemblies, mutation.promotionPermit);
       break;
     case "close_promotion_frontier":
       if (next.frontier !== "promotion_open" || next.tasks.some((task) => task.status !== "accepted")) {
@@ -136,14 +134,32 @@ function attachReview(program: Reviewed, product: Extract<Mutation, { kind: "att
   if (tasksFor(program, work).every((item) => item.status === "accepted")) work.status = "closed";
 }
 
-function closeImplementation(program: Reviewed, assemblies: Reviewed["promotionAssemblies"]): void {
+function closeImplementation(
+  program: Reviewed,
+  assemblies: Reviewed["promotionAssemblies"],
+  permit: Reviewed["promotionPermit"],
+): void {
   const implementation = program.tasks.filter((task) => task.task.artifactPolicy.kind !== "repository_promotion");
   if (program.frontier !== "implementation_open" || implementation.some((task) => task.status !== "accepted")) {
     throw changed("implementation frontier");
   }
+  assertPromotionPermit({
+    programId: program.programId,
+    currentAuthorityRef: program.authorityRef,
+    acceptedPlanRef: program.plan.ref,
+    planningReviewRef: program.planningReviewRef,
+    assemblies,
+    permit,
+  });
   program.promotionAssemblies = assemblies;
-  const hasPromotion = program.tasks.some((task) => task.task.artifactPolicy.kind === "repository_promotion");
-  program.frontier = hasPromotion ? "awaiting_consolidation" : "closed";
+  const hasPromotion = program.tasks.some((task) =>
+    task.task.artifactPolicy.kind === "repository_promotion");
+  if (hasPromotion !== Boolean(permit) || hasPromotion !== (assemblies.length > 0)) {
+    throw changed("promotion permit");
+  }
+  if (permit) program.promotionPermit = permit;
+  else delete program.promotionPermit;
+  program.frontier = hasPromotion ? "promotion_open" : "closed";
   for (const work of program.works) {
     work.status = tasksFor(program, work).some((task) => task.task.artifactPolicy.kind === "repository_promotion")
       ? "active" : "closed";
@@ -156,7 +172,7 @@ function acceptPromotionDeferral(program: Reviewed, product: Extract<Mutation, {
   const task = taskById(program, product.deferral.promotionTaskRef.id);
   const attempt = attemptById(task, product.deferral.attemptRef.id);
   if (program.frontier !== "promotion_open" || task.status !== "selected" || attempt.status !== "ready" ||
-    program.promotionAuthorization?.ref.id !== product.deferral.authorizationRef.id) {
+    program.promotionPermit?.ref.id !== product.deferral.authorizationRef.id) {
     throw changed("promotion deferral");
   }
   attempt.status = "promotion_deferred";

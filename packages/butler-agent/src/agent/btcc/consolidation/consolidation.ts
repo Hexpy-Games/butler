@@ -16,7 +16,7 @@ export async function consolidation(command: {
   turn: TurnRecord;
   phase: PhaseInvocation;
 }): Promise<Extract<TurnEvent, {
-  kind: "ConsolidationRepairRequired" | "FinalDossierAccepted" | "PromotionAuthorized";
+  kind: "ConsolidationRepairRequired" | "FinalDossierAccepted";
 }>> {
   if (command.turn.semanticState !== "consolidation") {
     throw new Error(`Consolidation cannot advance ${command.turn.semanticState}`);
@@ -74,15 +74,10 @@ async function consolidateCompletedWork(
   command: { turn: TurnRecord; phase: PhaseInvocation },
   accepted: GoalContractAcceptedProduct,
 ): Promise<Extract<TurnEvent, {
-  kind: "ConsolidationRepairRequired" | "FinalDossierAccepted" | "PromotionAuthorized";
+  kind: "ConsolidationRepairRequired" | "FinalDossierAccepted";
 }>> {
   const program = requireManagedProgram(command.turn);
-  const implementationTasks = program.tasks.filter(
-    (task) => task.task.artifactPolicy.kind !== "repository_promotion",
-  );
-  const promotionIsClosed = program.frontier === "closed" && Boolean(program.promotionAuthorization);
-  const reviewedTasks = promotionIsClosed ? program.tasks : implementationTasks;
-  const reviews = reviewedTasks.map((task) => task.currentReview);
+  const reviews = program.tasks.map((task) => task.currentReview);
   if (reviews.some((review) => !review || review.review.verdict !== "passed")) {
     throw new Error("Consolidation requires every passed Task Review");
   }
@@ -96,8 +91,8 @@ async function consolidateCompletedWork(
     integrationCriteria: program.plan.integrationCriterionRefs,
     artifactLifecycle: program.artifactLifecycle,
     frontier: program.frontier,
-    taskStatuses: reviewedTasks.map((task) => task.status),
-    taskRefs: reviewedTasks.map((task) => task.task.ref),
+    taskStatuses: program.tasks.map((task) => task.status),
+    taskRefs: program.tasks.map((task) => task.task.ref),
     goalFields: accepted.goalContract.fields,
     programId: program.programId,
     goalContractRef: program.goalContractRef,
@@ -105,14 +100,12 @@ async function consolidateCompletedWork(
     planRef: program.plan.ref,
     planningReviewRef: program.planningReviewRef,
     taskReviewRefs: reviews.map((review) => review!.review.ref),
-    promotionAssemblies: program.frontier === "awaiting_consolidation"
-      ? program.promotionAssemblies : [],
-    promotionClosure: promotionIsClosed ? "promoted" : "not_required",
+    promotionClosure: program.tasks.some(
+      (task) => task.task.artifactPolicy.kind === "repository_promotion",
+    ) ? "promoted" : "not_required",
     candidateRefs: program.promotionAssemblies.map((assembly) => assembly.candidate.ref),
   }));
   return product.kind === "consolidation_repair"
     ? { kind: "ConsolidationRepairRequired", product }
-    : product.kind === "promotion_authorization"
-    ? { kind: "PromotionAuthorized", product }
     : { kind: "FinalDossierAccepted", product };
 }

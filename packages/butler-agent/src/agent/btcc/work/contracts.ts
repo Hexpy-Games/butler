@@ -3,8 +3,11 @@ import type {
   WorkspaceMutationScope,
   WorkspaceOperationRoot,
 } from "../core/index.ts";
-import type { WorkspaceProvision } from "../artifact/index.ts";
-import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
+import type {
+  PromotionPermit,
+  ReviewedPromotionAssembly,
+  WorkspaceProvision,
+} from "../artifact/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 
 export type AttemptRecord = {
@@ -75,6 +78,10 @@ export type WorkFrontierDecision =
       kind: "revalidate_task";
       task: ReviewedManagedProgramState["tasks"][number];
     }
-  | { kind: "close_frontier"; promotionAssemblies: ReviewedPromotionAssembly[] }
+  | {
+      kind: "close_frontier";
+      promotionAssemblies: ReviewedPromotionAssembly[];
+      promotionPermit?: PromotionPermit;
+    }
   | { kind: "complete_promotion" }
   | { kind: "defer_promotion"; deferredAnchorRef: ContentRef };

@@ -13,12 +13,12 @@ type ProgramRow = {
   authority_ref: string;
   accepted_plan_ref: string | null;
   planning_review_ref: string | null;
-  frontier: "unplanned" | "implementation_open" | "awaiting_consolidation" | "promotion_open" | "closed";
+  frontier: "unplanned" | "implementation_open" | "promotion_open" | "closed";
   ledger_id: string;
   manifest_revision: number;
   pending_correction_plan_ref: string | null;
   promotion_assembly_refs_json: string | null;
-  promotion_authorization_ref: string | null;
+  promotion_permit_ref: string | null;
   active_deferral_ref: string | null;
   promotion_deferral_ref: string | null;
   available_specs_json: string;
@@ -82,16 +82,14 @@ export class SqliteWorkLedgerProgramReader {
       promotionAssemblies: this.loadPromotionAssemblies(
         program.promotion_assembly_refs_json,
       ),
-      ...(program.promotion_authorization_ref
-        ? { promotionAuthorization: this.loadRecord(program.promotion_authorization_ref) }
+      ...(program.promotion_permit_ref
+        ? { promotionPermit: this.loadRecord(program.promotion_permit_ref) }
         : {}),
       frontier: program.frontier === "closed"
         ? "closed"
-        : program.frontier === "awaiting_consolidation"
-          ? "awaiting_consolidation"
-          : program.frontier === "promotion_open"
-            ? "promotion_open"
-            : "implementation_open",
+        : program.frontier === "promotion_open"
+          ? "promotion_open"
+          : "implementation_open",
       ...(program.pending_correction_plan_ref
         ? { correctionPlanRef: this.loadRef(program.pending_correction_plan_ref) }
         : latestAttempt?.attemptRecord.correctionPlanRef
@@ -116,7 +114,7 @@ export class SqliteWorkLedgerProgramReader {
       SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
         planning_review_ref, frontier, ledger_id, manifest_revision,
         pending_correction_plan_ref, promotion_assembly_refs_json,
-        promotion_authorization_ref, active_deferral_ref, promotion_deferral_ref,
+        promotion_permit_ref, active_deferral_ref, promotion_deferral_ref,
         available_specs_json, governing_spec_refs_json
       FROM btcc_programs WHERE program_id = ?
     `).get(programId);

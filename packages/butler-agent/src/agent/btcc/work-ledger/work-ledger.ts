@@ -33,7 +33,6 @@ function programIdOf(input: WorkLedgerCommit): string {
     case "attach_review":
     case "accept_feedback_plan":
     case "close_implementation_frontier":
-    case "authorize_promotion":
     case "close_promotion_frontier":
     case "accept_managed_deferral":
     case "accept_promotion_deferral":

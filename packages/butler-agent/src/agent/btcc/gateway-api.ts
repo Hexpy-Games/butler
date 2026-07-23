@@ -48,6 +48,7 @@ export {
   projectEphemeralOperationResult,
   READ_OPERATION_RESULT_CAPABILITY,
 } from "./operation-result/index.ts";
+export { assertPromotionPermit } from "./artifact/index.ts";
 export type {
   LogicalLedgerBundle,
   LogicalLedgerRecord,

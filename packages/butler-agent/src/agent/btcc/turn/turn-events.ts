@@ -9,7 +9,6 @@ import type {
 import type {
   ConsolidationRepairProduct,
   FinalDossierProduct,
-  PromotionAuthorizationProduct,
 } from "../consolidation/index.ts";
 import type { PromotionDeferralProduct, ManagedDeferralProduct } from "../deferral/index.ts";
 import type { ResultCandidateProduct } from "../execution/index.ts";
@@ -23,7 +22,10 @@ import type {
 } from "../planning/index.ts";
 import type { PreparedReportProduct } from "../reporting/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
-import type { ReviewedPromotionAssembly } from "../artifact/index.ts";
+import type {
+  PromotionPermit,
+  ReviewedPromotionAssembly,
+} from "../artifact/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
 
 export type TurnEvent =
@@ -38,7 +40,11 @@ export type TurnEvent =
   | { kind: "PlanningRevisionRequested"; product: PlanningRevisionRequiredProduct }
   | { kind: "WorkTaskSelected"; attempt: ManagedAttempt }
   | { kind: "WorkTaskReadyForReview" }
-  | { kind: "WorkFrontierClosed"; promotionAssemblies: ReviewedPromotionAssembly[] }
+  | {
+      kind: "WorkFrontierClosed";
+      promotionAssemblies: ReviewedPromotionAssembly[];
+      promotionPermit?: PromotionPermit;
+    }
   | { kind: "ResultCandidateSubmitted"; product: ResultCandidateProduct }
   | { kind: "TaskReviewPassed"; product: TaskReviewProduct }
   | { kind: "TaskReviewFailed"; product: TaskReviewProduct }
@@ -56,6 +62,5 @@ export type TurnEvent =
         | { kind: "promoted" }
         | { kind: "deferred"; deferredAnchorRef: import("../core/index.ts").ContentRef };
     }
-  | { kind: "PromotionAuthorized"; product: PromotionAuthorizationProduct }
   | { kind: "PreparedReportAccepted"; product: PreparedReportProduct }
   | { kind: "DeliveryObserved"; assistantMessageId: string };

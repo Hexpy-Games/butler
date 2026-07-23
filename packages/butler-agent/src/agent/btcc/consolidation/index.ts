@@ -3,5 +3,4 @@ export type {
   ConsolidationProduct,
   ConsolidationRepairProduct,
   FinalDossierProduct,
-  PromotionAuthorizationProduct,
 } from "./contracts.ts";

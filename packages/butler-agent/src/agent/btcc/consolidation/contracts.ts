@@ -52,25 +52,6 @@ export type FinalDossierProduct = {
   };
 };
 
-export type PromotionAuthorizationProduct = {
-  kind: "promotion_authorization";
-  assessment: ConsolidationAssessment;
-  authorization: {
-    ref: ContentRef;
-    programId: string;
-    originalGoalContractRef: ContentRef;
-    currentAuthorityRef: ContentRef;
-    assessmentRef: ContentRef;
-    acceptedPlanRef: ContentRef;
-    planningReviewRef: ContentRef;
-    candidateRefs: ContentRef[];
-    resolutionRefs: ContentRef[];
-    promotionTaskRefs: ContentRef[];
-    assessment: "authorized";
-    userReport: UserReportFacts;
-  };
-};
-
 export type ConsolidationRepairProduct = {
   kind: "consolidation_repair";
   assessment: ConsolidationAssessment;
@@ -92,5 +73,4 @@ export type ConsolidationRepairProduct = {
 
 export type ConsolidationProduct =
   | ConsolidationRepairProduct
-  | FinalDossierProduct
-  | PromotionAuthorizationProduct;
+  | FinalDossierProduct;

@@ -80,7 +80,7 @@ function installRevisedProgram(
     frontier: "implementation_open",
     correctionPlanRef: candidate.correctionPlan.ref,
   };
-  delete next.promotionAuthorization;
+  delete next.promotionPermit;
   delete next.activeDeferral;
   delete next.promotionDeferral;
   for (const work of next.works) {

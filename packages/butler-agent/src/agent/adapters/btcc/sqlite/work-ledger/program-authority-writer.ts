@@ -55,9 +55,9 @@ export class SqliteProgramAuthorityWriter {
     const current = this.db.query<{
       active_deferral_ref: string | null;
       accepted_plan_ref: string | null;
-      promotion_authorization_ref: string | null;
+      promotion_permit_ref: string | null;
     }, [string]>(`
-      SELECT active_deferral_ref, accepted_plan_ref, promotion_authorization_ref
+      SELECT active_deferral_ref, accepted_plan_ref, promotion_permit_ref
       FROM btcc_programs WHERE program_id = ?
     `).get(candidate.programId);
     if (!current || current.active_deferral_ref !== expectedAnchor) {
@@ -66,7 +66,7 @@ export class SqliteProgramAuthorityWriter {
     if (current.accepted_plan_ref) {
       this.continueReviewedPlan(product, {
         acceptedPlanRef: current.accepted_plan_ref,
-        promotionAuthorized: current.promotion_authorization_ref !== null,
+        promotionPermitted: current.promotion_permit_ref !== null,
       }, projection);
       return;
     }
@@ -161,7 +161,7 @@ export class SqliteProgramAuthorityWriter {
 
   private continueReviewedPlan(
     product: InstallPlan["product"],
-    current: { acceptedPlanRef: string; promotionAuthorized: boolean },
+    current: { acceptedPlanRef: string; promotionPermitted: boolean },
     projection: ManagedProgramAuthority,
   ): void {
     const candidate = product.candidate;
@@ -182,7 +182,7 @@ export class SqliteProgramAuthorityWriter {
       WHERE program_id = ? AND manifest_revision = ?
     `).run(
       product.review.ref.id,
-      current.promotionAuthorized ? "promotion_open" : "implementation_open",
+      current.promotionPermitted ? "promotion_open" : "implementation_open",
       stableJson(projection.availableSpecs),
       stableJson(projection.governingSpecRefs),
       candidate.programId,
@@ -199,7 +199,7 @@ export class SqliteProgramAuthorityWriter {
     this.closeUnacceptedAttempts(candidate.programId);
     const replaced = this.db.query(`
       UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
-        frontier = 'implementation_open', promotion_authorization_ref = NULL,
+        frontier = 'implementation_open', promotion_permit_ref = NULL,
         promotion_assembly_refs_json = NULL, active_deferral_ref = NULL,
         active_deferral_turn_id = NULL, promotion_deferral_ref = NULL,
         available_specs_json = ?, governing_spec_refs_json = ?,

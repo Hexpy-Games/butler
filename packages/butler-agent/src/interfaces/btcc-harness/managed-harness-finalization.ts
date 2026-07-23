@@ -19,15 +19,6 @@ export function submitConsolidation(
       userReport: deferredReportFacts(),
     };
   }
-  if (asArray(state.promotionAssemblies).length > 0) {
-    return {
-      kind: "promotion_authorization",
-      ...assessment,
-      goalCoverage: "fulfilled",
-      semanticFidelity: "faithful",
-      userReport: completedReportFacts(),
-    };
-  }
   return {
     kind: "final_dossier",
     ...assessment,
@@ -41,6 +32,7 @@ export function submitConsolidation(
 function assessmentVerdicts(state: Record<string, unknown>, repair: boolean) {
   return {
     goalFieldVerdicts: asArray(state.goalFields).map((field, index) => ({
+      fieldId: String(asRecord(field).fieldId),
       verdict: repair && index === 1 ? "not_fulfilled" : "fulfilled",
     })),
     taskCompatibility: {

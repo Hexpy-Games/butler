@@ -11,6 +11,7 @@ export {
   logicalLedgerRecords,
   acceptFeedbackAuthority,
   acceptReviewedPlanAuthority,
+  assertPromotionPermit,
   bindManagedProgram,
   operationRoundScope,
   projectEphemeralOperationResult,

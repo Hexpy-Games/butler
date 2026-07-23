@@ -29,7 +29,7 @@ export class SqliteReviewedGraphInstaller {
       UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
         authority_ref = ?, frontier = 'implementation_open',
         pending_correction_plan_ref = ?, promotion_assembly_refs_json = NULL,
-        promotion_authorization_ref = NULL, active_deferral_ref = NULL,
+        promotion_permit_ref = NULL, active_deferral_ref = NULL,
         active_deferral_turn_id = NULL, promotion_deferral_ref = NULL,
         available_specs_json = ?, governing_spec_refs_json = ?,
         manifest_revision = manifest_revision + 1

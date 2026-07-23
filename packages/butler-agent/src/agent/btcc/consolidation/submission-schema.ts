@@ -10,6 +10,7 @@ import { userReportFactsSubmissionSchema } from "./user-report-facts.ts";
 
 const assessmentFields = {
   goalFieldVerdicts: arraySchema(objectSchema({
+    fieldId: textSchema(),
     verdict: enumSchema("fulfilled", "deferred", "not_fulfilled"),
   }), { minItems: 1 }),
   taskCompatibility: objectSchema({
@@ -29,12 +30,6 @@ export const consolidationSubmissionSchema = variantsSchema(
     kind: literalSchema("final_dossier"),
     goalCoverage: literalSchema("deferred"),
     semanticFidelity: literalSchema("faithful"),
-    userReport: userReportFactsSubmissionSchema,
-  }),
-  objectSchema({
-    kind: literalSchema("promotion_authorization"),
-    ...assessmentFields,
-    goalCoverage: literalSchema("fulfilled"),
     userReport: userReportFactsSubmissionSchema,
   }),
   objectSchema({

@@ -5,9 +5,6 @@ import { stableJson } from "../identity.ts";
 type CloseImplementation = Extract<WorkLedgerCommit["mutation"], {
   kind: "close_implementation_frontier";
 }>;
-type AuthorizePromotion = Extract<WorkLedgerCommit["mutation"], {
-  kind: "authorize_promotion";
-}>;
 type ClosePromotion = Extract<WorkLedgerCommit["mutation"], {
   kind: "close_promotion_frontier";
 }>;
@@ -23,27 +20,40 @@ export class SqlitePromotionFrontierWriter {
 
   closeImplementation(mutation: CloseImplementation): void {
     const programId = mutation.cursor.programId;
+    const hasPromotion = this.db.query<{ count: number }, [string]>(`
+      SELECT COUNT(*) AS count FROM btcc_tasks
+      WHERE program_id = ? AND is_active = 1
+        AND task_kind = 'repository_promotion'
+    `).get(programId)!.count > 0;
+    if (
+      hasPromotion !== Boolean(mutation.promotionPermit) ||
+      hasPromotion !== (mutation.promotionAssemblies.length > 0)
+    ) {
+      throw new Error("Work Ledger promotion permit does not match the reviewed graph");
+    }
     const assemblyRefs = mutation.promotionAssemblies.map((assembly) => ({
       candidateRef: assembly.candidate.ref,
       resolutionRef: assembly.resolution.ref,
     }));
     const closed = this.db.query(`
-      UPDATE btcc_programs SET promotion_assembly_refs_json = ?, frontier = CASE
-          WHEN EXISTS (
-            SELECT 1 FROM btcc_tasks
-            WHERE program_id = ? AND is_active = 1
-              AND task_kind = 'repository_promotion'
-          ) THEN 'awaiting_consolidation'
-          ELSE 'closed'
-        END,
+      UPDATE btcc_programs SET promotion_assembly_refs_json = ?,
+        promotion_permit_ref = ?, frontier = ?,
         manifest_revision = manifest_revision + 1
       WHERE program_id = ? AND frontier = 'implementation_open'
+        AND manifest_revision = ?
         AND NOT EXISTS (
           SELECT 1 FROM btcc_tasks
           WHERE program_id = ? AND is_active = 1
             AND task_kind != 'repository_promotion' AND status != 'accepted'
         )
-    `).run(stableJson(assemblyRefs), programId, programId, programId);
+    `).run(
+      stableJson(assemblyRefs),
+      mutation.promotionPermit?.ref.id ?? null,
+      hasPromotion ? "promotion_open" : "closed",
+      programId,
+      mutation.cursor.expectedManifestRevision,
+      programId,
+    );
     if (closed.changes !== 1) throw new Error("Work Ledger frontier changed");
     this.db.query(`
       UPDATE btcc_work_items SET status = CASE
@@ -55,20 +65,6 @@ export class SqlitePromotionFrontierWriter {
         ) THEN 'active' ELSE 'closed' END
       WHERE program_id = ?
     `).run(programId);
-  }
-
-  authorize(mutation: AuthorizePromotion): void {
-    const updated = this.db.query(`
-      UPDATE btcc_programs SET frontier = 'promotion_open',
-        promotion_authorization_ref = ?, manifest_revision = manifest_revision + 1
-      WHERE program_id = ? AND frontier = 'awaiting_consolidation'
-        AND manifest_revision = ?
-    `).run(
-      mutation.product.authorization.ref.id,
-      mutation.cursor.programId,
-      mutation.cursor.expectedManifestRevision,
-    );
-    if (updated.changes !== 1) throw new Error("Promotion authorization lost its frontier");
   }
 
   close(mutation: ClosePromotion): void {
@@ -111,7 +107,7 @@ export class SqlitePromotionFrontierWriter {
         promotion_deferral_ref = ?,
         manifest_revision = manifest_revision + 1
       WHERE program_id = ? AND frontier = 'promotion_open'
-        AND promotion_authorization_ref = ? AND manifest_revision = ?
+        AND promotion_permit_ref = ? AND manifest_revision = ?
     `).run(
       product.anchor.ref.id,
       product.anchor.sourceTurnId,

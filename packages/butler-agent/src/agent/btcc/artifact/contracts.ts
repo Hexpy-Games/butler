@@ -76,3 +76,15 @@ export type ReviewedPromotionAssembly = {
     exactFrontierTaskRefs: ContentRef[];
   };
 };
+
+export type PromotionPermit = {
+  ref: ContentRef;
+  programId: string;
+  currentAuthorityRef: ContentRef;
+  acceptedPlanRef: ContentRef;
+  planningReviewRef: ContentRef;
+  candidateRefs: ContentRef[];
+  resolutionRefs: ContentRef[];
+  promotionTaskRefs: ContentRef[];
+  basis: "accepted_implementation_and_integration_reviews";
+};
