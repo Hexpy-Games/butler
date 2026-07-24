@@ -15,6 +15,7 @@ import { reportingSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "reporting",
+  operationSurface: "authorized",
   objective: "render_the_accepted_final_dossier_truthfully",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

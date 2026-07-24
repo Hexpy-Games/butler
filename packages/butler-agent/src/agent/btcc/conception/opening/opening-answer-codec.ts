@@ -10,11 +10,22 @@ import { openingSubmissionSchema } from "../submission-schemas.ts";
 export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
   submissionSchema: openingSubmissionSchema,
   decode(submission, envelope) {
-    if (isRecord(submission) && submission.kind === "opening_continuation") {
+    if (
+      isRecord(submission) &&
+      (submission.kind === "assisted_continuation" ||
+        submission.kind === "managed_continuation")
+    ) {
       return decodeOpeningContinuation(submission, envelope.binding.turnId);
     }
-    const { answer, route, personalizationRefs } = decodeOpeningAnswer(submission, envelope);
+    return decodeOpeningAnswerProduct(submission, envelope);
+  },
+};
 
+export function decodeOpeningAnswerProduct(
+  submission: unknown,
+  envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
+) {
+    const { answer, route, personalizationRefs } = decodeOpeningAnswer(submission, envelope);
     const goalBody = {
       originalMessageId: envelope.context.originalMessageId,
       interpretedIntent: answer.interpretedIntent,
@@ -81,9 +92,8 @@ export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
         disposition: "answered",
         content: answer.answer,
       },
-    };
-  },
-};
+    } satisfies Extract<OpeningProduct, { kind: "opening_answer" }>;
+}
 
 function decodeOpeningContinuation(
   value: Record<string, unknown>,
@@ -99,7 +109,7 @@ function decodeOpeningContinuation(
   };
   return {
     kind: "opening_continuation",
-    route: "managed",
+    route: value.kind === "assisted_continuation" ? "assisted" : "managed",
     projection: {
       ref: contentRef("opening-projection", body),
       content: value.message,

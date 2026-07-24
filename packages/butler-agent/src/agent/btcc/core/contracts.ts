@@ -19,6 +19,7 @@ export type PhaseRunBinding = {
 
 export type ModelPhaseState =
   | "conception_opening"
+  | "assisted_answer"
   | "conception_deliberation"
   | "contract_review"
   | "planning"
@@ -49,6 +50,7 @@ export type OpeningContext = {
 export type PhaseEnvelope = {
   binding: PhaseRunBinding;
   phase: ModelPhaseState;
+  operationSurface: "closed" | "authorized";
   objective: string;
   duties: readonly PromptDutyId[];
   prohibitions: readonly PromptProhibitionId[];
@@ -80,6 +82,7 @@ export type AuthoringContractBinding = {
 export type PhaseContract = Pick<
   PhaseEnvelope,
   | "phase"
+  | "operationSurface"
   | "objective"
   | "duties"
   | "prohibitions"

@@ -21,6 +21,7 @@ export function phaseEnvelope(options: { emptyContext?: boolean } = {}): PhaseEn
       executionFence: 7,
     },
     phase: "planning",
+    operationSurface: "authorized",
     objective: "Author the smallest sufficient plan.",
     duties: ["preserve_original_goal", "author_smallest_sufficient_plan"],
     prohibitions: ["no_model_substitution", "no_hidden_retry_loop"],

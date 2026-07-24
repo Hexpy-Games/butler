@@ -11,7 +11,13 @@ import { ManagedTurnProjectionWriter } from "./managed-turn-projection-writer.ts
 import type { ProjectLedgerBoundaryContext } from "./project-ledger-promotion-writer.ts";
 import { ProjectManagedBoundary } from "./project-managed-boundary.ts";
 type ManagedTransition = Exclude<BtccPersistenceTypes["transition"],
-  { kind: "activate_opening" | "accept_opening_answer" | "observe_delivery" }>;
+  {
+    kind:
+      | "activate_opening"
+      | "accept_opening_answer"
+      | "accept_opening_continuation"
+      | "observe_delivery";
+  }>;
 type ManagedTurnState = BtccPersistenceTypes["managedTurnState"];
 type TurnRecord = BtccPersistenceTypes["turn"];
 export class SqliteManagedTransitionWriter {
@@ -45,23 +51,6 @@ export class SqliteManagedTransitionWriter {
   ): void {
     this.prepareProjectPromotion(turn, nextRevision, transition, projectLedger);
     switch (transition.kind) {
-      case "accept_opening_continuation": {
-        this.insert("opening_projection", transition.product.projection);
-        this.db.query(`
-          INSERT INTO btcc_opening_projections (
-            turn_id, projection_ref, content, content_sha256
-          ) VALUES (?, ?, ?, ?)
-        `).run(
-          turn.turnId,
-          transition.product.projection.ref.id,
-          transition.product.projection.content,
-          transition.product.projection.contentSha256,
-        );
-        this.advance(turn, nextRevision, transition.successor, {
-          opening: transition.product,
-        }, { route: "managed" });
-        return;
-      }
       case "submit_goal_candidate":
       case "request_goal_revision":
       case "accept_goal_contract":

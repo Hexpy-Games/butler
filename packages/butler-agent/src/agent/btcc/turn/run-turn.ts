@@ -65,7 +65,8 @@ export async function deliverTurn(
 
 function isOpening(turn: TurnRecord): boolean {
   return turn.semanticState === "admitted" ||
-    turn.semanticState === "conception_opening";
+    turn.semanticState === "conception_opening" ||
+    turn.semanticState === "assisted_answer";
 }
 
 function isManaged(turn: TurnRecord): boolean {

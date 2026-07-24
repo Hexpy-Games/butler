@@ -28,6 +28,7 @@ const LENSES: ConceptionLensId[] = [
 
 const CONTRACT: PhaseContract = {
   phase: "conception_deliberation",
+  operationSurface: "authorized",
   objective: "understand_the_full_request_and_author_a_goal_candidate",
   duties: [
     "preserve_selected_model", "state_input_only", "understand_request",

@@ -22,6 +22,7 @@ import { taskReviewSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_review",
+  operationSurface: "authorized",
   objective: "independently_compare_every_task_criterion_with_current_targets",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

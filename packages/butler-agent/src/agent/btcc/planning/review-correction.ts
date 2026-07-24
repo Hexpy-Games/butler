@@ -17,6 +17,7 @@ import { feedbackPlanReviewSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning_review",
+  operationSurface: "authorized",
   objective: "independently_review_the_exact_scoped_correction",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

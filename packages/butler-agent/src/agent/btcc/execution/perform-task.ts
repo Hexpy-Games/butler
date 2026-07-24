@@ -21,6 +21,7 @@ import { taskExecutionSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_execution",
+  operationSurface: "authorized",
   objective: "execute_the_exact_accepted_task_and_record_its_concrete_result",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

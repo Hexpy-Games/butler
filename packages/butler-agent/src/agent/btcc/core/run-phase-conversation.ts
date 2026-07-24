@@ -14,6 +14,7 @@ import {
   isBtccOperationalInterruption,
   OperationalInterruptionError,
 } from "../recovery/index.ts";
+import { phaseOperationAuthority } from "./phase-operation-authority.ts";
 
 export async function runPhaseConversation<Product>(
   command: PhaseConversationCommand<Product>,
@@ -180,13 +181,11 @@ function assembleEnvelope<Product>(
       conversation.binding,
       command.modelSelection,
     ));
-  const operationAuthority = {
-    ...command.operationAuthority,
-    observationScopeRefs: [
-      ...command.operationAuthority.observationScopeRefs,
-      ...operationResults.map((result) => result.readScopeRef),
-    ],
-  };
+  const operationAuthority = phaseOperationAuthority(
+    command.phaseContract.operationSurface,
+    command.operationAuthority,
+    operationResults,
+  );
   return {
     binding: conversation.binding,
     ...command.phaseContract,

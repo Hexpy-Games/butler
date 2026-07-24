@@ -16,6 +16,7 @@ import {
 const semanticStates = [
   "admitted",
   "conception_opening",
+  "assisted_answer",
   "conception_deliberation",
   "contract_review",
   "planning",

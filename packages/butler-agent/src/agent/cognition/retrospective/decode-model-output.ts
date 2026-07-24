@@ -17,7 +17,7 @@ import {
 import { RETROSPECTIVE_RUBRIC_REVISION } from "./evaluation-rubric.ts";
 
 const PHASES = new Set<ModelPhaseState>([
-  "conception_opening", "conception_deliberation", "contract_review",
+  "conception_opening", "assisted_answer", "conception_deliberation", "contract_review",
   "planning", "planning_review", "task_execution", "task_review",
   "feedback_conception", "feedback_planning", "feedback_planning_review",
   "consolidation", "reporting",

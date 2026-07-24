@@ -22,6 +22,7 @@ import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
+  operationSurface: "authorized",
   objective: "independently_review_the_exact_complete_plan_graph",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

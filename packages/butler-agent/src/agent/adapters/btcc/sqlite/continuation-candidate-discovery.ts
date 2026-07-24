@@ -4,12 +4,12 @@ import type {
   FreshBtccTurnCommand,
 } from "../../../btcc/gateway-api.ts";
 import { ledgerManifestContentHash } from "../../../btcc/gateway-api.ts";
-import type { ManagedDeferralProduct } from "../../../btcc/deferral/index.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger/work-ledger-program-reader.ts";
 
 type Candidate = BtccPersistenceTypes["deferredContinuationCandidate"];
+type ManagedDeferralProduct = BtccPersistenceTypes["managedDeferralProduct"];
 type ProjectRuntime = {
   publications: ProjectWorkLedgerPublicationAdapter;
   resolveProjectRoot(projectRef: string): string;

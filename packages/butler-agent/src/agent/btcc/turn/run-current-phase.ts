@@ -37,6 +37,7 @@ export async function runCurrentPhase(input: {
       return { kind: "TurnActivated" };
 
     case "conception_opening":
+    case "assisted_answer":
     case "conception_deliberation":
     case "contract_review":
       return conception({ cycle: "initial", turn, phase: phase() });

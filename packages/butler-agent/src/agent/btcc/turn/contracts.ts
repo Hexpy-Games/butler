@@ -41,6 +41,7 @@ export type { TurnEvent } from "./turn-events.ts";
 export type TurnSemanticState =
   | "admitted"
   | "conception_opening"
+  | "assisted_answer"
   | "conception_deliberation"
   | "contract_review"
   | "planning"
@@ -136,7 +137,7 @@ export type AcceptedTurnTransition =
     }
   | {
       kind: "accept_opening_continuation";
-      successor: "conception_deliberation";
+      successor: "assisted_answer" | "conception_deliberation";
       product: OpeningContinuationProduct;
     }
   | { kind: "submit_goal_candidate"; successor: "contract_review"; product: GoalContractCandidateProduct }

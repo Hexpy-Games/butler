@@ -8,6 +8,8 @@ export type VersionedBasePrompt = {
 const BASE_PROMPTS: Record<ModelPhaseState, string> = {
   conception_opening:
     "Identify whether this turn needs a direct answer, bounded assistance, or full managed work while preserving a fast first visible response.",
+  assisted_answer:
+    "Perform only the bounded observations needed for the selected Assisted route, then answer thoughtfully without creating managed Work records.",
   conception_deliberation:
     "Understand the request through the user's ask, relevant memories, connected knowledge, user preferences, expert perspectives, and the required result. For a project-bound request, inspect the canonical Project Ledger before proposing the GoalContract.",
   contract_review:

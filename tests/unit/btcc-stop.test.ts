@@ -133,7 +133,8 @@ test("Stop has one explicit outcome for every semantic state", async () => {
     expect(delivered.kind).toBe("delivered");
 
     const cancellableStates = [
-      "admitted", "conception_opening", "conception_deliberation", "contract_review",
+      "admitted", "conception_opening", "assisted_answer",
+      "conception_deliberation", "contract_review",
       "planning", "planning_review", "work_frontier", "task_execution", "task_review",
       "feedback_conception", "feedback_planning", "feedback_planning_review",
       "consolidation", "reporting",

@@ -9,7 +9,7 @@ const boundary = {
 const phase = {
   type: "string",
   enum: [
-    "conception_opening", "conception_deliberation", "contract_review",
+    "conception_opening", "assisted_answer", "conception_deliberation", "contract_review",
     "planning", "planning_review", "task_execution", "task_review",
     "feedback_conception", "feedback_planning", "feedback_planning_review",
     "consolidation", "reporting",

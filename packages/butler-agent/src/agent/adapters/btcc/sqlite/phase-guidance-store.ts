@@ -17,6 +17,7 @@ type ModelPhaseState = AcceptedPhaseGuidance["phase"];
 
 const PHASES = new Set<ModelPhaseState>([
   "conception_opening",
+  "assisted_answer",
   "conception_deliberation",
   "contract_review",
   "planning",

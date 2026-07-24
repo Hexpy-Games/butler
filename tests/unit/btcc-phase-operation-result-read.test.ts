@@ -38,6 +38,7 @@ test("authorizes an exact read from a prior operation result without rerunning i
     context: phaseContext(),
     phaseContract: {
       phase: "conception_deliberation",
+      operationSurface: "authorized",
       objective: "read_the_missing_range",
       duties: [],
       prohibitions: [],

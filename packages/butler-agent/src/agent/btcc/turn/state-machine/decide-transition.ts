@@ -45,7 +45,8 @@ function acceptedTransition(
     };
   }
   if (
-    turn.semanticState === "conception_opening" &&
+    (turn.semanticState === "conception_opening" ||
+      turn.semanticState === "assisted_answer") &&
     event.kind === "OpeningAnswerAccepted"
   ) {
     const committedRevision = turn.revision + 1;
@@ -68,7 +69,13 @@ function acceptedTransition(
     };
   }
   if (turn.semanticState === "conception_opening" && event.kind === "OpeningContinuationAccepted") {
-    return { kind: "accept_opening_continuation", successor: "conception_deliberation", product: event.product };
+    return {
+      kind: "accept_opening_continuation",
+      successor: event.product.route === "assisted"
+        ? "assisted_answer"
+        : "conception_deliberation",
+      product: event.product,
+    };
   }
   if (turn.semanticState === "conception_deliberation" && event.kind === "GoalContractCandidateSubmitted") {
     return { kind: "submit_goal_candidate", successor: "contract_review", product: event.product };
