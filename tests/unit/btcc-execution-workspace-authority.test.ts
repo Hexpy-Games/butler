@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { authorizeTaskOperations } from
-  "../../packages/butler-agent/src/agent/btcc/execution/authorize-task-operations.ts";
+import { scopeTaskExecution } from
+  "../../packages/butler-agent/src/agent/btcc/execution/scope-task-execution.ts";
 import { resolveAvailableCapabilities } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/available-capabilities.ts";
 
@@ -8,7 +8,7 @@ const workspaceRef = { id: "workspace-current", sha256: "workspace-current-sha" 
 
 describe("BTCC Task Execution workspace authority", () => {
   test("closes stale target observation while retaining independent scopes", async () => {
-    const authority = authorizeTaskOperations({
+    const scoped = scopeTaskExecution({
       admittedAuthority: {
         observationScopeRefs: [
           "workspace:/project",
@@ -30,18 +30,21 @@ describe("BTCC Task Execution workspace authority", () => {
       },
     });
 
-    expect(authority).toEqual({
-      observationScopeRefs: ["workspace:/independent", "web:current"],
-      mutation: {
-        kind: "workspace_only",
-        workspaceRef,
-        operationRoot: { kind: "directory", relativeTarget: "." },
-        mutationScope: { kind: "read_only" },
+    expect(scoped).toEqual({
+      targetScopeRefs: [],
+      operationAuthority: {
+        observationScopeRefs: ["workspace:/independent", "web:current"],
+        mutation: {
+          kind: "workspace_only",
+          workspaceRef,
+          operationRoot: { kind: "directory", relativeTarget: "." },
+          mutationScope: { kind: "read_only" },
+        },
       },
     });
 
     const capabilities = await resolveAvailableCapabilities({
-      authority,
+      authority: scoped.operationAuthority,
       catalog: {
         list: () => [
           {
@@ -78,7 +81,7 @@ describe("BTCC Task Execution workspace authority", () => {
   });
 
   test("fails instead of silently retaining baseline authority without a target scope", () => {
-    expect(() => authorizeTaskOperations({
+    expect(() => scopeTaskExecution({
       admittedAuthority: {
         observationScopeRefs: ["workspace:/project"],
         mutation: { kind: "forbidden" },
