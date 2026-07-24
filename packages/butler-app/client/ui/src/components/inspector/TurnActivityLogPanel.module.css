@@ -3,3 +3,10 @@
   text-overflow: initial;
   white-space: normal;
 }
+
+.detailLabel {
+  display: inline-block;
+  min-width: 2.75rem;
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}

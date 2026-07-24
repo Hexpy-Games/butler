@@ -100,6 +100,22 @@ afterEach(() => {
   }
 });
 
+test("turn activity action opens the dedicated inspector tab", () => {
+  useButlerStore.setState({
+    leftOpen: true,
+    rightOpen: false,
+    rightTab: "summary",
+  });
+
+  useButlerStore.getState().openTurnActivity();
+
+  expect(useButlerStore.getState()).toMatchObject({
+    leftOpen: true,
+    rightOpen: true,
+    rightTab: "activity",
+  });
+});
+
 test("draft first send immediately opens an optimistic session shell", async () => {
   let releaseSession: () => void = () => undefined;
   let sendMessageBody: Record<string, unknown> | null = null;

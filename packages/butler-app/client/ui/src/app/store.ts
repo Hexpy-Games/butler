@@ -137,6 +137,7 @@ interface ButlerStore {
   setLeftOpen: (value: Updater<boolean>) => void;
   setRightOpen: (value: Updater<boolean>) => void;
   setRightTab: (rightTab: string) => void;
+  openTurnActivity: () => void;
   setSelectedArtifactId: (artifactId: string | null) => void;
   openArtifact: (artifactId: string, artifact?: SessionArtifactSummary) => void;
   setLeftPanelWidth: (leftPanelWidth: number) => void;
@@ -660,6 +661,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : { rightOpen: false };
     }),
   setRightTab: (rightTab) => set({ rightTab }),
+  openTurnActivity: () =>
+    set((state) => ({
+      ...normalizeAdaptivePanelState({
+        mode: currentAdaptiveMode(),
+        requested: "right",
+        leftOpen: state.leftOpen,
+        rightOpen: true,
+      }),
+      rightTab: "activity",
+    })),
   setSelectedArtifactId: (artifactId) =>
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
   openArtifact: (artifactId, artifact) =>

@@ -124,7 +124,10 @@ function publicActivitySchema(moment: string): Record<string, unknown> {
     }, ["summary", "rationale", "nextStep"]),
     description: [
       `User-visible activity record for the ${moment}.`,
-      "Explain what was decided or is happening, why it matters, and what follows.",
+      "Name the concrete target and current action, decision, or result.",
+      "Explain why it matters to the accepted Goal, governing Spec, Plan, or current review finding.",
+      "Name the next observable action or state transition.",
+      "Do not merely repeat the current phase name.",
       "Summarize intent without exposing hidden chain-of-thought.",
     ].join(" "),
   };

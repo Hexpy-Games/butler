@@ -56,8 +56,14 @@ export function TurnActivityLogPanel({ rows }: { rows: ProgressRow[] }) {
 function ActivityDetail({ activity }: { activity: PhaseActivity }) {
   return (
     <Stack gap="xs">
-      <Typo.Caption as="span">{activity.rationale}</Typo.Caption>
-      <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
+      <Typo.Caption as="span">
+        <span className={styles.detailLabel}>의도</span>
+        {activity.rationale}
+      </Typo.Caption>
+      <Typo.Caption as="span">
+        <span className={styles.detailLabel}>다음</span>
+        {activity.nextStep}
+      </Typo.Caption>
       {activity.createdAt ? (
         <time dateTime={activity.createdAt}>
           <Typo.Caption as="span">

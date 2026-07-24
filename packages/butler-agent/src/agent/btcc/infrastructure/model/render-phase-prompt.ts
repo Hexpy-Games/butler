@@ -165,7 +165,8 @@ function promptDocument(input: {
           : ["phase_submission"],
         phaseSubmission: [
           "Use one submission object allowed by the exact phase exits.",
-          "Write publicActivity as a concise user-visible handoff: what this phase decided, why it matters, and what the next phase will do.",
+          "Write publicActivity as a concise user-visible handoff: name the concrete target and decision or result, why it matters to the accepted Goal, governing Spec, Plan, or review finding, and the next observable action or transition.",
+          "Do not substitute a generic phase label for useful activity detail.",
           "Do not expose hidden chain-of-thought or copy raw operation output.",
         ].join(" "),
         ...(availableCapabilities.length > 0
@@ -174,7 +175,8 @@ function promptDocument(input: {
                 "Use a non-empty array of typed requests within authority.",
                 "Include every currently known independent operation needed for the next decision in this one batch; keep only genuinely result-dependent work for a later round.",
                 "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
-                "Write publicActivity for the user: what is happening, why it is needed, and what follows; summarize intent without hidden chain-of-thought.",
+                "Write publicActivity for the user: name the concrete target and current action, why it is needed for the accepted Goal, governing Spec, Plan, or review finding, and what observable action follows.",
+                "Do not substitute a generic phase label for useful activity detail or expose hidden chain-of-thought.",
                 "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
                 "Use each priorOperationResultIndex source descriptor to find the exact stable result, then read_operation_result instead of repeating its source operation. Repeat the source only for a fresh target revision or an uncaptured view.",
                 "Use a result executionSummary to determine command exit success. Read omitted command payload only when its content is necessary for failure diagnosis or the next semantic decision.",
