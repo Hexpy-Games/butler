@@ -14,6 +14,7 @@ export {
   assertPromotionPermit,
   bindManagedProgram,
   operationRoundScope,
+  planningCandidateBundleEntries,
   projectEphemeralOperationResult,
   READ_OPERATION_RESULT_CAPABILITY,
 } from "./gateway-api.ts";

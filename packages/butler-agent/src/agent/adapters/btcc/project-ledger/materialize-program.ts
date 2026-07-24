@@ -4,6 +4,7 @@ import {
   contentRef,
   createLogicalLedgerBundle,
   logicalLedgerRecords,
+  planningCandidateBundleEntries,
   stableJson,
   type BtccPersistenceTypes,
   type WorkLedgerCommit,
@@ -12,9 +13,12 @@ import type { ProjectLedgerCore } from "./project-ledger-core.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Ref = { id: string; sha256: string };
-type Bundle = Extract<WorkLedgerCommit["mutation"], { kind: "install_reviewed_plan" }>["product"][
+type Candidate = Extract<WorkLedgerCommit["mutation"], { kind: "install_reviewed_plan" }>["product"][
   "candidate"
-]["bundle"];
+];
+type Bundle = Candidate["bundle"] & {
+  entries: ReturnType<typeof planningCandidateBundleEntries>;
+};
 
 export function materializeProjectProgram(
   core: ProjectLedgerCore,
@@ -25,7 +29,7 @@ export function materializeProjectProgram(
   const previous = loadProjectProgram(core, root, program.programId);
   const logicalBundle = createLogicalLedgerBundle({ commit, previous, next: program });
   const planningBundle = commit.mutation.kind === "install_reviewed_plan"
-    ? verifiedPlanningBundle(commit.mutation.product.candidate.bundle)
+    ? verifiedPlanningBundle(commit.mutation.product.candidate)
     : undefined;
   for (const entry of planningBundle?.entries ?? []) {
     ensureReference(core, root, entry.ref, entry.semanticBytes, `BTCC ${entry.recordKind}`);
@@ -114,19 +118,24 @@ function exactSemanticBytes(value: { ref: Ref } & Record<string, unknown>, bundl
   return prepared.semanticBytes;
 }
 
-function verifiedPlanningBundle(bundle: Bundle): Bundle {
+function verifiedPlanningBundle(candidate: Candidate): Bundle {
+  const bundle = candidate.bundle;
   const { ref, ...body } = bundle;
   const expected = contentRef("planning-candidate-bundle", body);
   if (expected.id !== ref.id || expected.sha256 !== ref.sha256) {
     throw new Error("Accepted Planning bundle identity changed after review");
   }
-  for (const entry of bundle.entries) {
+  const entries = planningCandidateBundleEntries(candidate);
+  for (const entry of entries) {
     if (stableJson(JSON.parse(entry.semanticBytes)) !== entry.semanticBytes ||
       digest(entry.semanticBytes) !== entry.ref.sha256) {
       throw new Error(`Accepted Planning bundle entry changed: ${entry.ref.id}`);
     }
   }
-  return bundle;
+  if (stableJson(entries.map((entry) => entry.ref)) !== stableJson(bundle.recordRefs)) {
+    throw new Error("Accepted Planning bundle record index changed");
+  }
+  return { ...bundle, entries };
 }
 
 function ensureModeledRecord(

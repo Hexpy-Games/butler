@@ -19,6 +19,8 @@ import {
   successfulReview,
 } from "./support/btcc-project-ledger-fixture.ts";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
+import { planningCandidateBundleEntries } from
+  "../../packages/butler-agent/src/agent/btcc/planning/index.ts";
 
 afterEach(clearProjectFixtures);
 
@@ -65,7 +67,7 @@ describe("BTCC Project Work Ledger prepared publication", () => {
       governingSpecRefs: bind.program.availableSpecRefs,
     });
     await adapter.promoteAndObserve(install.publication);
-    for (const entry of accepted.candidate.bundle.entries) {
+    for (const entry of planningCandidateBundleEntries(accepted.candidate)) {
       const found = fixture.core.resolveRecord(fixture.ledgerRoot, {
         kind: "reference", id: entry.ref.id,
       });

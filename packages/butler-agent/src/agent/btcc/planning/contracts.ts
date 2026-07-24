@@ -219,7 +219,6 @@ export type PlanningCandidate = {
     programId: string;
     observedManifestRevision: number;
     recordRefs: ContentRef[];
-    entries: PlanningCandidateBundleEntry[];
   };
 };
 

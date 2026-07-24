@@ -134,6 +134,8 @@ describe("BTCC Planning contract", () => {
       .toEqual(candidate.criteria[0]!.ref);
     expect(contentRef("planning-candidate-bundle", withoutRef(candidate.bundle)))
       .toEqual(candidate.bundle.ref);
+    expect(candidate.bundle).not.toHaveProperty("entries");
+    expect(JSON.stringify(candidate)).not.toContain("\"semanticBytes\"");
   });
 
   test("rejects missing or duplicate task-bound EffectIntents", () => {

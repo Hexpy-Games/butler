@@ -3,6 +3,7 @@ import {
   assertLogicalLedgerMutationId,
   contentRef,
   createLogicalLedgerBundle,
+  planningCandidateBundleEntries,
   stableJson,
   type WorkLedgerCommit,
 } from "../../../btcc/index.ts";
@@ -93,7 +94,7 @@ function publicationProvenance(
     throw new Error("Project Ledger publication is not the exact accepted Planning bundle");
   }
   const recordRefs = candidate.bundle.recordRefs;
-  const entries = candidate.bundle.entries;
+  const entries = planningCandidateBundleEntries(candidate);
   if (recordRefs.length !== entries.length ||
     new Set(recordRefs.map((ref) => `${ref.id}:${ref.sha256}`)).size !== entries.length) {
     throw new Error("Accepted Planning bundle inventory is not one-to-one");
