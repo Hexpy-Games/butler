@@ -324,7 +324,8 @@ describe("production BTCC selected model", () => {
       carrierKinds: ["phase_submission"],
       phaseSubmission: [
         "Use one submission object allowed by the exact phase exits.",
-        "Write publicActivity as a concise user-visible handoff: what this phase decided, why it matters, and what the next phase will do.",
+        "Write publicActivity as a concise user-visible handoff: name the concrete target and decision or result, why it matters to the accepted Goal, governing Spec, Plan, or review finding, and the next observable action or transition.",
+        "Do not substitute a generic phase label for useful activity detail.",
         "Do not expose hidden chain-of-thought or copy raw operation output.",
       ].join(" "),
     });
