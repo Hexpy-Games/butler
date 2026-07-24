@@ -25,6 +25,14 @@ const DUTIES = {
   select_exact_governing_spec_logical_ids: "Select only exact logical ids of governing Specs resolved from admitted Project or Session Work Ledger authority; use an empty list when no governing Spec applies.",
   define_artifact_persistence: "State whether Goal success requires reviewed artifact bytes to persist to the admitted target. Decide from the complete intent and intended result, never from keywords, paths, or tool names.",
   review_goal_contract_exactly: "Compare all six lens assessments, adopted fields and roles, required outcomes, non-goals, acceptance intent, authority, personalization, provenance, strategy, and continuation with the immutable request.",
+  review_continuation_coherence: [
+    "Select a deferred continuation only when its projected original goal, blocker",
+    "reason, readiness condition, and open frontier coherently describe the same work",
+    "and the current request semantically resumes that work. If any projection fields",
+    "contradict one another, are insufficient, or describe another goal, omit the",
+    "continuationCandidateId and accept the Goal as a new Program. Never resolve opaque",
+    "refs by searching their hash text in another store.",
+  ].join(" "),
   review_artifact_persistence: "Independently compare the exact artifactPersistence value with the immutable request and intended result; require revision when an isolated-only result would not satisfy the Goal or persistence was added without authority.",
   author_smallest_sufficient_plan: [
     "Author the fewest cohesive Works and independently executable Tasks that satisfy",
