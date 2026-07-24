@@ -41,6 +41,9 @@ export class SqliteTransitionWriter {
         case "accept_opening_answer":
           this.acceptOpeningAnswer(input.turn, nextRevision, input.transition);
           return;
+        case "accept_opening_continuation":
+          this.acceptOpeningContinuation(input.turn, nextRevision, input.transition);
+          return;
         case "observe_delivery":
           this.observeDelivery(input.turn, nextRevision, input.transition);
           return;
@@ -96,6 +99,54 @@ export class SqliteTransitionWriter {
       turn.revision,
     );
     if (updated.changes !== 1) throw new Error("BTCC Opening commit lost Turn CAS");
+    this.insertCheckpoint(turn.turnId, nextRevision, checkpoint);
+  }
+
+  private acceptOpeningContinuation(
+    turn: TurnRecord,
+    nextRevision: number,
+    transition: Extract<AcceptedTurnTransition, { kind: "accept_opening_continuation" }>,
+  ): void {
+    const projection = transition.product.projection;
+    this.records.insert(
+      projection.ref.id,
+      "opening_projection",
+      projection.ref.sha256,
+      stableJson(projection),
+    );
+    this.db.query(`
+      INSERT INTO btcc_opening_projections (
+        turn_id, projection_ref, content, content_sha256
+      ) VALUES (?, ?, ?, ?)
+    `).run(
+      turn.turnId,
+      projection.ref.id,
+      projection.content,
+      projection.contentSha256,
+    );
+    const checkpoint = checkpointFor(
+      turn.turnId,
+      nextRevision,
+      transition.successor,
+      "phase",
+    );
+    const managed = transition.product.route === "managed"
+      ? stableJson({ opening: transition.product })
+      : null;
+    const updated = this.db.query(`
+      UPDATE btcc_turns SET semantic_state = ?, active_checkpoint_id = ?,
+        route = ?, managed_state_json = ?, revision = ?
+      WHERE turn_id = ? AND revision = ?
+    `).run(
+      transition.successor,
+      checkpoint.checkpointId,
+      transition.product.route,
+      managed,
+      nextRevision,
+      turn.turnId,
+      turn.revision,
+    );
+    if (updated.changes !== 1) throw new Error("BTCC Opening continuation lost Turn CAS");
     this.insertCheckpoint(turn.turnId, nextRevision, checkpoint);
   }
 

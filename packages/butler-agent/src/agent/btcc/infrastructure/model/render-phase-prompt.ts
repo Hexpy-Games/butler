@@ -24,10 +24,16 @@ export async function renderPhasePrompt(
   capabilityCatalog: StructuralCapabilityCatalog,
   guidanceReader: PhaseGuidanceReader,
 ): Promise<RenderedPhasePrompt> {
+  const operationAuthority = envelope.operationSurface === "closed"
+    ? {
+        observationScopeRefs: [],
+        mutation: { kind: "forbidden" as const },
+      }
+    : envelope.operationAuthority;
   const [resolvedContext, availableCapabilities, acceptedPhaseGuidance] = await Promise.all([
     resolveButlerContext(envelope, contextResolver),
     resolveAvailableCapabilities({
-      authority: envelope.operationAuthority,
+      authority: operationAuthority,
       catalog: capabilityCatalog,
     }),
     guidanceReader.list({
@@ -72,30 +78,36 @@ export async function renderPhasePrompt(
             baselineObservationScopeRefs: envelope.context.baselineObservationScopeRefs,
           },
           operationContext,
-          operationAuthority: envelope.operationAuthority,
+          operationAuthority,
           availableCapabilities,
           providerCorrection: envelope.providerCorrection ?? null,
         },
       },
       outputSchemaGuidance: {
-        carrierKinds: ["phase_submission", "operation_requests"],
+        carrierKinds: availableCapabilities.length > 0
+          ? ["phase_submission", "operation_requests"]
+          : ["phase_submission"],
         phaseSubmission: "Use one submission object allowed by the exact phase exits.",
-        operationRequests: [
-          "Use a non-empty array of typed requests within authority.",
-          "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
-          "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
-        ].join(" "),
+        ...(availableCapabilities.length > 0
+          ? {
+              operationRequests: [
+                "Use a non-empty array of typed requests within authority.",
+                "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
+                "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
+              ].join(" "),
+            }
+          : {}),
       },
     }),
     responseSchema: providerCarrierSchema(
       availableCapabilities,
       envelope.submissionSchema,
-      envelope.operationAuthority,
+      operationAuthority,
     ),
     carrierFunctions: providerCarrierFunctions(
       availableCapabilities,
       envelope.submissionSchema,
-      envelope.operationAuthority,
+      operationAuthority,
     ),
     admissionSchema: providerCarrierAdmissionSchema(
       availableCapabilities,
@@ -118,6 +130,7 @@ function providerCorrectionInstruction(
 function exactPhaseContract(envelope: PhaseEnvelope) {
   return {
     phase: envelope.phase,
+    operationSurface: envelope.operationSurface,
     objective: envelope.objective,
     duties: resolveDutyInstructions(envelope.duties),
     prohibitions: resolveProhibitionInstructions(envelope.prohibitions),

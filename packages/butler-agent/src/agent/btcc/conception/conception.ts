@@ -7,6 +7,7 @@ import {
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
+import { answerWithAssistance } from "./assistance/answer-with-assistance.ts";
 import { conceiveCorrection } from "./conceive-correction.ts";
 import { deliberateGoal } from "./deliberate-goal.ts";
 import { openConception } from "./opening/open-conception.ts";
@@ -58,6 +59,10 @@ async function conceiveInitialGoal(command: {
       return product.kind === "opening_answer"
         ? { kind: "OpeningAnswerAccepted", product }
         : { kind: "OpeningContinuationAccepted", product };
+    }
+    case "assisted_answer": {
+      const product = await answerWithAssistance(command.phase);
+      return { kind: "OpeningAnswerAccepted", product };
     }
     case "conception_deliberation": {
       const managed = requireManagedState(command.turn);

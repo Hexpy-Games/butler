@@ -23,6 +23,19 @@ export class NoLedgerHarnessModel implements SelectedModel {
   }
 
   private roundFor(envelope: PhaseEnvelope): ProviderRoundValue {
+    if (
+      envelope.phase === "conception_opening" &&
+      isAssistedScenario(this.scenario)
+    ) {
+      return {
+        kind: "phase_submission",
+        submission: {
+          kind: "assisted_continuation",
+          message: "필요한 최신 정보를 확인해서 바로 알려드리겠습니다.",
+        },
+        actualIdentity: identity(envelope),
+      };
+    }
     if (this.scenario === "assisted-weather" && envelope.operationResults.length === 0) {
       return operations(envelope, [{
         requestId: "observe-seoul-weather",

@@ -14,6 +14,7 @@ import { feedbackIntentSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_conception",
+  operationSurface: "authorized",
   objective: "understand_the_review_finding_and_scope_the_correction",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

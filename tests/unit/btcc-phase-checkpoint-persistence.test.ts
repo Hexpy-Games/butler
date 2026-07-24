@@ -127,6 +127,7 @@ describe("BTCC phase checkpoint persistence", () => {
       context: phaseEnvelope(binding).context,
       phaseContract: {
         phase: "conception_deliberation",
+        operationSurface: "authorized",
         objective: "adopt_durable_submission",
         duties: [],
         prohibitions: [],
@@ -188,6 +189,7 @@ describe("BTCC phase checkpoint persistence", () => {
       context: phaseEnvelope(binding).context,
       phaseContract: {
         phase: "conception_deliberation" as const,
+        operationSurface: "authorized" as const,
         objective: "persist_before_decode",
         duties: [], prohibitions: [],
       },
@@ -283,6 +285,7 @@ function phaseEnvelope(binding: PhaseRunBinding): PhaseEnvelope {
   return {
     binding,
     phase: "conception_deliberation",
+    operationSurface: "authorized",
     objective: "persist_exact_round",
     duties: [],
     prohibitions: [],

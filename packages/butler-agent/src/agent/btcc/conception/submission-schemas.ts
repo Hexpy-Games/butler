@@ -31,9 +31,13 @@ const answerFields = {
 
 export const openingSubmissionSchema = variantsSchema(
   objectSchema({ kind: literalSchema("direct_answer"), ...answerFields }),
-  objectSchema({ kind: literalSchema("assisted_answer"), ...answerFields }),
-  objectSchema({ kind: literalSchema("opening_continuation"), message: textSchema() }),
+  objectSchema({ kind: literalSchema("assisted_continuation"), message: textSchema() }),
+  objectSchema({ kind: literalSchema("managed_continuation"), message: textSchema() }),
 );
+export const assistedAnswerSubmissionSchema = objectSchema({
+  kind: literalSchema("assisted_answer"),
+  ...answerFields,
+});
 
 const lensAssessment = objectSchema({
   disposition: enumSchema("adopted", "non_applicable"),

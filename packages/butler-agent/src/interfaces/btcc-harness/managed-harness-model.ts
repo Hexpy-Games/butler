@@ -66,7 +66,7 @@ export class ManagedHarnessModel implements SelectedModel {
     switch (envelope.phase) {
       case "conception_opening":
         return {
-          kind: "opening_continuation",
+          kind: "managed_continuation",
           message: "요청의 목표와 완료 조건을 정리한 뒤 작업 계획을 세우겠습니다.",
         };
       case "conception_deliberation": {

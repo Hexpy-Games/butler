@@ -22,6 +22,7 @@ import { decodeTaskImpact } from "./decode-task-impact.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
+  operationSurface: "authorized",
   objective: "author_the_exact_review_correction_or_governing_revision",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

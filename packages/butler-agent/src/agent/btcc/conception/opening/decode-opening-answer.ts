@@ -7,7 +7,7 @@ import type {
 
 export function decodeOpeningAnswer(value: unknown, envelope: PhaseEnvelope) {
   const submitted = decodeStructuredAnswer(value);
-  const route = successfulObservations(envelope).length > 0 ? "assisted" : "direct";
+  const route = submitted.kind === "assisted_answer" ? "assisted" : "direct";
   const admittedPersonalizationRefs = collectPersonalizationRefs(envelope.context);
   const personalizationApplications = admitPersonalization(
     submitted.personalizationApplications,

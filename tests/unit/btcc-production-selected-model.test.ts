@@ -247,6 +247,70 @@ describe("production BTCC selected model", () => {
     expect(hasOpenObjectSchema(calls[0]!.responseSchema)).toBe(false);
   });
 
+  test("closes the operation carrier for Conception Opening", async () => {
+    let prompt: ProviderPhasePrompt | undefined;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: capabilityCatalog([{
+        capabilityRef: "workspace:inspect",
+        name: "inspect_workspace",
+        description: "Inspect an authorized workspace.",
+        operationKinds: ["observe"],
+        observationScopeKinds: ["workspace"],
+        inputSchema: { type: "object" },
+      }]),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async (input) => {
+        prompt = input;
+        return {
+          carrier: {
+            kind: "phase_submission",
+            submission: { kind: "opening_continuation", message: "요청을 구상해 진행하겠습니다." },
+          },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.phase = "conception_opening";
+    envelope.operationSurface = "closed";
+    envelope.operationAuthority = {
+      observationScopeRefs: ["workspace:/repo"],
+      mutation: { kind: "forbidden" },
+    };
+
+    await model.runRound(envelope);
+
+    const rendered = JSON.parse(prompt!.prompt) as {
+      promptHierarchy: {
+        immutablePhaseContract: { operationSurface: string };
+        currentTurnContext: {
+          operationAuthority: { observationScopeRefs: string[]; mutation: { kind: string } };
+          availableCapabilities: unknown[];
+        };
+      };
+      outputSchemaGuidance: {
+        carrierKinds: string[];
+        phaseSubmission: string;
+        operationRequests?: string;
+      };
+    };
+    expect(prompt?.carrierFunctions.map((item) => item.carrierKind)).toEqual([
+      "phase_submission",
+    ]);
+    expect(JSON.stringify(prompt?.responseSchema)).not.toContain("operation_requests");
+    expect(rendered.promptHierarchy.immutablePhaseContract.operationSurface).toBe("closed");
+    expect(rendered.promptHierarchy.currentTurnContext.operationAuthority).toEqual({
+      observationScopeRefs: [],
+      mutation: { kind: "forbidden" },
+    });
+    expect(rendered.promptHierarchy.currentTurnContext.availableCapabilities).toEqual([]);
+    expect(rendered.outputSchemaGuidance).toEqual({
+      carrierKinds: ["phase_submission"],
+      phaseSubmission: "Use one submission object allowed by the exact phase exits.",
+    });
+  });
+
   test("returns a non-empty operation carrier without changing the requested model", async () => {
     const request = {
       requestId: "observe-1",

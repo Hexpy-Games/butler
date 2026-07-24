@@ -11,6 +11,7 @@ import type {
 } from "./turn/index.ts";
 import type { ManagedAttempt } from "./work/index.ts";
 import type { DeferredContinuationCandidate } from "./continuation/index.ts";
+import type { ManagedDeferralProduct } from "./deferral/index.ts";
 import type {
   AcceptedPhaseGuidance,
   PhaseGuidanceDraft,
@@ -96,5 +97,6 @@ export type BtccPersistenceTypes = {
   planningAcceptedProduct: PlanningAcceptedProduct;
   resultCandidateProduct: ResultCandidateProduct;
   taskReviewProduct: TaskReviewProduct;
+  managedDeferralProduct: ManagedDeferralProduct;
   deferredContinuationCandidate: DeferredContinuationCandidate;
 };

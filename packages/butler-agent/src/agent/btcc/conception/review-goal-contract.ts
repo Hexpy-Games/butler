@@ -22,6 +22,7 @@ import { goalReviewSubmissionSchema } from "./submission-schemas.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "contract_review",
+  operationSurface: "authorized",
   objective: "independently_review_the_exact_goal_candidate",
   duties: [
     "preserve_selected_model", "state_input_only", "review_goal_contract_exactly",

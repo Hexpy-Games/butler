@@ -14,8 +14,8 @@ describe("BTCC no-ledger executable routes", () => {
   test.each([
     ["direct-greeting", "direct", 1, 0],
     ["direct-translation", "direct", 1, 0],
-    ["assisted-weather", "assisted", 2, 1],
-    ["assisted-research", "assisted", 3, 2],
+    ["assisted-weather", "assisted", 3, 1],
+    ["assisted-research", "assisted", 4, 2],
   ] as const)("completes %s without managed records", async (
     scenario,
     expectedRoute,
@@ -68,9 +68,12 @@ describe("BTCC no-ledger executable routes", () => {
     expect(result.replay).toEqual(result.initial);
     expect(result.modelCalls).toBe(expectedModelCalls);
     expect(result.operationCalls).toBe(expectedOperationCalls);
-    expect(result.phases).toEqual(
-      Array.from({ length: expectedModelCalls }, () => "conception_opening"),
-    );
+    expect(result.phases).toEqual(expectedRoute === "assisted"
+      ? [
+          "conception_opening",
+          ...Array.from({ length: expectedModelCalls - 1 }, () => "assisted_answer"),
+        ]
+      : ["conception_opening"]);
     expect(result.selectedModel).toEqual({
       provider: "harness",
       model: "no-ledger-v1",
@@ -88,6 +91,7 @@ describe("BTCC no-ledger executable routes", () => {
       const works = count(db, "btcc_work_items");
       const tasks = count(db, "btcc_tasks");
       const operations = count(db, "btcc_phase_operation_result_links");
+      const openingProjections = count(db, "btcc_opening_projections");
       const opening = db.query<{ content_json: string }, []>(
         "SELECT content_json FROM btcc_records WHERE kind = 'output_draft'",
       ).get();
@@ -102,6 +106,7 @@ describe("BTCC no-ledger executable routes", () => {
       expect(turn).toEqual({ route: expectedRoute, semantic_state: "delivered" });
       expect({ programs, works, tasks }).toEqual({ programs: 0, works: 0, tasks: 0 });
       expect(operations).toBe(expectedOperationCalls);
+      expect(openingProjections).toBe(expectedRoute === "assisted" ? 1 : 0);
       expect(draft.personalizationApplications.map(({ ref }) => ref)).toEqual([
         "profile:concise-korean",
         "feedback:lead-with-result",

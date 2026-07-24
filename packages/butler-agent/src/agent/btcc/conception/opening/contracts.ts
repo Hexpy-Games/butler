@@ -41,7 +41,7 @@ export type OpeningAnswerProduct = {
 
 export type OpeningContinuationProduct = {
   kind: "opening_continuation";
-  route: "managed";
+  route: "assisted" | "managed";
   projection: {
     ref: ContentRef;
     content: string;
@@ -73,6 +73,6 @@ export type OpeningAnswerSubmission = {
 };
 
 export type OpeningContinuationSubmission = {
-  kind: "opening_continuation";
+  kind: "assisted_continuation" | "managed_continuation";
   message: string;
 };

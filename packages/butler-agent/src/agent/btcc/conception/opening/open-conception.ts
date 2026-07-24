@@ -8,6 +8,7 @@ import { openingAnswerCodec } from "./opening-answer-codec.ts";
 
 const OPENING_PHASE_CONTRACT: PhaseContract = {
   phase: "conception_opening",
+  operationSurface: "closed",
   objective: "understand_and_answer_or_deepen",
   duties: [
     "preserve_selected_model",
@@ -22,13 +23,10 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
       "guard_fast_output",
       "apply_accepted_output_preferences",
     ],
-    assisted_answer: [
-      "author_minimal_goal",
-      "guard_fast_output",
-      "guard_public_claims",
-      "apply_accepted_output_preferences",
+    assisted_continuation: [
+      "publish_truthful_continuation",
     ],
-    opening_continuation: [
+    managed_continuation: [
       "publish_truthful_continuation",
     ],
   },

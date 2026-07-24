@@ -219,6 +219,7 @@ export function envelope(stateInput: unknown = {}): PhaseEnvelope {
       executionFence: 1,
     },
     phase: "task_execution",
+    operationSurface: "authorized",
     objective: "test production operations",
     duties: [],
     prohibitions: [],

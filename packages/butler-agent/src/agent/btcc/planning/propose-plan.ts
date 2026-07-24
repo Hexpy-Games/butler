@@ -20,6 +20,7 @@ import {
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
+  operationSurface: "authorized",
   objective: "author_or_revise_the_complete_managed_work_graph",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

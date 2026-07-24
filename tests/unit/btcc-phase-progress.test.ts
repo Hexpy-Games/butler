@@ -35,6 +35,7 @@ test("accepts a corrected request that reuses its local ID in a later model roun
       context: openingContext(),
       phaseContract: {
         phase: "conception_deliberation",
+        operationSurface: "authorized",
         objective: "produce_one_candidate",
         duties: [],
         prohibitions: [],
@@ -114,6 +115,78 @@ function operationRound(request: {
   };
 }
 
+test("projects a closed operation surface before the Opening model call", async () => {
+  let modelCalls = 0;
+  let accepted = false;
+  const product = await runPhaseConversation({
+    binding: {
+      ...binding,
+      semanticState: "conception_opening",
+      checkpointId: "checkpoint-opening-closed",
+    },
+    modelSelection: selectedModel(),
+    context: openingContext(),
+    phaseContract: {
+      phase: "conception_opening",
+      operationSurface: "closed",
+      objective: "publish_the_first_useful_message",
+      duties: [],
+      prohibitions: [],
+    },
+    codec: {
+      submissionSchema: objectSchema({}),
+      decode: () => ({ kind: "opening_continuation" }),
+    },
+    store: {
+      restore: async (current) => ({
+        binding: current,
+        acceptedProduct: null,
+        operationResults: [],
+      }),
+      appendOperationRound: async () => {
+        throw new Error("Opening must not append an operation round");
+      },
+      appendOperationResults: async () => {
+        throw new Error("Opening must not append operation results");
+      },
+      appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
+      acceptPhaseProduct: async ({ binding: current }) => {
+        accepted = true;
+        return nextBinding(current);
+      },
+    },
+    model: {
+      runRound: async (envelope) => {
+        modelCalls += 1;
+        expect(envelope.operationSurface).toBe("closed");
+        expect(envelope.operationAuthority).toEqual({
+          observationScopeRefs: [],
+          mutation: { kind: "forbidden" },
+        });
+        return {
+          kind: "phase_submission",
+          submission: { kind: "opening_continuation" },
+          actualIdentity: selectedModel(),
+        };
+      },
+    },
+    operations: {
+      perform: async () => {
+        throw new Error("Opening must not perform an operation");
+      },
+    },
+    operationAuthority: {
+      observationScopeRefs: ["workspace:/repo", "ledger:project"],
+      mutation: { kind: "forbidden" },
+    },
+    executionPermit: activePermit(),
+  });
+
+  expect(product).toEqual({ kind: "opening_continuation" });
+  expect(modelCalls).toBe(1);
+  expect(accepted).toBe(true);
+});
+
 test("does not checkpoint a malformed provider phase submission", async () => {
   let appended = false;
   const run = runPhaseConversation({
@@ -122,6 +195,7 @@ test("does not checkpoint a malformed provider phase submission", async () => {
     context: openingContext(),
     phaseContract: {
       phase: "conception_deliberation" as const,
+      operationSurface: "authorized" as const,
       objective: "produce_one_candidate",
       duties: [],
       prohibitions: [],
@@ -183,6 +257,7 @@ test("anchors provider recovery after the latest operation checkpoint", async ()
     context: openingContext(),
     phaseContract: {
       phase: "conception_deliberation" as const,
+      operationSurface: "authorized" as const,
       objective: "recover_exactly",
       duties: [],
       prohibitions: [],
@@ -239,6 +314,7 @@ test("returns a denied Task target to the same Phase conversation", async () => 
     context: openingContext(),
     phaseContract: {
       phase: "task_execution",
+      operationSurface: "authorized",
       objective: "execute_only_the_accepted_target",
       duties: [],
       prohibitions: [],

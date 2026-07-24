@@ -17,6 +17,7 @@ import { decodeUserReportFacts } from "./user-report-facts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "consolidation",
+  operationSurface: "authorized",
   objective: "assure_the_complete_result_against_the_original_goal",
   duties: [
     "preserve_original_goal", "preserve_selected_model", "state_input_only",

@@ -61,6 +61,7 @@ function progressLabel(state: string): string {
   switch (state) {
     case "admitted": return "요청을 확인하고 있습니다";
     case "conception_opening":
+    case "assisted_answer":
     case "conception_deliberation":
     case "contract_review": return "요청의 의도와 목표를 구상하고 있습니다";
     case "planning":
