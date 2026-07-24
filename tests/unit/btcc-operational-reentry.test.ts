@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test";
 import {
   createOperationalRecoveryBoundary,
   OperationalInterruptionError,
+  type OperationalRecoveryReadiness,
   type OperationalRecoveryStore,
-  type ProviderRecoveryReadiness,
 } from "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 
 describe("BTCC operational re-entry", () => {
   test("persists before readiness and never uses an exhaustion count", async () => {
     const events: string[] = [];
     const store = recoveryStore(events);
-    const readiness: ProviderRecoveryReadiness = {
+    const readiness: OperationalRecoveryReadiness = {
       async wait({ receipt }) {
         events.push(`ready:${receipt.activationCount}`);
       },
@@ -51,7 +51,10 @@ describe("BTCC operational re-entry", () => {
       async wait() { events.push("wait"); },
     });
 
-    expect(await recovery.resume(checkpoint, new AbortController().signal)).toBe(durable);
+    expect(await recovery.pending(checkpoint)).toEqual({
+      interruption: durable,
+      status: "ready",
+    });
     expect(events).toEqual([]);
   });
 });

@@ -43,7 +43,17 @@ export function projectTurnProgress(
       });
     },
     async operationalNoticeChanged(update) {
-      if (update.status === "cleared") return;
+      if (update.status === "cleared") {
+        await publish({
+          kind: "assistant.public_note",
+          payload: {
+            note: progressLabel(update.semanticState),
+            btccState: update.semanticState,
+            recoveryStatus: update.status,
+          },
+        });
+        return;
+      }
       await publish({
         kind: "assistant.public_note",
         payload: {

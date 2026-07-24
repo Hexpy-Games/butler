@@ -261,7 +261,7 @@ test("a normalized persistence interruption retains canonical Stop ownership", a
           "abort", () => reject(new Error("stopped")), { once: true },
         ));
       },
-      async resume() { return null; },
+      async pending() { return null; },
       async resolve() { return false; },
       async pendingTurnIds() { return []; },
     },

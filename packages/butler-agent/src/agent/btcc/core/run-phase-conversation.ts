@@ -13,6 +13,7 @@ import {
 import {
   isBtccOperationalInterruption,
   OperationalInterruptionError,
+  runtimeInterruption,
 } from "../recovery/index.ts";
 import { phaseOperationAuthority } from "./phase-operation-authority.ts";
 
@@ -24,12 +25,7 @@ export async function runPhaseConversation<Product>(
   } catch (error) {
     if (isBtccOperationalInterruption(error)) throw error;
     reportPhaseContractInterruption(command, error);
-    throw new OperationalInterruptionError(
-      "phase_contract_interruption",
-      command.binding,
-      { kind: "runtime_remediation" },
-      error,
-    );
+    throw runtimeInterruption(error, command.binding);
   }
 }
 

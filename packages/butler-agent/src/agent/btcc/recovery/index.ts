@@ -19,8 +19,8 @@ export type {
   ExecutionPermit,
   OperationalRecoveryBoundary,
   OperationalRecoveryReceipt,
+  OperationalRecoveryReadiness,
   OperationalRecoveryRecord,
   OperationalRecoveryStore,
-  ProviderRecoveryReadiness,
   TurnExecutionSupervisor,
 } from "./contracts.ts";

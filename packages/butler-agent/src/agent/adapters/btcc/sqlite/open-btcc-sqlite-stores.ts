@@ -11,8 +11,12 @@ import { SqliteTurnStateRepository } from "./turn-state-repository.ts";
 import { SqliteRetrospectiveScheduler } from "./retrospective-scheduler.ts";
 import { SqliteContextDocumentStore } from "./context/index.ts";
 import { SqlitePhaseGuidanceStore } from "./phase-guidance-store.ts";
-import { createOperationalRecoveryBoundary } from "../../../btcc/index.ts";
+import {
+  createOperationalRecoveryBoundary,
+  createProviderRecoveryReadiness,
+} from "../../../btcc/recovery/index.ts";
 import { SqliteOperationalRecoveryStore } from "./operational-recovery-store.ts";
+import { createSqliteWriteReadiness } from "./sqlite-write-readiness.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";
 import {
   currentRuntimeOwnerIdentity,
@@ -49,6 +53,7 @@ export function openBtccSqliteStores(input: {
   const turns = new SqliteTurnStateRepository(db, owner, input.projectLedger);
   const operationalRecovery = createOperationalRecoveryBoundary(
     new SqliteOperationalRecoveryStore(db),
+    createSqliteWriteReadiness(input.dbPath, createProviderRecoveryReadiness()),
   );
   return {
     admission: new SqliteTurnAdmissionRepository(
