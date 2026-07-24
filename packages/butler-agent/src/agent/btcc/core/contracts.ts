@@ -62,7 +62,7 @@ export type PhaseEnvelope = {
   context: OpeningContext;
   operationAuthority: OperationAuthority;
   operationResults: OperationResultProjection[];
-  latestOperationResultRefs?: OperationResultProjection["resultRef"][];
+  latestOperationResultCount?: number;
   phaseContinuity?: PhaseContinuity;
   submissionSchema: SubmissionSchema;
   providerCorrection?: ProviderCorrection;
@@ -128,7 +128,7 @@ export type PhaseConversationSnapshot<Product> = {
   acceptedProduct: Product | null;
   acceptedActualIdentity?: ActualModelIdentity;
   operationResults: OperationResult[];
-  latestOperationResultRefs?: OperationResultProjection["resultRef"][];
+  latestOperationResultCount?: number;
   phaseContinuity?: PhaseContinuity;
   pendingOperationRound?: {
     requests: OperationRequest[];

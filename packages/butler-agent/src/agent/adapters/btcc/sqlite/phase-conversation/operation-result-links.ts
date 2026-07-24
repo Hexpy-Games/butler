@@ -62,22 +62,20 @@ export class PhaseOperationResultLinks {
         JSON.parse(projection_json) as OperationResultProjection);
   }
 
-  loadLatestRefs(binding: PhaseRunBinding): OperationResultProjection["resultRef"][] {
+  loadLatestBatchSize(binding: PhaseRunBinding): number {
     const latest = this.db.query<{ checkpoint_revision: number }, [string, number]>(`
       SELECT MAX(checkpoint_revision) AS checkpoint_revision
       FROM btcc_phase_operation_result_links
       WHERE checkpoint_id = ? AND checkpoint_revision <= ?
     `).get(binding.checkpointId, binding.checkpointRevision);
     if (latest?.checkpoint_revision === null || latest?.checkpoint_revision === undefined) {
-      return [];
+      return 0;
     }
-    return this.db.query<{ projection_json: string }, [string, number]>(`
-      SELECT projection_json FROM btcc_phase_operation_result_links
+    const row = this.db.query<{ result_count: number }, [string, number]>(`
+      SELECT COUNT(*) AS result_count FROM btcc_phase_operation_result_links
       WHERE checkpoint_id = ? AND checkpoint_revision = ?
-      ORDER BY rowid
-    `).all(binding.checkpointId, latest.checkpoint_revision)
-      .map(({ projection_json }) =>
-        (JSON.parse(projection_json) as OperationResultProjection).resultRef);
+    `).get(binding.checkpointId, latest.checkpoint_revision);
+    return row?.result_count ?? 0;
   }
 }
 

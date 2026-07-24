@@ -76,7 +76,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
           results,
         }),
         operationResults: [...conversation.operationResults, ...results.map((item) => item.result)],
-        latestOperationResultRefs: results.map(({ result }) => result.resultRef),
+        latestOperationResultCount: results.length,
         phaseContinuity: conversation.pendingOperationRound.phaseContinuity,
         pendingOperationRound: undefined,
       };
@@ -201,7 +201,7 @@ function assembleEnvelope<Product>(
     context: command.context,
     operationAuthority,
     operationResults,
-    latestOperationResultRefs: conversation.latestOperationResultRefs,
+    latestOperationResultCount: conversation.latestOperationResultCount,
     ...(conversation.phaseContinuity
       ? { phaseContinuity: conversation.phaseContinuity }
       : {}),

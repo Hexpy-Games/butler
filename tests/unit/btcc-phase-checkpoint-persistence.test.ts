@@ -79,9 +79,7 @@ describe("BTCC phase checkpoint persistence", () => {
     expect(restored.binding.checkpointRevision).toBe(5);
     expect(restored.acceptedProduct).toEqual(product);
     expect(restored.operationResults).toHaveLength(1);
-    expect(restored.latestOperationResultRefs).toEqual([
-      restored.operationResults[0]?.resultRef,
-    ]);
+    expect(restored.latestOperationResultCount).toBe(1);
     expect(restored.phaseContinuity).toEqual(phaseContinuity);
     expect(restored.operationResults[0]).toMatchObject({
       request,
