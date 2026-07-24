@@ -5,6 +5,7 @@ const COMPACT_CONTRACTS = [
     contractId: "SPEC-BTCC-WORK-AUTHORING-CONTRACT",
     applicableRules: [
       "Preserve the immutable GoalContract and current governing authority.",
+      "Only an accepted continuation binding authorizes reuse of a prior Program identity or frontier. Without one, treat prior Program records as context and author a new smallest sufficient Program; never reconstruct historical Task identities or normalized criterion references as current execution authority.",
       "Treat the observable Spec catalog and selectable governing authority as different sets: governingSpecSelections may name only exact Spec revisions admitted by the GoalContract and AuthorityRevision.",
       "When project work requires a governing Spec but none is admitted, author the smallest sufficient Spec under specParentRootId; never select an observed but unaccepted catalog Spec.",
       "Every authored Spec declares parentId and concernId in reviewed bytes; use specParentRootId for a project-root Spec and an exact Spec logical id for a child.",

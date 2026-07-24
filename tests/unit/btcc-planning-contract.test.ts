@@ -30,6 +30,8 @@ describe("BTCC Planning contract", () => {
       .toContain("never collapse a layered feature");
     expect(PLANNING_AUTHORING_CONTRACTS[0]?.applicableRules.join("\n"))
       .toContain("Never encode discovery as a Task inside a graph");
+    expect(PLANNING_AUTHORING_CONTRACTS[0]?.applicableRules.join("\n"))
+      .toContain("Only an accepted continuation binding");
   });
 
   test("binds existing Specs by schema-constrained logical ID and governs authored Specs automatically", () => {

@@ -14,7 +14,7 @@ export async function readProjectLedger(
   }
   const projectRoot = context.resolveProjectLedgerRoot(projectId);
   const ledger = await readCanonicalProjectLedger(projectRoot);
-  const selected = selectRecords(ledger.records, args);
+  const selected = selectRecords(semanticRecords(ledger.records, args), args);
   const includeBody = args.include_body === true;
   if (includeBody && explicitRecordIds(args).size === 0) {
     throw new Error("Project Ledger body reads require explicit record_ids; discover metadata first");
@@ -33,6 +33,23 @@ export async function readProjectLedger(
       ...(includeBody ? { body: record.body } : {}),
     })),
   };
+}
+
+function semanticRecords(
+  records: CanonicalLedgerRecord[],
+  args: Record<string, unknown>,
+): CanonicalLedgerRecord[] {
+  const ids = explicitRecordIds(args);
+  const kinds = stringSet(args.kinds, "kinds");
+  if (kinds.has("reference")) return records;
+  if (ids.size === 0) return records.filter((record) => record.kind !== "reference");
+  const semanticIds = new Set(
+    records
+      .filter((record) => ids.has(record.id) && record.kind !== "reference")
+      .map((record) => record.id),
+  );
+  return records.filter((record) =>
+    record.kind !== "reference" || !semanticIds.has(record.id));
 }
 
 function projectRefFromContext(context: CapabilityExecutionContext): string {
