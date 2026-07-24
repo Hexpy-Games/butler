@@ -63,10 +63,6 @@ async function writeWorkspaceFile(
   const target = await requireWorkspacePath(context.workspacePath, requestedPath, true);
   const current = await readFile(target).catch(() => undefined);
   if (current && args.overwrite !== true) throw new Error("write_file requires overwrite=true");
-  if (typeof args.expected_sha256 === "string") {
-    const actual = current ? sha256(current) : "missing";
-    if (actual !== args.expected_sha256) throw new Error("write_file expected_sha256 does not match");
-  }
   await mkdir(dirname(target), { recursive: true });
   const temporary = `${target}.btcc-${process.pid}-${Date.now()}`;
   try {

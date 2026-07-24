@@ -50,7 +50,7 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
     capabilityRef: "read_file",
     name: "read_file",
-    description: "Read bounded UTF-8 text and return the complete-file sha256 used by write_file.expected_sha256.",
+    description: "Read bounded UTF-8 text and return its complete-file sha256.",
     operationKinds: ["observe", "workspace_artifact_observation", "review_validation"],
     observationScopeKinds: ["workspace"],
     inputSchema: object({
@@ -70,7 +70,6 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
       path: string("Workspace-relative path."),
       content: string(),
       overwrite: { type: "boolean" },
-      expected_sha256: string("Complete-file sha256 returned by the latest read_file of this path."),
       create_parents: { type: "boolean" },
     }, ["path", "content", "overwrite"]),
     execute: (args, context) => executeFileCapability("write_file", args, context),
