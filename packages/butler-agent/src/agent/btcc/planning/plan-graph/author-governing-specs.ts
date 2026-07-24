@@ -27,14 +27,15 @@ function authorSpecs(
   rootParentId?: string,
 ) {
   if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    rejectPlanningProposal("specifications_invalid", "Planning specifications must be an array");
+  }
+  if (value.length === 0) return [];
   if (!rootParentId) {
     rejectPlanningProposal(
       "specification_project_authority_missing",
       "Planning cannot author a Project Spec without project authority",
     );
-  }
-  if (!Array.isArray(value)) {
-    rejectPlanningProposal("specifications_invalid", "Planning specifications must be an array");
   }
   const specs = value.map((item, index) => {
     const draft = item as Record<string, unknown>;

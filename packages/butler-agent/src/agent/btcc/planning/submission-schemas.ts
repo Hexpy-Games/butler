@@ -92,17 +92,16 @@ const promotionSelector = objectSchema({
   integrationTaskId: textSchema(),
   promotionTaskId: textSchema(),
 });
-const specifications = arraySchema(objectSchema({
+const specification = objectSchema({
   logicalId: textSchema(),
   parentId: textSchema(),
   concernId: textSchema(),
   title: textSchema(),
   body: textSchema(),
-}), { minItems: 1 });
-const promotionSelectors = arraySchema(promotionSelector, { minItems: 1 });
+});
 
 export function revisedPlanSubmissionSchema(logicalIds: string[]): SubmissionSchema {
-  return variantsSchema(...planVariants({}, logicalIds));
+  return canonicalPlanSchema({}, logicalIds);
 }
 
 export function planCandidateSubmissionSchema(
@@ -113,28 +112,23 @@ export function planCandidateSubmissionSchema(
     kind: literalSchema("plan_candidate"),
     ...(findingIds.length > 0 ? { findingDecisions: findingDecisionSchema(findingIds) } : {}),
   };
-  return variantsSchema(...planVariants(prefix, logicalIds));
+  return canonicalPlanSchema(prefix, logicalIds);
 }
 
-function planVariants(
+function canonicalPlanSchema(
   prefix: Record<string, SubmissionSchema>,
   logicalIds: string[],
-): SubmissionSchema[] {
-  const base = { ...prefix, ...planFields };
-  const variants = [
-    objectSchema(base),
-    objectSchema({ ...base, specifications }),
-    objectSchema({ ...base, promotionSelectors }),
-    objectSchema({ ...base, specifications, promotionSelectors }),
-  ];
-  if (logicalIds.length === 0) return variants;
-  const governingSpecSelections = arraySchema(enumSchema(...logicalIds), { minItems: 1 });
-  return [...variants,
-    objectSchema({ ...base, governingSpecSelections }),
-    objectSchema({ ...base, specifications, governingSpecSelections }),
-    objectSchema({ ...base, governingSpecSelections, promotionSelectors }),
-    objectSchema({ ...base, specifications, governingSpecSelections, promotionSelectors }),
-  ];
+): SubmissionSchema {
+  const governingSpec = logicalIds.length > 0
+    ? enumSchema(...logicalIds)
+    : textSchema();
+  return objectSchema({
+    ...prefix,
+    ...planFields,
+    specifications: arraySchema(specification),
+    governingSpecSelections: arraySchema(governingSpec),
+    promotionSelectors: arraySchema(promotionSelector),
+  });
 }
 
 const REVIEW_DIMENSIONS = [

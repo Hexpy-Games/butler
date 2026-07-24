@@ -57,6 +57,7 @@ test("fresh continuation rebinds the complete current Planning authority", () =>
       sessionId: "continuation-session",
       product: {
         kind: "goal_contract_accepted",
+        planningContext: { observationResultIndex: [] },
         goalContract,
         authority,
         review: {

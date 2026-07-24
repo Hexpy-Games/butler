@@ -19,6 +19,7 @@ import type {
   DeferredContinuationCandidate,
 } from "../continuation/index.ts";
 import { goalReviewSubmissionSchema } from "./submission-schemas.ts";
+import { retainConceptionPlanningContext } from "./planning-context.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "contract_review",
@@ -108,6 +109,10 @@ const codec: PhaseCodec<GoalContractReviewProduct> = {
       kind: "goal_contract_accepted",
       review: { ref: contentRef("goal-review", reviewBody), ...reviewBody },
       goalContract: candidate.candidate.proposedContract,
+      planningContext: retainConceptionPlanningContext(
+        envelope.operationResults,
+        candidate.candidate.planningContext,
+      ),
       authority: { ref: contentRef("authority-revision", authorityBody), ...authorityBody },
     };
   },

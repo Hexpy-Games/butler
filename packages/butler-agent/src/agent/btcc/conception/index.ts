@@ -10,6 +10,7 @@ export type {
   GoalContractReviewProduct,
   GoverningSpecApplication,
 } from "./managed-contracts.ts";
+export type { ConceptionPlanningContext } from "./planning-context.ts";
 export type {
   OpeningAnswerProduct,
   OpeningContinuationProduct,

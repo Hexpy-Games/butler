@@ -35,6 +35,17 @@ export function retainPlanningObservations(
   return [...byResult.values()];
 }
 
+export function mergePlanningObservationIndexes(
+  ...indexes: PlanningObservationResultIndexEntry[][]
+): PlanningObservationResultIndexEntry[] {
+  const byResult = new Map<string, PlanningObservationResultIndexEntry>();
+  for (const entry of indexes.flat()) {
+    const key = refKey(entry.resultRef);
+    if (!byResult.has(key)) byResult.set(key, entry);
+  }
+  return [...byResult.values()];
+}
+
 function refKey(ref: { id: string; sha256: string }): string {
   return `${ref.id}:${ref.sha256}`;
 }
