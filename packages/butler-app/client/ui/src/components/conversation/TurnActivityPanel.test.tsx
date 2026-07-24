@@ -119,6 +119,36 @@ test("turn activity panel shows model-authored phase intent as an open history",
   expect(html).toContain("aria-expanded=\"true\"");
 });
 
+test("turn activity panel shows a newer phase placeholder beside prior detail", () => {
+  const html = renderPanel([
+    phaseActivityRow(),
+    {
+      id: "contract-review-progress",
+      kind: "message",
+      state: "running",
+      safe_label: "구상 결과를 독립적으로 검토하고 있습니다",
+    },
+  ]);
+
+  expect(html).toContain("작업 진행 로그");
+  expect(html).toContain("구상 결과를 독립적으로 검토하고 있습니다");
+});
+
+test("turn activity panel hides an older placeholder after phase detail arrives", () => {
+  const html = renderPanel([
+    {
+      id: "conception-progress",
+      kind: "message",
+      state: "running",
+      safe_label: "요청의 의도와 목표를 구상하고 있습니다",
+    },
+    phaseActivityRow(),
+  ]);
+
+  expect(html).toContain("작업 진행 로그");
+  expect(html).not.toContain("요청의 의도와 목표를 구상하고 있습니다");
+});
+
 test("turn activity panel renders acknowledged receipt only as pending status", () => {
   const html = renderPanel([acknowledgedRow()], "accepted");
 
@@ -168,5 +198,19 @@ function acknowledgedRow(): ProgressRow {
     receipt_kind: "turn.acknowledged",
     work_block_id: "work-ack",
     work_block_label: "Receipt text must not become a block.",
+  };
+}
+
+function phaseActivityRow(): ProgressRow {
+  return {
+    id: "conception-activity",
+    kind: "message",
+    state: "running",
+    safe_label: "관련 스펙과 구현을 확인하고 있습니다.",
+    semantic_block_id: "conception_deliberation",
+    work_decision_summary: "관련 스펙과 구현을 확인하고 있습니다.",
+    work_decision_rationale: "사용자의 원래 목표를 보존하기 위해 필요합니다.",
+    work_decision_next_step: "목표 계약을 작성합니다.",
+    work_decision_source: "model-authored",
   };
 }
