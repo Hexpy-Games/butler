@@ -55,6 +55,12 @@ describe("production BTCC capabilities", () => {
     expect(result.byteLength).toBeGreaterThan(120_000);
     expect(result.preview).toContain(prefix);
     expect(result.content).toBeUndefined();
+    expect(result.executionSummary).toEqual({
+      kind: "command_execution",
+      exitCode: 0,
+      timedOut: false,
+      signal: null,
+    });
     const read = await runtime.operations.perform({
       request: {
         requestId: "read-command-prefix",

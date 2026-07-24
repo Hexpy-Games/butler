@@ -157,6 +157,27 @@ describe("BTCC operation context projection", () => {
     });
     expect(JSON.stringify(source)).not.toContain("large mutation payload");
   });
+
+  test("keeps command completion in the compact durable index", () => {
+    const command = {
+      ...result("validation", "run_command"),
+      executionSummary: {
+        kind: "command_execution" as const,
+        exitCode: 0,
+        timedOut: false,
+        signal: null,
+      },
+    };
+    const latest = result("latest-source", "grep_files");
+
+    const projected = projectOperationContext({
+      operationResults: [command, latest],
+      latestOperationResultCount: 1,
+    } as PhaseEnvelope);
+
+    expect(projected.priorOperationResultIndex[0]?.executionSummary)
+      .toEqual(command.executionSummary);
+  });
 });
 
 function result(

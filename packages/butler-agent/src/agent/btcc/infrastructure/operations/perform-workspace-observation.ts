@@ -54,5 +54,6 @@ export async function performWorkspaceObservation(input: {
     }),
     content: payload.content,
     ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
+    ...(payload.executionSummary ? { executionSummary: payload.executionSummary } : {}),
   };
 }

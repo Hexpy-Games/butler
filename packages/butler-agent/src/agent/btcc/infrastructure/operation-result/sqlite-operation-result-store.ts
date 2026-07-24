@@ -101,6 +101,7 @@ export class SqliteOperationResultStore implements OperationResultStore {
       payloadRef,
       outcome: input.result.outcome,
       observationRef: input.result.observationRef,
+      executionSummary: input.result.executionSummary ?? null,
       structuralRefs: structuralRefs(input.result),
     };
     const record: OperationResultRecord = {
@@ -115,6 +116,9 @@ export class SqliteOperationResultStore implements OperationResultStore {
       byteLength,
       completeness: input.result.completeness ?? "requested_scope_complete",
       observationRef: input.result.observationRef,
+      ...(input.result.executionSummary
+        ? { executionSummary: input.result.executionSummary }
+        : {}),
       ...structuralRefs(input.result),
     };
     this.insertRecord(input.request, record);

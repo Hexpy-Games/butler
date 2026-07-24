@@ -39,6 +39,9 @@ export function projectEphemeralOperationResult(input: {
     byteLength: bytes.byteLength,
     completeness: "complete",
     observationRef: input.result.observationRef,
+    ...(input.result.executionSummary
+      ? { executionSummary: input.result.executionSummary }
+      : {}),
     ...structuralRefs(input.result),
   };
   return projectRecord({
@@ -68,6 +71,9 @@ export function projectRecord(input: {
     completeness: input.record.completeness,
     byteLength: input.record.byteLength,
     observationRef: input.record.observationRef,
+    ...(input.record.executionSummary
+      ? { executionSummary: input.record.executionSummary }
+      : {}),
     preview,
     omittedBytes: Math.max(0, input.record.byteLength - projectedBytes),
     readScopeRef: resultScopeRef(input.record.resultRef),

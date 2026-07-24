@@ -38,7 +38,6 @@ import {
 type WorkspaceRequest = Extract<import("../../core/index.ts").OperationRequest, {
   kind: "workspace_artifact_action";
 }>;
-
 export type WorkspaceActionBoundary =
   | "tool_mutated"
   | "candidate_prepared"
@@ -246,6 +245,7 @@ function prepareCandidate(
       targetSnapshotRef: candidate.ref,
       content: payload.content,
       ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
+      ...(payload.executionSummary ? { executionSummary: payload.executionSummary } : {}),
     };
     const observed = { ...journal, status: "workspace_observed" as const, result };
     input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), observed);
@@ -279,6 +279,7 @@ function prepareCandidate(
     targetSnapshotRef: candidate.ref,
     content: payload.content,
     ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
+    ...(payload.executionSummary ? { executionSummary: payload.executionSummary } : {}),
   };
   const prepared: WorkspaceActionJournal = {
     ...journal,

@@ -104,6 +104,7 @@ export async function performReviewValidation(input: {
       validationReceiptRef,
       content: payload.content,
       ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
+      ...(payload.executionSummary ? { executionSummary: payload.executionSummary } : {}),
     };
   } finally {
     removeOwnedRoot(root);
