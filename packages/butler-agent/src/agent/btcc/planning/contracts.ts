@@ -63,6 +63,10 @@ export type AvailableSpecRevision = {
   revisionRef: ContentRef;
 };
 
+export type GoverningSpecRevision = AvailableSpecRevision & {
+  body: string;
+};
+
 export type ManagedEffectIntent = {
   ref: ContentRef;
   programId: string;
@@ -264,9 +268,26 @@ export type PlanningReview = {
   reviewedIntegrationCriterionRefs: ContentRef[];
   reviewedArtifactLifecycleRef: ContentRef;
   reviewedSpecRevisionRefs: ContentRef[];
+  coverage: PlanningReviewCoverage[];
   verdict: "accepted" | "revision_required";
   findings: string[];
   findingSetRef?: ContentRef;
+};
+
+export type PlanningReviewDimension =
+  | "original_goal"
+  | "governing_specs"
+  | "work_cohesion"
+  | "task_executability"
+  | "dependencies"
+  | "verification_integration"
+  | "effect_authority"
+  | "artifact_lifecycle";
+
+export type PlanningReviewCoverage = {
+  dimension: PlanningReviewDimension;
+  verdict: "passed" | "failed";
+  findings: string[];
 };
 
 export type PlanningAcceptedProduct = {

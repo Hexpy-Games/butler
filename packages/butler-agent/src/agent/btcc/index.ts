@@ -56,7 +56,10 @@ export type {
   PhaseRunBinding,
   SpooledOperationOutput,
 } from "./gateway-api.ts";
-export type { AvailableSpecRevision } from "./planning/contracts.ts";
+export type {
+  AvailableSpecRevision,
+  GoverningSpecRevision,
+} from "./planning/contracts.ts";
 export type {
   OperationRequest,
   PhaseEnvelope,

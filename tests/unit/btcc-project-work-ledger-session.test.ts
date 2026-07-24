@@ -69,6 +69,7 @@ describe("BTCC Session Work Ledger selection", () => {
       reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
       reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
       reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+      coverage: acceptedPlanningCoverage(),
       verdict: "accepted" as const,
       findings: [] as [],
     };
@@ -158,6 +159,24 @@ describe("BTCC Session Work Ledger selection", () => {
       .toThrow("logical record identity is invalid");
   });
 });
+
+function acceptedPlanningCoverage() {
+  const dimensions = [
+    "original_goal",
+    "governing_specs",
+    "work_cohesion",
+    "task_executability",
+    "dependencies",
+    "verification_integration",
+    "effect_authority",
+    "artifact_lifecycle",
+  ] as const;
+  return dimensions.map((dimension) => ({
+    dimension,
+    verdict: "passed" as const,
+    findings: [],
+  }));
+}
 
 function sessionProgramCommit(): WorkLedgerCommit {
   const ref = (id: string) => ({ id, sha256: `${id}-sha256` });

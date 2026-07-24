@@ -11,6 +11,10 @@ import { proposeCorrectionOrRevision } from "./plan-correction.ts";
 import { proposePlan } from "./propose-plan.ts";
 import { reviewCorrection } from "./review-correction.ts";
 import { reviewPlan } from "./review-plan.ts";
+import type {
+  GoverningSpecRevision,
+  PlanningCandidateProduct,
+} from "./contracts.ts";
 
 type InitialPlanningEvent = Extract<TurnEvent, {
   kind:
@@ -101,6 +105,7 @@ async function authorInitialPlan(command: {
     programId: authority.programId,
     observedManifestRevision: authority.manifestRevision,
     governingSpecRefs: authority.governingSpecRefs,
+    governingSpecs: authority.governingSpecs,
     availableSpecs: authority.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
     ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
@@ -139,13 +144,47 @@ async function reviewInitialPlan(command: {
       programId: current.programId,
       manifestRevision: current.manifestRevision,
       governingSpecRefs: current.governingSpecRefs,
+      governingSpecs: governingSpecsForReview(current.governingSpecs, managed.planCandidate),
     },
     planCandidate: managed.planCandidate,
+    ...(managed.planningRevision
+      ? { priorPlanningReview: managed.planningRevision.review }
+      : {}),
   }));
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.kind === "planning_accepted"
     ? { kind: "PlanningReviewAccepted", product }
     : { kind: "PlanningRevisionRequested", product };
+}
+
+function governingSpecsForReview(
+  accepted: GoverningSpecRevision[],
+  product: PlanningCandidateProduct | undefined,
+): GoverningSpecRevision[] {
+  if (!product || "validationFindings" in product.candidate) {
+    return accepted;
+  }
+  const candidate = product.candidate;
+  const byRef = new Map(accepted.map((spec) => [refKey(spec.revisionRef), spec]));
+  for (const spec of candidate.authoredSpecs) {
+    byRef.set(refKey(spec.ref), {
+      logicalId: spec.logicalId,
+      parentId: spec.parentId,
+      concernId: spec.concernId,
+      title: spec.title,
+      status: "specified",
+      revisionRef: spec.ref,
+      body: spec.body,
+    });
+  }
+  return candidate.governingSpecRefs.flatMap((ref) => {
+    const spec = byRef.get(refKey(ref));
+    return spec ? [spec] : [];
+  });
+}
+
+function refKey(ref: { id: string; sha256: string }): string {
+  return `${ref.id}:${ref.sha256}`;
 }
 
 async function authorFeedbackPlan(command: {
@@ -179,6 +218,7 @@ async function authorFeedbackPlan(command: {
       programId: program.programId,
       observedManifestRevision: program.manifestRevision,
       governingSpecRefs: program.governingSpecRefs,
+      governingSpecs: program.governingSpecs,
       availableSpecs: program.availableSpecs,
       requireGoverningSpec: managed.goalAcceptance.authority.ledgerScope.kind === "project",
       currentTasks: program.tasks.map((task) => task.task),
@@ -256,6 +296,7 @@ function projectFeedbackReviewInput(
     acceptedAuthority: accepted.authority,
     acceptedPlanRef: program.plan.ref,
     governingSpecRefs: program.governingSpecRefs,
+    governingSpecs: program.governingSpecs,
     currentWork: program.currentWork.work,
     currentTask: program.currentTask.task,
     currentAttempt,

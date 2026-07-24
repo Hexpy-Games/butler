@@ -130,20 +130,53 @@ function planVariants(
   ];
 }
 
+const REVIEW_DIMENSIONS = [
+  "original_goal",
+  "governing_specs",
+  "work_cohesion",
+  "task_executability",
+  "dependencies",
+  "verification_integration",
+  "effect_authority",
+  "artifact_lifecycle",
+] as const;
+
 const acceptedPlanReview = objectSchema({
   kind: literalSchema("planning_review"),
   verdict: literalSchema("accepted"),
-  findings: arraySchema(textSchema(), { maxItems: 0 }),
+  coverage: reviewCoverage(),
 });
 export const planRevisionReviewSubmissionSchema = objectSchema({
   kind: literalSchema("planning_review"),
   verdict: literalSchema("revision_required"),
   findings: arraySchema(textSchema(), { minItems: 1 }),
 });
+const reviewedPlanRevision = objectSchema({
+  kind: literalSchema("planning_review"),
+  verdict: literalSchema("revision_required"),
+  coverage: reviewCoverage(),
+});
 export const planReviewSubmissionSchema = variantsSchema(
   acceptedPlanReview,
-  planRevisionReviewSubmissionSchema,
+  reviewedPlanRevision,
 );
+
+function reviewCoverage(): SubmissionSchema {
+  const passed = objectSchema({
+    dimension: enumSchema(...REVIEW_DIMENSIONS),
+    verdict: literalSchema("passed"),
+    findings: arraySchema(textSchema(), { maxItems: 0 }),
+  });
+  const failed = objectSchema({
+    dimension: enumSchema(...REVIEW_DIMENSIONS),
+    verdict: literalSchema("failed"),
+    findings: arraySchema(textSchema(), { minItems: 1 }),
+  });
+  return arraySchema(variantsSchema(passed, failed), {
+    minItems: REVIEW_DIMENSIONS.length,
+    maxItems: REVIEW_DIMENSIONS.length,
+  });
+}
 
 const impact = variantsSchema(
   objectSchema({

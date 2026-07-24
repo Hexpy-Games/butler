@@ -14,6 +14,7 @@ import type {
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import type { PromotionDeferralProduct } from "../deferral/index.ts";
 import type { AvailableSpecRevision } from "../planning/contracts.ts";
+import type { GoverningSpecRevision } from "../planning/contracts.ts";
 
 export type ManagedProgramAuthority = {
   ledgerId: string;
@@ -23,6 +24,7 @@ export type ManagedProgramAuthority = {
   authorityRef: ContentRef;
   availableSpecRefs: ContentRef[];
   availableSpecs: AvailableSpecRevision[];
+  governingSpecs: GoverningSpecRevision[];
   governingSpecRefs: ContentRef[];
   requiredOutcomeId: string;
 };

@@ -5,7 +5,10 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
 import { reviewPlan } from "../../packages/butler-agent/src/agent/btcc/planning/review-plan.ts";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
-import type { PlanningCandidate } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
+import type {
+  PlanningCandidate,
+  PlanningReviewCoverage,
+} from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
 import {
   feedbackPlanReviewSubmissionSchema,
   planCandidateSubmissionSchema,
@@ -215,7 +218,7 @@ describe("BTCC Planning contract", () => {
   test("binds runtime-owned refs without asking the reviewer to echo them", async () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
     const accepted = await reviewPlan(reviewInvocation(candidate, {
-      kind: "planning_review", verdict: "accepted", findings: [],
+      kind: "planning_review", verdict: "accepted", coverage: acceptedCoverage(),
     }));
     expect(accepted.kind).toBe("planning_accepted");
     if (accepted.kind !== "planning_accepted") throw new Error("expected accepted plan");
@@ -223,6 +226,31 @@ describe("BTCC Planning contract", () => {
       .toEqual(candidate.effectIntents.map((effect) => effect.ref));
     expect(accepted.review.reviewedIntegrationCriterionRefs)
       .toEqual(candidate.integrationCriteria.map((item) => item.ref));
+  });
+
+  test("requires one unique verdict for every Planning Review dimension", async () => {
+    const candidate = authorPlanCandidate(artifactPlan(), authoringState());
+    const duplicate = acceptedCoverage();
+    duplicate[7] = { ...duplicate[0]! };
+    expect(reviewPlan(reviewInvocation(candidate, {
+      kind: "planning_review", verdict: "accepted", coverage: duplicate,
+    }))).rejects.toThrow("provider_phase_submission_invalid");
+
+    const failed = acceptedCoverage();
+    failed[1] = {
+      dimension: "governing_specs",
+      verdict: "failed",
+      findings: ["The candidate omits one governing requirement."],
+    };
+    const reviewed = await reviewPlan(reviewInvocation(candidate, {
+      kind: "planning_review", verdict: "revision_required", coverage: failed,
+    }));
+    expect(reviewed.kind).toBe("planning_revision_required");
+    if (reviewed.kind !== "planning_revision_required") throw new Error("expected revision");
+    expect(reviewed.review.findings).toEqual([
+      "The candidate omits one governing requirement.",
+    ]);
+    expect(reviewed.review.coverage).toEqual(failed);
   });
 
   test("routes a structurally invalid proposal through Planning Review revision", async () => {
@@ -242,6 +270,24 @@ describe("BTCC Planning contract", () => {
     expect(reviewed.review.findings.join("\n")).toContain("planned_graph_mismatch");
   });
 });
+
+function acceptedCoverage(): PlanningReviewCoverage[] {
+  const dimensions = [
+    "original_goal",
+    "governing_specs",
+    "work_cohesion",
+    "task_executability",
+    "dependencies",
+    "verification_integration",
+    "effect_authority",
+    "artifact_lifecycle",
+  ] as const;
+  return dimensions.map((dimension) => ({
+    dimension,
+    verdict: "passed",
+    findings: [],
+  }));
+}
 
 function authoringState() {
   return {

@@ -143,7 +143,10 @@ export function submitPlanningReview(
     return {
       kind: "planning_review",
       verdict: "revision_required",
-      findings: ["두 번째 Task의 완료 조건을 더 명확히 표현해야 한다"],
+      coverage: planningReviewCoverage(
+        "task_executability",
+        "두 번째 Task의 완료 조건을 더 명확히 표현해야 한다",
+      ),
     };
   }
   return {
@@ -151,8 +154,26 @@ export function submitPlanningReview(
     reviewedEffectIntentRefs: nestedRecordRefs(state, "effectIntents"),
     reviewedIntegrationCriterionRefs: nestedRecordRefs(state, "integrationCriteria"),
     verdict: "accepted",
-    findings: [],
+    coverage: planningReviewCoverage(),
   };
+}
+
+function planningReviewCoverage(
+  failedDimension?: string,
+  finding?: string,
+) {
+  return [
+    "original_goal",
+    "governing_specs",
+    "work_cohesion",
+    "task_executability",
+    "dependencies",
+    "verification_integration",
+    "effect_authority",
+    "artifact_lifecycle",
+  ].map((dimension) => dimension === failedDimension
+    ? { dimension, verdict: "failed", findings: [finding] }
+    : { dimension, verdict: "passed", findings: [] });
 }
 
 export function submitFeedbackPlan(

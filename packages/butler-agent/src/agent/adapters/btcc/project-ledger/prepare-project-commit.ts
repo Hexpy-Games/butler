@@ -25,14 +25,23 @@ export async function prepareProjectCommit(
   const programId = programIdOf(input);
   const current = loadProjectProgram(core, input.projectRoot, programId);
   assertLogicalLedgerMutationId(input.commit, current);
-  const availableSpecs = input.commit.mutation.kind === "bind_program"
+  const canonicalSpecs = input.commit.mutation.kind === "bind_program"
     ? resolveCanonicalSpecCatalog(core, input.projectRoot)
-      .map(({ body: _body, ...spec }) => spec)
+    : [];
+  const availableSpecs = input.commit.mutation.kind === "bind_program"
+    ? canonicalSpecs.map(({ body: _body, ...spec }) => spec)
     : current?.availableSpecs ?? [];
+  const governingSpecs = input.commit.mutation.kind === "bind_program"
+    ? selectGoverningSpecs(
+      canonicalSpecs,
+      input.commit.mutation.product.goalContract.governingSpecLogicalIds,
+    )
+    : current?.governingSpecs ?? [];
   const program = reduceProjectProgram(
     current,
     input.commit,
     availableSpecs,
+    governingSpecs,
   );
   const paths = publicationPaths(stagingRoot, input.commit.mutationId);
   const prepared = core.prepareProjectLedgerPublication({
@@ -68,6 +77,18 @@ export async function prepareProjectCommit(
       entries: provenance.entries,
     },
   };
+}
+
+function selectGoverningSpecs<T extends { logicalId: string }>(
+  catalog: T[],
+  logicalIds: string[],
+): T[] {
+  const byLogicalId = new Map(catalog.map((spec) => [spec.logicalId, spec]));
+  return logicalIds.map((logicalId) => {
+    const spec = byLogicalId.get(logicalId);
+    if (!spec) throw new Error(`Canonical governing Spec ${logicalId} is unavailable`);
+    return spec;
+  });
 }
 
 function publicationProvenance(

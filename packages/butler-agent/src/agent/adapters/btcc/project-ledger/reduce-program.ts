@@ -2,6 +2,7 @@ import type {
   BtccPersistenceTypes,
   WorkLedgerCommit,
   AvailableSpecRevision,
+  GoverningSpecRevision,
 } from "../../../btcc/index.ts";
 import {
   assertPromotionPermit,
@@ -18,10 +19,11 @@ export function reduceProjectProgram(
   current: Program | null,
   commit: WorkLedgerCommit,
   availableSpecs: AvailableSpecRevision[] = current?.availableSpecs ?? [],
+  governingSpecs: GoverningSpecRevision[] = current?.governingSpecs ?? [],
 ): Program {
   const mutation = commit.mutation;
   if (mutation.kind === "bind_program") {
-    return bindManagedProgram(current, mutation, availableSpecs);
+    return bindManagedProgram(current, mutation, availableSpecs, governingSpecs);
   }
   const program = requireProgram(current, mutation);
   if (mutation.kind === "install_reviewed_plan") return installPlan(program, mutation.product);
