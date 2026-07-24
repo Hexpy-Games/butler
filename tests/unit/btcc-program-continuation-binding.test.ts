@@ -10,7 +10,8 @@ test("fresh continuation rebinds the complete current Planning authority", () =>
   const initial = projectBindingCommit();
   const binding = initial.commit.mutation;
   if (binding.kind !== "bind_program") throw new Error("bind Program fixture expected");
-  const current = bindManagedProgram(null, binding, [availableSpec]);
+  const governingSpec = { ...availableSpec, body: "# Fixture spec\n" };
+  const current = bindManagedProgram(null, binding, [availableSpec], [governingSpec]);
   const anchorRef = contentRef("deferral-anchor", { programId: current.programId });
   current.activeDeferral = { anchor: { ref: anchorRef } } as never;
 
@@ -71,7 +72,12 @@ test("fresh continuation rebinds the complete current Planning authority", () =>
   };
 
   if (commit.mutation.kind !== "bind_program") throw new Error("bind Program fixture expected");
-  const rebound = bindManagedProgram(current, commit.mutation, [availableSpec]);
+  const rebound = bindManagedProgram(
+    current,
+    commit.mutation,
+    [availableSpec],
+    [governingSpec],
+  );
 
   expect(rebound).toMatchObject({
     manifestRevision: current.manifestRevision + 1,

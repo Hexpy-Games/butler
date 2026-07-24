@@ -119,14 +119,13 @@ function canonicalPlanSchema(
   prefix: Record<string, SubmissionSchema>,
   logicalIds: string[],
 ): SubmissionSchema {
-  const governingSpec = logicalIds.length > 0
-    ? enumSchema(...logicalIds)
-    : textSchema();
   return objectSchema({
     ...prefix,
     ...planFields,
     specifications: arraySchema(specification),
-    governingSpecSelections: arraySchema(governingSpec),
+    governingSpecSelections: logicalIds.length > 0
+      ? arraySchema(enumSchema(...logicalIds))
+      : arraySchema(textSchema(), { maxItems: 0 }),
     promotionSelectors: arraySchema(promotionSelector),
   });
 }
