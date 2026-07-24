@@ -156,7 +156,27 @@ export function submitPlanningReview(
     reviewedIntegrationCriterionRefs: nestedRecordRefs(state, "integrationCriteria"),
     verdict: "accepted",
     coverage: planningReviewCoverage(),
+    ...priorPlanningFindingVerdicts(state),
     ...planningReviewSubjects(state),
+  };
+}
+
+function priorPlanningFindingVerdicts(state: Record<string, unknown>) {
+  const prior = asRecord(state.priorPlanningReview);
+  const findingSet = asRecord(prior.findingSet);
+  const rootCauseKeys = asArray(findingSet.findings).flatMap((finding) => {
+    const value = asRecord(finding);
+    return value.recommendedDisposition === "required_now" &&
+      typeof value.rootCauseKey === "string"
+      ? [value.rootCauseKey]
+      : [];
+  });
+  return rootCauseKeys.length === 0 ? {} : {
+    priorFindingVerdicts: rootCauseKeys.map((rootCauseKey) => ({
+      rootCauseKey,
+      verdict: "resolved",
+      observation: "수정된 계획이 최초 동결 Finding을 해소했다",
+    })),
   };
 }
 
@@ -205,10 +225,9 @@ function planningReviewSubjects(
       return {
         subjectId,
         verdict: "failed",
-        findingRootCauseKeys: ["clarify-second-task-completion"],
       };
     }
-    return { subjectId, verdict: "passed", findingRootCauseKeys: [] };
+    return { subjectId, verdict: "passed" };
   });
   return { subjects: reviewedSubjects, findings };
 }

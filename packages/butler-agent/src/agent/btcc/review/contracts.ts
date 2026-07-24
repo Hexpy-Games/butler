@@ -42,8 +42,6 @@ export type ReviewFinding = {
   recommendedDisposition: "required_now" | "backlog";
   origin:
     | { kind: "initial_review" }
-    | { kind: "prior_finding"; findingRef: ContentRef }
-    | { kind: "correction_regression"; findingRef: ContentRef }
     | { kind: "backlog_candidate" };
   targetRevisionRefs: ContentRef[];
 };
@@ -52,6 +50,12 @@ export type ReviewFindingSet = {
   ref: ContentRef;
   owner: "task_review";
   findingRefs: ContentRef[];
+};
+
+export type ReviewFindingVerdict = {
+  findingRef: ContentRef;
+  verdict: "resolved" | "unresolved" | "regressed";
+  observation: string;
 };
 
 export type TaskCorrectionScope = {
@@ -81,6 +85,7 @@ export type TaskReviewProduct = {
     criterionVerdicts: CriterionVerdict[];
     observations: ReviewObservation[];
     findings: ReviewFinding[];
+    findingVerdicts: ReviewFindingVerdict[];
     reviewedResultRefs: ContentRef[];
     reviewedTargetStateRevisionRefs: ContentRef[];
     reviewedArtifactRevisionRefs: ContentRef[];

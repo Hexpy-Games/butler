@@ -10,13 +10,13 @@ import {
 } from "../core/index.ts";
 import type {
   FeedbackPlanningFinding,
+  FeedbackPlanningFindingVerdict,
   FeedbackPlanningReview,
   FeedbackPlanProduct,
   FeedbackPlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { feedbackPlanReviewSubmissionSchema } from "./submission-schemas.ts";
-import { requiredFeedbackFindingRefs } from "./finding-decisions.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning_review",
@@ -36,10 +36,10 @@ const CONTRACT: PhaseContract = {
 };
 
 function correctionReviewCodec(prior?: FeedbackPlanningReview) {
-  const priorFindingRefs = requiredFeedbackFindingRefs(prior);
+  const priorFindings = requiredFeedbackFindings(prior);
   return withManagedDeferral<FeedbackPlanningReviewProduct>({
   submissionSchema: feedbackPlanReviewSubmissionSchema(
-    priorFindingRefs.map((ref) => ref.id),
+    priorFindings.map((finding) => finding.rootCauseKey),
   ),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Planning Review state");
@@ -53,9 +53,8 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
     if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
       throw new Error("Feedback Planning Review verdict is invalid");
     }
-    const reviewedFindings = normalizeFeedbackFindings(
-      requireFeedbackFindings(value.findings, prior),
-    );
+    const decoded = requireFeedbackFindings(value, priorFindings);
+    const reviewedFindings = normalizeFeedbackFindings(decoded.findings);
     const blocking = reviewedFindings
       .filter((finding) => finding.recommendedDisposition === "required_now");
     const findings = blocking.map((finding) => finding.statement);
@@ -70,6 +69,7 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
       originalGoalContractRef: goalRef,
       correctionKind: candidate.candidate.correctionKind,
       reviewedFindings,
+      findingVerdicts: decoded.verdicts,
     };
     if (value.verdict === "accepted") {
       const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
@@ -79,10 +79,11 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
         review: { ref: contentRef("feedback-planning-review", body), ...body },
       };
     }
-    const findingSetRef = contentRef("feedback-planning-finding-set", {
-      candidateRef: candidate.candidate.ref,
-      findingRefs: blocking.map((finding) => finding.ref),
-    });
+    const findingSetRef = prior?.findingSetRef ??
+      contentRef("feedback-planning-finding-set", {
+        candidateRef: candidate.candidate.ref,
+        findingRefs: blocking.map((finding) => finding.ref),
+      });
     const body = {
       ...reviewBase,
       verdict: "revision_required" as const,
@@ -110,14 +111,45 @@ export function reviewCorrection(command: PhaseInvocation) {
 
 function requireFeedbackFindings(
   value: unknown,
-  prior?: FeedbackPlanningReview,
-): FeedbackPlanningFinding[] {
-  if (!Array.isArray(value)) {
+  priorFindings: FeedbackPlanningFinding[],
+): {
+  findings: FeedbackPlanningFinding[];
+  verdicts: FeedbackPlanningFindingVerdict[];
+} {
+  const submission = requireRecord(value, "Feedback Planning Review submission");
+  if (!Array.isArray(submission.findings)) {
     throw new Error("Feedback Planning Review findings must be an array");
   }
-  const priorById = new Map((prior?.reviewedFindings ?? [])
-    .filter((finding) => finding.recommendedDisposition === "required_now")
-    .map((finding) => [finding.ref.id, finding]));
+  if (priorFindings.length > 0) {
+    const verdicts = requirePriorFindingVerdicts(
+      submission.priorFindingVerdicts,
+      priorFindings,
+    );
+    const backlog = decodeSubmittedFeedbackFindings(submission.findings);
+    if (backlog.some((finding) => finding.recommendedDisposition === "required_now")) {
+      throw new Error("Feedback Planning re-review cannot submit a new blocker");
+    }
+    const unresolved = verdicts
+      .filter((verdict) => verdict.verdict === "unresolved")
+      .map((verdict) => priorFindings.find((finding) =>
+        finding.ref.id === verdict.findingRef.id)!);
+    return {
+      findings: [
+        ...unresolved,
+        ...backlog,
+      ],
+      verdicts,
+    };
+  }
+  return {
+    findings: decodeSubmittedFeedbackFindings(submission.findings),
+    verdicts: [],
+  };
+}
+
+function decodeSubmittedFeedbackFindings(
+  value: unknown[],
+): FeedbackPlanningFinding[] {
   return value.map((item, index) => {
     const finding = requireRecord(item, `Feedback Planning finding[${index}]`);
     const rootCauseKey = requireString(
@@ -127,21 +159,6 @@ function requireFeedbackFindings(
     const statement = requireString(finding.statement, "Feedback Planning finding statement");
     const priority = requirePriority(finding.priority);
     if (finding.recommendedDisposition === "required_now") {
-      if (prior) {
-        const previous = priorById.get(
-          requireString(finding.priorFindingId, "prior Feedback Planning finding id"),
-        );
-        if (
-          finding.findingOrigin !== "prior_finding" ||
-          !previous ||
-          previous.rootCauseKey !== rootCauseKey ||
-          previous.statement !== statement ||
-          previous.priority !== priority
-        ) {
-          throw new Error("Feedback Planning re-review changed its frozen finding");
-        }
-        return previous;
-      }
       if (finding.findingOrigin !== "initial_review") {
         throw new Error("Initial Feedback Planning finding origin is invalid");
       }
@@ -169,6 +186,51 @@ function requireFeedbackFindings(
     };
     return { ref: contentRef("feedback-planning-finding", body), ...body };
   });
+}
+
+function requirePriorFindingVerdicts(
+  value: unknown,
+  priorFindings: FeedbackPlanningFinding[],
+): FeedbackPlanningFindingVerdict[] {
+  if (!Array.isArray(value) || value.length !== priorFindings.length) {
+    throw new Error("Feedback Planning re-review must judge every frozen finding");
+  }
+  const byRootCause = new Map(priorFindings.map((finding) => [
+    finding.rootCauseKey,
+    finding,
+  ]));
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    const verdict = requireRecord(item, `priorFindingVerdicts[${index}]`);
+    const rootCauseKey = requireString(
+      verdict.rootCauseKey,
+      "Feedback Planning prior root cause key",
+    );
+    const finding = byRootCause.get(rootCauseKey);
+    if (!finding || seen.has(rootCauseKey)) {
+      throw new Error("Feedback Planning prior finding verdicts must be exact and unique");
+    }
+    seen.add(rootCauseKey);
+    if (verdict.verdict !== "resolved" && verdict.verdict !== "unresolved") {
+      throw new Error("Feedback Planning prior finding verdict is invalid");
+    }
+    return {
+      findingRef: finding.ref,
+      verdict: verdict.verdict,
+      observation: requireString(
+        verdict.observation,
+        "Feedback Planning prior finding observation",
+      ),
+    };
+  });
+}
+
+function requiredFeedbackFindings(
+  prior: FeedbackPlanningReview | undefined,
+): FeedbackPlanningFinding[] {
+  return (prior?.reviewedFindings ?? []).filter(
+    (finding) => finding.recommendedDisposition === "required_now",
+  );
 }
 
 function normalizeFeedbackFindings(

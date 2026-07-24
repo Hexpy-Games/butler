@@ -79,6 +79,7 @@ describe("BTCC Session Work Ledger selection", () => {
       coverage: acceptedPlanningCoverage(),
       verdict: "accepted" as const,
       findings: [] as [],
+      findingVerdicts: [],
     };
     const review = { ref: contentRef("planning-review", reviewBody), ...reviewBody };
     const product = { kind: "planning_accepted" as const, candidate, review };

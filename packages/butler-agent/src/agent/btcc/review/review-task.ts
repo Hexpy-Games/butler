@@ -1,29 +1,27 @@
 import {
   contentRef,
   requireRecord,
-  requireString,
   runPhaseConversation,
-  stableJson,
-  type ContentRef,
   type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
 import type { ResultCandidateProduct } from "../execution/index.ts";
-import type {
-  CriterionVerdict,
-  ReviewFinding,
-  ReviewObservation,
-  TaskReviewProduct,
-} from "./contracts.ts";
+import type { ReviewFinding, TaskReviewProduct } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import {
-  decodeReviewFindings,
   normalizeRootFindings,
   requirePriorFindings,
   validateCorrectionFindingScope,
 } from "./review-findings.ts";
 import { taskReviewSubmissionSchema } from "./submission-schema.ts";
+import {
+  decodeCriterionVerdicts,
+  requireContentRef,
+  requireRecords,
+  sameContentRef,
+  uniqueRefs,
+} from "./criterion-verdicts.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "task_review",
@@ -46,7 +44,7 @@ function semanticReviewCodec(
   return {
   submissionSchema: taskReviewSubmissionSchema(
     "semantic",
-    priorFindings.map((finding) => finding.ref.id),
+    priorFindings.map((finding) => finding.rootCauseKey),
   ),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Review state");
@@ -61,6 +59,7 @@ function semanticReviewCodec(
     const decoded = decodeCriterionVerdicts({
       submitted: value.criterionVerdicts,
       submittedFindings: value.findings,
+      submittedPriorFindingVerdicts: value.priorFindingVerdicts,
       criteria,
       questions,
       result,
@@ -118,6 +117,7 @@ function semanticReviewCodec(
       criterionVerdicts: decoded.verdicts,
       observations: decoded.observations,
       findings: orderedFindings,
+      findingVerdicts: decoded.findingVerdicts,
       reviewedResultRefs: uniqueRefs(
         decoded.verdicts.flatMap((verdict) => verdict.reviewedResultRefs),
       ),
@@ -181,146 +181,4 @@ export function reviewTask(command: PhaseInvocation) {
       ? promotionCodec()
       : withManagedDeferral(semanticReviewCodec(priorFindings)),
   });
-}
-
-function decodeCriterionVerdicts(input: {
-  submitted: unknown;
-  submittedFindings: unknown;
-  criteria: Record<string, unknown>[];
-  questions: Record<string, unknown>[];
-  result: ResultCandidateProduct;
-  checkpointId: string;
-  runtimeBoundResultRefs: ContentRef[];
-  priorFindings: ReviewFinding[];
-}): {
-  verdicts: CriterionVerdict[];
-  observations: ReviewObservation[];
-  findings: ReviewFinding[];
-} {
-  if (!Array.isArray(input.submitted) || input.submitted.length !== input.criteria.length) {
-    throw new Error(
-      "Task Review must submit exactly one verdict for each stateInput.criteria entry",
-    );
-  }
-  const criteria = new Map(input.criteria.map((criterion) => {
-    const ref = requireContentRef(criterion.ref, "criterion.ref");
-    return [refKey(ref), { criterion, ref }];
-  }));
-  const reviewedCriteria = new Set<string>();
-  const observations: ReviewObservation[] = [];
-  const targetRevisionRefs = input.result.result.targetStateRevisions.map((item) => item.ref);
-  const findings = decodeReviewFindings({
-    submitted: input.submittedFindings,
-    criterionRefs: [...criteria.values()].map((item) => item.ref),
-    taskRef: input.result.result.taskRef,
-    attemptRef: input.result.result.attemptRef,
-    targetRevisionRefs,
-    priorFindings: input.priorFindings,
-  });
-  const findingByRootCause = new Map(
-    findings.map((finding) => [finding.rootCauseKey, finding]),
-  );
-  const verdicts = input.submitted.map((item, index) => {
-    const submitted = requireRecord(item, `criterionVerdicts[${index}]`);
-    const criterionRef = requireContentRef(
-      submitted.criterionRef,
-      `criterionVerdicts[${index}].criterionRef`,
-    );
-    const criterionKey = refKey(criterionRef);
-    if (!criteria.has(criterionKey)) {
-      throw new Error("Task Review submitted a criterion outside stateInput.criteria");
-    }
-    if (reviewedCriteria.has(criterionKey)) {
-      throw new Error("Task Review repeated a current Task criterion");
-    }
-    reviewedCriteria.add(criterionKey);
-    const questionRefs = input.questions
-      .filter((question) => stableJson(question.criterionRef) === stableJson(criterionRef))
-      .map((question) => requireContentRef(question.ref, "question.ref"));
-    if (submitted.verdict !== "satisfied" && submitted.verdict !== "not_satisfied") {
-      throw new Error("Task Review criterion verdict is invalid");
-    }
-    const criterionVerdict = submitted.verdict as "satisfied" | "not_satisfied";
-    const findingRootCauseKeys = requireFindingRootCauseKeys(
-      submitted.findingRootCauseKeys,
-      findingByRootCause,
-    );
-    const criterionFindings = findingRootCauseKeys
-      .map((rootCauseKey) => findingByRootCause.get(rootCauseKey)!);
-    const hasBlockingFinding = criterionFindings.some(
-      (finding) => finding.recommendedDisposition === "required_now",
-    );
-    if ((criterionVerdict === "not_satisfied") !== hasBlockingFinding) {
-      throw new Error("Task Review criterion verdict conflicts with required-now findings");
-    }
-    const observationBody = {
-      taskRef: input.result.result.taskRef,
-      attemptRef: input.result.result.attemptRef,
-      executionTargetRef: input.result.result.executionTargetRef,
-      targetRevisionRefs,
-      description: requireString(submitted.observation, "criterion observation"),
-      reviewedResultRefs: input.runtimeBoundResultRefs,
-      reviewCheckpointRef: input.checkpointId,
-    };
-    const observation = {
-      ref: contentRef("review-observation", observationBody), ...observationBody,
-    };
-    observations.push(observation);
-    return {
-      criterionRef,
-      verificationQuestionRefs: questionRefs,
-      currentTargetRevisionRefs: targetRevisionRefs,
-      reviewedResultRefs: input.runtimeBoundResultRefs,
-      observationRefs: [observation.ref],
-      verdict: criterionVerdict,
-      findingRefs: criterionFindings.map((finding) => finding.ref),
-    };
-  });
-  if (reviewedCriteria.size !== criteria.size) {
-    throw new Error("Task Review did not cover every accepted criterion");
-  }
-  return { verdicts, observations, findings };
-}
-
-function requireFindingRootCauseKeys(
-  value: unknown,
-  findings: Map<string, ReviewFinding>,
-): string[] {
-  if (!Array.isArray(value)) {
-    throw new Error("Task Review criterion findingRootCauseKeys must be an array");
-  }
-  const keys = value.map((item) =>
-    requireString(item, "Task Review criterion root cause key"));
-  if (
-    new Set(keys).size !== keys.length ||
-    keys.some((rootCauseKey) => !findings.has(rootCauseKey))
-  ) {
-    throw new Error("Task Review criterion root cause refs must be exact and unique");
-  }
-  return keys;
-}
-
-function requireRecords(value: unknown, label: string): Record<string, unknown>[] {
-  if (!Array.isArray(value) || value.length === 0) throw new Error(`${label} is empty`);
-  return value.map((item, index) => requireRecord(item, `${label}[${index}]`));
-}
-
-function requireContentRef(value: unknown, label: string): ContentRef {
-  const record = requireRecord(value, label);
-  return {
-    id: requireString(record.id, `${label}.id`),
-    sha256: requireString(record.sha256, `${label}.sha256`),
-  };
-}
-
-function refKey(ref: ContentRef): string {
-  return `${ref.id}\0${ref.sha256}`;
-}
-
-function uniqueRefs(refs: ContentRef[]): ContentRef[] {
-  return [...new Map(refs.map((ref) => [refKey(ref), ref])).values()];
-}
-
-function sameContentRef(left: ContentRef, right: ContentRef): boolean {
-  return left.id === right.id && left.sha256 === right.sha256;
 }

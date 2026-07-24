@@ -8,6 +8,7 @@ import type {
   PlanningCandidate,
   PlanningReviewCoverage,
   PlanningReviewDimension,
+  PlanningReviewFindingVerdict,
   PlanningReviewSubject,
   PlanningReviewSubjectCoverage,
   PlanningReviewSubjectFinding,
@@ -60,22 +61,13 @@ export function planningReviewSubjects(
 
 export function requireSubjectCoverage(
   value: unknown,
-  findingValue: unknown,
   expected: PlanningReviewSubject[],
-  priorFindings: PlanningReviewSubjectFinding[] = [],
+  findings: PlanningReviewSubjectFinding[],
 ): PlanningReviewSubjectCoverage[] {
   if (!Array.isArray(value) || value.length !== expected.length) {
     throw new Error("Planning Review must judge every candidate subject");
   }
   const expectedById = new Map(expected.map((item) => [item.subjectId, item]));
-  const findings = requireRootFindings(
-    findingValue,
-    [...expectedById.keys()],
-    priorFindings,
-  );
-  const findingByRootCause = new Map(
-    findings.map((finding) => [finding.rootCauseKey, finding]),
-  );
   const seen = new Set<string>();
   const coverage = value.map((item, index) => {
     const entry = requireRecord(item, `Planning Review subjects[${index}]`);
@@ -88,10 +80,8 @@ export function requireSubjectCoverage(
     if (entry.verdict !== "passed" && entry.verdict !== "failed") {
       throw new Error("Planning Review subject verdict is invalid");
     }
-    const subjectFindings = requireFindingRootCauseKeys(
-      entry.findingRootCauseKeys,
-      findingByRootCause,
-    ).map((rootCauseKey) => findingByRootCause.get(rootCauseKey)!);
+    const subjectFindings = findings.filter((finding) =>
+      finding.affectedSubjectIds.includes(subjectId));
     const hasBlockingFinding = subjectFindings.some(
       (finding) => finding.recommendedDisposition === "required_now",
     );
@@ -107,8 +97,32 @@ export function requireSubjectCoverage(
   if (seen.size !== expected.length) {
     throw new Error("Planning Review subjects must be exact, unique, and complete");
   }
-  requireReciprocalFindingReferences(coverage, findings);
   return coverage;
+}
+
+export function resolvePlanningReviewFindings(
+  findingValue: unknown,
+  priorVerdictValue: unknown,
+  expected: PlanningReviewSubject[],
+  priorFindings: PlanningReviewSubjectFinding[],
+): {
+  findings: PlanningReviewSubjectFinding[];
+  verdicts: PlanningReviewFindingVerdict[];
+} {
+  const expectedSubjectIds = expected.map((subject) => subject.subjectId);
+  const submitted = requireRootFindings(findingValue, expectedSubjectIds);
+  if (priorFindings.length === 0) {
+    return { findings: submitted, verdicts: [] };
+  }
+  if (submitted.some((finding) => finding.recommendedDisposition === "required_now")) {
+    throw new Error("Planning re-review cannot submit a new blocker");
+  }
+  const verdicts = requirePriorFindingVerdicts(priorVerdictValue, priorFindings);
+  const unresolved = verdicts
+    .filter((verdict) => verdict.verdict === "unresolved")
+    .map((verdict) => priorFindings.find((finding) =>
+      finding.ref.id === verdict.findingRef.id)!);
+  return { findings: [...unresolved, ...submitted], verdicts };
 }
 
 export function requireDimensionCoverage(
@@ -161,7 +175,6 @@ function subject(
 function requireRootFindings(
   value: unknown,
   expectedSubjectIds: string[],
-  priorFindings: PlanningReviewSubjectFinding[],
 ): PlanningReviewSubjectFinding[] {
   if (!Array.isArray(value)) {
     throw new Error("Planning Review findings must be an array");
@@ -195,34 +208,12 @@ function requireRootFindings(
       affectedSubjectIds: requireAffectedSubjectIds(
         finding.affectedSubjectIds,
         expectedSubjectIds,
-        priorFindings.length === 0
-          ? undefined
-          : priorFindings.find((item) => item.ref.id === finding.priorFindingId),
       ),
       dimension: finding.dimension as PlanningReviewDimension,
       message: requireString(finding.message, "Planning Review finding message"),
       priority,
       recommendedDisposition,
     };
-    if (recommendedDisposition === "required_now" && priorFindings.length > 0) {
-      const priorFindingId = requireString(
-        finding.priorFindingId,
-        "Planning Review prior finding id",
-      );
-      const prior = priorFindings.find((item) => item.ref.id === priorFindingId);
-      if (
-        finding.findingOrigin !== "prior_finding" ||
-        !prior ||
-        prior.rootCauseKey !== body.rootCauseKey ||
-        !sameStrings(prior.affectedSubjectIds, body.affectedSubjectIds) ||
-        prior.dimension !== body.dimension ||
-        prior.message !== body.message ||
-        prior.priority !== body.priority
-      ) {
-        throw new Error("Planning re-review changed its frozen finding");
-      }
-      return prior;
-    }
     if (recommendedDisposition === "required_now" && finding.findingOrigin !== "initial_review") {
       throw new Error("Initial Planning finding origin is invalid");
     }
@@ -247,7 +238,6 @@ function requireRootFindings(
 function requireAffectedSubjectIds(
   value: unknown,
   expectedSubjectIds: string[],
-  prior?: PlanningReviewSubjectFinding,
 ): string[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error("Planning Review finding must name affected subjects");
@@ -259,47 +249,42 @@ function requireAffectedSubjectIds(
   if (affected.some((subjectId) => !expected.has(subjectId))) {
     throw new Error("Planning Review finding names a subject outside the candidate");
   }
-  if (prior && !sameStrings(prior.affectedSubjectIds, affected)) {
-    throw new Error("Planning re-review changed affected subjects");
-  }
   return affected;
 }
 
-function requireFindingRootCauseKeys(
+function requirePriorFindingVerdicts(
   value: unknown,
-  findings: Map<string, PlanningReviewSubjectFinding>,
-): string[] {
-  if (!Array.isArray(value)) {
-    throw new Error("Planning Review subject findingRootCauseKeys must be an array");
+  priorFindings: PlanningReviewSubjectFinding[],
+): PlanningReviewFindingVerdict[] {
+  if (!Array.isArray(value) || value.length !== priorFindings.length) {
+    throw new Error("Planning re-review must judge every frozen finding");
   }
-  const keys = value.map((item) =>
-    requireString(item, "Planning Review subject root cause key"));
-  if (
-    new Set(keys).size !== keys.length ||
-    keys.some((rootCauseKey) => !findings.has(rootCauseKey))
-  ) {
-    throw new Error("Planning Review subject root cause refs must be exact and unique");
-  }
-  return keys;
-}
-
-function requireReciprocalFindingReferences(
-  subjects: PlanningReviewSubjectCoverage[],
-  findings: PlanningReviewSubjectFinding[],
-): void {
-  for (const finding of findings) {
-    const attached = subjects
-      .filter((subject) =>
-        subject.findings.some((item) => item.rootCauseKey === finding.rootCauseKey))
-      .map((subject) => subject.subjectId)
-      .sort();
-    if (!sameStrings(attached, finding.affectedSubjectIds)) {
-      throw new Error("Planning Review finding references are not reciprocal");
+  const byRootCause = new Map(priorFindings.map((finding) => [
+    finding.rootCauseKey,
+    finding,
+  ]));
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    const submitted = requireRecord(item, `priorFindingVerdicts[${index}]`);
+    const rootCauseKey = requireString(
+      submitted.rootCauseKey,
+      "Planning re-review root cause key",
+    );
+    const finding = byRootCause.get(rootCauseKey);
+    if (!finding || seen.has(rootCauseKey)) {
+      throw new Error("Planning re-review finding verdicts must be exact and unique");
     }
-  }
-}
-
-function sameStrings(left: string[], right: string[]): boolean {
-  return left.length === right.length &&
-    left.every((value, index) => value === right[index]);
+    seen.add(rootCauseKey);
+    if (submitted.verdict !== "resolved" && submitted.verdict !== "unresolved") {
+      throw new Error("Planning re-review finding verdict is invalid");
+    }
+    return {
+      findingRef: finding.ref,
+      verdict: submitted.verdict,
+      observation: requireString(
+        submitted.observation,
+        "Planning re-review observation",
+      ),
+    };
+  });
 }

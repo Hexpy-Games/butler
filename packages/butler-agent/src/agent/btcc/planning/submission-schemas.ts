@@ -154,7 +154,7 @@ function reviewCoverage(): SubmissionSchema {
 
 export function planReviewSubmissionSchema(
   subjectIds: string[],
-  priorFindingIds: string[] = [],
+  priorRootCauseKeys: string[] = [],
 ): SubmissionSchema {
   const findingFields = {
     rootCauseKey: textSchema(),
@@ -163,7 +163,7 @@ export function planReviewSubmissionSchema(
     message: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
   };
-  const rootFinding = priorFindingIds.length === 0
+  const rootFinding = priorRootCauseKeys.length === 0
     ? variantsSchema(
         objectSchema({
           ...findingFields,
@@ -176,25 +176,16 @@ export function planReviewSubmissionSchema(
           findingOrigin: literalSchema("backlog_candidate"),
         }),
       )
-    : variantsSchema(
-        objectSchema({
-          ...findingFields,
-          recommendedDisposition: literalSchema("required_now"),
-          findingOrigin: literalSchema("prior_finding"),
-          priorFindingId: enumSchema(...priorFindingIds),
-        }),
-        objectSchema({
-          ...findingFields,
-          recommendedDisposition: literalSchema("backlog"),
-          findingOrigin: literalSchema("backlog_candidate"),
-        }),
-      );
+    : objectSchema({
+        ...findingFields,
+        recommendedDisposition: literalSchema("backlog"),
+        findingOrigin: literalSchema("backlog_candidate"),
+      });
   const subjectCoverage = objectSchema({
     subjectId: enumSchema(...subjectIds),
     verdict: enumSchema("passed", "failed"),
-    findingRootCauseKeys: textList(),
   });
-  const reviewFields = {
+  const reviewFields: Record<string, SubmissionSchema> = {
     kind: literalSchema("planning_review"),
     coverage: reviewCoverage(),
     findings: arraySchema(rootFinding),
@@ -203,6 +194,16 @@ export function planReviewSubmissionSchema(
       maxItems: subjectIds.length,
     }),
   };
+  if (priorRootCauseKeys.length > 0) {
+    reviewFields.priorFindingVerdicts = arraySchema(objectSchema({
+      rootCauseKey: enumSchema(...priorRootCauseKeys),
+      verdict: enumSchema("resolved", "unresolved"),
+      observation: textSchema(),
+    }), {
+      minItems: priorRootCauseKeys.length,
+      maxItems: priorRootCauseKeys.length,
+    });
+  }
   return variantsSchema(
     objectSchema({ ...reviewFields, verdict: literalSchema("accepted") }),
     objectSchema({ ...reviewFields, verdict: literalSchema("revision_required") }),
@@ -280,13 +281,13 @@ const feedbackReviewIdentity = {
   kind: literalSchema("feedback_planning_review"),
 };
 
-export function feedbackPlanReviewSubmissionSchema(priorFindingIds: string[]) {
+export function feedbackPlanReviewSubmissionSchema(priorRootCauseKeys: string[]) {
   const baseFinding = {
     rootCauseKey: textSchema(),
     statement: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
   };
-  const finding = priorFindingIds.length === 0
+  const finding = priorRootCauseKeys.length === 0
     ? variantsSchema(
         objectSchema({
           ...baseFinding,
@@ -299,20 +300,24 @@ export function feedbackPlanReviewSubmissionSchema(priorFindingIds: string[]) {
           findingOrigin: literalSchema("backlog_candidate"),
         }),
       )
-    : variantsSchema(
-        objectSchema({
-          ...baseFinding,
-          recommendedDisposition: literalSchema("required_now"),
-          findingOrigin: literalSchema("prior_finding"),
-          priorFindingId: enumSchema(...priorFindingIds),
-        }),
-        objectSchema({
-          ...baseFinding,
-          recommendedDisposition: literalSchema("backlog"),
-          findingOrigin: literalSchema("backlog_candidate"),
-        }),
-      );
-  const fields = { findings: arraySchema(finding) };
+    : objectSchema({
+        ...baseFinding,
+        recommendedDisposition: literalSchema("backlog"),
+        findingOrigin: literalSchema("backlog_candidate"),
+      });
+  const fields: Record<string, SubmissionSchema> = {
+    findings: arraySchema(finding),
+  };
+  if (priorRootCauseKeys.length > 0) {
+    fields.priorFindingVerdicts = arraySchema(objectSchema({
+      rootCauseKey: enumSchema(...priorRootCauseKeys),
+      verdict: enumSchema("resolved", "unresolved"),
+      observation: textSchema(),
+    }), {
+      minItems: priorRootCauseKeys.length,
+      maxItems: priorRootCauseKeys.length,
+    });
+  }
   return variantsSchema(
     objectSchema({
       ...feedbackReviewIdentity,

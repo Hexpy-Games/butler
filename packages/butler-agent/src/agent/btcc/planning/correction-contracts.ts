@@ -71,7 +71,14 @@ export type FeedbackPlanningReview = {
   verdict: "accepted" | "revision_required";
   findings: string[];
   reviewedFindings: FeedbackPlanningFinding[];
+  findingVerdicts: FeedbackPlanningFindingVerdict[];
   findingSetRef?: ContentRef;
+};
+
+export type FeedbackPlanningFindingVerdict = {
+  findingRef: ContentRef;
+  verdict: "resolved" | "unresolved";
+  observation: string;
 };
 
 export type FeedbackPlanningFinding = {

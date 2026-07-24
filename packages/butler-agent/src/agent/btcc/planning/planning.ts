@@ -7,6 +7,7 @@ import {
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
+import { taskReviewAuthority } from "../review/index.ts";
 import { proposeCorrectionOrRevision } from "./plan-correction.ts";
 import { projectFeedbackPlanningContext } from "./feedback-planning-context.ts";
 import { proposePlan } from "./propose-plan.ts";
@@ -216,11 +217,20 @@ async function authorFeedbackPlan(command: {
   const program = requireManagedProgram(command.turn);
   const accepted = managed.goalAcceptance;
   if (!accepted) throw new Error("Feedback Planning is missing Goal authority");
-  const product = await proposeCorrectionOrRevision(withManagedDeferralState(
+  const currentResult = program.currentTask.currentResult;
+  if (!currentResult) throw new Error("Feedback Planning is missing the current ResultCandidate");
+  const invocation = withManagedDeferralState(
     command.phase,
     command.turn,
     projectFeedbackPlanningContext({ managed, program, accepted }),
-  ));
+  );
+  const product = await proposeCorrectionOrRevision({
+    ...invocation,
+    operationAuthority: taskReviewAuthority({
+      baseline: command.phase.operationAuthority,
+      result: currentResult.result,
+    }),
+  });
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "FeedbackPlanCandidateSubmitted", product };
@@ -242,11 +252,22 @@ async function reviewFeedbackPlan(command: {
   const program = requireManagedProgram(command.turn);
   const accepted = managed.goalAcceptance;
   if (!accepted) throw new Error("Feedback Planning Review is missing accepted Goal authority");
-  const product = await reviewCorrection(withManagedDeferralState(
+  const currentResult = program.currentTask.currentResult;
+  if (!currentResult) {
+    throw new Error("Feedback Planning Review is missing the current ResultCandidate");
+  }
+  const invocation = withManagedDeferralState(
     command.phase,
     command.turn,
     projectFeedbackReviewInput(managed, program, accepted),
-  ));
+  );
+  const product = await reviewCorrection({
+    ...invocation,
+    operationAuthority: taskReviewAuthority({
+      baseline: command.phase.operationAuthority,
+      result: currentResult.result,
+    }),
+  });
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.kind === "feedback_planning_accepted"
     ? { kind: "FeedbackPlanningReviewAccepted", product }
@@ -294,7 +315,7 @@ function projectFeedbackReviewInput(
     feedbackPlan,
     artifactLifecycle: program.artifactLifecycle,
     ...(managed.feedbackPlanningRevision
-      ? { previousFeedbackPlanningReview: managed.feedbackPlanningRevision }
+      ? { previousFeedbackPlanningReview: managed.feedbackPlanningRevision.review }
       : {}),
     goalContractRef: program.goalContractRef,
   };
