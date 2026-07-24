@@ -114,15 +114,15 @@ export function resolvePlanningReviewFindings(
   if (priorFindings.length === 0) {
     return { findings: submitted, verdicts: [] };
   }
-  if (submitted.some((finding) => finding.recommendedDisposition === "required_now")) {
-    throw new Error("Planning re-review cannot submit a new blocker");
+  if (submitted.length > 0) {
+    throw new Error("Planning re-review cannot submit a new finding");
   }
   const verdicts = requirePriorFindingVerdicts(priorVerdictValue, priorFindings);
   const unresolved = verdicts
     .filter((verdict) => verdict.verdict === "unresolved")
     .map((verdict) => priorFindings.find((finding) =>
       finding.ref.id === verdict.findingRef.id)!);
-  return { findings: [...unresolved, ...submitted], verdicts };
+  return { findings: unresolved, verdicts };
 }
 
 export function requireDimensionCoverage(
@@ -200,6 +200,7 @@ function requireRootFindings(
     const recommendedDisposition = finding.recommendedDisposition as
       | "required_now"
       | "backlog";
+    const scopeRelation = requirePlanningScope(finding.scopeRelation);
     const body = {
       rootCauseKey: requireString(
         finding.rootCauseKey,
@@ -212,7 +213,12 @@ function requireRootFindings(
       dimension: finding.dimension as PlanningReviewDimension,
       message: requireString(finding.message, "Planning Review finding message"),
       priority,
+      scopeRelation,
       recommendedDisposition,
+      dispositionRationale: requireString(
+        finding.dispositionRationale,
+        "Planning Review finding disposition rationale",
+      ),
     };
     if (recommendedDisposition === "required_now" && finding.findingOrigin !== "initial_review") {
       throw new Error("Initial Planning finding origin is invalid");
@@ -233,6 +239,19 @@ function requireRootFindings(
     throw new Error("Planning Review root cause keys must be unique");
   }
   return findings;
+}
+
+function requirePlanningScope(
+  value: unknown,
+): PlanningReviewSubjectFinding["scopeRelation"] {
+  if (
+    value !== "current_plan" &&
+    value !== "governing_contract" &&
+    value !== "outside_current_scope"
+  ) {
+    throw new Error("Planning Review finding scope relation is invalid");
+  }
+  return value;
 }
 
 function requireAffectedSubjectIds(

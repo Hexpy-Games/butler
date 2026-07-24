@@ -8,12 +8,13 @@ export type TaskImpact = {
   successorTaskRef?: ContentRef;
 };
 
-type CorrectionPlan = {
+export type CorrectionPlan = {
   ref: ContentRef;
   kind: "correction_plan";
   governingWorkPlanRef: ContentRef;
   targetTaskRefs: [ContentRef, ...ContentRef[]];
   correctionAction: string;
+  findingDecisions: PlanningFindingDecision[];
   artifactLifecycleRef: ContentRef;
 };
 
@@ -86,7 +87,12 @@ export type FeedbackPlanningFinding = {
   rootCauseKey: string;
   statement: string;
   priority: "P0" | "P1" | "P2";
+  scopeRelation:
+    | "current_correction"
+    | "governing_contract"
+    | "outside_current_scope";
   recommendedDisposition: "required_now" | "backlog";
+  dispositionRationale: string;
   origin:
     | { kind: "initial_review" }
     | { kind: "prior_finding"; findingRef: ContentRef }

@@ -26,6 +26,12 @@ const findingFields = {
   ),
   finding: textSchema(),
   priority: enumSchema("P0", "P1", "P2"),
+  scopeRelation: enumSchema(
+    "current_task",
+    "governing_contract",
+    "outside_current_scope",
+  ),
+  dispositionRationale: textSchema(),
 };
 
 function semanticRootFinding(priorRootCauseKeys: string[]) {
@@ -71,7 +77,10 @@ export function taskReviewSubmissionSchema(
   const fields = {
     kind: literalSchema("task_review"),
     criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),
-    findings: arraySchema(rootFinding),
+    findings: arraySchema(
+      rootFinding,
+      priorRootCauseKeys.length > 0 ? { maxItems: 0 } : {},
+    ),
   };
   return priorRootCauseKeys.length === 0
     ? objectSchema(fields)

@@ -11,6 +11,18 @@ import {
   submitPlanningReview,
 } from "./managed-harness-planning.ts";
 import { submitConsolidation, submitReport } from "./managed-harness-finalization.ts";
+import {
+  goalFindingDecisions,
+  goalPriorFindingVerdicts,
+  goalReviewSubjects,
+} from "./managed-harness-goal.ts";
+import {
+  asArray,
+  asRecord,
+  executionTargetKind,
+  firstContinuationCandidateId,
+  nestedValue,
+} from "./managed-harness-state.ts";
 
 type SelectedModel = BtccRuntimeDependencies["model"];
 type PhaseEnvelope = Parameters<SelectedModel["runRound"]>[0];
@@ -38,6 +50,8 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly reviseFirstGoal = false,
     private readonly failedReviewOrdinal = 1,
     private readonly revalidateAcceptedTask = false,
+    private readonly reviewFindingDecision:
+      "apply_now" | "dispute" | "split_to_backlog" = "apply_now",
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
@@ -111,6 +125,7 @@ export class ManagedHarnessModel implements SelectedModel {
             expert_perspective: nonApplicable("고객 경험 관점은 해석 수단이며 새 목표가 아니다"),
             intended_result_and_acceptance: adopted("실행 가능한 짧은 가이드가 완료 조건이다", ["intended_result"]),
           },
+          ...goalFindingDecisions(state),
         };
       }
       case "contract_review":
@@ -120,13 +135,25 @@ export class ManagedHarnessModel implements SelectedModel {
             kind: "goal_contract_review",
             strategy: "managed",
             verdict: "revision_required",
-            findings: ["조사 수행과 실행 지침이라는 원래 요청의 필수 결과가 누락되었다"],
+            subjects: goalReviewSubjects("goal:intended_result"),
+            findings: [{
+              rootCauseKey: "missing-required-result",
+              affectedSubjectIds: ["goal:intended_result"],
+              finding: "조사 수행과 실행 지침이라는 원래 요청의 필수 결과가 누락되었다",
+              priority: "P1",
+              scopeRelation: "current_goal",
+              recommendedDisposition: "required_now",
+              dispositionRationale: "원래 요청의 필수 결과를 직접 누락했다",
+            }],
           };
         }
         return {
           kind: "goal_contract_review",
           strategy: "managed",
           verdict: "accepted",
+          ...(this.goalReviewCount === 1
+            ? { subjects: goalReviewSubjects() }
+            : goalPriorFindingVerdicts(state)),
           ...(this.chooseContinuation
             ? { continuationCandidateId: firstContinuationCandidateId(state) }
             : {}),
@@ -228,7 +255,9 @@ export class ManagedHarnessModel implements SelectedModel {
                   : "authority_contradiction",
               finding: "수용 기준이 요구한 실행 지침을 구현하지 않았다",
               priority: "P1",
+              scopeRelation: "current_task",
               recommendedDisposition: "required_now",
+              dispositionRationale: "현재 Task의 명시적 수용 기준을 충족하지 못했다",
               findingOrigin: "initial_review",
             }],
           };
@@ -258,7 +287,7 @@ export class ManagedHarnessModel implements SelectedModel {
           kind: "feedback_intent",
           correctionKind: this.correctionKind,
           intendedCorrection: "누락된 실행 지침만 보완한다",
-          ...feedbackFindingDecisions(state),
+          ...feedbackFindingDecisions(state, this.reviewFindingDecision),
         };
       case "feedback_planning":
         return submitFeedbackPlan(
@@ -296,39 +325,10 @@ function deferredForUserAuthority(kind = "managed_deferral") {
   };
 }
 
-function firstContinuationCandidateId(state: Record<string, unknown>): string {
-  const candidate = asRecord(asArray(state.continuationCandidates)[0]);
-  const id = candidate.candidateId;
-  if (typeof id !== "string") throw new Error("Harness continuation candidate is missing");
-  return id;
-}
-
-function executionTargetKind(state: Record<string, unknown>): unknown {
-  return nestedValue(state, "executionTarget", "target", "kind");
-}
-
 function adopted(assessment: string, adoptedGoalFieldIds: string[]) {
   return { disposition: "adopted", assessment, adoptedGoalFieldIds };
 }
 
 function nonApplicable(assessment: string) {
   return { disposition: "non_applicable", assessment, adoptedGoalFieldIds: [] };
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return value as Record<string, unknown>;
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function nestedValue(
-  state: Record<string, unknown>,
-  ...path: string[]
-): unknown {
-  let value: unknown = state;
-  for (const key of path) value = asRecord(value)[key];
-  return value;
 }

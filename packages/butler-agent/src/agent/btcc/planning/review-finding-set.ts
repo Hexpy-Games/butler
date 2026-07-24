@@ -83,7 +83,9 @@ export function draftReviewFindings(
       dimension: "task_executability" as const,
       message: `${finding.code}: ${finding.message}`,
       priority: "P0" as const,
+      scopeRelation: "current_plan" as const,
       recommendedDisposition: "required_now" as const,
+      dispositionRationale: "The PlanningDraft cannot materialize a valid candidate.",
       origin: { kind: "initial_review" as const },
     };
     return {
@@ -126,6 +128,7 @@ function decodeDraftFinding(
   const recommendedDisposition = finding.recommendedDisposition as
     | "required_now"
     | "backlog";
+  const scopeRelation = requireScopeRelation(finding.scopeRelation);
   if (
     (required && finding.findingOrigin !== "initial_review") ||
     (!required && finding.findingOrigin !== "backlog_candidate")
@@ -141,7 +144,12 @@ function decodeDraftFinding(
     dimension,
     message: requireString(finding.message, "Planning draft Review finding message"),
     priority,
+    scopeRelation,
     recommendedDisposition,
+    dispositionRationale: requireString(
+      finding.dispositionRationale,
+      "Planning draft Review finding disposition rationale",
+    ),
     origin: required
       ? { kind: "initial_review" as const }
       : { kind: "backlog_candidate" as const },
@@ -152,4 +160,17 @@ function decodeDraftFinding(
     }),
     ...body,
   };
+}
+
+function requireScopeRelation(
+  value: unknown,
+): PlanningReviewSubjectFinding["scopeRelation"] {
+  if (
+    value !== "current_plan" &&
+    value !== "governing_contract" &&
+    value !== "outside_current_scope"
+  ) {
+    throw new Error("Planning draft Review finding scope relation is invalid");
+  }
+  return value;
 }

@@ -3,7 +3,6 @@ import {
   digest,
   requireLiteral,
   requireRecord,
-  requireStringArray,
   runPhaseConversation,
   type PhaseCodec,
   type PhaseContract,
@@ -12,14 +11,27 @@ import {
 import type {
   ConceptionLensId,
   GoalContractCandidateProduct,
+  GoalContractRevisionRequiredProduct,
   GoalContractReviewProduct,
+  GoalReviewFinding,
+  GoalReviewFindingVerdict,
 } from "./managed-contracts.ts";
 import type {
   ContinuationBinding,
   DeferredContinuationCandidate,
 } from "../continuation/index.ts";
-import { goalReviewSubmissionSchema } from "./submission-schemas.ts";
+import {
+  goalReviewSubmissionSchema,
+} from "./submission-schemas.ts";
 import { retainConceptionPlanningContext } from "./planning-context.ts";
+import {
+  decodeGoalSubjectCoverage,
+  decodeInitialGoalFindings,
+  decodePriorGoalFindingVerdicts,
+  preserveGoalReviewLineage,
+  requireGoalFindingCoverage,
+  unresolvedGoalFindings,
+} from "./goal-review-findings.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "contract_review",
@@ -36,17 +48,46 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec: PhaseCodec<GoalContractReviewProduct> = {
-  submissionSchema: goalReviewSubmissionSchema,
+function goalReviewCodec(
+  prior?: GoalContractRevisionRequiredProduct,
+): PhaseCodec<GoalContractReviewProduct> {
+  const frozenFindings = prior?.review.findings ?? [];
+  return {
+  submissionSchema: goalReviewSubmissionSchema(
+    frozenFindings.map((finding) => finding.rootCauseKey),
+  ),
   decode(submission, envelope) {
     const candidate = loadCandidate(envelope.context.stateInput);
+    preserveGoalReviewLineage(candidate, prior);
     const value = requireRecord(submission, "Goal Contract Review submission");
     requireLiteral(value.kind, "goal_contract_review", "Goal Contract Review kind");
     requireLiteral(value.strategy, "managed", "Goal Contract Review strategy");
+    const findingVerdicts = decodePriorGoalFindingVerdicts(
+      value.priorFindingVerdicts,
+      frozenFindings,
+    );
+    const initialSubjects = prior
+      ? []
+      : decodeGoalSubjectCoverage(value.subjects);
     if (value.verdict === "revision_required") {
-      return requireRevision(candidate, requireStringArray(value.findings, "Goal Review findings"));
+      const findings = prior
+        ? unresolvedGoalFindings(frozenFindings, findingVerdicts)
+        : decodeInitialGoalFindings(value.findings, candidate);
+      if (!prior) requireGoalFindingCoverage(initialSubjects, findings);
+      return requireRevision(
+        candidate,
+        findings,
+        findingVerdicts,
+        prior?.review.findingSet,
+      );
     }
     requireLiteral(value.verdict, "accepted", "Goal Contract Review verdict");
+    if (!prior && initialSubjects.some((subject) => subject.verdict !== "passed")) {
+      throw new Error("Accepted Goal Contract Review has failed subject coverage");
+    }
+    if (findingVerdicts.some((verdict) => verdict.verdict !== "resolved")) {
+      throw new Error("Accepted Goal Contract re-review has unresolved frozen findings");
+    }
     const reviewedLensIds: ConceptionLensId[] = [
       "requested_content", "related_memory", "connected_current_knowledge",
       "user_preferences_and_resolution_style", "expert_perspective",
@@ -76,6 +117,7 @@ const codec: PhaseCodec<GoalContractReviewProduct> = {
       continuationBindingRef: continuation.ref,
       verdict: "accepted" as const,
       findings: [] as [],
+      findingVerdicts,
     };
     const ledgerScope = projectRef
       ? { kind: "project" as const, projectRef }
@@ -117,24 +159,32 @@ const codec: PhaseCodec<GoalContractReviewProduct> = {
     };
   },
 };
+}
 
 function requireRevision(
   product: GoalContractCandidateProduct,
-  submittedFindings: string[],
+  findings: GoalReviewFinding[],
+  findingVerdicts: GoalReviewFindingVerdict[],
+  priorFindingSet?: GoalContractRevisionRequiredProduct["review"]["findingSet"],
 ): GoalContractReviewProduct {
-  const findings = [...new Set(submittedFindings.map((finding) => finding.trim()).filter(Boolean))];
   if (findings.length === 0) throw new Error("Goal Contract revision requires findings");
   const candidate = product.candidate;
-  const findingSetRef = contentRef("goal-finding-set", {
-    candidateRef: candidate.ref,
-    findings,
-  });
+  const findingSet = priorFindingSet ?? (() => {
+    const setBody = {
+      candidateRef: candidate.ref,
+      findingRefs: findings.map((finding) => finding.ref),
+    };
+    return { ref: contentRef("goal-finding-set", setBody), ...setBody };
+  })();
+  const findingSetRef = findingSet.ref;
   const body = {
     candidateRef: candidate.ref,
     originalMessageId: candidate.proposedContract.originalMessageId,
     originalMessageSha256: candidate.proposedContract.originalMessageSha256,
     verdict: "revision_required" as const,
-    findings: findings as [string, ...string[]],
+    findings: findings as [GoalReviewFinding, ...GoalReviewFinding[]],
+    findingVerdicts,
+    findingSet,
     findingSetRef,
   };
   return {
@@ -145,7 +195,13 @@ function requireRevision(
 }
 
 export function reviewGoalContract(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = requireRecord(command.context.stateInput, "Contract Review state input");
+  const prior = state.goalRevision as GoalContractRevisionRequiredProduct | undefined;
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: goalReviewCodec(prior),
+  });
 }
 
 function selectContinuation(

@@ -27,6 +27,11 @@ export async function execution(command: {
   if (!accepted) throw new Error("Execution is missing accepted Goal authority");
   const attempt = requireCurrentAttempt(program);
   const target = attempt.executionTarget.target;
+  const correctionContext = projectExecutionCorrectionContext(
+    command.turn,
+    program,
+    attempt.attemptRecord.correctionPlanRef,
+  );
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -44,6 +49,7 @@ export async function execution(command: {
     executionTargetRef: attempt.executionTargetRef,
     executionTarget: attempt.executionTarget,
     targetScopeRefs: executionScopeRefs(program, target),
+    ...(correctionContext ? { correctionContext } : {}),
   });
   const product = await performTask({
     ...invocation,
@@ -53,6 +59,57 @@ export async function execution(command: {
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "ResultCandidateSubmitted", product };
+}
+
+function projectExecutionCorrectionContext(
+  turn: TurnRecord,
+  program: ReturnType<typeof requireManagedProgram>,
+  correctionPlanRef: { id: string; sha256: string } | undefined,
+) {
+  if (!correctionPlanRef) return undefined;
+  const managed = requireManagedState(turn);
+  const intent = managed.feedbackIntent?.feedbackIntent;
+  const acceptance = managed.feedbackAcceptance;
+  const plan = acceptance?.candidate.correctionPlan;
+  if (
+    !intent ||
+    !acceptance ||
+    !plan ||
+    !sameRef(plan.ref, correctionPlanRef) ||
+    !sameRef(acceptance.candidate.feedbackIntentRef, intent.ref)
+  ) {
+    throw new Error("Task Execution correction context changed");
+  }
+  if (
+    plan.findingDecisions.length !== intent.findingDecisions.length ||
+    plan.findingDecisions.some((decision, index) => {
+      const accepted = intent.findingDecisions[index]!;
+      return !sameRef(decision.findingRef, accepted.findingRef) ||
+        decision.decision !== accepted.decision ||
+        decision.rationale !== accepted.rationale;
+    })
+  ) {
+    throw new Error("Task Execution CorrectionPlan changed its finding decisions");
+  }
+  if (
+    plan.findingDecisions.length > 0 &&
+    !plan.findingDecisions.some((decision) => decision.decision === "apply_now")
+  ) {
+    throw new Error("Task Execution cannot run a disposition-only correction");
+  }
+  return {
+    correctionPlan: plan,
+    findingDecisions: intent.findingDecisions,
+    correctionPlanningReview: acceptance.review,
+    currentTaskRef: program.currentTask.task.ref,
+  };
+}
+
+function sameRef(
+  left: { id: string; sha256: string },
+  right: { id: string; sha256: string },
+): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function criteriaForCurrentTask(program: ReturnType<typeof requireManagedProgram>) {

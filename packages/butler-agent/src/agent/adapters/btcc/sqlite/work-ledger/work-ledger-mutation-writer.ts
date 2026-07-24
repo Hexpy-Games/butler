@@ -12,6 +12,7 @@ import {
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";
+import { SqliteImplementationRepairWriter } from "./implementation-repair-writer.ts";
 import { SqlitePromotionFrontierWriter } from "./promotion-frontier-writer.ts";
 import { SqliteProgramAuthorityWriter } from "./program-authority-writer.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger-program-reader.ts";
@@ -20,6 +21,7 @@ import { validateFrontierMutation } from "./validate-frontier-mutation.ts";
 export class SqliteWorkLedgerMutationWriter {
   private readonly journal: WorkLedgerCommitJournal;
   private readonly graphRevisions: SqliteReviewedGraphInstaller;
+  private readonly implementationRepairs: SqliteImplementationRepairWriter;
   private readonly promotionFrontier: SqlitePromotionFrontierWriter;
   private readonly programAuthority: SqliteProgramAuthorityWriter;
   private readonly programs: SqliteWorkLedgerProgramReader;
@@ -27,6 +29,7 @@ export class SqliteWorkLedgerMutationWriter {
   constructor(private readonly db: Database) {
     this.journal = new WorkLedgerCommitJournal(db);
     this.graphRevisions = new SqliteReviewedGraphInstaller(db);
+    this.implementationRepairs = new SqliteImplementationRepairWriter(db);
     this.promotionFrontier = new SqlitePromotionFrontierWriter(db);
     this.programAuthority = new SqliteProgramAuthorityWriter(db);
     this.programs = new SqliteWorkLedgerProgramReader(db);
@@ -171,6 +174,7 @@ export class SqliteWorkLedgerMutationWriter {
     if (updated.changes !== 1) throw new Error("Work Ledger Review lost its submitted Task");
     const task = this.taskOwner(product.review.taskRef.id);
     if (status === "accepted") {
+      this.implementationRepairs.closeDisposition(task.programId);
       this.db.query(`
         UPDATE btcc_work_items SET status = 'closed'
         WHERE work_id = ? AND NOT EXISTS (
@@ -182,55 +186,12 @@ export class SqliteWorkLedgerMutationWriter {
     this.bumpManifest(task.programId);
   }
 
-  private acceptRepair(
-    product: Extract<WorkLedgerCommit["mutation"], {
-      kind: "accept_feedback_plan";
-    }>["product"],
-  ): void {
-    const targets = product.candidate.correctionPlan.targetTaskRefs;
-    const programIds = new Set(targets.map((target) => this.reopenRepairTarget(target.id)));
-    if (programIds.size !== 1) throw new Error("Implementation repair crossed Program authority");
-    const programId = [...programIds][0]!;
-    this.db.query(`
-      UPDATE btcc_programs SET pending_correction_plan_ref = ?, frontier = 'implementation_open'
-      WHERE program_id = ?
-    `).run(product.candidate.correctionPlan.ref.id, programId);
-    this.bumpManifest(programId);
-  }
-
-  private reopenRepairTarget(taskId: string): string {
-    const task = this.db.query<{
-      program_id: string;
-      work_id: string;
-      current_attempt_id: string | null;
-      status: string;
-    }, [string]>(`
-      SELECT program_id, work_id, current_attempt_id, status FROM btcc_tasks
-      WHERE task_id = ? AND status IN ('review_failed', 'accepted') AND is_active = 1
-    `).get(taskId);
-    if (!task) throw new Error("Implementation repair target is not reviewable");
-    if (task.status === "review_failed") {
-      const closed = this.db.query(`
-        UPDATE btcc_attempts SET status = 'closed_unaccepted'
-        WHERE attempt_id = ? AND status = 'review_failed'
-      `).run(task.current_attempt_id);
-      if (closed.changes !== 1) throw new Error("Implementation repair lost its failed Attempt");
-    }
-    this.db.query(`
-      UPDATE btcc_tasks SET status = 'planned', current_attempt_id = NULL,
-        result_ref = NULL, review_ref = NULL WHERE task_id = ?
-    `).run(taskId);
-    this.db.query("UPDATE btcc_work_items SET status = 'planned' WHERE work_id = ?")
-      .run(task.work_id);
-    return task.program_id;
-  }
-
   private acceptFeedbackPlan(
     product: Extract<WorkLedgerCommit["mutation"], { kind: "accept_feedback_plan" }>["product"],
     authority: ManagedProgramAuthority,
   ): void {
     if (product.candidate.correctionKind === "implementation_repair") {
-      this.acceptRepair(product);
+      this.implementationRepairs.accept(product);
       return;
     }
     this.graphRevisions.install(product, authority);

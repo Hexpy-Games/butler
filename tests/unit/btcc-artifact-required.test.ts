@@ -320,12 +320,33 @@ function reviewInvocation(
     reviewAuthorityRef: ref("authority"),
     reviewSourceRef: result.result.workspaceRevisionRef,
     ...(overrides.priorCorrectionFindings
-      ? { priorCorrectionFindings: overrides.priorCorrectionFindings }
+      ? {
+          priorCorrectionFindings: overrides.priorCorrectionFindings,
+          correctionContext: correctionContextFor(
+            overrides.priorCorrectionFindings,
+          ),
+        }
       : {}),
   }, normalizeTaskReviewRootFindings(
     overrides.criterionVerdicts,
     overrides.priorFindingVerdicts,
   ));
+}
+
+function correctionContextFor(findings: unknown[]) {
+  const frozen = findings as Array<{ ref: ReturnType<typeof ref> }>;
+  const findingDecisions = frozen.map((finding) => ({
+    findingRef: finding.ref,
+    decision: "apply_now",
+    rationale: "Apply the frozen correction.",
+  }));
+  return {
+    frozenFindings: findings,
+    findingDecisions,
+    correctionPlan: {
+      findingDecisions,
+    },
+  };
 }
 
 function normalizeTaskReviewRootFindings(
@@ -352,7 +373,10 @@ function normalizeTaskReviewRootFindings(
       findingCategory: verdict.findingCategory,
       finding: verdict.finding,
       priority: verdict.priority,
+      scopeRelation: verdict.scopeRelation ?? "current_task",
       recommendedDisposition: verdict.recommendedDisposition,
+      dispositionRationale: verdict.dispositionRationale ??
+        "The submitted finding is evaluated against the current Task criterion.",
       findingOrigin: verdict.findingOrigin,
       ...("priorFindingId" in verdict
         ? { priorFindingId: verdict.priorFindingId }
@@ -367,7 +391,9 @@ function normalizeTaskReviewRootFindings(
       findingCategory: _findingCategory,
       finding: _finding,
       priority: _priority,
+      scopeRelation: _scopeRelation,
       recommendedDisposition: _recommendedDisposition,
+      dispositionRationale: _dispositionRationale,
       findingOrigin: _findingOrigin,
       priorFindingId: _priorFindingId,
       ...criterion
@@ -565,7 +591,9 @@ function priorFinding(id: string) {
     category: "implementation_nonconformance" as const,
     statement: "The implementation omits the required behavior.",
     priority: "P1" as const,
+    scopeRelation: "current_task" as const,
     recommendedDisposition: "required_now" as const,
+    dispositionRationale: "The accepted current Task criterion is materially unmet.",
     origin: { kind: "initial_review" as const },
     targetRevisionRefs: [],
   };

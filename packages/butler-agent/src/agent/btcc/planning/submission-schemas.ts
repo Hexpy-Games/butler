@@ -161,6 +161,12 @@ export function planReviewSubmissionSchema(
     dimension: enumSchema(...REVIEW_DIMENSIONS),
     message: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
+    scopeRelation: enumSchema(
+      "current_plan",
+      "governing_contract",
+      "outside_current_scope",
+    ),
+    dispositionRationale: textSchema(),
   };
   const rootFinding = priorRootCauseKeys.length === 0
     ? variantsSchema(
@@ -187,7 +193,10 @@ export function planReviewSubmissionSchema(
   const reviewFields: Record<string, SubmissionSchema> = {
     kind: literalSchema("planning_review"),
     coverage: reviewCoverage(),
-    findings: arraySchema(rootFinding),
+    findings: arraySchema(
+      rootFinding,
+      priorRootCauseKeys.length > 0 ? { maxItems: 0 } : {},
+    ),
     subjects: arraySchema(subjectCoverage, {
       minItems: subjectIds.length,
       maxItems: subjectIds.length,
@@ -285,6 +294,12 @@ export function feedbackPlanReviewSubmissionSchema(priorRootCauseKeys: string[])
     rootCauseKey: textSchema(),
     statement: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
+    scopeRelation: enumSchema(
+      "current_correction",
+      "governing_contract",
+      "outside_current_scope",
+    ),
+    dispositionRationale: textSchema(),
   };
   const finding = priorRootCauseKeys.length === 0
     ? variantsSchema(
@@ -305,7 +320,10 @@ export function feedbackPlanReviewSubmissionSchema(priorRootCauseKeys: string[])
         findingOrigin: literalSchema("backlog_candidate"),
       });
   const fields: Record<string, SubmissionSchema> = {
-    findings: arraySchema(finding),
+    findings: arraySchema(
+      finding,
+      priorRootCauseKeys.length > 0 ? { maxItems: 0 } : {},
+    ),
   };
   if (priorRootCauseKeys.length > 0) {
     fields.priorFindingVerdicts = arraySchema(objectSchema({

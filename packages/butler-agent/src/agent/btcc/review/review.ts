@@ -9,6 +9,7 @@ import {
 import { reviewTask } from "./review-task.ts";
 import { projectDirectSuccessorHandoffs } from "./project-successor-handoffs.ts";
 import { taskReviewAuthority } from "./source-authority.ts";
+import type { TaskReviewProduct } from "./contracts.ts";
 
 type ReviewEvent = Extract<TurnEvent, {
   kind: "TaskReviewPassed" | "TaskReviewFailed" | "ManagedDeferralAccepted";
@@ -33,6 +34,10 @@ export async function review(command: {
   ) {
     throw new Error("Review result is not bound to the exact current Task revision");
   }
+  const priorFindings = priorCorrectionFindings(program);
+  const correctionContext = priorFindings.length > 0
+    ? projectCorrectionContext(command.turn, program, priorFindings)
+    : undefined;
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -44,7 +49,8 @@ export async function review(command: {
     reviewAuthorityRef: program.authorityRef,
     criteria: resolveCriteria(program),
     verificationQuestions: resolveVerificationQuestions(program),
-    priorCorrectionFindings: priorCorrectionFindings(program),
+    priorCorrectionFindings: priorFindings,
+    ...(correctionContext ? { correctionContext } : {}),
     ...(result.result.kind === "workspace_artifact"
       ? { reviewSourceRef: result.result.workspaceRevisionRef }
       : {}),
@@ -65,6 +71,13 @@ export async function review(command: {
 function priorCorrectionFindings(
   program: ReturnType<typeof requireManagedProgram>,
 ) {
+  if (
+    program.correctionPlanRef &&
+    program.currentTask.status === "result_submitted" &&
+    program.currentTask.currentReview?.review.verdict === "not_passed"
+  ) {
+    return requiredFindings(program.currentTask.currentReview);
+  }
   const attempt = program.currentTask.attempts.at(-1);
   if (!attempt?.attemptRecord.correctionPlanRef || !attempt.attemptRecord.previousAttemptRef) {
     return [];
@@ -72,8 +85,66 @@ function priorCorrectionFindings(
   const previous = program.currentTask.attempts.find((candidate) =>
     candidate.attemptRecord.ref.id === attempt.attemptRecord.previousAttemptRef?.id);
   if (!previous?.review || previous.review.review.verdict !== "not_passed") return [];
-  return previous.review.review.findings
+  return requiredFindings(previous.review);
+}
+
+function projectCorrectionContext(
+  turn: TurnRecord,
+  program: ReturnType<typeof requireManagedProgram>,
+  frozenFindings: ReturnType<typeof priorCorrectionFindings>,
+) {
+  const managed = requireManagedState(turn);
+  const intent = managed.feedbackIntent?.feedbackIntent;
+  const acceptance = managed.feedbackAcceptance;
+  const correctionPlan = acceptance?.candidate.correctionPlan;
+  if (!intent || !acceptance || !correctionPlan || acceptance.review.verdict !== "accepted") {
+    throw new Error("Task re-review is missing its accepted correction context");
+  }
+  if (
+    !program.correctionPlanRef ||
+    !sameRef(program.correctionPlanRef, correctionPlan.ref) ||
+    !sameRef(intent.ref, acceptance.candidate.feedbackIntentRef)
+  ) {
+    throw new Error("Task re-review correction context changed");
+  }
+  const expected = new Set(frozenFindings.map((finding) => finding.ref.id));
+  const decisions = intent.findingDecisions;
+  if (
+    decisions.length !== frozenFindings.length ||
+    new Set(decisions.map((decision) => decision.findingRef.id)).size !== decisions.length ||
+    decisions.some((decision) => !expected.has(decision.findingRef.id))
+  ) {
+    throw new Error("Task re-review finding decisions changed");
+  }
+  if (
+    correctionPlan.findingDecisions.length !== decisions.length ||
+    correctionPlan.findingDecisions.some((decision, index) => {
+      const accepted = decisions[index]!;
+      return !sameRef(decision.findingRef, accepted.findingRef) ||
+        decision.decision !== accepted.decision ||
+        decision.rationale !== accepted.rationale;
+    })
+  ) {
+    throw new Error("Task re-review CorrectionPlan changed its finding decisions");
+  }
+  return {
+    frozenFindings,
+    findingDecisions: decisions,
+    correctionPlan,
+    correctionPlanningReview: acceptance.review,
+  };
+}
+
+function requiredFindings(product: TaskReviewProduct) {
+  return product.review.findings
     .filter((finding) => finding.recommendedDisposition === "required_now");
+}
+
+function sameRef(
+  left: { id: string; sha256: string },
+  right: { id: string; sha256: string },
+): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function resolveCriteria(program: ReturnType<typeof requireManagedProgram>) {

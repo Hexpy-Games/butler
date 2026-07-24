@@ -18,6 +18,8 @@ describe("BTCC managed executable ingress", () => {
   test.each([
     ["managed-pass", 11, 2],
     ["managed-review-repair", 16, 3],
+    ["managed-review-dispute", 15, 2],
+    ["managed-review-backlog", 15, 2],
     ["managed-planning-revision", 13, 2],
     ["managed-goal-revision", 13, 2],
     ["managed-feedback-planning-revision", 18, 3],
@@ -94,13 +96,20 @@ describe("BTCC managed executable ingress", () => {
         ]
       : ["feedback_conception", "feedback_planning", "feedback_planning_review"];
     const needsRepair = scenario === "managed-review-repair" ||
+      scenario === "managed-review-dispute" ||
+      scenario === "managed-review-backlog" ||
       scenario === "managed-feedback-planning-revision" ||
       scenario === "managed-governing-revision" ||
       scenario === "managed-authority-revision";
     expect(result.phases).toEqual([
       ...firstTask,
       ...(needsRepair ? repairCycle : []),
-      ...(needsRepair ? ["task_execution", "task_review"] : []),
+      ...(needsRepair
+        ? scenario === "managed-review-dispute" ||
+            scenario === "managed-review-backlog"
+          ? ["task_review"]
+          : ["task_execution", "task_review"]
+        : []),
       "task_execution", "task_review", "consolidation", "reporting",
     ]);
     if (needsRepair) {
@@ -197,7 +206,13 @@ describe("BTCC managed executable ingress", () => {
       expect(persistedManaged.programId).toBeTruthy();
       expect(program?.frontier).toBe("closed");
       expect(program?.scope_kind).toBe("session");
-      const expectedManifestRevision = needsRepair ? 13 : 9;
+      const expectedManifestRevision =
+        scenario === "managed-review-dispute" ||
+          scenario === "managed-review-backlog"
+        ? 11
+        : needsRepair
+          ? 13
+          : 9;
       expect(program?.manifest_revision).toBe(expectedManifestRevision);
       expect(ledgerMutations?.count).toBe(expectedManifestRevision);
       expect(promotedClaims?.count).toBe(expectedManifestRevision);
@@ -288,11 +303,20 @@ describe("BTCC managed executable ingress", () => {
           previousCandidateRef: goalCandidates[0]?.ref,
           reviewRef: expect.any(Object),
           findingSetRef: expect.any(Object),
+          findingDecisions: [{
+            findingRef: expect.any(Object),
+            decision: "apply_now",
+            rationale: expect.any(String),
+          }],
         });
         expect(phaseInputs.get("conception_deliberation")).toMatchObject({
           goalRevision: {
             kind: "goal_contract_revision_required",
-            review: { findings: [expect.stringContaining("원래 요청")] },
+            review: {
+              findings: [{
+                statement: expect.stringContaining("원래 요청"),
+              }],
+            },
           },
         });
       }
@@ -315,7 +339,9 @@ describe("BTCC managed executable ingress", () => {
         `).get();
         expect(inactive?.count).toBeGreaterThan(0);
       }
-      if (needsRepair && scenario !== "managed-governing-revision" &&
+      if (needsRepair && scenario !== "managed-review-dispute" &&
+          scenario !== "managed-review-backlog" &&
+          scenario !== "managed-governing-revision" &&
           scenario !== "managed-authority-revision") {
         expect(attemptRows[1]?.previous_attempt_id).toBe(attemptRows[0]?.attempt_id);
         expect(attemptRows[1]?.correction_plan_ref).toBeTruthy();
@@ -323,6 +349,14 @@ describe("BTCC managed executable ingress", () => {
           SELECT COUNT(*) AS count FROM btcc_tasks WHERE is_active = 0
         `).get();
         expect(inactive?.count).toBe(0);
+      }
+      if (
+        scenario === "managed-review-dispute" ||
+        scenario === "managed-review-backlog"
+      ) {
+        expect(attemptRows.every((attempt) =>
+          attempt.previous_attempt_id === null &&
+          attempt.correction_plan_ref === null)).toBe(true);
       }
       if (scenario === "managed-governing-revision" || scenario === "managed-authority-revision") {
         expect(attemptRows[1]?.previous_attempt_id).toBeNull();

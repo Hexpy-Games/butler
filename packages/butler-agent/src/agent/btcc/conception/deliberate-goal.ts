@@ -14,6 +14,8 @@ import type {
   ConceptionLensId,
   GoalContractCandidateProduct,
   GoalContractRevisionRequiredProduct,
+  GoalReviewFinding,
+  GoalReviewFindingDecision,
 } from "./managed-contracts.ts";
 import { requireGoverningSpecApplications } from "./governing-spec-applications.ts";
 import { goalCandidateSubmissionSchema } from "./submission-schemas.ts";
@@ -44,8 +46,14 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec: PhaseCodec<GoalContractCandidateProduct> = {
-  submissionSchema: goalCandidateSubmissionSchema,
+function goalCodec(
+  priorRevision?: GoalContractRevisionRequiredProduct,
+): PhaseCodec<GoalContractCandidateProduct> {
+  const priorFindings = priorRevision?.review.findings ?? [];
+  return {
+  submissionSchema: goalCandidateSubmissionSchema(
+    priorFindings.map((finding) => finding.rootCauseKey),
+  ),
   decode(submission, envelope) {
     const value = requireRecord(submission, "Conception submission");
     requireLiteral(value.kind, "goal_contract_candidate", "Conception kind");
@@ -113,6 +121,7 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
     const revisionOrigin = bindGoalRevision(
       envelope.context.stateInput,
       proposedContract.ref,
+      decodeGoalFindingDecisions(value.findingDecisions, priorFindings),
     );
     const candidateBody = {
       turnId: envelope.binding.turnId,
@@ -130,10 +139,12 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
     };
   },
 };
+}
 
 export function bindGoalRevision(
   input: unknown,
   proposedContractRef: GoalContractCandidateProduct["candidate"]["proposedContract"]["ref"],
+  findingDecisions: GoalReviewFindingDecision[] = [],
 ): GoalContractCandidateProduct["candidate"]["revisionOrigin"] {
   if (input === undefined) return { kind: "initial" };
   const state = requireRecord(input, "Conception revision state");
@@ -145,15 +156,73 @@ export function bindGoalRevision(
   if (!sameRef(revision.review.candidateRef, revision.candidate.ref)) {
     throw new Error("Goal review is not bound to its exact previous candidate");
   }
-  if (sameRef(proposedContractRef, revision.candidate.proposedContract.ref)) {
+  const requiresContractChange = findingDecisions.some(
+    (decision) => decision.decision === "apply_now",
+  );
+  if (
+    requiresContractChange &&
+    sameRef(proposedContractRef, revision.candidate.proposedContract.ref)
+  ) {
     throw new Error("Goal Contract revision did not change the proposed contract");
+  }
+  const expected = new Set(revision.review.findings.map((finding) => finding.ref.id));
+  if (
+    findingDecisions.length !== revision.review.findings.length ||
+    new Set(findingDecisions.map((decision) => decision.findingRef.id)).size !==
+      findingDecisions.length ||
+    findingDecisions.some((decision) => !expected.has(decision.findingRef.id))
+  ) {
+    throw new Error("Goal Contract revision must decide every frozen finding");
   }
   return {
     kind: "review_revision",
     previousCandidateRef: revision.candidate.ref,
     reviewRef: revision.review.ref,
     findingSetRef: revision.review.findingSetRef,
+    findingDecisions,
   };
+}
+
+function decodeGoalFindingDecisions(
+  value: unknown,
+  findings: GoalReviewFinding[],
+): GoalReviewFindingDecision[] {
+  if (findings.length === 0) return [];
+  if (!Array.isArray(value) || value.length !== findings.length) {
+    throw new Error("Goal Contract revision must decide every frozen finding");
+  }
+  const byRootCause = new Map(findings.map((finding) => [
+    finding.rootCauseKey,
+    finding,
+  ]));
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    const submitted = requireRecord(item, `Goal findingDecision[${index}]`);
+    const rootCauseKey = requireString(
+      submitted.rootCauseKey,
+      `Goal findingDecision[${index}].rootCauseKey`,
+    );
+    const finding = byRootCause.get(rootCauseKey);
+    if (!finding || seen.has(rootCauseKey)) {
+      throw new Error("Goal Contract finding decisions must be exact and unique");
+    }
+    seen.add(rootCauseKey);
+    if (
+      submitted.decision !== "apply_now" &&
+      submitted.decision !== "dispute" &&
+      submitted.decision !== "split_to_backlog"
+    ) {
+      throw new Error("Goal Contract finding decision is invalid");
+    }
+    return {
+      findingRef: finding.ref,
+      decision: submitted.decision,
+      rationale: requireString(
+        submitted.rationale,
+        `Goal findingDecision[${index}].rationale`,
+      ),
+    };
+  });
 }
 
 function priorPlanningContext(input: unknown) {
@@ -198,5 +267,12 @@ function requireArtifactPersistence(value: unknown): "not_required" | "required"
 }
 
 export function deliberateGoal(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = command.context.stateInput as {
+    goalRevision?: GoalContractRevisionRequiredProduct;
+  } | undefined;
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: goalCodec(state?.goalRevision),
+  });
 }

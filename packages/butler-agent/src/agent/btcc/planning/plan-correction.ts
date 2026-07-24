@@ -85,6 +85,7 @@ function feedbackPlanningCodec(
           affectedTaskRefs,
           lifecycleRef,
           value.correctionAction,
+          intent.feedbackIntent.findingDecisions,
         );
         return feedbackProduct({
           correctionKind: "implementation_repair",
@@ -140,6 +141,7 @@ function feedbackPlanningCodec(
         revisedTargets as [ContentRef, ...ContentRef[]],
         revisedPlan.artifactLifecycle.ref,
         value.correctionAction,
+        intent.feedbackIntent.findingDecisions,
       );
       const common = {
         revisionOrigin,
@@ -215,12 +217,14 @@ function correctionPlanFor(
   targetTaskRefs: [ContentRef, ...ContentRef[]],
   artifactLifecycleRef: ContentRef,
   action: unknown,
+  findingDecisions: PlanningFindingDecision[],
 ) {
   const body = {
     kind: "correction_plan" as const,
     governingWorkPlanRef,
     targetTaskRefs,
     correctionAction: requireString(action, "correctionAction"),
+    findingDecisions,
     artifactLifecycleRef,
   };
   return { ref: contentRef("correction-plan", body), ...body };
