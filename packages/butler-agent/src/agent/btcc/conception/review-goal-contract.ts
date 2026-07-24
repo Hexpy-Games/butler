@@ -25,7 +25,7 @@ const CONTRACT: PhaseContract = {
   objective: "independently_review_the_exact_goal_candidate",
   duties: [
     "preserve_selected_model", "state_input_only", "review_goal_contract_exactly",
-    "review_artifact_persistence",
+    "review_continuation_coherence", "review_artifact_persistence",
   ],
   prohibitions: [
     "no_successor_choice", "no_runtime_semantic_judgment", "no_model_substitution",
