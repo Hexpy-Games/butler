@@ -150,6 +150,19 @@ describe("production BTCC capabilities", () => {
       "Preserve Sandy's voice.",
       "",
     ].join("\n"));
+    mkdirSync(join(projectRoot, "references"), { recursive: true });
+    writeFileSync(join(projectRoot, "references", "trust-shadow.md"), [
+      "---",
+      'schema: "project-ledger.reference.v1"',
+      'kind: "reference"',
+      'id: "SPEC-SANDY-TRUST"',
+      'title: "Normalized trust record"',
+      'status: "active"',
+      "---",
+      "",
+      "Internal normalized duplicate.",
+      "",
+    ].join("\n"));
     const runtime = createProductionToolRuntime({
       butlerHome: root,
       butlerData: root,
@@ -190,7 +203,9 @@ describe("production BTCC capabilities", () => {
       available: true,
       records: [{ id: "SPEC-SANDY-TRUST", kind: "spec" }],
     });
+    expect((result as { records: unknown[] }).records).toHaveLength(1);
     expect(JSON.stringify(result)).toContain("Preserve Sandy's voice");
+    expect(JSON.stringify(result)).not.toContain("Internal normalized duplicate");
 
     const searched = await execute({
       name: "project_ledger_read",
@@ -209,6 +224,25 @@ describe("production BTCC capabilities", () => {
       expect.objectContaining({ id: "SPEC-SANDY-TRUST", kind: "spec" }),
     );
     expect(JSON.stringify(searched)).not.toContain("Preserve Sandy's voice");
+    expect((searched as { records: Array<{ kind: string }> }).records)
+      .not.toContainEqual(expect.objectContaining({ kind: "reference" }));
+    const normalized = await execute({
+      name: "project_ledger_read",
+      args: {
+        kinds: ["reference"],
+        record_ids: ["SPEC-SANDY-TRUST"],
+        include_body: true,
+      },
+      rawArguments: JSON.stringify({
+        kinds: ["reference"],
+        record_ids: ["SPEC-SANDY-TRUST"],
+        include_body: true,
+      }),
+    });
+    expect(normalized).toMatchObject({
+      records: [{ id: "SPEC-SANDY-TRUST", kind: "reference" }],
+    });
+    expect(JSON.stringify(normalized)).toContain("Internal normalized duplicate");
     await expect(execute({
       name: "project_ledger_read",
       args: { query: "Sandy voice", include_body: true },
