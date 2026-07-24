@@ -5,6 +5,7 @@ import {
   Command,
   FileText,
   ListFilter,
+  ListChecks,
   InspectorShell,
 } from "@/butler-ds";
 import { useButlerStore, selectEffectiveRightOpen } from "@/app/store.ts";
@@ -14,6 +15,7 @@ import { ContextPanel } from "./ContextPanel.tsx";
 import { ArtifactsPanel } from "./ArtifactsPanel.tsx";
 import { AutomationTargetsPanel } from "./AutomationTargetsPanel.tsx";
 import { WorkersPanel } from "./WorkersPanel.tsx";
+import { TurnActivityLogPanel } from "./TurnActivityLogPanel.tsx";
 
 interface InspectorProps {
   id?: string;
@@ -31,6 +33,7 @@ export function Inspector({ id }: InspectorProps = {}) {
 
   const tabs: Array<[string, string, ReactElement]> = [
     ["summary", appCopy.inspector.tabs.summary, <ListFilter size={16} />],
+    ["activity", appCopy.inspector.tabs.activity, <ListChecks size={16} />],
     ["context", appCopy.inspector.tabs.context, <Command size={16} />],
     ["artifacts", appCopy.inspector.tabs.artifacts, <FileText size={16} />],
     ["automations", appCopy.inspector.tabs.automations, <Clock3 size={16} />],
@@ -50,6 +53,11 @@ export function Inspector({ id }: InspectorProps = {}) {
           status={status}
           summary={summary}
           onExportTranscript={exportTranscript}
+        />
+      )}
+      {activeTab === "activity" && (
+        <TurnActivityLogPanel
+          rows={summary?.latest_progress?.safe_progress_rows ?? []}
         />
       )}
       {activeTab === "context" && (

@@ -3,8 +3,3 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
-.activity {
-  min-width: 0;
-  padding-left: var(--space-6);
-}

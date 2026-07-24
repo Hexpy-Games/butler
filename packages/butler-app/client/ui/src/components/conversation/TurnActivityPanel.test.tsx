@@ -86,7 +86,7 @@ test("turn activity panel keeps the latest phase activity visible after Opening"
   expect(html).not.toContain("요청의 의도와 목표를 구상하고 있습니다");
 });
 
-test("turn activity panel shows model-authored phase intent as an open history", () => {
+test("turn activity panel shows only the latest model-authored phase intent", () => {
   const html = renderPanel([
     {
       id: "conception-activity",
@@ -112,11 +112,9 @@ test("turn activity panel shows model-authored phase intent as an open history",
     },
   ]);
 
-  expect(html).toContain("작업 진행 로그");
-  expect(html).toContain("2개 기록");
-  expect(html).toContain("사용자의 원래 목표를 보존하기 위해 필요합니다.");
+  expect(html).toContain("현재 · 계획 · 전체 2개 기록");
+  expect(html).not.toContain("사용자의 원래 목표를 보존하기 위해 필요합니다.");
   expect(html).toContain("다음: 계획 후보를 검토합니다.");
-  expect(html).toContain("aria-expanded=\"true\"");
 });
 
 test("turn activity panel shows a newer phase placeholder beside prior detail", () => {
@@ -130,7 +128,7 @@ test("turn activity panel shows a newer phase placeholder beside prior detail", 
     },
   ]);
 
-  expect(html).toContain("작업 진행 로그");
+  expect(html).toContain("현재 · 구상 · 전체 1개 기록");
   expect(html).toContain("구상 결과를 독립적으로 검토하고 있습니다");
 });
 
@@ -145,7 +143,7 @@ test("turn activity panel hides an older placeholder after phase detail arrives"
     phaseActivityRow(),
   ]);
 
-  expect(html).toContain("작업 진행 로그");
+  expect(html).toContain("현재 · 구상 · 전체 1개 기록");
   expect(html).not.toContain("요청의 의도와 목표를 구상하고 있습니다");
 });
 

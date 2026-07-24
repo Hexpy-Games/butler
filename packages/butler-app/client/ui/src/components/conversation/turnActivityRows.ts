@@ -6,6 +6,7 @@ export type PhaseActivity = {
   summary: string;
   rationale: string;
   nextStep: string;
+  createdAt?: string;
 };
 
 export function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
@@ -27,6 +28,7 @@ export function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
       summary: row.work_decision_summary,
       rationale: row.work_decision_rationale,
       nextStep: row.work_decision_next_step,
+      createdAt: row.created_at,
     }];
   });
 }

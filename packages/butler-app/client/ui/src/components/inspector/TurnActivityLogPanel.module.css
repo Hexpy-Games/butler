@@ -1,0 +1,5 @@
+.log [data-slot="activity-feed-title"] {
+  overflow: visible;
+  text-overflow: initial;
+  white-space: normal;
+}

@@ -179,6 +179,7 @@ export interface AppCopy {
   inspector: {
     tabs: {
       summary: string;
+      activity: string;
       context: string;
       artifacts: string;
       automations: string;
@@ -822,6 +823,7 @@ const koKrCopy: AppCopy = {
   inspector: {
     tabs: {
       summary: "요약",
+      activity: "활동",
       context: "맥락",
       artifacts: "아티팩트",
       automations: "자동화",
@@ -1542,6 +1544,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
   inspector: {
     tabs: {
       summary: "Summary",
+      activity: "Activity",
       context: "Context",
       artifacts: "Artifacts",
       automations: "Automations",
