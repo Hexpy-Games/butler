@@ -69,7 +69,10 @@ export type {
 } from "./operation-result/index.ts";
 export type { SpooledOperationOutput } from "./core/index.ts";
 export type { RetrospectiveScheduler } from "./delivery/index.ts";
-export type { OperationalRecoveryReadiness } from "./recovery/index.ts";
+export type {
+  CommittedSuccessorReadiness,
+  OperationalRecoveryReadiness,
+} from "./recovery/index.ts";
 export type {
   BtccRuntimeDependencies,
   BtccTurnCommand,

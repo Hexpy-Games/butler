@@ -46,6 +46,10 @@ export interface OperationalRecoveryReadiness {
   }): Promise<void>;
 }
 
+export interface CommittedSuccessorReadiness {
+  waitForStorageReadiness(signal: AbortSignal): Promise<void>;
+}
+
 export interface OperationalRecoveryBoundary {
   awaitReentry(
     interruption: OperationalInterruptionError,

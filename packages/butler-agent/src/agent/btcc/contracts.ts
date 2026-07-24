@@ -15,6 +15,7 @@ import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
 import type { DeferredContinuationCandidate } from "./continuation/index.ts";
 import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type {
+  CommittedSuccessorReadiness,
   OperationalActivation,
   OperationalRecoveryBoundary,
 } from "./recovery/index.ts";
@@ -127,5 +128,6 @@ export type BtccRuntimeDependencies = {
   messages: CanonicalMessageStore;
   retrospective: RetrospectiveScheduler;
   operationalRecovery?: OperationalRecoveryBoundary;
+  committedSuccessorReadiness?: CommittedSuccessorReadiness;
   progress?: BtccTurnProgressObserver;
 };

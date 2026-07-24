@@ -14,6 +14,7 @@ import {
   resolveOperationalInterruption,
   waitForOperationalReentry,
 } from "./operational-checkpoint.ts";
+import { activateCommittedSuccessor } from "./activate-committed-successor.ts";
 import { runCurrentPhase } from "./run-current-phase.ts";
 import { decideTransition } from "./state-machine/index.ts";
 import { publishOpeningDecision, publishTurnProgress } from "./turn-progress.ts";
@@ -37,6 +38,7 @@ export async function advanceTurn(
       semanticState: turn.semanticState,
     });
     let claim: StateExecutionClaim | undefined;
+    let boundaryCommitted = false;
 
     try {
       claim = await dependencies.turns.acquireStateExecutionClaim(turn);
@@ -69,13 +71,19 @@ export async function advanceTurn(
         claim,
         transition: decision.transition,
       });
+      boundaryCommitted = true;
       await resolveOperationalInterruption(
         dependencies,
         currentCheckpointBinding(claim),
       );
       permit.assertActive();
 
-      const successor = await dependencies.turns.activateCommittedSuccessor(turn.turnId);
+      const successor = await activateCommittedSuccessor({
+        turnId: turn.turnId,
+        expectedState: decision.transition.successor,
+        dependencies,
+        permit,
+      });
       if (decision.transition.kind === "accept_opening_continuation") {
         await publishOpeningDecision(
           dependencies.progress,
@@ -87,6 +95,11 @@ export async function advanceTurn(
       await publishTurnProgress(dependencies.progress, successor);
       return successor;
     } catch (error) {
+      if (boundaryCommitted) {
+        const stopped = await findTerminalTurn(dependencies, turn.turnId);
+        if (stopped) return stopped;
+        throw error;
+      }
       const reloaded = await recoverAdvanceFailure({
         error,
         turn,

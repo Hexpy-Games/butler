@@ -44,6 +44,7 @@ export function createBtccComposition(input: {
     messages: stores.messages,
     retrospective: stores.retrospective,
     operationalRecovery: stores.operationalRecovery,
+    committedSuccessorReadiness: stores.committedSuccessorReadiness,
   });
 }
 
@@ -103,6 +104,7 @@ export function createProductionBtccComposition(input: {
     messages: stores.messages,
     retrospective: stores.retrospective,
     operationalRecovery: stores.operationalRecovery,
+    committedSuccessorReadiness: stores.committedSuccessorReadiness,
     progress,
   });
   const ready = recoverOperationalOwnership(runtime, stores);

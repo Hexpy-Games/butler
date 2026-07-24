@@ -16,6 +16,7 @@ export type {
   OperationalCheckpointAnchor,
 } from "./operational-interruption.ts";
 export type {
+  CommittedSuccessorReadiness,
   ExecutionPermit,
   OperationalRecoveryBoundary,
   OperationalRecoveryReceipt,
