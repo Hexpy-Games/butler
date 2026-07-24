@@ -34,3 +34,32 @@ test("relays phase activity only to observers of the matching turn", async () =>
     nextStep: "계획 후보를 작성합니다.",
   }]);
 });
+
+test("relays model-round liveness only to observers of the matching turn", async () => {
+  const hub = new BtccTurnProgressHub();
+  const observed: unknown[] = [];
+  hub.observe("turn-observed", {
+    async stateChanged() {},
+    modelRoundWaiting(update) {
+      observed.push(update);
+    },
+  });
+  hub.observe("turn-other", {
+    async stateChanged() {},
+    modelRoundWaiting() {
+      throw new Error("unrelated turn observer must not receive liveness");
+    },
+  });
+
+  await hub.modelRoundWaiting({
+    turnId: "turn-observed",
+    semanticState: "planning",
+    checkpointId: "checkpoint-planning",
+  });
+
+  expect(observed).toEqual([{
+    turnId: "turn-observed",
+    semanticState: "planning",
+    checkpointId: "checkpoint-planning",
+  }]);
+});
