@@ -103,7 +103,7 @@ async function runFunctionToolRound(
       carrierCount += 1;
       const definition = functions.get(call.name);
       if (carrierCount === 1 && definition) {
-        carrier = { kind: definition.carrierKind, ...call.args };
+        carrier = bindFunctionArguments(definition, call.args);
       }
       return Promise.resolve({ accepted: true });
     },
@@ -124,6 +124,21 @@ async function runFunctionToolRound(
       reasoningEffort: input.modelSelection.reasoningEffort,
       controlsHash: input.modelSelection.controlsHash,
     },
+  };
+}
+
+export function bindFunctionArguments(
+  definition: ProviderCarrierFunction,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (definition.argumentBinding === "carrier_fields") {
+    return { kind: definition.carrierKind, ...args };
+  }
+  const { publicActivity, ...submission } = args;
+  return {
+    kind: "phase_submission",
+    submission,
+    publicActivity,
   };
 }
 

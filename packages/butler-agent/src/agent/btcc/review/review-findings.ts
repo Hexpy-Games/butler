@@ -1,4 +1,5 @@
 import {
+  contentRef,
   requireRecord,
   requireString,
   type ContentRef,
@@ -8,6 +9,61 @@ import type {
   ReviewFinding,
   ReviewFindingCategory,
 } from "./contracts.ts";
+
+export function decodeReviewFindings(input: {
+  submitted: unknown;
+  criterionRefs: ContentRef[];
+  taskRef: ContentRef;
+  attemptRef: ContentRef;
+  targetRevisionRefs: ContentRef[];
+  priorFindings: ReviewFinding[];
+}): ReviewFinding[] {
+  if (!Array.isArray(input.submitted)) {
+    throw new Error("Task Review findings must be an array");
+  }
+  const findings = input.submitted.map((item, index) => {
+    const submitted = requireRecord(item, `findings[${index}]`);
+    const category = requireFindingCategory(submitted.findingCategory);
+    const priority = requireFindingPriority(submitted.priority);
+    const recommendedDisposition = submitted.recommendedDisposition === "backlog"
+      ? "backlog" as const
+      : "required_now" as const;
+    const origin = requireFindingOrigin(submitted, input.priorFindings);
+    const findingBody = {
+      rootCauseKey: requireString(submitted.rootCauseKey, "finding root cause key"),
+      affectedCriterionRefs: requireAffectedCriterionRefs(
+        submitted.affectedCriterionRefs,
+        input.criterionRefs,
+      ),
+      taskRef: input.taskRef,
+      attemptRef: input.attemptRef,
+      category,
+      statement: requireString(submitted.finding, "finding statement"),
+      priority,
+      recommendedDisposition,
+      origin,
+      targetRevisionRefs: input.targetRevisionRefs,
+    };
+    const prior = origin.kind === "prior_finding" ||
+        origin.kind === "correction_regression"
+      ? input.priorFindings.find((finding) => finding.ref.id === origin.findingRef.id)
+      : undefined;
+    if (prior && (
+      prior.rootCauseKey !== findingBody.rootCauseKey ||
+      !sameRefList(prior.affectedCriterionRefs, findingBody.affectedCriterionRefs)
+    )) {
+      throw new Error("Task re-review changed its frozen root finding");
+    }
+    return prior ?? {
+      ref: contentRef("finding", findingBody),
+      ...findingBody,
+    };
+  });
+  if (new Set(findings.map((finding) => finding.rootCauseKey)).size !== findings.length) {
+    throw new Error("Task Review root cause keys must be unique");
+  }
+  return findings;
+}
 
 export function requireFindingPriority(value: unknown): "P0" | "P1" | "P2" {
   if (value !== "P0" && value !== "P1" && value !== "P2") {
@@ -106,7 +162,7 @@ export function normalizeRootFindings(
       .map((verdict) => verdict.criterionRef)
       .sort((left, right) => refKey(left).localeCompare(refKey(right)));
     if (!sameRefs(attached, finding.affectedCriterionRefs)) {
-      throw new Error("Task Review root finding attachments are incomplete");
+      throw new Error("Task Review finding references are not reciprocal");
     }
   }
   const priority = { P0: 0, P1: 1, P2: 2 };
@@ -117,7 +173,7 @@ export function normalizeRootFindings(
 
 export function requireAffectedCriterionRefs(
   value: unknown,
-  currentCriterionRef: ContentRef,
+  allowedCriterionRefs: ContentRef[],
 ): ContentRef[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error("Task Review finding must name affected criteria");
@@ -130,8 +186,9 @@ export function requireAffectedCriterionRefs(
     };
     return [refKey(ref), ref];
   })).values()].sort((left, right) => refKey(left).localeCompare(refKey(right)));
-  if (!refs.some((ref) => sameRef(ref, currentCriterionRef))) {
-    throw new Error("Task Review finding is not attached to its current criterion");
+  if (refs.some((ref) =>
+    !allowedCriterionRefs.some((allowed) => sameRef(ref, allowed)))) {
+    throw new Error("Task Review finding names a criterion outside the current Task");
   }
   return refs;
 }

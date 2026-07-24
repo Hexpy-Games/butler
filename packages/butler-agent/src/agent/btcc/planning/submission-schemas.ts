@@ -163,7 +163,7 @@ export function planReviewSubmissionSchema(
     message: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
   };
-  const subjectFinding = priorFindingIds.length === 0
+  const rootFinding = priorFindingIds.length === 0
     ? variantsSchema(
         objectSchema({
           ...findingFields,
@@ -189,21 +189,15 @@ export function planReviewSubmissionSchema(
           findingOrigin: literalSchema("backlog_candidate"),
         }),
       );
-  const subjectCoverage = variantsSchema(
-    objectSchema({
-      subjectId: enumSchema(...subjectIds),
-      verdict: literalSchema("passed"),
-      findings: arraySchema(subjectFinding),
-    }),
-    objectSchema({
-      subjectId: enumSchema(...subjectIds),
-      verdict: literalSchema("failed"),
-      findings: arraySchema(subjectFinding, { minItems: 1 }),
-    }),
-  );
+  const subjectCoverage = objectSchema({
+    subjectId: enumSchema(...subjectIds),
+    verdict: enumSchema("passed", "failed"),
+    findingRootCauseKeys: textList(),
+  });
   const reviewFields = {
     kind: literalSchema("planning_review"),
     coverage: reviewCoverage(),
+    findings: arraySchema(rootFinding),
     subjects: arraySchema(subjectCoverage, {
       minItems: subjectIds.length,
       maxItems: subjectIds.length,

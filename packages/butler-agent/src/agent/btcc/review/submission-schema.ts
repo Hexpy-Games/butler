@@ -11,11 +11,8 @@ import {
 const commonCriterionFields = {
   criterionRef: contentRefSchema(),
   observation: textSchema(),
+  findingRootCauseKeys: arraySchema(textSchema()),
 };
-const satisfiedCriterionVerdict = objectSchema({
-  ...commonCriterionFields,
-  verdict: literalSchema("satisfied"),
-});
 const findingFields = {
   rootCauseKey: textSchema(),
   affectedCriterionRefs: arraySchema(contentRefSchema(), { minItems: 1 }),
@@ -32,10 +29,8 @@ const findingFields = {
   priority: enumSchema("P0", "P1", "P2"),
 };
 
-function semanticCriterionVerdict(priorFindingIds: string[]) {
+function semanticRootFinding(priorFindingIds: string[]) {
   const requiredFinding = {
-    ...commonCriterionFields,
-    verdict: literalSchema("not_satisfied"),
     ...findingFields,
     recommendedDisposition: literalSchema("required_now"),
   };
@@ -54,10 +49,7 @@ function semanticCriterionVerdict(priorFindingIds: string[]) {
         }),
       ];
   return variantsSchema(
-    satisfiedCriterionVerdict,
     objectSchema({
-      ...commonCriterionFields,
-      verdict: literalSchema("satisfied"),
       ...findingFields,
       recommendedDisposition: literalSchema("backlog"),
       findingOrigin: literalSchema("backlog_candidate"),
@@ -73,10 +65,24 @@ export function taskReviewSubmissionSchema(
   priorFindingIds: string[] = [],
 ) {
   const criterionVerdict = mode === "promotion_identity"
-    ? satisfiedCriterionVerdict
-    : semanticCriterionVerdict(priorFindingIds);
+    ? objectSchema({
+        ...commonCriterionFields,
+        verdict: literalSchema("satisfied"),
+      })
+    : objectSchema({
+        ...commonCriterionFields,
+        verdict: enumSchema("satisfied", "not_satisfied"),
+      });
+  const rootFinding = mode === "promotion_identity"
+    ? objectSchema({
+        ...findingFields,
+        recommendedDisposition: literalSchema("backlog"),
+        findingOrigin: literalSchema("backlog_candidate"),
+      })
+    : semanticRootFinding(priorFindingIds);
   return objectSchema({
     kind: literalSchema("task_review"),
     criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),
+    findings: arraySchema(rootFinding),
   });
 }

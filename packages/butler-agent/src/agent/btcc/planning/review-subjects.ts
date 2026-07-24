@@ -60,6 +60,7 @@ export function planningReviewSubjects(
 
 export function requireSubjectCoverage(
   value: unknown,
+  findingValue: unknown,
   expected: PlanningReviewSubject[],
   priorFindings: PlanningReviewSubjectFinding[] = [],
 ): PlanningReviewSubjectCoverage[] {
@@ -67,6 +68,14 @@ export function requireSubjectCoverage(
     throw new Error("Planning Review must judge every candidate subject");
   }
   const expectedById = new Map(expected.map((item) => [item.subjectId, item]));
+  const findings = requireRootFindings(
+    findingValue,
+    [...expectedById.keys()],
+    priorFindings,
+  );
+  const findingByRootCause = new Map(
+    findings.map((finding) => [finding.rootCauseKey, finding]),
+  );
   const seen = new Set<string>();
   const coverage = value.map((item, index) => {
     const entry = requireRecord(item, `Planning Review subjects[${index}]`);
@@ -79,12 +88,11 @@ export function requireSubjectCoverage(
     if (entry.verdict !== "passed" && entry.verdict !== "failed") {
       throw new Error("Planning Review subject verdict is invalid");
     }
-    const findings = requireSubjectFindings(
-      entry.findings,
-      expectedSubject,
-      priorFindings,
-    );
-    const hasBlockingFinding = findings.some(
+    const subjectFindings = requireFindingRootCauseKeys(
+      entry.findingRootCauseKeys,
+      findingByRootCause,
+    ).map((rootCauseKey) => findingByRootCause.get(rootCauseKey)!);
+    const hasBlockingFinding = subjectFindings.some(
       (finding) => finding.recommendedDisposition === "required_now",
     );
     if ((entry.verdict === "failed") !== hasBlockingFinding) {
@@ -93,13 +101,13 @@ export function requireSubjectCoverage(
     return {
       ...expectedSubject,
       verdict: entry.verdict,
-      findings,
+      findings: subjectFindings,
     } satisfies PlanningReviewSubjectCoverage;
   });
   if (seen.size !== expected.length) {
     throw new Error("Planning Review subjects must be exact, unique, and complete");
   }
-  requireCompleteRootFindingAttachments(coverage);
+  requireReciprocalFindingReferences(coverage, findings);
   return coverage;
 }
 
@@ -150,18 +158,18 @@ function subject(
   return { subjectId, kind, subjectRef: ref };
 }
 
-function requireSubjectFindings(
+function requireRootFindings(
   value: unknown,
-  subject: PlanningReviewSubject,
+  expectedSubjectIds: string[],
   priorFindings: PlanningReviewSubjectFinding[],
 ): PlanningReviewSubjectFinding[] {
   if (!Array.isArray(value)) {
-    throw new Error(`Planning Review ${subject.subjectId} findings must be an array`);
+    throw new Error("Planning Review findings must be an array");
   }
-  return value.map((item, index) => {
+  const findings = value.map((item, index) => {
     const finding = requireRecord(
       item,
-      `Planning Review ${subject.subjectId} finding[${index}]`,
+      `Planning Review finding[${index}]`,
     );
     if (!PLANNING_REVIEW_DIMENSIONS.includes(finding.dimension as PlanningReviewDimension)) {
       throw new Error("Planning Review subject finding dimension is invalid");
@@ -182,17 +190,17 @@ function requireSubjectFindings(
     const body = {
       rootCauseKey: requireString(
         finding.rootCauseKey,
-        "Planning Review subject finding root cause key",
+        "Planning Review finding root cause key",
       ),
       affectedSubjectIds: requireAffectedSubjectIds(
         finding.affectedSubjectIds,
-        subject.subjectId,
+        expectedSubjectIds,
         priorFindings.length === 0
           ? undefined
           : priorFindings.find((item) => item.ref.id === finding.priorFindingId),
       ),
       dimension: finding.dimension as PlanningReviewDimension,
-      message: requireString(finding.message, "Planning Review subject finding message"),
+      message: requireString(finding.message, "Planning Review finding message"),
       priority,
       recommendedDisposition,
     };
@@ -230,11 +238,15 @@ function requireSubjectFindings(
     });
     return { ref, ...body, origin };
   });
+  if (new Set(findings.map((finding) => finding.rootCauseKey)).size !== findings.length) {
+    throw new Error("Planning Review root cause keys must be unique");
+  }
+  return findings;
 }
 
 function requireAffectedSubjectIds(
   value: unknown,
-  currentSubjectId: string,
+  expectedSubjectIds: string[],
   prior?: PlanningReviewSubjectFinding,
 ): string[] {
   if (!Array.isArray(value) || value.length === 0) {
@@ -243,8 +255,9 @@ function requireAffectedSubjectIds(
   const affected = [...new Set(value.map((item) =>
     requireString(item, "Planning Review affected subject id"),
   ))].sort();
-  if (!affected.includes(currentSubjectId)) {
-    throw new Error("Planning Review finding is not attached to its current subject");
+  const expected = new Set(expectedSubjectIds);
+  if (affected.some((subjectId) => !expected.has(subjectId))) {
+    throw new Error("Planning Review finding names a subject outside the candidate");
   }
   if (prior && !sameStrings(prior.affectedSubjectIds, affected)) {
     throw new Error("Planning re-review changed affected subjects");
@@ -252,29 +265,36 @@ function requireAffectedSubjectIds(
   return affected;
 }
 
-function requireCompleteRootFindingAttachments(
-  subjects: PlanningReviewSubjectCoverage[],
-): void {
-  const attachments = new Map<string, Set<string>>();
-  const findings = new Map<string, PlanningReviewSubjectFinding>();
-  const rootCauseRefs = new Map<string, string>();
-  for (const subject of subjects) {
-    for (const finding of subject.findings) {
-      const priorRef = rootCauseRefs.get(finding.rootCauseKey);
-      if (priorRef && priorRef !== finding.ref.id) {
-        throw new Error("Planning Review redefined one root cause");
-      }
-      rootCauseRefs.set(finding.rootCauseKey, finding.ref.id);
-      findings.set(finding.ref.id, finding);
-      const attached = attachments.get(finding.ref.id) ?? new Set<string>();
-      attached.add(subject.subjectId);
-      attachments.set(finding.ref.id, attached);
-    }
+function requireFindingRootCauseKeys(
+  value: unknown,
+  findings: Map<string, PlanningReviewSubjectFinding>,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Planning Review subject findingRootCauseKeys must be an array");
   }
-  for (const [findingId, finding] of findings) {
-    const attached = [...(attachments.get(findingId) ?? [])].sort();
+  const keys = value.map((item) =>
+    requireString(item, "Planning Review subject root cause key"));
+  if (
+    new Set(keys).size !== keys.length ||
+    keys.some((rootCauseKey) => !findings.has(rootCauseKey))
+  ) {
+    throw new Error("Planning Review subject root cause refs must be exact and unique");
+  }
+  return keys;
+}
+
+function requireReciprocalFindingReferences(
+  subjects: PlanningReviewSubjectCoverage[],
+  findings: PlanningReviewSubjectFinding[],
+): void {
+  for (const finding of findings) {
+    const attached = subjects
+      .filter((subject) =>
+        subject.findings.some((item) => item.rootCauseKey === finding.rootCauseKey))
+      .map((subject) => subject.subjectId)
+      .sort();
     if (!sameStrings(attached, finding.affectedSubjectIds)) {
-      throw new Error("Planning Review root finding attachments are incomplete");
+      throw new Error("Planning Review finding references are not reciprocal");
     }
   }
 }

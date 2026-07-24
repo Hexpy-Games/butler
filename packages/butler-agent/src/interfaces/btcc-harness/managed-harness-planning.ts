@@ -137,16 +137,17 @@ export function submitPlanningReview(
 ) {
   const revisionRequired = reviseFirst && reviewCount === 1;
   if (revisionRequired) {
+    const review = planningReviewSubjects(
+      state,
+      "task:",
+      "task_executability",
+      "두 번째 Task의 완료 조건을 더 명확히 표현해야 한다",
+    );
     return {
       kind: "planning_review",
       verdict: "revision_required",
       coverage: planningReviewCoverage("task_executability"),
-      subjects: planningReviewSubjects(
-        state,
-        "task:",
-        "task_executability",
-        "두 번째 Task의 완료 조건을 더 명확히 표현해야 한다",
-      ),
+      ...review,
     };
   }
   return {
@@ -155,7 +156,7 @@ export function submitPlanningReview(
     reviewedIntegrationCriterionRefs: nestedRecordRefs(state, "integrationCriteria"),
     verdict: "accepted",
     coverage: planningReviewCoverage(),
-    subjects: planningReviewSubjects(state),
+    ...planningReviewSubjects(state),
   };
 }
 
@@ -186,42 +187,41 @@ function planningReviewSubjects(
     ? state.requiredReviewSubjects
     : [];
   let failed = false;
-  return subjects.map((item) => {
+  const findings: Record<string, unknown>[] = [];
+  const reviewedSubjects = subjects.map((item) => {
     const subject = asRecord(item);
     const subjectId = String(subject.subjectId);
     if (!failed && failedPrefix && subjectId.startsWith(failedPrefix)) {
       failed = true;
+      findings.push({
+        rootCauseKey: "clarify-second-task-completion",
+        affectedSubjectIds: [subjectId],
+        dimension,
+        message,
+        priority: "P1",
+        recommendedDisposition: "required_now",
+        findingOrigin: "initial_review",
+      });
       return {
         subjectId,
         verdict: "failed",
-        findings: [{
-          rootCauseKey: "clarify-second-task-completion",
-          affectedSubjectIds: [subjectId],
-          dimension,
-          message,
-          priority: "P1",
-          recommendedDisposition: "required_now",
-          findingOrigin: "initial_review",
-        }],
+        findingRootCauseKeys: ["clarify-second-task-completion"],
       };
     }
-    return { subjectId, verdict: "passed", findings: [] };
+    return { subjectId, verdict: "passed", findingRootCauseKeys: [] };
   });
+  return { subjects: reviewedSubjects, findings };
 }
 
 function findingDecisions(state: Record<string, unknown>) {
   const prior = asRecord(state.priorPlanningReview);
-  if (!Array.isArray(prior.reviewedSubjects)) return {};
-  const findingIds = prior.reviewedSubjects.flatMap((item) => {
-    const subject = asRecord(item);
-    if (!Array.isArray(subject.findings)) return [];
-    return subject.findings.flatMap((finding) => {
-      const value = asRecord(finding);
-      const ref = asRecord(value.ref);
-      return value.recommendedDisposition === "required_now" && typeof ref.id === "string"
-        ? [ref.id]
-        : [];
-    });
+  const findingSet = asRecord(prior.findingSet);
+  const findingIds = asArray(findingSet.findings).flatMap((finding) => {
+    const value = asRecord(finding);
+    const ref = asRecord(value.ref);
+    return value.recommendedDisposition === "required_now" && typeof ref.id === "string"
+      ? [ref.id]
+      : [];
   });
   return findingIds.length === 0 ? {} : {
     findingDecisions: findingIds.map((findingId) => ({

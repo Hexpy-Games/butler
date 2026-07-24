@@ -328,23 +328,56 @@ function reviewInvocation(
 
 function normalizeTaskReviewRootFindings(
   verdicts: unknown[] | undefined,
-): unknown[] | undefined {
-  return verdicts?.map((value) => {
+): { criterionVerdicts: unknown[]; findings: unknown[] } | undefined {
+  if (!verdicts) return undefined;
+  const findings = new Map<string, Record<string, unknown>>();
+  const criterionVerdicts = verdicts.map((value) => {
     const verdict = value as Record<string, unknown>;
-    if (!("finding" in verdict)) return verdict;
-    return {
-      rootCauseKey: verdict.priorFindingId ?? verdict.finding,
+    if (!("finding" in verdict)) {
+      return { ...verdict, findingRootCauseKeys: [] };
+    }
+    const rootCauseKey = String(
+      verdict.rootCauseKey ?? verdict.priorFindingId ?? verdict.finding,
+    );
+    findings.set(rootCauseKey, {
+      rootCauseKey,
       affectedCriterionRefs: [verdict.criterionRef],
-      ...verdict,
+      findingCategory: verdict.findingCategory,
+      finding: verdict.finding,
+      priority: verdict.priority,
+      recommendedDisposition: verdict.recommendedDisposition,
+      findingOrigin: verdict.findingOrigin,
+      ...("priorFindingId" in verdict
+        ? { priorFindingId: verdict.priorFindingId }
+        : {}),
+      ...("affectedCriterionRefs" in verdict
+        ? { affectedCriterionRefs: verdict.affectedCriterionRefs }
+        : {}),
+    });
+    const {
+      rootCauseKey: _rootCauseKey,
+      affectedCriterionRefs: _affectedCriterionRefs,
+      findingCategory: _findingCategory,
+      finding: _finding,
+      priority: _priority,
+      recommendedDisposition: _recommendedDisposition,
+      findingOrigin: _findingOrigin,
+      priorFindingId: _priorFindingId,
+      ...criterion
+    } = verdict;
+    return {
+      ...criterion,
+      findingRootCauseKeys: [rootCauseKey],
     };
   });
+  return { criterionVerdicts, findings: [...findings.values()] };
 }
 
 function invocation(
   semanticState: "task_execution" | "task_review",
   results: OperationResult[],
   stateInput: Record<string, unknown>,
-  criterionVerdicts?: unknown[],
+  reviewSubmission?: { criterionVerdicts: unknown[]; findings: unknown[] },
 ): PhaseInvocation {
   return {
     binding: {
@@ -389,11 +422,13 @@ function invocation(
           ? { kind: "result_candidate", resultSummary: "artifact updated" }
           : {
               kind: "task_review",
-              criterionVerdicts: criterionVerdicts ?? [{
+              criterionVerdicts: reviewSubmission?.criterionVerdicts ?? [{
                 criterionRef: ref("criterion"),
                 observation: "the disposable validation passed",
                 verdict: "satisfied",
+                findingRootCauseKeys: [],
               }],
+              findings: reviewSubmission?.findings ?? [],
             },
         actualIdentity: selectedModel(),
       }),

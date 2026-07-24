@@ -207,6 +207,7 @@ export class ManagedHarnessModel implements SelectedModel {
         this.reviewCount += 1;
         const criteria = asArray(state.criteria);
         if (this.failFirstReview && this.reviewCount === this.failedReviewOrdinal) {
+          const failedCriterionRef = asRecord(criteria[0]).ref;
           return {
             kind: "task_review",
             criterionVerdicts: criteria.map((criterion, index) => ({
@@ -215,22 +216,23 @@ export class ManagedHarnessModel implements SelectedModel {
               observation: index === 0
                 ? "초안에 실제 적용 지침이 빠져 있다"
                 : "해당 기준은 충족한다",
-              ...(index === 0
-                ? {
-                    rootCauseKey: "missing-execution-guidance",
-                    affectedCriterionRefs: [asRecord(criterion).ref],
-                    findingCategory: this.correctionKind === "implementation_repair"
-                      ? "implementation_nonconformance"
-                      : this.correctionKind === "governing_revision"
-                        ? "task_decomposition"
-                        : "authority_contradiction",
-                    finding: "수용 기준이 요구한 실행 지침을 구현하지 않았다",
-                    priority: "P1",
-                    recommendedDisposition: "required_now",
-                    findingOrigin: "initial_review",
-                  }
-                : {}),
+              findingRootCauseKeys: index === 0
+                ? ["missing-execution-guidance"]
+                : [],
             })),
+            findings: [{
+              rootCauseKey: "missing-execution-guidance",
+              affectedCriterionRefs: [failedCriterionRef],
+              findingCategory: this.correctionKind === "implementation_repair"
+                ? "implementation_nonconformance"
+                : this.correctionKind === "governing_revision"
+                  ? "task_decomposition"
+                  : "authority_contradiction",
+              finding: "수용 기준이 요구한 실행 지침을 구현하지 않았다",
+              priority: "P1",
+              recommendedDisposition: "required_now",
+              findingOrigin: "initial_review",
+            }],
           };
         }
         return {
@@ -239,7 +241,9 @@ export class ManagedHarnessModel implements SelectedModel {
             criterionRef: asRecord(criterion).ref,
             verdict: "satisfied",
             observation: "원칙과 실행 지침이 모두 포함되어 수용 기준을 충족한다",
+            findingRootCauseKeys: [],
           })),
+          findings: [],
         };
       }
       case "feedback_conception":
