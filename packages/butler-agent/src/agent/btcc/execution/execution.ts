@@ -11,6 +11,7 @@ import {
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
+import { authorizeTaskOperations } from "./authorize-task-operations.ts";
 import { performTask } from "./perform-task.ts";
 
 export async function execution(command: {
@@ -53,7 +54,11 @@ export async function execution(command: {
   });
   const product = await performTask({
     ...invocation,
-    operationAuthority: executionAuthority(command.phase, invocation, target),
+    operationAuthority: authorizeTaskOperations({
+      admittedAuthority: command.phase.operationAuthority,
+      target,
+      artifactTargetScopeRef: artifactTargetScopeRef(program),
+    }),
   });
   if (isPromotionDeferral(product)) return { kind: "PromotionDeferralAccepted", product };
   return isManagedDeferral(product)
@@ -135,35 +140,9 @@ function executionScopeRefs(
   return [policy.workspaceScopeRef];
 }
 
-function executionAuthority(
-  phase: PhaseInvocation,
-  invocation: ReturnType<typeof withManagedDeferralState>,
-  target: ReturnType<typeof requireCurrentAttempt>["executionTarget"]["target"],
-) {
-  const observationScopeRefs = phase.operationAuthority.observationScopeRefs;
-  if (target.kind === "provisioned_workspace") {
-    return {
-      observationScopeRefs,
-      mutation: {
-        kind: "workspace_only" as const,
-        workspaceRef: target.workspaceRef,
-        operationRoot: target.operationRoot,
-        mutationScope: target.mutationScope,
-      },
-    };
-  }
-  if (target.kind === "repository_promotion") {
-    return {
-      observationScopeRefs,
-      mutation: {
-        kind: "repository_promotion_only" as const,
-        authorizationRef: target.authorizationRef,
-        candidateRef: target.candidateRef,
-        resolutionRef: target.resolutionRef,
-        baselineRef: target.baselineRef,
-        finalSnapshotRef: target.finalSnapshotRef,
-      },
-    };
-  }
-  return invocation.operationAuthority;
+function artifactTargetScopeRef(
+  program: ReturnType<typeof requireManagedProgram>,
+): string | undefined {
+  const policy = program.currentTask.task.artifactPolicy;
+  return policy.kind === "workspace_artifact" ? policy.workspaceScopeRef : undefined;
 }
