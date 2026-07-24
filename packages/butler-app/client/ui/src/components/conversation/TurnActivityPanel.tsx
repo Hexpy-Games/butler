@@ -5,7 +5,10 @@ import {
   type TypedUiReadModel,
 } from "@/app/utils.ts";
 import type { ProgressRow } from "@/app/types.ts";
-import { CurrentPhaseActivity, PhaseActivityLog } from "./PhaseActivityLog";
+import {
+  CurrentModelPhaseActivity,
+  CurrentPhaseActivity,
+} from "./PhaseActivityLog";
 import { WorkDecisionBody } from "./WorkDecisionBody";
 import { TurnDecisionRow } from "./TurnDecisionRow";
 import {
@@ -113,7 +116,7 @@ export function TurnActivityPanel({
           key={`${decision.summary}:${decisionIndex}`}
         />
       ))}
-      <PhaseActivityLog activities={phaseActivities} />
+      <CurrentModelPhaseActivity activities={phaseActivities} />
       {publicActivity ? <CurrentPhaseActivity row={publicActivity} /> : null}
       {activeBlocks.map((block, blockIndex) => (
         <WorkActivityBlock
