@@ -3,6 +3,7 @@ import {
   assertLogicalLedgerMutationId,
   contentRef,
   createLogicalLedgerBundle,
+  governingSpecLogicalIds,
   planningCandidateBundleEntries,
   stableJson,
   type WorkLedgerCommit,
@@ -34,7 +35,7 @@ export async function prepareProjectCommit(
   const governingSpecs = input.commit.mutation.kind === "bind_program"
     ? selectGoverningSpecs(
       canonicalSpecs,
-      input.commit.mutation.product.goalContract.governingSpecLogicalIds,
+      governingSpecLogicalIds(input.commit.mutation.product.goalContract),
     )
     : current?.governingSpecs ?? [];
   const program = reduceProjectProgram(

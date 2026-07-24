@@ -7,7 +7,7 @@ export const PROMPT_DUTY_IDS = [
   "requested_content", "related_memory",
   "connected_current_knowledge", "user_preferences_and_resolution_style",
   "expert_perspective", "intended_result_and_acceptance",
-  "select_exact_governing_spec_logical_ids", "define_artifact_persistence",
+  "map_governing_spec_applicability", "define_artifact_persistence",
   "review_goal_contract_exactly", "review_continuation_coherence",
   "review_artifact_persistence",
   "author_smallest_sufficient_plan", "apply_authoring_contracts",

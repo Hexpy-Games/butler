@@ -103,7 +103,7 @@ describe("BTCC Session Work Ledger selection", () => {
     const adapter = createProjectWorkLedgerPublicationAdapter({
       stagingRoot: join(fixture.root, "staging"),
     });
-    const commit = projectBindingCommit({ governingSpecLogicalIds: [] }).commit;
+    const commit = projectBindingCommit({ governingSpecApplications: [] }).commit;
     const prepared = await adapter.prepareCommit({
       projectRoot: fixture.ledgerRoot,
       expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
@@ -221,7 +221,7 @@ function sessionProgramCommit(): WorkLedgerCommit {
           },
           lensAssessments: {} as never,
           personalizationRefs: [],
-          governingSpecLogicalIds: [],
+          governingSpecApplications: [],
           nonGoals: [],
         },
         authority: {

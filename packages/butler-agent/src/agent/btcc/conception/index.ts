@@ -1,4 +1,5 @@
 export { conception } from "./conception.ts";
+export { governingSpecLogicalIds } from "./governing-spec-applications.ts";
 export type {
   FeedbackIntentProduct,
   GoalContractAcceptedProduct,
@@ -7,6 +8,7 @@ export type {
   GoalContractRecord,
   GoalContractRevisionRequiredProduct,
   GoalContractReviewProduct,
+  GoverningSpecApplication,
 } from "./managed-contracts.ts";
 export type {
   OpeningAnswerProduct,

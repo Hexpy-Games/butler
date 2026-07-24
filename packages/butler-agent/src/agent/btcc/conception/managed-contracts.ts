@@ -23,11 +23,17 @@ export type GoalContractRecord = {
     adoptedGoalFieldIds: string[];
   }>;
   personalizationRefs: string[];
-  governingSpecLogicalIds: string[];
+  governingSpecApplications: GoverningSpecApplication[];
   nonGoals: string[];
 };
 
 export type GoalArtifactPersistence = "not_required" | "required";
+
+export type GoverningSpecApplication = {
+  logicalId: string;
+  changeObligations: string[];
+  preservationConstraints: string[];
+};
 
 export type ConceptionLensId =
   | "requested_content"

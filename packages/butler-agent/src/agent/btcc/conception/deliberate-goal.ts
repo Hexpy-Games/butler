@@ -15,6 +15,7 @@ import type {
   GoalContractCandidateProduct,
   GoalContractRevisionRequiredProduct,
 } from "./managed-contracts.ts";
+import { requireGoverningSpecApplications } from "./governing-spec-applications.ts";
 import { goalCandidateSubmissionSchema } from "./submission-schemas.ts";
 
 const LENSES: ConceptionLensId[] = [
@@ -32,7 +33,7 @@ const CONTRACT: PhaseContract = {
   objective: "understand_the_full_request_and_author_a_goal_candidate",
   duties: [
     "preserve_selected_model", "state_input_only", "understand_request",
-    ...LENSES, "select_exact_governing_spec_logical_ids", "candidate_revision_lineage",
+    ...LENSES, "map_governing_spec_applicability", "candidate_revision_lineage",
     "apply_exact_review_findings", "define_artifact_persistence",
   ],
   prohibitions: [
@@ -102,8 +103,8 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
       },
       lensAssessments,
       personalizationRefs,
-      governingSpecLogicalIds: uniqueStrings(
-        requireStringArray(value.governingSpecLogicalIds, "governingSpecLogicalIds"),
+      governingSpecApplications: requireGoverningSpecApplications(
+        value.governingSpecApplications,
       ),
       nonGoals: requireStringArray(value.nonGoals, "nonGoals"),
     };
@@ -174,13 +175,6 @@ function canonicalLensBinding(
   return submittedDisposition === "adopted"
     ? { disposition: "adopted" as const, adoptedGoalFieldIds }
     : { disposition: "non_applicable" as const, adoptedGoalFieldIds: [] };
-}
-
-function uniqueStrings(values: string[]): string[] {
-  if (new Set(values).size !== values.length) {
-    throw new Error("governingSpecLogicalIds contains duplicates");
-  }
-  return values;
 }
 
 function requireArtifactPersistence(value: unknown): "not_required" | "required" {

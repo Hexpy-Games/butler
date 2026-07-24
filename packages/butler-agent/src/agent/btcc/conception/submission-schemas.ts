@@ -73,6 +73,12 @@ const lensAssessment = objectSchema({
   adoptedGoalFieldIds: textList(),
 });
 
+const governingSpecApplication = objectSchema({
+  logicalId: textSchema(),
+  changeObligations: textList(),
+  preservationConstraints: textList(),
+});
+
 export const goalCandidateSubmissionSchema = objectSchema({
   kind: literalSchema("goal_contract_candidate"),
   request: textSchema(),
@@ -81,7 +87,7 @@ export const goalCandidateSubmissionSchema = objectSchema({
   artifactPersistence: enumSchema("not_required", "required"),
   nonGoals: textList(),
   personalizationRefs: textList(),
-  governingSpecLogicalIds: textList(),
+  governingSpecApplications: arraySchema(governingSpecApplication),
   lensAssessments: objectSchema({
     requested_content: lensAssessment,
     related_memory: lensAssessment,

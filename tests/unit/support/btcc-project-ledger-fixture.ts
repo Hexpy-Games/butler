@@ -161,7 +161,11 @@ function acceptedPlanningCoverage() {
 }
 
 export function projectBindingCommit(options: {
-  governingSpecLogicalIds?: string[];
+  governingSpecApplications?: Array<{
+    logicalId: string;
+    changeObligations: string[];
+    preservationConstraints: string[];
+  }>;
 } = {}): {
   goalContract: Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>["product"]["goalContract"];
   authority: Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>["product"]["authority"];
@@ -186,7 +190,11 @@ export function projectBindingCommit(options: {
     },
     lensAssessments: {} as never,
     personalizationRefs: [],
-    governingSpecLogicalIds: options.governingSpecLogicalIds ?? ["SPEC-FIXTURE"],
+    governingSpecApplications: options.governingSpecApplications ?? [{
+      logicalId: "SPEC-FIXTURE",
+      changeObligations: ["Produce the verified fixture result"],
+      preservationConstraints: [],
+    }],
     nonGoals: [],
   };
   const goalContract = { ref: contentRef("goal-contract", goalBody), ...goalBody };

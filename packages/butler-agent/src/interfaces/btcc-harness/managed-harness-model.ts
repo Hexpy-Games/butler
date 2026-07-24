@@ -93,7 +93,13 @@ export class ManagedHarnessModel implements SelectedModel {
           artifactPersistence: this.artifactPlan ? "required" : "not_required",
           nonGoals: ["프로젝트 파일이나 외부 시스템을 변경하지 않는다"],
           personalizationRefs,
-          governingSpecLogicalIds: envelope.context.projectRef ? ["SPEC-HARNESS"] : [],
+          governingSpecApplications: envelope.context.projectRef
+            ? [{
+                logicalId: "SPEC-HARNESS",
+                changeObligations: ["고객 응대 운영 가이드를 작성한다"],
+                preservationConstraints: [],
+              }]
+            : [],
           lensAssessments: {
             requested_content: adopted("고객 응대 원칙 조사와 가이드 작성", ["request"]),
             related_memory: adopted("원래 의도를 끝까지 보존한다", ["intended_result"]),
