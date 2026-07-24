@@ -51,9 +51,13 @@ export function openBtccSqliteStores(input: {
     input.processLiveness ?? new LocalProcessLiveness(),
   );
   const turns = new SqliteTurnStateRepository(db, owner, input.projectLedger);
+  const sqliteWriteReadiness = createSqliteWriteReadiness(
+    input.dbPath,
+    createProviderRecoveryReadiness(),
+  );
   const operationalRecovery = createOperationalRecoveryBoundary(
     new SqliteOperationalRecoveryStore(db),
-    createSqliteWriteReadiness(input.dbPath, createProviderRecoveryReadiness()),
+    sqliteWriteReadiness,
   );
   return {
     admission: new SqliteTurnAdmissionRepository(
@@ -69,6 +73,7 @@ export function openBtccSqliteStores(input: {
     phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     operationalRecovery,
+    committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {
       owner.close();
       db.close();

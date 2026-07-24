@@ -12,6 +12,10 @@ import {
   type TurnSemanticState,
   type TurnStateRepository,
 } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import { advanceTurn } from
+  "../../packages/butler-agent/src/agent/btcc/turn/advance-turn.ts";
+import { createTurnExecutionSupervisor } from
+  "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 
 const semanticStates = [
   "admitted",
@@ -224,6 +228,83 @@ test("runtime normalizes a post-claim persistence defect before it reaches ingre
     activation: { kind: "runtime_remediation" },
     anchor: { claimId: claim.claimId, checkpointId: claim.checkpointId },
   });
+});
+
+test("post-commit storage recovery activates the successor without replaying its predecessor", async () => {
+  const turn = turnIn("admitted");
+  const successor = {
+    ...turn,
+    semanticState: "conception_opening" as const,
+    checkpoint: {
+      checkpointId: "checkpoint-successor",
+      checkpointRevision: 0,
+      kind: "phase" as const,
+      semanticState: "conception_opening" as const,
+    },
+    revision: turn.revision + 1,
+  };
+  const claim: StateExecutionClaim = {
+    claimId: "claim-post-commit",
+    turnId: turn.turnId,
+    turnRevision: turn.revision,
+    semanticState: turn.semanticState,
+    checkpointId: turn.checkpoint!.checkpointId,
+    checkpointRevision: turn.checkpoint!.checkpointRevision,
+    executionFence: turn.executionFence,
+  };
+  let claims = 0;
+  let commits = 0;
+  let activations = 0;
+  let readinessWaits = 0;
+  const notices: string[] = [];
+  const sqliteLock = Object.assign(new Error("database is locked"), {
+    name: "SQLiteError",
+  });
+  const turns: TurnStateRepository = {
+    async findTurn() { return successor; },
+    async activateCommittedSuccessor() {
+      activations += 1;
+      if (activations === 1) throw sqliteLock;
+      return successor;
+    },
+    async acquireStateExecutionClaim() {
+      claims += 1;
+      return claim;
+    },
+    async commitTransition() { commits += 1; },
+    async stopTurn() { throw new Error("not used"); },
+  };
+  const dependencies = {
+    turns,
+    committedSuccessorReadiness: {
+      async waitForStorageReadiness() { readinessWaits += 1; },
+    },
+    progress: {
+      async stateChanged() {},
+      async operationalNoticeChanged(update) { notices.push(update.status); },
+    },
+    admission: null as never,
+    phaseConversations: null as never,
+    model: null as never,
+    operations: null as never,
+    artifacts: null as never,
+    messages: null as never,
+    retrospective: null as never,
+  } satisfies BtccRuntimeDependencies;
+
+  await expect(advanceTurn(
+    turn,
+    dependencies,
+    createTurnExecutionSupervisor(),
+  )).resolves.toEqual(successor);
+
+  expect({ claims, commits, activations, readinessWaits }).toEqual({
+    claims: 1,
+    commits: 1,
+    activations: 2,
+    readinessWaits: 1,
+  });
+  expect(notices).toEqual(["recovering", "cleared"]);
 });
 
 test("a normalized persistence interruption retains canonical Stop ownership", async () => {

@@ -3,6 +3,7 @@ import type {
 } from "../contracts.ts";
 import type { TurnExecutionSupervisor } from "../recovery/index.ts";
 import { advanceTurn } from "./advance-turn.ts";
+import { activateCommittedSuccessor } from "./activate-committed-successor.ts";
 import type { ContinuingTurnCommand } from "./load-or-admit-turn.ts";
 import { loadOrAdmitTurn } from "./load-or-admit-turn.ts";
 import { publishTurnProgress } from "./turn-progress.ts";
@@ -19,7 +20,21 @@ export async function openTurn(
   supervisor: TurnExecutionSupervisor,
 ): Promise<OpenedTurn> {
   let turn = await loadOrAdmitTurn(command, dependencies);
-  turn = await dependencies.turns.activateCommittedSuccessor(turn.turnId);
+  const permit = supervisor.enter({
+    turnId: turn.turnId,
+    executionFence: turn.executionFence,
+    semanticState: turn.semanticState,
+  });
+  try {
+    turn = await activateCommittedSuccessor({
+      turnId: turn.turnId,
+      expectedState: turn.semanticState,
+      dependencies,
+      permit,
+    });
+  } finally {
+    permit.close();
+  }
   await publishTurnProgress(dependencies.progress, turn);
 
   while (isOpening(turn)) {
