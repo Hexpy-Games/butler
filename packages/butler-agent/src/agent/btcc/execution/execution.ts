@@ -11,8 +11,8 @@ import {
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
-import { authorizeTaskOperations } from "./authorize-task-operations.ts";
 import { performTask } from "./perform-task.ts";
+import { scopeTaskExecution } from "./scope-task-execution.ts";
 
 export async function execution(command: {
   turn: TurnRecord;
@@ -33,6 +33,11 @@ export async function execution(command: {
     program,
     attempt.attemptRecord.correctionPlanRef,
   );
+  const taskExecution = scopeTaskExecution({
+    admittedAuthority: command.phase.operationAuthority,
+    target,
+    artifactTargetScopeRef: artifactTargetScopeRef(program),
+  });
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -49,16 +54,12 @@ export async function execution(command: {
     attemptRef: attempt.attemptRecord.ref,
     executionTargetRef: attempt.executionTargetRef,
     executionTarget: attempt.executionTarget,
-    targetScopeRefs: executionScopeRefs(program, target),
+    targetScopeRefs: taskExecution.targetScopeRefs,
     ...(correctionContext ? { correctionContext } : {}),
   });
   const product = await performTask({
     ...invocation,
-    operationAuthority: authorizeTaskOperations({
-      admittedAuthority: command.phase.operationAuthority,
-      target,
-      artifactTargetScopeRef: artifactTargetScopeRef(program),
-    }),
+    operationAuthority: taskExecution.operationAuthority,
   });
   if (isPromotionDeferral(product)) return { kind: "PromotionDeferralAccepted", product };
   return isManagedDeferral(product)
@@ -125,19 +126,6 @@ function criteriaForCurrentTask(program: ReturnType<typeof requireManagedProgram
 function questionsForCurrentTask(program: ReturnType<typeof requireManagedProgram>) {
   const ids = new Set(program.currentTask.task.verificationQuestionRefs.map((ref) => ref.id));
   return program.verificationQuestions.filter((question) => ids.has(question.ref.id));
-}
-
-function executionScopeRefs(
-  program: ReturnType<typeof requireManagedProgram>,
-  target: ReturnType<typeof requireCurrentAttempt>["executionTarget"]["target"],
-): string[] {
-  if (target.kind === "non_artifact") return target.targetScopeRefs;
-  if (target.kind === "repository_promotion") return [];
-  const policy = program.currentTask.task.artifactPolicy;
-  if (policy.kind !== "workspace_artifact") {
-    throw new Error("Provisioned workspace requires a workspace artifact Task");
-  }
-  return [policy.workspaceScopeRef];
 }
 
 function artifactTargetScopeRef(
