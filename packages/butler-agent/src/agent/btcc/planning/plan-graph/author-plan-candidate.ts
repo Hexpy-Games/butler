@@ -1,7 +1,6 @@
 import {
   contentRef,
   requireString,
-  stableJson,
   type ContentRef,
 } from "../../core/index.ts";
 import type { GoalArtifactPersistence } from "../../conception/index.ts";
@@ -10,9 +9,9 @@ import type {
   ManagedTask,
   ManagedVerificationQuestion,
   ManagedWork,
-  PlanningCandidateBundleEntry,
   PlanningCandidate,
 } from "../contracts.ts";
+import { planningCandidateBundleEntries } from "../candidate-bundle.ts";
 import { authorArtifactLifecycle } from "./author-artifact-lifecycle.ts";
 import { authorGoverningSpecs } from "./author-governing-specs.ts";
 import { authorPlanningConsiderations } from "./author-planning-considerations.ts";
@@ -142,26 +141,25 @@ export function authorPlanCandidate(
     artifactLifecycleRef: artifactLifecycle.ref,
   };
   const plan = { ref: contentRef("work-plan", planBody), ...planBody };
-  const entries = [
-    ...bundleEntries("spec_revision", authoredSpecs),
-    ...bundleEntries("acceptance_criterion", criteria),
-    ...bundleEntries("verification_question", questions),
-    ...bundleEntries("effect_intent", authoredLifecycle.effectIntents),
-    ...bundleEntries("integration_criterion", authoredLifecycle.integrationCriteria),
-    ...bundleEntries("risk", risks),
-    ...bundleEntries("assumption", assumptions),
-    ...bundleEntries("task_revision", tasks),
-    ...bundleEntries("work_revision", works),
-    ...bundleEntries("artifact_lifecycle", [artifactLifecycle]),
-    ...bundleEntries("work_graph", [workGraph]),
-    ...bundleEntries("work_plan", [plan]),
-  ];
+  const entries = planningCandidateBundleEntries({
+    authoredSpecs,
+    criteria,
+    verificationQuestions: questions,
+    effectIntents: authoredLifecycle.effectIntents,
+    integrationCriteria: authoredLifecycle.integrationCriteria,
+    risks,
+    assumptions,
+    tasks,
+    works,
+    artifactLifecycle,
+    workGraph,
+    plan,
+  });
   const bundleBody = {
     ledgerId: state.ledgerId,
     programId: state.programId,
     observedManifestRevision: state.observedManifestRevision,
     recordRefs: entries.map((entry) => entry.ref),
-    entries,
   };
   const bundle = { ref: contentRef("planning-candidate-bundle", bundleBody), ...bundleBody };
   const revisionOrigin = state.previousCandidateRef && state.findingSetRef
@@ -203,37 +201,6 @@ export function authorPlanCandidate(
     bundle,
   };
   return { ref: contentRef("plan-candidate", candidateBody), ...candidateBody };
-}
-
-function bundleEntries(
-  recordKind: string,
-  records: Array<{ ref: ContentRef } & Record<string, unknown>>,
-): PlanningCandidateBundleEntry[] {
-  return records.map((record) => {
-    const { ref, ...semantic } = record;
-    const semanticBytes = stableJson(semantic);
-    if (contentRef(recordKindForRef(recordKind), semantic).sha256 !== ref.sha256) {
-      throw new Error(`Planning bundle ${recordKind} bytes do not match ${ref.id}`);
-    }
-    return { recordKind, ref, semanticBytes };
-  });
-}
-
-function recordKindForRef(recordKind: string): string {
-  return {
-    spec_revision: "spec-revision",
-    acceptance_criterion: "acceptance-criterion",
-    verification_question: "verification-question",
-    effect_intent: "effect-intent",
-    integration_criterion: "integration-criterion",
-    risk: "planning-risk",
-    assumption: "planning-assumption",
-    task_revision: "task",
-    work_revision: "work",
-    artifact_lifecycle: "artifact-lifecycle",
-    work_graph: "work-graph",
-    work_plan: "work-plan",
-  }[recordKind] ?? recordKind;
 }
 
 function materializeCriteria(

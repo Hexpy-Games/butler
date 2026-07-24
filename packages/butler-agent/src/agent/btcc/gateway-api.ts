@@ -46,6 +46,7 @@ export {
   acceptReviewedPlanAuthority,
   bindManagedProgram,
 } from "./work-ledger/program-authority.ts";
+export { planningCandidateBundleEntries } from "./planning/index.ts";
 export {
   projectEphemeralOperationResult,
   READ_OPERATION_RESULT_CAPABILITY,
