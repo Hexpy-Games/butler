@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { executeFileCapability } from "../../packages/butler-agent/src/agent/composition/production-btcc/capabilities/file-capabilities.ts";
@@ -40,6 +41,41 @@ test("BTCC list_files discovers nested sources without searching file content", 
     }, context(workspace)) as { files: string[]; truncated: boolean };
 
     expect(result).toEqual({ files: ["src/sample.ts"], truncated: false });
+  } finally {
+    await rm(workspace, { recursive: true, force: true });
+  }
+});
+
+test("BTCC read_file returns the exact revision accepted by write_file", async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "btcc-file-revision-"));
+  try {
+    const path = join(workspace, "profile.ts");
+    const original = "export const trust = 0.5;\n";
+    await writeFile(path, original);
+
+    const observed = await executeFileCapability("read_file", {
+      path: "profile.ts",
+    }, context(workspace)) as { sha256: string };
+    expect(observed.sha256).toBe(
+      createHash("sha256").update(original).digest("hex"),
+    );
+
+    await executeFileCapability("write_file", {
+      path: "profile.ts",
+      content: "export const trust = 0.4;\n",
+      overwrite: true,
+      expected_sha256: observed.sha256,
+    }, context(workspace));
+    expect(await readFile(path, "utf8")).toBe("export const trust = 0.4;\n");
+
+    expect(executeFileCapability("write_file", {
+      path: "profile.ts",
+      content: "export const trust = 0.3;\n",
+      overwrite: true,
+      expected_sha256: observed.sha256,
+    }, context(workspace))).rejects.toThrow(
+      "write_file expected_sha256 does not match",
+    );
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }

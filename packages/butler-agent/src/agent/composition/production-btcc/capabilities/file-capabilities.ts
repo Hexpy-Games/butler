@@ -50,6 +50,7 @@ async function readWorkspaceFile(
     startLine: start,
     endLine: Math.min(lines.length, start + limit - 1),
     totalLines: lines.length,
+    sha256: sha256(bytes),
     content: lines.slice(start - 1, start - 1 + limit).join("\n"),
   };
 }
