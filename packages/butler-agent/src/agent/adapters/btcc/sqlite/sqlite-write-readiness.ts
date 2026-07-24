@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import type {
   OperationalRecoveryReadiness,
 } from "../../../btcc/gateway-api.ts";
+import { isSqliteContention } from "../../../../foundation/sqlite-contention.ts";
 
 const WRITE_PROBE_BUSY_WINDOW_MS = 250;
 
@@ -54,15 +55,6 @@ function probeWriteAccess(dbPath: string): boolean {
     }
     db.close();
   }
-}
-
-function isSqliteContention(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; errno?: unknown };
-  return candidate.code === "SQLITE_BUSY" ||
-    candidate.code === "SQLITE_LOCKED" ||
-    candidate.errno === 5 ||
-    candidate.errno === 6;
 }
 
 function yieldToCancellation(signal: AbortSignal): Promise<void> {

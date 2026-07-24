@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, realpathSync, unlinkSync } from "fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "path";
 import { Database } from "bun:sqlite";
+import { isSqliteContention } from "../../foundation/sqlite-contention.ts";
 
 export const MUTATION_LOCK_SHARD_COUNT = 64;
 export const PRODUCTION_LOCK_BUSY_TIMEOUT_MS = 0;
@@ -45,7 +46,7 @@ export function withSqliteMutationLock<T>(input: {
       db.exec("BEGIN IMMEDIATE");
       transactionActive = true;
     } catch (error) {
-      if (sqliteBusy(error)) return null;
+      if (isSqliteContention(error)) return null;
       throw error;
     }
     const now = (input.now ?? new Date()).toISOString();
@@ -193,10 +194,4 @@ function assertContained(root: string, target: string): void {
   if (child === "" || child === ".." || child.startsWith(`..${separator}`) || isAbsolute(child)) {
     throw new Error("sqlite_mutation_lock_path_outside_root");
   }
-}
-
-function sqliteBusy(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: string; message?: string };
-  return candidate.code === "SQLITE_BUSY" || candidate.message?.includes("database is locked") === true;
 }

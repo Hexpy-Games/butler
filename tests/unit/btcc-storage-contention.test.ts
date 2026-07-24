@@ -35,6 +35,33 @@ test("typed SQLite writer contention is automatically recoverable", () => {
   });
 });
 
+test("Bun SQLite driver identity survives missing enumerable codes", () => {
+  const error = Object.assign(new Error("database is locked"), {
+    name: "SQLiteError",
+  });
+
+  expect(runtimeInterruption(error, anchor)).toMatchObject({
+    code: "sqlite_write_contention",
+    activation: { kind: "automatic_storage_recovery" },
+    cause: error,
+  });
+});
+
+test("wrapped SQLite contention preserves automatic recovery semantics", () => {
+  const sqliteError = Object.assign(new Error("database table is locked"), {
+    name: "SQLiteError",
+  });
+  const error = new Error("phase repository write failed", {
+    cause: sqliteError,
+  });
+
+  expect(runtimeInterruption(error, anchor)).toMatchObject({
+    code: "sqlite_write_contention",
+    activation: { kind: "automatic_storage_recovery" },
+    cause: error,
+  });
+});
+
 test("storage recovery waits for actual SQLite writer readiness", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-sqlite-readiness-"));
   const dbPath = join(root, "butler.sqlite");
