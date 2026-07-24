@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 import { Stack, Typo } from "@/butler-ds";
 import type { ProgressRow } from "@/app/types.ts";
-import type { PhaseActivity } from "./turnActivityRows";
-import { ViewTurnActivityButton } from "./ViewTurnActivityButton";
 import styles from "./PhaseActivityLog.module.css";
 
 export function CurrentPhaseActivity({ row }: { row: ProgressRow }) {
@@ -15,40 +13,6 @@ export function CurrentPhaseActivity({ row }: { row: ProgressRow }) {
     >
       {row.safe_label}
     </Typo.Body>
-  );
-}
-
-export function CurrentModelPhaseActivity({
-  activities,
-  currentState,
-}: {
-  activities: PhaseActivity[];
-  currentState?: string;
-}) {
-  const latest = activities.at(-1);
-  if (!latest) return null;
-
-  return (
-    <section
-      data-test-class="turn-current-phase-activity"
-      aria-label="현재 작업"
-    >
-      <Stack gap="xs" aria-live="polite">
-        <Typo.Caption as="p" className={styles.secondary}>
-          현재 · {phaseLabel(currentState ?? latest.phase)} · 전체 {activities.length}개 기록
-        </Typo.Caption>
-        <Typo.Body as="p" className={styles.secondary}>
-          {latest.summary}
-        </Typo.Body>
-        <Typo.Caption as="p" className={styles.secondary}>
-          {latest.rationale}
-        </Typo.Caption>
-        <Typo.Caption as="p" className={styles.secondary}>
-          다음: {latest.nextStep}
-        </Typo.Caption>
-        <ViewTurnActivityButton count={activities.length} />
-      </Stack>
-    </section>
   );
 }
 

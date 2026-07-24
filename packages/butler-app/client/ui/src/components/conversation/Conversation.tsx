@@ -12,12 +12,10 @@ import {
   resolveButlerMarkTheme,
 } from "./conversationUtils";
 import { ConversationScroll, ConversationShell } from "@/butler-ds";
-import { useAutoRevealTurnActivity } from "@/components/inspector/useAutoRevealTurnActivity.ts";
 
 void appCopy;
 
 export function Conversation() {
-  useAutoRevealTurnActivity();
   const activeChatId = useButlerStore((state) => state.activeChatId);
   const navigation = useButlerStore((state) => state.navigation);
   const messages = useButlerStore((state) => state.messages);

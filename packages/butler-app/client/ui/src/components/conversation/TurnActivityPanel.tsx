@@ -1,12 +1,12 @@
-import { appCopy } from "@/app/copy.ts";
 import {
   typedUiReadModelsFromProgressRows,
   workBlocksFromProgressRows,
   type TypedUiReadModel,
 } from "@/app/utils.ts";
 import type { ProgressRow } from "@/app/types.ts";
-import { CurrentModelPhaseActivity, CurrentModelRoundWaiting, CurrentPhaseActivity }
+import { CurrentModelRoundWaiting, CurrentPhaseActivity }
   from "./PhaseActivityLog";
+import { TurnActivityTimeline } from "./TurnActivityTimeline";
 import { WorkDecisionBody } from "./WorkDecisionBody";
 import { TurnDecisionRow } from "./TurnDecisionRow";
 import { currentModelRoundWait, currentSemanticState, latestPublicActivity,
@@ -16,11 +16,9 @@ import {
   isTerminalActivityState,
   workActivityToolsForBlock,
 } from "./toolchainUtils";
-import { Skeleton, Stack, Typo, WorkActivityBlock } from "@/butler-ds";
-const SESSION_STARTING_STATE = "session_starting";
-const PENDING_SKELETON_WIDTH = "min(420px, 100%)";
-const PENDING_SKELETON_LINE_HEIGHT = "0.75rem";
-const PENDING_SKELETON_LINE_WIDTHS = ["86%", "68%", "46%"] as const;
+import { Stack, WorkActivityBlock } from "@/butler-ds";
+import { TurnActivityPending } from "./TurnActivityPending";
+import { appCopy } from "@/app/copy.ts";
 
 export function TurnActivityPanel({
   rows,
@@ -46,58 +44,7 @@ export function TurnActivityPanel({
     phaseActivities.length === 0 &&
     !publicActivity
   ) {
-    const receipt = acknowledgedReceipt(readModels);
-    const pendingLabel = receipt?.label.trim()
-      ? receipt.label
-      : turnActivityPendingLabel(state);
-    if (state === SESSION_STARTING_STATE && !receipt) {
-      return (
-        <Stack
-          gap="2"
-          data-test-class="turn-activity-panel turn-activity-pending-skeleton"
-          aria-live="polite"
-          aria-label={pendingLabel}
-          style={{ width: PENDING_SKELETON_WIDTH }}
-        >
-          <Typo.Body
-            as="p"
-            data-test-class="turn-activity-pending"
-            data-turn-state={state}
-            style={{
-              margin: 0,
-              color: "var(--text-secondary)",
-              fontWeight: "var(--font-weight-regular)",
-            }}
-          >
-            {pendingLabel}
-          </Typo.Body>
-          {PENDING_SKELETON_LINE_WIDTHS.map((width) => (
-            <Skeleton
-              key={width}
-              style={{
-                height: PENDING_SKELETON_LINE_HEIGHT,
-                width,
-              }}
-            />
-          ))}
-        </Stack>
-      );
-    }
-    return (
-      <Typo.Body
-        as="p"
-        data-test-class="turn-activity-panel turn-activity-pending"
-        data-turn-state={state ?? "unknown"}
-        aria-live="polite"
-        style={{
-          margin: 0,
-          color: "var(--text-secondary)",
-          fontWeight: "var(--font-weight-regular)",
-        }}
-      >
-        {pendingLabel}
-      </Typo.Body>
-    );
+    return <TurnActivityPending readModels={readModels} state={state} />;
   }
 
   return (
@@ -114,7 +61,11 @@ export function TurnActivityPanel({
           key={`${decision.summary}:${decisionIndex}`}
         />
       ))}
-      <CurrentModelPhaseActivity activities={phaseActivities} currentState={semanticState} />
+      <TurnActivityTimeline
+        activities={phaseActivities}
+        currentState={semanticState}
+        live
+      />
       {modelRoundWait ? <CurrentModelRoundWaiting row={modelRoundWait} /> : null}
       {publicActivity ? <CurrentPhaseActivity row={publicActivity} /> : null}
       {activeBlocks.map((block, blockIndex) => (
@@ -132,23 +83,6 @@ export function TurnActivityPanel({
         />
       ))}
     </Stack>
-  );
-}
-
-function turnActivityPendingLabel(state?: string): string {
-  const normalizedState = state?.trim().toLowerCase();
-  return normalizedState
-    ? (appCopy.conversation.work.pendingStateLabels[normalizedState] ??
-        appCopy.conversation.work.pendingLabel)
-    : appCopy.conversation.work.pendingLabel;
-}
-
-function acknowledgedReceipt(
-  readModels: TypedUiReadModel[],
-): Extract<TypedUiReadModel, { type: "receipt" }> | undefined {
-  return readModels.find(
-    (model): model is Extract<TypedUiReadModel, { type: "receipt" }> =>
-      model.type === "receipt" && model.receiptKind === "turn.acknowledged",
   );
 }
 

@@ -1105,7 +1105,9 @@ export function freezeMessageWorkBlocksForRecord(
   snapshot: TurnProgressSnapshot | null | undefined,
 ): MessageRecord {
   if (message.role !== "assistant" || !message.turn_id) return message;
-  const messageWithCleanBlocks = sanitizeMessageWorkBlocksForRecord(message);
+  const messageWithActivity = freezeMessagePhaseActivity(message, snapshot);
+  const messageWithCleanBlocks =
+    sanitizeMessageWorkBlocksForRecord(messageWithActivity);
   const blocks = completedMessageWorkBlocksFromSnapshot(
     snapshot,
     terminalProgressStateFromMessageStatus(message.status),
@@ -1120,6 +1122,35 @@ export function freezeMessageWorkBlocksForRecord(
     return messageWithCleanBlocks;
   }
   return { ...messageWithCleanBlocks, work_blocks: blocks };
+}
+
+function freezeMessagePhaseActivity(
+  message: MessageRecord,
+  snapshot: TurnProgressSnapshot | null | undefined,
+): MessageRecord {
+  const activityRows = (snapshot?.safe_progress_rows ?? []).filter(
+    isModelAuthoredPhaseActivityRow,
+  );
+  if (activityRows.length === 0) return message;
+  if (
+    message.turn_activity_rows &&
+    progressRowArrayEqual(message.turn_activity_rows, activityRows)
+  ) {
+    return message;
+  }
+  return { ...message, turn_activity_rows: activityRows };
+}
+
+function isModelAuthoredPhaseActivityRow(row: ProgressRow): boolean {
+  return Boolean(
+    row.kind === "message" &&
+    !row.work_block_id &&
+    row.semantic_block_id &&
+    row.work_decision_source === "model-authored" &&
+    row.work_decision_summary &&
+    row.work_decision_rationale &&
+    row.work_decision_next_step,
+  );
 }
 
 function sanitizeMessageWorkBlocksForRecord(
@@ -1472,10 +1503,16 @@ function mergeMessageRecord(
   previous: MessageRecord,
   incoming: MessageRecord,
 ): MessageRecord {
-  const next =
-    previous.work_blocks?.length && !incoming.work_blocks
-      ? { ...incoming, work_blocks: previous.work_blocks }
-      : incoming;
+  let next = incoming;
+  if (previous.work_blocks?.length && !next.work_blocks) {
+    next = { ...next, work_blocks: previous.work_blocks };
+  }
+  if (previous.turn_activity_rows?.length && !next.turn_activity_rows) {
+    next = {
+      ...next,
+      turn_activity_rows: previous.turn_activity_rows,
+    };
+  }
   const sanitized = sanitizeMessageWorkBlocksForRecord(next);
   return messageRecordEqual(previous, sanitized) ? previous : sanitized;
 }
@@ -1787,6 +1824,10 @@ function messageRecordEqual(
     left.created_at === right.created_at &&
     left.updated_at === right.updated_at &&
     workBlockArrayEqual(left.work_blocks ?? [], right.work_blocks ?? []) &&
+    progressRowArrayEqual(
+      left.turn_activity_rows ?? [],
+      right.turn_activity_rows ?? [],
+    ) &&
     JSON.stringify(left.attachments ?? []) ===
       JSON.stringify(right.attachments ?? []) &&
     JSON.stringify(left.artifacts ?? []) ===

@@ -697,6 +697,7 @@ export interface MessageRecord {
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
   work_blocks?: WorkBlockView[];
+  turn_activity_rows?: ProgressRow[];
   status?: string;
   delivery_state?: RuntimeDeliveryState;
   limitation_codes?: string[];

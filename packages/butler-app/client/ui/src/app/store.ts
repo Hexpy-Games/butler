@@ -137,7 +137,6 @@ interface ButlerStore {
   setLeftOpen: (value: Updater<boolean>) => void;
   setRightOpen: (value: Updater<boolean>) => void;
   setRightTab: (rightTab: string) => void;
-  openTurnActivity: () => void;
   setSelectedArtifactId: (artifactId: string | null) => void;
   openArtifact: (artifactId: string, artifact?: SessionArtifactSummary) => void;
   setLeftPanelWidth: (leftPanelWidth: number) => void;
@@ -248,7 +247,11 @@ function messageRecordsEqual(
       structurallyEqual(message.limitations ?? [], other.limitations ?? []) &&
       structurallyEqual(message.attachments ?? [], other.attachments ?? []) &&
       structurallyEqual(message.artifacts ?? [], other.artifacts ?? []) &&
-      structurallyEqual(message.work_blocks ?? [], other.work_blocks ?? [])
+      structurallyEqual(message.work_blocks ?? [], other.work_blocks ?? []) &&
+      structurallyEqual(
+        message.turn_activity_rows ?? [],
+        other.turn_activity_rows ?? [],
+      )
     );
   });
 }
@@ -261,6 +264,26 @@ function reusePreviousMessageRecord(
   return previous && messageRecordsEqual([previous], [message])
     ? previous
     : message;
+}
+
+function retainFrozenTurnPresentation(
+  previous: MessageRecord | undefined,
+  incoming: MessageRecord,
+): MessageRecord {
+  let retained = incoming;
+  if (previous?.work_blocks?.length && !retained.work_blocks) {
+    retained = { ...retained, work_blocks: previous.work_blocks };
+  }
+  if (
+    previous?.turn_activity_rows?.length &&
+    !retained.turn_activity_rows
+  ) {
+    retained = {
+      ...retained,
+      turn_activity_rows: previous.turn_activity_rows,
+    };
+  }
+  return retained;
 }
 
 function completedSendingOperationState(
@@ -402,9 +425,7 @@ function applyMessageListView(
   const messages = freezeMessageWorkBlocks(
     sourceMessages.map((message) => {
       const previous = previousById.get(message.id);
-      return previous?.work_blocks?.length && !message.work_blocks
-        ? { ...message, work_blocks: previous.work_blocks }
-        : message;
+      return retainFrozenTurnPresentation(previous, message);
     }),
     prunedTurnProgress,
   ).map((message) => reusePreviousMessageRecord(previousById, message));
@@ -557,10 +578,7 @@ function applySessionView(
   );
   const messages = sourceMessages.map((message) => {
     const previous = previousById.get(message.id);
-    const retainedMessage =
-      previous?.work_blocks?.length && !message.work_blocks
-        ? { ...message, work_blocks: previous.work_blocks }
-        : message;
+    const retainedMessage = retainFrozenTurnPresentation(previous, message);
     const frozen = freezeMessageWorkBlocksForRecord(
       retainedMessage,
       retainedMessage.turn_id
@@ -661,16 +679,6 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         : { rightOpen: false };
     }),
   setRightTab: (rightTab) => set({ rightTab }),
-  openTurnActivity: () =>
-    set((state) => ({
-      ...normalizeAdaptivePanelState({
-        mode: currentAdaptiveMode(),
-        requested: "right",
-        leftOpen: state.leftOpen,
-        rightOpen: true,
-      }),
-      rightTab: "activity",
-    })),
   setSelectedArtifactId: (artifactId) =>
     set({ selectedArtifactId: artifactId, selectedArtifact: null }),
   openArtifact: (artifactId, artifact) =>

@@ -112,10 +112,10 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
     },
   ]);
 
-  expect(html).toContain("현재 · 계획 · 전체 2개 기록");
+  expect(html).toContain("현재 · 계획 · 2개 기록");
   expect(html).not.toContain("사용자의 원래 목표를 보존하기 위해 필요합니다.");
   expect(html).toContain("다음: 계획 후보를 검토합니다.");
-  expect(html).toContain("전체 활동 2개 보기");
+  expect(html).toContain("전체 보기 (2)");
 });
 
 test("turn activity panel keeps the handoff under the canonical successor phase", () => {
@@ -130,7 +130,7 @@ test("turn activity panel keeps the handoff under the canonical successor phase"
     },
   ]);
 
-  expect(html).toContain("현재 · 구상 검토 · 전체 1개 기록");
+  expect(html).toContain("현재 · 구상 검토 · 1개 기록");
   expect(html).not.toContain("구상 결과를 독립적으로 검토하고 있습니다");
 });
 
@@ -165,7 +165,7 @@ test("turn activity panel hides an older placeholder after phase detail arrives"
     phaseActivityRow(),
   ]);
 
-  expect(html).toContain("현재 · 구상 · 전체 1개 기록");
+  expect(html).toContain("현재 · 구상 · 1개 기록");
   expect(html).not.toContain("요청의 의도와 목표를 구상하고 있습니다");
 });
 

@@ -11,6 +11,7 @@ import {
   activeTurnProgressSnapshot,
   applyTimelineEvents,
   freezeMessageWorkBlocks,
+  freezeMessageWorkBlocksForRecord,
   mergeTurnProgressFromSummary,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
 import {
@@ -100,20 +101,41 @@ afterEach(() => {
   }
 });
 
-test("turn activity action opens the dedicated inspector tab", () => {
-  useButlerStore.setState({
-    leftOpen: true,
-    rightOpen: false,
-    rightTab: "summary",
+test("completed assistant messages retain their own phase activity history", () => {
+  const message: MessageRecord = {
+    id: "assistant-turn-a",
+    turn_id: "turn-a",
+    role: "assistant",
+    text: "완료했습니다.",
+    status: "delivered",
+  };
+  const frozen = freezeMessageWorkBlocksForRecord(message, {
+    turn_id: "turn-a",
+    state: "delivered",
+    safe_progress_rows: [
+      {
+        id: "planning-a",
+        kind: "message",
+        state: "running",
+        safe_label: "수정 범위를 정했습니다.",
+        semantic_block_id: "planning",
+        work_decision_summary: "수정 범위를 정했습니다.",
+        work_decision_rationale: "목표를 빠짐없이 구현하기 위해서입니다.",
+        work_decision_next_step: "첫 작업을 실행합니다.",
+        work_decision_source: "model-authored",
+      },
+      {
+        id: "unrelated-turn-row",
+        kind: "message",
+        state: "running",
+        safe_label: "일반 상태",
+      },
+    ],
   });
 
-  useButlerStore.getState().openTurnActivity();
-
-  expect(useButlerStore.getState()).toMatchObject({
-    leftOpen: true,
-    rightOpen: true,
-    rightTab: "activity",
-  });
+  expect(frozen.turn_activity_rows?.map((row) => row.id)).toEqual([
+    "planning-a",
+  ]);
 });
 
 test("draft first send immediately opens an optimistic session shell", async () => {
