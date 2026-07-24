@@ -45,7 +45,7 @@ type ResultBase = {
   executionCheckpointRef: string;
   resultSummary: ResultSummary;
   operationResultRefs: ContentRef[];
-  operationResults: OperationResultProjection[];
+  operationResultReadScopeRefs: string[];
   unresolvedConditionRefs: [];
   targetStateRevisions: TargetStateRevision[];
   effectReceiptRefs: [];

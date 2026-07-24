@@ -264,7 +264,7 @@ export function successfulResult(
     executionCheckpointRef: "checkpoint-execution",
     resultSummary,
     operationResultRefs: [],
-    operationResults: [],
+    operationResultReadScopeRefs: [],
     unresolvedConditionRefs: [] as [],
     targetStateRevisions: [],
     effectReceiptRefs: [] as [],

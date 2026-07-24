@@ -16,9 +16,7 @@ test("Task Review exposes exact result reads and only the immutable workspace so
     result: {
       kind: "workspace_artifact",
       workspaceRevisionRef: reviewSourceRef,
-      operationResults: [{
-        readScopeRef: "operation-result:result-1",
-      }],
+      operationResultReadScopeRefs: ["operation-result:result-1"],
     } as never,
   });
 
