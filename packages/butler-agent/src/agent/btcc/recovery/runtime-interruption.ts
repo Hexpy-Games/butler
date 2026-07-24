@@ -3,13 +3,14 @@ import {
   OperationalInterruptionError,
   type OperationalCheckpointAnchor,
 } from "./operational-interruption.ts";
+import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 
 export function runtimeInterruption(
   error: unknown,
   anchor: OperationalCheckpointAnchor,
 ): OperationalInterruptionError {
   if (isBtccOperationalInterruption(error)) return error;
-  if (isSqliteWriteContention(error)) {
+  if (isSqliteContention(error)) {
     return new OperationalInterruptionError(
       "sqlite_write_contention",
       anchor,
@@ -23,11 +24,4 @@ export function runtimeInterruption(
     { kind: "runtime_remediation" },
     error,
   );
-}
-
-function isSqliteWriteContention(error: unknown): boolean {
-  if (typeof error !== "object" || error === null) return false;
-  const value = error as { code?: unknown; errno?: unknown };
-  return value.code === "SQLITE_BUSY" || value.code === "SQLITE_LOCKED" ||
-    value.errno === 5 || value.errno === 6;
 }
