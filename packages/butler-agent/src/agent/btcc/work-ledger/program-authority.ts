@@ -10,6 +10,7 @@ import type {
   ManagedProgramState,
   WorkLedgerMutation,
 } from "./contracts.ts";
+import { governingSpecLogicalIds } from "../conception/index.ts";
 
 type BindProgram = Extract<WorkLedgerMutation, { kind: "bind_program" }>;
 
@@ -21,8 +22,9 @@ export function bindManagedProgram(
 ): ManagedProgramState {
   const { authority, goalContract } = mutation.product;
   const binding = authority.managedBinding;
+  const governingLogicalIds = governingSpecLogicalIds(goalContract);
   const governingSpecRefs = resolveGoverningSpecRefs(
-    goalContract.governingSpecLogicalIds,
+    governingLogicalIds,
     availableSpecs,
   );
   const nextAuthority = {
@@ -33,7 +35,7 @@ export function bindManagedProgram(
     availableSpecs,
     availableSpecRefs: availableSpecs.map((spec) => spec.revisionRef),
     governingSpecs: selectGoverningSpecs(
-      goalContract.governingSpecLogicalIds,
+      governingLogicalIds,
       governingSpecs,
     ),
     governingSpecRefs,

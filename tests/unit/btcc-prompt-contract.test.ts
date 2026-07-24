@@ -14,8 +14,10 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
   );
   expect(resolveProhibitionInstructions(PROMPT_PROHIBITION_IDS).map((item) => item.id))
     .toEqual([...PROMPT_PROHIBITION_IDS]);
-  expect(resolveDutyInstructions(["select_exact_governing_spec_logical_ids"])[0]?.instruction)
-    .toContain("governing Specs");
+  expect(resolveDutyInstructions(["map_governing_spec_applicability"])[0]?.instruction)
+    .toContain("changeObligations");
+  expect(resolveDutyInstructions(["map_governing_spec_applicability"])[0]?.instruction)
+    .toContain("preservationConstraints");
   expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
     .toContain("exactly one verdict per entry");
   expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
@@ -32,6 +34,10 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("never collapse a layered feature");
   expect(resolveDutyInstructions(["author_smallest_sufficient_plan"])[0]?.instruction)
     .toContain("Never create a discovery Task inside a graph");
+  expect(resolveDutyInstructions(["author_smallest_sufficient_plan"])[0]?.instruction)
+    .toContain("existing conforming behavior");
+  expect(resolveDutyInstructions(["review_plan_exactly"])[0]?.instruction)
+    .toContain("Never expand the Goal");
   expect(resolveDutyInstructions(["review_task_independently"])[0]?.instruction)
     .toContain("Do not choose or reproduce opaque");
   expect(resolveDutyInstructions(["classify_correction_kind"])[0]?.instruction)

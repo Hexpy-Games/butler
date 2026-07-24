@@ -1,4 +1,5 @@
 export { createBtccTurnRuntime } from "./main.ts";
+export { governingSpecLogicalIds } from "./conception/index.ts";
 export {
   assertLogicalLedgerMutationId,
   assertLogicalLedgerRecordBytes,
