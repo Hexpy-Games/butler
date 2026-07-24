@@ -39,6 +39,20 @@ export type ReviewFinding = {
   targetRevisionRefs: ContentRef[];
 };
 
+export type ReviewFindingSet = {
+  ref: ContentRef;
+  owner: "task_review";
+  findingRefs: ContentRef[];
+};
+
+export type TaskCorrectionScope = {
+  ref: ContentRef;
+  origin: "task_review";
+  sourceTaskRef: ContentRef;
+  sourceAttemptRef: ContentRef;
+  findingSetRef: ContentRef;
+};
+
 export type TaskReviewProduct = {
   kind: "task_review";
   review: {
@@ -69,7 +83,9 @@ export type TaskReviewProduct = {
     | {
         verdict: "not_passed";
         findingSetRef: ContentRef;
+        findingSet: ReviewFindingSet;
         correctionScopeRef: ContentRef;
+        correctionScope: TaskCorrectionScope;
       }
   );
 };

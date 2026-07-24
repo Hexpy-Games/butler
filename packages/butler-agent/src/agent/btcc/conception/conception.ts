@@ -135,7 +135,7 @@ function feedbackSource(
   return {
     origin: "task_review" as const,
     record: review,
-    correctionScopeRef: review.review.correctionScopeRef,
+    correctionScopeRef: review.review.correctionScope.ref,
     affectedTaskRefs: [program.currentTask.task.ref],
   };
 }

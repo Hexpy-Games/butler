@@ -117,18 +117,22 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       return { kind: "task_review", review: { ref: contentRef("task-review", body), ...body } };
     }
     const findingRefs = decoded.findings.map((finding) => finding.ref);
-    const findingSetRef = contentRef("finding-set", { owner: "task_review", findingRefs });
-    const correctionScopeRef = contentRef("correction-scope", {
-      origin: "task_review",
+    const findingSetBody = { owner: "task_review" as const, findingRefs };
+    const findingSetRef = contentRef("finding-set", findingSetBody);
+    const correctionScopeBody = {
+      origin: "task_review" as const,
       sourceTaskRef: result.result.taskRef,
       sourceAttemptRef: result.result.attemptRef,
       findingSetRef,
-    });
+    };
+    const correctionScopeRef = contentRef("correction-scope", correctionScopeBody);
     const body = {
       ...reviewBase,
       verdict: "not_passed" as const,
       findingSetRef,
+      findingSet: { ref: findingSetRef, ...findingSetBody },
       correctionScopeRef,
+      correctionScope: { ref: correctionScopeRef, ...correctionScopeBody },
     };
     return { kind: "task_review", review: { ref: contentRef("task-review", body), ...body } };
   },
