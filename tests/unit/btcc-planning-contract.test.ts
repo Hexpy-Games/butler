@@ -94,6 +94,29 @@ describe("BTCC Planning contract", () => {
     expect(schema).toContain('"enum":["SPEC-EXISTING"]');
   });
 
+  test("uses one canonical Planning submission shape for optional collections", () => {
+    const schema = planCandidateSubmissionSchema(["SPEC-EXISTING"]) as {
+      type?: string;
+      properties?: Record<string, unknown>;
+      required?: string[];
+      anyOf?: unknown[];
+    };
+
+    expect(schema.type).toBe("object");
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.required).toEqual(expect.arrayContaining([
+      "specifications",
+      "governingSpecSelections",
+      "promotionSelectors",
+      "risks",
+      "assumptions",
+      "effectIntents",
+      "integrationCriteria",
+    ]));
+    expect(schema.properties).toHaveProperty("specifications");
+    expect(schema.properties).toHaveProperty("promotionSelectors");
+  });
+
   test("constrains feedback review findings by priority, scope, and frozen identity", () => {
     const planningRevision = JSON.stringify(
       planReviewSubmissionSchema(["task:one"], ["planning-finding-1"]),

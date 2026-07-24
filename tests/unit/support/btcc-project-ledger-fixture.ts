@@ -242,7 +242,13 @@ export function projectBindingCommit(options: {
       mutation: {
         kind: "bind_program" as const,
         sessionId: "session-project",
-        product: { kind: "goal_contract_accepted" as const, goalContract, authority, review },
+        product: {
+          kind: "goal_contract_accepted" as const,
+          goalContract,
+          planningContext: { observationResultIndex: [] },
+          authority,
+          review,
+        },
       },
     },
   } satisfies {

@@ -1,5 +1,6 @@
 import type { ContentRef } from "../core/index.ts";
 import type { ContinuationBinding } from "../continuation/index.ts";
+import type { ConceptionPlanningContext } from "./planning-context.ts";
 
 export type GoalContractRecord = {
   ref: ContentRef;
@@ -57,6 +58,7 @@ export type GoalContractCandidateProduct = {
           reviewRef: ContentRef;
           findingSetRef: ContentRef;
         };
+    planningContext: ConceptionPlanningContext;
   };
 };
 
@@ -93,6 +95,7 @@ export type GoalContractAcceptedProduct = {
     findings: [];
   };
   goalContract: GoalContractRecord;
+  planningContext: ConceptionPlanningContext;
   authority: {
     ref: ContentRef;
     goalContractRef: ContentRef;

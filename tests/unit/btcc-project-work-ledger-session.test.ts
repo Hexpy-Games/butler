@@ -196,6 +196,7 @@ function sessionProgramCommit(): WorkLedgerCommit {
       sessionId: "session-fixture",
       product: {
         kind: "goal_contract_accepted",
+        planningContext: { observationResultIndex: [] },
         review: {
           ref: ref("review"),
           candidateRef: ref("candidate"),

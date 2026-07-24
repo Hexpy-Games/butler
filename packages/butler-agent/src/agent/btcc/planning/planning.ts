@@ -18,7 +18,10 @@ import type {
   PlanningDraftCandidate,
   PlanningProposal,
 } from "./contracts.ts";
-import { admitPlanningObservations } from "./observation-result-index.ts";
+import {
+  admitPlanningObservations,
+  mergePlanningObservationIndexes,
+} from "./observation-result-index.ts";
 
 type InitialPlanningEvent = Extract<TurnEvent, {
   kind:
@@ -95,9 +98,13 @@ async function authorInitialPlan(command: {
   if (!accepted) throw new Error("Planning is missing accepted Goal authority");
   const authority = requireManagedPlanningAuthority(command.turn);
   const previous = managed.planningRevision;
+  const observations = mergePlanningObservationIndexes(
+    accepted.planningContext.observationResultIndex,
+    previous?.observationResultIndex ?? [],
+  );
   const phase = admitPlanningObservations(
     command.phase,
-    previous?.observationResultIndex ?? [],
+    observations,
   );
   const product = await proposePlan(withManagedDeferralState(phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
@@ -116,6 +123,7 @@ async function authorInitialPlan(command: {
     governingSpecs: authority.governingSpecs,
     availableSpecs: authority.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
+    priorPlanningObservationResultIndex: observations,
     ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
       ? { continuation: accepted.authority.managedBinding.continuationBinding }
       : {}),
@@ -123,7 +131,6 @@ async function authorInitialPlan(command: {
       ? {
           previousPlanCandidate: previous.candidate,
           planningReviewFindings: previous.review.findings,
-          priorPlanningObservationResultIndex: previous.observationResultIndex,
         }
       : {}),
     ...(previous && !isPlanningDraft(previous.candidate)

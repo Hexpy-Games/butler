@@ -17,6 +17,7 @@ import type {
 } from "./managed-contracts.ts";
 import { requireGoverningSpecApplications } from "./governing-spec-applications.ts";
 import { goalCandidateSubmissionSchema } from "./submission-schemas.ts";
+import { retainConceptionPlanningContext } from "./planning-context.ts";
 
 const LENSES: ConceptionLensId[] = [
   "requested_content",
@@ -118,6 +119,10 @@ const codec: PhaseCodec<GoalContractCandidateProduct> = {
       proposedContract,
       proposedStrategy: "managed" as const,
       revisionOrigin,
+      planningContext: retainConceptionPlanningContext(
+        envelope.operationResults,
+        priorPlanningContext(envelope.context.stateInput),
+      ),
     };
     return {
       kind: "goal_contract_candidate",
@@ -149,6 +154,14 @@ export function bindGoalRevision(
     reviewRef: revision.review.ref,
     findingSetRef: revision.review.findingSetRef,
   };
+}
+
+function priorPlanningContext(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return undefined;
+  const revision = (input as Record<string, unknown>).goalRevision;
+  if (!revision || typeof revision !== "object" || Array.isArray(revision)) return undefined;
+  const candidate = (revision as GoalContractRevisionRequiredProduct).candidate;
+  return candidate?.planningContext;
 }
 
 function sameRef(
