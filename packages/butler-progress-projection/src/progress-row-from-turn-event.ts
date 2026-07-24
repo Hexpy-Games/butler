@@ -40,6 +40,7 @@ export function progressRowFromSharedTurnEvent(
       work_block_label:
         optionalText(payload.decisionTitle ?? payload.workBlockLabel) ??
         (workBlockId ? note : undefined),
+      bridge_phase: payload.operational === true ? "operational_recovery" : undefined,
       ...workDecisionFields(payload),
     };
   }

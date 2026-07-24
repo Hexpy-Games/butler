@@ -1,20 +1,17 @@
 import type {
-  OperationAuthority,
-  OperationRequest,
   PhaseConversationCommand,
   PhaseConversationSnapshot,
   PhaseEnvelope,
-  OperationResult,
 } from "./contracts.ts";
-import {
-  projectEphemeralOperationResult,
-  type OperationResultProjection,
-} from "../operation-result/index.ts";
 import {
   isBtccOperationalInterruption,
   OperationalInterruptionError,
   runtimeInterruption,
 } from "../recovery/index.ts";
+import {
+  normalizeOperationResult,
+  performOperationBatch,
+} from "./operation-round.ts";
 import { phaseOperationAuthority } from "./phase-operation-authority.ts";
 
 export async function runPhaseConversation<Product>(
@@ -67,7 +64,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
         command.modelSelection,
         conversation.pendingOperationRound.actualIdentity,
       );
-      const results = await performRequestedObservations(
+      const results = await performOperationBatch(
         command,
         envelope,
         conversation.pendingOperationRound.requests,
@@ -139,10 +136,18 @@ async function runPhaseConversationAtCheckpoint<Product>(
         binding: conversation.binding,
         envelope,
         submission: round.submission,
+        publicActivity: round.publicActivity,
         actualIdentity: round.actualIdentity,
       }),
       pendingSubmissionRound: round,
     };
+    if (round.publicActivity) {
+      await command.activity?.publish({
+        turnId: conversation.binding.turnId,
+        semanticState: conversation.binding.semanticState,
+        activity: round.publicActivity,
+      });
+    }
   }
 }
 
@@ -205,127 +210,6 @@ function assembleEnvelope<Product>(
       ? { providerCorrection: command.providerCorrection }
       : {}),
   };
-}
-
-function normalizeOperationResult(
-  result: OperationResult,
-  binding: PhaseEnvelope["binding"],
-  modelSelection: PhaseEnvelope["modelSelection"],
-): OperationResultProjection {
-  if (isOperationResultProjection(result)) return result;
-  if (!result.content) {
-    throw new Error("BTCC operation result has neither a projection nor complete content");
-  }
-  return projectEphemeralOperationResult({
-    binding,
-    request: result.request,
-    result: { ...result, content: result.content },
-    modelSelection,
-  });
-}
-
-async function performRequestedObservations<Product>(
-  command: PhaseConversationCommand<Product>,
-  envelope: PhaseEnvelope,
-  requests: OperationRequest[],
-): Promise<Array<{ request: OperationRequest; result: OperationResultProjection }>> {
-  if (requests.length === 0) {
-    throw new Error("BTCC operation request carrier must not be empty");
-  }
-  const roundRequests = new Map<string, OperationRequest>();
-  const results: Array<{
-    request: OperationRequest;
-    result: OperationResultProjection;
-  }> = [];
-  for (const request of requests) {
-    command.executionPermit.assertActive();
-    assertAuthorizedOperationKind(request, envelope.operationAuthority);
-    const existing = roundRequests.get(request.requestId);
-    if (existing) {
-      if (!sameRequest(existing, request)) {
-        throw new Error("BTCC provider round reused one request ID for different operations");
-      }
-      throw new Error("BTCC provider round contains a duplicate operation request ID");
-    }
-    roundRequests.set(request.requestId, request);
-    const observed = await command.operations.perform({
-      request,
-      envelope,
-      signal: command.executionPermit.signal,
-    });
-    command.executionPermit.assertActive();
-    if (observed.requestId !== request.requestId) {
-      throw new Error("BTCC observation result does not match its request");
-    }
-    const result = isOperationResultProjection(observed)
-      ? { ...observed, request }
-      : projectEphemeralOperationResult({
-          binding: envelope.binding,
-          request,
-          result: observed,
-          modelSelection: envelope.modelSelection,
-        });
-    results.push({ request, result });
-  }
-  command.executionPermit.assertActive();
-  return results;
-}
-
-function isOperationResultProjection(
-  result: OperationResult | Awaited<
-    ReturnType<PhaseConversationCommand<unknown>["operations"]["perform"]>
-  >,
-): result is OperationResultProjection {
-  return "resultRef" in result && "preview" in result && "readScopeRef" in result;
-}
-
-function sameRequest(
-  left: OperationRequest,
-  right: OperationRequest,
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function assertAuthorizedOperationKind(
-  request: OperationRequest,
-  authority: OperationAuthority,
-): void {
-  if (request.kind === "observe") {
-    if (authority.observationScopeRefs.includes(request.scopeRef)) return;
-  } else if (request.kind === "workspace_artifact_observation") {
-    if (
-      authority.mutation.kind === "workspace_only" &&
-      sameRef(request.workspaceRef, authority.mutation.workspaceRef)
-    ) return;
-  } else if (request.kind === "workspace_artifact_action") {
-    if (
-      authority.mutation.kind === "workspace_only" &&
-      sameRef(request.workspaceRef, authority.mutation.workspaceRef)
-    ) return;
-  } else if (request.kind === "review_validation" &&
-    authority.mutation.kind === "validation_overlay_only" &&
-    sameRef(request.reviewSourceRef, authority.mutation.reviewSourceRef)
-  ) {
-    return;
-  } else if (
-    request.kind === "repository_promotion" &&
-    authority.mutation.kind === "repository_promotion_only" &&
-    sameRef(request.authorizationRef, authority.mutation.authorizationRef) &&
-    sameRef(request.candidateRef, authority.mutation.candidateRef) &&
-    sameRef(request.resolutionRef, authority.mutation.resolutionRef) &&
-    sameRef(request.baselineRef, authority.mutation.baselineRef) &&
-    sameRef(request.finalSnapshotRef, authority.mutation.finalSnapshotRef)
-  ) {
-    return;
-  }
-  throw new Error("BTCC phase requested an operation outside its admitted authority");
-}
-
-function sameRef(
-  left: { id: string; sha256: string },
-  right: { id: string; sha256: string },
-): boolean {
-  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function assertActualModel(

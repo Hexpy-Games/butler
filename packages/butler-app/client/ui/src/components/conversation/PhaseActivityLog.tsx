@@ -18,8 +18,10 @@ export function CurrentPhaseActivity({ row }: { row: ProgressRow }) {
 
 export function CurrentModelPhaseActivity({
   activities,
+  currentState,
 }: {
   activities: PhaseActivity[];
+  currentState?: string;
 }) {
   const latest = activities.at(-1);
   if (!latest) return null;
@@ -31,7 +33,7 @@ export function CurrentModelPhaseActivity({
     >
       <Stack gap="xs" aria-live="polite">
         <Typo.Caption as="p" className={styles.secondary}>
-          현재 · {phaseLabel(latest.phase)} · 전체 {activities.length}개 기록
+          현재 · {phaseLabel(currentState ?? latest.phase)} · 전체 {activities.length}개 기록
         </Typo.Caption>
         <Typo.Body as="p" className={styles.secondary}>
           {latest.summary}

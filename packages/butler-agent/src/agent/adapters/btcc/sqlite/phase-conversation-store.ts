@@ -120,11 +120,13 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
     binding: PhaseRunBinding;
     envelope: PhaseEnvelope;
     submission: unknown;
+    publicActivity?: PhaseContinuity["publicActivity"];
     actualIdentity: ActualModelIdentity;
   }): Promise<PhaseRunBinding> {
     const providerRound = {
       kind: "phase_submission" as const,
       submission: input.submission,
+      ...(input.publicActivity ? { publicActivity: input.publicActivity } : {}),
       actualIdentity: input.actualIdentity,
     };
     return this.db.transaction(() => {

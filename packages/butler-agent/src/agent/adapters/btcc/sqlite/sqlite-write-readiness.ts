@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import type {
   OperationalRecoveryReadiness,
-} from "../../../btcc/recovery/index.ts";
+} from "../../../btcc/gateway-api.ts";
 
 const WRITE_PROBE_BUSY_WINDOW_MS = 250;
 

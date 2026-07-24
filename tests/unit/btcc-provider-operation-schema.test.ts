@@ -31,6 +31,11 @@ test("renders only the exact accepted Task targets into the provider schema", as
         carrier: {
           kind: "phase_submission",
           submission: { kind: "complete" },
+          publicActivity: {
+            summary: "허용된 작업 대상을 확인했습니다.",
+            rationale: "실행 권한과 계획 범위를 일치시켰습니다.",
+            nextStep: "정확한 대상만 실행합니다.",
+          },
         },
         actualIdentity: actualIdentity(),
       };

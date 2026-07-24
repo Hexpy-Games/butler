@@ -6,6 +6,7 @@ import type { SubmissionSchema } from "./submission-schema.ts";
 import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
 import type { OperationResultProjection } from "../operation-result/contracts.ts";
 import type { OperationResultCompleteness } from "../operation-result/contracts.ts";
+import type { PublicPhaseActivity } from "./phase-activity.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -102,6 +103,7 @@ export type ProviderRoundValue =
   | {
       kind: "phase_submission";
       submission: unknown;
+      publicActivity?: PublicPhaseActivity;
       actualIdentity: ActualModelIdentity;
     }
   | {
@@ -135,6 +137,7 @@ export type PhaseConversationSnapshot<Product> = {
   };
   pendingSubmissionRound?: {
     submission: unknown;
+    publicActivity?: PublicPhaseActivity;
     actualIdentity: ActualModelIdentity;
   };
 };
@@ -156,6 +159,7 @@ export interface PhaseConversationStore {
     binding: PhaseRunBinding;
     envelope: PhaseEnvelope;
     submission: unknown;
+    publicActivity?: PublicPhaseActivity;
     actualIdentity: ActualModelIdentity;
   }): Promise<PhaseRunBinding>;
   acceptPhaseProduct<Product>(input: {
@@ -190,11 +194,7 @@ export type PhaseContinuity = {
   decisions: string[];
   unresolved: string[];
   nextOperationPurpose: string;
-  publicActivity: {
-    summary: string;
-    rationale: string;
-    nextStep: string;
-  };
+  publicActivity: PublicPhaseActivity;
 };
 
 export type WorkspaceOperationRoot =
@@ -328,7 +328,7 @@ export type PhaseConversationCommand<Product> = {
     publish(update: {
       turnId: string;
       semanticState: ModelPhaseState;
-      activity: PhaseContinuity["publicActivity"];
+      activity: PublicPhaseActivity;
     }): void | Promise<void>;
   };
   providerCorrection?: ProviderCorrection;

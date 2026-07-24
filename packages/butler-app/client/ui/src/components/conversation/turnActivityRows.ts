@@ -35,6 +35,7 @@ export function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
 
 export function latestPublicActivity(
   rows: ProgressRow[],
+  hasModelActivity = false,
 ): ProgressRow | undefined {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
@@ -45,9 +46,23 @@ export function latestPublicActivity(
       !row.work_block_id
     ) {
       if (row.work_decision_source) return undefined;
+      if (hasModelActivity && row.bridge_phase !== "operational_recovery") {
+        return undefined;
+      }
       if (row.safe_label.trim().length === 0) continue;
       return row;
     }
   }
   return undefined;
+}
+
+export function currentSemanticState(
+  rows: ProgressRow[],
+  activities: PhaseActivity[],
+): string | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const semanticState = rows[index]?.semantic_block_id;
+    if (semanticState) return semanticState;
+  }
+  return activities.at(-1)?.phase;
 }

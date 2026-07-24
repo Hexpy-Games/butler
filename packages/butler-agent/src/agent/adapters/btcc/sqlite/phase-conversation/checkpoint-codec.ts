@@ -31,17 +31,23 @@ export function decodePendingOperation(value: string): {
 
 export function decodePendingSubmission(value: string): {
   submission: unknown;
+  publicActivity?: PhaseContinuity["publicActivity"];
   actualIdentity: ActualModelIdentity;
 } {
   const parsed = JSON.parse(value) as {
     kind?: string;
     submission?: unknown;
+    publicActivity?: PhaseContinuity["publicActivity"];
     actualIdentity?: ActualModelIdentity;
   };
   if (parsed.kind !== "phase_submission" || !("submission" in parsed) || !parsed.actualIdentity) {
     throw new Error("BTCC pending phase submission carrier is invalid");
   }
-  return { submission: parsed.submission, actualIdentity: parsed.actualIdentity };
+  return {
+    submission: parsed.submission,
+    ...(parsed.publicActivity ? { publicActivity: parsed.publicActivity } : {}),
+    actualIdentity: parsed.actualIdentity,
+  };
 }
 
 export function optionalJson(value: unknown): string | null {

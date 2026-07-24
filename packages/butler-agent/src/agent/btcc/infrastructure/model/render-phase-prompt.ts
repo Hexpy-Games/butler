@@ -87,7 +87,11 @@ export async function renderPhasePrompt(
         carrierKinds: availableCapabilities.length > 0
           ? ["phase_submission", "operation_requests"]
           : ["phase_submission"],
-        phaseSubmission: "Use one submission object allowed by the exact phase exits.",
+        phaseSubmission: [
+          "Use one submission object allowed by the exact phase exits.",
+          "Write publicActivity as a concise user-visible handoff: what this phase decided, why it matters, and what the next phase will do.",
+          "Do not expose hidden chain-of-thought or copy raw operation output.",
+        ].join(" "),
         ...(availableCapabilities.length > 0
           ? {
               operationRequests: [

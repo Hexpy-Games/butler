@@ -34,7 +34,10 @@ export function providerCarrierFunctions(
     name: "submit_btcc_phase_submission",
     description: "Submit the one phase product allowed by the current BTCC phase.",
     carrierKind: "phase_submission",
-    parameters: objectParameters({ submission: submissionSchema }, ["submission"]),
+    parameters: objectParameters({
+      submission: submissionSchema,
+      publicActivity: publicActivitySchema("phase handoff"),
+    }, ["submission", "publicActivity"]),
   }];
   if (capabilities.length > 0) {
     const carrier = operationRequestsSchema(
@@ -60,8 +63,9 @@ function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Recor
     properties: {
       kind: stringConstant("phase_submission"),
       submission: submissionSchema,
+      publicActivity: publicActivitySchema("phase handoff"),
     },
-    required: ["kind", "submission"],
+    required: ["kind", "submission", "publicActivity"],
     additionalProperties: false,
   };
 }
@@ -93,18 +97,7 @@ function phaseContinuitySchema(): Record<string, unknown> {
     decisions: { type: "array", items: { type: "string" } },
     unresolved: { type: "array", items: { type: "string" } },
     nextOperationPurpose: { type: "string" },
-    publicActivity: {
-      ...objectParameters({
-        summary: { type: "string", minLength: 1 },
-        rationale: { type: "string", minLength: 1 },
-        nextStep: { type: "string", minLength: 1 },
-      }, ["summary", "rationale", "nextStep"]),
-      description: [
-        "User-visible activity record for the operation batch now beginning.",
-        "Explain what is happening, why it is needed, and what follows.",
-        "Summarize intent without exposing hidden chain-of-thought.",
-      ].join(" "),
-    },
+    publicActivity: publicActivitySchema("operation batch now beginning"),
     }, [
       "objectiveState",
       "decisions",
@@ -115,6 +108,21 @@ function phaseContinuitySchema(): Record<string, unknown> {
     description: [
       "Replaceable phase-local continuity for the next stateless model round.",
       "Integrate conclusions, not raw operation output or a growing transcript.",
+    ].join(" "),
+  };
+}
+
+function publicActivitySchema(moment: string): Record<string, unknown> {
+  return {
+    ...objectParameters({
+      summary: { type: "string", minLength: 1 },
+      rationale: { type: "string", minLength: 1 },
+      nextStep: { type: "string", minLength: 1 },
+    }, ["summary", "rationale", "nextStep"]),
+    description: [
+      `User-visible activity record for the ${moment}.`,
+      "Explain what was decided or is happening, why it matters, and what follows.",
+      "Summarize intent without exposing hidden chain-of-thought.",
     ].join(" "),
   };
 }
