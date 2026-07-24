@@ -1,5 +1,6 @@
 import type { ContentRef } from "../core/index.ts";
 import type { ContinuationBinding } from "../continuation/index.ts";
+import type { OperationResultProjection } from "../operation-result/index.ts";
 
 export type TaskArtifactPolicy =
   | { kind: "non_artifact"; targetScopeRefs: string[] }
@@ -250,7 +251,24 @@ export type PlanningCandidateBundleEntry = {
 export type PlanningCandidateProduct = {
   kind: "plan_candidate";
   candidate: PlanningProposal;
+  observationResultIndex: PlanningObservationResultIndexEntry[];
 };
+
+export type PlanningObservationResultIndexEntry = Pick<
+  OperationResultProjection,
+  | "resultRef"
+  | "requestRef"
+  | "requestId"
+  | "capabilityRef"
+  | "outcome"
+  | "completeness"
+  | "byteLength"
+  | "observationRef"
+  | "readScopeRef"
+  | "artifactRevisionRef"
+  | "targetSnapshotRef"
+  | "validationReceiptRef"
+>;
 
 export type PlanningContinuation = Extract<ContinuationBinding, { kind: "deferred_goal" }>;
 
@@ -299,6 +317,7 @@ export type PlanningAcceptedProduct = {
 export type PlanningRevisionRequiredProduct = {
   kind: "planning_revision_required";
   candidate: PlanningProposal;
+  observationResultIndex: PlanningObservationResultIndexEntry[];
   review: Pick<PlanningReview,
     "ref" | "candidateRef" | "originalGoalContractRef"
   > & Partial<Omit<PlanningReview,
