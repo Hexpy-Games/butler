@@ -148,12 +148,6 @@ const REVIEW_DIMENSIONS = [
   "artifact_lifecycle",
 ] as const;
 
-export const planRevisionReviewSubmissionSchema = objectSchema({
-  kind: literalSchema("planning_review"),
-  verdict: literalSchema("revision_required"),
-  findings: arraySchema(textSchema(), { minItems: 1 }),
-});
-
 function reviewCoverage(): SubmissionSchema {
   return arraySchema(objectSchema({
     dimension: enumSchema(...REVIEW_DIMENSIONS),

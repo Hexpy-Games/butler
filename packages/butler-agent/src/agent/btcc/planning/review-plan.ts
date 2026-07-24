@@ -1,7 +1,6 @@
 import {
   contentRef,
   requireRecord,
-  requireStringArray,
   runPhaseConversation,
   type PhaseContract,
   type PhaseInvocation,
@@ -17,8 +16,8 @@ import type {
 import { withManagedDeferral } from "../deferral/index.ts";
 import {
   planReviewSubmissionSchema,
-  planRevisionReviewSubmissionSchema,
 } from "./submission-schemas.ts";
+import { planDraftReviewSubmissionSchema } from "./draft-review-submission-schema.ts";
 import { attestCandidateBundle } from "./review-plan-attestation.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import {
@@ -26,6 +25,11 @@ import {
   requireDimensionCoverage,
   requireSubjectCoverage,
 } from "./review-subjects.ts";
+import {
+  createPlanningFindingSet,
+  draftReviewFindings,
+  requiredPlanningFindings,
+} from "./review-finding-set.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
@@ -55,10 +59,10 @@ function reviewCodec(
   const subjects = isDraft(candidate.candidate)
     ? []
     : planningReviewSubjects(candidate.candidate);
-  const priorBlocking = prior ? orderedBlockingFindings(prior.reviewedSubjects) : [];
+  const priorBlocking = requiredPlanningFindings(prior);
   return withManagedDeferral<PlanningReviewProduct>({
     submissionSchema: isDraft(candidate.candidate)
-      ? planRevisionReviewSubmissionSchema
+      ? planDraftReviewSubmissionSchema
       : planReviewSubmissionSchema(
           subjects.map((item) => item.subjectId),
           priorBlocking.map((finding) => finding.ref.id),
@@ -71,10 +75,9 @@ function reviewCodec(
         throw new Error("Planning Review verdict is invalid");
       }
       if (isDraft(loaded.candidate)) {
-        const submittedFindings = requireStringArray(value.findings, "Planning Review findings");
         return requireDraftRevision(
           loaded.candidate,
-          submittedFindings,
+          value.findings,
           loaded.observationResultIndex,
         );
       }
@@ -146,16 +149,16 @@ function requireMaterializedRevision(
   submittedFindings: string[],
 ): PlanningReviewProduct {
   const candidate = product.candidate;
+  const allFindings = reviewBase.reviewedSubjects
+    .flatMap((subject) => subject.findings);
+  const findingSet = createPlanningFindingSet(candidate.ref, allFindings);
   const findings = requireFindings(submittedFindings);
-  const findingSetRef = contentRef("planning-finding-set", {
-    candidateRef: candidate.ref,
-    findingRefs: orderedBlockingFindings(reviewBase.reviewedSubjects)
-      .map((finding) => finding.ref),
-  });
+  const findingSetRef = findingSet.ref;
   const body = {
     ...reviewBase,
     verdict: "revision_required" as const,
     findings: findings as [string, ...string[]],
+    findingSet,
     findingSetRef,
   };
   return {
@@ -168,22 +171,25 @@ function requireMaterializedRevision(
 
 function requireDraftRevision(
   candidate: PlanningDraftCandidate,
-  submittedFindings: string[],
+  submittedFindings: unknown,
   observationResultIndex: PlanningCandidateProduct["observationResultIndex"] = [],
 ): PlanningReviewProduct {
-  const findings = requireFindings([
-    ...candidate.validationFindings.map((finding) => `${finding.code}: ${finding.message}`),
-    ...submittedFindings,
-  ]);
-  const findingSetRef = contentRef("planning-finding-set", {
-    candidateRef: candidate.ref,
-    findings,
-  });
+  const findingSet = createPlanningFindingSet(
+    candidate.ref,
+    draftReviewFindings(candidate, submittedFindings),
+  );
+  const findings = requireFindings(
+    findingSet.findings
+      .filter((finding) => finding.recommendedDisposition === "required_now")
+      .map((finding) => finding.message),
+  );
+  const findingSetRef = findingSet.ref;
   const body = {
     candidateRef: candidate.ref,
     originalGoalContractRef: candidate.goalContractRef,
     verdict: "revision_required" as const,
     findings,
+    findingSet,
     findingSetRef,
   };
   return {
@@ -217,7 +223,7 @@ function preserveRevisionReviewScope(
   ) {
     throw new Error("Planning revision changed its frozen review lineage");
   }
-  const priorBlocking = orderedBlockingFindings(prior.reviewedSubjects);
+  const priorBlocking = requiredPlanningFindings(prior);
   const decisions = candidate.revisionOrigin.findingDecisions;
   if (
     decisions.length !== priorBlocking.length ||

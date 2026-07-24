@@ -11,6 +11,8 @@ import type {
 } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
 import { planningReviewSubjects } from
   "../../packages/butler-agent/src/agent/btcc/planning/review-subjects.ts";
+import { requiredSubjectFindingRefs } from
+  "../../packages/butler-agent/src/agent/btcc/planning/finding-decisions.ts";
 import {
   feedbackPlanReviewSubmissionSchema,
   planCandidateSubmissionSchema,
@@ -423,11 +425,38 @@ describe("BTCC Planning contract", () => {
     const reviewed = await reviewPlan(reviewInvocation(draft, {
       kind: "planning_review",
       verdict: "revision_required",
-      findings: ["Align the participating Task set with the promotion selector."],
+      findings: [{
+        dimension: "verification_integration",
+        message: "Align the participating Task set with the promotion selector.",
+        priority: "P1",
+        recommendedDisposition: "required_now",
+        findingOrigin: "initial_review",
+      }],
     }));
     expect(reviewed.kind).toBe("planning_revision_required");
     if (reviewed.kind !== "planning_revision_required") throw new Error("expected revision");
     expect(reviewed.review.findings.join("\n")).toContain("planned_graph_mismatch");
+    expect(reviewed.review.findingSet.findings.map((finding) => finding.priority))
+      .toEqual(["P0", "P1"]);
+
+    const findingRefs = requiredSubjectFindingRefs(reviewed.review);
+    const revised = authorPlanCandidate(artifactPlan(), {
+      ...authoringState(),
+      previousCandidateRef: draft.ref,
+      findingSetRef: reviewed.review.findingSetRef,
+      findingDecisions: findingRefs.map((findingRef) => ({
+        findingRef,
+        decision: "apply_now" as const,
+        rationale: "The revised candidate resolves this exact frozen finding.",
+      })),
+    });
+    const accepted = await reviewPlan(reviewInvocation(revised, {
+      kind: "planning_review",
+      verdict: "accepted",
+      coverage: acceptedCoverage(),
+      subjects: acceptedSubjects(revised),
+    }, reviewed.review));
+    expect(accepted.kind).toBe("planning_accepted");
   });
 });
 
