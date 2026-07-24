@@ -31,6 +31,17 @@ export class BtccTurnProgressHub implements BtccTurnProgressObserver {
     ));
   }
 
+  async phaseActivityChanged(
+    update: Parameters<NonNullable<
+      BtccTurnProgressObserver["phaseActivityChanged"]
+    >>[0],
+  ): Promise<void> {
+    const observers = [...(this.observers.get(update.turnId) ?? [])];
+    await Promise.all(observers.map((observer) =>
+      observer.phaseActivityChanged?.(update),
+    ));
+  }
+
   async operationalNoticeChanged(
     update: Parameters<NonNullable<
       BtccTurnProgressObserver["operationalNoticeChanged"]
