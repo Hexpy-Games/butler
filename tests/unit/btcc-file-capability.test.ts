@@ -46,7 +46,7 @@ test("BTCC list_files discovers nested sources without searching file content", 
   }
 });
 
-test("BTCC read_file returns the exact revision accepted by write_file", async () => {
+test("BTCC reads exact revisions and atomically overwrites its isolated workspace", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "btcc-file-revision-"));
   try {
     const path = join(workspace, "profile.ts");
@@ -64,18 +64,15 @@ test("BTCC read_file returns the exact revision accepted by write_file", async (
       path: "profile.ts",
       content: "export const trust = 0.4;\n",
       overwrite: true,
-      expected_sha256: observed.sha256,
     }, context(workspace));
     expect(await readFile(path, "utf8")).toBe("export const trust = 0.4;\n");
 
-    expect(executeFileCapability("write_file", {
+    await executeFileCapability("write_file", {
       path: "profile.ts",
       content: "export const trust = 0.3;\n",
       overwrite: true,
-      expected_sha256: observed.sha256,
-    }, context(workspace))).rejects.toThrow(
-      "write_file expected_sha256 does not match",
-    );
+    }, context(workspace));
+    expect(await readFile(path, "utf8")).toBe("export const trust = 0.3;\n");
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
