@@ -7,9 +7,13 @@ import type {
   SelectedModel,
 } from "../../core/index.ts";
 import type { AdmittedModelSelection } from "../../contracts.ts";
-import type { ProductionSelectedModelDependencies } from "./contracts.ts";
+import type {
+  ProductionSelectedModelDependencies,
+  ProviderPhasePromptRunner,
+} from "./contracts.ts";
 import { ModelProviderRequestError } from "../../../../integrations/providers/provider-errors.ts";
 import type { OperationalActivation } from "../../recovery/index.ts";
+import { runWithinModelRoundBoundary } from "./model-round-boundary.ts";
 import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.ts";
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
 import { validateJsonObjectSchema } from "../../../tools/tool-bridge/schema-validation.ts";
@@ -20,68 +24,95 @@ export function createProductionSelectedModel(
   const promptRunner = dependencies.promptRunner ?? createProviderPhasePromptRunner();
   return {
     async runRound(envelope, signal) {
-      if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
-      try {
-        const rendered = await renderProviderPrompt(envelope, dependencies);
-        if (signal?.aborted) return interruption("provider_aborted", { kind: "cancelled" });
-        const { admissionSchema, ...providerPrompt } = rendered;
-        const result = await promptRunner.run({
-          modelSelection: envelope.modelSelection,
-          ...providerPrompt,
-          cacheScope: `btcc:${envelope.phase}`,
-          signal,
-        });
-        if (!sameIdentity(envelope.modelSelection, result.actualIdentity)) {
-          return interruption("selected_model_identity_mismatch", {
-            kind: "runtime_remediation",
-          });
-        }
-        try {
-          assertCarrierMatchesRenderedSchema(result.carrier, admissionSchema);
-          return decodeCarrier(
-            result.carrier,
-            envelope.operationAuthority,
-            result.actualIdentity,
-          );
-        } catch (error) {
-          if (error instanceof ProviderCarrierProtocolError) {
-            return interruption("provider_protocol_interruption", {
-              kind: "automatic_provider_recovery",
-            }, error.message);
-          }
-          throw error;
-        }
-      } catch (error) {
-        if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
-          const diagnostic = error instanceof ModelProviderRequestError
-            ? error.diagnostic()
-            : {
-                name: error instanceof Error ? error.name : "UnknownError",
-                message: error instanceof Error ? error.message : String(error),
-              };
-          console.error(JSON.stringify({
-            event: "btcc_provider_round_interruption",
-            phase: envelope.phase,
-            diagnostic,
-          }));
-        }
-        if (signal?.aborted || isAbortError(error)) {
-          return interruption("provider_aborted", { kind: "cancelled" });
-        }
-        if (error instanceof ModelProviderRequestError) {
-          return interruption(error.code, activationForProviderFailure(error));
-        }
-        if (error instanceof PhasePromptRenderError) {
-          return interruption("phase_prompt_render_interruption", {
-            kind: "runtime_remediation",
-          });
-        }
-        return interruption("provider_adapter_interruption", {
+      const bounded = await runWithinModelRoundBoundary({
+        signal,
+        totalTimeoutMs: dependencies.roundBoundary?.totalTimeoutMs,
+        run: async (roundSignal) => await runSelectedModelRound(
+          envelope,
+          dependencies,
+          promptRunner,
+          roundSignal,
+        ),
+      });
+      if (bounded.kind === "timed_out") {
+        return interruption("provider_round_timeout", {
           kind: "automatic_provider_recovery",
         });
       }
+      if (bounded.kind === "cancelled") {
+        return interruption("provider_aborted", { kind: "cancelled" });
+      }
+      return bounded.value;
     },
   };
+}
+
+async function runSelectedModelRound(
+  envelope: Parameters<SelectedModel["runRound"]>[0],
+  dependencies: ProductionSelectedModelDependencies,
+  promptRunner: ProviderPhasePromptRunner,
+  signal: AbortSignal,
+): Promise<ProviderRoundValue> {
+  if (signal.aborted) return interruption("provider_aborted", { kind: "cancelled" });
+  try {
+    const rendered = await renderProviderPrompt(envelope, dependencies);
+    if (signal.aborted) return interruption("provider_aborted", { kind: "cancelled" });
+    const { admissionSchema, ...providerPrompt } = rendered;
+    const result = await promptRunner.run({
+      modelSelection: envelope.modelSelection,
+      ...providerPrompt,
+      cacheScope: `btcc:${envelope.phase}`,
+      signal,
+    });
+    if (!sameIdentity(envelope.modelSelection, result.actualIdentity)) {
+      return interruption("selected_model_identity_mismatch", {
+        kind: "runtime_remediation",
+      });
+    }
+    try {
+      assertCarrierMatchesRenderedSchema(result.carrier, admissionSchema);
+      return decodeCarrier(
+        result.carrier,
+        envelope.operationAuthority,
+        result.actualIdentity,
+      );
+    } catch (error) {
+      if (error instanceof ProviderCarrierProtocolError) {
+        return interruption("provider_protocol_interruption", {
+          kind: "automatic_provider_recovery",
+        }, error.message);
+      }
+      throw error;
+    }
+  } catch (error) {
+    if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
+      const diagnostic = error instanceof ModelProviderRequestError
+        ? error.diagnostic()
+        : {
+            name: error instanceof Error ? error.name : "UnknownError",
+            message: error instanceof Error ? error.message : String(error),
+          };
+      console.error(JSON.stringify({
+        event: "btcc_provider_round_interruption",
+        phase: envelope.phase,
+        diagnostic,
+      }));
+    }
+    if (signal.aborted || isAbortError(error)) {
+      return interruption("provider_aborted", { kind: "cancelled" });
+    }
+    if (error instanceof ModelProviderRequestError) {
+      return interruption(error.code, activationForProviderFailure(error));
+    }
+    if (error instanceof PhasePromptRenderError) {
+      return interruption("phase_prompt_render_interruption", {
+        kind: "runtime_remediation",
+      });
+    }
+    return interruption("provider_adapter_interruption", {
+      kind: "automatic_provider_recovery",
+    });
+  }
 }
 
 function assertCarrierMatchesRenderedSchema(
