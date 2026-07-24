@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Stack, Typo } from "@/butler-ds";
 import type { ProgressRow } from "@/app/types.ts";
 import type { PhaseActivity } from "./turnActivityRows";
+import { ViewTurnActivityButton } from "./ViewTurnActivityButton";
 import styles from "./PhaseActivityLog.module.css";
 
 export function CurrentPhaseActivity({ row }: { row: ProgressRow }) {
@@ -45,6 +46,7 @@ export function CurrentModelPhaseActivity({
         <Typo.Caption as="p" className={styles.secondary}>
           다음: {latest.nextStep}
         </Typo.Caption>
+        <ViewTurnActivityButton count={activities.length} />
       </Stack>
     </section>
   );

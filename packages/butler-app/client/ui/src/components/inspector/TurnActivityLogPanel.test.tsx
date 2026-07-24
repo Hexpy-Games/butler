@@ -49,8 +49,10 @@ test("turn activity log renders every committed public phase activity", () => {
   expect(html).toContain("턴 활동");
   expect(html).toContain("관련 기록을 확인하고 있습니다.");
   expect(html).toContain("원래 목표를 정확히 보존하기 위해 필요합니다.");
+  expect(html).toContain("의도");
   expect(html).toContain("수정 범위를 정하고 있습니다.");
-  expect(html).toContain("다음: 계획을 독립적으로 검토합니다.");
+  expect(html).toContain("다음");
+  expect(html).toContain("계획을 독립적으로 검토합니다.");
   expect(html).toContain("구상");
   expect(html).toContain("계획");
   expect(html).toContain("모델 응답을 기다리고 있습니다");
