@@ -49,6 +49,12 @@ function observation(requestId: string, capabilityRef: string) {
       input: {},
     },
     capabilityRef,
+    source: {
+      kind: "observe" as const,
+      capabilityRef,
+      scopeRef: "workspace:/repo",
+      input: {},
+    },
     outcome: "observed" as const,
     completeness: "complete" as const,
     byteLength: 12_000,

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { projectOperationContext } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/project-operation-context.ts";
+import { describeOperationSource } from
+  "../../packages/butler-agent/src/agent/btcc/operation-result/index.ts";
 import type {
   OperationResultProjection,
   PhaseEnvelope,
@@ -23,9 +25,34 @@ describe("BTCC operation context projection", () => {
         expect.objectContaining({
           resultRef: source.resultRef,
           capabilityRef: "read_file",
+          source: {
+            kind: "observe",
+            capabilityRef: "read_file",
+            scopeRef: "workspace:/repo",
+            input: {},
+          },
         }),
       ],
     });
+  });
+
+  test("describes mutation targets without copying their payload", () => {
+    const source = describeOperationSource({
+      requestId: "write-source",
+      kind: "workspace_artifact_action",
+      capabilityRef: "write_file",
+      workspaceRef: ref("workspace"),
+      relativeTarget: "src/source.ts",
+      input: { path: "src/source.ts", content: "large mutation payload" },
+    });
+
+    expect(source).toEqual({
+      kind: "workspace_artifact_action",
+      capabilityRef: "write_file",
+      workspaceRef: ref("workspace"),
+      relativeTarget: "src/source.ts",
+    });
+    expect(JSON.stringify(source)).not.toContain("large mutation payload");
   });
 });
 

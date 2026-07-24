@@ -7,6 +7,41 @@ import type {
 
 export type ResultRef = { id: string; sha256: string };
 
+export type OperationSourceDescriptor =
+  | {
+      kind: "observe";
+      capabilityRef: string;
+      scopeRef: string;
+      input: Record<string, unknown>;
+    }
+  | {
+      kind: "workspace_artifact_observation";
+      capabilityRef: string;
+      workspaceRef: ResultRef;
+      input: Record<string, unknown>;
+    }
+  | {
+      kind: "review_validation";
+      capabilityRef: string;
+      reviewSourceRef: ResultRef;
+      input: Record<string, unknown>;
+    }
+  | {
+      kind: "workspace_artifact_action";
+      capabilityRef: string;
+      workspaceRef: ResultRef;
+      relativeTarget: string;
+    }
+  | {
+      kind: "repository_promotion";
+      capabilityRef: string;
+      authorizationRef: ResultRef;
+      candidateRef: ResultRef;
+      resolutionRef: ResultRef;
+      baselineRef: ResultRef;
+      finalSnapshotRef: ResultRef;
+    };
+
 export type OperationResultCompleteness =
   | "complete"
   | "requested_scope_complete"
@@ -66,6 +101,26 @@ export type OperationResultProjection = {
   promotedSnapshotRef?: ResultRef;
   promotionRecords?: NonNullable<ObservationResult["promotionRecords"]>;
 };
+
+export type OperationResultIndexEntry = Pick<
+  OperationResultProjection,
+  | "resultRef"
+  | "requestRef"
+  | "requestId"
+  | "capabilityRef"
+  | "outcome"
+  | "completeness"
+  | "byteLength"
+  | "observationRef"
+  | "readScopeRef"
+  | "artifactRevisionRef"
+  | "targetSnapshotRef"
+  | "validationReceiptRef"
+  | "transactionRef"
+  | "commitJournalRef"
+  | "promotionReceiptRef"
+  | "promotedSnapshotRef"
+> & { source: OperationSourceDescriptor };
 
 export type OperationResultSelector =
   | { kind: "bytes"; start: number; length: number }

@@ -3,6 +3,8 @@ export {
   READ_OPERATION_RESULT_CAPABILITY,
 } from "./contracts.ts";
 export type {
+  OperationSourceDescriptor,
+  OperationResultIndexEntry,
   OperationResultCompleteness,
   OperationResultProjection,
   OperationResultRecord,
@@ -11,6 +13,10 @@ export type {
   OperationResultView,
   ResultRef,
 } from "./contracts.ts";
+export {
+  describeOperationSource,
+  indexOperationResult,
+} from "./source-descriptor.ts";
 export {
   parseResultScopeRef,
   projectEphemeralOperationResult,
