@@ -74,7 +74,16 @@ const DUTIES = {
   ].join(" "),
   declare_effects_risks_assumptions: "Declare exact external EffectIntents, authority scopes, risks, assumptions, and reconciliation requirements; artifact actions and Review validation are not external effects.",
   author_artifact_lifecycle: "Bind one exact artifact policy per Task and complete selectors, integration, promotion protocol, target derivation, immutable Review sources, disposable validation, and promotion identity Review.",
-  review_plan_exactly: "Review the complete materialized candidate bytes against the immutable GoalContract and accepted authority, not only internal Plan consistency.",
+  review_plan_exactly: [
+    "Review the complete materialized candidate bytes against the immutable GoalContract,",
+    "the exact governing Spec bodies in currentPlanningAuthority.governingSpecs, and",
+    "accepted authority, not only internal Plan consistency. Return exactly one coverage",
+    "entry for every schema dimension. Resolve all review-relevant observations before",
+    "submitting and report every material defect found by this complete pass together;",
+    "never stage available independent findings across later revisions. For a revised",
+    "candidate, verify every priorPlanningReview finding and repeat the complete coverage",
+    "pass in the same round without rediscovering governing Specs by Ledger lookup.",
+  ].join(" "),
   review_work_cohesion: "Require every Work to own one coherent outcome and reject mechanical grouping or unrelated responsibilities.",
   review_executability: [
     "Require every Task to have sufficient inputs, authority, target, criteria,",

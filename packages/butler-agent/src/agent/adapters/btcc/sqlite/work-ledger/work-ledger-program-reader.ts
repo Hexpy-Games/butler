@@ -5,6 +5,7 @@ type ManagedProgramState = BtccPersistenceTypes["managedProgramState"];
 type ContentRef = ManagedProgramState["goalContractRef"];
 type ReviewedProgram = Extract<ManagedProgramState, { planningState: "reviewed" }>;
 type ManagedTaskState = ReviewedProgram["tasks"][number];
+type GoverningSpec = ManagedProgramState["governingSpecs"][number];
 type ManagedDeferralProduct = NonNullable<ManagedProgramState["activeDeferral"]>;
 type PromotionDeferralProduct = NonNullable<ReviewedProgram["promotionDeferral"]>;
 
@@ -31,16 +32,19 @@ export class SqliteWorkLedgerProgramReader {
   load(programId: string): ManagedProgramState | null {
     const program = this.loadProgramRow(programId);
     if (!program) return null;
+    const availableSpecs = JSON.parse(program.available_specs_json);
+    const governingSpecRefs: ContentRef[] = JSON.parse(program.governing_spec_refs_json);
     const authority = {
       ledgerId: program.ledger_id,
       programId,
       manifestRevision: program.manifest_revision,
       goalContractRef: this.loadRef(program.goal_contract_ref),
       authorityRef: this.loadRef(program.authority_ref),
-      availableSpecs: JSON.parse(program.available_specs_json),
-      availableSpecRefs: JSON.parse(program.available_specs_json)
+      availableSpecs,
+      availableSpecRefs: availableSpecs
         .map((spec: { revisionRef: ContentRef }) => spec.revisionRef),
-      governingSpecRefs: JSON.parse(program.governing_spec_refs_json),
+      governingSpecs: governingSpecRefs.map((ref) => this.loadRecord<GoverningSpec>(ref.id)),
+      governingSpecRefs,
       requiredOutcomeId: this.loadRecord<{
         requiredOutcome: { outcomeId: string };
       }>(program.goal_contract_ref).requiredOutcome.outcomeId,

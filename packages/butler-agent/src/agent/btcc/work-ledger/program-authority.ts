@@ -1,7 +1,8 @@
 import type {
   AvailableSpecRevision,
-  ManagedSpecRevision,
   FeedbackPlanningAcceptedProduct,
+  GoverningSpecRevision,
+  ManagedSpecRevision,
   PlanningAcceptedProduct,
 } from "../planning/contracts.ts";
 import type {
@@ -16,6 +17,7 @@ export function bindManagedProgram(
   current: ManagedProgramState | null,
   mutation: BindProgram,
   availableSpecs: AvailableSpecRevision[],
+  governingSpecs: GoverningSpecRevision[] = [],
 ): ManagedProgramState {
   const { authority, goalContract } = mutation.product;
   const binding = authority.managedBinding;
@@ -30,6 +32,10 @@ export function bindManagedProgram(
     authorityRef: authority.ref,
     availableSpecs,
     availableSpecRefs: availableSpecs.map((spec) => spec.revisionRef),
+    governingSpecs: selectGoverningSpecs(
+      goalContract.governingSpecLogicalIds,
+      governingSpecs,
+    ),
     governingSpecRefs,
     requiredOutcomeId: goalContract.requiredOutcome.outcomeId,
   };
@@ -80,6 +86,7 @@ export function acceptReviewedPlanAuthority(
     authorityRef: current.authorityRef,
     availableSpecs,
     availableSpecRefs: availableSpecs.map((spec) => spec.revisionRef),
+    governingSpecs: selectAcceptedGoverningSpecs(current.governingSpecs ?? [], candidate),
     governingSpecRefs: candidate.governingSpecRefs,
     requiredOutcomeId: current.requiredOutcomeId,
   };
@@ -120,6 +127,7 @@ export function acceptFeedbackAuthority(
     authorityRef,
     availableSpecs,
     availableSpecRefs: availableSpecs.map((spec) => spec.revisionRef),
+    governingSpecs: selectAcceptedGoverningSpecs(current.governingSpecs ?? [], plan),
     governingSpecRefs: plan.governingSpecRefs,
     requiredOutcomeId: current.requiredOutcomeId,
   };
@@ -204,6 +212,41 @@ function resolveGoverningSpecRefs(
     const revisionRef = byLogicalId.get(logicalId);
     if (!revisionRef) throw new Error(`Work Ledger governing Spec ${logicalId} changed`);
     return revisionRef;
+  });
+}
+
+function selectGoverningSpecs(
+  logicalIds: string[],
+  revisions: GoverningSpecRevision[],
+): GoverningSpecRevision[] {
+  const byLogicalId = new Map(revisions.map((spec) => [spec.logicalId, spec]));
+  return logicalIds.map((logicalId) => {
+    const revision = byLogicalId.get(logicalId);
+    if (!revision) throw new Error(`Work Ledger governing Spec body ${logicalId} changed`);
+    return revision;
+  });
+}
+
+function selectAcceptedGoverningSpecs(
+  current: GoverningSpecRevision[],
+  candidate: PlanningAcceptedProduct["candidate"],
+): GoverningSpecRevision[] {
+  const revisions = new Map(current.map((spec) => [refKey(spec.revisionRef), spec]));
+  for (const spec of candidate.authoredSpecs) {
+    revisions.set(refKey(spec.ref), {
+      logicalId: spec.logicalId,
+      parentId: spec.parentId,
+      concernId: spec.concernId,
+      title: spec.title,
+      status: "specified",
+      revisionRef: spec.ref,
+      body: spec.body,
+    });
+  }
+  return candidate.governingSpecRefs.map((ref) => {
+    const revision = revisions.get(refKey(ref));
+    if (!revision) throw new Error(`Work Ledger governing Spec body ${ref.id} changed`);
+    return revision;
   });
 }
 

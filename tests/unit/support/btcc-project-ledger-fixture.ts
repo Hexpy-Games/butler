@@ -131,6 +131,7 @@ export function reviewedPlan(options: {
     reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
     reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
     reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+    coverage: acceptedPlanningCoverage(),
     verdict: "accepted" as const,
     findings: [] as [],
   };
@@ -139,6 +140,24 @@ export function reviewedPlan(options: {
     candidate,
     review: { ref: contentRef("planning-review", reviewBody), ...reviewBody },
   };
+}
+
+function acceptedPlanningCoverage() {
+  const dimensions = [
+    "original_goal",
+    "governing_specs",
+    "work_cohesion",
+    "task_executability",
+    "dependencies",
+    "verification_integration",
+    "effect_authority",
+    "artifact_lifecycle",
+  ] as const;
+  return dimensions.map((dimension) => ({
+    dimension,
+    verdict: "passed" as const,
+    findings: [],
+  }));
 }
 
 export function projectBindingCommit(options: {

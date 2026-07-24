@@ -10,6 +10,8 @@ import type {
   PlanningCandidate,
   PlanningCandidateProduct,
   PlanningDraftCandidate,
+  PlanningReviewCoverage,
+  PlanningReviewDimension,
   PlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
@@ -41,6 +43,17 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
+const REVIEW_DIMENSIONS: readonly PlanningReviewDimension[] = [
+  "original_goal",
+  "governing_specs",
+  "work_cohesion",
+  "task_executability",
+  "dependencies",
+  "verification_integration",
+  "effect_authority",
+  "artifact_lifecycle",
+];
+
 function reviewCodec(candidate: PlanningCandidateProduct) {
   return withManagedDeferral<PlanningReviewProduct>({
     submissionSchema: isDraft(candidate.candidate)
@@ -53,13 +66,18 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
       if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
         throw new Error("Planning Review verdict is invalid");
       }
-      const submittedFindings = requireStringArray(value.findings, "Planning Review findings");
       if (isDraft(loaded.candidate)) {
+        const submittedFindings = requireStringArray(value.findings, "Planning Review findings");
         return requireDraftRevision(loaded.candidate, submittedFindings);
       }
       const materialized = loaded.candidate;
-      const reviewBase = exactReviewBase(materialized);
+      const coverage = requireReviewCoverage(value.coverage);
+      const submittedFindings = coverage.flatMap((item) => item.findings);
+      const reviewBase = exactReviewBase(materialized, coverage);
       if (value.verdict === "accepted") {
+        if (submittedFindings.length > 0) {
+          throw new Error("Accepted Planning Review cannot contain failed coverage");
+        }
         attestCandidateBundle(materialized);
         const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
         return {
@@ -68,12 +86,18 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
           review: { ref: contentRef("planning-review", body), ...body },
         };
       }
+      if (submittedFindings.length === 0) {
+        throw new Error("Planning revision requires failed coverage");
+      }
       return requireMaterializedRevision(materialized, reviewBase, submittedFindings);
     },
   });
 }
 
-function exactReviewBase(candidate: PlanningCandidate) {
+function exactReviewBase(
+  candidate: PlanningCandidate,
+  coverage: PlanningReviewCoverage[],
+) {
   return {
     candidateRef: candidate.ref,
     originalGoalContractRef: candidate.goalContractRef,
@@ -87,6 +111,7 @@ function exactReviewBase(candidate: PlanningCandidate) {
     reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
     reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
     reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+    coverage,
   };
 }
 
@@ -143,6 +168,43 @@ function requireFindings(findings: string[]): [string, ...string[]] {
   const unique = [...new Set(findings.map((finding) => finding.trim()).filter(Boolean))];
   if (unique.length === 0) throw new Error("Planning revision requires findings");
   return unique as [string, ...string[]];
+}
+
+function requireReviewCoverage(value: unknown): PlanningReviewCoverage[] {
+  if (!Array.isArray(value) || value.length !== REVIEW_DIMENSIONS.length) {
+    throw new Error("Planning Review must cover every review dimension");
+  }
+  const coverage = value.map((item, index) => {
+    const entry = requireRecord(item, `Planning Review coverage[${index}]`);
+    const dimension = entry.dimension;
+    if (!REVIEW_DIMENSIONS.includes(dimension as PlanningReviewDimension)) {
+      throw new Error("Planning Review coverage dimension is invalid");
+    }
+    if (entry.verdict !== "passed" && entry.verdict !== "failed") {
+      throw new Error("Planning Review coverage verdict is invalid");
+    }
+    const findings = requireStringArray(
+      entry.findings,
+      `Planning Review ${String(dimension)} findings`,
+    );
+    if (entry.verdict === "passed" && findings.length > 0) {
+      throw new Error("Passed Planning Review coverage cannot contain findings");
+    }
+    if (entry.verdict === "failed" && findings.length === 0) {
+      throw new Error("Failed Planning Review coverage requires findings");
+    }
+    return {
+      dimension: dimension as PlanningReviewDimension,
+      verdict: entry.verdict as "passed" | "failed",
+      findings,
+    };
+  });
+  const dimensions = coverage.map((item) => item.dimension);
+  if (new Set(dimensions).size !== REVIEW_DIMENSIONS.length ||
+    REVIEW_DIMENSIONS.some((dimension) => !dimensions.includes(dimension))) {
+    throw new Error("Planning Review coverage dimensions must be unique and complete");
+  }
+  return coverage;
 }
 
 function isDraft(candidate: PlanningCandidateProduct["candidate"]): candidate is PlanningDraftCandidate {
