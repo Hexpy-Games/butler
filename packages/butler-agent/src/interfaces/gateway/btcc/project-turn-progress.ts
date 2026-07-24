@@ -5,6 +5,21 @@ export function projectTurnProgress(
   publish: (event: RuntimeTurnEventInput) => Promise<void>,
 ): BtccTurnProgressObserver {
   return {
+    async openingDecisionAccepted(update) {
+      await publish({
+        kind: "assistant.decision",
+        payload: {
+          decisionId: update.decisionId,
+          role: "opening",
+          summary: update.summary,
+          rationale: update.rationale,
+          nextStep: update.nextStep,
+          source: "model-authored",
+          firstVisible: true,
+          turnRevision: update.turnRevision,
+        },
+      });
+    },
     async stateChanged(update) {
       if (update.semanticState === "delivery_committed") {
         await publish({ kind: "message.final.started" });

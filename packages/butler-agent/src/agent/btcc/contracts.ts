@@ -83,6 +83,14 @@ export interface BtccTurnRuntime {
 }
 
 export interface BtccTurnProgressObserver {
+  openingDecisionAccepted?(update: {
+    turnId: string;
+    turnRevision: number;
+    decisionId: string;
+    summary: string;
+    rationale: string;
+    nextStep: string;
+  }): void | Promise<void>;
   stateChanged(update: {
     turnId: string;
     semanticState: string;

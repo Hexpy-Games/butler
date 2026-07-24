@@ -31,7 +31,9 @@ export class NoLedgerHarnessModel implements SelectedModel {
         kind: "phase_submission",
         submission: {
           kind: "assisted_continuation",
-          message: "필요한 최신 정보를 확인해서 바로 알려드리겠습니다.",
+          summary: "필요한 최신 정보를 확인하겠습니다.",
+          rationale: "현재 상태를 확인해야 정확하게 답할 수 있습니다.",
+          nextStep: "필요한 관찰만 수행한 뒤 바로 알려드리겠습니다.",
         },
         actualIdentity: identity(envelope),
       };

@@ -16,7 +16,7 @@ import {
 } from "./operational-checkpoint.ts";
 import { runCurrentPhase } from "./run-current-phase.ts";
 import { decideTransition } from "./state-machine/index.ts";
-import { publishTurnProgress } from "./turn-progress.ts";
+import { publishOpeningDecision, publishTurnProgress } from "./turn-progress.ts";
 import type {
   StateExecutionClaim,
   TurnRecord,
@@ -76,6 +76,14 @@ export async function advanceTurn(
       permit.assertActive();
 
       const successor = await dependencies.turns.activateCommittedSuccessor(turn.turnId);
+      if (decision.transition.kind === "accept_opening_continuation") {
+        await publishOpeningDecision(
+          dependencies.progress,
+          turn.turnId,
+          successor.revision,
+          decision.transition.product,
+        );
+      }
       await publishTurnProgress(dependencies.progress, successor);
       return successor;
     } catch (error) {

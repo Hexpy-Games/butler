@@ -67,7 +67,9 @@ export class ManagedHarnessModel implements SelectedModel {
       case "conception_opening":
         return {
           kind: "managed_continuation",
-          message: "요청의 목표와 완료 조건을 정리한 뒤 작업 계획을 세우겠습니다.",
+          summary: "요청의 목표와 완료 조건을 먼저 정리하겠습니다.",
+          rationale: "원래 의도를 보존한 계획이 필요한 관리 작업입니다.",
+          nextStep: "관련 스펙을 확인하고 Work와 Task를 구성하겠습니다.",
         };
       case "conception_deliberation": {
         const revision = asRecord(state.goalRevision);
