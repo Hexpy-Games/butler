@@ -7,9 +7,9 @@ import type { ManagedTask } from "./contracts.ts";
 import type { TaskImpact } from "./correction-contracts.ts";
 
 type CurrentTaskState = {
-  task: ManagedTask;
+  task: Pick<ManagedTask, "ref" | "taskLogicalId">;
   status: string;
-  currentResult?: unknown;
+  hasCurrentResult: boolean;
 };
 
 export function decodeTaskImpact(input: {
@@ -88,7 +88,7 @@ function validateSuccessor(input: {
   }
   if (
     input.disposition === "revalidate" &&
-    (input.prior.status !== "accepted" || !input.prior.currentResult)
+    (input.prior.status !== "accepted" || !input.prior.hasCurrentResult)
   ) {
     throw new Error("Feedback Planning can revalidate only an accepted concrete result");
   }

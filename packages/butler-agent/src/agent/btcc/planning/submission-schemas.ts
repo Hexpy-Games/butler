@@ -192,22 +192,28 @@ const impact = variantsSchema(
   }),
 );
 
-export function feedbackPlanSubmissionSchema(logicalIds: string[]): SubmissionSchema {
+export function feedbackPlanSubmissionSchema(
+  logicalIds: string[],
+  correctionKind?:
+    | "implementation_repair"
+    | "governing_revision"
+    | "authority_scope_revision",
+): SubmissionSchema {
   const revisedPlan = revisedPlanSubmissionSchema(logicalIds);
-  return variantsSchema(
-  objectSchema({
+  const variants = {
+    implementation_repair: objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
     correctionKind: literalSchema("implementation_repair"),
     correctionAction: textSchema(),
   }),
-  objectSchema({
+    governing_revision: objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
     correctionKind: literalSchema("governing_revision"),
     correctionAction: textSchema(),
     revisedPlan,
     impactMap: arraySchema(impact, { minItems: 1 }),
   }),
-  objectSchema({
+    authority_scope_revision: objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
     correctionKind: literalSchema("authority_scope_revision"),
     correctionAction: textSchema(),
@@ -215,7 +221,10 @@ export function feedbackPlanSubmissionSchema(logicalIds: string[]): SubmissionSc
     impactMap: arraySchema(impact, { minItems: 1 }),
     authorityChange: textSchema(),
   }),
-  );
+  };
+  return correctionKind
+    ? variants[correctionKind]
+    : variantsSchema(...Object.values(variants));
 }
 
 const feedbackReviewIdentity = {

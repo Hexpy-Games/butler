@@ -661,6 +661,57 @@ describe("production BTCC selected model", () => {
       activation: { kind: "automatic_provider_recovery" },
     });
   });
+
+  test("classifies provider-reported context overflow as internal prompt remediation", async () => {
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => {
+        throw new ModelProviderRequestError({
+          code: "provider_context_limit_exceeded",
+          message: "assembled request exceeded model context",
+          provider: "openai",
+          api: "responses",
+          statusCode: 400,
+          retryable: false,
+        });
+      }),
+    });
+
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_context_limit_exceeded",
+      activation: { kind: "runtime_remediation" },
+    });
+  });
+
+  test("rejects an oversized locally assembled prompt before provider transport", async () => {
+    let calls = 0;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => {
+        calls += 1;
+        throw new Error("provider transport must not run");
+      }),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.modelSelection = {
+      ...envelope.modelSelection,
+      contextWindowTokens: 128_100,
+    };
+    envelope.context.stateInput = { oversized: "x" };
+
+    expect(await model.runRound(envelope)).toMatchObject({
+      kind: "interruption",
+      code: "phase_prompt_capacity_exceeded",
+      activation: { kind: "runtime_remediation" },
+      diagnosticMessage: expect.stringContaining("input tokens"),
+    });
+    expect(calls).toBe(0);
+  });
 });
 
 function hasOpenObjectSchema(value: unknown): boolean {

@@ -22,16 +22,38 @@ export function fitOperationContext(input: {
   );
   const inputCapacity = contextWindow - metadata.max_output_tokens;
 
-  for (const candidate of operationContextCompactionCandidates(input.projected)) {
+  const candidates = operationContextCompactionCandidates(input.projected);
+  let finalEstimate = 0;
+  for (const candidate of candidates) {
     const serialized = JSON.stringify({
       ...asRecord(input.fixedRequestShape),
       prompt: input.renderPrompt(candidate),
     });
-    if (estimateTokensForModel(serialized, modelRef).tokens <= inputCapacity) {
+    finalEstimate = estimateTokensForModel(serialized, modelRef).tokens;
+    if (finalEstimate <= inputCapacity) {
       return candidate;
     }
   }
-  return operationContextCompactionCandidates(input.projected).at(-1)!;
+  throw new PhasePromptCapacityError({
+    modelRef,
+    estimatedInputTokens: finalEstimate,
+    inputCapacityTokens: inputCapacity,
+  });
+}
+
+export class PhasePromptCapacityError extends Error {
+  override readonly name = "PhasePromptCapacityError";
+
+  constructor(readonly receipt: {
+    modelRef: string;
+    estimatedInputTokens: number;
+    inputCapacityTokens: number;
+  }) {
+    super(
+      `BTCC phase prompt needs ${receipt.estimatedInputTokens} input tokens; ` +
+      `${receipt.modelRef} admits ${receipt.inputCapacityTokens}`,
+    );
+  }
 }
 
 function canonicalModelRef(selection: AdmittedModelSelection): string {

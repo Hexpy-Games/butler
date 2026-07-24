@@ -17,7 +17,7 @@ test("governing rework may replace a Task logical identity", () => {
       successorTaskLogicalId: replacement.taskLogicalId,
       reason: "The reviewed responsibility moved to an atomic event store.",
     }],
-    currentTasks: [{ task: prior, status: "review_failed" }],
+    currentTasks: [{ task: prior, status: "review_failed", hasCurrentResult: false }],
     nextTasks: [replacement],
   })).toEqual([{
     priorTaskRef: prior.ref,
@@ -36,7 +36,7 @@ test("replan may retire a prior Task while newly required Tasks start fresh", ()
       disposition: "replan",
       reason: "The broad responsibility was decomposed.",
     }],
-    currentTasks: [{ task: prior, status: "review_failed" }],
+    currentTasks: [{ task: prior, status: "review_failed", hasCurrentResult: false }],
     nextTasks: [
       task("relationship-event-store", "store"),
       task("relationship-profile-projection", "projection"),
@@ -59,7 +59,7 @@ test("unaffected lineage cannot silently change Task identity", () => {
       successorTaskLogicalId: replacement.taskLogicalId,
       reason: "Claimed unchanged.",
     }],
-    currentTasks: [{ task: prior, status: "accepted", currentResult: {} }],
+    currentTasks: [{ task: prior, status: "accepted", hasCurrentResult: true }],
     nextTasks: [replacement],
   })).toThrow("unaffected impact must preserve Task logical identity");
 });
