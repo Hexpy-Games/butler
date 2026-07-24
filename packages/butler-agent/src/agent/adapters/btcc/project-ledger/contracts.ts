@@ -57,6 +57,11 @@ export type PrepareProjectCommitInput = {
 
 export interface ProjectWorkLedgerPublicationAdapter {
   observeCanonicalHead(projectRoot: string): Promise<ProjectLedgerHead>;
+  listCanonicalSpecs?(projectRoot: string): Promise<ProjectCanonicalSpecRevision[]>;
+  resolveCanonicalSpecs?(
+    projectRoot: string,
+    logicalIds: readonly string[],
+  ): Promise<ProjectCanonicalSpecRevision[]>;
   prepareCommit(input: PrepareProjectCommitInput): Promise<PreparedProjectCommit>;
   loadProgram(projectRoot: string, programId: string): Promise<ProjectManagedProgram | null>;
   listDeferredPrograms(projectRoot: string): Promise<ProjectManagedProgram[]>;
@@ -71,6 +76,16 @@ export interface ProjectWorkLedgerPublicationAdapter {
     publication: PreparedProjectLedgerPublication,
   ): Promise<void>;
 }
+
+export type ProjectCanonicalSpecRevision = {
+  logicalId: string;
+  parentId: string;
+  concernId: string;
+  revisionRef: { id: string; sha256: string };
+  title: string;
+  status: string;
+  body: string;
+};
 
 export class ProjectLedgerPublicationClaimConflictError extends Error {
   readonly code = "project_ledger_publication_claim_conflict";

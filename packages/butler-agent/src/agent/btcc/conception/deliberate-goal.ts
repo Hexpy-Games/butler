@@ -11,6 +11,9 @@ import {
   type PhaseInvocation,
 } from "../core/index.ts";
 import type {
+  AvailableSpecRevision,
+} from "../planning/contracts.ts";
+import type {
   ConceptionLensId,
   GoalContractCandidateProduct,
   GoalContractRevisionRequiredProduct,
@@ -48,10 +51,12 @@ const CONTRACT: PhaseContract = {
 
 function goalCodec(
   priorRevision?: GoalContractRevisionRequiredProduct,
+  availableGoverningSpecs: AvailableSpecRevision[] = [],
 ): PhaseCodec<GoalContractCandidateProduct> {
   const priorFindings = priorRevision?.review.findings ?? [];
   return {
   submissionSchema: goalCandidateSubmissionSchema(
+    availableGoverningSpecs.map((spec) => spec.logicalId),
     priorFindings.map((finding) => finding.rootCauseKey),
   ),
   decode(submission, envelope) {
@@ -114,6 +119,7 @@ function goalCodec(
       personalizationRefs,
       governingSpecApplications: requireGoverningSpecApplications(
         value.governingSpecApplications,
+        availableGoverningSpecs.map((spec) => spec.logicalId),
       ),
       nonGoals: requireStringArray(value.nonGoals, "nonGoals"),
     };
@@ -128,6 +134,7 @@ function goalCodec(
       proposedContract,
       proposedStrategy: "managed" as const,
       revisionOrigin,
+      availableGoverningSpecs,
       planningContext: retainConceptionPlanningContext(
         envelope.operationResults,
         priorPlanningContext(envelope.context.stateInput),
@@ -269,10 +276,14 @@ function requireArtifactPersistence(value: unknown): "not_required" | "required"
 export function deliberateGoal(command: PhaseInvocation) {
   const state = command.context.stateInput as {
     goalRevision?: GoalContractRevisionRequiredProduct;
+    availableGoverningSpecs?: AvailableSpecRevision[];
   } | undefined;
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: goalCodec(state?.goalRevision),
+    codec: goalCodec(
+      state?.goalRevision,
+      state?.availableGoverningSpecs ?? [],
+    ),
   });
 }

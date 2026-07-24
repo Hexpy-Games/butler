@@ -14,6 +14,10 @@ import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 import { prepareProjectCommit } from "./prepare-project-commit.ts";
 import { loadProjectProgram } from "./materialize-program.ts";
 import { reconcileOrphanedPublications } from "./reconcile-publications.ts";
+import {
+  resolveCanonicalSpecCatalog,
+  resolveCanonicalSpecRevisions,
+} from "./canonical-spec-resolver.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -23,6 +27,18 @@ class DefaultProjectWorkLedgerPublicationAdapter
 
   observeCanonicalHead(projectRoot: string) {
     return observeProjectLedgerHead(projectRoot);
+  }
+
+  async listCanonicalSpecs(projectRoot: string) {
+    return resolveCanonicalSpecCatalog(await loadProjectLedgerCore(), projectRoot);
+  }
+
+  async resolveCanonicalSpecs(projectRoot: string, logicalIds: readonly string[]) {
+    return resolveCanonicalSpecRevisions(
+      await loadProjectLedgerCore(),
+      projectRoot,
+      logicalIds,
+    );
   }
 
   async prepareCommit(input: PrepareProjectCommitInput) {

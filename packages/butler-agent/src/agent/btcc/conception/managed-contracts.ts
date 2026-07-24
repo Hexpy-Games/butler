@@ -1,5 +1,6 @@
 import type { ContentRef } from "../core/index.ts";
 import type { ContinuationBinding } from "../continuation/index.ts";
+import type { AvailableSpecRevision } from "../planning/contracts.ts";
 import type { ConceptionPlanningContext } from "./planning-context.ts";
 
 export type GoalContractRecord = {
@@ -59,6 +60,7 @@ export type GoalContractCandidateProduct = {
           findingSetRef: ContentRef;
           findingDecisions: GoalReviewFindingDecision[];
         };
+    availableGoverningSpecs: AvailableSpecRevision[];
     planningContext: ConceptionPlanningContext;
   };
 };

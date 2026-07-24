@@ -40,7 +40,12 @@ export async function runCurrentPhase(input: {
     case "assisted_answer":
     case "conception_deliberation":
     case "contract_review":
-      return conception({ cycle: "initial", turn, phase: phase() });
+      return conception({
+        cycle: "initial",
+        turn,
+        phase: phase(),
+        governingSpecs: dependencies.governingSpecs,
+      });
 
     case "planning":
     case "planning_review":
@@ -56,7 +61,12 @@ export async function runCurrentPhase(input: {
       return review({ turn, phase: phase() });
 
     case "feedback_conception":
-      return conception({ cycle: "review_feedback", turn, phase: phase() });
+      return conception({
+        cycle: "review_feedback",
+        turn,
+        phase: phase(),
+        governingSpecs: dependencies.governingSpecs,
+      });
 
     case "feedback_planning":
     case "feedback_planning_review":

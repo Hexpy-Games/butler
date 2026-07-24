@@ -19,6 +19,10 @@ import type {
   OperationalActivation,
   OperationalRecoveryBoundary,
 } from "./recovery/index.ts";
+import type {
+  AvailableSpecRevision,
+  GoverningSpecRevision,
+} from "./planning/contracts.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -118,6 +122,14 @@ export interface BtccTurnProgressObserver {
   }): void | Promise<void>;
 }
 
+export interface GoverningSpecAuthority {
+  listCatalog(projectRef: string): Promise<AvailableSpecRevision[]>;
+  resolveSelected(
+    projectRef: string,
+    logicalIds: readonly string[],
+  ): Promise<GoverningSpecRevision[]>;
+}
+
 export type BtccRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
@@ -129,5 +141,6 @@ export type BtccRuntimeDependencies = {
   retrospective: RetrospectiveScheduler;
   operationalRecovery?: OperationalRecoveryBoundary;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
+  governingSpecs?: GoverningSpecAuthority;
   progress?: BtccTurnProgressObserver;
 };

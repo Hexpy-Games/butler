@@ -33,9 +33,37 @@ test("governing revision re-reviews an accepted result without rerunning Executi
 });
 
 test("Project Work Ledger applies the same governing revalidation path", async () => {
-  const { result } = await runRevalidation("project:harness-revalidation");
+  const { dataRoot, result } = await runRevalidation("project:harness-revalidation");
   expect(result.initial.kind).toBe("delivered");
   expectRevalidationPhases(result.phases);
+
+  const db = new Database(join(dataRoot, "runtime", "btcc-successor.sqlite"), {
+    readonly: true,
+  });
+  try {
+    const row = db.query<{ phase_envelope_json: string }, []>(`
+      SELECT revision.phase_envelope_json
+      FROM btcc_phase_checkpoint_revisions revision
+      JOIN btcc_checkpoints checkpoint
+        ON checkpoint.checkpoint_id = revision.checkpoint_id
+      WHERE checkpoint.semantic_state = 'contract_review'
+        AND revision.phase_envelope_json IS NOT NULL
+      ORDER BY checkpoint.turn_revision, revision.checkpoint_revision
+      LIMIT 1
+    `).get();
+    const state = JSON.parse(row!.phase_envelope_json).context.stateInput;
+    expect(state.availableGoverningSpecs).toMatchObject([{
+      logicalId: "SPEC-HARNESS",
+      title: "Harness behavior",
+    }]);
+    expect(state.availableGoverningSpecs[0]).not.toHaveProperty("body");
+    expect(state.selectedGoverningSpecs).toMatchObject([{
+      logicalId: "SPEC-HARNESS",
+      body: expect.stringContaining("Preserve the original request"),
+    }]);
+  } finally {
+    db.close();
+  }
 }, 15_000);
 
 async function runRevalidation(projectRef?: string) {

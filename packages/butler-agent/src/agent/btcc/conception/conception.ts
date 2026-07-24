@@ -1,3 +1,4 @@
+import type { GoverningSpecAuthority } from "../contracts.ts";
 import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
 import { isManagedDeferral, withManagedDeferralState } from "../deferral/index.ts";
@@ -29,17 +30,20 @@ type ConceptionCommand = {
   cycle: "initial" | "review_feedback";
   turn: TurnRecord;
   phase: PhaseInvocation;
+  governingSpecs?: GoverningSpecAuthority;
 };
 
 export function conception(command: {
   cycle: "initial";
   turn: TurnRecord;
   phase: PhaseInvocation;
+  governingSpecs?: GoverningSpecAuthority;
 }): Promise<InitialConceptionEvent>;
 export function conception(command: {
   cycle: "review_feedback";
   turn: TurnRecord;
   phase: PhaseInvocation;
+  governingSpecs?: GoverningSpecAuthority;
 }): Promise<FeedbackConceptionEvent>;
 export function conception(
   command: ConceptionCommand,
@@ -52,6 +56,7 @@ export function conception(
 async function conceiveInitialGoal(command: {
   turn: TurnRecord;
   phase: PhaseInvocation;
+  governingSpecs?: GoverningSpecAuthority;
 }): Promise<InitialConceptionEvent> {
   switch (command.turn.semanticState) {
     case "conception_opening": {
@@ -66,13 +71,24 @@ async function conceiveInitialGoal(command: {
     }
     case "conception_deliberation": {
       const managed = requireManagedState(command.turn);
+      const availableGoverningSpecs = managed.goalRevision
+        ?.candidate.availableGoverningSpecs ?? await listGoverningSpecs(command);
       const product = await deliberateGoal(withPhaseState(command.phase, {
+        availableGoverningSpecs,
         ...(managed.goalRevision ? { goalRevision: managed.goalRevision } : {}),
       }));
       return { kind: "GoalContractCandidateSubmitted", product };
     }
     case "contract_review": {
       const managed = requireManagedState(command.turn);
+      const availableGoverningSpecs =
+        managed.goalCandidate?.candidate.availableGoverningSpecs ?? [];
+      const selectedGoverningSpecs = await resolveSelectedGoverningSpecs(
+        command,
+        managed.goalCandidate?.candidate.proposedContract.governingSpecApplications
+          .map((application) => application.logicalId) ?? [],
+      );
+      assertSelectedSpecRevisions(availableGoverningSpecs, selectedGoverningSpecs);
       const product = await reviewGoalContract(withPhaseState(command.phase, {
         inboxId: command.turn.inboxId,
         sessionId: command.turn.sessionId,
@@ -80,6 +96,8 @@ async function conceiveInitialGoal(command: {
           ? { projectRef: command.turn.context.projectRef }
           : {}),
         continuationCandidates: command.turn.continuationCandidates,
+        availableGoverningSpecs,
+        selectedGoverningSpecs,
         goalCandidate: managed.goalCandidate,
         ...(managed.goalRevision ? { goalRevision: managed.goalRevision } : {}),
       }));
@@ -90,6 +108,49 @@ async function conceiveInitialGoal(command: {
     default:
       throw new Error(`Conception cannot advance ${command.turn.semanticState}`);
   }
+}
+
+function assertSelectedSpecRevisions(
+  available: Awaited<ReturnType<typeof listGoverningSpecs>>,
+  selected: Awaited<ReturnType<typeof resolveSelectedGoverningSpecs>>,
+) {
+  const admitted = new Map(
+    available.map((spec) => [spec.logicalId, spec.revisionRef]),
+  );
+  for (const spec of selected) {
+    const expected = admitted.get(spec.logicalId);
+    if (
+      !expected ||
+      expected.id !== spec.revisionRef.id ||
+      expected.sha256 !== spec.revisionRef.sha256
+    ) {
+      throw new Error(`Governing Spec authority changed: ${spec.logicalId}`);
+    }
+  }
+}
+
+function listGoverningSpecs(command: {
+  turn: TurnRecord;
+  governingSpecs?: GoverningSpecAuthority;
+}) {
+  const projectRef = command.turn.context.projectRef;
+  if (!projectRef || !command.governingSpecs) return Promise.resolve([]);
+  return command.governingSpecs.listCatalog(projectRef);
+}
+
+function resolveSelectedGoverningSpecs(
+  command: {
+    turn: TurnRecord;
+    governingSpecs?: GoverningSpecAuthority;
+  },
+  logicalIds: readonly string[],
+) {
+  if (logicalIds.length === 0) return Promise.resolve([]);
+  const projectRef = command.turn.context.projectRef;
+  if (!projectRef || !command.governingSpecs) {
+    throw new Error("Selected governing Specs have no admitted project authority");
+  }
+  return command.governingSpecs.resolveSelected(projectRef, logicalIds);
 }
 
 async function conceiveReviewFeedback(command: {
