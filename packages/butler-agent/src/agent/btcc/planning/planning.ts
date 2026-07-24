@@ -214,14 +214,59 @@ async function reviewFeedbackPlan(command: {
   const program = requireManagedProgram(command.turn);
   const accepted = managed.goalAcceptance;
   if (!accepted) throw new Error("Feedback Planning Review is missing accepted Goal authority");
-  const product = await reviewCorrection(withManagedDeferralState(command.phase, command.turn, {
-    acceptedGoalContract: accepted.goalContract,
-    acceptedAuthority: accepted.authority,
-    feedbackPlan: managed.feedbackPlan,
-    goalContractRef: program.goalContractRef,
-  }));
+  const product = await reviewCorrection(withManagedDeferralState(
+    command.phase,
+    command.turn,
+    projectFeedbackReviewInput(managed, program, accepted),
+  ));
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.kind === "feedback_planning_accepted"
     ? { kind: "FeedbackPlanningReviewAccepted", product }
     : { kind: "FeedbackPlanningRevisionRequested", product };
+}
+
+function projectFeedbackReviewInput(
+  managed: ReturnType<typeof requireManagedState>,
+  program: ReturnType<typeof requireManagedProgram>,
+  accepted: NonNullable<ReturnType<typeof requireManagedState>["goalAcceptance"]>,
+) {
+  const currentAttempt = program.currentTask.attempts.at(-1);
+  if (!currentAttempt) {
+    throw new Error("Feedback Planning Review is missing the current Attempt");
+  }
+  const currentResult = program.currentTask.currentResult;
+  if (!currentResult) {
+    throw new Error("Feedback Planning Review is missing the current ResultCandidate");
+  }
+  const feedbackIntent = managed.feedbackIntent;
+  if (!feedbackIntent) {
+    throw new Error("Feedback Planning Review is missing the accepted FeedbackIntent");
+  }
+  const feedbackPlan = managed.feedbackPlan;
+  if (!feedbackPlan) {
+    throw new Error("Feedback Planning Review is missing the exact FeedbackPlan candidate");
+  }
+  const correctionSource = managed.consolidationRepair?.repair
+    ?? program.currentTask.currentReview;
+  if (!correctionSource) {
+    throw new Error("Feedback Planning Review is missing its correction source");
+  }
+  return {
+    acceptedGoalContract: accepted.goalContract,
+    acceptedAuthority: accepted.authority,
+    acceptedPlanRef: program.plan.ref,
+    governingSpecRefs: program.governingSpecRefs,
+    currentWork: program.currentWork.work,
+    currentTask: program.currentTask.task,
+    currentAttempt,
+    currentResult,
+    correctionSource,
+    feedbackIntent,
+    feedbackPlan,
+    artifactLifecycle: program.artifactLifecycle,
+    ...(managed.feedbackPlanningRevision
+      ? { previousFeedbackPlanningReview: managed.feedbackPlanningRevision }
+      : {}),
+    goalContractRef: program.goalContractRef,
+  };
 }

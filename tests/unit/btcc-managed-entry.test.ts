@@ -229,6 +229,40 @@ describe("BTCC managed executable ingress", () => {
         currentTask: { intendedOutcome: expect.any(String) },
       });
       expect(phaseInputs.get("task_review")).not.toHaveProperty("acceptedPlan");
+      if (needsRepair) {
+        expect(phaseInputs.get("feedback_planning_review")).toMatchObject({
+          acceptedGoalContract: { request: expect.any(String) },
+          acceptedAuthority: { route: "managed" },
+          acceptedPlanRef: { id: expect.any(String), sha256: expect.any(String) },
+          governingSpecRefs: expect.any(Array),
+          currentWork: { outcome: expect.any(String) },
+          currentTask: { intendedOutcome: expect.any(String) },
+          currentAttempt: {
+            attemptRecord: { ref: { id: expect.any(String), sha256: expect.any(String) } },
+          },
+          currentResult: { kind: "result_candidate" },
+          correctionSource: {
+            kind: "task_review",
+            review: {
+              verdict: "not_passed",
+              findings: expect.any(Array),
+              findingSet: {
+                owner: "task_review",
+                findingRefs: expect.any(Array),
+              },
+              correctionScope: {
+                origin: "task_review",
+                sourceTaskRef: expect.any(Object),
+                sourceAttemptRef: expect.any(Object),
+              },
+            },
+          },
+          feedbackIntent: { kind: "feedback_intent" },
+          feedbackPlan: { kind: "feedback_plan_candidate" },
+          artifactLifecycle: { ref: { id: expect.any(String), sha256: expect.any(String) } },
+        });
+        expect(phaseInputs.get("feedback_planning_review")).not.toHaveProperty("acceptedPlan");
+      }
       expect(phaseInputs.get("consolidation")).toMatchObject({
         acceptedGoalContract: { request: expect.any(String) },
         acceptedPlan: { strategy: expect.any(String) },
@@ -260,6 +294,15 @@ describe("BTCC managed executable ingress", () => {
       if (scenario === "managed-feedback-planning-revision") {
         expect(feedbackCandidates).toHaveLength(2);
         expect(feedbackCandidates[1]?.revisionOrigin.kind).toBe("review_revision");
+        expect(phaseInputs.get("feedback_planning_review")).toMatchObject({
+          previousFeedbackPlanningReview: {
+            kind: "feedback_planning_revision_required",
+            review: {
+              verdict: "revision_required",
+              findings: [expect.any(String)],
+            },
+          },
+        });
       }
       if (scenario === "managed-governing-revision" || scenario === "managed-authority-revision") {
         expect(planningCandidates.at(-1)?.observedManifestRevision).toBe(5);
