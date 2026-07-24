@@ -190,6 +190,11 @@ export type PhaseContinuity = {
   decisions: string[];
   unresolved: string[];
   nextOperationPurpose: string;
+  publicActivity: {
+    summary: string;
+    rationale: string;
+    nextStep: string;
+  };
 };
 
 export type WorkspaceOperationRoot =
@@ -319,6 +324,13 @@ export type PhaseConversationCommand<Product> = {
   operations: OperationExecutor;
   operationAuthority: OperationAuthority;
   executionPermit: ExecutionPermit;
+  activity?: {
+    publish(update: {
+      turnId: string;
+      semanticState: ModelPhaseState;
+      activity: PhaseContinuity["publicActivity"];
+    }): void | Promise<void>;
+  };
   providerCorrection?: ProviderCorrection;
 };
 
@@ -332,5 +344,6 @@ export type PhaseInvocation = Pick<
   | "operations"
   | "operationAuthority"
   | "executionPermit"
+  | "activity"
   | "providerCorrection"
 >;

@@ -42,6 +42,20 @@ export function projectTurnProgress(
         },
       });
     },
+    async phaseActivityChanged(update) {
+      await publish({
+        kind: "assistant.public_note",
+        payload: {
+          note: update.summary,
+          btccState: update.semanticState,
+          decisionSummary: update.summary,
+          decisionRationale: update.rationale,
+          decisionNextStep: update.nextStep,
+          decisionSource: "model-authored",
+          semanticBlockId: update.semanticState,
+        },
+      });
+    },
     async operationalNoticeChanged(update) {
       if (update.status === "cleared") {
         await publish({

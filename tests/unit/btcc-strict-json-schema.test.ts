@@ -116,6 +116,11 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
       decisions: [],
       unresolved: ["The current status is unknown."],
       nextOperationPurpose: "Read the current status.",
+      publicActivity: {
+        summary: "현재 작업 상태를 확인하고 있습니다.",
+        rationale: "다음 판단을 현재 상태에 근거하기 위해 필요합니다.",
+        nextStep: "확인 결과를 바탕으로 단계 산출물을 작성합니다.",
+      },
     },
     requests: [{
       requestId: "request-1",

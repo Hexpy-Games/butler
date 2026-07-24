@@ -27,6 +27,11 @@ describe("BTCC phase checkpoint persistence", () => {
       decisions: ["Use the accepted workspace scope."],
       unresolved: ["The current file content is unknown."],
       nextOperationPurpose: "Read the current file once.",
+      publicActivity: {
+        summary: "현재 파일의 내용을 확인하고 있습니다.",
+        rationale: "계획을 현재 구현 상태에 맞추기 위해 필요합니다.",
+        nextStep: "확인한 내용으로 다음 작업 범위를 결정합니다.",
+      },
     };
 
     const operationRound = await store.appendOperationRound({

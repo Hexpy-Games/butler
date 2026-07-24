@@ -96,6 +96,13 @@ export interface BtccTurnProgressObserver {
     semanticState: string;
     turnRevision: number;
   }): void | Promise<void>;
+  phaseActivityChanged?(update: {
+    turnId: string;
+    semanticState: string;
+    summary: string;
+    rationale: string;
+    nextStep: string;
+  }): void | Promise<void>;
   operationalNoticeChanged?(update: {
     turnId: string;
     semanticState: string;
