@@ -6,7 +6,10 @@ import type { SubmissionSchema } from "./submission-schema.ts";
 import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
 import type { OperationResultProjection } from "../operation-result/contracts.ts";
 import type { OperationResultCompleteness } from "../operation-result/contracts.ts";
-import type { PublicPhaseActivity } from "./phase-activity.ts";
+import type {
+  PhaseActivityPublisher,
+  PublicPhaseActivity,
+} from "./phase-activity.ts";
 
 export type PhaseRunBinding = {
   turnId: string;
@@ -324,13 +327,7 @@ export type PhaseConversationCommand<Product> = {
   operations: OperationExecutor;
   operationAuthority: OperationAuthority;
   executionPermit: ExecutionPermit;
-  activity?: {
-    publish(update: {
-      turnId: string;
-      semanticState: ModelPhaseState;
-      activity: PublicPhaseActivity;
-    }): void | Promise<void>;
-  };
+  activity?: PhaseActivityPublisher;
   providerCorrection?: ProviderCorrection;
 };
 

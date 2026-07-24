@@ -103,6 +103,11 @@ export interface BtccTurnProgressObserver {
     rationale: string;
     nextStep: string;
   }): void | Promise<void>;
+  modelRoundWaiting?(update: {
+    turnId: string;
+    semanticState: string;
+    checkpointId: string;
+  }): void | Promise<void>;
   operationalNoticeChanged?(update: {
     turnId: string;
     semanticState: string;

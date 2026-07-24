@@ -100,3 +100,30 @@ test("projects canonical phase identity and marks only active recovery as operat
   expect(recoveryRow?.bridge_phase).toBe("operational_recovery");
   expect(recoveryRow?.semantic_block_id).toBe("planning_review");
 });
+
+test("projects one runtime-owned waiting state for a selected-model round", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.modelRoundWaiting?.({
+    turnId: "turn-model-wait",
+    semanticState: "planning",
+    checkpointId: "checkpoint-planning",
+  });
+
+  const row = progressRowFromSharedTurnEvent({
+    id: "model-wait-event",
+    turnSequence: 8,
+    createdAt: "2026-07-24T12:00:00.000Z",
+    kind: events[0]!.kind,
+    payload: events[0]!.payload,
+  });
+  expect(row).toMatchObject({
+    kind: "message",
+    safe_label: "모델 응답을 기다리고 있습니다",
+    bridge_phase: "model_round_waiting",
+    semantic_block_id: "planning",
+  });
+});

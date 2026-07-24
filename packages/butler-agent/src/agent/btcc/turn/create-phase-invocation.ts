@@ -37,7 +37,8 @@ export function createPhaseInvocation(
       mutation: { kind: "forbidden" },
     },
     executionPermit,
-    ...(dependencies.progress?.phaseActivityChanged
+    ...(dependencies.progress?.phaseActivityChanged ||
+        dependencies.progress?.modelRoundWaiting
       ? {
           activity: {
             publish: (update) => dependencies.progress?.phaseActivityChanged?.({
@@ -45,6 +46,8 @@ export function createPhaseInvocation(
               semanticState: update.semanticState,
               ...update.activity,
             }),
+            modelRoundWaiting: (update) =>
+              dependencies.progress?.modelRoundWaiting?.(update),
           },
         }
       : {}),

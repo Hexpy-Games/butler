@@ -97,6 +97,11 @@ async function runPhaseConversationAtCheckpoint<Product>(
       command.executionPermit.assertActive();
       return product;
     }
+    await command.activity?.modelRoundWaiting?.({
+      turnId: conversation.binding.turnId,
+      semanticState: conversation.binding.semanticState,
+      checkpointId: conversation.binding.checkpointId,
+    });
     const round = await command.model.runRound(envelope, command.executionPermit.signal);
     command.executionPermit.assertActive();
     if (round.kind === "interruption") {

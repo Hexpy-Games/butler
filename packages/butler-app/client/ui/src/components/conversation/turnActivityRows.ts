@@ -33,6 +33,31 @@ export function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
   });
 }
 
+export function currentModelRoundWait(
+  rows: ProgressRow[],
+): ProgressRow | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (!row) continue;
+    if (
+      row.state === "delivered" ||
+      row.state === "completed" ||
+      row.state === "cancelled" ||
+      row.state === "failed"
+    ) {
+      return undefined;
+    }
+    if (row.bridge_phase === "model_round_waiting") return row;
+    if (
+      row.work_decision_source === "model-authored" ||
+      row.bridge_phase === "operational_recovery"
+    ) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export function latestPublicActivity(
   rows: ProgressRow[],
   hasModelActivity = false,
