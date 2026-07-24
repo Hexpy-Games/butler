@@ -1,4 +1,5 @@
 import {
+  contentRef,
   requireRecord,
   requireString,
   type ContentRef,
@@ -60,6 +61,7 @@ export function planningReviewSubjects(
 export function requireSubjectCoverage(
   value: unknown,
   expected: PlanningReviewSubject[],
+  priorFindings: PlanningReviewSubjectFinding[] = [],
 ): PlanningReviewSubjectCoverage[] {
   if (!Array.isArray(value) || value.length !== expected.length) {
     throw new Error("Planning Review must judge every candidate subject");
@@ -77,12 +79,16 @@ export function requireSubjectCoverage(
     if (entry.verdict !== "passed" && entry.verdict !== "failed") {
       throw new Error("Planning Review subject verdict is invalid");
     }
-    const findings = requireSubjectFindings(entry.findings, subjectId);
-    if (entry.verdict === "passed" && findings.length > 0) {
-      throw new Error("Passed Planning Review subject cannot contain findings");
-    }
-    if (entry.verdict === "failed" && findings.length === 0) {
-      throw new Error("Failed Planning Review subject requires findings");
+    const findings = requireSubjectFindings(
+      entry.findings,
+      expectedSubject,
+      priorFindings,
+    );
+    const hasBlockingFinding = findings.some(
+      (finding) => finding.recommendedDisposition === "required_now",
+    );
+    if ((entry.verdict === "failed") !== hasBlockingFinding) {
+      throw new Error("Planning Review subject verdict conflicts with required-now findings");
     }
     return {
       ...expectedSubject,
@@ -108,6 +114,7 @@ export function requireDimensionCoverage(
   );
   for (const subject of subjects) {
     for (const finding of subject.findings) {
+      if (finding.recommendedDisposition !== "required_now") continue;
       findingsByDimension.get(finding.dimension)!.push(finding.message);
     }
   }
@@ -144,19 +151,70 @@ function subject(
 
 function requireSubjectFindings(
   value: unknown,
-  subjectId: string,
+  subject: PlanningReviewSubject,
+  priorFindings: PlanningReviewSubjectFinding[],
 ): PlanningReviewSubjectFinding[] {
   if (!Array.isArray(value)) {
-    throw new Error(`Planning Review ${subjectId} findings must be an array`);
+    throw new Error(`Planning Review ${subject.subjectId} findings must be an array`);
   }
   return value.map((item, index) => {
-    const finding = requireRecord(item, `Planning Review ${subjectId} finding[${index}]`);
+    const finding = requireRecord(
+      item,
+      `Planning Review ${subject.subjectId} finding[${index}]`,
+    );
     if (!PLANNING_REVIEW_DIMENSIONS.includes(finding.dimension as PlanningReviewDimension)) {
       throw new Error("Planning Review subject finding dimension is invalid");
     }
-    return {
+    if (finding.priority !== "P0" && finding.priority !== "P1" && finding.priority !== "P2") {
+      throw new Error("Planning Review subject finding priority is invalid");
+    }
+    if (
+      finding.recommendedDisposition !== "required_now" &&
+      finding.recommendedDisposition !== "backlog"
+    ) {
+      throw new Error("Planning Review subject finding disposition is invalid");
+    }
+    const priority = finding.priority as "P0" | "P1" | "P2";
+    const recommendedDisposition = finding.recommendedDisposition as
+      | "required_now"
+      | "backlog";
+    const body = {
       dimension: finding.dimension as PlanningReviewDimension,
       message: requireString(finding.message, "Planning Review subject finding message"),
+      priority,
+      recommendedDisposition,
     };
+    if (recommendedDisposition === "required_now" && priorFindings.length > 0) {
+      const priorFindingId = requireString(
+        finding.priorFindingId,
+        "Planning Review prior finding id",
+      );
+      const prior = priorFindings.find((item) => item.ref.id === priorFindingId);
+      if (
+        finding.findingOrigin !== "prior_finding" ||
+        !prior ||
+        prior.dimension !== body.dimension ||
+        prior.message !== body.message ||
+        prior.priority !== body.priority
+      ) {
+        throw new Error("Planning re-review changed its frozen finding");
+      }
+      return prior;
+    }
+    if (recommendedDisposition === "required_now" && finding.findingOrigin !== "initial_review") {
+      throw new Error("Initial Planning finding origin is invalid");
+    }
+    if (recommendedDisposition === "backlog" && finding.findingOrigin !== "backlog_candidate") {
+      throw new Error("Planning backlog finding origin is invalid");
+    }
+    const origin = recommendedDisposition === "required_now"
+      ? { kind: "initial_review" as const }
+      : { kind: "backlog_candidate" as const };
+    const ref = contentRef("planning-review-finding", {
+      subjectId: subject.subjectId,
+      ...body,
+      origin,
+    });
+    return { ref, ...body, origin };
   });
 }

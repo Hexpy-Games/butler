@@ -8,6 +8,8 @@ export type PriorTaskReviewFindingProjection = {
     findingRef: ContentRef;
     category: string;
     statement: string;
+    priority: string;
+    recommendedDisposition: string;
   }>;
 };
 
@@ -31,6 +33,8 @@ export function projectPriorTaskReviewFindings(
         findingRef: finding.ref,
         category: finding.category,
         statement: finding.statement,
+        priority: finding.priority,
+        recommendedDisposition: finding.recommendedDisposition,
       })),
     }];
   });

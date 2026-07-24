@@ -27,8 +27,9 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec = withManagedDeferral<FeedbackIntentProduct>({
-  submissionSchema: feedbackIntentSubmissionSchema,
+function correctionCodec(findingRefs: ContentRef[]) {
+  return withManagedDeferral<FeedbackIntentProduct>({
+  submissionSchema: feedbackIntentSubmissionSchema(findingRefs.map((ref) => ref.id)),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Conception state");
     const correctionScopeRef = requireContentRef(state.correctionScopeRef, "correctionScopeRef");
@@ -43,6 +44,7 @@ const codec = withManagedDeferral<FeedbackIntentProduct>({
       currentAuthorityRef: authorityRef,
       correctionKind,
       intendedCorrection: requireString(value.intendedCorrection, "intendedCorrection"),
+      findingDecisions: requireFindingDecisions(value.findingDecisions, findingRefs),
     };
     return {
       kind: "feedback_intent",
@@ -50,9 +52,63 @@ const codec = withManagedDeferral<FeedbackIntentProduct>({
     };
   },
 });
+}
 
 export function conceiveCorrection(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = requireRecord(command.context.stateInput, "Feedback Conception state");
+  const findingRefs = correctionFindingRefs(state.correctionSource);
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: correctionCodec(findingRefs),
+  });
+}
+
+function correctionFindingRefs(value: unknown): ContentRef[] {
+  const source = requireRecord(value, "correctionSource");
+  const review = source.review && typeof source.review === "object"
+    ? requireRecord(source.review, "correctionSource.review")
+    : undefined;
+  if (!review || !Array.isArray(review.findings)) return [];
+  return review.findings.flatMap((item, index) => {
+    const finding = requireRecord(item, `correctionSource finding[${index}]`);
+    return finding.recommendedDisposition === "required_now"
+      ? [requireContentRef(finding.ref, `correctionSource finding[${index}].ref`)]
+      : [];
+  });
+}
+
+function requireFindingDecisions(
+  value: unknown,
+  findingRefs: ContentRef[],
+): FeedbackIntentProduct["feedbackIntent"]["findingDecisions"] {
+  if (findingRefs.length === 0) return [];
+  if (!Array.isArray(value) || value.length !== findingRefs.length) {
+    throw new Error("Feedback Conception must decide every required finding");
+  }
+  const byId = new Map(findingRefs.map((ref) => [ref.id, ref]));
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    const decision = requireRecord(item, `findingDecisions[${index}]`);
+    const findingId = requireString(decision.findingId, "findingDecision.findingId");
+    const findingRef = byId.get(findingId);
+    if (!findingRef || seen.has(findingId)) {
+      throw new Error("Feedback finding decisions must be exact, unique, and complete");
+    }
+    seen.add(findingId);
+    if (
+      decision.decision !== "apply_now" &&
+      decision.decision !== "dispute" &&
+      decision.decision !== "split_to_backlog"
+    ) {
+      throw new Error("Feedback finding decision is invalid");
+    }
+    return {
+      findingRef,
+      decision: decision.decision,
+      rationale: requireString(decision.rationale, "findingDecision.rationale"),
+    };
+  });
 }
 
 function requireCorrectionKind(value: unknown):

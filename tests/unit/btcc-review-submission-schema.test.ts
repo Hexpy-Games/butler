@@ -26,12 +26,25 @@ test("promotion Review exposes only a satisfied criterion verdict", () => {
   });
 });
 
-test("ordinary Task Review retains satisfied and not-satisfied verdicts", () => {
+test("ordinary Task Review separates pass, backlog, and blocking findings", () => {
   const verdict = criterionVerdictSchema(taskReviewSubmissionSchema("semantic"));
 
   expect(verdict.type).toBeUndefined();
   expect(Array.isArray(verdict.anyOf)).toBe(true);
-  expect(verdict.anyOf).toHaveLength(2);
+  expect(verdict.anyOf).toHaveLength(3);
+});
+
+test("correction Task Review binds blockers to prior findings or correction regressions", () => {
+  const verdict = criterionVerdictSchema(
+    taskReviewSubmissionSchema("semantic", ["finding-1"]),
+  );
+  const serialized = JSON.stringify(verdict);
+
+  expect(verdict.anyOf).toHaveLength(4);
+  expect(serialized).toContain('"const":"prior_finding"');
+  expect(serialized).toContain('"enum":["finding-1"]');
+  expect(serialized).toContain('"const":"correction_regression"');
+  expect(serialized).not.toContain('"const":"initial_review"');
 });
 
 function criterionVerdictSchema(schema: Record<string, unknown>) {

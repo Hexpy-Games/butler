@@ -36,6 +36,13 @@ export type ReviewFinding = {
   attemptRef: ContentRef;
   category: ReviewFindingCategory;
   statement: string;
+  priority: "P0" | "P1" | "P2";
+  recommendedDisposition: "required_now" | "backlog";
+  origin:
+    | { kind: "initial_review" }
+    | { kind: "prior_finding"; findingRef: ContentRef }
+    | { kind: "correction_regression"; findingRef: ContentRef }
+    | { kind: "backlog_candidate" };
   targetRevisionRefs: ContentRef[];
 };
 

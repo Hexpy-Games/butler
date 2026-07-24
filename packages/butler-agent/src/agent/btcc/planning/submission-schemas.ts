@@ -105,8 +105,15 @@ export function revisedPlanSubmissionSchema(logicalIds: string[]): SubmissionSch
   return variantsSchema(...planVariants({}, logicalIds));
 }
 
-export function planCandidateSubmissionSchema(logicalIds: string[]): SubmissionSchema {
-  return variantsSchema(...planVariants({ kind: literalSchema("plan_candidate") }, logicalIds));
+export function planCandidateSubmissionSchema(
+  logicalIds: string[],
+  findingIds: string[] = [],
+): SubmissionSchema {
+  const prefix = {
+    kind: literalSchema("plan_candidate"),
+    ...(findingIds.length > 0 ? { findingDecisions: findingDecisionSchema(findingIds) } : {}),
+  };
+  return variantsSchema(...planVariants(prefix, logicalIds));
 }
 
 function planVariants(
@@ -157,16 +164,46 @@ function reviewCoverage(): SubmissionSchema {
   });
 }
 
-export function planReviewSubmissionSchema(subjectIds: string[]): SubmissionSchema {
-  const subjectFinding = objectSchema({
+export function planReviewSubmissionSchema(
+  subjectIds: string[],
+  priorFindingIds: string[] = [],
+): SubmissionSchema {
+  const findingFields = {
     dimension: enumSchema(...REVIEW_DIMENSIONS),
     message: textSchema(),
-  });
+    priority: enumSchema("P0", "P1", "P2"),
+  };
+  const subjectFinding = priorFindingIds.length === 0
+    ? variantsSchema(
+        objectSchema({
+          ...findingFields,
+          recommendedDisposition: literalSchema("required_now"),
+          findingOrigin: literalSchema("initial_review"),
+        }),
+        objectSchema({
+          ...findingFields,
+          recommendedDisposition: literalSchema("backlog"),
+          findingOrigin: literalSchema("backlog_candidate"),
+        }),
+      )
+    : variantsSchema(
+        objectSchema({
+          ...findingFields,
+          recommendedDisposition: literalSchema("required_now"),
+          findingOrigin: literalSchema("prior_finding"),
+          priorFindingId: enumSchema(...priorFindingIds),
+        }),
+        objectSchema({
+          ...findingFields,
+          recommendedDisposition: literalSchema("backlog"),
+          findingOrigin: literalSchema("backlog_candidate"),
+        }),
+      );
   const subjectCoverage = variantsSchema(
     objectSchema({
       subjectId: enumSchema(...subjectIds),
       verdict: literalSchema("passed"),
-      findings: arraySchema(subjectFinding, { maxItems: 0 }),
+      findings: arraySchema(subjectFinding),
     }),
     objectSchema({
       subjectId: enumSchema(...subjectIds),
@@ -186,6 +223,17 @@ export function planReviewSubmissionSchema(subjectIds: string[]): SubmissionSche
     objectSchema({ ...reviewFields, verdict: literalSchema("accepted") }),
     objectSchema({ ...reviewFields, verdict: literalSchema("revision_required") }),
   );
+}
+
+function findingDecisionSchema(findingIds: string[]): SubmissionSchema {
+  return arraySchema(objectSchema({
+    findingId: enumSchema(...findingIds),
+    decision: enumSchema("apply_now", "dispute", "split_to_backlog"),
+    rationale: textSchema(),
+  }), {
+    minItems: findingIds.length,
+    maxItems: findingIds.length,
+  });
 }
 
 const impact = variantsSchema(
@@ -208,16 +256,22 @@ export function feedbackPlanSubmissionSchema(
     | "implementation_repair"
     | "governing_revision"
     | "authority_scope_revision",
+  findingIds: string[] = [],
 ): SubmissionSchema {
   const revisedPlan = revisedPlanSubmissionSchema(logicalIds);
+  const decisions: Record<string, SubmissionSchema> = findingIds.length > 0
+    ? { findingDecisions: findingDecisionSchema(findingIds) }
+    : {};
   const variants = {
     implementation_repair: objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
+    ...decisions,
     correctionKind: literalSchema("implementation_repair"),
     correctionAction: textSchema(),
   }),
     governing_revision: objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
+    ...decisions,
     correctionKind: literalSchema("governing_revision"),
     correctionAction: textSchema(),
     revisedPlan,
@@ -225,6 +279,7 @@ export function feedbackPlanSubmissionSchema(
   }),
     authority_scope_revision: objectSchema({
     kind: literalSchema("feedback_plan_candidate"),
+    ...decisions,
     correctionKind: literalSchema("authority_scope_revision"),
     correctionAction: textSchema(),
     revisedPlan,
@@ -241,25 +296,48 @@ const feedbackReviewIdentity = {
   kind: literalSchema("feedback_planning_review"),
 };
 
-const acceptedFeedbackReview = {
-  ...feedbackReviewIdentity,
-  verdict: literalSchema("accepted"),
-  findings: arraySchema(textSchema(), { maxItems: 0 }),
-};
-
-const revisionFeedbackReview = {
-  ...feedbackReviewIdentity,
-  verdict: literalSchema("revision_required"),
-  findings: arraySchema(textSchema(), { minItems: 1 }),
-};
-
-function feedbackReviewVariants(fields: Record<string, SubmissionSchema>) {
-  return [
-    objectSchema({ ...acceptedFeedbackReview, ...fields }),
-    objectSchema({ ...revisionFeedbackReview, ...fields }),
-  ];
+export function feedbackPlanReviewSubmissionSchema(priorFindingIds: string[]) {
+  const baseFinding = {
+    statement: textSchema(),
+    priority: enumSchema("P0", "P1", "P2"),
+  };
+  const finding = priorFindingIds.length === 0
+    ? variantsSchema(
+        objectSchema({
+          ...baseFinding,
+          recommendedDisposition: literalSchema("required_now"),
+          findingOrigin: literalSchema("initial_review"),
+        }),
+        objectSchema({
+          ...baseFinding,
+          recommendedDisposition: literalSchema("backlog"),
+          findingOrigin: literalSchema("backlog_candidate"),
+        }),
+      )
+    : variantsSchema(
+        objectSchema({
+          ...baseFinding,
+          recommendedDisposition: literalSchema("required_now"),
+          findingOrigin: literalSchema("prior_finding"),
+          priorFindingId: enumSchema(...priorFindingIds),
+        }),
+        objectSchema({
+          ...baseFinding,
+          recommendedDisposition: literalSchema("backlog"),
+          findingOrigin: literalSchema("backlog_candidate"),
+        }),
+      );
+  const fields = { findings: arraySchema(finding) };
+  return variantsSchema(
+    objectSchema({
+      ...feedbackReviewIdentity,
+      verdict: literalSchema("accepted"),
+      ...fields,
+    }),
+    objectSchema({
+      ...feedbackReviewIdentity,
+      verdict: literalSchema("revision_required"),
+      ...fields,
+    }),
+  );
 }
-
-export const feedbackPlanReviewSubmissionSchema = variantsSchema(
-  ...feedbackReviewVariants({}),
-);

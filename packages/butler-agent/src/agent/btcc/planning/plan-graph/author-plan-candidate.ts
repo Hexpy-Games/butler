@@ -38,6 +38,7 @@ export type AuthoringState = {
   workspaceScopeRef: string;
   previousCandidateRef?: ContentRef;
   findingSetRef?: ContentRef;
+  findingDecisions?: import("../contracts.ts").PlanningFindingDecision[];
   continuation?: import("../contracts.ts").PlanningContinuation;
   requireGoverningSpec?: boolean;
   specParentRootId?: string;
@@ -167,6 +168,7 @@ export function authorPlanCandidate(
         kind: "review_revision" as const,
         previousCandidateRef: state.previousCandidateRef,
         findingSetRef: state.findingSetRef,
+        findingDecisions: state.findingDecisions ?? [],
       }
     : state.continuation
       ? {

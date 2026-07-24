@@ -126,5 +126,10 @@ export type FeedbackIntentProduct = {
       | "governing_revision"
       | "authority_scope_revision";
     intendedCorrection: string;
+    findingDecisions: Array<{
+      findingRef: ContentRef;
+      decision: "apply_now" | "dispute" | "split_to_backlog";
+      rationale: string;
+    }>;
   };
 };

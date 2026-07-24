@@ -13,11 +13,18 @@ import type { ResultCandidateProduct } from "../execution/index.ts";
 import type {
   CriterionVerdict,
   ReviewFinding,
-  ReviewFindingCategory,
   ReviewObservation,
   TaskReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
+import {
+  orderFindings,
+  requireFindingCategory,
+  requireFindingOrigin,
+  requireFindingPriority,
+  requirePriorFindings,
+  validateCorrectionFindingScope,
+} from "./review-findings.ts";
 import { taskReviewSubmissionSchema } from "./submission-schema.ts";
 
 const CONTRACT: PhaseContract = {
@@ -35,8 +42,14 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
-  submissionSchema: taskReviewSubmissionSchema("semantic"),
+function semanticReviewCodec(
+  priorFindings: ReviewFinding[],
+): PhaseCodec<TaskReviewProduct> {
+  return {
+  submissionSchema: taskReviewSubmissionSchema(
+    "semantic",
+    priorFindings.map((finding) => finding.ref.id),
+  ),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Task Review state");
     const result = state.resultCandidate as ResultCandidateProduct | undefined;
@@ -57,7 +70,10 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
         result.result.resultSummary.ref,
         ...envelope.operationResults.map((operation) => operation.resultRef),
       ]),
+      priorFindings,
     });
+      const orderedFindings = orderFindings(decoded.findings);
+      validateCorrectionFindingScope(orderedFindings, priorFindings);
     const passed = decoded.verdicts.every((verdict) => verdict.verdict === "satisfied");
     if (result.result.kind === "repository_promotion" && !passed) {
       throw new Error("Promotion Review is identity-only and cannot fail semantically");
@@ -99,7 +115,7 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       reviewCheckpointRef: envelope.binding.checkpointId,
       criterionVerdicts: decoded.verdicts,
       observations: decoded.observations,
-      findings: decoded.findings,
+      findings: orderedFindings,
       reviewedResultRefs: uniqueRefs(
         decoded.verdicts.flatMap((verdict) => verdict.reviewedResultRefs),
       ),
@@ -117,7 +133,9 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
       const body = { ...reviewBase, verdict: "passed" as const };
       return { kind: "task_review", review: { ref: contentRef("task-review", body), ...body } };
     }
-    const findingRefs = decoded.findings.map((finding) => finding.ref);
+    const findingRefs = orderedFindings
+      .filter((finding) => finding.recommendedDisposition === "required_now")
+      .map((finding) => finding.ref);
     const findingSetBody = { owner: "task_review" as const, findingRefs };
     const findingSetRef = contentRef("finding-set", findingSetBody);
     const correctionScopeBody = {
@@ -138,13 +156,14 @@ const semanticReviewCodec: PhaseCodec<TaskReviewProduct> = {
     return { kind: "task_review", review: { ref: contentRef("task-review", body), ...body } };
   },
 };
+}
 
-const codec = withManagedDeferral(semanticReviewCodec);
-
-const promotionCodec = {
-  ...semanticReviewCodec,
+function promotionCodec() {
+  return {
+  ...semanticReviewCodec([]),
   submissionSchema: taskReviewSubmissionSchema("promotion_identity"),
 };
+}
 
 export function reviewTask(command: PhaseInvocation) {
   const state = requireRecord(command.context.stateInput, "Task Review state");
@@ -152,10 +171,13 @@ export function reviewTask(command: PhaseInvocation) {
   if (result?.kind !== "result_candidate") {
     throw new Error("Task Review is missing its exact ResultCandidate");
   }
+  const priorFindings = requirePriorFindings(state.priorCorrectionFindings);
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: result.result.kind === "repository_promotion" ? promotionCodec : codec,
+    codec: result.result.kind === "repository_promotion"
+      ? promotionCodec()
+      : withManagedDeferral(semanticReviewCodec(priorFindings)),
   });
 }
 
@@ -166,6 +188,7 @@ function decodeCriterionVerdicts(input: {
   result: ResultCandidateProduct;
   checkpointId: string;
   runtimeBoundResultRefs: ContentRef[];
+  priorFindings: ReviewFinding[];
 }): {
   verdicts: CriterionVerdict[];
   observations: ReviewObservation[];
@@ -219,13 +242,24 @@ function decodeCriterionVerdicts(input: {
     };
     observations.push(observation);
     const findingRefs: ContentRef[] = [];
-    if (criterionVerdict === "not_satisfied") {
+    if (
+      criterionVerdict === "not_satisfied" ||
+      submitted.recommendedDisposition === "backlog"
+    ) {
       const category = requireFindingCategory(submitted.findingCategory);
+      const priority = requireFindingPriority(submitted.priority);
+      const recommendedDisposition = submitted.recommendedDisposition === "backlog"
+        ? "backlog" as const
+        : "required_now" as const;
+      const origin = requireFindingOrigin(submitted, input.priorFindings);
       const findingBody = {
         taskRef: input.result.result.taskRef,
         attemptRef: input.result.result.attemptRef,
         category,
         statement: requireString(submitted.finding, "criterion finding"),
+        priority,
+        recommendedDisposition,
+        origin,
         targetRevisionRefs,
       };
       const finding = { ref: contentRef("finding", findingBody), ...findingBody };
@@ -246,18 +280,6 @@ function decodeCriterionVerdicts(input: {
     throw new Error("Task Review did not cover every accepted criterion");
   }
   return { verdicts, observations, findings };
-}
-
-function requireFindingCategory(value: unknown): ReviewFindingCategory {
-  const allowed: ReviewFindingCategory[] = [
-    "implementation_nonconformance", "authority_contradiction", "goal_drift",
-    "task_decomposition", "dependency_invalid", "verification_incomplete",
-    "missing_observation",
-  ];
-  if (typeof value !== "string" || !allowed.includes(value as ReviewFindingCategory)) {
-    throw new Error("Task Review finding category is invalid");
-  }
-  return value as ReviewFindingCategory;
 }
 
 function requireRecords(value: unknown, label: string): Record<string, unknown>[] {

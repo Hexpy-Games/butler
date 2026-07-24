@@ -114,12 +114,26 @@ export const goalReviewSubmissionSchema = variantsSchema(
   }),
 );
 
-export const feedbackIntentSubmissionSchema = objectSchema({
-  kind: literalSchema("feedback_intent"),
-  correctionKind: enumSchema(
-    "implementation_repair",
-    "governing_revision",
-    "authority_scope_revision",
-  ),
-  intendedCorrection: textSchema(),
-});
+export function feedbackIntentSubmissionSchema(findingIds: string[]) {
+  return objectSchema({
+    kind: literalSchema("feedback_intent"),
+    correctionKind: enumSchema(
+      "implementation_repair",
+      "governing_revision",
+      "authority_scope_revision",
+    ),
+    intendedCorrection: textSchema(),
+    ...(findingIds.length > 0
+      ? {
+          findingDecisions: arraySchema(objectSchema({
+            findingId: enumSchema(...findingIds),
+            decision: enumSchema("apply_now", "dispute", "split_to_backlog"),
+            rationale: textSchema(),
+          }), {
+            minItems: findingIds.length,
+            maxItems: findingIds.length,
+          }),
+        }
+      : {}),
+  });
+}

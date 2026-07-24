@@ -21,6 +21,10 @@ import {
   selectableGoverningSpecIds,
 } from "./decode-available-specs.ts";
 import { retainPlanningObservations } from "./observation-result-index.ts";
+import {
+  decodeFindingDecisions,
+  requiredSubjectFindingRefs,
+} from "./finding-decisions.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -47,9 +51,15 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-function planningCodec(selectableSpecIds: string[]) {
+function planningCodec(
+  selectableSpecIds: string[],
+  priorFindingRefs: ContentRef[],
+) {
   return withManagedDeferral<PlanningCandidateProduct>({
-    submissionSchema: planCandidateSubmissionSchema(selectableSpecIds),
+    submissionSchema: planCandidateSubmissionSchema(
+      selectableSpecIds,
+      priorFindingRefs.map((ref) => ref.id),
+    ),
     decode(submission, envelope) {
       const state = requireRecord(envelope.context.stateInput, "Planning state");
       const value = requireRecord(submission, "Planning submission");
@@ -86,7 +96,13 @@ function planningCodec(selectableSpecIds: string[]) {
               }
             : {}),
           ...(state.findingSetRef
-            ? { findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef") }
+            ? {
+                findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef"),
+                findingDecisions: decodeFindingDecisions(
+                  value.findingDecisions,
+                  priorFindingRefs,
+                ),
+              }
             : {}),
           ...(state.continuation
             ? { continuation: state.continuation as PlanningContinuation }
@@ -121,13 +137,14 @@ export function proposePlan(command: PhaseInvocation) {
     state.governingSpecRefs,
     "governingSpecRefs",
   );
+  const priorFindingRefs = requiredSubjectFindingRefs(state.priorPlanningReview);
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
     codec: planningCodec(selectableGoverningSpecIds(
       availableSpecs,
       admittedGoverningSpecRefs,
-    )),
+    ), priorFindingRefs),
   });
 }
 

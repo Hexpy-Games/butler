@@ -207,7 +207,12 @@ export type PlanningCandidate = {
         sourceTurnId: string;
         deferredAnchorRef: ContentRef;
       }
-    | { kind: "review_revision"; previousCandidateRef: ContentRef; findingSetRef: ContentRef };
+    | {
+        kind: "review_revision";
+        previousCandidateRef: ContentRef;
+        findingSetRef: ContentRef;
+        findingDecisions: PlanningFindingDecision[];
+      };
   resolvedDeferralAnchorRefs: ContentRef[];
   plan: ManagedPlan;
   works: ManagedWork[];
@@ -260,104 +265,30 @@ export type PlanningObservationResultIndexEntry = OperationResultIndexEntry;
 
 export type PlanningContinuation = Extract<ContinuationBinding, { kind: "deferred_goal" }>;
 
-export type PlanningReview = {
-  ref: ContentRef;
-  candidateRef: ContentRef;
-  originalGoalContractRef: ContentRef;
-  reviewedBundleRef: ContentRef;
-  reviewedWorkGraphRef: ContentRef;
-  reviewedWorkRefs: ContentRef[];
-  reviewedTaskRefs: ContentRef[];
-  reviewedCriterionRefs: ContentRef[];
-  reviewedVerificationQuestionRefs: ContentRef[];
-  reviewedEffectIntentRefs: ContentRef[];
-  reviewedIntegrationCriterionRefs: ContentRef[];
-  reviewedArtifactLifecycleRef: ContentRef;
-  reviewedSpecRevisionRefs: ContentRef[];
-  reviewedSubjects: PlanningReviewSubjectCoverage[];
-  coverage: PlanningReviewCoverage[];
-  verdict: "accepted" | "revision_required";
-  findings: string[];
-  findingSetRef?: ContentRef;
+export type PlanningFindingDecision = {
+  findingRef: ContentRef;
+  decision: "apply_now" | "dispute" | "split_to_backlog";
+  rationale: string;
 };
-
-export type PlanningReviewDimension =
-  | "original_goal"
-  | "governing_specs"
-  | "work_cohesion"
-  | "task_executability"
-  | "dependencies"
-  | "verification_integration"
-  | "effect_authority"
-  | "artifact_lifecycle";
-
-export type PlanningReviewCoverage = {
-  dimension: PlanningReviewDimension;
-  verdict: "passed" | "failed";
-  findings: string[];
-};
-
-export type PlanningReviewSubjectKind =
-  | "original_goal"
-  | "governing_spec"
-  | "plan"
-  | "work_graph"
-  | "work"
-  | "task"
-  | "criterion"
-  | "verification_question"
-  | "risk"
-  | "assumption"
-  | "integration_criterion"
-  | "effect_intent"
-  | "artifact_lifecycle";
-
-export type PlanningReviewSubject = {
-  subjectId: string;
-  kind: PlanningReviewSubjectKind;
-  subjectRef: ContentRef;
-};
-
-export type PlanningReviewSubjectFinding = {
-  dimension: PlanningReviewDimension;
-  message: string;
-};
-
-export type PlanningReviewSubjectCoverage = PlanningReviewSubject & {
-  verdict: "passed" | "failed";
-  findings: PlanningReviewSubjectFinding[];
-};
-
-export type PlanningAcceptedProduct = {
-  kind: "planning_accepted";
-  candidate: PlanningCandidate;
-  review: PlanningReview & { verdict: "accepted"; findings: [] };
-};
-
-export type PlanningRevisionRequiredProduct = {
-  kind: "planning_revision_required";
-  candidate: PlanningProposal;
-  observationResultIndex: PlanningObservationResultIndexEntry[];
-  review: Pick<PlanningReview,
-    "ref" | "candidateRef" | "originalGoalContractRef"
-  > & Partial<Omit<PlanningReview,
-    "ref" | "candidateRef" | "originalGoalContractRef" | "verdict" | "findings" | "findingSetRef"
-  >> & {
-    verdict: "revision_required";
-    findings: [string, ...string[]];
-    findingSetRef: ContentRef;
-  };
-};
-
-export type PlanningReviewProduct =
-  | PlanningAcceptedProduct
-  | PlanningRevisionRequiredProduct;
 
 export type {
   FeedbackPlanProduct,
   FeedbackPlanningAcceptedProduct,
+  FeedbackPlanningFinding,
   FeedbackPlanningReview,
   FeedbackPlanningReviewProduct,
   FeedbackPlanningRevisionRequiredProduct,
   TaskImpact,
 } from "./correction-contracts.ts";
+export type {
+  PlanningAcceptedProduct,
+  PlanningReview,
+  PlanningReviewCoverage,
+  PlanningReviewDimension,
+  PlanningReviewProduct,
+  PlanningReviewSubject,
+  PlanningReviewSubjectCoverage,
+  PlanningReviewSubjectFinding,
+  PlanningReviewSubjectKind,
+  PlanningRevisionRequiredProduct,
+} from "./review-contracts.ts";

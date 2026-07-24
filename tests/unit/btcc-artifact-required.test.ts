@@ -118,6 +118,83 @@ test("workspace review passes with a successful disposable validation receipt", 
     .toEqual(product.review.reviewedResultRefs);
 });
 
+test("Task Review records an independent improvement as backlog without reopening the Task", async () => {
+  const validated: OperationResult = {
+    requestId: "review-validation",
+    request: reviewValidationRequest(),
+    outcome: "review_validated",
+    observationRef: ref("review-observation"),
+    validationReceiptRef: ref("validation-receipt"),
+    content: "validation passed in disposable overlay",
+  };
+  const product = await reviewTask(reviewInvocation([validated], {
+    criterionVerdicts: [{
+      criterionRef: ref("criterion"),
+      observation: "The accepted criterion is satisfied.",
+      verdict: "satisfied",
+      findingCategory: "verification_incomplete",
+      finding: "A broader benchmark would improve future confidence.",
+      priority: "P2",
+      recommendedDisposition: "backlog",
+      findingOrigin: "backlog_candidate",
+    }],
+  }));
+
+  expect(product.kind).toBe("task_review");
+  if (product.kind !== "task_review") throw new Error("expected task review");
+  expect(product.review.verdict).toBe("passed");
+  expect(product.review.findings[0]).toMatchObject({
+    priority: "P2",
+    recommendedDisposition: "backlog",
+    origin: { kind: "backlog_candidate" },
+  });
+});
+
+test("Task re-review preserves the exact prior blocker instead of rewriting it", async () => {
+  const prior = priorFinding("finding-prior");
+  const changed = reviewTask(reviewInvocation([], {
+    priorCorrectionFindings: [prior],
+    criterionVerdicts: [{
+      criterionRef: ref("criterion"),
+      observation: "The correction still does not satisfy the criterion.",
+      verdict: "not_satisfied",
+      findingCategory: prior.category,
+      finding: "A different problem statement.",
+      priority: prior.priority,
+      recommendedDisposition: "required_now",
+      findingOrigin: "prior_finding",
+      priorFindingId: prior.ref.id,
+    }],
+  }));
+
+  await expect(changed).rejects.toThrow("provider_phase_submission_invalid");
+});
+
+test("Task correction regressions remain causally bound to one prior blocker", async () => {
+  const prior = priorFinding("finding-prior");
+  const product = await reviewTask(reviewInvocation([], {
+    priorCorrectionFindings: [prior],
+    criterionVerdicts: [{
+      criterionRef: ref("criterion"),
+      observation: "The correction introduced a replacement regression.",
+      verdict: "not_satisfied",
+      findingCategory: "implementation_nonconformance",
+      finding: "The correction broke the same criterion in a new way.",
+      priority: "P1",
+      recommendedDisposition: "required_now",
+      findingOrigin: "correction_regression",
+      priorFindingId: prior.ref.id,
+    }],
+  }));
+
+  expect(product.kind).toBe("task_review");
+  if (product.kind !== "task_review") throw new Error("expected task review");
+  expect(product.review.findings[0]?.origin).toEqual({
+    kind: "correction_regression",
+    findingRef: prior.ref,
+  });
+});
+
 test("workspace review diagnoses a criterion outside the current Task", async () => {
   const error = await reviewTask(reviewInvocation([], {
     criterionVerdicts: [{
@@ -187,6 +264,7 @@ function reviewInvocation(
       criterionRef: ReturnType<typeof ref>;
     }>;
     criterionVerdicts?: unknown[];
+    priorCorrectionFindings?: unknown[];
   } = {},
 ): PhaseInvocation {
   const result = workspaceResult();
@@ -202,6 +280,9 @@ function reviewInvocation(
     }],
     reviewAuthorityRef: ref("authority"),
     reviewSourceRef: result.result.workspaceRevisionRef,
+    ...(overrides.priorCorrectionFindings
+      ? { priorCorrectionFindings: overrides.priorCorrectionFindings }
+      : {}),
   }, overrides.criterionVerdicts);
 }
 
@@ -369,6 +450,20 @@ function reviewValidationRequest() {
 
 function ref(id: string) {
   return { id, sha256: `${id}-sha` };
+}
+
+function priorFinding(id: string) {
+  return {
+    ref: ref(id),
+    taskRef: ref("task"),
+    attemptRef: ref("prior-attempt"),
+    category: "implementation_nonconformance" as const,
+    statement: "The implementation omits the required behavior.",
+    priority: "P1" as const,
+    recommendedDisposition: "required_now" as const,
+    origin: { kind: "initial_review" as const },
+    targetRevisionRefs: [],
+  };
 }
 
 function selectedModel() {
