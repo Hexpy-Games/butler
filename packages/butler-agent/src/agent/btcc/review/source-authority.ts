@@ -5,10 +5,9 @@ export function taskReviewAuthority(input: {
   baseline: OperationAuthority;
   result: ResultCandidateProduct["result"];
 }): OperationAuthority {
-  const exactResultScopes = input.result.operationResults.map((result) => result.readScopeRef);
   const observationScopeRefs = unique([
     ...input.baseline.observationScopeRefs,
-    ...exactResultScopes,
+    ...input.result.operationResultReadScopeRefs,
   ]);
   if (input.result.kind !== "workspace_artifact") {
     return { ...input.baseline, observationScopeRefs };

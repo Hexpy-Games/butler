@@ -5,7 +5,6 @@ import {
   requireString,
   runPhaseConversation,
   type ContentRef,
-  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
@@ -43,6 +42,7 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
     const executionTarget = requireRecord(state.executionTarget, "executionTarget");
     const target = requireRecord(executionTarget.target, "executionTarget.target");
     const resultSummary = requireString(value.resultSummary, "resultSummary");
+    const operationResults = uniqueOperationResults(envelope.operationResults);
     const summary = {
       ref: contentRef("result-summary", { content: resultSummary }),
       content: resultSummary,
@@ -58,16 +58,20 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
       executionTargetRef: requireContentRef(state.executionTargetRef, "executionTargetRef"),
       executionCheckpointRef: envelope.binding.checkpointId,
       resultSummary: summary,
-      operationResultRefs: envelope.operationResults.map((result) => result.resultRef),
-      operationResults: envelope.operationResults,
+      operationResultRefs: uniqueContentRefs(
+        operationResults.map((result) => result.resultRef),
+      ),
+      operationResultReadScopeRefs: uniqueStrings(
+        operationResults.map((result) => result.readScopeRef),
+      ),
       unresolvedConditionRefs: [] as [],
-      targetStateRevisions: targetStateRevisions(envelope.operationResults),
+      targetStateRevisions: targetStateRevisions(operationResults),
       effectReceiptRefs: [] as [],
     };
     const resultBody = target.kind === "provisioned_workspace"
-      ? workspaceResult(common, target, envelope)
+      ? workspaceResult(common, target, operationResults)
       : target.kind === "repository_promotion"
-        ? promotionResult(common, target, envelope)
+        ? promotionResult(common, target, operationResults)
         : { ...common, kind: "non_artifact" as const, artifactRevisionRefs: [] as [] };
     return {
       kind: "result_candidate",
@@ -83,9 +87,9 @@ export function performTask(command: PhaseInvocation) {
 function promotionResult(
   common: Omit<ResultCandidateProduct["result"], "ref" | "kind" | "artifactRevisionRefs">,
   target: Record<string, unknown>,
-  envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
+  operationResults: OperationResultProjection[],
 ) {
-  const promoted = envelope.operationResults.filter((result) => result.outcome === "promoted");
+  const promoted = operationResults.filter((result) => result.outcome === "promoted");
   if (promoted.length !== 1) {
     throw new Error("Promotion Execution requires one exact promotion receipt");
   }
@@ -135,10 +139,10 @@ function assertSameRef(
 function workspaceResult(
   common: Omit<ResultCandidateProduct["result"], "ref" | "kind" | "artifactRevisionRefs">,
   target: Record<string, unknown>,
-  envelope: Parameters<PhaseCodec<unknown>["decode"]>[1],
+  operationResults: OperationResultProjection[],
 ) {
   const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
-  const workspaceActions = envelope.operationResults.filter(
+  const workspaceActions = operationResults.filter(
     (result) =>
       (result.outcome === "observed" || result.outcome === "workspace_artifact_applied") &&
       result.request.kind === "workspace_artifact_action" &&
@@ -235,4 +239,30 @@ function requireContentRef(value: unknown, label: string): ContentRef {
 function requireContentRefs(value: unknown, label: string): ContentRef[] {
   if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
   return value.map((item, index) => requireContentRef(item, `${label}[${index}]`));
+}
+
+function uniqueContentRefs(refs: ContentRef[]): ContentRef[] {
+  const seen = new Set<string>();
+  return refs.filter((ref) => {
+    const key = `${ref.id}:${ref.sha256}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+function uniqueOperationResults(
+  results: OperationResultProjection[],
+): OperationResultProjection[] {
+  const seen = new Set<string>();
+  return results.filter(({ resultRef }) => {
+    const key = `${resultRef.id}:${resultRef.sha256}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

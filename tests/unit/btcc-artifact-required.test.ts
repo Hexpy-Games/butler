@@ -50,10 +50,14 @@ test("workspace execution binds the final successfully applied snapshot", async 
     ref("observation-first"),
     ref("observation-final"),
   ]);
-  expect(product.result.operationResults).toHaveLength(2);
-  expect(product.result.operationResultRefs).toEqual(
-    product.result.operationResults.map((result) => result.resultRef),
-  );
+  expect(product.result.operationResultRefs).toHaveLength(2);
+  expect(product.result.operationResultReadScopeRefs).toHaveLength(2);
+  expect(product.result.operationResultReadScopeRefs.every(
+    (scopeRef) => scopeRef.startsWith("result:operation-result"),
+  )).toBe(true);
+  expect("operationResults" in product.result).toBe(false);
+  expect(JSON.stringify(product)).not.toContain("applied first");
+  expect(JSON.stringify(product)).not.toContain("applied final");
   expect(product.result.targetStateRevisions.map((revision) => revision.target)).toEqual([
     { kind: "workspace", workspaceRef },
     { kind: "workspace", workspaceRef },
@@ -313,7 +317,7 @@ function workspaceResult(): ResultCandidateProduct {
       executionCheckpointRef: "checkpoint-task_execution",
       resultSummary: { ref: ref("result-summary"), content: "artifact updated" },
       operationResultRefs: [ref("observation-final")],
-      operationResults: [],
+      operationResultReadScopeRefs: ["result:operation-result:operation-result-sha"],
       unresolvedConditionRefs: [],
       targetStateRevisions: [],
       effectReceiptRefs: [],
