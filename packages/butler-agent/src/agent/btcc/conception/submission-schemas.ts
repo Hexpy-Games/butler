@@ -6,6 +6,7 @@ import {
   objectSchema,
   textSchema,
   variantsSchema,
+  type SubmissionSchema,
 } from "../core/index.ts";
 
 const textList = () => arraySchema(textSchema());
@@ -79,40 +80,128 @@ const governingSpecApplication = objectSchema({
   preservationConstraints: textList(),
 });
 
-export const goalCandidateSubmissionSchema = objectSchema({
-  kind: literalSchema("goal_contract_candidate"),
-  request: textSchema(),
-  intendedResult: textSchema(),
-  acceptanceIntent: textSchema(),
-  artifactPersistence: enumSchema("not_required", "required"),
-  nonGoals: textList(),
-  personalizationRefs: textList(),
-  governingSpecApplications: arraySchema(governingSpecApplication),
-  lensAssessments: objectSchema({
-    requested_content: lensAssessment,
-    related_memory: lensAssessment,
-    connected_current_knowledge: lensAssessment,
-    user_preferences_and_resolution_style: lensAssessment,
-    expert_perspective: lensAssessment,
-    intended_result_and_acceptance: lensAssessment,
-  }),
-});
+export function goalCandidateSubmissionSchema(priorRootCauseKeys: string[] = []) {
+  return objectSchema({
+    kind: literalSchema("goal_contract_candidate"),
+    request: textSchema(),
+    intendedResult: textSchema(),
+    acceptanceIntent: textSchema(),
+    artifactPersistence: enumSchema("not_required", "required"),
+    nonGoals: textList(),
+    personalizationRefs: textList(),
+    governingSpecApplications: arraySchema(governingSpecApplication),
+    lensAssessments: objectSchema({
+      requested_content: lensAssessment,
+      related_memory: lensAssessment,
+      connected_current_knowledge: lensAssessment,
+      user_preferences_and_resolution_style: lensAssessment,
+      expert_perspective: lensAssessment,
+      intended_result_and_acceptance: lensAssessment,
+    }),
+    ...(priorRootCauseKeys.length > 0
+      ? {
+          findingDecisions: arraySchema(objectSchema({
+            rootCauseKey: enumSchema(...priorRootCauseKeys),
+            decision: enumSchema("apply_now", "dispute", "split_to_backlog"),
+            rationale: textSchema(),
+          }), {
+            minItems: priorRootCauseKeys.length,
+            maxItems: priorRootCauseKeys.length,
+          }),
+        }
+      : {}),
+  });
+}
 
 const acceptedGoalReviewFields = {
   kind: literalSchema("goal_contract_review"),
   strategy: literalSchema("managed"),
   verdict: literalSchema("accepted"),
 };
-export const goalReviewSubmissionSchema = variantsSchema(
-  objectSchema(acceptedGoalReviewFields),
-  objectSchema({ ...acceptedGoalReviewFields, continuationCandidateId: textSchema() }),
-  objectSchema({
-    kind: literalSchema("goal_contract_review"),
-    strategy: literalSchema("managed"),
-    verdict: literalSchema("revision_required"),
-    findings: textList(),
-  }),
-);
+export const GOAL_REVIEW_SUBJECTS = [
+  "goal:request",
+  "goal:intended_result",
+  "goal:acceptance_intent",
+  "goal:artifact_persistence",
+  "goal:governing_specs",
+  "goal:non_goals",
+  "lens:requested_content",
+  "lens:related_memory",
+  "lens:connected_current_knowledge",
+  "lens:user_preferences_and_resolution_style",
+  "lens:expert_perspective",
+  "lens:intended_result_and_acceptance",
+] as const;
+
+export function goalReviewSubmissionSchema(priorRootCauseKeys: string[] = []) {
+  const priorVerdicts: Record<string, SubmissionSchema> = priorRootCauseKeys.length > 0
+    ? {
+        priorFindingVerdicts: arraySchema(objectSchema({
+          rootCauseKey: enumSchema(...priorRootCauseKeys),
+          verdict: enumSchema("resolved", "unresolved"),
+          observation: textSchema(),
+        }), {
+          minItems: priorRootCauseKeys.length,
+          maxItems: priorRootCauseKeys.length,
+        }),
+      }
+    : {};
+  const initialCoverage: Record<string, SubmissionSchema> =
+    priorRootCauseKeys.length === 0
+      ? {
+          subjects: arraySchema(objectSchema({
+            subjectId: enumSchema(...GOAL_REVIEW_SUBJECTS),
+            verdict: enumSchema("passed", "failed"),
+          }), {
+            minItems: GOAL_REVIEW_SUBJECTS.length,
+            maxItems: GOAL_REVIEW_SUBJECTS.length,
+          }),
+        }
+      : {};
+  const accepted = [
+    objectSchema({
+      ...acceptedGoalReviewFields,
+      ...initialCoverage,
+      ...priorVerdicts,
+    }),
+    objectSchema({
+      ...acceptedGoalReviewFields,
+      continuationCandidateId: textSchema(),
+      ...initialCoverage,
+      ...priorVerdicts,
+    }),
+  ];
+  if (priorRootCauseKeys.length > 0) {
+    return variantsSchema(
+      ...accepted,
+      objectSchema({
+        kind: literalSchema("goal_contract_review"),
+        strategy: literalSchema("managed"),
+        verdict: literalSchema("revision_required"),
+        ...priorVerdicts,
+      }),
+    );
+  }
+  const finding = objectSchema({
+    rootCauseKey: textSchema(),
+    affectedSubjectIds: arraySchema(enumSchema(...GOAL_REVIEW_SUBJECTS), { minItems: 1 }),
+    finding: textSchema(),
+    priority: enumSchema("P0", "P1", "P2"),
+    scopeRelation: enumSchema("current_goal", "governing_contract"),
+    recommendedDisposition: literalSchema("required_now"),
+    dispositionRationale: textSchema(),
+  });
+  return variantsSchema(
+    ...accepted,
+    objectSchema({
+      kind: literalSchema("goal_contract_review"),
+      strategy: literalSchema("managed"),
+      verdict: literalSchema("revision_required"),
+      ...initialCoverage,
+      findings: arraySchema(finding, { minItems: 1 }),
+    }),
+  );
+}
 
 export function feedbackIntentSubmissionSchema(findingIds: string[]) {
   return objectSchema({

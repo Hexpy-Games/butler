@@ -13,6 +13,12 @@ const findingFields = {
   dimension: enumSchema(...PLANNING_REVIEW_DIMENSIONS),
   message: textSchema(),
   priority: enumSchema("P0", "P1", "P2"),
+  scopeRelation: enumSchema(
+    "current_plan",
+    "governing_contract",
+    "outside_current_scope",
+  ),
+  dispositionRationale: textSchema(),
 };
 
 export const planDraftReviewSubmissionSchema = objectSchema({

@@ -11,6 +11,22 @@ test("a reviewed Goal candidate must change bytes and preserve exact revision li
   const previousCandidateRef = ref("goal-candidate-1");
   const reviewRef = ref("goal-review-1");
   const findingSetRef = ref("goal-findings-1");
+  const findingRef = ref("goal-finding-1");
+  const finding = {
+    ref: findingRef,
+    rootCauseKey: "missing_requested_implementation",
+    affectedSubjectIds: ["goal:request"],
+    statement: "Restore the requested implementation and validation.",
+    priority: "P1",
+    scopeRelation: "current_goal",
+    recommendedDisposition: "required_now",
+    dispositionRationale: "The candidate omitted the requested implementation.",
+  };
+  const decisions = [{
+    findingRef,
+    decision: "apply_now" as const,
+    rationale: "Restore the omitted Goal obligation.",
+  }];
   const goalRevision = {
     kind: "goal_contract_revision_required",
     candidate: {
@@ -25,18 +41,36 @@ test("a reviewed Goal candidate must change bytes and preserve exact revision li
       originalMessageId: "message-1",
       originalMessageSha256: "message-sha256",
       verdict: "revision_required",
-      findings: ["Restore the requested implementation and validation."],
+      findings: [finding],
+      findingSet: {
+        ref: findingSetRef,
+        candidateRef: previousCandidateRef,
+        findingRefs: [findingRef],
+      },
       findingSetRef,
     },
-  } as GoalContractRevisionRequiredProduct;
+  } as unknown as GoalContractRevisionRequiredProduct;
 
-  expect(() => bindGoalRevision({ goalRevision }, previousContractRef))
+  expect(() => bindGoalRevision({ goalRevision }, previousContractRef, decisions))
     .toThrow("did not change the proposed contract");
-  expect(bindGoalRevision({ goalRevision }, ref("goal-contract-2"))).toEqual({
+  expect(bindGoalRevision({ goalRevision }, ref("goal-contract-2"), decisions)).toEqual({
     kind: "review_revision",
     previousCandidateRef,
     reviewRef,
     findingSetRef,
+    findingDecisions: decisions,
+  });
+  const disputed = [{
+    findingRef,
+    decision: "dispute" as const,
+    rationale: "The frozen Goal already contains the claimed obligation.",
+  }];
+  expect(bindGoalRevision({ goalRevision }, previousContractRef, disputed)).toEqual({
+    kind: "review_revision",
+    previousCandidateRef,
+    reviewRef,
+    findingSetRef,
+    findingDecisions: disputed,
   });
 });
 
@@ -55,10 +89,15 @@ test("a Goal review cannot be attached to a different candidate", () => {
       originalMessageId: "message-1",
       originalMessageSha256: "message-sha256",
       verdict: "revision_required",
-      findings: ["A finding"],
+      findings: [],
+      findingSet: {
+        ref: ref("findings-1"),
+        candidateRef: ref("candidate-2"),
+        findingRefs: [],
+      },
       findingSetRef: ref("findings-1"),
     },
-  } as GoalContractRevisionRequiredProduct;
+  } as unknown as GoalContractRevisionRequiredProduct;
 
   expect(() => bindGoalRevision({ goalRevision }, ref("goal-2")))
     .toThrow("not bound to its exact previous candidate");

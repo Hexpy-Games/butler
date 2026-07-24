@@ -219,7 +219,9 @@ function planningReviewSubjects(
         dimension,
         message,
         priority: "P1",
+        scopeRelation: "current_plan",
         recommendedDisposition: "required_now",
+        dispositionRationale: "현재 Plan의 명시적 Task 경계를 충족하지 못했다",
         findingOrigin: "initial_review",
       });
       return {

@@ -39,7 +39,12 @@ export function decodeReviewFindings(input: {
       category,
       statement: requireString(submitted.finding, "finding statement"),
       priority,
+      scopeRelation: requireScopeRelation(submitted.scopeRelation),
       recommendedDisposition,
+      dispositionRationale: requireString(
+        submitted.dispositionRationale,
+        "finding disposition rationale",
+      ),
       origin,
       targetRevisionRefs: input.targetRevisionRefs,
     };
@@ -73,6 +78,17 @@ export function requireFindingCategory(value: unknown): ReviewFindingCategory {
   return value as ReviewFindingCategory;
 }
 
+function requireScopeRelation(value: unknown): ReviewFinding["scopeRelation"] {
+  if (
+    value !== "current_task" &&
+    value !== "governing_contract" &&
+    value !== "outside_current_scope"
+  ) {
+    throw new Error("Task Review finding scope relation is invalid");
+  }
+  return value;
+}
+
 export function requireFindingOrigin(
   submitted: Record<string, unknown>,
 ): ReviewFinding["origin"] {
@@ -90,15 +106,13 @@ export function validateCorrectionFindingScope(
   priorFindings: ReviewFinding[],
 ): void {
   if (priorFindings.length === 0) return;
-  const blocking = findings
-    .filter((finding) => finding.recommendedDisposition === "required_now");
   const priorIds = new Set(priorFindings.map((finding) => finding.ref.id));
-  const causalIds = blocking.map((finding) =>
+  const causalIds = findings.map((finding) =>
     priorIds.has(finding.ref.id) ? finding.ref.id : "");
   if (
     causalIds.some((id) => id.length === 0) ||
     new Set(causalIds).size !== causalIds.length ||
-    blocking.length > priorFindings.length
+    findings.length > priorFindings.length
   ) {
     throw new Error("Task re-review expanded its frozen correction scope");
   }

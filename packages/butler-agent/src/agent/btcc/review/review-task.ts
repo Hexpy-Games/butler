@@ -54,6 +54,9 @@ function semanticReviewCodec(
     }
     const criteria = requireRecords(state.criteria, "criteria");
     const questions = requireRecords(state.verificationQuestions, "verificationQuestions");
+    if (priorFindings.length > 0) {
+      requireCorrectionContext(state.correctionContext, priorFindings);
+    }
     const value = requireRecord(submission, "Task Review submission");
     if (value.kind !== "task_review") throw new Error("Task Review submission has an invalid kind");
     const decoded = decodeCriterionVerdicts({
@@ -158,6 +161,43 @@ function semanticReviewCodec(
     return { kind: "task_review", review: { ref: contentRef("task-review", body), ...body } };
   },
 };
+}
+
+function requireCorrectionContext(
+  value: unknown,
+  priorFindings: ReviewFinding[],
+): void {
+  const context = requireRecord(value, "Task re-review correctionContext");
+  if (!Array.isArray(context.frozenFindings)) {
+    throw new Error("Task re-review is missing its frozen FindingSet");
+  }
+  const frozen = context.frozenFindings as ReviewFinding[];
+  const expected = new Set(priorFindings.map((finding) => finding.ref.id));
+  if (
+    frozen.length !== priorFindings.length ||
+    frozen.some((finding) => !expected.has(finding.ref.id))
+  ) {
+    throw new Error("Task re-review frozen FindingSet changed");
+  }
+  if (!Array.isArray(context.findingDecisions)) {
+    throw new Error("Task re-review is missing its finding decisions");
+  }
+  const decisions = context.findingDecisions.map((item, index) => {
+    const decision = requireRecord(item, `Task re-review findingDecision[${index}]`);
+    return requireContentRef(decision.findingRef, `findingDecision[${index}].findingRef`);
+  });
+  if (
+    decisions.length !== priorFindings.length ||
+    new Set(decisions.map((ref) => ref.id)).size !== decisions.length ||
+    decisions.some((ref) => !expected.has(ref.id))
+  ) {
+    throw new Error("Task re-review finding decisions changed");
+  }
+  const plan = requireRecord(context.correctionPlan, "Task re-review CorrectionPlan");
+  if (!Array.isArray(plan.findingDecisions) ||
+    plan.findingDecisions.length !== decisions.length) {
+    throw new Error("Task re-review CorrectionPlan omitted finding decisions");
+  }
 }
 
 function promotionCodec() {

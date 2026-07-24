@@ -125,19 +125,15 @@ function requireFeedbackFindings(
       submission.priorFindingVerdicts,
       priorFindings,
     );
-    const backlog = decodeSubmittedFeedbackFindings(submission.findings);
-    if (backlog.some((finding) => finding.recommendedDisposition === "required_now")) {
-      throw new Error("Feedback Planning re-review cannot submit a new blocker");
+    if (submission.findings.length > 0) {
+      throw new Error("Feedback Planning re-review cannot submit a new finding");
     }
     const unresolved = verdicts
       .filter((verdict) => verdict.verdict === "unresolved")
       .map((verdict) => priorFindings.find((finding) =>
         finding.ref.id === verdict.findingRef.id)!);
     return {
-      findings: [
-        ...unresolved,
-        ...backlog,
-      ],
+      findings: unresolved,
       verdicts,
     };
   }
@@ -158,6 +154,11 @@ function decodeSubmittedFeedbackFindings(
     );
     const statement = requireString(finding.statement, "Feedback Planning finding statement");
     const priority = requirePriority(finding.priority);
+    const scopeRelation = requireScopeRelation(finding.scopeRelation);
+    const dispositionRationale = requireString(
+      finding.dispositionRationale,
+      "Feedback Planning finding disposition rationale",
+    );
     if (finding.recommendedDisposition === "required_now") {
       if (finding.findingOrigin !== "initial_review") {
         throw new Error("Initial Feedback Planning finding origin is invalid");
@@ -166,7 +167,9 @@ function decodeSubmittedFeedbackFindings(
         rootCauseKey,
         statement,
         priority,
+        scopeRelation,
         recommendedDisposition: "required_now" as const,
+        dispositionRationale,
         origin: { kind: "initial_review" as const },
       };
       return { ref: contentRef("feedback-planning-finding", body), ...body };
@@ -181,7 +184,9 @@ function decodeSubmittedFeedbackFindings(
       rootCauseKey,
       statement,
       priority,
+      scopeRelation,
       recommendedDisposition: "backlog" as const,
+      dispositionRationale,
       origin: { kind: "backlog_candidate" as const },
     };
     return { ref: contentRef("feedback-planning-finding", body), ...body };
@@ -252,6 +257,19 @@ function normalizeFeedbackFindings(
 function requirePriority(value: unknown): "P0" | "P1" | "P2" {
   if (value !== "P0" && value !== "P1" && value !== "P2") {
     throw new Error("Feedback Planning finding priority is invalid");
+  }
+  return value;
+}
+
+function requireScopeRelation(
+  value: unknown,
+): FeedbackPlanningFinding["scopeRelation"] {
+  if (
+    value !== "current_correction" &&
+    value !== "governing_contract" &&
+    value !== "outside_current_scope"
+  ) {
+    throw new Error("Feedback Planning finding scope relation is invalid");
   }
   return value;
 }

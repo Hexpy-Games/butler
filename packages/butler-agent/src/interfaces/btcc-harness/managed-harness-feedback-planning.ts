@@ -65,7 +65,9 @@ export function submitFeedbackPlanningReview(
           rootCauseKey: "limit-correction-to-failed-task",
           statement: "보완 행동을 실패한 Task 범위로 더 명확히 제한해야 한다",
           priority: "P1",
+          scopeRelation: "current_correction",
           recommendedDisposition: "required_now",
+          dispositionRationale: "현재 교정 계획이 동결된 Finding보다 넓다",
           findingOrigin: "initial_review",
         }]
       : [],
@@ -81,7 +83,10 @@ export function submitFeedbackPlanningReview(
   };
 }
 
-export function feedbackFindingDecisions(state: Record<string, unknown>) {
+export function feedbackFindingDecisions(
+  state: Record<string, unknown>,
+  decision: "apply_now" | "dispute" | "split_to_backlog" = "apply_now",
+) {
   const source = asRecord(state.correctionSource);
   const review = asRecord(source.review);
   const findingIds = asArray(review.findings).flatMap((item) => {
@@ -94,8 +99,12 @@ export function feedbackFindingDecisions(state: Record<string, unknown>) {
   return findingIds.length === 0 ? {} : {
     findingDecisions: findingIds.map((findingId) => ({
       findingId,
-      decision: "apply_now",
-      rationale: "현재 Task의 수용 기준을 막는 결함을 이번 수정에서 해결한다",
+      decision,
+      rationale: decision === "apply_now"
+        ? "현재 Task의 수용 기준을 막는 결함을 이번 수정에서 해결한다"
+        : decision === "dispute"
+          ? "현재 결과가 이미 수용 기준을 충족하므로 최초 판단에 이의를 제기한다"
+          : "현재 요청의 완료 조건이 아니므로 별도 backlog 후보로 분리한다",
     })),
   };
 }

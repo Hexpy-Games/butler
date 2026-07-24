@@ -72,6 +72,7 @@ async function conceiveInitialGoal(command: {
       return { kind: "GoalContractCandidateSubmitted", product };
     }
     case "contract_review": {
+      const managed = requireManagedState(command.turn);
       const product = await reviewGoalContract(withPhaseState(command.phase, {
         inboxId: command.turn.inboxId,
         sessionId: command.turn.sessionId,
@@ -79,7 +80,8 @@ async function conceiveInitialGoal(command: {
           ? { projectRef: command.turn.context.projectRef }
           : {}),
         continuationCandidates: command.turn.continuationCandidates,
-        goalCandidate: requireManagedState(command.turn).goalCandidate,
+        goalCandidate: managed.goalCandidate,
+        ...(managed.goalRevision ? { goalRevision: managed.goalRevision } : {}),
       }));
       return product.kind === "goal_contract_accepted"
         ? { kind: "GoalContractReviewAccepted", product }

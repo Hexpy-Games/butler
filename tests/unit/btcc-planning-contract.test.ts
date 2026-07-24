@@ -408,7 +408,7 @@ describe("BTCC Planning contract", () => {
     expect(reviewed.review.findings).toEqual([rootFinding.message]);
   });
 
-  test("freezes the first blocker set across re-review and permits backlog separation", async () => {
+  test("freezes the first blocker set and gives re-review no new finding surface", async () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
     const firstSubjects = acceptedSubjects(candidate);
     const original = firstSubjects.find((item) => item.subjectId === "task:integrate")!;
@@ -470,9 +470,7 @@ describe("BTCC Planning contract", () => {
     }, first.review))).rejects.toThrow("provider_phase_submission_invalid");
 
     unchanged.verdict = "passed";
-    unchanged.findings[0]!.recommendedDisposition = "backlog";
-    unchanged.findings[0]!.findingOrigin = "backlog_candidate";
-    delete unchanged.findings[0]!.priorFindingId;
+    unchanged.findings = [];
     const accepted = await reviewPlan(reviewInvocation(revised, {
       kind: "planning_review",
       verdict: "accepted",
@@ -720,6 +718,9 @@ function normalizeReviewRootFindings(
         rootFindings.set(rootCauseKey, {
           rootCauseKey,
           affectedSubjectIds: [subject.subjectId],
+          scopeRelation: finding.scopeRelation ?? "current_plan",
+          dispositionRationale: finding.dispositionRationale ??
+            "The finding is evaluated against the current Plan subject.",
           ...finding,
         });
       });
@@ -739,6 +740,9 @@ function normalizeReviewRootFindings(
         const finding = value as Record<string, unknown>;
         return {
           rootCauseKey: finding.message,
+          scopeRelation: finding.scopeRelation ?? "current_plan",
+          dispositionRationale: finding.dispositionRationale ??
+            "The finding is evaluated against the current Plan subject.",
           ...finding,
         };
       }),

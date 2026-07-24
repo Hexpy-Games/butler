@@ -39,7 +39,12 @@ export type ReviewFinding = {
   category: ReviewFindingCategory;
   statement: string;
   priority: "P0" | "P1" | "P2";
+  scopeRelation:
+    | "current_task"
+    | "governing_contract"
+    | "outside_current_scope";
   recommendedDisposition: "required_now" | "backlog";
+  dispositionRationale: string;
   origin:
     | { kind: "initial_review" }
     | { kind: "backlog_candidate" };

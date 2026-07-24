@@ -57,6 +57,7 @@ export type GoalContractCandidateProduct = {
           previousCandidateRef: ContentRef;
           reviewRef: ContentRef;
           findingSetRef: ContentRef;
+          findingDecisions: GoalReviewFindingDecision[];
         };
     planningContext: ConceptionPlanningContext;
   };
@@ -68,8 +69,39 @@ export type GoalContractReview = {
   originalMessageId: string;
   originalMessageSha256: string;
   verdict: "accepted" | "revision_required";
-  findings: string[];
+  findings: GoalReviewFinding[];
+  findingVerdicts?: GoalReviewFindingVerdict[];
+  findingSet?: GoalReviewFindingSet;
   findingSetRef?: ContentRef;
+};
+
+export type GoalReviewFinding = {
+  ref: ContentRef;
+  rootCauseKey: string;
+  affectedSubjectIds: string[];
+  statement: string;
+  priority: "P0" | "P1" | "P2";
+  scopeRelation: "current_goal" | "governing_contract";
+  recommendedDisposition: "required_now";
+  dispositionRationale: string;
+};
+
+export type GoalReviewFindingSet = {
+  ref: ContentRef;
+  candidateRef: ContentRef;
+  findingRefs: ContentRef[];
+};
+
+export type GoalReviewFindingVerdict = {
+  findingRef: ContentRef;
+  verdict: "resolved" | "unresolved";
+  observation: string;
+};
+
+export type GoalReviewFindingDecision = {
+  findingRef: ContentRef;
+  decision: "apply_now" | "dispute" | "split_to_backlog";
+  rationale: string;
 };
 
 export type GoalContractRevisionRequiredProduct = {
@@ -77,7 +109,8 @@ export type GoalContractRevisionRequiredProduct = {
   candidate: GoalContractCandidateProduct["candidate"];
   review: GoalContractReview & {
     verdict: "revision_required";
-    findings: [string, ...string[]];
+    findings: [GoalReviewFinding, ...GoalReviewFinding[]];
+    findingSet: GoalReviewFindingSet;
     findingSetRef: ContentRef;
   };
 };

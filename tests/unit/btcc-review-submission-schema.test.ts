@@ -39,11 +39,13 @@ test("ordinary Task Review separates pass, backlog, and blocking findings", () =
 test("correction Task Review judges frozen root causes without re-authoring them", () => {
   const schema = taskReviewSubmissionSchema("semantic", ["root-cause-1"]);
   const serialized = JSON.stringify(schema);
+  const properties = schema.properties as Record<string, Record<string, unknown>>;
 
   expect(serialized).toContain('"priorFindingVerdicts"');
   expect(serialized).toContain('"enum":["root-cause-1"]');
   expect(serialized).toContain('"enum":["resolved","unresolved","regressed"]');
   expect(serialized).not.toContain('"const":"initial_review"');
+  expect(properties.findings?.maxItems).toBe(0);
 });
 
 function criterionVerdictSchema(schema: Record<string, unknown>) {

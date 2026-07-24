@@ -41,6 +41,8 @@ type HarnessOptions = {
     | "direct"
     | "managed-pass"
     | "managed-review-repair"
+    | "managed-review-dispute"
+    | "managed-review-backlog"
     | "managed-planning-revision"
     | "managed-goal-revision"
     | "managed-feedback-planning-revision"
@@ -211,6 +213,8 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
   if (
     value === "managed-pass" ||
     value === "managed-review-repair" ||
+    value === "managed-review-dispute" ||
+    value === "managed-review-backlog" ||
     value === "managed-planning-revision" ||
     value === "managed-goal-revision" ||
     value === "managed-feedback-planning-revision" ||
@@ -242,6 +246,8 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
   if (
     scenario === "managed-pass" ||
     scenario === "managed-review-repair" ||
+    scenario === "managed-review-dispute" ||
+    scenario === "managed-review-backlog" ||
     scenario === "managed-planning-revision" ||
     scenario === "managed-goal-revision" ||
     scenario === "managed-feedback-planning-revision" ||
@@ -278,6 +284,11 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
       scenario === "managed-goal-revision",
       scenario === "managed-governing-revalidation" ? 2 : 1,
       scenario === "managed-governing-revalidation",
+      scenario === "managed-review-dispute"
+        ? "dispute"
+        : scenario === "managed-review-backlog"
+          ? "split_to_backlog"
+          : "apply_now",
     );
   }
   return new NoLedgerHarnessModel(scenario);

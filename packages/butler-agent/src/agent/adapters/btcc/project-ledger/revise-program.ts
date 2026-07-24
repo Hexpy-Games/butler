@@ -21,8 +21,40 @@ type TaskImpact = RevisedCandidate["impactMap"][number];
 export function acceptProjectFeedback(program: Program, product: Product): Program {
   const authority = acceptFeedbackAuthority(program, product);
   return product.candidate.correctionKind === "implementation_repair"
-    ? reopenRepairTasks(program, product, authority.manifestRevision)
+    ? product.candidate.correctionPlan.findingDecisions.length === 0 ||
+        product.candidate.correctionPlan.findingDecisions
+          .some((decision) => decision.decision === "apply_now")
+      ? reopenRepairTasks(program, product, authority.manifestRevision)
+      : reopenDispositionReview(program, product, authority.manifestRevision)
     : installRevisedProgram(program, product, authority);
+}
+
+function reopenDispositionReview(
+  program: Program,
+  product: Product,
+  manifestRevision: number,
+): Program {
+  for (const ref of product.candidate.correctionPlan.targetTaskRefs) {
+    const task = taskById(program, ref.id);
+    if (
+      task.status !== "review_failed" ||
+      !task.currentResult ||
+      task.currentReview?.review.verdict !== "not_passed"
+    ) {
+      throw changed("finding disposition target");
+    }
+    const attempt = task.attempts.at(-1);
+    if (!attempt || attempt.status !== "review_failed") {
+      throw changed("finding disposition Attempt");
+    }
+    attempt.status = "result_submitted";
+    task.status = "result_submitted";
+    workByLogicalId(program, task.task.workLogicalId).status = "active";
+  }
+  program.correctionPlanRef = product.candidate.correctionPlan.ref;
+  program.frontier = "implementation_open";
+  program.manifestRevision = manifestRevision;
+  return selectCurrent(program);
 }
 
 function reopenRepairTasks(
