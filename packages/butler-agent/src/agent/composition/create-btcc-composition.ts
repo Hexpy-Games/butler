@@ -20,6 +20,8 @@ import {
 import { join } from "node:path";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { createProjectGoverningSpecAuthority } from
+  "./project-governing-spec-authority.ts";
 
 export function createBtccComposition(input: {
   dbPath: string;
@@ -34,6 +36,9 @@ export function createBtccComposition(input: {
     ownerId: input.ownerId,
     ...(input.projectLedger ? { projectLedger: input.projectLedger } : {}),
   });
+  const governingSpecs = input.projectLedger
+    ? createProjectGoverningSpecAuthority(input.projectLedger)
+    : undefined;
   return createBtccTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
@@ -45,6 +50,9 @@ export function createBtccComposition(input: {
     retrospective: stores.retrospective,
     operationalRecovery: stores.operationalRecovery,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
+    ...(governingSpecs
+      ? { governingSpecs }
+      : {}),
   });
 }
 
@@ -72,13 +80,14 @@ export function createProductionBtccComposition(input: {
     }
     return reference.ledger_root;
   };
+  const publications = createProjectWorkLedgerPublicationAdapter({
+    stagingRoot: join(input.butlerData, "runtime", "btcc-project-ledger-publications"),
+  });
   const stores = openBtccSqliteStores({
     dbPath: input.appMessageDbPath,
     ownerId: input.ownerId,
     projectLedger: {
-      publications: createProjectWorkLedgerPublicationAdapter({
-        stagingRoot: join(input.butlerData, "runtime", "btcc-project-ledger-publications"),
-      }),
+      publications,
       resolveProjectRoot,
     },
   });
@@ -90,6 +99,13 @@ export function createProductionBtccComposition(input: {
     ...createProductionToolRuntime({ ...input, resolveProjectLedgerRoot: resolveProjectRoot }),
   });
   const progress = new BtccTurnProgressHub();
+  const governingSpecs = createProjectGoverningSpecAuthority({
+    publications,
+    resolveProjectRoot,
+  });
+  if (!governingSpecs) {
+    throw new Error("Production Project Ledger has no governing Spec authority");
+  }
   const runtime = createBtccTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
@@ -105,6 +121,7 @@ export function createProductionBtccComposition(input: {
     retrospective: stores.retrospective,
     operationalRecovery: stores.operationalRecovery,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
+    governingSpecs,
     progress,
   });
   const ready = recoverOperationalOwnership(runtime, stores);

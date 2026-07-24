@@ -3,6 +3,8 @@ import {
   governingSpecLogicalIds,
   requireGoverningSpecApplications,
 } from "../../packages/butler-agent/src/agent/btcc/conception/governing-spec-applications.ts";
+import { goalCandidateSubmissionSchema } from
+  "../../packages/butler-agent/src/agent/btcc/conception/submission-schemas.ts";
 
 test("keeps request change obligations separate from preservation constraints", () => {
   const governingSpecApplications = requireGoverningSpecApplications([
@@ -50,4 +52,30 @@ test("rejects duplicate governing Spec logical identities", () => {
       },
     ]),
   ).toThrow("duplicate logicalIds");
+});
+
+test("rejects a governing Spec identity outside the admitted catalog", () => {
+  expect(() =>
+    requireGoverningSpecApplications([{
+      logicalId: "project-root-id",
+      changeObligations: ["Treat the project root as a Spec"],
+      preservationConstraints: [],
+    }], ["SPEC-PROFILE"]),
+  ).toThrow("outside the admitted catalog");
+});
+
+test("closes the provider schema over the admitted governing Spec catalog", () => {
+  const empty = goalCandidateSubmissionSchema([]);
+  const emptyProperties = empty.properties as Record<string, Record<string, unknown>>;
+  expect(emptyProperties.governingSpecApplications?.maxItems).toBe(0);
+
+  const admitted = goalCandidateSubmissionSchema(["SPEC-PROFILE", "SPEC-FEEDBACK"]);
+  const properties = admitted.properties as Record<string, Record<string, unknown>>;
+  const items = properties.governingSpecApplications?.items as {
+    properties: Record<string, Record<string, unknown>>;
+  };
+  expect(items.properties.logicalId?.enum).toEqual([
+    "SPEC-PROFILE",
+    "SPEC-FEEDBACK",
+  ]);
 });

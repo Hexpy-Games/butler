@@ -13,6 +13,7 @@ export function governingSpecLogicalIds(
 
 export function requireGoverningSpecApplications(
   value: unknown,
+  allowedLogicalIds?: readonly string[],
 ): GoverningSpecApplication[] {
   if (!Array.isArray(value)) {
     throw new Error("governingSpecApplications must be an array");
@@ -23,6 +24,13 @@ export function requireGoverningSpecApplications(
   const logicalIds = applications.map((application) => application.logicalId);
   if (new Set(logicalIds).size !== logicalIds.length) {
     throw new Error("governingSpecApplications contains duplicate logicalIds");
+  }
+  if (allowedLogicalIds) {
+    const allowed = new Set(allowedLogicalIds);
+    const unavailable = logicalIds.find((logicalId) => !allowed.has(logicalId));
+    if (unavailable) {
+      throw new Error(`governing Spec ${unavailable} is outside the admitted catalog`);
+    }
   }
   return applications;
 }

@@ -43,6 +43,7 @@ export type {
   BtccTurnProgressObserver,
   BtccTurnRuntime,
   ButlerContextInput,
+  GoverningSpecAuthority,
   ReasoningEffort,
 } from "./contracts.ts";
 export type {
