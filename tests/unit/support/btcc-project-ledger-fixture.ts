@@ -10,6 +10,8 @@ import type { PlanningAcceptedProduct } from
   "../../../packages/butler-agent/src/agent/btcc/planning/index.ts";
 import { authorPlanCandidate } from
   "../../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
+import { planningReviewSubjects } from
+  "../../../packages/butler-agent/src/agent/btcc/planning/review-subjects.ts";
 import type { TaskReviewProduct } from
   "../../../packages/butler-agent/src/agent/btcc/review/index.ts";
 import type { ManagedAttempt } from
@@ -131,6 +133,11 @@ export function reviewedPlan(options: {
     reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
     reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
     reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+    reviewedSubjects: planningReviewSubjects(candidate).map((subject) => ({
+      ...subject,
+      verdict: "passed" as const,
+      findings: [],
+    })),
     coverage: acceptedPlanningCoverage(),
     verdict: "accepted" as const,
     findings: [] as [],

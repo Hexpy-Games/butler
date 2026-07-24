@@ -141,41 +141,51 @@ const REVIEW_DIMENSIONS = [
   "artifact_lifecycle",
 ] as const;
 
-const acceptedPlanReview = objectSchema({
-  kind: literalSchema("planning_review"),
-  verdict: literalSchema("accepted"),
-  coverage: reviewCoverage(),
-});
 export const planRevisionReviewSubmissionSchema = objectSchema({
   kind: literalSchema("planning_review"),
   verdict: literalSchema("revision_required"),
   findings: arraySchema(textSchema(), { minItems: 1 }),
 });
-const reviewedPlanRevision = objectSchema({
-  kind: literalSchema("planning_review"),
-  verdict: literalSchema("revision_required"),
-  coverage: reviewCoverage(),
-});
-export const planReviewSubmissionSchema = variantsSchema(
-  acceptedPlanReview,
-  reviewedPlanRevision,
-);
 
 function reviewCoverage(): SubmissionSchema {
-  const passed = objectSchema({
+  return arraySchema(objectSchema({
     dimension: enumSchema(...REVIEW_DIMENSIONS),
-    verdict: literalSchema("passed"),
-    findings: arraySchema(textSchema(), { maxItems: 0 }),
-  });
-  const failed = objectSchema({
-    dimension: enumSchema(...REVIEW_DIMENSIONS),
-    verdict: literalSchema("failed"),
-    findings: arraySchema(textSchema(), { minItems: 1 }),
-  });
-  return arraySchema(variantsSchema(passed, failed), {
+    verdict: enumSchema("passed", "failed"),
+  }), {
     minItems: REVIEW_DIMENSIONS.length,
     maxItems: REVIEW_DIMENSIONS.length,
   });
+}
+
+export function planReviewSubmissionSchema(subjectIds: string[]): SubmissionSchema {
+  const subjectFinding = objectSchema({
+    dimension: enumSchema(...REVIEW_DIMENSIONS),
+    message: textSchema(),
+  });
+  const subjectCoverage = variantsSchema(
+    objectSchema({
+      subjectId: enumSchema(...subjectIds),
+      verdict: literalSchema("passed"),
+      findings: arraySchema(subjectFinding, { maxItems: 0 }),
+    }),
+    objectSchema({
+      subjectId: enumSchema(...subjectIds),
+      verdict: literalSchema("failed"),
+      findings: arraySchema(subjectFinding, { minItems: 1 }),
+    }),
+  );
+  const reviewFields = {
+    kind: literalSchema("planning_review"),
+    coverage: reviewCoverage(),
+    subjects: arraySchema(subjectCoverage, {
+      minItems: subjectIds.length,
+      maxItems: subjectIds.length,
+    }),
+  };
+  return variantsSchema(
+    objectSchema({ ...reviewFields, verdict: literalSchema("accepted") }),
+    objectSchema({ ...reviewFields, verdict: literalSchema("revision_required") }),
+  );
 }
 
 const impact = variantsSchema(

@@ -10,8 +10,6 @@ import type {
   PlanningCandidate,
   PlanningCandidateProduct,
   PlanningDraftCandidate,
-  PlanningReviewCoverage,
-  PlanningReviewDimension,
   PlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
@@ -21,6 +19,11 @@ import {
 } from "./submission-schemas.ts";
 import { attestCandidateBundle } from "./review-plan-attestation.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
+import {
+  planningReviewSubjects,
+  requireDimensionCoverage,
+  requireSubjectCoverage,
+} from "./review-subjects.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
@@ -43,22 +46,14 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-const REVIEW_DIMENSIONS: readonly PlanningReviewDimension[] = [
-  "original_goal",
-  "governing_specs",
-  "work_cohesion",
-  "task_executability",
-  "dependencies",
-  "verification_integration",
-  "effect_authority",
-  "artifact_lifecycle",
-];
-
 function reviewCodec(candidate: PlanningCandidateProduct) {
+  const subjects = isDraft(candidate.candidate)
+    ? []
+    : planningReviewSubjects(candidate.candidate);
   return withManagedDeferral<PlanningReviewProduct>({
     submissionSchema: isDraft(candidate.candidate)
       ? planRevisionReviewSubmissionSchema
-      : planReviewSubmissionSchema,
+      : planReviewSubmissionSchema(subjects.map((item) => item.subjectId)),
     decode(submission, envelope) {
       const loaded = loadCandidate(envelope.context.stateInput);
       const value = requireRecord(submission, "Planning Review submission");
@@ -75,9 +70,11 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
         );
       }
       const materialized = loaded.candidate;
-      const coverage = requireReviewCoverage(value.coverage);
-      const submittedFindings = coverage.flatMap((item) => item.findings);
-      const reviewBase = exactReviewBase(materialized, coverage);
+      const reviewedSubjects = requireSubjectCoverage(value.subjects, subjects);
+      const coverage = requireDimensionCoverage(value.coverage, reviewedSubjects);
+      const submittedFindings = reviewedSubjects
+        .flatMap((item) => item.findings.map((finding) => finding.message));
+      const reviewBase = exactReviewBase(materialized, coverage, reviewedSubjects);
       if (value.verdict === "accepted") {
         if (submittedFindings.length > 0) {
           throw new Error("Accepted Planning Review cannot contain failed coverage");
@@ -104,7 +101,8 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
 
 function exactReviewBase(
   candidate: PlanningCandidate,
-  coverage: PlanningReviewCoverage[],
+  coverage: ReturnType<typeof requireDimensionCoverage>,
+  reviewedSubjects: ReturnType<typeof requireSubjectCoverage>,
 ) {
   return {
     candidateRef: candidate.ref,
@@ -119,6 +117,7 @@ function exactReviewBase(
     reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
     reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
     reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+    reviewedSubjects,
     coverage,
   };
 }
@@ -182,51 +181,24 @@ function requireFindings(findings: string[]): [string, ...string[]] {
   return unique as [string, ...string[]];
 }
 
-function requireReviewCoverage(value: unknown): PlanningReviewCoverage[] {
-  if (!Array.isArray(value) || value.length !== REVIEW_DIMENSIONS.length) {
-    throw new Error("Planning Review must cover every review dimension");
-  }
-  const coverage = value.map((item, index) => {
-    const entry = requireRecord(item, `Planning Review coverage[${index}]`);
-    const dimension = entry.dimension;
-    if (!REVIEW_DIMENSIONS.includes(dimension as PlanningReviewDimension)) {
-      throw new Error("Planning Review coverage dimension is invalid");
-    }
-    if (entry.verdict !== "passed" && entry.verdict !== "failed") {
-      throw new Error("Planning Review coverage verdict is invalid");
-    }
-    const findings = requireStringArray(
-      entry.findings,
-      `Planning Review ${String(dimension)} findings`,
-    );
-    if (entry.verdict === "passed" && findings.length > 0) {
-      throw new Error("Passed Planning Review coverage cannot contain findings");
-    }
-    if (entry.verdict === "failed" && findings.length === 0) {
-      throw new Error("Failed Planning Review coverage requires findings");
-    }
-    return {
-      dimension: dimension as PlanningReviewDimension,
-      verdict: entry.verdict as "passed" | "failed",
-      findings,
-    };
-  });
-  const dimensions = coverage.map((item) => item.dimension);
-  if (new Set(dimensions).size !== REVIEW_DIMENSIONS.length ||
-    REVIEW_DIMENSIONS.some((dimension) => !dimensions.includes(dimension))) {
-    throw new Error("Planning Review coverage dimensions must be unique and complete");
-  }
-  return coverage;
-}
-
 function isDraft(candidate: PlanningCandidateProduct["candidate"]): candidate is PlanningDraftCandidate {
   return "kind" in candidate && candidate.kind === "planning_draft";
 }
 
 export function reviewPlan(command: PhaseInvocation) {
   const candidate = loadCandidate(command.context.stateInput);
+  const requiredReviewSubjects = isDraft(candidate.candidate)
+    ? []
+    : planningReviewSubjects(candidate.candidate);
   return runPhaseConversation({
     ...command,
+    context: {
+      ...command.context,
+      stateInput: {
+        ...requireRecord(command.context.stateInput, "Planning Review state"),
+        requiredReviewSubjects,
+      },
+    },
     phaseContract: CONTRACT,
     codec: reviewCodec(candidate),
   });

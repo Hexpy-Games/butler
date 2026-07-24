@@ -5,6 +5,7 @@ import type {
   ManagedSpecRevision,
   PlanningAcceptedProduct,
 } from "../planning/contracts.ts";
+import { planningReviewSubjects } from "../planning/review-subjects.ts";
 import type {
   ManagedProgramAuthority,
   ManagedProgramState,
@@ -166,7 +167,8 @@ function assertAcceptedReview(product: PlanningAcceptedProduct): void {
       candidate.integrationCriteria.map((criterion) => criterion.ref),
     ) ||
     !sameRef(review.reviewedArtifactLifecycleRef, candidate.artifactLifecycle.ref) ||
-    !sameRefs(review.reviewedSpecRevisionRefs, candidate.authoredSpecRevisionRefs)
+    !sameRefs(review.reviewedSpecRevisionRefs, candidate.authoredSpecRevisionRefs) ||
+    !sameReviewedSubjects(review.reviewedSubjects, planningReviewSubjects(candidate))
   ) {
     throw new Error("Work Ledger reviewed Plan receipt changed");
   }
@@ -284,6 +286,21 @@ function sameRefs(
 ): boolean {
   return left.length === right.length &&
     left.every((ref, index) => sameRef(ref, right[index]!));
+}
+
+function sameReviewedSubjects(
+  reviewed: PlanningAcceptedProduct["review"]["reviewedSubjects"],
+  expected: ReturnType<typeof planningReviewSubjects>,
+): boolean {
+  return reviewed.length === expected.length &&
+    reviewed.every((item, index) => {
+      const subject = expected[index]!;
+      return item.subjectId === subject.subjectId &&
+        item.kind === subject.kind &&
+        sameRef(item.subjectRef, subject.subjectRef) &&
+        item.verdict === "passed" &&
+        item.findings.length === 0;
+    });
 }
 
 function refKey(ref: { id: string; sha256: string }): string {
