@@ -1,6 +1,8 @@
 import type { ContentRef } from "../core/index.ts";
 import type { ContinuationBinding } from "../continuation/index.ts";
-import type { OperationResultProjection } from "../operation-result/index.ts";
+import type {
+  OperationResultIndexEntry,
+} from "../operation-result/index.ts";
 
 export type TaskArtifactPolicy =
   | { kind: "non_artifact"; targetScopeRefs: string[] }
@@ -254,21 +256,7 @@ export type PlanningCandidateProduct = {
   observationResultIndex: PlanningObservationResultIndexEntry[];
 };
 
-export type PlanningObservationResultIndexEntry = Pick<
-  OperationResultProjection,
-  | "resultRef"
-  | "requestRef"
-  | "requestId"
-  | "capabilityRef"
-  | "outcome"
-  | "completeness"
-  | "byteLength"
-  | "observationRef"
-  | "readScopeRef"
-  | "artifactRevisionRef"
-  | "targetSnapshotRef"
-  | "validationReceiptRef"
->;
+export type PlanningObservationResultIndexEntry = OperationResultIndexEntry;
 
 export type PlanningContinuation = Extract<ContinuationBinding, { kind: "deferred_goal" }>;
 

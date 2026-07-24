@@ -1,8 +1,10 @@
 import type { PhaseEnvelope } from "../../core/index.ts";
 import type {
+  OperationResultIndexEntry,
   OperationResultProjection,
   ResultRef,
 } from "../../operation-result/index.ts";
+import { indexOperationResult } from "../../operation-result/index.ts";
 
 export function projectOperationContext(envelope: PhaseEnvelope) {
   const latestCount = envelope.latestOperationResultCount ?? 0;
@@ -19,35 +21,12 @@ export function projectOperationContext(envelope: PhaseEnvelope) {
 }
 
 function indexPriorResults(results: OperationResultProjection[]) {
-  const byResult = new Map<string, ReturnType<typeof indexOperationResult>>();
+  const byResult = new Map<string, OperationResultIndexEntry>();
   for (const result of results) {
     const identity = resultIdentity(result.resultRef);
     if (!byResult.has(identity)) byResult.set(identity, indexOperationResult(result));
   }
   return [...byResult.values()];
-}
-
-function indexOperationResult(result: OperationResultProjection) {
-  return {
-    resultRef: result.resultRef,
-    requestRef: result.requestRef,
-    requestId: result.requestId,
-    capabilityRef: result.capabilityRef,
-    outcome: result.outcome,
-    completeness: result.completeness,
-    byteLength: result.byteLength,
-    observationRef: result.observationRef,
-    readScopeRef: result.readScopeRef,
-    ...(result.artifactRevisionRef
-      ? { artifactRevisionRef: result.artifactRevisionRef }
-      : {}),
-    ...(result.targetSnapshotRef
-      ? { targetSnapshotRef: result.targetSnapshotRef }
-      : {}),
-    ...(result.validationReceiptRef
-      ? { validationReceiptRef: result.validationReceiptRef }
-      : {}),
-  };
 }
 
 function resultIdentity(ref: ResultRef): string {
