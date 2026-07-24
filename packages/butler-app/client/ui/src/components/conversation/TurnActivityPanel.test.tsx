@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ProgressRow } from "@/app/types.ts";
 import { TurnActivityPanel } from "./TurnActivityPanel";
 
-test("turn activity panel renders opening decisions before work blocks", () => {
+test("turn activity panel replaces an opening decision with the latest work", () => {
   const html = renderPanel([
     acknowledgedRow(),
     {
@@ -42,13 +42,9 @@ test("turn activity panel renders opening decisions before work blocks", () => {
     },
   ]);
 
-  expect(html).toContain("turn-decision-row");
-  expect(html).toContain("I will inspect the current UI read model.");
-  expect(html).toContain("The panel must render explicit assistant decisions.");
-  expect(html).toContain("Check the focused client tests.");
-  expect(html.indexOf("turn-decision-row")).toBeLessThan(
-    html.indexOf("Run focused validation"),
-  );
+  expect(html).not.toContain("turn-decision-row");
+  expect(html).not.toContain("I will inspect the current UI read model.");
+  expect(html).toContain("Run focused validation");
   expect(html).toContain("Bun: app-client utils");
   expect(html).not.toContain("Request received. Preparing the work.");
 });
@@ -80,7 +76,7 @@ test("turn activity panel keeps the latest phase activity visible after Opening"
     },
   ]);
 
-  expect(html).toContain("turn-decision-row");
+  expect(html).not.toContain("turn-decision-row");
   expect(html).toContain("turn-phase-activity");
   expect(html).toContain("작업 계획을 세우고 검토하고 있습니다");
   expect(html).not.toContain("요청의 의도와 목표를 구상하고 있습니다");
@@ -134,7 +130,7 @@ test("turn activity panel keeps the handoff under the canonical successor phase"
   expect(html).not.toContain("구상 결과를 독립적으로 검토하고 있습니다");
 });
 
-test("turn activity panel shows model wait beneath the latest public intent", () => {
+test("turn activity panel keeps liveness beneath the one latest intent", () => {
   const html = renderPanel([
     phaseActivityRow(),
     {
@@ -149,9 +145,8 @@ test("turn activity panel shows model wait beneath the latest public intent", ()
 
   expect(html).toContain("관련 스펙과 구현을 확인하고 있습니다.");
   expect(html).toContain("turn-model-round-waiting");
-  expect(html).toContain("모델 응답을 기다리고 있습니다");
-  expect(html).toContain("마지막으로 공개한 작업 의도를 이어서");
-  expect(html.match(/모델 응답을 기다리고 있습니다/gu)).toHaveLength(1);
+  expect(html).not.toContain("모델 응답을 기다리고 있습니다");
+  expect(html).toContain("응답 생성 중");
 });
 
 test("turn activity panel hides an older placeholder after phase detail arrives", () => {

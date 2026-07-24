@@ -164,7 +164,8 @@ const turnActivityCollapsedSelector = "[data-test-class~=\"turn-activity-collaps
 const todoComposerPanelSelector = "[data-test-class~=\"todo-composer-panel\"]";
 const turnWorkPanelSelector = "[data-test-class~=\"turn-work-panel\"]";
 const turnWorkCollapsedSelector = "[data-test-class~=\"turn-work-collapsed\"]";
-const turnWorkCollapsedTriggerSelector = `${turnWorkCollapsedSelector} [role="button"]`;
+const turnWorkCollapsedTriggerSelector =
+  `${turnWorkCollapsedSelector} [data-test-class~="toggle-turn-activity-history"]`;
 const turnWorkBlockSelector = "[data-test-class~=\"turn-work-block\"]";
 const turnWorkBlockHeaderSelector = "[data-test-class~=\"turn-work-block-header\"]";
 const turnWorkToolRowSelector = "[data-test-class~=\"turn-work-tool-row\"]";

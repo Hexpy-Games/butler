@@ -3,6 +3,7 @@ import { Button, ListChecks, Stack, Typo } from "@/butler-ds";
 import type { PhaseActivity } from "./turnActivityRows";
 import { phaseLabel } from "./PhaseActivityLog";
 import styles from "./TurnActivityTimeline.module.css";
+import { appCopy } from "@/app/copy.ts";
 
 export function TurnActivityTimeline({
   activities,
@@ -14,6 +15,7 @@ export function TurnActivityTimeline({
   live?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const workCopy = appCopy.conversation.work;
   const latest = activities.at(-1);
   if (!latest) return null;
   const currentPhase = phaseLabel(currentState ?? latest.phase);
@@ -72,7 +74,11 @@ export function TurnActivityTimeline({
             iconStart={<ListChecks size={14} />}
             onClick={() => setExpanded((value) => !value)}
             size="xs"
-            text={expanded ? "접기" : `전체 보기 (${activities.length})`}
+            text={
+              expanded
+                ? workCopy.collapseLabel
+                : workCopy.viewAllLabel(activities.length)
+            }
             type="button"
             variant="borderless"
           />
