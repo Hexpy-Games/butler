@@ -11,7 +11,6 @@ import {
 const commonCriterionFields = {
   criterionRef: contentRefSchema(),
   observation: textSchema(),
-  findingRootCauseKeys: arraySchema(textSchema()),
 };
 const findingFields = {
   rootCauseKey: textSchema(),
@@ -29,25 +28,14 @@ const findingFields = {
   priority: enumSchema("P0", "P1", "P2"),
 };
 
-function semanticRootFinding(priorFindingIds: string[]) {
+function semanticRootFinding(priorRootCauseKeys: string[]) {
   const requiredFinding = {
     ...findingFields,
     recommendedDisposition: literalSchema("required_now"),
   };
-  const requiredVariants = priorFindingIds.length === 0
+  const requiredVariants = priorRootCauseKeys.length === 0
     ? [objectSchema({ ...requiredFinding, findingOrigin: literalSchema("initial_review") })]
-    : [
-        objectSchema({
-          ...requiredFinding,
-          findingOrigin: literalSchema("prior_finding"),
-          priorFindingId: enumSchema(...priorFindingIds),
-        }),
-        objectSchema({
-          ...requiredFinding,
-          findingOrigin: literalSchema("correction_regression"),
-          priorFindingId: enumSchema(...priorFindingIds),
-        }),
-      ];
+    : [];
   return variantsSchema(
     objectSchema({
       ...findingFields,
@@ -62,7 +50,7 @@ export type TaskReviewMode = "semantic" | "promotion_identity";
 
 export function taskReviewSubmissionSchema(
   mode: TaskReviewMode,
-  priorFindingIds: string[] = [],
+  priorRootCauseKeys: string[] = [],
 ) {
   const criterionVerdict = mode === "promotion_identity"
     ? objectSchema({
@@ -79,10 +67,23 @@ export function taskReviewSubmissionSchema(
         recommendedDisposition: literalSchema("backlog"),
         findingOrigin: literalSchema("backlog_candidate"),
       })
-    : semanticRootFinding(priorFindingIds);
-  return objectSchema({
+    : semanticRootFinding(priorRootCauseKeys);
+  const fields = {
     kind: literalSchema("task_review"),
     criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),
     findings: arraySchema(rootFinding),
-  });
+  };
+  return priorRootCauseKeys.length === 0
+    ? objectSchema(fields)
+    : objectSchema({
+        ...fields,
+        priorFindingVerdicts: arraySchema(objectSchema({
+          rootCauseKey: enumSchema(...priorRootCauseKeys),
+          verdict: enumSchema("resolved", "unresolved", "regressed"),
+          observation: textSchema(),
+        }), {
+          minItems: priorRootCauseKeys.length,
+          maxItems: priorRootCauseKeys.length,
+        }),
+      });
 }

@@ -49,11 +49,14 @@ export function submitFeedbackPlan(
 }
 
 export function submitFeedbackPlanningReview(
-  _state: Record<string, unknown>,
+  state: Record<string, unknown>,
   reviseFirst: boolean,
   reviewCount: number,
 ) {
   const revisionRequired = reviseFirst && reviewCount === 1;
+  const prior = asRecord(state.previousFeedbackPlanningReview);
+  const priorFindings = asArray(prior.reviewedFindings)
+    .filter((finding) => asRecord(finding).recommendedDisposition === "required_now");
   return {
     kind: "feedback_planning_review",
     verdict: revisionRequired ? "revision_required" : "accepted",
@@ -66,6 +69,34 @@ export function submitFeedbackPlanningReview(
           findingOrigin: "initial_review",
         }]
       : [],
+    ...(priorFindings.length > 0
+      ? {
+          priorFindingVerdicts: priorFindings.map((finding) => ({
+            rootCauseKey: asRecord(finding).rootCauseKey,
+            verdict: "resolved",
+            observation: "수정된 교정 계획이 이 동결 Finding을 해소했다",
+          })),
+        }
+      : {}),
+  };
+}
+
+export function feedbackFindingDecisions(state: Record<string, unknown>) {
+  const source = asRecord(state.correctionSource);
+  const review = asRecord(source.review);
+  const findingIds = asArray(review.findings).flatMap((item) => {
+    const finding = asRecord(item);
+    const ref = asRecord(finding.ref);
+    return finding.recommendedDisposition === "required_now" && typeof ref.id === "string"
+      ? [ref.id]
+      : [];
+  });
+  return findingIds.length === 0 ? {} : {
+    findingDecisions: findingIds.map((findingId) => ({
+      findingId,
+      decision: "apply_now",
+      rationale: "현재 Task의 수용 기준을 막는 결함을 이번 수정에서 해결한다",
+    })),
   };
 }
 

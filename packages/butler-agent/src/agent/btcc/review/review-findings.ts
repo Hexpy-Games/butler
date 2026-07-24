@@ -16,7 +16,6 @@ export function decodeReviewFindings(input: {
   taskRef: ContentRef;
   attemptRef: ContentRef;
   targetRevisionRefs: ContentRef[];
-  priorFindings: ReviewFinding[];
 }): ReviewFinding[] {
   if (!Array.isArray(input.submitted)) {
     throw new Error("Task Review findings must be an array");
@@ -28,7 +27,7 @@ export function decodeReviewFindings(input: {
     const recommendedDisposition = submitted.recommendedDisposition === "backlog"
       ? "backlog" as const
       : "required_now" as const;
-    const origin = requireFindingOrigin(submitted, input.priorFindings);
+    const origin = requireFindingOrigin(submitted);
     const findingBody = {
       rootCauseKey: requireString(submitted.rootCauseKey, "finding root cause key"),
       affectedCriterionRefs: requireAffectedCriterionRefs(
@@ -44,17 +43,7 @@ export function decodeReviewFindings(input: {
       origin,
       targetRevisionRefs: input.targetRevisionRefs,
     };
-    const prior = origin.kind === "prior_finding" ||
-        origin.kind === "correction_regression"
-      ? input.priorFindings.find((finding) => finding.ref.id === origin.findingRef.id)
-      : undefined;
-    if (prior && (
-      prior.rootCauseKey !== findingBody.rootCauseKey ||
-      !sameRefList(prior.affectedCriterionRefs, findingBody.affectedCriterionRefs)
-    )) {
-      throw new Error("Task re-review changed its frozen root finding");
-    }
-    return prior ?? {
+    return {
       ref: contentRef("finding", findingBody),
       ...findingBody,
     };
@@ -86,31 +75,14 @@ export function requireFindingCategory(value: unknown): ReviewFindingCategory {
 
 export function requireFindingOrigin(
   submitted: Record<string, unknown>,
-  priorFindings: ReviewFinding[],
 ): ReviewFinding["origin"] {
-  if (submitted.findingOrigin === "initial_review" && priorFindings.length === 0) {
+  if (submitted.findingOrigin === "initial_review") {
     return { kind: "initial_review" };
   }
   if (submitted.findingOrigin === "backlog_candidate") {
     return { kind: "backlog_candidate" };
   }
-  if (submitted.findingOrigin === "prior_finding") {
-    const prior = priorFindings.find((finding) => finding.ref.id === submitted.priorFindingId);
-    if (
-      prior &&
-      prior.statement === submitted.finding &&
-      prior.category === submitted.findingCategory &&
-      prior.priority === submitted.priority
-    ) {
-      return { kind: "prior_finding", findingRef: prior.ref };
-    }
-    throw new Error("Task re-review changed its frozen finding");
-  }
-  if (submitted.findingOrigin === "correction_regression" && priorFindings.length > 0) {
-    const prior = priorFindings.find((finding) => finding.ref.id === submitted.priorFindingId);
-    if (prior) return { kind: "correction_regression", findingRef: prior.ref };
-  }
-  throw new Error("Task Review finding origin is outside the correction scope");
+  throw new Error("Task Review finding origin is invalid");
 }
 
 export function validateCorrectionFindingScope(
@@ -121,13 +93,8 @@ export function validateCorrectionFindingScope(
   const blocking = findings
     .filter((finding) => finding.recommendedDisposition === "required_now");
   const priorIds = new Set(priorFindings.map((finding) => finding.ref.id));
-  const causalIds = blocking.map((finding) => {
-    if (priorIds.has(finding.ref.id)) return finding.ref.id;
-    return finding.origin.kind === "prior_finding" ||
-      finding.origin.kind === "correction_regression"
-      ? finding.origin.findingRef.id
-      : "";
-  });
+  const causalIds = blocking.map((finding) =>
+    priorIds.has(finding.ref.id) ? finding.ref.id : "");
   if (
     causalIds.some((id) => id.length === 0) ||
     new Set(causalIds).size !== causalIds.length ||
@@ -147,7 +114,7 @@ export function requirePriorFindings(value: unknown): ReviewFinding[] {
 
 export function normalizeRootFindings(
   findings: ReviewFinding[],
-  verdicts: CriterionVerdict[],
+  _verdicts: CriterionVerdict[],
 ): ReviewFinding[] {
   const unique = [...new Map(findings.map((finding) => [finding.ref.id, finding])).values()];
   const rootCauseRefs = new Map<string, string>();
@@ -157,13 +124,6 @@ export function normalizeRootFindings(
       throw new Error("Task Review redefined one root cause");
     }
     rootCauseRefs.set(finding.rootCauseKey, finding.ref.id);
-    const attached = verdicts
-      .filter((verdict) => verdict.findingRefs.some((ref) => ref.id === finding.ref.id))
-      .map((verdict) => verdict.criterionRef)
-      .sort((left, right) => refKey(left).localeCompare(refKey(right)));
-    if (!sameRefs(attached, finding.affectedCriterionRefs)) {
-      throw new Error("Task Review finding references are not reciprocal");
-    }
   }
   const priority = { P0: 0, P1: 1, P2: 2 };
   return unique.sort(
@@ -193,22 +153,8 @@ export function requireAffectedCriterionRefs(
   return refs;
 }
 
-export function sameRefList(left: ContentRef[], right: ContentRef[]): boolean {
-  return left.length === right.length &&
-    left.every((ref, index) => sameRef(ref, right[index]!));
-}
-
 function refKey(ref: { id: string; sha256: string }): string {
   return `${ref.id}\0${ref.sha256}`;
-}
-
-function sameRefs(
-  left: Array<{ id: string; sha256: string }>,
-  right: Array<{ id: string; sha256: string }>,
-): boolean {
-  return left.length === right.length &&
-    left.every((ref, index) =>
-      ref.id === right[index]?.id && ref.sha256 === right[index]?.sha256);
 }
 
 function sameRef(left: ContentRef, right: ContentRef): boolean {

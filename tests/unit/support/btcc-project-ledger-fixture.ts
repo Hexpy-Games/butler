@@ -141,6 +141,7 @@ export function reviewedPlan(options: {
     coverage: acceptedPlanningCoverage(),
     verdict: "accepted" as const,
     findings: [] as [],
+    findingVerdicts: [],
   };
   return {
     kind: "planning_accepted",
@@ -356,6 +357,7 @@ export function successfulReview(
     })),
     observations: [observation],
     findings: [],
+    findingVerdicts: [],
     reviewedResultRefs: [result.result.resultSummary.ref],
     reviewedTargetStateRevisionRefs: [],
     reviewedArtifactRevisionRefs: [],

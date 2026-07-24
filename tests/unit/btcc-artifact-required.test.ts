@@ -193,7 +193,7 @@ test("Task Review freezes one root finding across several failed criteria", asyn
     .toEqual(expect.arrayContaining(affectedCriterionRefs));
 });
 
-test("Task re-review preserves the exact prior blocker instead of rewriting it", async () => {
+test("Task re-review requires exact frozen root-cause coverage", async () => {
   const prior = priorFinding("finding-prior");
   const changed = reviewTask(reviewInvocation([], {
     priorCorrectionFindings: [prior],
@@ -201,12 +201,11 @@ test("Task re-review preserves the exact prior blocker instead of rewriting it",
       criterionRef: ref("criterion"),
       observation: "The correction still does not satisfy the criterion.",
       verdict: "not_satisfied",
-      findingCategory: prior.category,
-      finding: "A different problem statement.",
-      priority: prior.priority,
-      recommendedDisposition: "required_now",
-      findingOrigin: "prior_finding",
-      priorFindingId: prior.ref.id,
+    }],
+    priorFindingVerdicts: [{
+      rootCauseKey: "another-root-cause",
+      verdict: "unresolved",
+      observation: "The original blocker remains.",
     }],
   }));
 
@@ -221,12 +220,11 @@ test("Task correction regressions remain under the exact frozen root finding", a
       criterionRef: ref("criterion"),
       observation: "The correction introduced a replacement regression.",
       verdict: "not_satisfied",
-      findingCategory: "implementation_nonconformance",
-      finding: "The correction broke the same criterion in a new way.",
-      priority: "P1",
-      recommendedDisposition: "required_now",
-      findingOrigin: "correction_regression",
-      priorFindingId: prior.ref.id,
+    }],
+    priorFindingVerdicts: [{
+      rootCauseKey: prior.rootCauseKey,
+      verdict: "regressed",
+      observation: "The attempted repair regressed the same frozen root cause.",
     }],
   }));
 
@@ -305,6 +303,7 @@ function reviewInvocation(
     }>;
     criterionVerdicts?: unknown[];
     priorCorrectionFindings?: unknown[];
+    priorFindingVerdicts?: unknown[];
   } = {},
 ): PhaseInvocation {
   const result = workspaceResult();
@@ -323,18 +322,26 @@ function reviewInvocation(
     ...(overrides.priorCorrectionFindings
       ? { priorCorrectionFindings: overrides.priorCorrectionFindings }
       : {}),
-  }, normalizeTaskReviewRootFindings(overrides.criterionVerdicts));
+  }, normalizeTaskReviewRootFindings(
+    overrides.criterionVerdicts,
+    overrides.priorFindingVerdicts,
+  ));
 }
 
 function normalizeTaskReviewRootFindings(
   verdicts: unknown[] | undefined,
-): { criterionVerdicts: unknown[]; findings: unknown[] } | undefined {
+  priorFindingVerdicts: unknown[] | undefined,
+): {
+  criterionVerdicts: unknown[];
+  findings: unknown[];
+  priorFindingVerdicts?: unknown[];
+} | undefined {
   if (!verdicts) return undefined;
   const findings = new Map<string, Record<string, unknown>>();
   const criterionVerdicts = verdicts.map((value) => {
     const verdict = value as Record<string, unknown>;
     if (!("finding" in verdict)) {
-      return { ...verdict, findingRootCauseKeys: [] };
+      return verdict;
     }
     const rootCauseKey = String(
       verdict.rootCauseKey ?? verdict.priorFindingId ?? verdict.finding,
@@ -365,19 +372,24 @@ function normalizeTaskReviewRootFindings(
       priorFindingId: _priorFindingId,
       ...criterion
     } = verdict;
-    return {
-      ...criterion,
-      findingRootCauseKeys: [rootCauseKey],
-    };
+    return criterion;
   });
-  return { criterionVerdicts, findings: [...findings.values()] };
+  return {
+    criterionVerdicts,
+    findings: [...findings.values()],
+    ...(priorFindingVerdicts ? { priorFindingVerdicts } : {}),
+  };
 }
 
 function invocation(
   semanticState: "task_execution" | "task_review",
   results: OperationResult[],
   stateInput: Record<string, unknown>,
-  reviewSubmission?: { criterionVerdicts: unknown[]; findings: unknown[] },
+  reviewSubmission?: {
+    criterionVerdicts: unknown[];
+    findings: unknown[];
+    priorFindingVerdicts?: unknown[];
+  },
 ): PhaseInvocation {
   return {
     binding: {
@@ -426,9 +438,11 @@ function invocation(
                 criterionRef: ref("criterion"),
                 observation: "the disposable validation passed",
                 verdict: "satisfied",
-                findingRootCauseKeys: [],
               }],
               findings: reviewSubmission?.findings ?? [],
+              ...(reviewSubmission?.priorFindingVerdicts
+                ? { priorFindingVerdicts: reviewSubmission.priorFindingVerdicts }
+                : {}),
             },
         actualIdentity: selectedModel(),
       }),

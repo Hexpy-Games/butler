@@ -19,13 +19,9 @@ test("promotion Review exposes only a satisfied criterion verdict", () => {
         additionalProperties: false,
       },
       observation: { type: "string", minLength: 1 },
-      findingRootCauseKeys: {
-        type: "array",
-        items: { type: "string", minLength: 1 },
-      },
       verdict: { type: "string", const: "satisfied" },
     },
-    required: ["criterionRef", "observation", "findingRootCauseKeys", "verdict"],
+    required: ["criterionRef", "observation", "verdict"],
     additionalProperties: false,
   });
 });
@@ -40,16 +36,13 @@ test("ordinary Task Review separates pass, backlog, and blocking findings", () =
   expect(findings.anyOf).toHaveLength(2);
 });
 
-test("correction Task Review binds blockers to prior findings or correction regressions", () => {
-  const findings = rootFindingSchema(
-    taskReviewSubmissionSchema("semantic", ["finding-1"]),
-  );
-  const serialized = JSON.stringify(findings);
+test("correction Task Review judges frozen root causes without re-authoring them", () => {
+  const schema = taskReviewSubmissionSchema("semantic", ["root-cause-1"]);
+  const serialized = JSON.stringify(schema);
 
-  expect(findings.anyOf).toHaveLength(3);
-  expect(serialized).toContain('"const":"prior_finding"');
-  expect(serialized).toContain('"enum":["finding-1"]');
-  expect(serialized).toContain('"const":"correction_regression"');
+  expect(serialized).toContain('"priorFindingVerdicts"');
+  expect(serialized).toContain('"enum":["root-cause-1"]');
+  expect(serialized).toContain('"enum":["resolved","unresolved","regressed"]');
   expect(serialized).not.toContain('"const":"initial_review"');
 });
 

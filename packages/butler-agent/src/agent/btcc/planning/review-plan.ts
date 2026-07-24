@@ -24,6 +24,7 @@ import {
   planningReviewSubjects,
   requireDimensionCoverage,
   requireSubjectCoverage,
+  resolvePlanningReviewFindings,
 } from "./review-subjects.ts";
 import {
   createPlanningFindingSet,
@@ -65,7 +66,7 @@ function reviewCodec(
       ? planDraftReviewSubmissionSchema
       : planReviewSubmissionSchema(
           subjects.map((item) => item.subjectId),
-          priorBlocking.map((finding) => finding.ref.id),
+          priorBlocking.map((finding) => finding.rootCauseKey),
         ),
     decode(submission, envelope) {
       const loaded = loadCandidate(envelope.context.stateInput);
@@ -82,11 +83,16 @@ function reviewCodec(
         );
       }
       const materialized = loaded.candidate;
-      const reviewedSubjects = requireSubjectCoverage(
-        value.subjects,
+      const decodedFindings = resolvePlanningReviewFindings(
         value.findings,
+        value.priorFindingVerdicts,
         subjects,
         priorBlocking,
+      );
+      const reviewedSubjects = requireSubjectCoverage(
+        value.subjects,
+        subjects,
+        decodedFindings.findings,
       );
       preserveRevisionReviewScope(
         materialized,
@@ -96,7 +102,12 @@ function reviewCodec(
       const coverage = requireDimensionCoverage(value.coverage, reviewedSubjects);
       const blockingFindings = orderedBlockingFindings(reviewedSubjects);
       const submittedFindings = blockingFindings.map((finding) => finding.message);
-      const reviewBase = exactReviewBase(materialized, coverage, reviewedSubjects);
+      const reviewBase = exactReviewBase(
+        materialized,
+        coverage,
+        reviewedSubjects,
+        decodedFindings.verdicts,
+      );
       if (value.verdict === "accepted") {
         if (submittedFindings.length > 0) {
           throw new Error("Accepted Planning Review cannot contain failed coverage");
@@ -125,6 +136,7 @@ function exactReviewBase(
   candidate: PlanningCandidate,
   coverage: ReturnType<typeof requireDimensionCoverage>,
   reviewedSubjects: ReturnType<typeof requireSubjectCoverage>,
+  findingVerdicts: PlanningReview["findingVerdicts"],
 ) {
   return {
     candidateRef: candidate.ref,
@@ -141,6 +153,7 @@ function exactReviewBase(
     reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
     reviewedSubjects,
     coverage,
+    findingVerdicts,
   };
 }
 
@@ -190,6 +203,7 @@ function requireDraftRevision(
     originalGoalContractRef: candidate.goalContractRef,
     verdict: "revision_required" as const,
     findings,
+    findingVerdicts: [],
     findingSet,
     findingSetRef,
   };

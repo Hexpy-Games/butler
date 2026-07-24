@@ -301,11 +301,8 @@ describe("BTCC managed executable ingress", () => {
         expect(feedbackCandidates[1]?.revisionOrigin.kind).toBe("review_revision");
         expect(phaseInputs.get("feedback_planning_review")).toMatchObject({
           previousFeedbackPlanningReview: {
-            kind: "feedback_planning_revision_required",
-            review: {
-              verdict: "revision_required",
-              findings: [expect.any(String)],
-            },
+            verdict: "revision_required",
+            findings: [expect.any(String)],
           },
         });
       }

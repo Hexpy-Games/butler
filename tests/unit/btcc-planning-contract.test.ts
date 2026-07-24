@@ -119,10 +119,11 @@ describe("BTCC Planning contract", () => {
 
   test("constrains feedback review findings by priority, scope, and frozen identity", () => {
     const planningRevision = JSON.stringify(
-      planReviewSubmissionSchema(["task:one"], ["planning-finding-1"]),
+      planReviewSubmissionSchema(["task:one"], ["planning-root-cause-1"]),
     );
-    expect(planningRevision).toContain('"const":"prior_finding"');
-    expect(planningRevision).toContain('"enum":["planning-finding-1"]');
+    expect(planningRevision).toContain('"priorFindingVerdicts"');
+    expect(planningRevision).toContain('"enum":["resolved","unresolved"]');
+    expect(planningRevision).toContain('"enum":["planning-root-cause-1"]');
     expect(planningRevision).not.toContain('"const":"initial_review"');
 
     const schema = JSON.stringify(feedbackPlanReviewSubmissionSchema([]));
@@ -133,9 +134,10 @@ describe("BTCC Planning contract", () => {
     expect(schema).toContain('"const":"backlog"');
     expect(schema).toContain('"const":"initial_review"');
 
-    const revised = JSON.stringify(feedbackPlanReviewSubmissionSchema(["finding-1"]));
-    expect(revised).toContain('"const":"prior_finding"');
-    expect(revised).toContain('"enum":["finding-1"]');
+    const revised = JSON.stringify(feedbackPlanReviewSubmissionSchema(["root-cause-1"]));
+    expect(revised).toContain('"priorFindingVerdicts"');
+    expect(revised).toContain('"enum":["resolved","unresolved"]');
+    expect(revised).toContain('"enum":["root-cause-1"]');
     expect(revised).not.toContain('"const":"initial_review"');
   });
   test("authors exact risks, assumptions, effects, integration, and contained artifact targets", () => {
@@ -460,6 +462,11 @@ describe("BTCC Planning contract", () => {
       verdict: "revision_required",
       coverage: expandedCoverage,
       subjects: expanded,
+      priorFindingVerdicts: [{
+        rootCauseKey: originalFinding.rootCauseKey,
+        verdict: "unresolved",
+        observation: "The frozen concern remains unresolved.",
+      }],
     }, first.review))).rejects.toThrow("provider_phase_submission_invalid");
 
     unchanged.verdict = "passed";
@@ -471,6 +478,11 @@ describe("BTCC Planning contract", () => {
       verdict: "accepted",
       coverage: acceptedCoverage(),
       subjects: expanded,
+      priorFindingVerdicts: [{
+        rootCauseKey: originalFinding.rootCauseKey,
+        verdict: "resolved",
+        observation: "The revised plan no longer blocks the requested outcome.",
+      }],
     }, first.review));
     expect(accepted.kind).toBe("planning_accepted");
   });
@@ -515,6 +527,13 @@ describe("BTCC Planning contract", () => {
       verdict: "accepted",
       coverage: acceptedCoverage(),
       subjects: acceptedSubjects(revised),
+      priorFindingVerdicts: reviewed.review.findingSet.findings
+        .filter((finding) => finding.recommendedDisposition === "required_now")
+        .map((finding) => ({
+          rootCauseKey: finding.rootCauseKey,
+          verdict: "resolved",
+          observation: "The revised candidate resolves this frozen finding.",
+        })),
     }, reviewed.review));
     expect(accepted.kind).toBe("planning_accepted");
   });
@@ -694,7 +713,7 @@ function normalizeReviewRootFindings(
         subjectId: string;
         findings: Array<Record<string, unknown>>;
       };
-      const findingRootCauseKeys = subject.findings.map((finding) => {
+      subject.findings.forEach((finding) => {
         const rootCauseKey = String(
           finding.rootCauseKey ?? finding.priorFindingId ?? finding.message,
         );
@@ -703,10 +722,9 @@ function normalizeReviewRootFindings(
           affectedSubjectIds: [subject.subjectId],
           ...finding,
         });
-        return rootCauseKey;
       });
       const { findings: _findings, ...coverage } = subject;
-      return { ...coverage, findingRootCauseKeys };
+      return coverage;
     });
     return {
       ...submission,

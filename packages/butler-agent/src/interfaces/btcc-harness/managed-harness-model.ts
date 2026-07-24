@@ -1,5 +1,6 @@
 import type { BtccRuntimeDependencies } from "../../agent/btcc/index.ts";
 import {
+  feedbackFindingDecisions,
   submitFeedbackPlan,
   submitFeedbackPlanningReview,
   type HarnessCorrectionKind,
@@ -216,9 +217,6 @@ export class ManagedHarnessModel implements SelectedModel {
               observation: index === 0
                 ? "초안에 실제 적용 지침이 빠져 있다"
                 : "해당 기준은 충족한다",
-              findingRootCauseKeys: index === 0
-                ? ["missing-execution-guidance"]
-                : [],
             })),
             findings: [{
               rootCauseKey: "missing-execution-guidance",
@@ -235,15 +233,24 @@ export class ManagedHarnessModel implements SelectedModel {
             }],
           };
         }
+        const priorFindings = asArray(state.priorCorrectionFindings);
         return {
           kind: "task_review",
           criterionVerdicts: criteria.map((criterion) => ({
             criterionRef: asRecord(criterion).ref,
             verdict: "satisfied",
             observation: "원칙과 실행 지침이 모두 포함되어 수용 기준을 충족한다",
-            findingRootCauseKeys: [],
           })),
           findings: [],
+          ...(priorFindings.length > 0
+            ? {
+                priorFindingVerdicts: priorFindings.map((finding) => ({
+                  rootCauseKey: asRecord(finding).rootCauseKey,
+                  verdict: "resolved",
+                  observation: "교정 결과가 이 동결 Finding을 해소했다",
+                })),
+              }
+            : {}),
         };
       }
       case "feedback_conception":
@@ -276,25 +283,6 @@ export class ManagedHarnessModel implements SelectedModel {
         return submitReport(state);
     }
   }
-}
-
-function feedbackFindingDecisions(state: Record<string, unknown>) {
-  const source = asRecord(state.correctionSource);
-  const review = asRecord(source.review);
-  const findingIds = asArray(review.findings).flatMap((item) => {
-    const finding = asRecord(item);
-    const ref = asRecord(finding.ref);
-    return finding.recommendedDisposition === "required_now" && typeof ref.id === "string"
-      ? [ref.id]
-      : [];
-  });
-  return findingIds.length === 0 ? {} : {
-    findingDecisions: findingIds.map((findingId) => ({
-      findingId,
-      decision: "apply_now",
-      rationale: "현재 Task의 수용 기준을 막는 결함을 이번 수정에서 해결한다",
-    })),
-  };
 }
 
 function deferredForUserAuthority(kind = "managed_deferral") {
