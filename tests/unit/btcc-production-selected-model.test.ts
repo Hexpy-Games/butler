@@ -18,6 +18,12 @@ import {
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
+const publicActivity = {
+  summary: "현재 단계의 판단을 마쳤습니다.",
+  rationale: "요청 목표와 단계 계약을 함께 확인했습니다.",
+  nextStep: "다음 단계가 이 판단을 이어받습니다.",
+};
+
 describe("production BTCC selected model", () => {
   test("sends the exact identity, phase state, operations, authority, and resolved context once", async () => {
     const calls: ProviderPhasePrompt[] = [];
@@ -33,6 +39,7 @@ describe("production BTCC selected model", () => {
         carrier: {
           kind: "phase_submission",
           submission: { kind: "opening_continuation", message: "I am checking the request." },
+          publicActivity,
         },
         actualIdentity: actualIdentity(),
       };
@@ -98,6 +105,7 @@ describe("production BTCC selected model", () => {
     expect(result).toEqual({
       kind: "phase_submission",
       submission: { kind: "opening_continuation", message: "I am checking the request." },
+      publicActivity,
       actualIdentity: actualIdentity(),
     });
     expect(calls).toHaveLength(1);
@@ -121,7 +129,7 @@ describe("production BTCC selected model", () => {
       "operation_requests",
     ]);
     expect(calls[0]?.carrierFunctions[0]?.parameters).toMatchObject({
-      required: ["submission"],
+      required: ["submission", "publicActivity"],
       additionalProperties: false,
     });
 
@@ -266,6 +274,7 @@ describe("production BTCC selected model", () => {
           carrier: {
             kind: "phase_submission",
             submission: { kind: "opening_continuation", message: "요청을 구상해 진행하겠습니다." },
+            publicActivity,
           },
           actualIdentity: actualIdentity(),
         };
@@ -307,7 +316,11 @@ describe("production BTCC selected model", () => {
     expect(rendered.promptHierarchy.currentTurnContext.availableCapabilities).toEqual([]);
     expect(rendered.outputSchemaGuidance).toEqual({
       carrierKinds: ["phase_submission"],
-      phaseSubmission: "Use one submission object allowed by the exact phase exits.",
+      phaseSubmission: [
+        "Use one submission object allowed by the exact phase exits.",
+        "Write publicActivity as a concise user-visible handoff: what this phase decided, why it matters, and what the next phase will do.",
+        "Do not expose hidden chain-of-thought or copy raw operation output.",
+      ].join(" "),
     });
   });
 
@@ -362,7 +375,7 @@ describe("production BTCC selected model", () => {
       promptRunner: promptRunner(async (input) => {
         prompt = input.prompt;
         return {
-          carrier: { kind: "phase_submission", submission: { kind: "plan" } },
+          carrier: { kind: "phase_submission", submission: { kind: "plan" }, publicActivity },
           actualIdentity: actualIdentity(),
         };
       }),
@@ -390,7 +403,7 @@ describe("production BTCC selected model", () => {
       promptRunner: promptRunner(async (input) => {
         prompt = input.prompt;
         return {
-          carrier: { kind: "phase_submission", submission: { kind: "plan" } },
+          carrier: { kind: "phase_submission", submission: { kind: "plan" }, publicActivity },
           actualIdentity: actualIdentity(),
         };
       }),
@@ -474,7 +487,7 @@ describe("production BTCC selected model", () => {
     const responses: ProviderPhasePromptResult[] = [
       { carrier: { kind: "operation_requests", requests: [] }, actualIdentity: actualIdentity() },
       {
-        carrier: { kind: "phase_submission", submission: { kind: "plan" } },
+        carrier: { kind: "phase_submission", submission: { kind: "plan" }, publicActivity },
         actualIdentity: { ...actualIdentity(), model: "gpt-5.5" },
       },
     ];

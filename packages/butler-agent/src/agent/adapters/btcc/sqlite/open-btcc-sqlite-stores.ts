@@ -14,7 +14,7 @@ import { SqlitePhaseGuidanceStore } from "./phase-guidance-store.ts";
 import {
   createOperationalRecoveryBoundary,
   createProviderRecoveryReadiness,
-} from "../../../btcc/recovery/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import { SqliteOperationalRecoveryStore } from "./operational-recovery-store.ts";
 import { createSqliteWriteReadiness } from "./sqlite-write-readiness.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";

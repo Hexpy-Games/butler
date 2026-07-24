@@ -117,7 +117,7 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
   expect(html).toContain("다음: 계획 후보를 검토합니다.");
 });
 
-test("turn activity panel shows a newer phase placeholder beside prior detail", () => {
+test("turn activity panel keeps the handoff under the canonical successor phase", () => {
   const html = renderPanel([
     phaseActivityRow(),
     {
@@ -125,11 +125,12 @@ test("turn activity panel shows a newer phase placeholder beside prior detail", 
       kind: "message",
       state: "running",
       safe_label: "구상 결과를 독립적으로 검토하고 있습니다",
+      semantic_block_id: "contract_review",
     },
   ]);
 
-  expect(html).toContain("현재 · 구상 · 전체 1개 기록");
-  expect(html).toContain("구상 결과를 독립적으로 검토하고 있습니다");
+  expect(html).toContain("현재 · 구상 검토 · 전체 1개 기록");
+  expect(html).not.toContain("구상 결과를 독립적으로 검토하고 있습니다");
 });
 
 test("turn activity panel hides an older placeholder after phase detail arrives", () => {

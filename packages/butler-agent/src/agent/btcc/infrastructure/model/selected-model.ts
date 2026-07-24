@@ -107,10 +107,15 @@ function decodeCarrier(
   if (!isRecord(carrier)) {
     throw new ProviderCarrierProtocolError("BTCC provider carrier is not an object");
   }
-  if (carrier.kind === "phase_submission" && isRecord(carrier.submission)) {
+  if (
+    carrier.kind === "phase_submission" &&
+    isRecord(carrier.submission) &&
+    isRecord(carrier.publicActivity)
+  ) {
     return {
       kind: "phase_submission",
       submission: carrier.submission,
+      publicActivity: carrier.publicActivity as PhaseContinuity["publicActivity"],
       actualIdentity,
     };
   }

@@ -38,6 +38,7 @@ export function projectTurnProgress(
         payload: {
           note: progressLabel(update.semanticState),
           btccState: update.semanticState,
+          semanticBlockId: update.semanticState,
           turnRevision: update.turnRevision,
         },
       });
@@ -63,6 +64,7 @@ export function projectTurnProgress(
           payload: {
             note: progressLabel(update.semanticState),
             btccState: update.semanticState,
+            semanticBlockId: update.semanticState,
             recoveryStatus: update.status,
           },
         });
@@ -73,6 +75,7 @@ export function projectTurnProgress(
         payload: {
           note: operationalProgressLabel(update.activationKind),
           operational: true,
+          semanticBlockId: update.semanticState,
           recoveryStatus: update.status,
         },
       });

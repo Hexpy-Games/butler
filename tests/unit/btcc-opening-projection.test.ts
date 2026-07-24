@@ -3,6 +3,8 @@ import { publishOpeningDecision } from
   "../../packages/butler-agent/src/agent/btcc/turn/turn-progress.ts";
 import { projectTurnProgress } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-progress.ts";
+import { progressRowFromSharedTurnEvent } from
+  "../../packages/butler-progress-projection/src/index.ts";
 
 test("projects the committed model-authored Opening decision without rewriting it", async () => {
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
@@ -63,4 +65,34 @@ test("projects model-authored phase activity with intent and next step", async (
       semanticBlockId: "planning",
     },
   }]);
+});
+
+test("projects canonical phase identity and marks only active recovery as operational", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.stateChanged({
+    turnId: "turn-phase-handoff",
+    semanticState: "planning_review",
+    turnRevision: 5,
+  });
+  await observer.operationalNoticeChanged?.({
+    turnId: "turn-phase-handoff",
+    semanticState: "planning_review",
+    status: "recovering",
+    code: "provider_rate_limited",
+    activationKind: "automatic_provider_recovery",
+  });
+
+  expect(events[0]?.payload?.semanticBlockId).toBe("planning_review");
+  const recoveryRow = progressRowFromSharedTurnEvent({
+    id: "recovery-event",
+    turnSequence: 2,
+    kind: events[1]!.kind,
+    payload: events[1]!.payload,
+  });
+  expect(recoveryRow?.bridge_phase).toBe("operational_recovery");
+  expect(recoveryRow?.semantic_block_id).toBe("planning_review");
 });

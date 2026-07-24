@@ -61,3 +61,4 @@ export {
   isSpooledOperationOutput,
   type SpooledOperationOutput,
 } from "./operation-payload.ts";
+export type { PublicPhaseActivity } from "./phase-activity.ts";

@@ -57,10 +57,16 @@ describe("BTCC phase checkpoint persistence", () => {
       results: [{ request, result: observation }],
     });
     const product = { kind: "goal_contract_candidate", exact: "product bytes" };
+    const submissionActivity = {
+      summary: "목표 계약 후보를 완성했습니다.",
+      rationale: "확인한 현재 상태와 사용자의 요청을 함께 반영했습니다.",
+      nextStep: "후보가 원래 의도와 완료 기준을 보존하는지 검토합니다.",
+    };
     const pendingSubmission = await store.appendPhaseSubmission({
       binding: observed,
       envelope: phaseEnvelope(observed),
       submission: { kind: "goal_contract_candidate", exact: "submission bytes" },
+      publicActivity: submissionActivity,
       actualIdentity: identity,
     });
     const submitted = await store.acceptPhaseProduct({
@@ -105,11 +111,14 @@ describe("BTCC phase checkpoint persistence", () => {
     expect(JSON.parse(provider!.provider_round_json)).toEqual({
       kind: "phase_submission",
       submission: { kind: "goal_contract_candidate", exact: "submission bytes" },
+      publicActivity: submissionActivity,
       actualIdentity: identity,
     });
-    expect(JSON.parse(provider!.pending_submission_json).submission).toEqual({
+    const pendingCarrier = JSON.parse(provider!.pending_submission_json);
+    expect(pendingCarrier.submission).toEqual({
       kind: "goal_contract_candidate", exact: "submission bytes",
     });
+    expect(pendingCarrier.publicActivity).toEqual(submissionActivity);
     expect(JSON.parse(final!.product_bundle_json)).toEqual(product);
     expect(db.query<{ count: number }, []>(`
       SELECT COUNT(*) AS count FROM btcc_phase_model_rounds

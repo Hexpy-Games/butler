@@ -108,6 +108,11 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
   const submissionWitness = {
     kind: "phase_submission",
     submission: { kind: "sample_submission", summary: "done" },
+    publicActivity: {
+      summary: "현재 단계 산출물을 완성했습니다.",
+      rationale: "단계 계약을 충족하는 결과를 만들었습니다.",
+      nextStep: "다음 단계가 결과를 이어받습니다.",
+    },
   };
   const operationWitness = {
     kind: "operation_requests",
