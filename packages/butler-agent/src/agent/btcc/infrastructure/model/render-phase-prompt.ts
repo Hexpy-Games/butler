@@ -1,4 +1,6 @@
 import type { PhaseEnvelope } from "../../core/index.ts";
+import { modelStructuredDecisionTransport } from
+  "../../../../integrations/providers/model-catalog.ts";
 import type {
   ButlerContextResolver,
   RenderedPhasePrompt,
@@ -17,6 +19,7 @@ import {
 } from "./prompt-duty-catalog.ts";
 import { projectOperationContext } from "./project-operation-context.ts";
 import { projectContinuationContext } from "./project-continuation-context.ts";
+import { fitOperationContext } from "./fit-operation-context.ts";
 
 export async function renderPhasePrompt(
   envelope: PhaseEnvelope,
@@ -42,18 +45,91 @@ export async function renderPhasePrompt(
       ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
     }),
   ]);
-  const operationContext = projectOperationContext(envelope);
+  const responseSchema = providerCarrierSchema(
+    availableCapabilities,
+    envelope.submissionSchema,
+    operationAuthority,
+  );
+  const carrierFunctions = providerCarrierFunctions(
+    availableCapabilities,
+    envelope.submissionSchema,
+    operationAuthority,
+  );
+  const instructions = [
+    "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
+    "Do not add prose outside the carrier and do not choose a successor phase or model.",
+    "Choose semantic operations only; the runtime binds immutable authority references.",
+    ...(envelope.providerCorrection
+      ? [providerCorrectionInstruction(envelope.providerCorrection)]
+      : []),
+    "Follow promptHierarchy in order: earlier layers override later layers.",
+  ].join(" ");
+  const projectedOperationContext = projectOperationContext(envelope);
+  const renderPrompt = (
+    operationContext: typeof projectedOperationContext,
+  ) => JSON.stringify(promptDocument({
+    envelope,
+    resolvedContext,
+    availableCapabilities,
+    acceptedPhaseGuidance,
+    operationAuthority,
+    operationContext,
+  }));
+  const operationContext = fitOperationContext({
+    projected: projectedOperationContext,
+    modelSelection: envelope.modelSelection,
+    renderPrompt,
+    fixedRequestShape: fixedProviderRequestShape(
+      envelope,
+      instructions,
+      responseSchema,
+      carrierFunctions,
+    ),
+  });
   return {
-    instructions: [
-      "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
-      "Do not add prose outside the carrier and do not choose a successor phase or model.",
-      "Choose semantic operations only; the runtime binds immutable authority references.",
-      ...(envelope.providerCorrection
-        ? [providerCorrectionInstruction(envelope.providerCorrection)]
-        : []),
-      "Follow promptHierarchy in order: earlier layers override later layers.",
-    ].join(" "),
-    prompt: JSON.stringify({
+    instructions,
+    prompt: renderPrompt(operationContext),
+    responseSchema,
+    carrierFunctions,
+    admissionSchema: providerCarrierAdmissionSchema(
+      availableCapabilities,
+      envelope.submissionSchema,
+    ),
+  };
+}
+
+function fixedProviderRequestShape(
+  envelope: PhaseEnvelope,
+  instructions: string,
+  responseSchema: Record<string, unknown>,
+  carrierFunctions: ReturnType<typeof providerCarrierFunctions>,
+) {
+  const selected = envelope.modelSelection;
+  const modelRef = selected.model.includes("/")
+    ? selected.model
+    : `${selected.provider}/${selected.model}`;
+  return modelStructuredDecisionTransport(modelRef) === "function_tool"
+    ? { instructions, carrierFunctions }
+    : { instructions, responseSchema };
+}
+
+function promptDocument(input: {
+  envelope: PhaseEnvelope;
+  resolvedContext: Awaited<ReturnType<typeof resolveButlerContext>>;
+  availableCapabilities: Awaited<ReturnType<typeof resolveAvailableCapabilities>>;
+  acceptedPhaseGuidance: Awaited<ReturnType<PhaseGuidanceReader["list"]>>;
+  operationAuthority: PhaseEnvelope["operationAuthority"];
+  operationContext: ReturnType<typeof projectOperationContext>;
+}) {
+  const {
+    envelope,
+    resolvedContext,
+    availableCapabilities,
+    acceptedPhaseGuidance,
+    operationAuthority,
+    operationContext,
+  } = input;
+  return {
       binding: envelope.binding,
       selectedModel: envelope.modelSelection,
       promptHierarchy: {
@@ -104,21 +180,6 @@ export async function renderPhasePrompt(
             }
           : {}),
       },
-    }),
-    responseSchema: providerCarrierSchema(
-      availableCapabilities,
-      envelope.submissionSchema,
-      operationAuthority,
-    ),
-    carrierFunctions: providerCarrierFunctions(
-      availableCapabilities,
-      envelope.submissionSchema,
-      operationAuthority,
-    ),
-    admissionSchema: providerCarrierAdmissionSchema(
-      availableCapabilities,
-      envelope.submissionSchema,
-    ),
   };
 }
 
