@@ -133,7 +133,8 @@ function assertCarrierMatchesRenderedSchema(
   const validation = validateJsonObjectSchema(carrier, responseSchema);
   if (!validation.ok) {
     throw new ProviderCarrierProtocolError(
-      `BTCC provider carrier violates the rendered schema at ${validation.path}`,
+      `BTCC provider carrier violates the rendered schema at ${validation.path}: ` +
+      validation.message,
     );
   }
 }

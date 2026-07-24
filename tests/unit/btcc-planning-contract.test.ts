@@ -688,22 +688,30 @@ function normalizeReviewRootFindings(
   submission: Record<string, unknown>,
 ): Record<string, unknown> {
   if (Array.isArray(submission.subjects)) {
+    const rootFindings = new Map<string, Record<string, unknown>>();
+    const subjects = submission.subjects.map((value) => {
+      const subject = value as {
+        subjectId: string;
+        findings: Array<Record<string, unknown>>;
+      };
+      const findingRootCauseKeys = subject.findings.map((finding) => {
+        const rootCauseKey = String(
+          finding.rootCauseKey ?? finding.priorFindingId ?? finding.message,
+        );
+        rootFindings.set(rootCauseKey, {
+          rootCauseKey,
+          affectedSubjectIds: [subject.subjectId],
+          ...finding,
+        });
+        return rootCauseKey;
+      });
+      const { findings: _findings, ...coverage } = subject;
+      return { ...coverage, findingRootCauseKeys };
+    });
     return {
       ...submission,
-      subjects: submission.subjects.map((value) => {
-        const subject = value as {
-          subjectId: string;
-          findings: Array<Record<string, unknown>>;
-        };
-        return {
-          ...subject,
-          findings: subject.findings.map((finding) => ({
-            rootCauseKey: finding.priorFindingId ?? finding.message,
-            affectedSubjectIds: [subject.subjectId],
-            ...finding,
-          })),
-        };
-      }),
+      findings: [...rootFindings.values()],
+      subjects,
     };
   }
   if (Array.isArray(submission.findings)) {

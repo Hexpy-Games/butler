@@ -130,9 +130,11 @@ describe("production BTCC selected model", () => {
       "operation_requests",
     ]);
     expect(calls[0]?.carrierFunctions[0]?.parameters).toMatchObject({
-      required: ["submission", "publicActivity"],
+      required: ["kind", "publicActivity"],
       additionalProperties: false,
     });
+    expect(calls[0]?.carrierFunctions[0]?.argumentBinding)
+      .toBe("flat_phase_submission");
 
     const prompt = JSON.parse(calls[0]!.prompt) as Record<string, any>;
     const hierarchy = prompt.promptHierarchy;
@@ -486,7 +488,8 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
-      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission",
+      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission: " +
+        "No schema variant matched: Missing required argument: submission",
     });
   });
 
@@ -510,7 +513,8 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
-      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission",
+      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission: " +
+        "No schema variant matched: Missing required argument: submission",
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",

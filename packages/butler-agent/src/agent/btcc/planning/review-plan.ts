@@ -84,6 +84,7 @@ function reviewCodec(
       const materialized = loaded.candidate;
       const reviewedSubjects = requireSubjectCoverage(
         value.subjects,
+        value.findings,
         subjects,
         priorBlocking,
       );

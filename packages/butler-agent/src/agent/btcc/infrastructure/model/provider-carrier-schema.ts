@@ -30,15 +30,7 @@ export function providerCarrierFunctions(
   submissionSchema: Record<string, unknown>,
   authority: OperationAuthority,
 ): ProviderCarrierFunction[] {
-  const functions: ProviderCarrierFunction[] = [{
-    name: "submit_btcc_phase_submission",
-    description: "Submit the one phase product allowed by the current BTCC phase.",
-    carrierKind: "phase_submission",
-    parameters: objectParameters({
-      submission: submissionSchema,
-      publicActivity: publicActivitySchema("phase handoff"),
-    }, ["submission", "publicActivity"]),
-  }];
+  const functions = phaseSubmissionFunctions(submissionSchema);
   if (capabilities.length > 0) {
     const carrier = operationRequestsSchema(
       capabilities,
@@ -51,6 +43,7 @@ export function providerCarrierFunctions(
         "Include every currently known independent operation needed for the next decision.",
       ].join(" "),
       carrierKind: "operation_requests",
+      argumentBinding: "carrier_fields",
       parameters: objectParameters({
         phaseContinuity: carrier.phaseContinuity,
         requests: carrier.requests,
@@ -58,6 +51,59 @@ export function providerCarrierFunctions(
     });
   }
   return functions;
+}
+
+function phaseSubmissionFunctions(
+  submissionSchema: Record<string, unknown>,
+): ProviderCarrierFunction[] {
+  return leafObjectVariants(submissionSchema).map((variant, index) => {
+    const properties = objectValue(variant.properties);
+    if (!properties || "publicActivity" in properties) {
+      throw new Error("Phase submission function requires an object without publicActivity");
+    }
+    const required = Array.isArray(variant.required)
+      ? variant.required.filter((item): item is string => typeof item === "string")
+      : [];
+    return {
+      name: `submit_btcc_phase_${variantLabel(properties, index)}`,
+      description: "Submit one typed phase product allowed by the current BTCC phase.",
+      carrierKind: "phase_submission",
+      argumentBinding: "flat_phase_submission",
+      parameters: objectParameters({
+        ...properties,
+        publicActivity: publicActivitySchema("phase handoff"),
+      }, [...required, "publicActivity"]),
+    };
+  });
+}
+
+function leafObjectVariants(schema: Record<string, unknown>): Record<string, unknown>[] {
+  const variants = Array.isArray(schema.anyOf) ? schema.anyOf : null;
+  if (variants && !objectValue(schema.properties)) {
+    return variants.flatMap((variant) => {
+      const record = objectValue(variant);
+      if (!record) throw new Error("Phase submission variant must be an object schema");
+      return leafObjectVariants(record);
+    });
+  }
+  if (schema.type !== "object" || !objectValue(schema.properties)) {
+    throw new Error("Phase submission must resolve to object schema variants");
+  }
+  return [schema];
+}
+
+function variantLabel(properties: Record<string, unknown>, index: number): string {
+  const constants = ["kind", "verdict"]
+    .map((key) => objectValue(properties[key])?.const)
+    .filter((value): value is string => typeof value === "string");
+  const label = constants.join("_").replace(/[^a-zA-Z0-9_]/g, "_");
+  return `${label || "submission"}_${index + 1}`;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Record<string, unknown> {

@@ -18,13 +18,9 @@ import type {
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import {
+  decodeReviewFindings,
   normalizeRootFindings,
-  requireAffectedCriterionRefs,
-  requireFindingCategory,
-  requireFindingOrigin,
-  requireFindingPriority,
   requirePriorFindings,
-  sameRefList,
   validateCorrectionFindingScope,
 } from "./review-findings.ts";
 import { taskReviewSubmissionSchema } from "./submission-schema.ts";
@@ -64,6 +60,7 @@ function semanticReviewCodec(
     if (value.kind !== "task_review") throw new Error("Task Review submission has an invalid kind");
     const decoded = decodeCriterionVerdicts({
       submitted: value.criterionVerdicts,
+      submittedFindings: value.findings,
       criteria,
       questions,
       result,
@@ -188,6 +185,7 @@ export function reviewTask(command: PhaseInvocation) {
 
 function decodeCriterionVerdicts(input: {
   submitted: unknown;
+  submittedFindings: unknown;
   criteria: Record<string, unknown>[];
   questions: Record<string, unknown>[];
   result: ResultCandidateProduct;
@@ -210,8 +208,18 @@ function decodeCriterionVerdicts(input: {
   }));
   const reviewedCriteria = new Set<string>();
   const observations: ReviewObservation[] = [];
-  const findings: ReviewFinding[] = [];
   const targetRevisionRefs = input.result.result.targetStateRevisions.map((item) => item.ref);
+  const findings = decodeReviewFindings({
+    submitted: input.submittedFindings,
+    criterionRefs: [...criteria.values()].map((item) => item.ref),
+    taskRef: input.result.result.taskRef,
+    attemptRef: input.result.result.attemptRef,
+    targetRevisionRefs,
+    priorFindings: input.priorFindings,
+  });
+  const findingByRootCause = new Map(
+    findings.map((finding) => [finding.rootCauseKey, finding]),
+  );
   const verdicts = input.submitted.map((item, index) => {
     const submitted = requireRecord(item, `criterionVerdicts[${index}]`);
     const criterionRef = requireContentRef(
@@ -233,6 +241,18 @@ function decodeCriterionVerdicts(input: {
       throw new Error("Task Review criterion verdict is invalid");
     }
     const criterionVerdict = submitted.verdict as "satisfied" | "not_satisfied";
+    const findingRootCauseKeys = requireFindingRootCauseKeys(
+      submitted.findingRootCauseKeys,
+      findingByRootCause,
+    );
+    const criterionFindings = findingRootCauseKeys
+      .map((rootCauseKey) => findingByRootCause.get(rootCauseKey)!);
+    const hasBlockingFinding = criterionFindings.some(
+      (finding) => finding.recommendedDisposition === "required_now",
+    );
+    if ((criterionVerdict === "not_satisfied") !== hasBlockingFinding) {
+      throw new Error("Task Review criterion verdict conflicts with required-now findings");
+    }
     const observationBody = {
       taskRef: input.result.result.taskRef,
       attemptRef: input.result.result.attemptRef,
@@ -246,50 +266,6 @@ function decodeCriterionVerdicts(input: {
       ref: contentRef("review-observation", observationBody), ...observationBody,
     };
     observations.push(observation);
-    const findingRefs: ContentRef[] = [];
-    if (
-      criterionVerdict === "not_satisfied" ||
-      submitted.recommendedDisposition === "backlog"
-    ) {
-      const category = requireFindingCategory(submitted.findingCategory);
-      const priority = requireFindingPriority(submitted.priority);
-      const recommendedDisposition = submitted.recommendedDisposition === "backlog"
-        ? "backlog" as const
-        : "required_now" as const;
-      const origin = requireFindingOrigin(submitted, input.priorFindings);
-      const findingBody = {
-        rootCauseKey: requireString(
-          submitted.rootCauseKey,
-          "criterion finding root cause key",
-        ),
-        affectedCriterionRefs: requireAffectedCriterionRefs(
-          submitted.affectedCriterionRefs,
-          criterionRef,
-        ),
-        taskRef: input.result.result.taskRef,
-        attemptRef: input.result.result.attemptRef,
-        category,
-        statement: requireString(submitted.finding, "criterion finding"),
-        priority,
-        recommendedDisposition,
-        origin,
-        targetRevisionRefs,
-      };
-      const prior = origin.kind === "prior_finding" ||
-          origin.kind === "correction_regression"
-        ? input.priorFindings.find((item) => item.ref.id === origin.findingRef.id)
-        : undefined;
-      if (prior && (
-        prior.rootCauseKey !== findingBody.rootCauseKey ||
-        !sameRefList(prior.affectedCriterionRefs, findingBody.affectedCriterionRefs)
-      )) {
-        throw new Error("Task re-review changed its frozen root finding");
-      }
-      const finding = prior ??
-        { ref: contentRef("finding", findingBody), ...findingBody };
-      findings.push(finding);
-      findingRefs.push(finding.ref);
-    }
     return {
       criterionRef,
       verificationQuestionRefs: questionRefs,
@@ -297,13 +273,31 @@ function decodeCriterionVerdicts(input: {
       reviewedResultRefs: input.runtimeBoundResultRefs,
       observationRefs: [observation.ref],
       verdict: criterionVerdict,
-      findingRefs,
+      findingRefs: criterionFindings.map((finding) => finding.ref),
     };
   });
   if (reviewedCriteria.size !== criteria.size) {
     throw new Error("Task Review did not cover every accepted criterion");
   }
   return { verdicts, observations, findings };
+}
+
+function requireFindingRootCauseKeys(
+  value: unknown,
+  findings: Map<string, ReviewFinding>,
+): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Task Review criterion findingRootCauseKeys must be an array");
+  }
+  const keys = value.map((item) =>
+    requireString(item, "Task Review criterion root cause key"));
+  if (
+    new Set(keys).size !== keys.length ||
+    keys.some((rootCauseKey) => !findings.has(rootCauseKey))
+  ) {
+    throw new Error("Task Review criterion root cause refs must be exact and unique");
+  }
+  return keys;
 }
 
 function requireRecords(value: unknown, label: string): Record<string, unknown>[] {
