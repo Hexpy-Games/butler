@@ -38,9 +38,7 @@ export function TurnActivityPanel({
       toolchainRowsForBlock(block).length > 0,
   );
   const phaseActivities = phaseActivityRows(rows);
-  const publicActivity = phaseActivities.length === 0
-    ? latestPublicActivity(rows)
-    : undefined;
+  const publicActivity = latestPublicActivity(rows);
   if (
     decisions.length === 0 &&
     activeBlocks.length === 0 &&

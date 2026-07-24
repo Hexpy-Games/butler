@@ -40,10 +40,10 @@ export function latestPublicActivity(
       row &&
       row.kind === "message" &&
       row.state === "running" &&
-      !row.work_block_id &&
-      !row.work_decision_source &&
-      row.safe_label.trim().length > 0
+      !row.work_block_id
     ) {
+      if (row.work_decision_source) return undefined;
+      if (row.safe_label.trim().length === 0) continue;
       return row;
     }
   }
