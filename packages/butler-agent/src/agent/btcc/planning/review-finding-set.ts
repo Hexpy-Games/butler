@@ -19,12 +19,18 @@ export function createPlanningFindingSet(
   candidateRef: ContentRef,
   findings: PlanningReviewSubjectFinding[],
 ): PlanningFindingSet {
-  const ordered = [...findings].sort(
+  const unique = [...new Map(findings.map((finding) => [finding.ref.id, finding])).values()];
+  const rootCauseRefs = new Map<string, string>();
+  for (const finding of unique) {
+    const priorRef = rootCauseRefs.get(finding.rootCauseKey);
+    if (priorRef && priorRef !== finding.ref.id) {
+      throw new Error("Planning FindingSet redefined one root cause");
+    }
+    rootCauseRefs.set(finding.rootCauseKey, finding.ref.id);
+  }
+  const ordered = unique.sort(
     (left, right) => PRIORITY_ORDER[left.priority] - PRIORITY_ORDER[right.priority],
   );
-  if (new Set(ordered.map((finding) => finding.ref.id)).size !== ordered.length) {
-    throw new Error("Planning FindingSet contains duplicate finding identities");
-  }
   const body = {
     candidateRef,
     findingRefs: ordered.map((finding) => finding.ref),
@@ -70,7 +76,10 @@ export function draftReviewFindings(
   value: unknown,
 ): PlanningReviewSubjectFinding[] {
   const structural = candidate.validationFindings.map((finding) => {
+    const subjectId = `draft:${candidate.ref.id}`;
     const body = {
+      rootCauseKey: `structural:${finding.code}`,
+      affectedSubjectIds: [subjectId],
       dimension: "task_executability" as const,
       message: `${finding.code}: ${finding.message}`,
       priority: "P0" as const,
@@ -79,7 +88,6 @@ export function draftReviewFindings(
     };
     return {
       ref: contentRef("planning-review-finding", {
-        subjectId: `draft:${candidate.ref.id}`,
         ...body,
       }),
       ...body,
@@ -125,6 +133,11 @@ function decodeDraftFinding(
     throw new Error("Planning draft Review finding origin is invalid");
   }
   const body = {
+    rootCauseKey: requireString(
+      finding.rootCauseKey,
+      "Planning draft Review finding root cause key",
+    ),
+    affectedSubjectIds: [`draft:${candidate.ref.id}`],
     dimension,
     message: requireString(finding.message, "Planning draft Review finding message"),
     priority,
@@ -135,7 +148,6 @@ function decodeDraftFinding(
   };
   return {
     ref: contentRef("planning-review-finding", {
-      subjectId: `draft:${candidate.ref.id}`,
       ...body,
     }),
     ...body,

@@ -37,6 +37,7 @@ const COMPACT_CONTRACTS = [
       "The Plan declares the reviewed selector, target, baseline policy, and journaled_complete_target_exchange_v1 protocol; runtime contracts own workspace provisioning, journal storage and transitions, crash reconciliation, and snapshot canonicalization, so do not re-specify them per Plan.",
       "Planning Review compares runtime-owned candidate refs and observedManifestRevision with currentPlanningAuthority; acceptedAuthority.managedBinding.expectedManifestRevision is the pre-bind lineage base, not the candidate revision.",
       "Planning Review judges the exact materialized candidate bytes against the immutable selected governing Spec bodies and returns one complete finding set covering every required review dimension.",
+      "Planning Review separates complete subject coverage from root causes: one required correction has one rootCauseKey, one immutable Finding, every affected subject id, the highest applicable priority, and one correction decision; attach that exact Finding definition to each affected subject without creating paraphrased duplicates.",
       "A revised candidate is checked against the exact prior finding set and every complete review dimension in one pass; do not defer an available independent finding to another correction cycle.",
       "Implementation repair preserves the accepted graph; graph changes require governing review.",
     ],

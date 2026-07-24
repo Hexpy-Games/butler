@@ -217,6 +217,8 @@ export class ManagedHarnessModel implements SelectedModel {
                 : "해당 기준은 충족한다",
               ...(index === 0
                 ? {
+                    rootCauseKey: "missing-execution-guidance",
+                    affectedCriterionRefs: [asRecord(criterion).ref],
                     findingCategory: this.correctionKind === "implementation_repair"
                       ? "implementation_nonconformance"
                       : this.correctionKind === "governing_revision"

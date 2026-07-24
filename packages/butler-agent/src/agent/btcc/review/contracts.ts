@@ -32,6 +32,8 @@ export type ReviewObservation = {
 
 export type ReviewFinding = {
   ref: ContentRef;
+  rootCauseKey: string;
+  affectedCriterionRefs: ContentRef[];
   taskRef: ContentRef;
   attemptRef: ContentRef;
   category: ReviewFindingCategory;

@@ -245,9 +245,10 @@ function preserveRevisionReviewScope(
 
 function orderedBlockingFindings(subjects: PlanningReviewSubjectCoverage[]) {
   const order = { P0: 0, P1: 1, P2: 2 };
-  return subjects
+  const findings = subjects
     .flatMap((subject) => subject.findings)
-    .filter((finding) => finding.recommendedDisposition === "required_now")
+    .filter((finding) => finding.recommendedDisposition === "required_now");
+  return [...new Map(findings.map((finding) => [finding.ref.id, finding])).values()]
     .sort((left, right) => order[left.priority] - order[right.priority]);
 }
 

@@ -66,6 +66,8 @@ export type PlanningReviewSubject = {
 
 export type PlanningReviewSubjectFinding = {
   ref: ContentRef;
+  rootCauseKey: string;
+  affectedSubjectIds: string[];
   dimension: PlanningReviewDimension;
   message: string;
   priority: "P0" | "P1" | "P2";

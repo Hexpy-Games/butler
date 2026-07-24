@@ -53,7 +53,9 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
     if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
       throw new Error("Feedback Planning Review verdict is invalid");
     }
-    const reviewedFindings = requireFeedbackFindings(value.findings, prior);
+    const reviewedFindings = normalizeFeedbackFindings(
+      requireFeedbackFindings(value.findings, prior),
+    );
     const blocking = reviewedFindings
       .filter((finding) => finding.recommendedDisposition === "required_now");
     const findings = blocking.map((finding) => finding.statement);
@@ -118,6 +120,10 @@ function requireFeedbackFindings(
     .map((finding) => [finding.ref.id, finding]));
   return value.map((item, index) => {
     const finding = requireRecord(item, `Feedback Planning finding[${index}]`);
+    const rootCauseKey = requireString(
+      finding.rootCauseKey,
+      "Feedback Planning finding root cause key",
+    );
     const statement = requireString(finding.statement, "Feedback Planning finding statement");
     const priority = requirePriority(finding.priority);
     if (finding.recommendedDisposition === "required_now") {
@@ -128,6 +134,7 @@ function requireFeedbackFindings(
         if (
           finding.findingOrigin !== "prior_finding" ||
           !previous ||
+          previous.rootCauseKey !== rootCauseKey ||
           previous.statement !== statement ||
           previous.priority !== priority
         ) {
@@ -139,6 +146,7 @@ function requireFeedbackFindings(
         throw new Error("Initial Feedback Planning finding origin is invalid");
       }
       const body = {
+        rootCauseKey,
         statement,
         priority,
         recommendedDisposition: "required_now" as const,
@@ -153,6 +161,7 @@ function requireFeedbackFindings(
       throw new Error("Feedback Planning backlog finding is invalid");
     }
     const body = {
+      rootCauseKey,
       statement,
       priority,
       recommendedDisposition: "backlog" as const,
@@ -160,6 +169,22 @@ function requireFeedbackFindings(
     };
     return { ref: contentRef("feedback-planning-finding", body), ...body };
   });
+}
+
+function normalizeFeedbackFindings(
+  findings: FeedbackPlanningFinding[],
+): FeedbackPlanningFinding[] {
+  const byRootCause = new Map<string, string>();
+  for (const finding of findings) {
+    const priorRef = byRootCause.get(finding.rootCauseKey);
+    if (priorRef && priorRef !== finding.ref.id) {
+      throw new Error("Feedback Planning Review redefined one root cause");
+    }
+    byRootCause.set(finding.rootCauseKey, finding.ref.id);
+  }
+  const unique = [...new Map(findings.map((finding) => [finding.ref.id, finding])).values()];
+  const priority = { P0: 0, P1: 1, P2: 2 };
+  return unique.sort((left, right) => priority[left.priority] - priority[right.priority]);
 }
 
 function requirePriority(value: unknown): "P0" | "P1" | "P2" {

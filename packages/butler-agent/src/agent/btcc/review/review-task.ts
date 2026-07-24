@@ -18,11 +18,13 @@ import type {
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import {
-  orderFindings,
+  normalizeRootFindings,
+  requireAffectedCriterionRefs,
   requireFindingCategory,
   requireFindingOrigin,
   requireFindingPriority,
   requirePriorFindings,
+  sameRefList,
   validateCorrectionFindingScope,
 } from "./review-findings.ts";
 import { taskReviewSubmissionSchema } from "./submission-schema.ts";
@@ -72,7 +74,10 @@ function semanticReviewCodec(
       ]),
       priorFindings,
     });
-      const orderedFindings = orderFindings(decoded.findings);
+      const orderedFindings = normalizeRootFindings(
+        decoded.findings,
+        decoded.verdicts,
+      );
       validateCorrectionFindingScope(orderedFindings, priorFindings);
     const passed = decoded.verdicts.every((verdict) => verdict.verdict === "satisfied");
     if (result.result.kind === "repository_promotion" && !passed) {
@@ -253,6 +258,14 @@ function decodeCriterionVerdicts(input: {
         : "required_now" as const;
       const origin = requireFindingOrigin(submitted, input.priorFindings);
       const findingBody = {
+        rootCauseKey: requireString(
+          submitted.rootCauseKey,
+          "criterion finding root cause key",
+        ),
+        affectedCriterionRefs: requireAffectedCriterionRefs(
+          submitted.affectedCriterionRefs,
+          criterionRef,
+        ),
         taskRef: input.result.result.taskRef,
         attemptRef: input.result.result.attemptRef,
         category,
@@ -262,7 +275,18 @@ function decodeCriterionVerdicts(input: {
         origin,
         targetRevisionRefs,
       };
-      const finding = { ref: contentRef("finding", findingBody), ...findingBody };
+      const prior = origin.kind === "prior_finding" ||
+          origin.kind === "correction_regression"
+        ? input.priorFindings.find((item) => item.ref.id === origin.findingRef.id)
+        : undefined;
+      if (prior && (
+        prior.rootCauseKey !== findingBody.rootCauseKey ||
+        !sameRefList(prior.affectedCriterionRefs, findingBody.affectedCriterionRefs)
+      )) {
+        throw new Error("Task re-review changed its frozen root finding");
+      }
+      const finding = prior ??
+        { ref: contentRef("finding", findingBody), ...findingBody };
       findings.push(finding);
       findingRefs.push(finding.ref);
     }

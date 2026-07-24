@@ -163,6 +163,8 @@ export function planReviewSubmissionSchema(
   priorFindingIds: string[] = [],
 ): SubmissionSchema {
   const findingFields = {
+    rootCauseKey: textSchema(),
+    affectedSubjectIds: arraySchema(enumSchema(...subjectIds), { minItems: 1 }),
     dimension: enumSchema(...REVIEW_DIMENSIONS),
     message: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
@@ -292,6 +294,7 @@ const feedbackReviewIdentity = {
 
 export function feedbackPlanReviewSubmissionSchema(priorFindingIds: string[]) {
   const baseFinding = {
+    rootCauseKey: textSchema(),
     statement: textSchema(),
     priority: enumSchema("P0", "P1", "P2"),
   };
