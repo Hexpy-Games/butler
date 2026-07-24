@@ -23,6 +23,8 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
 import { authorPlanCandidate } from
   "../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
+import { planningReviewSubjects } from
+  "../../packages/butler-agent/src/agent/btcc/planning/review-subjects.ts";
 
 afterEach(clearProjectFixtures);
 
@@ -69,6 +71,11 @@ describe("BTCC Session Work Ledger selection", () => {
       reviewedIntegrationCriterionRefs: candidate.integrationCriteria.map((item) => item.ref),
       reviewedArtifactLifecycleRef: candidate.artifactLifecycle.ref,
       reviewedSpecRevisionRefs: candidate.authoredSpecRevisionRefs,
+      reviewedSubjects: planningReviewSubjects(candidate).map((subject) => ({
+        ...subject,
+        verdict: "passed" as const,
+        findings: [],
+      })),
       coverage: acceptedPlanningCoverage(),
       verdict: "accepted" as const,
       findings: [] as [],

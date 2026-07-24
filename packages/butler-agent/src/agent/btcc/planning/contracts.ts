@@ -274,6 +274,7 @@ export type PlanningReview = {
   reviewedIntegrationCriterionRefs: ContentRef[];
   reviewedArtifactLifecycleRef: ContentRef;
   reviewedSpecRevisionRefs: ContentRef[];
+  reviewedSubjects: PlanningReviewSubjectCoverage[];
   coverage: PlanningReviewCoverage[];
   verdict: "accepted" | "revision_required";
   findings: string[];
@@ -294,6 +295,37 @@ export type PlanningReviewCoverage = {
   dimension: PlanningReviewDimension;
   verdict: "passed" | "failed";
   findings: string[];
+};
+
+export type PlanningReviewSubjectKind =
+  | "original_goal"
+  | "governing_spec"
+  | "plan"
+  | "work_graph"
+  | "work"
+  | "task"
+  | "criterion"
+  | "verification_question"
+  | "risk"
+  | "assumption"
+  | "integration_criterion"
+  | "effect_intent"
+  | "artifact_lifecycle";
+
+export type PlanningReviewSubject = {
+  subjectId: string;
+  kind: PlanningReviewSubjectKind;
+  subjectRef: ContentRef;
+};
+
+export type PlanningReviewSubjectFinding = {
+  dimension: PlanningReviewDimension;
+  message: string;
+};
+
+export type PlanningReviewSubjectCoverage = PlanningReviewSubject & {
+  verdict: "passed" | "failed";
+  findings: PlanningReviewSubjectFinding[];
 };
 
 export type PlanningAcceptedProduct = {
