@@ -49,6 +49,11 @@
   background: transparent;
 }
 
+.rolling {
+  animation: work-activity-roll-in var(--adaptive-panel-duration)
+    var(--adaptive-panel-easing);
+}
+
 .header {
   display: block;
   position: relative;
@@ -88,6 +93,24 @@
     -1 * var(--work-activity-content-x) + var(--work-activity-line-x) - 0.5lh
   );
   background: var(--surface);
+}
+
+@keyframes work-activity-roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rolling {
+    animation: none;
+  }
 }
 
 .icon svg,

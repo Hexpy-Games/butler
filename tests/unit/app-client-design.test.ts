@@ -2274,9 +2274,8 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function ToolchainDisclosureRow");
   expect(renderer).toContain("function toolchainRowsForBlock");
   expect(renderer).toContain('import { appCopy } from "@/app/copy.ts";');
-  expect(renderer).toContain(
-    "workCopy.collapsedSummary(primaryLabel, blocks.length)",
-  );
+  expect(renderer).toContain("const latest = blocks.at(-1)");
+  expect(renderer).toContain("const visibleBlocks = expanded ? blocks : [latest]");
   expect(renderer).toContain(
     "aria-label={appCopy.conversation.result.regionLabel}",
   );
@@ -3881,7 +3880,7 @@ describe("app-client design system foundation", () => {
       read(
         "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
       ),
-    ).toContain('surface="plain"');
+    ).toContain("workCopy.viewAllLabel(blocks.length)");
     const workActivityStyles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css",
     );

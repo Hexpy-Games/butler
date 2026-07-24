@@ -19,7 +19,6 @@ interface MessageContentProps {
   message: MessageRecord;
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
-  expandWorkBlocks?: boolean;
   onCopyAssistantMessage: (message: MessageRecord) => void;
 }
 
@@ -27,18 +26,17 @@ function MessageContentComponent({
   message,
   copied,
   footerMeta,
-  expandWorkBlocks = false,
   onCopyAssistantMessage,
 }: MessageContentProps) {
   return (
     <>
       {message.role === "assistant" ? (
         <>
-          <CompletedTurnActivity rows={message.turn_activity_rows} />
-          <CompletedWorkBlocks
-            blocks={message.work_blocks}
-            defaultExpanded={expandWorkBlocks}
-          />
+          {message.work_blocks?.length ? (
+            <CompletedWorkBlocks blocks={message.work_blocks} />
+          ) : (
+            <CompletedTurnActivity rows={message.turn_activity_rows} />
+          )}
           {message.status === "failed" ? (
             <AssistantFailureNotice message={message} />
           ) : (
@@ -90,7 +88,6 @@ export const MessageContent = memo(
     previous.message === next.message &&
     previous.copied === next.copied &&
     previous.footerMeta === next.footerMeta &&
-    previous.expandWorkBlocks === next.expandWorkBlocks &&
     previous.onCopyAssistantMessage === next.onCopyAssistantMessage,
 );
 MessageContent.displayName = "MessageContent";

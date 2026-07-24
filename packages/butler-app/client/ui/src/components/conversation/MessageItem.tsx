@@ -30,7 +30,6 @@ function MessageItemComponent({
         message={message}
         copied={copied}
         footerMeta={footerMeta}
-        expandWorkBlocks={isLatestAssistant}
         onCopyAssistantMessage={onCopyAssistantMessage}
       />
     </VirtualMessageRow>

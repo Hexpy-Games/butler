@@ -1,51 +1,63 @@
 import { memo, useState } from "react";
-import { DisclosureRow, ListChecks, Stack, WorkActivityBlock } from "@/butler-ds";
+import { Button, ListChecks, Stack, WorkActivityBlock } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { WorkBlockView } from "@/app/types.ts";
 import { WorkDecisionBody } from "./WorkDecisionBody";
-import { workActivityToolsForBlock } from "./toolchainUtils";
+import {
+  isTerminalActivityState,
+  workActivityToolsForBlock,
+} from "./toolchainUtils";
 
 function CollapsedTurnActivityComponent({
   blocks,
-  defaultExpanded = false,
 }: {
   blocks: WorkBlockView[];
-  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [expanded, setExpanded] = useState(false);
   const workCopy = appCopy.conversation.work;
-  const primaryLabel = blocks[0]?.label ?? workCopy.pendingLabel;
-  const label = workCopy.collapsedSummary(primaryLabel, blocks.length);
+  const latest = blocks.at(-1);
+  if (!latest) return null;
+  const visibleBlocks = expanded ? blocks : [latest];
 
   return (
     <section
       data-test-class="turn-activity-collapsed turn-work-collapsed"
       aria-label={workCopy.historyRegionLabel}
     >
-      <DisclosureRow
-        aria-label={
-          expanded
-            ? workCopy.collapseHistoryLabel(primaryLabel, blocks.length)
-            : workCopy.expandHistoryLabel(primaryLabel, blocks.length)
-        }
-        icon={<ListChecks size={15} />}
-        open={expanded}
-        surface="plain"
-        title={label}
-        onToggle={() => setExpanded((value) => !value)}
-      >
-        <Stack gap="md">
-          {blocks.map((block, blockIndex) => (
-            <WorkActivityBlock
-              data-work-block-id={block.id}
-              key={`${block.id}:${blockIndex}`}
-              title={block.label}
-              description={<WorkDecisionBody block={block} />}
-              tools={workActivityToolsForBlock(block)}
-            />
-          ))}
-        </Stack>
-      </DisclosureRow>
+      <Stack gap="md" aria-live="polite">
+        {visibleBlocks.map((block, blockIndex) => (
+          <WorkActivityBlock
+            data-work-block-id={block.id}
+            key={`${block.id}:${blockIndex}`}
+            rolling={!expanded}
+            running={!isTerminalActivityState(block.state)}
+            title={block.label}
+            description={<WorkDecisionBody block={block} />}
+            tools={workActivityToolsForBlock(block)}
+          />
+        ))}
+        {blocks.length > 1 ? (
+          <Button
+            aria-expanded={expanded}
+            aria-label={
+              expanded
+                ? workCopy.collapseHistoryLabel(latest.label, blocks.length)
+                : workCopy.expandHistoryLabel(latest.label, blocks.length)
+            }
+            data-test-class="toggle-turn-activity-history"
+            iconStart={<ListChecks size={14} />}
+            onClick={() => setExpanded((value) => !value)}
+            size="xs"
+            text={
+              expanded
+                ? workCopy.collapseLabel
+                : workCopy.viewAllLabel(blocks.length)
+            }
+            type="button"
+            variant="borderless"
+          />
+        ) : null}
+      </Stack>
     </section>
   );
 }

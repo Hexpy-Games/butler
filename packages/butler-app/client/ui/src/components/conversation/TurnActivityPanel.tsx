@@ -7,18 +7,13 @@ import type { ProgressRow } from "@/app/types.ts";
 import { CurrentModelRoundWaiting, CurrentPhaseActivity }
   from "./PhaseActivityLog";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
-import { WorkDecisionBody } from "./WorkDecisionBody";
 import { TurnDecisionRow } from "./TurnDecisionRow";
 import { currentModelRoundWait, currentSemanticState, latestPublicActivity,
   phaseActivityRows } from "./turnActivityRows";
-import {
-  toolchainRowsForBlock,
-  isTerminalActivityState,
-  workActivityToolsForBlock,
-} from "./toolchainUtils";
-import { Stack, WorkActivityBlock } from "@/butler-ds";
+import { Stack } from "@/butler-ds";
 import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
+import { CollapsedTurnActivity } from "./WorkBlocks";
 
 export function TurnActivityPanel({
   rows,
@@ -29,18 +24,14 @@ export function TurnActivityPanel({
 }) {
   const readModels = typedUiReadModelsFromProgressRows(rows);
   const decisions = readModels.filter(isDecisionReadModel);
-  const activeBlocks = workBlocksFromProgressRows(rows).filter(
-    (block) =>
-      !isTerminalActivityState(block.state) ||
-      toolchainRowsForBlock(block).length > 0,
-  );
+  const workBlocks = workBlocksFromProgressRows(rows);
   const phaseActivities = phaseActivityRows(rows);
   const publicActivity = latestPublicActivity(rows, phaseActivities.length > 0);
   const semanticState = currentSemanticState(rows, phaseActivities);
   const modelRoundWait = currentModelRoundWait(rows);
   if (
     decisions.length === 0 &&
-    activeBlocks.length === 0 &&
+    workBlocks.length === 0 &&
     phaseActivities.length === 0 &&
     !publicActivity
   ) {
@@ -55,33 +46,25 @@ export function TurnActivityPanel({
       aria-live="polite"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
-      {decisions.map((decision, decisionIndex) => (
-        <TurnDecisionRow
-          decision={decision}
-          key={`${decision.summary}:${decisionIndex}`}
+      {workBlocks.length > 0 ? (
+        <CollapsedTurnActivity blocks={workBlocks} />
+      ) : phaseActivities.length > 0 ? (
+        <TurnActivityTimeline
+          activities={phaseActivities}
+          currentState={semanticState}
+          live
         />
-      ))}
-      <TurnActivityTimeline
-        activities={phaseActivities}
-        currentState={semanticState}
-        live
-      />
-      {modelRoundWait ? <CurrentModelRoundWaiting row={modelRoundWait} /> : null}
-      {publicActivity ? <CurrentPhaseActivity row={publicActivity} /> : null}
-      {activeBlocks.map((block, blockIndex) => (
-        <WorkActivityBlock
-          className="turn-activity-item"
-          data-work-block-id={block.id}
-          key={`${block.id}:${blockIndex}`}
-          running={!isTerminalActivityState(block.state)}
-          title={block.label}
-          description={<WorkDecisionBody block={block} />}
-          tools={workActivityToolsForBlock(block)}
-          aria-label={appCopy.conversation.work.toolchainRegionLabel(
-            block.label,
-          )}
-        />
-      ))}
+      ) : modelRoundWait ? (
+        <CurrentModelRoundWaiting row={modelRoundWait} />
+      ) : publicActivity ? (
+        <CurrentPhaseActivity row={publicActivity} />
+      ) : decisions.length > 0 ? (
+        <TurnDecisionRow decision={decisions.at(-1)!} />
+      ) : null}
+      {modelRoundWait &&
+      (workBlocks.length > 0 || phaseActivities.length > 0) ? (
+        <CurrentModelRoundWaiting row={modelRoundWait} showLabel={false} />
+      ) : null}
     </Stack>
   );
 }

@@ -22,6 +22,8 @@ interface ConversationWorkCopy {
   collapsedSummary: (primaryLabel: string, count: number) => string;
   expandHistoryLabel: (primaryLabel: string, count: number) => string;
   collapseHistoryLabel: (primaryLabel: string, count: number) => string;
+  viewAllLabel: CountFormatter;
+  collapseLabel: string;
   toolchainRegionLabel: (label: string) => string;
   detailsRegionLabel: (label: string) => string;
   webSearchSummary: CountFormatter;
@@ -672,6 +674,8 @@ const koKrCopy: AppCopy = {
         count <= 1
           ? `${primaryLabel} 세부 내역 닫기`
           : `${primaryLabel} 외 ${count - 1}개 진행 내역 닫기`,
+      viewAllLabel: (count) => `전체 보기 (${count})`,
+      collapseLabel: "접기",
       toolchainRegionLabel: (label) => `${label} 도구 실행 내역`,
       detailsRegionLabel: (label) => `${label} 세부 내역`,
       webSearchSummary: (count) => `Web search ${count} queries`,
