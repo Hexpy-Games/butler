@@ -9,6 +9,7 @@ import {
   MessageRetryActionsContainer,
 } from "./FailureNoticeContainer";
 import { CompletedWorkBlocks } from "./CompletedWorkBlocks";
+import { CompletedTurnActivity } from "./CompletedTurnActivity";
 import { MessageArtifacts } from "./MessageArtifacts";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -33,6 +34,7 @@ function MessageContentComponent({
     <>
       {message.role === "assistant" ? (
         <>
+          <CompletedTurnActivity rows={message.turn_activity_rows} />
           <CompletedWorkBlocks
             blocks={message.work_blocks}
             defaultExpanded={expandWorkBlocks}
