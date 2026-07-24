@@ -44,4 +44,11 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("blocker");
   expect(resolveDutyInstructions(["review_continuation_coherence"])[0]?.instruction)
     .toContain("new Program");
+  const openingRoute = resolveDutyInstructions(["choose_direct_assisted_or_deepen"])[0]
+    ?.instruction ?? "";
+  expect(openingRoute).toContain("requestObligation");
+  expect(openingRoute).toContain("Do not weaken an imperative");
+  expect(openingRoute).toContain("completionMode=answer_only");
+  expect(openingRoute).toContain("completionMode=managed_effect_or_artifact");
+  expect(openingRoute).toContain("never route by keywords");
 });

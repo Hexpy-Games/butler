@@ -95,6 +95,10 @@ describe("BTCC no-ledger executable routes", () => {
       const opening = db.query<{ content_json: string }, []>(
         "SELECT content_json FROM btcc_records WHERE kind = 'output_draft'",
       ).get();
+      const openingCheckpoint = db.query<{ accepted_product_json: string }, []>(
+        `SELECT accepted_product_json FROM btcc_checkpoints
+         WHERE semantic_state = 'conception_opening'`,
+      ).get();
       const operationRows = db.query<{ projection_json: string }, []>(
         "SELECT projection_json FROM btcc_phase_operation_result_links ORDER BY rowid",
       ).all();
@@ -104,6 +108,13 @@ describe("BTCC no-ledger executable routes", () => {
       };
 
       expect(turn).toEqual({ route: expectedRoute, semantic_state: "delivered" });
+      expect(JSON.parse(openingCheckpoint!.accepted_product_json).fulfillment)
+        .toEqual({
+          requestObligation: requestObligationFor(scenario),
+          completionMode: expectedRoute === "assisted"
+            ? "bounded_observation_then_answer"
+            : "answer_only",
+        });
       expect({ programs, works, tasks }).toEqual({ programs: 0, works: 0, tasks: 0 });
       expect(operations).toBe(expectedOperationCalls);
       expect(openingProjections).toBe(expectedRoute === "assisted" ? 1 : 0);
@@ -134,5 +145,14 @@ function messageFor(scenario: string): string {
     case "direct-translation": return "이 문장을 영어로 번역해줘: 좋은 아침입니다.";
     case "assisted-weather": return "현재 서울 날씨를 확인해줘.";
     default: return "요즘 유행하는 밈 두 가지를 찾아서 짧게 알려줘.";
+  }
+}
+
+function requestObligationFor(scenario: string): string {
+  switch (scenario) {
+    case "direct-greeting": return "개인화된 인사말을 전달한다";
+    case "direct-translation": return "정확한 영어 번역문을 전달한다";
+    case "assisted-weather": return "관찰한 현재 서울 날씨를 전달한다";
+    default: return "관찰한 밈 두 가지를 짧게 전달한다";
   }
 }

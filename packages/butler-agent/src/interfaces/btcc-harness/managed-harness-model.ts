@@ -67,6 +67,8 @@ export class ManagedHarnessModel implements SelectedModel {
       case "conception_opening":
         return {
           kind: "managed_continuation",
+          completionMode: "managed_effect_or_artifact",
+          requestObligation: "고객 응대 원칙을 조사해 운영 가이드를 작성한다",
           summary: "요청의 목표와 완료 조건을 먼저 정리하겠습니다.",
           rationale: "원래 의도를 보존한 계획이 필요한 관리 작업입니다.",
           nextStep: "관련 스펙을 확인하고 Work와 Task를 구성하겠습니다.",

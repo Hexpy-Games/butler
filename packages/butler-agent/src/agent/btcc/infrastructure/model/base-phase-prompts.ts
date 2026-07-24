@@ -1,13 +1,13 @@
 import type { ModelPhaseState } from "../../core/index.ts";
 
 export type VersionedBasePrompt = {
-  revision: "btcc.base-prompt.v1";
+  revision: "btcc.base-prompt.v2";
   content: string;
 };
 
 const BASE_PROMPTS: Record<ModelPhaseState, string> = {
   conception_opening:
-    "Identify whether this turn needs a direct answer, bounded assistance, or full managed work while preserving a fast first visible response.",
+    "Preserve exactly what the user asked Butler to accomplish, then choose whether that obligation is completed by an answer, bounded read-only observation plus an answer, or managed work that produces the requested effect or artifact. Never replace a requested change, implementation, persistent artifact, publication, or external action with advice about doing it. Keep the first visible response fast.",
   assisted_answer:
     "Perform only the bounded observations needed for the selected Assisted route, then answer thoughtfully without creating managed Work records.",
   conception_deliberation:
@@ -36,7 +36,7 @@ const BASE_PROMPTS: Record<ModelPhaseState, string> = {
 
 export function loadBasePrompt(phase: ModelPhaseState): VersionedBasePrompt {
   return {
-    revision: "btcc.base-prompt.v1",
+    revision: "btcc.base-prompt.v2",
     content: BASE_PROMPTS[phase],
   };
 }

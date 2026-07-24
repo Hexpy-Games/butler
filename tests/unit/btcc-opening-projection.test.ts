@@ -15,6 +15,10 @@ test("projects the committed model-authored Opening decision without rewriting i
   await publishOpeningDecision(observer, "turn-opening", 2, {
     kind: "opening_continuation",
     route: "managed",
+    fulfillment: {
+      requestObligation: "요청한 프로젝트 변경을 구현한다",
+      completionMode: "managed_effect_or_artifact",
+    },
     projection: {
       ref: { id: "opening-decision-1", sha256: "opening-sha-1" },
       summary: "요청의 목표와 완료 조건을 먼저 정리하겠습니다.",

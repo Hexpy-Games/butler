@@ -183,7 +183,7 @@ describe("production BTCC selected model", () => {
       }],
     });
     expect(hierarchy.versionedBasePrompt).toMatchObject({
-      revision: "btcc.base-prompt.v1",
+      revision: "btcc.base-prompt.v2",
     });
     expect(hierarchy.acceptedPhaseGuidance).toEqual([{
       guidanceId: "planning-check-original-goal",
