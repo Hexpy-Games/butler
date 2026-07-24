@@ -53,6 +53,39 @@ test("turn activity panel renders opening decisions before work blocks", () => {
   expect(html).not.toContain("Request received. Preparing the work.");
 });
 
+test("turn activity panel keeps the latest phase activity visible after Opening", () => {
+  const html = renderPanel([
+    {
+      id: "opening-decision",
+      kind: "decision",
+      state: "running",
+      safe_label: "요청의 목표와 완료 조건을 정리하겠습니다.",
+      public_decision_role: "opening",
+      public_decision_summary: "요청의 목표와 완료 조건을 정리하겠습니다.",
+      public_decision_rationale: "관리 작업이 필요합니다.",
+      public_decision_next_step: "작업 계획을 세우겠습니다.",
+      public_decision_source: "model-authored",
+    },
+    {
+      id: "conception-progress",
+      kind: "message",
+      state: "running",
+      safe_label: "요청의 의도와 목표를 구상하고 있습니다",
+    },
+    {
+      id: "planning-progress",
+      kind: "message",
+      state: "running",
+      safe_label: "작업 계획을 세우고 검토하고 있습니다",
+    },
+  ]);
+
+  expect(html).toContain("turn-decision-row");
+  expect(html).toContain("turn-phase-activity");
+  expect(html).toContain("작업 계획을 세우고 검토하고 있습니다");
+  expect(html).not.toContain("요청의 의도와 목표를 구상하고 있습니다");
+});
+
 test("turn activity panel renders acknowledged receipt only as pending status", () => {
   const html = renderPanel([acknowledgedRow()], "accepted");
 

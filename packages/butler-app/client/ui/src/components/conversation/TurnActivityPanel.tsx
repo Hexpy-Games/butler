@@ -7,17 +7,22 @@ import {
 import type { ProgressRow } from "@/app/types.ts";
 import { WorkDecisionBody } from "./WorkDecisionBody";
 import { TurnDecisionRow } from "./TurnDecisionRow";
+import { latestPublicActivity } from "./turnActivityRows";
 import {
   toolchainRowsForBlock,
   isTerminalActivityState,
   workActivityToolsForBlock,
 } from "./toolchainUtils";
 import { Skeleton, Stack, Typo, WorkActivityBlock } from "@/butler-ds";
-
 const SESSION_STARTING_STATE = "session_starting";
 const PENDING_SKELETON_WIDTH = "min(420px, 100%)";
 const PENDING_SKELETON_LINE_HEIGHT = "0.75rem";
 const PENDING_SKELETON_LINE_WIDTHS = ["86%", "68%", "46%"] as const;
+const activityStyle = {
+  margin: 0,
+  color: "var(--text-secondary)",
+  fontWeight: "var(--font-weight-regular)",
+} as const;
 
 export function TurnActivityPanel({
   rows,
@@ -33,7 +38,8 @@ export function TurnActivityPanel({
       !isTerminalActivityState(block.state) ||
       toolchainRowsForBlock(block).length > 0,
   );
-  if (decisions.length === 0 && activeBlocks.length === 0) {
+  const publicActivity = latestPublicActivity(rows);
+  if (decisions.length === 0 && activeBlocks.length === 0 && !publicActivity) {
     const receipt = acknowledgedReceipt(readModels);
     const pendingLabel = receipt?.label.trim()
       ? receipt.label
@@ -102,6 +108,16 @@ export function TurnActivityPanel({
           key={`${decision.summary}:${decisionIndex}`}
         />
       ))}
+      {publicActivity ? (
+        <Typo.Body
+          as="p"
+          data-test-class="turn-phase-activity"
+          data-turn-state={publicActivity.state}
+          style={activityStyle}
+        >
+          {publicActivity.safe_label}
+        </Typo.Body>
+      ) : null}
       {activeBlocks.map((block, blockIndex) => (
         <WorkActivityBlock
           className="turn-activity-item"
