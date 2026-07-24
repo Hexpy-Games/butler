@@ -7,7 +7,10 @@ import {
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
-import type { PlanningCandidateProduct } from "./contracts.ts";
+import type {
+  PlanningCandidateProduct,
+  PlanningObservationResultIndexEntry,
+} from "./contracts.ts";
 import type { PlanningContinuation } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
@@ -17,6 +20,7 @@ import {
   decodeAvailableSpecs,
   selectableGoverningSpecIds,
 } from "./decode-available-specs.ts";
+import { retainPlanningObservations } from "./observation-result-index.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -51,41 +55,56 @@ function planningCodec(selectableSpecIds: string[]) {
       const value = requireRecord(submission, "Planning submission");
       requireLiteral(value.kind, "plan_candidate", "Planning kind");
       return {
-      kind: "plan_candidate",
-      candidate: authorPlanningProposal(value, {
-        goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
-        authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
-        requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
-        artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
-        workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
-        ledgerId: requireString(state.ledgerId, "ledgerId"),
-        ...(optionalString(state.specParentRootId) ? {
-          specParentRootId: optionalString(state.specParentRootId),
-        } : {}),
-        programId: requireString(state.programId, "programId"),
-        observedManifestRevision: requirePositiveInteger(
-          state.observedManifestRevision,
-          "observedManifestRevision",
+        kind: "plan_candidate",
+        candidate: authorPlanningProposal(value, {
+          goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
+          authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
+          requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+          artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
+          workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
+          ledgerId: requireString(state.ledgerId, "ledgerId"),
+          ...(optionalString(state.specParentRootId) ? {
+            specParentRootId: optionalString(state.specParentRootId),
+          } : {}),
+          programId: requireString(state.programId, "programId"),
+          observedManifestRevision: requirePositiveInteger(
+            state.observedManifestRevision,
+            "observedManifestRevision",
+          ),
+          governingSpecRefs: requireContentRefs(state.governingSpecRefs, "governingSpecRefs"),
+          availableSpecs: decodeAvailableSpecs(
+            state.availableSpecs,
+            optionalString(state.specParentRootId),
+          ),
+          requireGoverningSpec: Boolean(state.requireGoverningSpec),
+          ...(state.previousCandidateRef
+            ? {
+                previousCandidateRef: requireContentRef(
+                  state.previousCandidateRef,
+                  "previousCandidateRef",
+                ),
+              }
+            : {}),
+          ...(state.findingSetRef
+            ? { findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef") }
+            : {}),
+          ...(state.continuation
+            ? { continuation: state.continuation as PlanningContinuation }
+            : {}),
+        }),
+        observationResultIndex: retainPlanningObservations(
+          priorObservationResultIndex(state.priorPlanningObservationResultIndex),
+          envelope.operationResults,
         ),
-        governingSpecRefs: requireContentRefs(state.governingSpecRefs, "governingSpecRefs"),
-        availableSpecs: decodeAvailableSpecs(
-          state.availableSpecs,
-          optionalString(state.specParentRootId),
-        ),
-        requireGoverningSpec: Boolean(state.requireGoverningSpec),
-        ...(state.previousCandidateRef
-          ? { previousCandidateRef: requireContentRef(state.previousCandidateRef, "previousCandidateRef") }
-          : {}),
-        ...(state.findingSetRef
-          ? { findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef") }
-          : {}),
-        ...(state.continuation
-          ? { continuation: state.continuation as PlanningContinuation }
-          : {}),
-      }),
       };
     },
   });
+}
+
+function priorObservationResultIndex(value: unknown): PlanningObservationResultIndexEntry[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("priorPlanningObservationResultIndex must be an array");
+  return value as PlanningObservationResultIndexEntry[];
 }
 
 function optionalString(value: unknown): string | undefined {

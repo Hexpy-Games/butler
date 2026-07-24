@@ -15,6 +15,7 @@ import type {
   GoverningSpecRevision,
   PlanningCandidateProduct,
 } from "./contracts.ts";
+import { admitPlanningObservations } from "./observation-result-index.ts";
 
 type InitialPlanningEvent = Extract<TurnEvent, {
   kind:
@@ -91,7 +92,11 @@ async function authorInitialPlan(command: {
   if (!accepted) throw new Error("Planning is missing accepted Goal authority");
   const authority = requireManagedPlanningAuthority(command.turn);
   const previous = managed.planningRevision;
-  const product = await proposePlan(withManagedDeferralState(command.phase, command.turn, {
+  const phase = admitPlanningObservations(
+    command.phase,
+    previous?.observationResultIndex ?? [],
+  );
+  const product = await proposePlan(withManagedDeferralState(phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
     goalContractRef: authority.goalContractRef,
@@ -117,6 +122,7 @@ async function authorInitialPlan(command: {
           findingSetRef: previous.review.findingSetRef,
           previousPlanCandidate: previous.candidate,
           planningReviewFindings: previous.review.findings,
+          priorPlanningObservationResultIndex: previous.observationResultIndex,
         }
       : {}),
   }));

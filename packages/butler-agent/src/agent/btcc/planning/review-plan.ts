@@ -68,7 +68,11 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
       }
       if (isDraft(loaded.candidate)) {
         const submittedFindings = requireStringArray(value.findings, "Planning Review findings");
-        return requireDraftRevision(loaded.candidate, submittedFindings);
+        return requireDraftRevision(
+          loaded.candidate,
+          submittedFindings,
+          loaded.observationResultIndex,
+        );
       }
       const materialized = loaded.candidate;
       const coverage = requireReviewCoverage(value.coverage);
@@ -89,7 +93,11 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
       if (submittedFindings.length === 0) {
         throw new Error("Planning revision requires failed coverage");
       }
-      return requireMaterializedRevision(materialized, reviewBase, submittedFindings);
+      return requireMaterializedRevision(
+        { ...loaded, candidate: materialized },
+        reviewBase,
+        submittedFindings,
+      );
     },
   });
 }
@@ -116,10 +124,11 @@ function exactReviewBase(
 }
 
 function requireMaterializedRevision(
-  candidate: PlanningCandidate,
+  product: PlanningCandidateProduct & { candidate: PlanningCandidate },
   reviewBase: ReturnType<typeof exactReviewBase>,
   submittedFindings: string[],
 ): PlanningReviewProduct {
+  const candidate = product.candidate;
   const findings = requireFindings(submittedFindings);
   const findingSetRef = contentRef("planning-finding-set", {
     candidateRef: candidate.ref,
@@ -134,6 +143,7 @@ function requireMaterializedRevision(
   return {
     kind: "planning_revision_required",
     candidate,
+    observationResultIndex: product.observationResultIndex,
     review: { ref: contentRef("planning-review", body), ...body },
   };
 }
@@ -141,6 +151,7 @@ function requireMaterializedRevision(
 function requireDraftRevision(
   candidate: PlanningDraftCandidate,
   submittedFindings: string[],
+  observationResultIndex: PlanningCandidateProduct["observationResultIndex"] = [],
 ): PlanningReviewProduct {
   const findings = requireFindings([
     ...candidate.validationFindings.map((finding) => `${finding.code}: ${finding.message}`),
@@ -160,6 +171,7 @@ function requireDraftRevision(
   return {
     kind: "planning_revision_required",
     candidate,
+    observationResultIndex,
     review: { ref: contentRef("planning-review", body), ...body },
   };
 }
@@ -226,5 +238,10 @@ function loadCandidate(input: unknown): PlanningCandidateProduct {
   if (candidate?.kind !== "plan_candidate") {
     throw new Error("Planning Review is missing the exact candidate");
   }
-  return candidate;
+  return {
+    ...candidate,
+    observationResultIndex: Array.isArray(candidate.observationResultIndex)
+      ? candidate.observationResultIndex
+      : [],
+  };
 }
