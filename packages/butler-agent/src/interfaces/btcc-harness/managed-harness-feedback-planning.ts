@@ -59,6 +59,7 @@ export function submitFeedbackPlanningReview(
     verdict: revisionRequired ? "revision_required" : "accepted",
     findings: revisionRequired
       ? [{
+          rootCauseKey: "limit-correction-to-failed-task",
           statement: "보완 행동을 실패한 Task 범위로 더 명확히 제한해야 한다",
           priority: "P1",
           recommendedDisposition: "required_now",

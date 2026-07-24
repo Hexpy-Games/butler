@@ -150,6 +150,49 @@ test("Task Review records an independent improvement as backlog without reopenin
   });
 });
 
+test("Task Review freezes one root finding across several failed criteria", async () => {
+  const criterionOne = ref("criterion");
+  const criterionTwo = ref("criterion-two");
+  const affectedCriterionRefs = [criterionOne, criterionTwo];
+  const shared = {
+    rootCauseKey: "shared-storage-boundary",
+    affectedCriterionRefs,
+    findingCategory: "implementation_nonconformance",
+    finding: "One storage boundary defect violates both criteria.",
+    priority: "P1",
+    recommendedDisposition: "required_now",
+    findingOrigin: "initial_review",
+  };
+  const product = await reviewTask(reviewInvocation([], {
+    criteria: [{ ref: criterionOne }, { ref: criterionTwo }],
+    verificationQuestions: [
+      { ref: ref("question-one"), criterionRef: criterionOne },
+      { ref: ref("question-two"), criterionRef: criterionTwo },
+    ],
+    criterionVerdicts: [
+      {
+        criterionRef: criterionOne,
+        observation: "The first criterion exposes the shared defect.",
+        verdict: "not_satisfied",
+        ...shared,
+      },
+      {
+        criterionRef: criterionTwo,
+        observation: "The second criterion exposes the same shared defect.",
+        verdict: "not_satisfied",
+        ...shared,
+      },
+    ],
+  }));
+
+  if (product.kind !== "task_review") throw new Error("expected task review");
+  if (product.review.verdict !== "not_passed") throw new Error("expected failed review");
+  expect(product.review.findings).toHaveLength(1);
+  expect(product.review.findingSet.findingRefs).toHaveLength(1);
+  expect(product.review.findings[0]?.affectedCriterionRefs)
+    .toEqual(expect.arrayContaining(affectedCriterionRefs));
+});
+
 test("Task re-review preserves the exact prior blocker instead of rewriting it", async () => {
   const prior = priorFinding("finding-prior");
   const changed = reviewTask(reviewInvocation([], {
@@ -170,7 +213,7 @@ test("Task re-review preserves the exact prior blocker instead of rewriting it",
   await expect(changed).rejects.toThrow("provider_phase_submission_invalid");
 });
 
-test("Task correction regressions remain causally bound to one prior blocker", async () => {
+test("Task correction regressions remain under the exact frozen root finding", async () => {
   const prior = priorFinding("finding-prior");
   const product = await reviewTask(reviewInvocation([], {
     priorCorrectionFindings: [prior],
@@ -189,10 +232,7 @@ test("Task correction regressions remain causally bound to one prior blocker", a
 
   expect(product.kind).toBe("task_review");
   if (product.kind !== "task_review") throw new Error("expected task review");
-  expect(product.review.findings[0]?.origin).toEqual({
-    kind: "correction_regression",
-    findingRef: prior.ref,
-  });
+  expect(product.review.findings).toEqual([prior]);
 });
 
 test("workspace review diagnoses a criterion outside the current Task", async () => {
@@ -283,7 +323,21 @@ function reviewInvocation(
     ...(overrides.priorCorrectionFindings
       ? { priorCorrectionFindings: overrides.priorCorrectionFindings }
       : {}),
-  }, overrides.criterionVerdicts);
+  }, normalizeTaskReviewRootFindings(overrides.criterionVerdicts));
+}
+
+function normalizeTaskReviewRootFindings(
+  verdicts: unknown[] | undefined,
+): unknown[] | undefined {
+  return verdicts?.map((value) => {
+    const verdict = value as Record<string, unknown>;
+    if (!("finding" in verdict)) return verdict;
+    return {
+      rootCauseKey: verdict.priorFindingId ?? verdict.finding,
+      affectedCriterionRefs: [verdict.criterionRef],
+      ...verdict,
+    };
+  });
 }
 
 function invocation(
@@ -455,6 +509,8 @@ function ref(id: string) {
 function priorFinding(id: string) {
   return {
     ref: ref(id),
+    rootCauseKey: id,
+    affectedCriterionRefs: [ref("criterion")],
     taskRef: ref("task"),
     attemptRef: ref("prior-attempt"),
     category: "implementation_nonconformance" as const,

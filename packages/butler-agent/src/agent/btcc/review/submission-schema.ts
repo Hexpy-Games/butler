@@ -17,6 +17,8 @@ const satisfiedCriterionVerdict = objectSchema({
   verdict: literalSchema("satisfied"),
 });
 const findingFields = {
+  rootCauseKey: textSchema(),
+  affectedCriterionRefs: arraySchema(contentRefSchema(), { minItems: 1 }),
   findingCategory: enumSchema(
     "implementation_nonconformance",
     "authority_contradiction",

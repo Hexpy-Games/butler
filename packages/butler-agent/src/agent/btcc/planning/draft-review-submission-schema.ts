@@ -9,6 +9,7 @@ import {
 import { PLANNING_REVIEW_DIMENSIONS } from "./review-subjects.ts";
 
 const findingFields = {
+  rootCauseKey: textSchema(),
   dimension: enumSchema(...PLANNING_REVIEW_DIMENSIONS),
   message: textSchema(),
   priority: enumSchema("P0", "P1", "P2"),

@@ -194,6 +194,8 @@ function planningReviewSubjects(
         subjectId,
         verdict: "failed",
         findings: [{
+          rootCauseKey: "clarify-second-task-completion",
+          affectedSubjectIds: [subjectId],
           dimension,
           message,
           priority: "P1",

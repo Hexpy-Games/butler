@@ -76,6 +76,7 @@ export type FeedbackPlanningReview = {
 
 export type FeedbackPlanningFinding = {
   ref: ContentRef;
+  rootCauseKey: string;
   statement: string;
   priority: "P0" | "P1" | "P2";
   recommendedDisposition: "required_now" | "backlog";

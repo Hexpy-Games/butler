@@ -346,6 +346,43 @@ describe("BTCC Planning contract", () => {
     expect(reviewed.review.reviewedSubjects).toHaveLength(planningReviewSubjects(candidate).length);
   });
 
+  test("freezes one root finding for a correction affecting several subjects", async () => {
+    const candidate = authorPlanCandidate(artifactPlan(), authoringState());
+    const subjects = acceptedSubjects(candidate);
+    const task = subjects.find((item) => item.subjectId === "task:integrate")!;
+    const assumption = subjects.find(
+      (item) => item.subjectId === "assumption:target-present",
+    )!;
+    const affectedSubjectIds = [assumption.subjectId, task.subjectId].sort();
+    const rootFinding = {
+      rootCauseKey: "integration-boundary",
+      affectedSubjectIds,
+      dimension: "task_executability",
+      message: "One missing integration boundary affects the Task and its assumption.",
+      priority: "P1" as const,
+      recommendedDisposition: "required_now" as const,
+      findingOrigin: "initial_review" as const,
+    };
+    task.verdict = "failed";
+    task.findings = [{ ...rootFinding }];
+    assumption.verdict = "failed";
+    assumption.findings = [{ ...rootFinding }];
+    const coverage = acceptedCoverage();
+    coverage.find((item) => item.dimension === "task_executability")!.verdict = "failed";
+
+    const reviewed = await reviewPlan(reviewInvocation(candidate, {
+      kind: "planning_review",
+      verdict: "revision_required",
+      coverage,
+      subjects,
+    }));
+    if (reviewed.kind !== "planning_revision_required") throw new Error("expected revision");
+    expect(reviewed.review.findingSet.findings).toHaveLength(1);
+    expect(reviewed.review.findingSet.findings[0]?.affectedSubjectIds)
+      .toEqual(affectedSubjectIds);
+    expect(reviewed.review.findings).toEqual([rootFinding.message]);
+  });
+
   test("freezes the first blocker set across re-review and permits backlog separation", async () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
     const firstSubjects = acceptedSubjects(candidate);
@@ -569,6 +606,7 @@ function reviewInvocation(
   submission: Record<string, unknown>,
   priorPlanningReview?: unknown,
 ) {
+  const normalizedSubmission = normalizeReviewRootFindings(submission);
   const modelSelection = {
     provider: "openai",
     model: "gpt-5.6-sol",
@@ -609,7 +647,7 @@ function reviewInvocation(
     model: {
       runRound: async () => ({
         kind: "phase_submission" as const,
-        submission,
+        submission: normalizedSubmission,
         actualIdentity: modelSelection,
       }),
     },
@@ -621,6 +659,43 @@ function reviewInvocation(
       close() {},
     },
   };
+}
+
+function normalizeReviewRootFindings(
+  submission: Record<string, unknown>,
+): Record<string, unknown> {
+  if (Array.isArray(submission.subjects)) {
+    return {
+      ...submission,
+      subjects: submission.subjects.map((value) => {
+        const subject = value as {
+          subjectId: string;
+          findings: Array<Record<string, unknown>>;
+        };
+        return {
+          ...subject,
+          findings: subject.findings.map((finding) => ({
+            rootCauseKey: finding.priorFindingId ?? finding.message,
+            affectedSubjectIds: [subject.subjectId],
+            ...finding,
+          })),
+        };
+      }),
+    };
+  }
+  if (Array.isArray(submission.findings)) {
+    return {
+      ...submission,
+      findings: submission.findings.map((value) => {
+        const finding = value as Record<string, unknown>;
+        return {
+          rootCauseKey: finding.message,
+          ...finding,
+        };
+      }),
+    };
+  }
+  return submission;
 }
 
 function withoutRef<T extends { ref: { id: string; sha256: string } }>(record: T): Omit<T, "ref"> {

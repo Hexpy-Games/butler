@@ -43,6 +43,8 @@ function review(
       verdict: "not_passed",
       findings: [{
         ref: ref(findingId),
+        rootCauseKey: findingId,
+        affectedCriterionRefs: [ref("criterion")],
         category: "implementation_nonconformance",
         statement,
         priority: "P1",
