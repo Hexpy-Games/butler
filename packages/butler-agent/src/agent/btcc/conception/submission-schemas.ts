@@ -31,13 +31,24 @@ const answerFields = {
 
 export const openingSubmissionSchema = variantsSchema(
   objectSchema({ kind: literalSchema("direct_answer"), ...answerFields }),
-  objectSchema({ kind: literalSchema("assisted_continuation"), message: textSchema() }),
-  objectSchema({ kind: literalSchema("managed_continuation"), message: textSchema() }),
+  openingContinuationSchema("assisted_continuation"),
+  openingContinuationSchema("managed_continuation"),
 );
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),
   ...answerFields,
 });
+
+function openingContinuationSchema(
+  kind: "assisted_continuation" | "managed_continuation",
+) {
+  return objectSchema({
+    kind: literalSchema(kind),
+    summary: textSchema(),
+    rationale: textSchema(),
+    nextStep: textSchema(),
+  });
+}
 
 const lensAssessment = objectSchema({
   disposition: enumSchema("adopted", "non_applicable"),

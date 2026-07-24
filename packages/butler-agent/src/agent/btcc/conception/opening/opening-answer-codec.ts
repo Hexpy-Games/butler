@@ -1,5 +1,5 @@
 import type { PhaseCodec } from "../../core/index.ts";
-import { contentRef, digest } from "../../core/index.ts";
+import { contentRef, digest, stableJson } from "../../core/index.ts";
 import type {
   OpeningContinuationProduct,
   OpeningProduct,
@@ -99,20 +99,32 @@ function decodeOpeningContinuation(
   value: Record<string, unknown>,
   turnId: string,
 ): OpeningContinuationProduct {
-  if (!isNonEmptyString(value.message)) {
-    throw new Error("Opening continuation message is invalid");
+  if (
+    !isNonEmptyString(value.summary) ||
+    !isNonEmptyString(value.rationale) ||
+    !isNonEmptyString(value.nextStep)
+  ) {
+    throw new Error("Opening continuation decision is invalid");
   }
   const body = {
     turnId,
-    content: value.message,
-    contentSha256: digest(value.message),
+    summary: value.summary,
+    rationale: value.rationale,
+    nextStep: value.nextStep,
+    contentSha256: digest(stableJson({
+      summary: value.summary,
+      rationale: value.rationale,
+      nextStep: value.nextStep,
+    })),
   };
   return {
     kind: "opening_continuation",
     route: value.kind === "assisted_continuation" ? "assisted" : "managed",
     projection: {
       ref: contentRef("opening-projection", body),
-      content: value.message,
+      summary: value.summary,
+      rationale: value.rationale,
+      nextStep: value.nextStep,
       contentSha256: body.contentSha256,
     },
   };

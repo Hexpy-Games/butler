@@ -121,7 +121,7 @@ export class SqliteTransitionWriter {
     `).run(
       turn.turnId,
       projection.ref.id,
-      projection.content,
+      projection.summary,
       projection.contentSha256,
     );
     const checkpoint = checkpointFor(

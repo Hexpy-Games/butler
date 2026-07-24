@@ -44,7 +44,9 @@ export type OpeningContinuationProduct = {
   route: "assisted" | "managed";
   projection: {
     ref: ContentRef;
-    content: string;
+    summary: string;
+    rationale: string;
+    nextStep: string;
     contentSha256: string;
   };
 };
@@ -74,5 +76,7 @@ export type OpeningAnswerSubmission = {
 
 export type OpeningContinuationSubmission = {
   kind: "assisted_continuation" | "managed_continuation";
-  message: string;
+  summary: string;
+  rationale: string;
+  nextStep: string;
 };
