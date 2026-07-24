@@ -31,6 +31,7 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     throw new Error("Opening submission must be a Direct or Assisted answer");
   }
   if (
+    !isNonEmptyString(value.requestObligation) ||
     !isNonEmptyString(value.interpretedIntent) ||
     !isNonEmptyString(value.requiredOutcome) ||
     !isNonEmptyString(value.answer) ||
@@ -39,7 +40,10 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     !Array.isArray(value.personalizationApplications) ||
     !Array.isArray(value.publicClaims) ||
     (value.requiredOutcomeResolution !== "fulfilled" &&
-      value.requiredOutcomeResolution !== "truthfully_limited")
+      value.requiredOutcomeResolution !== "truthfully_limited") ||
+    (value.kind === "direct_answer" && value.completionMode !== "answer_only") ||
+    (value.kind === "assisted_answer" &&
+      value.completionMode !== "bounded_observation_then_answer")
   ) {
     throw new Error("Opening answer has an invalid structured product");
   }
@@ -47,16 +51,27 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     decodePersonalizationApplication,
   );
   const publicClaims = value.publicClaims.map(decodePublicClaim);
-  return {
-    kind: value.kind,
+  const requiredOutcomeResolution: OpeningAnswerSubmission["requiredOutcomeResolution"] =
+    value.requiredOutcomeResolution === "fulfilled"
+    ? "fulfilled"
+    : "truthfully_limited";
+  const fields = {
+    requestObligation: value.requestObligation,
     interpretedIntent: value.interpretedIntent,
     requiredOutcome: value.requiredOutcome,
-    requiredOutcomeResolution: value.requiredOutcomeResolution,
+    requiredOutcomeResolution,
     nonGoals: value.nonGoals,
     answer: value.answer,
     personalizationApplications,
     publicClaims,
   };
+  return value.kind === "direct_answer"
+    ? { kind: "direct_answer", completionMode: "answer_only", ...fields }
+    : {
+        kind: "assisted_answer",
+        completionMode: "bounded_observation_then_answer",
+        ...fields,
+      };
 }
 
 function decodePublicClaim(value: unknown): PublicClaim {

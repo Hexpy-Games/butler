@@ -28,6 +28,7 @@ export function decodeOpeningAnswerProduct(
     const { answer, route, personalizationRefs } = decodeOpeningAnswer(submission, envelope);
     const goalBody = {
       originalMessageId: envelope.context.originalMessageId,
+      requestObligation: answer.requestObligation,
       interpretedIntent: answer.interpretedIntent,
       requiredOutcome: answer.requiredOutcome,
       personalizationRefs,
@@ -77,6 +78,10 @@ export function decodeOpeningAnswerProduct(
     return {
       kind: "opening_answer",
       route,
+      fulfillment: {
+        requestObligation: answer.requestObligation,
+        completionMode: answer.completionMode,
+      },
       goalContract,
       authority,
       continuationBinding: {
@@ -100,6 +105,11 @@ function decodeOpeningContinuation(
   turnId: string,
 ): OpeningContinuationProduct {
   if (
+    !isNonEmptyString(value.requestObligation) ||
+    (value.kind === "assisted_continuation" &&
+      value.completionMode !== "bounded_observation_then_answer") ||
+    (value.kind === "managed_continuation" &&
+      value.completionMode !== "managed_effect_or_artifact") ||
     !isNonEmptyString(value.summary) ||
     !isNonEmptyString(value.rationale) ||
     !isNonEmptyString(value.nextStep)
@@ -108,6 +118,8 @@ function decodeOpeningContinuation(
   }
   const body = {
     turnId,
+    requestObligation: value.requestObligation,
+    completionMode: value.completionMode,
     summary: value.summary,
     rationale: value.rationale,
     nextStep: value.nextStep,
@@ -120,6 +132,12 @@ function decodeOpeningContinuation(
   return {
     kind: "opening_continuation",
     route: value.kind === "assisted_continuation" ? "assisted" : "managed",
+    fulfillment: {
+      requestObligation: value.requestObligation,
+      completionMode: value.kind === "assisted_continuation"
+        ? "bounded_observation_then_answer"
+        : "managed_effect_or_artifact",
+    },
     projection: {
       ref: contentRef("opening-projection", body),
       summary: value.summary,

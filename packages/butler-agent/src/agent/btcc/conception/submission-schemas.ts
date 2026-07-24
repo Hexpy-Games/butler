@@ -20,6 +20,7 @@ const publicClaim = objectSchema({
   sourceRefs: refList(),
 });
 const answerFields = {
+  requestObligation: textSchema(),
   interpretedIntent: textSchema(),
   requiredOutcome: textSchema(),
   requiredOutcomeResolution: enumSchema("fulfilled", "truthfully_limited"),
@@ -30,20 +31,36 @@ const answerFields = {
 };
 
 export const openingSubmissionSchema = variantsSchema(
-  objectSchema({ kind: literalSchema("direct_answer"), ...answerFields }),
-  openingContinuationSchema("assisted_continuation"),
-  openingContinuationSchema("managed_continuation"),
+  objectSchema({
+    kind: literalSchema("direct_answer"),
+    completionMode: literalSchema("answer_only"),
+    ...answerFields,
+  }),
+  openingContinuationSchema(
+    "assisted_continuation",
+    "bounded_observation_then_answer",
+  ),
+  openingContinuationSchema(
+    "managed_continuation",
+    "managed_effect_or_artifact",
+  ),
 );
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),
+  completionMode: literalSchema("bounded_observation_then_answer"),
   ...answerFields,
 });
 
 function openingContinuationSchema(
   kind: "assisted_continuation" | "managed_continuation",
+  completionMode:
+    | "bounded_observation_then_answer"
+    | "managed_effect_or_artifact",
 ) {
   return objectSchema({
     kind: literalSchema(kind),
+    completionMode: literalSchema(completionMode),
+    requestObligation: textSchema(),
     summary: textSchema(),
     rationale: textSchema(),
     nextStep: textSchema(),

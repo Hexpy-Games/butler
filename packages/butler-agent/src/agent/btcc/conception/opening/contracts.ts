@@ -5,9 +5,11 @@ import type {
 export type OpeningAnswerProduct = {
   kind: "opening_answer";
   route: "direct" | "assisted";
+  fulfillment: OpeningFulfillment;
   goalContract: {
     ref: ContentRef;
     originalMessageId: string;
+    requestObligation: string;
     interpretedIntent: string;
     requiredOutcome: string;
     personalizationRefs: string[];
@@ -42,6 +44,7 @@ export type OpeningAnswerProduct = {
 export type OpeningContinuationProduct = {
   kind: "opening_continuation";
   route: "assisted" | "managed";
+  fulfillment: OpeningFulfillment;
   projection: {
     ref: ContentRef;
     summary: string;
@@ -53,6 +56,14 @@ export type OpeningContinuationProduct = {
 
 export type OpeningProduct = OpeningAnswerProduct | OpeningContinuationProduct;
 
+export type OpeningFulfillment = {
+  requestObligation: string;
+  completionMode:
+    | "answer_only"
+    | "bounded_observation_then_answer"
+    | "managed_effect_or_artifact";
+};
+
 export type PersonalizationApplication = {
   ref: string;
   decision: "applied" | "not_applicable";
@@ -63,8 +74,8 @@ export type PublicClaim = {
   sourceRefs: ContentRef[];
 };
 
-export type OpeningAnswerSubmission = {
-  kind: "direct_answer" | "assisted_answer";
+type OpeningAnswerFields = {
+  requestObligation: string;
   interpretedIntent: string;
   requiredOutcome: string;
   requiredOutcomeResolution: "fulfilled" | "truthfully_limited";
@@ -74,9 +85,28 @@ export type OpeningAnswerSubmission = {
   publicClaims: PublicClaim[];
 };
 
-export type OpeningContinuationSubmission = {
-  kind: "assisted_continuation" | "managed_continuation";
+export type OpeningAnswerSubmission = OpeningAnswerFields & (
+  | { kind: "direct_answer"; completionMode: "answer_only" }
+  | {
+      kind: "assisted_answer";
+      completionMode: "bounded_observation_then_answer";
+    }
+);
+
+type OpeningContinuationFields = {
+  requestObligation: string;
   summary: string;
   rationale: string;
   nextStep: string;
 };
+
+export type OpeningContinuationSubmission = OpeningContinuationFields & (
+  | {
+      kind: "assisted_continuation";
+      completionMode: "bounded_observation_then_answer";
+    }
+  | {
+      kind: "managed_continuation";
+      completionMode: "managed_effect_or_artifact";
+    }
+);
