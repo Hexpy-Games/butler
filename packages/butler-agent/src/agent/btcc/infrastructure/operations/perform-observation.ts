@@ -43,5 +43,6 @@ export async function performObservation(input: {
     }),
     content: payload.content,
     ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
+    ...(payload.executionSummary ? { executionSummary: payload.executionSummary } : {}),
   };
 }

@@ -136,6 +136,10 @@ describe("production BTCC selected model", () => {
 
     const prompt = JSON.parse(calls[0]!.prompt) as Record<string, any>;
     const hierarchy = prompt.promptHierarchy;
+    expect(prompt.outputSchemaGuidance.operationRequests)
+      .toContain("every currently known independent operation");
+    expect(prompt.outputSchemaGuidance.operationRequests)
+      .toContain("executionSummary");
     expect(Object.keys(hierarchy)).toEqual([
       "immutablePhaseContract",
       "versionedBasePrompt",

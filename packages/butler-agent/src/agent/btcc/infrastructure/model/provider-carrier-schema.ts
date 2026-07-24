@@ -46,7 +46,10 @@ export function providerCarrierFunctions(
     ).properties as Record<string, unknown>;
     functions.push({
       name: "submit_btcc_operation_requests",
-      description: "Request one or more operations allowed by the current BTCC phase.",
+      description: [
+        "Request one coherent batch of operations allowed by the current BTCC phase.",
+        "Include every currently known independent operation needed for the next decision.",
+      ].join(" "),
       carrierKind: "operation_requests",
       parameters: objectParameters({
         phaseContinuity: carrier.phaseContinuity,

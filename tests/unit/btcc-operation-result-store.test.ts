@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
@@ -106,6 +107,50 @@ describe("BTCC operation result store", () => {
     reopened.close();
   });
 
+  test("retains typed command completion without rereading the payload", async () => {
+    const root = temporaryRoot();
+    const payloadPath = join(root, "command-output.txt");
+    const payload = `${JSON.stringify({ exitCode: 0 })}\n--- stdout ---\npassed\n--- stderr ---\n`;
+    writeFileSync(payloadPath, payload);
+    const store = new SqliteOperationResultStore(root);
+    const request = observationRequest();
+    const executionSummary = {
+      kind: "command_execution" as const,
+      exitCode: 0,
+      timedOut: false,
+      signal: null,
+    };
+
+    const recorded = await store.record({
+      binding: binding(),
+      request,
+      result: {
+        requestId: request.requestId,
+        outcome: "observed",
+        observationRef: { id: "observation:command", sha256: "command" },
+        content: JSON.stringify({ exitCode: 0, timedOut: false, signal: null }),
+        payloadSource: {
+          kind: "spooled_text",
+          path: payloadPath,
+          sha256: sha256(payload),
+          byteLength: Buffer.byteLength(payload),
+          mediaType: "text/plain; charset=utf-8",
+        },
+        executionSummary,
+      },
+      modelSelection: modelSelection(),
+    });
+
+    expect(recorded.executionSummary).toEqual(executionSummary);
+    const found = await store.find({
+      binding: binding(),
+      request,
+      modelSelection: modelSelection(),
+    });
+    expect(found?.executionSummary).toEqual(executionSummary);
+    store.close();
+  });
+
   test("reads durable source request input through the documented JSON root", async () => {
     const root = temporaryRoot();
     const store = new SqliteOperationResultStore(root);
@@ -186,4 +231,8 @@ function modelSelection() {
     controlsHash: "controls",
     contextWindowTokens: 200_000,
   };
+}
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }

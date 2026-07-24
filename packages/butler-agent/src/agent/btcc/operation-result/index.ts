@@ -3,6 +3,7 @@ export {
   READ_OPERATION_RESULT_CAPABILITY,
 } from "./contracts.ts";
 export type {
+  CommandExecutionSummary,
   OperationSourceDescriptor,
   OperationResultIndexEntry,
   OperationResultCompleteness,

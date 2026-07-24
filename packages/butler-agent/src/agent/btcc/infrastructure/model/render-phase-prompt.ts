@@ -172,10 +172,12 @@ function promptDocument(input: {
           ? {
               operationRequests: [
                 "Use a non-empty array of typed requests within authority.",
+                "Include every currently known independent operation needed for the next decision in this one batch; keep only genuinely result-dependent work for a later round.",
                 "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
                 "Write publicActivity for the user: what is happening, why it is needed, and what follows; summarize intent without hidden chain-of-thought.",
                 "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
                 "Use each priorOperationResultIndex source descriptor to find the exact stable result, then read_operation_result instead of repeating its source operation. Repeat the source only for a fresh target revision or an uncaptured view.",
+                "Use a result executionSummary to determine command exit success. Read omitted command payload only when its content is necessary for failure diagnosis or the next semantic decision.",
               ].join(" "),
             }
           : {}),

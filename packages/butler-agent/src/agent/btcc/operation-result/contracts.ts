@@ -47,6 +47,13 @@ export type OperationResultCompleteness =
   | "requested_scope_complete"
   | "capture_incomplete";
 
+export type CommandExecutionSummary = {
+  kind: "command_execution";
+  exitCode: number | null;
+  timedOut: boolean;
+  signal: string | null;
+};
+
 export type OperationResultRecord = {
   resultRef: ResultRef;
   requestRef: ResultRef;
@@ -59,6 +66,7 @@ export type OperationResultRecord = {
   byteLength: number;
   completeness: OperationResultCompleteness;
   observationRef: ResultRef;
+  executionSummary?: CommandExecutionSummary;
   artifactRevisionRef?: ResultRef;
   targetSnapshotRef?: ResultRef;
   validationReceiptRef?: ResultRef;
@@ -87,6 +95,7 @@ export type OperationResultProjection = {
   completeness: OperationResultCompleteness;
   byteLength: number;
   observationRef: ResultRef;
+  executionSummary?: CommandExecutionSummary;
   preview: string;
   content?: string;
   omittedBytes: number;
@@ -112,6 +121,7 @@ export type OperationResultIndexEntry = Pick<
   | "completeness"
   | "byteLength"
   | "observationRef"
+  | "executionSummary"
   | "readScopeRef"
   | "artifactRevisionRef"
   | "targetSnapshotRef"

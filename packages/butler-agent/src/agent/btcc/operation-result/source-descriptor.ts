@@ -65,6 +65,7 @@ export function indexOperationResult(
     byteLength: result.byteLength,
     observationRef: result.observationRef,
     readScopeRef: result.readScopeRef,
+    ...(result.executionSummary ? { executionSummary: result.executionSummary } : {}),
     ...resultRefs(result),
   };
 }

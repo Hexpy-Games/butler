@@ -6,6 +6,7 @@ import type { SubmissionSchema } from "./submission-schema.ts";
 import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
 import type { OperationResultProjection } from "../operation-result/contracts.ts";
 import type { OperationResultCompleteness } from "../operation-result/contracts.ts";
+import type { CommandExecutionSummary } from "../operation-result/contracts.ts";
 import type {
   PhaseActivityPublisher,
   PublicPhaseActivity,
@@ -301,6 +302,7 @@ export type ObservationResult =
   & {
       content: string;
       payloadSource?: OperationPayloadSource;
+      executionSummary?: CommandExecutionSummary;
     };
 
 export interface OperationExecutor {
