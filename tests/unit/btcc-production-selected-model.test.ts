@@ -219,12 +219,15 @@ describe("production BTCC selected model", () => {
     });
     expect(hierarchy.currentTurnContext.operationContext).toEqual({
       phaseContinuity: null,
-      latestOperationResults: [],
-      selectedOperationResultViews: [],
-      priorOperationResultIndex: [expect.objectContaining({
+      inlineOperationResults: [expect.objectContaining({
         resultRef: { id: "result:1", sha256: "result-hash" },
-        readScopeRef: "operation-result:result:1",
+        inlinePayload: {
+          kind: "complete",
+          content: "Trust should be based on repeated behavior and context.",
+        },
       })],
+      selectedOperationResultViews: [],
+      priorOperationResultIndex: [],
     });
     expect(hierarchy.currentTurnContext.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
     expect(hierarchy.currentTurnContext.butlerContext).toEqual({
@@ -435,14 +438,13 @@ describe("production BTCC selected model", () => {
 
     const context = JSON.parse(prompt).promptHierarchy.currentTurnContext.operationContext;
     expect(context.phaseContinuity).toEqual(phaseContinuity());
-    expect(context.latestOperationResults).toEqual([latest]);
-    expect(context.selectedOperationResultViews).toEqual([]);
-    expect(context.priorOperationResultIndex).toHaveLength(1);
-    expect(context.priorOperationResultIndex[0]).not.toHaveProperty("preview");
-    expect(context.priorOperationResultIndex[0].resultRef).toEqual({
-      id: "result:1",
-      sha256: "result-hash",
+    expect(context.inlineOperationResults).toHaveLength(2);
+    expect(context.inlineOperationResults[1]).toMatchObject({
+      resultRef: latest.resultRef,
+      inlinePayload: { kind: "complete", content: "latest full result" },
     });
+    expect(context.selectedOperationResultViews).toEqual([]);
+    expect(context.priorOperationResultIndex).toEqual([]);
   });
 
   test("rejects an operation that was not offered by the exact phase capability schema", async () => {

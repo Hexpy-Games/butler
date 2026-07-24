@@ -20,6 +20,10 @@ export async function openTurn(
   supervisor: TurnExecutionSupervisor,
 ): Promise<OpenedTurn> {
   let turn = await loadOrAdmitTurn(command, dependencies);
+  if (isTerminal(turn)) {
+    await publishTurnProgress(dependencies.progress, turn);
+    return { route: "immediate", turn };
+  }
   const permit = supervisor.enter({
     turnId: turn.turnId,
     executionFence: turn.executionFence,

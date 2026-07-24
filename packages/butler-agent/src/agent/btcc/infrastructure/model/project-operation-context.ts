@@ -1,5 +1,6 @@
 import type { PhaseEnvelope } from "../../core/index.ts";
 import type {
+  OperationSourceDescriptor,
   OperationResultIndexEntry,
   OperationResultProjection,
   ResultRef,
@@ -12,10 +13,34 @@ import {
 
 export type ProjectedOperationContext = {
   phaseContinuity: PhaseEnvelope["phaseContinuity"] | null;
-  latestOperationResults: OperationResultProjection[];
+  inlineOperationResults: OperationResultProjection[];
   selectedOperationResultViews: OperationResultProjection[];
   priorOperationResultIndex: OperationResultIndexEntry[];
 };
+
+export type PromptOperationContext = {
+  phaseContinuity: PhaseEnvelope["phaseContinuity"] | null;
+  inlineOperationResults: PromptInlineOperationResult[];
+  selectedOperationResultViews: PromptSelectedOperationResultView[];
+  priorOperationResultIndex: OperationResultIndexEntry[];
+};
+
+type PromptInlineOperationResult = OperationResultMetadata & {
+  source: OperationSourceDescriptor;
+  inlinePayload:
+    | { kind: "complete"; content: string }
+    | { kind: "partial"; content: string; omittedBytes: number };
+};
+
+type PromptSelectedOperationResultView = OperationResultMetadata & {
+  source: OperationSourceDescriptor;
+  exactView: NonNullable<OperationResultProjection["view"]>;
+};
+
+type OperationResultMetadata = Omit<
+  OperationResultProjection,
+  "request" | "preview" | "content" | "omittedBytes" | "view"
+>;
 
 export function projectOperationContext(envelope: PhaseEnvelope): ProjectedOperationContext {
   const latestCount = envelope.latestOperationResultCount ?? 0;
@@ -23,13 +48,24 @@ export function projectOperationContext(envelope: PhaseEnvelope): ProjectedOpera
   if (latestStart < 0) {
     throw new Error("Latest operation batch exceeds the persisted result sequence");
   }
-  const prior = envelope.operationResults.slice(0, latestStart);
-  const latest = envelope.operationResults.slice(latestStart);
   return {
     phaseContinuity: envelope.phaseContinuity ?? null,
-    latestOperationResults: latest,
-    selectedOperationResultViews: selectedViews(prior, latest),
-    priorOperationResultIndex: indexPriorResults(prior),
+    inlineOperationResults: envelope.operationResults.filter(
+      (result) => !isResultReadRequest(result.request),
+    ),
+    selectedOperationResultViews: selectedViews(envelope.operationResults),
+    priorOperationResultIndex: [],
+  };
+}
+
+export function promptOperationContext(
+  projected: ProjectedOperationContext,
+): PromptOperationContext {
+  return {
+    phaseContinuity: projected.phaseContinuity,
+    inlineOperationResults: projected.inlineOperationResults.map(inlineResult),
+    selectedOperationResultViews: projected.selectedOperationResultViews.map(selectedView),
+    priorOperationResultIndex: projected.priorOperationResultIndex,
   };
 }
 
@@ -37,30 +73,31 @@ export function operationContextCompactionCandidates(
   projected: ProjectedOperationContext,
 ): ProjectedOperationContext[] {
   const candidates = [projected];
+  let inline = [...projected.inlineOperationResults];
   let selected = [...projected.selectedOperationResultViews];
-  let latest = [...projected.latestOperationResults];
+  let compacted = [...projected.priorOperationResultIndex];
 
-  while (selected.length > 0) {
-    selected = selected.slice(1);
-    candidates.push(withPayloadSet(projected, latest, selected));
+  while (inline.length > 0) {
+    compacted = indexPriorResults([...compacted, inline[0]!]);
+    inline = inline.slice(1);
+    candidates.push(withPayloadSet(projected, inline, selected, compacted));
   }
-  while (latest.length > 0) {
-    latest = latest.slice(1);
-    candidates.push(withPayloadSet(projected, latest, selected));
+  while (selected.length > 0) {
+    compacted = indexPriorResults([...compacted, selected[0]!]);
+    selected = selected.slice(1);
+    candidates.push(withPayloadSet(projected, inline, selected, compacted));
   }
   return candidates;
 }
 
 function selectedViews(
-  prior: OperationResultProjection[],
-  latest: OperationResultProjection[],
+  results: OperationResultProjection[],
 ): OperationResultProjection[] {
-  const latestKeys = new Set(latest.filter(hasSelectedView).map(viewKey));
   const byView = new Map<string, OperationResultProjection>();
-  for (const result of prior) {
+  for (const result of results) {
     if (!hasSelectedView(result)) continue;
     const key = viewKey(result);
-    if (!latestKeys.has(key)) byView.set(key, result);
+    byView.set(key, result);
   }
   return [...byView.values()];
 }
@@ -75,23 +112,53 @@ function viewKey(result: OperationResultProjection): string {
 
 function withPayloadSet(
   projected: ProjectedOperationContext,
-  latest: OperationResultProjection[],
+  inline: OperationResultProjection[],
   selected: OperationResultProjection[],
+  compacted: OperationResultIndexEntry[],
 ): ProjectedOperationContext {
-  const retained = new Set([...latest, ...selected]);
-  const compacted = [
-    ...projected.latestOperationResults,
-    ...projected.selectedOperationResultViews,
-  ].filter((result) => !retained.has(result));
   return {
     ...projected,
-    latestOperationResults: latest,
+    inlineOperationResults: inline,
     selectedOperationResultViews: selected,
-    priorOperationResultIndex: indexPriorResults([
-      ...projected.priorOperationResultIndex,
-      ...compacted,
-    ]),
+    priorOperationResultIndex: compacted,
   };
+}
+
+function inlineResult(result: OperationResultProjection): PromptInlineOperationResult {
+  const metadata = operationResultMetadata(result);
+  const content = result.content ?? result.preview;
+  return {
+    ...metadata,
+    source: indexOperationResult(result).source,
+    inlinePayload: result.omittedBytes === 0
+      ? { kind: "complete", content }
+      : { kind: "partial", content, omittedBytes: result.omittedBytes },
+  };
+}
+
+function selectedView(
+  result: OperationResultProjection,
+): PromptSelectedOperationResultView {
+  if (!result.view) throw new Error("Selected operation result view is missing");
+  return {
+    ...operationResultMetadata(result),
+    source: indexOperationResult(result).source,
+    exactView: result.view,
+  };
+}
+
+function operationResultMetadata(
+  result: OperationResultProjection,
+): OperationResultMetadata {
+  const {
+    request: _request,
+    preview: _preview,
+    content: _content,
+    omittedBytes: _omittedBytes,
+    view: _view,
+    ...metadata
+  } = result;
+  return metadata;
 }
 
 function indexPriorResults(

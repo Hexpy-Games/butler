@@ -17,7 +17,10 @@ import {
   resolveDutyInstructions,
   resolveProhibitionInstructions,
 } from "./prompt-duty-catalog.ts";
-import { projectOperationContext } from "./project-operation-context.ts";
+import {
+  projectOperationContext,
+  promptOperationContext,
+} from "./project-operation-context.ts";
 import { projectContinuationContext } from "./project-continuation-context.ts";
 import { fitOperationContext } from "./fit-operation-context.ts";
 
@@ -153,7 +156,7 @@ function promptDocument(input: {
             continuation: projectContinuationContext(envelope),
             baselineObservationScopeRefs: envelope.context.baselineObservationScopeRefs,
           },
-          operationContext,
+          operationContext: promptOperationContext(operationContext),
           operationAuthority,
           availableCapabilities,
           providerCorrection: envelope.providerCorrection ?? null,
@@ -178,7 +181,9 @@ function promptDocument(input: {
                 "Write publicActivity for the user: name the concrete target and current action, why it is needed for the accepted Goal, governing Spec, Plan, or review finding, and what observable action follows.",
                 "Do not substitute a generic phase label for useful activity detail or expose hidden chain-of-thought.",
                 "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
-                "Use each priorOperationResultIndex source descriptor to find the exact stable result, then read_operation_result instead of repeating its source operation. Repeat the source only for a fresh target revision or an uncaptured view.",
+                "Consume every inlineOperationResults item whose inlinePayload.kind is complete directly; it is the entire requested result and must not be read again through read_operation_result.",
+                "For inlinePayload.kind partial, call read_operation_result only when omitted content is necessary for the next semantic decision.",
+                "Use each priorOperationResultIndex source descriptor to find a compacted stable result, then read_operation_result instead of repeating its source operation. Repeat the source only for a fresh target revision or an uncaptured view.",
                 "Use a result executionSummary to determine command exit success. Read omitted command payload only when its content is necessary for failure diagnosis or the next semantic decision.",
               ].join(" "),
             }

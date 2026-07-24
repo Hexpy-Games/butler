@@ -36,7 +36,9 @@ describe("BTCC Planning governing Spec selection", () => {
     const authorOnlySchema = JSON.stringify(planCandidateSubmissionSchema(
       selectableGoverningSpecIds(available, []),
     ));
-    expect(authorOnlySchema).not.toContain("governingSpecSelections");
+    expect(authorOnlySchema).toContain(
+      '"governingSpecSelections":{"type":"array","items":{"type":"string","minLength":1},"maxItems":0}',
+    );
     expect(authorOnlySchema).toContain("specifications");
   });
 });

@@ -3,6 +3,8 @@ import { projectOperationContext } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/project-operation-context.ts";
 import { operationContextCompactionCandidates } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/project-operation-context.ts";
+import { promptOperationContext } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/model/project-operation-context.ts";
 import { fitOperationContext } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/fit-operation-context.ts";
 import { describeOperationSource } from
@@ -13,7 +15,7 @@ import type {
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
 
 describe("BTCC operation context projection", () => {
-  test("selects the exact last batch when result reads share their source ref", () => {
+  test("retains source results and exact selected views across later batches", () => {
     const source = result("source-read", "read_file");
     const previousRead = result("first-result-read", "read_operation_result", source, {
       selector: "lines",
@@ -32,20 +34,9 @@ describe("BTCC operation context projection", () => {
 
     expect(projectOperationContext(envelope)).toEqual({
       phaseContinuity: null,
-      latestOperationResults: [latestRead],
-      selectedOperationResultViews: [previousRead],
-      priorOperationResultIndex: [
-        expect.objectContaining({
-          resultRef: source.resultRef,
-          capabilityRef: "read_file",
-          source: {
-            kind: "observe",
-            capabilityRef: "read_file",
-            scopeRef: "workspace:/repo",
-            input: {},
-          },
-        }),
-      ],
+      inlineOperationResults: [source],
+      selectedOperationResultViews: [previousRead, latestRead],
+      priorOperationResultIndex: [],
     });
   });
 
@@ -69,10 +60,10 @@ describe("BTCC operation context projection", () => {
     } as PhaseEnvelope);
 
     expect(projected.selectedOperationResultViews).toEqual([duplicateRead]);
-    expect(projected.latestOperationResults).toEqual([latestSource]);
+    expect(projected.inlineOperationResults).toEqual([source, latestSource]);
   });
 
-  test("compacts selected views before the latest source batch and retains indexes", () => {
+  test("compacts oldest source payloads before selected views and retains indexes", () => {
     const source = result("source-read", "read_file");
     const selected = result("selected-read", "read_operation_result", source, {
       selector: "lines",
@@ -86,12 +77,13 @@ describe("BTCC operation context projection", () => {
     } as PhaseEnvelope));
 
     expect(candidates.map((candidate) => ({
-      latest: candidate.latestOperationResults.length,
+      inline: candidate.inlineOperationResults.length,
       selected: candidate.selectedOperationResultViews.length,
     }))).toEqual([
-      { latest: 1, selected: 1 },
-      { latest: 1, selected: 0 },
-      { latest: 0, selected: 0 },
+      { inline: 2, selected: 1 },
+      { inline: 1, selected: 1 },
+      { inline: 0, selected: 1 },
+      { inline: 0, selected: 0 },
     ]);
     expect(candidates.at(-1)!.priorOperationResultIndex.map((entry) => entry.resultRef))
       .toEqual([source.resultRef, latest.resultRef]);
@@ -133,10 +125,36 @@ describe("BTCC operation context projection", () => {
       fixedRequestShape: {},
     });
 
-    expect(fitted.latestOperationResults).toEqual([latest]);
+    expect(fitted.inlineOperationResults).toEqual([]);
     expect(fitted.selectedOperationResultViews).toEqual([]);
     expect(fitted.priorOperationResultIndex.map((entry) => entry.resultRef))
       .toContainEqual(source.resultRef);
+  });
+
+  test("labels full inline results as complete instead of previews", () => {
+    const complete = {
+      ...result("complete-source", "read_file"),
+      preview: "entire requested file",
+      byteLength: 21,
+      omittedBytes: 0,
+    };
+    const partial = {
+      ...result("partial-source", "read_file"),
+      preview: "first bytes",
+      byteLength: 100,
+      omittedBytes: 89,
+    };
+
+    const context = promptOperationContext(projectOperationContext({
+      operationResults: [complete, partial],
+      latestOperationResultCount: 1,
+    } as PhaseEnvelope));
+
+    expect(context.inlineOperationResults.map((item) => item.inlinePayload)).toEqual([
+      { kind: "complete", content: "entire requested file" },
+      { kind: "partial", content: "first bytes", omittedBytes: 89 },
+    ]);
+    expect(context.inlineOperationResults[0]).not.toHaveProperty("preview");
   });
 
   test("describes mutation targets without copying their payload", () => {
@@ -174,8 +192,9 @@ describe("BTCC operation context projection", () => {
       operationResults: [command, latest],
       latestOperationResultCount: 1,
     } as PhaseEnvelope);
+    const compacted = operationContextCompactionCandidates(projected)[1]!;
 
-    expect(projected.priorOperationResultIndex[0]?.executionSummary)
+    expect(compacted.priorOperationResultIndex[0]?.executionSummary)
       .toEqual(command.executionSummary);
   });
 });
