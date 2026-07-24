@@ -29,19 +29,21 @@ export async function recoverPersistedInterruption(
   anchor: OperationalCheckpointAnchor,
   permit: ExecutionPermit,
 ): Promise<OperationalInterruptionError | null> {
-  const interruption = await dependencies.operationalRecovery?.resume(
-    anchor,
-    permit.signal,
-  );
-  if (!interruption) return null;
-  await publishOperationalNotice(dependencies.progress, {
-    turnId: anchor.turnId,
-    status: "recovering",
-    code: interruption.code,
-    activationKind: interruption.activation.kind,
-  });
+  const record = await dependencies.operationalRecovery?.pending(anchor);
+  if (!record) return null;
+  if (record.status === "interrupted") {
+    await waitForOperationalReentry(dependencies, record.interruption, permit);
+  } else {
+    await publishOperationalNotice(dependencies.progress, {
+      turnId: anchor.turnId,
+      semanticState: anchor.semanticState,
+      status: "cleared",
+      code: record.interruption.code,
+      activationKind: record.interruption.activation.kind,
+    });
+  }
   permit.assertActive();
-  return interruption;
+  return record.interruption;
 }
 
 export async function waitForOperationalReentry(
@@ -51,6 +53,7 @@ export async function waitForOperationalReentry(
 ): Promise<void> {
   await publishOperationalNotice(dependencies.progress, {
     turnId: interruption.anchor.turnId,
+    semanticState: interruption.anchor.semanticState,
     status: "recovering",
     code: interruption.code,
     activationKind: interruption.activation.kind,
@@ -59,6 +62,13 @@ export async function waitForOperationalReentry(
     interruption,
     permit.signal,
   );
+  await publishOperationalNotice(dependencies.progress, {
+    turnId: interruption.anchor.turnId,
+    semanticState: interruption.anchor.semanticState,
+    status: "cleared",
+    code: interruption.code,
+    activationKind: interruption.activation.kind,
+  });
   const turn = await dependencies.turns.findTurn(interruption.anchor.turnId);
   if (turn && !isTerminal(turn)) {
     assertSameOperationalCheckpoint(turn, interruption.anchor);
@@ -75,6 +85,7 @@ export async function resolveOperationalInterruption(
     if (resolved) {
       await publishOperationalNotice(dependencies.progress, {
         turnId: anchor.turnId,
+        semanticState: anchor.semanticState,
         status: "cleared",
       });
     }

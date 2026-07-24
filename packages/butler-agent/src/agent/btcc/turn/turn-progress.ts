@@ -44,6 +44,7 @@ export async function publishOperationalNotice(
   observer: BtccTurnProgressObserver | undefined,
   update: {
     turnId: string;
+    semanticState: string;
     status: "recovering" | "cleared";
     code?: string;
     activationKind?: OperationalActivation["kind"];

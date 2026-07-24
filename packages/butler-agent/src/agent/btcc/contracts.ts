@@ -98,6 +98,7 @@ export interface BtccTurnProgressObserver {
   }): void | Promise<void>;
   operationalNoticeChanged?(update: {
     turnId: string;
+    semanticState: string;
     status: "recovering" | "cleared";
     code?: string;
     activationKind?: OperationalActivation["kind"];

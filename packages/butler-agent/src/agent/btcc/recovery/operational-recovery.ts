@@ -1,14 +1,14 @@
 import type {
   OperationalRecoveryBoundary,
+  OperationalRecoveryReadiness,
   OperationalRecoveryStore,
-  ProviderRecoveryReadiness,
 } from "./contracts.ts";
 
 const MAX_PROVIDER_COOLDOWN_MS = 30_000;
 
 export function createOperationalRecoveryBoundary(
   store: OperationalRecoveryStore,
-  readiness: ProviderRecoveryReadiness = createProviderRecoveryReadiness(),
+  readiness: OperationalRecoveryReadiness = createProviderRecoveryReadiness(),
 ): OperationalRecoveryBoundary {
   return {
     async awaitReentry(interruption, signal) {
@@ -16,34 +16,21 @@ export function createOperationalRecoveryBoundary(
       await readiness.wait({ interruption, receipt, signal });
       await store.markReady(receipt);
     },
-    async resume(anchor, signal) {
-      const record = await store.pending(anchor);
-      if (!record) return null;
-      if (record.status === "interrupted") {
-        const receipt = await store.record(record.interruption);
-        await readiness.wait({
-          interruption: record.interruption,
-          receipt,
-          signal,
-        });
-        await store.markReady(receipt);
-      }
-      return record.interruption;
-    },
+    pending: (anchor) => store.pending(anchor),
     resolve: (anchor) => store.resolve(anchor),
     pendingTurnIds: () => store.pendingTurnIds(),
   };
 }
 
-export function createProviderRecoveryReadiness(): ProviderRecoveryReadiness {
+export function createProviderRecoveryReadiness(): OperationalRecoveryReadiness {
   return {
     async wait({ interruption, receipt, signal }) {
-      if (
-        interruption.activation.kind === "automatic_provider_recovery" ||
-        interruption.activation.kind === "automatic_storage_recovery"
-      ) {
+      if (interruption.activation.kind === "automatic_provider_recovery") {
         await waitForCooldown(providerCooldown(receipt.activationCount), signal);
         return;
+      }
+      if (interruption.activation.kind === "automatic_storage_recovery") {
+        throw new Error("Operational storage recovery readiness is not configured");
       }
       await waitForActivation(signal);
     },

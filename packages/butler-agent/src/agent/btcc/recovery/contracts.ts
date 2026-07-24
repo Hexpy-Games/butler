@@ -38,7 +38,7 @@ export interface OperationalRecoveryStore {
   pendingTurnIds(): Promise<string[]>;
 }
 
-export interface ProviderRecoveryReadiness {
+export interface OperationalRecoveryReadiness {
   wait(input: {
     interruption: OperationalInterruptionError;
     receipt: OperationalRecoveryReceipt;
@@ -51,10 +51,7 @@ export interface OperationalRecoveryBoundary {
     interruption: OperationalInterruptionError,
     signal: AbortSignal,
   ): Promise<void>;
-  resume(
-    anchor: OperationalCheckpointAnchor,
-    signal: AbortSignal,
-  ): Promise<OperationalInterruptionError | null>;
+  pending(anchor: OperationalCheckpointAnchor): Promise<OperationalRecoveryRecord | null>;
   resolve(anchor: OperationalCheckpointAnchor): Promise<boolean>;
   pendingTurnIds(): Promise<string[]>;
 }
