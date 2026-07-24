@@ -420,7 +420,7 @@ describe("production BTCC selected model", () => {
       readScopeRef: "operation-result:result:2",
     };
     envelope.operationResults.push(latest);
-    envelope.latestOperationResultRefs = [latest.resultRef];
+    envelope.latestOperationResultCount = 1;
     envelope.phaseContinuity = phaseContinuity();
 
     await model.runRound(envelope);

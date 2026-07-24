@@ -56,7 +56,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         ? { acceptedActualIdentity: JSON.parse(head.actual_identity_json) as ActualModelIdentity }
         : {}),
       operationResults: this.operationResults.load(currentBinding),
-      latestOperationResultRefs: this.operationResults.loadLatestRefs(currentBinding),
+      latestOperationResultCount: this.operationResults.loadLatestBatchSize(currentBinding),
       ...(latestOperation?.phaseContinuity
         ? { phaseContinuity: latestOperation.phaseContinuity }
         : {}),
