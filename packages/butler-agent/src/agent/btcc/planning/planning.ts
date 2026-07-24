@@ -15,9 +15,8 @@ import { reviewPlan } from "./review-plan.ts";
 import type {
   GoverningSpecRevision,
   PlanningCandidateProduct,
-  PlanningDraftCandidate,
-  PlanningProposal,
 } from "./contracts.ts";
+import type { PlanningRevisionRequiredProduct } from "./review-contracts.ts";
 import {
   admitPlanningObservations,
   mergePlanningObservationIndexes,
@@ -127,27 +126,24 @@ async function authorInitialPlan(command: {
     ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
       ? { continuation: accepted.authority.managedBinding.continuationBinding }
       : {}),
-    ...(previous
-      ? {
-          previousPlanCandidate: previous.candidate,
-          planningReviewFindings: previous.review.findings,
-        }
-      : {}),
-    ...(previous && !isPlanningDraft(previous.candidate)
-      ? {
-          previousCandidateRef: previous.candidate.ref,
-          findingSetRef: previous.review.findingSetRef,
-          priorPlanningReview: previous.review,
-        }
-      : {}),
+    ...projectPlanningRevision(previous),
   }));
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "PlanCandidateSubmitted", product };
 }
 
-function isPlanningDraft(candidate: PlanningProposal): candidate is PlanningDraftCandidate {
-  return "kind" in candidate && candidate.kind === "planning_draft";
+export function projectPlanningRevision(
+  previous: PlanningRevisionRequiredProduct | undefined,
+) {
+  if (!previous) return {};
+  return {
+    previousPlanCandidate: previous.candidate,
+    planningReviewFindings: previous.review.findings,
+    previousCandidateRef: previous.candidate.ref,
+    findingSetRef: previous.review.findingSetRef,
+    priorPlanningReview: previous.review,
+  };
 }
 
 async function reviewInitialPlan(command: {
