@@ -111,6 +111,11 @@ export function phaseContinuity() {
     decisions: [],
     unresolved: ["The requested operation must be observed."],
     nextOperationPurpose: "Resolve the remaining phase question.",
+    publicActivity: {
+      summary: "현재 단계에 필요한 내용을 확인하고 있습니다.",
+      rationale: "정확한 다음 판단에 필요한 현재 상태를 확보합니다.",
+      nextStep: "확인한 내용을 바탕으로 단계 결과를 작성합니다.",
+    },
   };
 }
 

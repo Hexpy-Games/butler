@@ -123,6 +123,13 @@ async function runPhaseConversationAtCheckpoint<Product>(
         }),
         pendingOperationRound: round,
       };
+      if (round.phaseContinuity) {
+        await command.activity?.publish({
+          turnId: conversation.binding.turnId,
+          semanticState: conversation.binding.semanticState,
+          activity: round.phaseContinuity.publicActivity,
+        });
+      }
       continue;
     }
     decodePhaseSubmission(command, round.submission, envelope);

@@ -37,6 +37,17 @@ export function createPhaseInvocation(
       mutation: { kind: "forbidden" },
     },
     executionPermit,
+    ...(dependencies.progress?.phaseActivityChanged
+      ? {
+          activity: {
+            publish: (update) => dependencies.progress?.phaseActivityChanged?.({
+              turnId: update.turnId,
+              semanticState: update.semanticState,
+              ...update.activity,
+            }),
+          },
+        }
+      : {}),
     ...(providerCorrection ? { providerCorrection } : {}),
   };
 }

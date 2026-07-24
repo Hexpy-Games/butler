@@ -1,0 +1,37 @@
+/// <reference types="bun" />
+
+import { expect, test } from "bun:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PhaseActivityLog } from "./PhaseActivityLog";
+
+test("phase activity log keeps model-authored intent history open", () => {
+  const html = renderToStaticMarkup(
+    <PhaseActivityLog
+      activities={[
+        {
+          id: "conception-1",
+          phase: "conception_deliberation",
+          summary: "관련 스펙과 현재 구현을 함께 확인하고 있습니다.",
+          rationale: "사용자 의도와 기존 설계가 어긋나지 않게 범위를 정합니다.",
+          nextStep: "확인한 내용을 목표 계약으로 정리합니다.",
+        },
+        {
+          id: "planning-1",
+          phase: "planning",
+          summary: "수정할 모듈과 검증 경로를 구체화하고 있습니다.",
+          rationale: "불필요한 변경 없이 완료 가능한 작업 단위로 나누기 위해 필요합니다.",
+          nextStep: "계획 후보를 독립적으로 검토합니다.",
+        },
+      ]}
+    />,
+  );
+
+  expect(html).toContain("작업 진행 로그");
+  expect(html).toContain("2개 기록");
+  expect(html).toContain("관련 스펙과 현재 구현을 함께 확인하고 있습니다.");
+  expect(html).toContain("사용자 의도와 기존 설계가 어긋나지 않게 범위를 정합니다.");
+  expect(html).toContain("수정할 모듈과 검증 경로를 구체화하고 있습니다.");
+  expect(html).toContain("다음: 계획 후보를 독립적으로 검토합니다.");
+  expect(html).toContain("aria-expanded=\"true\"");
+});

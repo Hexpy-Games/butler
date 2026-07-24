@@ -36,3 +36,31 @@ test("projects the committed model-authored Opening decision without rewriting i
     },
   }]);
 });
+
+test("projects model-authored phase activity with intent and next step", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.phaseActivityChanged?.({
+    turnId: "turn-phase-activity",
+    semanticState: "planning",
+    summary: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
+    rationale: "기존 설계와 구현을 맞춘 최소 작업 범위를 정하기 위해 필요합니다.",
+    nextStep: "확인 결과를 Work와 Task로 나누어 계획 후보를 작성합니다.",
+  });
+
+  expect(events).toEqual([{
+    kind: "assistant.public_note",
+    payload: {
+      note: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
+      btccState: "planning",
+      decisionSummary: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
+      decisionRationale: "기존 설계와 구현을 맞춘 최소 작업 범위를 정하기 위해 필요합니다.",
+      decisionNextStep: "확인 결과를 Work와 Task로 나누어 계획 후보를 작성합니다.",
+      decisionSource: "model-authored",
+      semanticBlockId: "planning",
+    },
+  }]);
+});

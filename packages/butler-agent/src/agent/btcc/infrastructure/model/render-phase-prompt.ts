@@ -93,7 +93,9 @@ export async function renderPhasePrompt(
               operationRequests: [
                 "Use a non-empty array of typed requests within authority.",
                 "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
+                "Write publicActivity for the user: what is happening, why it is needed, and what follows; summarize intent without hidden chain-of-thought.",
                 "Do not copy raw operation output into phaseContinuity; durable results remain readable by ref.",
+                "Use read_operation_result with priorOperationResultIndex when a stable prior result is needed; repeat a source operation only for a fresh target revision or an uncaptured view.",
               ].join(" "),
             }
           : {}),
