@@ -70,6 +70,7 @@ export function latestPublicActivity(
       row.state === "running" &&
       !row.work_block_id
     ) {
+      if (row.bridge_phase === "model_round_waiting") return undefined;
       if (row.work_decision_source) return undefined;
       if (hasModelActivity && row.bridge_phase !== "operational_recovery") {
         return undefined;

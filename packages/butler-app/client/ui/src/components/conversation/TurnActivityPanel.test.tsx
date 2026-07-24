@@ -150,6 +150,7 @@ test("turn activity panel shows model wait beneath the latest public intent", ()
   expect(html).toContain("turn-model-round-waiting");
   expect(html).toContain("모델 응답을 기다리고 있습니다");
   expect(html).toContain("마지막으로 공개한 작업 의도를 이어서");
+  expect(html.match(/모델 응답을 기다리고 있습니다/gu)).toHaveLength(1);
 });
 
 test("turn activity panel hides an older placeholder after phase detail arrives", () => {

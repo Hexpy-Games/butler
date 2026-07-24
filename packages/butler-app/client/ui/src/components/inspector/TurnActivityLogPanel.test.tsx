@@ -55,4 +55,5 @@ test("turn activity log renders every committed public phase activity", () => {
   expect(html).toContain("계획");
   expect(html).toContain("모델 응답을 기다리고 있습니다");
   expect(html).toContain("turn-model-round-waiting");
+  expect(html.match(/모델 응답을 기다리고 있습니다/gu)).toHaveLength(1);
 });

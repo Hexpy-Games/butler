@@ -37,7 +37,7 @@ export function TurnActivityLogPanel({ rows }: { rows: ProgressRow[] }) {
       icon: <LoaderCircle size={17} />,
       title: waiting.safe_label,
       meta: phaseLabel(waiting.semantic_block_id),
-      description: <CurrentModelRoundWaiting row={waiting} />,
+      description: <CurrentModelRoundWaiting row={waiting} showLabel={false} />,
     });
   }
 

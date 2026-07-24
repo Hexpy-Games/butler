@@ -50,7 +50,13 @@ export function CurrentModelPhaseActivity({
   );
 }
 
-export function CurrentModelRoundWaiting({ row }: { row: ProgressRow }) {
+export function CurrentModelRoundWaiting({
+  row,
+  showLabel = true,
+}: {
+  row: ProgressRow;
+  showLabel?: boolean;
+}) {
   const elapsed = useElapsedTime(row.created_at);
   return (
     <section
@@ -59,7 +65,8 @@ export function CurrentModelRoundWaiting({ row }: { row: ProgressRow }) {
     >
       <Stack gap="xs" aria-live="polite">
         <Typo.Body as="p" className={styles.secondary}>
-          {row.safe_label}{elapsed ? ` · ${elapsed}` : ""}
+          {showLabel ? row.safe_label : "응답 생성 중"}
+          {elapsed ? ` · ${elapsed}` : ""}
         </Typo.Body>
         <Typo.Caption as="p" className={styles.secondary}>
           마지막으로 공개한 작업 의도를 이어서 응답을 생성 중입니다.
