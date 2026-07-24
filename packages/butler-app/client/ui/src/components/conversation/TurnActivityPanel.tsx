@@ -5,14 +5,12 @@ import {
   type TypedUiReadModel,
 } from "@/app/utils.ts";
 import type { ProgressRow } from "@/app/types.ts";
-import { CurrentModelPhaseActivity, CurrentPhaseActivity } from "./PhaseActivityLog";
+import { CurrentModelPhaseActivity, CurrentModelRoundWaiting, CurrentPhaseActivity }
+  from "./PhaseActivityLog";
 import { WorkDecisionBody } from "./WorkDecisionBody";
 import { TurnDecisionRow } from "./TurnDecisionRow";
-import {
-  currentSemanticState,
-  latestPublicActivity,
-  phaseActivityRows,
-} from "./turnActivityRows";
+import { currentModelRoundWait, currentSemanticState, latestPublicActivity,
+  phaseActivityRows } from "./turnActivityRows";
 import {
   toolchainRowsForBlock,
   isTerminalActivityState,
@@ -41,6 +39,7 @@ export function TurnActivityPanel({
   const phaseActivities = phaseActivityRows(rows);
   const publicActivity = latestPublicActivity(rows, phaseActivities.length > 0);
   const semanticState = currentSemanticState(rows, phaseActivities);
+  const modelRoundWait = currentModelRoundWait(rows);
   if (
     decisions.length === 0 &&
     activeBlocks.length === 0 &&
@@ -116,6 +115,7 @@ export function TurnActivityPanel({
         />
       ))}
       <CurrentModelPhaseActivity activities={phaseActivities} currentState={semanticState} />
+      {modelRoundWait ? <CurrentModelRoundWaiting row={modelRoundWait} /> : null}
       {publicActivity ? <CurrentPhaseActivity row={publicActivity} /> : null}
       {activeBlocks.map((block, blockIndex) => (
         <WorkActivityBlock

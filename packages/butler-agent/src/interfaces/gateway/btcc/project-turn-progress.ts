@@ -57,6 +57,18 @@ export function projectTurnProgress(
         },
       });
     },
+    async modelRoundWaiting(update) {
+      await publish({
+        kind: "assistant.public_note",
+        payload: {
+          note: "모델 응답을 기다리고 있습니다",
+          btccState: update.semanticState,
+          semanticBlockId: update.semanticState,
+          bridgePhase: "model_round_waiting",
+          checkpointId: update.checkpointId,
+        },
+      });
+    },
     async operationalNoticeChanged(update) {
       if (update.status === "cleared") {
         await publish({

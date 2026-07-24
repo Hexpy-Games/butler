@@ -28,6 +28,7 @@ test("accepts a corrected request that reuses its local ID in a later model roun
   let modelCalls = 0;
   let operationCalls = 0;
   const modelRounds: string[] = [];
+  const waitingRounds: string[] = [];
 
   const product = await runPhaseConversation({
       binding,
@@ -92,6 +93,12 @@ test("accepts a corrected request that reuses its local ID in a later model roun
         mutation: { kind: "forbidden" },
       },
       executionPermit: activePermit(),
+      activity: {
+        publish: () => {},
+        modelRoundWaiting: ({ checkpointId }) => {
+          waitingRounds.push(checkpointId);
+        },
+      },
     });
 
   expect(product).toEqual({ kind: "complete" });
@@ -99,6 +106,11 @@ test("accepts a corrected request that reuses its local ID in a later model roun
   expect(operationCalls).toBe(2);
   expect(results).toHaveLength(2);
   expect(modelRounds).toEqual(["operation_requests", "operation_requests"]);
+  expect(waitingRounds).toEqual([
+    "checkpoint-phase-progress",
+    "checkpoint-phase-progress",
+    "checkpoint-phase-progress",
+  ]);
 });
 
 function operationRound(request: {
