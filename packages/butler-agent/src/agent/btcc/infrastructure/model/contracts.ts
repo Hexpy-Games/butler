@@ -76,6 +76,9 @@ export type ProductionSelectedModelDependencies = {
   capabilities: StructuralCapabilityCatalog;
   guidance: PhaseGuidanceReader;
   promptRunner?: ProviderPhasePromptRunner;
+  roundBoundary?: {
+    totalTimeoutMs?: number;
+  };
 };
 
 export type RenderedPhasePrompt = {

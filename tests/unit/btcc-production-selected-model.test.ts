@@ -110,7 +110,8 @@ describe("production BTCC selected model", () => {
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.modelSelection).toEqual(modelSelection());
-    expect(calls[0]?.signal).toBe(signal);
+    expect(calls[0]?.signal).not.toBe(signal);
+    expect(calls[0]?.signal?.aborted).toBe(false);
     expect(calls[0]?.cacheScope).toBe("btcc:planning");
     expect(calls[0]?.responseSchema).toMatchObject({
       anyOf: [
@@ -575,6 +576,51 @@ describe("production BTCC selected model", () => {
       activation: { kind: "cancelled" },
     });
     expect(calls).toBe(4);
+  });
+
+  test("bounds the whole selected-model round before provider admission", async () => {
+    let promptCalls = 0;
+    const model = createProductionSelectedModel({
+      context: {
+        resolve: async () => await new Promise<string>(() => {}),
+      },
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => {
+        promptCalls += 1;
+        throw new Error("provider must not be reached");
+      }),
+      roundBoundary: { totalTimeoutMs: 20 },
+    });
+    const envelope = phaseEnvelope();
+
+    expect(await model.runRound(envelope)).toEqual({
+      kind: "interruption",
+      code: "provider_round_timeout",
+      activation: { kind: "automatic_provider_recovery" },
+    });
+    expect(promptCalls).toBe(0);
+  });
+
+  test("the selected-model round boundary aborts an admitted provider call", async () => {
+    let roundSignal: AbortSignal | undefined;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async (input) => {
+        roundSignal = input.signal;
+        return await new Promise<ProviderPhasePromptResult>(() => {});
+      }),
+      roundBoundary: { totalTimeoutMs: 20 },
+    });
+
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_round_timeout",
+      activation: { kind: "automatic_provider_recovery" },
+    });
+    expect(roundSignal?.aborted).toBe(true);
   });
 
   test("holds provider action and protocol defects without automatic replay", async () => {
