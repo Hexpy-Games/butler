@@ -1,5 +1,5 @@
 import type { ContentRef } from "../core/index.ts";
-import type { PlanningCandidate } from "./contracts.ts";
+import type { PlanningCandidate, PlanningFindingDecision } from "./contracts.ts";
 
 export type TaskImpact = {
   priorTaskRef: ContentRef;
@@ -21,7 +21,12 @@ type FeedbackCandidateBase = {
   ref: ContentRef;
   revisionOrigin:
     | { kind: "initial" }
-    | { kind: "review_revision"; previousCandidateRef: ContentRef; findingSetRef: ContentRef };
+    | {
+        kind: "review_revision";
+        previousCandidateRef: ContentRef;
+        findingSetRef: ContentRef;
+        findingDecisions: PlanningFindingDecision[];
+      };
   feedbackIntentRef: ContentRef;
   correctionScopeRef: ContentRef;
   correctionPlan: CorrectionPlan;
@@ -65,7 +70,19 @@ export type FeedbackPlanningReview = {
     | "authority_scope_revision";
   verdict: "accepted" | "revision_required";
   findings: string[];
+  reviewedFindings: FeedbackPlanningFinding[];
   findingSetRef?: ContentRef;
+};
+
+export type FeedbackPlanningFinding = {
+  ref: ContentRef;
+  statement: string;
+  priority: "P0" | "P1" | "P2";
+  recommendedDisposition: "required_now" | "backlog";
+  origin:
+    | { kind: "initial_review" }
+    | { kind: "prior_finding"; findingRef: ContentRef }
+    | { kind: "backlog_candidate" };
 };
 
 export type FeedbackPlanningAcceptedProduct = {

@@ -2,18 +2,21 @@ import {
   contentRef,
   requireLiteral,
   requireRecord,
-  requireStringArray,
+  requireString,
   runPhaseConversation,
   type ContentRef,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
 import type {
+  FeedbackPlanningFinding,
+  FeedbackPlanningReview,
   FeedbackPlanProduct,
   FeedbackPlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { feedbackPlanReviewSubmissionSchema } from "./submission-schemas.ts";
+import { requiredFeedbackFindingRefs } from "./finding-decisions.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning_review",
@@ -32,8 +35,12 @@ const CONTRACT: PhaseContract = {
   ],
 };
 
-const codec = withManagedDeferral<FeedbackPlanningReviewProduct>({
-  submissionSchema: feedbackPlanReviewSubmissionSchema,
+function correctionReviewCodec(prior?: FeedbackPlanningReview) {
+  const priorFindingRefs = requiredFeedbackFindingRefs(prior);
+  return withManagedDeferral<FeedbackPlanningReviewProduct>({
+  submissionSchema: feedbackPlanReviewSubmissionSchema(
+    priorFindingRefs.map((ref) => ref.id),
+  ),
   decode(submission, envelope) {
     const state = requireRecord(envelope.context.stateInput, "Feedback Planning Review state");
     const candidate = state.feedbackPlan as FeedbackPlanProduct | undefined;
@@ -46,17 +53,21 @@ const codec = withManagedDeferral<FeedbackPlanningReviewProduct>({
     if (value.verdict !== "accepted" && value.verdict !== "revision_required") {
       throw new Error("Feedback Planning Review verdict is invalid");
     }
-    const findings = requireStringArray(value.findings, "Feedback Planning Review findings");
-    if (value.verdict === "accepted" && findings.length > 0) {
+    const reviewedFindings = requireFeedbackFindings(value.findings, prior);
+    const blocking = reviewedFindings
+      .filter((finding) => finding.recommendedDisposition === "required_now");
+    const findings = blocking.map((finding) => finding.statement);
+    if (value.verdict === "accepted" && blocking.length > 0) {
       throw new Error("Accepted Feedback Planning Review cannot carry findings");
     }
-    if (value.verdict === "revision_required" && findings.length === 0) {
+    if (value.verdict === "revision_required" && blocking.length === 0) {
       throw new Error("Feedback Planning revision requires findings");
     }
     const reviewBase = {
       candidateRef: candidate.candidate.ref,
       originalGoalContractRef: goalRef,
       correctionKind: candidate.candidate.correctionKind,
+      reviewedFindings,
     };
     if (value.verdict === "accepted") {
       const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
@@ -68,7 +79,7 @@ const codec = withManagedDeferral<FeedbackPlanningReviewProduct>({
     }
     const findingSetRef = contentRef("feedback-planning-finding-set", {
       candidateRef: candidate.candidate.ref,
-      findings,
+      findingRefs: blocking.map((finding) => finding.ref),
     });
     const body = {
       ...reviewBase,
@@ -83,9 +94,79 @@ const codec = withManagedDeferral<FeedbackPlanningReviewProduct>({
     };
   },
 });
+}
 
 export function reviewCorrection(command: PhaseInvocation) {
-  return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+  const state = requireRecord(command.context.stateInput, "Feedback Planning Review state");
+  const prior = state.previousFeedbackPlanningReview as FeedbackPlanningReview | undefined;
+  return runPhaseConversation({
+    ...command,
+    phaseContract: CONTRACT,
+    codec: correctionReviewCodec(prior),
+  });
+}
+
+function requireFeedbackFindings(
+  value: unknown,
+  prior?: FeedbackPlanningReview,
+): FeedbackPlanningFinding[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Feedback Planning Review findings must be an array");
+  }
+  const priorById = new Map((prior?.reviewedFindings ?? [])
+    .filter((finding) => finding.recommendedDisposition === "required_now")
+    .map((finding) => [finding.ref.id, finding]));
+  return value.map((item, index) => {
+    const finding = requireRecord(item, `Feedback Planning finding[${index}]`);
+    const statement = requireString(finding.statement, "Feedback Planning finding statement");
+    const priority = requirePriority(finding.priority);
+    if (finding.recommendedDisposition === "required_now") {
+      if (prior) {
+        const previous = priorById.get(
+          requireString(finding.priorFindingId, "prior Feedback Planning finding id"),
+        );
+        if (
+          finding.findingOrigin !== "prior_finding" ||
+          !previous ||
+          previous.statement !== statement ||
+          previous.priority !== priority
+        ) {
+          throw new Error("Feedback Planning re-review changed its frozen finding");
+        }
+        return previous;
+      }
+      if (finding.findingOrigin !== "initial_review") {
+        throw new Error("Initial Feedback Planning finding origin is invalid");
+      }
+      const body = {
+        statement,
+        priority,
+        recommendedDisposition: "required_now" as const,
+        origin: { kind: "initial_review" as const },
+      };
+      return { ref: contentRef("feedback-planning-finding", body), ...body };
+    }
+    if (
+      finding.recommendedDisposition !== "backlog" ||
+      finding.findingOrigin !== "backlog_candidate"
+    ) {
+      throw new Error("Feedback Planning backlog finding is invalid");
+    }
+    const body = {
+      statement,
+      priority,
+      recommendedDisposition: "backlog" as const,
+      origin: { kind: "backlog_candidate" as const },
+    };
+    return { ref: contentRef("feedback-planning-finding", body), ...body };
+  });
+}
+
+function requirePriority(value: unknown): "P0" | "P1" | "P2" {
+  if (value !== "P0" && value !== "P1" && value !== "P2") {
+    throw new Error("Feedback Planning finding priority is invalid");
+  }
+  return value;
 }
 
 function requireContentRef(value: unknown, label: string): ContentRef {

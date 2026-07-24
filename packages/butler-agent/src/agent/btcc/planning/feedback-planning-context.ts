@@ -96,6 +96,7 @@ function revisionContext(managed: ManagedTurnState): Record<string, unknown> {
         previousCandidateRef: previous.candidate.ref,
         findingSetRef: previous.review.findingSetRef,
         previousFeedbackPlan: previous.candidate,
+        previousFeedbackPlanningReview: previous.review,
         feedbackPlanningReviewFindings: previous.review.findings,
       }
     : {};

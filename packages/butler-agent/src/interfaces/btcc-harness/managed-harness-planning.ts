@@ -1,11 +1,7 @@
-export type HarnessCorrectionKind =
-  | "implementation_repair"
-  | "governing_revision"
-  | "authority_scope_revision";
-
 export function submitInitialPlan(state: Record<string, unknown>) {
   return {
     kind: "plan_candidate",
+    ...findingDecisions(state),
     ...governingSelection(state),
     strategy: "조사와 가이드 완성을 독립적으로 검토 가능한 두 Task로 구성한다",
     works: [{
@@ -143,7 +139,10 @@ export function submitPlanningReview(
     return {
       kind: "planning_review",
       verdict: "revision_required",
-      coverage: planningReviewCoverage(
+      coverage: planningReviewCoverage("task_executability"),
+      subjects: planningReviewSubjects(
+        state,
+        "task:",
         "task_executability",
         "두 번째 Task의 완료 조건을 더 명확히 표현해야 한다",
       ),
@@ -155,12 +154,12 @@ export function submitPlanningReview(
     reviewedIntegrationCriterionRefs: nestedRecordRefs(state, "integrationCriteria"),
     verdict: "accepted",
     coverage: planningReviewCoverage(),
+    subjects: planningReviewSubjects(state),
   };
 }
 
 function planningReviewCoverage(
   failedDimension?: string,
-  finding?: string,
 ) {
   return [
     "original_goal",
@@ -172,105 +171,61 @@ function planningReviewCoverage(
     "effect_authority",
     "artifact_lifecycle",
   ].map((dimension) => dimension === failedDimension
-    ? { dimension, verdict: "failed", findings: [finding] }
-    : { dimension, verdict: "passed", findings: [] });
+    ? { dimension, verdict: "failed" }
+    : { dimension, verdict: "passed" });
 }
 
-export function submitFeedbackPlan(
+function planningReviewSubjects(
   state: Record<string, unknown>,
-  correctionKind: HarnessCorrectionKind,
-  revalidateAcceptedTask = false,
+  failedPrefix?: string,
+  dimension?: string,
+  message?: string,
 ) {
-  if (correctionKind === "implementation_repair") {
-    return {
-      kind: "feedback_plan_candidate",
-      correctionKind,
-      correctionAction: "같은 Task에서 고객 응대 원칙별 실행 지침을 추가한다",
-    };
-  }
-  return {
-    kind: "feedback_plan_candidate",
-    correctionKind,
-    correctionAction: "리뷰 피드백에 맞춰 Task 경계와 의존 순서를 다시 승인한다",
-    revisedPlan: revalidateAcceptedTask
-      ? unchangedTaskRevision(state)
-      : revisedPlanSubmission(state),
-    impactMap: asArray(state.taskImpactIndex).map((taskState, index) => ({
-      priorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId,
-      disposition: revalidateAcceptedTask && index === 0
-        ? "revalidate"
-        : index === 0 || revalidateAcceptedTask
-          ? "rework"
-          : "replan",
-      ...(index === 0 || revalidateAcceptedTask
-        ? { successorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId }
-        : {}),
-      reason: revalidateAcceptedTask && index === 0
-        ? "변경된 governing authority 아래에서 기존 통과 결과를 다시 검토해야 한다"
-        : index === 0
-        ? "리뷰에서 발견한 구현 누락을 같은 Task에서 다시 수행해야 한다"
-        : "변경된 Task 경계에 맞춰 후속 작업을 다시 계획해야 한다",
+  const subjects = Array.isArray(state.requiredReviewSubjects)
+    ? state.requiredReviewSubjects
+    : [];
+  let failed = false;
+  return subjects.map((item) => {
+    const subject = asRecord(item);
+    const subjectId = String(subject.subjectId);
+    if (!failed && failedPrefix && subjectId.startsWith(failedPrefix)) {
+      failed = true;
+      return {
+        subjectId,
+        verdict: "failed",
+        findings: [{
+          dimension,
+          message,
+          priority: "P1",
+          recommendedDisposition: "required_now",
+          findingOrigin: "initial_review",
+        }],
+      };
+    }
+    return { subjectId, verdict: "passed", findings: [] };
+  });
+}
+
+function findingDecisions(state: Record<string, unknown>) {
+  const prior = asRecord(state.priorPlanningReview);
+  if (!Array.isArray(prior.reviewedSubjects)) return {};
+  const findingIds = prior.reviewedSubjects.flatMap((item) => {
+    const subject = asRecord(item);
+    if (!Array.isArray(subject.findings)) return [];
+    return subject.findings.flatMap((finding) => {
+      const value = asRecord(finding);
+      const ref = asRecord(value.ref);
+      return value.recommendedDisposition === "required_now" && typeof ref.id === "string"
+        ? [ref.id]
+        : [];
+    });
+  });
+  return findingIds.length === 0 ? {} : {
+    findingDecisions: findingIds.map((findingId) => ({
+      findingId,
+      decision: "apply_now",
+      rationale: "리뷰가 지적한 현재 범위의 결함을 이번 계획에서 수정한다",
     })),
-    ...(correctionKind === "authority_scope_revision"
-      ? { authorityChange: "사용자가 승인한 확장 범위를 적용한다" }
-      : {}),
-  };
-}
-
-function unchangedTaskRevision(state: Record<string, unknown>) {
-  const { kind: _kind, ...revision } = submitInitialPlan(state);
-  return {
-    ...revision,
-    strategy: "기존 Task 계약을 보존하고 변경된 governing authority 아래에서 재검토한다",
-  };
-}
-
-export function submitFeedbackPlanningReview(
-  reviseFirst: boolean,
-  reviewCount: number,
-) {
-  const revisionRequired = reviseFirst && reviewCount === 1;
-  return {
-    kind: "feedback_planning_review",
-    verdict: revisionRequired ? "revision_required" : "accepted",
-    findings: revisionRequired
-      ? ["보완 행동을 실패한 Task 범위로 더 명확히 제한해야 한다"]
-      : [],
-  };
-}
-
-function revisedPlanSubmission(state: Record<string, unknown>) {
-  return {
-    ...governingSelection(state),
-    strategy: "리뷰 피드백에 따라 조사와 가이드 작성 경계를 명확히 다시 구성한다",
-    works: [{
-      logicalId: "customer-service-guide",
-      outcome: "고객 응대 운영 가이드 완성",
-      dependencyWorkIds: [],
-      tasks: [
-        taskSubmission({
-          logicalId: "research-principles",
-          intendedOutcome: "신뢰 가능한 고객 응대 원칙과 적용 범위를 함께 조사한다",
-          executionOrdinal: 1,
-          dependencyTaskIds: [],
-          criterion: "요청한 고객 응대 원칙과 적용 범위가 조사 결과에 포함된다",
-          question: "조사 결과가 원래 요청의 핵심 원칙과 범위를 충족하는가?",
-          goalField: "request",
-          outcome: state.requiredOutcomeId,
-        }),
-        taskSubmission({
-          logicalId: "write-guide",
-          intendedOutcome: "승인된 조사 결과를 짧고 실행 가능한 가이드로 작성한다",
-          executionOrdinal: 2,
-          dependencyTaskIds: ["research-principles"],
-          criterion: "가이드가 짧고 실행 가능한 적용 지침을 제공한다",
-          question: "최종 가이드가 의도한 결과와 완료 조건을 충족하는가?",
-          goalField: "intended_result",
-          outcome: state.requiredOutcomeId,
-        }),
-      ],
-    }],
-    ...emptyPlanningConsiderations(),
   };
 }
 

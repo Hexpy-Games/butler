@@ -274,6 +274,11 @@ describe("BTCC managed executable ingress", () => {
           kind: "review_revision",
           previousCandidateRef: planningCandidates[0]?.ref,
           findingSetRef: expect.any(Object),
+          findingDecisions: [{
+            findingRef: expect.any(Object),
+            decision: "apply_now",
+            rationale: expect.any(String),
+          }],
         });
       }
       if (scenario === "managed-goal-revision") {

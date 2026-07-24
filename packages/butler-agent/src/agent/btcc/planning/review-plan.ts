@@ -10,6 +10,8 @@ import type {
   PlanningCandidate,
   PlanningCandidateProduct,
   PlanningDraftCandidate,
+  PlanningReview,
+  PlanningReviewSubjectCoverage,
   PlanningReviewProduct,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
@@ -46,14 +48,21 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-function reviewCodec(candidate: PlanningCandidateProduct) {
+function reviewCodec(
+  candidate: PlanningCandidateProduct,
+  prior?: PlanningReview,
+) {
   const subjects = isDraft(candidate.candidate)
     ? []
     : planningReviewSubjects(candidate.candidate);
+  const priorBlocking = prior ? orderedBlockingFindings(prior.reviewedSubjects) : [];
   return withManagedDeferral<PlanningReviewProduct>({
     submissionSchema: isDraft(candidate.candidate)
       ? planRevisionReviewSubmissionSchema
-      : planReviewSubmissionSchema(subjects.map((item) => item.subjectId)),
+      : planReviewSubmissionSchema(
+          subjects.map((item) => item.subjectId),
+          priorBlocking.map((finding) => finding.ref.id),
+        ),
     decode(submission, envelope) {
       const loaded = loadCandidate(envelope.context.stateInput);
       const value = requireRecord(submission, "Planning Review submission");
@@ -70,10 +79,19 @@ function reviewCodec(candidate: PlanningCandidateProduct) {
         );
       }
       const materialized = loaded.candidate;
-      const reviewedSubjects = requireSubjectCoverage(value.subjects, subjects);
+      const reviewedSubjects = requireSubjectCoverage(
+        value.subjects,
+        subjects,
+        priorBlocking,
+      );
+      preserveRevisionReviewScope(
+        materialized,
+        reviewedSubjects,
+        envelope.context.stateInput,
+      );
       const coverage = requireDimensionCoverage(value.coverage, reviewedSubjects);
-      const submittedFindings = reviewedSubjects
-        .flatMap((item) => item.findings.map((finding) => finding.message));
+      const blockingFindings = orderedBlockingFindings(reviewedSubjects);
+      const submittedFindings = blockingFindings.map((finding) => finding.message);
       const reviewBase = exactReviewBase(materialized, coverage, reviewedSubjects);
       if (value.verdict === "accepted") {
         if (submittedFindings.length > 0) {
@@ -131,7 +149,8 @@ function requireMaterializedRevision(
   const findings = requireFindings(submittedFindings);
   const findingSetRef = contentRef("planning-finding-set", {
     candidateRef: candidate.ref,
-    findings,
+    findingRefs: orderedBlockingFindings(reviewBase.reviewedSubjects)
+      .map((finding) => finding.ref),
   });
   const body = {
     ...reviewBase,
@@ -181,12 +200,66 @@ function requireFindings(findings: string[]): [string, ...string[]] {
   return unique as [string, ...string[]];
 }
 
+function preserveRevisionReviewScope(
+  candidate: PlanningCandidate,
+  current: PlanningReviewSubjectCoverage[],
+  stateInput: unknown,
+): void {
+  if (candidate.revisionOrigin.kind !== "review_revision") return;
+  const state = requireRecord(stateInput, "Planning Review state");
+  const prior = state.priorPlanningReview as PlanningReview | undefined;
+  if (!prior || prior.verdict !== "revision_required" || !prior.findingSetRef) {
+    throw new Error("Planning revision Review is missing its frozen prior finding set");
+  }
+  if (
+    !sameRef(prior.findingSetRef, candidate.revisionOrigin.findingSetRef) ||
+    !sameRef(prior.candidateRef, candidate.revisionOrigin.previousCandidateRef)
+  ) {
+    throw new Error("Planning revision changed its frozen review lineage");
+  }
+  const priorBlocking = orderedBlockingFindings(prior.reviewedSubjects);
+  const decisions = candidate.revisionOrigin.findingDecisions;
+  if (
+    decisions.length !== priorBlocking.length ||
+    !priorBlocking.every((finding) =>
+      decisions.some((decision) => sameRef(decision.findingRef, finding.ref)))
+  ) {
+    throw new Error("Planning revision did not decide the frozen finding set");
+  }
+  const currentBlocking = orderedBlockingFindings(current);
+  const priorFindingIds = new Set(priorBlocking.map((finding) => finding.ref.id));
+  const currentFindingIds = currentBlocking.map((finding) => finding.ref.id);
+  if (
+    new Set(currentFindingIds).size !== currentFindingIds.length ||
+    currentFindingIds.some((findingId) => !priorFindingIds.has(findingId))
+  ) {
+    throw new Error("Planning re-review can only retain frozen prior blockers");
+  }
+}
+
+function orderedBlockingFindings(subjects: PlanningReviewSubjectCoverage[]) {
+  const order = { P0: 0, P1: 1, P2: 2 };
+  return subjects
+    .flatMap((subject) => subject.findings)
+    .filter((finding) => finding.recommendedDisposition === "required_now")
+    .sort((left, right) => order[left.priority] - order[right.priority]);
+}
+
+function sameRef(
+  left: { id: string; sha256: string },
+  right: { id: string; sha256: string },
+): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
+}
+
 function isDraft(candidate: PlanningCandidateProduct["candidate"]): candidate is PlanningDraftCandidate {
   return "kind" in candidate && candidate.kind === "planning_draft";
 }
 
 export function reviewPlan(command: PhaseInvocation) {
+  const state = requireRecord(command.context.stateInput, "Planning Review state");
   const candidate = loadCandidate(command.context.stateInput);
+  const prior = state.priorPlanningReview as PlanningReview | undefined;
   const requiredReviewSubjects = isDraft(candidate.candidate)
     ? []
     : planningReviewSubjects(candidate.candidate);
@@ -200,7 +273,7 @@ export function reviewPlan(command: PhaseInvocation) {
       },
     },
     phaseContract: CONTRACT,
-    codec: reviewCodec(candidate),
+    codec: reviewCodec(candidate, prior),
   });
 }
 

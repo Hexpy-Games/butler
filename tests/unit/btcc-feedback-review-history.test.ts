@@ -25,6 +25,8 @@ test("Feedback Conception receives prior failed findings but not its current sou
       findingRef: ref("prior-finding"),
       category: "implementation_nonconformance",
       statement: "Repeated aggregation drift",
+      priority: "P1",
+      recommendedDisposition: "required_now",
     }],
   }]);
 });
@@ -43,6 +45,9 @@ function review(
         ref: ref(findingId),
         category: "implementation_nonconformance",
         statement,
+        priority: "P1",
+        recommendedDisposition: "required_now",
+        origin: { kind: "initial_review" },
       }],
     },
   } as TaskReviewProduct;

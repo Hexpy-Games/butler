@@ -44,6 +44,7 @@ export async function review(command: {
     reviewAuthorityRef: program.authorityRef,
     criteria: resolveCriteria(program),
     verificationQuestions: resolveVerificationQuestions(program),
+    priorCorrectionFindings: priorCorrectionFindings(program),
     ...(result.result.kind === "workspace_artifact"
       ? { reviewSourceRef: result.result.workspaceRevisionRef }
       : {}),
@@ -59,6 +60,20 @@ export async function review(command: {
   return product.review.verdict === "passed"
     ? { kind: "TaskReviewPassed", product }
     : { kind: "TaskReviewFailed", product };
+}
+
+function priorCorrectionFindings(
+  program: ReturnType<typeof requireManagedProgram>,
+) {
+  const attempt = program.currentTask.attempts.at(-1);
+  if (!attempt?.attemptRecord.correctionPlanRef || !attempt.attemptRecord.previousAttemptRef) {
+    return [];
+  }
+  const previous = program.currentTask.attempts.find((candidate) =>
+    candidate.attemptRecord.ref.id === attempt.attemptRecord.previousAttemptRef?.id);
+  if (!previous?.review || previous.review.review.verdict !== "not_passed") return [];
+  return previous.review.review.findings
+    .filter((finding) => finding.recommendedDisposition === "required_now");
 }
 
 function resolveCriteria(program: ReturnType<typeof requireManagedProgram>) {

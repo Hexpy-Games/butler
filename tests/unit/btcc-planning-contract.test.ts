@@ -14,6 +14,7 @@ import { planningReviewSubjects } from
 import {
   feedbackPlanReviewSubmissionSchema,
   planCandidateSubmissionSchema,
+  planReviewSubmissionSchema,
 } from
   "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from
@@ -91,12 +92,26 @@ describe("BTCC Planning contract", () => {
     expect(schema).toContain('"enum":["SPEC-EXISTING"]');
   });
 
-  test("constrains feedback review findings by verdict before decoding", () => {
-    const schema = JSON.stringify(feedbackPlanReviewSubmissionSchema);
+  test("constrains feedback review findings by priority, scope, and frozen identity", () => {
+    const planningRevision = JSON.stringify(
+      planReviewSubmissionSchema(["task:one"], ["planning-finding-1"]),
+    );
+    expect(planningRevision).toContain('"const":"prior_finding"');
+    expect(planningRevision).toContain('"enum":["planning-finding-1"]');
+    expect(planningRevision).not.toContain('"const":"initial_review"');
+
+    const schema = JSON.stringify(feedbackPlanReviewSubmissionSchema([]));
     expect(schema).toContain('"const":"accepted"');
-    expect(schema).toContain('"maxItems":0');
     expect(schema).toContain('"const":"revision_required"');
-    expect(schema).toContain('"minItems":1');
+    expect(schema).toContain('"enum":["P0","P1","P2"]');
+    expect(schema).toContain('"const":"required_now"');
+    expect(schema).toContain('"const":"backlog"');
+    expect(schema).toContain('"const":"initial_review"');
+
+    const revised = JSON.stringify(feedbackPlanReviewSubmissionSchema(["finding-1"]));
+    expect(revised).toContain('"const":"prior_finding"');
+    expect(revised).toContain('"enum":["finding-1"]');
+    expect(revised).not.toContain('"const":"initial_review"');
   });
   test("authors exact risks, assumptions, effects, integration, and contained artifact targets", () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
@@ -257,6 +272,9 @@ describe("BTCC Planning contract", () => {
     plan.findings = [{
       dimension: "governing_specs",
       message: "The candidate omits one governing requirement.",
+      priority: "P0",
+      recommendedDisposition: "required_now",
+      findingOrigin: "initial_review",
     }];
     const reviewed = await reviewPlan(reviewInvocation(candidate, {
       kind: "planning_review",
@@ -294,12 +312,18 @@ describe("BTCC Planning contract", () => {
     task.findings = [{
       dimension: "task_executability",
       message: "Integration combines independent implementation responsibilities.",
+      priority: "P1",
+      recommendedDisposition: "required_now",
+      findingOrigin: "initial_review",
     }];
     const assumption = subjects.find((item) => item.subjectId === "assumption:target-present")!;
     assumption.verdict = "failed";
     assumption.findings = [{
       dimension: "dependencies",
       message: "The target-presence assumption is unresolved before execution.",
+      priority: "P0",
+      recommendedDisposition: "required_now",
+      findingOrigin: "initial_review",
     }];
     const coverage = acceptedCoverage();
     coverage.find((item) => item.dimension === "task_executability")!.verdict = "failed";
@@ -314,10 +338,79 @@ describe("BTCC Planning contract", () => {
     expect(reviewed.kind).toBe("planning_revision_required");
     if (reviewed.kind !== "planning_revision_required") throw new Error("expected revision");
     expect(reviewed.review.findings).toEqual([
-      "Integration combines independent implementation responsibilities.",
       "The target-presence assumption is unresolved before execution.",
+      "Integration combines independent implementation responsibilities.",
     ]);
     expect(reviewed.review.reviewedSubjects).toHaveLength(planningReviewSubjects(candidate).length);
+  });
+
+  test("freezes the first blocker set across re-review and permits backlog separation", async () => {
+    const candidate = authorPlanCandidate(artifactPlan(), authoringState());
+    const firstSubjects = acceptedSubjects(candidate);
+    const original = firstSubjects.find((item) => item.subjectId === "task:integrate")!;
+    original.verdict = "failed";
+    original.findings = [{
+      dimension: "task_executability",
+      message: "Integration owns two separable contributions.",
+      priority: "P1",
+      recommendedDisposition: "required_now",
+      findingOrigin: "initial_review",
+    }];
+    const firstCoverage = acceptedCoverage();
+    firstCoverage.find((item) => item.dimension === "task_executability")!.verdict = "failed";
+    const first = await reviewPlan(reviewInvocation(candidate, {
+      kind: "planning_review",
+      verdict: "revision_required",
+      coverage: firstCoverage,
+      subjects: firstSubjects,
+    }));
+    if (first.kind !== "planning_revision_required") throw new Error("expected revision");
+    if (!first.review.reviewedSubjects) throw new Error("expected reviewed subjects");
+    const originalFinding = first.review.reviewedSubjects
+      .flatMap((subject) => subject.findings)
+      .find((finding) => finding.recommendedDisposition === "required_now")!;
+    const revised = authorPlanCandidate(artifactPlan(), {
+      ...authoringState(),
+      previousCandidateRef: candidate.ref,
+      findingSetRef: first.review.findingSetRef,
+      findingDecisions: [{
+        findingRef: originalFinding.ref,
+        decision: "split_to_backlog",
+        rationale: "The concern is useful but does not block the requested outcome.",
+      }],
+    });
+
+    const expanded = acceptedSubjects(revised);
+    const unchanged = expanded.find((item) => item.subjectId === "assumption:target-present")!;
+    unchanged.verdict = "failed";
+    unchanged.findings = [{
+      dimension: "dependencies",
+      message: "A new blocker was discovered on an unchanged assumption.",
+      priority: "P1",
+      recommendedDisposition: "required_now",
+      findingOrigin: "prior_finding",
+      priorFindingId: originalFinding.ref.id,
+    }];
+    const expandedCoverage = acceptedCoverage();
+    expandedCoverage.find((item) => item.dimension === "dependencies")!.verdict = "failed";
+    expect(reviewPlan(reviewInvocation(revised, {
+      kind: "planning_review",
+      verdict: "revision_required",
+      coverage: expandedCoverage,
+      subjects: expanded,
+    }, first.review))).rejects.toThrow("provider_phase_submission_invalid");
+
+    unchanged.verdict = "passed";
+    unchanged.findings[0]!.recommendedDisposition = "backlog";
+    unchanged.findings[0]!.findingOrigin = "backlog_candidate";
+    delete unchanged.findings[0]!.priorFindingId;
+    const accepted = await reviewPlan(reviewInvocation(revised, {
+      kind: "planning_review",
+      verdict: "accepted",
+      coverage: acceptedCoverage(),
+      subjects: expanded,
+    }, first.review));
+    expect(accepted.kind).toBe("planning_accepted");
   });
 
   test("routes a structurally invalid proposal through Planning Review revision", async () => {
@@ -362,7 +455,14 @@ function acceptedSubjects(candidate: PlanningCandidate) {
   return planningReviewSubjects(candidate).map(({ subjectId }) => ({
     subjectId,
     verdict: "passed" as "passed" | "failed",
-    findings: [] as Array<{ dimension: string; message: string }>,
+    findings: [] as Array<{
+      dimension: string;
+      message: string;
+      priority: "P0" | "P1" | "P2";
+      recommendedDisposition: "required_now" | "backlog";
+      findingOrigin: "initial_review" | "prior_finding" | "backlog_candidate";
+      priorFindingId?: string;
+    }>,
   }));
 }
 
@@ -438,6 +538,7 @@ function artifactPlan() {
 function reviewInvocation(
   candidate: PlanningCandidate | ReturnType<typeof authorPlanningProposal>,
   submission: Record<string, unknown>,
+  priorPlanningReview?: unknown,
 ) {
   const modelSelection = {
     provider: "openai",
@@ -458,7 +559,10 @@ function reviewInvocation(
       sessionId: "session-1", userRef: "user-1", profileRefs: [], recentFeedbackRefs: [],
       mandatoryHotCacheRefs: [], optionalHotCacheRefs: [],
       baselineObservationScopeRefs: ["workspace:/repo"],
-      stateInput: { planCandidate: { kind: "plan_candidate", candidate } },
+      stateInput: {
+        planCandidate: { kind: "plan_candidate", candidate },
+        ...(priorPlanningReview ? { priorPlanningReview } : {}),
+      },
     },
     store: {
       restore: async (binding: any) => ({ binding, acceptedProduct: null, operationResults: [] }),

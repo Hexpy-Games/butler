@@ -15,6 +15,8 @@ import { reviewPlan } from "./review-plan.ts";
 import type {
   GoverningSpecRevision,
   PlanningCandidateProduct,
+  PlanningDraftCandidate,
+  PlanningProposal,
 } from "./contracts.ts";
 import { admitPlanningObservations } from "./observation-result-index.ts";
 
@@ -119,17 +121,26 @@ async function authorInitialPlan(command: {
       : {}),
     ...(previous
       ? {
-          previousCandidateRef: previous.candidate.ref,
-          findingSetRef: previous.review.findingSetRef,
           previousPlanCandidate: previous.candidate,
           planningReviewFindings: previous.review.findings,
           priorPlanningObservationResultIndex: previous.observationResultIndex,
+        }
+      : {}),
+    ...(previous && !isPlanningDraft(previous.candidate)
+      ? {
+          previousCandidateRef: previous.candidate.ref,
+          findingSetRef: previous.review.findingSetRef,
+          priorPlanningReview: previous.review,
         }
       : {}),
   }));
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "PlanCandidateSubmitted", product };
+}
+
+function isPlanningDraft(candidate: PlanningProposal): candidate is PlanningDraftCandidate {
+  return "kind" in candidate && candidate.kind === "planning_draft";
 }
 
 async function reviewInitialPlan(command: {

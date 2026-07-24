@@ -13,12 +13,17 @@ import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import type {
   FeedbackPlanProduct,
   ManagedTask,
+  PlanningFindingDecision,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { authorPlanCandidate } from "./plan-graph/index.ts";
 import { feedbackPlanSubmissionSchema } from "./submission-schemas.ts";
 import { decodeAvailableSpecs } from "./decode-available-specs.ts";
 import { decodeTaskImpact } from "./decode-task-impact.ts";
+import {
+  decodeFindingDecisions,
+  requiredFeedbackFindingRefs,
+} from "./finding-decisions.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -44,9 +49,14 @@ const CONTRACT: PhaseContract = {
 function feedbackPlanningCodec(
   availableSpecIds: string[],
   correctionKind: FeedbackIntentProduct["feedbackIntent"]["correctionKind"],
+  priorFindingRefs: ContentRef[],
 ) {
   return withManagedDeferral<FeedbackPlanProduct>({
-    submissionSchema: feedbackPlanSubmissionSchema(availableSpecIds, correctionKind),
+    submissionSchema: feedbackPlanSubmissionSchema(
+      availableSpecIds,
+      correctionKind,
+      priorFindingRefs.map((ref) => ref.id),
+    ),
     decode(submission, envelope) {
       const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
       const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;
@@ -61,7 +71,14 @@ function feedbackPlanningCodec(
       const currentPlanRef = requireContentRef(state.workPlanRef, "workPlanRef");
       const affectedTaskRefs = requireContentRefs(state.affectedTaskRefs, "affectedTaskRefs");
       const lifecycleRef = requireContentRef(state.artifactLifecycleRef, "artifactLifecycleRef");
-      const revisionOrigin = revisionOriginFrom(state);
+      const revisionOrigin = revisionOriginFrom(
+        state,
+        decodeFindingDecisions(
+          value.findingDecisions,
+          priorFindingRefs,
+          "Feedback Planning",
+        ),
+      );
       if (value.correctionKind === "implementation_repair") {
         const correctionPlan = correctionPlanFor(
           currentPlanRef,
@@ -154,12 +171,16 @@ export function proposeCorrectionOrRevision(command: PhaseInvocation) {
   const availableSpecs = correctionKind === "implementation_repair"
     ? []
     : decodeAvailableSpecs(state.availableSpecs, optionalString(state.specParentRootId));
+  const priorFindingRefs = requiredFeedbackFindingRefs(
+    state.previousFeedbackPlanningReview,
+  );
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
     codec: feedbackPlanningCodec(
       availableSpecs.map((spec) => spec.logicalId),
       correctionKind,
+      priorFindingRefs,
     ),
   });
 }
@@ -214,12 +235,16 @@ function feedbackProduct(
   } as FeedbackPlanProduct;
 }
 
-function revisionOriginFrom(state: Record<string, unknown>) {
+function revisionOriginFrom(
+  state: Record<string, unknown>,
+  findingDecisions: PlanningFindingDecision[],
+) {
   return state.previousCandidateRef && state.findingSetRef
     ? {
         kind: "review_revision" as const,
         previousCandidateRef: requireContentRef(state.previousCandidateRef, "previousCandidateRef"),
         findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef"),
+        findingDecisions,
       }
     : { kind: "initial" as const };
 }
