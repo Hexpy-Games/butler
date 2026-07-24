@@ -16,6 +16,7 @@ import type { OperationalActivation } from "../../recovery/index.ts";
 import { runWithinModelRoundBoundary } from "./model-round-boundary.ts";
 import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.ts";
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
+import { PhasePromptCapacityError } from "./fit-operation-context.ts";
 import { validateJsonObjectSchema } from "../../../tools/tool-bridge/schema-validation.ts";
 
 export function createProductionSelectedModel(
@@ -105,9 +106,16 @@ async function runSelectedModelRound(
       return interruption(error.code, activationForProviderFailure(error));
     }
     if (error instanceof PhasePromptRenderError) {
-      return interruption("phase_prompt_render_interruption", {
-        kind: "runtime_remediation",
-      });
+      const cause = error.cause;
+      return cause instanceof PhasePromptCapacityError
+        ? interruption(
+            "phase_prompt_capacity_exceeded",
+            { kind: "runtime_remediation" },
+            cause.message,
+          )
+        : interruption("phase_prompt_render_interruption", {
+            kind: "runtime_remediation",
+          });
     }
     return interruption("provider_adapter_interruption", {
       kind: "automatic_provider_recovery",
@@ -268,8 +276,12 @@ function activationForProviderFailure(
     return { kind: "automatic_provider_recovery" };
   }
   if (
+    error.code === "provider_context_limit_exceeded"
+  ) {
+    return { kind: "runtime_remediation" };
+  }
+  if (
     error.code === "provider_auth_error" ||
-    error.code === "provider_context_limit_exceeded" ||
     error.statusCode === 400 ||
     error.statusCode === 401 ||
     error.statusCode === 403

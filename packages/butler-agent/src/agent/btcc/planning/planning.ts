@@ -8,6 +8,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { proposeCorrectionOrRevision } from "./plan-correction.ts";
+import { projectFeedbackPlanningContext } from "./feedback-planning-context.ts";
 import { proposePlan } from "./propose-plan.ts";
 import { reviewCorrection } from "./review-correction.ts";
 import { reviewPlan } from "./review-plan.ts";
@@ -199,45 +200,12 @@ async function authorFeedbackPlan(command: {
 }): Promise<FeedbackPlanningEvent> {
   const managed = requireManagedState(command.turn);
   const program = requireManagedProgram(command.turn);
-  if (!managed.goalAcceptance) throw new Error("Feedback Planning is missing Goal authority");
-  const previous = managed.feedbackPlanningRevision;
-  const affectedTaskRefs = managed.consolidationRepair?.repair.correctionScope.affectedTaskRefs
-    ?? [program.currentTask.task.ref];
+  const accepted = managed.goalAcceptance;
+  if (!accepted) throw new Error("Feedback Planning is missing Goal authority");
   const product = await proposeCorrectionOrRevision(withManagedDeferralState(
     command.phase,
     command.turn,
-    {
-      acceptedGoalContract: managed.goalAcceptance.goalContract,
-      acceptedAuthority: managed.goalAcceptance.authority,
-      feedbackIntent: managed.feedbackIntent,
-      workPlanRef: program.plan.ref,
-      affectedTaskRefs,
-      artifactLifecycleRef: program.artifactLifecycle.ref,
-      goalContractRef: program.goalContractRef,
-      authorityRef: program.authorityRef,
-      requiredOutcomeId: program.requiredOutcomeId,
-      artifactPersistence: managed.goalAcceptance.goalContract.artifactPersistence,
-      ledgerId: program.ledgerId,
-      ...(specParentRootId(managed.goalAcceptance.authority) ? {
-        specParentRootId: specParentRootId(managed.goalAcceptance.authority),
-      } : {}),
-      programId: program.programId,
-      observedManifestRevision: program.manifestRevision,
-      governingSpecRefs: program.governingSpecRefs,
-      governingSpecs: program.governingSpecs,
-      availableSpecs: program.availableSpecs,
-      requireGoverningSpec: managed.goalAcceptance.authority.ledgerScope.kind === "project",
-      currentTasks: program.tasks.map((task) => task.task),
-      currentTaskStates: program.tasks,
-      ...(previous
-        ? {
-            previousCandidateRef: previous.candidate.ref,
-            findingSetRef: previous.review.findingSetRef,
-            previousFeedbackPlan: previous.candidate,
-            feedbackPlanningReviewFindings: previous.review.findings,
-          }
-        : {}),
-    },
+    projectFeedbackPlanningContext({ managed, program, accepted }),
   ));
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }

@@ -41,9 +41,12 @@ const CONTRACT: PhaseContract = {
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
 };
 
-function feedbackPlanningCodec(availableSpecIds: string[]) {
+function feedbackPlanningCodec(
+  availableSpecIds: string[],
+  correctionKind: FeedbackIntentProduct["feedbackIntent"]["correctionKind"],
+) {
   return withManagedDeferral<FeedbackPlanProduct>({
-    submissionSchema: feedbackPlanSubmissionSchema(availableSpecIds),
+    submissionSchema: feedbackPlanSubmissionSchema(availableSpecIds, correctionKind),
     decode(submission, envelope) {
       const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
       const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;
@@ -106,7 +109,7 @@ function feedbackPlanningCodec(availableSpecIds: string[]) {
       );
       const impactMap = decodeTaskImpact({
         submission: value.impactMap,
-        currentTasks: requireCurrentTaskStates(state.currentTaskStates),
+        currentTasks: requireTaskImpactIndex(state.taskImpactIndex),
         nextTasks: revisedPlan.tasks,
       });
       const revisedTargets = impactMap
@@ -143,14 +146,21 @@ function feedbackPlanningCodec(availableSpecIds: string[]) {
 
 export function proposeCorrectionOrRevision(command: PhaseInvocation) {
   const state = requireRecord(command.context.stateInput, "Feedback Planning state");
-  const availableSpecs = decodeAvailableSpecs(
-    state.availableSpecs,
-    optionalString(state.specParentRootId),
-  );
+  const intent = state.feedbackIntent as FeedbackIntentProduct | undefined;
+  if (intent?.kind !== "feedback_intent") {
+    throw new Error("Feedback Planning is missing its accepted intent");
+  }
+  const correctionKind = intent.feedbackIntent.correctionKind;
+  const availableSpecs = correctionKind === "implementation_repair"
+    ? []
+    : decodeAvailableSpecs(state.availableSpecs, optionalString(state.specParentRootId));
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: feedbackPlanningCodec(availableSpecs.map((spec) => spec.logicalId)),
+    codec: feedbackPlanningCodec(
+      availableSpecs.map((spec) => spec.logicalId),
+      correctionKind,
+    ),
   });
 }
 
@@ -214,12 +224,12 @@ function revisionOriginFrom(state: Record<string, unknown>) {
     : { kind: "initial" as const };
 }
 
-function requireCurrentTaskStates(value: unknown) {
-  if (!Array.isArray(value) || value.length === 0) throw new Error("currentTaskStates is empty");
+function requireTaskImpactIndex(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) throw new Error("taskImpactIndex is empty");
   return value as Array<{
-    task: ManagedTask;
+    task: Pick<ManagedTask, "ref" | "taskLogicalId">;
     status: string;
-    currentResult?: unknown;
+    hasCurrentResult: boolean;
   }>;
 }
 

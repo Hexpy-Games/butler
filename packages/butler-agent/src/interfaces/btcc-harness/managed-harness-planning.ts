@@ -195,15 +195,15 @@ export function submitFeedbackPlan(
     revisedPlan: revalidateAcceptedTask
       ? unchangedTaskRevision(state)
       : revisedPlanSubmission(state),
-    impactMap: asArray(state.currentTasks).map((task, index) => ({
-      priorTaskLogicalId: asRecord(task).taskLogicalId,
+    impactMap: asArray(state.taskImpactIndex).map((taskState, index) => ({
+      priorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId,
       disposition: revalidateAcceptedTask && index === 0
         ? "revalidate"
         : index === 0 || revalidateAcceptedTask
           ? "rework"
           : "replan",
       ...(index === 0 || revalidateAcceptedTask
-        ? { successorTaskLogicalId: asRecord(task).taskLogicalId }
+        ? { successorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId }
         : {}),
       reason: revalidateAcceptedTask && index === 0
         ? "변경된 governing authority 아래에서 기존 통과 결과를 다시 검토해야 한다"
