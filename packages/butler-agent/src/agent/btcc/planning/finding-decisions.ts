@@ -4,6 +4,8 @@ import {
   type ContentRef,
 } from "../core/index.ts";
 import type { PlanningFindingDecision } from "./contracts.ts";
+import type { PlanningReview } from "./contracts.ts";
+import { requiredPlanningFindings } from "./review-finding-set.ts";
 
 export function decodeFindingDecisions(
   value: unknown,
@@ -41,14 +43,8 @@ export function decodeFindingDecisions(
 
 export function requiredSubjectFindingRefs(value: unknown): ContentRef[] {
   if (value === undefined) return [];
-  const review = requireRecord(value, "priorPlanningReview");
-  if (!Array.isArray(review.reviewedSubjects)) {
-    throw new Error("priorPlanningReview has no reviewed subjects");
-  }
-  return review.reviewedSubjects.flatMap((item, subjectIndex) => {
-    const subject = requireRecord(item, `priorPlanningReview subject[${subjectIndex}]`);
-    return requiredFindingRefs(subject.findings, `priorPlanningReview subject[${subjectIndex}]`);
-  });
+  return requiredPlanningFindings(value as PlanningReview)
+    .map((finding) => finding.ref);
 }
 
 export function requiredFeedbackFindingRefs(value: unknown): ContentRef[] {

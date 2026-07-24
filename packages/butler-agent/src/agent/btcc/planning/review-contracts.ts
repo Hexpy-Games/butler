@@ -23,6 +23,7 @@ export type PlanningReview = {
   coverage: PlanningReviewCoverage[];
   verdict: "accepted" | "revision_required";
   findings: string[];
+  findingSet?: PlanningFindingSet;
   findingSetRef?: ContentRef;
 };
 
@@ -80,6 +81,12 @@ export type PlanningReviewSubjectCoverage = PlanningReviewSubject & {
   findings: PlanningReviewSubjectFinding[];
 };
 
+export type PlanningFindingSet = {
+  ref: ContentRef;
+  candidateRef: ContentRef;
+  findings: PlanningReviewSubjectFinding[];
+};
+
 export type PlanningAcceptedProduct = {
   kind: "planning_accepted";
   candidate: PlanningCandidate;
@@ -97,6 +104,7 @@ export type PlanningRevisionRequiredProduct = {
   >> & {
     verdict: "revision_required";
     findings: [string, ...string[]];
+    findingSet: PlanningFindingSet;
     findingSetRef: ContentRef;
   };
 };

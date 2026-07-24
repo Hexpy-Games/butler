@@ -281,6 +281,7 @@ export type {
   TaskImpact,
 } from "./correction-contracts.ts";
 export type {
+  PlanningFindingSet,
   PlanningAcceptedProduct,
   PlanningReview,
   PlanningReviewCoverage,
