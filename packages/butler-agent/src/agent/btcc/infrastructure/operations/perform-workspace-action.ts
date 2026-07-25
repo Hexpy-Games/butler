@@ -12,7 +12,6 @@ import {
   type StoredWorkspace,
   type WorkspaceActionJournal,
 } from "./artifact-store.ts";
-import { exchangeCompleteRoots } from "../../../../foundation/atomic-root-exchange.ts";
 import {
   assertActive,
   operationContent,
@@ -27,6 +26,11 @@ import {
   syncCompleteTarget,
   workspaceContentRoot,
 } from "./target-snapshot.ts";
+import {
+  exchangePreparedCandidate,
+  requireWorkspaceCandidate,
+  type WorkspaceActionBoundary,
+} from "./exchange-workspace-candidate.ts";
 import { operationRoundScope } from "../../core/operation-identity.ts";
 import {
   requireAcceptedWorkspaceDelta,
@@ -38,11 +42,6 @@ import {
 type WorkspaceRequest = Extract<import("../../core/index.ts").OperationRequest, {
   kind: "workspace_artifact_action";
 }>;
-export type WorkspaceActionBoundary =
-  | "tool_mutated"
-  | "candidate_prepared"
-  | "workspace_exchanged";
-
 export async function performWorkspaceAction(input: {
   request: WorkspaceRequest;
   envelope: PhaseEnvelope;
@@ -110,12 +109,13 @@ export async function performWorkspaceAction(input: {
   if (journal.status === "candidate_prepared") {
     assertActive(input.signal);
     journal = exchangePreparedCandidate(input, workspace, journal);
+    input.store.saveWorkspaceAction(scopeId, journal);
   }
 
   if (journal.status !== "workspace_exchanged" || !journal.result) {
     throw new Error("BTCC workspace action did not reach its durable exchanged result");
   }
-  requireWorkspaceCandidate(workspace, journal);
+  requireWorkspaceCandidate(input.store, workspace, journal);
   return journal.result;
 }
 
@@ -289,56 +289,6 @@ function prepareCandidate(
   };
   input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), prepared);
   return prepared;
-}
-
-function exchangePreparedCandidate(
-  input: Parameters<typeof performWorkspaceAction>[0],
-  workspace: StoredWorkspace,
-  journal: WorkspaceActionJournal,
-): WorkspaceActionJournal {
-  const candidateRef = requireCandidateRef(journal);
-  const workspaceSnapshot = captureWorkspaceSnapshot(
-    workspace.workspaceRoot, workspace.targetKind, workspace.baselineTargetState,
-  );
-  const overlaySnapshot = captureWorkspaceSnapshot(
-    journal.overlayRoot, workspace.targetKind, workspace.baselineTargetState,
-  );
-  if (sameRef(workspaceSnapshot.ref, journal.beforeSnapshotRef) &&
-    sameRef(overlaySnapshot.ref, candidateRef)) {
-    exchangeCompleteRoots(
-      workspaceContentRoot(journal.overlayRoot),
-      workspaceContentRoot(workspace.workspaceRoot),
-    );
-    input.afterBoundary?.("workspace_exchanged");
-  } else if (!sameRef(workspaceSnapshot.ref, candidateRef) ||
-    !sameRef(overlaySnapshot.ref, journal.beforeSnapshotRef)) {
-    throw new Error("BTCC workspace action cannot reconcile its atomic exchange");
-  }
-  requireWorkspaceCandidate(workspace, journal);
-  const exchanged = { ...journal, status: "workspace_exchanged" as const };
-  input.store.saveWorkspaceAction(operationRoundScope(input.envelope.binding), exchanged);
-  return exchanged;
-}
-
-function requireWorkspaceCandidate(
-  workspace: StoredWorkspace,
-  journal: WorkspaceActionJournal,
-): void {
-  const current = captureWorkspaceSnapshot(
-    workspace.workspaceRoot,
-    workspace.targetKind,
-    workspace.baselineTargetState,
-  );
-  if (!sameRef(current.ref, requireCandidateRef(journal))) {
-    throw new Error("BTCC Program workspace does not equal its prepared candidate");
-  }
-}
-
-function requireCandidateRef(journal: WorkspaceActionJournal) {
-  if (!journal.candidateSnapshotRef || !journal.result) {
-    throw new Error("BTCC workspace action has no durable prepared candidate");
-  }
-  return journal.candidateSnapshotRef;
 }
 
 function requireWorkspace(store: ArtifactStore, request: WorkspaceRequest): StoredWorkspace {

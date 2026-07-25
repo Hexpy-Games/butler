@@ -4,7 +4,11 @@ import {
   type OperationAuthority,
 } from "../../core/index.ts";
 import type { StoredWorkspace } from "./artifact-store.ts";
-import type { MaterializedSnapshot, SnapshotEntry } from "./target-snapshot.ts";
+import {
+  isWorkspaceControlPath,
+  type MaterializedSnapshot,
+  type SnapshotEntry,
+} from "./target-snapshot.ts";
 
 type WorkspaceAuthority = Extract<
   OperationAuthority["mutation"],
@@ -64,7 +68,8 @@ export function requireAcceptedWorkspaceDelta(
   after: MaterializedSnapshot,
 ): void {
   const changes = changedEntries(before, after);
-  if (changes.length === 0) return;
+  const payloadChanges = changes.filter((change) => !isWorkspaceControlPath(change.path));
+  if (payloadChanges.length === 0) return;
   if (authority.mutationScope.kind === "read_only") {
     throw rejected(
       "read_only_task_mutated_workspace",
@@ -72,7 +77,7 @@ export function requireAcceptedWorkspaceDelta(
     );
   }
   const writablePaths = authority.mutationScope.writablePaths;
-  const denied = changes.find((change) => !isAuthorizedChange(
+  const denied = payloadChanges.find((change) => !isAuthorizedChange(
     change,
     writablePaths,
   ));

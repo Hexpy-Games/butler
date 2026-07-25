@@ -31,6 +31,8 @@ export type MaterializedSnapshot = {
   entries: SnapshotEntry[];
 };
 
+const WORKSPACE_CONTROL_ROOTS = new Set([".git", ".hg", ".jj", ".svn"]);
+
 export function captureTargetSnapshot(targetPath: string): MaterializedSnapshot {
   if (!existsSync(targetPath)) return snapshot("directory", [], "absent");
   const stat = lstatSync(targetPath);
@@ -137,6 +139,21 @@ export function snapshotSha256(snapshotValue: MaterializedSnapshot): string {
   return snapshotValue.ref.sha256;
 }
 
+export function isWorkspaceControlPath(path: string): boolean {
+  const [root] = path.split("/");
+  return WORKSPACE_CONTROL_ROOTS.has(root);
+}
+
+export function sameWorkspacePayload(
+  left: MaterializedSnapshot,
+  right: MaterializedSnapshot,
+): boolean {
+  if (left.targetKind !== right.targetKind || left.targetState !== right.targetState) {
+    return false;
+  }
+  return JSON.stringify(payloadIdentity(left)) === JSON.stringify(payloadIdentity(right));
+}
+
 export function bytesSha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
@@ -205,6 +222,19 @@ function snapshot(
     targetKind,
     entries,
   };
+}
+
+function payloadIdentity(snapshotValue: MaterializedSnapshot): unknown[] {
+  return snapshotValue.entries
+    .filter((entry) => !isWorkspaceControlPath(entry.path))
+    .map((entry) => entry.kind === "file"
+      ? {
+          path: entry.path,
+          kind: entry.kind,
+          mode: entry.mode,
+          contentSha256: entry.contentSha256,
+        }
+      : entry);
 }
 
 function snapshotEntryPath(root: string, targetKind: TargetKind, path: string): string {

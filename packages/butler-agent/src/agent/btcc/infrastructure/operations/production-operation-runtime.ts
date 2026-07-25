@@ -22,8 +22,8 @@ import { performReviewValidation } from "./perform-review-validation.ts";
 import {
   cleanupWorkspaceAction,
   performWorkspaceAction,
-  type WorkspaceActionBoundary,
 } from "./perform-workspace-action.ts";
+import type { WorkspaceActionBoundary } from "./exchange-workspace-candidate.ts";
 import { performWorkspaceObservation } from "./perform-workspace-observation.ts";
 import { operationRoundScope } from "../../core/operation-identity.ts";
 
