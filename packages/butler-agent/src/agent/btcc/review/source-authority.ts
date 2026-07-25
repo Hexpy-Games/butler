@@ -1,5 +1,12 @@
-import type { OperationAuthority } from "../core/index.ts";
-import type { ResultCandidateProduct } from "../execution/index.ts";
+import type { ContentRef, OperationAuthority } from "../core/index.ts";
+import type { ResultCandidateProduct, WorkspaceRevision } from "../execution/index.ts";
+
+export type ReviewValidationSourceProjection =
+  | Record<string, never>
+  | {
+      reviewSourceRef: ContentRef;
+      reviewValidationSource: WorkspaceRevision;
+    };
 
 export function taskReviewAuthority(input: {
   baseline: OperationAuthority;
@@ -20,6 +27,16 @@ export function taskReviewAuthority(input: {
       kind: "validation_overlay_only",
       reviewSourceRef: input.result.workspaceRevisionRef,
     },
+  };
+}
+
+export function projectReviewValidationSource(
+  result: ResultCandidateProduct["result"],
+): ReviewValidationSourceProjection {
+  if (result.kind !== "workspace_artifact") return {};
+  return {
+    reviewSourceRef: result.workspaceRevisionRef,
+    reviewValidationSource: result.workspaceRevision,
   };
 }
 

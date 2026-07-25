@@ -32,14 +32,10 @@ test("Review exposes immutable file bytes through the Task logical path", async 
     return { valid: true };
   };
   const reviewEnvelope = envelope({
-    resultCandidate: {
-      result: {
-        workspaceRevision: {
-          ref: reviewSourceRef,
-          workspaceRef: provision.workspace.ref,
-          targetSnapshotRef: applied.targetSnapshotRef,
-        },
-      },
+    reviewValidationSource: {
+      ref: reviewSourceRef,
+      workspaceRef: provision.workspace.ref,
+      targetSnapshotRef: applied.targetSnapshotRef,
     },
   });
   reviewEnvelope.context.baselineObservationScopeRefs = [`workspace:${fixture.root}`];

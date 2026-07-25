@@ -8,7 +8,10 @@ import {
 } from "../turn/index.ts";
 import { reviewTask } from "./review-task.ts";
 import { projectDirectSuccessorHandoffs } from "./project-successor-handoffs.ts";
-import { taskReviewAuthority } from "./source-authority.ts";
+import {
+  projectReviewValidationSource,
+  taskReviewAuthority,
+} from "./source-authority.ts";
 import type { TaskReviewProduct } from "./contracts.ts";
 
 type ReviewEvent = Extract<TurnEvent, {
@@ -51,9 +54,7 @@ export async function review(command: {
     verificationQuestions: resolveVerificationQuestions(program),
     priorCorrectionFindings: priorFindings,
     ...(correctionContext ? { correctionContext } : {}),
-    ...(result.result.kind === "workspace_artifact"
-      ? { reviewSourceRef: result.result.workspaceRevisionRef }
-      : {}),
+    ...projectReviewValidationSource(result.result),
   });
   const product = await reviewTask({
     ...invocation,

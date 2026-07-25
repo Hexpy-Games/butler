@@ -14,6 +14,9 @@ test("implementation repair projects only the exact current correction authority
   expect(context.currentTask).toEqual(fixture.program.currentTask.task);
   expect(context.correctionSource).toEqual(fixture.program.currentTask.currentReview);
   expect(context.governingSpecs).toEqual([fixture.program.governingSpecs[0]]);
+  expect(context.reviewValidationSource).toEqual(
+    fixture.program.currentTask.currentResult.result.workspaceRevision,
+  );
   expect(serialized).not.toContain("UNRELATED_RESULT_BODY");
   expect(serialized).not.toContain("FULL_ACCEPTED_PLAN");
   expect(context).not.toHaveProperty("taskImpactIndex");
@@ -56,9 +59,21 @@ function feedbackFixture(
     },
     status: index < 4 ? "accepted" : index === 4 ? "review_failed" : "planned",
     attempts: [],
-    currentResult: index < 5
-      ? { result: `UNRELATED_RESULT_BODY_${index}_${"x".repeat(10_000)}` }
-      : undefined,
+    currentResult: index === 4
+      ? {
+          result: {
+            kind: "workspace_artifact",
+            workspaceRevisionRef: ref("current-workspace-revision"),
+            workspaceRevision: {
+              ref: ref("current-workspace-revision"),
+              workspaceRef: ref("current-workspace"),
+              targetSnapshotRef: ref("current-snapshot"),
+            },
+          },
+        }
+      : index < 4
+        ? { result: `UNRELATED_RESULT_BODY_${index}_${"x".repeat(10_000)}` }
+        : undefined,
     currentReview: index === 4 ? { review: { findings: ["idempotency defect"] } } : undefined,
   }));
   const program = {
