@@ -62,6 +62,22 @@ test("a Codex stream whose body ignores abort still fails on the idle provider-r
   expect(fetchCalls).toBe(1);
 });
 
+test("a default OpenAI round preserves a healthy silent reasoning interval", async () => {
+  process.env.BUTLER_PROVIDER_ROUND_IDLE_TIMEOUT_MS = "10";
+  globalThis.fetch = codexFetchFromSchedule([
+    { afterMs: 30, event: completedEvent("ok") },
+  ]);
+
+  await expect(createOpenAIResponse(
+    { model: "gpt-5.6-sol", input: "test" },
+    undefined,
+    { mode: "codex_subscription", authorization: fakeAuthorization() },
+    undefined,
+    { roundIndex: 0 },
+    { totalTimeoutMs: 100 },
+  )).resolves.toMatchObject({ id: "response-complete" });
+});
+
 test("a hosted chat request that never returns enters provider recovery through the same deadline", async () => {
   let fetchCalls = 0;
   globalThis.fetch = (async () => {
