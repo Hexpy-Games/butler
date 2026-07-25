@@ -5,7 +5,7 @@ export type ProviderRoundTimeoutKind = "total" | "idle";
 
 export interface ProviderRoundPolicy {
   totalTimeoutMs: number;
-  idleTimeoutMs: number;
+  idleTimeoutMs: number | null;
 }
 
 export interface ProviderRoundGuard {
@@ -48,7 +48,7 @@ export function resolveProviderRoundPolicy(
       process.env.BUTLER_PROVIDER_ROUND_TIMEOUT_MS,
       DEFAULT_PROVIDER_ROUND_TIMEOUT_MS,
     ),
-    idleTimeoutMs: positiveMilliseconds(
+    idleTimeoutMs: idleTimeoutMilliseconds(
       override.idleTimeoutMs,
       process.env.BUTLER_PROVIDER_ROUND_IDLE_TIMEOUT_MS,
       DEFAULT_PROVIDER_ROUND_IDLE_TIMEOUT_MS,
@@ -75,6 +75,7 @@ export function createProviderRoundGuard(input: {
   };
   const armIdleTimer = () => {
     if (idleTimer) clearTimeout(idleTimer);
+    if (policy.idleTimeoutMs === null) return;
     idleTimer = unrefTimer(setTimeout(() => abortForTimeout("idle"), policy.idleTimeoutMs));
   };
   const onExternalAbort = () => {
@@ -141,6 +142,15 @@ function positiveMilliseconds(
   if (Number.isInteger(override) && Number(override) > 0) return Number(override);
   const parsed = Number(environmentValue);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function idleTimeoutMilliseconds(
+  override: number | null | undefined,
+  environmentValue: string | undefined,
+  fallback: number,
+): number | null {
+  if (override === null) return null;
+  return positiveMilliseconds(override, environmentValue, fallback);
 }
 
 function unrefTimer<T extends ReturnType<typeof setTimeout>>(timer: T): T {

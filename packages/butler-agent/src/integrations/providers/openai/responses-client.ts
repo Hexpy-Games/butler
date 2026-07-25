@@ -23,10 +23,12 @@ export async function createOpenAIResponse(
   providerRoundPolicy?: Partial<ProviderRoundPolicy>,
   retryAttempts?: number,
 ): Promise<OpenAIResponse> {
-  const guard = createProviderRoundGuard({ signal, policy: providerRoundPolicy });
-  let auth = authOverride;
+  const auth = authOverride ?? await resolveOpenAIAuth();
+  const guard = createProviderRoundGuard({
+    signal,
+    policy: openAIProviderRoundPolicy(providerRoundPolicy),
+  });
   try {
-    auth = auth ?? await resolveOpenAIAuth();
     return await raceProviderRoundWithSignal(
       withModelApiRetry(
         async () => await createOpenAIResponseOnce(
@@ -58,6 +60,13 @@ export async function createOpenAIResponse(
   } finally {
     guard.dispose();
   }
+}
+
+function openAIProviderRoundPolicy(
+  policy?: Partial<ProviderRoundPolicy>,
+): Partial<ProviderRoundPolicy> | undefined {
+  if (policy?.idleTimeoutMs !== undefined) return policy;
+  return { ...policy, idleTimeoutMs: null };
 }
 
 
