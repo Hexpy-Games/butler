@@ -7,7 +7,10 @@ import {
   type TurnEvent,
   type TurnRecord,
 } from "../turn/index.ts";
-import { taskReviewAuthority } from "../review/index.ts";
+import {
+  projectReviewValidationSource,
+  taskReviewAuthority,
+} from "../review/index.ts";
 import { proposeCorrectionOrRevision } from "./plan-correction.ts";
 import { projectFeedbackPlanningContext } from "./feedback-planning-context.ts";
 import { proposePlan } from "./propose-plan.ts";
@@ -310,6 +313,7 @@ function projectFeedbackReviewInput(
     currentTask: program.currentTask.task,
     currentAttempt,
     currentResult,
+    ...projectReviewValidationSource(currentResult.result),
     correctionSource,
     feedbackIntent,
     feedbackPlan,

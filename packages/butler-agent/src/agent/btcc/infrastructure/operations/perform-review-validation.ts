@@ -118,11 +118,12 @@ function resolveReviewSource(
   targetSnapshotRef: { id: string; sha256: string };
   workspaceRef: { id: string; sha256: string };
 } {
-  const state = requireRecord(envelope.context.stateInput, "Task Review state");
-  const resultCandidate = requireRecord(state.resultCandidate, "Task Review ResultCandidate");
-  const result = requireRecord(resultCandidate.result, "Task Review result");
-  const revision = requireRecord(result.workspaceRevision, "Task Review workspace revision");
-  const ref = requireRef(revision.ref, "Task Review workspace revision ref");
+  const state = requireRecord(envelope.context.stateInput, "Review validation state");
+  const revision = requireRecord(
+    state.reviewValidationSource,
+    "Review validation source",
+  );
+  const ref = requireRef(revision.ref, "Review validation source ref");
   if (!sameRef(ref, expectedRef)) throw new Error("BTCC Review request changed its source revision");
   return {
     targetSnapshotRef: requireRef(revision.targetSnapshotRef, "Review target snapshot"),

@@ -2,6 +2,7 @@ import type { GoalContractAcceptedProduct } from "../conception/index.ts";
 import type { ContentRef } from "../core/index.ts";
 import type { ManagedTurnState } from "../turn/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
+import { projectReviewValidationSource } from "../review/index.ts";
 
 type FeedbackPlanningContextInput = {
   accepted: GoalContractAcceptedProduct;
@@ -16,6 +17,10 @@ export function projectFeedbackPlanningContext(
   const feedbackIntent = managed.feedbackIntent;
   if (!feedbackIntent) {
     throw new Error("Feedback Planning is missing the accepted FeedbackIntent");
+  }
+  const currentResult = program.currentTask.currentResult;
+  if (!currentResult) {
+    throw new Error("Feedback Planning is missing the current ResultCandidate");
   }
   const affectedTaskRefs = managed.consolidationRepair?.repair.correctionScope.affectedTaskRefs
     ?? [program.currentTask.task.ref];
@@ -39,6 +44,7 @@ export function projectFeedbackPlanningContext(
     authorityRef: program.authorityRef,
     requiredOutcomeId: program.requiredOutcomeId,
     artifactPersistence: accepted.goalContract.artifactPersistence,
+    ...projectReviewValidationSource(currentResult.result),
     ...revisionContext(managed),
   };
   if (feedbackIntent.feedbackIntent.correctionKind === "implementation_repair") {

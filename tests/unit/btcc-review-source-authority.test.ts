@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { taskReviewAuthority } from
+import { projectReviewValidationSource, taskReviewAuthority } from
   "../../packages/butler-agent/src/agent/btcc/review/source-authority.ts";
 
 test("Task Review exposes exact result reads and only the immutable workspace source", () => {
@@ -27,5 +27,23 @@ test("Task Review exposes exact result reads and only the immutable workspace so
       "operation-result:result-1",
     ],
     mutation: { kind: "validation_overlay_only", reviewSourceRef },
+  });
+  expect(projectReviewValidationSource({
+    kind: "workspace_artifact",
+    workspaceRevisionRef: reviewSourceRef,
+    workspaceRevision: {
+      ref: reviewSourceRef,
+      workspaceRef: { id: "workspace", sha256: "workspace-sha" },
+      producingWorkRef: { id: "work", sha256: "work-sha" },
+      producingTaskRef: { id: "task", sha256: "task-sha" },
+      producingAttemptRef: { id: "attempt", sha256: "attempt-sha" },
+      baseAcceptedRevisionRefs: [],
+      artifactRevisionRefs: [],
+      targetSnapshotRef: { id: "snapshot", sha256: "snapshot-sha" },
+      producedByOperationRefs: [],
+    },
+  } as never)).toEqual({
+    reviewSourceRef,
+    reviewValidationSource: expect.objectContaining({ ref: reviewSourceRef }),
   });
 });

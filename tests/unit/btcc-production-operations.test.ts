@@ -45,14 +45,10 @@ describe("production BTCC artifact operations", () => {
     });
     const review = reviewRequest(reviewSourceRef);
     const reviewEnvelope = envelope({
-      resultCandidate: {
-        result: {
-          workspaceRevision: {
-            ref: reviewSourceRef,
-            workspaceRef: provision.workspace.ref,
-            targetSnapshotRef: applied.targetSnapshotRef,
-          },
-        },
+      reviewValidationSource: {
+        ref: reviewSourceRef,
+        workspaceRef: provision.workspace.ref,
+        targetSnapshotRef: applied.targetSnapshotRef,
       },
     });
     reviewEnvelope.context.baselineObservationScopeRefs = [`workspace:${fixture.root}`];
