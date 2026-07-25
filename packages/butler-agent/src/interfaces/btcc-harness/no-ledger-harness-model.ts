@@ -31,7 +31,7 @@ export class NoLedgerHarnessModel implements SelectedModel {
         kind: "phase_submission",
         submission: {
           kind: "assisted_continuation",
-          completionMode: "bounded_observation_then_answer",
+          requiredResultKind: "current_observation",
           requestObligation: outcomeFor(this.scenario),
           summary: "필요한 최신 정보를 확인하겠습니다.",
           rationale: "현재 상태를 확인해야 정확하게 답할 수 있습니다.",
@@ -86,9 +86,9 @@ function answer(envelope: PhaseEnvelope, scenario: NoLedgerScenario): ProviderRo
     kind: "phase_submission",
     submission: {
       kind: isAssistedScenario(scenario) ? "assisted_answer" : "direct_answer",
-      completionMode: isAssistedScenario(scenario)
-        ? "bounded_observation_then_answer"
-        : "answer_only",
+      requiredResultKind: isAssistedScenario(scenario)
+        ? "current_observation"
+        : "response_content",
       requestObligation: outcomeFor(scenario),
       interpretedIntent: intentFor(scenario),
       requiredOutcome: outcomeFor(scenario),

@@ -58,11 +58,20 @@ export type OpeningProduct = OpeningAnswerProduct | OpeningContinuationProduct;
 
 export type OpeningFulfillment = {
   requestObligation: string;
+  requiredResultKind: OpeningRequiredResultKind;
   completionMode:
     | "answer_only"
     | "bounded_observation_then_answer"
     | "managed_effect_or_artifact";
 };
+
+export type OpeningRequiredResultKind =
+  | "response_content"
+  | "current_observation"
+  | "target_change"
+  | "persistent_artifact"
+  | "external_effect"
+  | "durable_work";
 
 export type PersonalizationApplication = {
   ref: string;
@@ -86,10 +95,10 @@ type OpeningAnswerFields = {
 };
 
 export type OpeningAnswerSubmission = OpeningAnswerFields & (
-  | { kind: "direct_answer"; completionMode: "answer_only" }
+  | { kind: "direct_answer"; requiredResultKind: "response_content" }
   | {
       kind: "assisted_answer";
-      completionMode: "bounded_observation_then_answer";
+      requiredResultKind: "current_observation";
     }
 );
 
@@ -103,10 +112,13 @@ type OpeningContinuationFields = {
 export type OpeningContinuationSubmission = OpeningContinuationFields & (
   | {
       kind: "assisted_continuation";
-      completionMode: "bounded_observation_then_answer";
+      requiredResultKind: "current_observation";
     }
   | {
       kind: "managed_continuation";
-      completionMode: "managed_effect_or_artifact";
+      requiredResultKind: Exclude<
+        OpeningRequiredResultKind,
+        "response_content" | "current_observation"
+      >;
     }
 );

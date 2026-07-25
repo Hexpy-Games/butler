@@ -41,9 +41,9 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     !Array.isArray(value.publicClaims) ||
     (value.requiredOutcomeResolution !== "fulfilled" &&
       value.requiredOutcomeResolution !== "truthfully_limited") ||
-    (value.kind === "direct_answer" && value.completionMode !== "answer_only") ||
+    (value.kind === "direct_answer" && value.requiredResultKind !== "response_content") ||
     (value.kind === "assisted_answer" &&
-      value.completionMode !== "bounded_observation_then_answer")
+      value.requiredResultKind !== "current_observation")
   ) {
     throw new Error("Opening answer has an invalid structured product");
   }
@@ -66,10 +66,10 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     publicClaims,
   };
   return value.kind === "direct_answer"
-    ? { kind: "direct_answer", completionMode: "answer_only", ...fields }
+    ? { kind: "direct_answer", requiredResultKind: "response_content", ...fields }
     : {
         kind: "assisted_answer",
-        completionMode: "bounded_observation_then_answer",
+        requiredResultKind: "current_observation",
         ...fields,
       };
 }

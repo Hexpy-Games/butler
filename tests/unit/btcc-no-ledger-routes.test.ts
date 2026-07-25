@@ -111,6 +111,9 @@ describe("BTCC no-ledger executable routes", () => {
       expect(JSON.parse(openingCheckpoint!.accepted_product_json).fulfillment)
         .toEqual({
           requestObligation: requestObligationFor(scenario),
+          requiredResultKind: expectedRoute === "assisted"
+            ? "current_observation"
+            : "response_content",
           completionMode: expectedRoute === "assisted"
             ? "bounded_observation_then_answer"
             : "answer_only",

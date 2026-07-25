@@ -17,6 +17,7 @@ test("projects the committed model-authored Opening decision without rewriting i
     route: "managed",
     fulfillment: {
       requestObligation: "요청한 프로젝트 변경을 구현한다",
+      requiredResultKind: "target_change",
       completionMode: "managed_effect_or_artifact",
     },
     projection: {

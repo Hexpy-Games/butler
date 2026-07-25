@@ -7,6 +7,10 @@ import {
   resolveDutyInstructions,
   resolveProhibitionInstructions,
 } from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/prompt-duty-catalog.ts";
+import { openingSubmissionSchema } from
+  "../../packages/butler-agent/src/agent/btcc/conception/submission-schemas.ts";
+import { completionModeFor } from
+  "../../packages/butler-agent/src/agent/btcc/conception/opening/fulfillment.ts";
 
 test("every typed phase duty and prohibition has one prompt instruction", () => {
   expect(resolveDutyInstructions(PROMPT_DUTY_IDS).map((item) => item.id)).toEqual(
@@ -54,7 +58,19 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     ?.instruction ?? "";
   expect(openingRoute).toContain("requestObligation");
   expect(openingRoute).toContain("Do not weaken an imperative");
-  expect(openingRoute).toContain("completionMode=answer_only");
-  expect(openingRoute).toContain("completionMode=managed_effect_or_artifact");
+  expect(openingRoute).toContain("requiredResultKind: response_content");
+  expect(openingRoute).toContain("target_change, persistent_artifact");
+  expect(openingRoute).toContain("never a current target observation");
   expect(openingRoute).toContain("never route by keywords");
+});
+
+test("Opening derives route mode from one typed required result", () => {
+  const schema = JSON.stringify(openingSubmissionSchema);
+  expect(schema).toContain("requiredResultKind");
+  expect(schema).toContain("target_change");
+  expect(schema).not.toContain("completionMode");
+  expect(completionModeFor("response_content")).toBe("answer_only");
+  expect(completionModeFor("current_observation"))
+    .toBe("bounded_observation_then_answer");
+  expect(completionModeFor("target_change")).toBe("managed_effect_or_artifact");
 });

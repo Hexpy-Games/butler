@@ -34,33 +34,31 @@ const answerFields = {
 export const openingSubmissionSchema = variantsSchema(
   objectSchema({
     kind: literalSchema("direct_answer"),
-    completionMode: literalSchema("answer_only"),
+    requiredResultKind: literalSchema("response_content"),
     ...answerFields,
   }),
   openingContinuationSchema(
     "assisted_continuation",
-    "bounded_observation_then_answer",
+    literalSchema("current_observation"),
   ),
   openingContinuationSchema(
     "managed_continuation",
-    "managed_effect_or_artifact",
+    enumSchema("target_change", "persistent_artifact", "external_effect", "durable_work"),
   ),
 );
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),
-  completionMode: literalSchema("bounded_observation_then_answer"),
+  requiredResultKind: literalSchema("current_observation"),
   ...answerFields,
 });
 
 function openingContinuationSchema(
   kind: "assisted_continuation" | "managed_continuation",
-  completionMode:
-    | "bounded_observation_then_answer"
-    | "managed_effect_or_artifact",
+  requiredResultKind: SubmissionSchema,
 ) {
   return objectSchema({
     kind: literalSchema(kind),
-    completionMode: literalSchema(completionMode),
+    requiredResultKind,
     requestObligation: textSchema(),
     summary: textSchema(),
     rationale: textSchema(),

@@ -27,7 +27,7 @@ export class DirectHarnessModel implements SelectedModel {
       kind: "phase_submission",
       submission: {
         kind: "direct_answer",
-        completionMode: "answer_only",
+        requiredResultKind: "response_content",
         requestObligation: "사용자에게 짧게 인사한다",
         interpretedIntent: "사용자에게 짧고 정중하게 인사한다",
         requiredOutcome: "짧은 인사말을 전달한다",
