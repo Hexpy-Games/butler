@@ -6,6 +6,7 @@ import type {
 } from "./contracts.ts";
 import { decodeOpeningAnswer } from "./decode-opening-answer.ts";
 import { openingSubmissionSchema } from "../submission-schemas.ts";
+import { completionModeFor, isManagedResultKind } from "./fulfillment.ts";
 
 export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
   submissionSchema: openingSubmissionSchema,
@@ -80,7 +81,8 @@ export function decodeOpeningAnswerProduct(
       route,
       fulfillment: {
         requestObligation: answer.requestObligation,
-        completionMode: answer.completionMode,
+        requiredResultKind: answer.requiredResultKind,
+        completionMode: completionModeFor(answer.requiredResultKind),
       },
       goalContract,
       authority,
@@ -106,20 +108,20 @@ function decodeOpeningContinuation(
 ): OpeningContinuationProduct {
   if (
     !isNonEmptyString(value.requestObligation) ||
-    (value.kind === "assisted_continuation" &&
-      value.completionMode !== "bounded_observation_then_answer") ||
-    (value.kind === "managed_continuation" &&
-      value.completionMode !== "managed_effect_or_artifact") ||
     !isNonEmptyString(value.summary) ||
     !isNonEmptyString(value.rationale) ||
     !isNonEmptyString(value.nextStep)
   ) {
     throw new Error("Opening continuation decision is invalid");
   }
+  const requiredResultKind = value.kind === "assisted_continuation"
+    ? requireAssistedResult(value.requiredResultKind)
+    : requireManagedResult(value.requiredResultKind);
   const body = {
     turnId,
     requestObligation: value.requestObligation,
-    completionMode: value.completionMode,
+    requiredResultKind,
+    completionMode: completionModeFor(requiredResultKind),
     summary: value.summary,
     rationale: value.rationale,
     nextStep: value.nextStep,
@@ -134,9 +136,8 @@ function decodeOpeningContinuation(
     route: value.kind === "assisted_continuation" ? "assisted" : "managed",
     fulfillment: {
       requestObligation: value.requestObligation,
-      completionMode: value.kind === "assisted_continuation"
-        ? "bounded_observation_then_answer"
-        : "managed_effect_or_artifact",
+      requiredResultKind,
+      completionMode: completionModeFor(requiredResultKind),
     },
     projection: {
       ref: contentRef("opening-projection", body),
@@ -146,6 +147,20 @@ function decodeOpeningContinuation(
       contentSha256: body.contentSha256,
     },
   };
+}
+
+function requireAssistedResult(value: unknown): "current_observation" {
+  if (value !== "current_observation") {
+    throw new Error("Assisted Opening requires a current observation result");
+  }
+  return value;
+}
+
+function requireManagedResult(value: unknown) {
+  if (!isManagedResultKind(value)) {
+    throw new Error("Managed Opening requires an effect, artifact, or durable work result");
+  }
+  return value;
 }
 
 
