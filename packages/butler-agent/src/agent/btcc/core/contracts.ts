@@ -209,16 +209,17 @@ export type WorkspaceMutationScope =
   | { kind: "read_only" }
   | { kind: "contained_paths"; writablePaths: string[] };
 
-export type OperationRequest =
+export type OperationRequest = {
+  requestId: string;
+  publicTitle: string;
+} & (
   | {
-      requestId: string;
       kind: "observe";
       capabilityRef: string;
       scopeRef: string;
       input: Record<string, unknown>;
     }
   | {
-      requestId: string;
       kind: "workspace_artifact_action";
       capabilityRef: string;
       workspaceRef: { id: string; sha256: string };
@@ -226,21 +227,18 @@ export type OperationRequest =
       input: Record<string, unknown>;
     }
   | {
-      requestId: string;
       kind: "workspace_artifact_observation";
       capabilityRef: string;
       workspaceRef: { id: string; sha256: string };
       input: Record<string, unknown>;
     }
   | {
-      requestId: string;
       kind: "review_validation";
       capabilityRef: string;
       reviewSourceRef: { id: string; sha256: string };
       input: Record<string, unknown>;
     }
   | {
-      requestId: string;
       kind: "repository_promotion";
       capabilityRef: string;
       authorizationRef: { id: string; sha256: string };
@@ -249,7 +247,8 @@ export type OperationRequest =
       baselineRef: { id: string; sha256: string };
       finalSnapshotRef: { id: string; sha256: string };
       input: Record<string, unknown>;
-    };
+    }
+);
 
 export type OperationResult = {
   requestId: string;

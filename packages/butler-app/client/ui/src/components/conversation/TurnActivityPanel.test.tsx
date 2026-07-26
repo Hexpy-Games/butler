@@ -149,6 +149,26 @@ test("turn activity panel keeps liveness beneath the one latest intent", () => {
   expect(html).toContain("응답 생성 중");
 });
 
+test("turn activity panel nests the model-authored operation under its phase", () => {
+  const html = renderPanel([
+    phaseActivityRow(),
+    {
+      id: "operation-running",
+      kind: "used_tool",
+      state: "running",
+      safe_label: "관련 구현 파일 확인",
+      safe_tool_name: "read_workspace_files",
+      tool_call_id: "operation-read-files",
+      semantic_block_id: "conception_deliberation",
+      bridge_phase: "btcc_operation",
+    },
+  ]);
+
+  expect(html).toContain("관련 구현 파일 확인");
+  expect(html).toContain("turn-current-status-slot");
+  expect(html).not.toContain(">read_workspace_files<");
+});
+
 test("turn activity panel hides an older placeholder after phase detail arrives", () => {
   const html = renderPanel([
     {

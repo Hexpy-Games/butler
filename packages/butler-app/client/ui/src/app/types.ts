@@ -781,6 +781,8 @@ export interface ProgressRow {
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
+  tool_result_id?: string;
+  tool_result_byte_length?: number;
   bridge_phase?: string;
   receipt_kind?: string;
   public_decision_role?: string;
@@ -815,6 +817,17 @@ export interface ProgressRow {
   safe_detail_rows?: ProgressDetailRow[];
   safe_order?: number;
   created_at?: string;
+}
+
+export interface OperationOutputView {
+  turn_id: string;
+  request_id: string;
+  result_id: string;
+  content: string;
+  byte_start: number;
+  byte_end: number;
+  byte_length: number;
+  complete: boolean;
 }
 
 export interface TurnProgressSnapshot {

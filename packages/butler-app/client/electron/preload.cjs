@@ -487,6 +487,16 @@ const butlerApp = Object.freeze({
     method: "POST",
     body: JSON.stringify({}),
   }),
+  getOperationOutput: ({ turnId, requestId, resultId, offset = 0 }) => {
+    const params = new URLSearchParams({
+      result_id: resultId,
+      offset: String(offset),
+    });
+    return requestJson(
+      `/turns/${encodeURIComponent(turnId)}/operations/${encodeURIComponent(requestId)}` +
+        `/output?${params.toString()}`,
+    );
+  },
   getSettings: () => requestJson("/settings"),
   showDesktopNotification: ({ kind, title, body, sessionId } = {}) =>
     ipcRenderer.invoke("butler:show-desktop-notification", {

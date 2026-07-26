@@ -146,6 +146,7 @@ export function workspaceRequest(
 ): Extract<OperationRequest, { kind: "workspace_artifact_action" }> {
   return {
     requestId: `workspace:${relativeTarget}:${content}`,
+    publicTitle: "Test operation",
     kind: "workspace_artifact_action",
     capabilityRef: "write_file",
     workspaceRef,
@@ -160,6 +161,7 @@ export function workspaceObservationRequest(
 ): Extract<OperationRequest, { kind: "workspace_artifact_observation" }> {
   return {
     requestId: `workspace-observation:${path}`,
+    publicTitle: "Test operation",
     kind: "workspace_artifact_observation",
     capabilityRef: "read_file",
     workspaceRef,
@@ -172,6 +174,7 @@ export function reviewRequest(
 ): Extract<OperationRequest, { kind: "review_validation" }> {
   return {
     requestId: "review-1",
+    publicTitle: "Test operation",
     kind: "review_validation",
     capabilityRef: "run_command",
     reviewSourceRef,
@@ -192,6 +195,7 @@ export function promotionRequest(
   };
   const request: Extract<OperationRequest, { kind: "repository_promotion" }> = {
     requestId: "promotion-1",
+    publicTitle: "Test operation",
     kind: "repository_promotion",
     capabilityRef: "repository_promotion",
     ...refs,

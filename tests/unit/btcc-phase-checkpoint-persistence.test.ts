@@ -325,6 +325,7 @@ function phaseEnvelope(binding: PhaseRunBinding): PhaseEnvelope {
 function observationRequest() {
   return {
     requestId: "request-1",
+    publicTitle: "Test operation",
     kind: "observe" as const,
     capabilityRef: "read_file",
     scopeRef: "workspace:/repo",

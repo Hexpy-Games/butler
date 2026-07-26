@@ -129,6 +129,7 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
     },
     requests: [{
       requestId: "request-1",
+      publicTitle: "Test operation",
       kind: "observe",
       capabilityRef: "observe.workspace",
       input: { query: "status" },

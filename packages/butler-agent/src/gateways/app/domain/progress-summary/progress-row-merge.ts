@@ -239,6 +239,12 @@ function mergeProgressRow(
       incoming.safe_path_labels,
     tool_call_id:
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
+    tool_result_id:
+      base.tool_result_id ?? current.tool_result_id ?? incoming.tool_result_id,
+    tool_result_byte_length:
+      base.tool_result_byte_length ??
+      current.tool_result_byte_length ??
+      incoming.tool_result_byte_length,
     bridge_phase:
       base.bridge_phase ?? current.bridge_phase ?? incoming.bridge_phase,
     turn_event_sequence: minimumOptionalNumber(

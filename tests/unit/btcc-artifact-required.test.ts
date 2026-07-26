@@ -13,6 +13,7 @@ import { reviewTask } from
 const workspaceRef = ref("workspace");
 const workspaceRequest = {
   requestId: "workspace-action",
+  publicTitle: "Test operation",
   kind: "workspace_artifact_action" as const,
   capabilityRef: "workspace-editor",
   workspaceRef,
@@ -571,6 +572,7 @@ function observedWorkspaceResult(suffix: string, snapshot: string): OperationRes
 function reviewValidationRequest() {
   return {
     requestId: "review-validation",
+    publicTitle: "Test operation",
     kind: "review_validation" as const,
     capabilityRef: "test-runner",
     reviewSourceRef: ref("workspace-revision"),

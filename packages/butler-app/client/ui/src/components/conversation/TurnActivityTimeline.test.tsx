@@ -44,6 +44,7 @@ test("turn activity keeps one latest item until view all expands in place", asyn
             summary: "이전 목표를 확인했습니다.",
             rationale: "의도를 보존하기 위해서입니다.",
             nextStep: "계획을 만듭니다.",
+            operations: [],
           },
           {
             id: "planning",
@@ -51,6 +52,7 @@ test("turn activity keeps one latest item until view all expands in place", asyn
             summary: "구현 순서를 정했습니다.",
             rationale: "작업 경계를 분명히 하기 위해서입니다.",
             nextStep: "첫 작업을 실행합니다.",
+            operations: [],
           },
         ]}
       />,
@@ -70,5 +72,8 @@ test("turn activity keeps one latest item until view all expands in place", asyn
   expect(container.textContent).toContain("이전 목표를 확인했습니다.");
   expect(container.textContent).toContain("구현 순서를 정했습니다.");
   expect(toggle.textContent).toContain("접기");
+  const blocks = container.querySelectorAll('[data-test-class~="turn-work-block"]');
+  expect(blocks[0]?.getAttribute("data-connected")).toBe("true");
+  expect(blocks[1]?.hasAttribute("data-connected")).toBe(false);
   await act(async () => root.unmount());
 });

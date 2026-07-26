@@ -41,27 +41,72 @@ export async function performOperationBatch<Product>(
     command.executionPermit.assertActive();
     assertAuthorizedOperationKind(request, envelope.operationAuthority);
     rejectDuplicateRequest(roundRequests, request);
-    const observed = await command.operations.perform({
-      request,
-      envelope,
-      signal: command.executionPermit.signal,
-    });
-    command.executionPermit.assertActive();
-    if (observed.requestId !== request.requestId) {
-      throw new Error("BTCC observation result does not match its request");
+    requirePublicOperationMetadata(request);
+    await publishOperation(command, envelope, request, "started");
+    try {
+      const observed = await command.operations.perform({
+        request,
+        envelope,
+        signal: command.executionPermit.signal,
+      });
+      command.executionPermit.assertActive();
+      if (observed.requestId !== request.requestId) {
+        throw new Error("BTCC observation result does not match its request");
+      }
+      const result = isOperationResultProjection(observed)
+        ? { ...observed, request }
+        : projectEphemeralOperationResult({
+            binding: envelope.binding,
+            request,
+            result: observed,
+            modelSelection: envelope.modelSelection,
+          });
+      await publishOperation(command, envelope, request, "completed", result);
+      results.push({ request, result });
+    } catch (error) {
+      await publishOperation(
+        command,
+        envelope,
+        request,
+        isAbortError(error, command.executionPermit.signal) ? "cancelled" : "failed",
+      );
+      throw error;
     }
-    const result = isOperationResultProjection(observed)
-      ? { ...observed, request }
-      : projectEphemeralOperationResult({
-          binding: envelope.binding,
-          request,
-          result: observed,
-          modelSelection: envelope.modelSelection,
-        });
-    results.push({ request, result });
   }
   command.executionPermit.assertActive();
   return results;
+}
+
+async function publishOperation<Product>(
+  command: PhaseConversationCommand<Product>,
+  envelope: PhaseEnvelope,
+  request: OperationRequest,
+  status: "started" | "completed" | "failed" | "cancelled",
+  result?: OperationResultProjection,
+): Promise<void> {
+  await command.activity?.operationChanged?.({
+    turnId: envelope.binding.turnId,
+    semanticState: envelope.binding.semanticState,
+    request,
+    status,
+    ...(result ? { resultRef: result.resultRef, byteLength: result.byteLength } : {}),
+  });
+}
+
+function requirePublicOperationMetadata(request: OperationRequest): void {
+  if (!request.publicTitle.trim() || request.publicTitle.length > 120) {
+    throw new Error("BTCC operation request requires a public title");
+  }
+  if (
+    request.requestId.length > 96 ||
+    !/^[A-Za-z0-9_.:/-]+$/u.test(request.requestId)
+  ) {
+    throw new Error("BTCC operation request requires a stable request ID");
+  }
+}
+
+function isAbortError(error: unknown, signal: AbortSignal): boolean {
+  return signal.aborted || (error instanceof Error && error.name === "AbortError");
 }
 
 function rejectDuplicateRequest(

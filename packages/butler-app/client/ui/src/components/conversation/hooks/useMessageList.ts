@@ -116,6 +116,7 @@ export function useMessageList(
     activeTurn,
     progressRows: timelineProgressRows,
     turnState,
+    turnId: activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id,
     showTurnActivity,
     itemCount,
     copiedMessageId,

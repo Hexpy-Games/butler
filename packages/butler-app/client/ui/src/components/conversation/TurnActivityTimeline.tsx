@@ -3,6 +3,7 @@ import { Button, ListChecks, Stack, Typo, WorkActivityBlock } from "@/butler-ds"
 import type { PhaseActivity } from "./turnActivityRows";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
+import { workActivityToolsFromRows } from "./toolchainUtils";
 
 const metaStyle = { color: "var(--text-secondary)" } as const;
 
@@ -10,10 +11,12 @@ export function TurnActivityTimeline({
   activities,
   currentState,
   live = false,
+  turnId,
 }: {
   activities: PhaseActivity[];
   currentState?: string;
   live?: boolean;
+  turnId?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const workCopy = appCopy.conversation.work;
@@ -32,14 +35,18 @@ export function TurnActivityTimeline({
         </Typo.Caption>
         {expanded ? (
           <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {activities.map((activity) => (
+            {activities.map((activity, index) => (
               <li key={activity.id}>
-                <ActivityBlock activity={activity} />
+                <ActivityBlock
+                  activity={activity}
+                  connected={index < activities.length - 1}
+                  turnId={turnId}
+                />
               </li>
             ))}
           </Stack>
         ) : (
-          <ActivityBlock activity={latest} rolling={live} />
+          <ActivityBlock activity={latest} rolling={live} turnId={turnId} />
         )}
         {activities.length > 1 ? (
           <Button
@@ -65,9 +72,13 @@ export function TurnActivityTimeline({
 function ActivityBlock({
   activity,
   rolling = false,
+  connected = false,
+  turnId,
 }: {
   activity: PhaseActivity;
   rolling?: boolean;
+  connected?: boolean;
+  turnId?: string;
 }) {
   const meta = activity.createdAt
     ? `${phaseLabel(activity.phase)} · ${formatActivityTime(activity.createdAt)}`
@@ -75,6 +86,7 @@ function ActivityBlock({
   return (
     <WorkActivityBlock
       density="compact"
+      connected={connected}
       rolling={rolling}
       title={activity.summary}
       description={
@@ -84,6 +96,7 @@ function ActivityBlock({
           <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
         </Stack>
       }
+      tools={workActivityToolsFromRows(activity.operations, turnId)}
     />
   );
 }

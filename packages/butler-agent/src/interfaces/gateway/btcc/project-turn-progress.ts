@@ -69,6 +69,24 @@ export function projectTurnProgress(
         },
       });
     },
+    async operationChanged(update) {
+      await publish({
+        kind: operationEventKind(update.status),
+        payload: {
+          safeLabel: update.publicTitle,
+          toolName: update.capabilityRef,
+          toolCallId: update.requestId,
+          activityKind: "used_tool",
+          bridgePhase: "btcc_operation",
+          semanticBlockId: update.semanticState,
+          operationStatus: update.status,
+          ...(update.resultRef ? { resultId: update.resultRef.id } : {}),
+          ...(update.byteLength !== undefined
+            ? { resultByteLength: update.byteLength }
+            : {}),
+        },
+      });
+    },
     async operationalNoticeChanged(update) {
       if (update.status === "cleared") {
         await publish({
@@ -93,6 +111,15 @@ export function projectTurnProgress(
       });
     },
   };
+}
+
+function operationEventKind(
+  status: "started" | "completed" | "failed" | "cancelled",
+): "tool.started" | "tool.completed" | "tool.failed" | "tool.cancelled" {
+  if (status === "started") return "tool.started";
+  if (status === "completed") return "tool.completed";
+  if (status === "cancelled") return "tool.cancelled";
+  return "tool.failed";
 }
 
 function operationalProgressLabel(

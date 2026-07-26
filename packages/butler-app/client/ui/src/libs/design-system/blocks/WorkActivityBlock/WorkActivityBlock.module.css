@@ -45,6 +45,10 @@
   bottom: calc(0px - var(--work-activity-line-bridge));
 }
 
+.connected::before {
+  bottom: calc(0px - var(--work-activity-line-bridge));
+}
+
 .running {
   background: transparent;
 }
@@ -137,6 +141,20 @@
   color: var(--work-activity-muted-text);
   font-weight: var(--font-weight-regular);
   overflow-wrap: anywhere;
+}
+
+.output {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font: var(--font-code);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .tools {

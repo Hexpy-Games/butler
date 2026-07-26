@@ -1,4 +1,5 @@
 import type { ModelPhaseState } from "./contracts.ts";
+import type { OperationRequest } from "./contracts.ts";
 
 export type PublicPhaseActivity = {
   summary: string;
@@ -16,5 +17,13 @@ export interface PhaseActivityPublisher {
     turnId: string;
     semanticState: ModelPhaseState;
     checkpointId: string;
+  }): void | Promise<void>;
+  operationChanged?(update: {
+    turnId: string;
+    semanticState: ModelPhaseState;
+    request: OperationRequest;
+    status: "started" | "completed" | "failed" | "cancelled";
+    resultRef?: { id: string; sha256: string };
+    byteLength?: number;
   }): void | Promise<void>;
 }

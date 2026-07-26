@@ -32,6 +32,8 @@ export interface SharedProgressRow {
   safe_order?: number;
   safe_path_labels?: string[];
   tool_call_id?: string;
+  tool_result_id?: string;
+  tool_result_byte_length?: number;
   bridge_phase?: string;
   receipt_kind?: string;
   public_decision_role?: string;

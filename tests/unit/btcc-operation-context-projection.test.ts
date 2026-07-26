@@ -161,6 +161,7 @@ describe("BTCC operation context projection", () => {
   test("describes mutation targets without copying their payload", () => {
     const source = describeOperationSource({
       requestId: "write-source",
+      publicTitle: "Test operation",
       kind: "workspace_artifact_action",
       capabilityRef: "write_file",
       workspaceRef: ref("workspace"),
@@ -213,6 +214,7 @@ function result(
     requestId,
     request: {
       requestId,
+      publicTitle: "Read operation context",
       kind: "observe",
       capabilityRef,
       scopeRef: "workspace:/repo",

@@ -33,6 +33,8 @@ export interface ProgressSummaryRow {
   safe_tool_name?: string;
   safe_input_label?: string;
   tool_call_id?: string;
+  tool_result_id?: string;
+  tool_result_byte_length?: number;
   bridge_phase?: string;
   receipt_kind?: string;
   public_decision_role?: string;

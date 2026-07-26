@@ -39,6 +39,7 @@ describe("production BTCC capabilities", () => {
     const prefix = "PRESERVE-COMMAND-PREFIX";
     const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
       requestId: "command-large-output",
+      publicTitle: "Test operation",
       kind: "workspace_artifact_action",
       capabilityRef: "run_command",
       workspaceRef: provision.workspace.ref,
@@ -64,6 +65,7 @@ describe("production BTCC capabilities", () => {
     const read = await runtime.operations.perform({
       request: {
         requestId: "read-command-prefix",
+        publicTitle: "Test operation",
         kind: "observe",
         capabilityRef: "read_operation_result",
         scopeRef: result.readScopeRef!,
@@ -83,6 +85,7 @@ describe("production BTCC capabilities", () => {
     });
     const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
       requestId: "write-1",
+      publicTitle: "Test operation",
       kind: "workspace_artifact_action",
       capabilityRef: "write_file",
       workspaceRef: { id: "workspace-1", sha256: "workspace-hash" },
@@ -116,6 +119,7 @@ describe("production BTCC capabilities", () => {
     });
     const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
       requestId: "read-as-write",
+      publicTitle: "Test operation",
       kind: "workspace_artifact_action",
       capabilityRef: "read_file",
       workspaceRef: { id: "workspace-1", sha256: "workspace-hash" },
@@ -180,6 +184,7 @@ describe("production BTCC capabilities", () => {
     });
     const request: Extract<OperationRequest, { kind: "observe" }> = {
       requestId: "ledger-read-1",
+      publicTitle: "Test operation",
       kind: "observe",
       capabilityRef: "project_ledger_read",
       scopeRef: "ledger:sandy",
@@ -257,6 +262,7 @@ describe("production BTCC capabilities", () => {
 
     const reviewRequest: Extract<OperationRequest, { kind: "review_validation" }> = {
       requestId: "ledger-review-1",
+      publicTitle: "Test operation",
       kind: "review_validation",
       capabilityRef: "project_ledger_read",
       reviewSourceRef: { id: "review-source", sha256: "review-source-sha" },

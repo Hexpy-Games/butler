@@ -184,6 +184,12 @@ function operationSchema(
   authority?: OperationAuthority,
 ): Record<string, unknown> {
   const common = {
+    publicTitle: {
+      type: "string",
+      minLength: 1,
+      maxLength: 120,
+      description: "Concise model-authored user-visible operation title.",
+    },
     capabilityRef: stringConstant(capability.capabilityRef),
     input: capability.inputSchema,
   };
@@ -230,7 +236,12 @@ function operationShape(
   return {
     type: "object",
     properties: {
-      requestId: { type: "string" },
+      requestId: {
+        type: "string",
+        minLength: 1,
+        maxLength: 96,
+        pattern: "^[A-Za-z0-9_.:/-]+$",
+      },
       kind: stringConstant(kind),
       ...properties,
     },

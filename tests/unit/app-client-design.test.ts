@@ -698,6 +698,8 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("retryTurnWithCurrentControls:");
   expect(preload).toContain("/retry-current");
   expect(preload).toContain("cancelTurn:");
+  expect(preload).toContain("getOperationOutput:");
+  expect(preload).toContain("/operations/${encodeURIComponent(requestId)}`");
   expect(preload).toContain("getSettings:");
   expect(preload).toContain("updateSettings:");
   expect(preload).toContain("getProfileImportPrompt:");
@@ -721,6 +723,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(renderer).toContain("subscribeLiveEvents");
   expect(renderer).toContain("new EventSource(liveEventsUrl");
   expect(renderer).toContain("function bridgeRequest");
+  expect(renderer).toContain('callBridge<T>(bridge, "getOperationOutput"');
   expect(renderer).toContain("function canSelectProjectFolder");
   expect(renderer).toContain("project_folder_picker_unavailable");
 });

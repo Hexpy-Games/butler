@@ -10,6 +10,7 @@ import type {
   MessageFileRef,
   MessageFileUploadResult,
   MessageRecord,
+  OperationOutputView,
   MessageSendRequest,
   MessageSendResult,
   QueueMessageRequest,
@@ -63,6 +64,12 @@ export interface AppStoreSessionApi {
     messages: MessageRecord[],
   ): Record<string, TurnProgressSnapshotView>;
   getTurn(turnId: string): TurnRecord;
+  getOperationOutput(input: {
+    turnId: string;
+    requestId: string;
+    resultId: string;
+    byteStart: number;
+  }): OperationOutputView | null;
   createMessageFile(input: {
     ownerSessionId?: string;
     name: string;
@@ -174,6 +181,9 @@ export function createSessionStoreApi(
     },
     getTurn(turnId) {
       return kernel.turns.getTurn(turnId);
+    },
+    getOperationOutput(input) {
+      return kernel.operationOutputs.read(input);
     },
     createMessageFile(input) {
       return kernel.messageFiles.create(input);

@@ -67,6 +67,7 @@ test("phase recovery uses the latest durable checkpoint revision", async () => {
           requests: [
             {
               requestId: "read-1",
+              publicTitle: "Test operation",
               kind: "observe",
               capabilityRef: "read_file",
               scopeRef: "workspace:/repo",

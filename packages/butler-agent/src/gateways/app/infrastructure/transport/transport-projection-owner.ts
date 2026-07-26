@@ -1,6 +1,5 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
-import { watch, type FSWatcher } from "chokidar";
 
 const PROJECTION_SETTLE_MS = 25;
 
@@ -20,14 +19,15 @@ export class AppTransportProjectionOwner {
     if (this.watcher || this.closed) return;
     const transcriptRoot = join(this.input.butlerData, "transcripts");
     mkdirSync(transcriptRoot, { recursive: true });
-    this.input.syncAll();
-    this.watcher = watch(join(transcriptRoot, "*.jsonl"), {
-      ignoreInitial: true,
+    this.watcher = watch(transcriptRoot, { persistent: false }, (_event, file) => {
+      if (!file || String(file).endsWith(".jsonl")) this.schedule();
     });
-    this.watcher.on("add", () => this.schedule());
-    this.watcher.on("change", () => this.schedule());
-    this.watcher.on("unlink", () => this.schedule());
-    this.watcher.on("ready", () => this.schedule());
+    try {
+      this.input.syncAll();
+    } catch (error) {
+      this.close();
+      throw error;
+    }
   }
 
   close(): void {
@@ -36,7 +36,7 @@ export class AppTransportProjectionOwner {
     this.scheduled = null;
     const watcher = this.watcher;
     this.watcher = null;
-    if (watcher) void watcher.close();
+    watcher?.close();
   }
 
   private schedule(): void {

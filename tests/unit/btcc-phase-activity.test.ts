@@ -9,6 +9,7 @@ test("publishes committed model-authored activity before an operation batch", as
   const eventOrder: string[] = [];
   const request = {
     requestId: "inspect-current-state",
+    publicTitle: "현재 구현 파일을 확인합니다",
     kind: "observe" as const,
     capabilityRef: "read_file",
     scopeRef: "workspace:test",
@@ -107,6 +108,9 @@ test("publishes committed model-authored activity before an operation batch", as
         eventOrder.push("activity_published");
         published.push(update);
       },
+      operationChanged(update) {
+        eventOrder.push(`operation_${update.status}`);
+      },
     },
   });
 
@@ -114,7 +118,9 @@ test("publishes committed model-authored activity before an operation batch", as
   expect(eventOrder).toEqual([
     "operation_round_committed",
     "activity_published",
+    "operation_started",
     "operation_performed",
+    "operation_completed",
     "activity_published",
   ]);
   expect(published).toEqual([

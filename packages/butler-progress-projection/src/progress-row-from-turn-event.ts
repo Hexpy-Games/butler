@@ -134,13 +134,18 @@ export function progressRowFromSharedTurnEvent(
       state:
         event.kind === "tool.failed"
           ? "failed"
+          : event.kind === "tool.cancelled"
+            ? "cancelled"
           : event.kind === "tool.completed"
             ? "delivered"
             : "running",
       safe_tool_name: toolName,
       safe_input_label: inputLabel,
       tool_call_id: optionalText(payload.toolCallId),
+      tool_result_id: optionalText(payload.resultId),
+      tool_result_byte_length: optionalNonNegativeInteger(payload.resultByteLength),
       bridge_phase: optionalText(payload.bridgePhase),
+      semantic_block_id: optionalText(payload.semanticBlockId),
       work_block_id: optionalText(payload.workBlockId),
       work_block_label:
         decision.work_decision_title ?? optionalText(payload.workBlockLabel),

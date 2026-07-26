@@ -37,6 +37,7 @@ import { AppWorkerControlStore } from "../../domain/workers/worker-control-store
 import { FileQueueButlerServiceClient } from "../../../core/client.ts";
 import { SessionBindingStore } from "../../../../test-support/harness/session-store.ts";
 import type { AppStoreKernel } from "./app-store-kernel.ts";
+import { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -78,6 +79,7 @@ export function initializeAppStoreKernel(
   );
   kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
+  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.butlerData);
   kernel.db = new Database(options.dbPath ?? ":memory:", { create: true });
   coordinateSharedSqliteWriter(kernel.db);
   kernel.events = new AppEventStore(kernel.db);

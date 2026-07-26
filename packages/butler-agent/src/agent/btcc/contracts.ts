@@ -113,6 +113,16 @@ export interface BtccTurnProgressObserver {
     semanticState: string;
     checkpointId: string;
   }): void | Promise<void>;
+  operationChanged?(update: {
+    turnId: string;
+    semanticState: string;
+    requestId: string;
+    publicTitle: string;
+    capabilityRef: string;
+    status: "started" | "completed" | "failed" | "cancelled";
+    resultRef?: { id: string; sha256: string };
+    byteLength?: number;
+  }): void | Promise<void>;
   operationalNoticeChanged?(update: {
     turnId: string;
     semanticState: string;

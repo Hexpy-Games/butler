@@ -32,11 +32,11 @@ function MessageContentComponent({
     <>
       {message.role === "assistant" ? (
         <>
-          {message.work_blocks?.length ? (
-            <CompletedWorkBlocks blocks={message.work_blocks} />
-          ) : (
-            <CompletedTurnActivity rows={message.turn_activity_rows} />
-          )}
+          <CompletedTurnActivity
+            rows={message.turn_activity_rows}
+            turnId={message.turn_id}
+          />
+          <CompletedWorkBlocks blocks={message.work_blocks} />
           {message.status === "failed" ? (
             <AssistantFailureNotice message={message} />
           ) : (

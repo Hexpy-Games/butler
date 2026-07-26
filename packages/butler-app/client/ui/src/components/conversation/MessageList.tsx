@@ -33,6 +33,7 @@ function MessageListComponent({
     latestAssistantMessageId,
     progressRows,
     turnState,
+    turnId,
     showTurnActivity,
     itemCount,
     copiedMessageId,
@@ -76,6 +77,7 @@ function MessageListComponent({
                   topOffset={topOffset}
                   progressRows={progressRows}
                   turnState={turnState}
+                  turnId={turnId}
                   markTheme={markTheme}
                   rowVirtualizer={rowVirtualizer}
                 />

@@ -12,6 +12,7 @@ export * from "./personalization-contract.ts";
 export * from "./session-dashboard-contract.ts";
 export * from "./context-contract.ts";
 export * from "./progress-contract.ts";
+export * from "./operation-output-contract.ts";
 export * from "./attachment-contract.ts";
 export * from "./session-contract.ts";
 export * from "./automation-worker-contract.ts";

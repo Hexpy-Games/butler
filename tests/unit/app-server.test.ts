@@ -10383,7 +10383,7 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+    expect(server.store.syncAllAppTransportEvents()).toBe(0);
     expect(server.store.syncAllAppTransportEvents()).toBe(0);
     const row = server.store.db
       .query<{ count: number }, [string]>(
@@ -10440,7 +10440,7 @@ test("app transport sync includes archived sessions while a turn is active", asy
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+    expect(server.store.syncAllAppTransportEvents()).toBe(0);
     const progress = server.store.listTurnProgressSnapshotsForMessages([
       result.data.accepted,
     ]);
@@ -10494,7 +10494,7 @@ test("app transport sync projects appended progress and final events once", asyn
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    expect(server.store.syncAllAppTransportEvents()).toBe(1);
+    expect(server.store.syncAllAppTransportEvents()).toBe(0);
 
     appendTranscriptEvent(
       createTranscriptEvent({
@@ -11981,6 +11981,27 @@ test("turn cancel preserves earlier assistant work history while stopping active
         }),
       });
       input.onProgress?.({
+        id: "cancel-phase-activity",
+        kind: "message",
+        state: "running",
+        safe_label: "정지 전 현재 작업을 확인하고 있습니다.",
+        semantic_block_id: "planning",
+        work_decision_summary: "정지 전 현재 작업을 확인하고 있습니다.",
+        work_decision_rationale: "중단하더라도 이미 공개한 활동을 보존해야 합니다.",
+        work_decision_next_step: "중단 요청을 반영합니다.",
+        work_decision_source: "model-authored",
+      });
+      input.onProgress?.({
+        id: "cancel-operation-activity",
+        kind: "used_tool",
+        state: "running",
+        safe_label: "현재 작업 상태 확인",
+        safe_tool_name: "workspace_status",
+        tool_call_id: "operation-cancel-status",
+        semantic_block_id: "planning",
+        bridge_phase: "btcc_operation",
+      });
+      input.onProgress?.({
         id: "cancel-progress-row",
         kind: "ran_command",
         state: "running",
@@ -12089,6 +12110,17 @@ test("turn cancel preserves earlier assistant work history while stopping active
           label: "중단할 작업",
           state: "cancelled",
           rows: [expect.objectContaining({ id: "cancel-progress-row", state: "cancelled" })],
+        }),
+      ],
+      turn_activity_rows: [
+        expect.objectContaining({
+          id: "cancel-phase-activity",
+          state: "cancelled",
+        }),
+        expect.objectContaining({
+          id: "cancel-operation-activity",
+          state: "cancelled",
+          safe_label: "현재 작업 상태 확인",
         }),
       ],
     });
