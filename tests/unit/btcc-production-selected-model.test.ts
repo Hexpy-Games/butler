@@ -24,6 +24,22 @@ const publicActivity = {
   nextStep: "다음 단계가 이 판단을 이어받습니다.",
 };
 
+function parseCacheOrderedPrompt(prompt: string): {
+  stable: Record<string, any>;
+  dynamic: Record<string, any>;
+  serializedStablePrefix: string;
+} {
+  const [serializedStablePrefix, serializedDynamic, ...remainder] = prompt.split("\n");
+  expect(serializedStablePrefix).toBeTruthy();
+  expect(serializedDynamic).toBeTruthy();
+  expect(remainder).toEqual([]);
+  return {
+    stable: JSON.parse(serializedStablePrefix!).stablePhasePrefix,
+    dynamic: JSON.parse(serializedDynamic!).dynamicTurnContent,
+    serializedStablePrefix: serializedStablePrefix!,
+  };
+}
+
 describe("production BTCC selected model", () => {
   test("sends the exact identity, phase state, operations, authority, and resolved context once", async () => {
     const calls: ProviderPhasePrompt[] = [];
@@ -136,19 +152,20 @@ describe("production BTCC selected model", () => {
     expect(calls[0]?.carrierFunctions[0]?.argumentBinding)
       .toBe("flat_phase_submission");
 
-    const prompt = JSON.parse(calls[0]!.prompt) as Record<string, any>;
-    const hierarchy = prompt.promptHierarchy;
-    expect(prompt.outputSchemaGuidance.operationRequests)
+    const { stable, dynamic } = parseCacheOrderedPrompt(calls[0]!.prompt);
+    const hierarchy = Object.fromEntries(
+      stable.promptHierarchy.map((layer: Record<string, any>) => [layer.layer, layer.content]),
+    );
+    expect(stable.outputContract.operationRequests)
       .toContain("every currently known independent operation");
-    expect(prompt.outputSchemaGuidance.operationRequests)
+    expect(stable.outputContract.operationRequests)
       .toContain("executionSummary");
-    expect(Object.keys(hierarchy)).toEqual([
+    expect(stable.promptHierarchy.map((layer: Record<string, any>) => layer.layer)).toEqual([
       "immutablePhaseContract",
       "versionedBasePrompt",
       "acceptedPhaseGuidance",
-      "currentTurnContext",
     ]);
-    expect(hierarchy.currentTurnContext.originalRequest).toEqual({
+    expect(dynamic.originalRequest).toEqual({
       messageId: "message-1",
       content: "Improve Sandy's trust profiling without changing her voice.",
     });
@@ -180,6 +197,12 @@ describe("production BTCC selected model", () => {
           id: "declare_verification_integration",
           instruction: expect.stringContaining("ResultCandidate"),
         }],
+      },
+    });
+    expect(dynamic.currentAcceptedState).toEqual({
+      stateInput: {
+        acceptedGoalRef: "goal:1",
+        managedLedgerBindingRef: "ledger:1",
       },
       authoringContractRefs: ["spec-authoring@1"],
       authoringContracts: [{
@@ -213,11 +236,7 @@ describe("production BTCC selected model", () => {
       sourceIds: ["source-1"],
       contentSha256: "guidance-hash",
     }]);
-    expect(hierarchy.currentTurnContext.stateInput).toEqual({
-      acceptedGoalRef: "goal:1",
-      managedLedgerBindingRef: "ledger:1",
-    });
-    expect(hierarchy.currentTurnContext.operationContext).toEqual({
+    expect(dynamic.operationContext).toEqual({
       phaseContinuity: null,
       inlineOperationResults: [expect.objectContaining({
         resultRef: { id: "result:1", sha256: "result-hash" },
@@ -229,8 +248,8 @@ describe("production BTCC selected model", () => {
       selectedOperationResultViews: [],
       priorOperationResultIndex: [],
     });
-    expect(hierarchy.currentTurnContext.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
-    expect(hierarchy.currentTurnContext.butlerContext).toEqual({
+    expect(dynamic.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
+    expect(dynamic.butlerContext).toEqual({
       sessionId: "session-1",
       userRef: "user-1",
       projectRef: "project-1",
@@ -241,7 +260,7 @@ describe("production BTCC selected model", () => {
       continuation: { candidates: [] },
       baselineObservationScopeRefs: ["web:current"],
     });
-    expect(hierarchy.currentTurnContext.availableCapabilities).toEqual([{
+    expect(stable.capabilitySchemas).toEqual([{
       capabilityRef: "weather:current",
       name: "current_weather",
       description: "Read current weather for one location.",
@@ -264,6 +283,101 @@ describe("production BTCC selected model", () => {
     );
     expect(submissionCarrier?.properties.submission).toEqual(phaseEnvelope().submissionSchema);
     expect(hasOpenObjectSchema(calls[0]!.responseSchema)).toBe(false);
+  });
+
+  test("keeps one serialized stable prefix while dynamic Turn state changes", async () => {
+    const calls: ProviderPhasePrompt[] = [];
+    const capabilities = [
+      {
+        capabilityRef: "web:search",
+        name: "search_web",
+        description: "Search the authorized web scope.",
+        operationKinds: ["observe" as const],
+        observationScopeRefs: ["web:current"],
+        inputSchema: {
+          type: "object",
+          properties: { query: { type: "string" } },
+          required: ["query"],
+          additionalProperties: false,
+        },
+      },
+      {
+        capabilityRef: "web:read",
+        name: "read_web_page",
+        description: "Read one page in the authorized web scope.",
+        operationKinds: ["observe" as const],
+        observationScopeRefs: ["web:current"],
+        inputSchema: {
+          type: "object",
+          properties: { url: { type: "string" } },
+          required: ["url"],
+          additionalProperties: false,
+        },
+      },
+    ];
+    const createModel = (reverse: boolean) => createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: capabilityCatalog(reverse ? [...capabilities].reverse() : capabilities),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async (input) => {
+        calls.push(input);
+        return {
+          carrier: { kind: "phase_submission", submission: { kind: "plan" }, publicActivity },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+    const firstEnvelope = phaseEnvelope({ emptyContext: true });
+    const secondEnvelope = phaseEnvelope({ emptyContext: true });
+    secondEnvelope.binding = {
+      ...secondEnvelope.binding,
+      turnId: "turn-2",
+      turnRevision: 9,
+      checkpointId: "checkpoint-2",
+      checkpointRevision: 6,
+    };
+    secondEnvelope.context = {
+      ...secondEnvelope.context,
+      originalMessageId: "message-2",
+      originalMessage: "A different current request.",
+      stateInput: {
+        acceptedGoalRef: "goal:2",
+        currentTimestamp: "2026-07-27T12:34:56.000Z",
+      },
+    };
+    secondEnvelope.authoringContractRefs = ["spec-authoring@2"];
+    secondEnvelope.authoringContracts = [{
+      contractId: "spec-authoring",
+      revisionRef: { id: "spec-authoring@2", sha256: "authoring-hash-2" },
+      applicableRules: ["preserve-current-behavior"],
+    }];
+    secondEnvelope.operationResults = [{
+      ...secondEnvelope.operationResults[0]!,
+      resultRef: { id: "result:2", sha256: "result-hash-2" },
+      requestRef: { id: "request:2", sha256: "request-hash-2" },
+      preview: "different complete result",
+      content: "different complete result",
+      readScopeRef: "operation-result:result:2",
+    }];
+
+    await createModel(false).runRound(firstEnvelope);
+    await createModel(true).runRound(secondEnvelope);
+
+    const first = parseCacheOrderedPrompt(calls[0]!.prompt);
+    const second = parseCacheOrderedPrompt(calls[1]!.prompt);
+    expect(first.serializedStablePrefix).toBe(second.serializedStablePrefix);
+    expect(first.dynamic).not.toEqual(second.dynamic);
+    expect(calls[0]!.instructions).toBe(calls[1]!.instructions);
+    expect(calls[0]!.responseSchema).toEqual(calls[1]!.responseSchema);
+    expect(calls[0]!.carrierFunctions).toEqual(calls[1]!.carrierFunctions);
+    expect(calls[0]!.cacheScope).toBe(calls[1]!.cacheScope);
+    expect(first.serializedStablePrefix).toContain("web:read");
+    expect(first.serializedStablePrefix).toContain("outputContract");
+    expect(first.serializedStablePrefix).not.toContain("turn-1");
+    expect(first.serializedStablePrefix).not.toContain("message-1");
+    expect(first.serializedStablePrefix).not.toContain("result:1");
+    expect(calls[0]!.prompt.slice(first.serializedStablePrefix.length + 1)).toContain("turn-1");
+    expect(calls[1]!.prompt.slice(second.serializedStablePrefix.length + 1)).toContain("turn-2");
   });
 
   test("closes the operation carrier for Conception Opening", async () => {
@@ -301,31 +415,21 @@ describe("production BTCC selected model", () => {
 
     await model.runRound(envelope);
 
-    const rendered = JSON.parse(prompt!.prompt) as {
-      promptHierarchy: {
-        immutablePhaseContract: { operationSurface: string };
-        currentTurnContext: {
-          operationAuthority: { observationScopeRefs: string[]; mutation: { kind: string } };
-          availableCapabilities: unknown[];
-        };
-      };
-      outputSchemaGuidance: {
-        carrierKinds: string[];
-        phaseSubmission: string;
-        operationRequests?: string;
-      };
-    };
+    const rendered = parseCacheOrderedPrompt(prompt!.prompt);
     expect(prompt?.carrierFunctions.map((item) => item.carrierKind)).toEqual([
       "phase_submission",
     ]);
     expect(JSON.stringify(prompt?.responseSchema)).not.toContain("operation_requests");
-    expect(rendered.promptHierarchy.immutablePhaseContract.operationSurface).toBe("closed");
-    expect(rendered.promptHierarchy.currentTurnContext.operationAuthority).toEqual({
+    expect(rendered.stable.promptHierarchy[0]).toEqual({
+      layer: "immutablePhaseContract",
+      content: expect.objectContaining({ operationSurface: "closed" }),
+    });
+    expect(rendered.dynamic.operationAuthority).toEqual({
       observationScopeRefs: [],
       mutation: { kind: "forbidden" },
     });
-    expect(rendered.promptHierarchy.currentTurnContext.availableCapabilities).toEqual([]);
-    expect(rendered.outputSchemaGuidance).toEqual({
+    expect(rendered.stable.capabilitySchemas).toEqual([]);
+    expect(rendered.stable.outputContract).toEqual({
       carrierKinds: ["phase_submission"],
       phaseSubmission: [
         "Use one submission object allowed by the exact phase exits.",
@@ -437,7 +541,7 @@ describe("production BTCC selected model", () => {
 
     await model.runRound(envelope);
 
-    const context = JSON.parse(prompt).promptHierarchy.currentTurnContext.operationContext;
+    const context = parseCacheOrderedPrompt(prompt).dynamic.operationContext;
     expect(context.phaseContinuity).toEqual(phaseContinuity());
     expect(context.inlineOperationResults).toHaveLength(2);
     expect(context.inlineOperationResults[1]).toMatchObject({
