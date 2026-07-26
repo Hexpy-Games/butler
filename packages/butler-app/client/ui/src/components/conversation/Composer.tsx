@@ -119,7 +119,6 @@ export function Composer(props: ComposerProps) {
   });
   const showAdjunct =
     queue.sessionQueue.length > 0 ||
-    state.todoRows.length > 0 ||
     state.workers.length > 0;
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
@@ -138,7 +137,6 @@ export function Composer(props: ComposerProps) {
             queuedMessages={queue.sessionQueue}
             onEditQueued={queue.handleEditQueued}
             onDeleteQueued={queue.handleDeleteQueued}
-            todoRows={state.todoRows}
             showWorkers={state.workers.length > 0}
           />
         ) : null

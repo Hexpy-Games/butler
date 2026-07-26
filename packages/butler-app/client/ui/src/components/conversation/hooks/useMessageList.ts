@@ -114,7 +114,7 @@ export function useMessageList(
     assistantFooterMetaById,
     workers,
     activeTurn,
-    progressRows: timelineProgressRows,
+    progressRows,
     turnState,
     turnId: activeSnapshot?.turn_id ?? summary?.latest_progress?.turn_id,
     showTurnActivity,

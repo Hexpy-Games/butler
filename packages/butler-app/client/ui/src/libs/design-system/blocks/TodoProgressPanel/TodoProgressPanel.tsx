@@ -1,26 +1,22 @@
 import type { HTMLAttributes } from "react";
-import {
-  CheckCircle2,
-  Circle,
-  CircleX,
-  ListChecks,
-  LoaderCircle,
-} from "../../components/Icons";
-import { Typo } from "../../components/Typo";
+import { ListChecks } from "../../components/Icons";
 import { cn } from "../../lib/utils";
 import { ComposerAdjunctPanel } from "../ComposerAdjunctPanel";
 import styles from "./TodoProgressPanel.module.css";
+import { TodoProgressItemRow } from "./TodoProgressItemRow";
 
 export type TodoProgressPanelItemState =
   | "pending"
   | "running"
+  | "reviewing"
   | "completed"
-  | "failed"
-  | "cancelled";
+  | "correction-required"
+  | "stopped";
 
 export interface TodoProgressPanelItem {
   id: string;
   title: string;
+  groupTitle?: string;
   state: TodoProgressPanelItemState;
   statusLabel: string;
 }
@@ -42,7 +38,11 @@ export function TodoProgressPanel({
   ...props
 }: TodoProgressPanelProps) {
   if (items.length === 0) return null;
-  const currentItem = items.find((item) => item.state === "running");
+  const currentItem = items.find((item) =>
+    item.state === "running" ||
+    item.state === "reviewing" ||
+    item.state === "correction-required",
+  );
   const collapsedSummary = currentItem
     ? `${currentItem.statusLabel}: ${currentItem.title}`
     : undefined;
@@ -58,27 +58,8 @@ export function TodoProgressPanel({
       {...props}
     >
       <ul className={styles.list}>
-        {items.map((item) => (
-          <li className={styles.item} data-state={item.state} key={item.id}>
-            <span className={styles.marker} aria-hidden="true">
-              {itemIcon(item.state)}
-            </span>
-            <Typo.Body as="span" className={styles.title} title={item.title}>
-              {item.title}
-            </Typo.Body>
-            <Typo.Caption as="span" className={styles.status}>
-              {item.statusLabel}
-            </Typo.Caption>
-          </li>
-        ))}
+        {items.map((item) => <TodoProgressItemRow item={item} key={item.id} />)}
       </ul>
     </ComposerAdjunctPanel>
   );
-}
-
-function itemIcon(state: TodoProgressPanelItemState) {
-  if (state === "completed") return <CheckCircle2 size={15} />;
-  if (state === "failed" || state === "cancelled") return <CircleX size={15} />;
-  if (state === "running") return <LoaderCircle size={15} />;
-  return <Circle size={15} />;
 }

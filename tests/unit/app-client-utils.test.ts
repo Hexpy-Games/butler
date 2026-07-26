@@ -1904,6 +1904,89 @@ test("delivered terminal progress preserves same-turn cancelled terminal rows", 
   );
 });
 
+test("canonical Work Ledger updates replace lifecycle state and unchanged replay is a no-op", async () => {
+  const clientUtils = await import("../../packages/butler-app/client/ui/src/app/utils.ts");
+  const { applyTimelineEventsToViewState, mergeTurnProgressSnapshotMap } = clientUtils;
+  const initial = {
+    "turn-work": {
+      turn_id: "turn-work",
+      state: "running",
+      safe_progress_rows: [canonicalTaskRow("completed")],
+    },
+  };
+  const reopened = mergeTurnProgressSnapshotMap(initial, {
+    "turn-work": {
+      turn_id: "turn-work",
+      state: "running",
+      safe_progress_rows: [canonicalTaskRow("correction_required")],
+    },
+  });
+
+  expect(reopened["turn-work"]?.safe_progress_rows[0]?.state).toBe(
+    "correction_required",
+  );
+  expect(mergeTurnProgressSnapshotMap(reopened, {
+    "turn-work": reopened["turn-work"]!,
+  })).toBe(reopened);
+
+  const live = applyTimelineEventsToViewState([
+    {
+      id: 10,
+      type: "progress.summary",
+      payload: {
+        session_id: "chat-work",
+        turn_id: "turn-work",
+        row: canonicalTaskRow("correction_required"),
+      },
+      created_at: "2026-07-27T00:00:00.000Z",
+    },
+  ], "chat-work", {
+    messages: [],
+    summary: {
+      session_id: "chat-work",
+      turn_state: "running",
+      latest_progress: {
+        turn_id: "turn-work",
+        state: "running",
+        safe_progress_rows: [],
+      },
+      artifacts: [],
+      skills_used: [],
+      worker_activity: [],
+      work_streams: [],
+    },
+    turnProgress: {},
+  });
+  const reloaded = mergeTurnProgressSnapshotMap({}, {
+    "turn-work": reopened["turn-work"]!,
+  });
+  expect(live.turnProgress["turn-work"]?.safe_progress_rows).toEqual(
+    reloaded["turn-work"]?.safe_progress_rows,
+  );
+});
+
+function canonicalTaskRow(state: string) {
+  return {
+    id: "task-1",
+    kind: "todo",
+    state,
+    safe_label: "Repair canonical progress",
+    safe_input_label: "task-1",
+    bridge_phase: "btcc_work_ledger",
+    created_at: "2026-07-27T00:00:00.000Z",
+  };
+}
+
+test("a delivered deferred Turn does not mark unfinished Work Ledger tasks complete", async () => {
+  const { todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  );
+  expect(todoRowsForDisplay([
+    canonicalTaskRow("completed"),
+    { ...canonicalTaskRow("planned"), id: "task-2", safe_input_label: "task-2" },
+  ], "delivered").map((row) => row.state)).toEqual(["completed", "pending"]);
+});
+
 test("timeline keeps per-turn progress snapshots separate across live turns", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {

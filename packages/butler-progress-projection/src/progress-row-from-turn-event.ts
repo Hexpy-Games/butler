@@ -117,6 +117,9 @@ export function progressRowFromSharedTurnEvent(
         safe_label: safeText(payload.safeLabel, "Working step"),
         state: optionalText(payload.state) ?? "running",
         safe_input_label: todoId,
+        bridge_phase: optionalText(payload.bridgePhase),
+        work_stream_id: optionalText(payload.workstreamId),
+        semantic_block_id: optionalText(payload.semanticBlockId),
         safe_detail_rows: detailRows(payload.detailRows),
         safe_order: optionalNonNegativeInteger(payload.safeOrder),
       };

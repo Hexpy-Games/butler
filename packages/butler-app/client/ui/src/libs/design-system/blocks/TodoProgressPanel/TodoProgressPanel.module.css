@@ -27,7 +27,8 @@
   color: var(--text-tertiary);
 }
 
-.item[data-state="running"] .marker {
+.item[data-state="running"] .marker,
+.item[data-state="reviewing"] .marker {
   color: var(--accent);
 }
 
@@ -35,14 +36,26 @@
   color: var(--ok);
 }
 
-.item[data-state="failed"],
-.item[data-state="cancelled"] {
+.item[data-state="correction-required"],
+.item[data-state="stopped"] {
   color: var(--text-tertiary);
 }
 
 .title {
   overflow: hidden;
   min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content {
+  display: grid;
+  min-width: 0;
+}
+
+.group {
+  overflow: hidden;
+  color: var(--text-tertiary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

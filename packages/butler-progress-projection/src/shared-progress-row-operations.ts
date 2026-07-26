@@ -118,7 +118,7 @@ export function mergeProgressState(current: string, incoming: string): string {
 }
 
 export function isTerminalProgressState(state: string): boolean {
-  return ["failed", "cancelled", "delivered", "complete", "completed"].includes(state);
+  return ["failed", "cancelled", "delivered", "complete", "completed", "stopped"].includes(state);
 }
 
 function progressStateRank(state: string): number {

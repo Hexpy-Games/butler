@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { publishOpeningDecision } from
+import { publishOpeningDecision, publishTurnProgress } from
   "../../packages/butler-agent/src/agent/btcc/turn/turn-progress.ts";
 import { projectTurnProgress } from
   "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-progress.ts";
@@ -145,5 +145,96 @@ test("projects one runtime-owned waiting state for a selected-model round", asyn
     safe_label: "모델 응답을 기다리고 있습니다",
     bridge_phase: "model_round_waiting",
     semantic_block_id: "planning",
+  });
+});
+
+test("projects canonical Work Ledger tasks without deriving labels or lifecycle", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.workProgressChanged?.({
+    turnId: "turn-work",
+    turnRevision: 8,
+    programId: "program-1",
+    tasks: [
+      {
+        taskId: "task-1",
+        taskTitle: "Implement the canonical projection",
+        taskOrder: 1,
+        taskState: "reviewing",
+        workId: "work-1",
+        workTitle: "Synchronize Work progress",
+        workState: "active",
+      },
+    ],
+  });
+
+  const row = progressRowFromSharedTurnEvent({
+    id: "event-work",
+    turnSequence: 4,
+    createdAt: "2026-07-27T00:00:00.000Z",
+    kind: events[0]!.kind,
+    payload: events[0]!.payload,
+  });
+  expect(row).toMatchObject({
+    id: "task-1",
+    kind: "todo",
+    safe_label: "Implement the canonical projection",
+    state: "reviewing",
+    bridge_phase: "btcc_work_ledger",
+    work_stream_id: "work-1",
+    semantic_block_id: "work-ledger-program-1",
+    safe_order: 1,
+    safe_detail_rows: [{
+      id: "work",
+      kind: "work",
+      safe_label: "Work",
+      safe_value: "Synchronize Work progress",
+      state: "active",
+    }],
+  });
+});
+
+test("committed BTCC successor publishes the installed Planning graph", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+  const work = {
+    workLogicalId: "work-1",
+    outcome: "Deliver the Work projection",
+  };
+  const task = {
+    taskLogicalId: "task-1",
+    workLogicalId: "work-1",
+    intendedOutcome: "Publish accepted Task state",
+    executionOrdinal: 1,
+  };
+
+  await publishTurnProgress(observer, {
+    turnId: "turn-work",
+    revision: 9,
+    semanticState: "task_review",
+    managed: {
+      program: {
+        planningState: "reviewed",
+        programId: "program-1",
+        works: [{ work, status: "active" }],
+        tasks: [{ task, status: "result_submitted" }],
+      },
+    },
+  } as never);
+
+  expect(events.map((event) => event.kind)).toEqual([
+    "tool.progress",
+    "assistant.public_note",
+  ]);
+  expect(events[0]?.payload).toMatchObject({
+    todoId: "task-1",
+    safeLabel: "Publish accepted Task state",
+    state: "reviewing",
+    workstreamId: "work-1",
   });
 });

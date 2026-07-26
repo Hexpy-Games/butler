@@ -52,7 +52,8 @@ export function isTerminalProgressState(state: string): boolean {
     state === "cancelled" ||
     state === "delivered" ||
     state === "complete" ||
-    state === "completed"
+    state === "completed" ||
+    state === "stopped"
   );
 }
 
@@ -210,6 +211,15 @@ function mergeProgressRow(
   current: ProgressSummaryRow,
   incoming: ProgressSummaryRow,
 ): ProgressSummaryRow {
+  if (isCanonicalWorkTaskRow(current) && isCanonicalWorkTaskRow(incoming)) {
+    const next = {
+      ...current,
+      ...incoming,
+      created_at: current.created_at,
+      safe_order: minimumOptionalNumber(current.safe_order, incoming.safe_order),
+    };
+    return progressRowsEquivalent(current, next) ? current : next;
+  }
   const incomingWins =
     progressMergeState(current.state, incoming.state) === incoming.state;
   const base = incomingWins
@@ -309,6 +319,10 @@ function mergeProgressRow(
       incoming.public_decision_latency_ms,
     created_at: current.created_at ?? incoming.created_at,
   };
+}
+
+function isCanonicalWorkTaskRow(row: ProgressSummaryRow): boolean {
+  return row.kind === "todo" && row.bridge_phase === "btcc_work_ledger";
 }
 
 function minimumOptionalNumber(

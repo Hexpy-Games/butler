@@ -1142,6 +1142,7 @@ function freezeMessagePhaseActivity(
 }
 
 function isTurnActivityRow(row: ProgressRow): boolean {
+  if (row.kind === "todo" && row.bridge_phase === "btcc_work_ledger") return true;
   if (row.bridge_phase === "btcc_operation" && row.semantic_block_id) return true;
   return Boolean(
     row.kind === "message" &&
@@ -1716,6 +1717,15 @@ function mergeProgressRow(
   incoming: ProgressRow,
   options: { reviveForRetry?: boolean } = {},
 ): ProgressRow {
+  if (isCanonicalWorkTaskRow(current) && isCanonicalWorkTaskRow(incoming)) {
+    const next = {
+      ...current,
+      ...incoming,
+      created_at: current.created_at,
+      safe_order: minimumOptionalNumber(current.safe_order, incoming.safe_order),
+    };
+    return progressRowEqual(current, next) ? current : next;
+  }
   const mergedState = progressMergeRowState(current, incoming, options);
   const incomingWins = mergedState === incoming.state;
   const base = incomingWins
@@ -1786,6 +1796,10 @@ function mergeProgressRow(
     created_at: current.created_at ?? incoming.created_at,
   };
   return progressRowEqual(current, next) ? current : next;
+}
+
+function isCanonicalWorkTaskRow(row: ProgressRow): boolean {
+  return row.kind === "todo" && row.bridge_phase === "btcc_work_ledger";
 }
 
 function minimumOptionalNumber(
@@ -2022,7 +2036,8 @@ function isTerminalProgressState(state: string): boolean {
     state === "cancelled" ||
     state === "delivered" ||
     state === "complete" ||
-    state === "completed"
+    state === "completed" ||
+    state === "stopped"
   );
 }
 

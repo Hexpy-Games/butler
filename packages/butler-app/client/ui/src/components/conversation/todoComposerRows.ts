@@ -4,7 +4,14 @@ import { semanticProgressRows } from "../../app/utils.ts";
 export interface TodoComposerItem {
   id: string;
   label: string;
-  state: "pending" | "running" | "completed" | "failed" | "cancelled";
+  workLabel?: string;
+  state:
+    | "pending"
+    | "running"
+    | "reviewing"
+    | "completed"
+    | "correction-required"
+    | "stopped";
 }
 
 interface RankedTodoComposerItem {
@@ -13,7 +20,10 @@ interface RankedTodoComposerItem {
   index: number;
 }
 
-export function todoRowsForDisplay(rows: ProgressRow[]): TodoComposerItem[] {
+export function todoRowsForDisplay(
+  rows: ProgressRow[],
+  turnState?: string,
+): TodoComposerItem[] {
   const byKey = new Map<string, RankedTodoComposerItem>();
   const semanticRows = semanticProgressRows(rows);
   for (const [index, row] of semanticRows.entries()) {
@@ -27,7 +37,8 @@ export function todoRowsForDisplay(rows: ProgressRow[]): TodoComposerItem[] {
       item: {
         id: todoId,
         label,
-        state: todoState(row.state),
+        workLabel: workLabel(row),
+        state: todoState(row.state, turnState),
       },
       order: previous
         ? mergeTodoOrder(previous.order, todoOrder(row.safe_order))
@@ -43,13 +54,24 @@ export function todoRowsForDisplay(rows: ProgressRow[]): TodoComposerItem[] {
     .map((entry) => entry.item);
 }
 
-function todoState(state?: string): TodoComposerItem["state"] {
+function todoState(state?: string, turnState?: string): TodoComposerItem["state"] {
+  if (turnState === "cancelled" && state !== "completed" && state !== "delivered")
+    return "stopped";
   if (state === "delivered" || state === "complete" || state === "completed")
     return "completed";
-  if (state === "failed") return "failed";
-  if (state === "cancelled") return "cancelled";
-  if (state === "running" || state === "streaming") return "running";
+  if (state === "reviewing") return "reviewing";
+  if (state === "failed" || state === "correction_required")
+    return "correction-required";
+  if (state === "cancelled" || state === "stopped") return "stopped";
+  if (state === "running" || state === "streaming" || state === "active")
+    return "running";
   return "pending";
+}
+
+function workLabel(row: ProgressRow): string | undefined {
+  return row.safe_detail_rows
+    ?.find((detail) => detail.kind === "work" && detail.id === "work")
+    ?.safe_value?.trim() || undefined;
 }
 
 function todoOrder(value?: number): number {

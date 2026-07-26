@@ -116,6 +116,7 @@ export class AppSessionMessageProjectionStore {
 }
 
 function isTurnActivityRow(row: ProgressSummaryRow): boolean {
+  if (row.kind === "todo" && row.bridge_phase === "btcc_work_ledger") return true;
   if (row.bridge_phase === "btcc_operation" && row.semantic_block_id) return true;
   return Boolean(
     row.kind === "message" &&
