@@ -36,6 +36,7 @@ export type UnplannedManagedProgramState = ManagedProgramAuthority & {
 
 export type ReviewedManagedProgramState = ManagedProgramAuthority & {
   planningState: "reviewed";
+  acceptedPlan: PlanningAcceptedProduct["candidate"];
   plan: PlanningAcceptedProduct["candidate"]["plan"];
   planningReviewRef: ContentRef;
   works: ManagedWorkState[];

@@ -13,6 +13,7 @@ type ProgramRow = {
   goal_contract_ref: string;
   authority_ref: string;
   accepted_plan_ref: string | null;
+  accepted_plan_candidate_ref: string | null;
   planning_review_ref: string | null;
   frontier: "unplanned" | "implementation_open" | "promotion_open" | "closed";
   ledger_id: string;
@@ -59,6 +60,9 @@ export class SqliteWorkLedgerProgramReader {
       };
     }
     const plan = this.loadRecord<ReviewedProgram["plan"]>(program.accepted_plan_ref);
+    const acceptedPlanRef = program.accepted_plan_candidate_ref ??
+      this.loadRecord<{ candidateRef: ContentRef }>(program.planning_review_ref).candidateRef.id;
+    const acceptedPlan = this.loadRecord<ReviewedProgram["acceptedPlan"]>(acceptedPlanRef);
     const works = this.loadWorks(programId);
     const tasks = this.loadTasks(programId);
     const currentTask = selectCurrentTask(tasks);
@@ -70,6 +74,7 @@ export class SqliteWorkLedgerProgramReader {
     return {
       ...authority,
       planningState: "reviewed",
+      acceptedPlan,
       plan,
       planningReviewRef: this.loadRef(program.planning_review_ref),
       works,
@@ -115,7 +120,7 @@ export class SqliteWorkLedgerProgramReader {
 
   private loadProgramRow(programId: string): ProgramRow | null {
     return this.db.query<ProgramRow, [string]>(`
-      SELECT goal_contract_ref, authority_ref, accepted_plan_ref,
+      SELECT goal_contract_ref, authority_ref, accepted_plan_ref, accepted_plan_candidate_ref,
         planning_review_ref, frontier, ledger_id, manifest_revision,
         pending_correction_plan_ref, promotion_assembly_refs_json,
         promotion_permit_ref, active_deferral_ref, promotion_deferral_ref,

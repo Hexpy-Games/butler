@@ -69,6 +69,18 @@ export function loadProjectProgram(
     if (!body) throw new Error("Project Work Ledger manifest body is missing");
     const program = JSON.parse(body) as Program;
     if (program.programId !== programId) throw new Error("Project Work Ledger manifest identity changed");
+    if (program.planningState === "reviewed" && !program.acceptedPlan) {
+      const review = readReferencedRecord<{ candidateRef: Ref }>(
+        core,
+        root,
+        program.planningReviewRef,
+      );
+      program.acceptedPlan = readReferencedRecord(
+        core,
+        root,
+        review.candidateRef,
+      );
+    }
     program.governingSpecs = hydrateGoverningSpecs(core, root, program);
     hydrateRevalidationSources(program);
     return program;
@@ -76,6 +88,19 @@ export function loadProjectProgram(
     if (isMissing(error)) return null;
     throw error;
   }
+}
+
+function readReferencedRecord<T>(
+  core: ProjectLedgerCore,
+  root: string,
+  ref: Ref,
+): T {
+  const record = core.resolveRecord(root, { kind: "reference", id: ref.id });
+  const body = core.readRecordBody(record.filePath);
+  if (!body || digest(body) !== ref.sha256) {
+    throw new Error(`Project Work Ledger reference changed: ${ref.id}`);
+  }
+  return JSON.parse(body) as T;
 }
 
 function hydrateRevalidationSources(program: Program): void {

@@ -26,7 +26,8 @@ export class SqliteReviewedGraphInstaller {
     }
     const next = candidate.nextPlanCandidate;
     const updated = this.db.query(`
-      UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
+      UPDATE btcc_programs SET accepted_plan_ref = ?, accepted_plan_candidate_ref = ?,
+        planning_review_ref = ?,
         authority_ref = ?, frontier = 'implementation_open',
         pending_correction_plan_ref = ?, promotion_assembly_refs_json = NULL,
         promotion_permit_ref = NULL, active_deferral_ref = NULL,
@@ -36,6 +37,7 @@ export class SqliteReviewedGraphInstaller {
       WHERE program_id = ? AND manifest_revision = ?
     `).run(
       next.plan.ref.id,
+      next.ref.id,
       product.review.ref.id,
       authority.authorityRef.id,
       candidate.correctionPlan.ref.id,

@@ -50,10 +50,6 @@ export function projectFeedbackPlanningContext(
   if (feedbackIntent.feedbackIntent.correctionKind === "implementation_repair") {
     return common;
   }
-  const acceptedPlan = managed.planningAcceptance?.candidate;
-  if (!acceptedPlan) {
-    throw new Error("Governing Feedback Planning requires the accepted semantic Plan");
-  }
   return {
     ...common,
     ledgerId: program.ledgerId,
@@ -66,7 +62,7 @@ export function projectFeedbackPlanningContext(
     governingSpecs: program.governingSpecs,
     availableSpecs: program.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
-    acceptedPlan,
+    acceptedPlan: program.acceptedPlan,
     taskImpactIndex: program.tasks.map((state) => ({
       task: {
         ref: state.task.ref,

@@ -113,7 +113,8 @@ export class SqliteProgramAuthorityWriter {
   ): void {
     const candidate = product.candidate;
     const activated = this.db.query(`
-      UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
+      UPDATE btcc_programs SET accepted_plan_ref = ?, accepted_plan_candidate_ref = ?,
+        planning_review_ref = ?,
         frontier = 'implementation_open', active_deferral_ref = NULL,
         active_deferral_turn_id = NULL, promotion_deferral_ref = NULL,
         available_specs_json = ?, governing_spec_refs_json = ?,
@@ -121,6 +122,7 @@ export class SqliteProgramAuthorityWriter {
       WHERE program_id = ? AND frontier = 'unplanned' AND manifest_revision = ?
     `).run(
       candidate.plan.ref.id,
+      candidate.ref.id,
       product.review.ref.id,
       stableJson(projection.availableSpecs),
       stableJson(projection.governingSpecRefs),
@@ -198,7 +200,8 @@ export class SqliteProgramAuthorityWriter {
     const candidate = product.candidate;
     this.closeUnacceptedAttempts(candidate.programId);
     const replaced = this.db.query(`
-      UPDATE btcc_programs SET accepted_plan_ref = ?, planning_review_ref = ?,
+      UPDATE btcc_programs SET accepted_plan_ref = ?, accepted_plan_candidate_ref = ?,
+        planning_review_ref = ?,
         frontier = 'implementation_open', promotion_permit_ref = NULL,
         promotion_assembly_refs_json = NULL, active_deferral_ref = NULL,
         active_deferral_turn_id = NULL, promotion_deferral_ref = NULL,
@@ -207,6 +210,7 @@ export class SqliteProgramAuthorityWriter {
       WHERE program_id = ? AND manifest_revision = ?
     `).run(
       candidate.plan.ref.id,
+      candidate.ref.id,
       product.review.ref.id,
       stableJson(projection.availableSpecs),
       stableJson(projection.governingSpecRefs),

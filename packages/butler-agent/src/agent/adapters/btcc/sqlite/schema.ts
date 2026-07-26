@@ -244,6 +244,7 @@ CREATE TABLE IF NOT EXISTS btcc_programs (
   goal_contract_ref TEXT NOT NULL,
   authority_ref TEXT NOT NULL,
   accepted_plan_ref TEXT,
+  accepted_plan_candidate_ref TEXT,
   planning_review_ref TEXT,
   pending_correction_plan_ref TEXT,
   promotion_assembly_refs_json TEXT,
