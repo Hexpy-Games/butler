@@ -102,6 +102,25 @@ test("projects canonical phase identity and marks only active recovery as operat
   expect(recoveryRow?.semantic_block_id).toBe("planning_review");
 });
 
+test("distinguishes provider product correction from connection recovery", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.operationalNoticeChanged?.({
+    turnId: "turn-product-correction",
+    semanticState: "feedback_planning",
+    status: "recovering",
+    code: "provider_phase_submission_invalid",
+    activationKind: "automatic_provider_recovery",
+  });
+
+  expect(events[0]?.payload?.note).toBe(
+    "모델 출력 계약을 바로잡고 있습니다. 완료된 작업은 그대로 보존됩니다",
+  );
+});
+
 test("projects one runtime-owned waiting state for a selected-model round", async () => {
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const observer = projectTurnProgress(async (event) => {

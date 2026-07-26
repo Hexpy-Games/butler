@@ -254,6 +254,10 @@ const DUTIES = {
     "unaffected, revalidate, rework, or replan. Preserve logical identity for",
     "unaffected and revalidate. Rework may name a replacement successor identity;",
     "replan may omit a successor when the prior Task is retired or decomposed.",
+    "Unaffected means the exact accepted Task revision is preserved: governing Spec",
+    "refs, outcome, dependencies, scope, criteria, verification questions, artifact",
+    "policy, effect class, and execution ordinal must all remain unchanged. If any of",
+    "those fields changes, classify that Task as revalidate, rework, or replan instead.",
     "New successor Tasks start planned. Implementation repair changes no governing revision.",
   ].join(" "),
   review_correction_exactly: [
