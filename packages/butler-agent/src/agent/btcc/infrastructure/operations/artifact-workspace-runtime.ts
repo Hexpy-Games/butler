@@ -16,11 +16,11 @@ import { contentRef, digest, stableJson } from "../../core/index.ts";
 import type { ProductionOperationRuntimeOptions } from "./contracts.ts";
 import { ArtifactStore, type StoredWorkspace } from "./artifact-store.ts";
 import {
-  captureTargetSnapshot,
-  materializeSnapshot,
+  copyWorkspaceControls,
   removeOwnedRoot,
   workspaceContentRoot,
-} from "./target-snapshot.ts";
+  type MaterializedSnapshot,
+} from "../artifact-snapshot/index.ts";
 
 export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRuntime {
   constructor(
@@ -40,7 +40,7 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
       throw new Error("BTCC target scope resolver must return an absolute path");
     }
     const requestedPath = resolve(resolved.targetPath);
-    const baselineSnapshot = captureTargetSnapshot(requestedPath);
+    const baselineSnapshot = this.store.snapshots.captureTarget(requestedPath);
     const targetPath = existsSync(requestedPath)
       ? realpathSync(requestedPath)
       : requestedPath;
@@ -52,7 +52,13 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
       "workspaces",
       provision.workspace.ref.id,
     );
-    materializeOwnedWorkspace(workspaceRoot, provision, baselineSnapshot);
+    materializeOwnedWorkspace(
+      workspaceRoot,
+      provision,
+      baselineSnapshot,
+      requestedPath,
+      this.store,
+    );
     const stored: StoredWorkspace = {
       key,
       provision,
@@ -62,7 +68,7 @@ export class ProductionArtifactWorkspaceRuntime implements ArtifactWorkspaceRunt
       workspaceRoot,
       baselineSnapshotRef: baselineSnapshot.ref,
     };
-    this.store.saveWorkspace(stored, baselineSnapshot);
+    this.store.saveWorkspace(stored);
     return provision;
   }
 }
@@ -108,7 +114,9 @@ function createProvision(
 function materializeOwnedWorkspace(
   root: string,
   provision: WorkspaceProvision,
-  snapshotValue: ReturnType<typeof captureTargetSnapshot>,
+  snapshotValue: MaterializedSnapshot,
+  targetPath: string,
+  store: ArtifactStore,
 ): void {
   if (existsSync(root)) {
     const marker = readOwnerMarker(root);
@@ -121,7 +129,11 @@ function materializeOwnedWorkspace(
   const stage = `${root}.provisioning-${process.pid}`;
   removeOwnedRoot(stage);
   mkdirSync(stage, { recursive: true });
-  materializeSnapshot(snapshotValue, workspaceContentRoot(stage));
+  const contentRoot = workspaceContentRoot(stage);
+  store.snapshots.materialize(snapshotValue, contentRoot);
+  if (snapshotValue.targetKind === "directory" && existsSync(targetPath)) {
+    copyWorkspaceControls(targetPath, contentRoot);
+  }
   writeFileSync(join(stage, ".butler-owner.json"), JSON.stringify({
     workspaceId: provision.workspace.ref.id,
     ownerMarkerSha256: provision.receipt.ownerMarkerSha256,

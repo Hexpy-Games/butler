@@ -11,25 +11,28 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { installCompleteRoot } from
   "../../packages/butler-agent/src/foundation/atomic-root-exchange.ts";
-import { captureTargetSnapshot } from
-  "../../packages/butler-agent/src/agent/btcc/infrastructure/operations/target-snapshot.ts";
+import { ArtifactSnapshotRepository } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/artifact-snapshot/index.ts";
 
 test("represents an absent baseline and atomically installs its first complete target", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-btcc-absent-target-"));
+  const database = new Database(":memory:");
+  const snapshots = new ArtifactSnapshotRepository(database, join(root, "blobs"));
   try {
     const target = join(root, "btcc");
     const stage = join(root, ".btcc-stage");
-    expect(captureTargetSnapshot(target).targetState).toBe("absent");
+    expect(snapshots.captureTarget(target).targetState).toBe("absent");
 
     mkdirSync(stage);
     writeFileSync(join(stage, "index.ts"), "export const ready = true;\n");
-    const candidate = captureTargetSnapshot(stage);
+    const candidate = snapshots.captureTarget(stage);
     installCompleteRoot(stage, target);
 
-    expect(captureTargetSnapshot(target)).toEqual(candidate);
+    expect(snapshots.captureTarget(target)).toEqual(candidate);
     expect(readFileSync(join(target, "index.ts"), "utf8"))
       .toBe("export const ready = true;\n");
   } finally {
+    database.close();
     rmSync(root, { force: true, recursive: true });
   }
 });

@@ -299,7 +299,7 @@ describe("production BTCC artifact operations", () => {
   for (const boundary of [
     "tool_mutated",
     "candidate_prepared",
-    "workspace_exchanged",
+    "workspace_applied",
     "before_result_persist",
   ] as const) {
     test(`recovers ${boundary} without invoking the workspace capability twice`, async () => {

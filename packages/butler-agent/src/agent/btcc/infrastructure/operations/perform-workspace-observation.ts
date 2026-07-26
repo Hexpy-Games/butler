@@ -2,7 +2,7 @@ import { contentRef, type ObservationResult, type PhaseEnvelope } from "../../co
 import type { ProductionOperationRuntimeOptions } from "./contracts.ts";
 import { ArtifactStore } from "./artifact-store.ts";
 import { assertActive, operationContent, sameRef } from "./operation-helpers.ts";
-import { workspaceContentRoot } from "./target-snapshot.ts";
+import { workspaceContentRoot } from "../artifact-snapshot/index.ts";
 
 type WorkspaceObservation = Extract<import("../../core/index.ts").OperationRequest, {
   kind: "workspace_artifact_observation";

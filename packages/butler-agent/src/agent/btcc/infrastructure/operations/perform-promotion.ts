@@ -14,12 +14,10 @@ import {
 } from "../../../../foundation/atomic-root-exchange.ts";
 import { assertActive, sameRef } from "./operation-helpers.ts";
 import {
-  captureTargetSnapshot,
-  captureWorkspaceSnapshot,
-  materializeCompleteTarget,
+  copyWorkspaceControls,
   removeOwnedRoot,
   syncCompleteTarget,
-} from "./target-snapshot.ts";
+} from "../artifact-snapshot/index.ts";
 import { operationRoundScope } from "../../core/operation-identity.ts";
 
 type PromotionRequest = Extract<import("../../core/index.ts").OperationRequest, {
@@ -52,7 +50,7 @@ export function performPromotion(input: {
   if (candidate.targetState !== "present") {
     throw new Error("BTCC promotion candidate must materialize a present target");
   }
-  const currentWorkspace = captureWorkspaceSnapshot(
+  const currentWorkspace = input.store.snapshots.captureWorkspace(
     workspace.workspaceRoot,
     workspace.targetKind,
     workspace.baselineTargetState,
@@ -60,7 +58,7 @@ export function performPromotion(input: {
   if (!sameRef(currentWorkspace.ref, candidate.ref)) {
     throw new Error("BTCC workspace changed after the reviewed candidate was accepted");
   }
-  const targetSnapshot = captureTargetSnapshot(workspace.targetPath);
+  const targetSnapshot = input.store.snapshots.captureTarget(workspace.targetPath);
   let intent = input.store.loadPromotion(scopeId, input.request);
   if (!intent) {
     if (!sameRef(targetSnapshot.ref, workspace.baselineSnapshotRef)) {
@@ -86,11 +84,11 @@ export function performPromotion(input: {
     intent = stageCandidate(scopeId, intent, candidate, input.store);
   }
   if (sameRef(targetSnapshot.ref, candidate.ref)) {
-    requireDisplacedBaseline(intent, workspace.baselineSnapshotRef);
+    requireDisplacedBaseline(intent, workspace.baselineSnapshotRef, input.store);
     intent = { ...intent, status: "committed" };
     input.store.savePromotion(scopeId, intent);
   } else if (sameRef(targetSnapshot.ref, workspace.baselineSnapshotRef)) {
-    requireStagedCandidate(intent, candidate.ref);
+    requireStagedCandidate(intent, candidate.ref, input.store);
     assertActive(input.signal);
     if (intent.status === "prepared") {
       intent = { ...intent, status: "commit_intent_durable" };
@@ -101,11 +99,11 @@ export function performPromotion(input: {
     } else {
       exchangeCompleteRoots(intent.stagedPath, workspace.targetPath);
     }
-    const observed = captureTargetSnapshot(workspace.targetPath);
+    const observed = input.store.snapshots.captureTarget(workspace.targetPath);
     if (!sameRef(observed.ref, candidate.ref)) {
       throw new Error("BTCC promoted target does not equal the reviewed candidate");
     }
-    requireDisplacedBaseline(intent, workspace.baselineSnapshotRef);
+    requireDisplacedBaseline(intent, workspace.baselineSnapshotRef, input.store);
     intent = { ...intent, status: "committed" };
     input.store.savePromotion(scopeId, intent);
   } else {
@@ -129,7 +127,7 @@ function closePromotionStage(
   if (intent.status !== "committed") {
     throw new Error("BTCC promotion cannot clean up before commit observation");
   }
-  requireDisplacedBaseline(intent, intent.baselineSnapshotRef);
+  requireDisplacedBaseline(intent, intent.baselineSnapshotRef, store);
   const cleanupRootRef = contentRef("owned-promotion-stage", {
     transactionId: intent.transactionId,
     workspaceRef: intent.workspaceRef,
@@ -179,13 +177,16 @@ function stageCandidate(
 ): PromotionIntent {
   if (existsSync(intent.stagedPath)) {
     try {
-      requireStagedCandidate(intent, candidate.ref);
+      requireStagedCandidate(intent, candidate.ref, store);
     } catch {
       removeOwnedRoot(intent.stagedPath);
-      materializeCompleteTarget(candidate, intent.stagedPath);
+      store.snapshots.materializeCompleteTarget(candidate, intent.stagedPath);
     }
   } else {
-    materializeCompleteTarget(candidate, intent.stagedPath);
+    store.snapshots.materializeCompleteTarget(candidate, intent.stagedPath);
+  }
+  if (candidate.targetKind === "directory" && existsSync(intent.targetPath)) {
+    copyWorkspaceControls(intent.targetPath, intent.stagedPath);
   }
   syncCompleteTarget(intent.stagedPath);
   const prepared = { ...intent, status: "prepared" as const };
@@ -193,22 +194,30 @@ function stageCandidate(
   return prepared;
 }
 
-function requireStagedCandidate(intent: PromotionIntent, candidateRef: ContentRef): void {
+function requireStagedCandidate(
+  intent: PromotionIntent,
+  candidateRef: ContentRef,
+  store: ArtifactStore,
+): void {
   if (!existsSync(intent.stagedPath)) {
     throw new Error("BTCC promotion stage is missing after durable preparation");
   }
-  const staged = captureTargetSnapshot(intent.stagedPath);
+  const staged = store.snapshots.captureTarget(intent.stagedPath);
   if (!sameRef(staged.ref, candidateRef)) {
     throw new Error("BTCC promotion stage does not equal the reviewed candidate");
   }
 }
 
-function requireDisplacedBaseline(intent: PromotionIntent, baselineRef: ContentRef): void {
+function requireDisplacedBaseline(
+  intent: PromotionIntent,
+  baselineRef: ContentRef,
+  store: ArtifactStore,
+): void {
   if (intent.baselineTargetState === "absent" && !existsSync(intent.stagedPath)) return;
   if (!existsSync(intent.stagedPath)) {
     throw new Error("BTCC promotion lost its displaced baseline");
   }
-  const displaced = captureTargetSnapshot(intent.stagedPath);
+  const displaced = store.snapshots.captureTarget(intent.stagedPath);
   if (!sameRef(displaced.ref, baselineRef)) {
     throw new Error("BTCC promotion cannot reconcile its displaced baseline");
   }
