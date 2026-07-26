@@ -49,6 +49,21 @@ test("implementation repair schema cannot request a replacement Program", () => 
   expect(serialized).not.toContain("impactMap");
 });
 
+test("legacy checkpoint uses its latest accepted governing revision", () => {
+  const fixture = feedbackFixture("governing_revision");
+  delete fixture.program.acceptedPlan;
+  fixture.managed.feedbackAcceptance = {
+    candidate: {
+      correctionKind: "governing_revision",
+      nextPlanCandidate: { marker: "LATEST_FEEDBACK_PLAN" },
+    },
+  };
+
+  expect(projectFeedbackPlanningContext(fixture).acceptedPlan).toEqual({
+    marker: "LATEST_FEEDBACK_PLAN",
+  });
+});
+
 function feedbackFixture(
   correctionKind: "implementation_repair" | "governing_revision",
 ): any {
