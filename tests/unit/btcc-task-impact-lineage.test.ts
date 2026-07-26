@@ -108,6 +108,26 @@ test("revalidate preserves logical identity while accepting a newer Task revisio
   ).toEqual(revised.ref);
 });
 
+test("revalidate rejects a changed Task without an accepted concrete result", () => {
+  const prior = task("review-failed-task", "prior-revision");
+  const revised = task("review-failed-task", "revised-revision");
+
+  expect(() => decodeTaskImpact({
+    submission: [{
+      priorTaskLogicalId: prior.taskLogicalId,
+      disposition: "revalidate",
+      successorTaskLogicalId: revised.taskLogicalId,
+      reason: "The contract changed.",
+    }],
+    currentTasks: [{ task: prior, status: "review_failed", hasCurrentResult: true }],
+    nextTasks: [revised],
+  })).toThrow(
+    "Task review-failed-task has status review_failed and currentResult=true; " +
+    "revalidate requires an accepted concrete result, so classify this changed Task " +
+    "as rework or replan",
+  );
+});
+
 test("unaffected lineage preserves the exact Task revision", () => {
   const prior = task("stable-task", "prior-revision");
   const revised = task("stable-task", "revised-revision");
