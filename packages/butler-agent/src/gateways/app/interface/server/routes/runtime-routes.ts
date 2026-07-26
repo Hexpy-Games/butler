@@ -105,6 +105,7 @@ export async function handleRuntimeRoutes(
     return liveEventsResponse(
       input.store,
       Number.isFinite(cursor) ? cursor : 0,
+      input.request.signal,
     );
   }
   return null;

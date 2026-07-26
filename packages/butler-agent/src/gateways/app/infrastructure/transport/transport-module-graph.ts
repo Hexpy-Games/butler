@@ -2,12 +2,14 @@ import type { SessionBindingStore } from "../../../../test-support/harness/sessi
 import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { AppMessageFileStore } from "../../domain/message-files/message-file-store.ts";
 import { AppTransportProjectionStore } from "./transport-projection-store.ts";
+import { AppTransportProjectionOwner } from "./transport-projection-owner.ts";
 import { AppTransportQueueStore } from "./transport-queue-store.ts";
 import { Database } from "bun:sqlite";
 
 export interface AppTransportModuleGraph {
   appTransportQueue: AppTransportQueueStore;
   transportProjection: AppTransportProjectionStore;
+  transportProjectionOwner: AppTransportProjectionOwner;
 }
 
 export function createAppTransportModuleGraph(input: {
@@ -92,5 +94,9 @@ export function createAppTransportModuleGraph(input: {
     drainQueuedSessionMessages: (chatId) =>
       host.drainQueuedSessionMessages(chatId),
   });
-  return { appTransportQueue, transportProjection };
+  const transportProjectionOwner = new AppTransportProjectionOwner({
+    butlerData,
+    syncAll: () => transportProjection.syncAll(),
+  });
+  return { appTransportQueue, transportProjection, transportProjectionOwner };
 }
