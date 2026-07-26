@@ -30,11 +30,7 @@ export async function review(command: {
   if (!accepted) throw new Error("Review is missing accepted Goal authority");
   const result = program.currentTask.currentResult;
   if (!result) throw new Error("Review requires the current ResultCandidate");
-  if (
-    program.currentTask.status !== "result_submitted" ||
-    result.result.taskRef.id !== program.currentTask.task.ref.id ||
-    result.result.taskRevisionSha256 !== program.currentTask.task.ref.sha256
-  ) {
+  if (!isReviewableResult(program.currentTask, result)) {
     throw new Error("Review result is not bound to the exact current Task revision");
   }
   const priorFindings = priorCorrectionFindings(program);
@@ -67,6 +63,26 @@ export async function review(command: {
   return product.review.verdict === "passed"
     ? { kind: "TaskReviewPassed", product }
     : { kind: "TaskReviewFailed", product };
+}
+
+function isReviewableResult(
+  task: ReturnType<typeof requireManagedProgram>["currentTask"],
+  result: NonNullable<ReturnType<typeof requireManagedProgram>["currentTask"]["currentResult"]>,
+): boolean {
+  if (task.status !== "result_submitted") return false;
+  const source = task.revalidationSource;
+  if (!source) {
+    return result.result.taskRef.id === task.task.ref.id &&
+      result.result.taskRevisionSha256 === task.task.ref.sha256;
+  }
+  const attempt = task.attempts.at(-1);
+  return Boolean(
+    attempt &&
+    attempt.status === "result_submitted" &&
+    sameRef(attempt.attemptRecord.taskRef, source.priorTaskRef) &&
+    sameRef(result.result.taskRef, source.priorTaskRef) &&
+    sameRef(result.result.ref, source.resultRef),
+  );
 }
 
 function priorCorrectionFindings(

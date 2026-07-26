@@ -96,6 +96,7 @@ test("revalidate preserves logical identity while accepting a newer Task revisio
           priorTaskLogicalId: prior.taskLogicalId,
           disposition: "revalidate",
           successorTaskLogicalId: revised.taskLogicalId,
+          revalidationPrerequisiteTaskLogicalIds: [],
           reason:
             "The governing revision requires the accepted result to be revalidated.",
         },
@@ -117,6 +118,7 @@ test("revalidate rejects a changed Task without an accepted concrete result", ()
       priorTaskLogicalId: prior.taskLogicalId,
       disposition: "revalidate",
       successorTaskLogicalId: revised.taskLogicalId,
+      revalidationPrerequisiteTaskLogicalIds: [],
       reason: "The contract changed.",
     }],
     currentTasks: [{ task: prior, status: "review_failed", hasCurrentResult: true }],
@@ -126,6 +128,35 @@ test("revalidate rejects a changed Task without an accepted concrete result", ()
     "revalidate requires an accepted concrete result, so classify this changed Task " +
     "as rework or replan",
   );
+});
+
+test("after-repair revalidation requires an earlier declared Task dependency", () => {
+  const prior = task("stable-task", "prior-revision");
+  const repair = {
+    ...task("repair-task", "repair-revision"),
+    executionOrdinal: 2,
+    dependencyTaskRefs: [],
+  } as ManagedTask;
+  const revised = {
+    ...task("stable-task", "revised-revision"),
+    executionOrdinal: 3,
+    dependencyTaskRefs: [repair.ref],
+  } as ManagedTask;
+
+  expect(decodeTaskImpact({
+    submission: [{
+      priorTaskLogicalId: prior.taskLogicalId,
+      disposition: "revalidate",
+      successorTaskLogicalId: revised.taskLogicalId,
+      revalidationPrerequisiteTaskLogicalIds: [repair.taskLogicalId],
+      reason: "Review the accepted result only after the repair is complete.",
+    }],
+    currentTasks: [{ task: prior, status: "accepted", hasCurrentResult: true }],
+    nextTasks: [repair, revised],
+  })[0]).toMatchObject({
+    disposition: "revalidate",
+    revalidationPrerequisiteTaskRefs: [repair.ref],
+  });
 });
 
 test("unaffected lineage preserves the exact Task revision", () => {
@@ -164,14 +195,21 @@ test("impact schema requires successors except when replanning", () => {
   expect(variants[0].properties).not.toHaveProperty("successorTaskLogicalId");
   expect(variants[1].properties.disposition).toEqual({
     type: "string",
-    enum: ["unaffected", "revalidate", "rework"],
+    enum: ["unaffected", "rework"],
   });
   expect(variants[1].required).toContain("successorTaskLogicalId");
+  expect(variants[2].properties.disposition).toEqual({
+    type: "string",
+    const: "revalidate",
+  });
+  expect(variants[2].required).toContain("revalidationPrerequisiteTaskLogicalIds");
 });
 
 function task(logicalId: string, revision: string): ManagedTask {
   return {
     ref: ref(revision),
     taskLogicalId: logicalId,
-  } as ManagedTask;
+    executionOrdinal: 1,
+    dependencyTaskRefs: [],
+  } as unknown as ManagedTask;
 }

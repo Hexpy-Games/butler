@@ -23,7 +23,8 @@ test("governing revision re-reviews an accepted result without rerunning Executi
       SELECT task_id, COUNT(*) AS attempts
       FROM btcc_attempts GROUP BY task_id ORDER BY MIN(rowid)
     `).all();
-    expect(attempts.map((item) => item.attempts)).toEqual([1, 2]);
+    expect(attempts.reduce((sum, item) => sum + item.attempts, 0)).toBe(3);
+    expect(attempts.every((item) => item.attempts === 1)).toBe(true);
     expect(db.query<{ count: number }, []>(`
       SELECT COUNT(*) AS count FROM btcc_records WHERE kind = 'task_review'
     `).get()?.count).toBe(4);

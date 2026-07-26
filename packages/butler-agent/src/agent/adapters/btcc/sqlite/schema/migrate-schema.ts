@@ -6,6 +6,7 @@ export function migrateBtccSchema(db: Database): void {
   ensureLedgerContentionClaimPath(db);
   ensureOperationalDiagnostic(db);
   ensureProgramAuthorityProjection(db);
+  ensureColumn(db, "btcc_tasks", "revalidation_source_json", "TEXT");
 }
 
 function ensureProgramAuthorityProjection(db: Database): void {

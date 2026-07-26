@@ -36,6 +36,9 @@ export function submitFeedbackPlan(
       ...(index === 0 || revalidateAcceptedTask
         ? { successorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId }
         : {}),
+      ...(revalidateAcceptedTask && index === 0
+        ? { revalidationPrerequisiteTaskLogicalIds: [] }
+        : {}),
       reason: revalidateAcceptedTask && index === 0
         ? "변경된 governing authority 아래에서 기존 통과 결과를 다시 검토해야 한다"
         : index === 0
@@ -147,8 +150,15 @@ function feedbackPlanningFindingDecisions(state: Record<string, unknown>) {
 
 function unchangedTaskRevision(state: Record<string, unknown>) {
   const { kind: _kind, ...revision } = submitInitialPlan(state);
+  const works = structuredClone(asArray(revision.works));
+  const firstWork = asRecord(works[0]);
+  const tasks = asArray(firstWork.tasks);
+  const firstTask = asRecord(tasks[0]);
+  firstTask.intendedOutcome =
+    `${String(firstTask.intendedOutcome)} 변경된 governing 기준에서도 동일 결과를 충족한다`;
   return {
     ...revision,
+    works,
     strategy: "기존 Task 계약을 보존하고 변경된 governing authority 아래에서 재검토한다",
   };
 }

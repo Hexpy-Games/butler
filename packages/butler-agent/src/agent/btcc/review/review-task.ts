@@ -104,6 +104,8 @@ function semanticReviewCodec(
         "Workspace artifact Review requires successful disposable validation before passing",
       );
     }
+    const reviewTask = requireRecord(state.currentTask, "currentTask");
+    const reviewTaskRef = requireContentRef(reviewTask.ref, "currentTask.ref");
     const reviewBase = {
       kind: result.result.kind,
       turnId: envelope.binding.turnId,
@@ -112,8 +114,8 @@ function semanticReviewCodec(
       resultAuthorityRef: result.result.authorityRef,
       resultCandidateRef: result.result.ref,
       workRef: result.result.workRef,
-      taskRef: result.result.taskRef,
-      taskRevisionSha256: result.result.taskRevisionSha256,
+      taskRef: reviewTaskRef,
+      taskRevisionSha256: reviewTaskRef.sha256,
       attemptRef: result.result.attemptRef,
       executionTargetRef: result.result.executionTargetRef,
       reviewCheckpointRef: envelope.binding.checkpointId,

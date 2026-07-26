@@ -132,7 +132,10 @@ function attachReview(program: Reviewed, product: Extract<Mutation, { kind: "att
   attempt.review = product;
   task.status = status;
   task.currentReview = product;
-  if (status === "accepted") delete program.correctionPlanRef;
+  if (status === "accepted") {
+    delete task.revalidationSource;
+    delete program.correctionPlanRef;
+  }
   const work = workByLogicalId(program, task.task.workLogicalId);
   if (tasksFor(program, work).every((item) => item.status === "accepted")) work.status = "closed";
 }

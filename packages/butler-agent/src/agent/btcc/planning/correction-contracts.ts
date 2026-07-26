@@ -1,12 +1,26 @@
 import type { ContentRef } from "../core/index.ts";
 import type { PlanningCandidate, PlanningFindingDecision } from "./contracts.ts";
 
-export type TaskImpact = {
+type TaskImpactBase = {
   priorTaskRef: ContentRef;
-  disposition: "unaffected" | "revalidate" | "rework" | "replan";
   reason: string;
-  successorTaskRef?: ContentRef;
 };
+
+export type TaskImpact = TaskImpactBase & (
+  | {
+      disposition: "revalidate";
+      successorTaskRef: ContentRef;
+      revalidationPrerequisiteTaskRefs: ContentRef[];
+    }
+  | {
+      disposition: "unaffected" | "rework";
+      successorTaskRef: ContentRef;
+    }
+  | {
+      disposition: "replan";
+      successorTaskRef?: never;
+    }
+);
 
 export type CorrectionPlan = {
   ref: ContentRef;

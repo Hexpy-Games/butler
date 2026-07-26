@@ -70,6 +70,10 @@ export type ManagedTaskState = {
   attempts: ManagedAttempt[];
   currentResult?: ResultCandidateProduct;
   currentReview?: TaskReviewProduct;
+  revalidationSource?: {
+    priorTaskRef: ContentRef;
+    resultRef: ContentRef;
+  };
 };
 
 export type WorkLedgerCursor = {

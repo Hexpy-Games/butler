@@ -194,8 +194,15 @@ const impact = variantsSchema(
   }),
   objectSchema({
     priorTaskLogicalId: textSchema(),
-    disposition: enumSchema("unaffected", "revalidate", "rework"),
+    disposition: enumSchema("unaffected", "rework"),
     successorTaskLogicalId: textSchema(),
+    reason: textSchema(),
+  }),
+  objectSchema({
+    priorTaskLogicalId: textSchema(),
+    disposition: literalSchema("revalidate"),
+    successorTaskLogicalId: textSchema(),
+    revalidationPrerequisiteTaskLogicalIds: arraySchema(textSchema()),
     reason: textSchema(),
   }),
 );

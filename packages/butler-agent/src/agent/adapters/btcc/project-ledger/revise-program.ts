@@ -155,6 +155,10 @@ function prepareRevalidation(
   attempt.status = "result_submitted";
   const next = { ...prior, task, attempts, status: "result_submitted" as const };
   delete next.currentReview;
+  next.revalidationSource = {
+    priorTaskRef: prior.task.ref,
+    resultRef: prior.currentResult.result.ref,
+  };
   return next;
 }
 

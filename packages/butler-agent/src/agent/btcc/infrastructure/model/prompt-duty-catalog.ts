@@ -262,6 +262,12 @@ const DUTIES = {
     "Use revalidate only when taskImpactIndex says the prior Task is accepted and has",
     "a current concrete result. A changed planned, executing, or review-failed Task",
     "requires rework or replan; it cannot be revalidated.",
+    "For every revalidate impact, list revalidationPrerequisiteTaskLogicalIds explicitly.",
+    "When revalidation is meant to observe a new repair, the revised Task must run after",
+    "and directly depend on every listed repair Task. Use an empty list only when the",
+    "accepted result can be reviewed immediately against the revised contract before any",
+    "new mutation. Review this ordering semantically; prose claiming after-repair",
+    "revalidation with an empty or later dependency is invalid.",
     "New successor Tasks start planned. Implementation repair changes no governing revision.",
   ].join(" "),
   review_correction_exactly: [

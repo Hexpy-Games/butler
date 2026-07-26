@@ -275,7 +275,8 @@ CREATE TABLE IF NOT EXISTS btcc_tasks (
   is_active INTEGER NOT NULL DEFAULT 1,
   current_attempt_id TEXT,
   result_ref TEXT,
-  review_ref TEXT
+  review_ref TEXT,
+  revalidation_source_json TEXT
 );
 
 CREATE TABLE IF NOT EXISTS btcc_attempts (
