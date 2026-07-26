@@ -39,7 +39,7 @@ export function createBtccComposition(input: {
   const governingSpecs = input.projectLedger
     ? createProjectGoverningSpecAuthority(input.projectLedger)
     : undefined;
-  return createBtccTurnRuntime({
+  const runtime = createBtccTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     phaseConversations: stores.phaseConversations,
@@ -54,6 +54,13 @@ export function createBtccComposition(input: {
       ? { governingSpecs }
       : {}),
   });
+  const ready = recoverOperationalOwnership(runtime, stores);
+  return {
+    async handle(command) {
+      await ready;
+      return runtime.handle(command);
+    },
+  };
 }
 
 export function createProductionBtccComposition(input: {
@@ -140,6 +147,7 @@ async function recoverOperationalOwnership(
   stores: ReturnType<typeof openBtccSqliteStores>,
 ): Promise<void> {
   await stores.turns.recoverPendingProjectLedgerPromotions();
+  await stores.operationalRecoveryStartup.activateInheritedRuntimeRemediations();
   const turnIds = await stores.operationalRecovery.pendingTurnIds();
   for (const turnId of turnIds) {
     void runtime.handle({ kind: "resume", turnId }).catch(reportRecoveryFailure);

@@ -33,6 +33,7 @@ export type OperationalRecoveryRecord = {
 export interface OperationalRecoveryStore {
   record(interruption: OperationalInterruptionError): Promise<OperationalRecoveryReceipt>;
   markReady(receipt: OperationalRecoveryReceipt): Promise<void>;
+  activateInheritedRuntimeRemediations(): Promise<void>;
   pending(anchor: OperationalCheckpointAnchor): Promise<OperationalRecoveryRecord | null>;
   resolve(anchor: OperationalCheckpointAnchor): Promise<boolean>;
   pendingTurnIds(): Promise<string[]>;

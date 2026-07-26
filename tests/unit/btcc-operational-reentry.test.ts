@@ -43,6 +43,7 @@ describe("BTCC operational re-entry", () => {
         return { interruptionId: "interruption-1", activationCount: 1 };
       },
       async markReady() { events.push("mark-ready"); },
+      async activateInheritedRuntimeRemediations() {},
       async pending() { return { interruption: durable, status: "ready" }; },
       async resolve() { return true; },
       async pendingTurnIds() { return [checkpoint.turnId]; },
@@ -68,6 +69,7 @@ function recoveryStore(events: string[]): OperationalRecoveryStore {
       return { interruptionId: "interruption-1", activationCount };
     },
     async markReady() {},
+    async activateInheritedRuntimeRemediations() {},
     async pending() { return null; },
     async resolve() { return true; },
     async pendingTurnIds() {

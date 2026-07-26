@@ -78,3 +78,72 @@ test("startup closes an interruption whose state claim already committed", async
     db.close();
   }
 });
+
+test("process restart activates only inherited runtime remediation", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    seedActiveInterruption(db, "runtime", "runtime_remediation");
+    seedActiveInterruption(db, "provider", "provider_action_required");
+    const store = new SqliteOperationalRecoveryStore(db);
+
+    await store.activateInheritedRuntimeRemediations();
+
+    const rows = db.query<{ activation_kind: string; status: string }, []>(`
+      SELECT activation_kind, status FROM btcc_operational_interruptions
+      ORDER BY activation_kind
+    `).all();
+    expect(rows).toEqual([
+      { activation_kind: "provider_action_required", status: "interrupted" },
+      { activation_kind: "runtime_remediation", status: "ready" },
+    ]);
+  } finally {
+    db.close();
+  }
+});
+
+function seedActiveInterruption(
+  db: Database,
+  suffix: string,
+  activationKind: string,
+): void {
+  db.query(`
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, continuation_snapshot_json, semantic_state,
+      active_checkpoint_id, revision, execution_fence
+    ) VALUES (?, ?, ?, ?, ?, '', '{}', '{}', '{}', '[]',
+      'task_execution', ?, 1, 0)
+  `).run(
+    `turn-${suffix}`,
+    `session-${suffix}`,
+    `inbox-${suffix}`,
+    `trigger-${suffix}`,
+    `message-${suffix}`,
+    `checkpoint-${suffix}`,
+  );
+  db.query(`
+    INSERT INTO btcc_state_claims (
+      claim_id, turn_id, turn_revision, semantic_state,
+      checkpoint_id, checkpoint_revision, execution_fence,
+      owner_id, owner_generation, lease_generation, status
+    ) VALUES (?, ?, 1, 'task_execution', ?, 1, 0, 'owner', 1, 1, 'active')
+  `).run(`claim-${suffix}`, `turn-${suffix}`, `checkpoint-${suffix}`);
+  db.query(`
+    INSERT INTO btcc_operational_interruptions (
+      interruption_id, turn_id, turn_revision, semantic_state,
+      checkpoint_id, checkpoint_revision, claim_id, execution_fence,
+      code, activation_kind, activation_count, status, interrupted_at
+    ) VALUES (?, ?, 1, 'task_execution', ?, 1, ?, 0,
+      'simulated', ?, 1, 'interrupted', ?)
+  `).run(
+    `interruption-${suffix}`,
+    `turn-${suffix}`,
+    `checkpoint-${suffix}`,
+    `claim-${suffix}`,
+    activationKind,
+    new Date().toISOString(),
+  );
+}
