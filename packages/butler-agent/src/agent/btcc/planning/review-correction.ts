@@ -26,6 +26,7 @@ const CONTRACT: PhaseContract = {
     "preserve_original_goal", "preserve_selected_model", "state_input_only",
     "review_correction_exactly", "review_dependencies", "review_verification_integration",
     "review_effect_authority", "review_artifact_lifecycle",
+    "select_correction_revision_target",
     "author_managed_deferral",
   ],
   prohibitions: [
@@ -79,6 +80,8 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
         review: { ref: contentRef("feedback-planning-review", body), ...body },
       };
     }
+    const revisionTarget = requireRevisionTarget(value.revisionTarget);
+    assertRevisionTargetMatchesFindings(revisionTarget, blocking);
     const findingSetRef = prior?.findingSetRef ??
       contentRef("feedback-planning-finding-set", {
         candidateRef: candidate.candidate.ref,
@@ -87,6 +90,7 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
     const body = {
       ...reviewBase,
       verdict: "revision_required" as const,
+      revisionTarget,
       findings: findings as [string, ...string[]],
       findingSetRef,
     };
@@ -97,6 +101,27 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
     };
   },
 });
+}
+
+function requireRevisionTarget(
+  value: unknown,
+): "feedback_plan" | "feedback_intent" {
+  if (value !== "feedback_plan" && value !== "feedback_intent") {
+    throw new Error("Feedback Planning revision target is invalid");
+  }
+  return value;
+}
+
+function assertRevisionTargetMatchesFindings(
+  target: "feedback_plan" | "feedback_intent",
+  findings: FeedbackPlanningFinding[],
+): void {
+  const changesAcceptedIntent = findings.some(
+    (finding) => finding.scopeRelation === "governing_contract",
+  );
+  if (changesAcceptedIntent !== (target === "feedback_intent")) {
+    throw new Error("Feedback Planning revision target conflicts with its findings");
+  }
 }
 
 export function reviewCorrection(command: PhaseInvocation) {

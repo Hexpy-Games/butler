@@ -46,7 +46,14 @@ export function feedbackPlanReviewSubmissionSchema(
   if (priorRootCauseKeys.length > 0) {
     fields.priorFindingVerdicts = priorFindingVerdicts(priorRootCauseKeys);
   }
-  return reviewVerdictVariants(fields);
+  return variantsSchema(
+    objectSchema({ ...fields, verdict: literalSchema("accepted") }),
+    objectSchema({
+      ...fields,
+      verdict: literalSchema("revision_required"),
+      revisionTarget: enumSchema("feedback_plan", "feedback_intent"),
+    }),
+  );
 }
 
 function reviewCoverage(): SubmissionSchema {

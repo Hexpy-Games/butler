@@ -70,6 +70,7 @@ export type FeedbackPlanningReview = {
     | "governing_revision"
     | "authority_scope_revision";
   verdict: "accepted" | "revision_required";
+  revisionTarget?: "feedback_plan" | "feedback_intent";
   findings: string[];
   reviewedFindings: FeedbackPlanningFinding[];
   findingVerdicts: FeedbackPlanningFindingVerdict[];
@@ -110,6 +111,7 @@ export type FeedbackPlanningRevisionRequiredProduct = {
   candidate: FeedbackPlanProduct["candidate"];
   review: FeedbackPlanningReview & {
     verdict: "revision_required";
+    revisionTarget: "feedback_plan" | "feedback_intent";
     findings: [string, ...string[]];
     findingSetRef: ContentRef;
   };

@@ -60,6 +60,7 @@ export function submitFeedbackPlanningReview(
   return {
     kind: "feedback_planning_review",
     verdict: revisionRequired ? "revision_required" : "accepted",
+    ...(revisionRequired ? { revisionTarget: "feedback_plan" } : {}),
     findings: revisionRequired
       ? [{
           rootCauseKey: "limit-correction-to-failed-task",
@@ -80,6 +81,23 @@ export function submitFeedbackPlanningReview(
           })),
         }
       : {}),
+  };
+}
+
+export function reviseFeedbackIntentReview() {
+  return {
+    kind: "feedback_planning_review",
+    verdict: "revision_required",
+    revisionTarget: "feedback_intent",
+    findings: [{
+      rootCauseKey: "repair-requires-governing-task-boundary",
+      statement: "The accepted local repair cannot mutate a predecessor-owned target.",
+      priority: "P0",
+      scopeRelation: "governing_contract",
+      recommendedDisposition: "required_now",
+      dispositionRationale: "The correction kind must return to governing Planning.",
+      findingOrigin: "initial_review",
+    }],
   };
 }
 

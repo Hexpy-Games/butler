@@ -208,7 +208,9 @@ function acceptedTransition(
   ) {
     return {
       kind: "request_feedback_plan_revision",
-      successor: "feedback_planning",
+      successor: event.product.review.revisionTarget === "feedback_intent"
+        ? "feedback_conception"
+        : "feedback_planning",
       product: event.product,
     };
   }

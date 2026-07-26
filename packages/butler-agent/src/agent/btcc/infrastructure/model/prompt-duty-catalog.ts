@@ -245,6 +245,8 @@ const DUTIES = {
     "Task boundary or authority through governing Planning instead of expanding the same local repair.",
     "Use stateInput.priorTaskReviewFindings as the durable comparison input and choose",
     "governing_revision or authority_scope_revision when the recurrence exposes that boundary.",
+    "When stateInput.previousFeedbackPlanningReview rejects the accepted correction kind,",
+    "replace that kind in Feedback Conception before authoring another correction candidate.",
   ].join(" "),
   author_scoped_correction: "Author only records required by the accepted CorrectionScope and preserve unaffected history.",
   author_complete_impact_map: [
@@ -269,6 +271,13 @@ const DUTIES = {
     "priorFindingVerdict for every frozen rootCauseKey without re-authoring its body or",
     "submitting a new Finding. Consider independent improvements for separate backlog work",
     "only after the current correction closes.",
+  ].join(" "),
+  select_correction_revision_target: [
+    "When Feedback Planning needs revision, select feedback_plan only when the accepted",
+    "FeedbackIntent and correction kind remain valid. Select feedback_intent when a",
+    "governing-contract finding requires changing correction kind, authority scope,",
+    "Task decomposition, or intended correction. This selects the semantic revision owner;",
+    "it does not choose an arbitrary state-machine successor.",
   ].join(" "),
   assure_original_goal: "Compare the complete current result with the immutable original GoalContract, not merely the latest Plan or completed Task list.",
   assure_normative_goal_sets: "Judge every RequiredOutcome and constraint exactly; keep contextual guidance proportional and presentation preferences for Reporting.",

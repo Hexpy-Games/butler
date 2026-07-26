@@ -46,6 +46,7 @@ type HarnessOptions = {
     | "managed-planning-revision"
     | "managed-goal-revision"
     | "managed-feedback-planning-revision"
+    | "managed-feedback-intent-revision"
     | "managed-governing-revision"
     | "managed-governing-revalidation"
     | "managed-authority-revision"
@@ -219,6 +220,7 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-planning-revision" ||
     value === "managed-goal-revision" ||
     value === "managed-feedback-planning-revision" ||
+    value === "managed-feedback-intent-revision" ||
     value === "managed-governing-revision" ||
     value === "managed-governing-revalidation" ||
     value === "managed-authority-revision" ||
@@ -257,6 +259,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     scenario === "managed-planning-revision" ||
     scenario === "managed-goal-revision" ||
     scenario === "managed-feedback-planning-revision" ||
+    scenario === "managed-feedback-intent-revision" ||
     scenario === "managed-governing-revision" ||
     scenario === "managed-governing-revalidation" ||
     scenario === "managed-authority-revision"
@@ -295,6 +298,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
         : scenario === "managed-review-backlog"
           ? "split_to_backlog"
           : "apply_now",
+      scenario === "managed-feedback-intent-revision",
     );
   }
   return new NoLedgerHarnessModel(scenario);

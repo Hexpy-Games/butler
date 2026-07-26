@@ -161,6 +161,7 @@ async function conceiveReviewFeedback(command: {
   const accepted = requireManagedState(command.turn).goalAcceptance;
   if (!accepted) throw new Error("Feedback Conception is missing accepted Goal authority");
   const source = feedbackSource(command.turn, program);
+  const managed = requireManagedState(command.turn);
   const product = await conceiveCorrection(withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -175,6 +176,13 @@ async function conceiveReviewFeedback(command: {
       program.currentTask,
       source.origin === "task_review" ? source.record.review.ref : undefined,
     ),
+    ...(managed.feedbackPlanningRevision
+      ? {
+          previousFeedbackIntent: managed.feedbackIntent,
+          previousFeedbackPlan: managed.feedbackPlanningRevision.candidate,
+          previousFeedbackPlanningReview: managed.feedbackPlanningRevision.review,
+        }
+      : {}),
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
   }));

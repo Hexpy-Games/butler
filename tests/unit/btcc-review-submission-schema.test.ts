@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { taskReviewSubmissionSchema } from "../../packages/butler-agent/src/agent/btcc/review/submission-schema.ts";
+import { feedbackPlanReviewSubmissionSchema } from
+  "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
 
 test("promotion Review exposes only a satisfied criterion verdict", () => {
   const schema = taskReviewSubmissionSchema("promotion_identity");
@@ -46,6 +48,14 @@ test("correction Task Review judges frozen root causes without re-authoring them
   expect(serialized).toContain('"enum":["resolved","unresolved","regressed"]');
   expect(serialized).not.toContain('"const":"initial_review"');
   expect(properties.findings?.maxItems).toBe(0);
+});
+
+test("Feedback Planning Review names the semantic revision owner", () => {
+  const schema = feedbackPlanReviewSubmissionSchema([]);
+  const serialized = JSON.stringify(schema);
+
+  expect(serialized).toContain('"revisionTarget"');
+  expect(serialized).toContain('"enum":["feedback_plan","feedback_intent"]');
 });
 
 function criterionVerdictSchema(schema: Record<string, unknown>) {
