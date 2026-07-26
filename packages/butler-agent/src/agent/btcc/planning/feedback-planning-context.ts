@@ -62,7 +62,7 @@ export function projectFeedbackPlanningContext(
     governingSpecs: program.governingSpecs,
     availableSpecs: program.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
-    acceptedPlan: program.acceptedPlan,
+    acceptedPlan: currentAcceptedPlan(program, managed),
     taskImpactIndex: program.tasks.map((state) => ({
       task: {
         ref: state.task.ref,
@@ -72,6 +72,23 @@ export function projectFeedbackPlanningContext(
       hasCurrentResult: Boolean(state.currentResult),
     })),
   };
+}
+
+function currentAcceptedPlan(
+  program: ReviewedManagedProgramState,
+  managed: ManagedTurnState,
+) {
+  if (program.acceptedPlan) return program.acceptedPlan;
+  const feedback = managed.feedbackAcceptance?.candidate;
+  if (
+    feedback?.correctionKind === "governing_revision" ||
+    feedback?.correctionKind === "authority_scope_revision"
+  ) {
+    return feedback.nextPlanCandidate;
+  }
+  const initial = managed.planningAcceptance?.candidate;
+  if (!initial) throw new Error("Feedback Planning is missing current Plan authority");
+  return initial;
 }
 
 function correctionSource(
