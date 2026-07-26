@@ -17,12 +17,20 @@ export function decodeTaskImpact(input: {
   currentTasks: CurrentTaskState[];
   nextTasks: ManagedTask[];
 }): TaskImpact[] {
-  if (!Array.isArray(input.submission) ||
-    input.submission.length !== input.currentTasks.length) {
-    throw new Error("Feedback Planning impact map must cover every current Task");
+  if (
+    !Array.isArray(input.submission) ||
+    input.submission.length !== input.currentTasks.length
+  ) {
+    throw new Error(
+      "Feedback Planning impact map must cover every current Task",
+    );
   }
-  const current = new Map(input.currentTasks.map((state) => [state.task.taskLogicalId, state]));
-  const next = new Map(input.nextTasks.map((task) => [task.taskLogicalId, task]));
+  const current = new Map(
+    input.currentTasks.map((state) => [state.task.taskLogicalId, state]),
+  );
+  const next = new Map(
+    input.nextTasks.map((task) => [task.taskLogicalId, task]),
+  );
   const visitedPrior = new Set<string>();
   const visitedSuccessor = new Set<string>();
 
@@ -44,11 +52,15 @@ export function decodeTaskImpact(input: {
           `impactMap[${index}].successorTaskLogicalId`,
         )
       : undefined;
-    const successor = successorTaskLogicalId ? next.get(successorTaskLogicalId) : undefined;
+    const successor = successorTaskLogicalId
+      ? next.get(successorTaskLogicalId)
+      : undefined;
     validateSuccessor({ disposition, prior, successor });
     if (successor) {
       if (visitedSuccessor.has(successor.taskLogicalId)) {
-        throw new Error("Feedback Planning mapped more than one prior Task to one successor");
+        throw new Error(
+          "Feedback Planning mapped more than one prior Task to one successor",
+        );
       }
       visitedSuccessor.add(successor.taskLogicalId);
     }
@@ -71,26 +83,35 @@ function validateSuccessor(input: {
   successor?: ManagedTask;
 }): void {
   if (input.disposition !== "replan" && !input.successor) {
-    throw new Error(`${input.disposition} impact requires a current successor Task`);
+    throw new Error(
+      `${input.disposition} impact requires a current successor Task`,
+    );
   }
   if (!input.successor) return;
   if (
-    (input.disposition === "unaffected" || input.disposition === "revalidate") &&
+    (input.disposition === "unaffected" ||
+      input.disposition === "revalidate") &&
     input.successor.taskLogicalId !== input.prior.task.taskLogicalId
   ) {
-    throw new Error(`${input.disposition} impact must preserve Task logical identity`);
+    throw new Error(
+      `${input.disposition} impact must preserve Task logical identity`,
+    );
   }
   if (
-    (input.disposition === "unaffected" || input.disposition === "revalidate") &&
+    input.disposition === "unaffected" &&
     refKey(input.successor.ref) !== refKey(input.prior.task.ref)
   ) {
-    throw new Error(`${input.disposition} impact cannot change the Task revision`);
+    throw new Error(
+      `${input.disposition} impact cannot change the Task revision`,
+    );
   }
   if (
     input.disposition === "revalidate" &&
     (input.prior.status !== "accepted" || !input.prior.hasCurrentResult)
   ) {
-    throw new Error("Feedback Planning can revalidate only an accepted concrete result");
+    throw new Error(
+      "Feedback Planning can revalidate only an accepted concrete result",
+    );
   }
 }
 
