@@ -3,8 +3,8 @@ import type {
   LogicalLedgerBundle,
   LogicalLedgerRecord,
   WorkLedgerCommit,
-} from "../../../../btcc/index.ts";
-import { assertLogicalLedgerRecordBytes } from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
+import { assertLogicalLedgerRecordBytes } from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
 
 type CommitBoundary =

@@ -7,7 +7,7 @@ import { BTCC_SUCCESSOR_SCHEMA } from
 import { migrateBtccSchema } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/migrate-schema.ts";
 import { OperationalInterruptionError } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 
 test("runtime remediation retains its private diagnostic cause", async () => {
   const db = new Database(":memory:");

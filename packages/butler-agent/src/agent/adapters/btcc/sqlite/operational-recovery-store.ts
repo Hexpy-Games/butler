@@ -3,8 +3,8 @@ import type {
   OperationalCheckpointAnchor,
   OperationalRecoveryReceipt,
   OperationalRecoveryStore,
-} from "../../../btcc/index.ts";
-import { OperationalInterruptionError } from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
+import { OperationalInterruptionError } from "../../../btcc/gateway-api.ts";
 
 type ReceiptRow = { interruption_id: string; activation_count: number };
 type InterruptionRow = {

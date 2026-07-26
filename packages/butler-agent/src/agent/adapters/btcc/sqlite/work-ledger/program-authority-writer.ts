@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   ManagedProgramAuthority,
   WorkLedgerCommit,
-} from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
 
 type BindProgram = Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>;

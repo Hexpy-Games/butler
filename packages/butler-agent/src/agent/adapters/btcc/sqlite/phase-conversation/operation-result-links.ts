@@ -6,7 +6,7 @@ import {
   type OperationResult,
   type PhaseRunBinding,
   type OperationResultProjection,
-} from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "../identity.ts";
 
 export class PhaseOperationResultLinks {

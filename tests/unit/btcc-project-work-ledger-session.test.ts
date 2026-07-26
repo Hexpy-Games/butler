@@ -20,7 +20,7 @@ import {
   assertLogicalLedgerRecordBytes,
   contentRef,
   stableJson,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
 import { authorPlanCandidate } from
   "../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
 import { planningReviewSubjects } from

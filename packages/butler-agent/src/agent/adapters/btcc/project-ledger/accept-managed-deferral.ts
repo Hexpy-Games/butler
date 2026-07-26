@@ -1,7 +1,7 @@
 import type {
   BtccPersistenceTypes,
   WorkLedgerCommit,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Mutation = Extract<

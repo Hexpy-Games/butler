@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { ledgerManifestContentHash, type BtccRuntimeDependencies, type WorkLedgerCommit }
-  from "../../../../btcc/index.ts";
+  from "../../../../btcc/gateway-api.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../../project-ledger/index.ts";
 import {
   ProjectLedgerHeadConflictError,

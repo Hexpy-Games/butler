@@ -40,6 +40,8 @@ export {
   ledgerRecordSha256,
   logicalLedgerRecords,
 } from "./work-ledger/index.ts";
+export { contentRef, stableJson } from "./core/index.ts";
+export { governingSpecLogicalIds } from "./conception/index.ts";
 export { operationRoundScope } from "./core/operation-identity.ts";
 export {
   acceptFeedbackAuthority,
@@ -55,6 +57,8 @@ export { assertPromotionPermit } from "./artifact/index.ts";
 export {
   createOperationalRecoveryBoundary,
   createProviderRecoveryReadiness,
+  LedgerContentionInterruption,
+  OperationalInterruptionError,
 } from "./recovery/index.ts";
 export type {
   LogicalLedgerBundle,
@@ -71,7 +75,10 @@ export type { SpooledOperationOutput } from "./core/index.ts";
 export type { RetrospectiveScheduler } from "./delivery/index.ts";
 export type {
   CommittedSuccessorReadiness,
+  OperationalCheckpointAnchor,
+  OperationalRecoveryReceipt,
   OperationalRecoveryReadiness,
+  OperationalRecoveryStore,
 } from "./recovery/index.ts";
 export type {
   BtccRuntimeDependencies,
@@ -79,6 +86,10 @@ export type {
   BtccTurnProgressObserver,
   FreshBtccTurnCommand,
 } from "./contracts.ts";
+export type {
+  AvailableSpecRevision,
+  GoverningSpecRevision,
+} from "./planning/contracts.ts";
 export type { StopPersistenceOutcome } from "./turn/index.ts";
 export type {
   AcceptedPhaseGuidance,

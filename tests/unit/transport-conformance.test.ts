@@ -172,8 +172,16 @@ test("turn event projection follows transport capabilities", () => {
 
 test("session actors remain transport-agnostic", () => {
   const actorFiles = [
-    join(process.cwd(), "packages", "butler-agent", "src", "interfaces", "gateway", "butler-session.ts"),
-    join(process.cwd(), "packages", "butler-agent", "src", "interfaces", "gateway", "steward-session.ts"),
+    join(
+      process.cwd(),
+      "packages",
+      "butler-agent",
+      "src",
+      "interfaces",
+      "gateway",
+      "btcc",
+      "btcc-session-actor.ts",
+    ),
   ];
   for (const file of actorFiles) {
     expect(readFileSync(file, "utf8")).not.toMatch(/telegram/i);

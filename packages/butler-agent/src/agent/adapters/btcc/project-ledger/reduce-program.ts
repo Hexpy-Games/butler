@@ -3,12 +3,12 @@ import type {
   WorkLedgerCommit,
   AvailableSpecRevision,
   GoverningSpecRevision,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import {
   acceptReviewedPlanAuthority,
   assertPromotionPermit,
   bindManagedProgram,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 import { acceptProjectFeedback } from "./revise-program.ts";
 
