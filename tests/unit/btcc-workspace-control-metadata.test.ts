@@ -20,7 +20,7 @@ describe("BTCC workspace control metadata boundary", () => {
     writeFileSync(join(fixture.targetPath, ".git", "config"), "[core]\n\tbare = false\n");
     const runtime = createFaultableRuntime(fixture, (boundary) => {
       if (boundary !== "candidate_prepared") return;
-      const gitRoot = join(actionContentRoot(fixture.dataRoot), ".git");
+      const gitRoot = join(fixture.targetPath, ".git");
       writeFileSync(join(gitRoot, "config"), "[core]\n\tbare = false\n\tignorecase = true\n");
       writeFileSync(join(gitRoot, "objects", "host-refresh"), "runtime-owned metadata\n");
     });
@@ -43,7 +43,7 @@ describe("BTCC workspace control metadata boundary", () => {
     const runtime = createFaultableRuntime(fixture, (boundary) => {
       if (boundary !== "candidate_prepared") return;
       writeFileSync(
-        join(actionContentRoot(fixture.dataRoot), "unexpected.txt"),
+        join(programWorkspaceContentRoot(fixture.dataRoot), "unexpected.txt"),
         "outside the prepared candidate\n",
       );
     });
@@ -57,14 +57,14 @@ describe("BTCC workspace control metadata boundary", () => {
         "guide.md",
       ),
       envelope: workspaceEnvelope(provision),
-    })).rejects.toThrow("cannot reconcile its atomic exchange");
+    })).rejects.toThrow("Program workspace changed after its applied result");
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8"))
       .toBe(fixture.original);
   });
 });
 
-function actionContentRoot(dataRoot: string): string {
-  const actionsRoot = join(dataRoot, "runtime", "btcc-artifacts", "workspace-actions");
-  const [actionRoot] = readdirSync(actionsRoot);
-  return join(actionsRoot, actionRoot, "content");
+function programWorkspaceContentRoot(dataRoot: string): string {
+  const workspacesRoot = join(dataRoot, "runtime", "btcc-artifacts", "workspaces");
+  const [workspaceRoot] = readdirSync(workspacesRoot);
+  return join(workspacesRoot, workspaceRoot, "content");
 }

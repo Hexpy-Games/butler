@@ -4,12 +4,11 @@ import {
   type TypedUiReadModel,
 } from "@/app/utils.ts";
 import type { ProgressRow } from "@/app/types.ts";
-import { CurrentModelRoundWaiting } from "./CurrentModelRoundWaiting";
-import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
+import { CurrentTurnStatus } from "./CurrentTurnStatus";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
 import { TurnDecisionRow } from "./TurnDecisionRow";
 import { currentModelRoundWait, currentSemanticState, latestPublicActivity,
-  phaseActivityRows } from "./turnActivityRows";
+  currentOperationActivity, phaseActivityRows } from "./turnActivityRows";
 import { Stack } from "@/butler-ds";
 import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
@@ -18,9 +17,11 @@ import { CollapsedTurnActivity } from "./WorkBlocks";
 export function TurnActivityPanel({
   rows,
   state,
+  turnId,
 }: {
   rows: ProgressRow[];
   state?: string;
+  turnId?: string;
 }) {
   const readModels = typedUiReadModelsFromProgressRows(rows);
   const decisions = readModels.filter(isDecisionReadModel);
@@ -29,11 +30,14 @@ export function TurnActivityPanel({
   const publicActivity = latestPublicActivity(rows, phaseActivities.length > 0);
   const semanticState = currentSemanticState(rows, phaseActivities);
   const modelRoundWait = currentModelRoundWait(rows);
+  const operation = currentOperationActivity(rows);
   if (
     decisions.length === 0 &&
     workBlocks.length === 0 &&
     phaseActivities.length === 0 &&
-    !publicActivity
+    !publicActivity &&
+    !modelRoundWait &&
+    !operation
   ) {
     return <TurnActivityPending readModels={readModels} state={state} />;
   }
@@ -43,27 +47,32 @@ export function TurnActivityPanel({
       as="section"
       gap="md"
       data-test-class="turn-activity-panel turn-work-panel turn-decision-work-panel"
-      aria-live="polite"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
-      {workBlocks.length > 0 ? (
-        <CollapsedTurnActivity blocks={workBlocks} />
-      ) : phaseActivities.length > 0 ? (
+      {phaseActivities.length > 0 ? (
         <TurnActivityTimeline
           activities={phaseActivities}
           currentState={semanticState}
           live
+          turnId={turnId}
         />
-      ) : modelRoundWait ? (
-        <CurrentModelRoundWaiting row={modelRoundWait} />
-      ) : publicActivity ? (
-        <CurrentPhaseActivity row={publicActivity} />
+      ) : workBlocks.length > 0 ? (
+        <CollapsedTurnActivity blocks={workBlocks} />
+      ) : publicActivity || modelRoundWait || operation ? (
+        <CurrentTurnStatus
+          modelRoundWait={modelRoundWait}
+          operation={operation}
+          publicActivity={publicActivity}
+        />
       ) : decisions.length > 0 ? (
         <TurnDecisionRow decision={decisions.at(-1)!} />
       ) : null}
-      {modelRoundWait &&
-      (workBlocks.length > 0 || phaseActivities.length > 0) ? (
-        <CurrentModelRoundWaiting row={modelRoundWait} showLabel={false} />
+      {workBlocks.length > 0 || phaseActivities.length > 0 ? (
+        <CurrentTurnStatus
+          modelRoundWait={modelRoundWait}
+          operation={operation}
+          publicActivity={publicActivity}
+        />
       ) : null}
     </Stack>
   );

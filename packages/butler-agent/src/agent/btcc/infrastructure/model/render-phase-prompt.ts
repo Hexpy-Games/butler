@@ -176,6 +176,7 @@ function promptDocument(input: {
           ? {
               operationRequests: [
                 "Use a non-empty array of typed requests within authority.",
+                "Write each request publicTitle as a concise user-visible action title; describe the concrete action without copying commands, arguments, or hidden reasoning.",
                 "Include every currently known independent operation needed for the next decision in this one batch; keep only genuinely result-dependent work for a later round.",
                 "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",
                 "Write publicActivity for the user: name the concrete target and current action, why it is needed for the accepted Goal, governing Spec, Plan, or review finding, and what observable action follows.",

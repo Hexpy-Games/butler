@@ -78,6 +78,7 @@ test("binds the current workspace identity outside model-authored bytes", async 
         phaseContinuity: phaseContinuity(),
         requests: [{
           requestId: "read-current",
+          publicTitle: "Test operation",
           kind: "workspace_artifact_observation",
           capabilityRef: "read_file",
           input: { path: "src/sample.ts" },

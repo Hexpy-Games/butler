@@ -44,6 +44,12 @@ function isWorkspaceControlPath(path: string): boolean {
 
 function readGitInventory(root: string): string[] | null {
   if (!existsSync(join(root, ".git"))) return null;
+  const repository = spawnSync(
+    "git",
+    ["-C", root, "rev-parse", "--is-inside-work-tree"],
+    { encoding: "utf8" },
+  );
+  if (repository.status !== 0 || repository.stdout.trim() !== "true") return null;
   const result = spawnSync(
     "git",
     ["-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "."],

@@ -18,6 +18,7 @@ export interface WorkActivityBlockProps
   icon?: ReactNode;
   running?: boolean;
   rolling?: boolean;
+  connected?: boolean;
   density?: "normal" | "compact";
   tools?: WorkActivityToolItem[];
   className?: string;
@@ -29,6 +30,7 @@ export function WorkActivityBlock({
   icon,
   running = false,
   rolling = false,
+  connected = false,
   density = "normal",
   tools = [],
   className,
@@ -41,9 +43,11 @@ export function WorkActivityBlock({
         density === "compact" && styles.compact,
         running && styles.running,
         rolling && styles.rolling,
+        connected && styles.connected,
         className,
       )}
       elevation="none"
+      data-connected={connected || undefined}
       data-test-class={`turn-work-block${running ? " turn-work-block-running" : ""}`}
       {...props}
     >

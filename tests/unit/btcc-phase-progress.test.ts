@@ -19,6 +19,7 @@ test("accepts a corrected request that reuses its local ID in a later model roun
   const results: OperationResult[] = [];
   const firstRequest = {
     requestId: "request-1",
+    publicTitle: "Test operation",
     kind: "observe" as const,
     capabilityRef: "capability-1",
     scopeRef: "scope-1",
@@ -115,6 +116,7 @@ test("accepts a corrected request that reuses its local ID in a later model roun
 
 function operationRound(request: {
   requestId: string;
+  publicTitle: string;
   kind: "observe";
   capabilityRef: string;
   scopeRef: string;
@@ -257,6 +259,7 @@ test("does not checkpoint a malformed provider phase submission", async () => {
 test("anchors provider recovery after the latest operation checkpoint", async () => {
   const request = {
     requestId: "request-before-interruption",
+    publicTitle: "Test operation",
     kind: "observe" as const,
     capabilityRef: "capability-1",
     scopeRef: "scope-1",
@@ -357,6 +360,7 @@ test("returns a denied Task target to the same Phase conversation", async () => 
             kind: "operation_requests",
             requests: [{
               requestId: "denied-root",
+              publicTitle: "Test operation",
               kind: "workspace_artifact_action",
               capabilityRef: "workspace:write",
               workspaceRef,

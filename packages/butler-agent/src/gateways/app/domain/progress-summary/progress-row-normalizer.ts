@@ -46,6 +46,14 @@ function applyBasicProgressFields(
   if (inputLabel) row.safe_input_label = inputLabel;
   const toolCallId = safeOptionalShortToken(input.tool_call_id);
   if (toolCallId) row.tool_call_id = toolCallId;
+  const toolResultId = safeOptionalShortToken(input.tool_result_id);
+  if (toolResultId) row.tool_result_id = toolResultId;
+  const toolResultByteLength = safeOptionalNonNegativeInteger(
+    input.tool_result_byte_length,
+  );
+  if (toolResultByteLength !== undefined) {
+    row.tool_result_byte_length = toolResultByteLength;
+  }
   const bridgePhase = safeOptionalShortToken(input.bridge_phase);
   if (bridgePhase) row.bridge_phase = bridgePhase;
   const receiptKind = safeOptionalShortToken(input.receipt_kind);

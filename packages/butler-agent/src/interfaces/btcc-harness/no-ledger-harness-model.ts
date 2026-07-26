@@ -43,6 +43,7 @@ export class NoLedgerHarnessModel implements SelectedModel {
     if (this.scenario === "assisted-weather" && envelope.operationResults.length === 0) {
       return operations(envelope, [{
         requestId: "observe-seoul-weather",
+        publicTitle: "서울의 현재 날씨를 확인합니다",
         kind: "observe",
         capabilityRef: "weather:seoul-current",
         scopeRef: "public-current-information",
@@ -53,6 +54,7 @@ export class NoLedgerHarnessModel implements SelectedModel {
       const ordinal = envelope.operationResults.length + 1;
       return operations(envelope, [{
         requestId: `observe-current-meme-${ordinal}`,
+        publicTitle: `현재 유행 밈 자료 ${ordinal}을 확인합니다`,
         kind: "observe",
         capabilityRef: ordinal === 1 ? "meme:current-first" : "meme:current-second",
         scopeRef: "public-current-information",

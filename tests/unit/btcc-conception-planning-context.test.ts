@@ -43,6 +43,7 @@ function operationResult(
     request: {
       kind: "observe",
       requestId,
+      publicTitle: "Read planning source",
       capabilityRef: "read_file",
       scopeRef: "workspace:/repo",
       input: { path },

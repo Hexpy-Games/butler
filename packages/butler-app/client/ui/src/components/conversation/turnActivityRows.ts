@@ -7,9 +7,17 @@ export type PhaseActivity = {
   rationale: string;
   nextStep: string;
   createdAt?: string;
+  operations: ProgressRow[];
 };
 
 export function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
+  const operationsByPhase = new Map<string, ProgressRow[]>();
+  for (const row of rows) {
+    if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;
+    const operations = operationsByPhase.get(row.semantic_block_id) ?? [];
+    operations.push(row);
+    operationsByPhase.set(row.semantic_block_id, operations);
+  }
   return rows.flatMap((row) => {
     if (
       row.kind !== "message" ||
@@ -29,8 +37,21 @@ export function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
       rationale: row.work_decision_rationale,
       nextStep: row.work_decision_next_step,
       createdAt: row.created_at,
+      operations: operationsByPhase.get(row.semantic_block_id) ?? [],
     }];
   });
+}
+
+export function currentOperationActivity(
+  rows: ProgressRow[],
+): ProgressRow | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (row?.bridge_phase === "btcc_operation" && row.state === "running") {
+      return row;
+    }
+  }
+  return undefined;
 }
 
 export function currentModelRoundWait(

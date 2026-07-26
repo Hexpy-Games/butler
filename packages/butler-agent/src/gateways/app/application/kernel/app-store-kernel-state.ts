@@ -28,6 +28,7 @@ import type { AppWorkerActivityStore } from "../../domain/workers/worker-activit
 import type { AppWorkerControlStore } from "../../domain/workers/worker-control-store.ts";
 import type { SettingsView } from "../../interface/protocol/app-protocol.ts";
 import type { DeveloperLogStore } from "../../../../operations/diagnostics/developer-log-store.ts";
+import type { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
 
 export interface AppStoreKernelState {
   db: Database;
@@ -45,6 +46,7 @@ export interface AppStoreKernelState {
   runtimeInfo: AppRuntimeInfoStore;
   systemMonitor: AppSystemMonitorStore;
   developerLogs: DeveloperLogStore;
+  operationOutputs: SqliteOperationOutputReader;
   settingsPersistence: AppSettingsPersistence;
   modelSettingsPolicy: AppModelSettingsPolicy;
   modelRegistry: AppModelRegistryStore;

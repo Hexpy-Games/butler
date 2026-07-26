@@ -34,6 +34,7 @@ test("operation journals scope a model request ID to its provider round", async 
 function request(query: string) {
   return {
     requestId: "op-1",
+    publicTitle: "Test operation",
     kind: "observe" as const,
     capabilityRef: "inspect",
     scopeRef: "workspace:test",

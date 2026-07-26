@@ -43,6 +43,7 @@ function observation(requestId: string, capabilityRef: string) {
     requestId,
     request: {
       requestId,
+      publicTitle: "Read planning observation",
       kind: "observe" as const,
       capabilityRef,
       scopeRef: "workspace:/repo/source.ts",

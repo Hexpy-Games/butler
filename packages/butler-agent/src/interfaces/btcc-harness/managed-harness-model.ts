@@ -189,6 +189,7 @@ export class ManagedHarnessModel implements SelectedModel {
             kind: "operation_requests",
             requests: [{
               requestId: `repository-promotion:${envelope.binding.checkpointId}`,
+              publicTitle: "승인된 결과를 프로젝트에 반영합니다",
               kind: "repository_promotion",
               capabilityRef: "harness:promote-artifact",
               authorizationRef: target.authorizationRef,
@@ -206,6 +207,7 @@ export class ManagedHarnessModel implements SelectedModel {
             kind: "operation_requests",
             requests: [{
               requestId: `workspace-action:${envelope.binding.checkpointId}`,
+              publicTitle: "격리된 작업공간에 결과를 작성합니다",
               kind: "workspace_artifact_action",
               capabilityRef: "harness:write-artifact",
               workspaceRef: nestedValue(
@@ -228,6 +230,7 @@ export class ManagedHarnessModel implements SelectedModel {
             kind: "operation_requests",
             requests: [{
               requestId: `review-validation:${envelope.binding.checkpointId}`,
+              publicTitle: "작성된 결과를 검증합니다",
               kind: "review_validation",
               capabilityRef: "harness:validate-artifact",
               reviewSourceRef: state.reviewSourceRef,

@@ -480,6 +480,17 @@ async function bridgeRequest<T>(bridge: ButlerAppBridge, path: string, options: 
   if (retryCurrentMatch) return await callBridge<T>(bridge, "retryTurnWithCurrentControls", { turnId: decodeURIComponent(retryCurrentMatch[1]) });
   const cancelMatch = method === "POST" ? url.pathname.match(/^\/turns\/([^/]+)\/cancel$/) : null;
   if (cancelMatch) return await callBridge<T>(bridge, "cancelTurn", { turnId: decodeURIComponent(cancelMatch[1]) });
+  const operationOutputMatch = method === "GET"
+    ? url.pathname.match(/^\/turns\/([^/]+)\/operations\/([^/]+)\/output$/u)
+    : null;
+  if (operationOutputMatch) {
+    return await callBridge<T>(bridge, "getOperationOutput", {
+      turnId: decodeURIComponent(operationOutputMatch[1]!),
+      requestId: decodeURIComponent(operationOutputMatch[2]!),
+      resultId: url.searchParams.get("result_id"),
+      offset: Number(url.searchParams.get("offset") ?? "0"),
+    });
+  }
   if (method === "GET" && url.pathname === "/automations") {
     return await callBridge<T>(bridge, "listAutomations", { targetSessionId: url.searchParams.get("target_session_id") ?? undefined });
   }

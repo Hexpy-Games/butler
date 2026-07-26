@@ -38,7 +38,8 @@ export function createPhaseInvocation(
     },
     executionPermit,
     ...(dependencies.progress?.phaseActivityChanged ||
-        dependencies.progress?.modelRoundWaiting
+        dependencies.progress?.modelRoundWaiting ||
+        dependencies.progress?.operationChanged
       ? {
           activity: {
             publish: (update) => dependencies.progress?.phaseActivityChanged?.({
@@ -48,6 +49,19 @@ export function createPhaseInvocation(
             }),
             modelRoundWaiting: (update) =>
               dependencies.progress?.modelRoundWaiting?.(update),
+            operationChanged: (update) =>
+              dependencies.progress?.operationChanged?.({
+                turnId: update.turnId,
+                semanticState: update.semanticState,
+                requestId: update.request.requestId,
+                publicTitle: update.request.publicTitle,
+                capabilityRef: update.request.capabilityRef,
+                status: update.status,
+                ...(update.resultRef ? { resultRef: update.resultRef } : {}),
+                ...(update.byteLength !== undefined
+                  ? { byteLength: update.byteLength }
+                  : {}),
+              }),
           },
         }
       : {}),

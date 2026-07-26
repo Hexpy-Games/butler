@@ -79,6 +79,7 @@ test("admits an out-of-scope target as a rejectable Phase proposal", async () =>
         phaseContinuity: phaseContinuity(),
         requests: [{
           requestId: "broader-target",
+          publicTitle: "Test operation",
           kind: "workspace_artifact_action",
           capabilityRef: "workspace:write",
           relativeTarget: ".",
@@ -104,6 +105,7 @@ test("admits an out-of-scope target as a rejectable Phase proposal", async () =>
     phaseContinuity: phaseContinuity(),
     requests: [{
       requestId: "broader-target",
+      publicTitle: "Test operation",
       kind: "workspace_artifact_action",
       capabilityRef: "workspace:write",
       workspaceRef,

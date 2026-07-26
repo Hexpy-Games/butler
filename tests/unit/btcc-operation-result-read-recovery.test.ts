@@ -15,6 +15,7 @@ test("an invalid result selector returns a correctable operation result", async 
   const runtime = createRuntime(fixture);
   const sourceRequest: Extract<OperationRequest, { kind: "observe" }> = {
     requestId: "observe-source",
+    publicTitle: "Test operation",
     kind: "observe",
     capabilityRef: "web_read",
     scopeRef: "public-web",
@@ -29,6 +30,7 @@ test("an invalid result selector returns a correctable operation result", async 
   }
   const invalidRead: Extract<OperationRequest, { kind: "observe" }> = {
     requestId: "read-missing-pointer",
+    publicTitle: "Test operation",
     kind: "observe",
     capabilityRef: "read_operation_result",
     scopeRef: source.readScopeRef,

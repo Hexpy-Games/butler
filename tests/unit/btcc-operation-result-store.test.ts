@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { SqliteOperationResultStore } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/operation-result/index.ts";
+import { SqliteOperationOutputReader } from
+  "../../packages/butler-agent/src/gateways/app/infrastructure/operation-output/sqlite-operation-output-reader.ts";
 import type {
   OperationRequest,
   PhaseRunBinding,
@@ -44,6 +46,7 @@ describe("BTCC operation result store", () => {
     const view = await store.read({
       request: {
         requestId: "read-middle",
+        publicTitle: "Test operation",
         kind: "observe",
         capabilityRef: "read_operation_result",
         scopeRef: projection.readScopeRef,
@@ -105,6 +108,56 @@ describe("BTCC operation result store", () => {
     expect(found?.resultRef).toEqual(recorded.resultRef);
     expect(found?.preview).toBe("durable result");
     reopened.close();
+  });
+
+  test("serves output lazily in authorized UTF-8 pages", async () => {
+    const root = temporaryRoot();
+    const store = new SqliteOperationResultStore(root);
+    const request = observationRequest();
+    const content = `${"가".repeat(30_000)}끝`;
+    const projection = await store.record({
+      binding: binding(),
+      request,
+      result: {
+        requestId: request.requestId,
+        outcome: "observed",
+        observationRef: { id: "observation:paged", sha256: "paged" },
+        content,
+      },
+      modelSelection: modelSelection(),
+    });
+    store.close();
+
+    const reader = new SqliteOperationOutputReader(root);
+    const first = reader.read({
+      turnId: binding().turnId,
+      requestId: request.requestId,
+      resultId: projection.resultRef.id,
+      byteStart: 0,
+    });
+    expect(first).not.toBeNull();
+    expect(first?.complete).toBe(false);
+    expect(first?.content).not.toContain("�");
+    const second = reader.read({
+      turnId: binding().turnId,
+      requestId: request.requestId,
+      resultId: projection.resultRef.id,
+      byteStart: first!.byte_end,
+    });
+    expect(`${first?.content}${second?.content}`).toBe(content);
+    expect(second?.complete).toBe(true);
+    expect(reader.read({
+      turnId: "turn-other",
+      requestId: request.requestId,
+      resultId: projection.resultRef.id,
+      byteStart: 0,
+    })).toBeNull();
+    expect(reader.read({
+      turnId: binding().turnId,
+      requestId: "request-other",
+      resultId: projection.resultRef.id,
+      byteStart: 0,
+    })).toBeNull();
   });
 
   test("retains typed command completion without rereading the payload", async () => {
@@ -170,6 +223,7 @@ describe("BTCC operation result store", () => {
     const requestContent = await store.read({
       request: {
         requestId: "recover-source-command",
+        publicTitle: "Test operation",
         kind: "observe",
         capabilityRef: "read_operation_result",
         scopeRef: projection.readScopeRef,
@@ -180,6 +234,7 @@ describe("BTCC operation result store", () => {
     const resultCode = await store.read({
       request: {
         requestId: "read-result-code",
+        publicTitle: "Test operation",
         kind: "observe",
         capabilityRef: "read_operation_result",
         scopeRef: projection.readScopeRef,
@@ -215,6 +270,7 @@ function binding(): PhaseRunBinding {
 function observationRequest(): Extract<OperationRequest, { kind: "observe" }> {
   return {
     requestId: "observe-large",
+    publicTitle: "Test operation",
     kind: "observe",
     capabilityRef: "run_command",
     scopeRef: "workspace:fixture",

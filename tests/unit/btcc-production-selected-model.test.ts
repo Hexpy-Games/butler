@@ -339,6 +339,7 @@ describe("production BTCC selected model", () => {
   test("returns a non-empty operation carrier without changing the requested model", async () => {
     const request = {
       requestId: "observe-1",
+      publicTitle: "Test operation",
       kind: "observe" as const,
       capabilityRef: "weather:current",
       scopeRef: "web:current",
@@ -469,6 +470,7 @@ describe("production BTCC selected model", () => {
           phaseContinuity: phaseContinuity(),
           requests: [{
             requestId: "invalid-review-operation",
+            publicTitle: "Test operation",
             kind: "review_validation",
             capabilityRef: "project_ledger_read",
             input: { record_ids: ["SPEC-1"] },

@@ -57,6 +57,7 @@ export function phaseEnvelope(options: { emptyContext?: boolean } = {}): PhaseEn
       requestId: "prior-observation",
       request: {
         requestId: "prior-observation",
+        publicTitle: "Test operation",
         kind: "observe",
         capabilityRef: "web:search",
         scopeRef: "web:current",

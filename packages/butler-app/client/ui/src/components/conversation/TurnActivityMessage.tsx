@@ -7,6 +7,7 @@ import { MessageAvatarBlock, MessageRow } from "@/butler-ds";
 interface TurnActivityMessageProps {
   progressRows: ProgressRow[];
   turnState?: string;
+  turnId?: string;
   markTheme: "dark" | "light";
   virtualRow: VirtualItem;
   topOffset: number;
@@ -16,6 +17,7 @@ interface TurnActivityMessageProps {
 export function TurnActivityMessage({
   progressRows,
   turnState,
+  turnId,
   markTheme,
   virtualRow,
   topOffset,
@@ -43,7 +45,7 @@ export function TurnActivityMessage({
         </MessageAvatarBlock>
       }
     >
-      <TurnActivityPanel rows={progressRows} state={turnState} />
+      <TurnActivityPanel rows={progressRows} state={turnState} turnId={turnId} />
     </MessageRow>
   );
 }

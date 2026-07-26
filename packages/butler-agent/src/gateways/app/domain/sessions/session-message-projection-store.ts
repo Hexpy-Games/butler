@@ -38,17 +38,20 @@ export class AppSessionMessageProjectionStore {
       const publicDelivery = delivery
         ? publicAppDeliveryMetadata(publicDeliveryMetadataForProjection(delivery))
         : null;
-      const workBlocks = workBlocksFromTerminalProgressRows(
-        progressRowsForTurnState(
-          this.input.listProgressRowsForTurn(message.turn_id),
-          turn.state,
-        ),
+      const terminalRows = progressRowsForTurnState(
+        this.input.listProgressRowsForTurn(message.turn_id),
+        turn.state,
       );
-      if (workBlocks.length === 0 && !publicDelivery) return message;
+      const workBlocks = workBlocksFromTerminalProgressRows(terminalRows);
+      const activityRows = terminalRows.filter(isTurnActivityRow);
+      if (workBlocks.length === 0 && activityRows.length === 0 && !publicDelivery) {
+        return message;
+      }
       return {
         ...message,
         ...(publicDelivery ?? {}),
         ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
+        ...(activityRows.length > 0 ? { turn_activity_rows: activityRows } : {}),
       };
     });
   }
@@ -71,16 +74,17 @@ export class AppSessionMessageProjectionStore {
     const publicDelivery = delivery
       ? publicDeliveryMetadataForProjection(delivery)
       : null;
-    const workBlocks = workBlocksFromTerminalProgressRows(
-      progressRowsForTurnState(
-        this.input.listProgressRowsForTurn(turnId),
-        turn.state,
-      ),
+    const terminalRows = progressRowsForTurnState(
+      this.input.listProgressRowsForTurn(turnId),
+      turn.state,
     );
+    const workBlocks = workBlocksFromTerminalProgressRows(terminalRows);
+    const activityRows = terminalRows.filter(isTurnActivityRow);
     return {
       ...message,
       ...(publicDelivery ?? {}),
       ...(workBlocks.length > 0 ? { work_blocks: workBlocks } : {}),
+      ...(activityRows.length > 0 ? { turn_activity_rows: activityRows } : {}),
     };
   }
 
@@ -109,4 +113,17 @@ export class AppSessionMessageProjectionStore {
     }
     return null;
   }
+}
+
+function isTurnActivityRow(row: ProgressSummaryRow): boolean {
+  if (row.bridge_phase === "btcc_operation" && row.semantic_block_id) return true;
+  return Boolean(
+    row.kind === "message" &&
+    !row.work_block_id &&
+    row.semantic_block_id &&
+    row.work_decision_source === "model-authored" &&
+    row.work_decision_summary &&
+    row.work_decision_rationale &&
+    row.work_decision_next_step,
+  );
 }

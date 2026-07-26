@@ -71,6 +71,7 @@ export class SharedProgressReducer<Row extends SharedProgressRow> {
       block.rows = [...block.rowMap.values()];
       return;
     }
+    if (row.bridge_phase === "btcc_operation") return;
     if (!isToolActivityRow(row)) return;
     this.#appendToolRow(row);
   }

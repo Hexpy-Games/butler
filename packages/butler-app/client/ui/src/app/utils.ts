@@ -1129,7 +1129,7 @@ function freezeMessagePhaseActivity(
   snapshot: TurnProgressSnapshot | null | undefined,
 ): MessageRecord {
   const activityRows = (snapshot?.safe_progress_rows ?? []).filter(
-    isModelAuthoredPhaseActivityRow,
+    isTurnActivityRow,
   );
   if (activityRows.length === 0) return message;
   if (
@@ -1141,7 +1141,8 @@ function freezeMessagePhaseActivity(
   return { ...message, turn_activity_rows: activityRows };
 }
 
-function isModelAuthoredPhaseActivityRow(row: ProgressRow): boolean {
+function isTurnActivityRow(row: ProgressRow): boolean {
+  if (row.bridge_phase === "btcc_operation" && row.semantic_block_id) return true;
   return Boolean(
     row.kind === "message" &&
     !row.work_block_id &&
@@ -1744,6 +1745,12 @@ function mergeProgressRow(
       incoming.safe_path_labels,
     tool_call_id:
       base.tool_call_id ?? current.tool_call_id ?? incoming.tool_call_id,
+    tool_result_id:
+      base.tool_result_id ?? current.tool_result_id ?? incoming.tool_result_id,
+    tool_result_byte_length:
+      base.tool_result_byte_length ??
+      current.tool_result_byte_length ??
+      incoming.tool_result_byte_length,
     turn_event_sequence: minimumOptionalNumber(
       current.turn_event_sequence,
       incoming.turn_event_sequence,
@@ -1929,6 +1936,8 @@ function progressRowEqual(left: ProgressRow, right: ProgressRow): boolean {
     left.safe_order === right.safe_order &&
     left.turn_event_sequence === right.turn_event_sequence &&
     left.tool_call_id === right.tool_call_id &&
+    left.tool_result_id === right.tool_result_id &&
+    left.tool_result_byte_length === right.tool_result_byte_length &&
     left.work_contract_id === right.work_contract_id &&
     left.work_stream_id === right.work_stream_id &&
     left.semantic_block_id === right.semantic_block_id &&

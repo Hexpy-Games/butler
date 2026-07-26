@@ -21,6 +21,7 @@ test("authorizes an exact read from a prior operation result without rerunning i
   const results: OperationResult[] = [];
   const observed = {
     requestId: "observe-large",
+    publicTitle: "Test operation",
     kind: "observe" as const,
     capabilityRef: "web_read",
     scopeRef: "web:https://example.com",
@@ -69,6 +70,7 @@ test("authorizes an exact read from a prior operation result without rerunning i
           expect(envelope.operationAuthority.observationScopeRefs).toContain(readScopeRef);
           return operationRound({
             requestId: "read-large-middle",
+            publicTitle: "Test operation",
             kind: "observe",
             capabilityRef: "read_operation_result",
             scopeRef: readScopeRef,
@@ -159,6 +161,7 @@ function projection(
 
 function operationRound(request: {
   requestId: string;
+  publicTitle: string;
   kind: "observe";
   capabilityRef: string;
   scopeRef: string;

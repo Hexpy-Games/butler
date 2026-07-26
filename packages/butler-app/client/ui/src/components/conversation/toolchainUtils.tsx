@@ -12,6 +12,7 @@ import {
 import { appCopy } from "@/app/copy.ts";
 import { isVisibleToolchainProgressRow } from "@/app/utils.ts";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
+import { OperationOutputDetails } from "./OperationOutputDetails";
 
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
   return block.rows.filter((row) => isVisibleToolchainRow(row, block.label));
@@ -19,16 +20,37 @@ export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
 
 export function workActivityToolsForBlock(
   block: WorkBlockView,
+  turnId?: string,
 ): WorkActivityToolItem[] {
-  return toolchainRowsForBlock(block).map((row, rowIndex) => ({
+  return workActivityToolsFromRows(toolchainRowsForBlock(block), turnId);
+}
+
+export function workActivityToolsFromRows(
+  rows: ProgressRow[],
+  turnId?: string,
+): WorkActivityToolItem[] {
+  return rows.map((row, rowIndex) => ({
     id: `${row.id}:${rowIndex}`,
     icon: activityIcon(row),
     title: toolchainSummaryLabel(row),
     summaryLabel: toolchainGroupLabel(row),
-    details: row.safe_detail_rows
-      ?.map((detail) => toolchainDetailLabel(detail, row))
-      .join(" "),
+    details: toolDetails(row, turnId),
   }));
+}
+
+function toolDetails(row: ProgressRow, turnId?: string): ReactElement | string | undefined {
+  if (turnId && row.tool_call_id && row.tool_result_id) {
+    return (
+      <OperationOutputDetails
+        requestId={row.tool_call_id}
+        resultId={row.tool_result_id}
+        turnId={turnId}
+      />
+    );
+  }
+  return row.safe_detail_rows
+    ?.map((detail) => toolchainDetailLabel(detail, row))
+    .join(" ");
 }
 
 export function isVisibleToolchainRow(
@@ -43,6 +65,7 @@ export function isTerminalActivityState(state: string): boolean {
 }
 
 export function activityIcon(row: ProgressRow): ReactElement {
+  if (row.bridge_phase === "btcc_operation") return <Wrench size={15} />;
   const label = row.safe_label.toLowerCase();
   if (row.kind === "searched" || label.includes("search"))
     return <Search size={15} />;
@@ -67,6 +90,7 @@ export function toolchainLabel(row: ProgressRow): string {
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
+  if (row.bridge_phase === "btcc_operation") return row.safe_label;
   const detailCount = row.safe_detail_rows?.length ?? 0;
   const firstDetail = row.safe_detail_rows?.[0];
   if (row.kind === "todo" && !row.safe_tool_name && firstDetail) {
@@ -85,6 +109,7 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
+  if (row.bridge_phase === "btcc_operation") return "작업";
   const toolName = row.safe_tool_name?.trim();
   if (
     row.kind === "searched" ||

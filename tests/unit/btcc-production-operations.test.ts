@@ -172,6 +172,7 @@ describe("production BTCC artifact operations", () => {
     };
     const request: Extract<OperationRequest, { kind: "observe" }> = {
       requestId: "observe-1",
+      publicTitle: "Test operation",
       kind: "observe",
       capabilityRef: "web_search",
       scopeRef: "public-web",
@@ -194,6 +195,7 @@ describe("production BTCC artifact operations", () => {
     };
     const request: Extract<OperationRequest, { kind: "observe" }> = {
       requestId: "observe-delegation",
+      publicTitle: "Test operation",
       kind: "observe",
       capabilityRef: "web_read",
       scopeRef: "public-web",
@@ -218,6 +220,7 @@ describe("production BTCC artifact operations", () => {
     };
     const request: Extract<OperationRequest, { kind: "observe" }> = {
       requestId: "observe-rejected",
+      publicTitle: "Test operation",
       kind: "observe",
       capabilityRef: "read_file",
       scopeRef: "workspace:test",

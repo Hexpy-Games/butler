@@ -27,6 +27,7 @@ export const TURN_EVENT_KINDS = [
   "tool.progress",
   "tool.completed",
   "tool.failed",
+  "tool.cancelled",
   "tool_result.finalized",
   "tool_result.failed",
   "guard.started",
@@ -131,6 +132,8 @@ export interface ProgressRowLike {
   turn_event_sequence?: number;
   safe_path_labels?: string[];
   tool_call_id?: string;
+  tool_result_id?: string;
+  tool_result_byte_length?: number;
   bridge_phase?: string;
   receipt_kind?: string;
   public_decision_role?: string;
