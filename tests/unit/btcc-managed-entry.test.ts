@@ -281,8 +281,9 @@ describe("BTCC managed executable ingress", () => {
       expect(phaseInputs.get("consolidation")).toMatchObject({
         acceptedGoalContract: { request: expect.any(String) },
         acceptedPlan: { strategy: expect.any(String) },
-        managedTasks: expect.any(Array),
+        taskOutcomes: expect.any(Array),
       });
+      expect(phaseInputs.get("consolidation")).not.toHaveProperty("managedTasks");
       if (scenario === "managed-planning-revision") {
         expect(planningCandidates).toHaveLength(2);
         expect(planningCandidates[1]?.revisionOrigin).toEqual({
