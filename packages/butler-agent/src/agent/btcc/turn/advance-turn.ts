@@ -14,14 +14,15 @@ import {
   resolveOperationalInterruption,
   waitForOperationalReentry,
 } from "./operational-checkpoint.ts";
+import { acquireStateExecution } from "./acquire-state-execution.ts";
 import { activateCommittedSuccessor } from "./activate-committed-successor.ts";
 import { runCurrentPhase } from "./run-current-phase.ts";
 import { decideTransition } from "./state-machine/index.ts";
-import { publishOpeningDecision, publishTurnProgress } from "./turn-progress.ts";
-import type {
-  StateExecutionClaim,
-  TurnRecord,
-} from "./contracts.ts";
+import {
+  publishOpeningDecision,
+  publishTurnProgress,
+} from "./turn-progress.ts";
+import type { StateExecutionClaim, TurnRecord } from "./contracts.ts";
 
 export async function advanceTurn(
   initial: TurnRecord,
@@ -41,7 +42,7 @@ export async function advanceTurn(
     let boundaryCommitted = false;
 
     try {
-      claim = await dependencies.turns.acquireStateExecutionClaim(turn);
+      claim = await acquireStateExecution(turn, dependencies, permit);
       const recovered = await recoverPersistedInterruption(
         dependencies,
         currentCheckpointBinding(claim),
@@ -110,7 +111,9 @@ export async function advanceTurn(
       if (!reloaded) {
         const interruption = claim
           ? runtimeInterruption(error, currentCheckpointBinding(claim))
-          : isBtccOperationalInterruption(error) ? error : undefined;
+          : isBtccOperationalInterruption(error)
+            ? error
+            : undefined;
         throw interruption ?? error;
       }
       turn = reloaded;
@@ -142,7 +145,9 @@ async function recoverAdvanceFailure(input: {
 
   const interruption = input.claim
     ? runtimeInterruption(error, currentCheckpointBinding(input.claim))
-    : isBtccOperationalInterruption(error) ? error : undefined;
+    : isBtccOperationalInterruption(error)
+      ? error
+      : undefined;
   if (interruption && dependencies.operationalRecovery) {
     try {
       await waitForOperationalReentry(dependencies, interruption, permit);
@@ -170,7 +175,9 @@ async function reloadOwnedTurn(
 }
 
 function isTerminal(turn: TurnRecord): boolean {
-  return turn.semanticState === "delivered" || turn.semanticState === "cancelled";
+  return (
+    turn.semanticState === "delivered" || turn.semanticState === "cancelled"
+  );
 }
 
 async function findTerminalTurn(
