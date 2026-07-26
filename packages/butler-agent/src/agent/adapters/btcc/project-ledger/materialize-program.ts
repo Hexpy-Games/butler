@@ -69,11 +69,47 @@ export function loadProjectProgram(
     if (!body) throw new Error("Project Work Ledger manifest body is missing");
     const program = JSON.parse(body) as Program;
     if (program.programId !== programId) throw new Error("Project Work Ledger manifest identity changed");
+    program.governingSpecs = hydrateGoverningSpecs(core, root, program);
     return program;
   } catch (error) {
     if (isMissing(error)) return null;
     throw error;
   }
+}
+
+function hydrateGoverningSpecs(
+  core: ProjectLedgerCore,
+  root: string,
+  program: Program,
+): Program["governingSpecs"] {
+  const current = new Map(
+    (program.governingSpecs ?? []).map((spec) => [refKey(spec.revisionRef), spec]),
+  );
+  return program.governingSpecRefs.map((ref) => {
+    const retained = current.get(refKey(ref));
+    if (retained) return retained;
+    const record = core.resolveRecord(root, { kind: "reference", id: ref.id });
+    const body = core.readRecordBody(record.filePath);
+    if (!body || digest(body) !== ref.sha256) {
+      throw new Error(`Project Work Ledger governing Spec reference changed: ${ref.id}`);
+    }
+    const authored = JSON.parse(body) as {
+      logicalId: string;
+      parentId: string;
+      concernId: string;
+      title: string;
+      body: string;
+    };
+    return {
+      ...authored,
+      status: "specified" as const,
+      revisionRef: ref,
+    };
+  });
+}
+
+function refKey(ref: Ref): string {
+  return `${ref.id}\0${ref.sha256}`;
 }
 
 function materializeGraph(

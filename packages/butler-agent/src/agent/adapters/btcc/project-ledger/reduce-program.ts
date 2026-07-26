@@ -5,6 +5,7 @@ import type {
   GoverningSpecRevision,
 } from "../../../btcc/index.ts";
 import {
+  acceptReviewedPlanAuthority,
   assertPromotionPermit,
   bindManagedProgram,
 } from "../../../btcc/index.ts";
@@ -72,18 +73,12 @@ function installPlan(program: Program, product: Extract<Mutation, {
   kind: "install_reviewed_plan";
 }>["product"]): Reviewed {
   const candidate = product.candidate;
-  if (program.manifestRevision !== candidate.observedManifestRevision ||
-    program.goalContractRef.id !== candidate.goalContractRef.id ||
-    program.authorityRef.id !== candidate.authorityRef.id ||
-    !selectedSpecsAvailable(program, candidate)) throw changed("Plan base");
+  const authority = acceptReviewedPlanAuthority(program, product);
   const works = candidate.works.map((work) => ({ work, status: "planned" as const }));
   const tasks = candidate.tasks.map((task) => ({ task, status: "planned" as const, attempts: [] }));
   return selectCurrent({
     ...program,
-    availableSpecs: mergeAvailableSpecs(program.availableSpecs, candidate.authoredSpecs),
-    availableSpecRefs: uniqueRefs([...program.availableSpecRefs, ...candidate.authoredSpecRevisionRefs]),
-    governingSpecRefs: candidate.governingSpecRefs,
-    manifestRevision: program.manifestRevision + 1,
+    ...authority,
     planningState: "reviewed",
     plan: candidate.plan,
     planningReviewRef: product.review.ref,
@@ -237,44 +232,4 @@ function selectCurrent(program: Reviewed): Reviewed {
 
 function changed(subject: string): Error {
   return new Error(`Project Work Ledger ${subject} changed`);
-}
-
-function uniqueRefs<T extends { id: string }>(refs: T[]): T[] {
-  return [...new Map(refs.map((ref) => [ref.id, ref])).values()];
-}
-
-function selectedSpecsAvailable(
-  program: Program,
-  candidate: Extract<Mutation, { kind: "install_reviewed_plan" }>["product"]["candidate"],
-): boolean {
-  if (candidate.governingSpecRefs.length === 0) return false;
-  const available = new Set([
-    ...program.availableSpecRefs,
-    ...candidate.authoredSpecRevisionRefs,
-  ].map((ref) => ref.id));
-  return candidate.governingSpecRefs.every((ref) => available.has(ref.id));
-}
-
-function mergeAvailableSpecs(
-  current: AvailableSpecRevision[],
-  authored: Array<{
-    logicalId: string;
-    parentId: string;
-    concernId: string;
-    title: string;
-    ref: { id: string; sha256: string };
-  }>,
-): AvailableSpecRevision[] {
-  const byLogicalId = new Map(current.map((spec) => [spec.logicalId, spec]));
-  for (const spec of authored) {
-    byLogicalId.set(spec.logicalId, {
-      logicalId: spec.logicalId,
-      parentId: spec.parentId,
-      concernId: spec.concernId,
-      title: spec.title,
-      status: "specified",
-      revisionRef: spec.ref,
-    });
-  }
-  return [...byLogicalId.values()].sort((left, right) => left.logicalId.localeCompare(right.logicalId));
 }

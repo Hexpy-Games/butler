@@ -25,6 +25,65 @@ import { planningCandidateBundleEntries } from
 afterEach(clearProjectFixtures);
 
 describe("BTCC Project Work Ledger prepared publication", () => {
+  test("installs an authored governing Spec body into the active Program", async () => {
+    const fixture = await projectFixture();
+    const adapter = createProjectWorkLedgerPublicationAdapter({
+      stagingRoot: join(fixture.root, "staging"),
+    });
+    const binding = projectBindingCommit();
+    const bound = await adapter.prepareCommit({
+      projectRoot: fixture.ledgerRoot,
+      expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
+      commit: binding.commit,
+    });
+    await adapter.promoteAndObserve(bound.publication);
+
+    const accepted = reviewedPlan({
+      goalContractRef: binding.goalContract.ref,
+      authorityRef: binding.authority.ref,
+      availableSpecRefs: bound.program.availableSpecRefs,
+      governingSpecSelections: ["SPEC-FIXTURE"],
+      specifications: [{
+        logicalId: "SPEC-FIXTURE",
+        parentId: "fixture-project",
+        concernId: "SPEC-FIXTURE",
+        title: "Fixture spec revision",
+        body: "# Fixture spec\n\nThe accepted Plan authored this revision.\n",
+      }],
+      requireGoverningSpec: true,
+    });
+    const installed = await commitMutation(adapter, fixture.ledgerRoot, {
+      mutationId: "mutation-project-authored-spec",
+      turnId: "turn-project-authored-spec",
+      expectedTurnRevision: 4,
+      mutation: { kind: "install_reviewed_plan", product: accepted },
+    });
+
+    expect(installed.program.governingSpecs).toEqual([{
+      logicalId: "SPEC-FIXTURE",
+      parentId: "fixture-project",
+      concernId: "SPEC-FIXTURE",
+      title: "Fixture spec revision",
+      status: "specified",
+      revisionRef: accepted.candidate.authoredSpecs[0]!.ref,
+      body: "# Fixture spec\n\nThe accepted Plan authored this revision.\n",
+    }]);
+    await adapter.promoteAndObserve(installed.publication);
+    expect(await adapter.loadProgram(fixture.ledgerRoot, "program-fixture"))
+      .toEqual(installed.program);
+
+    const legacyManifest = structuredClone(installed.program) as Record<string, unknown>;
+    delete legacyManifest.governingSpecs;
+    fixture.core.updateRecord(fixture.ledgerRoot, {
+      project: fixture.ledgerRoot,
+      kind: "reference",
+      id: "BTCC-PROGRAM-program-fixture",
+      body: JSON.stringify(legacyManifest),
+    });
+    expect(await adapter.loadProgram(fixture.ledgerRoot, "program-fixture"))
+      .toEqual(installed.program);
+  });
+
   test("hydrates canonical Project authority through the accepted Task lifecycle", async () => {
     const fixture = await projectFixture();
     const adapter = createProjectWorkLedgerPublicationAdapter({
