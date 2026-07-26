@@ -39,6 +39,7 @@ export {
   ledgerMutationId,
   ledgerRecordSha256,
   logicalLedgerRecords,
+  projectWorkProgress,
 } from "./work-ledger/index.ts";
 export { contentRef, stableJson } from "./core/index.ts";
 export { governingSpecLogicalIds } from "./conception/index.ts";
@@ -67,6 +68,7 @@ export type {
   WorkLedgerCommit,
   WorkLedgerStorage,
   ManagedProgramAuthority,
+  WorkProgressTask,
 } from "./work-ledger/index.ts";
 export type {
   OperationResultProjection,

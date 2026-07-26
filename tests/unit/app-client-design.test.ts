@@ -2970,7 +2970,7 @@ test("composer controls use a store boundary instead of toolbar props drilling",
   expect(store).toContain("handleModelChoice");
 });
 
-test("composer adjunct panels use design-system blocks inside the composer card", () => {
+test("conversation progress and composer workers use design-system blocks", () => {
   const composerCard = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/ComposerCard/ComposerCard.tsx",
   );
@@ -2982,7 +2982,7 @@ test("composer adjunct panels use design-system blocks inside the composer card"
     "packages/butler-app/client/ui/src/components/conversation/WorkerComposerPanel.tsx",
   );
   const todoPanel = read(
-    "packages/butler-app/client/ui/src/components/conversation/TodoComposerPanel.tsx",
+    "packages/butler-app/client/ui/src/components/conversation/WorkProgressPanel.tsx",
   );
   const workerPanelFixture = read(
     "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkerActivityPanel/WorkerActivityPanel.fixtures.tsx",

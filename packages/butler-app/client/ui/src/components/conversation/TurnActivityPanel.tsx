@@ -13,6 +13,7 @@ import { Stack } from "@/butler-ds";
 import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
 import { CollapsedTurnActivity } from "./WorkBlocks";
+import { WorkProgressPanel } from "./WorkProgressPanel";
 
 export function TurnActivityPanel({
   rows,
@@ -24,20 +25,23 @@ export function TurnActivityPanel({
   turnId?: string;
 }) {
   const readModels = typedUiReadModelsFromProgressRows(rows);
+  const todoRows = rows.filter((row) => row.kind === "todo");
+  const activityRows = rows.filter((row) => row.kind !== "todo");
   const decisions = readModels.filter(isDecisionReadModel);
-  const workBlocks = workBlocksFromProgressRows(rows);
-  const phaseActivities = phaseActivityRows(rows);
-  const publicActivity = latestPublicActivity(rows, phaseActivities.length > 0);
-  const semanticState = currentSemanticState(rows, phaseActivities);
-  const modelRoundWait = currentModelRoundWait(rows);
-  const operation = currentOperationActivity(rows);
+  const workBlocks = workBlocksFromProgressRows(activityRows);
+  const phaseActivities = phaseActivityRows(activityRows);
+  const publicActivity = latestPublicActivity(activityRows, phaseActivities.length > 0);
+  const semanticState = currentSemanticState(activityRows, phaseActivities);
+  const modelRoundWait = currentModelRoundWait(activityRows);
+  const operation = currentOperationActivity(activityRows);
   if (
     decisions.length === 0 &&
     workBlocks.length === 0 &&
     phaseActivities.length === 0 &&
     !publicActivity &&
     !modelRoundWait &&
-    !operation
+    !operation &&
+    todoRows.length === 0
   ) {
     return <TurnActivityPending readModels={readModels} state={state} />;
   }
@@ -49,6 +53,7 @@ export function TurnActivityPanel({
       data-test-class="turn-activity-panel turn-work-panel turn-decision-work-panel"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
+      <WorkProgressPanel rows={todoRows} turnState={state} />
       {phaseActivities.length > 0 ? (
         <TurnActivityTimeline
           activities={phaseActivities}

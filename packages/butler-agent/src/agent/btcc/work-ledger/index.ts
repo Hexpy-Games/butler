@@ -1,4 +1,9 @@
 export { createWorkLedger } from "./work-ledger.ts";
+export { projectWorkProgress } from "./work-progress-projection.ts";
+export type {
+  WorkProgressTask,
+  WorkProgressTaskState,
+} from "./work-progress-projection.ts";
 export {
   createLogicalLedgerBundle,
   assertLogicalLedgerMutationId,

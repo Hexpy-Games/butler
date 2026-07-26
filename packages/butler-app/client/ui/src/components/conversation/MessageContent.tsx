@@ -35,6 +35,7 @@ function MessageContentComponent({
           <CompletedTurnActivity
             rows={message.turn_activity_rows}
             turnId={message.turn_id}
+            turnState={message.status}
           />
           <CompletedWorkBlocks blocks={message.work_blocks} />
           {message.status === "failed" ? (

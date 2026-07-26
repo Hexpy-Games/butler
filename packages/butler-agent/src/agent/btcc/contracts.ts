@@ -23,6 +23,7 @@ import type {
   AvailableSpecRevision,
   GoverningSpecRevision,
 } from "./planning/contracts.ts";
+import type { WorkProgressTask } from "./work-ledger/index.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -100,6 +101,12 @@ export interface BtccTurnProgressObserver {
     turnId: string;
     semanticState: string;
     turnRevision: number;
+  }): void | Promise<void>;
+  workProgressChanged?(update: {
+    turnId: string;
+    turnRevision: number;
+    programId: string;
+    tasks: WorkProgressTask[];
   }): void | Promise<void>;
   phaseActivityChanged?(update: {
     turnId: string;

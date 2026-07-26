@@ -43,6 +43,31 @@ export function projectTurnProgress(
         },
       });
     },
+    async workProgressChanged(update) {
+      for (const task of update.tasks) {
+        await publish({
+          kind: "tool.progress",
+          payload: {
+            activityKind: "todo",
+            todoId: task.taskId,
+            safeLabel: task.taskTitle,
+            state: task.taskState,
+            safeOrder: task.taskOrder,
+            bridgePhase: "btcc_work_ledger",
+            workstreamId: task.workId,
+            semanticBlockId: `work-ledger-${update.programId}`,
+            turnRevision: update.turnRevision,
+            detailRows: [{
+              id: "work",
+              kind: "work",
+              safe_label: "Work",
+              safe_value: task.workTitle,
+              state: task.workState,
+            }],
+          },
+        });
+      }
+    },
     async phaseActivityChanged(update) {
       await publish({
         kind: "assistant.public_note",
