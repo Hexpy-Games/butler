@@ -34,6 +34,9 @@ import type {
 import {
   reconcileBtccTurnProjectionAuthority,
 } from "./btcc-turn-projection-authority.ts";
+import {
+  reconcileBtccTerminalDeliveries,
+} from "./btcc-terminal-projection.ts";
 
 interface PendingAppTurnEventOutbound {
   chatId: string;
@@ -70,8 +73,9 @@ export class AppTransportProjectionStore {
       this.options.db,
     );
     const transcriptProjectionCount = this.transcriptSync.syncAll();
+    const terminalProjectionCount = this.reconcileBtccTerminalDeliveries();
     return (
-      authorityReconciliationCount + transcriptProjectionCount +
+      authorityReconciliationCount + transcriptProjectionCount + terminalProjectionCount +
       this.reconcileDeferredQueuedFinalOutbounds()
     );
   }
@@ -82,10 +86,21 @@ export class AppTransportProjectionStore {
       chatId,
     );
     const transcriptProjectionCount = this.transcriptSync.syncChat(chatId);
+    const terminalProjectionCount = this.reconcileBtccTerminalDeliveries(chatId);
     return (
-      authorityReconciliationCount + transcriptProjectionCount +
+      authorityReconciliationCount + transcriptProjectionCount + terminalProjectionCount +
       this.reconcileDeferredQueuedFinalOutbounds(chatId)
     );
+  }
+
+  private reconcileBtccTerminalDeliveries(chatId?: string): number {
+    return reconcileBtccTerminalDeliveries({
+      options: this.options,
+      hasProjectedAction: (actionId) => this.hasProjectedTransportEvent(actionId),
+      markProjectedAction: (actionId, eventId, targetChatId) =>
+        this.markProjectedTransportEvent(actionId, eventId, targetChatId),
+      chatId,
+    });
   }
 
   private projectAppOutboundEvent(
