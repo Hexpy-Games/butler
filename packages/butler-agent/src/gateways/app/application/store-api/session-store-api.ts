@@ -162,6 +162,7 @@ export function createSessionStoreApi(
     },
     getSessionView(sessionId) {
       kernel.turnActions.reconcileCancellationSettlements(sessionId);
+      kernel.turnActions.reconcileCancelledTurnActivityMessages(sessionId);
       return kernel.sessionViews.getSessionView(sessionId);
     },
     listArtifacts(sessionId) {

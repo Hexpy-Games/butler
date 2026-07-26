@@ -91,6 +91,7 @@ import {
   runtimeModels,
 } from "./utils.ts";
 import { isServerBackedSessionId } from "./sessionIds.ts";
+import { finishVisibleCancellation } from "./cancellation/finish-visible-cancellation.ts";
 
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
 type SessionAction = "rename" | "archive";
@@ -1414,9 +1415,25 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         body: JSON.stringify({}),
       });
       await get().reloadMessages(activeChatId);
-      await get().refreshSessionSummary(activeChatId);
-      await get().refreshSessionView(activeChatId);
-      set({ status: { label: "ready", tone: "ok" } });
+      set((state) => {
+        const cancelled = finishVisibleCancellation(
+          state,
+          activeChatId,
+          turnId,
+        );
+        return {
+          ...cancelled,
+          sessionMessageViews: upsertCompleteSessionView(
+            state.sessionMessageViews,
+            completeSessionView(
+              activeChatId,
+              cancelled.messages,
+              cancelled.turnProgress,
+            ),
+          ),
+          status: { label: "ready", tone: "ok" },
+        };
+      });
     } catch (error) {
       notifyError(error, "Stop failed", { id: "turn-stop" });
       set({ status: { label: "ready", tone: "ok" } });

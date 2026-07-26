@@ -234,13 +234,17 @@ export class AppTurnActionStore {
       .run(now, sessionId);
   }
 
-  reconcileCancelledTurnActivityMessages(): void {
+  reconcileCancelledTurnActivityMessages(sessionId?: string): void {
     const rows = this.input.db
-      .query<{ id: string; chat_id: string }, [string]>(
+      .query<
+        { id: string; chat_id: string },
+        [string | null, string | null, string]
+      >(
         `
       SELECT turns.id, turns.chat_id
       FROM turns
       WHERE turns.state = 'cancelled'
+        AND (? IS NULL OR turns.chat_id = ?)
         AND NOT EXISTS (
           SELECT 1
           FROM messages
@@ -252,7 +256,7 @@ export class AppTurnActionStore {
       ORDER BY turns.rowid ASC
     `,
       )
-      .all(CANCELLED_TURN_ACTIVITY_TEXT);
+      .all(sessionId ?? null, sessionId ?? null, CANCELLED_TURN_ACTIVITY_TEXT);
     for (const row of rows) {
       this.input.ensureCancelledTurnActivityMessage(row.chat_id, row.id);
     }

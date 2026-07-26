@@ -2962,6 +2962,23 @@ test("cancelActiveTurn targets only the canonical SessionView active turn", asyn
   ]);
   expect(calls.some((call) => call.path.includes("worker-activity"))).toBe(false);
   expect(calls.some((call) => call.path.includes("turn-stale-summary"))).toBe(false);
+  expect(useButlerStore.getState().sessionView).toMatchObject({
+    status: "cancelled",
+    active_turn: null,
+    latest_turn: {
+      id: "turn-canonical",
+      state: "cancelled",
+      delivery_state: "cancelled",
+      cancellable: false,
+    },
+  });
+  expect(useButlerStore.getState().summary).toMatchObject({
+    turn_state: "cancelled",
+    latest_progress: {
+      turn_id: "turn-canonical",
+      state: "cancelled",
+    },
+  });
 });
 
 test("sendMessage keeps concurrent session sends scoped until each operation finishes", async () => {

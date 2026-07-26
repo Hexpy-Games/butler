@@ -9130,6 +9130,15 @@ test("app transport final result projection does not resurrect cancelled turns",
     cancellable: false,
     retryable: false,
   });
+  const stoppingMessages = await getJson(`${url}messages?chat_id=general`);
+  expect(stoppingMessages.data.messages).toContainEqual(
+    expect.objectContaining({
+      turn_id: turnId,
+      role: "assistant",
+      status: "cancelled",
+      text: "Stopped.",
+    }),
+  );
   const settlementDb = new Database(dbPath);
   settlementDb.query(`
     UPDATE app_turn_cancel_outbox
