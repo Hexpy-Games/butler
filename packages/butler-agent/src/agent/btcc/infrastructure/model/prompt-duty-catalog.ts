@@ -258,6 +258,9 @@ const DUTIES = {
     "refs, outcome, dependencies, scope, criteria, verification questions, artifact",
     "policy, effect class, and execution ordinal must all remain unchanged. If any of",
     "those fields changes, classify that Task as revalidate, rework, or replan instead.",
+    "Use revalidate only when taskImpactIndex says the prior Task is accepted and has",
+    "a current concrete result. A changed planned, executing, or review-failed Task",
+    "requires rework or replan; it cannot be revalidated.",
     "New successor Tasks start planned. Implementation repair changes no governing revision.",
   ].join(" "),
   review_correction_exactly: [

@@ -50,6 +50,8 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("materially equivalent implementation findings recur");
   expect(resolveDutyInstructions(["author_complete_impact_map"])[0]?.instruction)
     .toContain("exact accepted Task revision");
+  expect(resolveDutyInstructions(["author_complete_impact_map"])[0]?.instruction)
+    .toContain("requires rework or replan");
   expect(resolveDutyInstructions(["conceive_scoped_correction"])[0]?.instruction)
     .toContain("stateInput.priorTaskReviewFindings");
   expect(resolveDutyInstructions(["review_continuation_coherence"])[0]?.instruction)

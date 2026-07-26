@@ -112,7 +112,9 @@ function validateSuccessor(input: {
     (input.prior.status !== "accepted" || !input.prior.hasCurrentResult)
   ) {
     throw new Error(
-      "Feedback Planning can revalidate only an accepted concrete result",
+      `Task ${input.prior.task.taskLogicalId} has status ${input.prior.status} ` +
+      `and currentResult=${input.prior.hasCurrentResult}; revalidate requires an ` +
+      "accepted concrete result, so classify this changed Task as rework or replan",
     );
   }
 }
