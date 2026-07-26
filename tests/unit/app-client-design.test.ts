@@ -2815,7 +2815,7 @@ test("thinking mark components expose state and theme contracts", () => {
 test("active turn fallback copy matches the turn state", () => {
   const copy = read("packages/butler-app/client/ui/src/app/copy.ts");
   const panel = read(
-    "packages/butler-app/client/ui/src/components/conversation/TurnActivityPanel.tsx",
+    "packages/butler-app/client/ui/src/components/conversation/TurnActivityPending.tsx",
   );
 
   expect(copy).toContain("pendingStateLabels");
@@ -2824,7 +2824,7 @@ test("active turn fallback copy matches the turn state", () => {
   expect(copy).toContain('streaming: "응답을 작성하고 있습니다."');
   expect(panel).toContain('const SESSION_STARTING_STATE = "session_starting"');
   expect(panel).toContain("<Skeleton");
-  expect(panel).toContain("turnActivityPendingLabel(state)");
+  expect(panel).toContain("pendingStateLabel(state)");
   expect(panel).toContain('data-turn-state={state ?? "unknown"}');
   expect(panel).not.toContain("{appCopy.conversation.work.pendingLabel}");
 });
@@ -3950,12 +3950,12 @@ describe("app-client design system foundation", () => {
       read(
         "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
       ),
-    ).toContain('<Stack gap="md">');
+    ).toContain('<Stack gap="md"');
     expect(
       read(
         "packages/butler-app/client/ui/src/components/conversation/TurnActivityPanel.tsx",
       ),
-    ).toContain("workActivityToolsForBlock(block)");
+    ).toContain("<CollapsedTurnActivity blocks={workBlocks} />");
     expect(
       read(
         "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",

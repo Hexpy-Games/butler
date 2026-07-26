@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Button, ListChecks, Stack, Typo } from "@/butler-ds";
+import { Button, ListChecks, Stack, Typo, WorkActivityBlock } from "@/butler-ds";
 import type { PhaseActivity } from "./turnActivityRows";
-import { phaseLabel } from "./PhaseActivityLog";
-import styles from "./TurnActivityTimeline.module.css";
+import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
+
+const metaStyle = { color: "var(--text-secondary)" } as const;
 
 export function TurnActivityTimeline({
   activities,
@@ -26,46 +27,19 @@ export function TurnActivityTimeline({
       data-test-class="turn-current-phase-activity"
     >
       <Stack gap="xs" aria-live={live ? "polite" : undefined}>
-        <Typo.Caption as="p" className={styles.meta}>
+        <Typo.Caption as="p" style={metaStyle}>
           {live ? "현재" : "활동"} · {currentPhase} · {activities.length}개 기록
         </Typo.Caption>
         {expanded ? (
-          <ol className={styles.history}>
+          <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
             {activities.map((activity) => (
-              <li className={styles.historyItem} key={activity.id}>
-                <Typo.Caption as="p" className={styles.itemMeta}>
-                  {phaseLabel(activity.phase)}
-                  {activity.createdAt
-                    ? ` · ${formatActivityTime(activity.createdAt)}`
-                    : ""}
-                </Typo.Caption>
-                <Typo.Body as="p" className={styles.summary}>
-                  {activity.summary}
-                </Typo.Body>
-                <Typo.Caption as="p" className={styles.detail}>
-                  의도: {activity.rationale}
-                </Typo.Caption>
-                <Typo.Caption as="p" className={styles.detail}>
-                  다음: {activity.nextStep}
-                </Typo.Caption>
+              <li key={activity.id}>
+                <ActivityBlock activity={activity} />
               </li>
             ))}
-          </ol>
+          </Stack>
         ) : (
-          <div
-            className={live ? styles.rolling : styles.current}
-            key={latest.id}
-          >
-            <Typo.Body as="p" className={styles.summary}>
-              {latest.summary}
-            </Typo.Body>
-            <Typo.Caption as="p" className={styles.detail}>
-              의도: {latest.rationale}
-            </Typo.Caption>
-            <Typo.Caption as="p" className={styles.detail}>
-              다음: {latest.nextStep}
-            </Typo.Caption>
-          </div>
+          <ActivityBlock activity={latest} rolling={live} />
         )}
         {activities.length > 1 ? (
           <Button
@@ -85,6 +59,32 @@ export function TurnActivityTimeline({
         ) : null}
       </Stack>
     </section>
+  );
+}
+
+function ActivityBlock({
+  activity,
+  rolling = false,
+}: {
+  activity: PhaseActivity;
+  rolling?: boolean;
+}) {
+  const meta = activity.createdAt
+    ? `${phaseLabel(activity.phase)} · ${formatActivityTime(activity.createdAt)}`
+    : phaseLabel(activity.phase);
+  return (
+    <WorkActivityBlock
+      density="compact"
+      rolling={rolling}
+      title={activity.summary}
+      description={
+        <Stack as="span" gap="xs">
+          <Typo.Caption as="span">{meta}</Typo.Caption>
+          <Typo.Caption as="span">의도: {activity.rationale}</Typo.Caption>
+          <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
+        </Stack>
+      }
+    />
   );
 }
 

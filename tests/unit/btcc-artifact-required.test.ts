@@ -312,6 +312,7 @@ function reviewInvocation(
   }
   return invocation("task_review", results, {
     resultCandidate: result,
+    currentTask: { ref: result.result.taskRef },
     criteria: overrides.criteria ?? [{ ref: ref("criterion") }],
     verificationQuestions: overrides.verificationQuestions ?? [{
       ref: ref("verification-question"),
