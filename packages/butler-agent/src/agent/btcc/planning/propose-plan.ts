@@ -10,6 +10,7 @@ import {
 import type {
   PlanningCandidateProduct,
   PlanningObservationResultIndexEntry,
+  PlanningReview,
 } from "./contracts.ts";
 import type { PlanningContinuation } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
@@ -25,6 +26,7 @@ import {
   decodeFindingDecisions,
   requiredSubjectFindingRefs,
 } from "./finding-decisions.ts";
+import { assertRevisedPlanChanged } from "./assert-revised-plan-changed.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -64,50 +66,59 @@ function planningCodec(
       const state = requireRecord(envelope.context.stateInput, "Planning state");
       const value = requireRecord(submission, "Planning submission");
       requireLiteral(value.kind, "plan_candidate", "Planning kind");
+      const findingDecisions = state.findingSetRef
+        ? decodeFindingDecisions(value.findingDecisions, priorFindingRefs)
+        : [];
+      const candidate = authorPlanningProposal(value, {
+        goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
+        authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
+        requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+        artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
+        workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
+        ledgerId: requireString(state.ledgerId, "ledgerId"),
+        ...(optionalString(state.specParentRootId) ? {
+          specParentRootId: optionalString(state.specParentRootId),
+        } : {}),
+        programId: requireString(state.programId, "programId"),
+        observedManifestRevision: requirePositiveInteger(
+          state.observedManifestRevision,
+          "observedManifestRevision",
+        ),
+        governingSpecRefs: requireContentRefs(state.governingSpecRefs, "governingSpecRefs"),
+        availableSpecs: decodeAvailableSpecs(
+          state.availableSpecs,
+          optionalString(state.specParentRootId),
+        ),
+        requireGoverningSpec: Boolean(state.requireGoverningSpec),
+        ...(state.previousCandidateRef
+          ? {
+              previousCandidateRef: requireContentRef(
+                state.previousCandidateRef,
+                "previousCandidateRef",
+              ),
+            }
+          : {}),
+        ...(state.findingSetRef
+          ? {
+              findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef"),
+              findingDecisions,
+            }
+          : {}),
+        ...(state.continuation
+          ? { continuation: state.continuation as PlanningContinuation }
+          : {}),
+      });
+      if (state.previousPlanCandidate && state.priorPlanningReview) {
+        assertRevisedPlanChanged({
+          previous: state.previousPlanCandidate as PlanningCandidateProduct["candidate"],
+          revised: candidate,
+          priorReview: state.priorPlanningReview as PlanningReview,
+          decisions: findingDecisions,
+        });
+      }
       return {
         kind: "plan_candidate",
-        candidate: authorPlanningProposal(value, {
-          goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
-          authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
-          requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
-          artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
-          workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
-          ledgerId: requireString(state.ledgerId, "ledgerId"),
-          ...(optionalString(state.specParentRootId) ? {
-            specParentRootId: optionalString(state.specParentRootId),
-          } : {}),
-          programId: requireString(state.programId, "programId"),
-          observedManifestRevision: requirePositiveInteger(
-            state.observedManifestRevision,
-            "observedManifestRevision",
-          ),
-          governingSpecRefs: requireContentRefs(state.governingSpecRefs, "governingSpecRefs"),
-          availableSpecs: decodeAvailableSpecs(
-            state.availableSpecs,
-            optionalString(state.specParentRootId),
-          ),
-          requireGoverningSpec: Boolean(state.requireGoverningSpec),
-          ...(state.previousCandidateRef
-            ? {
-                previousCandidateRef: requireContentRef(
-                  state.previousCandidateRef,
-                  "previousCandidateRef",
-                ),
-              }
-            : {}),
-          ...(state.findingSetRef
-            ? {
-                findingSetRef: requireContentRef(state.findingSetRef, "findingSetRef"),
-                findingDecisions: decodeFindingDecisions(
-                  value.findingDecisions,
-                  priorFindingRefs,
-                ),
-              }
-            : {}),
-          ...(state.continuation
-            ? { continuation: state.continuation as PlanningContinuation }
-            : {}),
-        }),
+        candidate,
         observationResultIndex: retainPlanningObservations(
           priorObservationResultIndex(state.priorPlanningObservationResultIndex),
           envelope.operationResults,

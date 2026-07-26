@@ -37,21 +37,48 @@ export function readWorkDrafts(
   if (!Array.isArray(value) || value.length === 0) {
     rejectPlanningProposal("works_missing", "Planning requires Works");
   }
-  let executionOrdinal = 0;
+  const taskOrdinals = new Map<string, number>();
+  const workCompletionOrdinals = new Map<string, number>();
   return value.map((item, workIndex) => {
     const work = requireRecord(item, `works[${workIndex}]`);
     const tasks = work.tasks;
     if (!Array.isArray(tasks) || tasks.length === 0) {
       rejectPlanningProposal("tasks_missing", `works[${workIndex}] requires Tasks`);
     }
-    return {
+    const dependencyWorkIds = requireStringArray(work.dependencyWorkIds, "dependencyWorkIds");
+    const workBaseOrdinal = dependencyWorkIds.reduce((maximum, dependencyId) => {
+      const ordinal = workCompletionOrdinals.get(dependencyId);
+      if (!ordinal) return maximum;
+      return Math.max(maximum, ordinal);
+    }, 0);
+    const draft = {
       logicalId: requireString(work.logicalId, `works[${workIndex}].logicalId`),
       outcome: requireString(work.outcome, `works[${workIndex}].outcome`),
-      dependencyWorkIds: requireStringArray(work.dependencyWorkIds, "dependencyWorkIds"),
-      tasks: tasks.map((task, taskIndex) => readTaskDraft(
-        task, workIndex, taskIndex, ++executionOrdinal, workspaceScopeRef,
-      )),
+      dependencyWorkIds,
+      tasks: tasks.map((task, taskIndex) => {
+        const record = requireRecord(task, `works[${workIndex}].tasks[${taskIndex}]`);
+        const dependencies = requireStringArray(record.dependencyTaskIds, "dependencyTaskIds");
+        const dependencyOrdinal = dependencies.reduce((maximum, dependencyId) => {
+          const ordinal = taskOrdinals.get(dependencyId);
+          if (!ordinal) return maximum;
+          return Math.max(maximum, ordinal);
+        }, workBaseOrdinal);
+        const taskDraft = readTaskDraft(
+          record,
+          workIndex,
+          taskIndex,
+          dependencyOrdinal + 1,
+          workspaceScopeRef,
+        );
+        taskOrdinals.set(taskDraft.logicalId, taskDraft.executionOrdinal);
+        return taskDraft;
+      }),
     };
+    workCompletionOrdinals.set(
+      draft.logicalId,
+      Math.max(...draft.tasks.map((task) => task.executionOrdinal)),
+    );
+    return draft;
   });
 }
 

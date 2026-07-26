@@ -23,16 +23,19 @@ export function planReviewSubmissionSchema(
   subjectIds: string[],
   priorRootCauseKeys: string[] = [],
 ): SubmissionSchema {
+  if (priorRootCauseKeys.length > 0) {
+    return reviewVerdictVariants({
+      kind: literalSchema("planning_review"),
+      findings: arraySchema(textSchema(), { maxItems: 0 }),
+      priorFindingVerdicts: priorFindingVerdicts(priorRootCauseKeys),
+    });
+  }
   const reviewFields: Record<string, SubmissionSchema> = {
     kind: literalSchema("planning_review"),
     coverage: reviewCoverage(),
     findings: findingsSchema(subjectIds, priorRootCauseKeys),
     subjects: subjectCoverageSchema(subjectIds),
   };
-  if (priorRootCauseKeys.length > 0) {
-    reviewFields.priorFindingVerdicts =
-      priorFindingVerdicts(priorRootCauseKeys);
-  }
   return reviewVerdictVariants(reviewFields);
 }
 

@@ -100,6 +100,24 @@ export function requireSubjectCoverage(
   return coverage;
 }
 
+export function projectSubjectCoverage(
+  expected: PlanningReviewSubject[],
+  findings: PlanningReviewSubjectFinding[],
+): PlanningReviewSubjectCoverage[] {
+  return expected.map((subject) => {
+    const subjectFindings = findings.filter((finding) =>
+      finding.affectedSubjectIds.includes(subject.subjectId));
+    return {
+      ...subject,
+      verdict: subjectFindings.some((finding) =>
+          finding.recommendedDisposition === "required_now")
+        ? "failed" as const
+        : "passed" as const,
+      findings: subjectFindings,
+    };
+  });
+}
+
 export function resolvePlanningReviewFindings(
   findingValue: unknown,
   priorVerdictValue: unknown,
@@ -132,15 +150,8 @@ export function requireDimensionCoverage(
   if (!Array.isArray(value) || value.length !== PLANNING_REVIEW_DIMENSIONS.length) {
     throw new Error("Planning Review must cover every review dimension");
   }
-  const findingsByDimension = new Map<PlanningReviewDimension, string[]>(
-    PLANNING_REVIEW_DIMENSIONS.map((dimension) => [dimension, []]),
-  );
-  for (const subject of subjects) {
-    for (const finding of subject.findings) {
-      if (finding.recommendedDisposition !== "required_now") continue;
-      findingsByDimension.get(finding.dimension)!.push(finding.message);
-    }
-  }
+  const projected = projectDimensionCoverage(subjects);
+  const projectedByDimension = new Map(projected.map((item) => [item.dimension, item]));
   const seen = new Set<PlanningReviewDimension>();
   const coverage = value.map((item, index) => {
     const entry = requireRecord(item, `Planning Review coverage[${index}]`);
@@ -149,19 +160,33 @@ export function requireDimensionCoverage(
       throw new Error("Planning Review coverage dimensions must be unique and complete");
     }
     seen.add(dimension);
-    const findings = [...new Set(findingsByDimension.get(dimension) ?? [])];
-    const expectedVerdict: "passed" | "failed" = findings.length > 0
-      ? "failed"
-      : "passed";
-    if (entry.verdict !== expectedVerdict) {
+    const expectedCoverage = projectedByDimension.get(dimension)!;
+    if (entry.verdict !== expectedCoverage.verdict) {
       throw new Error("Planning Review dimension verdict conflicts with subject findings");
     }
-    return { dimension, verdict: expectedVerdict, findings };
+    return expectedCoverage;
   });
   if (seen.size !== PLANNING_REVIEW_DIMENSIONS.length) {
     throw new Error("Planning Review coverage dimensions must be unique and complete");
   }
   return coverage;
+}
+
+export function projectDimensionCoverage(
+  subjects: PlanningReviewSubjectCoverage[],
+): PlanningReviewCoverage[] {
+  return PLANNING_REVIEW_DIMENSIONS.map((dimension) => {
+    const findings = [...new Set(subjects.flatMap((subject) => subject.findings)
+      .filter((finding) =>
+        finding.dimension === dimension &&
+        finding.recommendedDisposition === "required_now")
+      .map((finding) => finding.message))];
+    return {
+      dimension,
+      verdict: findings.length > 0 ? "failed" as const : "passed" as const,
+      findings,
+    };
+  });
 }
 
 function subject(
