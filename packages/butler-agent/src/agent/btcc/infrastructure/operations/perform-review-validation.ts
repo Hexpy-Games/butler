@@ -15,12 +15,10 @@ import {
   sameRef,
 } from "./operation-helpers.ts";
 import {
-  captureWorkspaceSnapshot,
-  materializeSnapshot,
+  copyWorkspaceControls,
   removeOwnedRoot,
-  snapshotSha256,
   workspaceContentRoot,
-} from "./target-snapshot.ts";
+} from "../artifact-snapshot/index.ts";
 import { operationRoundScope } from "../../core/operation-identity.ts";
 
 export async function performReviewValidation(input: {
@@ -50,12 +48,13 @@ export async function performReviewValidation(input: {
   if (existsSync(root)) removeOwnedRoot(root);
   mkdirSync(root, { recursive: true });
   const contentRoot = workspaceContentRoot(root);
-  materializeSnapshot(snapshotValue, contentRoot);
+  input.store.snapshots.materialize(snapshotValue, contentRoot);
+  copyWorkspaceControls(workspaceContentRoot(workspace.workspaceRoot), contentRoot);
   projectLogicalFileTarget(input.envelope, workspace, contentRoot);
-  const before = captureWorkspaceSnapshot(
+  const before = input.store.snapshots.captureWorkspace(
     root, snapshotValue.targetKind, snapshotValue.targetState,
   );
-  if (snapshotSha256(before) !== snapshotSha256(snapshotValue)) {
+  if (!sameRef(before.ref, snapshotValue.ref)) {
     removeOwnedRoot(root);
     throw new Error("BTCC Review overlay does not match its immutable source");
   }
@@ -78,7 +77,7 @@ export async function performReviewValidation(input: {
       signal: input.signal,
     });
     assertActive(input.signal);
-    const after = captureWorkspaceSnapshot(
+    const after = input.store.snapshots.captureWorkspace(
       root, snapshotValue.targetKind, snapshotValue.targetState,
     );
     const payload = operationContent(output);

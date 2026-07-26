@@ -19,13 +19,9 @@ import type {
 import { performObservation } from "./perform-observation.ts";
 import { performPromotion } from "./perform-promotion.ts";
 import { performReviewValidation } from "./perform-review-validation.ts";
-import {
-  cleanupWorkspaceAction,
-  performWorkspaceAction,
-} from "./perform-workspace-action.ts";
-import type { WorkspaceActionBoundary } from "./exchange-workspace-candidate.ts";
+import { performWorkspaceAction } from "./perform-workspace-action.ts";
+import type { WorkspaceActionBoundary } from "./perform-workspace-action.ts";
 import { performWorkspaceObservation } from "./perform-workspace-observation.ts";
-import { operationRoundScope } from "../../core/operation-identity.ts";
 
 export type OperationRuntimeBoundary = WorkspaceActionBoundary | "before_result_persist";
 
@@ -72,18 +68,12 @@ export function createOperationExecutor(
           });
         }
       }
-      const scopeId = operationRoundScope(input.envelope.binding);
       const existing = await resultStore.find({
         binding: input.envelope.binding,
         request: input.request,
         modelSelection: input.envelope.modelSelection,
       });
-      if (existing) {
-        if (input.request.kind === "workspace_artifact_action") {
-          cleanupWorkspaceAction(store, scopeId, input.request);
-        }
-        return existing;
-      }
+      if (existing) return existing;
       const result = await performOperation(input, options, store, afterWorkspaceBoundary).catch((error: unknown) => {
         if (error instanceof OperationRejectedError) {
           return rejectedOperation(input.request, error);
@@ -110,9 +100,6 @@ export function createOperationExecutor(
         result,
         modelSelection: input.envelope.modelSelection,
       });
-      if (input.request.kind === "workspace_artifact_action") {
-        cleanupWorkspaceAction(store, scopeId, input.request);
-      }
       return projection;
     },
   };

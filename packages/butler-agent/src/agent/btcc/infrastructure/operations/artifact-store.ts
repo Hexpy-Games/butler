@@ -1,9 +1,18 @@
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Database } from "bun:sqlite";
 import type { WorkspaceProvision } from "../../artifact/index.ts";
-import type { ObservationResult, OperationRequest } from "../../core/index.ts";
-import type { MaterializedSnapshot, TargetKind } from "./target-snapshot.ts";
+import type {
+  ObservationResult,
+  OperationPayloadSource,
+  OperationRequest,
+} from "../../core/index.ts";
+import type { CommandExecutionSummary } from "../../operation-result/index.ts";
+import {
+  ArtifactSnapshotRepository,
+  type MaterializedSnapshot,
+  type TargetKind,
+} from "../artifact-snapshot/index.ts";
 
 export type StoredWorkspace = {
   key: string;
@@ -31,31 +40,33 @@ export type PromotionIntent = {
 export type WorkspaceActionJournal = {
   request: Extract<OperationRequest, { kind: "workspace_artifact_action" }>;
   workspaceRef: { id: string; sha256: string };
-  overlayRoot: string;
   beforeSnapshotRef: { id: string; sha256: string };
   status:
-    | "reserved" | "dispatching" | "workspace_observed"
-    | "candidate_prepared" | "workspace_exchanged";
+    | "reserved" | "dispatching" | "tool_completed" | "workspace_observed"
+    | "candidate_prepared" | "workspace_applied";
+  operationOutput?: {
+    content: string;
+    payloadSource?: Exclude<OperationPayloadSource, string>;
+    executionSummary?: CommandExecutionSummary;
+  };
   candidateSnapshotRef?: { id: string; sha256: string };
   result?: ObservationResult;
 };
 
 export class ArtifactStore {
   private readonly database: Database;
+  readonly snapshots: ArtifactSnapshotRepository;
 
   constructor(butlerData: string) {
     const path = join(butlerData, "runtime", "btcc-artifacts.sqlite");
     mkdirSync(dirname(path), { recursive: true });
+    removeLegacyArtifactRuntime(path, butlerData);
     this.database = new Database(path, { create: true });
     this.database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS btcc_artifact_workspaces (
         workspace_key TEXT PRIMARY KEY,
         workspace_id TEXT NOT NULL UNIQUE,
-        value_json TEXT NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS btcc_artifact_snapshots (
-        snapshot_id TEXT PRIMARY KEY,
         value_json TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS btcc_artifact_promotions (
@@ -69,6 +80,11 @@ export class ArtifactStore {
         value_json TEXT NOT NULL
       );
     `);
+    this.database.exec("PRAGMA user_version = 2;");
+    this.snapshots = new ArtifactSnapshotRepository(
+      this.database,
+      join(butlerData, "runtime", "btcc-artifact-blobs", "sha256"),
+    );
   }
 
   loadWorkspaceByKey(key: string): StoredWorkspace | null {
@@ -85,9 +101,8 @@ export class ArtifactStore {
     );
   }
 
-  saveWorkspace(workspace: StoredWorkspace, baseline: MaterializedSnapshot): void {
+  saveWorkspace(workspace: StoredWorkspace): void {
     this.database.transaction(() => {
-      this.saveSnapshot(baseline);
       this.database.query(`
         INSERT INTO btcc_artifact_workspaces(workspace_key, workspace_id, value_json)
         VALUES (?, ?, ?)
@@ -101,22 +116,7 @@ export class ArtifactStore {
   }
 
   loadSnapshot(snapshotId: string): MaterializedSnapshot | null {
-    return this.readJson<MaterializedSnapshot>(
-      "SELECT value_json FROM btcc_artifact_snapshots WHERE snapshot_id = ?",
-      snapshotId,
-    );
-  }
-
-  saveSnapshot(snapshotValue: MaterializedSnapshot): void {
-    this.database.query(`
-      INSERT INTO btcc_artifact_snapshots(snapshot_id, value_json)
-      VALUES (?, ?)
-      ON CONFLICT(snapshot_id) DO NOTHING
-    `).run(snapshotValue.ref.id, JSON.stringify(snapshotValue));
-    const accepted = this.loadSnapshot(snapshotValue.ref.id);
-    if (!accepted || JSON.stringify(accepted) !== JSON.stringify(snapshotValue)) {
-      throw new Error("BTCC snapshot identity conflicts with its materialized bytes");
-    }
+    return this.snapshots.load(snapshotId);
   }
 
   loadPromotion(
@@ -184,6 +184,32 @@ export class ArtifactStore {
   private readJson<Value>(sql: string, identity: string): Value | null {
     const row = this.database.query(sql).get(identity) as { value_json: string } | null;
     return row ? JSON.parse(row.value_json) as Value : null;
+  }
+}
+
+function removeLegacyArtifactRuntime(path: string, butlerData: string): void {
+  if (!existsSync(path) || !isLegacyArtifactDatabase(path)) return;
+  rmSync(path, { force: true });
+  rmSync(`${path}-wal`, { force: true });
+  rmSync(`${path}-shm`, { force: true });
+  rmSync(join(butlerData, "runtime", "btcc-artifacts"), {
+    recursive: true,
+    force: true,
+  });
+}
+
+function isLegacyArtifactDatabase(path: string): boolean {
+  const database = new Database(path, { readonly: true });
+  try {
+    const row = database
+      .query<{ name: string }, []>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'table' AND name = 'btcc_artifact_snapshots'`,
+      )
+      .get();
+    return Boolean(row);
+  } finally {
+    database.close();
   }
 }
 
