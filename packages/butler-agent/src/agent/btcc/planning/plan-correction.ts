@@ -13,6 +13,7 @@ import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import type {
   FeedbackPlanProduct,
   ManagedTask,
+  PlanningCandidate,
   PlanningFindingDecision,
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
@@ -24,6 +25,8 @@ import {
   decodeFindingDecisions,
   requiredFeedbackFindingRefs,
 } from "./finding-decisions.ts";
+import { preserveUnaffectedTaskDrafts } from
+  "./plan-revision/preserve-unaffected-tasks.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -100,8 +103,13 @@ function feedbackPlanningCodec(
       const proposedAuthority = value.correctionKind === "authority_scope_revision"
         ? authorityRevision(currentAuthorityRef, value.authorityChange)
         : undefined;
+      const acceptedPlan = requirePlanningCandidate(state.acceptedPlan);
       const revisedPlan = authorPlanCandidate(
-        requireRecord(value.revisedPlan, "revisedPlan"),
+        preserveUnaffectedTaskDrafts({
+          revisedPlan: requireRecord(value.revisedPlan, "revisedPlan"),
+          impactMap: value.impactMap,
+          acceptedPlan,
+        }),
         {
           ledgerId: requireString(state.ledgerId, "ledgerId"),
           programId: requireString(state.programId, "programId"),
@@ -260,6 +268,14 @@ function requireTaskImpactIndex(value: unknown) {
     status: string;
     hasCurrentResult: boolean;
   }>;
+}
+
+function requirePlanningCandidate(value: unknown): PlanningCandidate {
+  const candidate = requireRecord(value, "acceptedPlan") as unknown as PlanningCandidate;
+  if (!Array.isArray(candidate.tasks) || !Array.isArray(candidate.works)) {
+    throw new Error("Feedback Planning acceptedPlan is incomplete");
+  }
+  return candidate;
 }
 
 function requirePositiveInteger(value: unknown, label: string): number {
