@@ -1,20 +1,12 @@
 import { useEffect, useState } from "react";
-import { Stack, Typo } from "@/butler-ds";
 import type { ProgressRow } from "@/app/types.ts";
-import styles from "./PhaseActivityLog.module.css";
+import { Stack, Typo } from "@/butler-ds";
 
-export function CurrentPhaseActivity({ row }: { row: ProgressRow }) {
-  return (
-    <Typo.Body
-      as="p"
-      data-test-class="turn-phase-activity"
-      data-turn-state={row.state}
-      className={styles.secondary}
-    >
-      {row.safe_label}
-    </Typo.Body>
-  );
-}
+const secondaryText = {
+  color: "var(--text-secondary)",
+  minWidth: 0,
+  overflowWrap: "anywhere",
+} as const;
 
 export function CurrentModelRoundWaiting({
   row,
@@ -30,30 +22,16 @@ export function CurrentModelRoundWaiting({
       aria-label="모델 응답 대기"
     >
       <Stack gap="xs" aria-live="polite">
-        <Typo.Body as="p" className={styles.secondary}>
+        <Typo.Body as="p" style={secondaryText}>
           {showLabel ? row.safe_label : "응답 생성 중"}
           {elapsed ? ` · ${elapsed}` : ""}
         </Typo.Body>
-        <Typo.Caption as="p" className={styles.secondary}>
+        <Typo.Caption as="p" style={secondaryText}>
           마지막으로 공개한 작업 의도를 이어서 응답을 생성 중입니다.
         </Typo.Caption>
       </Stack>
     </section>
   );
-}
-
-export function phaseLabel(phase?: string): string {
-  if (!phase) return "진행";
-  if (phase.startsWith("conception")) return "구상";
-  if (phase === "contract_review") return "구상 검토";
-  if (phase === "planning") return "계획";
-  if (phase === "planning_review") return "계획 검토";
-  if (phase === "task_execution") return "실행";
-  if (phase === "task_review") return "작업 리뷰";
-  if (phase.startsWith("feedback_")) return "피드백 반영";
-  if (phase === "consolidation") return "통합 점검";
-  if (phase === "reporting") return "보고";
-  return "진행";
 }
 
 function useElapsedTime(startedAt?: string): string {
@@ -69,6 +47,5 @@ function useElapsedTime(startedAt?: string): string {
   const totalSeconds = Math.max(0, Math.floor((now - started) / 1_000));
   if (totalSeconds < 60) return `${totalSeconds}초 경과`;
   const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}분 ${seconds}초 경과`;
+  return `${minutes}분 ${totalSeconds % 60}초 경과`;
 }

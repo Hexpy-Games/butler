@@ -4,8 +4,8 @@ import {
   type TypedUiReadModel,
 } from "@/app/utils.ts";
 import type { ProgressRow } from "@/app/types.ts";
-import { CurrentModelRoundWaiting, CurrentPhaseActivity }
-  from "./PhaseActivityLog";
+import { CurrentModelRoundWaiting } from "./CurrentModelRoundWaiting";
+import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
 import { TurnDecisionRow } from "./TurnDecisionRow";
 import { currentModelRoundWait, currentSemanticState, latestPublicActivity,
