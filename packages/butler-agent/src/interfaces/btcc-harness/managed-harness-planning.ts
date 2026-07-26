@@ -1,4 +1,5 @@
 export function submitInitialPlan(state: Record<string, unknown>) {
+  const revising = Object.keys(findingDecisions(state)).length > 0;
   return {
     kind: "plan_candidate",
     ...findingDecisions(state),
@@ -21,7 +22,9 @@ export function submitInitialPlan(state: Record<string, unknown>) {
         }),
         taskSubmission({
           logicalId: "write-guide",
-          intendedOutcome: "조사 결과를 짧고 실행 가능한 가이드로 작성",
+          intendedOutcome: revising
+            ? "조사 결과를 짧고 실행 가능한 가이드로 작성하고 완료 조건을 명시"
+            : "조사 결과를 짧고 실행 가능한 가이드로 작성",
           executionOrdinal: 2,
           dependencyTaskIds: ["research-principles"],
           criterion: "가이드가 짧고 실행 가능한 적용 지침을 제공한다",
@@ -139,7 +142,7 @@ export function submitPlanningReview(
   if (revisionRequired) {
     const review = planningReviewSubjects(
       state,
-      "task:",
+      "task:write-guide",
       "task_executability",
       "두 번째 Task의 완료 조건을 더 명확히 표현해야 한다",
     );
@@ -150,13 +153,21 @@ export function submitPlanningReview(
       ...review,
     };
   }
+  const priorVerdicts = priorPlanningFindingVerdicts(state);
+  if (Object.keys(priorVerdicts).length > 0) {
+    return {
+      kind: "planning_review",
+      verdict: "accepted",
+      findings: [],
+      ...priorVerdicts,
+    };
+  }
   return {
     kind: "planning_review",
     reviewedEffectIntentRefs: nestedRecordRefs(state, "effectIntents"),
     reviewedIntegrationCriterionRefs: nestedRecordRefs(state, "integrationCriteria"),
     verdict: "accepted",
     coverage: planningReviewCoverage(),
-    ...priorPlanningFindingVerdicts(state),
     ...planningReviewSubjects(state),
   };
 }

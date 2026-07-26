@@ -22,6 +22,8 @@ import { attestCandidateBundle } from "./review-plan-attestation.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import {
   planningReviewSubjects,
+  projectDimensionCoverage,
+  projectSubjectCoverage,
   requireDimensionCoverage,
   requireSubjectCoverage,
   resolvePlanningReviewFindings,
@@ -51,6 +53,11 @@ const CONTRACT: PhaseContract = {
   ],
   authoringContractRefs: PLANNING_AUTHORING_CONTRACTS.map((contract) => contract.contractId),
   authoringContracts: PLANNING_AUTHORING_CONTRACTS,
+};
+
+const CORRECTION_VERIFICATION_CONTRACT: PhaseContract = {
+  ...CONTRACT,
+  objective: "verify_the_frozen_planning_findings_against_the_exact_revision",
 };
 
 function reviewCodec(
@@ -89,17 +96,17 @@ function reviewCodec(
         subjects,
         priorBlocking,
       );
-      const reviewedSubjects = requireSubjectCoverage(
-        value.subjects,
-        subjects,
-        decodedFindings.findings,
-      );
+      const reviewedSubjects = priorBlocking.length > 0
+        ? projectSubjectCoverage(subjects, decodedFindings.findings)
+        : requireSubjectCoverage(value.subjects, subjects, decodedFindings.findings);
       preserveRevisionReviewScope(
         materialized,
         reviewedSubjects,
         envelope.context.stateInput,
       );
-      const coverage = requireDimensionCoverage(value.coverage, reviewedSubjects);
+      const coverage = priorBlocking.length > 0
+        ? projectDimensionCoverage(reviewedSubjects)
+        : requireDimensionCoverage(value.coverage, reviewedSubjects);
       const blockingFindings = orderedBlockingFindings(reviewedSubjects);
       const submittedFindings = blockingFindings.map((finding) => finding.message);
       const reviewBase = exactReviewBase(
@@ -285,6 +292,7 @@ export function reviewPlan(command: PhaseInvocation) {
   const requiredReviewSubjects = isDraft(candidate.candidate)
     ? []
     : planningReviewSubjects(candidate.candidate);
+  const priorBlocking = requiredPlanningFindings(prior);
   return runPhaseConversation({
     ...command,
     context: {
@@ -294,7 +302,9 @@ export function reviewPlan(command: PhaseInvocation) {
         requiredReviewSubjects,
       },
     },
-    phaseContract: CONTRACT,
+    phaseContract: priorBlocking.length > 0
+      ? CORRECTION_VERIFICATION_CONTRACT
+      : CONTRACT,
     codec: reviewCodec(candidate, prior),
   });
 }

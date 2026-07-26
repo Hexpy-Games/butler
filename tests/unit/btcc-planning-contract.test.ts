@@ -125,6 +125,8 @@ describe("BTCC Planning contract", () => {
     expect(planningRevision).toContain('"enum":["resolved","unresolved"]');
     expect(planningRevision).toContain('"enum":["planning-root-cause-1"]');
     expect(planningRevision).not.toContain('"const":"initial_review"');
+    expect(planningRevision).not.toContain('"coverage"');
+    expect(planningRevision).not.toContain('"subjects"');
 
     const schema = JSON.stringify(feedbackPlanReviewSubmissionSchema([]));
     expect(schema).toContain('"const":"accepted"');
@@ -474,8 +476,7 @@ describe("BTCC Planning contract", () => {
     const accepted = await reviewPlan(reviewInvocation(revised, {
       kind: "planning_review",
       verdict: "accepted",
-      coverage: acceptedCoverage(),
-      subjects: expanded,
+      findings: [],
       priorFindingVerdicts: [{
         rootCauseKey: originalFinding.rootCauseKey,
         verdict: "resolved",
@@ -523,8 +524,7 @@ describe("BTCC Planning contract", () => {
     const accepted = await reviewPlan(reviewInvocation(revised, {
       kind: "planning_review",
       verdict: "accepted",
-      coverage: acceptedCoverage(),
-      subjects: acceptedSubjects(revised),
+      findings: [],
       priorFindingVerdicts: reviewed.review.findingSet.findings
         .filter((finding) => finding.recommendedDisposition === "required_now")
         .map((finding) => ({

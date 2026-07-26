@@ -41,7 +41,7 @@ const COMPACT_CONTRACTS = [
       "Planning Review judges the exact materialized candidate bytes against the immutable selected governing Spec bodies and returns one complete finding set covering every required review dimension.",
       "Planning Review separates complete subject coverage from root causes: one required correction has one rootCauseKey, one top-level immutable Finding, every affected subject id, the highest applicable priority, and one correction decision; runtime projects that one Finding to its affected subjects, so subjects never duplicate Finding links or bodies.",
       "A PlanningDraft validation finding is already one runtime-owned P0 root cause; Planning Review never restates that defect as a second semantic Finding and adds only independent root causes established by the same complete pass.",
-      "A revised candidate is checked against the exact prior finding set and every complete review dimension in one pass; do not defer an available independent finding to another correction cycle.",
+      "A revised candidate is checked only against the exact frozen prior finding set and accepted finding decisions; re-review returns one resolution verdict per frozen root cause and cannot add another Finding.",
       "Implementation repair preserves the accepted graph; graph changes require governing review.",
     ],
   },
