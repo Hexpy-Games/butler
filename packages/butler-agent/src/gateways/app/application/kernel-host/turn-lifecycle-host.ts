@@ -80,7 +80,7 @@ export interface AppStoreKernelTurnLifecycleHost {
   ): Promise<void>;
   sessionHasActiveTurn(sessionId: string): boolean;
   reconcileDeliveredSystemResponderTurns(sessionId: string): void;
-  reconcileCancelledTurnActivityMessages(): void;
+  reconcileCancelledTurnActivityMessages(sessionId?: string): void;
   insertTurn(
     chatId: string,
     state: TurnState,
@@ -175,8 +175,8 @@ export function createTurnLifecycleHost(
     reconcileDeliveredSystemResponderTurns(sessionId) {
       kernel.turnActions.reconcileDeliveredSystemResponderTurns(sessionId);
     },
-    reconcileCancelledTurnActivityMessages() {
-      kernel.turnActions.reconcileCancelledTurnActivityMessages();
+    reconcileCancelledTurnActivityMessages(sessionId) {
+      kernel.turnActions.reconcileCancelledTurnActivityMessages(sessionId);
     },
     insertTurn(chatId, state, safeStatusLabel, controlResolution) {
       return kernel.turns.insertTurn(

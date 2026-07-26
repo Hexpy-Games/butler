@@ -33,6 +33,7 @@ export class AppTurnCancellation {
 
     this.recordDecision(row);
     if (!this.input.cancelResponder(turnId)) {
+      this.input.ensureCancelledTurnActivityMessage(row.chat_id, turnId);
       return emptyResult(this.input.getTurn(turnId));
     }
 
