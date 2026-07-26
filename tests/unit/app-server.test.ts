@@ -969,6 +969,87 @@ test("app server live events stream matches replay for turn events", async () =>
   }
 });
 
+test("live stream requests one snapshot reconciliation instead of replaying an unbounded backlog", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    port: 0,
+  });
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    for (let index = 0; index < 250; index += 1) {
+      server.store.appendSafeServerEvent("test.backlog", { index });
+    }
+    const response = await fetch(`${server.url}events/live?cursor=0`);
+    reader = response.body?.getReader();
+    if (!reader) throw new Error("Missing SSE body.");
+
+    const event = await readSseEvent(
+      reader,
+      (candidate) => candidate.type === "stream.reconcile_required",
+    );
+
+    expect(event.id).toBe(server.store.latestEventCursor());
+    expect(event.payload).toMatchObject({
+      after_cursor: 0,
+      high_water_cursor: event.id,
+    });
+  } finally {
+    await reader?.cancel().catch(() => undefined);
+    server.stop();
+  }
+});
+
+test("one server-owned transcript watcher projects changes without a client refresh", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const result = await postJson(`${server.url}messages`, {
+      chat_id: "general",
+      text: "project from the transcript watcher",
+    });
+    const turnId = result.data.turn.id;
+    const userMessageId = result.data.accepted.id;
+    appendTranscriptEvent(
+      createTranscriptEvent({
+        sessionId: "butler/app-general",
+        kind: "outbound",
+        transport: "app",
+        timestamp: "2026-07-26T12:00:00.000Z",
+        payload: {
+          actionId: `watcher-progress:${userMessageId}`,
+          accountId: "local",
+          peer: { kind: "dm", id: "general" },
+          message: { text: "", replyToMessageId: userMessageId },
+          metadata: {
+            kind: "tool_progress",
+            activityKind: "searched",
+            toolName: "Search",
+            safeLabel: "Search: watcher projection",
+            inputLabel: "watcher projection",
+            toolCallId: "watcher-tool",
+          },
+        },
+      }),
+    );
+
+    await waitForCondition(() => {
+      const row = server.store.db
+        .query<{ count: number }, [string]>(
+          `SELECT COUNT(*) AS count FROM events
+           WHERE type = 'progress.summary'
+             AND json_extract(payload_json, '$.turn_id') = ?`,
+        )
+        .get(turnId);
+      return row?.count === 1;
+    });
+  } finally {
+    server.stop();
+  }
+});
+
 test("app server persists and replays deterministic acknowledgement before later turn events", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),

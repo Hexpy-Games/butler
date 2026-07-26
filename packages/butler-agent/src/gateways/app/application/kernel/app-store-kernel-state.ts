@@ -78,6 +78,7 @@ export interface AppStoreKernelState {
   turnActions: AppSessionModuleGraph["turnActions"];
   appTransportQueue: AppTransportModuleGraph["appTransportQueue"];
   transportProjection: AppTransportModuleGraph["transportProjection"];
+  transportProjectionOwner: AppTransportModuleGraph["transportProjectionOwner"];
   turns: AppTurnRecordStore;
   automationStore: AppAutomationStore;
   messageFiles: AppMessageFileStore;

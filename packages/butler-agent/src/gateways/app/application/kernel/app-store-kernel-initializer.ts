@@ -223,6 +223,7 @@ export function initializeAppStoreKernel(
   });
   kernel.appTransportQueue = transportModules.appTransportQueue;
   kernel.transportProjection = transportModules.transportProjection;
+  kernel.transportProjectionOwner = transportModules.transportProjectionOwner;
   kernel.integrations = new AppIntegrationStore(
     kernel.butlerData,
     kernel.butlerHome,
@@ -280,6 +281,7 @@ export function initializeAppStoreKernel(
     kernel.settingsPersistence.readStoredProjectWorkspaceRoot() ??
     kernel.projectWorkspaceRoot;
   seedAppStoreDefaults(kernel.db);
+  kernel.transportProjectionOwner.start();
   kernel.turnActions.reconcileCancellationSettlements();
   kernel.reconcileCancelledTurnActivityMessages();
 }

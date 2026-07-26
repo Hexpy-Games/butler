@@ -1378,7 +1378,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain('message.status === "failed"');
   expect(renderer).toContain("isRuntimeFaultRetryableMessage(message)");
   expect(renderer).toContain("onRetryTurn(turnId)");
-  expect(renderer).toContain("eventPollingRef");
+  expect(renderer).not.toContain("eventPollingRef");
   expect(renderer).toContain("function collapseAssistantAttempts");
   expect(renderer).toContain("function WorkerComposerPanel");
   expect(renderer).toContain("function ContextPanel");
@@ -2221,12 +2221,19 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(
     read("packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts"),
   ).not.toContain("SESSION_SUMMARY_IDLE_REFRESH_MS");
+  const liveSessionEvents = read(
+    "packages/butler-app/client/ui/src/hooks/live-session/useLiveSessionEvents.ts",
+  );
   expect(
     read("packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts"),
-  ).toContain("shouldFollowSessionEvents");
+  ).not.toContain("SESSION_SUMMARY_ACTIVE_REFRESH_MS");
   expect(
     read("packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts"),
-  ).toContain("hasCompleteCachedSession");
+  ).not.toContain("/events?cursor=");
+  expect(liveSessionEvents).toContain("subscribeLiveEvents(");
+  expect(liveSessionEvents).toContain("projectedEventCursor");
+  expect(liveSessionEvents).toContain('event.type === "stream.reconcile_required"');
+  expect(liveSessionEvents).not.toContain("setInterval(");
   expect(
     read("packages/butler-app/client/ui/src/hooks/useAppBootstrap.ts"),
   ).toContain("if (cursor > 0)");
@@ -3097,8 +3104,13 @@ test("composer adjunct panels use design-system blocks inside the composer card"
   expect(todoProgressPanelStyles).not.toContain("box-shadow");
   expect(todoProgressPanelStyles).not.toContain("background:");
   expect(todoProgressPanelStyles).not.toContain("border:");
-  expect(bootstrap).toContain("activeWorkerVisible");
-  expect(bootstrap).toContain("hasFollowableWorkerActivity(data.workers)");
+  expect(bootstrap).not.toContain("activeWorkerVisible");
+  expect(bootstrap).not.toContain("hasFollowableWorkerActivity(data.workers)");
+  expect(
+    read(
+      "packages/butler-app/client/ui/src/hooks/live-session/useLiveSessionEvents.ts",
+    ),
+  ).toContain("subscribeLiveEvents(");
 });
 
 describe("app-client design system foundation", () => {

@@ -39,6 +39,7 @@ export interface AppStoreRuntimeApi {
     sinceTs?: number | null;
   }): UsageMonitorView;
   syncAllAppTransportEvents(): number;
+  latestEventCursor(): number;
   replayEvents(cursor?: number): AppEventEnvelope[];
   subscribeEvents(listener: (event: AppEventEnvelope) => void): () => void;
   appendSafeServerEvent(
@@ -59,6 +60,7 @@ export function createRuntimeStoreApi(
     close() {
       if (kernel.closed) return;
       try {
+        kernel.transportProjectionOwner.close();
         kernel.db.query("PRAGMA wal_checkpoint(TRUNCATE)").all();
       } finally {
         kernel.sessionBindingStore.close();
@@ -105,8 +107,10 @@ export function createRuntimeStoreApi(
     syncAllAppTransportEvents() {
       return kernel.transportProjection.syncAll();
     },
+    latestEventCursor() {
+      return kernel.events.latestCursor();
+    },
     replayEvents(cursor = 0) {
-      kernel.transportProjection.syncAll();
       return kernel.events.replay(cursor);
     },
     subscribeEvents(listener) {

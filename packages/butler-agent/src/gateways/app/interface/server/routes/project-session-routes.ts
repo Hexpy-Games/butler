@@ -30,7 +30,6 @@ export async function handleProjectSessionRoutes(
     return json(apiEnvelope(input.store.listChats()));
   }
   if (input.request.method === "GET" && url.pathname === "/navigation") {
-    input.store.syncAllAppTransportEvents();
     return json(apiEnvelope<NavigationView>(input.store.listNavigation()));
   }
   if (input.request.method === "GET" && url.pathname === "/new-chat-briefing") {
