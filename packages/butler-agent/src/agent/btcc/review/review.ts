@@ -70,12 +70,21 @@ function isReviewableResult(
   result: NonNullable<ReturnType<typeof requireManagedProgram>["currentTask"]["currentResult"]>,
 ): boolean {
   if (task.status !== "result_submitted") return false;
-  const source = task.revalidationSource;
+  const attempt = task.attempts.at(-1);
+  const source = task.revalidationSource ?? (
+    attempt?.status === "result_submitted" &&
+    sameRef(attempt.attemptRecord.taskRef, result.result.taskRef) &&
+    !sameRef(result.result.taskRef, task.task.ref)
+      ? {
+          priorTaskRef: result.result.taskRef,
+          resultRef: result.result.ref,
+        }
+      : undefined
+  );
   if (!source) {
     return result.result.taskRef.id === task.task.ref.id &&
       result.result.taskRevisionSha256 === task.task.ref.sha256;
   }
-  const attempt = task.attempts.at(-1);
   return Boolean(
     attempt &&
     attempt.status === "result_submitted" &&
