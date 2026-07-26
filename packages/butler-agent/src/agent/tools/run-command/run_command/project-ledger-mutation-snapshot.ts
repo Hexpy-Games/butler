@@ -47,7 +47,7 @@ export function createProjectLedgerMutationSnapshot(input: {
   if (isProjectLedgerCliCommand(input.command, input)) return null;
   if (!mayMutateProjectLedger(input.command) && !hasOpaqueExecution(input.command)) return null;
   const roots = protectedRoots(input.workspacePath, input.butlerData, {
-    includeHome: hasOpaqueExecution(input.command) || mayTouchHomeFallback(input.command),
+    includeHome: mayTouchHomeFallback(input.command),
   });
   if (roots.length === 0) return null;
   const backupDir = mkdtempSync(join(tmpdir(), "butler-project-ledger-snapshot-"));
