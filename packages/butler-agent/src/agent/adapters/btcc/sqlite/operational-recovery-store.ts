@@ -69,6 +69,21 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
     `).run(receipt.interruptionId);
   }
 
+  async activateInheritedRuntimeRemediations(): Promise<void> {
+    this.db.query(`
+      UPDATE btcc_operational_interruptions
+      SET status = 'ready'
+      WHERE status = 'interrupted' AND activation_kind = 'runtime_remediation'
+        AND EXISTS (
+          SELECT 1 FROM btcc_state_claims claim
+          JOIN btcc_turns turn ON turn.turn_id = btcc_operational_interruptions.turn_id
+          WHERE claim.claim_id = btcc_operational_interruptions.claim_id
+            AND claim.status = 'active'
+            AND turn.semantic_state NOT IN ('delivered', 'cancelled')
+        )
+    `).run();
+  }
+
   async pending(
     anchor: OperationalCheckpointAnchor,
   ) {

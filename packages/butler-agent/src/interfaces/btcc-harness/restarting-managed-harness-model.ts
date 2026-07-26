@@ -8,9 +8,13 @@ type PhaseEnvelope = Parameters<BtccRuntimeDependencies["model"]["runRound"]>[0]
 export class RestartingManagedHarnessModel extends ManagedHarnessModel {
   private readonly marker: string;
 
-  constructor(dataRoot: string) {
+  constructor(
+    dataRoot: string,
+    private readonly activation: "automatic_provider_recovery" | "runtime_remediation" =
+      "automatic_provider_recovery",
+  ) {
     super(false);
-    this.marker = join(dataRoot, "task-execution-interrupted-once");
+    this.marker = join(dataRoot, `task-execution-${activation}-once`);
   }
 
   override runRound(envelope: PhaseEnvelope) {
@@ -19,7 +23,7 @@ export class RestartingManagedHarnessModel extends ManagedHarnessModel {
       return Promise.resolve({
         kind: "interruption" as const,
         code: "simulated_provider_unavailable",
-        activation: { kind: "automatic_provider_recovery" as const },
+        activation: { kind: this.activation },
       });
     }
     return super.runRound(envelope);

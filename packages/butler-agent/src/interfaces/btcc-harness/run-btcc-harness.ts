@@ -55,6 +55,7 @@ type HarnessOptions = {
     | "managed-continuation"
     | "managed-consolidation-repair"
     | "managed-restart-once"
+    | "managed-runtime-remediation-once"
     | NoLedgerScenario;
 };
 
@@ -226,7 +227,8 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-promotion-deferral" ||
     value === "managed-continuation" ||
     value === "managed-consolidation-repair" ||
-    value === "managed-restart-once"
+    value === "managed-restart-once" ||
+    value === "managed-runtime-remediation-once"
   ) return value;
   if (
     value === "direct-greeting" ||
@@ -242,6 +244,10 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
   if (scenario === "managed-restart-once") {
     if (!dataRoot) throw new Error("Restart scenario requires a data root");
     return new RestartingManagedHarnessModel(dataRoot);
+  }
+  if (scenario === "managed-runtime-remediation-once") {
+    if (!dataRoot) throw new Error("Restart scenario requires a data root");
+    return new RestartingManagedHarnessModel(dataRoot, "runtime_remediation");
   }
   if (
     scenario === "managed-pass" ||

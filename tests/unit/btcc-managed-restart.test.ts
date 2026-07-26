@@ -72,9 +72,46 @@ describe("BTCC managed restart", () => {
     expect(output).toContain('"kind":"delivered"');
     assertResumedTurn(dataRoot);
   });
+
+  test("new process re-enters inherited runtime remediation at the exact phase", async () => {
+    const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-runtime-repair-"));
+    temporaryRoots.push(dataRoot);
+    const args = harnessArgs(
+      dataRoot,
+      "turn-runtime-repair",
+      "managed-runtime-remediation-once",
+    );
+    const first = Bun.spawn(args, {
+      cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
+    });
+    await waitForInterruption(dataRoot);
+    first.kill();
+    await first.exited;
+
+    const resumed = Bun.spawn(args, {
+      cwd: resolve(import.meta.dir, "../.."), stderr: "pipe", stdout: "pipe",
+    });
+    const [exit, output, error] = await Promise.all([
+      resumed.exited,
+      new Response(resumed.stdout).text(),
+      new Response(resumed.stderr).text(),
+    ]);
+    expect(error).toBe("");
+    expect(exit).toBe(0);
+    const result = JSON.parse(output) as { phases: string[]; initial: { kind: string } };
+    expect(result.initial.kind).toBe("delivered");
+    expect(result.phases[0]).toBe("task_execution");
+    expect(result.phases).not.toContain("conception_opening");
+    expect(result.phases).not.toContain("planning");
+    assertResumedTurn(dataRoot);
+  });
 });
 
-function harnessArgs(dataRoot: string, turnId: string): string[] {
+function harnessArgs(
+  dataRoot: string,
+  turnId: string,
+  scenario = "managed-restart-once",
+): string[] {
   return [
     process.execPath,
     "run",
@@ -89,13 +126,13 @@ function harnessArgs(dataRoot: string, turnId: string): string[] {
     "--provider", "harness",
     "--model", "managed-v1",
     "--effort", "medium",
-    "--scenario", "managed-restart-once",
+    "--scenario", scenario,
   ];
 }
 
 async function waitForInterruption(dataRoot: string): Promise<void> {
   const dbPath = join(dataRoot, "runtime", "btcc-successor.sqlite");
-  for (let index = 0; index < 100; index += 1) {
+  for (let index = 0; index < 500; index += 1) {
     if (existsSync(dbPath)) {
       const db = new Database(dbPath, { readonly: true });
       try {

@@ -55,8 +55,9 @@ export function openBtccSqliteStores(input: {
     input.dbPath,
     createProviderRecoveryReadiness(),
   );
+  const operationalRecoveryStore = new SqliteOperationalRecoveryStore(db);
   const operationalRecovery = createOperationalRecoveryBoundary(
-    new SqliteOperationalRecoveryStore(db),
+    operationalRecoveryStore,
     sqliteWriteReadiness,
   );
   return {
@@ -73,6 +74,10 @@ export function openBtccSqliteStores(input: {
     phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     operationalRecovery,
+    operationalRecoveryStartup: {
+      activateInheritedRuntimeRemediations: () =>
+        operationalRecoveryStore.activateInheritedRuntimeRemediations(),
+    },
     committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {
       owner.close();
