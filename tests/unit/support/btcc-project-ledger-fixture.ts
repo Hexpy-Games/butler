@@ -380,6 +380,7 @@ async function loadProjectLedgerCore() {
     initProject: commands.initProject,
     ledgerRoot: fileSystem.ledgerRoot,
     createRecord: recordCommands.createRecord,
+    updateRecord: recordCommands.updateRecord,
     resolveRecord: recordCommands.resolveRecord,
     createWork: lifecycle.createWork,
     createTask: lifecycle.createTask,
