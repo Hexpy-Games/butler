@@ -10,7 +10,7 @@ import type {
   TurnSemanticState,
 } from "./turn/index.ts";
 import type { ManagedAttempt } from "./work/index.ts";
-import type { DeferredContinuationCandidate } from "./continuation/index.ts";
+import type { ContinuationCandidate } from "./continuation/index.ts";
 import type { ManagedDeferralProduct } from "./deferral/index.ts";
 import type {
   AcceptedPhaseGuidance,
@@ -120,5 +120,5 @@ export type BtccPersistenceTypes = {
   resultCandidateProduct: ResultCandidateProduct;
   taskReviewProduct: TaskReviewProduct;
   managedDeferralProduct: ManagedDeferralProduct;
-  deferredContinuationCandidate: DeferredContinuationCandidate;
+  continuationCandidate: ContinuationCandidate;
 };

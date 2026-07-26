@@ -274,7 +274,8 @@ function semanticBody(value: { ref: Ref } & Record<string, unknown>): string {
   return body;
 }
 
-function projectWorkStatus(status: "planned" | "active" | "closed"): string {
+function projectWorkStatus(status: "planned" | "active" | "closed" | "cancelled"): string {
+  if (status === "cancelled") return "cancelled";
   return status === "planned" ? "specified" : status === "active" ? "in_progress" : "done";
 }
 
@@ -283,6 +284,7 @@ function projectTaskStatus(status: Extract<Program, { planningState: "reviewed" 
   if (status === "accepted") return "done";
   if (status === "review_failed") return "failed";
   if (status === "promotion_deferred") return "blocked";
+  if (status === "cancelled") return "cancelled";
   return "in_progress";
 }
 

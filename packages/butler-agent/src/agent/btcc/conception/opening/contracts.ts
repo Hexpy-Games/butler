@@ -54,7 +54,23 @@ export type OpeningContinuationProduct = {
   };
 };
 
-export type OpeningProduct = OpeningAnswerProduct | OpeningContinuationProduct;
+export type OpeningWorkCancellationProduct = {
+  kind: "opening_work_cancellation";
+  route: "managed";
+  candidate: import("../../continuation/index.ts").ContinuationCandidate;
+  cancellation: {
+    ref: ContentRef;
+    kind: "cancel_work";
+    reason: string;
+    sourceTurnId: string;
+    programId: string;
+  };
+};
+
+export type OpeningProduct =
+  | OpeningAnswerProduct
+  | OpeningContinuationProduct
+  | OpeningWorkCancellationProduct;
 
 export type OpeningFulfillment = {
   requestObligation: string;

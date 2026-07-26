@@ -18,9 +18,37 @@ export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
     ) {
       return decodeOpeningContinuation(submission, envelope.binding.turnId);
     }
+    if (isRecord(submission) && submission.kind === "cancel_work") {
+      return decodeWorkCancellation(submission, envelope);
+    }
     return decodeOpeningAnswerProduct(submission, envelope);
   },
 };
+
+function decodeWorkCancellation(
+  value: Record<string, unknown>,
+  envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
+): OpeningProduct {
+  if (!isNonEmptyString(value.continuationCandidateId) || !isNonEmptyString(value.reason)) {
+    throw new Error("Opening cancel_work decision is invalid");
+  }
+  const candidate = envelope.context.continuationCandidates?.find(
+    (item) => item.candidateId === value.continuationCandidateId,
+  );
+  if (!candidate) throw new Error("Opening cancel_work selected an unavailable Program");
+  const body = {
+    kind: "cancel_work" as const,
+    reason: value.reason,
+    sourceTurnId: candidate.sourceTurnId,
+    programId: candidate.programId,
+  };
+  return {
+    kind: "opening_work_cancellation",
+    route: "managed",
+    candidate,
+    cancellation: { ref: contentRef("work-cancellation", body), ...body },
+  };
+}
 
 export function decodeOpeningAnswerProduct(
   submission: unknown,

@@ -38,9 +38,12 @@ export function ledgerCommit<M extends WorkLedgerMutation>(
 }
 
 function continuationBaseManifestHash(mutation: WorkLedgerMutation): string | undefined {
+  if (mutation.kind === "cancel_program") {
+    return mutation.baseManifestHash;
+  }
   if (mutation.kind !== "bind_program") return undefined;
   const binding = mutation.product.authority.managedBinding.continuationBinding;
-  return binding.kind === "deferred_goal" ? binding.baseManifestHash : undefined;
+  return binding.kind !== "new_request" ? binding.baseManifestHash : undefined;
 }
 
 function ledgerIdentity(mutation: WorkLedgerMutation) {

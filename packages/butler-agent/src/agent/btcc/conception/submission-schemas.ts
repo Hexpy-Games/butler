@@ -45,6 +45,11 @@ export const openingSubmissionSchema = variantsSchema(
     "managed_continuation",
     enumSchema("target_change", "persistent_artifact", "external_effect", "durable_work"),
   ),
+  objectSchema({
+    kind: literalSchema("cancel_work"),
+    continuationCandidateId: textSchema(),
+    reason: textSchema(),
+  }),
 );
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),

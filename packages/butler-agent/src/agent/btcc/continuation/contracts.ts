@@ -1,6 +1,7 @@
 import type { ContentRef } from "../core/index.ts";
 
-export type DeferredContinuationCandidate = {
+export type ContinuationCandidate = {
+  continuationKind: "managed_deferral" | "user_stopped";
   candidateId: string;
   ledgerId: string;
   programId: string;
@@ -10,10 +11,10 @@ export type DeferredContinuationCandidate = {
   originalGoalContractRef: ContentRef;
   anchorRef: ContentRef;
   blockerRef: ContentRef;
-  context?: DeferredContinuationContext;
+  context?: ContinuationContext;
 };
 
-export type DeferredContinuationContext = {
+export type ContinuationContext = {
   originalGoalContract: Record<string, unknown> | null;
   blocker: {
     sourceState: string;
@@ -25,7 +26,18 @@ export type DeferredContinuationContext = {
     currentTaskRef?: ContentRef;
     openWorkRefs: ContentRef[];
     openTaskRefs: ContentRef[];
+    completedTasks?: ContinuationTaskState[];
+    interruptedTask?: ContinuationTaskState;
+    pendingTasks?: ContinuationTaskState[];
   };
+};
+
+export type ContinuationTaskState = {
+  task: Record<string, unknown> & { ref: ContentRef };
+  status: "reviewed_passed" | "interrupted" | "pending";
+  dependencyTaskRefs: ContentRef[];
+  resultRef?: ContentRef;
+  reviewRef?: ContentRef;
 };
 
 export type ContinuationBinding =
@@ -42,4 +54,19 @@ export type ContinuationBinding =
       sourceTurnId: string;
       originalGoalContractRef: ContentRef;
       anchorRef: ContentRef;
+      context?: ContinuationContext;
+    }
+  | {
+      kind: "stopped_program";
+      inboxId: string;
+      ref: ContentRef;
+      candidateId: string;
+      ledgerId: string;
+      programId: string;
+      expectedManifestRevision: number;
+      baseManifestHash: string;
+      sourceTurnId: string;
+      originalGoalContractRef: ContentRef;
+      anchorRef: ContentRef;
+      context?: ContinuationContext;
     };

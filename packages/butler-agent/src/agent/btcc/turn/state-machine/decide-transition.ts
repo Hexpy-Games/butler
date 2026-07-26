@@ -77,6 +77,25 @@ function acceptedTransition(
       product: event.product,
     };
   }
+  if (turn.semanticState === "conception_opening" && event.kind === "WorkCancellationAccepted") {
+    const candidate = event.product.candidate;
+    return {
+      kind: "accept_work_cancellation",
+      successor: "cancelled",
+      product: event.product,
+      ledgerCommit: ledgerCommit(turn, {
+        kind: "cancel_program",
+        cursor: {
+          ledgerId: candidate.ledgerId,
+          programId: candidate.programId,
+          expectedManifestRevision: candidate.expectedManifestRevision,
+        },
+        continuationCandidateId: candidate.candidateId,
+        baseManifestHash: candidate.baseManifestHash,
+        cancellation: event.product.cancellation,
+      }),
+    };
+  }
   if (turn.semanticState === "conception_deliberation" && event.kind === "GoalContractCandidateSubmitted") {
     return { kind: "submit_goal_candidate", successor: "contract_review", product: event.product };
   }

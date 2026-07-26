@@ -15,7 +15,7 @@ type ProgramRow = {
   accepted_plan_ref: string | null;
   accepted_plan_candidate_ref: string | null;
   planning_review_ref: string | null;
-  frontier: "unplanned" | "implementation_open" | "promotion_open" | "closed";
+  frontier: "unplanned" | "implementation_open" | "promotion_open" | "closed" | "cancelled";
   ledger_id: string;
   manifest_revision: number;
   pending_correction_plan_ref: string | null;
@@ -23,6 +23,7 @@ type ProgramRow = {
   promotion_permit_ref: string | null;
   active_deferral_ref: string | null;
   promotion_deferral_ref: string | null;
+  cancellation_ref: string | null;
   available_specs_json: string;
   governing_spec_refs_json: string;
 };
@@ -96,6 +97,8 @@ export class SqliteWorkLedgerProgramReader {
         : {}),
       frontier: program.frontier === "closed"
         ? "closed"
+        : program.frontier === "cancelled"
+          ? "cancelled"
         : program.frontier === "promotion_open"
           ? "promotion_open"
           : "implementation_open",
@@ -115,6 +118,9 @@ export class SqliteWorkLedgerProgramReader {
             ),
           }
         : {}),
+      ...(program.cancellation_ref
+        ? { cancellation: this.loadRecord(program.cancellation_ref) }
+        : {}),
     };
   }
 
@@ -123,7 +129,7 @@ export class SqliteWorkLedgerProgramReader {
       SELECT goal_contract_ref, authority_ref, accepted_plan_ref, accepted_plan_candidate_ref,
         planning_review_ref, frontier, ledger_id, manifest_revision,
         pending_correction_plan_ref, promotion_assembly_refs_json,
-        promotion_permit_ref, active_deferral_ref, promotion_deferral_ref,
+        promotion_permit_ref, active_deferral_ref, promotion_deferral_ref, cancellation_ref,
         available_specs_json, governing_spec_refs_json
       FROM btcc_programs WHERE program_id = ?
     `).get(programId);

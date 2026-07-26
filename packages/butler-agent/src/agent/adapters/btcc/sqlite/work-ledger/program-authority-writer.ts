@@ -4,12 +4,20 @@ import type {
   WorkLedgerCommit,
 } from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
+import { SqliteContinuedPlanWriter } from "./continued-plan-writer.ts";
+import { StoppedContinuationRegistry } from "../stopped-continuation-registry.ts";
 
 type BindProgram = Extract<WorkLedgerCommit["mutation"], { kind: "bind_program" }>;
 type InstallPlan = Extract<WorkLedgerCommit["mutation"], { kind: "install_reviewed_plan" }>;
 
 export class SqliteProgramAuthorityWriter {
-  constructor(private readonly db: Database) {}
+  private readonly continuedPlans: SqliteContinuedPlanWriter;
+  private readonly stoppedContinuations: StoppedContinuationRegistry;
+
+  constructor(private readonly db: Database) {
+    this.continuedPlans = new SqliteContinuedPlanWriter(db);
+    this.stoppedContinuations = new StoppedContinuationRegistry(db);
+  }
 
   bindProgram(
     mutation: BindProgram,
@@ -23,6 +31,10 @@ export class SqliteProgramAuthorityWriter {
     const scopeId = authority.ledgerScope.sessionId;
     if (binding.source === "deferred_goal") {
       this.bindDeferredProgram(mutation, scopeId, projection);
+      return;
+    }
+    if (binding.source === "stopped_program") {
+      this.bindStoppedProgram(mutation, scopeId, projection);
       return;
     }
     this.db.query(`
@@ -42,6 +54,37 @@ export class SqliteProgramAuthorityWriter {
       stableJson(projection.availableSpecs),
       stableJson(projection.governingSpecRefs),
     );
+  }
+
+  private bindStoppedProgram(
+    mutation: BindProgram,
+    scopeId: string,
+    projection: ManagedProgramAuthority,
+  ): void {
+    const authority = mutation.product.authority;
+    const binding = authority.managedBinding;
+    if (binding.continuationBinding.kind !== "stopped_program") {
+      throw new Error("Stopped Program binding lacks its continuation provenance");
+    }
+    const rebound = this.db.query(`
+      UPDATE btcc_programs SET goal_contract_ref = ?, authority_ref = ?,
+        available_specs_json = ?, governing_spec_refs_json = ?,
+        manifest_revision = manifest_revision + 1
+      WHERE program_id = ? AND ledger_id = ? AND scope_kind = ? AND scope_id = ?
+        AND manifest_revision = ? AND active_deferral_ref IS NULL
+    `).run(
+      mutation.product.goalContract.ref.id,
+      authority.ref.id,
+      stableJson(projection.availableSpecs),
+      stableJson(projection.governingSpecRefs),
+      binding.programId,
+      binding.ledgerId,
+      authority.ledgerScope.kind,
+      scopeId,
+      binding.expectedManifestRevision,
+    );
+    if (rebound.changes !== 1) throw new Error("Stopped Program binding changed");
+    this.stoppedContinuations.consumeBinding(binding);
   }
 
   installReviewedPlan(
@@ -64,7 +107,7 @@ export class SqliteProgramAuthorityWriter {
       throw new Error("Reviewed Plan continuation anchor changed");
     }
     if (current.accepted_plan_ref) {
-      this.continueReviewedPlan(product, {
+      this.continuedPlans.install(product, {
         acceptedPlanRef: current.accepted_plan_ref,
         promotionPermitted: current.promotion_permit_ref !== null,
       }, projection);
@@ -161,146 +204,4 @@ export class SqliteProgramAuthorityWriter {
     }
   }
 
-  private continueReviewedPlan(
-    product: InstallPlan["product"],
-    current: { acceptedPlanRef: string; promotionPermitted: boolean },
-    projection: ManagedProgramAuthority,
-  ): void {
-    const candidate = product.candidate;
-    if (candidate.revisionOrigin.kind !== "deferred_continuation") {
-      throw new Error("Deferred continuation lost its reviewed anchor");
-    }
-    if (candidate.plan.ref.id !== current.acceptedPlanRef) {
-      this.replaceContinuedPlan(product, projection);
-      return;
-    }
-    this.closeUnacceptedAttempts(candidate.programId);
-    this.reopenUnacceptedTasks(candidate.programId);
-    const continued = this.db.query(`
-      UPDATE btcc_programs SET planning_review_ref = ?, frontier = ?,
-        active_deferral_ref = NULL, active_deferral_turn_id = NULL,
-        promotion_deferral_ref = NULL, available_specs_json = ?,
-        governing_spec_refs_json = ?, manifest_revision = manifest_revision + 1
-      WHERE program_id = ? AND manifest_revision = ?
-    `).run(
-      product.review.ref.id,
-      current.promotionPermitted ? "promotion_open" : "implementation_open",
-      stableJson(projection.availableSpecs),
-      stableJson(projection.governingSpecRefs),
-      candidate.programId,
-      candidate.observedManifestRevision,
-    );
-    if (continued.changes !== 1) throw new Error("Deferred continuation base changed");
-  }
-
-  private replaceContinuedPlan(
-    product: InstallPlan["product"],
-    projection: ManagedProgramAuthority,
-  ): void {
-    const candidate = product.candidate;
-    this.closeUnacceptedAttempts(candidate.programId);
-    const replaced = this.db.query(`
-      UPDATE btcc_programs SET accepted_plan_ref = ?, accepted_plan_candidate_ref = ?,
-        planning_review_ref = ?,
-        frontier = 'implementation_open', promotion_permit_ref = NULL,
-        promotion_assembly_refs_json = NULL, active_deferral_ref = NULL,
-        active_deferral_turn_id = NULL, promotion_deferral_ref = NULL,
-        available_specs_json = ?, governing_spec_refs_json = ?,
-        manifest_revision = manifest_revision + 1
-      WHERE program_id = ? AND manifest_revision = ?
-    `).run(
-      candidate.plan.ref.id,
-      candidate.ref.id,
-      product.review.ref.id,
-      stableJson(projection.availableSpecs),
-      stableJson(projection.governingSpecRefs),
-      candidate.programId,
-      candidate.observedManifestRevision,
-    );
-    if (replaced.changes !== 1) throw new Error("Continued Plan revision lost its manifest base");
-    this.db.query("UPDATE btcc_work_items SET is_active = 0 WHERE program_id = ?")
-      .run(candidate.programId);
-    this.db.query("UPDATE btcc_tasks SET is_active = 0 WHERE program_id = ?")
-      .run(candidate.programId);
-    this.installContinuedWorks(product);
-    this.installContinuedTasks(product);
-    this.synchronizeContinuedWorks(candidate.programId);
-  }
-
-  private installContinuedWorks(product: InstallPlan["product"]): void {
-    for (const work of product.candidate.works) {
-      const restored = this.db.query(`
-        UPDATE btcc_work_items SET is_active = 1 WHERE work_id = ? AND program_id = ?
-      `).run(work.ref.id, product.candidate.programId);
-      if (restored.changes === 0) {
-        this.db.query(`
-          INSERT INTO btcc_work_items (work_id, program_id, work_ref, status, is_active)
-          VALUES (?, ?, ?, 'planned', 1)
-        `).run(work.ref.id, product.candidate.programId, stableJson(work.ref));
-      }
-    }
-  }
-
-  private installContinuedTasks(product: InstallPlan["product"]): void {
-    const workRefs = new Map(product.candidate.works
-      .map((work) => [work.workLogicalId, work.ref.id]));
-    for (const task of product.candidate.tasks) {
-      const workId = workRefs.get(task.workLogicalId);
-      if (!workId) throw new Error("Continued Task has no reviewed Work");
-      const restored = this.db.query(`
-        UPDATE btcc_tasks SET work_id = ?, is_active = 1
-        WHERE task_id = ? AND program_id = ?
-      `).run(workId, task.ref.id, product.candidate.programId);
-      if (restored.changes === 0) {
-        this.db.query(`
-          INSERT INTO btcc_tasks (
-            task_id, program_id, work_id, task_ref, task_kind, status, is_active
-          ) VALUES (?, ?, ?, ?, ?, 'planned', 1)
-        `).run(
-          task.ref.id,
-          product.candidate.programId,
-          workId,
-          stableJson(task.ref),
-          task.artifactPolicy.kind,
-        );
-      }
-    }
-  }
-
-  private synchronizeContinuedWorks(programId: string): void {
-    this.db.query(`
-      UPDATE btcc_work_items SET status = CASE
-        WHEN NOT EXISTS (
-          SELECT 1 FROM btcc_tasks WHERE btcc_tasks.work_id = btcc_work_items.work_id
-            AND btcc_tasks.is_active = 1 AND btcc_tasks.status != 'accepted'
-        ) THEN 'closed' ELSE 'planned' END
-      WHERE program_id = ? AND is_active = 1
-    `).run(programId);
-  }
-
-  private closeUnacceptedAttempts(programId: string): void {
-    this.db.query(`
-      UPDATE btcc_attempts SET status = 'closed_unaccepted'
-      WHERE program_id = ? AND status != 'accepted'
-    `).run(programId);
-  }
-
-  private reopenUnacceptedTasks(programId: string): void {
-    this.db.query(`
-      UPDATE btcc_tasks SET status = CASE
-          WHEN status = 'accepted' THEN 'accepted' ELSE 'planned' END,
-        current_attempt_id = CASE WHEN status = 'accepted' THEN current_attempt_id ELSE NULL END,
-        result_ref = CASE WHEN status = 'accepted' THEN result_ref ELSE NULL END,
-        review_ref = CASE WHEN status = 'accepted' THEN review_ref ELSE NULL END
-      WHERE program_id = ? AND is_active = 1
-    `).run(programId);
-    this.db.query(`
-      UPDATE btcc_work_items SET status = CASE
-        WHEN NOT EXISTS (
-          SELECT 1 FROM btcc_tasks WHERE btcc_tasks.work_id = btcc_work_items.work_id
-            AND btcc_tasks.is_active = 1 AND btcc_tasks.status != 'accepted'
-        ) THEN 'closed' ELSE 'planned' END
-      WHERE program_id = ? AND is_active = 1
-    `).run(programId);
-  }
 }

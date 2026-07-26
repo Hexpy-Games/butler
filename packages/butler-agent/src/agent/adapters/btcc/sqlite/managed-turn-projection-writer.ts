@@ -60,4 +60,23 @@ export class ManagedTurnProjectionWriter {
       ) VALUES (?, ?, ?, ?, ?, 1, 1)
     `).run(checkpointId, turn.turnId, nextRevision, successor, checkpointKind(successor));
   }
+
+  cancelWork(
+    turn: TurnRecord,
+    nextRevision: number,
+    managed: ManagedTurnState,
+  ): void {
+    const updated = this.db.query(`
+      UPDATE btcc_turns SET semantic_state = 'cancelled', active_checkpoint_id = NULL,
+        managed_state_json = ?, revision = ?, route = 'managed',
+        final_disposition = 'cancelled'
+      WHERE turn_id = ? AND revision = ?
+    `).run(
+      stableJson(persistedManagedState(managed)),
+      nextRevision,
+      turn.turnId,
+      turn.revision,
+    );
+    if (updated.changes !== 1) throw new Error("BTCC work cancellation lost Turn CAS");
+  }
 }

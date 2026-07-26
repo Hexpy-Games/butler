@@ -1,5 +1,6 @@
 export type {
   ContinuationBinding,
-  DeferredContinuationContext,
-  DeferredContinuationCandidate,
+  ContinuationCandidate,
+  ContinuationContext,
+  ContinuationTaskState,
 } from "./contracts.ts";

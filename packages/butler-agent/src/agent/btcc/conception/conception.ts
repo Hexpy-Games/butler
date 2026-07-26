@@ -21,7 +21,8 @@ type InitialConceptionEvent = Extract<TurnEvent, {
     | "OpeningContinuationAccepted"
     | "GoalContractCandidateSubmitted"
     | "GoalContractReviewAccepted"
-    | "GoalContractRevisionRequested";
+    | "GoalContractRevisionRequested"
+    | "WorkCancellationAccepted";
 }>;
 type FeedbackConceptionEvent = Extract<TurnEvent, {
   kind: "FeedbackIntentAccepted" | "ManagedDeferralAccepted";
@@ -61,8 +62,11 @@ async function conceiveInitialGoal(command: {
   switch (command.turn.semanticState) {
     case "conception_opening": {
       const product = await openConception(command.phase);
-      return product.kind === "opening_answer"
-        ? { kind: "OpeningAnswerAccepted", product }
+      if (product.kind === "opening_answer") {
+        return { kind: "OpeningAnswerAccepted", product };
+      }
+      return product.kind === "opening_work_cancellation"
+        ? { kind: "WorkCancellationAccepted", product }
         : { kind: "OpeningContinuationAccepted", product };
     }
     case "assisted_answer": {
