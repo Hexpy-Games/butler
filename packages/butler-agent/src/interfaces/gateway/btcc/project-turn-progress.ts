@@ -85,7 +85,7 @@ export function projectTurnProgress(
       await publish({
         kind: "assistant.public_note",
         payload: {
-          note: operationalProgressLabel(update.activationKind),
+          note: operationalProgressLabel(update.activationKind, update.code),
           operational: true,
           semanticBlockId: update.semanticState,
           recoveryStatus: update.status,
@@ -98,7 +98,12 @@ export function projectTurnProgress(
 function operationalProgressLabel(
   activation: "automatic_provider_recovery" | "provider_action_required" |
     "automatic_storage_recovery" | "runtime_remediation" | "cancelled" | undefined,
+  code?: string,
 ): string {
+  if (code === "provider_phase_submission_invalid" ||
+    code === "provider_protocol_interruption") {
+    return "모델 출력 계약을 바로잡고 있습니다. 완료된 작업은 그대로 보존됩니다";
+  }
   if (activation === "automatic_provider_recovery") {
     return "모델 연결을 복구하고 있습니다. 현재 작업은 안전하게 보존되어 있으며 중지할 수 있습니다";
   }

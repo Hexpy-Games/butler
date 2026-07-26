@@ -127,7 +127,10 @@ test("unaffected lineage preserves the exact Task revision", () => {
       ],
       nextTasks: [revised],
     }),
-  ).toThrow("unaffected impact cannot change the Task revision");
+  ).toThrow(
+    "unaffected impact for Task stable-task cannot change the Task revision; " +
+    "preserve the exact accepted Task or classify it as revalidate, rework, or replan",
+  );
 });
 
 test("impact schema requires successors except when replanning", () => {

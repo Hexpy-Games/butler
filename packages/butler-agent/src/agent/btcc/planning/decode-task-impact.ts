@@ -102,7 +102,9 @@ function validateSuccessor(input: {
     refKey(input.successor.ref) !== refKey(input.prior.task.ref)
   ) {
     throw new Error(
-      `${input.disposition} impact cannot change the Task revision`,
+      `unaffected impact for Task ${input.prior.task.taskLogicalId} cannot change ` +
+      "the Task revision; preserve the exact accepted Task or classify it as " +
+      "revalidate, rework, or replan",
     );
   }
   if (
