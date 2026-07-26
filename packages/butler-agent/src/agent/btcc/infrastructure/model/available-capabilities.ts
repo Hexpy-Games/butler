@@ -9,11 +9,13 @@ import type {
 export async function resolveAvailableCapabilities(
   input: ResolveAvailableCapabilitiesInput,
 ): Promise<AvailablePhaseCapability[]> {
-  const definitions = await input.catalog.list();
+  const definitions = [...await input.catalog.list()].sort((left, right) =>
+    left.capabilityRef.localeCompare(right.capabilityRef) || left.name.localeCompare(right.name),
+  );
   assertUniqueCapabilityRefs(definitions);
   const result: AvailablePhaseCapability[] = [];
   for (const definition of definitions) {
-    for (const operationKind of definition.operationKinds) {
+    for (const operationKind of [...definition.operationKinds].sort()) {
       const scopes = admittedObservationScopes(
         definition,
         operationKind,
@@ -42,14 +44,14 @@ function admittedObservationScopes(
   if (operationKind !== "observe") return [];
   if (definition.observationScopeRefs !== undefined) {
     const declared = new Set(definition.observationScopeRefs);
-    return authorizedScopes.filter((scopeRef) => declared.has(scopeRef));
+    return authorizedScopes.filter((scopeRef) => declared.has(scopeRef)).sort();
   }
   if (definition.observationScopeKinds !== undefined) {
     const declared = new Set(definition.observationScopeKinds);
     return authorizedScopes.filter((scopeRef) => {
       const kind = scopeKind(scopeRef);
       return kind !== undefined && declared.has(kind);
-    });
+    }).sort();
   }
   return [];
 }
