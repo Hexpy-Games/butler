@@ -101,6 +101,7 @@ function installRevisedProgram(
   const next: Program = {
     ...program,
     ...authority,
+    acceptedPlan: plan,
     plan: plan.plan,
     planningReviewRef: product.review.ref,
     works,

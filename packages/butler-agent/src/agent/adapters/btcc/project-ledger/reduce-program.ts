@@ -80,6 +80,7 @@ function installPlan(program: Program, product: Extract<Mutation, {
     ...program,
     ...authority,
     planningState: "reviewed",
+    acceptedPlan: candidate,
     plan: candidate.plan,
     planningReviewRef: product.review.ref,
     works,

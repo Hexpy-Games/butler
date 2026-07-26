@@ -23,12 +23,13 @@ test("implementation repair projects only the exact current correction authority
   expect(context).not.toHaveProperty("availableSpecs");
 });
 
-test("governing revision projects the accepted Plan and compact all-Task impact index", () => {
+test("governing revision projects the latest Work Ledger Plan and compact impact index", () => {
   const fixture = feedbackFixture("governing_revision");
   const context = projectFeedbackPlanningContext(fixture);
   const index = context.taskImpactIndex as Array<Record<string, unknown>>;
 
-  expect(context.acceptedPlan).toEqual(fixture.managed.planningAcceptance.candidate);
+  expect(context.acceptedPlan).toEqual(fixture.program.acceptedPlan);
+  expect(context.acceptedPlan).not.toEqual(fixture.managed.planningAcceptance.candidate);
   expect(index).toHaveLength(11);
   expect(index[0]).toEqual({
     task: { ref: ref("task-1"), taskLogicalId: "task-1" },
@@ -84,6 +85,7 @@ function feedbackFixture(
     goalContractRef: ref("goal"),
     authorityRef: ref("authority"),
     requiredOutcomeId: "outcome-1",
+    acceptedPlan: { marker: "CURRENT_WORK_LEDGER_PLAN" },
     plan: { ref: ref("plan") },
     works: [{ work: { ref: ref("work"), workLogicalId: "work-1" }, status: "active" }],
     currentWork: { work: { ref: ref("work"), workLogicalId: "work-1" }, status: "active" },
