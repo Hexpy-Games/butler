@@ -11,6 +11,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { assureOriginalGoal } from "./assure-original-goal.ts";
+import { projectTaskOutcomes } from "./project-task-outcomes.ts";
 
 export async function consolidation(command: {
   turn: TurnRecord;
@@ -77,16 +78,13 @@ async function consolidateCompletedWork(
   kind: "ConsolidationRepairRequired" | "FinalDossierAccepted";
 }>> {
   const program = requireManagedProgram(command.turn);
-  const reviews = program.tasks.map((task) => task.currentReview);
-  if (reviews.some((review) => !review || review.review.verdict !== "passed")) {
-    throw new Error("Consolidation requires every passed Task Review");
-  }
+  const taskOutcomes = projectTaskOutcomes(program.tasks);
   const product = await assureOriginalGoal(withPhaseState(command.phase, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
     acceptedPlan: program.plan,
     managedWorks: program.works,
-    managedTasks: program.tasks,
+    taskOutcomes,
     criteria: program.criteria,
     integrationCriteria: program.plan.integrationCriterionRefs,
     artifactLifecycle: program.artifactLifecycle,
@@ -99,7 +97,7 @@ async function consolidateCompletedWork(
     authorityRef: program.authorityRef,
     planRef: program.plan.ref,
     planningReviewRef: program.planningReviewRef,
-    taskReviewRefs: reviews.map((review) => review!.review.ref),
+    taskReviewRefs: taskOutcomes.map((outcome) => outcome.review.ref),
     promotionClosure: program.tasks.some(
       (task) => task.task.artifactPolicy.kind === "repository_promotion",
     ) ? "promoted" : "not_required",
