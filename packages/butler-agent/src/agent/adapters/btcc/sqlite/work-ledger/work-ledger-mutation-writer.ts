@@ -163,11 +163,14 @@ export class SqliteWorkLedgerMutationWriter {
       product.review.ref.id,
     );
     const updated = this.db.query(`
-      UPDATE btcc_tasks SET status = ?, review_ref = ?
+      UPDATE btcc_tasks SET status = ?, review_ref = ?,
+        revalidation_source_json = CASE WHEN ? = 'accepted' THEN NULL
+          ELSE revalidation_source_json END
       WHERE task_id = ? AND current_attempt_id = ? AND status = 'result_submitted'
     `).run(
       status,
       product.review.ref.id,
+      status,
       product.review.taskRef.id,
       product.review.attemptRef.id,
     );

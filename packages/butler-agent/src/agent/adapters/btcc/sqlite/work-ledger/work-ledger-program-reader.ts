@@ -178,8 +178,9 @@ export class SqliteWorkLedgerProgramReader {
       status: ManagedTaskState["status"];
       result_ref: string | null;
       review_ref: string | null;
+      revalidation_source_json: string | null;
     }, [string, number]>(`
-      SELECT task_ref, status, result_ref, review_ref
+      SELECT task_ref, status, result_ref, review_ref, revalidation_source_json
       FROM btcc_tasks WHERE program_id = ? AND is_active = ? ORDER BY rowid
     `).all(programId, active ? 1 : 0);
     if (active && rows.length === 0) throw new Error("Work Ledger Program has no Task");
@@ -195,6 +196,9 @@ export class SqliteWorkLedgerProgramReader {
           : {}),
         ...(row.review_ref
           ? { currentReview: { kind: "task_review" as const, review: this.loadRecord(row.review_ref) } }
+          : {}),
+        ...(row.revalidation_source_json
+          ? { revalidationSource: JSON.parse(row.revalidation_source_json) }
           : {}),
       } as ManagedTaskState;
     });

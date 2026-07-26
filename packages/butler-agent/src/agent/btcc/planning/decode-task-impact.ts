@@ -1,6 +1,7 @@
 import {
   requireRecord,
   requireString,
+  requireStringArray,
   type ContentRef,
 } from "../core/index.ts";
 import type { ManagedTask } from "./contracts.ts";
@@ -64,17 +65,59 @@ export function decodeTaskImpact(input: {
       }
       visitedSuccessor.add(successor.taskLogicalId);
     }
-    return {
+    const base = {
       priorTaskRef: prior.task.ref,
-      disposition,
       reason: requireString(record.reason, `impactMap[${index}].reason`),
-      ...(successor ? { successorTaskRef: successor.ref } : {}),
     };
+    if (disposition === "replan") return { ...base, disposition };
+    if (!successor) throw new Error(`${disposition} impact lost its successor Task`);
+    if (disposition === "revalidate") {
+      return {
+        ...base,
+        disposition,
+        successorTaskRef: successor.ref,
+        revalidationPrerequisiteTaskRefs:
+          decodeRevalidationPrerequisites(record, successor, next),
+      };
+    }
+    return { ...base, disposition, successorTaskRef: successor.ref };
   });
   if (visitedPrior.size !== current.size) {
     throw new Error("Feedback Planning omitted a current Task");
   }
   return impacts;
+}
+
+function decodeRevalidationPrerequisites(
+  record: Record<string, unknown>,
+  successor: ManagedTask | undefined,
+  next: Map<string, ManagedTask>,
+): ContentRef[] {
+  if (!successor) return [];
+  const ids = requireStringArray(
+    record.revalidationPrerequisiteTaskLogicalIds,
+    "revalidationPrerequisiteTaskLogicalIds",
+  );
+  if (new Set(ids).size !== ids.length) {
+    throw new Error("Revalidation repeated a prerequisite Task");
+  }
+  const dependencyIds = new Set(successor.dependencyTaskRefs.map((ref) => ref.id));
+  return ids.map((logicalId) => {
+    const prerequisite = next.get(logicalId);
+    if (!prerequisite || prerequisite.taskLogicalId === successor.taskLogicalId) {
+      throw new Error("Revalidation prerequisite is not a distinct revised Task");
+    }
+    if (
+      prerequisite.executionOrdinal >= successor.executionOrdinal ||
+      !dependencyIds.has(prerequisite.ref.id)
+    ) {
+      throw new Error(
+        `Revalidation Task ${successor.taskLogicalId} must run after and depend on ` +
+        `prerequisite ${logicalId}`,
+      );
+    }
+    return prerequisite.ref;
+  });
 }
 
 function validateSuccessor(input: {

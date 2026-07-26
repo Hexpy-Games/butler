@@ -115,17 +115,44 @@ export class SqliteReviewedGraphInstaller {
     task: RevisedPlan["tasks"][number],
     impact?: TaskImpact,
   ): void {
-    const existing = this.db.query<{ status: string; result_ref: string | null }, [string]>(
-      "SELECT status, result_ref FROM btcc_tasks WHERE task_id = ?",
-    ).get(task.ref.id);
+    const sourceTaskId = impact?.priorTaskRef.id ?? task.ref.id;
+    const existing = this.db.query<{
+      status: string;
+      result_ref: string | null;
+      current_attempt_id: string | null;
+    }, [string]>(
+      "SELECT status, result_ref, current_attempt_id FROM btcc_tasks WHERE task_id = ?",
+    ).get(sourceTaskId);
     const status = nextStatus(impact, existing);
+    const revalidationSource = impact?.disposition === "revalidate" && existing?.result_ref
+      ? stableJson({ priorTaskRef: impact.priorTaskRef, resultRef: {
+          id: existing.result_ref,
+          sha256: this.recordSha(existing.result_ref),
+        } })
+      : null;
+    if (existing && sourceTaskId !== task.ref.id) {
+      if (status === "result_submitted") {
+        this.installRevalidationSuccessor({
+          programId,
+          workId,
+          task,
+          sourceTaskId,
+          existing,
+          revalidationSource: revalidationSource!,
+        });
+      } else {
+        this.insertPlannedTask(programId, workId, task);
+      }
+      return;
+    }
     if (existing) {
       this.db.query(`
         UPDATE btcc_tasks SET work_id = ?, task_kind = ?, status = ?, is_active = 1,
           current_attempt_id = CASE WHEN ? = 'planned' THEN NULL ELSE current_attempt_id END,
           result_ref = CASE WHEN ? = 'planned' THEN NULL ELSE result_ref END,
           review_ref = CASE
-            WHEN ? IN ('planned', 'result_submitted') THEN NULL ELSE review_ref END
+            WHEN ? IN ('planned', 'result_submitted') THEN NULL ELSE review_ref END,
+          revalidation_source_json = ?
         WHERE task_id = ?
       `).run(
         workId,
@@ -134,15 +161,67 @@ export class SqliteReviewedGraphInstaller {
         status,
         status,
         status,
+        revalidationSource,
         task.ref.id,
       );
       return;
     }
+    this.insertPlannedTask(programId, workId, task);
+  }
+
+  private insertPlannedTask(
+    programId: string,
+    workId: string,
+    task: RevisedPlan["tasks"][number],
+  ): void {
     this.db.query(`
       INSERT INTO btcc_tasks (
         task_id, program_id, work_id, task_ref, task_kind, status, is_active
       ) VALUES (?, ?, ?, ?, ?, 'planned', 1)
     `).run(task.ref.id, programId, workId, stableJson(task.ref), task.artifactPolicy.kind);
+  }
+
+  private installRevalidationSuccessor(input: {
+    programId: string;
+    workId: string;
+    task: RevisedPlan["tasks"][number];
+    sourceTaskId: string;
+    existing: { result_ref: string | null; current_attempt_id: string | null };
+    revalidationSource: string;
+  }): void {
+    if (!input.existing.result_ref || !input.existing.current_attempt_id) {
+      throw new Error("Revalidation successor lost its accepted result");
+    }
+    this.db.query(`
+      INSERT INTO btcc_tasks (
+        task_id, program_id, work_id, task_ref, task_kind, status, is_active,
+        current_attempt_id, result_ref, revalidation_source_json
+      ) VALUES (?, ?, ?, ?, ?, 'result_submitted', 1, ?, ?, ?)
+    `).run(
+      input.task.ref.id,
+      input.programId,
+      input.workId,
+      stableJson(input.task.ref),
+      input.task.artifactPolicy.kind,
+      input.existing.current_attempt_id,
+      input.existing.result_ref,
+      input.revalidationSource,
+    );
+    const moved = this.db.query(`
+      UPDATE btcc_attempts SET task_id = ?
+      WHERE task_id = ? AND attempt_id = ? AND status = 'result_submitted'
+    `).run(input.task.ref.id, input.sourceTaskId, input.existing.current_attempt_id);
+    if (moved.changes !== 1) {
+      throw new Error("Revalidation successor lost its accepted Attempt");
+    }
+  }
+
+  private recordSha(id: string): string {
+    const row = this.db.query<{ sha256: string }, [string]>(
+      "SELECT sha256 FROM btcc_records WHERE record_id = ?",
+    ).get(id);
+    if (!row) throw new Error("Revalidation lost its Result record");
+    return row.sha256;
   }
 
   private synchronizeWorkStatuses(programId: string): void {

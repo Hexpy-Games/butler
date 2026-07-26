@@ -70,10 +70,32 @@ export function loadProjectProgram(
     const program = JSON.parse(body) as Program;
     if (program.programId !== programId) throw new Error("Project Work Ledger manifest identity changed");
     program.governingSpecs = hydrateGoverningSpecs(core, root, program);
+    hydrateRevalidationSources(program);
     return program;
   } catch (error) {
     if (isMissing(error)) return null;
     throw error;
+  }
+}
+
+function hydrateRevalidationSources(program: Program): void {
+  if (program.planningState !== "reviewed") return;
+  for (const task of program.tasks) {
+    if (task.revalidationSource || task.status !== "result_submitted" || !task.currentResult) {
+      continue;
+    }
+    const attempt = task.attempts.at(-1);
+    const priorTaskRef = task.currentResult.result.taskRef;
+    if (
+      attempt?.status === "result_submitted" &&
+      refKey(attempt.attemptRecord.taskRef) === refKey(priorTaskRef) &&
+      refKey(priorTaskRef) !== refKey(task.task.ref)
+    ) {
+      task.revalidationSource = {
+        priorTaskRef,
+        resultRef: task.currentResult.result.ref,
+      };
+    }
   }
 }
 
