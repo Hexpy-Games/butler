@@ -1,8 +1,8 @@
 import type {
   BtccPersistenceTypes,
   WorkLedgerCommit,
-} from "../../../btcc/index.ts";
-import { acceptFeedbackAuthority } from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
+import { acceptFeedbackAuthority } from "../../../btcc/gateway-api.ts";
 
 type Program = Extract<
   BtccPersistenceTypes["managedProgramState"],

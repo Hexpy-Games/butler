@@ -2,7 +2,7 @@ import {
   assertPromotionPermit,
   type BtccPersistenceTypes,
   type WorkLedgerCommit,
-} from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
 
 type ManagedProgramState = BtccPersistenceTypes["managedProgramState"];
 

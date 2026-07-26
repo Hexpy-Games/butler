@@ -8,7 +8,7 @@ import {
   stableJson,
   type BtccPersistenceTypes,
   type WorkLedgerCommit,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import type { ProjectLedgerCore } from "./project-ledger-core.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];

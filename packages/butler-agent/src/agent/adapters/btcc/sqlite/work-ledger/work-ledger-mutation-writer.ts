@@ -8,7 +8,7 @@ import {
   bindManagedProgram,
   type WorkLedgerCommit,
   type ManagedProgramAuthority,
-} from "../../../../btcc/index.ts";
+} from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
 import { WorkLedgerCommitJournal } from "./work-ledger-commit-journal.ts";
 import { SqliteReviewedGraphInstaller } from "./reviewed-graph-installer.ts";

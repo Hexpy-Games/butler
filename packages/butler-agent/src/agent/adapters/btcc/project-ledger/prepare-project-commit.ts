@@ -7,7 +7,7 @@ import {
   planningCandidateBundleEntries,
   stableJson,
   type WorkLedgerCommit,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import type {
   PreparedProjectCommit,
   PrepareProjectCommitInput,

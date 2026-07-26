@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { WorkLedgerCommit } from "../../../../btcc/index.ts";
+import type { WorkLedgerCommit } from "../../../../btcc/gateway-api.ts";
 
 type FeedbackProduct = Extract<
   WorkLedgerCommit["mutation"],

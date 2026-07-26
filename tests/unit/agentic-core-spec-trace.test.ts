@@ -21,7 +21,7 @@ const dedicatedCapabilitySpecs = [
     spec: "project-ledger/projects/butler/specs/agentic-core-automation.md",
     legacySpec: "docs/specs/agentic-core-automation.md",
     criteria: ["AC4-SC01", "AC4-SC06"],
-    tests: ["tests/unit/automation-store.test.ts", "tests/unit/automation-gateway.test.ts"],
+    tests: ["tests/unit/automation-store.test.ts", "tests/unit/btcc-product-cutover.test.ts"],
   },
   {
     id: "AC-5",

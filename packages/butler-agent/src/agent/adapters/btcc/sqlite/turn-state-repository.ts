@@ -1,12 +1,12 @@
 import type { Database } from "bun:sqlite";
 import type {
   BtccRuntimeDependencies,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import {
   createWorkLedger,
   LedgerContentionInterruption,
   type WorkLedger,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/gateway-api.ts";
 import { SqliteTransitionWriter } from "./transition-writer.ts";
 import { SqliteWorkLedgerStorage } from "./work-ledger/index.ts";
 import { SqliteStopController } from "./sqlite-stop-controller.ts";

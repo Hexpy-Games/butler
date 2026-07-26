@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import { bindManagedProgram } from "../../packages/butler-agent/src/agent/btcc/work-ledger/program-authority.ts";
 import type { WorkLedgerCommit } from "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
-import type { AvailableSpecRevision } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { AvailableSpecRevision } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
 import { projectBindingCommit } from "./support/btcc-project-ledger-fixture.ts";
 
 test("fresh continuation rebinds the complete current Planning authority", () => {

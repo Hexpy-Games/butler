@@ -1,21 +1,19 @@
 # Gateway Session Interface
 
 `packages/butler-agent/src/interfaces/gateway/` contains the native Butler and
-steward session actors that run behind the agent-owned gateway core. Transport
+Steward adapters that admit every principal message to the replacement BTCC.
+Transport
 contracts, routing, inbound queueing, and gateway server dispatch live in
 `packages/butler-agent/src/gateways/core/`.
 
 ## Key Files
 
-- `session-actor.ts`: serialized per-session turn execution.
+- `btcc/btcc-session-actor.ts`: the single principal-Turn gateway actor.
 - `packages/butler-agent/src/agent/prompt/prompt-assembler.ts`: system, persona, memory, context, and
   tool prompt assembly used by the gateway.
 - `native-butler-bootstrap.ts` and `native-steward-bootstrap.ts`: live native
   bootstraps.
-- `worker-result-monitor.ts`: planned/direct worker completion promotion and
-  retryable delivery.
-- `butler-session.ts`, `steward-session.ts`, and `session-lifecycle.ts`:
-  session identity and lifecycle helpers.
+- `btcc/btcc-lifecycle-service.ts`: session identity and actor ownership.
 
 ## Boundaries
 
@@ -23,19 +21,16 @@ Transport adapters should not own conversation logic. Session actors consume
 transport-neutral envelopes from gateway core and return outbound actions;
 transport-specific rendering stays below the transport layer.
 
-Steward is a durable gateway session actor and runs through the same native
-tool-loop and WorkStream completion gates as Butler-facing sessions for
-non-trivial custody, review, synthesis, and routing work. Worker remains an
-internal runtime actor behind task dispatch, but its native turn events are
-projected into safe worker activity timelines and legacy task summaries.
-Gateway read routes must expose derived safe timeline/progress data rather than
-raw prompts, provider payloads, task internals, or secrets.
+Butler and Steward messages share the same BTCC actor and differ only in their
+stored binding and admitted project context. There is no compatibility
+principal-Turn actor or alternate queued dispatcher. A separately launched
+Worker remains an independent execution subsystem, not a principal-Turn
+fallback. Gateway read routes expose committed BTCC projections rather than raw
+prompts, provider payloads, or private runtime state.
 
 ## Related Specs
 
 - `SPEC-NATIVE-PRODUCT` - Native Butler Product
-- `SPEC-BUTLER-AGENT-LOOP` - Butler Agent Loop
-- `SPEC-AUTONOMOUS-PLANNED-DISPATCH` - Autonomous Planned Dispatch
-- `SPEC-WORKER-BTCC-RUNTIME-NORMALIZATION` - Worker BTCC Runtime Normalization
+- `SPEC-BTCC-ADAPTIVE-TURN-ALGORITHM` - BTCC Adaptive Turn Algorithm
 - `SPEC-OPERATIONAL-RELIABILITY` - Operational Reliability
 - `SPEC-TRANSPORT-EXPANSION-READINESS` - Transport Expansion Readiness

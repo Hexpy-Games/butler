@@ -37,10 +37,9 @@ visible worker timeline, not only persisted task files.
    `bun run app:client:dev`. The script starts Vite for `client/ui`, launches
    the Electron shell from `client/electron`, and points it at the configured
    local app gateway with `BUTLER_APP_SERVER_URL` / `BUTLER_APP_UI_URL`.
-2. In the Electron window, send a normal request that asks Butler to delegate a
-   small document-only task to a worker. For the WATL path, the automated live
-   scenario uses `BUTLER_APP_CLIENT_E2E_MODE=live-llm-watl-worker bun run
-   tests/e2e/app-client-multiturn-e2e.ts` after the UI build.
+2. In the Electron window, send a normal request that exercises the current
+   BTCC path. Do not use the retired local SessionActor harness as product
+   evidence.
 3. While the worker runs, inspect the assistant turn's work/turn activity area
    in the conversation view. The worker activity panel should show timeline
    rows for the worker, including executing and verifying phases plus

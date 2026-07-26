@@ -10,9 +10,10 @@ import { fitOperationContext } from
 import { describeOperationSource } from
   "../../packages/butler-agent/src/agent/btcc/operation-result/index.ts";
 import type {
-  OperationResultProjection,
   PhaseEnvelope,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { OperationResultProjection } from
+  "../../packages/butler-agent/src/agent/btcc/operation-result/index.ts";
 
 describe("BTCC operation context projection", () => {
   test("retains source results and exact selected views across later batches", () => {
