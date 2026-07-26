@@ -97,6 +97,7 @@ function isReviewableResult(
 function priorCorrectionFindings(
   program: ReturnType<typeof requireManagedProgram>,
 ) {
+  if (isGoverningRevalidation(program.currentTask)) return [];
   if (
     program.correctionPlanRef &&
     program.currentTask.status === "result_submitted" &&
@@ -112,6 +113,20 @@ function priorCorrectionFindings(
     candidate.attemptRecord.ref.id === attempt.attemptRecord.previousAttemptRef?.id);
   if (!previous?.review || previous.review.review.verdict !== "not_passed") return [];
   return requiredFindings(previous.review);
+}
+
+function isGoverningRevalidation(
+  task: ReturnType<typeof requireManagedProgram>["currentTask"],
+): boolean {
+  if (task.revalidationSource) return true;
+  const attempt = task.attempts.at(-1);
+  return Boolean(
+    task.status === "result_submitted" &&
+    task.currentResult &&
+    attempt?.status === "result_submitted" &&
+    sameRef(attempt.attemptRecord.taskRef, task.currentResult.result.taskRef) &&
+    !sameRef(task.currentResult.result.taskRef, task.task.ref),
+  );
 }
 
 function projectCorrectionContext(
