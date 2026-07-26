@@ -23,6 +23,7 @@ describe("BTCC managed executable ingress", () => {
     ["managed-planning-revision", 13, 2],
     ["managed-goal-revision", 13, 2],
     ["managed-feedback-planning-revision", 18, 3],
+    ["managed-feedback-intent-revision", 19, 3],
     ["managed-governing-revision", 16, 3],
     ["managed-authority-revision", 16, 3],
   ] as const)("completes %s through the same Turn entry", async (
@@ -89,7 +90,12 @@ describe("BTCC managed executable ingress", () => {
           ]
         : initialPlanning;
     const firstTask = [...reviewedPlanning, "task_execution", "task_review"];
-    const repairCycle = scenario === "managed-feedback-planning-revision"
+    const repairCycle = scenario === "managed-feedback-intent-revision"
+      ? [
+          "feedback_conception", "feedback_planning", "feedback_planning_review",
+          "feedback_conception", "feedback_planning", "feedback_planning_review",
+        ]
+      : scenario === "managed-feedback-planning-revision"
       ? [
           "feedback_conception", "feedback_planning", "feedback_planning_review",
           "feedback_planning", "feedback_planning_review",
@@ -99,6 +105,7 @@ describe("BTCC managed executable ingress", () => {
       scenario === "managed-review-dispute" ||
       scenario === "managed-review-backlog" ||
       scenario === "managed-feedback-planning-revision" ||
+      scenario === "managed-feedback-intent-revision" ||
       scenario === "managed-governing-revision" ||
       scenario === "managed-authority-revision";
     expect(result.phases).toEqual([
@@ -342,6 +349,7 @@ describe("BTCC managed executable ingress", () => {
       }
       if (needsRepair && scenario !== "managed-review-dispute" &&
           scenario !== "managed-review-backlog" &&
+          scenario !== "managed-feedback-intent-revision" &&
           scenario !== "managed-governing-revision" &&
           scenario !== "managed-authority-revision") {
         expect(attemptRows[1]?.previous_attempt_id).toBe(attemptRows[0]?.attempt_id);

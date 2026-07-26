@@ -3,6 +3,7 @@ import {
   feedbackFindingDecisions,
   submitFeedbackPlan,
   submitFeedbackPlanningReview,
+  reviseFeedbackIntentReview,
   type HarnessCorrectionKind,
 } from "./managed-harness-feedback-planning.ts";
 import {
@@ -35,6 +36,7 @@ export class ManagedHarnessModel implements SelectedModel {
   private planningReviewCount = 0;
   private goalReviewCount = 0;
   private feedbackPlanningReviewCount = 0;
+  private feedbackConceptionCount = 0;
   private deferralSubmitted = false;
   private consolidationRepairSubmitted = false;
 
@@ -52,6 +54,7 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly revalidateAcceptedTask = false,
     private readonly reviewFindingDecision:
       "apply_now" | "dispute" | "split_to_backlog" = "apply_now",
+    private readonly reviseFeedbackIntent = false,
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
@@ -282,21 +285,30 @@ export class ManagedHarnessModel implements SelectedModel {
             : {}),
         };
       }
-      case "feedback_conception":
+      case "feedback_conception": {
+        this.feedbackConceptionCount += 1;
         return {
           kind: "feedback_intent",
-          correctionKind: this.correctionKind,
+          correctionKind: this.reviseFeedbackIntent && this.feedbackConceptionCount > 1
+            ? "governing_revision"
+            : this.correctionKind,
           intendedCorrection: "누락된 실행 지침만 보완한다",
           ...feedbackFindingDecisions(state, this.reviewFindingDecision),
         };
-      case "feedback_planning":
+      }
+      case "feedback_planning": {
+        const intent = asRecord(asRecord(state.feedbackIntent).feedbackIntent);
         return submitFeedbackPlan(
           state,
-          this.correctionKind,
+          intent.correctionKind as HarnessCorrectionKind,
           this.revalidateAcceptedTask,
         );
+      }
       case "feedback_planning_review":
         this.feedbackPlanningReviewCount += 1;
+        if (this.reviseFeedbackIntent && this.feedbackPlanningReviewCount === 1) {
+          return reviseFeedbackIntentReview();
+        }
         return submitFeedbackPlanningReview(
           state,
           this.reviseFirstCorrection,

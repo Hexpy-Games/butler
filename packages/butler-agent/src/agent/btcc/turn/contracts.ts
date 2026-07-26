@@ -217,7 +217,7 @@ export type AcceptedTurnTransition =
   | { kind: "submit_feedback_plan"; successor: "feedback_planning_review"; product: FeedbackPlanProduct }
   | {
       kind: "request_feedback_plan_revision";
-      successor: "feedback_planning";
+      successor: "feedback_planning" | "feedback_conception";
       product: FeedbackPlanningRevisionRequiredProduct;
     }
   | {
