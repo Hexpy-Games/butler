@@ -170,13 +170,20 @@ export function authorPlanCandidate(
         findingSetRef: state.findingSetRef,
         findingDecisions: state.findingDecisions ?? [],
       }
-    : state.continuation
+    : state.continuation?.kind === "deferred_goal"
       ? {
           kind: "deferred_continuation" as const,
           continuationBindingRef: state.continuation.ref,
           sourceTurnId: state.continuation.sourceTurnId,
           deferredAnchorRef: state.continuation.anchorRef,
         }
+      : state.continuation?.kind === "stopped_program"
+        ? {
+            kind: "stopped_continuation" as const,
+            continuationBindingRef: state.continuation.ref,
+            sourceTurnId: state.continuation.sourceTurnId,
+            stoppedAnchorRef: state.continuation.anchorRef,
+          }
       : { kind: "initial" as const };
   const candidateBody = {
     ledgerId: state.ledgerId,
@@ -188,7 +195,9 @@ export function authorPlanCandidate(
     authoredSpecs,
     authorityRef: state.authorityRef,
     revisionOrigin,
-    resolvedDeferralAnchorRefs: state.continuation ? [state.continuation.anchorRef] : [],
+    resolvedDeferralAnchorRefs: state.continuation?.kind === "deferred_goal"
+      ? [state.continuation.anchorRef]
+      : [],
     plan,
     works,
     tasks,

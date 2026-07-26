@@ -14,5 +14,6 @@ export type { ConceptionPlanningContext } from "./planning-context.ts";
 export type {
   OpeningAnswerProduct,
   OpeningContinuationProduct,
+  OpeningWorkCancellationProduct,
   OpeningProduct,
 } from "./opening/index.ts";

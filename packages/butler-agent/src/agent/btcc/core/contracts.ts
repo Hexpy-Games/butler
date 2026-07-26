@@ -1,5 +1,5 @@
 import type { AdmittedModelSelection } from "../contracts.ts";
-import type { DeferredContinuationCandidate } from "../continuation/index.ts";
+import type { ContinuationCandidate } from "../continuation/index.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
 import type { OperationalActivation } from "../recovery/index.ts";
 import type { SubmissionSchema } from "./submission-schema.ts";
@@ -48,7 +48,7 @@ export type OpeningContext = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
-  continuationCandidates?: DeferredContinuationCandidate[];
+  continuationCandidates?: ContinuationCandidate[];
   stateInput?: unknown;
 };
 

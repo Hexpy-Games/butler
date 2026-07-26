@@ -48,7 +48,14 @@ export type ReviewedManagedProgramState = ManagedProgramAuthority & {
   artifactLifecycle: PlanningAcceptedProduct["candidate"]["artifactLifecycle"];
   promotionAssemblies: ReviewedPromotionAssembly[];
   promotionPermit?: PromotionPermit;
-  frontier: "implementation_open" | "promotion_open" | "closed";
+  frontier: "implementation_open" | "promotion_open" | "closed" | "cancelled";
+  cancellation?: {
+    ref: ContentRef;
+    kind: "cancel_work";
+    reason: string;
+    sourceTurnId: string;
+    programId: string;
+  };
   correctionPlanRef?: ContentRef;
   activeDeferral?: ManagedDeferralProduct;
   promotionDeferral?: PromotionDeferralProduct;
@@ -60,14 +67,14 @@ export type ManagedProgramState =
 
 export type ManagedWorkState = {
   work: PlanningAcceptedProduct["candidate"]["works"][number];
-  status: "planned" | "active" | "closed";
+  status: "planned" | "active" | "closed" | "cancelled";
 };
 
 export type ManagedTaskState = {
   task: PlanningAcceptedProduct["candidate"]["tasks"][number];
   status:
     | "planned" | "selected" | "result_submitted" | "review_failed"
-    | "accepted" | "promotion_deferred";
+    | "accepted" | "promotion_deferred" | "cancelled";
   attempts: ManagedAttempt[];
   currentResult?: ResultCandidateProduct;
   currentReview?: TaskReviewProduct;
@@ -130,6 +137,19 @@ export type WorkLedgerMutation =
       kind: "close_deferred_promotion_frontier";
       cursor: WorkLedgerCursor;
       deferredAnchorRef: ContentRef;
+    }
+  | {
+      kind: "cancel_program";
+      cursor: WorkLedgerCursor;
+      continuationCandidateId: string;
+      baseManifestHash: string;
+      cancellation: {
+        ref: ContentRef;
+        kind: "cancel_work";
+        reason: string;
+        sourceTurnId: string;
+        programId: string;
+      };
     };
 
 export type WorkLedgerCommit = {

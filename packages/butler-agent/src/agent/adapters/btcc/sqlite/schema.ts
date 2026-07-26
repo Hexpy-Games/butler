@@ -146,6 +146,25 @@ CREATE TABLE IF NOT EXISTS btcc_stop_requests (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS btcc_stopped_program_continuations (
+  candidate_id TEXT NOT NULL UNIQUE,
+  anchor_id TEXT PRIMARY KEY,
+  anchor_sha256 TEXT NOT NULL,
+  blocker_id TEXT NOT NULL,
+  blocker_sha256 TEXT NOT NULL,
+  source_turn_id TEXT NOT NULL UNIQUE,
+  session_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  ledger_id TEXT NOT NULL,
+  program_id TEXT NOT NULL,
+  expected_manifest_revision INTEGER NOT NULL,
+  base_manifest_hash TEXT NOT NULL,
+  goal_contract_ref TEXT NOT NULL,
+  context_json TEXT NOT NULL,
+  status TEXT NOT NULL
+);
+
 ${BTCC_PHASE_CONVERSATION_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_delivery_outbox (
@@ -252,6 +271,7 @@ CREATE TABLE IF NOT EXISTS btcc_programs (
   active_deferral_ref TEXT,
   active_deferral_turn_id TEXT,
   promotion_deferral_ref TEXT,
+  cancellation_ref TEXT,
   frontier TEXT NOT NULL,
   manifest_revision INTEGER NOT NULL,
   available_specs_json TEXT NOT NULL DEFAULT '[]',

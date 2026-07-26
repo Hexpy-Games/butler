@@ -6,7 +6,7 @@ import type {
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";
-import { discoverDeferredContinuationCandidates } from
+import { discoverContinuationCandidates } from
   "./continuation-candidate-discovery.ts";
 import { SqliteAdmissionConstructionClaims } from "./admission-construction-claims.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
@@ -93,7 +93,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     claim: AdmissionConstructionClaim,
   ): Promise<TurnRecord> {
     const command = this.loadCommand(inbox.inboxId);
-    const continuationCandidates = await discoverDeferredContinuationCandidates(
+    const continuationCandidates = await discoverContinuationCandidates(
       this.db,
       command,
       this.projectLedger,

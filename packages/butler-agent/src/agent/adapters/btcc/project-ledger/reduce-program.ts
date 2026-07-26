@@ -64,6 +64,23 @@ export function reduceProjectProgram(
         !next.promotionDeferral) throw changed("deferred promotion frontier");
       next.frontier = "closed";
       break;
+    case "cancel_program":
+      if (next.frontier === "closed" || next.frontier === "cancelled") {
+        throw changed("cancellation frontier");
+      }
+      next.frontier = "cancelled";
+      next.cancellation = mutation.cancellation;
+      next.tasks.forEach((task) => {
+        if (task.status !== "accepted") task.status = "cancelled";
+        const attempt = task.attempts.at(-1);
+        if (attempt && attempt.status !== "accepted") attempt.status = "closed_unaccepted";
+      });
+      next.works.forEach((work) => {
+        if (work.status !== "closed") work.status = "cancelled";
+      });
+      delete next.activeDeferral;
+      delete next.promotionDeferral;
+      break;
   }
   next.manifestRevision += 1;
   return selectCurrent(next);
@@ -74,6 +91,13 @@ function installPlan(program: Program, product: Extract<Mutation, {
 }>["product"]): Reviewed {
   const candidate = product.candidate;
   const authority = acceptReviewedPlanAuthority(program, product);
+  if (
+    program.planningState === "reviewed" &&
+    (candidate.revisionOrigin.kind === "deferred_continuation" ||
+      candidate.revisionOrigin.kind === "stopped_continuation")
+  ) {
+    return installContinuedPlan(program, product, authority);
+  }
   const works = candidate.works.map((work) => ({ work, status: "planned" as const }));
   const tasks = candidate.tasks.map((task) => ({ task, status: "planned" as const, attempts: [] }));
   return selectCurrent({
@@ -93,6 +117,61 @@ function installPlan(program: Program, product: Extract<Mutation, {
     promotionAssemblies: [],
     frontier: "implementation_open",
   });
+}
+
+function installContinuedPlan(
+  program: Reviewed,
+  product: Extract<Mutation, { kind: "install_reviewed_plan" }>["product"],
+  authority: ReturnType<typeof acceptReviewedPlanAuthority>,
+): Reviewed {
+  const candidate = product.candidate;
+  const priorTasks = new Map(program.tasks.map((task) => [task.task.ref.id, task]));
+  const candidateTaskIds = new Set(candidate.tasks.map((task) => task.ref.id));
+  const carriedCompleted = program.tasks
+    .filter((task) => task.status === "accepted" && !candidateTaskIds.has(task.task.ref.id));
+  const tasks = candidate.tasks.map((task) => {
+    const prior = priorTasks.get(task.ref.id);
+    if (prior?.status === "accepted") return structuredClone(prior);
+    const attempts = structuredClone(prior?.attempts ?? []);
+    const current = attempts.at(-1);
+    if (current && current.status !== "accepted") current.status = "closed_unaccepted";
+    return { task, status: "planned" as const, attempts };
+  });
+  tasks.push(...structuredClone(carriedCompleted));
+  const candidateWorkIds = new Set(candidate.works.map((work) => work.workLogicalId));
+  const carriedWorkIds = new Set(carriedCompleted.map((task) => task.task.workLogicalId));
+  const carriedWorks = program.works.filter((work) =>
+    carriedWorkIds.has(work.work.workLogicalId) &&
+    !candidateWorkIds.has(work.work.workLogicalId));
+  const works = [
+    ...candidate.works.map((work) => ({ work, status: "planned" as const })),
+    ...structuredClone(carriedWorks),
+  ];
+  const next: Reviewed = {
+    ...program,
+    ...authority,
+    acceptedPlan: candidate,
+    plan: candidate.plan,
+    planningReviewRef: product.review.ref,
+    works,
+    tasks,
+    currentWork: works[0]!,
+    currentTask: tasks[0]!,
+    criteria: candidate.criteria,
+    verificationQuestions: candidate.verificationQuestions,
+    artifactLifecycle: candidate.artifactLifecycle,
+    promotionAssemblies: [],
+    frontier: "implementation_open",
+  };
+  delete next.activeDeferral;
+  delete next.promotionDeferral;
+  delete next.promotionPermit;
+  for (const work of next.works) {
+    if (tasksFor(next, work).every((task) => task.status === "accepted")) {
+      work.status = "closed";
+    }
+  }
+  return selectCurrent(next);
 }
 
 function selectAttempt(program: Reviewed, attempt: Extract<Mutation, { kind: "select_attempt" }>[

@@ -50,7 +50,7 @@ export function bindManagedProgram(
       planningState: "unplanned",
     };
   }
-  assertDeferredContinuation(current, mutation);
+  assertProgramContinuation(current, mutation);
   return {
     ...current,
     ...nextAuthority,
@@ -190,20 +190,31 @@ function assertAcceptedFeedbackReview(
   }
 }
 
-function assertDeferredContinuation(
+function assertProgramContinuation(
   current: ManagedProgramState,
   mutation: BindProgram,
 ): void {
   const binding = mutation.product.authority.managedBinding;
   const continuation = binding.continuationBinding;
   if (
-    binding.source !== "deferred_goal" ||
-    continuation.kind !== "deferred_goal" ||
+    continuation.kind === "new_request" ||
     current.programId !== binding.programId ||
-    current.manifestRevision !== binding.expectedManifestRevision ||
-    current.activeDeferral?.anchor.ref.id !== continuation.anchorRef.id
+    current.manifestRevision !== binding.expectedManifestRevision
+  ) {
+    throw new Error("Work Ledger continued Program binding changed");
+  }
+  if (
+    continuation.kind === "deferred_goal" &&
+    (binding.source !== "deferred_goal" ||
+      current.activeDeferral?.anchor.ref.id !== continuation.anchorRef.id)
   ) {
     throw new Error("Work Ledger deferred Program binding changed");
+  }
+  if (
+    continuation.kind === "stopped_program" &&
+    (binding.source !== "stopped_program" || current.activeDeferral)
+  ) {
+    throw new Error("Work Ledger stopped Program binding changed");
   }
 }
 

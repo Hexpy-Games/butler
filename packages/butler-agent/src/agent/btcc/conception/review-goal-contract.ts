@@ -18,7 +18,7 @@ import type {
 } from "./managed-contracts.ts";
 import type {
   ContinuationBinding,
-  DeferredContinuationCandidate,
+  ContinuationCandidate,
 } from "../continuation/index.ts";
 import {
   goalReviewSubmissionSchema,
@@ -125,10 +125,10 @@ function goalReviewCodec(
     const defaultLedgerId = projectRef
       ? digest(`btcc-project-ledger.v1\0${projectRef}`)
       : digest(`btcc-session-ledger.v1\0${sessionId}`);
-    const ledgerId = continuation.kind === "deferred_goal"
+    const ledgerId = continuation.kind !== "new_request"
       ? continuation.ledgerId
       : defaultLedgerId;
-    const programId = continuation.kind === "deferred_goal"
+    const programId = continuation.kind !== "new_request"
       ? continuation.programId
       : digest(
           `btcc-program.v1\0${ledgerId}\0${inboxId}\0${envelope.binding.turnId}\0${candidate.candidate.proposedContract.ref.sha256}`,
@@ -140,10 +140,14 @@ function goalReviewCodec(
       managedBinding: {
         ledgerId,
         programId,
-        expectedManifestRevision: continuation.kind === "deferred_goal"
+        expectedManifestRevision: continuation.kind !== "new_request"
           ? continuation.expectedManifestRevision
           : 0,
-        source: continuation.kind === "deferred_goal" ? "deferred_goal" as const : "new_program" as const,
+        source: continuation.kind === "stopped_program"
+          ? "stopped_program" as const
+          : continuation.kind === "deferred_goal"
+            ? "deferred_goal" as const
+            : "new_program" as const,
         continuationBinding: continuation,
       },
     };
@@ -212,7 +216,7 @@ function selectContinuation(
   const candidates = requireRecord(input, "Contract Review state input")
     .continuationCandidates;
   const available = Array.isArray(candidates)
-    ? candidates as DeferredContinuationCandidate[]
+    ? candidates as ContinuationCandidate[]
     : [];
   if (submittedCandidateId === undefined || submittedCandidateId === null) {
     const body = { kind: "new_request" as const, inboxId };
@@ -223,13 +227,16 @@ function selectContinuation(
   }
   const candidate = available.find((item) => item.candidateId === submittedCandidateId);
   if (!candidate) throw new Error("Conception selected an unavailable continuation candidate");
+  const kind = candidate.continuationKind === "user_stopped"
+    ? "stopped_program" as const
+    : "deferred_goal" as const;
   const body = {
-    kind: "deferred_goal" as const,
+    kind,
     inboxId,
     ...candidate,
   };
   return {
-    kind: "deferred_goal",
+    kind,
     inboxId,
     ref: contentRef("continuation-binding", body),
     ...candidate,

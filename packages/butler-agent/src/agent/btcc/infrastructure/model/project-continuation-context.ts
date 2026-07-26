@@ -13,10 +13,11 @@ export function projectContinuationContext(envelope: PhaseEnvelope) {
   return {
     rule: [
       "Compare the current request with the projected goal, blocker, and frontier.",
-      "Select a candidate only when the user is semantically resuming that deferred goal.",
+      "Select a candidate only when the user is semantically resuming that deferred or user-stopped goal.",
       "The projected goal, blocker, readiness, and frontier must describe the same work.",
       "Opaque refs are identities, not search terms; do not probe unrelated stores to resolve them.",
       "If the projection is unrelated or insufficient, continue as a new request.",
+      "Emit cancel_work only when the current request explicitly and semantically abandons the exact candidate; never infer abandonment from its prior Stop state.",
     ].join(" "),
     candidates: envelope.context.continuationCandidates ?? [],
   };

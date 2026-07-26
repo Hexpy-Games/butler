@@ -5,6 +5,7 @@ import type {
   GoalContractRevisionRequiredProduct,
   OpeningAnswerProduct,
   OpeningContinuationProduct,
+  OpeningWorkCancellationProduct,
 } from "../conception/index.ts";
 import type {
   ConsolidationRepairProduct,
@@ -32,6 +33,7 @@ export type TurnEvent =
   | { kind: "TurnActivated" }
   | { kind: "OpeningAnswerAccepted"; product: OpeningAnswerProduct }
   | { kind: "OpeningContinuationAccepted"; product: OpeningContinuationProduct }
+  | { kind: "WorkCancellationAccepted"; product: OpeningWorkCancellationProduct }
   | { kind: "GoalContractCandidateSubmitted"; product: GoalContractCandidateProduct }
   | { kind: "GoalContractReviewAccepted"; product: GoalContractAcceptedProduct }
   | { kind: "GoalContractRevisionRequested"; product: GoalContractRevisionRequiredProduct }

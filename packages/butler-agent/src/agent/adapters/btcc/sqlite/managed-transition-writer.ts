@@ -10,6 +10,7 @@ import { ManagedPlanningRecordWriter } from "./managed-planning-record-writer.ts
 import { ManagedTurnProjectionWriter } from "./managed-turn-projection-writer.ts";
 import type { ProjectLedgerBoundaryContext } from "./project-ledger-promotion-writer.ts";
 import { ProjectManagedBoundary } from "./project-managed-boundary.ts";
+import { StoppedContinuationRegistry } from "./stopped-continuation-registry.ts";
 type ManagedTransition = Exclude<BtccPersistenceTypes["transition"],
   {
     kind:
@@ -29,6 +30,7 @@ export class SqliteManagedTransitionWriter {
   private readonly turnProjection: ManagedTurnProjectionWriter;
   private readonly projectBoundary: ProjectManagedBoundary;
   private readonly goals: ManagedGoalTransitionWriter;
+  private readonly stoppedContinuations: StoppedContinuationRegistry;
   constructor(private readonly db: Database, ledger: WorkLedger) {
     this.records = new SqliteImmutableRecordStore(db);
     this.artifactRecords = new ManagedArtifactRecordWriter(this.records);
@@ -42,6 +44,7 @@ export class SqliteManagedTransitionWriter {
       this.turnProjection,
       this.projectBoundary,
     );
+    this.stoppedContinuations = new StoppedContinuationRegistry(db);
   }
   commit(
     turn: TurnRecord,
@@ -53,8 +56,11 @@ export class SqliteManagedTransitionWriter {
     switch (transition.kind) {
       case "submit_goal_candidate":
       case "request_goal_revision":
+        this.goals.commit(turn, nextRevision, transition, projectLedger);
+        return;
       case "accept_goal_contract":
         this.goals.commit(turn, nextRevision, transition, projectLedger);
+        this.consumeStoppedBinding(transition);
         return;
       case "submit_plan_candidate":
         this.planningRecords.record(transition.product.candidate);
@@ -72,6 +78,21 @@ export class SqliteManagedTransitionWriter {
       case "accept_plan":
         this.acceptPlan(turn, nextRevision, transition, projectLedger);
         return;
+      case "accept_work_cancellation": {
+        this.insert("work_cancellation", transition.product.cancellation);
+        const program = this.requireCommittedProgram(
+          this.commitLedger(transition.ledgerCommit, projectLedger),
+        );
+        this.stoppedContinuations.consumeCancellation(
+          transition.ledgerCommit.mutation,
+          true,
+        );
+        this.turnProjection.cancelWork(turn, nextRevision, {
+          programId: program.programId,
+          program,
+        });
+        return;
+      }
       case "select_work_task":
         this.selectTask(turn, nextRevision, transition, projectLedger);
         return;
@@ -297,6 +318,15 @@ export class SqliteManagedTransitionWriter {
   }
   private advance(...input: Parameters<ManagedTurnProjectionWriter["advance"]>): void {
     this.turnProjection.advance(...input);
+  }
+
+  private consumeStoppedBinding(
+    transition: Extract<ManagedTransition, { kind: "accept_goal_contract" }>,
+  ): void {
+    this.stoppedContinuations.consumeBinding(
+      transition.product.authority.managedBinding,
+      true,
+    );
   }
   private insert<T extends { ref: { id: string; sha256: string } }>(kind: string, value: T): void {
     this.records.insert(value.ref.id, kind, value.ref.sha256, stableJson(value));

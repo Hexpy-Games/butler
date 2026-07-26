@@ -17,6 +17,7 @@ import { SqlitePromotionFrontierWriter } from "./promotion-frontier-writer.ts";
 import { SqliteProgramAuthorityWriter } from "./program-authority-writer.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger-program-reader.ts";
 import { validateFrontierMutation } from "./validate-frontier-mutation.ts";
+import { StoppedContinuationRegistry } from "../stopped-continuation-registry.ts";
 
 export class SqliteWorkLedgerMutationWriter {
   private readonly journal: WorkLedgerCommitJournal;
@@ -25,6 +26,7 @@ export class SqliteWorkLedgerMutationWriter {
   private readonly promotionFrontier: SqlitePromotionFrontierWriter;
   private readonly programAuthority: SqliteProgramAuthorityWriter;
   private readonly programs: SqliteWorkLedgerProgramReader;
+  private readonly stoppedContinuations: StoppedContinuationRegistry;
 
   constructor(private readonly db: Database) {
     this.journal = new WorkLedgerCommitJournal(db);
@@ -33,6 +35,7 @@ export class SqliteWorkLedgerMutationWriter {
     this.promotionFrontier = new SqlitePromotionFrontierWriter(db);
     this.programAuthority = new SqliteProgramAuthorityWriter(db);
     this.programs = new SqliteWorkLedgerProgramReader(db);
+    this.stoppedContinuations = new StoppedContinuationRegistry(db);
   }
 
   commitAtomically(input: WorkLedgerCommit): void {
@@ -99,6 +102,9 @@ export class SqliteWorkLedgerMutationWriter {
         return;
       case "close_deferred_promotion_frontier":
         this.promotionFrontier.closeDeferred(mutation);
+        return;
+      case "cancel_program":
+        this.cancelProgram(mutation);
         return;
     }
   }
@@ -215,6 +221,37 @@ export class SqliteWorkLedgerMutationWriter {
       mutation.cursor.expectedManifestRevision,
     );
     if (updated.changes !== 1) throw new Error("Work Ledger deferral base changed");
+  }
+
+  private cancelProgram(
+    mutation: Extract<WorkLedgerCommit["mutation"], { kind: "cancel_program" }>,
+  ): void {
+    const cancelled = this.db.query(`
+      UPDATE btcc_programs SET frontier = 'cancelled', cancellation_ref = ?,
+        active_deferral_ref = NULL, active_deferral_turn_id = NULL,
+        promotion_deferral_ref = NULL, manifest_revision = manifest_revision + 1
+      WHERE program_id = ? AND manifest_revision = ? AND frontier != 'closed'
+        AND frontier != 'cancelled'
+    `).run(
+      mutation.cancellation.ref.id,
+      mutation.cursor.programId,
+      mutation.cursor.expectedManifestRevision,
+    );
+    if (cancelled.changes !== 1) throw new Error("Work Ledger cancellation base changed");
+    this.db.query(`
+      UPDATE btcc_tasks SET status = 'cancelled'
+      WHERE program_id = ? AND is_active = 1 AND status != 'accepted'
+    `).run(mutation.cursor.programId);
+    this.db.query(`
+      UPDATE btcc_work_items SET status = CASE
+        WHEN status = 'closed' THEN 'closed' ELSE 'cancelled' END
+      WHERE program_id = ? AND is_active = 1
+    `).run(mutation.cursor.programId);
+    this.db.query(`
+      UPDATE btcc_attempts SET status = 'closed_unaccepted'
+      WHERE program_id = ? AND status != 'accepted'
+    `).run(mutation.cursor.programId);
+    this.stoppedContinuations.consumeCancellation(mutation);
   }
 
   private bumpManifest(programId: string): void {

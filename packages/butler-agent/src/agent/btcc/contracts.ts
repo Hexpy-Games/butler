@@ -12,7 +12,7 @@ import type {
   TurnStateRepository,
 } from "./turn/index.ts";
 import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
-import type { DeferredContinuationCandidate } from "./continuation/index.ts";
+import type { ContinuationCandidate } from "./continuation/index.ts";
 import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type {
   CommittedSuccessorReadiness,
@@ -44,7 +44,7 @@ export type ButlerContextInput = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
-  continuationCandidates?: DeferredContinuationCandidate[];
+  continuationCandidates?: ContinuationCandidate[];
 };
 
 export type BtccTurnCommand =

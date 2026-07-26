@@ -15,7 +15,7 @@ export type WorkProgressTask = {
   taskState: WorkProgressTaskState;
   workId: string;
   workTitle: string;
-  workState: "planned" | "active" | "completed";
+  workState: "planned" | "active" | "completed" | "cancelled";
 };
 
 export function projectWorkProgress(
@@ -55,5 +55,6 @@ function taskProgressState(
   if (status === "review_failed") return "correction_required";
   if (status === "accepted") return "completed";
   if (status === "promotion_deferred") return "stopped";
+  if (status === "cancelled") return "stopped";
   return "planned";
 }

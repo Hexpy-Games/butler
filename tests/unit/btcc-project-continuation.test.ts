@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
-import { discoverDeferredContinuationCandidates } from
+import { discoverContinuationCandidates } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/continuation-candidate-discovery.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
@@ -29,7 +29,7 @@ test("Project continuation comes from the canonical Project Work Ledger manifest
   const goalContractRef = { id: "goal", sha256: "a".repeat(64) };
   const anchorRef = { id: "anchor", sha256: "b".repeat(64) };
   const blockerRef = { id: "blocker", sha256: "c".repeat(64) };
-  const candidates = await discoverDeferredContinuationCandidates(
+  const candidates = await discoverContinuationCandidates(
     db,
     command(),
     {
@@ -65,6 +65,7 @@ test("Project continuation comes from the canonical Project Work Ledger manifest
     },
   );
   expect(candidates).toEqual([{
+    continuationKind: "managed_deferral",
     candidateId: expect.any(String),
     ledgerId: "project:fixture",
     programId: "program-project",

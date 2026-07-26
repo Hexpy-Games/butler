@@ -14,6 +14,7 @@ function ensureProgramAuthorityProjection(db: Database): void {
   ensureColumn(db, "btcc_programs", "governing_spec_refs_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "btcc_programs", "promotion_permit_ref", "TEXT");
   ensureColumn(db, "btcc_programs", "accepted_plan_candidate_ref", "TEXT");
+  ensureColumn(db, "btcc_programs", "cancellation_ref", "TEXT");
   const columns = db.query<ColumnRow, []>("PRAGMA table_info(btcc_programs)").all();
   if (columns.some((candidate) => candidate.name === "promotion_authorization_ref")) {
     db.exec(`

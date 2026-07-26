@@ -10,6 +10,7 @@ import type {
   GoalContractCandidateProduct,
   GoalContractRevisionRequiredProduct,
   OpeningContinuationProduct,
+  OpeningWorkCancellationProduct,
 } from "../conception/index.ts";
 import type { ConsolidationRepairProduct, FinalDossierProduct } from "../consolidation/index.ts";
 import type { ContentRef } from "../core/index.ts";
@@ -33,7 +34,7 @@ import type { WorkLedgerCommit, WorkLedgerMutation } from "../work-ledger/index.
 import type { ManagedTurnState } from "./managed-turn-state.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import type { PromotionDeferralProduct } from "../deferral/index.ts";
-import type { DeferredContinuationCandidate } from "../continuation/index.ts";
+import type { ContinuationCandidate } from "../continuation/index.ts";
 import type { TurnEvent } from "./turn-events.ts";
 
 export type { TurnEvent } from "./turn-events.ts";
@@ -82,7 +83,7 @@ export type TurnRecord = {
   originalMessage: string;
   modelSelection: AdmittedModelSelection;
   context: ButlerContextInput;
-  continuationCandidates: DeferredContinuationCandidate[];
+  continuationCandidates: ContinuationCandidate[];
   semanticState: TurnSemanticState;
   checkpoint?: TurnCheckpoint;
   route?: "direct" | "assisted" | "managed";
@@ -139,6 +140,14 @@ export type AcceptedTurnTransition =
       kind: "accept_opening_continuation";
       successor: "assisted_answer" | "conception_deliberation";
       product: OpeningContinuationProduct;
+    }
+  | {
+      kind: "accept_work_cancellation";
+      successor: "cancelled";
+      product: OpeningWorkCancellationProduct;
+      ledgerCommit: WorkLedgerCommit & {
+        mutation: Extract<WorkLedgerMutation, { kind: "cancel_program" }>;
+      };
     }
   | { kind: "submit_goal_candidate"; successor: "contract_review"; product: GoalContractCandidateProduct }
   | {

@@ -208,6 +208,12 @@ export type PlanningCandidate = {
         deferredAnchorRef: ContentRef;
       }
     | {
+        kind: "stopped_continuation";
+        continuationBindingRef: ContentRef;
+        sourceTurnId: string;
+        stoppedAnchorRef: ContentRef;
+      }
+    | {
         kind: "review_revision";
         previousCandidateRef: ContentRef;
         findingSetRef: ContentRef;
@@ -263,7 +269,7 @@ export type PlanningCandidateProduct = {
 
 export type PlanningObservationResultIndexEntry = OperationResultIndexEntry;
 
-export type PlanningContinuation = Extract<ContinuationBinding, { kind: "deferred_goal" }>;
+export type PlanningContinuation = Exclude<ContinuationBinding, { kind: "new_request" }>;
 
 export type PlanningFindingDecision = {
   findingRef: ContentRef;

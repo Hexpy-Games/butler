@@ -127,7 +127,7 @@ async function authorInitialPlan(command: {
     availableSpecs: authority.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
     priorPlanningObservationResultIndex: observations,
-    ...(accepted.authority.managedBinding.continuationBinding.kind === "deferred_goal"
+    ...(accepted.authority.managedBinding.continuationBinding.kind !== "new_request"
       ? { continuation: accepted.authority.managedBinding.continuationBinding }
       : {}),
     ...projectPlanningRevision(previous),

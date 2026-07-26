@@ -8,21 +8,24 @@ import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/inde
 import { digest, stableJson } from "./identity.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger/work-ledger-program-reader.ts";
 
-type Candidate = BtccPersistenceTypes["deferredContinuationCandidate"];
+type Candidate = BtccPersistenceTypes["continuationCandidate"];
 type ManagedDeferralProduct = BtccPersistenceTypes["managedDeferralProduct"];
 type ProjectRuntime = {
   publications: ProjectWorkLedgerPublicationAdapter;
   resolveProjectRoot(projectRef: string): string;
 };
 
-export async function discoverDeferredContinuationCandidates(
+export async function discoverContinuationCandidates(
   db: Database,
   command: FreshBtccTurnCommand,
   project?: ProjectRuntime,
 ): Promise<Candidate[]> {
-  return command.context.projectRef
-    ? discoverProjectCandidates(db, command.context.projectRef, project)
+  const deferred = command.context.projectRef
+    ? await discoverProjectCandidates(db, command.context.projectRef, project)
     : discoverSessionCandidates(db, command.sessionId);
+  const stopped = await discoverStoppedCandidates(db, command, project);
+  return [...deferred, ...stopped]
+    .sort((left, right) => left.candidateId.localeCompare(right.candidateId));
 }
 
 async function discoverProjectCandidates(
@@ -37,6 +40,7 @@ async function discoverProjectCandidates(
     const deferral = program?.activeDeferral;
     if (!program || !deferral || !isDeferredTurn(db, deferral.anchor.sourceTurnId)) continue;
     candidates.push(candidate({
+      continuationKind: "managed_deferral",
       ledgerId: program.ledgerId,
       programId: program.programId,
       expectedManifestRevision: program.manifestRevision,
@@ -58,6 +62,7 @@ async function discoverProjectCandidates(
 
 function discoverSessionCandidates(db: Database, sessionId: string): Candidate[] {
   type Row = {
+    candidate_id: string;
     ledger_id: string;
     program_id: string;
     manifest_revision: number;
@@ -89,6 +94,7 @@ function discoverSessionCandidates(db: Database, sessionId: string): Candidate[]
       anchor.blockerRef.id,
     );
     return candidate({
+      continuationKind: "managed_deferral",
       ledgerId: row.ledger_id,
       programId: row.program_id,
       expectedManifestRevision: row.manifest_revision,
@@ -107,12 +113,78 @@ function discoverSessionCandidates(db: Database, sessionId: string): Candidate[]
   });
 }
 
+async function discoverStoppedCandidates(
+  db: Database,
+  command: FreshBtccTurnCommand,
+  project?: ProjectRuntime,
+): Promise<Candidate[]> {
+  type Row = {
+    candidate_id: string;
+    anchor_id: string;
+    anchor_sha256: string;
+    blocker_id: string;
+    blocker_sha256: string;
+    source_turn_id: string;
+    ledger_id: string;
+    program_id: string;
+    expected_manifest_revision: number;
+    base_manifest_hash: string;
+    goal_contract_ref: string;
+    context_json: string;
+  };
+  const scopeKind = command.context.projectRef ? "project" : "session";
+  const scopeId = command.context.projectRef ?? command.sessionId;
+  const rows = db.query<Row, [string, string]>(`
+    SELECT c.candidate_id, c.anchor_id, c.anchor_sha256, c.blocker_id, c.blocker_sha256,
+      c.source_turn_id, c.ledger_id, c.program_id, c.expected_manifest_revision,
+      c.base_manifest_hash, c.goal_contract_ref, c.context_json
+    FROM btcc_stopped_program_continuations c
+    JOIN btcc_turns t ON t.turn_id = c.source_turn_id
+    WHERE c.scope_kind = ? AND c.scope_id = ? AND c.status = 'eligible'
+      AND t.semantic_state = 'cancelled' AND t.final_disposition = 'cancelled'
+    ORDER BY c.program_id
+  `).all(scopeKind, scopeId);
+  const sessionPrograms = new SqliteWorkLedgerProgramReader(db);
+  const projectRoot = command.context.projectRef && project
+    ? project.resolveProjectRoot(command.context.projectRef)
+    : undefined;
+  const candidates: Candidate[] = [];
+  for (const row of rows) {
+    const program = projectRoot && project
+      ? await project.publications.loadProgram(projectRoot, row.program_id)
+      : sessionPrograms.load(row.program_id);
+    if (!program || program.manifestRevision !== row.expected_manifest_revision) continue;
+    const currentHash = ledgerManifestContentHash(program, {
+      ledgerId: row.ledger_id,
+      programId: row.program_id,
+    });
+    if (currentHash !== row.base_manifest_hash) continue;
+    candidates.push(candidate({
+      continuationKind: "user_stopped",
+      ledgerId: row.ledger_id,
+      programId: row.program_id,
+      expectedManifestRevision: row.expected_manifest_revision,
+      baseManifestHash: row.base_manifest_hash,
+      sourceTurnId: row.source_turn_id,
+      originalGoalContractRef: loadRef(db, row.goal_contract_ref),
+      anchorRef: { id: row.anchor_id, sha256: row.anchor_sha256 },
+      blockerRef: { id: row.blocker_id, sha256: row.blocker_sha256 },
+    }, JSON.parse(row.context_json), row.candidate_id));
+  }
+  return candidates;
+}
+
 function candidate(
   body: Omit<Candidate, "candidateId" | "context">,
   context: NonNullable<Candidate["context"]>,
+  expectedCandidateId?: string,
 ): Candidate {
+  const candidateId = digest(`btcc-continuation-candidate.v1\0${stableJson(body)}`);
+  if (expectedCandidateId && candidateId !== expectedCandidateId) {
+    throw new Error("Stopped continuation candidate identity changed");
+  }
   return {
-    candidateId: digest(`btcc-continuation-candidate.v1\0${stableJson(body)}`),
+    candidateId,
     ...body,
     context,
   };

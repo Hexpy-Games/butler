@@ -15,7 +15,8 @@ test("opening an existing BTCC database migrates structural projections idempote
   legacy.exec(BTCC_SUCCESSOR_SCHEMA
     .replace("  claim_path TEXT NOT NULL,\n", "")
     .replace(",\n  available_specs_json TEXT NOT NULL DEFAULT '[]'", "")
-    .replace(",\n  governing_spec_refs_json TEXT NOT NULL DEFAULT '[]'", ""));
+    .replace(",\n  governing_spec_refs_json TEXT NOT NULL DEFAULT '[]'", "")
+    .replace("  cancellation_ref TEXT,\n", ""));
   legacy.close();
 
   const first = openBtccSqliteStores({ dbPath, ownerId: "migration-owner-1" });
@@ -35,6 +36,8 @@ test("opening an existing BTCC database migrates structural projections idempote
     .toMatchObject({ notnull: 1, dflt_value: "'[]'" });
   expect(programColumns.find((column) => column.name === "governing_spec_refs_json"))
     .toMatchObject({ notnull: 1, dflt_value: "'[]'" });
+  expect(programColumns.find((column) => column.name === "cancellation_ref"))
+    .toMatchObject({ notnull: 0, dflt_value: null });
   migrated.close();
   rmSync(root, { recursive: true, force: true });
 });
