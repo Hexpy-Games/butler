@@ -7,10 +7,12 @@ import {
   resolveDutyInstructions,
   resolveProhibitionInstructions,
 } from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/prompt-duty-catalog.ts";
-import { openingSubmissionSchema } from
+import { goalCandidateSubmissionSchema, openingSubmissionSchema } from
   "../../packages/butler-agent/src/agent/btcc/conception/submission-schemas.ts";
 import { completionModeFor } from
   "../../packages/butler-agent/src/agent/btcc/conception/opening/fulfillment.ts";
+import { decodeUserArtifactTargetRequirement } from
+  "../../packages/butler-agent/src/agent/btcc/conception/user-artifact-target-requirement.ts";
 
 test("every typed phase duty and prohibition has one prompt instruction", () => {
   expect(resolveDutyInstructions(PROMPT_DUTY_IDS).map((item) => item.id)).toEqual(
@@ -58,6 +60,19 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("blocker");
   expect(resolveDutyInstructions(["review_continuation_coherence"])[0]?.instruction)
     .toContain("new Program");
+  const persistenceAuthoring = resolveDutyInstructions(["define_artifact_persistence"])[0]
+    ?.instruction ?? "";
+  expect(persistenceAuthoring).toContain("userArtifactTargetRequirement");
+  expect(persistenceAuthoring)
+    .toContain("reviewed_artifact_bytes_at_admitted_target_required");
+  expect(persistenceAuthoring).toContain("internally persisted lifecycle records");
+  expect(persistenceAuthoring).toContain("independent of route, Task, tool, or storage");
+  expect(persistenceAuthoring).toContain("no_user_artifact_target");
+  const persistenceReview = resolveDutyInstructions(["review_artifact_persistence"])[0]
+    ?.instruction ?? "";
+  expect(persistenceReview).toContain("user-requested, reviewed product bytes");
+  expect(persistenceReview).toContain("internally persisted lifecycle records");
+  expect(persistenceReview).toContain("independent of route, Task, tool, or storage");
   const openingRoute = resolveDutyInstructions(["choose_direct_assisted_or_deepen"])[0]
     ?.instruction ?? "";
   expect(openingRoute).toContain("requestObligation");
@@ -66,6 +81,22 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
   expect(openingRoute).toContain("target_change, persistent_artifact");
   expect(openingRoute).toContain("never a current target observation");
   expect(openingRoute).toContain("never route by keywords");
+});
+
+test("Goal authoring distinguishes user artifacts from durable BTCC records", () => {
+  const schema = JSON.stringify(goalCandidateSubmissionSchema([]));
+  expect(schema).toContain("userArtifactTargetRequirement");
+  expect(schema).toContain("no_user_artifact_target");
+  expect(schema).toContain("reviewed_artifact_bytes_at_admitted_target_required");
+  expect(schema).not.toContain('"artifactPersistence"');
+  expect(schema).not.toContain("userArtifactPersistence");
+  expect(decodeUserArtifactTargetRequirement("no_user_artifact_target"))
+    .toBe("not_required");
+  expect(decodeUserArtifactTargetRequirement(
+    "reviewed_artifact_bytes_at_admitted_target_required",
+  ))
+    .toBe("required");
+  expect(() => decodeUserArtifactTargetRequirement("required")).toThrow();
 });
 
 test("Opening derives route mode from one typed required result", () => {
