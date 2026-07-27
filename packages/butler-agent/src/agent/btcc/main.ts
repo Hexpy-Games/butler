@@ -16,6 +16,7 @@ import {
   type ContinuingTurnCommand,
   type TurnExecutionSupervisor,
 } from "./turn/index.ts";
+import { publishTurnProgress } from "./turn/turn-progress.ts";
 
 class DefaultBtccTurnRuntime implements BtccTurnRuntime {
   private readonly supervisor = createTurnExecutionSupervisor();
@@ -25,7 +26,7 @@ class DefaultBtccTurnRuntime implements BtccTurnRuntime {
 
   handle(command: BtccTurnCommand): Promise<BtccTurnOutcome> {
     if (command.kind === "stop") {
-      return stopTurn(command, this.dependencies.turns, this.supervisor);
+      return stopAndPublish(command, this.dependencies, this.supervisor);
     }
     const active = this.activeTurns.get(command.turnId);
     if (active) return active;
@@ -35,6 +36,24 @@ class DefaultBtccTurnRuntime implements BtccTurnRuntime {
     this.activeTurns.set(command.turnId, running);
     return running;
   }
+}
+
+async function stopAndPublish(
+  command: Extract<BtccTurnCommand, { kind: "stop" }>,
+  dependencies: BtccRuntimeDependencies,
+  supervisor: TurnExecutionSupervisor,
+): Promise<BtccTurnOutcome> {
+  const outcome = await stopTurn(command, dependencies.turns, supervisor);
+  if (outcome.kind !== "cancelled") return outcome;
+  try {
+    const turn = await dependencies.turns.findTurn(command.turnId);
+    if (turn?.semanticState === "cancelled") {
+      await publishTurnProgress(dependencies.progress, turn);
+    }
+  } catch {
+    // Durable Stop remains authoritative when optional projection is unavailable.
+  }
+  return outcome;
 }
 
 async function runTurn(

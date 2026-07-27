@@ -84,7 +84,7 @@ function decodeManagedDeferral(
     throw new Error("Authorized promotion requires a typed promotion deferral");
   }
   const reason = requireString(submission.reason, "Managed deferral reason");
-  const readiness = decodeReadiness(submission.readiness);
+  const readiness = decodeReadiness(submission.readiness, envelope);
   const blockerBody = {
     programId: context.programId,
     sourceState: context.sourceState,
@@ -108,7 +108,10 @@ function decodeManagedDeferral(
   };
 }
 
-function decodeReadiness(value: unknown): ManagedReadinessCondition {
+function decodeReadiness(
+  value: unknown,
+  envelope: PhaseEnvelope,
+): ManagedReadinessCondition {
   const readiness = requireRecord(value, "Managed deferral readiness");
   if (readiness.kind === "user_authority") {
     return {
@@ -120,13 +123,24 @@ function decodeReadiness(value: unknown): ManagedReadinessCondition {
     };
   }
   if (readiness.kind === "external_readiness") {
+    const observationScopeRefs = requireNonEmptyStrings(
+      readiness.observationScopeRefs,
+      "observationScopeRefs",
+    );
+    if (
+      envelope.phase === "task_execution" &&
+      observationScopeRefs.some((scopeRef) =>
+        envelope.operationAuthority.observationScopeRefs.includes(scopeRef),
+      )
+    ) {
+      throw new Error(
+        "Task Execution external readiness names ordinary admitted observation authority",
+      );
+    }
     return {
       kind: "external_readiness",
-      observationScopeRefs: requireNonEmptyStrings(
-        readiness.observationScopeRefs,
-        "observationScopeRefs",
-      ),
-      currentObservationRefs: [],
+      observationScopeRefs,
+      currentObservationRefs: currentObservationRefs(observationScopeRefs, envelope),
     };
   }
   if (readiness.kind === "scheduled_time") {
@@ -136,6 +150,30 @@ function decodeReadiness(value: unknown): ManagedReadinessCondition {
     };
   }
   throw new Error("Managed deferral readiness kind is invalid");
+}
+
+function currentObservationRefs(
+  scopeRefs: readonly string[],
+  envelope: PhaseEnvelope,
+) {
+  const refs = scopeRefs.flatMap((scopeRef) => {
+    const result = envelope.operationResults.find((candidate) =>
+      candidate.request.kind === "observe" &&
+      candidate.request.scopeRef === scopeRef &&
+      candidate.outcome === "observed",
+    );
+    if (!result) {
+      throw new Error(
+        `Managed external readiness lacks a current observation for scope: ${scopeRef}`,
+      );
+    }
+    return [result.observationRef];
+  });
+  return refs.filter((ref, index) =>
+    refs.findIndex((candidate) =>
+      candidate.id === ref.id && candidate.sha256 === ref.sha256,
+    ) === index,
+  );
 }
 
 function requireNonEmptyStrings(

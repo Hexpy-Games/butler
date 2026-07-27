@@ -5,11 +5,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createBtccComposition } from "../../packages/butler-agent/src/agent/composition/index.ts";
+import { createBtccTurnRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/main.ts";
 import { stopTurn } from "../../packages/butler-agent/src/agent/btcc/turn/stop-turn.ts";
 import { DirectHarnessModel } from "../../packages/butler-agent/src/interfaces/btcc-harness/direct-harness-model.ts";
 import type {
   BtccRuntimeDependencies,
   BtccTurnCommand,
+  BtccTurnProgressObserver,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
 import type { TurnExecutionSupervisor } from "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 import type { TurnStateRepository } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
@@ -189,6 +192,67 @@ test("Stop keeps the in-memory fence when durable persistence is unavailable", a
     kind: "fenced_pending_persistence",
     turnId: "turn-fence-only",
   });
+});
+
+test("Stop publishes the canonical cancelled Work frontier without changing its response", async () => {
+  const task = {
+    taskLogicalId: "task-current",
+    workLogicalId: "work-current",
+    intendedOutcome: "Finish current Task",
+    executionOrdinal: 1,
+  };
+  const work = { workLogicalId: "work-current", outcome: "Finish current Work" };
+  const published: Array<{ state?: string; tasks?: unknown[] }> = [];
+  const progress: BtccTurnProgressObserver = {
+    stateChanged(update) { published.push({ state: update.semanticState }); },
+    workProgressChanged(update) { published.push({ tasks: update.tasks }); },
+  };
+  const turns: TurnStateRepository = {
+    async findTurn() {
+      return {
+        turnId: "turn-cancelled-progress",
+        semanticState: "cancelled",
+        revision: 4,
+        finalDisposition: "cancelled",
+        managed: {
+          program: {
+            planningState: "reviewed",
+            programId: "program-cancelled-progress",
+            works: [{ work, status: "active" }],
+            tasks: [{ task, status: "selected" }],
+            currentWork: { work, status: "active" },
+            currentTask: { task, status: "selected" },
+          },
+        },
+      } as never;
+    },
+    async activateCommittedSuccessor() { throw new Error("not used"); },
+    async acquireStateExecutionClaim() { throw new Error("not used"); },
+    async commitTransition() { throw new Error("not used"); },
+    async stopTurn() {
+      return { kind: "cancelled", turnId: "turn-cancelled-progress" };
+    },
+  };
+  const runtime = createBtccTurnRuntime({
+    turns,
+    progress,
+  } as never);
+  const outcome = await runtime.handle({
+    kind: "stop",
+    turnId: "turn-cancelled-progress",
+  });
+
+  expect(outcome).toEqual({ kind: "cancelled", turnId: "turn-cancelled-progress" });
+  expect(published).toEqual([
+    {
+      tasks: [expect.objectContaining({
+        taskId: "task-current",
+        taskState: "stopped",
+        workState: "active",
+      })],
+    },
+    { state: "cancelled" },
+  ]);
 });
 
 test("one runtime owns a persisted state while a concurrent runtime is excluded", async () => {

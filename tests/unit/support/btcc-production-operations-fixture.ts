@@ -178,7 +178,7 @@ export function reviewRequest(
     kind: "review_validation",
     capabilityRef: "run_command",
     reviewSourceRef,
-    input: { command: "check" },
+    input: { command: "check", state_effect: "validation" },
   };
 }
 
@@ -231,7 +231,7 @@ export function envelope(stateInput: unknown = {}): PhaseEnvelope {
       provider: "openai",
       model: "gpt-5.6-sol",
       reasoningEffort: "low",
-      controls: {},
+      controls: { accessMode: "full_access" },
       controlsHash: "controls",
     },
     context: {

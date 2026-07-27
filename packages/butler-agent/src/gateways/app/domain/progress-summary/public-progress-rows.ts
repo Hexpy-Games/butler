@@ -72,6 +72,7 @@ export function progressRowsForTurnState(
       (row) => turnState === "cancelled" || !isFirstVisibleProgressRow(row),
     )
     .map((row) => {
+      if (isCanonicalBtccWorkTaskRow(row)) return row;
       const safeDetailRows = row.safe_detail_rows?.map((detail) =>
         detail.state && !isTerminalProgressState(detail.state)
           ? { ...detail, state: rowState }
@@ -83,6 +84,10 @@ export function progressRowsForTurnState(
       if (!safeDetailRows) return nextRow;
       return { ...nextRow, safe_detail_rows: safeDetailRows };
     });
+}
+
+function isCanonicalBtccWorkTaskRow(row: ProgressSummaryRow): boolean {
+  return row.kind === "todo" && row.bridge_phase === "btcc_work_ledger";
 }
 
 function isFirstVisibleProgressRow(row: ProgressSummaryRow): boolean {

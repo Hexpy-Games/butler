@@ -124,7 +124,15 @@ const DUTIES = {
     "successor Tasks with dependency handoffs; never make a current Task criterion",
     "require mutation owned only by a future Task.",
   ].join(" "),
-  declare_effects_risks_assumptions: "Declare exact external EffectIntents, authority scopes, risks, assumptions, and reconciliation requirements; artifact actions and Review validation are not external effects.",
+  declare_effects_risks_assumptions: [
+    "Declare exact external EffectIntents, authority scopes, risks, assumptions,",
+    "and reconciliation requirements. A read-only local command is an observation:",
+    "use effectClass none, its admitted workspace targetScopeRef, omitted artifactPolicy,",
+    "and no EffectIntent. external_effect means an accepted mutation of one exact",
+    "non-workspace user target or external system. Artifact actions and Review validation",
+    "are not external effects. Never classify from a tool, process, command, argument,",
+    "path, or output.",
+  ].join(" "),
   author_artifact_lifecycle: "Bind one exact artifact policy per Task and complete selectors, integration, promotion protocol, target derivation, immutable Review sources, disposable validation, and promotion identity Review.",
   review_plan_exactly: [
     "Review the complete materialized candidate bytes against the immutable GoalContract,",

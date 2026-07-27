@@ -94,13 +94,18 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
     capabilityRef: "run_command",
     name: "run_command",
-    description: "Run one non-interactive command inside an isolated workspace.",
-    operationKinds: ["workspace_artifact_action", "review_validation"],
+    description: "Run one structurally classified non-interactive local command.",
+    operationKinds: ["observe", "workspace_artifact_action", "review_validation"],
+    observationScopeKinds: ["workspace"],
     inputSchema: object({
       command: string(),
       cwd: string(),
       timeout_ms: integer(1, 600_000),
-    }, ["command"]),
+      state_effect: {
+        type: "string",
+        enum: ["read_only", "mutation", "validation"],
+      },
+    }, ["command", "state_effect"]),
     execute: executeCommandCapability,
   },
   {

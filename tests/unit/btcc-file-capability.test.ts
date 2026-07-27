@@ -91,5 +91,7 @@ function context(workspace: string) {
     butlerData: join(workspace, ".butler"),
     workspacePath: workspace,
     originalRequest: "inspect the sample module",
+    operationKind: "workspace_artifact_action" as const,
+    accessMode: "full_access" as const,
   };
 }

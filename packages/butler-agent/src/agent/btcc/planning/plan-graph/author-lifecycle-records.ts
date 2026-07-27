@@ -93,8 +93,8 @@ export function materializeEffectIntents(
     const actionKind = requireString(draft.actionKind, "effect.actionKind");
     const action = actionKind === "repository_promotion"
       ? repositoryPromotionAction(task, selectors)
-      : actionKind === "external_operation"
-        ? externalOperationAction(task, requireString(draft.action, "effect.action"))
+      : actionKind === "external_target_mutation"
+        ? externalTargetMutationAction(task, requireString(draft.action, "effect.action"))
         : invalidAction();
     const body = {
       programId: authority.programId,
@@ -251,14 +251,14 @@ function repositoryPromotionAction(task: ManagedTask, selectors: PromotionSelect
   };
 }
 
-function externalOperationAction(task: ManagedTask, action: string) {
+function externalTargetMutationAction(task: ManagedTask, action: string) {
   if (task.artifactPolicy.kind === "repository_promotion" ||
     (task.artifactPolicy.kind === "workspace_artifact" &&
       task.artifactPolicy.mutationScope.kind !== "read_only")) {
-    rejectPlanningProposal("external_operation_policy_incompatible",
-      "External operation EffectIntent has incompatible artifact policy");
+    rejectPlanningProposal("external_target_mutation_policy_incompatible",
+      "External-target mutation EffectIntent has incompatible artifact policy");
   }
-  return { kind: "external_operation" as const, action };
+  return { kind: "external_target_mutation" as const, action };
 }
 
 function promotionTarget(task: ManagedTask): string {

@@ -274,7 +274,7 @@ function observationRequest(): Extract<OperationRequest, { kind: "observe" }> {
     kind: "observe",
     capabilityRef: "run_command",
     scopeRef: "workspace:fixture",
-    input: { command: "produce output" },
+    input: { command: "produce output", state_effect: "read_only" },
   };
 }
 

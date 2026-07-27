@@ -37,7 +37,7 @@ export async function publishTurnProgress(
         turnId: turn.turnId,
         turnRevision: turn.revision,
         programId: program.programId,
-        tasks: projectWorkProgress(program),
+        tasks: projectWorkProgress(program, turn.finalDisposition),
       });
     }
     await observer.stateChanged({
