@@ -4,6 +4,7 @@ import {
   requireString,
   runPhaseConversation,
   type ContentRef,
+  type PhaseCodec,
   type PhaseContract,
   type PhaseInvocation,
 } from "../core/index.ts";
@@ -13,7 +14,6 @@ import type {
   PlanningReview,
 } from "./contracts.ts";
 import type { PlanningContinuation } from "./contracts.ts";
-import { withManagedDeferral } from "../deferral/index.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
 import { authorPlanningProposal } from "./plan-graph/index.ts";
 import { planCandidateSubmissionSchema } from "./submission-schemas.ts";
@@ -27,6 +27,10 @@ import {
   requiredSubjectFindingRefs,
 } from "./finding-decisions.ts";
 import { assertRevisedPlanChanged } from "./assert-revised-plan-changed.ts";
+import {
+  applyPlanningDeferralPolicy,
+  type PlanningDeferralPolicy,
+} from "./deferral-policy.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning",
@@ -56,8 +60,9 @@ const CONTRACT: PhaseContract = {
 function planningCodec(
   selectableSpecIds: string[],
   priorFindingRefs: ContentRef[],
+  deferralPolicy: PlanningDeferralPolicy,
 ) {
-  return withManagedDeferral<PlanningCandidateProduct>({
+  const codec: PhaseCodec<PlanningCandidateProduct> = {
     submissionSchema: planCandidateSubmissionSchema(
       selectableSpecIds,
       priorFindingRefs.map((ref) => ref.id),
@@ -125,7 +130,8 @@ function planningCodec(
         ),
       };
     },
-  });
+  };
+  return applyPlanningDeferralPolicy(codec, deferralPolicy);
 }
 
 function priorObservationResultIndex(value: unknown): PlanningObservationResultIndexEntry[] {
@@ -138,7 +144,10 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-export function proposePlan(command: PhaseInvocation) {
+export function proposePlan(
+  command: PhaseInvocation,
+  deferralPolicy: PlanningDeferralPolicy = "allow",
+) {
   const state = requireRecord(command.context.stateInput, "Planning state");
   const availableSpecs = decodeAvailableSpecs(
     state.availableSpecs,
@@ -152,10 +161,11 @@ export function proposePlan(command: PhaseInvocation) {
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: planningCodec(selectableGoverningSpecIds(
-      availableSpecs,
-      admittedGoverningSpecRefs,
-    ), priorFindingRefs),
+    codec: planningCodec(
+      selectableGoverningSpecIds(availableSpecs, admittedGoverningSpecRefs),
+      priorFindingRefs,
+      deferralPolicy,
+    ),
   });
 }
 

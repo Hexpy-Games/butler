@@ -25,6 +25,7 @@ import {
   admitPlanningObservations,
   mergePlanningObservationIndexes,
 } from "./observation-result-index.ts";
+import { planningDeferralPolicy } from "./deferral-policy.ts";
 
 type InitialPlanningEvent = Extract<TurnEvent, {
   kind:
@@ -99,6 +100,9 @@ async function authorInitialPlan(command: {
   const managed = requireManagedState(command.turn);
   const accepted = managed.goalAcceptance;
   if (!accepted) throw new Error("Planning is missing accepted Goal authority");
+  const deferralPolicy = planningDeferralPolicy(
+    accepted.authority.managedBinding.continuationBinding,
+  );
   const authority = requireManagedPlanningAuthority(command.turn);
   const previous = managed.planningRevision;
   const observations = mergePlanningObservationIndexes(
@@ -131,7 +135,7 @@ async function authorInitialPlan(command: {
       ? { continuation: accepted.authority.managedBinding.continuationBinding }
       : {}),
     ...projectPlanningRevision(previous),
-  }));
+  }), deferralPolicy);
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "PlanCandidateSubmitted", product };
@@ -157,6 +161,9 @@ async function reviewInitialPlan(command: {
   const managed = requireManagedState(command.turn);
   const accepted = managed.goalAcceptance;
   if (!accepted) throw new Error("Planning Review is missing accepted Goal authority");
+  const deferralPolicy = planningDeferralPolicy(
+    accepted.authority.managedBinding.continuationBinding,
+  );
   const current = requireManagedPlanningAuthority(command.turn);
   const product = await reviewPlan(withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
@@ -175,7 +182,7 @@ async function reviewInitialPlan(command: {
     ...(managed.planningRevision
       ? { priorPlanningReview: managed.planningRevision.review }
       : {}),
-  }));
+  }), deferralPolicy);
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
   return product.kind === "planning_accepted"
     ? { kind: "PlanningReviewAccepted", product }
