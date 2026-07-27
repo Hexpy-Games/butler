@@ -17,9 +17,6 @@ import { generateSessionTitleWithProvider } from "../../agent/output/session-tit
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { createAppTransportAdapter } from "../transport/app/adapter.ts";
-import { createTelegramTransportAdapter } from "../transport/telegram/adapter.ts";
-import { createTelegramLiveGateway } from "../transport/telegram/live-gateway.ts";
-import { runTelegramPolling } from "../transport/telegram/polling-runner.ts";
 import { NativeInboundQueue } from "../../gateways/core/inbound-queue.ts";
 import {
   resolveTelegramGatewayRuntimeConfig,
@@ -127,13 +124,16 @@ export async function runNativeButlerMain(
     persistButlerSessionPointer(butlerData, binding.sessionId);
 
     const router = new GatewayRouter({ store });
-    const telegramAdapter = createTelegramTransportAdapter({
-      butlerHome,
-      sendTelegram: input.sendTelegram,
-    });
+    const telegramAdapter = telegramGateway.enabled
+      ? (await import("../transport/telegram/adapter.ts"))
+        .createTelegramTransportAdapter({
+          butlerHome,
+          sendTelegram: input.sendTelegram,
+        })
+      : null;
     const appAdapter = createAppTransportAdapter();
     const deliveryGuard = new DeliveryGuard({
-      adapters: [telegramAdapter, appAdapter],
+      adapters: telegramAdapter ? [telegramAdapter, appAdapter] : [appAdapter],
     });
     const deliverThroughEnabledGate = async (
       activeSessionId: string,
@@ -195,20 +195,26 @@ export async function runNativeButlerMain(
       handlers: createBtccGatewayHandlers(lifecycle),
       butlerData,
     });
-    const gateway = createTelegramLiveGateway({
-      adapter: telegramAdapter,
-      router,
-      server,
-      renderStatus: () => statusText({
-        sessionId: binding.sessionId,
-        modelRef: binding.modelRef,
-        butlerData,
-      }),
-    });
-    await gateway.start();
-    telegramPolling = input.enableTelegramPolling === false || !telegramGateway.enabled
-      ? undefined
-      : runTelegramPolling({
+    if (telegramAdapter) {
+      const [{ createTelegramLiveGateway }, { runTelegramPolling }] =
+        await Promise.all([
+          import("../transport/telegram/live-gateway.ts"),
+          import("../transport/telegram/polling-runner.ts"),
+        ]);
+      const gateway = createTelegramLiveGateway({
+        adapter: telegramAdapter,
+        router,
+        server,
+        renderStatus: () => statusText({
+          sessionId: binding.sessionId,
+          modelRef: binding.modelRef,
+          butlerData,
+        }),
+      });
+      await gateway.start();
+      telegramPolling = input.enableTelegramPolling === false
+        ? undefined
+        : runTelegramPolling({
           butlerData,
           gateway,
           shouldStop: telegramShouldStop,
@@ -216,6 +222,7 @@ export async function runNativeButlerMain(
             process.stdout.write(`[telegram] ${line}\n`);
           },
         });
+    }
     writeStartupGraceMarker(butlerData);
     const startupText = startupMessage(binding.modelRef);
     const startupDelivery = telegramGateway.enabled ? await sendStartupNotification({
