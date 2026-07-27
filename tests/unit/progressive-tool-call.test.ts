@@ -372,6 +372,77 @@ test("schema validation enforces const and conditional oneOf requirements", () =
   expect(validateJsonObjectSchema({ kind: "other" }, schema)).toMatchObject({ ok: false });
 });
 
+test("schema validation reports the failure from the matching discriminated variant", () => {
+  const variants = [
+    {
+      type: "object",
+      properties: {
+        kind: { const: "phase_submission" },
+        submission: { type: "object" },
+      },
+      required: ["kind", "submission"],
+    },
+    {
+      type: "object",
+      properties: {
+        kind: { const: "operation_requests" },
+        requests: { type: "array", minItems: 1 },
+      },
+      required: ["kind", "requests"],
+    },
+  ];
+
+  expect(validateJsonObjectSchema(
+    { kind: "operation_requests", requests: [] },
+    { anyOf: variants },
+  )).toEqual({
+    ok: false,
+    message: "No schema variant matched: Expected at least 1 items at $.requests",
+    path: "$.requests",
+  });
+  expect(validateJsonObjectSchema(
+    { kind: "operation_requests", requests: [] },
+    { oneOf: variants },
+  )).toEqual({
+    ok: false,
+    message: "No schema variant matched: Expected at least 1 items at $.requests",
+    path: "$.requests",
+  });
+
+  const sameKindVariants = [
+    {
+      properties: {
+        kind: { const: "observe" },
+        capabilityRef: { const: "workspace:first" },
+      },
+      required: ["kind", "capabilityRef", "firstOnly"],
+    },
+    {
+      properties: {
+        kind: { const: "observe" },
+        capabilityRef: { const: "workspace:second" },
+      },
+      required: ["kind", "capabilityRef", "secondOnly"],
+    },
+  ];
+  expect(validateJsonObjectSchema(
+    { kind: "observe", capabilityRef: "workspace:second" },
+    { anyOf: sameKindVariants },
+  )).toEqual({
+    ok: false,
+    message: "No schema variant matched: Missing required argument: secondOnly",
+    path: "$.secondOnly",
+  });
+  expect(validateJsonObjectSchema(
+    { kind: "invalid_kind", capabilityRef: "workspace:second" },
+    { anyOf: sameKindVariants },
+  )).toEqual({
+    ok: false,
+    message: "No schema variant matched: Missing required argument: firstOnly",
+    path: "$.firstOnly",
+  });
+});
+
 test("bridge audit metadata redacts raw tool_call arguments", () => {
   const event = bridgeToolAuditEvent(
     "tool_call",

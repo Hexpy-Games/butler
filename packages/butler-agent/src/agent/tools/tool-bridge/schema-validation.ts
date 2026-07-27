@@ -58,7 +58,8 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
     const results = oneOf.map((variant) => validateJsonValue(value, variant, path));
     const matches = results.filter((result) => result.ok);
     if (matches.length !== 1) {
-      const firstFailure = results.find((result) => !result.ok);
+      const firstFailure = matchingDiscriminatorFailure(value, oneOf, results) ??
+        results.find((result) => !result.ok);
       return {
         ok: false,
         message: matches.length === 0 && firstFailure && !firstFailure.ok
@@ -72,7 +73,8 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
   if (anyOf) {
     const results = anyOf.map((variant) => validateJsonValue(value, variant, path));
     if (!results.some((result) => result.ok)) {
-      const firstFailure = results.find((result) => !result.ok);
+      const firstFailure = matchingDiscriminatorFailure(value, anyOf, results) ??
+        results.find((result) => !result.ok);
       return {
         ok: false,
         message: firstFailure && !firstFailure.ok
@@ -91,6 +93,43 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
   if (typeof value === "number") return validateNumber(value, record, path);
   if (typeof value === "string") return validateString(value, record, path);
   return { ok: true };
+}
+
+function matchingDiscriminatorFailure(
+  value: unknown,
+  variants: unknown[],
+  results: SchemaValidationResult[],
+): SchemaValidationResult | undefined {
+  const input = objectRecord(value);
+  if (!input) return undefined;
+  let candidates = variants.map((_, index) => index);
+  let discriminated = false;
+  for (const key of sharedConstantProperties(variants)) {
+    if (!(key in input)) continue;
+    const matching = candidates.filter((index) =>
+      constantPropertyValue(variants[index], key) === input[key],
+    );
+    if (matching.length === 0) return undefined;
+    candidates = matching;
+    discriminated = true;
+  }
+  if (!discriminated) return undefined;
+  return candidates.map((index) => results[index]).find((result) => result && !result.ok);
+}
+
+function sharedConstantProperties(variants: unknown[]): string[] {
+  if (variants.length < 2) return [];
+  const firstProperties = objectRecord(objectRecord(variants[0])?.properties);
+  if (!firstProperties) return [];
+  return Object.keys(firstProperties).filter((key) =>
+    variants.every((variant) => constantPropertyValue(variant, key) !== undefined),
+  );
+}
+
+function constantPropertyValue(variant: unknown, key: string): unknown {
+  const properties = objectRecord(objectRecord(variant)?.properties);
+  const property = properties ? objectRecord(properties[key]) : null;
+  return property && "const" in property ? property.const : undefined;
 }
 
 function validateArray(value: unknown[], schema: Record<string, unknown>, path: string): SchemaValidationResult {

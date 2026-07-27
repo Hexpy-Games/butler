@@ -18,6 +18,7 @@ import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
 import { PhasePromptCapacityError } from "./fit-operation-context.ts";
 import { validateJsonObjectSchema } from "../../../tools/tool-bridge/schema-validation.ts";
+import { describeProviderCarrierShape } from "./provider-carrier-diagnostic.ts";
 
 export function createProductionSelectedModel(
   dependencies: ProductionSelectedModelDependencies,
@@ -140,7 +141,7 @@ function assertCarrierMatchesRenderedSchema(
   if (!validation.ok) {
     throw new ProviderCarrierProtocolError(
       `BTCC provider carrier violates the rendered schema at ${validation.path}: ` +
-      validation.message,
+      `${validation.message}; shape=${describeProviderCarrierShape(carrier)}`,
     );
   }
 }

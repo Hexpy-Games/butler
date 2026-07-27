@@ -13,7 +13,7 @@ import {
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
-test("renders only the exact accepted Task targets into the provider schema", async () => {
+test("keeps exact Task target authority out of the stable provider vocabulary", async () => {
   let prompt: ProviderPhasePrompt | undefined;
   const model = createProductionSelectedModel({
     context: emptyContextResolver(),
@@ -56,12 +56,12 @@ test("renders only the exact accepted Task targets into the provider schema", as
 
   const schema = JSON.stringify(prompt?.responseSchema);
   const functions = JSON.stringify(prompt?.carrierFunctions);
-  expect(schema).toContain('"relativeTarget":{"type":"string","enum":["src/sample.ts"]}');
-  expect(functions).toContain('"relativeTarget":{"type":"string","enum":["src/sample.ts"]}');
-  expect(schema).not.toContain('"relativeTarget":{"type":"string"}');
+  expect(schema).toContain('"relativeTarget":{"type":"string","minLength":1}');
+  expect(functions).toContain('"relativeTarget":{"type":"string","minLength":1}');
+  expect(schema).not.toContain('"relativeTarget":{"type":"string","enum"');
 });
 
-test("admits an out-of-scope target as a rejectable Phase proposal", async () => {
+test("rejects an out-of-scope proposal through exact local admission", async () => {
   const workspaceRef = { id: "workspace", sha256: "workspace-sha" };
   const model = createProductionSelectedModel({
     context: emptyContextResolver(),
@@ -100,18 +100,12 @@ test("admits an out-of-scope target as a rejectable Phase proposal", async () =>
     },
   };
 
-  expect(await model.runRound(envelope)).toEqual({
-    kind: "operation_requests",
-    phaseContinuity: phaseContinuity(),
-    requests: [{
-      requestId: "broader-target",
-      publicTitle: "Test operation",
-      kind: "workspace_artifact_action",
-      capabilityRef: "workspace:write",
-      workspaceRef,
-      relativeTarget: ".",
-      input: {},
-    }],
-    actualIdentity: actualIdentity(),
+  expect(await model.runRound(envelope)).toMatchObject({
+    kind: "interruption",
+    code: "provider_protocol_interruption",
+    diagnosticMessage: expect.stringContaining(
+      "$.requests[0].relativeTarget: No schema variant matched: " +
+      "No schema variant matched: Invalid enum value",
+    ),
   });
 });
