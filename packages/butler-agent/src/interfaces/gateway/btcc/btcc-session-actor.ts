@@ -43,7 +43,9 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
     });
     const command = admitGatewayCommand({ binding, envelope, turnId, context });
 
-    await this.publish(envelope, route, { kind: "turn.started" });
+    if (command.kind !== "resume") {
+      await this.publish(envelope, route, { kind: "turn.started" });
+    }
     const stopObserving = this.options.observeTurn(
       turnId,
       projectTurnProgress((event) => this.publish(envelope, route, event)),

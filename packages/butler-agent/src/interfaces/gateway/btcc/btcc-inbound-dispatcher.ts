@@ -132,7 +132,7 @@ async function dispatchItem(
 
   reactivateSession(item, options.store, options.now?.());
   try {
-    const result = await options.server.handleInbound(item.envelope);
+    const result = await options.server.handleInbound(dispatchEnvelope(item));
     if (result.status !== "handled") {
       options.queue.fail(item, `BTCC gateway ${result.status}`, {
         source: "gateway/btcc/btcc-inbound-dispatcher.ts",
@@ -161,6 +161,25 @@ async function dispatchItem(
     summary.interrupted = 1;
     return summary;
   }
+}
+
+function dispatchEnvelope(
+  item: ClaimedInboundEvent,
+): ClaimedInboundEvent["envelope"] {
+  if (
+    item.metadata.recoveredFromRuntimeInterruption !== true ||
+    !item.envelope.routingHints?.turnId?.trim()
+  ) {
+    return item.envelope;
+  }
+  const raw = item.envelope.raw && typeof item.envelope.raw === "object" &&
+      !Array.isArray(item.envelope.raw)
+    ? item.envelope.raw as Record<string, unknown>
+    : {};
+  return {
+    ...item.envelope,
+    raw: { ...raw, btccResume: true },
+  };
 }
 
 async function deliverResult(
