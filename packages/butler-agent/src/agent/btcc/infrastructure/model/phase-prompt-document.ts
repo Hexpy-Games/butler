@@ -11,6 +11,7 @@ import {
   type ProjectedOperationContext,
 } from "./project-operation-context.ts";
 import { projectContinuationContext } from "./project-continuation-context.ts";
+import type { PromptCacheBoundary } from "../../../../integrations/providers/contracts.ts";
 
 const DOCUMENT_BOUNDARY = "\n";
 
@@ -26,9 +27,13 @@ export function renderCacheOrderedPhasePrompt(input: {
   acceptedPhaseGuidance: AcceptedPhaseGuidance[];
   operationAuthority: PhaseEnvelope["operationAuthority"];
   operationContext: ProjectedOperationContext;
-}): string {
-  return canonicalJson(stablePhasePrefix(input)) + DOCUMENT_BOUNDARY +
-    canonicalJson(dynamicTurnContent(input));
+}): { prompt: string; promptCacheBoundary: PromptCacheBoundary } {
+  const stablePrefix = canonicalJson(stablePhasePrefix(input)) + DOCUMENT_BOUNDARY;
+  const dynamicSuffix = canonicalJson(dynamicTurnContent(input));
+  return {
+    prompt: stablePrefix + dynamicSuffix,
+    promptCacheBoundary: { stablePrefix, dynamicSuffix },
+  };
 }
 
 function stablePhasePrefix(input: Parameters<typeof renderCacheOrderedPhasePrompt>[0]) {

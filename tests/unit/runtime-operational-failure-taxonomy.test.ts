@@ -14,6 +14,26 @@ import {
 const codedError = (message: string, code: string): Error & { code: string } =>
   Object.assign(new Error(message), { code });
 
+test("provider HTTP failures normalize Retry-After and reset headers", () => {
+  const before = Date.now();
+  const retryAfter = providerHttpError({
+    provider: "zai",
+    api: "chat_completions",
+    statusCode: 429,
+    headers: new Headers({ "Retry-After": "60" }),
+  });
+  expect(Date.parse(retryAfter.retryAt ?? "")).toBeGreaterThanOrEqual(before + 60_000);
+
+  const resetAt = Math.ceil((Date.now() + 90_000) / 1_000);
+  const reset = providerHttpError({
+    provider: "zai",
+    api: "chat_completions",
+    statusCode: 429,
+    headers: new Headers({ "X-RateLimit-Reset": String(resetAt) }),
+  });
+  expect(reset.retryAt).toBe(new Date(resetAt * 1_000).toISOString());
+});
+
 test("runtime delivery taxonomy preserves operational failures with exact safe codes", () => {
   const cases = [
     {

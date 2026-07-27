@@ -5,6 +5,7 @@ import type {
 } from "../../core/index.ts";
 import type { AdmittedModelSelection } from "../../contracts.ts";
 import type { PhaseGuidanceReader } from "../../guidance/index.ts";
+import type { PromptCacheBoundary } from "../../../../integrations/providers/contracts.ts";
 
 export type ResolvedContextDocument = {
   ref: string;
@@ -49,6 +50,7 @@ export type ProviderPhasePrompt = {
   modelSelection: AdmittedModelSelection;
   instructions: string;
   prompt: string;
+  promptCacheBoundary: PromptCacheBoundary;
   responseSchema: Record<string, unknown>;
   carrierFunctions: readonly ProviderCarrierFunction[];
   cacheScope: string;
@@ -85,6 +87,7 @@ export type ProductionSelectedModelDependencies = {
 export type RenderedPhasePrompt = {
   instructions: string;
   prompt: string;
+  promptCacheBoundary: PromptCacheBoundary;
   responseSchema: Record<string, unknown>;
   carrierFunctions: readonly ProviderCarrierFunction[];
   admissionSchema: Record<string, unknown>;

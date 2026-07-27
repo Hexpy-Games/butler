@@ -69,7 +69,7 @@ export async function renderPhasePrompt(
     acceptedPhaseGuidance,
     operationAuthority,
     operationContext,
-  });
+  }).prompt;
   const operationContext = fitOperationContext({
     projected: projectedOperationContext,
     modelSelection: envelope.modelSelection,
@@ -81,9 +81,17 @@ export async function renderPhasePrompt(
       carrierFunctions,
     ),
   });
+  const renderedPrompt = renderCacheOrderedPhasePrompt({
+    envelope,
+    resolvedContext,
+    availableCapabilities,
+    acceptedPhaseGuidance,
+    operationAuthority,
+    operationContext,
+  });
   return {
     instructions,
-    prompt: renderPrompt(operationContext),
+    ...renderedPrompt,
     responseSchema,
     carrierFunctions,
     admissionSchema: providerCarrierAdmissionSchema(

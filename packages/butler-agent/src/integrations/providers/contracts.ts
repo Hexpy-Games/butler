@@ -27,6 +27,11 @@ export interface PromptCacheUsage {
   totalTokens?: number;
 }
 
+export interface PromptCacheBoundary {
+  stablePrefix: string;
+  dynamicSuffix: string;
+}
+
 export interface ModelInvocation {
   model: ModelRef;
   systemPrompt?: string;
@@ -86,4 +91,3 @@ export interface ToolDefinition {
   description: string;
   inputSchema: Record<string, unknown>;
 }
-

@@ -334,6 +334,7 @@ async function createHostedChatCompletionOnce(
       endpoint,
       model: config.modelId,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
   return parsed;

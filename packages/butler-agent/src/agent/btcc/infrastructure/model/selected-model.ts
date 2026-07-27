@@ -266,13 +266,22 @@ function interruption(
 function activationForProviderFailure(
   error: ModelProviderRequestError,
 ): OperationalActivation {
+  if (error.statusCode === 429) {
+    return error.retryAt
+      ? { kind: "automatic_provider_recovery", retryAt: error.retryAt }
+      : { kind: "provider_action_required" };
+  }
+  if (error.statusCode !== undefined && error.statusCode >= 500) {
+    return {
+      kind: "automatic_provider_recovery",
+      ...(error.retryAt ? { retryAt: error.retryAt } : {}),
+    };
+  }
   if (
     error.code === "provider_network_error" ||
     error.code === "provider_transport_interruption" ||
     error.code === "provider_empty_response" ||
-    error.code === "provider_round_timeout" ||
-    error.statusCode === 429 ||
-    (error.statusCode !== undefined && error.statusCode >= 500)
+    error.code === "provider_round_timeout"
   ) {
     return { kind: "automatic_provider_recovery" };
   }

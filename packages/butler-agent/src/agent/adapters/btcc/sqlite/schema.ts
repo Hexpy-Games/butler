@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS btcc_operational_interruptions (
   execution_fence INTEGER NOT NULL,
   code TEXT NOT NULL,
   activation_kind TEXT NOT NULL,
+  retry_at TEXT,
   diagnostic_message TEXT,
   activation_count INTEGER NOT NULL,
   status TEXT NOT NULL,

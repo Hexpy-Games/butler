@@ -371,6 +371,16 @@ describe("production BTCC selected model", () => {
     expect(calls[0]!.responseSchema).toEqual(calls[1]!.responseSchema);
     expect(calls[0]!.carrierFunctions).toEqual(calls[1]!.carrierFunctions);
     expect(calls[0]!.cacheScope).toBe(calls[1]!.cacheScope);
+    expect(calls[0]!.promptCacheBoundary.stablePrefix)
+      .toBe(first.serializedStablePrefix + "\n");
+    expect(calls[0]!.promptCacheBoundary.stablePrefix)
+      .toBe(calls[1]!.promptCacheBoundary.stablePrefix);
+    expect(calls[0]!.promptCacheBoundary.dynamicSuffix)
+      .not.toBe(calls[1]!.promptCacheBoundary.dynamicSuffix);
+    expect(
+      calls[0]!.promptCacheBoundary.stablePrefix +
+      calls[0]!.promptCacheBoundary.dynamicSuffix,
+    ).toBe(calls[0]!.prompt);
     expect(first.serializedStablePrefix).toContain("web:read");
     expect(first.serializedStablePrefix).toContain("outputContract");
     expect(first.serializedStablePrefix).not.toContain("turn-1");
@@ -678,7 +688,7 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "provider_rate_limited",
-      activation: { kind: "automatic_provider_recovery" },
+      activation: { kind: "provider_action_required" },
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
@@ -695,6 +705,50 @@ describe("production BTCC selected model", () => {
       activation: { kind: "cancelled" },
     });
     expect(calls).toBe(4);
+  });
+
+  test("carries provider-declared readiness into automatic HTTP recovery", async () => {
+    const retryAt = "2026-07-27T06:00:00.000Z";
+    const failures = [
+      new ModelProviderRequestError({
+        code: "provider_rate_limited",
+        message: "rate limited",
+        provider: "zai",
+        api: "chat_completions",
+        statusCode: 429,
+        retryable: true,
+        retryAt,
+      }),
+      new ModelProviderRequestError({
+        code: "provider_api_error",
+        message: "service unavailable",
+        provider: "zai",
+        api: "chat_completions",
+        statusCode: 503,
+        retryable: true,
+        retryAt,
+      }),
+    ];
+    let calls = 0;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => {
+        throw failures[calls++];
+      }),
+    });
+
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_rate_limited",
+      activation: { kind: "automatic_provider_recovery", retryAt },
+    });
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
+      kind: "interruption",
+      code: "provider_api_error",
+      activation: { kind: "automatic_provider_recovery", retryAt },
+    });
   });
 
   test("bounds the whole selected-model round before provider admission", async () => {

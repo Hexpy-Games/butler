@@ -58,6 +58,31 @@ describe("BTCC operational re-entry", () => {
     });
     expect(events).toEqual([]);
   });
+
+  test("provider-declared readiness replaces the local activation cooldown", async () => {
+    const events: string[] = [];
+    const store: OperationalRecoveryStore = {
+      async record() {
+        events.push("record");
+        return { interruptionId: "interruption-1", activationCount: 20 };
+      },
+      async markReady() { events.push("ready"); },
+      async activateInheritedRuntimeRemediations() {},
+      async pending() { return null; },
+      async resolve() { return true; },
+      async pendingTurnIds() { return []; },
+    };
+    const recovery = createOperationalRecoveryBoundary(store);
+    const declaredReady = new OperationalInterruptionError(
+      "provider_rate_limited",
+      checkpoint,
+      { kind: "automatic_provider_recovery", retryAt: "2020-01-01T00:00:00.000Z" },
+    );
+
+    await recovery.awaitReentry(declaredReady, new AbortController().signal);
+
+    expect(events).toEqual(["record", "ready"]);
+  });
 });
 
 function recoveryStore(events: string[]): OperationalRecoveryStore {

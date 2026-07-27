@@ -15,6 +15,7 @@ export interface RuntimeFailureDiagnostic {
   registeredInputCapacity?: number;
   requestHash?: string;
   timeoutKind?: "total" | "idle";
+  retryAt?: string;
 }
 
 export class ModelProviderRequestError extends Error {
@@ -31,6 +32,7 @@ export class ModelProviderRequestError extends Error {
   readonly registeredInputCapacity?: number;
   readonly requestHash?: string;
   readonly timeoutKind?: "total" | "idle";
+  readonly retryAt?: string;
 
   constructor(input: RuntimeFailureDiagnostic) {
     super(input.message);
@@ -48,6 +50,7 @@ export class ModelProviderRequestError extends Error {
     this.registeredInputCapacity = input.registeredInputCapacity;
     this.requestHash = input.requestHash;
     this.timeoutKind = input.timeoutKind;
+    this.retryAt = input.retryAt;
   }
 
   diagnostic(): RuntimeFailureDiagnostic {
@@ -66,6 +69,7 @@ export class ModelProviderRequestError extends Error {
       registeredInputCapacity: this.registeredInputCapacity,
       requestHash: this.requestHash,
       timeoutKind: this.timeoutKind,
+      retryAt: this.retryAt,
     };
   }
 }
@@ -107,6 +111,7 @@ export function providerHttpError(input: {
   endpoint?: string;
   model?: string;
   admission?: ModelRequestAdmissionReceipt;
+  headers?: Pick<Headers, "get">;
 }): ModelProviderRequestError {
   const status = input.statusCode;
   const detail = safeErrorText(input.detail);
@@ -147,7 +152,35 @@ export function providerHttpError(input: {
     measuredInputTokens: input.admission?.plan.compiled_input_tokens,
     registeredInputCapacity: input.admission?.plan.input_capacity_tokens,
     requestHash: input.admission?.serialized_request_sha256,
+    retryAt: providerRetryAt(input.headers),
   });
+}
+
+function providerRetryAt(headers?: Pick<Headers, "get">): string | undefined {
+  if (!headers) return undefined;
+  const now = Date.now();
+  const retryAfter = headers.get("retry-after")?.trim();
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    const timestamp = Number.isFinite(seconds)
+      ? now + Math.max(0, seconds) * 1_000
+      : Date.parse(retryAfter);
+    if (Number.isFinite(timestamp) && timestamp >= now) {
+      return new Date(timestamp).toISOString();
+    }
+  }
+  const rateLimitReset = headers.get("ratelimit-reset")?.trim();
+  if (rateLimitReset) {
+    const seconds = Number(rateLimitReset);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return new Date(now + seconds * 1_000).toISOString();
+    }
+  }
+  const legacyReset = Number(headers.get("x-ratelimit-reset")?.trim());
+  if (Number.isFinite(legacyReset) && legacyReset * 1_000 >= now) {
+    return new Date(legacyReset * 1_000).toISOString();
+  }
+  return undefined;
 }
 
 export function providerNetworkError(input: {

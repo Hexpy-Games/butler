@@ -9,7 +9,7 @@ export type OperationalCheckpointAnchor = {
 };
 
 export type OperationalActivation =
-  | { kind: "automatic_provider_recovery" }
+  | { kind: "automatic_provider_recovery"; retryAt?: string }
   | { kind: "automatic_storage_recovery" }
   | { kind: "provider_action_required" }
   | { kind: "runtime_remediation" }
