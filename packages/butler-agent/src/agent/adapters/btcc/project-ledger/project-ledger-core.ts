@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 
 type ProjectLedgerRecord = {
   filePath: string;
-  record: { id: string; kind: string; status?: string };
+  record: { id: string; kind: string; status?: string; parentId?: string };
 };
 
 export type ProjectLedgerCore = {
@@ -33,8 +33,9 @@ export type ProjectLedgerCore = {
   readRecordData(filePath: string): Record<string, unknown> | null;
   resolveRecord(
     project: string,
-    options: { id: string; kind: string },
+    options: { id: string; kind?: string },
   ): ProjectLedgerRecord;
+  planTransitionPath(kind: string, from: string | undefined, to: string): string[];
   observeProjectLedgerPromotion(publication: unknown): unknown;
   observeProjectLedgerSourceHead(project: string): {
     projectRoot: string;
@@ -60,8 +61,8 @@ export function loadProjectLedgerCore(): Promise<ProjectLedgerCore> {
 }
 
 async function loadCore(): Promise<ProjectLedgerCore> {
-  const [commands, docs, filesystem, lifecycle, records, recordCommands, transactions, indexer,
-    renderer] =
+  const [commands, docs, filesystem, lifecycle, records, recordCommands, stateMachine,
+    transactions, indexer, renderer] =
     await Promise.all([
       import(corePath("commands.js")),
       import(corePath("docs-migration.js")),
@@ -69,6 +70,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
       import(corePath("lifecycle-commands.js")),
       import(corePath("records.js")),
       import(corePath("record-commands.js")),
+      import(corePath("state-machine.js")),
       import(corePath("transactions/index.js")),
       import(corePath("indexer.js")),
       import(corePath("renderer.js")),
@@ -92,6 +94,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
     readRecordBody: records.readRecordBody,
     readRecordData: records.readRecordData,
     resolveRecord: recordCommands.resolveRecord,
+    planTransitionPath: stateMachine.planTransitionPath,
     observeProjectLedgerPromotion: transactions.observeProjectLedgerPromotion,
     observeProjectLedgerSourceHead: transactions.observeProjectLedgerSourceHead,
     prepareProjectLedgerPublication: transactions.prepareProjectLedgerPublication,

@@ -2,6 +2,7 @@ import {
   applyProjectLedgerRecordUpdates,
   type ProjectLedgerRecordUpdate,
 } from "../../../adapters/index.ts";
+import { OperationRejectedError } from "../../../btcc/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 
 export async function updateProjectLedger(
@@ -18,16 +19,31 @@ export async function updateProjectLedger(
   const updates = requireUpdates(args.updates);
   const projectRef = effect.targetScopeRef.slice("ledger:".length);
   if (!projectRef) throw new Error("Project Ledger effect target is empty");
-  return applyProjectLedgerRecordUpdates({
-    butlerData: context.butlerData,
-    projectRoot: context.resolveProjectLedgerRoot(projectRef),
-    effectKey: [
-      effect.effectIntentRef.id,
-      effect.effectIntentRef.sha256,
-      effect.occurrenceKey,
-    ].join(":"),
-    updates,
-  });
+  try {
+    return await applyProjectLedgerRecordUpdates({
+      butlerData: context.butlerData,
+      projectRoot: context.resolveProjectLedgerRoot(projectRef),
+      effectKey: [
+        effect.effectIntentRef.id,
+        effect.effectIntentRef.sha256,
+        effect.occurrenceKey,
+      ].join(":"),
+      updates,
+    });
+  } catch (error) {
+    if (isProjectLedgerDomainRejection(error)) {
+      throw new OperationRejectedError(`project_ledger_${error.code}`, error.message);
+    }
+    throw error;
+  }
+}
+
+function isProjectLedgerDomainRejection(
+  error: unknown,
+): error is Error & { code: string } {
+  if (!(error instanceof Error) || error.name !== "CliError") return false;
+  const code = (error as Error & { code?: unknown }).code;
+  return typeof code === "string" && code !== "internal_error";
 }
 
 function requireUpdates(value: unknown): ProjectLedgerRecordUpdate[] {
