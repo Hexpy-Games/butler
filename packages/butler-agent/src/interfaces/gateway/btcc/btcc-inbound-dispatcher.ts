@@ -39,7 +39,7 @@ export type BtccInboundDispatchOptions = {
     action: OutboundAction,
     metadata: Record<string, unknown>,
   ) => Promise<DeliveryResult>;
-  shouldHandleItem?: (item: ClaimedInboundEvent) => boolean;
+  shouldHandleItem?: (item: QueuedInboundEvent) => boolean;
   limit?: number;
   maxConcurrentSessions?: number;
   processingLeaseMs?: number;
@@ -63,7 +63,9 @@ export class BtccInboundDispatcher {
     options.queue.recoverStaleProcessing({
       staleAfterMs: options.processingLeaseMs ?? DEFAULT_LEASE_MS,
       now: options.now?.(),
-      shouldRecover: (record) => !this.activeQueueIds.has(record.queueId),
+      shouldRecover: (record) =>
+        !this.activeQueueIds.has(record.queueId) &&
+        (!options.shouldHandleItem || options.shouldHandleItem(record)),
     });
 
     const capacity = Math.max(
