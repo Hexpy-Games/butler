@@ -8,11 +8,11 @@ import {
   acceptReviewedPlanAuthority,
   assertPromotionPermit,
   bindManagedProgram,
+  canCloseImplementationFrontier,
   resolveStoppedReviewTask,
 } from "../../../btcc/gateway-api.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 import { acceptProjectFeedback } from "./revise-program.ts";
-import { canCloseImplementationFrontier } from "../../../btcc/work-ledger/frontier-readiness.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Reviewed = Extract<Program, { planningState: "reviewed" }>;

@@ -3,6 +3,7 @@ export {
   projectWorkProgress,
   retiredWorkProgress,
 } from "./work-progress-projection.ts";
+export { canCloseImplementationFrontier } from "./frontier-readiness.ts";
 export type {
   WorkProgressTask,
   WorkProgressTaskState,
