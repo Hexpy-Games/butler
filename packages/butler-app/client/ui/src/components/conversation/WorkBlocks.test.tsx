@@ -63,6 +63,53 @@ test("work activity shows only the latest block until view all expands", async (
   await act(async () => root.unmount());
 });
 
+test("completed work keeps its turn identity for lazy operation output", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", {
+    url: "http://localhost",
+  });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) {
+    throw new Error("Missing test root.");
+  }
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <CollapsedTurnActivity
+        blocks={[{
+          ...workBlock("operation", "검토한 작업"),
+          rows: [{
+            id: "operation-row",
+            kind: "used_tool",
+            state: "completed",
+            safe_label: "private command",
+            safe_tool_name: "run_command",
+            tool_call_id: "request-1",
+            tool_result_id: "result-1",
+            bridge_phase: "btcc_operation",
+          }],
+        }]}
+        turnId="turn-1"
+      />,
+    );
+  });
+
+  expect(container.textContent).toContain("실행: 계획한 작업을 처리 중");
+  expect(container.textContent).not.toContain("private command");
+  const toolButton = container.querySelector(
+    '[data-test-class~="turn-work-tool-row"] button',
+  );
+  expect(toolButton).not.toBeNull();
+  await act(async () => root.unmount());
+});
+
 function workBlock(id: string, label: string): WorkBlockView {
   return {
     id,

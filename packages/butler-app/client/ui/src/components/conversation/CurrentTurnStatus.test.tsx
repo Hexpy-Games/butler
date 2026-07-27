@@ -6,17 +6,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ProgressRow } from "@/app/types.ts";
 import { CurrentTurnStatus } from "./CurrentTurnStatus";
 
-test("current status reserves one clipped line while preserving the full label", () => {
-  const label = "Inspect a deliberately long operation title without moving the conversation";
+test("current status reserves one clipped line with a capability-owned title", () => {
+  const rawLabel = "run_command: printf a private argument";
   const html = renderToStaticMarkup(
-    <CurrentTurnStatus operation={progressRow(label)} />,
+    <CurrentTurnStatus operation={progressRow(rawLabel)} />,
   );
 
   expect(html).toContain('data-test-class="turn-current-status-slot"');
   expect(html).toContain('data-test-class="turn-current-status-content"');
-  expect(html).toContain(`title="${label}"`);
-  expect(html).toContain(label);
-
+  expect(html).toContain('title="실행: 계획한 작업을 처리 중"');
+  expect(html).toContain("실행: 계획한 작업을 처리 중");
+  expect(html).not.toContain(rawLabel);
 });
 
 function progressRow(label: string): ProgressRow {
@@ -25,6 +25,7 @@ function progressRow(label: string): ProgressRow {
     kind: "used_tool",
     state: "running",
     safe_label: label,
+    safe_tool_name: "run_command",
     bridge_phase: "btcc_operation",
   };
 }

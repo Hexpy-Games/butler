@@ -19,6 +19,7 @@ export class SqliteOperationOutputReader {
     requestId: string;
     resultId: string;
     byteStart: number;
+    allowAliasedRequest?: boolean;
   }): OperationOutputView | null {
     const databasePath = join(
       this.butlerData,
@@ -34,7 +35,11 @@ export class SqliteOperationOutputReader {
         FROM btcc_operation_results
         WHERE result_id = ?
       `).get(input.resultId);
-      if (!stored || stored.request_id !== input.requestId) return null;
+      if (!stored) return null;
+      if (
+        stored.request_id !== input.requestId &&
+        input.allowAliasedRequest !== true
+      ) return null;
       if (!stored.request_scope.startsWith(`${input.turnId}:`)) return null;
       const record = JSON.parse(stored.record_json) as {
         resultRef?: { id?: string };

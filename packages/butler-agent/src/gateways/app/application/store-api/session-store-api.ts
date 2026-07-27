@@ -31,6 +31,8 @@ import type {
   SendMessageOptions,
 } from "../../domain/sessions/message-responder-contract.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
+import { operationOutputIsLinked } from
+  "../../domain/progress-summary/operation-output-reference.ts";
 
 const DEFAULT_CHAT_ID = "general";
 
@@ -183,7 +185,14 @@ export function createSessionStoreApi(
       return kernel.turns.getTurn(turnId);
     },
     getOperationOutput(input) {
-      return kernel.operationOutputs.read(input);
+      return kernel.operationOutputs.read({
+        ...input,
+        allowAliasedRequest: operationOutputIsLinked(
+          kernel.turnProgress.listProgressRowsForTurn(input.turnId),
+          input.requestId,
+          input.resultId,
+        ),
+      });
     },
     createMessageFile(input) {
       return kernel.messageFiles.create(input);

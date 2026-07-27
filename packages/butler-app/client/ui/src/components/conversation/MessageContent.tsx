@@ -37,7 +37,10 @@ function MessageContentComponent({
             turnId={message.turn_id}
             turnState={message.status}
           />
-          <CompletedWorkBlocks blocks={message.work_blocks} />
+          <CompletedWorkBlocks
+            blocks={message.work_blocks}
+            turnId={message.turn_id}
+          />
           {message.status === "failed" ? (
             <AssistantFailureNotice message={message} />
           ) : (
