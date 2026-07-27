@@ -18,10 +18,19 @@ import type { TurnRecord } from
 import {
   bindAndContinue,
   freshContinuationCommand,
+  seedManagedProgramForStop,
   seedStoppedProgram,
   taskStatuses,
 } from "./support/btcc-stopped-work-fixture.ts";
 import { canonicalMutationId } from "./support/btcc-project-ledger-fixture.ts";
+import { SqliteTurnStateRepository } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
+import { SqliteRuntimeOwnerRegistry } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
+import type { ProjectWorkLedgerPublicationAdapter } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
+import { ledgerManifestContentHash } from
+  "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
 
 test("Stop reloads a typed frontier and a fresh Turn continues only unfinished Tasks", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-stopped-program-"));
@@ -29,7 +38,7 @@ test("Stop reloads a typed frontier and a fresh Turn continues only unfinished T
   try {
     let db = new Database(dbPath);
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    seedStoppedProgram(db);
+    await seedStoppedProgram(db);
     expect(taskStatuses(db)).toEqual(["accepted", "accepted", "selected", "planned"]);
     expect(terminalWakeRows(db)).toEqual([
       { turn_id: "turn-user-stopped", semantic_state: "cancelled" },
@@ -66,7 +75,7 @@ test("Stop reloads a typed frontier and a fresh Turn continues only unfinished T
 test("cancel_work consumes only the exact candidate and preserves accepted Tasks", async () => {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const storage = seedStoppedProgram(db);
+  const storage = await seedStoppedProgram(db);
   const candidates = await discoverContinuationCandidates(db, freshContinuationCommand());
   const candidate = candidates[0]!;
   const envelope = {
@@ -137,6 +146,98 @@ test("cancel_work consumes only the exact candidate and preserves accepted Tasks
   db.close();
 });
 
+test("project Stop retries promotion racing hydration and preserves the promoted Program", async () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  const projectRef = "project:loader-owned";
+  const { program } = seedManagedProgramForStop(db, projectRef);
+  const promotedProgram = { ...program, manifestRevision: program.manifestRevision + 1 };
+  db.query(`
+    INSERT INTO btcc_project_program_projections (
+      program_id, project_ref, ledger_id, manifest_revision
+    ) VALUES (?, ?, ?, ?)
+  `).run(program.programId, projectRef, program.ledgerId, program.manifestRevision);
+  let promoted = false;
+  const loadedRevisions: number[] = [];
+  const publications = {
+    loadProgram: async (projectRoot: string, programId: string) => {
+      expect(projectRoot).toBe("/canonical/project");
+      expect(programId).toBe(program.programId);
+      const loaded = promoted ? promotedProgram : program;
+      loadedRevisions.push(loaded.manifestRevision);
+      if (loadedRevisions.length === 1) {
+        installPendingPromotion(db, promotedProgram.manifestRevision);
+      }
+      return loaded;
+    },
+    promoteAndObserve: async () => { promoted = true; },
+    listDeferredPrograms: async () => [],
+  } as unknown as ProjectWorkLedgerPublicationAdapter;
+  const owner = new SqliteRuntimeOwnerRegistry(db, {
+    ownerId: "project-stop-owner",
+    hostId: "test-host",
+    processId: 2,
+    processStartedAtMs: 2,
+  }, { isAlive: () => true });
+  const turns = new SqliteTurnStateRepository(db, owner, {
+    publications,
+    resolveProjectRoot: (ref) => {
+      expect(ref).toBe(projectRef);
+      return "/canonical/project";
+    },
+  });
+
+  expect(await turns.stopTurn("turn-user-stopped")).toEqual({
+    kind: "cancelled",
+    turnId: "turn-user-stopped",
+  });
+  expect(loadedRevisions).toEqual([
+    program.manifestRevision,
+    promotedProgram.manifestRevision,
+  ]);
+  expect(JSON.parse(managedStateJson(db))).not.toHaveProperty("program");
+  const candidateRow = db.query<{
+    scope_kind: string;
+    scope_id: string;
+    program_id: string;
+    expected_manifest_revision: number;
+    base_manifest_hash: string;
+  }, []>(`
+    SELECT scope_kind, scope_id, program_id, expected_manifest_revision, base_manifest_hash
+    FROM btcc_stopped_program_continuations
+  `).get();
+  expect(candidateRow).toEqual({
+    scope_kind: "project",
+    scope_id: projectRef,
+    program_id: program.programId,
+    expected_manifest_revision: promotedProgram.manifestRevision,
+    base_manifest_hash: ledgerManifestContentHash(promotedProgram, {
+      ledgerId: program.ledgerId,
+      programId: program.programId,
+    }),
+  });
+  const fresh = freshContinuationCommand();
+  const candidates = await discoverContinuationCandidates(db, {
+    ...fresh,
+    context: { ...fresh.context, projectRef },
+  }, {
+    publications,
+    resolveProjectRoot: () => "/canonical/project",
+  });
+  expect(candidates).toHaveLength(1);
+  expect(candidates[0]).toMatchObject({
+    expectedManifestRevision: promotedProgram.manifestRevision,
+    baseManifestHash: candidateRow?.base_manifest_hash,
+  });
+  expect(loadedRevisions).toEqual([
+    program.manifestRevision,
+    promotedProgram.manifestRevision,
+    promotedProgram.manifestRevision,
+  ]);
+  owner.close();
+  db.close();
+});
+
 function stoppedCandidateStatus(db: Database): string | undefined {
   return db.query<{ status: string }, []>(
     "SELECT status FROM btcc_stopped_program_continuations",
@@ -157,4 +258,35 @@ function terminalWakeRows(db: Database) {
     SELECT turn_id, semantic_state FROM btcc_terminal_settlement_wakes
     ORDER BY turn_id
   `).all();
+}
+
+function managedStateJson(db: Database): string {
+  return db.query<{ managed_state_json: string }, []>(`
+    SELECT managed_state_json FROM btcc_turns
+    WHERE turn_id = 'turn-user-stopped'
+  `).get()!.managed_state_json;
+}
+
+function installPendingPromotion(db: Database, promotedRevision: number): void {
+  db.query("UPDATE btcc_turns SET revision = 8 WHERE turn_id = ?")
+    .run("turn-user-stopped");
+  db.query(`
+    UPDATE btcc_project_program_projections SET manifest_revision = ?
+    WHERE program_id = 'program-session'
+  `).run(promotedRevision);
+  db.query(`
+    INSERT INTO btcc_ledger_promotion_outbox (
+      outbox_id, turn_id, committed_turn_revision, mutation_id,
+      ledger_id, program_id, publication_json, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+  `).run(
+    "promotion-racing-stop", "turn-user-stopped", 8, "mutation-racing-stop",
+    "session:session-fixture", "program-session",
+    JSON.stringify({
+      ledgerId: "session:session-fixture",
+      programId: "program-session",
+      manifestSha256: "promoted-manifest",
+      corePublication: { publicationId: "publication-racing-stop" },
+    }),
+  );
 }

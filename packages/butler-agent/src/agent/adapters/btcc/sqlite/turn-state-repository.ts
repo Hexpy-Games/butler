@@ -9,7 +9,11 @@ import {
 } from "../../../btcc/gateway-api.ts";
 import { SqliteTransitionWriter } from "./transition-writer.ts";
 import { SqliteWorkLedgerStorage } from "./work-ledger/index.ts";
-import { SqliteStopController } from "./sqlite-stop-controller.ts";
+import {
+  ManagedStopPendingPromotionError,
+  ManagedStopRevisionChangedError,
+  SqliteStopController,
+} from "./sqlite-stop-controller.ts";
 import {
   ProjectLedgerMutationClaimConflictError,
   ProjectLedgerPublicationClaimConflictError,
@@ -224,13 +228,54 @@ export class SqliteTurnStateRepository implements TurnStateRepository {
   }
 
   async stopTurn(turnId: string) {
-    const outcome = this.stops.stop(turnId);
+    if (!this.stops.managedHydrationRequired(turnId)) {
+      const outcome = this.stops.stop(turnId);
+      this.completePendingPromotionAfterStop(turnId);
+      return outcome;
+    }
+    let turn: TurnRecord | null = null;
+    while (true) {
+      if (!this.stops.managedHydrationRequired(turnId)) {
+        return this.stops.stop(turnId);
+      }
+      if (!turn) {
+        const pending = this.projectPromotions.loadPending(turnId);
+        turn = pending?.status === "pending"
+          ? await this.activateCommittedSuccessor(turnId)
+          : await this.findTurn(turnId);
+      }
+      if (!turn || !this.stops.managedHydrationRequired(turnId)) {
+        return this.stops.stop(turnId);
+      }
+      const program = turn.managed?.program;
+      if (!program) throw new Error("Managed Stop canonical Program is missing");
+      try {
+        return this.stops.stop(turnId, {
+          program,
+          expectedRevision: turn.revision,
+          expectedSemanticState: turn.semanticState,
+        });
+      } catch (error) {
+        if (error instanceof ManagedStopPendingPromotionError) {
+          turn = await this.activateCommittedSuccessor(turnId);
+          continue;
+        }
+        if (error instanceof ManagedStopRevisionChangedError &&
+          error.actualRevision !== error.expectedRevision) {
+          turn = null;
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  private completePendingPromotionAfterStop(turnId: string): void {
     if (this.projectPromotions.loadPending(turnId)?.status === "pending") {
       void this.activateCommittedSuccessor(turnId).catch(() => {
         // Stop is already durable. Startup reconciliation retains promotion ownership.
       });
     }
-    return outcome;
   }
 
   private async reloadManagedProgram(

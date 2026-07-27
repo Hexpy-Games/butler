@@ -14,20 +14,55 @@ type TurnControlRow = {
   session_id: string;
   context_json: string;
   route: string | null;
-  managed_state_json: string | null;
 };
+
+export type ManagedStopHydration = {
+  program: ManagedProgramState;
+  expectedRevision: number;
+  expectedSemanticState: string;
+};
+
+export class ManagedStopPendingPromotionError extends Error {}
+
+export class ManagedStopRevisionChangedError extends Error {
+  constructor(
+    readonly expectedRevision: number,
+    readonly actualRevision: number,
+  ) {
+    super("Managed Stop Turn revision changed");
+  }
+}
 
 export class SqliteStopController {
   constructor(private readonly db: Database) {}
 
-  stop(turnId: string): StopPersistenceOutcome {
-    return this.db.transaction(() => this.persistStop(turnId))();
+  stop(
+    turnId: string,
+    hydration?: ManagedStopHydration,
+  ): StopPersistenceOutcome {
+    return this.db.transaction(() =>
+      this.persistStop(turnId, hydration),
+    )();
   }
 
-  private persistStop(turnId: string): StopPersistenceOutcome {
+  managedHydrationRequired(turnId: string): boolean {
+    const turn = this.db.query<{
+      semantic_state: string;
+      route: string | null;
+    }, [string]>(`
+      SELECT semantic_state, route FROM btcc_turns WHERE turn_id = ?
+    `).get(turnId);
+    return turn?.route === "managed" &&
+      !isTerminalStopState(turn.semantic_state);
+  }
+
+  private persistStop(
+    turnId: string,
+    hydration?: ManagedStopHydration,
+  ): StopPersistenceOutcome {
     const turn = this.db.query<TurnControlRow, [string]>(`
       SELECT semantic_state, revision, canonical_assistant_message_id, final_payload_json,
-        session_id, context_json, route, managed_state_json
+        session_id, context_json, route
       FROM btcc_turns WHERE turn_id = ?
     `).get(turnId);
     const stopRequestId = digest(`btcc-stop-request.v1\0${turnId}`);
@@ -67,7 +102,28 @@ export class SqliteStopController {
       return { kind: "already_finalizing", turnId };
     }
 
-    const cancelledRevision = turn.revision + 1;
+    if (turn.route === "managed") {
+      if (!hydration?.program) {
+        throw new Error("Managed Stop requires a canonically hydrated Program");
+      }
+      if (this.hasPendingProjectPromotion(turnId)) {
+        throw new ManagedStopPendingPromotionError(
+          "Managed Stop is gated by a pending Project promotion",
+        );
+      }
+      if (turn.revision !== hydration.expectedRevision) {
+        throw new ManagedStopRevisionChangedError(
+          hydration.expectedRevision,
+          turn.revision,
+        );
+      }
+      if (turn.semantic_state !== hydration.expectedSemanticState) {
+        throw new Error("Managed Stop semantic state changed without revision");
+      }
+    }
+    const expectedRevision = hydration?.expectedRevision ?? turn.revision;
+    const expectedState = hydration?.expectedSemanticState ?? turn.semantic_state;
+    const cancelledRevision = expectedRevision + 1;
     const cancelled = this.db.query<{ turn_id: string }, [
       number,
       string,
@@ -79,9 +135,9 @@ export class SqliteStopController {
         final_disposition = 'cancelled'
       WHERE turn_id = ? AND revision = ? AND semantic_state = ?
       RETURNING turn_id
-    `).get(cancelledRevision, turnId, turn.revision, turn.semantic_state);
+    `).get(cancelledRevision, turnId, expectedRevision, expectedState);
     if (cancelled?.turn_id !== turnId) throw new Error("BTCC Stop lost its Turn CAS");
-    this.preserveManagedContinuation(turnId, turn);
+    this.preserveManagedContinuation(turnId, turn, hydration?.program);
     this.db.query(`
       UPDATE btcc_checkpoints SET is_active = 0, active_claim_id = NULL
       WHERE turn_id = ? AND is_active = 1
@@ -94,10 +150,19 @@ export class SqliteStopController {
     return { kind: "cancelled", turnId };
   }
 
-  private preserveManagedContinuation(turnId: string, turn: TurnControlRow): void {
-    if (turn.route !== "managed" || !turn.managed_state_json) return;
-    const managed = JSON.parse(turn.managed_state_json) as { program?: ManagedProgramState };
-    const program = managed.program;
+  private hasPendingProjectPromotion(turnId: string): boolean {
+    return Boolean(this.db.query<{ outbox_id: string }, [string]>(`
+      SELECT outbox_id FROM btcc_ledger_promotion_outbox
+      WHERE turn_id = ? AND status = 'pending'
+    `).get(turnId));
+  }
+
+  private preserveManagedContinuation(
+    turnId: string,
+    turn: TurnControlRow,
+    program?: ManagedProgramState,
+  ): void {
+    if (turn.route !== "managed") return;
     if (!program || program.planningState !== "reviewed" ||
       program.frontier === "closed" || program.frontier === "cancelled") return;
     const unfinished = program.tasks.filter((task) => task.status !== "accepted");
@@ -220,6 +285,11 @@ export class SqliteStopController {
         updated_at = datetime('now') WHERE stop_request_id = ?
     `).run(status, turnRevision, id);
   }
+}
+
+function isTerminalStopState(state: string): boolean {
+  return state === "delivered" || state === "cancelled" ||
+    state === "delivery_committed";
 }
 
 function recordRef(kind: string, body: unknown) {

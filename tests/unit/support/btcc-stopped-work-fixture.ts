@@ -1,8 +1,10 @@
 import { Database } from "bun:sqlite";
 import { SqliteWorkLedgerStorage } from
   "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/work-ledger/index.ts";
-import { SqliteStopController } from
-  "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/sqlite-stop-controller.ts";
+import { SqliteTurnStateRepository } from
+  "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
+import { SqliteRuntimeOwnerRegistry } from
+  "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
 import { canonicalMutationId } from "./btcc-project-ledger-fixture.ts";
 import type { WorkLedgerCommit } from
   "../../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
@@ -21,7 +23,27 @@ export type StoppedCandidate = Awaited<
   ReturnType<typeof discoverContinuationCandidates>
 >[number];
 
-export function seedStoppedProgram(db: Database): SqliteWorkLedgerStorage {
+export async function seedStoppedProgram(
+  db: Database,
+): Promise<SqliteWorkLedgerStorage> {
+  const { storage } = seedManagedProgramForStop(db);
+  const owner = new SqliteRuntimeOwnerRegistry(db, {
+    ownerId: "stopped-program-fixture",
+    hostId: "test-host",
+    processId: 1,
+    processStartedAtMs: 1,
+  }, { isAlive: () => true });
+  const stopped = await new SqliteTurnStateRepository(db, owner)
+    .stopTurn("turn-user-stopped");
+  owner.close();
+  if (stopped.kind !== "cancelled") throw new Error("Fixture Turn was not stopped");
+  return storage;
+}
+
+export function seedManagedProgramForStop(
+  db: Database,
+  projectRef?: string,
+) {
   const storage = new SqliteWorkLedgerStorage(db);
   storage.commit(sessionProgramCommit());
   const initial = requireProgram(storage);
@@ -35,10 +57,9 @@ export function seedStoppedProgram(db: Database): SqliteWorkLedgerStorage {
   commit.mutationId = canonicalMutationId(commit, initial);
   storage.commit(commit);
   seedFrontier(db, plan);
-  insertManagedTurn(db, requireProgram(storage));
-  const stopped = new SqliteStopController(db).stop("turn-user-stopped");
-  if (stopped.kind !== "cancelled") throw new Error("Fixture Turn was not stopped");
-  return storage;
+  const program = requireProgram(storage);
+  insertManagedTurn(db, program, projectRef);
+  return { storage, program };
 }
 
 export function bindAndContinue(
@@ -250,7 +271,11 @@ function seedAcceptedTask(db: Database, task: ReturnType<typeof fourTaskPlan>["t
   `).run(resultRef.id, reviewRef.id, task.ref.id);
 }
 
-function insertManagedTurn(db: Database, program: Program): void {
+function insertManagedTurn(
+  db: Database,
+  program: Program,
+  projectRef?: string,
+): void {
   db.query(`
     INSERT INTO btcc_turns (
       turn_id, session_id, inbox_id, trigger_key, original_message_id,
@@ -262,8 +287,9 @@ function insertManagedTurn(db: Database, program: Program): void {
     "turn-user-stopped", "session-fixture", "inbox-user-stopped",
     "message:user-stopped", "message-user-stopped", "Start the four-task Program",
     "snapshot-user-stopped", stableJson({ provider: "openai", model: "gpt-5.6-sol" }),
-    stableJson({}), stableJson([]), "task_execution", "managed",
-    stableJson({ program }), 7, 0,
+    stableJson(projectRef ? { projectRef } : {}), stableJson([]),
+    "task_execution", "managed",
+    stableJson({ programId: program.programId, selectedTaskId: "task-c" }), 7, 0,
   );
 }
 
