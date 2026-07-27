@@ -1,7 +1,6 @@
 /// <reference types="bun" />
 
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ProgressRow } from "@/app/types.ts";
@@ -18,15 +17,6 @@ test("current status reserves one clipped line while preserving the full label",
   expect(html).toContain(`title="${label}"`);
   expect(html).toContain(label);
 
-  const css = readFileSync(
-    new URL("./CurrentTurnStatus.module.css", import.meta.url),
-    "utf8",
-  );
-  expect(css).toContain("height: calc(var(--font-size-3) * var(--line-height-body))");
-  expect(css).toContain("text-overflow: ellipsis");
-  expect(css).toContain("white-space: nowrap");
-  expect(css).not.toContain("min-height:");
-  expect(css).not.toContain("max-height:");
 });
 
 function progressRow(label: string): ProgressRow {

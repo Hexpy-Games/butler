@@ -31,12 +31,14 @@ const answerFields = {
   publicClaims: arraySchema(publicClaim),
 };
 
-export const openingSubmissionSchema = openingSubmissionSchemaFor([]);
+export const openingSubmissionSchema = openingSubmissionSchemaFor([], []);
 
 export function openingSubmissionSchemaFor(
-  continuationCandidateIds: readonly string[],
+  programCandidateIds: readonly string[],
+  finalizationCandidateIds: readonly string[] = [],
 ) {
-  const candidateIds = [...new Set(continuationCandidateIds)];
+  const programIds = [...new Set(programCandidateIds)];
+  const finalizationIds = [...new Set(finalizationCandidateIds)];
   const common = [
     objectSchema({
       kind: literalSchema("direct_answer"),
@@ -52,25 +54,25 @@ export function openingSubmissionSchemaFor(
       enumSchema("target_change", "persistent_artifact", "external_effect", "durable_work"),
     ),
   ];
-  if (candidateIds.length === 0) return variantsSchema(...common);
-  const candidateId = enumSchema(...candidateIds);
-  return variantsSchema(
-    ...common,
-    objectSchema({
-      kind: literalSchema("managed_program_continuation"),
-      requiredResultKind: literalSchema("durable_work"),
-      continuationCandidateId: candidateId,
-      requestObligation: textSchema(),
-      summary: textSchema(),
-      rationale: textSchema(),
-      nextStep: textSchema(),
-    }),
-    objectSchema({
-      kind: literalSchema("cancel_work"),
-      continuationCandidateId: candidateId,
-      reason: textSchema(),
-    }),
-  );
+  const variants = [...common];
+  if (programIds.length > 0) {
+    const candidateId = enumSchema(...programIds);
+    variants.push(
+      continuationCandidateSchema("managed_program_continuation", candidateId),
+      objectSchema({
+        kind: literalSchema("cancel_work"),
+        continuationCandidateId: candidateId,
+        reason: textSchema(),
+      }),
+    );
+  }
+  if (finalizationIds.length > 0) {
+    variants.push(continuationCandidateSchema(
+      "managed_finalization_continuation",
+      enumSchema(...finalizationIds),
+    ));
+  }
+  return variantsSchema(...variants);
 }
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),
@@ -85,6 +87,18 @@ function openingContinuationSchema(
   return objectSchema({
     kind: literalSchema(kind),
     requiredResultKind,
+    requestObligation: textSchema(),
+    summary: textSchema(),
+    rationale: textSchema(),
+    nextStep: textSchema(),
+  });
+}
+
+function continuationCandidateSchema(kind: string, candidateId: SubmissionSchema) {
+  return objectSchema({
+    kind: literalSchema(kind),
+    requiredResultKind: literalSchema("durable_work"),
+    continuationCandidateId: candidateId,
     requestObligation: textSchema(),
     summary: textSchema(),
     rationale: textSchema(),

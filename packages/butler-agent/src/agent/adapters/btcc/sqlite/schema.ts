@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS btcc_operational_interruptions (
   activation_kind TEXT NOT NULL,
   retry_at TEXT,
   diagnostic_message TEXT,
+  diagnostic_json TEXT,
   activation_count INTEGER NOT NULL,
   status TEXT NOT NULL,
   interrupted_at TEXT NOT NULL,
@@ -168,6 +169,27 @@ CREATE TABLE IF NOT EXISTS btcc_stopped_program_continuations (
   base_manifest_hash TEXT NOT NULL,
   goal_contract_ref TEXT NOT NULL,
   context_json TEXT NOT NULL,
+  status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_stopped_finalization_continuations (
+  candidate_id TEXT NOT NULL UNIQUE,
+  anchor_id TEXT PRIMARY KEY,
+  anchor_sha256 TEXT NOT NULL,
+  blocker_id TEXT NOT NULL,
+  blocker_sha256 TEXT NOT NULL,
+  source_turn_id TEXT NOT NULL UNIQUE,
+  session_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  ledger_id TEXT NOT NULL,
+  program_id TEXT NOT NULL,
+  expected_manifest_revision INTEGER NOT NULL,
+  base_manifest_hash TEXT NOT NULL,
+  goal_contract_ref TEXT NOT NULL,
+  resume_at TEXT NOT NULL CHECK (resume_at IN ('consolidation', 'reporting', 'delivery')),
+  context_json TEXT NOT NULL,
+  bound_turn_id TEXT,
   status TEXT NOT NULL
 );
 

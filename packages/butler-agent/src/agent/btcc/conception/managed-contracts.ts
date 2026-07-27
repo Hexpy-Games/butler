@@ -150,7 +150,11 @@ export type GoalContractAcceptedProduct = {
       ledgerId: string;
       programId: string;
       expectedManifestRevision: number;
-      source: "new_program" | "deferred_goal" | "stopped_program";
+      source:
+        | "new_program"
+        | "deferred_goal"
+        | "stopped_program"
+        | "stopped_finalization";
       continuationBinding: ContinuationBinding;
     };
   };

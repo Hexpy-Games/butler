@@ -124,7 +124,6 @@ test("large terminal journals compact incrementally without changing the project
   for (let index = 0; index < 205; index += 1) {
     events.append("settings.updated", { revision: 206 + index });
   }
-  const withLateRow = turnProgress.listProgressRowsForTurn("turn-incremental");
   let lateResult = retention.compact({
     turnId: "turn-incremental",
     chatId: "chat-1",

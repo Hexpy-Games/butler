@@ -1,5 +1,6 @@
 import type { PhaseCodec } from "../../core/index.ts";
 import { contentRef, digest, stableJson } from "../../core/index.ts";
+import type { ContinuationCandidate } from "../../continuation/index.ts";
 import type {
   OpeningContinuationProduct,
   OpeningProduct,
@@ -9,25 +10,35 @@ import { openingSubmissionSchemaFor } from "../submission-schemas.ts";
 import { completionModeFor, isManagedResultKind } from "./fulfillment.ts";
 
 export function openingAnswerCodec(
-  continuationCandidateIds: readonly string[],
+  continuationCandidates: readonly ContinuationCandidate[],
 ): PhaseCodec<OpeningProduct> {
+  const programCandidateIds = continuationCandidates
+    .filter((candidate) => candidate.continuationKind !== "managed_finalization")
+    .map(({ candidateId }) => candidateId);
+  const finalizationCandidateIds = continuationCandidates
+    .filter((candidate) => candidate.continuationKind === "managed_finalization")
+    .map(({ candidateId }) => candidateId);
   return {
-  submissionSchema: openingSubmissionSchemaFor(continuationCandidateIds),
-  decode(submission, envelope) {
-    if (
-      isRecord(submission) &&
-      (submission.kind === "assisted_continuation" ||
-        submission.kind === "managed_continuation" ||
-        submission.kind === "managed_program_continuation")
-    ) {
-      return decodeOpeningContinuation(submission, envelope);
-    }
-    if (isRecord(submission) && submission.kind === "cancel_work") {
-      return decodeWorkCancellation(submission, envelope);
-    }
-    return decodeOpeningAnswerProduct(submission, envelope);
-  },
-};
+    submissionSchema: openingSubmissionSchemaFor(
+      programCandidateIds,
+      finalizationCandidateIds,
+    ),
+    decode(submission, envelope) {
+      if (
+        isRecord(submission) &&
+        (submission.kind === "assisted_continuation" ||
+          submission.kind === "managed_continuation" ||
+          submission.kind === "managed_program_continuation" ||
+          submission.kind === "managed_finalization_continuation")
+      ) {
+        return decodeOpeningContinuation(submission, envelope);
+      }
+      if (isRecord(submission) && submission.kind === "cancel_work") {
+        return decodeWorkCancellation(submission, envelope);
+      }
+      return decodeOpeningAnswerProduct(submission, envelope);
+    },
+  };
 }
 
 function decodeWorkCancellation(
@@ -41,6 +52,9 @@ function decodeWorkCancellation(
     (item) => item.candidateId === value.continuationCandidateId,
   );
   if (!candidate) throw new Error("Opening cancel_work selected an unavailable Program");
+  if (candidate.continuationKind === "managed_finalization") {
+    throw new Error("Opening cancel_work cannot cancel finalization");
+  }
   const body = {
     kind: "cancel_work" as const,
     reason: value.reason,
@@ -149,13 +163,16 @@ function decodeOpeningContinuation(
   }
   const continuationMode = value.kind === "assisted_continuation"
     ? "assisted_request" as const
+    : value.kind === "managed_finalization_continuation"
+      ? "managed_finalization" as const
     : value.kind === "managed_program_continuation"
       ? "managed_program" as const
       : "managed_request" as const;
   const requiredResultKind = continuationMode === "assisted_request"
     ? requireAssistedResult(value.requiredResultKind)
     : requireManagedResult(value.requiredResultKind);
-  const continuationProposal = continuationMode === "managed_program"
+  const continuationProposal = continuationMode === "managed_program" ||
+      continuationMode === "managed_finalization"
     ? requireContinuationProposal(value.continuationCandidateId, envelope)
     : undefined;
   const body = {
@@ -192,8 +209,9 @@ function decodeOpeningContinuation(
   if (continuationMode === "assisted_request") {
     return { ...common, continuationMode, route: "assisted" };
   }
-  if (continuationMode === "managed_program") {
-    if (!continuationProposal) throw new Error("Managed Program proposal is missing");
+  if (continuationMode === "managed_program" ||
+    continuationMode === "managed_finalization") {
+    if (!continuationProposal) throw new Error("Managed continuation proposal is missing");
     return {
       ...common,
       continuationMode,

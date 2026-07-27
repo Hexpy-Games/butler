@@ -1,4 +1,7 @@
-import type { GoalContractAcceptedProduct } from "./conception/index.ts";
+import type {
+  GoalContractAcceptedProduct,
+  GoalContractRecord,
+} from "./conception/index.ts";
 import type { ResultCandidateProduct } from "./execution/index.ts";
 import type { PlanningAcceptedProduct } from "./planning/index.ts";
 import type { TaskReviewProduct } from "./review/index.ts";
@@ -6,11 +9,20 @@ import type {
   AcceptedTurnTransition,
   ManagedProgramState,
   ManagedTurnState,
+  DeliveryOutbox,
   TurnRecord,
   TurnSemanticState,
 } from "./turn/index.ts";
 import type { ManagedAttempt } from "./work/index.ts";
-import type { ContinuationCandidate } from "./continuation/index.ts";
+import type {
+  ContinuationBinding,
+  ContinuationCandidate,
+  ContinuationContext,
+  FinalizationContinuation,
+} from "./continuation/index.ts";
+import type { FinalDossierProduct } from "./consolidation/index.ts";
+import type { PreparedReportProduct } from "./reporting/index.ts";
+import type { ReviewedManagedProgramState } from "./work-ledger/index.ts";
 import type { ManagedDeferralProduct } from "./deferral/index.ts";
 import type {
   AcceptedPhaseGuidance,
@@ -59,6 +71,7 @@ export { assertPromotionPermit } from "./artifact/index.ts";
 export {
   createOperationalRecoveryBoundary,
   createProviderRecoveryReadiness,
+  decodeOperationalDiagnostic,
   LedgerContentionInterruption,
   OperationalInterruptionError,
 } from "./recovery/index.ts";
@@ -79,6 +92,7 @@ export type { RetrospectiveScheduler } from "./delivery/index.ts";
 export type {
   CommittedSuccessorReadiness,
   OperationalCheckpointAnchor,
+  OperationalDiagnostic,
   OperationalRecoveryReceipt,
   OperationalRecoveryReadiness,
   OperationalRecoveryStore,
@@ -110,6 +124,14 @@ export type {
   PhaseGuidanceScope,
   PhaseRunBinding,
   PublishPhaseGuidanceCommand,
+  ContinuationBinding,
+  ContinuationContext,
+  FinalizationContinuation,
+  FinalDossierProduct,
+  GoalContractRecord,
+  DeliveryOutbox,
+  PreparedReportProduct,
+  ReviewedManagedProgramState,
 };
 
 export type BtccPersistenceTypes = {

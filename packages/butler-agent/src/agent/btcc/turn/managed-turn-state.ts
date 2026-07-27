@@ -2,6 +2,7 @@ import type {
   FeedbackIntentProduct,
   GoalContractAcceptedProduct,
   GoalContractCandidateProduct,
+  GoalContractRecord,
   GoalContractRevisionRequiredProduct,
   OpeningContinuationProduct,
 } from "../conception/index.ts";
@@ -31,6 +32,7 @@ export type ManagedTurnState = {
   goalCandidate?: GoalContractCandidateProduct;
   goalRevision?: GoalContractRevisionRequiredProduct;
   goalAcceptance?: GoalContractAcceptedProduct;
+  finalizationOriginalGoalContract?: GoalContractRecord;
   planCandidate?: PlanningCandidateProduct;
   planningRevision?: PlanningRevisionRequiredProduct;
   planningAcceptance?: PlanningAcceptedProduct;

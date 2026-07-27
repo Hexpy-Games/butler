@@ -116,7 +116,12 @@ test("hosted 429 preserves provider-declared readiness", async () => {
   const retryAt = "Wed, 21 Oct 2099 07:28:00 GMT";
   globalThis.fetch = (async () => new Response(
     JSON.stringify({ error: { message: "rate limited" } }),
-    { status: 429, headers: { "Retry-After": retryAt } },
+    { status: 429, headers: {
+      "Retry-After": retryAt,
+      "X-Request-Id": "zai-request-429",
+      "X-RateLimit-Limit": "100",
+      "X-RateLimit-Remaining": "0",
+    } },
   )) as unknown as typeof fetch;
 
   await expect(createHostedChatCompletion(
@@ -128,6 +133,12 @@ test("hosted 429 preserves provider-declared readiness", async () => {
   )).rejects.toMatchObject({
     code: "provider_rate_limited",
     retryAt: new Date(retryAt).toISOString(),
+    providerRequestId: "zai-request-429",
+    rateLimit: {
+      retryAfter: retryAt,
+      limit: "100",
+      remaining: "0",
+    },
   });
 });
 

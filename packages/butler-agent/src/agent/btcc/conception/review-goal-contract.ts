@@ -147,8 +147,9 @@ function goalReviewCodec(
         expectedManifestRevision: continuation.binding.kind !== "new_request"
           ? continuation.binding.expectedManifestRevision
           : 0,
-        source: continuation.binding.kind === "stopped_program"
-          ? "stopped_program" as const
+        source: continuation.binding.kind === "stopped_program" ||
+          continuation.binding.kind === "stopped_finalization"
+          ? continuation.binding.kind
           : continuation.binding.kind === "deferred_goal"
             ? "deferred_goal" as const
             : "new_program" as const,

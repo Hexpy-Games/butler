@@ -1,8 +1,10 @@
 import type { ContentRef } from "../core/index.ts";
+import type { FinalDossierProduct } from "../consolidation/index.ts";
 import type { PlanningCandidate } from "../planning/contracts.ts";
+import type { PreparedReportProduct } from "../reporting/index.ts";
+import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 
-export type ContinuationCandidate = {
-  continuationKind: "managed_deferral" | "user_stopped";
+type ContinuationCandidateBase = {
   candidateId: string;
   ledgerId: string;
   programId: string;
@@ -12,8 +14,17 @@ export type ContinuationCandidate = {
   originalGoalContractRef: ContentRef;
   anchorRef: ContentRef;
   blockerRef: ContentRef;
-  context?: ContinuationContext;
 };
+
+export type ContinuationCandidate =
+  | (ContinuationCandidateBase & {
+      continuationKind: "managed_deferral" | "user_stopped";
+      context?: ContinuationContext;
+    })
+  | (ContinuationCandidateBase & {
+      continuationKind: "managed_finalization";
+      context: ContinuationContext & { finalization: FinalizationContinuation };
+    });
 
 export type ContinuationContext = {
   originalGoalContract: Record<string, unknown> | null;
@@ -32,7 +43,22 @@ export type ContinuationContext = {
     interruptedTask?: ContinuationTaskState;
     pendingTasks?: ContinuationTaskState[];
   };
+  finalization?: FinalizationContinuation;
 };
+
+export type FinalizationContinuation =
+  | {
+      resumeAt: "consolidation";
+      closedProgram: ReviewedManagedProgramState;
+    }
+  | {
+      resumeAt: "reporting";
+      finalDossier: FinalDossierProduct;
+    }
+  | {
+      resumeAt: "delivery";
+      preparedReport: PreparedReportProduct;
+    };
 
 export type ContinuationTaskState = {
   task: Record<string, unknown> & { ref: ContentRef };
@@ -71,4 +97,18 @@ export type ContinuationBinding =
       originalGoalContractRef: ContentRef;
       anchorRef: ContentRef;
       context?: ContinuationContext;
+    }
+  | {
+      kind: "stopped_finalization";
+      inboxId: string;
+      ref: ContentRef;
+      candidateId: string;
+      ledgerId: string;
+      programId: string;
+      expectedManifestRevision: number;
+      baseManifestHash: string;
+      sourceTurnId: string;
+      originalGoalContractRef: ContentRef;
+      anchorRef: ContentRef;
+      context: ContinuationContext & { finalization: FinalizationContinuation };
     };

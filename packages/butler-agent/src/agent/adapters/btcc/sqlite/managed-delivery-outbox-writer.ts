@@ -1,12 +1,15 @@
 import type { Database } from "bun:sqlite";
-import type { BtccPersistenceTypes } from "../../../btcc/gateway-api.ts";
+import type {
+  DeliveryOutbox,
+  PreparedReportProduct,
+} from "../../../btcc/gateway-api.ts";
 import { stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 
-type Transition = Extract<
-  BtccPersistenceTypes["transition"],
-  { kind: "accept_prepared_report" }
->;
+type PreparedDelivery = {
+  product: PreparedReportProduct;
+  deliveryOutbox: DeliveryOutbox;
+};
 
 export class ManagedDeliveryOutboxWriter {
   constructor(
@@ -14,7 +17,7 @@ export class ManagedDeliveryOutboxWriter {
     private readonly records: SqliteImmutableRecordStore,
   ) {}
 
-  prepare(turnId: string, nextRevision: number, transition: Transition): void {
+  prepare(turnId: string, nextRevision: number, transition: PreparedDelivery): void {
     this.insert("prepared_report", transition.product.report);
     this.insert("final_payload", transition.product.finalPayload);
     const outbox = transition.deliveryOutbox;

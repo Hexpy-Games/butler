@@ -7,8 +7,17 @@ import { ledgerManifestContentHash } from "../../../btcc/gateway-api.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteWorkLedgerProgramReader } from "./work-ledger/work-ledger-program-reader.ts";
+import {
+  loadStoppedFinalizationContext,
+  type StoppedFinalizationRow,
+} from "./stopped-finalization-authority.ts";
 
 type Candidate = BtccPersistenceTypes["continuationCandidate"];
+type CandidateBody = Candidate extends infer Entry
+  ? Entry extends Candidate
+    ? Omit<Entry, "candidateId" | "context">
+    : never
+  : never;
 type ManagedDeferralProduct = BtccPersistenceTypes["managedDeferralProduct"];
 type ProjectRuntime = {
   publications: ProjectWorkLedgerPublicationAdapter;
@@ -24,8 +33,60 @@ export async function discoverContinuationCandidates(
     ? await discoverProjectCandidates(db, command.context.projectRef, project)
     : discoverSessionCandidates(db, command.sessionId);
   const stopped = await discoverStoppedCandidates(db, command, project);
-  return [...deferred, ...stopped]
+  const finalization = await discoverFinalizationCandidates(db, command, project);
+  return [...deferred, ...stopped, ...finalization]
     .sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+}
+
+async function discoverFinalizationCandidates(
+  db: Database,
+  command: FreshBtccTurnCommand,
+  project?: ProjectRuntime,
+): Promise<Candidate[]> {
+  const scopeKind = command.context.projectRef ? "project" : "session";
+  const scopeId = command.context.projectRef ?? command.sessionId;
+  const rows = db.query<StoppedFinalizationRow, [string, string]>(`
+    SELECT c.candidate_id, c.anchor_id, c.anchor_sha256, c.blocker_id,
+      c.blocker_sha256, c.source_turn_id, c.ledger_id, c.program_id,
+      c.expected_manifest_revision, c.base_manifest_hash, c.goal_contract_ref,
+      c.resume_at
+    FROM btcc_stopped_finalization_continuations c
+    JOIN btcc_turns t ON t.turn_id = c.source_turn_id
+    WHERE c.scope_kind = ? AND c.scope_id = ? AND c.status = 'eligible'
+      AND t.semantic_state = 'cancelled' AND t.final_disposition = 'cancelled'
+    ORDER BY c.program_id
+  `).all(scopeKind, scopeId);
+  const sessionPrograms = new SqliteWorkLedgerProgramReader(db);
+  const projectRoot = command.context.projectRef && project
+    ? project.resolveProjectRoot(command.context.projectRef)
+    : undefined;
+  const candidates: Candidate[] = [];
+  for (const row of rows) {
+    const program = projectRoot && project
+      ? await project.publications.loadProgram(projectRoot, row.program_id)
+      : sessionPrograms.load(row.program_id);
+    if (!program || program.planningState !== "reviewed" ||
+      program.manifestRevision !== row.expected_manifest_revision ||
+      program.frontier !== "closed") continue;
+    const currentHash = ledgerManifestContentHash(program, {
+      ledgerId: row.ledger_id,
+      programId: row.program_id,
+    });
+    if (currentHash !== row.base_manifest_hash) continue;
+    const context = loadStoppedFinalizationContext(db, row, program);
+    candidates.push(candidate({
+      continuationKind: "managed_finalization",
+      ledgerId: row.ledger_id,
+      programId: row.program_id,
+      expectedManifestRevision: row.expected_manifest_revision,
+      baseManifestHash: row.base_manifest_hash,
+      sourceTurnId: row.source_turn_id,
+      originalGoalContractRef: program.goalContractRef,
+      anchorRef: { id: row.anchor_id, sha256: row.anchor_sha256 },
+      blockerRef: { id: row.blocker_id, sha256: row.blocker_sha256 },
+    }, context, row.candidate_id));
+  }
+  return candidates;
 }
 
 async function discoverProjectCandidates(
@@ -179,7 +240,7 @@ async function discoverStoppedCandidates(
 }
 
 function candidate(
-  body: Omit<Candidate, "candidateId" | "context">,
+  body: CandidateBody,
   context: NonNullable<Candidate["context"]>,
   expectedCandidateId?: string,
 ): Candidate {
@@ -187,11 +248,17 @@ function candidate(
   if (expectedCandidateId && candidateId !== expectedCandidateId) {
     throw new Error("Stopped continuation candidate identity changed");
   }
-  return {
-    candidateId,
-    ...body,
-    context,
-  };
+  if (body.continuationKind === "managed_finalization") {
+    if (!context.finalization) {
+      throw new Error("Finalization continuation context is missing");
+    }
+    return {
+      candidateId,
+      ...body,
+      context: { ...context, finalization: context.finalization },
+    };
+  }
+  return { candidateId, ...body, context };
 }
 
 function continuationContext(

@@ -78,6 +78,30 @@ function bindProposedContinuation(
     : [];
   const candidate = available.find((item) => item.candidateId === proposedCandidateId);
   if (!candidate) throw new Error("Conception selected an unavailable continuation candidate");
+  if (candidate.continuationKind === "managed_finalization") {
+    if (!candidate.context?.finalization) {
+      throw new Error("Finalization continuation is missing its resume state");
+    }
+    const context = {
+      ...candidate.context,
+      finalization: candidate.context.finalization,
+    };
+    const kind = "stopped_finalization" as const;
+    const body = { kind, inboxId, ...candidate, context };
+    return {
+      binding: {
+        kind,
+        inboxId,
+        ref: contentRef("continuation-binding", body),
+        ...candidate,
+        context,
+      },
+      reviewDecision: {
+        kind: "bind" as const,
+        continuationCandidateId: proposedCandidateId,
+      },
+    };
+  }
   const kind = candidate.continuationKind === "user_stopped"
     ? "stopped_program" as const
     : "deferred_goal" as const;

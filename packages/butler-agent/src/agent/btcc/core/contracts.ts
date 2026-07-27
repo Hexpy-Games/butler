@@ -2,6 +2,7 @@ import type { AdmittedModelSelection } from "../contracts.ts";
 import type { ContinuationCandidate } from "../continuation/index.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
 import type { OperationalActivation } from "../recovery/index.ts";
+import type { OperationalDiagnostic } from "../recovery/index.ts";
 import type { SubmissionSchema } from "./submission-schema.ts";
 import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
 import type { OperationResultProjection } from "../operation-result/contracts.ts";
@@ -121,6 +122,7 @@ export type ProviderRoundValue =
       code: string;
       activation: OperationalActivation;
       diagnosticMessage?: string;
+      diagnostic?: OperationalDiagnostic;
     };
 
 export interface SelectedModel {

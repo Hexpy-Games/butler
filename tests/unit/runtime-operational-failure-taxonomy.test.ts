@@ -32,6 +32,18 @@ test("provider HTTP failures normalize Retry-After and reset headers", () => {
     headers: new Headers({ "X-RateLimit-Reset": String(resetAt) }),
   });
   expect(reset.retryAt).toBe(new Date(resetAt * 1_000).toISOString());
+
+  const invalid = providerHttpError({
+    provider: "zai",
+    api: "chat_completions",
+    statusCode: 429,
+    headers: new Headers({
+      "Retry-After": "not-a-readiness-deadline",
+      "RateLimit-Reset": "also-not-a-deadline",
+      "X-RateLimit-Reset": "not-an-epoch",
+    }),
+  });
+  expect(invalid.retryAt).toBeUndefined();
 });
 
 test("runtime delivery taxonomy preserves operational failures with exact safe codes", () => {

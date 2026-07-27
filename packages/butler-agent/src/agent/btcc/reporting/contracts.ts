@@ -10,6 +10,7 @@ export type PreparedReportProduct = {
   };
   finalPayload: {
     ref: ContentRef;
+    turnId: string;
     reportRef: ContentRef;
     finalDossierRef: ContentRef;
     contentSha256: string;

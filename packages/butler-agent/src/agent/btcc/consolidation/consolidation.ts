@@ -1,6 +1,9 @@
 import type { PhaseInvocation } from "../core/index.ts";
 import { withPhaseState } from "../core/index.ts";
-import type { GoalContractAcceptedProduct } from "../conception/index.ts";
+import type {
+  GoalContractAcceptedProduct,
+  GoalContractRecord,
+} from "../conception/index.ts";
 import type { ManagedDeferralProduct } from "../deferral/index.ts";
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
 import {
@@ -29,13 +32,20 @@ export async function consolidation(command: {
     return consolidateDeferredTurn(command, accepted, managed.deferral);
   }
   const program = requireManagedProgram(command.turn);
+  const originalGoal = consolidationGoalSubject(managed, program, accepted);
   if (program.frontier === "closed" && program.promotionDeferral) {
     if (!program.activeDeferral) {
       throw new Error("Deferred promotion has no active deferral context");
     }
-    return consolidateDeferredTurn(command, accepted, program.activeDeferral, program);
+    return consolidateDeferredTurn(
+      command,
+      accepted,
+      program.activeDeferral,
+      program,
+      originalGoal,
+    );
   }
-  return consolidateCompletedWork(command, accepted);
+  return consolidateCompletedWork(command, accepted, originalGoal);
 }
 
 async function consolidateDeferredTurn(
@@ -43,6 +53,7 @@ async function consolidateDeferredTurn(
   accepted: GoalContractAcceptedProduct,
   sourceDeferral: ManagedDeferralProduct,
   sourceProgram?: ReviewedManagedProgramState,
+  originalGoal: GoalContractRecord = accepted.goalContract,
 ): Promise<Extract<TurnEvent, { kind: "FinalDossierAccepted" }>> {
   const authority = requireManagedPlanningAuthority(command.turn);
   const reviewed = sourceProgram ?? (authority.planningState === "reviewed" ? authority : undefined);
@@ -52,11 +63,11 @@ async function consolidateDeferredTurn(
     frontier: "deferred",
     taskStatuses: [],
     programId: authority.programId,
-    acceptedGoalContract: accepted.goalContract,
+    acceptedGoalContract: originalGoal,
     acceptedAuthority: accepted.authority,
     goalContractRef: authority.goalContractRef,
     authorityRef: authority.authorityRef,
-    goalFields: accepted.goalContract.fields,
+    goalFields: originalGoal.fields,
     taskReviewRefs: passedReviews,
     candidateRefs: reviewed?.promotionAssemblies.map((assembly) => assembly.candidate.ref) ?? [],
     promotionClosure: sourceProgram ? "deferred" : "not_required",
@@ -74,13 +85,14 @@ async function consolidateDeferredTurn(
 async function consolidateCompletedWork(
   command: { turn: TurnRecord; phase: PhaseInvocation },
   accepted: GoalContractAcceptedProduct,
+  originalGoal: GoalContractRecord,
 ): Promise<Extract<TurnEvent, {
   kind: "ConsolidationRepairRequired" | "FinalDossierAccepted";
 }>> {
   const program = requireManagedProgram(command.turn);
   const taskOutcomes = projectTaskOutcomes(program.tasks);
   const product = await assureOriginalGoal(withPhaseState(command.phase, {
-    acceptedGoalContract: accepted.goalContract,
+    acceptedGoalContract: originalGoal,
     acceptedAuthority: accepted.authority,
     acceptedPlan: program.plan,
     managedWorks: program.works,
@@ -91,7 +103,7 @@ async function consolidateCompletedWork(
     frontier: program.frontier,
     taskStatuses: program.tasks.map((task) => task.status),
     taskRefs: program.tasks.map((task) => task.task.ref),
-    goalFields: accepted.goalContract.fields,
+    goalFields: originalGoal.fields,
     programId: program.programId,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
@@ -106,4 +118,21 @@ async function consolidateCompletedWork(
   return product.kind === "consolidation_repair"
     ? { kind: "ConsolidationRepairRequired", product }
     : { kind: "FinalDossierAccepted", product };
+}
+
+export function consolidationGoalSubject(
+  managed: ReturnType<typeof requireManagedState>,
+  program: ReviewedManagedProgramState,
+  accepted: GoalContractAcceptedProduct,
+): GoalContractRecord {
+  const binding = accepted.authority.managedBinding.continuationBinding;
+  if (binding.kind !== "stopped_finalization") return accepted.goalContract;
+  const original = managed.finalizationOriginalGoalContract;
+  if (!original || original.ref.id !== program.goalContractRef.id ||
+    original.ref.sha256 !== program.goalContractRef.sha256 ||
+    binding.originalGoalContractRef.id !== program.goalContractRef.id ||
+    binding.originalGoalContractRef.sha256 !== program.goalContractRef.sha256) {
+    throw new Error("Consolidation original GoalContract authority changed");
+  }
+  return original;
 }
