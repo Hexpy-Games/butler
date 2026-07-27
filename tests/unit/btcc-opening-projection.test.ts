@@ -121,6 +121,41 @@ test("distinguishes provider product correction from connection recovery", async
   );
 });
 
+test("projects runtime remediation as an interrupted non-waiting activity", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.operationalNoticeChanged?.({
+    turnId: "turn-runtime-remediation",
+    semanticState: "task_review",
+    status: "interrupted",
+    code: "provider_phase_submission_invalid",
+    activationKind: "runtime_remediation",
+  });
+
+  const row = progressRowFromSharedTurnEvent({
+    id: "runtime-remediation-event",
+    turnSequence: 10,
+    kind: events[0]!.kind,
+    payload: events[0]!.payload,
+  });
+  expect(events[0]?.payload).toMatchObject({
+    btccState: "task_review",
+    bridgePhase: "operational_recovery",
+    recoveryStatus: "interrupted",
+  });
+  expect(row).toMatchObject({
+    kind: "message",
+    state: "running",
+    bridge_phase: "operational_recovery",
+    semantic_block_id: "task_review",
+  });
+  expect(row?.safe_label).toContain("안전하게 보류했습니다");
+  expect(row?.safe_label).not.toContain("바로잡고 있습니다");
+});
+
 test("projects one runtime-owned waiting state for a selected-model round", async () => {
   const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
   const observer = projectTurnProgress(async (event) => {

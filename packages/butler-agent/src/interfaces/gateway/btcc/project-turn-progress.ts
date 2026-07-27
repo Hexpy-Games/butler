@@ -120,6 +120,7 @@ export function projectTurnProgress(
             note: progressLabel(update.semanticState),
             btccState: update.semanticState,
             semanticBlockId: update.semanticState,
+            bridgePhase: "operational_recovery",
             recoveryStatus: update.status,
           },
         });
@@ -129,8 +130,10 @@ export function projectTurnProgress(
         kind: "assistant.public_note",
         payload: {
           note: operationalProgressLabel(update.activationKind, update.code),
+          btccState: update.semanticState,
           operational: true,
           semanticBlockId: update.semanticState,
+          bridgePhase: "operational_recovery",
           recoveryStatus: update.status,
         },
       });
@@ -152,8 +155,12 @@ function operationalProgressLabel(
     "automatic_storage_recovery" | "runtime_remediation" | "cancelled" | undefined,
   code?: string,
 ): string {
-  if (code === "provider_phase_submission_invalid" ||
-    code === "provider_protocol_interruption") {
+  if (activation === "runtime_remediation") {
+    return "현재 작업을 저장된 지점에 안전하게 보류했습니다. 중지 기능은 계속 사용할 수 있습니다";
+  }
+  if (activation === "automatic_provider_recovery" &&
+    (code === "provider_phase_submission_invalid" ||
+      code === "provider_protocol_interruption")) {
     return "모델 출력 계약을 바로잡고 있습니다. 완료된 작업은 그대로 보존됩니다";
   }
   if (activation === "automatic_provider_recovery") {
