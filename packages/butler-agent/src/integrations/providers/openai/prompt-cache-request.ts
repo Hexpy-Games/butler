@@ -1,7 +1,10 @@
 import { attachmentImageDataUrl, promptWithAttachmentContext } from
   "../../../agent/context/attachment-context.ts";
 import { openAIInputWithAttachments } from "../shared/runtime-support.ts";
-import type { OpenAIPromptCacheConfig } from "../runtime-contracts.ts";
+import type {
+  OpenAIAuthOverride,
+  OpenAIPromptCacheConfig,
+} from "../runtime-contracts.ts";
 import type {
   PromptCacheAwarePromptOptions,
   PromptCacheBoundary,
@@ -21,38 +24,54 @@ export function openAIPromptCacheRequest(input: {
   attachments?: PromptAttachments;
   boundary?: PromptCacheBoundary;
   configured: OpenAIPromptCacheConfig;
+  authMode: OpenAIAuthOverride["mode"];
 }): {
   input: unknown;
   cache: Record<string, unknown>;
   telemetry: OpenAIPromptCacheConfig;
 } {
-  if (!input.boundary || !EXPLICIT_BREAKPOINT_MODELS.has(input.model)) {
+  const codexTransport = input.authMode === "codex_oauth" ||
+    input.authMode === "codex_subscription";
+  if (!input.boundary) {
+    return {
+      input: openAIInputWithAttachments(input.prompt, input.attachments),
+      cache: codexTransport
+        ? { ...stableKey(input.configured) }
+        : { ...input.configured },
+      telemetry: codexTransport ? stableKey(input.configured) : input.configured,
+    };
+  }
+  if (input.prompt !== input.boundary.stablePrefix + input.boundary.dynamicSuffix) {
+    throw new Error("OpenAI prompt cache boundary does not reconstruct the exact prompt");
+  }
+  if (codexTransport) {
+    return {
+      input: orderedInput(input.boundary, input.attachments, false),
+      cache: { ...stableKey(input.configured) },
+      telemetry: stableKey(input.configured),
+    };
+  }
+  if (!EXPLICIT_BREAKPOINT_MODELS.has(input.model)) {
     return {
       input: openAIInputWithAttachments(input.prompt, input.attachments),
       cache: { ...input.configured },
       telemetry: input.configured,
     };
   }
-  if (input.prompt !== input.boundary.stablePrefix + input.boundary.dynamicSuffix) {
-    throw new Error("OpenAI prompt cache boundary does not reconstruct the exact prompt");
-  }
   return {
-    input: cacheableInput(input.boundary, input.attachments),
+    input: orderedInput(input.boundary, input.attachments, true),
     cache: {
-      ...(input.configured.prompt_cache_key
-        ? { prompt_cache_key: input.configured.prompt_cache_key }
-        : {}),
+      ...stableKey(input.configured),
       prompt_cache_options: { mode: "explicit" },
     },
-    telemetry: input.configured.prompt_cache_key
-      ? { prompt_cache_key: input.configured.prompt_cache_key }
-      : {},
+    telemetry: stableKey(input.configured),
   };
 }
 
-function cacheableInput(
+function orderedInput(
   boundary: PromptCacheBoundary,
   attachments?: PromptAttachments,
+  explicitBreakpoint = false,
 ): unknown {
   const imageParts = (attachments ?? [])
     .map((attachment) => attachmentImageDataUrl(attachment))
@@ -64,7 +83,9 @@ function cacheableInput(
       {
         type: "input_text",
         text: boundary.stablePrefix,
-        prompt_cache_breakpoint: { mode: "explicit" },
+        ...(explicitBreakpoint
+          ? { prompt_cache_breakpoint: { mode: "explicit" } }
+          : {}),
       },
       {
         type: "input_text",
@@ -73,4 +94,10 @@ function cacheableInput(
       ...imageParts,
     ],
   }];
+}
+
+function stableKey(configured: OpenAIPromptCacheConfig): OpenAIPromptCacheConfig {
+  return configured.prompt_cache_key
+    ? { prompt_cache_key: configured.prompt_cache_key }
+    : {};
 }

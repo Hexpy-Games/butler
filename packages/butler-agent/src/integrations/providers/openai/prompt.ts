@@ -7,6 +7,7 @@ import { recordPromptCacheMetric } from "./usage.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
 import type { PromptCacheAwarePromptOptions } from "../prompt-cache-boundary.ts";
 import { openAIPromptCacheRequest } from "./prompt-cache-request.ts";
+import { resolveOpenAIAuth } from "./auth.ts";
 
 
 export async function runOpenAIPromptWithUsage(
@@ -16,6 +17,7 @@ export async function runOpenAIPromptWithUsage(
 ): Promise<PromptTextResult> {
   const resolution = resolveOpenAIModel(modelOverride ?? options.model, options.reasoningEffort);
   const model = await resolveDynamicOpenAIModel(resolution.model);
+  const auth = authOverride ?? await resolveOpenAIAuth();
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "text-prompt");
   const cacheRequest = openAIPromptCacheRequest({
     model,
@@ -23,6 +25,7 @@ export async function runOpenAIPromptWithUsage(
     attachments: options.attachments,
     boundary: options.promptCacheBoundary,
     configured: promptCache,
+    authMode: auth.mode,
   });
   beforeAttributedModelRequest({
     attribution: options.usageAttribution,
@@ -36,7 +39,7 @@ export async function runOpenAIPromptWithUsage(
     ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
     reasoning: buildReasoningConfig(resolution),
     input: cacheRequest.input,
-  }, options.signal, authOverride, options.onProviderStreamEvent, {
+  }, options.signal, auth, options.onProviderStreamEvent, {
     attribution: options.usageAttribution,
     roundIndex: options.usageAttribution?.roundIndex ?? 0,
   }, undefined, options.providerRetryAttempts);
