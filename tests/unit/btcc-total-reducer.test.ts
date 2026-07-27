@@ -319,6 +319,7 @@ test("a normalized persistence interruption retains canonical Stop ownership", a
     executionFence: turn.executionFence,
   };
   let capturedCode = "";
+  const notices: string[] = [];
   let recoveryStarted!: () => void;
   const started = new Promise<void>((resolve) => { recoveryStarted = resolve; });
   const turns: TurnStateRepository = {
@@ -346,6 +347,10 @@ test("a normalized persistence interruption retains canonical Stop ownership", a
       async resolve() { return false; },
       async pendingTurnIds() { return []; },
     },
+    progress: {
+      async stateChanged() {},
+      async operationalNoticeChanged(update) { notices.push(update.status); },
+    },
     admission: null as never,
     phaseConversations: null as never,
     model: null as never,
@@ -359,6 +364,7 @@ test("a normalized persistence interruption retains canonical Stop ownership", a
 
   await started;
   expect(capturedCode).toBe("runtime_unclassified_interruption");
+  expect(notices).toEqual(["interrupted"]);
   expect(await runtime.handle({ kind: "stop", turnId: turn.turnId })).toEqual({
     kind: "cancelled",
     turnId: turn.turnId,

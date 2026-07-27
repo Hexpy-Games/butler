@@ -3,6 +3,7 @@ import {
   type ExecutionPermit,
   type OperationalCheckpointAnchor,
   type OperationalInterruptionError,
+  shouldScheduleAutomaticRecovery,
 } from "../recovery/index.ts";
 import type {
   StateExecutionClaim,
@@ -54,7 +55,9 @@ export async function waitForOperationalReentry(
   await publishOperationalNotice(dependencies.progress, {
     turnId: interruption.anchor.turnId,
     semanticState: interruption.anchor.semanticState,
-    status: "recovering",
+    status: shouldScheduleAutomaticRecovery(interruption)
+      ? "recovering"
+      : "interrupted",
     code: interruption.code,
     activationKind: interruption.activation.kind,
   });

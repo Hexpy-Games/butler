@@ -133,7 +133,7 @@ export interface BtccTurnProgressObserver {
   operationalNoticeChanged?(update: {
     turnId: string;
     semanticState: string;
-    status: "recovering" | "cleared";
+    status: "recovering" | "interrupted" | "cleared";
     code?: string;
     activationKind?: OperationalActivation["kind"];
   }): void | Promise<void>;
