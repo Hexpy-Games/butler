@@ -8,6 +8,7 @@ import {
   acceptReviewedPlanAuthority,
   assertPromotionPermit,
   bindManagedProgram,
+  resolveStoppedReviewTask,
 } from "../../../btcc/gateway-api.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 import { acceptProjectFeedback } from "./revise-program.ts";
@@ -127,10 +128,19 @@ function installContinuedPlan(
   const candidate = product.candidate;
   const priorTasks = new Map(program.tasks.map((task) => [task.task.ref.id, task]));
   const candidateTaskIds = new Set(candidate.tasks.map((task) => task.ref.id));
+  const reviewTask = candidate.revisionOrigin.kind === "stopped_continuation"
+    ? resolveStoppedReviewTask(candidate.revisionOrigin, program.tasks)
+    : null;
+  if (reviewTask && !candidate.tasks.some((task) => refsEqual(task.ref, reviewTask.task.ref))) {
+    throw new Error("Stopped continuation integrity violation: accepted Plan lost the current Task");
+  }
   const carriedCompleted = program.tasks
     .filter((task) => task.status === "accepted" && !candidateTaskIds.has(task.task.ref.id));
   const tasks = candidate.tasks.map((task) => {
     const prior = priorTasks.get(task.ref.id);
+    if (reviewTask && refsEqual(task.ref, reviewTask.task.ref)) {
+      return structuredClone(reviewTask);
+    }
     if (prior?.status === "accepted") return structuredClone(prior);
     const attempts = structuredClone(prior?.attempts ?? []);
     const current = attempts.at(-1);
@@ -139,7 +149,10 @@ function installContinuedPlan(
   });
   tasks.push(...structuredClone(carriedCompleted));
   const candidateWorkIds = new Set(candidate.works.map((work) => work.workLogicalId));
-  const carriedWorkIds = new Set(carriedCompleted.map((task) => task.task.workLogicalId));
+  const carriedWorkIds = new Set([
+    ...carriedCompleted.map((task) => task.task.workLogicalId),
+    ...(reviewTask ? [reviewTask.task.workLogicalId] : []),
+  ]);
   const carriedWorks = program.works.filter((work) =>
     carriedWorkIds.has(work.work.workLogicalId) &&
     !candidateWorkIds.has(work.work.workLogicalId));
@@ -172,6 +185,13 @@ function installContinuedPlan(
     }
   }
   return selectCurrent(next);
+}
+
+function refsEqual(
+  left: { id: string; sha256: string },
+  right: { id: string; sha256: string },
+): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function selectAttempt(program: Reviewed, attempt: Extract<Mutation, { kind: "select_attempt" }>[

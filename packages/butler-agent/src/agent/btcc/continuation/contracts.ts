@@ -1,4 +1,5 @@
 import type { ContentRef } from "../core/index.ts";
+import type { PlanningCandidate } from "../planning/contracts.ts";
 
 export type ContinuationCandidate = {
   continuationKind: "managed_deferral" | "user_stopped";
@@ -16,6 +17,7 @@ export type ContinuationCandidate = {
 
 export type ContinuationContext = {
   originalGoalContract: Record<string, unknown> | null;
+  acceptedPlan?: PlanningCandidate;
   blocker: {
     sourceState: string;
     reason: string;

@@ -40,6 +40,7 @@ export {
   ledgerRecordSha256,
   logicalLedgerRecords,
   projectWorkProgress,
+  resolveStoppedReviewTask,
 } from "./work-ledger/index.ts";
 export { contentRef, stableJson } from "./core/index.ts";
 export { governingSpecLogicalIds } from "./conception/index.ts";

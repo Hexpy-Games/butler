@@ -218,6 +218,7 @@ export class SqliteStopController {
     this.insertRecord(anchorRef, "user_stopped_program_anchor", anchorBody);
     const candidateContext = {
       originalGoalContract: this.loadRecord(program.goalContractRef.id),
+      acceptedPlan: program.acceptedPlan,
       blocker: {
         sourceState: turn.semantic_state,
         reason: blockerBody.reason,

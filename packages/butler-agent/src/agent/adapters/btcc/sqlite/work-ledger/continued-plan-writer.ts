@@ -3,7 +3,9 @@ import type {
   ManagedProgramAuthority,
   WorkLedgerCommit,
 } from "../../../../btcc/gateway-api.ts";
+import { resolveStoppedReviewTask } from "../../../../btcc/gateway-api.ts";
 import { stableJson } from "../identity.ts";
+import { SqliteWorkLedgerProgramReader } from "./work-ledger-program-reader.ts";
 
 type InstallPlan = Extract<WorkLedgerCommit["mutation"], { kind: "install_reviewed_plan" }>;
 type CurrentPlan = { acceptedPlanRef: string; promotionPermitted: boolean };
@@ -24,19 +26,41 @@ export class SqliteContinuedPlanWriter {
     ) {
       throw new Error("Program continuation lost its reviewed anchor");
     }
+    const prior = new SqliteWorkLedgerProgramReader(this.db).load(candidate.programId);
+    if (!prior || prior.planningState !== "reviewed") {
+      throw new Error("Stopped continuation integrity violation: current Program is not reviewed");
+    }
+    if (
+      candidate.revisionOrigin.kind === "stopped_continuation" &&
+      candidate.revisionOrigin.stoppedResultRef
+    ) {
+      this.assertStoredResultCandidate(candidate.revisionOrigin.stoppedResultRef);
+    }
+    const reviewTask = candidate.revisionOrigin.kind === "stopped_continuation"
+      ? resolveStoppedReviewTask(candidate.revisionOrigin, prior.tasks)
+      : null;
+    const preserved = reviewTask
+      ? {
+          taskId: reviewTask.task.ref.id,
+          attemptId: reviewTask.attempts.at(-1)!.attemptRecord.ref.id,
+          workId: this.workIdForTask(reviewTask.task.ref.id),
+          workLogicalId: reviewTask.task.workLogicalId,
+        }
+      : null;
     if (candidate.plan.ref.id !== current.acceptedPlanRef) {
-      this.replace(product, projection);
+      this.replace(product, projection, preserved);
       return;
     }
-    this.closeUnacceptedAttempts(candidate.programId);
-    this.reopenUnacceptedTasks(candidate.programId);
+    this.closeUnacceptedAttempts(candidate.programId, preserved?.attemptId);
+    this.reopenUnacceptedTasks(candidate.programId, preserved?.taskId);
     const continued = this.db.query(`
-      UPDATE btcc_programs SET planning_review_ref = ?, frontier = ?,
+      UPDATE btcc_programs SET accepted_plan_candidate_ref = ?, planning_review_ref = ?, frontier = ?,
         active_deferral_ref = NULL, active_deferral_turn_id = NULL,
         promotion_deferral_ref = NULL, available_specs_json = ?,
         governing_spec_refs_json = ?, manifest_revision = manifest_revision + 1
       WHERE program_id = ? AND manifest_revision = ?
     `).run(
+      candidate.ref.id,
       product.review.ref.id,
       current.promotionPermitted ? "promotion_open" : "implementation_open",
       stableJson(projection.availableSpecs),
@@ -50,10 +74,11 @@ export class SqliteContinuedPlanWriter {
   private replace(
     product: InstallPlan["product"],
     projection: ManagedProgramAuthority,
+    preserved: PreservedReviewTask | null,
   ): void {
     const candidate = product.candidate;
     const completed = this.activeAcceptedTasks(candidate.programId);
-    this.closeUnacceptedAttempts(candidate.programId);
+    this.closeUnacceptedAttempts(candidate.programId, preserved?.attemptId);
     const replaced = this.db.query(`
       UPDATE btcc_programs SET accepted_plan_ref = ?, accepted_plan_candidate_ref = ?,
         planning_review_ref = ?,
@@ -79,8 +104,45 @@ export class SqliteContinuedPlanWriter {
       .run(candidate.programId);
     this.installWorks(product);
     this.installTasks(product);
+    if (preserved) this.retainReviewTask(product, preserved);
     this.retainCompletedTasks(product, completed);
     this.synchronizeWorks(candidate.programId);
+  }
+
+  private assertStoredResultCandidate(ref: { id: string; sha256: string }): void {
+    const stored = this.db.query<{ kind: string; sha256: string }, [string]>(`
+      SELECT kind, sha256 FROM btcc_records WHERE record_id = ?
+    `).get(ref.id);
+    if (!stored || stored.sha256 !== ref.sha256 || stored.kind !== "result_candidate") {
+      throw new Error(
+        "Stopped continuation integrity violation: ResultCandidate record identity or kind mismatch",
+      );
+    }
+  }
+
+  private workIdForTask(taskId: string): string {
+    const row = this.db.query<{ work_id: string }, [string]>(`
+      SELECT work_id FROM btcc_tasks WHERE task_id = ? AND is_active = 1
+    `).get(taskId);
+    if (!row) {
+      throw new Error("Stopped continuation integrity violation: current Task has no active Work");
+    }
+    return row.work_id;
+  }
+
+  private retainReviewTask(
+    product: InstallPlan["product"],
+    preserved: PreservedReviewTask,
+  ): void {
+    const replacementWorkId = product.candidate.works.find((work) =>
+      work.workLogicalId === preserved.workLogicalId)?.ref.id;
+    if (!replacementWorkId) {
+      this.db.query("UPDATE btcc_work_items SET is_active = 1 WHERE work_id = ?")
+        .run(preserved.workId);
+    }
+    this.db.query(`
+      UPDATE btcc_tasks SET work_id = ?, is_active = 1 WHERE task_id = ?
+    `).run(replacementWorkId ?? preserved.workId, preserved.taskId);
   }
 
   private activeAcceptedTasks(programId: string): CompletedTask[] {
@@ -160,22 +222,31 @@ export class SqliteContinuedPlanWriter {
     }
   }
 
-  private closeUnacceptedAttempts(programId: string): void {
+  private closeUnacceptedAttempts(programId: string, preservedAttemptId?: string): void {
     this.db.query(`
       UPDATE btcc_attempts SET status = 'closed_unaccepted'
-      WHERE program_id = ? AND status != 'accepted'
-    `).run(programId);
+      WHERE program_id = ? AND status != 'accepted' AND attempt_id != COALESCE(?, '')
+    `).run(programId, preservedAttemptId ?? null);
   }
 
-  private reopenUnacceptedTasks(programId: string): void {
+  private reopenUnacceptedTasks(programId: string, preservedTaskId?: string): void {
     this.db.query(`
       UPDATE btcc_tasks SET status = CASE
-          WHEN status = 'accepted' THEN 'accepted' ELSE 'planned' END,
-        current_attempt_id = CASE WHEN status = 'accepted' THEN current_attempt_id ELSE NULL END,
-        result_ref = CASE WHEN status = 'accepted' THEN result_ref ELSE NULL END,
-        review_ref = CASE WHEN status = 'accepted' THEN review_ref ELSE NULL END
+          WHEN status = 'accepted' OR task_id = ? THEN status ELSE 'planned' END,
+        current_attempt_id = CASE
+          WHEN status = 'accepted' OR task_id = ? THEN current_attempt_id ELSE NULL END,
+        result_ref = CASE
+          WHEN status = 'accepted' OR task_id = ? THEN result_ref ELSE NULL END,
+        review_ref = CASE
+          WHEN status = 'accepted' OR task_id = ? THEN review_ref ELSE NULL END
       WHERE program_id = ? AND is_active = 1
-    `).run(programId);
+    `).run(
+      preservedTaskId ?? "",
+      preservedTaskId ?? "",
+      preservedTaskId ?? "",
+      preservedTaskId ?? "",
+      programId,
+    );
     this.synchronizeWorks(programId);
   }
 
@@ -190,3 +261,10 @@ export class SqliteContinuedPlanWriter {
     `).run(programId);
   }
 }
+
+type PreservedReviewTask = {
+  taskId: string;
+  attemptId: string;
+  workId: string;
+  workLogicalId: string;
+};

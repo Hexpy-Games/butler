@@ -159,6 +159,7 @@ async function discoverStoppedCandidates(
       programId: row.program_id,
     });
     if (currentHash !== row.base_manifest_hash) continue;
+    const storedContext = JSON.parse(row.context_json) as NonNullable<Candidate["context"]>;
     candidates.push(candidate({
       continuationKind: "user_stopped",
       ledgerId: row.ledger_id,
@@ -169,7 +170,10 @@ async function discoverStoppedCandidates(
       originalGoalContractRef: loadRef(db, row.goal_contract_ref),
       anchorRef: { id: row.anchor_id, sha256: row.anchor_sha256 },
       blockerRef: { id: row.blocker_id, sha256: row.blocker_sha256 },
-    }, JSON.parse(row.context_json), row.candidate_id));
+    }, {
+      ...storedContext,
+      ...(program.planningState === "reviewed" ? { acceptedPlan: program.acceptedPlan } : {}),
+    }, row.candidate_id));
   }
   return candidates;
 }
