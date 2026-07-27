@@ -5,6 +5,7 @@ import type {
 } from "./contracts.ts";
 
 const MAX_PROVIDER_COOLDOWN_MS = 30_000;
+const MAX_TIMER_DELAY_MS = 2_147_000_000;
 
 export function createOperationalRecoveryBoundary(
   store: OperationalRecoveryStore,
@@ -26,7 +27,12 @@ export function createProviderRecoveryReadiness(): OperationalRecoveryReadiness 
   return {
     async wait({ interruption, receipt, signal }) {
       if (interruption.activation.kind === "automatic_provider_recovery") {
-        await waitForCooldown(providerCooldown(receipt.activationCount), signal);
+        const retryAt = interruption.activation.retryAt;
+        if (retryAt) {
+          await waitForDelay(providerReadinessDelay(retryAt), signal);
+        } else {
+          await waitForDelay(providerCooldown(receipt.activationCount), signal);
+        }
         return;
       }
       if (interruption.activation.kind === "automatic_storage_recovery") {
@@ -42,14 +48,27 @@ function providerCooldown(activationCount: number): number {
   return Math.min(1_000 * (2 ** exponent), MAX_PROVIDER_COOLDOWN_MS);
 }
 
-function waitForCooldown(delayMs: number, signal: AbortSignal): Promise<void> {
+function providerReadinessDelay(retryAt: string): number {
+  const readinessAt = Date.parse(retryAt);
+  if (!Number.isFinite(readinessAt)) {
+    throw new Error("Provider recovery readiness deadline is invalid");
+  }
+  return Math.max(0, readinessAt - Date.now());
+}
+
+function waitForDelay(delayMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.reject(aborted());
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(done, delayMs);
+    const scheduledDelay = Math.min(delayMs, MAX_TIMER_DELAY_MS);
+    const timer = setTimeout(done, scheduledDelay);
     signal.addEventListener("abort", stopped, { once: true });
     function done() {
       signal.removeEventListener("abort", stopped);
-      resolve();
+      if (delayMs > scheduledDelay) {
+        waitForDelay(delayMs - scheduledDelay, signal).then(resolve, reject);
+      } else {
+        resolve();
+      }
     }
     function stopped() {
       clearTimeout(timer);

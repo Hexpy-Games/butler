@@ -112,6 +112,25 @@ test("a partial stream cannot become a provider product", async () => {
   )).rejects.toMatchObject({ code: "provider_protocol_error" });
 });
 
+test("hosted 429 preserves provider-declared readiness", async () => {
+  const retryAt = "Wed, 21 Oct 2099 07:28:00 GMT";
+  globalThis.fetch = (async () => new Response(
+    JSON.stringify({ error: { message: "rate limited" } }),
+    { status: 429, headers: { "Retry-After": retryAt } },
+  )) as unknown as typeof fetch;
+
+  await expect(createHostedChatCompletion(
+    config,
+    { messages: [{ role: "user", content: "test" }] },
+    undefined,
+    { roundIndex: 0 },
+    1,
+  )).rejects.toMatchObject({
+    code: "provider_rate_limited",
+    retryAt: new Date(retryAt).toISOString(),
+  });
+});
+
 function hostedChatFetchFromSchedule(
   schedule: Array<{ afterMs: number; data: Record<string, unknown> | "[DONE]" }>,
   onRequest?: (body: Record<string, unknown>) => void,

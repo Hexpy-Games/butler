@@ -35,6 +35,7 @@ async function runJsonSchemaRound(
 ): Promise<ProviderPhasePromptResult> {
   const result = await runPromptTextWithUsage({
     prompt: input.prompt,
+    promptCacheBoundary: input.promptCacheBoundary,
     instructions: input.instructions,
     model: modelRef,
     reasoningEffort: input.modelSelection.reasoningEffort,

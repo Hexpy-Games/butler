@@ -45,6 +45,40 @@ test("runtime remediation retains its private diagnostic cause", async () => {
   }
 });
 
+test("provider readiness deadline survives interruption persistence", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    const store = new SqliteOperationalRecoveryStore(db);
+    const anchor = {
+      turnId: "turn-rate-limit",
+      turnRevision: 1,
+      semanticState: "conception_opening",
+      checkpointId: "checkpoint-rate-limit",
+      checkpointRevision: 1,
+      claimId: "claim-rate-limit",
+      executionFence: 0,
+    };
+    const retryAt = "2026-07-27T06:00:00.000Z";
+    await store.record(new OperationalInterruptionError(
+      "provider_rate_limited",
+      anchor,
+      { kind: "automatic_provider_recovery", retryAt },
+    ));
+
+    expect(db.query<{ retry_at: string }, []>(`
+      SELECT retry_at FROM btcc_operational_interruptions
+    `).get()?.retry_at).toBe(retryAt);
+    expect((await store.pending(anchor))?.interruption.activation).toEqual({
+      kind: "automatic_provider_recovery",
+      retryAt,
+    });
+  } finally {
+    db.close();
+  }
+});
+
 test("startup closes an interruption whose state claim already committed", async () => {
   const db = new Database(":memory:");
   try {

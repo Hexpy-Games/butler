@@ -1,20 +1,29 @@
-import type { OpenAIAuthOverride, PromptOptions, PromptTextResult } from "../runtime-contracts.ts";
-import { afterAttributedModelResponse, beforeAttributedModelRequest, extractPromptCacheStats, extractResponseText, openAIInputWithAttachments } from "../shared/runtime-support.ts";
+import type { OpenAIAuthOverride, PromptTextResult } from "../runtime-contracts.ts";
+import { afterAttributedModelResponse, beforeAttributedModelRequest, extractPromptCacheStats, extractResponseText } from "../shared/runtime-support.ts";
 import { buildReasoningConfig, getResponsesUrl, resolveOpenAIModel, resolveOpenAIPromptCacheConfig } from "./config.ts";
 import { createOpenAIResponse } from "./responses.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "./usage.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
+import type { PromptCacheAwarePromptOptions } from "../prompt-cache-boundary.ts";
+import { openAIPromptCacheRequest } from "./prompt-cache-request.ts";
 
 
 export async function runOpenAIPromptWithUsage(
-  options: PromptOptions,
+  options: PromptCacheAwarePromptOptions,
   authOverride?: OpenAIAuthOverride,
   modelOverride?: string,
 ): Promise<PromptTextResult> {
   const resolution = resolveOpenAIModel(modelOverride ?? options.model, options.reasoningEffort);
   const model = await resolveDynamicOpenAIModel(resolution.model);
   const promptCache = resolveOpenAIPromptCacheConfig(options.cacheScope ?? "text-prompt");
+  const cacheRequest = openAIPromptCacheRequest({
+    model,
+    prompt: options.prompt,
+    attachments: options.attachments,
+    boundary: options.promptCacheBoundary,
+    configured: promptCache,
+  });
   beforeAttributedModelRequest({
     attribution: options.usageAttribution,
     roundIndex: options.usageAttribution?.roundIndex ?? 0,
@@ -22,11 +31,11 @@ export async function runOpenAIPromptWithUsage(
   const response = await createOpenAIResponse({
     model,
     store: true,
-    ...promptCache,
+    ...cacheRequest.cache,
     instructions: options.instructions,
     ...(options.responseFormat ? { text: { format: options.responseFormat } } : {}),
     reasoning: buildReasoningConfig(resolution),
-    input: openAIInputWithAttachments(options.prompt, options.attachments),
+    input: cacheRequest.input,
   }, options.signal, authOverride, options.onProviderStreamEvent, {
     attribution: options.usageAttribution,
     roundIndex: options.usageAttribution?.roundIndex ?? 0,
@@ -40,7 +49,7 @@ export async function runOpenAIPromptWithUsage(
   recordPromptCacheMetric(response, {
     model,
     scope: options.cacheScope ?? "text-prompt",
-    promptCache,
+    promptCache: cacheRequest.telemetry,
     butlerData: options.butlerData,
     usageAttribution: {
       ...options.usageAttribution,

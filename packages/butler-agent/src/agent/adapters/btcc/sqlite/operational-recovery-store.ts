@@ -10,6 +10,7 @@ type ReceiptRow = { interruption_id: string; activation_count: number };
 type InterruptionRow = {
   code: string;
   activation_kind: OperationalInterruptionError["activation"]["kind"];
+  retry_at: string | null;
   diagnostic_message: string | null;
   status: "interrupted" | "ready";
 };
@@ -27,12 +28,13 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       INSERT INTO btcc_operational_interruptions (
         interruption_id, turn_id, turn_revision, semantic_state,
         checkpoint_id, checkpoint_revision, claim_id, execution_fence,
-        code, activation_kind, diagnostic_message,
+        code, activation_kind, retry_at, diagnostic_message,
         activation_count, status, interrupted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'interrupted', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'interrupted', ?)
       ON CONFLICT(claim_id, code, activation_kind) DO UPDATE SET
         activation_count = CASE WHEN status = 'interrupted'
           THEN activation_count ELSE activation_count + 1 END,
+        retry_at = excluded.retry_at,
         diagnostic_message = excluded.diagnostic_message,
         status = 'interrupted', interrupted_at = excluded.interrupted_at,
         resolved_at = NULL
@@ -47,6 +49,9 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       anchor.executionFence,
       interruption.code,
       interruption.activation.kind,
+      interruption.activation.kind === "automatic_provider_recovery"
+        ? interruption.activation.retryAt ?? null
+        : null,
       diagnosticMessage(interruption),
       new Date().toISOString(),
     );
@@ -88,7 +93,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
     anchor: OperationalCheckpointAnchor,
   ) {
     const row = this.db.query<InterruptionRow, [string, string, number, string, number, number]>(`
-      SELECT code, activation_kind, diagnostic_message, status
+      SELECT code, activation_kind, retry_at, diagnostic_message, status
       FROM btcc_operational_interruptions
       WHERE claim_id = ? AND turn_id = ? AND turn_revision = ?
         AND checkpoint_id = ? AND checkpoint_revision = ?
@@ -106,7 +111,9 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       interruption: new OperationalInterruptionError(
         row.code,
         anchor,
-        { kind: row.activation_kind },
+        row.activation_kind === "automatic_provider_recovery" && row.retry_at
+          ? { kind: row.activation_kind, retryAt: row.retry_at }
+          : { kind: row.activation_kind },
         row.diagnostic_message ? new Error(row.diagnostic_message) : undefined,
       ),
       status: row.status,
