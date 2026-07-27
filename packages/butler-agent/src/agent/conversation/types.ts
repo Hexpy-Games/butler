@@ -244,6 +244,10 @@ export interface ConversationWriter {
   writeTurnOutcome?(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule;
   writeSummary(input: ConversationSummaryInput): ConversationSummary;
   getSessionByGatewayBinding(gateway: string, externalSessionId: string): ConversationSession | null;
+  readMessageBySourceRef?(
+    sessionId: string,
+    sourceRef: string,
+  ): ConversationMessageWithParts | null;
 }
 
 export interface ConversationProjectionReader {

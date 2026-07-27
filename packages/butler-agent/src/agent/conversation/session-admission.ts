@@ -14,6 +14,7 @@ import type {
 } from "./types.ts";
 import { publishConversationCompletionObservation } from "../cognition/continuity/completion-observation.ts";
 import { recordOperationalMetric } from "../../operations/metrics/operational-metrics.ts";
+import { conversationMessageText } from "./message-text.ts";
 
 export interface ConversationAdmissionTurnInput {
   writer: ConversationWriter;
@@ -208,6 +209,14 @@ export class ConversationAdmissionTurn {
     this.recordMetric(decision, event);
     if (!decision.operation) return;
     if (decision.operation.kind === "append_message") {
+      const sourceRef = decision.operation.sourceRef;
+      const existing = sourceRef
+        ? this.input.writer.readMessageBySourceRef?.(this.turn.session_id, sourceRef) ?? null
+        : null;
+      if (existing) {
+        this.acceptExistingMessage(existing, decision.operation.role, decision.operation.text);
+        return;
+      }
       if (decision.operation.role === "user") {
         const message = this.input.writer.appendUserMessage({
           sessionId: this.turn.session_id,
@@ -262,6 +271,19 @@ export class ConversationAdmissionTurn {
         model: decision.operation.model,
       });
     }
+  }
+
+  private acceptExistingMessage(
+    message: ConversationMessageWithParts, role: ConversationMessageWithParts["role"], text: string,
+  ): void {
+    const matches = message.turn_id === this.turn.id &&
+      message.role === role && conversationMessageText(message) === text;
+    if (!matches) {
+      throw new Error("conversation_source_ref_conflict");
+    }
+    if (role === "user") this.requestMessageId ??= message.id;
+    else if (role === "assistant") this.publicAssistantMessageId ??= message.id;
+    else throw new Error("conversation_source_ref_role_unsupported");
   }
 
   private appendToolCall(decision: AdmissionDecision): void {

@@ -22,6 +22,7 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
 import { createProductionBtccComposition } from "../../agent/composition/index.ts";
+import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import {
   BtccInboundDispatcher,
   BtccGatewayLifecycleService,
@@ -95,6 +96,7 @@ export async function runNativeButlerMain(
   if ("ready" in btcc && btcc.ready) await btcc.ready;
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData });
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
 
@@ -150,6 +152,8 @@ export async function runNativeButlerMain(
     };
     const lifecycle = new BtccGatewayLifecycleService({
       store,
+      conversationStore,
+      butlerData,
       ...bindBtccGatewayRuntime(btcc),
       promptAssembler: new PromptAssembler({
         butlerHome,
@@ -315,6 +319,7 @@ export async function runNativeButlerMain(
     stopTelegramPolling = true;
     stopReconciler?.close();
     btcc.close();
+    conversationStore.close();
     store.close();
   }
 }

@@ -11,6 +11,7 @@ import type {
 } from "../../../test-support/harness/contracts.ts";
 import type { GatewayRoute } from "../../../gateways/core/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
+import type { GatewayConversationStore } from "./conversation/index.ts";
 
 export type BtccGatewayRuntime = {
   runtime: BtccTurnRuntime;
@@ -27,6 +28,8 @@ export type BtccGatewayBinding = Pick<
 export type BtccGatewayActorOptions = BtccGatewayBinding & {
   binding: StoredSessionBinding;
   store: SessionBindingStore;
+  conversationStore: GatewayConversationStore;
+  butlerData: string;
   promptAssembler: Pick<PromptAssembler, "buildButlerContextAssembly">;
   deliverTurnEvent?: (input: {
     binding: StoredSessionBinding;

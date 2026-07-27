@@ -9,7 +9,7 @@ import type { PromptAssembler } from "../../../agent/prompt/prompt-assembler.ts"
 
 type LifecycleOptions = BtccGatewayBinding & Pick<
   BtccGatewayActorOptions,
-  "deliverTurnEvent" | "generateSessionTitle"
+  "butlerData" | "conversationStore" | "deliverTurnEvent" | "generateSessionTitle"
 > & {
   store: SessionBindingStore;
   promptAssembler: Pick<PromptAssembler, "buildButlerContextAssembly">;
