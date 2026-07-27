@@ -106,6 +106,7 @@ export async function runNativeButlerMain(
   let telegramPolling: Promise<void> | undefined;
   let stopReconciler: BtccStopRequestReconciler | undefined;
   const inboundDispatcher = new BtccInboundDispatcher();
+  const inboundQueue = new NativeInboundQueue(butlerData);
   const serviceShouldStop = () =>
     stopTelegramPolling || input.shutdownSignal?.aborted || existsSync(shutdownFlagPath);
   const currentTelegramGateway = () =>
@@ -180,6 +181,15 @@ export async function runNativeButlerMain(
     stopReconciler = new BtccStopRequestReconciler(appMessageDbPath, btcc.runtime);
     await stopReconciler.reconcile();
     await lifecycle.getOrCreate(binding.sessionId, "butler");
+    const recoverableInbound = shouldEnterBtcc(butlerData);
+    const recovered = inboundQueue.recoverRuntimeInterruptions(
+      recoverableInbound,
+    );
+    if (recovered.requeued > 0) {
+      process.stdout.write(
+        `[inbound-queue] recovered-runtime-interruptions=${recovered.requeued}\n`,
+      );
+    }
     const server = createGatewayServer({
       router,
       handlers: createBtccGatewayHandlers(lifecycle),
@@ -225,17 +235,17 @@ export async function runNativeButlerMain(
         onPoll: async () => {
           await stopReconciler?.reconcile();
           const summary = inboundDispatcher.poll({
-            queue: new NativeInboundQueue(butlerData),
+            queue: inboundQueue,
             server,
             store,
             deliveryGuard,
             deliverAction: deliverThroughEnabledGate,
-            shouldHandleItem: shouldEnterBtcc(butlerData),
+            shouldHandleItem: recoverableInbound,
             limit: 5,
             maxConcurrentSessions: 5,
             onOutcome: (outcome) => {
               process.stdout.write(
-                `[inbound-queue] completed queueId=${outcome.queueId} handled=${outcome.handled} delivered=${outcome.delivered} failed=${outcome.failed}\n`,
+                `[inbound-queue] completed queueId=${outcome.queueId} handled=${outcome.handled} delivered=${outcome.delivered} failed=${outcome.failed} interrupted=${outcome.interrupted}\n`,
               );
             },
           });

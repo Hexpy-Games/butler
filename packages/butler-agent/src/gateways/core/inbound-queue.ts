@@ -1,7 +1,18 @@
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "fs";
-import { dirname, join } from "path";
+import { existsSync, mkdirSync, readdirSync, renameSync } from "fs";
+import { join } from "path";
 import type { InboundEnvelope } from "./contracts.ts";
+import { settleCancelledDeadOwner } from "./inbound-queue-cancellation.ts";
+import {
+  parkQueueItemForProcessReplacement,
+  recoverRuntimeInterruptedQueueItems,
+} from "./inbound-queue-runtime-interruption.ts";
+import {
+  atomicWriteInboundQueueRecord,
+  inboundQueueDirectory,
+  readInboundQueueRecord,
+  type InboundQueueState,
+} from "./inbound-queue-storage.ts";
 
 export interface InboundProcessingLease {
   claimId: string;
@@ -33,6 +44,11 @@ export interface RecoverStaleProcessingOptions {
 }
 
 export interface RecoverStaleProcessingSummary {
+  requeued: number;
+  skipped: number;
+}
+
+export interface RecoverRuntimeInterruptionsSummary {
   requeued: number;
   skipped: number;
 }
@@ -69,22 +85,8 @@ function processingOwnerId(): string {
   return `${process.pid}:${randomUUID()}`;
 }
 
-function atomicWriteJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  renameSync(tmp, path);
-}
-
-function readJson<T>(path: string): T | null {
-  try {
-    return JSON.parse(readFileSync(path, "utf8")) as T;
-  } catch {
-    return null;
-  }
-}
-
 function queueRecordAvailable(record: QueuedInboundEvent, now: Date): boolean {
+  if (record.metadata.resumeAfterProcessId === process.pid) return false;
   const notBefore = typeof record.metadata.notBefore === "string"
     ? Date.parse(record.metadata.notBefore)
     : Number.NaN;
@@ -100,11 +102,11 @@ export class NativeInboundQueue {
   }
 
   protected readQueuedRecord(path: string): QueuedInboundEvent | null {
-    return readJson<QueuedInboundEvent>(path);
+    return readInboundQueueRecord<QueuedInboundEvent>(path);
   }
 
-  private dir(name: "pending" | "processing" | "processed" | "failed"): string {
-    return join(this.rootDir, name);
+  private dir(name: InboundQueueState): string {
+    return inboundQueueDirectory(this.rootDir, name);
   }
 
   enqueue(
@@ -121,7 +123,7 @@ export class NativeInboundQueue {
       attempts: 0,
       metadata,
     };
-    atomicWriteJson(join(this.dir("pending"), `${queueId}.json`), record);
+    atomicWriteInboundQueueRecord(join(this.dir("pending"), `${queueId}.json`), record);
     return record;
   }
 
@@ -162,7 +164,7 @@ export class NativeInboundQueue {
           leaseExpiresAt: new Date(now.getTime() + Math.max(1, leaseMs)).toISOString(),
         },
       };
-      atomicWriteJson(to, updated);
+      atomicWriteInboundQueueRecord(to, updated);
       claimed.push({
         ...updated,
         path: to,
@@ -223,7 +225,7 @@ export class NativeInboundQueue {
         summary.skipped += 1;
         continue;
       }
-      atomicWriteJson(pendingPath, {
+      atomicWriteInboundQueueRecord(pendingPath, {
         ...record,
         processing: undefined,
         metadata: {
@@ -242,105 +244,31 @@ export class NativeInboundQueue {
     return summary;
   }
 
+  recoverRuntimeInterruptions(
+    shouldRecover: (event: QueuedInboundEvent) => boolean,
+    now = new Date(),
+  ): RecoverRuntimeInterruptionsSummary {
+    return recoverRuntimeInterruptedQueueItems({
+      rootDir: this.rootDir,
+      shouldRecover,
+      readRecord: (path) => this.readQueuedRecord(path),
+      now,
+    });
+  }
+
   settleDeadOwnerCancellation(
     options: DeadOwnerCancellationSettlementOptions,
   ): DeadOwnerCancellationSettlementOutcome {
-    if (
-      !validQueueToken(options.queueId) ||
-      !validQueueToken(options.dispatchClaimId)
-    ) return "execution_identity_mismatch";
-    const processingPath = join(
-      this.dir("processing"),
-      `${options.queueId}.json`,
-    );
-    const settlingPath = deadOwnerCancellationSettlingPath(
-      processingPath,
-      options.dispatchClaimId,
-    );
-    const processedPath = join(
-      this.dir("processed"),
-      `${options.queueId}.json`,
-    );
-    const processed = this.readQueuedRecord(processedPath);
-    if (processed) {
-      if (!cancelledTerminalMatches(processed, options)) {
-        return "terminal_record_exists";
-      }
-      try {
-        if (existsSync(settlingPath)) {
-          renameSync(settlingPath, `${processingPath}.done`);
-        }
-      } catch {}
-      return "already_completed";
-    }
-    if (existsSync(join(this.dir("failed"), `${options.queueId}.json`))) {
-      return "terminal_record_exists";
-    }
-
-    const existingSettlingRecord = this.readQueuedRecord(settlingPath);
-    const record = existingSettlingRecord ?? this.readQueuedRecord(processingPath);
-    if (!record) return "processing_claim_missing";
-    if (!processingIdentityMatches(record, options)) {
-      return "execution_identity_mismatch";
-    }
-    const ownerLiveness = processingOwnerLiveness(record.processing?.ownerId);
-    if (ownerLiveness === "alive") return "processing_owner_alive";
-    if (ownerLiveness === "unknown") return "processing_owner_unknown";
-    const pendingPath = join(this.dir("pending"), `${options.queueId}.json`);
-    if (existsSync(pendingPath)) {
-      return "pending_record_exists";
-    }
-
-    if (!existingSettlingRecord) {
-      try {
-        renameSync(processingPath, settlingPath);
-      } catch {
-        if (existsSync(pendingPath)) return "pending_record_exists";
-        const racedTerminal = this.readQueuedRecord(processedPath);
-        if (racedTerminal && cancelledTerminalMatches(racedTerminal, options)) {
-          return "already_completed";
-        }
-        return "processing_claim_missing";
-      }
-    }
-    const current = this.readQueuedRecord(settlingPath);
-    if (!current || !processingIdentityMatches(current, options)) {
-      return "execution_identity_mismatch";
-    }
-    const currentOwnerLiveness = processingOwnerLiveness(
-      current.processing?.ownerId,
-    );
-    if (currentOwnerLiveness === "alive") return "processing_owner_alive";
-    if (currentOwnerLiveness === "unknown") return "processing_owner_unknown";
-    try {
-      atomicWriteJson(processedPath, {
-        ...current,
-        processedAt: (options.now ?? new Date()).toISOString(),
-        processingPath: undefined,
-        processing: undefined,
-        metadata: {
-          ...current.metadata,
-          dispatchStatus: "cancelled-principal-turn",
-          handled: false,
-          cancelled: true,
-          terminalClaimId: options.dispatchClaimId,
-        },
-      });
-    } catch (error) {
-      try {
-        renameSync(settlingPath, processingPath);
-      } catch {}
-      throw error;
-    }
-    try {
-      renameSync(settlingPath, `${processingPath}.done`);
-    } catch {}
-    return "completed";
+    return settleCancelledDeadOwner({
+      rootDir: this.rootDir,
+      options,
+      readRecord: (path) => this.readQueuedRecord(path),
+    });
   }
 
   complete(item: ClaimedInboundEvent, metadata: Record<string, unknown> = {}, now = new Date()): boolean {
     if (!this.ownsProcessingClaim(item)) return false;
-    atomicWriteJson(join(this.dir("processed"), `${item.queueId}.json`), {
+    atomicWriteInboundQueueRecord(join(this.dir("processed"), `${item.queueId}.json`), {
       ...item,
       processedAt: now.toISOString(),
       processingPath: undefined,
@@ -359,7 +287,7 @@ export class NativeInboundQueue {
 
   fail(item: ClaimedInboundEvent, error: string, metadata: Record<string, unknown> = {}, now = new Date()): boolean {
     if (!this.ownsProcessingClaim(item)) return false;
-    atomicWriteJson(join(this.dir("failed"), `${item.queueId}.json`), {
+    atomicWriteInboundQueueRecord(join(this.dir("failed"), `${item.queueId}.json`), {
       ...item,
       failedAt: now.toISOString(),
       processingPath: undefined,
@@ -374,6 +302,23 @@ export class NativeInboundQueue {
     try {
       renameSync(item.path, `${item.path}.failed`);
     } catch {}
+    return true;
+  }
+
+  parkForProcessReplacement(
+    item: ClaimedInboundEvent,
+    error: string,
+    metadata: Record<string, unknown> = {},
+    now = new Date(),
+  ): boolean {
+    if (!this.ownsProcessingClaim(item)) return false;
+    parkQueueItemForProcessReplacement({
+      rootDir: this.rootDir,
+      item,
+      error,
+      metadata,
+      now,
+    });
     return true;
   }
 
@@ -402,35 +347,4 @@ function processingOwnerLiveness(ownerId: string | undefined): "alive" | "dead" 
   } catch (error) {
     return (error as NodeJS.ErrnoException).code === "ESRCH" ? "dead" : "alive";
   }
-}
-
-function validQueueToken(token: string): boolean {
-  return /^[A-Za-z0-9._:-]{1,240}$/u.test(token);
-}
-
-function deadOwnerCancellationSettlingPath(
-  processingPath: string,
-  dispatchClaimId: string,
-): string {
-  return `${processingPath}.cancelling-${dispatchClaimId}`;
-}
-
-function processingIdentityMatches(
-  record: QueuedInboundEvent,
-  options: DeadOwnerCancellationSettlementOptions,
-): boolean {
-  return record.queueId === options.queueId &&
-    record.envelope.routingHints?.turnId === options.turnId &&
-    record.processing?.claimId === options.dispatchClaimId;
-}
-
-function cancelledTerminalMatches(
-  record: QueuedInboundEvent,
-  options: DeadOwnerCancellationSettlementOptions,
-): boolean {
-  return record.queueId === options.queueId &&
-    record.envelope.routingHints?.turnId === options.turnId &&
-    record.metadata.dispatchStatus === "cancelled-principal-turn" &&
-    record.metadata.cancelled === true &&
-    record.metadata.terminalClaimId === options.dispatchClaimId;
 }
