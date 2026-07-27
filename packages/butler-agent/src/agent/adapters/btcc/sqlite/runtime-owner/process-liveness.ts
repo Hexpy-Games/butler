@@ -42,6 +42,25 @@ export class LocalProcessLiveness implements ProcessLiveness {
 }
 
 function observeLocalProcess(processId: number): ProcessObservation {
+  if (process.platform === "win32") return observeWindowsProcess(processId);
+  return observePosixProcess(processId);
+}
+
+function observeWindowsProcess(processId: number): ProcessObservation {
+  const script = [
+    `$process = Get-Process -Id ${processId} -ErrorAction SilentlyContinue`,
+    "if ($null -eq $process) { exit 1 }",
+    "([DateTimeOffset]$process.StartTime).ToUnixTimeMilliseconds()",
+  ].join("; ");
+  const result = spawnSync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { encoding: "utf8", windowsHide: true },
+  );
+  return processObservation(result);
+}
+
+function observePosixProcess(processId: number): ProcessObservation {
   const result = spawnSync("ps", ["-p", String(processId), "-o", "lstart="], {
     encoding: "utf8",
   });
@@ -49,6 +68,19 @@ function observeLocalProcess(processId: number): ProcessObservation {
   if (result.status === 1 && result.stdout.trim() === "") return { kind: "missing" };
   if (result.status !== 0) return { kind: "unknown" };
   const startedAtMs = Date.parse(result.stdout.trim());
+  return Number.isFinite(startedAtMs)
+    ? { kind: "found", startedAtMs }
+    : { kind: "unknown" };
+}
+
+function processObservation(result: ReturnType<typeof spawnSync>): ProcessObservation {
+  const stdout = typeof result.stdout === "string"
+    ? result.stdout
+    : result.stdout?.toString("utf8") ?? "";
+  if (result.error) return { kind: "unknown" };
+  if (result.status === 1 && stdout.trim() === "") return { kind: "missing" };
+  if (result.status !== 0) return { kind: "unknown" };
+  const startedAtMs = Number(stdout.trim());
   return Number.isFinite(startedAtMs)
     ? { kind: "found", startedAtMs }
     : { kind: "unknown" };
