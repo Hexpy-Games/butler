@@ -69,12 +69,14 @@ test("cancel_work consumes only the exact candidate and preserves accepted Tasks
       continuationCandidates: candidates,
     },
   } as never;
-  expect(() => openingAnswerCodec.decode({
+  expect(() => openingAnswerCodec(candidates.map(({ candidateId }) => candidateId)).decode({
     kind: "cancel_work",
     continuationCandidateId: "unrelated-candidate",
     reason: "Cancel it",
   }, envelope)).toThrow("unavailable Program");
-  const product = openingAnswerCodec.decode({
+  const product = openingAnswerCodec(
+    candidates.map(({ candidateId }) => candidateId),
+  ).decode({
     kind: "cancel_work",
     continuationCandidateId: candidate.candidateId,
     reason: "Abandon this exact Program",

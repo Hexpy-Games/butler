@@ -78,6 +78,7 @@ async function conceiveInitialGoal(command: {
       const availableGoverningSpecs = managed.goalRevision
         ?.candidate.availableGoverningSpecs ?? await listGoverningSpecs(command);
       const product = await deliberateGoal(withPhaseState(command.phase, {
+        opening: managed.opening,
         availableGoverningSpecs,
         ...(managed.goalRevision ? { goalRevision: managed.goalRevision } : {}),
       }));
@@ -100,6 +101,7 @@ async function conceiveInitialGoal(command: {
           ? { projectRef: command.turn.context.projectRef }
           : {}),
         continuationCandidates: command.turn.continuationCandidates,
+        opening: managed.opening,
         availableGoverningSpecs,
         selectedGoverningSpecs,
         goalCandidate: managed.goalCandidate,

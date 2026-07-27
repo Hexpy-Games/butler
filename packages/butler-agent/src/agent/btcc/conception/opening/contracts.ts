@@ -41,9 +41,8 @@ export type OpeningAnswerProduct = {
   };
 };
 
-export type OpeningContinuationProduct = {
+type OpeningContinuationBase = {
   kind: "opening_continuation";
-  route: "assisted" | "managed";
   fulfillment: OpeningFulfillment;
   projection: {
     ref: ContentRef;
@@ -53,6 +52,25 @@ export type OpeningContinuationProduct = {
     contentSha256: string;
   };
 };
+
+export type OpeningContinuationProduct =
+  | (OpeningContinuationBase & {
+      continuationMode: "assisted_request";
+      route: "assisted";
+    })
+  | (OpeningContinuationBase & {
+      continuationMode: "managed_request";
+      route: "managed";
+    })
+  | (OpeningContinuationBase & {
+      continuationMode: "managed_program";
+      route: "managed";
+      continuationProposal: {
+        candidateId: string;
+        sourceTurnId: string;
+        programId: string;
+      };
+    });
 
 export type OpeningWorkCancellationProduct = {
   kind: "opening_work_cancellation";
@@ -136,5 +154,10 @@ export type OpeningContinuationSubmission = OpeningContinuationFields & (
         OpeningRequiredResultKind,
         "response_content" | "current_observation"
       >;
+    }
+  | {
+      kind: "managed_program_continuation";
+      requiredResultKind: "durable_work";
+      continuationCandidateId: string;
     }
 );

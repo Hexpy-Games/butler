@@ -229,6 +229,7 @@ export function projectBindingCommit(options: {
     reviewedOutcomeIds: ["required-outcome-fixture"] as [string],
     reviewedArtifactPersistence: goalContract.artifactPersistence,
     continuationBindingRef: continuation.ref,
+    continuationDecision: { kind: "new_request" as const },
     verdict: "accepted" as const,
     findings: [] as [],
   };
