@@ -164,8 +164,14 @@ export function shouldEnterBtcc(
       const state = db.query<{ state: string }, [string]>(
         "SELECT state FROM turns WHERE id = ?",
       ).get(turnId)?.state;
-      return !state ||
-        !["cancelling", "cancelled", "delivered", "failed"].includes(state);
+      if (state && ["cancelling", "cancelled", "delivered", "failed"].includes(state)) {
+        return false;
+      }
+      const btccState = db.query<{ semantic_state: string }, [string]>(
+        "SELECT semantic_state FROM btcc_turns WHERE turn_id = ?",
+      ).get(turnId)?.semantic_state;
+      if (btccState && ["cancelled", "delivered"].includes(btccState)) return false;
+      return Boolean(btccState) || item.metadata.recoveredFromRuntimeInterruption !== true;
     } catch {
       return true;
     } finally {
