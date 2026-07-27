@@ -27,7 +27,8 @@ function runLedgerJson(args: string[]): any {
 }
 
 test("state-machine module rejects invalid transitions and validates completion evidence", async () => {
-  const { assertTransition, completionGateIssues } = await import(stateMachineUrl) as any;
+  const { assertTransition, completionGateIssues, planTransitionPath } =
+    await import(stateMachineUrl) as any;
 
   expect(() => assertTransition("work", "proposed", "done")).toThrow("Invalid work transition");
   try {
@@ -42,6 +43,9 @@ test("state-machine module rejects invalid transitions and validates completion 
     ]);
   }
   expect(() => assertTransition("work", "review", "done")).not.toThrow();
+  expect(planTransitionPath("work", "in_progress", "done")).toEqual(["review", "done"]);
+  expect(planTransitionPath("task", "todo", "done")).toEqual(["in_progress", "done"]);
+  expect(planTransitionPath("task", "done", "done")).toEqual([]);
   expect(completionGateIssues({
     kind: "work",
     status: "done",

@@ -42,6 +42,28 @@ function transitionMap(kind) {
   return {};
 }
 
+export function planTransitionPath(kind, from, to) {
+  assertValidState(kind, to, { id: null });
+  if (!from || from === "unknown") return [to];
+  if (from === to) return [];
+  const transitions = transitionMap(kind);
+  const queue = [[from]];
+  const visited = new Set([from]);
+  while (queue.length > 0) {
+    const path = queue.shift();
+    const current = path[path.length - 1];
+    for (const next of transitions[current] ?? []) {
+      if (visited.has(next)) continue;
+      const candidate = [...path, next];
+      if (next === to) return candidate.slice(1);
+      visited.add(next);
+      queue.push(candidate);
+    }
+  }
+  assertTransition(kind, from, to);
+  return [];
+}
+
 function lifecycleCommand(kind, id, status, context = {}) {
   const target = id ?? "<id>";
   if (context.action === "create") {

@@ -39,6 +39,15 @@ describe("production BTCC capabilities", () => {
       status: "active",
       body: "Before",
     });
+    core.createWork(projectRoot, {
+      id: "W-SANDY",
+      title: "Sandy work",
+      spec: "SPEC-SANDY",
+      acceptance: "The work is complete",
+    });
+    for (const status of ["scoped", "specified", "in_progress"]) {
+      core.updateRecord(projectRoot, { kind: "work", id: "W-SANDY", status });
+    }
     const tools = createProductionToolRuntime({
       butlerHome: root,
       butlerData: root,
@@ -70,6 +79,13 @@ describe("production BTCC capabilities", () => {
           kind: "report",
           body: "After",
           reason: "Reconciled",
+        }, {
+          id: "W-SANDY",
+          kind: "work",
+          status: "done",
+          validation: "Validated before reconciliation",
+          review: "Reviewed before reconciliation",
+          report: "reports/sandy.md",
         }],
       },
     };
@@ -94,6 +110,8 @@ describe("production BTCC capabilities", () => {
     const record = core.resolveRecord(projectRoot, { kind: "report", id: "REPORT-SANDY" });
     expect(core.readRecordBody(record.filePath)).toBe("After");
     expect(core.readRecordData(record.filePath)?.reason).toBe("Reconciled");
+    expect(core.resolveRecord(projectRoot, { kind: "work", id: "W-SANDY" }).record.status)
+      .toBe("done");
 
     const replay = await runtime.operations.perform({ request, envelope: phase });
     expect(replay.resultRef).toEqual(result.resultRef);

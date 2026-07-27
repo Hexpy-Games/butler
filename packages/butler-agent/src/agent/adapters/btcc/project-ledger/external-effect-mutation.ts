@@ -99,7 +99,7 @@ export async function applyProjectLedgerRecordUpdates(input: {
         ...transaction,
         materialize(projectRoot: string) {
           for (const update of input.updates) {
-            core.updateRecord(projectRoot, updateOptions(update));
+            applyRecordUpdate(core, projectRoot, update);
           }
           for (const view of ["dashboard", "handoff", "roadmap"]) {
             core.render(projectRoot, view, { write: true });
@@ -140,6 +140,37 @@ export async function applyProjectLedgerRecordUpdates(input: {
     result,
   } satisfies EffectOccurrence);
   return result;
+}
+
+function applyRecordUpdate(
+  core: Awaited<ReturnType<typeof loadProjectLedgerCore>>,
+  projectRoot: string,
+  update: ProjectLedgerRecordUpdate,
+): void {
+  const current = core.resolveRecord(projectRoot, {
+    id: update.id,
+    ...(update.kind ? { kind: update.kind } : {}),
+  }).record;
+  if (!update.status || !["work", "task", "attempt"].includes(current.kind)) {
+    core.updateRecord(projectRoot, updateOptions(update));
+    return;
+  }
+  const path = core.planTransitionPath(current.kind, current.status, update.status);
+  for (const status of path.slice(0, -1)) {
+    core.updateRecord(projectRoot, { id: current.id, kind: current.kind, status });
+  }
+  if (path.length > 0 || hasNonStatusUpdate(update)) {
+    core.updateRecord(projectRoot, {
+      ...updateOptions(update),
+      kind: current.kind,
+      status: update.status,
+    });
+  }
+}
+
+function hasNonStatusUpdate(update: ProjectLedgerRecordUpdate): boolean {
+  return Object.entries(update).some(([key, value]) =>
+    key !== "id" && key !== "kind" && key !== "status" && value !== undefined);
 }
 
 function updateOptions(update: ProjectLedgerRecordUpdate): Record<string, unknown> {
