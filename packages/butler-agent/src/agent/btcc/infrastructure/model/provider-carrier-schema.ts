@@ -1,15 +1,17 @@
-import type { AvailablePhaseCapability } from "./contracts.ts";
-import type { ProviderCarrierFunction } from "./contracts.ts";
+import type {
+  AvailablePhaseCapability,
+  ProviderCapabilityVocabularyEntry,
+  ProviderCarrierFunction,
+} from "./contracts.ts";
 import type { OperationAuthority } from "../../core/index.ts";
 
 export function providerCarrierSchema(
-  capabilities: readonly AvailablePhaseCapability[],
+  capabilities: readonly ProviderCapabilityVocabularyEntry[],
   submissionSchema: Record<string, unknown>,
-  authority: OperationAuthority,
 ): Record<string, unknown> {
   const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
   if (capabilities.length > 0) {
-    carrierVariants.push(operationRequestsSchema(capabilities, authority));
+    carrierVariants.push(operationRequestsSchema(capabilities, { kind: "vocabulary" }));
   }
   return { anyOf: carrierVariants };
 }
@@ -17,29 +19,30 @@ export function providerCarrierSchema(
 export function providerCarrierAdmissionSchema(
   capabilities: readonly AvailablePhaseCapability[],
   submissionSchema: Record<string, unknown>,
+  authority: OperationAuthority,
 ): Record<string, unknown> {
   const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
   if (capabilities.length > 0) {
-    carrierVariants.push(operationRequestsSchema(capabilities));
+    carrierVariants.push(operationRequestsSchema(capabilities, { kind: "exact", authority }));
   }
   return { anyOf: carrierVariants };
 }
 
 export function providerCarrierFunctions(
-  capabilities: readonly AvailablePhaseCapability[],
+  capabilities: readonly ProviderCapabilityVocabularyEntry[],
   submissionSchema: Record<string, unknown>,
-  authority: OperationAuthority,
 ): ProviderCarrierFunction[] {
   const functions = phaseSubmissionFunctions(submissionSchema);
   if (capabilities.length > 0) {
     const carrier = operationRequestsSchema(
       capabilities,
-      authority,
+      { kind: "vocabulary" },
     ).properties as Record<string, unknown>;
     functions.push({
       name: "submit_btcc_operation_requests",
       description: [
-        "Request one coherent batch of operations allowed by the current BTCC phase.",
+        "Propose one coherent batch from the stable BTCC operation vocabulary.",
+        "Runtime separately admits the exact current capabilities and authority scopes.",
         "Include every currently known independent operation needed for the next decision.",
       ].join(" "),
       carrierKind: "operation_requests",
@@ -120,8 +123,8 @@ function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Recor
 }
 
 function operationRequestsSchema(
-  capabilities: readonly AvailablePhaseCapability[],
-  authority?: OperationAuthority,
+  capabilities: readonly CarrierCapability[],
+  binding: CarrierSchemaBinding,
 ): Record<string, unknown> {
   return {
     type: "object",
@@ -131,7 +134,7 @@ function operationRequestsSchema(
       requests: {
         type: "array",
         minItems: 1,
-        items: { anyOf: capabilities.map((capability) => operationSchema(capability, authority)) },
+        items: { anyOf: capabilities.map((capability) => operationSchema(capability, binding)) },
       },
     },
     required: ["kind", "phaseContinuity", "requests"],
@@ -180,8 +183,8 @@ function publicActivitySchema(moment: string): Record<string, unknown> {
 }
 
 function operationSchema(
-  capability: AvailablePhaseCapability,
-  authority?: OperationAuthority,
+  capability: CarrierCapability,
+  binding: CarrierSchemaBinding,
 ): Record<string, unknown> {
   const common = {
     publicTitle: {
@@ -197,14 +200,16 @@ function operationSchema(
     case "observe":
       return operationShape("observe", {
         ...common,
-        scopeRef: { type: "string", enum: capability.observationScopeRefs },
+        scopeRef: binding.kind === "exact"
+          ? { type: "string", enum: exactObservationScopes(capability) }
+          : { type: "string", minLength: 1 },
       });
     case "workspace_artifact_action":
       return operationShape("workspace_artifact_action", {
         ...common,
-        relativeTarget: authority
-          ? { type: "string", enum: workspaceTargets(authority) }
-          : { type: "string" },
+        relativeTarget: binding.kind === "exact"
+          ? { type: "string", enum: workspaceTargets(binding.authority) }
+          : { type: "string", minLength: 1 },
       });
     case "workspace_artifact_observation":
       return operationShape("workspace_artifact_observation", common);
@@ -217,6 +222,19 @@ function operationSchema(
         ...common,
       });
   }
+}
+
+type CarrierCapability = AvailablePhaseCapability | ProviderCapabilityVocabularyEntry;
+
+type CarrierSchemaBinding =
+  | { kind: "vocabulary" }
+  | { kind: "exact"; authority: OperationAuthority };
+
+function exactObservationScopes(capability: CarrierCapability): readonly string[] {
+  if (!("observationScopeRefs" in capability)) {
+    throw new Error("Exact carrier admission requires bound observation scopes");
+  }
+  return capability.observationScopeRefs;
 }
 
 function workspaceTargets(authority: OperationAuthority): string[] {

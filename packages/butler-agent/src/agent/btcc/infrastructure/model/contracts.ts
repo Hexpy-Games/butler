@@ -47,6 +47,13 @@ export type AvailablePhaseCapability = Omit<
   observationScopeRefs: readonly string[];
 };
 
+export type ProviderCapabilityVocabularyEntry = Omit<
+  StructuralCapabilityDefinition,
+  "operationKinds" | "observationScopeKinds" | "observationScopeRefs"
+> & {
+  operationKind: OperationRequest["kind"];
+};
+
 export type ProviderPhasePrompt = {
   modelSelection: AdmittedModelSelection;
   instructions: string;
@@ -98,7 +105,7 @@ export type RenderedPhasePrompt = {
   admissionSchema: Record<string, unknown>;
 };
 
-export type ResolveAvailableCapabilitiesInput = {
+export type ResolvePhaseCapabilitiesInput = {
   authority: OperationAuthority;
   catalog: StructuralCapabilityCatalog;
 };

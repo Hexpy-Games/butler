@@ -15,6 +15,7 @@ import {
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/tool-bridge/schema-validation.ts";
 import type {
   AvailablePhaseCapability,
+  ProviderCapabilityVocabularyEntry,
 } from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/contracts.ts";
 import type { OperationAuthority } from "../../packages/butler-agent/src/agent/btcc/core/contracts.ts";
 
@@ -79,15 +80,25 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
     inputSchema: objectSchema({ query: textSchema() }),
     observationScopeRefs: ["workspace"],
   } as AvailablePhaseCapability;
-  const authority = {} as OperationAuthority;
+  const vocabulary = [{
+    capabilityRef: capability.capabilityRef,
+    name: capability.name,
+    description: capability.description,
+    operationKind: capability.operationKind,
+    inputSchema: capability.inputSchema,
+  }] as ProviderCapabilityVocabularyEntry[];
+  const authority = {
+    observationScopeRefs: ["workspace"],
+    mutation: { kind: "forbidden" },
+  } as OperationAuthority;
   const carrierSchema = providerCarrierSchema(
-    [capability],
+    vocabulary,
     submissionSchema,
-    authority,
   );
   const admissionSchema = providerCarrierAdmissionSchema(
     [capability],
     submissionSchema,
+    authority,
   );
   const normalized = normalizeStrictTransportSchema({
     type: "object",

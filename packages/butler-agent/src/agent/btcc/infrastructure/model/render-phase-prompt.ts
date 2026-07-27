@@ -7,7 +7,7 @@ import type {
   ResolvedContextDocument,
   StructuralCapabilityCatalog,
 } from "./contracts.ts";
-import { resolveAvailableCapabilities } from "./available-capabilities.ts";
+import { resolvePhaseCapabilities } from "./available-capabilities.ts";
 import { providerCarrierSchema } from "./provider-carrier-schema.ts";
 import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
 import { providerCarrierAdmissionSchema } from "./provider-carrier-schema.ts";
@@ -30,9 +30,9 @@ export async function renderPhasePrompt(
         mutation: { kind: "forbidden" as const },
       }
     : envelope.operationAuthority;
-  const [resolvedContext, availableCapabilities, acceptedPhaseGuidance] = await Promise.all([
+  const [resolvedContext, capabilitySurface, acceptedPhaseGuidance] = await Promise.all([
     resolveButlerContext(envelope, contextResolver),
-    resolveAvailableCapabilities({
+    resolvePhaseCapabilities({
       authority: operationAuthority,
       catalog: capabilityCatalog,
     }),
@@ -42,15 +42,17 @@ export async function renderPhasePrompt(
       ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
     }),
   ]);
+  const availableCapabilities = capabilitySurface.availableCapabilities;
+  const providerVocabulary = envelope.operationSurface === "closed"
+    ? []
+    : capabilitySurface.providerVocabulary;
   const responseSchema = providerCarrierSchema(
-    availableCapabilities,
+    providerVocabulary,
     envelope.submissionSchema,
-    operationAuthority,
   );
   const carrierFunctions = providerCarrierFunctions(
-    availableCapabilities,
+    providerVocabulary,
     envelope.submissionSchema,
-    operationAuthority,
   );
   const instructions = [
     "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
@@ -97,6 +99,7 @@ export async function renderPhasePrompt(
     admissionSchema: providerCarrierAdmissionSchema(
       availableCapabilities,
       envelope.submissionSchema,
+      operationAuthority,
     ),
   };
 }

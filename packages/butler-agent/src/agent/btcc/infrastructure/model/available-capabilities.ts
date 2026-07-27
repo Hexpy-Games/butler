@@ -2,38 +2,78 @@ import type { OperationAuthority } from "../../core/index.ts";
 import type {
   AvailablePhaseCapability,
   ObservationScopeKind,
-  ResolveAvailableCapabilitiesInput,
+  ProviderCapabilityVocabularyEntry,
+  ResolvePhaseCapabilitiesInput,
   StructuralCapabilityDefinition,
 } from "./contracts.ts";
 
-export async function resolveAvailableCapabilities(
-  input: ResolveAvailableCapabilitiesInput,
-): Promise<AvailablePhaseCapability[]> {
+export async function resolvePhaseCapabilities(
+  input: ResolvePhaseCapabilitiesInput,
+): Promise<{
+  providerVocabulary: ProviderCapabilityVocabularyEntry[];
+  availableCapabilities: AvailablePhaseCapability[];
+}> {
   const definitions = [...await input.catalog.list()].sort((left, right) =>
     left.capabilityRef.localeCompare(right.capabilityRef) || left.name.localeCompare(right.name),
   );
   assertUniqueCapabilityRefs(definitions);
+  return {
+    providerVocabulary: providerVocabulary(definitions),
+    availableCapabilities: admittedCapabilities(definitions, input.authority),
+  };
+}
+
+export async function resolveAvailableCapabilities(
+  input: ResolvePhaseCapabilitiesInput,
+): Promise<AvailablePhaseCapability[]> {
+  return (await resolvePhaseCapabilities(input)).availableCapabilities;
+}
+
+function providerVocabulary(
+  definitions: readonly StructuralCapabilityDefinition[],
+): ProviderCapabilityVocabularyEntry[] {
+  return definitions.flatMap((definition) => {
+    return [...definition.operationKinds].sort().map((operationKind) => ({
+      ...carrierDefinition(definition),
+      operationKind,
+    }));
+  });
+}
+
+function admittedCapabilities(
+  definitions: readonly StructuralCapabilityDefinition[],
+  authority: OperationAuthority,
+): AvailablePhaseCapability[] {
   const result: AvailablePhaseCapability[] = [];
   for (const definition of definitions) {
     for (const operationKind of [...definition.operationKinds].sort()) {
       const scopes = admittedObservationScopes(
         definition,
         operationKind,
-        input.authority.observationScopeRefs,
+        authority.observationScopeRefs,
       );
-      const { operationKinds: _operationKinds, ...capability } = definition;
+      const capability = carrierDefinition(definition);
       if (operationKind === "observe") {
         if (scopes.length > 0) {
           result.push({ ...capability, operationKind, observationScopeRefs: scopes });
         }
         continue;
       }
-      if (mutationIsAuthorized(operationKind, input.authority.mutation)) {
+      if (mutationIsAuthorized(operationKind, authority.mutation)) {
         result.push({ ...capability, operationKind, observationScopeRefs: [] });
       }
     }
   }
   return result;
+}
+
+function carrierDefinition(definition: StructuralCapabilityDefinition) {
+  return {
+    capabilityRef: definition.capabilityRef,
+    name: definition.name,
+    description: definition.description,
+    inputSchema: definition.inputSchema,
+  };
 }
 
 function admittedObservationScopes(

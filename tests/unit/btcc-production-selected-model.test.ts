@@ -278,7 +278,7 @@ describe("production BTCC selected model", () => {
       },
     }]);
     expect(JSON.stringify(calls[0]?.responseSchema)).toContain("weather:current");
-    expect(JSON.stringify(calls[0]?.responseSchema)).not.toContain("workspace:write");
+    expect(JSON.stringify(calls[0]?.responseSchema)).toContain("workspace:write");
     const carrierSchema = calls[0]!.responseSchema as {
       anyOf: Array<{ properties: { kind: { const: string }; submission?: unknown } }>;
     };
