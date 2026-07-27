@@ -61,7 +61,7 @@ test("keeps exact Task target authority out of the stable provider vocabulary", 
   expect(schema).not.toContain('"relativeTarget":{"type":"string","enum"');
 });
 
-test("rejects an out-of-scope proposal through exact local admission", async () => {
+test("defers target containment to the operation authority boundary", async () => {
   const workspaceRef = { id: "workspace", sha256: "workspace-sha" };
   const model = createProductionSelectedModel({
     context: emptyContextResolver(),
@@ -101,14 +101,11 @@ test("rejects an out-of-scope proposal through exact local admission", async () 
   };
 
   expect(await model.runRound(envelope)).toMatchObject({
-    kind: "interruption",
-    code: "provider_protocol_interruption",
-    activation: { kind: "automatic_provider_recovery" },
-    diagnostic: {
-      schema: "btcc.operational-diagnostic.v1",
-      kind: "provider_carrier_rejection",
-      path: "$.requests[0].relativeTarget",
-      reason: "enum_mismatch",
-    },
+    kind: "operation_requests",
+    requests: [{
+      kind: "workspace_artifact_action",
+      relativeTarget: ".",
+      workspaceRef,
+    }],
   });
 });
