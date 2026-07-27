@@ -17,6 +17,7 @@ export * from "./components/Label";
 export * from "./components/NativeSelect";
 export * from "./components/Popover";
 export * from "./components/RollingStatusLine";
+export * from "./components/RollingSwap";
 export * from "./components/PillButton";
 export * from "./components/Select";
 export * from "./components/Separator";

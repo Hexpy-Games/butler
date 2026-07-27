@@ -77,3 +77,51 @@ test("turn activity keeps one latest item until view all expands in place", asyn
   expect(blocks[1]?.hasAttribute("data-connected")).toBe(false);
   await act(async () => root.unmount());
 });
+
+test("live activity rolls the prior block above the latest block", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", {
+    url: "http://localhost",
+  });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root")!;
+  const root = createRoot(container);
+  const first = activity("conception", "구상 내용을 확인했습니다.");
+
+  await act(async () => root.render(
+    <TurnActivityTimeline activities={[first]} live />,
+  ));
+  await act(async () => root.render(
+    <TurnActivityTimeline
+      activities={[first, activity("planning", "계획을 확정했습니다.")]}
+      live
+    />,
+  ));
+
+  expect(container.querySelector('[data-motion="outgoing"]')?.textContent)
+    .toContain("구상 내용을 확인했습니다.");
+  const incoming = container.querySelector('[data-motion="incoming"]');
+  expect(incoming?.textContent).toContain("계획을 확정했습니다.");
+  await act(async () => incoming?.dispatchEvent(
+    new dom.window.Event("animationend", { bubbles: true }),
+  ));
+  expect(container.textContent).not.toContain("구상 내용을 확인했습니다.");
+  await act(async () => root.unmount());
+});
+
+function activity(id: string, summary: string) {
+  return {
+    id,
+    phase: id,
+    summary,
+    rationale: "목표를 지키기 위해서입니다.",
+    nextStep: "다음 단계를 진행합니다.",
+    operations: [],
+  };
+}

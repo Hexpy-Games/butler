@@ -1,0 +1,55 @@
+.viewport {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.frame {
+  min-width: 0;
+  grid-area: 1 / 1;
+}
+
+.outgoing {
+  pointer-events: none;
+  animation: rolling-swap-out var(--adaptive-panel-duration)
+    var(--adaptive-panel-easing) both;
+}
+
+.incoming {
+  animation: rolling-swap-in var(--adaptive-panel-duration)
+    var(--adaptive-panel-easing) both;
+}
+
+@keyframes rolling-swap-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes rolling-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .outgoing {
+    display: none;
+  }
+
+  .incoming {
+    animation: none;
+  }
+}

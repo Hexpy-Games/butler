@@ -62,7 +62,7 @@ export function TurnActivityPanel({
           turnId={turnId}
         />
       ) : workBlocks.length > 0 ? (
-        <CollapsedTurnActivity blocks={workBlocks} turnId={turnId} />
+        <CollapsedTurnActivity blocks={workBlocks} live turnId={turnId} />
       ) : publicActivity || modelRoundWait || operation ? (
         <CurrentTurnStatus
           modelRoundWait={modelRoundWait}
