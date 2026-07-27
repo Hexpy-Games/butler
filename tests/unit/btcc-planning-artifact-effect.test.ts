@@ -62,4 +62,14 @@ test("read-only workspace lineage may own one exact external effect", () => {
     artifactPolicy: { kind: "workspace_artifact", mutationScope: { kind: "read_only" } },
   });
   expect(candidate.effectIntents[0]?.targetScopeRef).toBe("ledger:project");
+  expect(candidate.effectIntents[0]).toMatchObject({
+    normalizedPayload: "Bind the exact accepted result.",
+    desiredOutcome: "Ledger and workspace agree.",
+  });
+  expect(candidate.effectIntents[0]?.normalizedPayloadSha256).toBe(
+    contentRef("effect-payload", "Bind the exact accepted result.").sha256,
+  );
+  expect(candidate.effectIntents[0]?.desiredOutcomeSha256).toBe(
+    contentRef("effect-desired-outcome", "Ledger and workspace agree.").sha256,
+  );
 });
