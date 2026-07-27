@@ -10,6 +10,7 @@ import { openingAnswerCodec } from "../../packages/butler-agent/src/agent/btcc/c
 import { decideTransition } from "../../packages/butler-agent/src/agent/btcc/turn/state-machine/decide-transition.ts";
 import type { TurnRecord } from "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
 import { bindAndContinue, freshContinuationCommand, seedManagedProgramForStop, seedStoppedProgram, taskStatuses } from "./support/btcc-stopped-work-fixture.ts";
+import { insertRecord } from "./support/btcc-stopped-work-fixture-internals.ts";
 import { canonicalMutationId } from "./support/btcc-project-ledger-fixture.ts";
 import { SqliteTurnStateRepository } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
 import { SqliteRuntimeOwnerRegistry } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
@@ -54,6 +55,69 @@ test("Stop reloads a typed frontier and a fresh Turn continues only unfinished T
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("an active deferral is the only continuation authority for its Program", async () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  seedManagedProgramForStop(db);
+  const blocker = {
+    ref: { id: "active-blocker", sha256: "active-blocker-sha256" },
+    sourceState: "planning" as const,
+    reason: "Wait for authority",
+    readiness: {
+      kind: "user_authority" as const,
+      requiredAuthorityScopeRefs: ["workspace:repository"],
+    },
+  };
+  const anchor = {
+    ref: { id: "active-anchor", sha256: "active-anchor-sha256" },
+    sourceTurnId: "turn-active-deferral",
+    blockerRef: blocker.ref,
+    openWorkRefs: [],
+    openTaskRefs: [],
+  };
+  insertRecord(db, "managed_blocker", blocker.ref, blocker);
+  insertRecord(db, "managed_deferral_anchor", anchor.ref, anchor);
+  db.query(`
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, continuation_snapshot_json, semantic_state,
+      revision, execution_fence, final_disposition
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    anchor.sourceTurnId, "session-fixture", "inbox-active-deferral",
+    "message:active-deferral", "message-active-deferral", "Wait",
+    "snapshot-active-deferral", "{}", "{}", "[]", "delivered", 1, 1, "deferred",
+  );
+  db.query(`
+    UPDATE btcc_programs
+    SET active_deferral_ref = ?, active_deferral_turn_id = ?
+    WHERE program_id = 'program-session'
+  `).run(anchor.ref.id, anchor.sourceTurnId);
+  const owner = new SqliteRuntimeOwnerRegistry(db, {
+    ownerId: "active-deferral-stop-fixture",
+    hostId: "test-host",
+    processId: 3,
+    processStartedAtMs: 3,
+  }, { isAlive: () => true });
+  expect(await new SqliteTurnStateRepository(db, owner)
+    .stopTurn("turn-user-stopped")).toEqual({
+    kind: "cancelled",
+    turnId: "turn-user-stopped",
+  });
+  owner.close();
+
+  const candidates = await discoverContinuationCandidates(db, freshContinuationCommand());
+  expect(candidates).toHaveLength(1);
+  expect(candidates[0]).toMatchObject({
+    continuationKind: "managed_deferral",
+    programId: "program-session",
+    anchorRef: anchor.ref,
+    blockerRef: blocker.ref,
+  });
+  db.close();
 });
 
 test("cancel_work consumes only the exact candidate and preserves accepted Tasks", async () => {
