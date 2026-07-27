@@ -3,4 +3,5 @@ export type {
   ContinuationCandidate,
   ContinuationContext,
   ContinuationTaskState,
+  FinalizationContinuation,
 } from "./contracts.ts";

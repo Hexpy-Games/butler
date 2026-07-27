@@ -1,3 +1,4 @@
+import { expect } from "bun:test";
 import type {
   PhaseEnvelope,
 } from "../../../packages/butler-agent/src/agent/btcc/core/index.ts";
@@ -9,6 +10,27 @@ import type {
 } from "../../../packages/butler-agent/src/agent/btcc/infrastructure/model/index.ts";
 import type { AcceptedPhaseGuidance } from "../../../packages/butler-agent/src/agent/btcc/guidance/index.ts";
 
+export const publicActivity = {
+  summary: "현재 단계의 판단을 마쳤습니다.",
+  rationale: "요청 목표와 단계 계약을 함께 확인했습니다.",
+  nextStep: "다음 단계가 이 판단을 이어받습니다.",
+};
+
+export function parseCacheOrderedPrompt(prompt: string): {
+  stable: Record<string, any>;
+  dynamic: Record<string, any>;
+  serializedStablePrefix: string;
+} {
+  const [serializedStablePrefix, serializedDynamic, ...remainder] = prompt.split("\n");
+  expect(serializedStablePrefix).toBeTruthy();
+  expect(serializedDynamic).toBeTruthy();
+  expect(remainder).toEqual([]);
+  return {
+    stable: JSON.parse(serializedStablePrefix!).stablePhasePrefix,
+    dynamic: JSON.parse(serializedDynamic!).dynamicTurnContent,
+    serializedStablePrefix: serializedStablePrefix!,
+  };
+}
 export function phaseEnvelope(options: { emptyContext?: boolean } = {}): PhaseEnvelope {
   return {
     binding: {

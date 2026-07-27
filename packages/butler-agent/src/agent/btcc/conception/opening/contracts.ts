@@ -70,12 +70,24 @@ export type OpeningContinuationProduct =
         sourceTurnId: string;
         programId: string;
       };
+    })
+  | (OpeningContinuationBase & {
+      continuationMode: "managed_finalization";
+      route: "managed";
+      continuationProposal: {
+        candidateId: string;
+        sourceTurnId: string;
+        programId: string;
+      };
     });
 
 export type OpeningWorkCancellationProduct = {
   kind: "opening_work_cancellation";
   route: "managed";
-  candidate: import("../../continuation/index.ts").ContinuationCandidate;
+  candidate: Exclude<
+    import("../../continuation/index.ts").ContinuationCandidate,
+    { continuationKind: "managed_finalization" }
+  >;
   cancellation: {
     ref: ContentRef;
     kind: "cancel_work";
@@ -157,6 +169,11 @@ export type OpeningContinuationSubmission = OpeningContinuationFields & (
     }
   | {
       kind: "managed_program_continuation";
+      requiredResultKind: "durable_work";
+      continuationCandidateId: string;
+    }
+  | {
+      kind: "managed_finalization_continuation";
       requiredResultKind: "durable_work";
       continuationCandidateId: string;
     }

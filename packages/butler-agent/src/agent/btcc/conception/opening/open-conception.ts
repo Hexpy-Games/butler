@@ -32,6 +32,9 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
     managed_program_continuation: [
       "publish_truthful_continuation",
     ],
+    managed_finalization_continuation: [
+      "publish_truthful_continuation",
+    ],
   },
   prohibitions: [
     "no_successor_choice",
@@ -50,8 +53,6 @@ export async function openConception(
   return runPhaseConversation({
     ...command,
     phaseContract: OPENING_PHASE_CONTRACT,
-    codec: openingAnswerCodec(
-      command.context.continuationCandidates?.map(({ candidateId }) => candidateId) ?? [],
-    ),
+    codec: openingAnswerCodec(command.context.continuationCandidates ?? []),
   });
 }

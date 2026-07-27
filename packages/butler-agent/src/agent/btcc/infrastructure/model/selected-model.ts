@@ -12,13 +12,14 @@ import type {
   ProviderPhasePromptRunner,
 } from "./contracts.ts";
 import { ModelProviderRequestError } from "../../../../integrations/providers/provider-errors.ts";
-import type { OperationalActivation } from "../../recovery/index.ts";
+import type { OperationalActivation, OperationalDiagnostic } from "../../recovery/index.ts";
 import { runWithinModelRoundBoundary } from "./model-round-boundary.ts";
 import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.ts";
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
 import { PhasePromptCapacityError } from "./fit-operation-context.ts";
 import { validateJsonObjectSchema } from "../../../tools/tool-bridge/schema-validation.ts";
 import { describeProviderCarrierShape } from "./provider-carrier-diagnostic.ts";
+import { providerFailureDiagnostic } from "./provider-failure-diagnostic.ts";
 
 export function createProductionSelectedModel(
   dependencies: ProductionSelectedModelDependencies,
@@ -110,7 +111,12 @@ async function runSelectedModelRound(
       return interruption("provider_aborted", { kind: "cancelled" });
     }
     if (error instanceof ModelProviderRequestError) {
-      return interruption(error.code, activationForProviderFailure(error));
+      return interruption(
+        error.code,
+        activationForProviderFailure(error),
+        undefined,
+        providerFailureDiagnostic(error),
+      );
     }
     if (error instanceof PhasePromptRenderError) {
       const cause = error.cause;
@@ -261,12 +267,14 @@ function interruption(
   code: string,
   activation: OperationalActivation,
   diagnosticMessage?: string,
+  diagnostic?: OperationalDiagnostic,
 ): ProviderRoundValue {
   return {
     kind: "interruption",
     code,
     activation,
     ...(diagnosticMessage ? { diagnosticMessage } : {}),
+    ...(diagnostic ? { diagnostic } : {}),
   };
 }
 

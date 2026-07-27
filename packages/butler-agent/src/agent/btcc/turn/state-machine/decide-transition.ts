@@ -6,6 +6,7 @@ import type {
   TurnTransitionDecision,
 } from "../contracts.ts";
 import { ledgerCommit, ledgerCursor } from "./ledger-transition.ts";
+import { resumeFinalization } from "./resume-finalization.ts";
 
 export function decideTransition(
   turn: TurnRecord,
@@ -100,6 +101,14 @@ function acceptedTransition(
     return { kind: "submit_goal_candidate", successor: "contract_review", product: event.product };
   }
   if (turn.semanticState === "contract_review" && event.kind === "GoalContractReviewAccepted") {
+    const continuation = event.product.authority.managedBinding.continuationBinding;
+    if (continuation.kind === "stopped_finalization") {
+      return resumeFinalization(
+        turn,
+        event.product,
+        continuation.context.finalization,
+      );
+    }
     return {
       kind: "accept_goal_contract",
       successor: "planning",

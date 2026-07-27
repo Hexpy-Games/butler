@@ -16,7 +16,16 @@ export interface RuntimeFailureDiagnostic {
   requestHash?: string;
   timeoutKind?: "total" | "idle";
   retryAt?: string;
+  providerRequestId?: string;
+  rateLimit?: ProviderRateLimitDiagnostic;
 }
+
+export type ProviderRateLimitDiagnostic = {
+  retryAfter?: string;
+  reset?: string;
+  limit?: string;
+  remaining?: string;
+};
 
 export class ModelProviderRequestError extends Error {
   readonly code: string;
@@ -33,6 +42,8 @@ export class ModelProviderRequestError extends Error {
   readonly requestHash?: string;
   readonly timeoutKind?: "total" | "idle";
   readonly retryAt?: string;
+  readonly providerRequestId?: string;
+  readonly rateLimit?: ProviderRateLimitDiagnostic;
 
   constructor(input: RuntimeFailureDiagnostic) {
     super(input.message);
@@ -51,6 +62,8 @@ export class ModelProviderRequestError extends Error {
     this.requestHash = input.requestHash;
     this.timeoutKind = input.timeoutKind;
     this.retryAt = input.retryAt;
+    this.providerRequestId = input.providerRequestId;
+    this.rateLimit = input.rateLimit;
   }
 
   diagnostic(): RuntimeFailureDiagnostic {
@@ -70,6 +83,8 @@ export class ModelProviderRequestError extends Error {
       requestHash: this.requestHash,
       timeoutKind: this.timeoutKind,
       retryAt: this.retryAt,
+      providerRequestId: this.providerRequestId,
+      rateLimit: this.rateLimit,
     };
   }
 }
@@ -153,7 +168,42 @@ export function providerHttpError(input: {
     registeredInputCapacity: input.admission?.plan.input_capacity_tokens,
     requestHash: input.admission?.serialized_request_sha256,
     retryAt: providerRetryAt(input.headers),
+    providerRequestId: providerRequestId(input.headers),
+    rateLimit: providerRateLimit(input.headers),
   });
+}
+
+function providerRequestId(headers?: Pick<Headers, "get">): string | undefined {
+  if (!headers) return undefined;
+  for (const name of ["x-request-id", "request-id", "x-zai-request-id"]) {
+    const value = safeHeaderValue(headers.get(name));
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function providerRateLimit(
+  headers?: Pick<Headers, "get">,
+): ProviderRateLimitDiagnostic | undefined {
+  if (!headers) return undefined;
+  const values: ProviderRateLimitDiagnostic = {
+    retryAfter: safeHeaderValue(headers.get("retry-after")),
+    reset: safeHeaderValue(
+      headers.get("ratelimit-reset") ?? headers.get("x-ratelimit-reset"),
+    ),
+    limit: safeHeaderValue(
+      headers.get("ratelimit-limit") ?? headers.get("x-ratelimit-limit"),
+    ),
+    remaining: safeHeaderValue(
+      headers.get("ratelimit-remaining") ?? headers.get("x-ratelimit-remaining"),
+    ),
+  };
+  return Object.values(values).some(Boolean) ? values : undefined;
+}
+
+function safeHeaderValue(value: string | null): string | undefined {
+  const normalized = value?.split("\r").join(" ").split("\n").join(" ").trim();
+  return normalized ? normalized.slice(0, 160) : undefined;
 }
 
 function providerRetryAt(headers?: Pick<Headers, "get">): string | undefined {

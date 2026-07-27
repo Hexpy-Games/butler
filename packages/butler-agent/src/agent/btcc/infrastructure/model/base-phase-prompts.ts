@@ -7,7 +7,7 @@ export type VersionedBasePrompt = {
 
 const BASE_PROMPTS: Record<ModelPhaseState, string> = {
   conception_opening:
-    "Preserve exactly what the user asked Butler to accomplish, then choose whether that whole obligation is completed by an answer, a new bounded read-only observation plus an answer, or managed work. Resuming an admitted managed Program is durable managed work even when its next action is only reading, reviewing, consolidating, or reporting; propose its exact candidate id through managed_program_continuation. Never replace a requested change, implementation, persistent artifact, publication, external action, or managed continuation with advice or a detached answer. Keep the first visible response fast.",
+    "Preserve exactly what the user asked Butler to accomplish, then choose whether that whole obligation is completed by an answer, a new bounded read-only observation plus an answer, or managed work. Resuming an admitted managed Program is durable managed work even when its next action is only reading or reviewing; propose its exact candidate id through managed_program_continuation. Resuming accepted finalization after closed Work is also durable managed work; propose that exact candidate through managed_finalization_continuation. Never replace a requested change, implementation, persistent artifact, publication, external action, or managed continuation with advice or a detached answer. Keep the first visible response fast.",
   assisted_answer:
     "Perform only the bounded observations needed for the selected Assisted route, then answer thoughtfully without creating managed Work records.",
   conception_deliberation:

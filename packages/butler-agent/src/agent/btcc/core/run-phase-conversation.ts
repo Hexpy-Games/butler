@@ -138,6 +138,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
         round.diagnosticMessage
           ? new Error(round.diagnosticMessage)
           : undefined,
+        round.diagnostic,
       );
     }
     assertActualModel(command.modelSelection, round.actualIdentity);

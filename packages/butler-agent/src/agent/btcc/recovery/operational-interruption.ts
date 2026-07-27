@@ -1,3 +1,5 @@
+import type { OperationalDiagnostic } from "./operational-diagnostic.ts";
+
 export type OperationalCheckpointAnchor = {
   turnId: string;
   turnRevision: number;
@@ -23,6 +25,7 @@ export class OperationalInterruptionError extends Error {
     readonly anchor: OperationalCheckpointAnchor,
     readonly activation: OperationalActivation = { kind: "runtime_remediation" },
     cause?: unknown,
+    readonly diagnostic?: OperationalDiagnostic,
   ) {
     super(`BTCC operational interruption: ${code}`, { cause });
   }

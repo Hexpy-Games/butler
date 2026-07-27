@@ -14,7 +14,7 @@ export function projectContinuationContext(envelope: PhaseEnvelope) {
     rule: [
       "Compare the current request with the projected goal, blocker, and frontier.",
       "Select a candidate only when the user is semantically resuming that deferred or user-stopped goal.",
-      "At Opening, propose an exact selected candidate with managed_program_continuation; continuation of an existing managed Program is durable_work even when the next action is only read, Review, Consolidation, or Reporting.",
+      "At Opening, propose an exact selected open-Program candidate with managed_program_continuation. Propose a stopped closed-Work candidate with managed_finalization_continuation. Both are durable_work; never substitute Assisted merely because the next action is read, Review, Consolidation, Reporting, or Delivery.",
       "Use Assisted only for a candidate-free bounded new request; unrelated candidates do not force Managed work.",
       "The projected goal, blocker, readiness, and frontier must describe the same work.",
       "Opaque refs are identities, not search terms; do not probe unrelated stores to resolve them.",

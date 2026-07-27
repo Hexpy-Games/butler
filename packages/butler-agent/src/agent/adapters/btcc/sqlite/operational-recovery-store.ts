@@ -4,7 +4,12 @@ import type {
   OperationalRecoveryReceipt,
   OperationalRecoveryStore,
 } from "../../../btcc/gateway-api.ts";
-import { OperationalInterruptionError } from "../../../btcc/gateway-api.ts";
+import {
+  decodeOperationalDiagnostic,
+  OperationalInterruptionError,
+} from "../../../btcc/gateway-api.ts";
+import type { OperationalDiagnostic } from "../../../btcc/gateway-api.ts";
+import { stableJson } from "./identity.ts";
 
 type ReceiptRow = { interruption_id: string; activation_count: number };
 type InterruptionRow = {
@@ -12,11 +17,13 @@ type InterruptionRow = {
   activation_kind: OperationalInterruptionError["activation"]["kind"];
   retry_at: string | null;
   diagnostic_message: string | null;
+  diagnostic_json: string | null;
   status: "interrupted" | "ready";
 };
 
 export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore {
   constructor(private readonly db: Database) {
+    this.reconcileLegacyRateLimits();
     this.closeInterruptionsWhoseClaimsCompleted();
   }
 
@@ -28,14 +35,15 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       INSERT INTO btcc_operational_interruptions (
         interruption_id, turn_id, turn_revision, semantic_state,
         checkpoint_id, checkpoint_revision, claim_id, execution_fence,
-        code, activation_kind, retry_at, diagnostic_message,
+        code, activation_kind, retry_at, diagnostic_message, diagnostic_json,
         activation_count, status, interrupted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'interrupted', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'interrupted', ?)
       ON CONFLICT(claim_id, code, activation_kind) DO UPDATE SET
         activation_count = CASE WHEN status = 'interrupted'
           THEN activation_count ELSE activation_count + 1 END,
         retry_at = excluded.retry_at,
         diagnostic_message = excluded.diagnostic_message,
+        diagnostic_json = excluded.diagnostic_json,
         status = 'interrupted', interrupted_at = excluded.interrupted_at,
         resolved_at = NULL
     `).run(
@@ -53,6 +61,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
         ? interruption.activation.retryAt ?? null
         : null,
       diagnosticMessage(interruption),
+      persistedDiagnostic(interruption.diagnostic),
       new Date().toISOString(),
     );
     const row = this.db.query<ReceiptRow, [string, string, string]>(`
@@ -93,7 +102,8 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
     anchor: OperationalCheckpointAnchor,
   ) {
     const row = this.db.query<InterruptionRow, [string, string, number, string, number, number]>(`
-      SELECT code, activation_kind, retry_at, diagnostic_message, status
+      SELECT code, activation_kind, retry_at, diagnostic_message,
+        diagnostic_json, status
       FROM btcc_operational_interruptions
       WHERE claim_id = ? AND turn_id = ? AND turn_revision = ?
         AND checkpoint_id = ? AND checkpoint_revision = ?
@@ -115,6 +125,7 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
           ? { kind: row.activation_kind, retryAt: row.retry_at }
           : { kind: row.activation_kind },
         row.diagnostic_message ? new Error(row.diagnostic_message) : undefined,
+        operationalDiagnostic(row.diagnostic_json),
       ),
       status: row.status,
     } : null;
@@ -162,12 +173,43 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       )
     `).run(new Date().toISOString());
   }
+
+  private reconcileLegacyRateLimits(): void {
+    this.db.exec(`
+      DELETE FROM btcc_operational_interruptions AS stale
+      WHERE stale.code = 'provider_rate_limited'
+        AND stale.activation_kind = 'automatic_provider_recovery'
+        AND stale.retry_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM btcc_operational_interruptions AS parked
+          WHERE parked.claim_id = stale.claim_id
+            AND parked.code = stale.code
+            AND parked.activation_kind = 'provider_action_required'
+        );
+      UPDATE btcc_operational_interruptions
+      SET activation_kind = 'provider_action_required'
+      WHERE code = 'provider_rate_limited'
+        AND activation_kind = 'automatic_provider_recovery'
+        AND retry_at IS NULL;
+    `);
+  }
 }
 
 function diagnosticMessage(interruption: OperationalInterruptionError): string | null {
+  if (interruption.code.startsWith("provider_") ||
+    interruption.diagnostic?.kind === "provider_request") return null;
   const cause = interruption.cause;
   if (cause instanceof Error) return cause.message;
   return cause === undefined ? null : String(cause);
+}
+
+function operationalDiagnostic(value: string | null): OperationalDiagnostic | undefined {
+  return decodeOperationalDiagnostic(value);
+}
+
+function persistedDiagnostic(value: OperationalDiagnostic | undefined): string | null {
+  const diagnostic = decodeOperationalDiagnostic(value);
+  return diagnostic ? stableJson(diagnostic) : null;
 }
 
 function interruptionId(interruption: OperationalInterruptionError): string {

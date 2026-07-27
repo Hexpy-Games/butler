@@ -5,9 +5,11 @@ type ColumnRow = { name: string };
 export function migrateBtccSchema(db: Database): void {
   ensureLedgerContentionClaimPath(db);
   ensureOperationalDiagnostic(db);
+  ensureColumn(db, "btcc_operational_interruptions", "diagnostic_json", "TEXT");
   ensureColumn(db, "btcc_operational_interruptions", "retry_at", "TEXT");
   ensureProgramAuthorityProjection(db);
   ensureColumn(db, "btcc_tasks", "revalidation_source_json", "TEXT");
+  ensureColumn(db, "btcc_stopped_finalization_continuations", "bound_turn_id", "TEXT");
 }
 
 function ensureProgramAuthorityProjection(db: Database): void {

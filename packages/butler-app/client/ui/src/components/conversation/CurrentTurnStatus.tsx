@@ -1,7 +1,7 @@
 import type { ProgressRow } from "@/app/types.ts";
+import { RollingStatusLine } from "@/libs/design-system";
 import { CurrentModelRoundWaiting } from "./CurrentModelRoundWaiting";
 import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
-import styles from "./CurrentTurnStatus.module.css";
 
 export function CurrentTurnStatus({
   operation,
@@ -14,13 +14,12 @@ export function CurrentTurnStatus({
 }) {
   const fullLabel = operation?.safe_label ?? publicActivity?.safe_label;
   return (
-    <div
+    <RollingStatusLine
       aria-live="polite"
-      className={styles.slot}
       data-test-class="turn-current-status-slot"
       title={fullLabel}
     >
-      <div className={styles.content} data-test-class="turn-current-status-content">
+      <div data-test-class="turn-current-status-content">
         {operation ? (
           <CurrentPhaseActivity row={operation} />
         ) : modelRoundWait ? (
@@ -29,6 +28,6 @@ export function CurrentTurnStatus({
           <CurrentPhaseActivity row={publicActivity} />
         ) : null}
       </div>
-    </div>
+    </RollingStatusLine>
   );
 }

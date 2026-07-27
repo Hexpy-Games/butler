@@ -8,6 +8,8 @@ import { migrateBtccSchema } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema/migrate-schema.ts";
 import { OperationalInterruptionError } from
   "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
+import type { OperationalDiagnostic } from
+  "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 
 test("runtime remediation retains its private diagnostic cause", async () => {
   const db = new Database(":memory:");
@@ -30,7 +32,6 @@ test("runtime remediation retains its private diagnostic cause", async () => {
       { kind: "runtime_remediation" },
       new Error("inactive Spec entered the current catalog"),
     ));
-
     const row = db.query<{ diagnostic_message: string }, []>(`
       SELECT diagnostic_message FROM btcc_operational_interruptions
     `).get();
@@ -61,18 +62,182 @@ test("provider readiness deadline survives interruption persistence", async () =
       executionFence: 0,
     };
     const retryAt = "2026-07-27T06:00:00.000Z";
+    const diagnostic = {
+      schema: "btcc.operational-diagnostic.v1" as const,
+      kind: "provider_request" as const,
+      provider: "zai",
+      api: "chat_completions",
+      statusCode: 429,
+      retryable: true,
+      retryAt,
+      providerRequestId: "zai-request-429",
+      rateLimit: { retryAfter: "8", remaining: "0" },
+    };
     await store.record(new OperationalInterruptionError(
       "provider_rate_limited",
       anchor,
       { kind: "automatic_provider_recovery", retryAt },
+      undefined,
+      diagnostic,
     ));
-
-    expect(db.query<{ retry_at: string }, []>(`
-      SELECT retry_at FROM btcc_operational_interruptions
-    `).get()?.retry_at).toBe(retryAt);
-    expect((await store.pending(anchor))?.interruption.activation).toEqual({
+    const persisted = db.query<{ retry_at: string; diagnostic_json: string }, []>(`
+      SELECT retry_at, diagnostic_json FROM btcc_operational_interruptions
+    `).get();
+    expect(persisted?.retry_at).toBe(retryAt);
+    expect(JSON.parse(persisted?.diagnostic_json ?? "null")).toEqual(diagnostic);
+    const restored = (await store.pending(anchor))?.interruption;
+    expect(restored?.activation).toEqual({
       kind: "automatic_provider_recovery",
       retryAt,
+    });
+    expect(restored?.diagnostic).toEqual(diagnostic);
+  } finally {
+    db.close();
+  }
+});
+
+test("optional diagnostic corruption never blocks pending checkpoint recovery", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    const store = new SqliteOperationalRecoveryStore(db);
+    const anchor = {
+      turnId: "turn-corrupt-diagnostic",
+      turnRevision: 1,
+      semanticState: "task_execution",
+      checkpointId: "checkpoint-corrupt-diagnostic",
+      checkpointRevision: 2,
+      claimId: "claim-corrupt-diagnostic",
+      executionFence: 0,
+    };
+    await store.record(new OperationalInterruptionError(
+      "provider_rate_limited",
+      anchor,
+      { kind: "provider_action_required" },
+    ));
+    const corruptValues = [
+      "{malformed",
+      "null",
+      JSON.stringify({
+        schema: "btcc.operational-diagnostic.v999",
+        kind: "provider_request",
+      }),
+    ];
+    for (const diagnosticJson of corruptValues) {
+      db.query(`
+        UPDATE btcc_operational_interruptions SET diagnostic_json = ?
+      `).run(diagnosticJson);
+      const pending = await store.pending(anchor);
+      expect(pending?.status).toBe("interrupted");
+      expect(pending?.interruption.activation).toEqual({
+        kind: "provider_action_required",
+      });
+      expect(pending?.interruption.diagnostic).toBeUndefined();
+    }
+  } finally {
+    db.close();
+  }
+});
+
+test("durable provider diagnostics retain only normalized safe metadata", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    const store = new SqliteOperationalRecoveryStore(db);
+    const anchor = {
+      turnId: "turn-safe-diagnostic",
+      turnRevision: 1,
+      semanticState: "conception",
+      checkpointId: "checkpoint-safe-diagnostic",
+      checkpointRevision: 1,
+      claimId: "claim-safe-diagnostic",
+      executionFence: 0,
+    };
+    const providerControlled = {
+      schema: "btcc.operational-diagnostic.v1",
+      kind: "provider_request",
+      provider: "zai",
+      api: "chat_completions",
+      statusCode: 429,
+      endpoint: "https://api.example.test/v1/chat?prompt=secret#payload",
+      model: "glm-5.2",
+      retryable: true,
+      detail: "prompt and filesystem path",
+      cause: "authorization=secret",
+      retryAt: "2099-10-21T07:28:00Z",
+      providerRequestId: "request-429",
+      requestGeneration: 4,
+      measuredInputTokens: 1200,
+      registeredInputCapacity: 64000,
+      requestHash: "a".repeat(64),
+      rateLimit: {
+        retryAfter: "secret payload",
+        reset: "Wed, 21 Oct 2099 07:28:00 GMT",
+        limit: "100",
+        remaining: "-1",
+        providerPayload: "unknown secret",
+      },
+      providerPayload: { prompt: "secret" },
+    } as unknown as OperationalDiagnostic;
+    await store.record(new OperationalInterruptionError(
+      "provider_rate_limited",
+      anchor,
+      { kind: "automatic_provider_recovery", retryAt: "2099-10-21T07:28:00.000Z" },
+      new Error("provider echoed prompt=secret"),
+      providerControlled,
+    ));
+
+    type PersistedDiagnostic = {
+      diagnostic_message: string | null; diagnostic_json: string;
+    };
+    const persisted = db.query<PersistedDiagnostic, []>(`
+      SELECT diagnostic_message, diagnostic_json
+      FROM btcc_operational_interruptions
+    `).get();
+    expect(persisted?.diagnostic_message).toBeNull();
+    expect(JSON.parse(persisted?.diagnostic_json ?? "null")).toEqual({
+      schema: "btcc.operational-diagnostic.v1",
+      kind: "provider_request",
+      provider: "zai",
+      api: "chat_completions",
+      retryable: true,
+      statusCode: 429,
+      endpoint: "https://api.example.test/v1/chat",
+      model: "glm-5.2",
+      retryAt: "2099-10-21T07:28:00.000Z",
+      providerRequestId: "request-429",
+      requestGeneration: 4,
+      measuredInputTokens: 1200,
+      registeredInputCapacity: 64000,
+      requestHash: "a".repeat(64),
+      rateLimit: {
+        reset: "2099-10-21T07:28:00.000Z",
+        limit: "100",
+      },
+    });
+  } finally {
+    db.close();
+  }
+});
+
+test("legacy 429 without provider readiness is parked instead of replayed", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    seedActiveInterruption(db, "legacy-429", "automatic_provider_recovery", {
+      code: "provider_rate_limited",
+    });
+
+    new SqliteOperationalRecoveryStore(db);
+
+    expect(db.query<{ activation_kind: string; retry_at: string | null }, []>(`
+      SELECT activation_kind, retry_at FROM btcc_operational_interruptions
+    `).get()).toEqual({
+      activation_kind: "provider_action_required",
+      retry_at: null,
     });
   } finally {
     db.close();
@@ -141,6 +306,7 @@ function seedActiveInterruption(
   db: Database,
   suffix: string,
   activationKind: string,
+  options: { code?: string } = {},
 ): void {
   db.query(`
     INSERT INTO btcc_turns (
@@ -171,12 +337,13 @@ function seedActiveInterruption(
       checkpoint_id, checkpoint_revision, claim_id, execution_fence,
       code, activation_kind, activation_count, status, interrupted_at
     ) VALUES (?, ?, 1, 'task_execution', ?, 1, ?, 0,
-      'simulated', ?, 1, 'interrupted', ?)
+      ?, ?, 1, 'interrupted', ?)
   `).run(
     `interruption-${suffix}`,
     `turn-${suffix}`,
     `checkpoint-${suffix}`,
     `claim-${suffix}`,
+    options.code ?? "simulated",
     activationKind,
     new Date().toISOString(),
   );

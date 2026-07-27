@@ -13,6 +13,10 @@ import {
 } from "./managed-harness-planning.ts";
 import { submitConsolidation, submitReport } from "./managed-harness-finalization.ts";
 import {
+  continuationReviewDecision,
+  submitOpening,
+} from "./managed-harness-continuation.ts";
+import {
   goalFindingDecisions,
   goalPriorFindingVerdicts,
   goalReviewSubjects,
@@ -21,7 +25,6 @@ import {
   asArray,
   asRecord,
   executionTargetKind,
-  firstContinuationCandidateId,
   nestedValue,
 } from "./managed-harness-state.ts";
 
@@ -85,14 +88,7 @@ export class ManagedHarnessModel implements SelectedModel {
     const state = asRecord(envelope.context.stateInput);
     switch (envelope.phase) {
       case "conception_opening":
-        return {
-          kind: "managed_continuation",
-          requiredResultKind: "target_change",
-          requestObligation: "고객 응대 원칙을 조사해 운영 가이드를 작성한다",
-          summary: "요청의 목표와 완료 조건을 먼저 정리하겠습니다.",
-          rationale: "원래 의도를 보존한 계획이 필요한 관리 작업입니다.",
-          nextStep: "관련 스펙을 확인하고 Work와 Task를 구성하겠습니다.",
-        };
+        return submitOpening(envelope.context, this.chooseContinuation);
       case "conception_deliberation": {
         const revision = asRecord(state.goalRevision);
         const personalizationRefs = [
@@ -158,9 +154,7 @@ export class ManagedHarnessModel implements SelectedModel {
           ...(this.goalReviewCount === 1
             ? { subjects: goalReviewSubjects() }
             : goalPriorFindingVerdicts(state)),
-          ...(this.chooseContinuation
-            ? { continuationCandidateId: firstContinuationCandidateId(state) }
-            : {}),
+          ...continuationReviewDecision(state, this.chooseContinuation),
         };
       case "planning":
         if (this.deferralPhase === "planning" && !this.deferralSubmitted) {

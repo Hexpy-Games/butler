@@ -24,6 +24,7 @@ import type {
   PlanningRevisionRequiredProduct,
 } from "../planning/index.ts";
 import type { PreparedReportProduct } from "../reporting/index.ts";
+import type { FinalizationContinuation } from "../continuation/index.ts";
 import type { TaskReviewProduct } from "../review/index.ts";
 import type { ManagedAttempt } from "../work/index.ts";
 import type {
@@ -162,6 +163,14 @@ export type AcceptedTurnTransition =
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "bind_program" }>;
       };
+    }
+  | {
+      kind: "accept_finalization_continuation";
+      successor: "consolidation" | "reporting" | "delivery_committed";
+      product: GoalContractAcceptedProduct;
+      finalization: FinalizationContinuation;
+      preparedReport?: PreparedReportProduct;
+      deliveryOutbox?: DeliveryOutbox;
     }
   | { kind: "submit_plan_candidate"; successor: "planning_review"; product: PlanningCandidateProduct }
   | {

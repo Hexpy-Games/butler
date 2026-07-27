@@ -23,7 +23,7 @@ test("Opening proposes an exact stopped Program only through the Managed route",
   await seedStoppedProgram(db);
   const candidates = await discoverContinuationCandidates(db, freshContinuationCommand());
   const candidate = candidates[0]!;
-  const codec = openingAnswerCodec(candidates.map(({ candidateId }) => candidateId));
+  const codec = openingAnswerCodec(candidates);
   const envelope = {
     binding: { turnId: "turn-resume-opening" },
     context: { continuationCandidates: candidates },

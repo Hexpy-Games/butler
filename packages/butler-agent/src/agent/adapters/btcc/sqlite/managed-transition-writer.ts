@@ -6,11 +6,14 @@ import { ManagedArtifactRecordWriter } from "./managed-artifact-record-writer.ts
 import { ManagedDeliveryOutboxWriter } from "./managed-delivery-outbox-writer.ts";
 import { ConsolidationRepairWriter } from "./consolidation-repair-writer.ts";
 import { ManagedGoalTransitionWriter } from "./managed-goal-transition-writer.ts";
+import { ManagedFinalizationTransitionWriter } from
+  "./managed-finalization-transition-writer.ts";
 import { ManagedPlanningRecordWriter } from "./managed-planning-record-writer.ts";
 import { ManagedTurnProjectionWriter } from "./managed-turn-projection-writer.ts";
 import type { ProjectLedgerBoundaryContext } from "./project-ledger-promotion-writer.ts";
 import { ProjectManagedBoundary } from "./project-managed-boundary.ts";
 import { StoppedContinuationRegistry } from "./stopped-continuation-registry.ts";
+import { StoppedFinalizationRegistry } from "./stopped-finalization-registry.ts";
 type ManagedTransition = Exclude<BtccPersistenceTypes["transition"],
   {
     kind:
@@ -24,17 +27,17 @@ type TurnRecord = BtccPersistenceTypes["turn"];
 export class SqliteManagedTransitionWriter {
   private readonly records: SqliteImmutableRecordStore;
   private readonly artifactRecords: ManagedArtifactRecordWriter;
-  private readonly delivery: ManagedDeliveryOutboxWriter;
   private readonly consolidationRepairs: ConsolidationRepairWriter;
   private readonly planningRecords: ManagedPlanningRecordWriter;
   private readonly turnProjection: ManagedTurnProjectionWriter;
   private readonly projectBoundary: ProjectManagedBoundary;
   private readonly goals: ManagedGoalTransitionWriter;
+  private readonly finalizations: ManagedFinalizationTransitionWriter;
   private readonly stoppedContinuations: StoppedContinuationRegistry;
   constructor(private readonly db: Database, ledger: WorkLedger) {
     this.records = new SqliteImmutableRecordStore(db);
     this.artifactRecords = new ManagedArtifactRecordWriter(this.records);
-    this.delivery = new ManagedDeliveryOutboxWriter(db, this.records);
+    const delivery = new ManagedDeliveryOutboxWriter(db, this.records);
     this.consolidationRepairs = new ConsolidationRepairWriter(this.records);
     this.planningRecords = new ManagedPlanningRecordWriter(this.records);
     this.turnProjection = new ManagedTurnProjectionWriter(db);
@@ -45,6 +48,12 @@ export class SqliteManagedTransitionWriter {
       this.projectBoundary,
     );
     this.stoppedContinuations = new StoppedContinuationRegistry(db);
+    this.finalizations = new ManagedFinalizationTransitionWriter(
+      this.records,
+      this.turnProjection,
+      delivery,
+      new StoppedFinalizationRegistry(db),
+    );
   }
   commit(
     turn: TurnRecord,
@@ -61,6 +70,9 @@ export class SqliteManagedTransitionWriter {
       case "accept_goal_contract":
         this.goals.commit(turn, nextRevision, transition, projectLedger);
         this.consumeStoppedBinding(transition);
+        return;
+      case "accept_finalization_continuation":
+        this.finalizations.commit(turn, nextRevision, transition);
         return;
       case "submit_plan_candidate":
         this.planningRecords.record(transition.product.candidate);
@@ -188,14 +200,7 @@ export class SqliteManagedTransitionWriter {
         return;
       }
       case "accept_prepared_report":
-        this.delivery.prepare(turn.turnId, nextRevision, transition);
-        this.advance(turn, nextRevision, transition.successor, {
-          ...requiredManaged(turn), preparedReport: transition.product,
-        }, {
-          finalPayload: transition.product.finalPayload,
-          finalDisposition: transition.product.finalPayload.disposition,
-          outboxId: transition.deliveryOutbox.outboxId,
-        });
+        this.finalizations.commit(turn, nextRevision, transition);
         return;
     }
   }
@@ -213,7 +218,6 @@ export class SqliteManagedTransitionWriter {
       ...requiredManaged(turn), planningAcceptance: transition.product, program,
     });
   }
-
   private selectTask(
     turn: TurnRecord,
     nextRevision: number,
@@ -231,7 +235,6 @@ export class SqliteManagedTransitionWriter {
       program: committed,
     });
   }
-
   private submitResult(
     turn: TurnRecord,
     nextRevision: number,

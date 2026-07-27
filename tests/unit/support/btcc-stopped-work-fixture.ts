@@ -4,6 +4,7 @@ import { SqliteTurnStateRepository } from "../../../packages/butler-agent/src/ag
 import { SqliteRuntimeOwnerRegistry } from "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
 import { canonicalMutationId } from "./btcc-project-ledger-fixture.ts";
 import type { WorkLedgerCommit } from "../../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
+import type { ReviewedManagedProgramState } from "../../../packages/butler-agent/src/agent/btcc/work-ledger/index.ts";
 import { authorPlanningProposal } from "../../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
 import type { discoverContinuationCandidates } from "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/continuation-candidate-discovery.ts";
 import { fourTaskPlan, insertManagedTurn, planningAccepted, planAuthoringState, planSubmission, requireProgram, seedFrontier, sessionProgramCommit, stoppedBindingCommit } from "./btcc-stopped-work-fixture-internals.ts";
@@ -141,4 +142,18 @@ export function taskStatuses(db: Database): string[] {
   return db.query<{ status: string }, []>(
     "SELECT status FROM btcc_tasks WHERE is_active = 1 ORDER BY rowid",
   ).all().map((row) => row.status);
+}
+
+export function closeManagedProgramForFinalization(
+  db: Database,
+  storage: SqliteWorkLedgerStorage,
+): ReviewedManagedProgramState {
+  db.query("UPDATE btcc_tasks SET status = 'accepted' WHERE is_active = 1").run();
+  db.query("UPDATE btcc_work_items SET status = 'closed' WHERE is_active = 1").run();
+  db.query("UPDATE btcc_programs SET frontier = 'closed'").run();
+  const program = storage.loadProgram("program-session");
+  if (!program || program.planningState !== "reviewed" || program.frontier !== "closed") {
+    throw new Error("Closed finalization Program expected");
+  }
+  return program;
 }
