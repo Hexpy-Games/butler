@@ -184,10 +184,10 @@ function validateCommandStateEffect(
     );
   }
   if (request.kind === "workspace_artifact_action" &&
-    effect !== "read_only" && effect !== "mutation") {
+    effect !== "read_only" && effect !== "validation" && effect !== "mutation") {
     rejectInput(
       "workspace_command_effect_denied",
-      "BTCC workspace command requires read_only or mutation state_effect",
+      "BTCC workspace command requires read_only, validation, or mutation state_effect",
     );
   }
   if (request.kind === "workspace_artifact_action" && effect === "mutation" &&

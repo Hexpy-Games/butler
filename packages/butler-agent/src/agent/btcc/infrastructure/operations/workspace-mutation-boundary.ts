@@ -65,9 +65,16 @@ export function requireAcceptedWorkspaceDelta(
   authority: WorkspaceAuthority,
   before: MaterializedSnapshot,
   after: MaterializedSnapshot,
+  operationMayMutate: boolean,
 ): void {
   const changes = changedEntries(before, after);
   if (changes.length === 0) return;
+  if (!operationMayMutate) {
+    throw rejected(
+      "non_mutating_operation_changed_workspace",
+      "A read-only or validation operation produced a persistent workspace delta.",
+    );
+  }
   if (authority.mutationScope.kind === "read_only") {
     throw rejected(
       "read_only_task_mutated_workspace",

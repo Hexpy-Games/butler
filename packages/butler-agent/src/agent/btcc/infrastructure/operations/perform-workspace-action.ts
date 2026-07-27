@@ -203,7 +203,12 @@ function prepareAppliedWorkspace(
     workspace.baselineTargetState,
   );
   const before = requireSnapshot(input.store, journal.beforeSnapshotRef);
-  requireAcceptedWorkspaceDelta(mutationAuthority, before, candidate);
+  requireAcceptedWorkspaceDelta(
+    mutationAuthority,
+    before,
+    candidate,
+    operationMayMutate(input.request),
+  );
   if (sameRef(candidate.ref, journal.beforeSnapshotRef)) {
     return {
       ...journal,
@@ -245,6 +250,10 @@ function prepareAppliedWorkspace(
       artifactRevisionRef,
     ),
   };
+}
+
+function operationMayMutate(request: WorkspaceRequest): boolean {
+  return request.capabilityRef !== "run_command" || request.input.state_effect === "mutation";
 }
 
 function operationResult(
