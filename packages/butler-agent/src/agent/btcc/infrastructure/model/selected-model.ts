@@ -59,10 +59,13 @@ async function runSelectedModelRound(
   try {
     const rendered = await renderProviderPrompt(envelope, dependencies);
     if (signal.aborted) return interruption("provider_aborted", { kind: "cancelled" });
-    const { admissionSchema, ...providerPrompt } = rendered;
     const result = await promptRunner.run({
       modelSelection: envelope.modelSelection,
-      ...providerPrompt,
+      instructions: rendered.instructions,
+      prompt: rendered.prompt,
+      promptCacheBoundary: rendered.promptCacheBoundary,
+      responseSchema: rendered.responseSchema,
+      carrierFunctions: rendered.carrierFunctions,
       cacheScope: `btcc:${envelope.phase}`,
       usageAttribution: {
         turnId: envelope.binding.turnId,
@@ -77,7 +80,7 @@ async function runSelectedModelRound(
     }
     try {
       return acceptProviderCarrier(result.carrier, {
-        responseSchema: admissionSchema,
+        responseSchema: rendered.responseSchema,
         authority: envelope.operationAuthority,
         actualIdentity: result.actualIdentity,
       });

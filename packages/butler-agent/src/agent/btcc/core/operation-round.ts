@@ -2,6 +2,10 @@ import {
   projectEphemeralOperationResult,
   type OperationResultProjection,
 } from "../operation-result/index.ts";
+import {
+  OperationRejectedError,
+  rejectedOperationResult,
+} from "./operation-rejection.ts";
 import type {
   OperationAuthority,
   OperationRequest,
@@ -39,11 +43,11 @@ export async function performOperationBatch<Product>(
   const results: Array<{ request: OperationRequest; result: OperationResultProjection }> = [];
   for (const request of requests) {
     command.executionPermit.assertActive();
-    assertAuthorizedOperationKind(request, envelope.operationAuthority);
     rejectDuplicateRequest(roundRequests, request);
     requirePublicOperationMetadata(request);
     await publishOperation(command, envelope, request, "started");
     try {
+      assertAuthorizedOperationKind(request, envelope.operationAuthority);
       const observed = await command.operations.perform({
         request,
         envelope,
@@ -64,6 +68,17 @@ export async function performOperationBatch<Product>(
       await publishOperation(command, envelope, request, "completed", result);
       results.push({ request, result });
     } catch (error) {
+      if (error instanceof OperationRejectedError) {
+        const result = projectEphemeralOperationResult({
+          binding: envelope.binding,
+          request,
+          result: rejectedOperationResult(request, error),
+          modelSelection: envelope.modelSelection,
+        });
+        await publishOperation(command, envelope, request, "completed", result);
+        results.push({ request, result });
+        continue;
+      }
       await publishOperation(
         command,
         envelope,
@@ -135,6 +150,12 @@ function assertAuthorizedOperationKind(
   request: OperationRequest,
   authority: OperationAuthority,
 ): void {
+  if (request.runtimeAdmission?.kind === "rejected") {
+    throw new OperationRejectedError(
+      request.runtimeAdmission.code,
+      "This operation is not authorized in the current BTCC phase.",
+    );
+  }
   if (request.kind === "observe") {
     if (authority.observationScopeRefs.includes(request.scopeRef)) return;
   } else if (
@@ -161,7 +182,10 @@ function assertAuthorizedOperationKind(
   ) {
     return;
   }
-  throw new Error("BTCC phase requested an operation outside its admitted authority");
+  throw new OperationRejectedError(
+    "operation_authority_mismatch",
+    "This operation is not authorized in the current BTCC phase.",
+  );
 }
 
 function sameRef(

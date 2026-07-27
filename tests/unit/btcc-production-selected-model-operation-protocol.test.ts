@@ -121,6 +121,51 @@ describe("production BTCC selected model", () => {
     expect(calls).toBe(1);
   });
 
+  test("returns a structurally valid but phase-unadmitted operation for in-phase rejection", async () => {
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: capabilityCatalog([{
+        capabilityRef: "workspace:inspect",
+        name: "inspect_workspace",
+        description: "Inspect an authorized workspace.",
+        operationKinds: ["review_validation"],
+        inputSchema: { type: "object" },
+      }]),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => ({
+        carrier: {
+          kind: "operation_requests",
+          phaseContinuity: phaseContinuity(),
+          requests: [{
+            requestId: "unadmitted-review",
+            publicTitle: "Review the workspace",
+            kind: "review_validation",
+            capabilityRef: "workspace:inspect",
+            input: {},
+          }],
+        },
+        actualIdentity: actualIdentity(),
+      })),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.operationAuthority = {
+      observationScopeRefs: [],
+      mutation: { kind: "forbidden" },
+    };
+
+    expect(await model.runRound(envelope)).toMatchObject({
+      kind: "operation_requests",
+      requests: [{
+        requestId: "unadmitted-review",
+        kind: "review_validation",
+        runtimeAdmission: {
+          kind: "rejected",
+          code: "operation_authority_mismatch",
+        },
+      }],
+    });
+  });
+
   test("projects a durable provider-product rejection into the exact phase prompt", async () => {
     let prompt = "";
     const model = createProductionSelectedModel({

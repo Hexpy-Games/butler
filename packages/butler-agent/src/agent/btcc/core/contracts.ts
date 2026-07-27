@@ -211,10 +211,10 @@ export type WorkspaceOperationRoot =
 export type WorkspaceMutationScope =
   | { kind: "read_only" }
   | { kind: "contained_paths"; writablePaths: string[] };
-
 export type OperationRequest = {
   requestId: string;
   publicTitle: string;
+  runtimeAdmission?: { kind: "rejected"; code: "operation_authority_mismatch" };
 } & (
   | {
       kind: "observe";

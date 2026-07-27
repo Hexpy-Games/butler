@@ -56,7 +56,10 @@ export type {
   WorkspaceMutationScope,
   WorkspaceOperationRoot,
 } from "./contracts.ts";
-export { OperationRejectedError } from "./operation-rejection.ts";
+export {
+  OperationRejectedError,
+  rejectedOperationResult,
+} from "./operation-rejection.ts";
 export {
   isSpooledOperationOutput,
   type SpooledOperationOutput,
