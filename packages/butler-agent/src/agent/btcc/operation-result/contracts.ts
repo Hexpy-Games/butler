@@ -33,6 +33,14 @@ export type OperationSourceDescriptor =
       relativeTarget: string;
     }
   | {
+      kind: "external_effect";
+      capabilityRef: string;
+      effectIntentRef: ResultRef;
+      occurrenceKey: string;
+      targetScopeRef: string;
+      input: Record<string, unknown>;
+    }
+  | {
       kind: "repository_promotion";
       capabilityRef: string;
       authorizationRef: ResultRef;
@@ -70,6 +78,7 @@ export type OperationResultRecord = {
   artifactRevisionRef?: ResultRef;
   targetSnapshotRef?: ResultRef;
   validationReceiptRef?: ResultRef;
+  effectReceiptRef?: ResultRef;
   transactionRef?: ResultRef;
   commitJournalRef?: ResultRef;
   promotionReceiptRef?: ResultRef;
@@ -104,6 +113,7 @@ export type OperationResultProjection = {
   artifactRevisionRef?: ResultRef;
   targetSnapshotRef?: ResultRef;
   validationReceiptRef?: ResultRef;
+  effectReceiptRef?: ResultRef;
   transactionRef?: ResultRef;
   commitJournalRef?: ResultRef;
   promotionReceiptRef?: ResultRef;
@@ -126,6 +136,7 @@ export type OperationResultIndexEntry = Pick<
   | "artifactRevisionRef"
   | "targetSnapshotRef"
   | "validationReceiptRef"
+  | "effectReceiptRef"
   | "transactionRef"
   | "commitJournalRef"
   | "promotionReceiptRef"

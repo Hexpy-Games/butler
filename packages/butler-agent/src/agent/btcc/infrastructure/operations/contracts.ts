@@ -30,6 +30,10 @@ export type ProductionOperationRuntimeOptions = {
     envelope: PhaseEnvelope;
     request: Extract<OperationRequest, { kind: "review_validation" }>;
   }): ButlerOperationToolExecutor;
+  createExternalEffectExecutor(input: {
+    envelope: PhaseEnvelope;
+    request: Extract<OperationRequest, { kind: "external_effect" }>;
+  }): ButlerOperationToolExecutor;
   validateOperationInput(input: {
     envelope: PhaseEnvelope;
     request: OperationRequest;

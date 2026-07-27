@@ -118,6 +118,9 @@ function mutationIsAuthorized(
   if (operationKind === "review_validation") {
     return mutation.kind === "validation_overlay_only";
   }
+  if (operationKind === "external_effect") {
+    return mutation.kind === "external_effect_only";
+  }
   if (operationKind === "repository_promotion") {
     return mutation.kind === "repository_promotion_only";
   }

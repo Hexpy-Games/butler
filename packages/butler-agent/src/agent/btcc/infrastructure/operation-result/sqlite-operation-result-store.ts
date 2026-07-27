@@ -263,6 +263,9 @@ function structuralRefs(result: ObservationResult) {
     ...(result.validationReceiptRef
       ? { validationReceiptRef: result.validationReceiptRef }
       : {}),
+    ...(result.effectReceiptRef
+      ? { effectReceiptRef: result.effectReceiptRef }
+      : {}),
     ...(result.transactionRef ? { transactionRef: result.transactionRef } : {}),
     ...(result.commitJournalRef
       ? { commitJournalRef: result.commitJournalRef }

@@ -172,6 +172,14 @@ function assertAuthorizedOperationKind(
   ) {
     return;
   } else if (
+    request.kind === "external_effect" &&
+    authority.mutation.kind === "external_effect_only" &&
+    sameRef(request.effectIntentRef, authority.mutation.effectIntentRef) &&
+    request.occurrenceKey === authority.mutation.occurrenceKey &&
+    request.targetScopeRef === authority.mutation.targetScopeRef
+  ) {
+    return;
+  } else if (
     request.kind === "repository_promotion" &&
     authority.mutation.kind === "repository_promotion_only" &&
     sameRef(request.authorizationRef, authority.mutation.authorizationRef) &&

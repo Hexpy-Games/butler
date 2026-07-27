@@ -210,6 +210,10 @@ function operationSchema(
       return operationShape("review_validation", {
         ...common,
       });
+    case "external_effect":
+      return operationShape("external_effect", {
+        ...common,
+      });
     case "repository_promotion":
       return operationShape("repository_promotion", {
         ...common,

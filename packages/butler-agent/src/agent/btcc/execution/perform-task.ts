@@ -66,7 +66,7 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
       ),
       unresolvedConditionRefs: [] as [],
       targetStateRevisions: targetStateRevisions(operationResults),
-      effectReceiptRefs: [] as [],
+      effectReceiptRefs: effectReceiptRefs(state, operationResults),
     };
     const resultBody = target.kind === "provisioned_workspace"
       ? workspaceResult(common, target, operationResults)
@@ -82,6 +82,18 @@ const codec = withTaskExecutionDeferral<ResultCandidateProduct>({
 
 export function performTask(command: PhaseInvocation) {
   return runPhaseConversation({ ...command, phaseContract: CONTRACT, codec });
+}
+
+function effectReceiptRefs(
+  state: Record<string, unknown>,
+  results: OperationResultProjection[],
+): ContentRef[] {
+  const refs = uniqueContentRefs(results.flatMap((result) =>
+    result.effectReceiptRef ? [result.effectReceiptRef] : []));
+  if (state.currentEffectIntent && refs.length === 0) {
+    throw new Error("External-effect Execution requires an applied effect receipt");
+  }
+  return refs;
 }
 
 function promotionResult(
@@ -215,6 +227,9 @@ function targetOf(result: OperationResultProjection): TargetStateRevision["targe
   const request = result.request;
   if (request.kind === "observe") {
     return { kind: "scope", scopeRef: request.scopeRef };
+  }
+  if (request.kind === "external_effect") {
+    return { kind: "scope", scopeRef: request.targetScopeRef };
   }
   if (
     request.kind === "workspace_artifact_action" ||

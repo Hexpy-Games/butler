@@ -48,7 +48,7 @@ type ResultBase = {
   operationResultReadScopeRefs: string[];
   unresolvedConditionRefs: [];
   targetStateRevisions: TargetStateRevision[];
-  effectReceiptRefs: [];
+  effectReceiptRefs: ContentRef[];
 };
 
 export type ResultCandidateProduct = {

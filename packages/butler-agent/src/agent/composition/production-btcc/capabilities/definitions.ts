@@ -3,6 +3,7 @@ import { executeFileCapability } from "./file-capabilities.ts";
 import { executeCommandCapability } from "./command-capability.ts";
 import { executeWebCapability } from "./web-capabilities.ts";
 import { readProjectLedger } from "./project-ledger-capability.ts";
+import { updateProjectLedger } from "./project-ledger-mutation-capability.ts";
 
 const object = (
   properties: Record<string, unknown>,
@@ -32,6 +33,23 @@ const projectLedgerKinds = () => ({
   type: "array",
   items: { type: "string", enum: PROJECT_LEDGER_RECORD_KINDS },
 });
+const projectLedgerUpdate = () => object({
+  id: string("Exact existing Project Ledger record id."),
+  kind: { type: "string", enum: PROJECT_LEDGER_RECORD_KINDS },
+  title: string(),
+  status: string(),
+  body: string(),
+  spec: string(),
+  acceptance: string(),
+  validation: string(),
+  review: string(),
+  report: string(),
+  implementation: string(),
+  mitigation: string(),
+  reason: string(),
+  code_commits: string(),
+  ledger_commits: string(),
+}, ["id"]);
 
 export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
   {
@@ -152,5 +170,20 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
       max_records: integer(1, 50),
     }, []),
     execute: readProjectLedger,
+  },
+  {
+    capabilityRef: "project_ledger_update",
+    name: "project_ledger_update",
+    description: "Atomically update a coherent batch of existing records in the exact admitted Project Ledger and return its new canonical head.",
+    operationKinds: ["external_effect"],
+    inputSchema: object({
+      updates: {
+        type: "array",
+        minItems: 1,
+        maxItems: 50,
+        items: projectLedgerUpdate(),
+      },
+    }, ["updates"]),
+    execute: updateProjectLedger,
   },
 ];

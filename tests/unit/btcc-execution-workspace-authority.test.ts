@@ -7,6 +7,60 @@ import { resolveAvailableCapabilities } from
 const workspaceRef = { id: "workspace-current", sha256: "workspace-current-sha" };
 
 describe("BTCC Task Execution workspace authority", () => {
+  test("binds one accepted external effect without widening target authority", async () => {
+    const effectIntentRef = { id: "effect-1", sha256: "effect-sha" };
+    const scoped = scopeTaskExecution({
+      admittedAuthority: {
+        observationScopeRefs: ["ledger:sandy", "web:current"],
+        mutation: { kind: "forbidden" },
+      },
+      target: { kind: "non_artifact", targetScopeRefs: ["ledger:sandy"] },
+      externalEffect: {
+        ref: effectIntentRef,
+        occurrenceKey: "reconcile-ledger",
+        targetScopeRef: "ledger:sandy",
+      },
+    });
+
+    expect(scoped.operationAuthority.mutation).toEqual({
+      kind: "external_effect_only",
+      effectIntentRef,
+      occurrenceKey: "reconcile-ledger",
+      targetScopeRef: "ledger:sandy",
+    });
+    const capabilities = await resolveAvailableCapabilities({
+      authority: scoped.operationAuthority,
+      catalog: {
+        list: () => [{
+          capabilityRef: "project-ledger-update",
+          name: "project_ledger_update",
+          description: "Update the bound Ledger.",
+          operationKinds: ["external_effect"],
+          inputSchema: { type: "object" },
+        }],
+      },
+    });
+    expect(capabilities).toEqual([expect.objectContaining({
+      capabilityRef: "project-ledger-update",
+      operationKind: "external_effect",
+    })]);
+  });
+
+  test("rejects an external effect outside the current Task targets", () => {
+    expect(() => scopeTaskExecution({
+      admittedAuthority: {
+        observationScopeRefs: ["ledger:sandy"],
+        mutation: { kind: "forbidden" },
+      },
+      target: { kind: "non_artifact", targetScopeRefs: ["ledger:sandy"] },
+      externalEffect: {
+        ref: { id: "effect-1", sha256: "effect-sha" },
+        occurrenceKey: "wrong-target",
+        targetScopeRef: "ledger:other",
+      },
+    })).toThrow("outside the current Task target");
+  });
+
   test("closes stale target observation while retaining independent scopes", async () => {
     const scoped = scopeTaskExecution({
       admittedAuthority: {

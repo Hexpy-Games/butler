@@ -8,6 +8,11 @@ export function scopeTaskExecution(input: {
   admittedAuthority: OperationAuthority;
   target: ExecutionTarget;
   artifactTargetScopeRef?: string;
+  externalEffect?: {
+    ref: { id: string; sha256: string };
+    occurrenceKey: string;
+    targetScopeRef: string;
+  };
 }): {
   targetScopeRefs: string[];
   operationAuthority: OperationAuthority;
@@ -43,6 +48,23 @@ export function scopeTaskExecution(input: {
           resolutionRef: input.target.resolutionRef,
           baselineRef: input.target.baselineRef,
           finalSnapshotRef: input.target.finalSnapshotRef,
+        },
+      },
+    };
+  }
+  if (input.externalEffect) {
+    if (!input.target.targetScopeRefs.includes(input.externalEffect.targetScopeRef)) {
+      throw new Error("External Effect target is outside the current Task target");
+    }
+    return {
+      targetScopeRefs: input.target.targetScopeRefs,
+      operationAuthority: {
+        observationScopeRefs: input.admittedAuthority.observationScopeRefs,
+        mutation: {
+          kind: "external_effect_only",
+          effectIntentRef: input.externalEffect.ref,
+          occurrenceKey: input.externalEffect.occurrenceKey,
+          targetScopeRef: input.externalEffect.targetScopeRef,
         },
       },
     };

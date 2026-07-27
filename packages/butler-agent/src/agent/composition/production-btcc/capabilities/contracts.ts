@@ -7,6 +7,12 @@ export type CapabilityExecutionContext = {
   butlerData: string;
   workspacePath: string;
   observationScopeRef?: string;
+  externalEffect?: {
+    effectIntentRef: { id: string; sha256: string };
+    occurrenceKey: string;
+    targetScopeRef: string;
+    requestId: string;
+  };
   projectRef?: string;
   resolveProjectLedgerRoot?(projectRef: string): string;
   originalRequest: string;

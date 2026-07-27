@@ -23,6 +23,7 @@ export function createProductionToolRuntime(
   | "createWorkspaceToolExecutor"
   | "createWorkspaceObservationExecutor"
   | "createIsolatedValidationExecutor"
+  | "createExternalEffectExecutor"
   | "validateOperationInput"
 > {
   return {
@@ -42,6 +43,8 @@ export function createProductionToolRuntime(
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
     createIsolatedValidationExecutor: ({ workspacePath, envelope, request }) =>
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
+    createExternalEffectExecutor: ({ envelope, request }) =>
+      toolExecutor(options, envelope, options.butlerHome, request),
     validateOperationInput: ({ envelope, request, args }) =>
       validateInput(envelope, request, args),
   };
@@ -69,6 +72,14 @@ function toolExecutor(
       butlerData: options.butlerData,
       workspacePath,
       ...(request.kind === "observe" ? { observationScopeRef: request.scopeRef } : {}),
+      ...(request.kind === "external_effect" ? {
+        externalEffect: {
+          effectIntentRef: request.effectIntentRef,
+          occurrenceKey: request.occurrenceKey,
+          targetScopeRef: request.targetScopeRef,
+          requestId: request.requestId,
+        },
+      } : {}),
       ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
       ...(options.resolveProjectLedgerRoot
         ? { resolveProjectLedgerRoot: options.resolveProjectLedgerRoot }
@@ -136,6 +147,12 @@ function validateInput(
     rejectInput(
       "capability_input_invalid",
       `BTCC capability input is invalid at ${result.path}: ${result.message}`,
+    );
+  }
+  if (request.kind === "external_effect" && admittedAccessMode(envelope) === "read_only") {
+    rejectInput(
+      "read_only_access_external_effect_denied",
+      "BTCC read-only access mode cannot admit an external effect",
     );
   }
   if (request.capabilityRef === "run_command") {

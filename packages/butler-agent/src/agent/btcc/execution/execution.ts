@@ -28,6 +28,7 @@ export async function execution(command: {
   if (!accepted) throw new Error("Execution is missing accepted Goal authority");
   const attempt = requireCurrentAttempt(program);
   const target = attempt.executionTarget.target;
+  const externalEffect = currentExternalEffect(program);
   const correctionContext = projectExecutionCorrectionContext(
     command.turn,
     program,
@@ -37,6 +38,7 @@ export async function execution(command: {
     admittedAuthority: command.phase.operationAuthority,
     target,
     artifactTargetScopeRef: artifactTargetScopeRef(program),
+    ...(externalEffect ? { externalEffect } : {}),
   });
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
@@ -55,6 +57,7 @@ export async function execution(command: {
     executionTargetRef: attempt.executionTargetRef,
     executionTarget: attempt.executionTarget,
     targetScopeRefs: taskExecution.targetScopeRefs,
+    ...(externalEffect ? { currentEffectIntent: externalEffect } : {}),
     ...(correctionContext ? { correctionContext } : {}),
   });
   const product = await performTask({
@@ -65,6 +68,23 @@ export async function execution(command: {
   return isManagedDeferral(product)
     ? { kind: "ManagedDeferralAccepted", product }
     : { kind: "ResultCandidateSubmitted", product };
+}
+
+function currentExternalEffect(program: ReturnType<typeof requireManagedProgram>) {
+  const task = program.currentTask.task;
+  if (task.effectClass !== "external_effect" ||
+    task.artifactPolicy.kind === "repository_promotion") return undefined;
+  const owned = program.acceptedPlan.effectIntents.filter((intent) =>
+    intent.owningTaskKey.programId === program.programId &&
+    intent.owningTaskKey.taskLogicalId === task.taskLogicalId);
+  if (owned.length !== 1) {
+    throw new Error("External-effect Task requires one exact accepted EffectIntent");
+  }
+  const intent = owned[0]!;
+  if (intent.action.kind !== "external_target_mutation") {
+    throw new Error("Non-promotion Task has an incompatible EffectIntent action");
+  }
+  return intent;
 }
 
 function projectExecutionCorrectionContext(

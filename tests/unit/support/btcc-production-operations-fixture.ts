@@ -118,6 +118,9 @@ function runtimeOptions(
     createIsolatedValidationExecutor({ workspacePath }) {
       return async () => fixture.validate?.({ workspacePath }) ?? { valid: true };
     },
+    createExternalEffectExecutor() {
+      return async (call) => fixture.observe?.(call) ?? { ok: true };
+    },
     validateOperationInput() {},
   };
 }
