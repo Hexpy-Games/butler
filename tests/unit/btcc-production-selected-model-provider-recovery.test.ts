@@ -285,7 +285,7 @@ function providerDiagnostic(
   provider: string,
   api: string,
   retryable: boolean,
-  details: Partial<OperationalDiagnostic> = {},
+  details: Partial<Extract<OperationalDiagnostic, { kind: "provider_request" }>> = {},
 ): OperationalDiagnostic {
   return {
     schema: "btcc.operational-diagnostic.v1",

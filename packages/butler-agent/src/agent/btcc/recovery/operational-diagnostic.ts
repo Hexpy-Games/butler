@@ -1,4 +1,44 @@
-export type OperationalDiagnostic = {
+export type ProviderCarrierRejectionReason =
+  | "missing_required"
+  | "unexpected_property"
+  | "constant_mismatch"
+  | "enum_mismatch"
+  | "variant_mismatch"
+  | "type_mismatch"
+  | "minimum_items"
+  | "maximum_items"
+  | "minimum_value"
+  | "maximum_value"
+  | "minimum_length"
+  | "maximum_length"
+  | "carrier_not_object"
+  | "closed_protocol_mismatch"
+  | "operation_authority_mismatch";
+
+export type ProviderCarrierShape = {
+  carrierType: JsonValueType;
+  carrierKeys: string[];
+  submissionType?: JsonValueType;
+  submissionKeys: string[];
+  requestsType?: JsonValueType;
+  requestCount?: number;
+  requestKeys: string[][];
+};
+
+type JsonValueType =
+  | "array"
+  | "boolean"
+  | "null"
+  | "number"
+  | "object"
+  | "string"
+  | "undefined";
+
+export type OperationalDiagnostic =
+  | ProviderRequestDiagnostic
+  | ProviderCarrierRejectionDiagnostic;
+
+type ProviderRequestDiagnostic = {
   schema: "btcc.operational-diagnostic.v1";
   kind: "provider_request";
   provider: string;
@@ -21,19 +61,59 @@ export type OperationalDiagnostic = {
   };
 };
 
+export type ProviderCarrierRejectionDiagnostic = {
+  schema: "btcc.operational-diagnostic.v1";
+  kind: "provider_carrier_rejection";
+  path: string;
+  reason: ProviderCarrierRejectionReason;
+  shape: ProviderCarrierShape;
+};
+
 const IDENTIFIER_LIMIT = 96;
 const MODEL_LIMIT = 160;
 const ENDPOINT_LIMIT = 320;
 const REQUEST_ID_LIMIT = 160;
+const SCHEMA_PATH_LIMIT = 320;
+const SHAPE_KEY_LIMIT = 64;
+const SHAPE_KEYS_LIMIT = 48;
+const SHAPE_REQUESTS_LIMIT = 16;
+
+const CARRIER_REJECTION_REASONS: readonly ProviderCarrierRejectionReason[] = [
+  "missing_required",
+  "unexpected_property",
+  "constant_mismatch",
+  "enum_mismatch",
+  "variant_mismatch",
+  "type_mismatch",
+  "minimum_items",
+  "maximum_items",
+  "minimum_value",
+  "maximum_value",
+  "minimum_length",
+  "maximum_length",
+  "carrier_not_object",
+  "closed_protocol_mismatch",
+  "operation_authority_mismatch",
+];
 
 export function decodeOperationalDiagnostic(
   input: unknown,
 ): OperationalDiagnostic | undefined {
   const value = decodeJson(input);
-  if (!isRecord(value) ||
-    value.schema !== "btcc.operational-diagnostic.v1" ||
-    value.kind !== "provider_request" ||
-    typeof value.retryable !== "boolean") return undefined;
+  if (!isRecord(value) || value.schema !== "btcc.operational-diagnostic.v1") {
+    return undefined;
+  }
+  if (value.kind === "provider_request") return decodeProviderRequest(value);
+  if (value.kind === "provider_carrier_rejection") {
+    return decodeProviderCarrierRejection(value);
+  }
+  return undefined;
+}
+
+function decodeProviderRequest(
+  value: Record<string, unknown>,
+): ProviderRequestDiagnostic | undefined {
+  if (typeof value.retryable !== "boolean") return undefined;
   const provider = safeIdentifier(value.provider, IDENTIFIER_LIMIT);
   const api = safeIdentifier(value.api, IDENTIFIER_LIMIT);
   if (!provider || !api) return undefined;
@@ -64,6 +144,93 @@ export function decodeOperationalDiagnostic(
     ...(requestHash ? { requestHash } : {}),
     ...(rateLimit ? { rateLimit } : {}),
   };
+}
+
+function decodeProviderCarrierRejection(
+  value: Record<string, unknown>,
+): ProviderCarrierRejectionDiagnostic | undefined {
+  const path = safeSchemaPath(value.path);
+  const reason = carrierRejectionReason(value.reason);
+  const shape = safeCarrierShape(value.shape);
+  if (!path || !reason || !shape) return undefined;
+  return {
+    schema: "btcc.operational-diagnostic.v1",
+    kind: "provider_carrier_rejection",
+    path,
+    reason,
+    shape,
+  };
+}
+
+function safeCarrierShape(value: unknown): ProviderCarrierShape | undefined {
+  if (!isRecord(value)) return undefined;
+  const carrierType = jsonValueType(value.carrierType);
+  const carrierKeys = safeShapeKeys(value.carrierKeys);
+  const submissionType = optionalJsonValueType(value.submissionType);
+  const submissionKeys = safeShapeKeys(value.submissionKeys);
+  const requestsType = optionalJsonValueType(value.requestsType);
+  const requestCount = safeInteger(value.requestCount, 0, 100_000);
+  const requestKeys = safeRequestKeys(value.requestKeys);
+  if (!carrierType || !carrierKeys || !submissionKeys || !requestKeys) return undefined;
+  return {
+    carrierType,
+    carrierKeys,
+    ...(submissionType ? { submissionType } : {}),
+    submissionKeys,
+    ...(requestsType ? { requestsType } : {}),
+    ...(requestCount === undefined ? {} : { requestCount }),
+    requestKeys,
+  };
+}
+
+function safeShapeKeys(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > SHAPE_KEYS_LIMIT) return undefined;
+  return value.map((entry) => safeShapeKey(entry))
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function safeRequestKeys(value: unknown): string[][] | undefined {
+  if (!Array.isArray(value) || value.length > SHAPE_REQUESTS_LIMIT) return undefined;
+  const requests = value.map((entry) => safeShapeKeys(entry));
+  return requests.every((entry): entry is string[] => Boolean(entry))
+    ? requests
+    : undefined;
+}
+
+function safeShapeKey(value: unknown): string | undefined {
+  return safeIdentifier(value, SHAPE_KEY_LIMIT);
+}
+
+function safeSchemaPath(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value || value.length > SCHEMA_PATH_LIMIT) return undefined;
+  for (const character of value) {
+    if (!isSafeSchemaPathCharacter(character)) return undefined;
+  }
+  return value;
+}
+
+function isSafeSchemaPathCharacter(value: string): boolean {
+  return isSafeIdentifierCharacter(value) ||
+    value === "$" || value === "[" || value === "]";
+}
+
+function carrierRejectionReason(value: unknown): ProviderCarrierRejectionReason | undefined {
+  return typeof value === "string" &&
+      CARRIER_REJECTION_REASONS.includes(value as ProviderCarrierRejectionReason)
+    ? value as ProviderCarrierRejectionReason
+    : undefined;
+}
+
+function optionalJsonValueType(value: unknown): JsonValueType | undefined {
+  return value === undefined ? undefined : jsonValueType(value);
+}
+
+function jsonValueType(value: unknown): JsonValueType | undefined {
+  return value === "array" || value === "boolean" || value === "null" ||
+      value === "number" || value === "object" || value === "string" ||
+      value === "undefined"
+    ? value
+    : undefined;
 }
 
 function decodeJson(value: unknown): unknown {
@@ -98,11 +265,9 @@ function safeIdentifier(value: unknown, limit: number): string | undefined {
 
 function isSafeIdentifierCharacter(value: string): boolean {
   const code = value.charCodeAt(0);
-  return code >= 48 && code <= 57 ||
-    code >= 65 && code <= 90 ||
-    code >= 97 && code <= 122 ||
-    value === "-" || value === "_" || value === "." ||
-    value === ":" || value === "/";
+  return code >= 48 && code <= 57 || code >= 65 && code <= 90 ||
+    code >= 97 && code <= 122 || value === "-" || value === "_" ||
+    value === "." || value === ":" || value === "/";
 }
 
 function safeInteger(
@@ -126,13 +291,12 @@ function safeSha256(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length !== 64) return undefined;
   for (const character of value) {
     const code = character.charCodeAt(0);
-    const hexadecimal = code >= 48 && code <= 57 || code >= 97 && code <= 102;
-    if (!hexadecimal) return undefined;
+    if (!(code >= 48 && code <= 57 || code >= 97 && code <= 102)) return undefined;
   }
   return value;
 }
 
-function safeRateLimit(value: unknown): OperationalDiagnostic["rateLimit"] {
+function safeRateLimit(value: unknown): ProviderRequestDiagnostic["rateLimit"] {
   if (!isRecord(value)) return undefined;
   const retryAfter = safeReadinessValue(value.retryAfter);
   const reset = safeReadinessValue(value.reset);
@@ -148,9 +312,7 @@ function safeRateLimit(value: unknown): OperationalDiagnostic["rateLimit"] {
 }
 
 function safeReadinessValue(value: unknown): string | undefined {
-  const numeric = safeNonnegativeNumber(value);
-  if (numeric) return numeric;
-  return safeTimestamp(value);
+  return safeNonnegativeNumber(value) ?? safeTimestamp(value);
 }
 
 function safeNonnegativeNumber(value: unknown): string | undefined {

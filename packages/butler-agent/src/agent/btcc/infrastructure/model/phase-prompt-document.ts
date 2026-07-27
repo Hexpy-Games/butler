@@ -156,12 +156,22 @@ function carrierProtocolGuidance(allowsOperations: boolean) {
 function providerCorrectionInstruction(
   correction: NonNullable<PhaseEnvelope["providerCorrection"]>,
 ): string {
-  const diagnostic = correction.diagnosticMessage
-    ? ` Rejection reason: ${correction.diagnosticMessage}.`
-    : "";
+  const diagnostic = providerCorrectionDiagnostic(correction);
   return "The previous provider product was rejected before semantic acceptance." +
     diagnostic +
     " Correct it against the exact current schema and capability list; do not repeat the rejected shape.";
+}
+
+function providerCorrectionDiagnostic(
+  correction: NonNullable<PhaseEnvelope["providerCorrection"]>,
+): string {
+  if (correction.diagnostic?.kind === "provider_carrier_rejection") {
+    return ` The carrier was rejected at ${correction.diagnostic.path} ` +
+      `for ${correction.diagnostic.reason}.`;
+  }
+  return correction.diagnosticMessage
+    ? ` Rejection reason: ${correction.diagnosticMessage}.`
+    : "";
 }
 
 function canonicalJson(value: unknown): string {

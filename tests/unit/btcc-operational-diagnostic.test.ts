@@ -222,6 +222,73 @@ test("durable provider diagnostics retain only normalized safe metadata", async 
   }
 });
 
+test("typed carrier rejection survives restart without provider values", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    const store = new SqliteOperationalRecoveryStore(db);
+    const anchor = {
+      turnId: "turn-carrier-rejection",
+      turnRevision: 2,
+      semanticState: "task_review",
+      checkpointId: "checkpoint-carrier-rejection",
+      checkpointRevision: 4,
+      claimId: "claim-carrier-rejection",
+      executionFence: 1,
+    };
+    const diagnostic = {
+      schema: "btcc.operational-diagnostic.v1" as const,
+      kind: "provider_carrier_rejection" as const,
+      path: "$.requests[0].capabilityRef",
+      reason: "constant_mismatch" as const,
+      shape: {
+        carrierType: "object" as const,
+        carrierKeys: ["kind", "requests", "SECRET invalid key"],
+        submissionKeys: [],
+        requestsType: "array" as const,
+        requestCount: 1,
+        requestKeys: [["capabilityRef", "kind"]],
+      },
+      providerPayload: "SECRET provider prose",
+    } as unknown as OperationalDiagnostic;
+    await store.record(new OperationalInterruptionError(
+      "provider_protocol_interruption",
+      anchor,
+      { kind: "automatic_provider_recovery" },
+      new Error("SECRET rejected payload"),
+      diagnostic,
+    ));
+
+    const persisted = db.query<{
+      diagnostic_message: string | null;
+      diagnostic_json: string;
+    }, []>(`
+      SELECT diagnostic_message, diagnostic_json
+      FROM btcc_operational_interruptions
+    `).get();
+    expect(persisted?.diagnostic_message).toBeNull();
+    expect(persisted?.diagnostic_json).not.toContain("SECRET");
+    const restored = (await store.pending(anchor))?.interruption;
+    expect(restored?.diagnostic).toEqual({
+      schema: "btcc.operational-diagnostic.v1",
+      kind: "provider_carrier_rejection",
+      path: "$.requests[0].capabilityRef",
+      reason: "constant_mismatch",
+      shape: {
+        carrierType: "object",
+        carrierKeys: ["kind", "requests"],
+        submissionKeys: [],
+        requestsType: "array",
+        requestCount: 1,
+        requestKeys: [["capabilityRef", "kind"]],
+      },
+    });
+  } finally {
+    db.close();
+  }
+});
+
 test("legacy 429 without provider readiness is parked instead of replayed", async () => {
   const db = new Database(":memory:");
   try {

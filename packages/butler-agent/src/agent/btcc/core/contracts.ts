@@ -76,6 +76,7 @@ export type PhaseEnvelope = {
 export type ProviderCorrection = {
   kind: "previous_provider_product_rejected";
   code: "provider_protocol_interruption" | "provider_phase_submission_invalid";
+  diagnostic?: OperationalDiagnostic;
   diagnosticMessage?: string;
 };
 

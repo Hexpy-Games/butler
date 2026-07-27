@@ -138,15 +138,28 @@ describe("production BTCC selected model", () => {
     const envelope = phaseEnvelope({ emptyContext: true });
     envelope.providerCorrection = {
       kind: "previous_provider_product_rejected",
-      code: "provider_phase_submission_invalid",
-      diagnosticMessage: "submission omitted the required verdict",
+      code: "provider_protocol_interruption",
+      diagnostic: {
+        schema: "btcc.operational-diagnostic.v1",
+        kind: "provider_carrier_rejection",
+        path: "$.submission.verdict",
+        reason: "missing_required",
+        shape: {
+          carrierType: "object",
+          carrierKeys: ["kind", "submission"],
+          submissionType: "object",
+          submissionKeys: ["kind"],
+          requestKeys: [],
+        },
+      },
     };
 
     await model.runRound(envelope);
 
     expect(prompt).toContain("\"providerCorrection\"");
-    expect(prompt).toContain("\"provider_phase_submission_invalid\"");
-    expect(prompt).toContain("submission omitted the required verdict");
+    expect(prompt).toContain("\"provider_protocol_interruption\"");
+    expect(prompt).toContain("$.submission.verdict");
+    expect(prompt).toContain("missing_required");
   });
 
   test("rejects an operation that was not offered by the exact phase capability schema", async () => {
@@ -193,10 +206,11 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
-      diagnosticMessage: expect.stringContaining(
-        "$.requests[0].capabilityRef: No schema variant matched: " +
-        "No schema variant matched: Expected constant value",
-      ),
+      diagnostic: expect.objectContaining({
+        kind: "provider_carrier_rejection",
+        path: "$.requests[0].capabilityRef",
+        reason: "constant_mismatch",
+      }),
     });
   });
 
@@ -220,9 +234,11 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
-      diagnosticMessage: expect.stringContaining(
-        "$.submission: No schema variant matched: Missing required argument: submission",
-      ),
+      diagnostic: expect.objectContaining({
+        kind: "provider_carrier_rejection",
+        path: "$.submission",
+        reason: "missing_required",
+      }),
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
@@ -256,7 +272,18 @@ describe("production BTCC selected model", () => {
     corrected.providerCorrection = {
       kind: "previous_provider_product_rejected",
       code: "provider_protocol_interruption",
-      diagnosticMessage: "the prior carrier violated the rendered schema",
+      diagnostic: {
+        schema: "btcc.operational-diagnostic.v1",
+        kind: "provider_carrier_rejection",
+        path: "$.submission",
+        reason: "missing_required",
+        shape: {
+          carrierType: "object",
+          carrierKeys: ["kind", "requests"],
+          submissionKeys: [],
+          requestKeys: [],
+        },
+      },
     };
     expect(await model.runRound(corrected)).toMatchObject({
       kind: "interruption",

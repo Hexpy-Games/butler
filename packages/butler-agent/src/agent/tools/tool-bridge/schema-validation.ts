@@ -1,6 +1,25 @@
 export type SchemaValidationResult =
   | { ok: true }
-  | { ok: false; message: string; path: string };
+  | {
+      ok: false;
+      message: string;
+      path: string;
+      reason: SchemaViolationReason;
+    };
+
+export type SchemaViolationReason =
+  | "missing_required"
+  | "unexpected_property"
+  | "constant_mismatch"
+  | "enum_mismatch"
+  | "variant_mismatch"
+  | "type_mismatch"
+  | "minimum_items"
+  | "maximum_items"
+  | "minimum_value"
+  | "maximum_value"
+  | "minimum_length"
+  | "maximum_length";
 
 export function validateJsonObjectSchema(
   value: Record<string, unknown>,
@@ -18,7 +37,14 @@ function validateObject(
 ): SchemaValidationResult {
   const required = stringArray(schema.required);
   for (const key of required) {
-    if (!(key in value)) return { ok: false, message: `Missing required argument: ${key}`, path: `${path}.${key}` };
+    if (!(key in value)) {
+      return {
+        ok: false,
+        message: `Missing required argument: ${key}`,
+        path: `${path}.${key}`,
+        reason: "missing_required",
+      };
+    }
   }
   const properties = objectRecord(schema.properties);
   if (properties) {
@@ -32,7 +58,12 @@ function validateObject(
   if (additional === false) {
     for (const key of Object.keys(value)) {
       if (!properties || !(key in properties)) {
-        return { ok: false, message: `Unexpected argument: ${key}`, path: `${path}.${key}` };
+        return {
+          ok: false,
+          message: `Unexpected argument: ${key}`,
+          path: `${path}.${key}`,
+          reason: "unexpected_property",
+        };
       }
     }
   } else if (objectRecord(additional)) {
@@ -49,10 +80,22 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
   const record = objectRecord(schema);
   if (!record) return { ok: true };
   if ("const" in record && value !== record.const) {
-    return { ok: false, message: `Expected constant value at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected constant value at ${path}`,
+      path,
+      reason: "constant_mismatch",
+    };
   }
   const enumValues = Array.isArray(record.enum) ? record.enum : null;
-  if (enumValues && !enumValues.includes(value)) return { ok: false, message: `Invalid enum value at ${path}`, path };
+  if (enumValues && !enumValues.includes(value)) {
+    return {
+      ok: false,
+      message: `Invalid enum value at ${path}`,
+      path,
+      reason: "enum_mismatch",
+    };
+  }
   const oneOf = Array.isArray(record.oneOf) ? record.oneOf : null;
   if (oneOf) {
     const results = oneOf.map((variant) => validateJsonValue(value, variant, path));
@@ -66,6 +109,9 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
           ? `No schema variant matched: ${firstFailure.message}`
           : `Expected exactly one schema variant at ${path}`,
         path: matches.length === 0 && firstFailure && !firstFailure.ok ? firstFailure.path : path,
+        reason: matches.length === 0 && firstFailure && !firstFailure.ok
+          ? firstFailure.reason
+          : "variant_mismatch",
       };
     }
   }
@@ -81,12 +127,20 @@ function validateJsonValue(value: unknown, schema: unknown, path: string): Schem
           ? `No schema variant matched: ${firstFailure.message}`
           : `No schema variant matched at ${path}`,
         path: firstFailure && !firstFailure.ok ? firstFailure.path : path,
+        reason: firstFailure && !firstFailure.ok
+          ? firstFailure.reason
+          : "variant_mismatch",
       };
     }
   }
   const types = schemaTypes(record.type);
   if (types.length > 0 && !types.some((type) => matchesType(value, type))) {
-    return { ok: false, message: `Expected ${types.join(" or ")} at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected ${types.join(" or ")} at ${path}`,
+      path,
+      reason: "type_mismatch",
+    };
   }
   if (Array.isArray(value)) return validateArray(value, record, path);
   if (value && typeof value === "object" && !Array.isArray(value)) return validateObject(value as Record<string, unknown>, record, path);
@@ -134,10 +188,20 @@ function constantPropertyValue(variant: unknown, key: string): unknown {
 
 function validateArray(value: unknown[], schema: Record<string, unknown>, path: string): SchemaValidationResult {
   if (typeof schema.minItems === "number" && value.length < schema.minItems) {
-    return { ok: false, message: `Expected at least ${schema.minItems} items at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected at least ${schema.minItems} items at ${path}`,
+      path,
+      reason: "minimum_items",
+    };
   }
   if (typeof schema.maxItems === "number" && value.length > schema.maxItems) {
-    return { ok: false, message: `Expected at most ${schema.maxItems} items at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected at most ${schema.maxItems} items at ${path}`,
+      path,
+      reason: "maximum_items",
+    };
   }
   const itemSchema = schema.items;
   if (!itemSchema) return { ok: true };
@@ -150,20 +214,40 @@ function validateArray(value: unknown[], schema: Record<string, unknown>, path: 
 
 function validateNumber(value: number, schema: Record<string, unknown>, path: string): SchemaValidationResult {
   if (typeof schema.minimum === "number" && value < schema.minimum) {
-    return { ok: false, message: `Expected value >= ${schema.minimum} at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected value >= ${schema.minimum} at ${path}`,
+      path,
+      reason: "minimum_value",
+    };
   }
   if (typeof schema.maximum === "number" && value > schema.maximum) {
-    return { ok: false, message: `Expected value <= ${schema.maximum} at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected value <= ${schema.maximum} at ${path}`,
+      path,
+      reason: "maximum_value",
+    };
   }
   return { ok: true };
 }
 
 function validateString(value: string, schema: Record<string, unknown>, path: string): SchemaValidationResult {
   if (typeof schema.minLength === "number" && value.length < schema.minLength) {
-    return { ok: false, message: `Expected string length >= ${schema.minLength} at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected string length >= ${schema.minLength} at ${path}`,
+      path,
+      reason: "minimum_length",
+    };
   }
   if (typeof schema.maxLength === "number" && value.length > schema.maxLength) {
-    return { ok: false, message: `Expected string length <= ${schema.maxLength} at ${path}`, path };
+    return {
+      ok: false,
+      message: `Expected string length <= ${schema.maxLength} at ${path}`,
+      path,
+      reason: "maximum_length",
+    };
   }
   return { ok: true };
 }

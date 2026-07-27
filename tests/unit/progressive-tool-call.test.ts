@@ -354,6 +354,7 @@ test("tool_call schema validation rejects unknown properties when no properties 
     ok: false,
     message: "Unexpected argument: unexpected",
     path: "$.unexpected",
+    reason: "unexpected_property",
   });
 });
 
@@ -399,6 +400,7 @@ test("schema validation reports the failure from the matching discriminated vari
     ok: false,
     message: "No schema variant matched: Expected at least 1 items at $.requests",
     path: "$.requests",
+    reason: "minimum_items",
   });
   expect(validateJsonObjectSchema(
     { kind: "operation_requests", requests: [] },
@@ -407,6 +409,7 @@ test("schema validation reports the failure from the matching discriminated vari
     ok: false,
     message: "No schema variant matched: Expected at least 1 items at $.requests",
     path: "$.requests",
+    reason: "minimum_items",
   });
 
   const sameKindVariants = [
@@ -432,6 +435,7 @@ test("schema validation reports the failure from the matching discriminated vari
     ok: false,
     message: "No schema variant matched: Missing required argument: secondOnly",
     path: "$.secondOnly",
+    reason: "missing_required",
   });
   expect(validateJsonObjectSchema(
     { kind: "invalid_kind", capabilityRef: "workspace:second" },
@@ -440,6 +444,7 @@ test("schema validation reports the failure from the matching discriminated vari
     ok: false,
     message: "No schema variant matched: Missing required argument: firstOnly",
     path: "$.firstOnly",
+    reason: "missing_required",
   });
 });
 
