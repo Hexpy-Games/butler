@@ -8,10 +8,34 @@ import {
   type TurnForwardProgressGateResult,
   type TurnForwardProgressMetrics,
 } from "./turn-forward-progress-benchmark.ts";
+import {
+  measurePackagedProcesses,
+  requiredProcessRolesMeasured,
+  type DatabaseFileSample,
+  type PackagedPerformanceSnapshot,
+  type PackagedProcessMeasurement,
+  type PackagedProcessRole,
+} from "./packaged-performance-snapshot.ts";
 
 export type LedgerRecordSnapshot = Record<string, string>;
 
+export interface PackagedTransportCounters {
+  sessionViewRequests: number;
+  liveStreamConnections: number;
+  liveEvents: number;
+  heartbeatEvents: number;
+  reconcileRequests: number;
+}
+
+export interface DatabaseGrowthMeasurement {
+  relativePath: string;
+  beforeBytes: number;
+  afterBytes: number;
+  growthBytes: number;
+}
+
 export interface ElectronForwardProgressBenchmark {
+  schema: "butler.packaged-performance-measurement.v1";
   metrics: TurnForwardProgressMetrics;
   gate: TurnForwardProgressGateResult;
   wallMs: number;
@@ -23,8 +47,50 @@ export interface ElectronForwardProgressBenchmark {
   cpuRatio: number | null;
   rssBytes: number | null;
   heapUsedBytes: number | null;
+  processSnapshots: {
+    before: PackagedPerformanceSnapshot["processes"];
+    after: PackagedPerformanceSnapshot["processes"];
+    agentOperational: {
+      cpuRatio: number | null;
+      rssBytes: number | null;
+      heapUsedBytes: number | null;
+    };
+  };
+  processMeasurements: PackagedProcessMeasurement[];
+  databaseGrowth: {
+    files: DatabaseGrowthMeasurement[];
+    beforeBytes: number;
+    afterBytes: number;
+    growthBytes: number;
+  };
+  transport: PackagedTransportCounters;
+  measurementCompleteness: {
+    complete: boolean;
+    processRoles: Record<PackagedProcessRole, boolean>;
+    databaseFiles: boolean;
+    transportCounters: boolean;
+  };
   changedLedgerRecords: string[];
   createdLedgerRecords: string[];
+}
+
+export interface ElectronForwardProgressBenchmarkInput {
+  butlerData: string;
+  sinceTs: number;
+  completedAt: number;
+  firstMeaningfulMs: number;
+  toolCalls: string[];
+  openingDecisions: number;
+  noDeltaBroadReadRounds: number;
+  contractConflicts: number;
+  genericInternalFailures: number;
+  liveReplayParity: boolean;
+  ledgerBefore: LedgerRecordSnapshot;
+  ledgerRoot: string;
+  toolCompletedAt: number[];
+  beforeSnapshot: PackagedPerformanceSnapshot;
+  afterSnapshot: PackagedPerformanceSnapshot;
+  transportCounters: PackagedTransportCounters;
 }
 
 export function snapshotLedgerRecords(root: string): LedgerRecordSnapshot {
@@ -39,21 +105,9 @@ export function snapshotLedgerRecords(root: string): LedgerRecordSnapshot {
   );
 }
 
-export function collectElectronForwardProgressBenchmark(input: {
-  butlerData: string;
-  sinceTs: number;
-  completedAt: number;
-  firstMeaningfulMs: number;
-  toolCalls: string[];
-  openingDecisions: number;
-  noDeltaBroadReadRounds: number;
-  contractConflicts: number;
-  genericInternalFailures: number;
-  liveReplayParity: boolean;
-  ledgerBefore: LedgerRecordSnapshot;
-  ledgerRoot: string;
-  toolCompletedAt: number[];
-}): ElectronForwardProgressBenchmark {
+export function collectElectronForwardProgressBenchmark(
+  input: ElectronForwardProgressBenchmarkInput,
+): ElectronForwardProgressBenchmark {
   const promptEvents = readPromptCacheMetrics({
     butlerData: input.butlerData,
     sinceTs: input.sinceTs,
@@ -81,7 +135,25 @@ export function collectElectronForwardProgressBenchmark(input: {
     genericInternalFailures: input.genericInternalFailures,
     liveReplayParity: input.liveReplayParity,
   };
+  const cpuRatio = latestMetricValue(operationalEvents, "turn_cpu_ratio");
+  const rssBytes = latestMetricValue(operationalEvents, "turn_memory_rss");
+  const heapUsedBytes = latestMetricValue(
+    operationalEvents,
+    "turn_memory_heap_used",
+  );
+  const databaseGrowth = measureDatabaseGrowth(
+    input.beforeSnapshot.databases,
+    input.afterSnapshot.databases,
+  );
+  const processMeasurements = measurePackagedProcesses(
+    input.beforeSnapshot,
+    input.afterSnapshot,
+  );
+  const processRoles = requiredProcessRolesMeasured(processMeasurements);
+  const databaseFiles = databaseGrowth.files.length > 0;
+  const transportCounters = completeTransportCounters(input.transportCounters);
   return {
+    schema: "butler.packaged-performance-measurement.v1",
     metrics,
     gate: evaluateSandyForwardProgress(metrics),
     wallMs: Math.max(0, input.completedAt - input.sinceTs),
@@ -95,12 +167,62 @@ export function collectElectronForwardProgressBenchmark(input: {
     ),
     cachedTokens,
     uncachedPromptTokens: Math.max(0, promptTokens - cachedTokens),
-    cpuRatio: latestMetricValue(operationalEvents, "turn_cpu_ratio"),
-    rssBytes: latestMetricValue(operationalEvents, "turn_memory_rss"),
-    heapUsedBytes: latestMetricValue(operationalEvents, "turn_memory_heap_used"),
+    cpuRatio,
+    rssBytes,
+    heapUsedBytes,
+    processSnapshots: {
+      before: input.beforeSnapshot.processes,
+      after: input.afterSnapshot.processes,
+      agentOperational: { cpuRatio, rssBytes, heapUsedBytes },
+    },
+    processMeasurements,
+    databaseGrowth,
+    transport: input.transportCounters,
+    measurementCompleteness: {
+      complete:
+        Object.values(processRoles).every(Boolean) &&
+        databaseFiles &&
+        transportCounters,
+      processRoles,
+      databaseFiles,
+      transportCounters,
+    },
     changedLedgerRecords,
     createdLedgerRecords,
   };
+}
+
+function completeTransportCounters(counters: PackagedTransportCounters): boolean {
+  return Object.values(counters).every(
+    (value) => Number.isSafeInteger(value) && value >= 0,
+  );
+}
+
+function measureDatabaseGrowth(
+  before: DatabaseFileSample[],
+  after: DatabaseFileSample[],
+): ElectronForwardProgressBenchmark["databaseGrowth"] {
+  const beforeByPath = new Map(
+    before.map((sample) => [sample.relativePath, sample.sizeBytes]),
+  );
+  const afterByPath = new Map(
+    after.map((sample) => [sample.relativePath, sample.sizeBytes]),
+  );
+  const paths = [...new Set([...beforeByPath.keys(), ...afterByPath.keys()])]
+    .sort();
+  const files = paths.map((relativePath) => {
+    const beforeBytes = beforeByPath.get(relativePath) ?? 0;
+    const afterBytes = afterByPath.get(relativePath) ?? 0;
+    return {
+      relativePath,
+      beforeBytes,
+      afterBytes,
+      growthBytes: afterBytes - beforeBytes,
+    };
+  });
+  const beforeBytes = files.reduce((total, file) => total + file.beforeBytes, 0);
+  const afterBytes = files.reduce((total, file) => total + file.afterBytes, 0);
+  return { files, beforeBytes, afterBytes, growthBytes: afterBytes - beforeBytes };
 }
 
 function changedRecords(
