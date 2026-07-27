@@ -1,8 +1,9 @@
 import { resolve } from "node:path";
-import type {
-  OperationRequest,
-  PhaseEnvelope,
-  ProductionOperationRuntimeOptions,
+import {
+  OperationRejectedError,
+  type OperationRequest,
+  type PhaseEnvelope,
+  type ProductionOperationRuntimeOptions,
 } from "../../btcc/index.ts";
 import { validateJsonObjectSchema } from "../../tools/tool-bridge/schema-validation.ts";
 import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
@@ -124,12 +125,18 @@ function validateInput(
 ): void {
   if (request.kind === "repository_promotion") {
     if (Object.keys(args).length === 0) return;
-    throw new Error("BTCC promotion capability accepts no model-authored arguments");
+    rejectInput(
+      "repository_promotion_input_denied",
+      "BTCC promotion capability accepts no model-authored arguments",
+    );
   }
   const capability = requireCapability(request);
   const result = validateJsonObjectSchema(args, capability.inputSchema);
   if (!result.ok) {
-    throw new Error(`BTCC capability input is invalid at ${result.path}: ${result.message}`);
+    rejectInput(
+      "capability_input_invalid",
+      `BTCC capability input is invalid at ${result.path}: ${result.message}`,
+    );
   }
   if (request.capabilityRef === "run_command") {
     validateCommandStateEffect(
@@ -144,7 +151,10 @@ function validateInput(
     request.capabilityRef === "write_file" &&
     args.path !== request.relativeTarget
   ) {
-    throw new Error("BTCC write_file path must equal the planned relative target");
+    rejectInput(
+      "workspace_target_input_mismatch",
+      "BTCC write_file path must equal the planned relative target",
+    );
   }
 }
 
@@ -156,27 +166,49 @@ function validateCommandStateEffect(
 ): void {
   const effect = args.state_effect;
   if (request.kind === "observe" && !request.scopeRef.startsWith("workspace:")) {
-    throw new Error("BTCC command observation requires an admitted workspace scope");
+    rejectInput(
+      "command_observation_scope_denied",
+      "BTCC command observation requires an admitted workspace scope",
+    );
   }
   if (request.kind === "observe" && effect !== "read_only") {
-    throw new Error("BTCC command observation requires state_effect read_only");
+    rejectInput(
+      "command_observation_effect_denied",
+      "BTCC command observation requires state_effect read_only",
+    );
   }
   if (request.kind === "review_validation" && effect !== "validation") {
-    throw new Error("BTCC Review command requires state_effect validation");
+    rejectInput(
+      "review_validation_effect_denied",
+      "BTCC Review command requires state_effect validation",
+    );
   }
   if (request.kind === "workspace_artifact_action" &&
     effect !== "read_only" && effect !== "mutation") {
-    throw new Error("BTCC workspace command requires read_only or mutation state_effect");
+    rejectInput(
+      "workspace_command_effect_denied",
+      "BTCC workspace command requires read_only or mutation state_effect",
+    );
   }
   if (request.kind === "workspace_artifact_action" && effect === "mutation" &&
     envelope.operationAuthority.mutation.kind === "workspace_only" &&
     envelope.operationAuthority.mutation.mutationScope.kind === "read_only") {
-    throw new Error("BTCC read-only Task cannot admit a mutation command");
+    rejectInput(
+      "read_only_task_mutation_denied",
+      "BTCC read-only Task cannot admit a mutation command",
+    );
   }
   if (request.kind === "workspace_artifact_action" && effect === "mutation" &&
     accessMode === "read_only") {
-    throw new Error("BTCC read-only access mode cannot admit a mutation command");
+    rejectInput(
+      "read_only_access_mutation_denied",
+      "BTCC read-only access mode cannot admit a mutation command",
+    );
   }
+}
+
+function rejectInput(code: string, message: string): never {
+  throw new OperationRejectedError(code, message);
 }
 
 function requireCapability(request: OperationRequest) {
