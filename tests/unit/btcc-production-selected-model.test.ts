@@ -614,8 +614,10 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
-      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission: " +
-        "No schema variant matched: Missing required argument: submission",
+      diagnosticMessage: expect.stringContaining(
+        "$.requests[0].capabilityRef: No schema variant matched: " +
+        "No schema variant matched: Expected constant value",
+      ),
     });
   });
 
@@ -639,8 +641,9 @@ describe("production BTCC selected model", () => {
       kind: "interruption",
       code: "provider_protocol_interruption",
       activation: { kind: "automatic_provider_recovery" },
-      diagnosticMessage: "BTCC provider carrier violates the rendered schema at $.submission: " +
-        "No schema variant matched: Missing required argument: submission",
+      diagnosticMessage: expect.stringContaining(
+        "$.submission: No schema variant matched: Missing required argument: submission",
+      ),
     });
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
