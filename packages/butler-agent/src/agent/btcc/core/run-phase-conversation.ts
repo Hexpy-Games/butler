@@ -222,7 +222,11 @@ function decodePhaseSubmission<Product>(
     throw new OperationalInterruptionError(
       "provider_phase_submission_invalid",
       envelope.binding,
-      { kind: "automatic_provider_recovery" },
+      {
+        kind: envelope.providerCorrection
+          ? "runtime_remediation"
+          : "automatic_provider_recovery",
+      },
       error,
     );
   }
