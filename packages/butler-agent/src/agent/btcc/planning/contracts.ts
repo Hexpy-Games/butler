@@ -85,6 +85,8 @@ export type ManagedEffectIntent = {
         selectorRef: ContentRef;
         promotionProtocol: "journaled_complete_target_exchange_v1";
       };
+  normalizedPayload: string;
+  desiredOutcome: string;
   normalizedPayloadSha256: string;
   desiredOutcomeSha256: string;
   authorityRef: ContentRef;

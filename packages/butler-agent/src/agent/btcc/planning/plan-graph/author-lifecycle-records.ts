@@ -97,6 +97,8 @@ export function materializeEffectIntents(
       : actionKind === "external_target_mutation"
         ? externalTargetMutationAction(task, requireString(draft.action, "effect.action"))
         : invalidAction();
+    const normalizedPayload = requireString(draft.payload, "effect.payload");
+    const desiredOutcome = requireString(draft.desiredOutcome, "effect.desiredOutcome");
     const body = {
       programId: authority.programId,
       occurrenceKey: requireString(draft.occurrenceKey, "effect.occurrenceKey"),
@@ -108,12 +110,10 @@ export function materializeEffectIntents(
       ),
       targetScopeRef: effectTarget(task),
       action,
-      normalizedPayloadSha256: contentRef(
-        "effect-payload", requireString(draft.payload, "effect.payload"),
-      ).sha256,
-      desiredOutcomeSha256: contentRef(
-        "effect-desired-outcome", requireString(draft.desiredOutcome, "effect.desiredOutcome"),
-      ).sha256,
+      normalizedPayload,
+      desiredOutcome,
+      normalizedPayloadSha256: contentRef("effect-payload", normalizedPayload).sha256,
+      desiredOutcomeSha256: contentRef("effect-desired-outcome", desiredOutcome).sha256,
       authorityRef: authority.authorityRef,
     };
     return { ref: contentRef("effect-intent", body), ...body };
