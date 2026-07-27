@@ -297,7 +297,6 @@ export function initializeAppStoreKernel(
   kernel.transportProjectionOwner.start();
   kernel.turnActions.reconcileCancellationSettlements();
   kernel.reconcileCancelledTurnActivityMessages();
-  kernel.compactSettledTerminalTurns();
 }
 
 function safeString(value: unknown): string | undefined {

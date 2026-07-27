@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
 import { AppTransportProjectionOwner } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/transport-projection-owner.ts";
-import { AppTransportReceiptMigrationOwner } from
-  "../../packages/butler-agent/src/gateways/app/infrastructure/transport/receipt-migration-owner.ts";
 import { AppTransportHistoricalReconciliationOwner } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/historical-reconciliation-owner.ts";
 import { reconcileBtccTurnProjectionAuthorityBatch } from
@@ -18,7 +16,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test("transport projection starts asynchronously and drains finite batches", async () => {
+test("explicit full projection drains finite batches", async () => {
   const root = createRoot();
   let batches = 0;
   let settlementWakePasses = 0;
@@ -37,6 +35,7 @@ test("transport projection starts asynchronously and drains finite batches", asy
 
   owner.start();
   expect(batches).toBe(0);
+  void owner.syncAndWait();
   await waitUntil(() => batches === 3);
   await Bun.sleep(50);
   expect(batches).toBe(3);
@@ -63,6 +62,7 @@ test("one failed pass receives one cooperative recovery pass", async () => {
   });
 
   owner.start();
+  void owner.syncAndWait();
   await waitUntil(() => failures.length === 1);
   await waitUntil(() => calls === 2);
   expect((failures[0] as Error).message).toBe("projection failed");
@@ -113,6 +113,7 @@ test("a locked BTCC page reaches the owner recovery path once", async () => {
   });
 
   owner.start();
+  void owner.syncAndWait();
   await waitUntil(() => failures.length === 1);
   await waitUntil(() => turnState(projectionDb, "locked-turn") === "running");
   await Bun.sleep(100);
@@ -122,66 +123,61 @@ test("a locked BTCC page reaches the owner recovery path once", async () => {
   projectionDb.close();
 });
 
-test("pending receipt maintenance is scheduled apart from live drains", async () => {
+test("startup avoids historical transcript scans and follows changed files", async () => {
   const root = createRoot();
-  let liveCalls = 0;
-  let liveLaneReopens = 0;
-  let maintenanceCalls = 0;
-  const maintenance = new AppTransportReceiptMigrationOwner({
-    migrateNextBatch: () => {
-      maintenanceCalls += 1;
-      return true;
-    },
-    recordFailure: () => undefined,
-  });
+  let historicalScans = 0;
+  let terminalPasses = 0;
+  const changedFiles: string[] = [];
   const owner = new AppTransportProjectionOwner({
     butlerData: root,
     syncNextBatch: () => {
-      liveCalls += 1;
+      historicalScans += 1;
       return false;
     },
-    reopenCompletedLiveLanes: () => {
-      liveLaneReopens += 1;
+    syncChangedTranscript: (fileName) => {
+      changedFiles.push(fileName);
+      return false;
     },
+    syncTerminalQueue: () => {
+      terminalPasses += 1;
+      return false;
+    },
+    reopenCompletedLiveLanes: () => undefined,
     terminalSettlementWakeOwner: inertSettlementWakeOwner(),
     recordFailure: () => undefined,
-    maintenanceOwner: maintenance,
   });
 
   owner.start();
-  await owner.syncAndWait();
-  const liveCallsAtIdle = liveCalls;
-  expect(maintenanceCalls).toBe(0);
-  await waitUntil(() => maintenanceCalls >= 2);
-  expect(liveCalls).toBe(liveCallsAtIdle);
-
-  const startedAt = Date.now();
-  const reopensBeforeWake = liveLaneReopens;
-  writeFileSync(join(root, "transcripts", "live-wake.jsonl"), "{}\n");
-  await waitUntil(() => liveCalls === liveCallsAtIdle + 1);
-  expect(Date.now() - startedAt).toBeLessThan(200);
-  expect(liveLaneReopens).toBeGreaterThan(reopensBeforeWake);
-  expect(liveCalls).toBe(liveCallsAtIdle + 1);
+  await waitUntil(() => terminalPasses === 1);
+  expect(historicalScans).toBe(0);
+  writeFileSync(join(root, "transcripts", "butler_app-live.jsonl"), "{}\n");
+  await waitUntil(() => changedFiles.length === 1);
+  expect(changedFiles).toEqual(["butler_app-live.jsonl"]);
+  expect(historicalScans).toBe(0);
   owner.close();
 });
 
-test("receipt maintenance contains one failure recovery without hot retry", async () => {
-  let calls = 0;
-  const failures: unknown[] = [];
-  const maintenance = new AppTransportReceiptMigrationOwner({
-    migrateNextBatch: () => {
-      calls += 1;
-      throw new Error("migration failed");
+test("startup catches up only transcripts belonging to open turns", async () => {
+  const root = createRoot();
+  const changedFiles: string[] = [];
+  const owner = new AppTransportProjectionOwner({
+    butlerData: root,
+    syncNextBatch: () => false,
+    openTurnTranscriptFiles: () => ["butler_app-open.jsonl"],
+    syncChangedTranscript: (fileName) => {
+      changedFiles.push(fileName);
+      return false;
     },
-    recordFailure: (error) => failures.push(error),
+    syncTerminalQueue: () => false,
+    reopenCompletedLiveLanes: () => undefined,
+    terminalSettlementWakeOwner: inertSettlementWakeOwner(),
+    recordFailure: () => undefined,
   });
 
-  maintenance.start();
-  await waitUntil(() => calls === 2);
-  await Bun.sleep(350);
-  expect(calls).toBe(2);
-  expect(failures).toHaveLength(2);
-  maintenance.close();
+  owner.start();
+  await waitUntil(() => changedFiles.length === 1);
+  expect(changedFiles).toEqual(["butler_app-open.jsonl"]);
+  owner.close();
 });
 
 test("historical maintenance contains one recovery then becomes dormant", async () => {

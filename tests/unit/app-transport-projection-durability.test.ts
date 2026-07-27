@@ -5,8 +5,6 @@ import { IncrementalJsonParser } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/incremental-json-parser.ts";
 import { StagedTransportOutboundStore } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/staged-transport-outbound-store.ts";
-import { AppTransportReceiptMigrationOwner } from
-  "../../packages/butler-agent/src/gateways/app/infrastructure/transport/receipt-migration-owner.ts";
 import {
   cleanupTranscriptProjectionHarnesses,
   appendTranscript,
@@ -18,70 +16,48 @@ import {
 afterEach(() => cleanupTranscriptProjectionHarnesses());
 
 describe("durable transport projection state", () => {
-  test("legacy receipts migrate in bounded durable batches", () => {
+  test("legacy receipts remain readable without live migration writes", () => {
     const harness = createHarness();
     insertLegacyReceipts(harness, 129, "legacy");
-    writeTranscript(harness, [outbound("after-legacy-migration")]);
     const receipts = new AppProjectedTransportEventStore(harness.db);
 
-    expect(receipts.migrateLegacyBatch()).toBe(true);
-    expect(harness.durableReceiptCount()).toBe(32);
-    while (receipts.migrateLegacyBatch()) continue;
-    expect(harness.durableReceiptCount()).toBe(129);
-    expect(harness.legacyReceiptCount()).toBe(0);
-    expect(harness.createSync().syncChatWindow(harness.chatId).applied).toBe(1);
-    expect(harness.durableReceiptCount()).toBe(130);
+    expect(receipts.has("legacy-128")).toBe(true);
+    expect(harness.legacyReceiptCount()).toBe(129);
+    expect(harness.durableReceiptCount()).toBe(0);
     harness.close();
   });
 
-  test("legacy receipts remain authoritative until their copy completes", () => {
-    const harness = createHarness();
-    insertLegacyReceipts(harness, 40, "legacy");
-    const receipts = new AppProjectedTransportEventStore(harness.db);
-
-    expect(receipts.migrateLegacyBatch()).toBe(true);
-    expect(receipts.has("legacy-039")).toBe(true);
-    while (receipts.migrateLegacyBatch()) continue;
-    expect(receipts.has("legacy-039")).toBe(true);
-    expect(harness.legacyReceiptCount()).toBe(0);
-    harness.close();
-  });
-
-  test("live projection completes independently of receipt migration", () => {
+  test("new receipts use the durable store without rewriting legacy rows", () => {
     const harness = createHarness();
     insertLegacyReceipts(harness, 100, "old");
-    const liveEvent = outbound("new-live-action");
-    liveEvent.payload.metadata = {
-      kind: "tool_progress",
-      turnId: "turn-live",
-      activityKind: "read_file",
-      safeLabel: "Read live output",
-    };
-    writeTranscript(harness, [liveEvent]);
+    writeTranscript(harness, [progressOutbound("new-live-action")]);
 
-    const projection = harness.createProjectionStore();
-    expect(projection.migrateLegacyReceiptsNextBatch()).toBe(true);
-    expect(projection.syncNextBatch()).toBe(false);
+    expect(harness.createProjectionStore().syncNextBatch()).toBe(false);
     expect(harness.projected()).toContain("new-live-action");
-    expect(harness.legacyReceiptCount()).toBeGreaterThan(0);
+    expect(harness.legacyReceiptCount()).toBe(100);
+    expect(harness.durableReceiptCount()).toBe(1);
     harness.close();
   });
 
-  test("pending receipt maintenance never keeps a live cycle pending", () => {
+  test("partially copied receipt state remains idempotent", () => {
     const harness = createHarness();
-    insertLegacyReceipts(harness, 512, "old");
-    const first = progressOutbound("live-before-migration-round");
-    writeTranscript(harness, [first]);
-    const projection = harness.createProjectionStore();
+    insertLegacyReceipts(harness, 1, "copied");
+    harness.db.query(`
+      INSERT INTO app_transport_projection_receipts (
+        action_id, event_id, chat_id, created_at
+      ) SELECT action_id, event_id, chat_id, created_at
+        FROM projected_transport_events
+    `).run();
+    harness.db.query(`
+      INSERT INTO app_transport_projection_migrations (
+        name, cursor_action_id, completed, updated_at
+      ) VALUES ('projected_transport_events_v1', 'copied-000', 0, ?)
+    `).run(new Date().toISOString());
+    const receipts = new AppProjectedTransportEventStore(harness.db);
 
-    expect(projection.migrateLegacyReceiptsNextBatch()).toBe(true);
-    expect(projection.syncNextBatch()).toBe(false);
-    expect(harness.projected()).toContain("live-before-migration-round");
-
-    appendTranscript(harness, progressOutbound("live-during-migration"));
-    expect(projection.syncNextBatch()).toBe(false);
-    expect(harness.projected()).toContain("live-during-migration");
-    expect(harness.legacyReceiptCount()).toBeGreaterThan(0);
+    expect(receipts.has("copied-000")).toBe(true);
+    expect(harness.legacyReceiptCount()).toBe(1);
+    expect(harness.durableReceiptCount()).toBe(1);
     harness.close();
   });
 
@@ -124,33 +100,6 @@ describe("durable transport projection state", () => {
       passes += 1;
     }
     expect(passes).toBe(1);
-    harness.close();
-  });
-
-  test("receipt identity conflict records failure and preserves legacy source", async () => {
-    const harness = createHarness();
-    insertLegacyReceipts(harness, 1, "conflict");
-    harness.db.query(`
-      INSERT INTO app_transport_projection_receipts (
-        action_id, event_id, chat_id, created_at
-      ) VALUES ('conflict-000', 'wrong-event', 'wrong-chat', ?)
-    `).run(new Date().toISOString());
-    const receipts = new AppProjectedTransportEventStore(harness.db);
-    const failures: unknown[] = [];
-    const owner = new AppTransportReceiptMigrationOwner({
-      migrateNextBatch: () => receipts.migrateLegacyBatch(),
-      recordFailure: (error) => failures.push(error),
-    });
-
-    owner.start();
-    await waitUntil(() => failures.length === 1);
-    owner.close();
-    expect((failures[0] as Error).message).toContain("identity conflict");
-    expect(harness.legacyReceiptCount()).toBe(1);
-    expect(harness.durableReceiptCount()).toBe(1);
-    expect(harness.db.query<{ count: number }, []>(`
-      SELECT COUNT(*) AS count FROM app_transport_projection_migrations
-    `).get()?.count).toBe(0);
     harness.close();
   });
 
@@ -220,10 +169,4 @@ function progressOutbound(actionId: string) {
     safeLabel: `Read ${actionId}`,
   };
   return event;
-}
-
-async function waitUntil(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 1_000;
-  while (!predicate() && Date.now() < deadline) await Bun.sleep(10);
-  expect(predicate()).toBe(true);
 }

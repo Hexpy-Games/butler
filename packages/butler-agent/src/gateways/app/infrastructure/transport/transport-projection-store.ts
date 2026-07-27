@@ -89,6 +89,20 @@ export class AppTransportProjectionStore {
     return false;
   }
 
+  syncTranscriptFile(fileName: string): boolean {
+    return this.transcriptSync.syncTranscriptFile(fileName).pending;
+  }
+
+  openTurnTranscriptFiles(): string[] {
+    return this.transcriptSync.openTurnTranscriptFiles();
+  }
+
+  syncDeferredNextBatch(): boolean {
+    const pending = this.reconcileDeferredQueuedFinalOutboundBatch();
+    this.deferredCycleComplete = !pending;
+    return pending;
+  }
+
   reopenCompletedLiveLanes(): void {
     if (this.deferredCycleComplete) this.deferredFinalCursor = "";
     this.transcriptCycleComplete = false;
@@ -97,10 +111,6 @@ export class AppTransportProjectionStore {
 
   reconcileNextHistoricalPage(): boolean {
     return this.historical.reconcileNextPage();
-  }
-
-  migrateLegacyReceiptsNextBatch(): boolean {
-    return this.projectedEvents.migrateLegacyBatch();
   }
 
   private resetBatchCycle(): void {

@@ -3946,12 +3946,14 @@ describe("app-client design system foundation", () => {
       read(
         "packages/butler-app/client/ui/src/components/conversation/TurnActivityPanel.tsx",
       ),
-    ).toContain("<CollapsedTurnActivity blocks={workBlocks} />");
+    ).toContain(
+      "<CollapsedTurnActivity blocks={workBlocks} turnId={turnId} />",
+    );
     expect(
       read(
         "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
       ),
-    ).toContain("workActivityToolsForBlock(block)");
+    ).toContain("workActivityToolsForBlock(block, turnId)");
     expect(
       read(
         "packages/butler-app/client/ui/src/components/inspector/WorkersPanel.tsx",

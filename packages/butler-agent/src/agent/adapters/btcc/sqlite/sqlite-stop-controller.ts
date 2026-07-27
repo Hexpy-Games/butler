@@ -52,11 +52,14 @@ export class SqliteStopController {
     const turn = this.db.query<{
       semantic_state: string;
       route: string | null;
+      managed_state_json: string | null;
     }, [string]>(`
-      SELECT semantic_state, route FROM btcc_turns WHERE turn_id = ?
+      SELECT semantic_state, route, managed_state_json
+      FROM btcc_turns WHERE turn_id = ?
     `).get(turnId);
     return turn?.route === "managed" &&
-      !isTerminalStopState(turn.semantic_state);
+      !isTerminalStopState(turn.semantic_state) &&
+      hasManagedProgramIdentity(turn.managed_state_json);
   }
 
   private persistStop(
@@ -105,7 +108,10 @@ export class SqliteStopController {
       return { kind: "already_finalizing", turnId };
     }
 
-    if (turn.route === "managed") {
+    if (
+      turn.route === "managed" &&
+      hasManagedProgramIdentity(turn.managed_state_json)
+    ) {
       if (!hydration?.program) {
         throw new Error("Managed Stop requires a canonically hydrated Program");
       }
@@ -175,4 +181,14 @@ export class SqliteStopController {
 function isTerminalStopState(state: string): boolean {
   return state === "delivered" || state === "cancelled" ||
     state === "delivery_committed";
+}
+
+function hasManagedProgramIdentity(managedStateJson: string | null): boolean {
+  if (!managedStateJson) return false;
+  try {
+    const managed = JSON.parse(managedStateJson) as { programId?: unknown };
+    return typeof managed.programId === "string" && managed.programId.length > 0;
+  } catch {
+    return false;
+  }
 }

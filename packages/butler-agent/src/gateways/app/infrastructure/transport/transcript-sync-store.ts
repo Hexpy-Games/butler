@@ -16,6 +16,10 @@ import {
   type TranscriptProjectionCheckpoint,
 } from "./transcript-projection-checkpoint-store.ts";
 import { TranscriptLargeRecordSpool } from "./transcript-large-record-spool.ts";
+import {
+  listOpenTurnTranscriptFiles,
+  resolveAppTranscriptChatId,
+} from "./transcript-file-chat.ts";
 
 export type TranscriptProjectionDiagnostic = {
   chatId: string;
@@ -75,6 +79,19 @@ export class AppTransportTranscriptSyncStore {
 
   syncChatWindow(chatId: string): SyncWindowResult {
     return this.projectChatWindow(chatId);
+  }
+
+  syncTranscriptFile(fileName: string): SyncWindowResult {
+    const chatId = resolveAppTranscriptChatId(
+      this.input.db,
+      this.input.butlerData,
+      fileName,
+    );
+    return chatId ? this.projectChatWindow(chatId) : { applied: 0, pending: false };
+  }
+
+  openTurnTranscriptFiles(): string[] {
+    return listOpenTurnTranscriptFiles(this.input.db, this.input.butlerData);
   }
 
   private projectChatWindow(chatId: string): SyncWindowResult {

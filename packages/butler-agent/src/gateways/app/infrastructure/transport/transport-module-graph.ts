@@ -3,8 +3,6 @@ import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { AppMessageFileStore } from "../../domain/message-files/message-file-store.ts";
 import { AppTransportProjectionStore } from "./transport-projection-store.ts";
 import { AppTransportProjectionOwner } from "./transport-projection-owner.ts";
-import { AppTransportReceiptMigrationOwner } from
-  "./receipt-migration-owner.ts";
 import { AppTransportHistoricalReconciliationOwner } from
   "./historical-reconciliation-owner.ts";
 import { AppTransportQueueStore } from "./transport-queue-store.ts";
@@ -113,12 +111,6 @@ export function createAppTransportModuleGraph(input: {
         error_name: error instanceof Error ? error.name : "unknown",
       },
     }, { butlerData });
-  const receiptMigrationOwner = new AppTransportReceiptMigrationOwner({
-    migrateNextBatch: () =>
-      transportProjection.migrateLegacyReceiptsNextBatch(),
-    recordFailure: (error) =>
-      recordProjectionFailure("app.transport_receipt_migration", error),
-  });
   const historicalReconciliationOwner =
     new AppTransportHistoricalReconciliationOwner({
       reconcileNextPage: () =>
@@ -141,6 +133,11 @@ export function createAppTransportModuleGraph(input: {
   const transportProjectionOwner = new AppTransportProjectionOwner({
     butlerData,
     syncNextBatch: () => transportProjection.syncNextBatch(),
+    syncChangedTranscript: (fileName) =>
+      transportProjection.syncTranscriptFile(fileName),
+    openTurnTranscriptFiles: () =>
+      transportProjection.openTurnTranscriptFiles(),
+    syncTerminalQueue: () => transportProjection.syncDeferredNextBatch(),
     reopenCompletedLiveLanes: () =>
       transportProjection.reopenCompletedLiveLanes(),
     terminalSettlementWakeOwner,
@@ -148,12 +145,10 @@ export function createAppTransportModuleGraph(input: {
       recordProjectionFailure("app.transport_projection", error),
     maintenanceOwner: {
       start: () => {
-        receiptMigrationOwner.start();
         historicalReconciliationOwner.start();
       },
       close: () => {
         historicalReconciliationOwner.close();
-        receiptMigrationOwner.close();
       },
     },
   });
