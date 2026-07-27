@@ -5,6 +5,7 @@ import type {
   PhaseContinuity,
   ProviderRoundValue,
 } from "../../core/index.ts";
+import { contentRef } from "../../core/index.ts";
 import type {
   ProviderCarrierRejectionDiagnostic,
   ProviderCarrierRejectionReason,
@@ -121,7 +122,43 @@ function bindOperationAuthority(
       finalSnapshotRef: authority.mutation.finalSnapshotRef,
     } as OperationRequest;
   }
-  rejectCarrier("operation_authority_mismatch", "$.requests", carrier);
+  return bindRejectedAuthority(value, carrier);
+}
+
+function bindRejectedAuthority(
+  value: Record<string, unknown>,
+  carrier: Record<string, unknown>,
+): OperationRequest {
+  const marker = {
+    runtimeAdmission: {
+      kind: "rejected" as const,
+      code: "operation_authority_mismatch" as const,
+    },
+  };
+  const rejectedRef = contentRef("rejected-operation-authority", {
+    operationKind: value.kind,
+    capabilityRef: value.capabilityRef,
+  });
+  if (value.kind === "workspace_artifact_action" ||
+    value.kind === "workspace_artifact_observation"
+  ) {
+    return { ...value, ...marker, workspaceRef: rejectedRef } as OperationRequest;
+  }
+  if (value.kind === "review_validation") {
+    return { ...value, ...marker, reviewSourceRef: rejectedRef } as OperationRequest;
+  }
+  if (value.kind === "repository_promotion") {
+    return {
+      ...value,
+      ...marker,
+      authorizationRef: rejectedRef,
+      candidateRef: rejectedRef,
+      resolutionRef: rejectedRef,
+      baselineRef: rejectedRef,
+      finalSnapshotRef: rejectedRef,
+    } as OperationRequest;
+  }
+  rejectCarrier("closed_protocol_mismatch", "$.requests", carrier);
 }
 
 function rejectCarrier(

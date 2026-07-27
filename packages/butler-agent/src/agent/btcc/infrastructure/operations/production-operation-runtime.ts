@@ -1,9 +1,8 @@
 import {
   OperationRejectedError,
-  contentRef,
+  rejectedOperationResult,
   type ObservationResult,
   type OperationExecutor,
-  type OperationRequest,
 } from "../../core/index.ts";
 import {
   isResultReadRequest,
@@ -55,7 +54,7 @@ export function createOperationExecutor(
           return resultStore.record({
             binding: input.envelope.binding,
             request: input.request,
-            result: rejectedOperation(
+            result: rejectedOperationResult(
               input.request,
               new OperationRejectedError(
                 "operation_result_read_invalid",
@@ -76,14 +75,14 @@ export function createOperationExecutor(
       if (existing) return existing;
       const result = await performOperation(input, options, store, afterWorkspaceBoundary).catch((error: unknown) => {
         if (error instanceof OperationRejectedError) {
-          return rejectedOperation(input.request, error);
+          return rejectedOperationResult(input.request, error);
         }
         if (isAbortError(error) || input.signal?.aborted) throw error;
         if (
           input.request.kind !== "observe" &&
           input.request.kind !== "workspace_artifact_observation"
         ) throw error;
-        return rejectedOperation(
+        return rejectedOperationResult(
           input.request,
           new OperationRejectedError(
             "capability_execution_failed",
@@ -157,21 +156,4 @@ async function performOperation(
     store,
     signal: input.signal,
   });
-}
-
-function rejectedOperation(
-  request: OperationRequest,
-  error: OperationRejectedError,
-): ObservationResult {
-  const content = JSON.stringify({ status: "rejected", code: error.code, message: error.message });
-  return {
-    requestId: request.requestId,
-    outcome: "operation_rejected",
-    observationRef: contentRef("operation-rejection", {
-      requestId: request.requestId,
-      capabilityRef: request.capabilityRef,
-      code: error.code,
-    }),
-    content,
-  };
 }

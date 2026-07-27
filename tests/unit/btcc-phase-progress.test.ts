@@ -319,7 +319,7 @@ test("anchors provider recovery after the latest operation checkpoint", async ()
   });
 });
 
-test("returns a denied Task target to the same Phase conversation", async () => {
+test("returns a phase authority rejection without dispatching the operation", async () => {
   const results: OperationResult[] = [];
   const workspaceRef = { id: "workspace-1", sha256: "workspace-sha" };
   let calls = 0;
@@ -366,6 +366,10 @@ test("returns a denied Task target to the same Phase conversation", async () => 
               workspaceRef,
               relativeTarget: ".",
               input: { action: "inspect" },
+              runtimeAdmission: {
+                kind: "rejected",
+                code: "operation_authority_mismatch",
+              },
             }],
             actualIdentity: selectedModel(),
           };
@@ -382,21 +386,13 @@ test("returns a denied Task target to the same Phase conversation", async () => 
       },
     },
     operations: {
-      perform: async ({ request }) => ({
-        requestId: request.requestId,
-        outcome: "operation_rejected",
-        observationRef: { id: "denial", sha256: "denial-sha" },
-        content: "target is outside the accepted Task mutation scope",
-      }),
+      perform: async () => {
+        throw new Error("unadmitted operation must not be dispatched");
+      },
     },
     operationAuthority: {
       observationScopeRefs: [],
-      mutation: {
-        kind: "workspace_only",
-        workspaceRef,
-        operationRoot: { kind: "directory", relativeTarget: "." },
-        mutationScope: { kind: "contained_paths", writablePaths: ["src/sample.ts"] },
-      },
+      mutation: { kind: "forbidden" },
     },
     executionPermit: activePermit(),
   });

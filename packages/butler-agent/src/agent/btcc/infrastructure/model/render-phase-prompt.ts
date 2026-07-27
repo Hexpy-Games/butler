@@ -10,7 +10,6 @@ import type {
 import { resolvePhaseCapabilities } from "./available-capabilities.ts";
 import { providerCarrierSchema } from "./provider-carrier-schema.ts";
 import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
-import { providerCarrierAdmissionSchema } from "./provider-carrier-schema.ts";
 import type { PhaseGuidanceReader } from "../../guidance/index.ts";
 import {
   projectOperationContext,
@@ -96,11 +95,6 @@ export async function renderPhasePrompt(
     ...renderedPrompt,
     responseSchema,
     carrierFunctions,
-    admissionSchema: providerCarrierAdmissionSchema(
-      availableCapabilities,
-      envelope.submissionSchema,
-      operationAuthority,
-    ),
   };
 }
 
