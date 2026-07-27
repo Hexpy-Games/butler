@@ -53,8 +53,9 @@ function stablePhasePrefix(input: Parameters<typeof renderCacheOrderedPhasePromp
           content: sortedGuidance(input.acceptedPhaseGuidance),
         },
       ],
-      capabilitySchemas: input.availableCapabilities,
-      outputContract: outputSchemaGuidance(input.availableCapabilities.length > 0),
+      carrierProtocol: carrierProtocolGuidance(
+        input.envelope.operationSurface !== "closed",
+      ),
     },
   };
 }
@@ -87,6 +88,10 @@ function dynamicTurnContent(input: Parameters<typeof renderCacheOrderedPhaseProm
       },
       operationContext: promptOperationContext(input.operationContext),
       operationAuthority: input.operationAuthority,
+      capabilitySchemas: input.availableCapabilities,
+      availableCarrierKinds: input.availableCapabilities.length > 0
+        ? ["phase_submission", "operation_requests"]
+        : ["phase_submission"],
       providerCorrection: envelope.providerCorrection ?? null,
       providerCorrectionInstruction: envelope.providerCorrection
         ? providerCorrectionInstruction(envelope.providerCorrection)
@@ -119,20 +124,18 @@ function sortedGuidance(guidance: AcceptedPhaseGuidance[]): AcceptedPhaseGuidanc
   );
 }
 
-function outputSchemaGuidance(hasCapabilities: boolean) {
+function carrierProtocolGuidance(allowsOperations: boolean) {
   return {
-    carrierKinds: hasCapabilities
-      ? ["phase_submission", "operation_requests"]
-      : ["phase_submission"],
     phaseSubmission: [
       "Use one submission object allowed by the exact phase exits.",
       "Write publicActivity as a concise user-visible handoff: name the concrete target and decision or result, why it matters to the accepted Goal, governing Spec, Plan, or review finding, and the next observable action or transition.",
       "Do not substitute a generic phase label for useful activity detail.",
       "Do not expose hidden chain-of-thought or copy raw operation output.",
     ].join(" "),
-    ...(hasCapabilities
+    ...(allowsOperations
       ? {
           operationRequests: [
+            "Apply these instructions only when operation_requests appears in availableCarrierKinds.",
             "Use a non-empty array of typed requests within authority.",
             "Write each request publicTitle as a concise user-visible action title; describe the concrete action without copying commands, arguments, or hidden reasoning.",
             "Include every currently known independent operation needed for the next decision in this one batch; keep only genuinely result-dependent work for a later round.",

@@ -48,6 +48,7 @@ async function runJsonSchemaRound(
       strict: true,
     },
     cacheScope: input.cacheScope,
+    usageAttribution: input.usageAttribution,
     signal: input.signal,
     providerRetryAttempts: 1,
   });
@@ -80,6 +81,7 @@ async function runFunctionToolRound(
     model: modelRef,
     reasoningEffort: input.modelSelection.reasoningEffort,
     cacheScope: input.cacheScope,
+    usageAttribution: input.usageAttribution,
     signal: input.signal,
     providerRetryAttempts: 1,
     tools: input.carrierFunctions.map(asFunctionTool),

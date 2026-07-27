@@ -358,6 +358,11 @@ export interface OpenAIResponse {
     total_tokens?: number;
     prompt_tokens_details?: {
       cached_tokens?: number;
+      cache_write_tokens?: number;
+    };
+    input_tokens_details?: {
+      cached_tokens?: number;
+      cache_write_tokens?: number;
     };
   };
 }
@@ -372,6 +377,7 @@ export interface OpenAIPromptCacheConfig {
 export interface PromptCacheStats {
   promptTokens: number | null;
   cachedTokens: number;
+  cacheWriteTokens: number | null;
   totalTokens: number | null;
 }
 

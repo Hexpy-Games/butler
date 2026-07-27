@@ -14,6 +14,7 @@ export interface PromptCacheMetricEvent {
   reasoningEffort?: string;
   promptTokens: number;
   cachedTokens: number;
+  cacheWriteTokens?: number;
   totalTokens?: number | null;
   promptCacheKey?: string;
   promptCacheRetention?: PromptCacheRetention;

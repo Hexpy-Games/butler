@@ -63,15 +63,26 @@ export function extractPromptCacheStats(response: OpenAIResponse): PromptCacheSt
     numberOrNull(response.usage?.input_tokens) ??
     numberOrNull(response.usage?.prompt_tokens);
   const totalTokens = numberOrNull(response.usage?.total_tokens);
-  const cachedTokens = numberOrNull(response.usage?.prompt_tokens_details?.cached_tokens);
+  const cachedTokens =
+    numberOrNull(response.usage?.prompt_tokens_details?.cached_tokens) ??
+    numberOrNull(response.usage?.input_tokens_details?.cached_tokens);
+  const cacheWriteTokens =
+    numberOrNull(response.usage?.prompt_tokens_details?.cache_write_tokens) ??
+    numberOrNull(response.usage?.input_tokens_details?.cache_write_tokens);
 
-  if (promptTokens === null && totalTokens === null && cachedTokens === null) {
+  if (
+    promptTokens === null &&
+    totalTokens === null &&
+    cachedTokens === null &&
+    cacheWriteTokens === null
+  ) {
     return null;
   }
 
   return {
     promptTokens,
     cachedTokens: cachedTokens ?? 0,
+    cacheWriteTokens,
     totalTokens,
   };
 }

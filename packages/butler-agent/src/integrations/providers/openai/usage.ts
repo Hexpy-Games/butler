@@ -15,6 +15,7 @@ export function logPromptCacheStats(
   const parts = [
     `responses usage: prompt_tokens=${stats.promptTokens ?? "?"}`,
     `cached_tokens=${stats.cachedTokens}`,
+    `cache_write_tokens=${stats.cacheWriteTokens ?? "?"}`,
     `total_tokens=${stats.totalTokens ?? "?"}`,
   ];
   if (promptCache.prompt_cache_key) {
@@ -51,6 +52,9 @@ export function recordPromptCacheMetric(
     reasoningEffort: input.usageAttribution?.reasoningEffort,
     promptTokens: stats.promptTokens,
     cachedTokens: stats.cachedTokens,
+    ...(stats.cacheWriteTokens === null
+      ? {}
+      : { cacheWriteTokens: stats.cacheWriteTokens }),
     totalTokens: stats.totalTokens,
     promptCacheKey: input.promptCache.prompt_cache_key,
     promptCacheRetention: input.promptCache.prompt_cache_retention,

@@ -57,7 +57,6 @@ export async function runOpenAIPromptWithUsage(
     usageAttribution: {
       ...options.usageAttribution,
       reasoningEffort: resolution.reasoningEffort,
-      roundIndex: options.usageAttribution?.roundIndex ?? 0,
     },
   });
   const text = extractResponseText(response);

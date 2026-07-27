@@ -129,6 +129,10 @@ describe("production BTCC selected model", () => {
     expect(calls[0]?.signal).not.toBe(signal);
     expect(calls[0]?.signal?.aborted).toBe(false);
     expect(calls[0]?.cacheScope).toBe("btcc:planning");
+    expect(calls[0]?.usageAttribution).toEqual({
+      turnId: "turn-1",
+      phase: "planning",
+    });
     expect(calls[0]?.responseSchema).toMatchObject({
       anyOf: [
         {
@@ -156,9 +160,9 @@ describe("production BTCC selected model", () => {
     const hierarchy = Object.fromEntries(
       stable.promptHierarchy.map((layer: Record<string, any>) => [layer.layer, layer.content]),
     );
-    expect(stable.outputContract.operationRequests)
+    expect(stable.carrierProtocol.operationRequests)
       .toContain("every currently known independent operation");
-    expect(stable.outputContract.operationRequests)
+    expect(stable.carrierProtocol.operationRequests)
       .toContain("executionSummary");
     expect(stable.promptHierarchy.map((layer: Record<string, any>) => layer.layer)).toEqual([
       "immutablePhaseContract",
@@ -260,7 +264,7 @@ describe("production BTCC selected model", () => {
       continuation: { candidates: [] },
       baselineObservationScopeRefs: ["web:current"],
     });
-    expect(stable.capabilitySchemas).toEqual([{
+    expect(dynamic.capabilitySchemas).toEqual([{
       capabilityRef: "weather:current",
       name: "current_weather",
       description: "Read current weather for one location.",
@@ -381,8 +385,11 @@ describe("production BTCC selected model", () => {
       calls[0]!.promptCacheBoundary.stablePrefix +
       calls[0]!.promptCacheBoundary.dynamicSuffix,
     ).toBe(calls[0]!.prompt);
-    expect(first.serializedStablePrefix).toContain("web:read");
-    expect(first.serializedStablePrefix).toContain("outputContract");
+    expect(first.serializedStablePrefix).not.toContain("web:read");
+    expect(first.serializedStablePrefix).toContain("carrierProtocol");
+    expect(first.dynamic.capabilitySchemas).toHaveLength(2);
+    expect(first.dynamic.availableCarrierKinds)
+      .toEqual(["phase_submission", "operation_requests"]);
     expect(first.serializedStablePrefix).not.toContain("turn-1");
     expect(first.serializedStablePrefix).not.toContain("message-1");
     expect(first.serializedStablePrefix).not.toContain("result:1");
@@ -438,9 +445,9 @@ describe("production BTCC selected model", () => {
       observationScopeRefs: [],
       mutation: { kind: "forbidden" },
     });
-    expect(rendered.stable.capabilitySchemas).toEqual([]);
-    expect(rendered.stable.outputContract).toEqual({
-      carrierKinds: ["phase_submission"],
+    expect(rendered.dynamic.capabilitySchemas).toEqual([]);
+    expect(rendered.dynamic.availableCarrierKinds).toEqual(["phase_submission"]);
+    expect(rendered.stable.carrierProtocol).toEqual({
       phaseSubmission: [
         "Use one submission object allowed by the exact phase exits.",
         "Write publicActivity as a concise user-visible handoff: name the concrete target and decision or result, why it matters to the accepted Goal, governing Spec, Plan, or review finding, and the next observable action or transition.",
