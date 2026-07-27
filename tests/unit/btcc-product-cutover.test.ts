@@ -222,3 +222,59 @@ test("a BTCC runtime interruption parks the exact queue item for process replace
     rmSync(butlerData, { recursive: true, force: true });
   }
 });
+
+test("a recovered runtime interruption resumes its admitted Turn", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-runtime-resume-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(join(butlerData, "runtime", "sessions.sqlite"));
+  try {
+    queue.enqueue({
+      eventId: "app:runtime-resume",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "app-user" },
+      message: {
+        id: "runtime-resume",
+        text: "resume the admitted Turn",
+        timestamp: "2026-07-28T00:00:00.000Z",
+      },
+      routingHints: {
+        sessionId: "butler/app-general",
+        turnId: "turn-runtime-resume",
+      },
+    });
+    const [interrupted] = queue.claim(1);
+    queue.fail(interrupted!, "runtime defect", { dispatchStatus: "runtime-interrupted" });
+    expect(queue.recoverRuntimeInterruptions(() => true).requeued).toBe(1);
+
+    let resumeMarker = false;
+    const dispatcher = new BtccInboundDispatcher();
+    dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      server: {
+        async handleInbound(envelope) {
+          resumeMarker = (envelope.raw as Record<string, unknown>)?.btccResume === true;
+          return {
+            status: "handled",
+            route: {
+              sessionId: "butler/app-general",
+              role: "butler",
+              reason: "session-hint",
+              workspacePath: butlerData,
+            },
+            handlerResult: { ok: true, handledBy: "btcc-turn-runtime" },
+          };
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    expect(resumeMarker).toBe(true);
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
