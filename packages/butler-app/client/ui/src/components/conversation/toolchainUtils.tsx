@@ -13,6 +13,8 @@ import { appCopy } from "@/app/copy.ts";
 import { isVisibleToolchainProgressRow } from "@/app/utils.ts";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
 import { OperationOutputDetails } from "./OperationOutputDetails";
+import { publicOperationTitle } from
+  "../../../../../../butler-progress-projection/src/index.ts";
 
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
   return block.rows.filter((row) => isVisibleToolchainRow(row, block.label));
@@ -90,7 +92,9 @@ export function toolchainLabel(row: ProgressRow): string {
 }
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
-  if (row.bridge_phase === "btcc_operation") return row.safe_label;
+  if (row.bridge_phase === "btcc_operation") {
+    return publicOperationTitle(row.safe_tool_name);
+  }
   const detailCount = row.safe_detail_rows?.length ?? 0;
   const firstDetail = row.safe_detail_rows?.[0];
   if (row.kind === "todo" && !row.safe_tool_name && firstDetail) {

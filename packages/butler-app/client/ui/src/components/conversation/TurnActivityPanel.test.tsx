@@ -190,9 +190,29 @@ test("turn activity panel nests the model-authored operation under its phase", (
     },
   ]);
 
-  expect(html).toContain("관련 구현 파일 확인");
+  expect(html).toContain("작업: 계획한 도구를 사용 중");
+  expect(html).not.toContain("관련 구현 파일 확인");
   expect(html).toContain("turn-current-status-slot");
   expect(html).not.toContain(">read_workspace_files<");
+});
+
+test("turn activity does not expose command arguments as an operation title", () => {
+  const html = renderPanel([
+    phaseActivityRow(),
+    {
+      id: "operation-command",
+      kind: "used_tool",
+      state: "completed",
+      safe_label: "실행: printf 'private-value'",
+      safe_tool_name: "run_command",
+      tool_call_id: "operation-command",
+      semantic_block_id: "conception_deliberation",
+      bridge_phase: "btcc_operation",
+    },
+  ]);
+
+  expect(html).toContain("실행: 계획한 작업을 처리 중");
+  expect(html).not.toContain("private-value");
 });
 
 test("turn activity panel hides an older placeholder after phase detail arrives", () => {

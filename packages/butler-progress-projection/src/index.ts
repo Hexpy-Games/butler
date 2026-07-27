@@ -1,4 +1,5 @@
 export { progressRowFromSharedTurnEvent } from "./progress-row-from-turn-event.ts";
+export { publicOperationTitle } from "./public-operation-title.ts";
 export { isPublicTextSafe, sanitizePublicText } from "./public-text.ts";
 export {
   SharedProgressReducer,

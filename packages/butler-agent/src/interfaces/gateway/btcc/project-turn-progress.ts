@@ -1,5 +1,6 @@
 import type { BtccTurnProgressObserver } from "../../../agent/btcc/gateway-api.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
+import { publicOperationTitle } from "../../../agent/events/progress-projection.ts";
 
 export function projectTurnProgress(
   publish: (event: RuntimeTurnEventInput) => Promise<void>,
@@ -98,7 +99,7 @@ export function projectTurnProgress(
       await publish({
         kind: operationEventKind(update.status),
         payload: {
-          safeLabel: update.publicTitle,
+          safeLabel: publicOperationTitle(update.capabilityRef),
           toolName: update.capabilityRef,
           toolCallId: update.requestId,
           activityKind: "used_tool",

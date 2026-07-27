@@ -10,8 +10,10 @@ import {
 
 function CollapsedTurnActivityComponent({
   blocks,
+  turnId,
 }: {
   blocks: WorkBlockView[];
+  turnId?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const workCopy = appCopy.conversation.work;
@@ -33,7 +35,7 @@ function CollapsedTurnActivityComponent({
             running={!isTerminalActivityState(block.state)}
             title={block.label}
             description={<WorkDecisionBody block={block} />}
-            tools={workActivityToolsForBlock(block)}
+            tools={workActivityToolsForBlock(block, turnId)}
           />
         ))}
         {blocks.length > 1 ? (

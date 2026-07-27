@@ -1,5 +1,6 @@
 import type { ProgressRow } from "@/app/types.ts";
 import { RollingStatusLine } from "@/libs/design-system";
+import { publicOperationTitle } from "../../../../../../butler-progress-projection/src/index.ts";
 import { CurrentModelRoundWaiting } from "./CurrentModelRoundWaiting";
 import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
 
@@ -12,7 +13,10 @@ export function CurrentTurnStatus({
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
 }) {
-  const fullLabel = operation?.safe_label ?? publicActivity?.safe_label;
+  const operationLabel = operation
+    ? publicOperationTitle(operation.safe_tool_name)
+    : undefined;
+  const fullLabel = operationLabel ?? publicActivity?.safe_label;
   return (
     <RollingStatusLine
       aria-live="polite"
@@ -21,7 +25,7 @@ export function CurrentTurnStatus({
     >
       <div data-test-class="turn-current-status-content">
         {operation ? (
-          <CurrentPhaseActivity row={operation} />
+          <CurrentPhaseActivity row={{ ...operation, safe_label: operationLabel! }} />
         ) : modelRoundWait ? (
           <CurrentModelRoundWaiting row={modelRoundWait} />
         ) : publicActivity ? (

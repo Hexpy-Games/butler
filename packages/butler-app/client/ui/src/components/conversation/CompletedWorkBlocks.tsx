@@ -4,9 +4,11 @@ import { CollapsedTurnActivity } from "./WorkBlocks";
 
 export const CompletedWorkBlocks = memo(function CompletedWorkBlocks({
   blocks,
+  turnId,
 }: {
   blocks: WorkBlockView[] | undefined;
+  turnId?: string;
 }) {
   if (!blocks?.length) return null;
-  return <CollapsedTurnActivity blocks={blocks} />;
+  return <CollapsedTurnActivity blocks={blocks} turnId={turnId} />;
 });

@@ -35,10 +35,11 @@ export function ButlerThinkingMark({
   const stateRef = useRef<ButlerThinkingMarkState>(resolvedState);
   const morphRef = useRef(resolvedState === "working" ? 1 : 0);
   const waveStartedAtRef = useRef(Date.now());
+  const startLoopRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     stateRef.current = resolvedState;
-    window.dispatchEvent(new Event("butler-thinking-mark-state-change"));
+    startLoopRef.current();
   }, [resolvedState]);
 
   useEffect(() => {
@@ -67,7 +68,6 @@ export function ButlerThinkingMark({
     };
 
     const render = (time = performance.now()) => {
-      resize();
       const delta = lastRenderTime > 0 ? Math.min(time - lastRenderTime, 100) : 16;
       const target = stateRef.current === "working" && !media.matches ? 1 : 0;
       const transitionAmount = 1 - Math.exp(-delta / 220);
@@ -82,7 +82,7 @@ export function ButlerThinkingMark({
     const tick = (time: number) => {
       if (stopped) return;
       if (document.visibilityState === "hidden") {
-        animationFrame = window.requestAnimationFrame(tick);
+        animationFrame = 0;
         return;
       }
       if (time - lastFrame >= 1000 / 60) {
@@ -103,25 +103,38 @@ export function ButlerThinkingMark({
       animationFrame = window.requestAnimationFrame(tick);
     };
 
-    const observer = new ResizeObserver(() => render());
+    const resizeAndRender = () => {
+      resize();
+      render();
+    };
+    const observer = new ResizeObserver(resizeAndRender);
     observer.observe(canvas);
     const handleMediaChange = () => {
       render();
       startLoop();
     };
-    const handleStateChange = () => startLoop();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
+        return;
+      }
+      startLoop();
+    };
 
+    startLoopRef.current = startLoop;
     media.addEventListener("change", handleMediaChange);
-    window.addEventListener("butler-thinking-mark-state-change", handleStateChange);
-    render();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    resizeAndRender();
     startLoop();
 
     return () => {
       stopped = true;
+      startLoopRef.current = () => undefined;
       window.cancelAnimationFrame(animationFrame);
       observer.disconnect();
       media.removeEventListener("change", handleMediaChange);
-      window.removeEventListener("butler-thinking-mark-state-change", handleStateChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [resolvedTheme, themeColors?.dark, themeColors?.light]);
 
