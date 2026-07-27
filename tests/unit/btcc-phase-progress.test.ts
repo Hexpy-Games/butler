@@ -201,9 +201,11 @@ test("projects a closed operation surface before the Opening model call", async 
   expect(accepted).toBe(true);
 });
 
-test("does not checkpoint a malformed provider phase submission", async () => {
+test("returns a malformed phase proposal to the same conversation", async () => {
   let appended = false;
-  const run = runPhaseConversation({
+  let calls = 0;
+  const corrections: unknown[] = [];
+  const product = await runPhaseConversation({
     binding,
     modelSelection: selectedModel(),
     context: openingContext(),
@@ -216,7 +218,12 @@ test("does not checkpoint a malformed provider phase submission", async () => {
     },
     codec: {
       submissionSchema: objectSchema({}),
-      decode: () => { throw new Error("malformed submission"); },
+      decode: (submission) => {
+        if ((submission as { malformed?: boolean }).malformed) {
+          throw new Error("malformed submission");
+        }
+        return { kind: "complete" };
+      },
     },
     store: {
       restore: async (current) => ({
@@ -230,14 +237,18 @@ test("does not checkpoint a malformed provider phase submission", async () => {
         appended = true;
         return nextBinding(current);
       },
-      acceptPhaseProduct: async () => { throw new Error("unexpected product"); },
+      acceptPhaseProduct: async ({ binding: current }) => nextBinding(current),
     },
     model: {
-      runRound: async () => ({
-        kind: "phase_submission" as const,
-        submission: { malformed: true },
-        actualIdentity: selectedModel(),
-      }),
+      runRound: async (envelope) => {
+        corrections.push(envelope.providerCorrection);
+        calls += 1;
+        return {
+          kind: "phase_submission" as const,
+          submission: calls === 1 ? { malformed: true } : { kind: "complete" },
+          actualIdentity: selectedModel(),
+        };
+      },
     },
     operations: {
       perform: async () => { throw new Error("unexpected operation"); },
@@ -249,11 +260,17 @@ test("does not checkpoint a malformed provider phase submission", async () => {
     executionPermit: activePermit(),
   });
 
-  await expect(run).rejects.toMatchObject({
-    code: "provider_phase_submission_invalid",
-    activation: { kind: "automatic_provider_recovery" },
-  });
-  expect(appended).toBe(false);
+  expect(product).toEqual({ kind: "complete" });
+  expect(appended).toBe(true);
+  expect(calls).toBe(2);
+  expect(corrections).toEqual([
+    undefined,
+    {
+      kind: "previous_provider_product_rejected",
+      code: "provider_phase_submission_invalid",
+      diagnosticMessage: "malformed submission",
+    },
+  ]);
 });
 
 test("anchors provider recovery after the latest operation checkpoint", async () => {

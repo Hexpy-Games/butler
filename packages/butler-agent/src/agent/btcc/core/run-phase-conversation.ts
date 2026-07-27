@@ -108,8 +108,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
         command.modelSelection,
         conversation.pendingSubmissionRound.actualIdentity,
       );
-      const product = decodePhaseSubmission(
-        command,
+      const product = command.codec.decode(
         conversation.pendingSubmissionRound.submission,
         envelope,
       );
@@ -169,7 +168,11 @@ async function runPhaseConversationAtCheckpoint<Product>(
       }
       continue;
     }
-    decodePhaseSubmission(command, round.submission, envelope);
+    const proposal = decodePhaseSubmissionProposal(command, round.submission, envelope);
+    if (proposal.kind === "rejected") {
+      providerCorrection = proposal.correction;
+      continue;
+    }
     conversation = {
       ...conversation,
       binding: trackCheckpoint(
@@ -202,13 +205,15 @@ function trackCheckpoint(
   return binding;
 }
 
-function decodePhaseSubmission<Product>(
+function decodePhaseSubmissionProposal<Product>(
   command: PhaseConversationCommand<Product>,
   submission: unknown,
   envelope: PhaseEnvelope,
-): Product {
+):
+  | { kind: "accepted"; product: Product }
+  | { kind: "rejected"; correction: ProviderCorrection } {
   try {
-    return command.codec.decode(submission, envelope);
+    return { kind: "accepted", product: command.codec.decode(submission, envelope) };
   } catch (error) {
     if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
       console.error(
@@ -223,16 +228,14 @@ function decodePhaseSubmission<Product>(
         }),
       );
     }
-    throw new OperationalInterruptionError(
-      "provider_phase_submission_invalid",
-      envelope.binding,
-      {
-        kind: envelope.providerCorrection
-          ? "runtime_remediation"
-          : "automatic_provider_recovery",
+    return {
+      kind: "rejected",
+      correction: {
+        kind: "previous_provider_product_rejected",
+        code: "provider_phase_submission_invalid",
+        diagnosticMessage: error instanceof Error ? error.message : String(error),
       },
-      error,
-    );
+    };
   }
 }
 
