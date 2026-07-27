@@ -7,9 +7,13 @@ import type { BtccGatewayRuntime } from "../../../packages/butler-agent/src/inte
 
 export class ScriptedBtccGatewayRuntime implements BtccGatewayRuntime {
   readonly commands: BtccTurnCommand[] = [];
+  readonly persistedContextDocuments = new Map<string, Record<string, unknown>>();
   readonly contextDocuments = {
-    persist: (input: { scopeKind: string; scopeId: string; sourceId: string }) =>
-      `context:${input.scopeKind}:${input.scopeId}:${input.sourceId}`,
+    persist: (input: { scopeKind: string; scopeId: string; sourceId: string }) => {
+      const ref = `context:${input.scopeKind}:${input.scopeId}:${input.sourceId}`;
+      this.persistedContextDocuments.set(ref, input);
+      return ref;
+    },
   };
   readonly runtime = { handle: (command: BtccTurnCommand) => this.handle(command) };
   private readonly observers = new Map<string, Set<BtccTurnProgressObserver>>();

@@ -12,6 +12,7 @@ import { getStewardSessionPointer, registerRuntimeSession } from "../../test-sup
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
 import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { createProductionBtccComposition } from "../../agent/composition/index.ts";
+import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import {
   BtccGatewayLifecycleService,
   bindBtccGatewayRuntime,
@@ -195,6 +196,7 @@ export async function handleNativeStewardTelegramTurn(
   });
   if ("ready" in btcc && btcc.ready) await btcc.ready;
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
+  const conversationStore = new AgentConversationStore({ butlerData });
 
   try {
     const sessionId = resolveSessionId(store, butlerData, input.projectName);
@@ -211,6 +213,8 @@ export async function handleNativeStewardTelegramTurn(
 
     const lifecycle = new BtccGatewayLifecycleService({
       store,
+      conversationStore,
+      butlerData,
       ...bindBtccGatewayRuntime(btcc),
       promptAssembler: new PromptAssembler({
         butlerHome,
@@ -273,6 +277,7 @@ export async function handleNativeStewardTelegramTurn(
     };
   } finally {
     btcc.close();
+    conversationStore.close();
     store.close();
   }
 }

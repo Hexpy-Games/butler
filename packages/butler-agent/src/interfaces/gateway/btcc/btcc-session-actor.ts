@@ -15,6 +15,7 @@ import type { BtccGatewayActorOptions } from "./contracts.ts";
 import { projectTurnOutcome } from "./project-turn-outcome.ts";
 import { projectTurnProgress } from "./project-turn-progress.ts";
 import { snapshotGatewayContext } from "./snapshot-gateway-context.ts";
+import { GatewayConversationTurn } from "./conversation/index.ts";
 
 export class BtccGatewaySessionActor implements GatewaySessionActor {
   readonly sessionId: string;
@@ -31,24 +32,37 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
   ): Promise<GatewayActorTurnResult> {
     const binding = this.requireBinding();
     const turnId = envelope.routingHints?.turnId?.trim() || envelope.eventId;
-    const assembly = this.options.promptAssembler.buildButlerContextAssembly({
+    const conversation = GatewayConversationTurn.begin({
+      store: this.options.conversationStore,
       binding,
       envelope,
-      route,
+      turnId,
+      butlerData: this.options.butlerData,
     });
+    const assembly = conversation.includeRecentContext(
+      this.options.promptAssembler.buildButlerContextAssembly({
+        binding,
+        envelope,
+        route,
+      }),
+    );
     const context = snapshotGatewayContext({
       binding,
       assembly,
       documents: this.options.contextDocuments,
     });
     const command = admitGatewayCommand({ binding, envelope, turnId, context });
+    const publish = async (event: RuntimeTurnEventInput) => {
+      conversation.admitTurnEvent(event);
+      await this.publish(envelope, route, event);
+    };
 
     if (command.kind !== "resume") {
-      await this.publish(envelope, route, { kind: "turn.started" });
+      await publish({ kind: "turn.started" });
     }
     const stopObserving = this.options.observeTurn(
       turnId,
-      projectTurnProgress((event) => this.publish(envelope, route, event)),
+      projectTurnProgress(publish),
     );
     let outcome: BtccTurnOutcome;
     try {
@@ -63,6 +77,8 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
     const generatedSessionTitle = result.text
       ? await this.options.generateSessionTitle?.({ binding, envelope, route }) ?? null
       : null;
+    if (result.text) conversation.complete(result.text);
+    else conversation.cancel();
 
     return {
       text: result.text,
