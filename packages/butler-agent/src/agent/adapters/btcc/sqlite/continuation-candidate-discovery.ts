@@ -214,7 +214,11 @@ async function discoverStoppedCandidates(
     const program = projectRoot && project
       ? await project.publications.loadProgram(projectRoot, row.program_id)
       : sessionPrograms.load(row.program_id);
-    if (!program || program.manifestRevision !== row.expected_manifest_revision) continue;
+    if (
+      !program ||
+      program.activeDeferral ||
+      program.manifestRevision !== row.expected_manifest_revision
+    ) continue;
     const currentHash = ledgerManifestContentHash(program, {
       ledgerId: row.ledger_id,
       programId: row.program_id,
