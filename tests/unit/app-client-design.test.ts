@@ -2261,7 +2261,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
   expect(renderer).toContain("function toolchainRowsForBlock");
   expect(renderer).toContain('import { appCopy } from "@/app/copy.ts";');
   expect(renderer).toContain("const latest = blocks.at(-1)");
-  expect(renderer).toContain("const visibleBlocks = expanded ? blocks : [latest]");
+  expect(renderer).toContain(
+    "<RollingSwap itemKey={latest.id} motion={live}>",
+  );
   expect(renderer).toContain(
     "aria-label={appCopy.conversation.result.regionLabel}",
   );
@@ -3898,6 +3900,12 @@ describe("app-client design system foundation", () => {
     expect(workActivityStyles).toContain("max-width: min(100%, 760px)");
     expect(workActivityStyles).toContain("border: 1px solid var(--line)");
     expect(workActivityStyles).toContain(".toolGroup");
+    expect(workActivityStyles).not.toMatch(
+      /\.compact \.toolGroup\s*\{[^}]*width:\s*100%/su,
+    );
+    expect(workActivityStyles).not.toMatch(
+      /\.compact \.tool\s*\{[^}]*width:\s*100%/su,
+    );
     expect(workActivityStyles).toContain(".toolDetailButton");
     expect(workActivityStyles).toContain("border: 0");
     expect(workActivityStyles).toContain(".toolDetailText");
@@ -3947,7 +3955,7 @@ describe("app-client design system foundation", () => {
         "packages/butler-app/client/ui/src/components/conversation/TurnActivityPanel.tsx",
       ),
     ).toContain(
-      "<CollapsedTurnActivity blocks={workBlocks} turnId={turnId} />",
+      "<CollapsedTurnActivity blocks={workBlocks} live turnId={turnId} />",
     );
     expect(
       read(

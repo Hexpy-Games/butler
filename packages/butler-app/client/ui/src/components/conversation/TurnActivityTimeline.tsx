@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { Button, ListChecks, Stack, Typo, WorkActivityBlock } from "@/butler-ds";
+import {
+  Button,
+  ListChecks,
+  RollingSwap,
+  Stack,
+  Typo,
+  WorkActivityBlock,
+} from "@/butler-ds";
 import type { PhaseActivity } from "./turnActivityRows";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
@@ -33,37 +40,43 @@ export function TurnActivityTimeline({
         <Typo.Caption as="p" style={metaStyle}>
           {live ? "현재" : "활동"} · {currentPhase} · {activities.length}개 기록
         </Typo.Caption>
-        {expanded ? (
-          <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-            {activities.map((activity, index) => (
-              <li key={activity.id}>
-                <ActivityBlock
-                  activity={activity}
-                  connected={index < activities.length - 1}
-                  turnId={turnId}
-                />
-              </li>
-            ))}
-          </Stack>
-        ) : (
-          <ActivityBlock activity={latest} rolling={live} turnId={turnId} />
-        )}
-        {activities.length > 1 ? (
-          <Button
-            aria-expanded={expanded}
-            data-test-class="toggle-turn-activity-history"
-            iconStart={<ListChecks size={14} />}
-            onClick={() => setExpanded((value) => !value)}
-            size="xs"
-            text={
-              expanded
-                ? workCopy.collapseLabel
-                : workCopy.viewAllLabel(activities.length)
-            }
-            type="button"
-            variant="borderless"
-          />
-        ) : null}
+        <Stack gap="sm">
+          {expanded ? (
+            <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {activities.map((activity, index) => (
+                <li key={activity.id}>
+                  <ActivityBlock
+                    activity={activity}
+                    connected={index < activities.length - 1}
+                    turnId={turnId}
+                  />
+                </li>
+              ))}
+            </Stack>
+          ) : (
+            <RollingSwap itemKey={latest.id} motion={live}>
+              <ActivityBlock activity={latest} turnId={turnId} />
+            </RollingSwap>
+          )}
+          {activities.length > 1 ? (
+            <Stack as="footer" cross="start">
+              <Button
+                aria-expanded={expanded}
+                data-test-class="toggle-turn-activity-history"
+                iconStart={<ListChecks size={14} />}
+                onClick={() => setExpanded((value) => !value)}
+                size="xs"
+                text={
+                  expanded
+                    ? workCopy.collapseLabel
+                    : workCopy.viewAllLabel(activities.length)
+                }
+                type="button"
+                variant="borderless"
+              />
+            </Stack>
+          ) : null}
+        </Stack>
       </Stack>
     </section>
   );
@@ -71,12 +84,10 @@ export function TurnActivityTimeline({
 
 function ActivityBlock({
   activity,
-  rolling = false,
   connected = false,
   turnId,
 }: {
   activity: PhaseActivity;
-  rolling?: boolean;
   connected?: boolean;
   turnId?: string;
 }) {
@@ -87,7 +98,6 @@ function ActivityBlock({
     <WorkActivityBlock
       density="compact"
       connected={connected}
-      rolling={rolling}
       title={activity.summary}
       description={
         <Stack as="span" gap="xs">

@@ -17,7 +17,6 @@ export interface WorkActivityBlockProps
   description?: ReactNode;
   icon?: ReactNode;
   running?: boolean;
-  rolling?: boolean;
   connected?: boolean;
   density?: "normal" | "compact";
   tools?: WorkActivityToolItem[];
@@ -29,7 +28,6 @@ export function WorkActivityBlock({
   description,
   icon,
   running = false,
-  rolling = false,
   connected = false,
   density = "normal",
   tools = [],
@@ -42,7 +40,6 @@ export function WorkActivityBlock({
         styles.block,
         density === "compact" && styles.compact,
         running && styles.running,
-        rolling && styles.rolling,
         connected && styles.connected,
         className,
       )}

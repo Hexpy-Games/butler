@@ -110,6 +110,44 @@ test("completed work keeps its turn identity for lazy operation output", async (
   await act(async () => root.unmount());
 });
 
+test("live legacy activity rolls while completed history stays still", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", {
+    url: "http://localhost",
+  });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root")!;
+  const root = createRoot(container);
+  const first = workBlock("first", "이전 활동");
+
+  await act(async () => root.render(
+    <CollapsedTurnActivity blocks={[first]} live />,
+  ));
+  await act(async () => root.render(
+    <CollapsedTurnActivity
+      blocks={[first, workBlock("latest", "최신 활동")]}
+      live
+    />,
+  ));
+  expect(container.querySelector('[data-motion="outgoing"]')?.textContent)
+    .toContain("이전 활동");
+
+  await act(async () => root.render(
+    <CollapsedTurnActivity
+      blocks={[first, workBlock("completed", "완료 기록")]}
+    />,
+  ));
+  expect(container.querySelector('[data-motion="outgoing"]')).toBeNull();
+  expect(container.textContent).toContain("완료 기록");
+  await act(async () => root.unmount());
+});
+
 function workBlock(id: string, label: string): WorkBlockView {
   return {
     id,
