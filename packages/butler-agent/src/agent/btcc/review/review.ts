@@ -138,12 +138,15 @@ function projectCorrectionContext(
   const intent = managed.feedbackIntent?.feedbackIntent;
   const acceptance = managed.feedbackAcceptance;
   const correctionPlan = acceptance?.candidate.correctionPlan;
+  const attemptCorrectionPlanRef = program.currentTask.attempts.at(-1)
+    ?.attemptRecord.correctionPlanRef;
+  const activeCorrectionPlanRef = attemptCorrectionPlanRef ?? program.correctionPlanRef;
   if (!intent || !acceptance || !correctionPlan || acceptance.review.verdict !== "accepted") {
     throw new Error("Task re-review is missing its accepted correction context");
   }
   if (
-    !program.correctionPlanRef ||
-    !sameRef(program.correctionPlanRef, correctionPlan.ref) ||
+    !activeCorrectionPlanRef ||
+    !sameRef(activeCorrectionPlanRef, correctionPlan.ref) ||
     !sameRef(intent.ref, acceptance.candidate.feedbackIntentRef)
   ) {
     throw new Error("Task re-review correction context changed");

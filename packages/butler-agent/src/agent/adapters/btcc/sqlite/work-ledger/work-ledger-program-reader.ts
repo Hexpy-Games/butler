@@ -71,7 +71,6 @@ export class SqliteWorkLedgerProgramReader {
       (candidate) => candidate.work.workLogicalId === currentTask.task.workLogicalId,
     );
     if (!currentWork) throw new Error("Work Ledger current Task has no Work");
-    const latestAttempt = currentTask.attempts.at(-1);
     return {
       ...authority,
       planningState: "reviewed",
@@ -104,9 +103,7 @@ export class SqliteWorkLedgerProgramReader {
           : "implementation_open",
       ...(program.pending_correction_plan_ref
         ? { correctionPlanRef: this.loadRef(program.pending_correction_plan_ref) }
-        : latestAttempt?.attemptRecord.correctionPlanRef
-          ? { correctionPlanRef: latestAttempt.attemptRecord.correctionPlanRef }
-          : {}),
+        : {}),
       ...(program.active_deferral_ref
         ? { activeDeferral: this.loadManagedDeferral(program.active_deferral_ref) }
         : {}),

@@ -202,11 +202,7 @@ function selectAttempt(program: Reviewed, attempt: Extract<Mutation, { kind: "se
   task.status = "selected";
   task.attempts.push({ ...attempt, status: "ready" });
   workByLogicalId(program, task.task.workLogicalId).status = "active";
-  if (attempt.attemptRecord.correctionPlanRef) {
-    program.correctionPlanRef = attempt.attemptRecord.correctionPlanRef;
-  } else {
-    delete program.correctionPlanRef;
-  }
+  delete program.correctionPlanRef;
 }
 
 function attachResult(program: Reviewed, product: Extract<Mutation, { kind: "attach_result" }>[
