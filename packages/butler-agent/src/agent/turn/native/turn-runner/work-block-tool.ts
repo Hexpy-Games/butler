@@ -122,7 +122,12 @@ export function validateEmbeddedWorkBlockCall(
 ): SchemaValidationResult {
   const tool = availableTools.find((candidate) => candidate.name === call.name);
   if (!tool) {
-    return { ok: false, message: `Tool is not available in this work block: ${call.name}`, path: "$.name" };
+    return {
+      ok: false,
+      message: `Tool is not available in this work block: ${call.name}`,
+      path: "$.name",
+      reason: "enum_mismatch",
+    };
   }
   return validateJsonObjectSchema(call.args, tool.parameters);
 }

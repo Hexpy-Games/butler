@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { describeProviderCarrierShape } from
-  "../../packages/butler-agent/src/agent/btcc/infrastructure/model/provider-carrier-diagnostic.ts";
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/model/provider-carrier-protocol.ts";
 
 test("provider carrier diagnostics retain identifiers without payload values", () => {
   const diagnostic = describeProviderCarrierShape({
@@ -17,11 +17,13 @@ test("provider carrier diagnostics retain identifiers without payload values", (
     }],
   });
 
-  expect(JSON.parse(diagnostic)).toEqual({
-    keys: ["kind", "phaseContinuity", "requests"],
+  expect(diagnostic).toEqual({
+    carrierType: "object",
+    carrierKeys: ["kind", "phaseContinuity", "requests"],
     submissionKeys: [],
-    requests: [{
-      keys: [
+    requestsType: "array",
+    requestCount: 1,
+    requestKeys: [[
         "capabilityRef",
         "input",
         "kind",
@@ -29,13 +31,8 @@ test("provider carrier diagnostics retain identifiers without payload values", (
         "relativeTarget",
         "requestId",
         "scopeRef",
-      ],
-      requestId: "read-1",
-      kind: "observe",
-      capabilityRef: "workspace:read",
-      scopeRef: "workspace:project",
-      relativeTarget: "src/main.ts",
-    }],
+      ]],
   });
-  expect(diagnostic).not.toContain("SECRET");
+  expect(JSON.stringify(diagnostic)).not.toContain("SECRET");
+  expect(JSON.stringify(diagnostic)).not.toContain("src/main.ts");
 });

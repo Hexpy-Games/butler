@@ -2,6 +2,7 @@ import type {
   PhaseConversationCommand,
   PhaseConversationSnapshot,
   PhaseEnvelope,
+  ProviderCorrection,
 } from "./contracts.ts";
 import {
   isBtccOperationalInterruption,
@@ -54,6 +55,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
 ): Promise<Product> {
   command.executionPermit.assertActive();
   let conversation = await command.store.restore<Product>(command.binding);
+  let providerCorrection = command.providerCorrection;
   checkpointAdvanced(conversation.binding);
   command.executionPermit.assertActive();
   if (conversation.acceptedProduct) {
@@ -70,7 +72,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
   }
 
   while (true) {
-    const envelope = assembleEnvelope(command, conversation);
+    const envelope = assembleEnvelope(command, conversation, providerCorrection);
     command.executionPermit.assertActive();
     if (conversation.pendingOperationRound) {
       assertActualModel(
@@ -157,6 +159,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
         ),
         pendingOperationRound: round,
       };
+      providerCorrection = undefined;
       if (round.phaseContinuity) {
         await command.activity?.publish({
           turnId: conversation.binding.turnId,
@@ -236,6 +239,7 @@ function decodePhaseSubmission<Product>(
 function assembleEnvelope<Product>(
   command: PhaseConversationCommand<Product>,
   conversation: PhaseConversationSnapshot<Product>,
+  providerCorrection: ProviderCorrection | undefined,
 ): PhaseEnvelope {
   const operationResults = conversation.operationResults.map((result) =>
     normalizeOperationResult(
@@ -261,8 +265,8 @@ function assembleEnvelope<Product>(
       ? { phaseContinuity: conversation.phaseContinuity }
       : {}),
     submissionSchema: command.codec.submissionSchema,
-    ...(command.providerCorrection
-      ? { providerCorrection: command.providerCorrection }
+    ...(providerCorrection
+      ? { providerCorrection }
       : {}),
   };
 }

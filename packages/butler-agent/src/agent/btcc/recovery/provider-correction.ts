@@ -14,10 +14,12 @@ export function correctionForOperationalInterruption(
   return {
     kind: "previous_provider_product_rejected",
     code: interruption.code,
+    ...(interruption.diagnostic ? { diagnostic: interruption.diagnostic } : {}),
     ...(diagnostic ? { diagnosticMessage: diagnostic } : {}),
   };
 }
 
 function diagnosticMessage(interruption: OperationalInterruptionError): string | undefined {
+  if (interruption.diagnostic?.kind === "provider_carrier_rejection") return undefined;
   return interruption.cause instanceof Error ? interruption.cause.message : undefined;
 }

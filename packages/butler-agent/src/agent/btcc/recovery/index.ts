@@ -16,7 +16,12 @@ export type {
   OperationalCheckpointAnchor,
 } from "./operational-interruption.ts";
 export { decodeOperationalDiagnostic } from "./operational-diagnostic.ts";
-export type { OperationalDiagnostic } from "./operational-diagnostic.ts";
+export type {
+  OperationalDiagnostic,
+  ProviderCarrierRejectionDiagnostic,
+  ProviderCarrierRejectionReason,
+  ProviderCarrierShape,
+} from "./operational-diagnostic.ts";
 export type {
   CommittedSuccessorReadiness,
   ExecutionPermit,

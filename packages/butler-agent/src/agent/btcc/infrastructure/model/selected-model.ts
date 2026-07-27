@@ -1,8 +1,5 @@
 import type {
   ActualModelIdentity,
-  OperationAuthority,
-  OperationRequest,
-  PhaseContinuity,
   ProviderRoundValue,
   SelectedModel,
 } from "../../core/index.ts";
@@ -17,9 +14,11 @@ import { runWithinModelRoundBoundary } from "./model-round-boundary.ts";
 import { createProviderPhasePromptRunner } from "./provider-phase-prompt-runner.ts";
 import { renderPhasePrompt } from "./render-phase-prompt.ts";
 import { PhasePromptCapacityError } from "./fit-operation-context.ts";
-import { validateJsonObjectSchema } from "../../../tools/tool-bridge/schema-validation.ts";
-import { describeProviderCarrierShape } from "./provider-carrier-diagnostic.ts";
 import { providerFailureDiagnostic } from "./provider-failure-diagnostic.ts";
+import {
+  acceptProviderCarrier,
+  ProviderCarrierProtocolError,
+} from "./provider-carrier-protocol.ts";
 
 export function createProductionSelectedModel(
   dependencies: ProductionSelectedModelDependencies,
@@ -77,19 +76,19 @@ async function runSelectedModelRound(
       });
     }
     try {
-      assertCarrierMatchesRenderedSchema(result.carrier, admissionSchema);
-      return decodeCarrier(
-        result.carrier,
-        envelope.operationAuthority,
-        result.actualIdentity,
-      );
+      return acceptProviderCarrier(result.carrier, {
+        responseSchema: admissionSchema,
+        authority: envelope.operationAuthority,
+        actualIdentity: result.actualIdentity,
+      });
     } catch (error) {
       if (error instanceof ProviderCarrierProtocolError) {
+        reportProviderCarrierRejection(envelope, error);
         return interruption("provider_protocol_interruption", {
           kind: envelope.providerCorrection
             ? "runtime_remediation"
             : "automatic_provider_recovery",
-        }, error.message);
+        }, undefined, error.diagnostic);
       }
       throw error;
     }
@@ -136,101 +135,21 @@ async function runSelectedModelRound(
   }
 }
 
-function assertCarrierMatchesRenderedSchema(
-  carrier: unknown,
-  responseSchema: Record<string, unknown>,
-): asserts carrier is Record<string, unknown> {
-  if (!isRecord(carrier)) {
-    throw new ProviderCarrierProtocolError("BTCC provider carrier is not an object");
-  }
-  const validation = validateJsonObjectSchema(carrier, responseSchema);
-  if (!validation.ok) {
-    throw new ProviderCarrierProtocolError(
-      `BTCC provider carrier violates the rendered schema at ${validation.path}: ` +
-      `${validation.message}; shape=${describeProviderCarrierShape(carrier)}`,
-    );
-  }
-}
-
-function decodeCarrier(
-  carrier: unknown,
-  authority: OperationAuthority,
-  actualIdentity: ActualModelIdentity,
-): ProviderRoundValue {
-  if (!isRecord(carrier)) {
-    throw new ProviderCarrierProtocolError("BTCC provider carrier is not an object");
-  }
-  if (
-    carrier.kind === "phase_submission" &&
-    isRecord(carrier.submission) &&
-    isRecord(carrier.publicActivity)
-  ) {
-    return {
-      kind: "phase_submission",
-      submission: carrier.submission,
-      publicActivity: carrier.publicActivity as PhaseContinuity["publicActivity"],
-      actualIdentity,
-    };
-  }
-  if (
-    carrier.kind === "operation_requests" &&
-    isRecord(carrier.phaseContinuity) &&
-    Array.isArray(carrier.requests) &&
-    carrier.requests.length > 0 &&
-    carrier.requests.every(isRecord)
-  ) {
-    return {
-      kind: "operation_requests",
-      requests: carrier.requests.map((request) => bindOperationAuthority(request, authority)),
-      phaseContinuity: carrier.phaseContinuity as PhaseContinuity,
-      actualIdentity,
-    };
-  }
-  throw new ProviderCarrierProtocolError("BTCC provider carrier violates the closed protocol");
-}
-
-class ProviderCarrierProtocolError extends Error {
-  override readonly name = "ProviderCarrierProtocolError";
+function reportProviderCarrierRejection(
+  envelope: Parameters<SelectedModel["runRound"]>[0],
+  error: ProviderCarrierProtocolError,
+): void {
+  console.error(JSON.stringify({
+    event: "btcc_provider_carrier_rejected",
+    turnId: envelope.binding.turnId,
+    phase: envelope.phase,
+    checkpointId: envelope.binding.checkpointId,
+    diagnostic: error.diagnostic,
+  }));
 }
 
 class PhasePromptRenderError extends Error {
   override readonly name = "PhasePromptRenderError";
-}
-
-function bindOperationAuthority(
-  value: Record<string, unknown>,
-  authority: OperationAuthority,
-): OperationRequest {
-  if (value.kind === "observe") return value as OperationRequest;
-  if (
-    value.kind === "workspace_artifact_observation" &&
-    authority.mutation.kind === "workspace_only"
-  ) {
-    return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
-  }
-  if (value.kind === "workspace_artifact_action" && authority.mutation.kind === "workspace_only") {
-    return { ...value, workspaceRef: authority.mutation.workspaceRef } as OperationRequest;
-  }
-  if (value.kind === "review_validation" &&
-    authority.mutation.kind === "validation_overlay_only"
-  ) {
-    return { ...value, reviewSourceRef: authority.mutation.reviewSourceRef } as OperationRequest;
-  }
-  if (value.kind === "repository_promotion" &&
-    authority.mutation.kind === "repository_promotion_only"
-  ) {
-    return {
-      ...value,
-      authorizationRef: authority.mutation.authorizationRef,
-      candidateRef: authority.mutation.candidateRef,
-      resolutionRef: authority.mutation.resolutionRef,
-      baselineRef: authority.mutation.baselineRef,
-      finalSnapshotRef: authority.mutation.finalSnapshotRef,
-    } as OperationRequest;
-  }
-  throw new ProviderCarrierProtocolError(
-    "BTCC provider requested an operation without matching runtime authority",
-  );
 }
 
 async function renderProviderPrompt(
@@ -314,8 +233,4 @@ function activationForProviderFailure(
     return { kind: "provider_action_required" };
   }
   return { kind: "runtime_remediation" };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
