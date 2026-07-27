@@ -202,9 +202,7 @@ function operationSchema(
     case "workspace_artifact_action":
       return operationShape("workspace_artifact_action", {
         ...common,
-        relativeTarget: binding.kind === "exact"
-          ? { type: "string", enum: workspaceTargets(binding.authority) }
-          : { type: "string", minLength: 1 },
+        relativeTarget: { type: "string", minLength: 1 },
       });
     case "workspace_artifact_observation":
       return operationShape("workspace_artifact_observation", common);
@@ -230,16 +228,6 @@ function exactObservationScopes(capability: CarrierCapability): readonly string[
     throw new Error("Exact carrier admission requires bound observation scopes");
   }
   return capability.observationScopeRefs;
-}
-
-function workspaceTargets(authority: OperationAuthority): string[] {
-  if (authority.mutation.kind !== "workspace_only") return [];
-  if (authority.mutation.operationRoot.kind === "file") {
-    return [authority.mutation.operationRoot.relativeTarget];
-  }
-  return authority.mutation.mutationScope.kind === "contained_paths"
-    ? authority.mutation.mutationScope.writablePaths
-    : [authority.mutation.operationRoot.relativeTarget];
 }
 
 function operationShape(
