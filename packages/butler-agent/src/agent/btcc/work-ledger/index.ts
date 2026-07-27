@@ -28,3 +28,7 @@ export type {
   UnplannedManagedProgramState,
   WorkLedgerCursor,
 } from "./contracts.ts";
+export {
+  resolveStoppedReviewTask,
+  type StoppedReviewProvenance,
+} from "./stopped-review-resumption.ts";

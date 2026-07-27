@@ -23,6 +23,7 @@ import {
   type WorkDraft,
 } from "./read-plan-drafts.ts";
 import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
+import { resumeStoppedAcceptedPlan } from "./resume-stopped-accepted-plan.ts";
 import { validateArtifactPersistence } from "./validate-artifact-persistence.ts";
 
 export type AuthoringState = {
@@ -48,6 +49,8 @@ export function authorPlanCandidate(
   submission: Record<string, unknown>,
   state: AuthoringState,
 ): PlanningCandidate {
+  const resumed = resumeStoppedAcceptedPlan(submission, state);
+  if (resumed) return resumed;
   const { authoredSpecs, governingSpecRefs } = authorGoverningSpecs(
     submission.specifications,
     submission.governingSpecSelections,
@@ -183,6 +186,7 @@ export function authorPlanCandidate(
             continuationBindingRef: state.continuation.ref,
             sourceTurnId: state.continuation.sourceTurnId,
             stoppedAnchorRef: state.continuation.anchorRef,
+            ...stoppedTaskProvenance(state.continuation),
           }
       : { kind: "initial" as const };
   const candidateBody = {
@@ -212,6 +216,17 @@ export function authorPlanCandidate(
     bundle,
   };
   return { ref: contentRef("plan-candidate", candidateBody), ...candidateBody };
+}
+
+function stoppedTaskProvenance(
+  continuation: Extract<NonNullable<AuthoringState["continuation"]>, { kind: "stopped_program" }>,
+): { stoppedTaskRef?: ContentRef; stoppedResultRef?: ContentRef } {
+  const interrupted = continuation.context?.frontier.interruptedTask;
+  if (!interrupted) return {};
+  return {
+    stoppedTaskRef: interrupted.task.ref,
+    ...(interrupted.resultRef ? { stoppedResultRef: interrupted.resultRef } : {}),
+  };
 }
 
 function materializeCriteria(

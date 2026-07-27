@@ -3,34 +3,18 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BTCC_SUCCESSOR_SCHEMA } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
-import { SqliteWorkLedgerStorage } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/work-ledger/index.ts";
-import { discoverContinuationCandidates } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/continuation-candidate-discovery.ts";
-import { openingAnswerCodec } from
-  "../../packages/butler-agent/src/agent/btcc/conception/opening/opening-answer-codec.ts";
-import { decideTransition } from
-  "../../packages/butler-agent/src/agent/btcc/turn/state-machine/decide-transition.ts";
-import type { TurnRecord } from
-  "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
-import {
-  bindAndContinue,
-  freshContinuationCommand,
-  seedManagedProgramForStop,
-  seedStoppedProgram,
-  taskStatuses,
-} from "./support/btcc-stopped-work-fixture.ts";
+import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { SqliteWorkLedgerStorage } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/work-ledger/index.ts";
+import { discoverContinuationCandidates } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/continuation-candidate-discovery.ts";
+import { openingAnswerCodec } from "../../packages/butler-agent/src/agent/btcc/conception/opening/opening-answer-codec.ts";
+import { decideTransition } from "../../packages/butler-agent/src/agent/btcc/turn/state-machine/decide-transition.ts";
+import type { TurnRecord } from "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
+import { bindAndContinue, freshContinuationCommand, seedManagedProgramForStop, seedStoppedProgram, taskStatuses } from "./support/btcc-stopped-work-fixture.ts";
 import { canonicalMutationId } from "./support/btcc-project-ledger-fixture.ts";
-import { SqliteTurnStateRepository } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
-import { SqliteRuntimeOwnerRegistry } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
-import type { ProjectWorkLedgerPublicationAdapter } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
-import { ledgerManifestContentHash } from
-  "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
+import { SqliteTurnStateRepository } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
+import { SqliteRuntimeOwnerRegistry } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
+import type { ProjectWorkLedgerPublicationAdapter } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
+import { ledgerManifestContentHash } from "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
 
 test("Stop reloads a typed frontier and a fresh Turn continues only unfinished Tasks", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-stopped-program-"));
@@ -243,7 +227,6 @@ function stoppedCandidateStatus(db: Database): string | undefined {
     "SELECT status FROM btcc_stopped_program_continuations",
   ).get()?.status;
 }
-
 function oldTurnState(db: Database): string | undefined {
   return db.query<{ semantic_state: string }, [string]>(
     "SELECT semantic_state FROM btcc_turns WHERE turn_id = ?",

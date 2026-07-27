@@ -212,6 +212,9 @@ export type PlanningCandidate = {
         continuationBindingRef: ContentRef;
         sourceTurnId: string;
         stoppedAnchorRef: ContentRef;
+        stoppedTaskRef?: ContentRef;
+        stoppedResultRef?: ContentRef;
+        stoppedPlanGoalContractRef?: ContentRef;
       }
     | {
         kind: "review_revision";

@@ -66,7 +66,7 @@ const work = objectSchema({
 });
 const planFields = {
   strategy: textSchema(),
-  works: arraySchema(work, { minItems: 1 }),
+  works: arraySchema(work),
   risks: arraySchema(
     variantsSchema(
       objectSchema({
