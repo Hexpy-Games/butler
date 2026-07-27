@@ -14,6 +14,7 @@ import { insertRecord } from "./support/btcc-stopped-work-fixture-internals.ts";
 import { canonicalMutationId } from "./support/btcc-project-ledger-fixture.ts";
 import { SqliteTurnStateRepository } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
 import { SqliteRuntimeOwnerRegistry } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
+import { SqliteWorkLedgerProgramReader } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/work-ledger/work-ledger-program-reader.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 import { ledgerManifestContentHash } from "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
 
@@ -117,6 +118,54 @@ test("an active deferral is the only continuation authority for its Program", as
     anchorRef: anchor.ref,
     blockerRef: blocker.ref,
   });
+  db.close();
+});
+
+test("attempt correction history does not become pending Program authority", async () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  await seedStoppedProgram(db);
+  const correctionRef = {
+    id: "historic-correction-plan",
+    sha256: "historic-correction-plan-sha256",
+  };
+  const task = db.query<{ task_id: string; task_ref: string }, []>(`
+    SELECT task_id, task_ref FROM btcc_tasks WHERE status = 'selected'
+  `).get()!;
+  const attemptRef = { id: "historic-attempt", sha256: "historic-attempt-sha256" };
+  const targetRef = { id: "historic-target", sha256: "historic-target-sha256" };
+  const bindingRef = { id: "historic-binding", sha256: "historic-binding-sha256" };
+  insertRecord(db, "correction_plan", correctionRef, { ref: correctionRef });
+  insertRecord(db, "attempt", attemptRef, {
+    ref: attemptRef,
+    taskRef: JSON.parse(task.task_ref),
+    correctionPlanRef: correctionRef,
+  });
+  insertRecord(db, "task_execution_target", targetRef, { ref: targetRef });
+  insertRecord(db, "attempt_execution_target_binding", bindingRef, { ref: bindingRef });
+  db.query(`
+    INSERT INTO btcc_attempts (
+      attempt_id, program_id, task_id, attempt_ref, correction_plan_ref,
+      execution_target_ref, execution_target_binding_ref, status
+    ) VALUES (?, 'program-session', ?, ?, ?, ?, ?, 'ready')
+  `).run(
+    attemptRef.id,
+    task.task_id,
+    JSON.stringify(attemptRef),
+    correctionRef.id,
+    JSON.stringify(targetRef),
+    JSON.stringify(bindingRef),
+  );
+  db.query("UPDATE btcc_tasks SET current_attempt_id = ? WHERE task_id = ?")
+    .run(attemptRef.id, task.task_id);
+
+  const program = new SqliteWorkLedgerProgramReader(db).load("program-session");
+  if (!program || program.planningState !== "reviewed") {
+    throw new Error("Reviewed Program expected");
+  }
+  expect(program.correctionPlanRef).toBeUndefined();
+  expect(program.currentTask.attempts.at(-1)?.attemptRecord.correctionPlanRef)
+    .toEqual(correctionRef);
   db.close();
 });
 
