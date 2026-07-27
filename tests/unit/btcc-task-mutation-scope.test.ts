@@ -9,6 +9,8 @@ import {
   workspaceEnvelope,
   workspaceRequest,
 } from "./support/btcc-production-operations-fixture.ts";
+import type { OperationRequest } from
+  "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 
 afterEach(cleanupProductionOperationsFixtures);
 
@@ -76,6 +78,38 @@ describe("BTCC Task mutation scope", () => {
 
     expect(result.outcome).toBe("operation_rejected");
     expect(result.content ?? result.preview).toContain("read_only_task_mutated_workspace");
+    expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
+  });
+
+  test("rejects a workspace delta produced by a validation command", async () => {
+    const fixture = createDirectoryFixture();
+    fixture.workspace = ({ workspacePath }) => {
+      writeFileSync(join(workspacePath, "guide.md"), "unexpected validation delta\n");
+      return { changed: "guide.md" };
+    };
+    const runtime = createRuntime(fixture);
+    const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
+    const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
+      requestId: "validation-delta",
+      publicTitle: "Validate the Task workspace",
+      kind: "workspace_artifact_action",
+      capabilityRef: "run_command",
+      workspaceRef: provision.workspace.ref,
+      relativeTarget: "guide.md",
+      input: { command: "npm test", state_effect: "validation" },
+    };
+    const result = await runtime.operations.perform({
+      request,
+      envelope: workspaceEnvelope(provision, {
+        kind: "contained_paths",
+        writablePaths: ["guide.md"],
+      }),
+    });
+
+    expect(result.outcome).toBe("operation_rejected");
+    expect(result.content ?? result.preview).toContain(
+      "non_mutating_operation_changed_workspace",
+    );
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
   });
 });

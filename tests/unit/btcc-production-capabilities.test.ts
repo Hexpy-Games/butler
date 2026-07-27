@@ -158,6 +158,30 @@ describe("production BTCC capabilities", () => {
     })).toThrow(OperationRejectedError);
   });
 
+  test("admits a validation command in a Task-owned workspace", () => {
+    const root = fixtureRoot();
+    const runtime = createProductionToolRuntime({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: join(root, "app.sqlite"),
+    });
+    const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
+      requestId: "task-validation",
+      publicTitle: "Validate the Task workspace",
+      kind: "workspace_artifact_action",
+      capabilityRef: "run_command",
+      workspaceRef: { id: "workspace-1", sha256: "workspace-hash" },
+      relativeTarget: ".",
+      input: { command: "npm test", state_effect: "validation" },
+    };
+
+    expect(() => runtime.validateOperationInput({
+      envelope: envelope(),
+      request,
+      args: request.input,
+    })).not.toThrow();
+  });
+
   test("reads only the canonical Ledger bound by the observation scope", async () => {
     const root = fixtureRoot();
     const projectRoot = join(root, "project-ledger", "projects", "sandy");
