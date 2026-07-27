@@ -3,6 +3,7 @@ import {
   type BtccPersistenceTypes,
   type WorkLedgerCommit,
 } from "../../../../btcc/gateway-api.ts";
+import { canOpenPromotionFrontier } from "../../../../btcc/work-ledger/frontier-readiness.ts";
 
 type ManagedProgramState = BtccPersistenceTypes["managedProgramState"];
 
@@ -13,6 +14,9 @@ export function validateFrontierMutation(
   if (commit.mutation.kind !== "close_implementation_frontier") return;
   if (!previous || previous.planningState !== "reviewed") {
     throw new Error("Work Ledger promotion permit has no reviewed Program");
+  }
+  if (!canOpenPromotionFrontier(previous)) {
+    throw new Error("Work Ledger promotion frontier is not dependency-ready");
   }
   assertPromotionPermit({
     programId: previous.programId,
