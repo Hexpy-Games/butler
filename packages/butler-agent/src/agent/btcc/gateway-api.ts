@@ -92,7 +92,10 @@ export type {
   AvailableSpecRevision,
   GoverningSpecRevision,
 } from "./planning/contracts.ts";
-export type { StopPersistenceOutcome } from "./turn/index.ts";
+export type {
+  ManagedProgramState,
+  StopPersistenceOutcome,
+} from "./turn/index.ts";
 export type {
   AcceptedPhaseGuidance,
   ActualModelIdentity,
