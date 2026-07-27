@@ -1,4 +1,8 @@
 import type { ReviewedManagedProgramState } from "../work-ledger/index.ts";
+import {
+  canOpenPromotionFrontier,
+  nextDependencyReadyTask,
+} from "../work-ledger/frontier-readiness.ts";
 import type { WorkFrontierDecision } from "./contracts.ts";
 import { createPromotionPermit } from "../artifact/index.ts";
 import { assemblePromotionCandidates } from "./assemble-promotion-candidates.ts";
@@ -12,7 +16,7 @@ export function selectNextTaskOrClose(input: {
     const promotionTasks = input.program.tasks.filter(
       (task) => task.task.artifactPolicy.kind === "repository_promotion",
     );
-    if (promotionTasks.every((task) => task.status === "accepted")) {
+    if (input.program.tasks.every((task) => task.status === "accepted")) {
       return { kind: "complete_promotion" };
     }
     if (promotionTasks.some((task) => task.status === "promotion_deferred")) {
@@ -20,17 +24,25 @@ export function selectNextTaskOrClose(input: {
       if (!deferredAnchorRef) throw new Error("Deferred promotion has no continuation anchor");
       return { kind: "defer_promotion", deferredAnchorRef };
     }
-    const nextPromotion = promotionTasks.find((task) => task.status === "planned");
-    if (!nextPromotion) throw new Error("Authorized promotion has no ready Task");
-    return { kind: "select_task", task: nextPromotion };
+    const next = nextDependencyReadyTask(input.program.tasks);
+    if (!next) throw new Error("Authorized promotion graph has no dependency-ready Task");
+    return next.status === "result_submitted"
+      ? { kind: "revalidate_task", task: next }
+      : { kind: "select_task", task: next };
   }
   if (input.program.frontier !== "implementation_open") {
     throw new Error("Work Frontier requires an executable frontier");
   }
-  const implementationTasks = input.program.tasks.filter(
+  const nextImplementation = nextDependencyReadyTask(
+    input.program.tasks,
     (task) => task.task.artifactPolicy.kind !== "repository_promotion",
   );
-  if (implementationTasks.every((task) => task.status === "accepted")) {
+  if (nextImplementation) {
+    return nextImplementation.status === "result_submitted"
+      ? { kind: "revalidate_task", task: nextImplementation }
+      : { kind: "select_task", task: nextImplementation };
+  }
+  if (canOpenPromotionFrontier(input.program)) {
     const promotionAssemblies = assemblePromotionCandidates(input.program);
     const promotionPermit = createPromotionPermit({
       programId: input.program.programId,
@@ -46,18 +58,8 @@ export function selectNextTaskOrClose(input: {
     };
   }
 
-  const acceptedTaskIds = new Set(
-    input.program.tasks
-      .filter((task) => task.status === "accepted")
-      .map((task) => task.task.ref.id),
-  );
-  const next = implementationTasks
-    .filter((task) => task.status === "planned" || task.status === "result_submitted")
-    .filter((task) => task.task.dependencyTaskRefs.every((ref) => acceptedTaskIds.has(ref.id)))
-    .sort((left, right) => left.task.executionOrdinal - right.task.executionOrdinal)[0];
-  if (!next) throw new Error("Reviewed Work graph has no dependency-ready Task");
-
-  return next.status === "result_submitted"
-    ? { kind: "revalidate_task", task: next }
-    : { kind: "select_task", task: next };
+  if (input.program.tasks.every((task) => task.status === "accepted")) {
+    return { kind: "close_frontier", promotionAssemblies: [] };
+  }
+  throw new Error("Reviewed Work graph has no dependency-ready Task or frontier transition");
 }

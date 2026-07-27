@@ -41,18 +41,12 @@ export class SqlitePromotionFrontierWriter {
         manifest_revision = manifest_revision + 1
       WHERE program_id = ? AND frontier = 'implementation_open'
         AND manifest_revision = ?
-        AND NOT EXISTS (
-          SELECT 1 FROM btcc_tasks
-          WHERE program_id = ? AND is_active = 1
-            AND task_kind != 'repository_promotion' AND status != 'accepted'
-        )
     `).run(
       stableJson(assemblyRefs),
       mutation.promotionPermit?.ref.id ?? null,
       hasPromotion ? "promotion_open" : "closed",
       programId,
       mutation.cursor.expectedManifestRevision,
-      programId,
     );
     if (closed.changes !== 1) throw new Error("Work Ledger frontier changed");
     this.db.query(`

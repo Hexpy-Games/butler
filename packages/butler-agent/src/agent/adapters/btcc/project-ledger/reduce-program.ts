@@ -12,6 +12,7 @@ import {
 } from "../../../btcc/gateway-api.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 import { acceptProjectFeedback } from "./revise-program.ts";
+import { canOpenPromotionFrontier } from "../../../btcc/work-ledger/frontier-readiness.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Reviewed = Extract<Program, { planningState: "reviewed" }>;
@@ -245,8 +246,7 @@ function closeImplementation(
   assemblies: Reviewed["promotionAssemblies"],
   permit: Reviewed["promotionPermit"],
 ): void {
-  const implementation = program.tasks.filter((task) => task.task.artifactPolicy.kind !== "repository_promotion");
-  if (program.frontier !== "implementation_open" || implementation.some((task) => task.status !== "accepted")) {
+  if (!canOpenPromotionFrontier(program)) {
     throw changed("implementation frontier");
   }
   assertPromotionPermit({

@@ -72,6 +72,7 @@ export function materializePromotionSelectors(
     .filter((task) => task.artifactPolicy.kind === "repository_promotion")
     .map((task) => task.ref.id);
   assertExactStrings(promotionIds, plannedPromotionIds, "Promotion selector set");
+  assertSinglePromotionEpoch(tasks, new Set(promotionIds));
   return selectors;
 }
 
@@ -310,6 +311,27 @@ function assertDependencyClosure(
   if (required.some((ref) => !reachable.has(ref.id))) {
     rejectPlanningProposal("promotion_dependency_closure_missing",
       "Promotion dependency closure is missing");
+  }
+}
+
+function assertSinglePromotionEpoch(tasks: ManagedTask[], promotionIds: Set<string>): void {
+  const byRef = new Map(tasks.map((task) => [task.ref.id, task]));
+  for (const promotionId of promotionIds) {
+    const promotion = byRef.get(promotionId)!;
+    const frontier = [...promotion.dependencyTaskRefs];
+    const visited = new Set<string>();
+    while (frontier.length > 0) {
+      const ref = frontier.pop()!;
+      if (visited.has(ref.id)) continue;
+      visited.add(ref.id);
+      if (promotionIds.has(ref.id)) {
+        rejectPlanningProposal(
+          "promotion_epoch_nested",
+          "Repository promotion Tasks must belong to one dependency-ready promotion epoch",
+        );
+      }
+      frontier.push(...(byRef.get(ref.id)?.dependencyTaskRefs ?? []));
+    }
   }
 }
 
