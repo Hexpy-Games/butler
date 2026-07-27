@@ -84,3 +84,46 @@ test("startup reconciliation releases an exact observed crash-gap claim", async 
   ]);
   expect(existsSync(prepared.publication.corePublication.claimPath)).toBe(false);
 });
+
+test("historical observed journals preserve a newer publication claim", async () => {
+  const fixture = await projectFixture();
+  const core = await loadProjectLedgerCore();
+  const adapter = createProjectWorkLedgerPublicationAdapter({
+    stagingRoot: join(fixture.root, "staging"),
+  });
+  const binding = projectBindingCommit();
+  const first = await adapter.prepareCommit({
+    projectRoot: fixture.ledgerRoot,
+    expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
+    commit: binding.commit,
+  });
+  await adapter.promoteAndObserve(first.publication);
+
+  const accepted = reviewedPlan({
+    goalContractRef: binding.goalContract.ref,
+    authorityRef: binding.authority.ref,
+    availableSpecRefs: first.program.availableSpecRefs,
+    governingSpecSelections: [first.program.availableSpecs[0]!.logicalId],
+    requireGoverningSpec: true,
+  });
+  const nextCommit = {
+    mutationId: "",
+    turnId: "turn-newer-publication-claim",
+    expectedTurnRevision: 4,
+    mutation: { kind: "install_reviewed_plan" as const, product: accepted },
+  };
+  nextCommit.mutationId = canonicalMutationId(nextCommit, first.program);
+  const second = await adapter.prepareCommit({
+    projectRoot: fixture.ledgerRoot,
+    expectedBase: await adapter.observeCanonicalHead(fixture.ledgerRoot),
+    commit: nextCommit,
+  });
+
+  expect(() => core.reconcilePublicationClaim(
+    first.publication.corePublication.claimPath,
+    { ...first.publication.corePublication, status: "observed" },
+    true,
+  )).not.toThrow();
+  expect(existsSync(second.publication.corePublication.claimPath)).toBe(true);
+  await adapter.abort(second.publication);
+});

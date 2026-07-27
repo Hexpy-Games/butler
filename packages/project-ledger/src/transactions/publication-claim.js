@@ -54,14 +54,16 @@ export function releasePublicationClaim(path, transaction) {
 export function reconcilePublicationClaim(path, transaction, referenced) {
   if (transaction.status === "observed") {
     if (!existsSync(path)) return;
-    assertPublicationClaim(path, transaction);
-    rmSync(path, { recursive: true, force: true });
+    if (claimBelongsTo(readClaim(path), transaction)) {
+      rmSync(path, { recursive: true, force: true });
+    }
     return;
   }
   if (!referenced) {
     if (!existsSync(path)) return;
-    assertPublicationClaim(path, transaction);
-    rmSync(path, { recursive: true, force: true });
+    if (claimBelongsTo(readClaim(path), transaction)) {
+      rmSync(path, { recursive: true, force: true });
+    }
     return;
   }
   if (!existsSync(path)) {
@@ -70,6 +72,14 @@ export function reconcilePublicationClaim(path, transaction, referenced) {
     }
   }
   assertPublicationClaim(path, transaction);
+}
+
+function claimBelongsTo(claim, transaction) {
+  const expected = claimIdentity(transaction);
+  return claim.schema === expected.schema &&
+    claim.publicationId === expected.publicationId &&
+    claim.canonicalRoot === expected.canonicalRoot &&
+    claim.baseSha256 === expected.baseSha256;
 }
 
 function claimIdentity(transaction) {
