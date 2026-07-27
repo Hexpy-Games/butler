@@ -103,9 +103,12 @@ test("rejects an out-of-scope proposal through exact local admission", async () 
   expect(await model.runRound(envelope)).toMatchObject({
     kind: "interruption",
     code: "provider_protocol_interruption",
-    diagnosticMessage: expect.stringContaining(
-      "$.requests[0].relativeTarget: No schema variant matched: " +
-      "No schema variant matched: Invalid enum value",
-    ),
+    activation: { kind: "automatic_provider_recovery" },
+    diagnostic: {
+      schema: "btcc.operational-diagnostic.v1",
+      kind: "provider_carrier_rejection",
+      path: "$.requests[0].relativeTarget",
+      reason: "enum_mismatch",
+    },
   });
 });

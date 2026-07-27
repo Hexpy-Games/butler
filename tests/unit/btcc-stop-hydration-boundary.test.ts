@@ -76,6 +76,34 @@ test("managed Stop rejects a session Program hydrated at a stale Turn revision",
   db.close();
 });
 
+test("managed Stop before Planning cancels without a Program", () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  seedManagedProgramForStop(db);
+  const row = db.query<{ managed_state_json: string }, []>(`
+    SELECT managed_state_json FROM btcc_turns
+    WHERE turn_id = 'turn-user-stopped'
+  `).get()!;
+  const managed = JSON.parse(row.managed_state_json) as Record<string, unknown>;
+  delete managed.programId;
+  db.query(`
+    UPDATE btcc_turns
+    SET semantic_state = 'contract_review', managed_state_json = ?
+    WHERE turn_id = 'turn-user-stopped'
+  `).run(JSON.stringify(managed));
+  const stops = new SqliteStopController(db);
+
+  expect(stops.managedHydrationRequired("turn-user-stopped")).toBe(false);
+  expect(stops.stop("turn-user-stopped")).toEqual({
+    kind: "cancelled",
+    turnId: "turn-user-stopped",
+  });
+  expect(db.query<{ semantic_state: string }, []>(`
+    SELECT semantic_state FROM btcc_turns WHERE turn_id = 'turn-user-stopped'
+  `).get()?.semantic_state).toBe("cancelled");
+  db.close();
+});
+
 function projectTurn(projectRef: string) {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
