@@ -10,13 +10,13 @@ import {
 
 export function promoteProjectLedgerPublication(publication, exchangeRoots) {
   let journal = requiredJournal(publication);
-  if (journal.status === "observed") {
-    assertHead(
+  if (journal.status === "promoted" || journal.status === "observed") {
+    assertActiveHead(
       publication.candidateHead,
       inspectPublicationRoot(publication.canonicalRoot),
       "Observed Project Ledger publication is no longer active",
     );
-    return receipt(publication, "observed");
+    return receipt(publication, journal.status);
   }
   assertPublicationClaim(publication.claimPath, publication);
   const active = observeProjectLedgerSourceHead(publication.canonicalRoot);
@@ -54,7 +54,7 @@ export function promoteProjectLedgerPublication(publication, exchangeRoots) {
 
 export function observeProjectLedgerPromotion(publication) {
   const journal = requiredJournal(publication);
-  assertHead(
+  assertActiveHead(
     publication.candidateHead,
     inspectPublicationRoot(publication.canonicalRoot),
     "Project Ledger promoted head is not active",
@@ -93,10 +93,15 @@ function receipt(publication, status) {
 
 function sameHead(left, right) {
   return Boolean(left && right &&
+    storageAuthority(left) === storageAuthority(right) &&
     left.sourceSha256 === right.sourceSha256 &&
     left.sourceFileCount === right.sourceFileCount &&
     left.storageSha256 === right.storageSha256 &&
     left.storageEntryCount === right.storageEntryCount);
+}
+
+function storageAuthority(head) {
+  return head?.storageAuthority ?? "project-ledger-complete-root-v1";
 }
 
 function sameLogicalHead(left, right) {
@@ -107,6 +112,13 @@ function sameLogicalHead(left, right) {
 
 function assertHead(expected, actual, message) {
   if (!sameHead(expected, actual)) throw new Error(message);
+}
+
+function assertActiveHead(expected, actual, message) {
+  if (sameHead(expected, actual)) return;
+  const legacyIdentity = storageAuthority(expected) === "project-ledger-complete-root-v1";
+  if (legacyIdentity && sameLogicalHead(expected, actual)) return;
+  throw new Error(message);
 }
 
 function assertLogicalHead(expected, actual, message) {

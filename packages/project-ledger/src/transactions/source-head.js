@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { relative } from "node:path";
 import { ledgerRoot } from "../fs.js";
 import { readRecordBody, readRecordData, recordFiles } from "../records.js";
+import { isNonAuthoritativeProjectLedgerStorage } from "../storage-authority.js";
 
 const NON_SEMANTIC_FIELDS = new Set([
   "createdAt", "updatedAt", "generatedAt", "sourceMtimeMs",
@@ -26,6 +27,7 @@ export function observeProjectLedgerSourceHead(project) {
   }
   return {
     schema: "project-ledger.source-head.v1",
+    storageAuthority: "project-ledger-authoritative-v2",
     projectRoot: root,
     sourceSha256: digest(logicalBytes),
     sourceFileCount: semanticRecords.length,
@@ -59,6 +61,7 @@ function rootEntries(root) {
   const entries = [];
   for (const dirent of readdirSync(root, { withFileTypes: true })) {
     const path = `${root}/${dirent.name}`;
+    if (isNonAuthoritativeProjectLedgerStorage(path)) continue;
     if (dirent.isDirectory()) {
       entries.push({ kind: "directory", path });
       entries.push(...rootEntries(path));

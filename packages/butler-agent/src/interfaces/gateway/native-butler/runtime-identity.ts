@@ -12,7 +12,7 @@ import { registerRuntimeSession } from
   "../../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
-import type { ClaimedInboundEvent } from "../../../gateways/core/inbound-queue.ts";
+import type { QueuedInboundEvent } from "../../../gateways/core/inbound-queue.ts";
 import { resolveAppGatewayRuntimeConfig } from "../../../operations/gateway/registry.ts";
 import { runPromptText } from "../../../integrations/providers/provider.ts";
 import {
@@ -153,7 +153,7 @@ export function appTurnStateDbPath(butlerData: string): string {
 
 export function shouldEnterBtcc(
   butlerData: string,
-): (item: ClaimedInboundEvent) => boolean {
+): (item: QueuedInboundEvent) => boolean {
   const dbPath = appTurnStateDbPath(butlerData);
   return (item) => {
     const turnId = item.envelope.routingHints?.turnId?.trim();

@@ -26,6 +26,7 @@ export type BtccInboundDispatchSummary = {
   handled: number;
   delivered: number;
   failed: number;
+  interrupted: number;
 };
 
 export type BtccInboundDispatchOptions = {
@@ -151,11 +152,11 @@ async function dispatchItem(
     summary.delivered = delivered;
     return summary;
   } catch (error) {
-    options.queue.fail(item, privateFailureMessage(error), {
+    options.queue.parkForProcessReplacement(item, privateFailureMessage(error), {
       source: "gateway/btcc/btcc-inbound-dispatcher.ts",
       dispatchStatus: "runtime-interrupted",
     }, options.now?.());
-    summary.failed = 1;
+    summary.interrupted = 1;
     return summary;
   }
 }
@@ -307,7 +308,7 @@ function privateFailureMessage(error: unknown): string {
 }
 
 function emptySummary(): BtccInboundDispatchSummary {
-  return { claimed: 0, handled: 0, delivered: 0, failed: 0 };
+  return { claimed: 0, handled: 0, delivered: 0, failed: 0, interrupted: 0 };
 }
 
 function addSummary(
@@ -317,4 +318,5 @@ function addSummary(
   target.handled += source.handled;
   target.delivered += source.delivered;
   target.failed += source.failed;
+  target.interrupted += source.interrupted;
 }

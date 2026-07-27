@@ -85,6 +85,7 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
       handled: 1,
       delivered: 1,
       failed: 0,
+      interrupted: 0,
     });
     expect(handled).toBe(1);
     expect(delivered).toEqual(["BTCC final answer"]);
@@ -148,8 +149,74 @@ test("a cancelling App Turn is terminalized without entering BTCC", async () => 
       handled: 0,
       delivered: 0,
       failed: 0,
+      interrupted: 0,
     });
     expect(handled).toBe(false);
+  } finally {
+    store.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("a BTCC runtime interruption parks the exact queue item for process replacement", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-runtime-interruption-"));
+  const queue = new NativeInboundQueue(butlerData);
+  const store = new SessionBindingStore(join(butlerData, "runtime", "sessions.sqlite"));
+  try {
+    const queued = queue.enqueue({
+      eventId: "app:runtime-interruption",
+      transport: "app",
+      accountId: "local",
+      peer: { kind: "dm", id: "general" },
+      sender: { id: "app-user" },
+      message: {
+        id: "runtime-interruption",
+        text: "preserve this exact Turn",
+        timestamp: "2026-07-28T00:00:00.000Z",
+      },
+      routingHints: {
+        sessionId: "butler/app-general",
+        turnId: "turn-runtime-interruption",
+      },
+    });
+    const dispatcher = new BtccInboundDispatcher();
+    const summary = dispatcher.poll({
+      queue,
+      store,
+      deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      server: {
+        async handleInbound() {
+          throw new Error("post-commit activation interrupted");
+        },
+      },
+    });
+    await dispatcher.waitForIdle();
+
+    expect(summary).toEqual({
+      claimed: 1,
+      handled: 0,
+      delivered: 0,
+      failed: 0,
+      interrupted: 1,
+    });
+    const pending = join(
+      butlerData,
+      "runtime",
+      "inbound-events",
+      "pending",
+      `${queued.queueId}.json`,
+    );
+    const failed = join(
+      butlerData,
+      "runtime",
+      "inbound-events",
+      "failed",
+      `${queued.queueId}.json`,
+    );
+    expect(existsSync(pending)).toBe(true);
+    expect(existsSync(failed)).toBe(false);
+    expect(queue.claim(1)).toEqual([]);
+    expect(readFileSync(pending, "utf8")).toContain('"dispatchStatus": "runtime-interrupted"');
   } finally {
     store.close();
     rmSync(butlerData, { recursive: true, force: true });

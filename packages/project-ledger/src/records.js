@@ -10,6 +10,7 @@ import { CliError, nowIso } from "./errors.js";
 import { ensureDir, ledgerRoot, listFiles, projectRelative, safeReadJson } from "./fs.js";
 import { frontmatterBody, markdownWithFrontmatter, parseFrontmatter } from "./frontmatter.js";
 import { completionGateIssues } from "./state-machine.js";
+import { isNonAuthoritativeProjectLedgerStorage } from "./storage-authority.js";
 
 export function issue(code, severity, message, path, record = null) {
   return {
@@ -62,7 +63,7 @@ export function readRecordData(filePath) {
 export function readRecord(project, filePath) {
   const relPath = projectRelative(project, filePath);
   if (relPath.endsWith("ledger.jsonl")) return null;
-  if (isIgnoredMetadataFile(filePath)) return null;
+  if (isNonAuthoritativeProjectLedgerStorage(filePath)) return null;
   const stats = statSync(filePath);
   const data = readRecordData(filePath);
   if (!data) return null;
@@ -109,7 +110,8 @@ export function recordFiles(project) {
   return [
     projectFile,
     ...listFiles(root, { skipDirs: new Set(["index", "views"]) })
-      .filter((file) => file !== projectFile && !file.endsWith("ledger.jsonl") && !isIgnoredMetadataFile(file)),
+      .filter((file) => file !== projectFile && !file.endsWith("ledger.jsonl") &&
+        !isNonAuthoritativeProjectLedgerStorage(file)),
   ].filter((file) => existsSync(file));
 }
 
@@ -152,7 +154,7 @@ export function scanPrivacy(project) {
   const findings = [];
   for (const file of listFiles(ledgerRoot(project), { skipDirs: new Set(["index", "views"]) })) {
     if (file.endsWith("ledger.jsonl")) continue;
-    if (isIgnoredMetadataFile(file)) continue;
+    if (isNonAuthoritativeProjectLedgerStorage(file)) continue;
     const text = readFileSync(file, "utf8");
     if (PRIVATE_CONTENT_PATTERNS.some((pattern) => pattern.test(text))) {
       findings.push(issue(
@@ -164,10 +166,6 @@ export function scanPrivacy(project) {
     }
   }
   return findings;
-}
-
-function isIgnoredMetadataFile(filePath) {
-  return [".DS_Store", "github-issues.json"].includes(basename(filePath));
 }
 
 export function workRecordPath(project, id) {
