@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { projectWorkProgress } from
+import {
+  projectWorkProgress,
+  retiredWorkProgress,
+} from
   "../../packages/butler-agent/src/agent/btcc/work-ledger/work-progress-projection.ts";
 
 const work = { workLogicalId: "work-1", outcome: "Ship terminal truth" };
@@ -39,6 +42,23 @@ for (const disposition of ["deferred", "cancelled"] as const) {
     ]);
   });
 }
+
+test("a reviewed Plan revision retires unfinished Tasks it replaced", () => {
+  const replacement = task("task-4", 1);
+  const revised = Object.assign({}, program as object, {
+    tasks: [{ task: replacement, status: "selected" }],
+    currentTask: { task: replacement, status: "selected" },
+  }) as never;
+
+  expect(retiredWorkProgress(program, revised).map((row) => ({
+    taskId: row.taskId,
+    taskState: row.taskState,
+    workState: row.workState,
+  }))).toEqual([
+    { taskId: "task-2", taskState: "stopped", workState: "cancelled" },
+    { taskId: "task-3", taskState: "stopped", workState: "cancelled" },
+  ]);
+});
 
 function task(taskLogicalId: string, executionOrdinal: number) {
   return {

@@ -119,6 +119,33 @@ test("terminal turns preserve canonical BTCC Work Ledger rows", () => {
   expect(progressRowsForTurnState(rows, "cancelled")).toEqual(rows);
 });
 
+test("terminal turns cannot expose a canonical BTCC Task as still active", () => {
+  const row: ProgressSummaryRow = {
+    id: "replaced-task",
+    kind: "todo",
+    state: "active",
+    safe_label: "Replaced Task",
+    bridge_phase: "btcc_work_ledger",
+    created_at: CREATED_AT,
+    safe_detail_rows: [{
+      id: "work",
+      kind: "work",
+      safe_label: "Work",
+      safe_value: "Replaced Work",
+      state: "active",
+    }],
+  };
+
+  expect(progressRowsForTurnState([row], "delivered")).toEqual([{
+    ...row,
+    state: "stopped",
+    safe_detail_rows: [{
+      ...row.safe_detail_rows![0],
+      state: "cancelled",
+    }],
+  }]);
+});
+
 test("legacy terminal progress retains existing folding behavior", () => {
   const row: ProgressSummaryRow = {
     id: "legacy-task",

@@ -72,7 +72,9 @@ export function progressRowsForTurnState(
       (row) => turnState === "cancelled" || !isFirstVisibleProgressRow(row),
     )
     .map((row) => {
-      if (isCanonicalBtccWorkTaskRow(row)) return row;
+      if (isCanonicalBtccWorkTaskRow(row)) {
+        return terminalCanonicalTaskRow(row);
+      }
       const safeDetailRows = row.safe_detail_rows?.map((detail) =>
         detail.state && !isTerminalProgressState(detail.state)
           ? { ...detail, state: rowState }
@@ -84,6 +86,27 @@ export function progressRowsForTurnState(
       if (!safeDetailRows) return nextRow;
       return { ...nextRow, safe_detail_rows: safeDetailRows };
     });
+}
+
+function terminalCanonicalTaskRow(
+  row: ProgressSummaryRow,
+): ProgressSummaryRow {
+  if (
+    row.state !== "active" &&
+    row.state !== "reviewing" &&
+    row.state !== "correction_required"
+  ) {
+    return row;
+  }
+  return {
+    ...row,
+    state: "stopped",
+    safe_detail_rows: row.safe_detail_rows?.map((detail) =>
+      detail.state === "active" || detail.state === "reviewing"
+        ? { ...detail, state: "cancelled" }
+        : detail,
+    ),
+  };
 }
 
 function isCanonicalBtccWorkTaskRow(row: ProgressSummaryRow): boolean {

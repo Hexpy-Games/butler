@@ -1,5 +1,8 @@
 export { createWorkLedger } from "./work-ledger.ts";
-export { projectWorkProgress } from "./work-progress-projection.ts";
+export {
+  projectWorkProgress,
+  retiredWorkProgress,
+} from "./work-progress-projection.ts";
 export type {
   WorkProgressTask,
   WorkProgressTaskState,
