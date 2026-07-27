@@ -3,6 +3,7 @@ import {
   requireRecord,
   runPhaseConversation,
   type PhaseContract,
+  type PhaseCodec,
   type PhaseInvocation,
 } from "../core/index.ts";
 import type {
@@ -13,7 +14,6 @@ import type {
   PlanningReviewSubjectCoverage,
   PlanningReviewProduct,
 } from "./contracts.ts";
-import { withManagedDeferral } from "../deferral/index.ts";
 import {
   planReviewSubmissionSchema,
 } from "./submission-schemas.ts";
@@ -33,6 +33,10 @@ import {
   draftReviewFindings,
   requiredPlanningFindings,
 } from "./review-finding-set.ts";
+import {
+  applyPlanningDeferralPolicy,
+  type PlanningDeferralPolicy,
+} from "./deferral-policy.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "planning_review",
@@ -63,12 +67,13 @@ const CORRECTION_VERIFICATION_CONTRACT: PhaseContract = {
 function reviewCodec(
   candidate: PlanningCandidateProduct,
   prior?: PlanningReview,
+  deferralPolicy: PlanningDeferralPolicy = "allow",
 ) {
   const subjects = isDraft(candidate.candidate)
     ? []
     : planningReviewSubjects(candidate.candidate);
   const priorBlocking = requiredPlanningFindings(prior);
-  return withManagedDeferral<PlanningReviewProduct>({
+  const codec: PhaseCodec<PlanningReviewProduct> = {
     submissionSchema: isDraft(candidate.candidate)
       ? planDraftReviewSubmissionSchema
       : planReviewSubmissionSchema(
@@ -136,7 +141,8 @@ function reviewCodec(
         submittedFindings,
       );
     },
-  });
+  };
+  return applyPlanningDeferralPolicy(codec, deferralPolicy);
 }
 
 function exactReviewBase(
@@ -285,7 +291,10 @@ function isDraft(candidate: PlanningCandidateProduct["candidate"]): candidate is
   return "kind" in candidate && candidate.kind === "planning_draft";
 }
 
-export function reviewPlan(command: PhaseInvocation) {
+export function reviewPlan(
+  command: PhaseInvocation,
+  deferralPolicy: PlanningDeferralPolicy = "allow",
+) {
   const state = requireRecord(command.context.stateInput, "Planning Review state");
   const candidate = loadCandidate(command.context.stateInput);
   const prior = state.priorPlanningReview as PlanningReview | undefined;
@@ -305,7 +314,7 @@ export function reviewPlan(command: PhaseInvocation) {
     phaseContract: priorBlocking.length > 0
       ? CORRECTION_VERIFICATION_CONTRACT
       : CONTRACT,
-    codec: reviewCodec(candidate, prior),
+    codec: reviewCodec(candidate, prior, deferralPolicy),
   });
 }
 
