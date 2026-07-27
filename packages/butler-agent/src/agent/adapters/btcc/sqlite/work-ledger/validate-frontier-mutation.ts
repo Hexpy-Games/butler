@@ -1,9 +1,9 @@
 import {
   assertPromotionPermit,
   type BtccPersistenceTypes,
+  canCloseImplementationFrontier,
   type WorkLedgerCommit,
 } from "../../../../btcc/gateway-api.ts";
-import { canCloseImplementationFrontier } from "../../../../btcc/work-ledger/frontier-readiness.ts";
 
 type ManagedProgramState = BtccPersistenceTypes["managedProgramState"];
 

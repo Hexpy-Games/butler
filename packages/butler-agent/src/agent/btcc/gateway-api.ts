@@ -44,6 +44,7 @@ import type {
 export {
   assertLogicalLedgerMutationId,
   assertLogicalLedgerRecordBytes,
+  canCloseImplementationFrontier,
   createLogicalLedgerBundle,
   createWorkLedger,
   ledgerAttemptRef,
