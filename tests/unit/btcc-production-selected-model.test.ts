@@ -150,11 +150,12 @@ describe("production BTCC selected model", () => {
       "operation_requests",
     ]);
     expect(calls[0]?.carrierFunctions[0]?.parameters).toMatchObject({
-      required: ["kind", "publicActivity"],
+      required: ["submission", "publicActivity"],
       additionalProperties: false,
+      properties: {
+        submission: phaseEnvelope().submissionSchema,
+      },
     });
-    expect(calls[0]?.carrierFunctions[0]?.argumentBinding)
-      .toBe("flat_phase_submission");
 
     const { stable, dynamic } = parseCacheOrderedPrompt(calls[0]!.prompt);
     const hierarchy = Object.fromEntries(
@@ -644,6 +645,40 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "selected_model_identity_mismatch",
+      activation: { kind: "runtime_remediation" },
+    });
+    expect(calls).toBe(2);
+  });
+
+  test("does not automatically re-enter after a corrected carrier is rejected again", async () => {
+    let calls = 0;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => {
+        calls += 1;
+        return {
+          carrier: { kind: "operation_requests", requests: [] },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+
+    expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toMatchObject({
+      kind: "interruption",
+      code: "provider_protocol_interruption",
+      activation: { kind: "automatic_provider_recovery" },
+    });
+    const corrected = phaseEnvelope({ emptyContext: true });
+    corrected.providerCorrection = {
+      kind: "previous_provider_product_rejected",
+      code: "provider_protocol_interruption",
+      diagnosticMessage: "the prior carrier violated the rendered schema",
+    };
+    expect(await model.runRound(corrected)).toMatchObject({
+      kind: "interruption",
+      code: "provider_protocol_interruption",
       activation: { kind: "runtime_remediation" },
     });
     expect(calls).toBe(2);

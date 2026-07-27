@@ -134,15 +134,7 @@ export function bindFunctionArguments(
   definition: ProviderCarrierFunction,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (definition.argumentBinding === "carrier_fields") {
-    return { kind: definition.carrierKind, ...args };
-  }
-  const { publicActivity, ...submission } = args;
-  return {
-    kind: "phase_submission",
-    submission,
-    publicActivity,
-  };
+  return { ...args, kind: definition.carrierKind };
 }
 
 function asFunctionTool(definition: ProviderCarrierFunction) {

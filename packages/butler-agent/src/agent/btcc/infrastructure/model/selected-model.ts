@@ -84,7 +84,9 @@ async function runSelectedModelRound(
     } catch (error) {
       if (error instanceof ProviderCarrierProtocolError) {
         return interruption("provider_protocol_interruption", {
-          kind: "automatic_provider_recovery",
+          kind: envelope.providerCorrection
+            ? "runtime_remediation"
+            : "automatic_provider_recovery",
         }, error.message);
       }
       throw error;

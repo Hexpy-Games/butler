@@ -46,7 +46,6 @@ export function providerCarrierFunctions(
         "Include every currently known independent operation needed for the next decision.",
       ].join(" "),
       carrierKind: "operation_requests",
-      argumentBinding: "carrier_fields",
       parameters: objectParameters({
         phaseContinuity: carrier.phaseContinuity,
         requests: carrier.requests,
@@ -64,18 +63,14 @@ function phaseSubmissionFunctions(
     if (!properties || "publicActivity" in properties) {
       throw new Error("Phase submission function requires an object without publicActivity");
     }
-    const required = Array.isArray(variant.required)
-      ? variant.required.filter((item): item is string => typeof item === "string")
-      : [];
     return {
       name: `submit_btcc_phase_${variantLabel(properties, index)}`,
-      description: "Submit one typed phase product allowed by the current BTCC phase.",
+      description: "Submit one explicit BTCC phase carrier allowed by the current phase.",
       carrierKind: "phase_submission",
-      argumentBinding: "flat_phase_submission",
       parameters: objectParameters({
-        ...properties,
+        submission: variant,
         publicActivity: publicActivitySchema("phase handoff"),
-      }, [...required, "publicActivity"]),
+      }, ["submission", "publicActivity"]),
     };
   });
 }

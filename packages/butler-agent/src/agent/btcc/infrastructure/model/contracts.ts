@@ -73,7 +73,6 @@ export type ProviderCarrierFunction = {
   name: string;
   description: string;
   carrierKind: "phase_submission" | "operation_requests";
-  argumentBinding: "flat_phase_submission" | "carrier_fields";
   parameters: Record<string, unknown>;
 };
 
