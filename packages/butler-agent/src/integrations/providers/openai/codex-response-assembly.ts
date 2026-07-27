@@ -23,6 +23,7 @@ export function codexSseResponseFromAccumulator(
           total_tokens: usage.total_tokens,
           prompt_tokens_details: {
             cached_tokens: usage.input_tokens_details?.cached_tokens,
+            cache_write_tokens: usage.input_tokens_details?.cache_write_tokens,
           },
         }
       : undefined,

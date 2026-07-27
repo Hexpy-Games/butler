@@ -1,5 +1,6 @@
 import type {
   ActualModelIdentity,
+  ModelPhaseState,
   OperationAuthority,
   OperationRequest,
 } from "../../core/index.ts";
@@ -54,6 +55,10 @@ export type ProviderPhasePrompt = {
   responseSchema: Record<string, unknown>;
   carrierFunctions: readonly ProviderCarrierFunction[];
   cacheScope: string;
+  usageAttribution: {
+    turnId: string;
+    phase: ModelPhaseState;
+  };
   signal?: AbortSignal;
 };
 

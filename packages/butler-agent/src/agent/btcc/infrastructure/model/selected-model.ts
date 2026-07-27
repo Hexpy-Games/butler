@@ -63,6 +63,10 @@ async function runSelectedModelRound(
       modelSelection: envelope.modelSelection,
       ...providerPrompt,
       cacheScope: `btcc:${envelope.phase}`,
+      usageAttribution: {
+        turnId: envelope.binding.turnId,
+        phase: envelope.phase,
+      },
       signal,
     });
     if (!sameIdentity(envelope.modelSelection, result.actualIdentity)) {
