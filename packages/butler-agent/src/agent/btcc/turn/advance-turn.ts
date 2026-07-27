@@ -93,7 +93,7 @@ export async function advanceTurn(
           decision.transition.product,
         );
       }
-      await publishTurnProgress(dependencies.progress, successor);
+      await publishTurnProgress(dependencies.progress, successor, turn);
       return successor;
     } catch (error) {
       if (boundaryCommitted) {

@@ -54,6 +54,27 @@ export function projectWorkProgress(
     .sort((left, right) => left.taskOrder - right.taskOrder);
 }
 
+export function retiredWorkProgress(
+  previous: ReviewedManagedProgramState,
+  current: ReviewedManagedProgramState,
+): WorkProgressTask[] {
+  if (previous.programId !== current.programId) return [];
+  const currentTaskIds = new Set(
+    current.tasks.map(({ task }) => task.taskLogicalId),
+  );
+  return projectWorkProgress(previous)
+    .filter((task) =>
+      !currentTaskIds.has(task.taskId) &&
+      task.taskState !== "completed" &&
+      task.taskState !== "stopped",
+    )
+    .map((task) => ({
+      ...task,
+      taskState: "stopped" as const,
+      workState: "cancelled" as const,
+    }));
+}
+
 function taskProgressState(
   status: ReviewedManagedProgramState["tasks"][number]["status"],
 ): WorkProgressTaskState {

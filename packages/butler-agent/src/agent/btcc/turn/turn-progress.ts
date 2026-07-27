@@ -2,7 +2,10 @@ import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { OpeningContinuationProduct } from "../conception/index.ts";
 import type { OperationalActivation } from "../recovery/index.ts";
 import type { TurnRecord } from "./contracts.ts";
-import { projectWorkProgress } from "../work-ledger/index.ts";
+import {
+  projectWorkProgress,
+  retiredWorkProgress,
+} from "../work-ledger/index.ts";
 
 export async function publishOpeningDecision(
   observer: BtccTurnProgressObserver | undefined,
@@ -28,16 +31,24 @@ export async function publishOpeningDecision(
 export async function publishTurnProgress(
   observer: BtccTurnProgressObserver | undefined,
   turn: TurnRecord,
+  previous?: TurnRecord,
 ): Promise<void> {
   if (!observer) return;
   try {
     const program = turn.managed?.program;
     if (program?.planningState === "reviewed" && observer.workProgressChanged) {
+      const previousProgram = previous?.managed?.program;
+      const retiredTasks = previousProgram?.planningState === "reviewed"
+        ? retiredWorkProgress(previousProgram, program)
+        : [];
       await observer.workProgressChanged({
         turnId: turn.turnId,
         turnRevision: turn.revision,
         programId: program.programId,
-        tasks: projectWorkProgress(program, turn.finalDisposition),
+        tasks: [
+          ...retiredTasks,
+          ...projectWorkProgress(program, turn.finalDisposition),
+        ],
       });
     }
     await observer.stateChanged({
