@@ -140,7 +140,7 @@ export class OperationPayloadFiles {
   }
 
   private syncFile(path: string): void {
-    const file = openSync(path, "r");
+    const file = openSync(path, process.platform === "win32" ? "r+" : "r");
     try {
       fsyncSync(file);
     } finally {
@@ -149,6 +149,7 @@ export class OperationPayloadFiles {
   }
 
   private syncDirectory(path: string): void {
+    if (process.platform === "win32") return;
     const directory = openSync(dirname(path), "r");
     try {
       fsyncSync(directory);
