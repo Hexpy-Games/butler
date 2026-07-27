@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { InboundEnvelope } from
   "../../packages/butler-agent/src/gateways/core/contracts.ts";
-import { NativeInboundQueue } from
+import { NativeInboundQueue, type QueuedInboundEvent } from
   "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 
 test("native inbound queue requeues a legacy runtime interruption", () => {
@@ -32,6 +32,35 @@ test("native inbound queue requeues a legacy runtime interruption", () => {
       "failed",
       `${queued.queueId}.json.recovered`,
     ))).toBe(true);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("native inbound queue recovers an eligible dead-owner claim before lease expiry", () => {
+  const butlerData = join(tmpdir(), `butler-inbound-dead-owner-${Date.now()}`);
+  mkdirSync(butlerData, { recursive: true });
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const queued = queue.enqueue(envelope());
+    const [claimed] = queue.claimEligible(
+      1,
+      () => true,
+      new Date("2026-04-27T00:00:00.000Z"),
+      15 * 60_000,
+    );
+    const record = JSON.parse(readFileSync(claimed!.path, "utf8")) as QueuedInboundEvent;
+    record.processing = { ...record.processing!, ownerId: "999999:dead-owner" };
+    writeFileSync(claimed!.path, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+    expect(queue.recoverStaleProcessing({
+      staleAfterMs: 15 * 60_000,
+      now: new Date("2026-04-27T00:01:00.000Z"),
+      shouldRecover: () => true,
+    })).toEqual({ requeued: 1, skipped: 0 });
+    const [reclaimed] = queue.claim(1);
+    expect(reclaimed?.queueId).toBe(queued.queueId);
+    expect(readFileSync(reclaimed!.path, "utf8")).toContain("processing_owner_dead");
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

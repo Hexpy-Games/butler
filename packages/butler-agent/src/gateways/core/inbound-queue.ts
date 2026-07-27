@@ -200,8 +200,9 @@ export class NativeInboundQueue {
       const leaseExpiresAtMs = Date.parse(record.processing?.leaseExpiresAt ?? "");
       const leaseExpired =
         Number.isFinite(leaseExpiresAtMs) && nowMs >= leaseExpiresAtMs;
-      const ownerDead = record.metadata.sameLogicalTurnContinuation === true &&
-        processingOwnerLiveness(record.processing?.ownerId) === "dead";
+      const ownerDead = processingOwnerLiveness(record.processing?.ownerId) === "dead" &&
+        (record.metadata.sameLogicalTurnContinuation === true ||
+          options.shouldRecover?.(record) === true);
       if (!leaseExpired && !ownerDead) {
         summary.skipped += 1;
         continue;
@@ -335,7 +336,6 @@ export class NativeInboundQueue {
     return current?.processing?.claimId === item.processing.claimId;
   }
 }
-
 function processingOwnerLiveness(ownerId: string | undefined): "alive" | "dead" | "unknown" {
   const match = /^(\d+):/u.exec(ownerId ?? "");
   if (!match) return "unknown";
