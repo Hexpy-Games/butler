@@ -224,11 +224,24 @@ const server = createAppServer({
   responder: async (input) => {
     await smokeResponderProgressGate;
     input.onProgress?.({
+      id: "smoke-progress-phase",
+      kind: "message",
+      safe_label: "검증 작업을 실행합니다.",
+      semantic_block_id: "implementation_validation",
+      work_decision_source: "model-authored",
+      work_decision_summary: "로컬 검증 실행",
+      work_decision_rationale: "변경 사항을 브라우저에서 확인합니다.",
+      work_decision_next_step: "검증 결과를 검토합니다.",
+      state: "running",
+    });
+    input.onProgress?.({
       id: "smoke-progress-command",
       kind: "ran_command",
       safe_label: "Bash: bun test",
       safe_tool_name: "Bash",
       safe_input_label: "bun test",
+      bridge_phase: "btcc_operation",
+      semantic_block_id: "implementation_validation",
       work_block_id: "smoke-work-command",
       work_block_label: "로컬 테스트 명령을 실행합니다.",
       state: "running",
@@ -3718,6 +3731,27 @@ try {
     state: "visible",
     timeout: turnActivityTimeoutMs,
   });
+  const currentStatusGeometry = await timelineWorkActivity
+    .locator(testClass("turn-current-status-slot"))
+    .evaluate((element) => {
+      const line = element.querySelector("p");
+      if (!line) return null;
+      const original = line.textContent;
+      const beforeHeight = element.getBoundingClientRect().height;
+      line.textContent = "A deliberately long current operation label ".repeat(20);
+      const afterHeight = element.getBoundingClientRect().height;
+      const clipped = line.scrollWidth > line.clientWidth;
+      line.textContent = original;
+      return { beforeHeight, afterHeight, clipped };
+    });
+  assert(
+    currentStatusGeometry !== null &&
+      Math.abs(
+        currentStatusGeometry.beforeHeight - currentStatusGeometry.afterHeight,
+      ) < 0.5 &&
+      currentStatusGeometry.clipped,
+    `current status must stay one clipped line: ${JSON.stringify(currentStatusGeometry)}`,
+  );
   const activityButton = timelineWorkActivity
     .getByRole("button", { name: /Bash/u })
     .first();

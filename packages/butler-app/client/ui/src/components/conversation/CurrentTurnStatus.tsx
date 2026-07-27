@@ -1,12 +1,7 @@
 import type { ProgressRow } from "@/app/types.ts";
 import { CurrentModelRoundWaiting } from "./CurrentModelRoundWaiting";
 import { CurrentPhaseActivity } from "./CurrentPhaseActivity";
-
-const stableStatusSlot = {
-  alignItems: "center",
-  display: "flex",
-  minHeight: "calc(var(--font-size-3) * var(--line-height-body))",
-} as const;
+import styles from "./CurrentTurnStatus.module.css";
 
 export function CurrentTurnStatus({
   operation,
@@ -17,19 +12,23 @@ export function CurrentTurnStatus({
   modelRoundWait?: ProgressRow;
   publicActivity?: ProgressRow;
 }) {
+  const fullLabel = operation?.safe_label ?? publicActivity?.safe_label;
   return (
     <div
       aria-live="polite"
+      className={styles.slot}
       data-test-class="turn-current-status-slot"
-      style={stableStatusSlot}
+      title={fullLabel}
     >
-      {operation ? (
-        <CurrentPhaseActivity row={operation} />
-      ) : modelRoundWait ? (
-        <CurrentModelRoundWaiting row={modelRoundWait} />
-      ) : publicActivity ? (
-        <CurrentPhaseActivity row={publicActivity} />
-      ) : null}
+      <div className={styles.content} data-test-class="turn-current-status-content">
+        {operation ? (
+          <CurrentPhaseActivity row={operation} />
+        ) : modelRoundWait ? (
+          <CurrentModelRoundWaiting row={modelRoundWait} />
+        ) : publicActivity ? (
+          <CurrentPhaseActivity row={publicActivity} />
+        ) : null}
+      </div>
     </div>
   );
 }

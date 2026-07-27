@@ -1,0 +1,24 @@
+.slot {
+  display: flex;
+  height: calc(var(--font-size-3) * var(--line-height-body));
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+}
+
+.content {
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.content > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.content p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
