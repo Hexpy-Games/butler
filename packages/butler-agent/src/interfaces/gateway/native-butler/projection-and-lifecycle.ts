@@ -11,7 +11,6 @@ import { DeliveryGuard } from "../../transport/delivery-guard.ts";
 import {
   APP_TRANSPORT,
 } from "../../transport/app/adapter.ts";
-import { createTelegramTransportAdapter } from "../../transport/telegram/adapter.ts";
 
 export function appTurnEventAction(input: {
   sessionId: string;
@@ -83,6 +82,9 @@ export async function sendStartupNotification(input: {
 }): Promise<DeliveryResult | undefined> {
   const chatId = input.chatId?.trim();
   if (!chatId) return undefined;
+  const { createTelegramTransportAdapter } = await import(
+    "../../transport/telegram/adapter.ts",
+  );
   const action: OutboundAction = {
     actionId: `telegram-out:${input.sessionId}:startup`,
     transport: "telegram",
