@@ -44,18 +44,20 @@ export type {
   PhaseInvocation,
   PhaseRunBinding,
   ModelPhaseState,
-  OperationExecutor,
-  ObservationResult,
-  OperationPayloadSource,
-  OperationAuthority,
-  OperationRequest,
-  OperationResult,
   ProviderCorrection,
   ProviderRoundValue,
   SelectedModel,
+} from "./contracts.ts";
+export type {
+  OperationAuthority,
+  OperationExecutor,
+  OperationPayloadSource,
+  OperationRequest,
+  OperationResult,
+  ObservationResult,
   WorkspaceMutationScope,
   WorkspaceOperationRoot,
-} from "./contracts.ts";
+} from "./operation-contracts.ts";
 export {
   OperationRejectedError,
   rejectedOperationResult,

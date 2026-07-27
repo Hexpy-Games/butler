@@ -121,6 +121,85 @@ describe("production BTCC selected model", () => {
     expect(calls).toBe(1);
   });
 
+  test("injects accepted external-effect identity instead of trusting provider fields", async () => {
+    const effectIntentRef = { id: "effect-1", sha256: "effect-sha" };
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: capabilityCatalog([{
+        capabilityRef: "project-ledger-update",
+        name: "project_ledger_update",
+        description: "Update the admitted Project Ledger.",
+        operationKinds: ["external_effect"],
+        inputSchema: { type: "object" },
+      }]),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => ({
+        carrier: {
+          kind: "operation_requests",
+          phaseContinuity: phaseContinuity(),
+          requests: [{
+            requestId: "ledger-update-1",
+            publicTitle: "Update the project ledger",
+            kind: "external_effect",
+            capabilityRef: "project-ledger-update",
+            input: {},
+          }],
+        },
+        actualIdentity: actualIdentity(),
+      })),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.operationAuthority = {
+      observationScopeRefs: ["ledger:sandy"],
+      mutation: {
+        kind: "external_effect_only",
+        effectIntentRef,
+        occurrenceKey: "reconcile-ledger",
+        targetScopeRef: "ledger:sandy",
+      },
+    };
+
+    expect(await model.runRound(envelope)).toMatchObject({
+      kind: "operation_requests",
+      requests: [{
+        kind: "external_effect",
+        effectIntentRef,
+        occurrenceKey: "reconcile-ledger",
+        targetScopeRef: "ledger:sandy",
+      }],
+    });
+  });
+
+  test("stops before provider execution when an authorized mutation has no capability", async () => {
+    let calls = 0;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async () => {
+        calls += 1;
+        throw new Error("provider must not be called");
+      }),
+    });
+    const envelope = phaseEnvelope({ emptyContext: true });
+    envelope.operationAuthority = {
+      observationScopeRefs: ["ledger:sandy"],
+      mutation: {
+        kind: "external_effect_only",
+        effectIntentRef: { id: "effect-1", sha256: "effect-sha" },
+        occurrenceKey: "reconcile-ledger",
+        targetScopeRef: "ledger:sandy",
+      },
+    };
+
+    expect(await model.runRound(envelope)).toEqual({
+      kind: "interruption",
+      code: "phase_prompt_render_interruption",
+      activation: { kind: "runtime_remediation" },
+    });
+    expect(calls).toBe(0);
+  });
+
   test("returns a structurally valid but phase-unadmitted operation for in-phase rejection", async () => {
     const model = createProductionSelectedModel({
       context: emptyContextResolver(),

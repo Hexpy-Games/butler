@@ -110,6 +110,16 @@ function bindOperationAuthority(
   ) {
     return { ...value, reviewSourceRef: authority.mutation.reviewSourceRef } as OperationRequest;
   }
+  if (value.kind === "external_effect" &&
+    authority.mutation.kind === "external_effect_only"
+  ) {
+    return {
+      ...value,
+      effectIntentRef: authority.mutation.effectIntentRef,
+      occurrenceKey: authority.mutation.occurrenceKey,
+      targetScopeRef: authority.mutation.targetScopeRef,
+    } as OperationRequest;
+  }
   if (value.kind === "repository_promotion" &&
     authority.mutation.kind === "repository_promotion_only"
   ) {
@@ -146,6 +156,15 @@ function bindRejectedAuthority(
   }
   if (value.kind === "review_validation") {
     return { ...value, ...marker, reviewSourceRef: rejectedRef } as OperationRequest;
+  }
+  if (value.kind === "external_effect") {
+    return {
+      ...value,
+      ...marker,
+      effectIntentRef: rejectedRef,
+      occurrenceKey: "rejected",
+      targetScopeRef: "rejected:external-effect",
+    } as OperationRequest;
   }
   if (value.kind === "repository_promotion") {
     return {

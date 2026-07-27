@@ -6,8 +6,22 @@ import type { OperationalDiagnostic } from "../recovery/index.ts";
 import type { SubmissionSchema } from "./submission-schema.ts";
 import type { PromptDutyId, PromptProhibitionId } from "./prompt-contract.ts";
 import type { OperationResultProjection } from "../operation-result/contracts.ts";
-import type { OperationResultCompleteness } from "../operation-result/contracts.ts";
-import type { CommandExecutionSummary } from "../operation-result/contracts.ts";
+import type {
+  OperationAuthority,
+  OperationExecutor,
+  OperationRequest,
+  OperationResult,
+} from "./operation-contracts.ts";
+export type {
+  ObservationResult,
+  OperationAuthority,
+  OperationExecutor,
+  OperationPayloadSource,
+  OperationRequest,
+  OperationResult,
+  WorkspaceMutationScope,
+  WorkspaceOperationRoot,
+} from "./operation-contracts.ts";
 import type {
   PhaseActivityPublisher,
   PublicPhaseActivity,
@@ -175,27 +189,6 @@ export interface PhaseConversationStore {
   }): Promise<PhaseRunBinding>;
 }
 
-export type OperationAuthority = {
-  observationScopeRefs: string[];
-  mutation:
-    | { kind: "forbidden" }
-    | {
-        kind: "workspace_only";
-        workspaceRef: { id: string; sha256: string };
-        operationRoot: WorkspaceOperationRoot;
-        mutationScope: WorkspaceMutationScope;
-      }
-    | { kind: "validation_overlay_only"; reviewSourceRef: { id: string; sha256: string } }
-    | {
-        kind: "repository_promotion_only";
-        authorizationRef: { id: string; sha256: string };
-        candidateRef: { id: string; sha256: string };
-        resolutionRef: { id: string; sha256: string };
-        baselineRef: { id: string; sha256: string };
-        finalSnapshotRef: { id: string; sha256: string };
-      };
-};
-
 export type PhaseContinuity = {
   objectiveState: string;
   decisions: string[];
@@ -203,117 +196,6 @@ export type PhaseContinuity = {
   nextOperationPurpose: string;
   publicActivity: PublicPhaseActivity;
 };
-
-export type WorkspaceOperationRoot =
-  | { kind: "file"; relativeTarget: "target" }
-  | { kind: "directory"; relativeTarget: "." };
-
-export type WorkspaceMutationScope =
-  | { kind: "read_only" }
-  | { kind: "contained_paths"; writablePaths: string[] };
-export type OperationRequest = {
-  requestId: string;
-  publicTitle: string;
-  runtimeAdmission?: { kind: "rejected"; code: "operation_authority_mismatch" };
-} & (
-  | {
-      kind: "observe";
-      capabilityRef: string;
-      scopeRef: string;
-      input: Record<string, unknown>;
-    }
-  | {
-      kind: "workspace_artifact_action";
-      capabilityRef: string;
-      workspaceRef: { id: string; sha256: string };
-      relativeTarget: string;
-      input: Record<string, unknown>;
-    }
-  | {
-      kind: "workspace_artifact_observation";
-      capabilityRef: string;
-      workspaceRef: { id: string; sha256: string };
-      input: Record<string, unknown>;
-    }
-  | {
-      kind: "review_validation";
-      capabilityRef: string;
-      reviewSourceRef: { id: string; sha256: string };
-      input: Record<string, unknown>;
-    }
-  | {
-      kind: "repository_promotion";
-      capabilityRef: string;
-      authorizationRef: { id: string; sha256: string };
-      candidateRef: { id: string; sha256: string };
-      resolutionRef: { id: string; sha256: string };
-      baselineRef: { id: string; sha256: string };
-      finalSnapshotRef: { id: string; sha256: string };
-      input: Record<string, unknown>;
-    }
-);
-
-export type OperationResult = {
-  requestId: string;
-  request: OperationRequest;
-  outcome:
-    | "observed"
-    | "operation_rejected"
-    | "workspace_artifact_applied"
-    | "review_validated"
-    | "promoted";
-  observationRef: { id: string; sha256: string };
-  content?: string;
-  completeness?: OperationResultCompleteness;
-  resultRef?: OperationResultProjection["resultRef"];
-  requestRef?: OperationResultProjection["requestRef"];
-  capabilityRef?: string;
-  byteLength?: number;
-  preview?: string;
-  omittedBytes?: number;
-  readScopeRef?: string;
-  view?: OperationResultProjection["view"];
-  artifactRevisionRef?: { id: string; sha256: string };
-  targetSnapshotRef?: { id: string; sha256: string };
-  validationReceiptRef?: { id: string; sha256: string };
-  transactionRef?: { id: string; sha256: string };
-  commitJournalRef?: { id: string; sha256: string };
-  promotionReceiptRef?: { id: string; sha256: string };
-  promotedSnapshotRef?: { id: string; sha256: string };
-  promotionRecords?: {
-    transaction: { ref: { id: string; sha256: string }; [key: string]: unknown };
-    journals: Array<{ ref: { id: string; sha256: string }; state: string; [key: string]: unknown }>;
-    commitReceipt: { ref: { id: string; sha256: string }; [key: string]: unknown };
-    promotedSnapshot: { ref: { id: string; sha256: string }; [key: string]: unknown };
-    cleanupReceipt: { ref: { id: string; sha256: string }; [key: string]: unknown };
-  };
-};
-
-export type OperationPayloadSource =
-  | string
-  | {
-      kind: "spooled_text";
-      path: string;
-      sha256: string;
-      byteLength: number;
-      mediaType: "text/plain; charset=utf-8";
-    };
-
-export type ObservationResult =
-  Omit<OperationResult, "request" | "content">
-  & {
-      content: string;
-      payloadSource?: OperationPayloadSource;
-      executionSummary?: CommandExecutionSummary;
-    };
-
-export interface OperationExecutor {
-  perform(input: {
-    request: OperationRequest;
-    envelope: PhaseEnvelope;
-    signal?: AbortSignal;
-  }): Promise<ObservationResult | OperationResultProjection>;
-}
 
 export type PhaseCodec<Product> = {
   submissionSchema: SubmissionSchema;

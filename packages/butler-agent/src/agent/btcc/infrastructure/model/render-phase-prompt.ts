@@ -1,8 +1,9 @@
-import type { PhaseEnvelope } from "../../core/index.ts";
+import type { OperationRequest, PhaseEnvelope } from "../../core/index.ts";
 import { modelStructuredDecisionTransport } from
   "../../../../integrations/providers/model-catalog.ts";
 import type {
   ButlerContextResolver,
+  AvailablePhaseCapability,
   RenderedPhasePrompt,
   ResolvedContextDocument,
   StructuralCapabilityCatalog,
@@ -42,6 +43,7 @@ export async function renderPhasePrompt(
     }),
   ]);
   const availableCapabilities = capabilitySurface.availableCapabilities;
+  assertRequiredMutationCapability(operationAuthority, availableCapabilities);
   const providerVocabulary = envelope.operationSurface === "closed"
     ? []
     : capabilitySurface.providerVocabulary;
@@ -96,6 +98,25 @@ export async function renderPhasePrompt(
     responseSchema,
     carrierFunctions,
   };
+}
+
+function assertRequiredMutationCapability(
+  authority: PhaseEnvelope["operationAuthority"],
+  capabilities: readonly AvailablePhaseCapability[],
+): void {
+  const required = requiredMutationOperation(authority.mutation.kind);
+  if (!required || capabilities.some((item) => item.operationKind === required)) return;
+  throw new Error(`required_mutation_capability_unavailable:${required}`);
+}
+
+function requiredMutationOperation(
+  kind: PhaseEnvelope["operationAuthority"]["mutation"]["kind"],
+): OperationRequest["kind"] | undefined {
+  if (kind === "external_effect_only") return "external_effect";
+  if (kind === "repository_promotion_only") return "repository_promotion";
+  if (kind === "validation_overlay_only") return "review_validation";
+  if (kind === "workspace_only") return "workspace_artifact_action";
+  return undefined;
 }
 
 function fixedProviderRequestShape(

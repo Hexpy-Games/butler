@@ -40,6 +40,16 @@ export function describeOperationSource(
       relativeTarget: request.relativeTarget,
     };
   }
+  if (request.kind === "external_effect") {
+    return {
+      kind: request.kind,
+      capabilityRef: request.capabilityRef,
+      effectIntentRef: request.effectIntentRef,
+      occurrenceKey: request.occurrenceKey,
+      targetScopeRef: request.targetScopeRef,
+      input: request.input,
+    };
+  }
   return {
     kind: request.kind,
     capabilityRef: request.capabilityRef,
@@ -75,6 +85,7 @@ function resultRefs(result: OperationResultProjection) {
     ...(result.artifactRevisionRef ? { artifactRevisionRef: result.artifactRevisionRef } : {}),
     ...(result.targetSnapshotRef ? { targetSnapshotRef: result.targetSnapshotRef } : {}),
     ...(result.validationReceiptRef ? { validationReceiptRef: result.validationReceiptRef } : {}),
+    ...(result.effectReceiptRef ? { effectReceiptRef: result.effectReceiptRef } : {}),
     ...(result.transactionRef ? { transactionRef: result.transactionRef } : {}),
     ...(result.commitJournalRef ? { commitJournalRef: result.commitJournalRef } : {}),
     ...(result.promotionReceiptRef ? { promotionReceiptRef: result.promotionReceiptRef } : {}),

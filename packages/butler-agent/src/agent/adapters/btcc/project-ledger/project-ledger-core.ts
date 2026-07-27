@@ -26,6 +26,8 @@ export type ProjectLedgerCore = {
       path: string;
     }>;
   };
+  check(project: string): { ok: boolean; issues?: unknown[] };
+  render(project: string, view: string, options: Record<string, unknown>): unknown;
   projectPath(project: string, path: string): string;
   readRecordBody(filePath: string): string | null;
   readRecordData(filePath: string): Record<string, unknown> | null;
@@ -58,7 +60,8 @@ export function loadProjectLedgerCore(): Promise<ProjectLedgerCore> {
 }
 
 async function loadCore(): Promise<ProjectLedgerCore> {
-  const [commands, docs, filesystem, lifecycle, records, recordCommands, transactions, indexer] =
+  const [commands, docs, filesystem, lifecycle, records, recordCommands, transactions, indexer,
+    renderer] =
     await Promise.all([
       import(corePath("commands.js")),
       import(corePath("docs-migration.js")),
@@ -68,6 +71,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
       import(corePath("record-commands.js")),
       import(corePath("transactions/index.js")),
       import(corePath("indexer.js")),
+      import(corePath("renderer.js")),
     ]);
   return {
     initProject: commands.initProject,
@@ -82,6 +86,8 @@ async function loadCore(): Promise<ProjectLedgerCore> {
     updateTask: lifecycle.updateTask,
     updateWork: lifecycle.updateWork,
     buildIndex: indexer.buildIndex,
+    check: indexer.check,
+    render: renderer.render,
     projectPath: filesystem.projectPath,
     readRecordBody: records.readRecordBody,
     readRecordData: records.readRecordData,

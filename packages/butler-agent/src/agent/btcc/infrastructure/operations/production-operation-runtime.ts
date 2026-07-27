@@ -18,6 +18,7 @@ import type {
 import { performObservation } from "./perform-observation.ts";
 import { performPromotion } from "./perform-promotion.ts";
 import { performReviewValidation } from "./perform-review-validation.ts";
+import { performExternalEffect } from "./perform-external-effect.ts";
 import { performWorkspaceAction } from "./perform-workspace-action.ts";
 import type { WorkspaceActionBoundary } from "./perform-workspace-action.ts";
 import { performWorkspaceObservation } from "./perform-workspace-observation.ts";
@@ -147,6 +148,14 @@ async function performOperation(
       envelope: input.envelope,
       options,
       store,
+      signal: input.signal,
+    });
+  }
+  if (input.request.kind === "external_effect") {
+    return performExternalEffect({
+      request: input.request,
+      envelope: input.envelope,
+      options,
       signal: input.signal,
     });
   }

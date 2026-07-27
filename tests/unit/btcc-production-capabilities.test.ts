@@ -12,12 +12,119 @@ import {
   provisionWorkspace,
   workspaceEnvelope,
 } from "./support/btcc-production-operations-fixture.ts";
+import { loadProjectLedgerCore } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/project-ledger-core.ts";
 
 const roots: string[] = [];
 
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
 
 describe("production BTCC capabilities", () => {
+  test("atomically applies an admitted Project Ledger external effect", async () => {
+    const root = fixtureRoot();
+    const projectRoot = join(root, "project-ledger", "projects", "sandy");
+    mkdirSync(projectRoot, { recursive: true });
+    writeFileSync(join(projectRoot, "project.json"), JSON.stringify({
+      schema: "project-ledger.project.v1",
+      id: "sandy",
+      name: "Sandy",
+      status: "active",
+    }));
+    writeFileSync(join(projectRoot, "ledger.jsonl"), "");
+    const core = await loadProjectLedgerCore();
+    core.createRecord(projectRoot, {
+      kind: "report",
+      id: "REPORT-SANDY",
+      title: "Sandy report",
+      status: "active",
+      body: "Before",
+    });
+    const tools = createProductionToolRuntime({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: join(root, "app.sqlite"),
+      resolveProjectLedgerRoot(projectRef) {
+        expect(projectRef).toBe("sandy");
+        return projectRoot;
+      },
+    });
+    const runtime = createProductionOperationRuntime({
+      butlerData: root,
+      async resolveTargetScope() {
+        return { targetPath: root };
+      },
+      ...tools,
+    });
+    const effectIntentRef = { id: "effect-ledger", sha256: "effect-ledger-sha" };
+    const request: Extract<OperationRequest, { kind: "external_effect" }> = {
+      requestId: "update-sandy-report",
+      publicTitle: "Update Sandy project report",
+      kind: "external_effect",
+      capabilityRef: "project_ledger_update",
+      effectIntentRef,
+      occurrenceKey: "reconcile-sandy-ledger",
+      targetScopeRef: "ledger:sandy",
+      input: {
+        updates: [{
+          id: "REPORT-SANDY",
+          kind: "report",
+          body: "After",
+          reason: "Reconciled",
+        }],
+      },
+    };
+    const phase = envelope({ currentEffectIntent: { ref: effectIntentRef } });
+    phase.context.projectRef = "sandy";
+    phase.operationAuthority = {
+      observationScopeRefs: ["ledger:sandy"],
+      mutation: {
+        kind: "external_effect_only",
+        effectIntentRef,
+        occurrenceKey: request.occurrenceKey,
+        targetScopeRef: request.targetScopeRef,
+      },
+    };
+
+    const result = await runtime.operations.perform({ request, envelope: phase });
+    expect(result).toMatchObject({
+      outcome: "external_effect_applied",
+      effectReceiptRef: expect.any(Object),
+      targetSnapshotRef: expect.any(Object),
+    });
+    const record = core.resolveRecord(projectRoot, { kind: "report", id: "REPORT-SANDY" });
+    expect(core.readRecordBody(record.filePath)).toBe("After");
+    expect(core.readRecordData(record.filePath)?.reason).toBe("Reconciled");
+
+    const replay = await runtime.operations.perform({ request, envelope: phase });
+    expect(replay.resultRef).toEqual(result.resultRef);
+
+    const resumedPhase = {
+      ...phase,
+      binding: { ...phase.binding, checkpointRevision: phase.binding.checkpointRevision + 1 },
+    };
+    const resumed = await runtime.operations.perform({ request, envelope: resumedPhase });
+    expect(resumed.targetSnapshotRef).toEqual(result.targetSnapshotRef);
+
+    const conflictingRequest = {
+      ...request,
+      requestId: "change-sandy-report-again",
+      input: {
+        updates: [{ id: "REPORT-SANDY", kind: "report", body: "Different" }],
+      },
+    };
+    await expect(runtime.operations.perform({
+      request: conflictingRequest,
+      envelope: {
+        ...resumedPhase,
+        binding: {
+          ...resumedPhase.binding,
+          checkpointRevision: resumedPhase.binding.checkpointRevision + 1,
+        },
+      },
+    })).rejects.toThrow("already has different content");
+    expect(core.readRecordBody(record.filePath)).toBe("After");
+  });
+
   test("spools complete command output before projecting it", async () => {
     const root = fixtureRoot();
     const targetPath = join(root, "repository");

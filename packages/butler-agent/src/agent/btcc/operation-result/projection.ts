@@ -143,6 +143,9 @@ function structuralRefs(
     ...("validationReceiptRef" in result && result.validationReceiptRef
       ? { validationReceiptRef: result.validationReceiptRef }
       : {}),
+    ...("effectReceiptRef" in result && result.effectReceiptRef
+      ? { effectReceiptRef: result.effectReceiptRef }
+      : {}),
     ...("transactionRef" in result && result.transactionRef
       ? { transactionRef: result.transactionRef }
       : {}),
