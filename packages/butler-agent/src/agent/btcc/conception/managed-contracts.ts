@@ -126,6 +126,14 @@ export type GoalContractAcceptedProduct = {
     reviewedOutcomeIds: [string];
     reviewedArtifactPersistence: GoalArtifactPersistence;
     continuationBindingRef: ContentRef;
+    continuationDecision:
+      | { kind: "new_request" }
+      | { kind: "bind"; continuationCandidateId: string }
+      | {
+          kind: "reject";
+          continuationCandidateId: string;
+          rationale: string;
+        };
     verdict: "accepted";
     findings: [];
   };

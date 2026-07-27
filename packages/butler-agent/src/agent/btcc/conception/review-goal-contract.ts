@@ -16,13 +16,13 @@ import type {
   GoalReviewFinding,
   GoalReviewFindingVerdict,
 } from "./managed-contracts.ts";
-import type {
-  ContinuationBinding,
-  ContinuationCandidate,
-} from "../continuation/index.ts";
 import {
   goalReviewSubmissionSchema,
 } from "./submission-schemas.ts";
+import {
+  decideContinuation,
+  openingContinuationProposalId,
+} from "./continuation/index.ts";
 import { retainConceptionPlanningContext } from "./planning-context.ts";
 import {
   decodeGoalSubjectCoverage,
@@ -50,11 +50,13 @@ const CONTRACT: PhaseContract = {
 
 function goalReviewCodec(
   prior?: GoalContractRevisionRequiredProduct,
+  proposedContinuationCandidateId?: string,
 ): PhaseCodec<GoalContractReviewProduct> {
   const frozenFindings = prior?.review.findings ?? [];
   return {
   submissionSchema: goalReviewSubmissionSchema(
     frozenFindings.map((finding) => finding.rootCauseKey),
+    proposedContinuationCandidateId,
   ),
   decode(submission, envelope) {
     const candidate = loadCandidate(envelope.context.stateInput);
@@ -100,10 +102,11 @@ function goalReviewCodec(
     const inboxId = requireStringState(envelope.context.stateInput, "inboxId");
     const sessionId = requireStringState(envelope.context.stateInput, "sessionId");
     const projectRef = optionalStringState(envelope.context.stateInput, "projectRef");
-    const continuation = selectContinuation(
-      value.continuationCandidateId,
+    const continuation = decideContinuation(
+      value.continuationDecision,
       envelope.context.stateInput,
       inboxId,
+      proposedContinuationCandidateId,
     );
     const reviewBody = {
       candidateRef: candidate.candidate.ref,
@@ -114,7 +117,8 @@ function goalReviewCodec(
       reviewedFieldIds,
       reviewedOutcomeIds,
       reviewedArtifactPersistence: candidate.candidate.proposedContract.artifactPersistence,
-      continuationBindingRef: continuation.ref,
+      continuationBindingRef: continuation.binding.ref,
+      continuationDecision: continuation.reviewDecision,
       verdict: "accepted" as const,
       findings: [] as [],
       findingVerdicts,
@@ -125,11 +129,11 @@ function goalReviewCodec(
     const defaultLedgerId = projectRef
       ? digest(`btcc-project-ledger.v1\0${projectRef}`)
       : digest(`btcc-session-ledger.v1\0${sessionId}`);
-    const ledgerId = continuation.kind !== "new_request"
-      ? continuation.ledgerId
+    const ledgerId = continuation.binding.kind !== "new_request"
+      ? continuation.binding.ledgerId
       : defaultLedgerId;
-    const programId = continuation.kind !== "new_request"
-      ? continuation.programId
+    const programId = continuation.binding.kind !== "new_request"
+      ? continuation.binding.programId
       : digest(
           `btcc-program.v1\0${ledgerId}\0${inboxId}\0${envelope.binding.turnId}\0${candidate.candidate.proposedContract.ref.sha256}`,
         );
@@ -140,15 +144,15 @@ function goalReviewCodec(
       managedBinding: {
         ledgerId,
         programId,
-        expectedManifestRevision: continuation.kind !== "new_request"
-          ? continuation.expectedManifestRevision
+        expectedManifestRevision: continuation.binding.kind !== "new_request"
+          ? continuation.binding.expectedManifestRevision
           : 0,
-        source: continuation.kind === "stopped_program"
+        source: continuation.binding.kind === "stopped_program"
           ? "stopped_program" as const
-          : continuation.kind === "deferred_goal"
+          : continuation.binding.kind === "deferred_goal"
             ? "deferred_goal" as const
             : "new_program" as const,
-        continuationBinding: continuation,
+        continuationBinding: continuation.binding,
       },
     };
     return {
@@ -201,46 +205,12 @@ function requireRevision(
 export function reviewGoalContract(command: PhaseInvocation) {
   const state = requireRecord(command.context.stateInput, "Contract Review state input");
   const prior = state.goalRevision as GoalContractRevisionRequiredProduct | undefined;
+  const proposedContinuationCandidateId = openingContinuationProposalId(state);
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: goalReviewCodec(prior),
+    codec: goalReviewCodec(prior, proposedContinuationCandidateId),
   });
-}
-
-function selectContinuation(
-  submittedCandidateId: unknown,
-  input: unknown,
-  inboxId: string,
-): ContinuationBinding {
-  const candidates = requireRecord(input, "Contract Review state input")
-    .continuationCandidates;
-  const available = Array.isArray(candidates)
-    ? candidates as ContinuationCandidate[]
-    : [];
-  if (submittedCandidateId === undefined || submittedCandidateId === null) {
-    const body = { kind: "new_request" as const, inboxId };
-    return { kind: "new_request", inboxId, ref: contentRef("continuation-binding", body) };
-  }
-  if (typeof submittedCandidateId !== "string") {
-    throw new Error("Continuation candidate id must be a string");
-  }
-  const candidate = available.find((item) => item.candidateId === submittedCandidateId);
-  if (!candidate) throw new Error("Conception selected an unavailable continuation candidate");
-  const kind = candidate.continuationKind === "user_stopped"
-    ? "stopped_program" as const
-    : "deferred_goal" as const;
-  const body = {
-    kind,
-    inboxId,
-    ...candidate,
-  };
-  return {
-    kind,
-    inboxId,
-    ref: contentRef("continuation-binding", body),
-    ...candidate,
-  };
 }
 
 function loadCandidate(input: unknown): GoalContractCandidateProduct {

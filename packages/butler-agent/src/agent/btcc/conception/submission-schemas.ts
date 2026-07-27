@@ -31,26 +31,47 @@ const answerFields = {
   publicClaims: arraySchema(publicClaim),
 };
 
-export const openingSubmissionSchema = variantsSchema(
-  objectSchema({
-    kind: literalSchema("direct_answer"),
-    requiredResultKind: literalSchema("response_content"),
-    ...answerFields,
-  }),
-  openingContinuationSchema(
-    "assisted_continuation",
-    literalSchema("current_observation"),
-  ),
-  openingContinuationSchema(
-    "managed_continuation",
-    enumSchema("target_change", "persistent_artifact", "external_effect", "durable_work"),
-  ),
-  objectSchema({
-    kind: literalSchema("cancel_work"),
-    continuationCandidateId: textSchema(),
-    reason: textSchema(),
-  }),
-);
+export const openingSubmissionSchema = openingSubmissionSchemaFor([]);
+
+export function openingSubmissionSchemaFor(
+  continuationCandidateIds: readonly string[],
+) {
+  const candidateIds = [...new Set(continuationCandidateIds)];
+  const common = [
+    objectSchema({
+      kind: literalSchema("direct_answer"),
+      requiredResultKind: literalSchema("response_content"),
+      ...answerFields,
+    }),
+    openingContinuationSchema(
+      "assisted_continuation",
+      literalSchema("current_observation"),
+    ),
+    openingContinuationSchema(
+      "managed_continuation",
+      enumSchema("target_change", "persistent_artifact", "external_effect", "durable_work"),
+    ),
+  ];
+  if (candidateIds.length === 0) return variantsSchema(...common);
+  const candidateId = enumSchema(...candidateIds);
+  return variantsSchema(
+    ...common,
+    objectSchema({
+      kind: literalSchema("managed_program_continuation"),
+      requiredResultKind: literalSchema("durable_work"),
+      continuationCandidateId: candidateId,
+      requestObligation: textSchema(),
+      summary: textSchema(),
+      rationale: textSchema(),
+      nextStep: textSchema(),
+    }),
+    objectSchema({
+      kind: literalSchema("cancel_work"),
+      continuationCandidateId: candidateId,
+      reason: textSchema(),
+    }),
+  );
+}
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),
   requiredResultKind: literalSchema("current_observation"),
@@ -153,7 +174,10 @@ export const GOAL_REVIEW_SUBJECTS = [
   "lens:intended_result_and_acceptance",
 ] as const;
 
-export function goalReviewSubmissionSchema(priorRootCauseKeys: string[] = []) {
+export function goalReviewSubmissionSchema(
+  priorRootCauseKeys: string[] = [],
+  proposedContinuationCandidateId?: string,
+) {
   const priorVerdicts: Record<string, SubmissionSchema> = priorRootCauseKeys.length > 0
     ? {
         priorFindingVerdicts: arraySchema(objectSchema({
@@ -178,19 +202,25 @@ export function goalReviewSubmissionSchema(priorRootCauseKeys: string[] = []) {
           }),
         }
       : {};
-  const accepted = [
-    objectSchema({
-      ...acceptedGoalReviewFields,
-      ...initialCoverage,
-      ...priorVerdicts,
-    }),
-    objectSchema({
-      ...acceptedGoalReviewFields,
-      continuationCandidateId: textSchema(),
-      ...initialCoverage,
-      ...priorVerdicts,
-    }),
-  ];
+  const acceptedFields: Record<string, SubmissionSchema> = {
+    ...acceptedGoalReviewFields,
+    ...initialCoverage,
+    ...priorVerdicts,
+  };
+  if (proposedContinuationCandidateId) {
+    acceptedFields.continuationDecision = variantsSchema(
+      objectSchema({
+        kind: literalSchema("bind"),
+        continuationCandidateId: literalSchema(proposedContinuationCandidateId),
+      }),
+      objectSchema({
+        kind: literalSchema("reject"),
+        continuationCandidateId: literalSchema(proposedContinuationCandidateId),
+        rationale: textSchema(),
+      }),
+    );
+  }
+  const accepted = [objectSchema(acceptedFields)];
   if (priorRootCauseKeys.length > 0) {
     return variantsSchema(
       ...accepted,

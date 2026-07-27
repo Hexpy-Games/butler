@@ -14,6 +14,7 @@ test("projects the committed model-authored Opening decision without rewriting i
 
   await publishOpeningDecision(observer, "turn-opening", 2, {
     kind: "opening_continuation",
+    continuationMode: "managed_request",
     route: "managed",
     fulfillment: {
       requestObligation: "요청한 프로젝트 변경을 구현한다",

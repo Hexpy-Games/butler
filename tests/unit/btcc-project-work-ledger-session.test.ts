@@ -209,6 +209,7 @@ function sessionProgramCommit(): WorkLedgerCommit {
           reviewedOutcomeIds: ["required-outcome"],
           reviewedArtifactPersistence: "not_required",
           continuationBindingRef: ref("continuation"),
+          continuationDecision: { kind: "new_request" },
           verdict: "accepted",
           findings: [],
         },

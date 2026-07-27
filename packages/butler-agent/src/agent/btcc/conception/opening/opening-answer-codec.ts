@@ -5,18 +5,22 @@ import type {
   OpeningProduct,
 } from "./contracts.ts";
 import { decodeOpeningAnswer } from "./decode-opening-answer.ts";
-import { openingSubmissionSchema } from "../submission-schemas.ts";
+import { openingSubmissionSchemaFor } from "../submission-schemas.ts";
 import { completionModeFor, isManagedResultKind } from "./fulfillment.ts";
 
-export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
-  submissionSchema: openingSubmissionSchema,
+export function openingAnswerCodec(
+  continuationCandidateIds: readonly string[],
+): PhaseCodec<OpeningProduct> {
+  return {
+  submissionSchema: openingSubmissionSchemaFor(continuationCandidateIds),
   decode(submission, envelope) {
     if (
       isRecord(submission) &&
       (submission.kind === "assisted_continuation" ||
-        submission.kind === "managed_continuation")
+        submission.kind === "managed_continuation" ||
+        submission.kind === "managed_program_continuation")
     ) {
-      return decodeOpeningContinuation(submission, envelope.binding.turnId);
+      return decodeOpeningContinuation(submission, envelope);
     }
     if (isRecord(submission) && submission.kind === "cancel_work") {
       return decodeWorkCancellation(submission, envelope);
@@ -24,6 +28,7 @@ export const openingAnswerCodec: PhaseCodec<OpeningProduct> = {
     return decodeOpeningAnswerProduct(submission, envelope);
   },
 };
+}
 
 function decodeWorkCancellation(
   value: Record<string, unknown>,
@@ -132,7 +137,7 @@ export function decodeOpeningAnswerProduct(
 
 function decodeOpeningContinuation(
   value: Record<string, unknown>,
-  turnId: string,
+  envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
 ): OpeningContinuationProduct {
   if (
     !isNonEmptyString(value.requestObligation) ||
@@ -142,11 +147,21 @@ function decodeOpeningContinuation(
   ) {
     throw new Error("Opening continuation decision is invalid");
   }
-  const requiredResultKind = value.kind === "assisted_continuation"
+  const continuationMode = value.kind === "assisted_continuation"
+    ? "assisted_request" as const
+    : value.kind === "managed_program_continuation"
+      ? "managed_program" as const
+      : "managed_request" as const;
+  const requiredResultKind = continuationMode === "assisted_request"
     ? requireAssistedResult(value.requiredResultKind)
     : requireManagedResult(value.requiredResultKind);
+  const continuationProposal = continuationMode === "managed_program"
+    ? requireContinuationProposal(value.continuationCandidateId, envelope)
+    : undefined;
   const body = {
-    turnId,
+    turnId: envelope.binding.turnId,
+    continuationMode,
+    ...(continuationProposal ? { continuationProposal } : {}),
     requestObligation: value.requestObligation,
     requiredResultKind,
     completionMode: completionModeFor(requiredResultKind),
@@ -159,9 +174,8 @@ function decodeOpeningContinuation(
       nextStep: value.nextStep,
     })),
   };
-  return {
+  const common = {
     kind: "opening_continuation",
-    route: value.kind === "assisted_continuation" ? "assisted" : "managed",
     fulfillment: {
       requestObligation: value.requestObligation,
       requiredResultKind,
@@ -174,6 +188,39 @@ function decodeOpeningContinuation(
       nextStep: value.nextStep,
       contentSha256: body.contentSha256,
     },
+  } as const;
+  if (continuationMode === "assisted_request") {
+    return { ...common, continuationMode, route: "assisted" };
+  }
+  if (continuationMode === "managed_program") {
+    if (!continuationProposal) throw new Error("Managed Program proposal is missing");
+    return {
+      ...common,
+      continuationMode,
+      route: "managed",
+      continuationProposal,
+    };
+  }
+  return { ...common, continuationMode, route: "managed" };
+}
+
+function requireContinuationProposal(
+  value: unknown,
+  envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
+) {
+  if (!isNonEmptyString(value)) {
+    throw new Error("Managed Program continuation requires a candidate id");
+  }
+  const candidate = envelope.context.continuationCandidates?.find(
+    (item) => item.candidateId === value,
+  );
+  if (!candidate) {
+    throw new Error("Opening selected an unavailable continuation candidate");
+  }
+  return {
+    candidateId: candidate.candidateId,
+    sourceTurnId: candidate.sourceTurnId,
+    programId: candidate.programId,
   };
 }
 

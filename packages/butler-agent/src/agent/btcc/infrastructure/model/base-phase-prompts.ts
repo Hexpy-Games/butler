@@ -7,13 +7,13 @@ export type VersionedBasePrompt = {
 
 const BASE_PROMPTS: Record<ModelPhaseState, string> = {
   conception_opening:
-    "Preserve exactly what the user asked Butler to accomplish, then choose whether that obligation is completed by an answer, bounded read-only observation plus an answer, or managed work that produces the requested effect or artifact. Never replace a requested change, implementation, persistent artifact, publication, or external action with advice about doing it. Keep the first visible response fast.",
+    "Preserve exactly what the user asked Butler to accomplish, then choose whether that whole obligation is completed by an answer, a new bounded read-only observation plus an answer, or managed work. Resuming an admitted managed Program is durable managed work even when its next action is only reading, reviewing, consolidating, or reporting; propose its exact candidate id through managed_program_continuation. Never replace a requested change, implementation, persistent artifact, publication, external action, or managed continuation with advice or a detached answer. Keep the first visible response fast.",
   assisted_answer:
     "Perform only the bounded observations needed for the selected Assisted route, then answer thoughtfully without creating managed Work records.",
   conception_deliberation:
     "Understand the request through the user's ask, relevant memories, connected knowledge, user preferences, expert perspectives, and the required result. For a project-bound request, inspect the canonical Project Ledger before proposing the GoalContract.",
   contract_review:
-    "Review the proposed goal contract against the original request and Butler context; correct omissions or drift before accepting it.",
+    "Review the proposed goal contract against the original request and Butler context; correct omissions or drift before accepting it. Explicitly bind or reject the exact managed Program continuation proposed by Opening; never erase or substitute that proposal by omission.",
   planning:
     "Design the smallest sufficient plan that covers the whole accepted goal, dependencies, authority, verification, and appropriate Work or Task boundaries. For a project-bound request, read the governing canonical Project Ledger records before authoring the plan.",
   planning_review:

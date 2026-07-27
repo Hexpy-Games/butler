@@ -7,7 +7,12 @@ import {
   resolveDutyInstructions,
   resolveProhibitionInstructions,
 } from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/prompt-duty-catalog.ts";
-import { goalCandidateSubmissionSchema, openingSubmissionSchema } from
+import {
+  goalCandidateSubmissionSchema,
+  goalReviewSubmissionSchema,
+  openingSubmissionSchema,
+  openingSubmissionSchemaFor,
+} from
   "../../packages/butler-agent/src/agent/btcc/conception/submission-schemas.ts";
 import { completionModeFor } from
   "../../packages/butler-agent/src/agent/btcc/conception/opening/fulfillment.ts";
@@ -80,6 +85,8 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
   expect(openingRoute).toContain("requiredResultKind: response_content");
   expect(openingRoute).toContain("target_change, persistent_artifact");
   expect(openingRoute).toContain("never a current target observation");
+  expect(openingRoute).toContain("managed_program_continuation");
+  expect(openingRoute).toContain("candidate-free bounded new request");
   expect(openingRoute).toContain("never route by keywords");
 });
 
@@ -108,4 +115,21 @@ test("Opening derives route mode from one typed required result", () => {
   expect(completionModeFor("current_observation"))
     .toBe("bounded_observation_then_answer");
   expect(completionModeFor("target_change")).toBe("managed_effect_or_artifact");
+});
+
+test("Opening and Goal Review preserve one exact managed Program proposal", () => {
+  const noCandidates = JSON.stringify(openingSubmissionSchemaFor([]));
+  expect(noCandidates).not.toContain("managed_program_continuation");
+  expect(noCandidates).not.toContain("cancel_work");
+
+  const withCandidate = JSON.stringify(openingSubmissionSchemaFor(["candidate-exact"]));
+  expect(withCandidate).toContain("managed_program_continuation");
+  expect(withCandidate).toContain("candidate-exact");
+  expect(withCandidate).not.toContain("candidate-unavailable");
+
+  const review = JSON.stringify(goalReviewSubmissionSchema([], "candidate-exact"));
+  expect(review).toContain("continuationDecision");
+  expect(review).toContain("candidate-exact");
+  expect(review).toContain("bind");
+  expect(review).toContain("reject");
 });
