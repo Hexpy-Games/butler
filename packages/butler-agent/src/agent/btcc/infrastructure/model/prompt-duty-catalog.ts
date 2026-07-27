@@ -1,6 +1,8 @@
 import type {
   PromptDutyId,
 } from "../../core/prompt-contract.ts";
+import { ARTIFACT_PERSISTENCE_DUTIES } from
+  "./prompt-duties/artifact-persistence.ts";
 export { resolveProhibitionInstructions } from
   "./prompt-prohibition-catalog.ts";
 
@@ -57,7 +59,7 @@ const DUTIES = {
     "or prose. An empty admitted catalog requires an empty application list;",
     "Planning may author a new Spec when the Goal needs one.",
   ].join(" "),
-  define_artifact_persistence: "State whether Goal success requires reviewed artifact bytes to persist to the admitted target. Decide from the complete intent and intended result, never from keywords, paths, or tool names.",
+  ...ARTIFACT_PERSISTENCE_DUTIES,
   review_goal_contract_exactly: [
     "Compare all six lens assessments, adopted fields and roles, required outcomes,",
     "non-goals, acceptance intent, authority, personalization, provenance, strategy,",
@@ -84,7 +86,6 @@ const DUTIES = {
     "continuationCandidateId and accept the Goal as a new Program. Never resolve opaque",
     "refs by searching their hash text in another store.",
   ].join(" "),
-  review_artifact_persistence: "Independently compare the exact artifactPersistence value with the immutable request and intended result; require revision when an isolated-only result would not satisfy the Goal or persistence was added without authority.",
   author_smallest_sufficient_plan: [
     "Author the fewest cohesive Works and independently executable Tasks that satisfy",
     "every RequiredOutcome while preserving constraints. Split real dependency and",

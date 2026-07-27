@@ -23,6 +23,8 @@ import type {
 import { requireGoverningSpecApplications } from "./governing-spec-applications.ts";
 import { goalCandidateSubmissionSchema } from "./submission-schemas.ts";
 import { retainConceptionPlanningContext } from "./planning-context.ts";
+import { decodeUserArtifactTargetRequirement } from
+  "./user-artifact-target-requirement.ts";
 
 const LENSES: ConceptionLensId[] = [
   "requested_content",
@@ -106,7 +108,9 @@ function goalCodec(
       request,
       intendedResult,
       acceptanceIntent: requireString(value.acceptanceIntent, "acceptanceIntent"),
-      artifactPersistence: requireArtifactPersistence(value.artifactPersistence),
+      artifactPersistence: decodeUserArtifactTargetRequirement(
+        value.userArtifactTargetRequirement,
+      ),
       fields: [
         { fieldId: "request", semanticRole: "required_outcome", statement: request },
         { fieldId: "intended_result", semanticRole: "required_outcome", statement: intendedResult },
@@ -264,13 +268,6 @@ function canonicalLensBinding(
   return submittedDisposition === "adopted"
     ? { disposition: "adopted" as const, adoptedGoalFieldIds }
     : { disposition: "non_applicable" as const, adoptedGoalFieldIds: [] };
-}
-
-function requireArtifactPersistence(value: unknown): "not_required" | "required" {
-  if (value !== "not_required" && value !== "required") {
-    throw new Error("artifactPersistence must be not_required or required");
-  }
-  return value;
 }
 
 export function deliberateGoal(command: PhaseInvocation) {

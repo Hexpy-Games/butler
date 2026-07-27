@@ -101,7 +101,10 @@ export function goalCandidateSubmissionSchema(
     request: textSchema(),
     intendedResult: textSchema(),
     acceptanceIntent: textSchema(),
-    artifactPersistence: enumSchema("not_required", "required"),
+    userArtifactTargetRequirement: enumSchema(
+      "no_user_artifact_target",
+      "reviewed_artifact_bytes_at_admitted_target_required",
+    ),
     nonGoals: textList(),
     personalizationRefs: textList(),
     governingSpecApplications: governingSpecApplicationsSchema(
