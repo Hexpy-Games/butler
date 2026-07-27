@@ -33,7 +33,7 @@ test("read-only workspace lineage may own one exact external effect", () => {
     effectIntents: [{
       occurrenceKey: "reconcile-ledger",
       taskId: "reconcile-ledger",
-      actionKind: "external_operation",
+      actionKind: "external_target_mutation",
       action: "reconcile_project_ledger",
       payload: "Bind the exact accepted result.",
       desiredOutcome: "Ledger and workspace agree.",

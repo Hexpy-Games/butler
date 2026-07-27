@@ -22,10 +22,12 @@ test("isolated commands cannot read or write the original project root", async (
     `cat '${join(original, "source.ts")}'`,
     `printf compromised > '${join(original, "source.ts")}'`,
   ].join("; ");
-  const run = executeCommandCapability({ command }, {
+  const run = executeCommandCapability({ command, state_effect: "read_only" }, {
     butlerData: join(root, "data"),
     workspacePath: isolated,
     originalRequest: "review exact source",
+    operationKind: "workspace_artifact_action",
+    accessMode: "read_only",
     commandFilesystemBoundary: {
       kind: "isolated_workspace",
       deniedReadWriteRoots: [original],

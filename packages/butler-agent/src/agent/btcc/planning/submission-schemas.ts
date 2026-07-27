@@ -97,7 +97,7 @@ const planFields = {
     objectSchema({
       occurrenceKey: textSchema(),
       taskId: textSchema(),
-      actionKind: enumSchema("external_operation", "repository_promotion"),
+      actionKind: enumSchema("external_target_mutation", "repository_promotion"),
       action: textSchema(),
       payload: textSchema(),
       desiredOutcome: textSchema(),

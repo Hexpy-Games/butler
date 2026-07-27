@@ -31,6 +31,9 @@ export function createProductionToolRuntime(
         envelope,
         workspaceForObservation(envelope, request, options.butlerHome),
         request,
+        request.capabilityRef === "run_command"
+          ? { kind: "read_only_observation" }
+          : undefined,
       ),
     createWorkspaceToolExecutor: ({ workspacePath, envelope, request }) =>
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
@@ -38,7 +41,8 @@ export function createProductionToolRuntime(
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
     createIsolatedValidationExecutor: ({ workspacePath, envelope, request }) =>
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
-    validateOperationInput: ({ request, args }) => validateInput(request, args),
+    validateOperationInput: ({ envelope, request, args }) =>
+      validateInput(envelope, request, args),
   };
 }
 
@@ -47,10 +51,9 @@ function toolExecutor(
   envelope: PhaseEnvelope,
   workspacePath: string,
   request: OperationRequest,
-  commandFilesystemBoundary?: {
-    kind: "isolated_workspace";
-    deniedReadWriteRoots: string[];
-  },
+  commandFilesystemBoundary?:
+    | { kind: "isolated_workspace"; deniedReadWriteRoots: string[] }
+    | { kind: "read_only_observation" },
 ) {
   return async (call: {
     name: string;
@@ -70,6 +73,10 @@ function toolExecutor(
         ? { resolveProjectLedgerRoot: options.resolveProjectLedgerRoot }
         : {}),
       originalRequest: envelope.context.originalMessage,
+      operationKind: request.kind,
+      accessMode: request.capabilityRef === "run_command"
+        ? admittedAccessMode(envelope)
+        : "read_only",
       ...(commandFilesystemBoundary ? { commandFilesystemBoundary } : {}),
       signal: call.signal,
     });
@@ -84,6 +91,16 @@ function isolatedBoundary(envelope: PhaseEnvelope) {
     kind: "isolated_workspace" as const,
     deniedReadWriteRoots: [...new Set(deniedReadWriteRoots)],
   };
+}
+
+function admittedAccessMode(
+  envelope: PhaseEnvelope,
+): "full_access" | "ask_first" | "read_only" {
+  const value = envelope.modelSelection.controls.accessMode;
+  if (value === "full_access" || value === "ask_first" || value === "read_only") {
+    return value;
+  }
+  throw new Error("BTCC command access mode is not admitted");
 }
 
 function workspaceForObservation(
@@ -101,6 +118,7 @@ function workspaceForObservation(
 }
 
 function validateInput(
+  envelope: PhaseEnvelope,
   request: OperationRequest,
   args: Record<string, unknown>,
 ): void {
@@ -113,12 +131,51 @@ function validateInput(
   if (!result.ok) {
     throw new Error(`BTCC capability input is invalid at ${result.path}: ${result.message}`);
   }
+  if (request.capabilityRef === "run_command") {
+    validateCommandStateEffect(
+      envelope,
+      request,
+      args,
+      admittedAccessMode(envelope),
+    );
+  }
   if (
     request.kind === "workspace_artifact_action" &&
     request.capabilityRef === "write_file" &&
     args.path !== request.relativeTarget
   ) {
     throw new Error("BTCC write_file path must equal the planned relative target");
+  }
+}
+
+function validateCommandStateEffect(
+  envelope: PhaseEnvelope,
+  request: OperationRequest,
+  args: Record<string, unknown>,
+  accessMode: "full_access" | "ask_first" | "read_only",
+): void {
+  const effect = args.state_effect;
+  if (request.kind === "observe" && !request.scopeRef.startsWith("workspace:")) {
+    throw new Error("BTCC command observation requires an admitted workspace scope");
+  }
+  if (request.kind === "observe" && effect !== "read_only") {
+    throw new Error("BTCC command observation requires state_effect read_only");
+  }
+  if (request.kind === "review_validation" && effect !== "validation") {
+    throw new Error("BTCC Review command requires state_effect validation");
+  }
+  if (request.kind === "workspace_artifact_action" &&
+    effect !== "read_only" && effect !== "mutation") {
+    throw new Error("BTCC workspace command requires read_only or mutation state_effect");
+  }
+  if (request.kind === "workspace_artifact_action" && effect === "mutation" &&
+    envelope.operationAuthority.mutation.kind === "workspace_only" &&
+    envelope.operationAuthority.mutation.mutationScope.kind === "read_only") {
+    throw new Error("BTCC read-only Task cannot admit a mutation command");
+  }
+  if (request.kind === "workspace_artifact_action" && effect === "mutation" &&
+    accessMode === "read_only") {
+    throw new Error("BTCC read-only access mode cannot admit a mutation command");
   }
 }
 

@@ -46,6 +46,7 @@ describe("production BTCC capabilities", () => {
       relativeTarget: ".",
       input: {
         command: `node -e 'process.stdout.write("${prefix}" + "x".repeat(120000) + "TAIL")'`,
+        state_effect: "read_only",
       },
     };
     const result = await runtime.operations.perform({

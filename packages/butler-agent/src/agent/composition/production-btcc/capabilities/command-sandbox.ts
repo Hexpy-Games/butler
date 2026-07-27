@@ -13,10 +13,15 @@ export function isolatedCommandInvocation(
   context: CapabilityExecutionContext,
 ): CommandInvocation {
   const boundary = context.commandFilesystemBoundary;
-  if (!boundary || boundary.deniedReadWriteRoots.length === 0) {
+  if (!boundary) {
     return shellInvocation(command);
   }
+  if (boundary.kind === "read_only_observation") {
+    return readOnlyObservationInvocation(command, context.accessMode);
+  }
+  if (boundary.deniedReadWriteRoots.length === 0) return shellInvocation(command);
   if (process.platform !== "darwin") {
+    if (context.accessMode === "full_access") return shellInvocation(command);
     throw new OperationRejectedError(
       "command_filesystem_isolation_unavailable",
       "This host cannot establish the required isolated command filesystem boundary.",
@@ -26,6 +31,23 @@ export function isolatedCommandInvocation(
     executable: "/usr/bin/sandbox-exec",
     args: ["-p", macosSandboxProfile(boundary.deniedReadWriteRoots), "/bin/sh", "-lc", command],
   };
+}
+
+function readOnlyObservationInvocation(
+  command: string,
+  accessMode: CapabilityExecutionContext["accessMode"],
+): CommandInvocation {
+  if (process.platform === "darwin") {
+    return {
+      executable: "/usr/bin/sandbox-exec",
+      args: ["-p", macosReadOnlyObservationProfile(), "/bin/sh", "-lc", command],
+    };
+  }
+  if (accessMode === "full_access") return shellInvocation(command);
+  throw new OperationRejectedError(
+    "command_observation_isolation_unavailable",
+    "This host cannot enforce the admitted read-only local command boundary.",
+  );
 }
 
 function shellInvocation(command: string): CommandInvocation {
@@ -39,6 +61,15 @@ function macosSandboxProfile(roots: string[]): string {
       `(deny file-write* (subpath "${sandboxLiteral(root)}"))`,
     ].join("\n"));
   return ["(version 1)", "(allow default)", ...rules].join("\n");
+}
+
+function macosReadOnlyObservationProfile(): string {
+  return [
+    "(version 1)",
+    "(allow default)",
+    "(deny file-write*)",
+    "(deny network*)",
+  ].join("\n");
 }
 
 function canonicalRoot(root: string): string {

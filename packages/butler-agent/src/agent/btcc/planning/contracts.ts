@@ -79,7 +79,7 @@ export type ManagedEffectIntent = {
   sourceRequiredOutcomeRefs: string[];
   targetScopeRef: string;
   action:
-    | { kind: "external_operation"; action: string }
+    | { kind: "external_target_mutation"; action: string }
     | {
         kind: "repository_promotion";
         selectorRef: ContentRef;

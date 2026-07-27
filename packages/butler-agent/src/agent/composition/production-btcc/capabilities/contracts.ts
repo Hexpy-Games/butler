@@ -10,10 +10,11 @@ export type CapabilityExecutionContext = {
   projectRef?: string;
   resolveProjectLedgerRoot?(projectRef: string): string;
   originalRequest: string;
-  commandFilesystemBoundary?: {
-    kind: "isolated_workspace";
-    deniedReadWriteRoots: string[];
-  };
+  operationKind: OperationRequest["kind"];
+  accessMode: "full_access" | "ask_first" | "read_only";
+  commandFilesystemBoundary?:
+    | { kind: "isolated_workspace"; deniedReadWriteRoots: string[] }
+    | { kind: "read_only_observation" };
   signal?: AbortSignal;
 };
 

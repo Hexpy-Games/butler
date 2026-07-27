@@ -61,6 +61,32 @@ test("message cache snapshots keep completed messages and skip pending rows", ()
   expect(Object.keys(snapshot?.turn_progress ?? {})).toEqual(["turn-a"]);
 });
 
+test("message cache preserves terminal canonical Work Ledger states", () => {
+  const states = ["completed", "stopped", "planned"];
+  const snapshot = snapshotForCache("session-work", {
+    chat_id: "session-work",
+    messages: [message("assistant-work", "assistant", 3, "turn-work")],
+    turn_progress: {
+      "turn-work": {
+        turn_id: "turn-work",
+        state: "delivered",
+        safe_progress_rows: states.map((state, index) => ({
+          id: `task-${index + 1}`,
+          kind: "todo",
+          state,
+          safe_label: `Task ${index + 1}`,
+          safe_input_label: `task-${index + 1}`,
+          bridge_phase: "btcc_work_ledger",
+        })),
+      },
+    },
+  });
+
+  expect(
+    snapshot?.turn_progress?.["turn-work"]?.safe_progress_rows.map((row) => row.state),
+  ).toEqual(states);
+});
+
 test("message cache merge appends server rows from the cached final cursor", () => {
   const cached: MessageListView = {
     chat_id: "session-a",

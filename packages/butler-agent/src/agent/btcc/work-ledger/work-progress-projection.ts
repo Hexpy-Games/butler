@@ -20,7 +20,9 @@ export type WorkProgressTask = {
 
 export function projectWorkProgress(
   program: ReviewedManagedProgramState,
+  finalDisposition?: "completed" | "deferred" | "cancelled",
 ): WorkProgressTask[] {
+  const stopped = finalDisposition === "deferred" || finalDisposition === "cancelled";
   const workById = new Map(
     program.works.map(({ work, status }) => [
       work.workLogicalId,
@@ -34,11 +36,16 @@ export function projectWorkProgress(
     .map(({ task, status }) => {
       const work = workById.get(task.workLogicalId);
       if (!work) throw new Error(`Work progress Task has no Work: ${task.taskLogicalId}`);
+      const canonicalTaskState = taskProgressState(status);
       return {
         taskId: task.taskLogicalId,
         taskTitle: task.intendedOutcome,
         taskOrder: task.executionOrdinal,
-        taskState: taskProgressState(status),
+        taskState: stopped &&
+            task.taskLogicalId === program.currentTask.task.taskLogicalId &&
+            canonicalTaskState !== "completed"
+          ? "stopped"
+          : canonicalTaskState,
         workId: work.work.workLogicalId,
         workTitle: work.work.outcome,
         workState: work.state,

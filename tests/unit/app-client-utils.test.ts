@@ -1987,6 +1987,67 @@ test("a delivered deferred Turn does not mark unfinished Work Ledger tasks compl
   ], "delivered").map((row) => row.state)).toEqual(["completed", "pending"]);
 });
 
+test("terminal SSE and reload preserve exact canonical Work Ledger states", () => {
+  const rows = [
+    canonicalTaskRow("completed"),
+    { ...canonicalTaskRow("stopped"), id: "task-2", safe_input_label: "task-2" },
+    { ...canonicalTaskRow("planned"), id: "task-3", safe_input_label: "task-3" },
+  ];
+  const live = applyTimelineEventsToViewState([
+    ...rows.map((row, index) => ({
+      id: index + 1,
+      type: "progress.summary" as const,
+      payload: {
+        session_id: "chat-terminal-work",
+        turn_id: "turn-terminal-work",
+        row,
+      },
+      created_at: "2026-07-27T00:00:00.000Z",
+    })),
+    {
+      id: 4,
+      type: "message.updated" as const,
+      payload: {
+        message: {
+          id: "assistant-terminal-work",
+          chat_id: "chat-terminal-work",
+          turn_id: "turn-terminal-work",
+          role: "assistant" as const,
+          text: "Deferred",
+          status: "delivered" as const,
+          retryable: false,
+          cursor: 4,
+        },
+      },
+      created_at: "2026-07-27T00:00:01.000Z",
+    },
+  ], "chat-terminal-work", {
+    messages: [],
+    summary: {
+      session_id: "chat-terminal-work",
+      turn_state: "thinking",
+      latest_progress: {
+        turn_id: "turn-terminal-work",
+        state: "thinking",
+        safe_progress_rows: [],
+      },
+    },
+    turnProgress: {},
+  });
+  const reloaded = mergeTurnProgressSnapshotMap({}, {
+    "turn-terminal-work": {
+      turn_id: "turn-terminal-work",
+      state: "delivered",
+      safe_progress_rows: rows,
+    },
+  });
+
+  expect(live.turnProgress["turn-terminal-work"]?.safe_progress_rows).toEqual(rows);
+  expect(live.turnProgress["turn-terminal-work"]?.safe_progress_rows).toEqual(
+    reloaded["turn-terminal-work"]?.safe_progress_rows,
+  );
+});
+
 test("timeline keeps per-turn progress snapshots separate across live turns", () => {
   let messages: MessageRecord[] = [];
   let currentSummary: SessionSummaryView | null = {
