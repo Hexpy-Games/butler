@@ -215,13 +215,12 @@ export type PlanningCandidate = {
         stoppedTaskRef?: ContentRef;
         stoppedResultRef?: ContentRef;
         stoppedPlanGoalContractRef?: ContentRef;
-      }
-    | {
-        kind: "review_revision";
-        previousCandidateRef: ContentRef;
-        findingSetRef: ContentRef;
-        findingDecisions: PlanningFindingDecision[];
       };
+  reviewRevision?: {
+    previousCandidateRef: ContentRef;
+    findingSetRef: ContentRef;
+    findingDecisions: PlanningFindingDecision[];
+  };
   resolvedDeferralAnchorRefs: ContentRef[];
   plan: ManagedPlan;
   works: ManagedWork[];

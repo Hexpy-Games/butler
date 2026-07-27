@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ReviewedManagedProgramState } from
   "../../packages/butler-agent/src/agent/btcc/work-ledger/index.ts";
-import { canOpenPromotionFrontier } from
+import { canCloseImplementationFrontier, canOpenPromotionFrontier } from
   "../../packages/butler-agent/src/agent/btcc/work-ledger/frontier-readiness.ts";
 import { selectNextTaskOrClose } from
   "../../packages/butler-agent/src/agent/btcc/work/select-next-task-or-close.ts";
@@ -29,6 +29,28 @@ describe("BTCC dependency-driven Work frontier", () => {
       turnRevision: 13,
       program,
     })).toEqual({ kind: "complete_promotion" });
+  });
+
+  test("closes an implementation-only Program after every Task is accepted", () => {
+    const implementation = task(
+      "implementation",
+      1,
+      "non_artifact",
+      "accepted",
+      [],
+    );
+    const program = {
+      frontier: "implementation_open",
+      tasks: [implementation],
+    } as ReviewedManagedProgramState;
+
+    expect(canOpenPromotionFrontier(program)).toBe(false);
+    expect(canCloseImplementationFrontier(program)).toBe(true);
+    expect(selectNextTaskOrClose({
+      turnId: "turn-work-frontier",
+      turnRevision: 14,
+      program,
+    })).toEqual({ kind: "close_frontier", promotionAssemblies: [] });
   });
 });
 

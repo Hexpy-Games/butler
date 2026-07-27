@@ -166,29 +166,29 @@ export function authorPlanCandidate(
     recordRefs: entries.map((entry) => entry.ref),
   };
   const bundle = { ref: contentRef("planning-candidate-bundle", bundleBody), ...bundleBody };
-  const revisionOrigin = state.previousCandidateRef && state.findingSetRef
+  const revisionOrigin = state.continuation?.kind === "deferred_goal"
     ? {
-        kind: "review_revision" as const,
+        kind: "deferred_continuation" as const,
+        continuationBindingRef: state.continuation.ref,
+        sourceTurnId: state.continuation.sourceTurnId,
+        deferredAnchorRef: state.continuation.anchorRef,
+      }
+    : state.continuation?.kind === "stopped_program"
+      ? {
+          kind: "stopped_continuation" as const,
+          continuationBindingRef: state.continuation.ref,
+          sourceTurnId: state.continuation.sourceTurnId,
+          stoppedAnchorRef: state.continuation.anchorRef,
+          ...stoppedTaskProvenance(state.continuation),
+        }
+      : { kind: "initial" as const };
+  const reviewRevision = state.previousCandidateRef && state.findingSetRef
+    ? {
         previousCandidateRef: state.previousCandidateRef,
         findingSetRef: state.findingSetRef,
         findingDecisions: state.findingDecisions ?? [],
       }
-    : state.continuation?.kind === "deferred_goal"
-      ? {
-          kind: "deferred_continuation" as const,
-          continuationBindingRef: state.continuation.ref,
-          sourceTurnId: state.continuation.sourceTurnId,
-          deferredAnchorRef: state.continuation.anchorRef,
-        }
-      : state.continuation?.kind === "stopped_program"
-        ? {
-            kind: "stopped_continuation" as const,
-            continuationBindingRef: state.continuation.ref,
-            sourceTurnId: state.continuation.sourceTurnId,
-            stoppedAnchorRef: state.continuation.anchorRef,
-            ...stoppedTaskProvenance(state.continuation),
-          }
-      : { kind: "initial" as const };
+    : undefined;
   const candidateBody = {
     ledgerId: state.ledgerId,
     programId: state.programId,
@@ -199,6 +199,7 @@ export function authorPlanCandidate(
     authoredSpecs,
     authorityRef: state.authorityRef,
     revisionOrigin,
+    ...(reviewRevision ? { reviewRevision } : {}),
     resolvedDeferralAnchorRefs: state.continuation?.kind === "deferred_goal"
       ? [state.continuation.anchorRef]
       : [],
