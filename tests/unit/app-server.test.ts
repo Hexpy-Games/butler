@@ -1176,7 +1176,13 @@ test("app transport sync projects native actor turn event outbounds", async () =
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    await getJson(`${server.url}messages?chat_id=general`);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_staged_outbounds
+      WHERE action_id = ? AND state = 'awaiting_delivery'
+    `).get(actionId)));
     let replay = await getJson(`${server.url}events?cursor=0`);
     expect(
       replay.data.events.find(
@@ -1187,11 +1193,20 @@ test("app transport sync projects native actor turn event outbounds", async () =
       ),
     ).toBeUndefined();
 
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
+
     appendAppTurnEventDeliveryForTest({
       sessionId: "butler/app-general",
       actionId,
     });
-    await getJson(`${server.url}messages?chat_id=general`);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts
+      WHERE action_id = ?
+    `).get(actionId)));
     replay = await getJson(`${server.url}events?cursor=0`);
     const turnEventKinds = replay.data.events
       .filter(
@@ -2512,6 +2527,7 @@ test("native butler-main default provider generates app transport session titles
     });
     globalThis.fetch = originalFetch;
 
+    await server.store.waitForAppTransportProjection();
     await getJson(`${server.url}messages?chat_id=${encodeURIComponent(chatId)}`);
     expect(sawTitleRequest).toBe(true);
     expect(server.store.getSession(chatId).title).toBe("오늘 날씨");
@@ -7801,6 +7817,7 @@ test("app transport final result projection delivers queued turns after app-serv
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=${chatId}`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -7941,6 +7958,7 @@ test("app transport no-visible limited final closes queued turns without assista
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8010,10 +8028,11 @@ test("session summary replaces first visible preparation with the first semantic
     ).db;
     storeDb.query(
       `
-        INSERT INTO events (type, payload_json, created_at)
-        VALUES ('agent.turn_event.progress', ?, ?)
+        INSERT INTO events (type, turn_id, payload_json, created_at)
+        VALUES ('agent.turn_event.progress', ?, ?, ?)
       `,
     ).run(
+      turnId,
       JSON.stringify({
         session_id: "general",
         turn_id: turnId,
@@ -8033,10 +8052,11 @@ test("session summary replaces first visible preparation with the first semantic
     );
     storeDb.query(
       `
-        INSERT INTO events (type, payload_json, created_at)
-        VALUES ('agent.turn_event.progress', ?, ?)
+        INSERT INTO events (type, turn_id, payload_json, created_at)
+        VALUES ('agent.turn_event.progress', ?, ?, ?)
       `,
     ).run(
+      turnId,
       JSON.stringify({
         session_id: "general",
         turn_id: turnId,
@@ -8123,6 +8143,7 @@ test("app transport live generic internal verification text is hidden unless mar
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8213,6 +8234,7 @@ test("app transport internal limited final text is hidden by typed limitation co
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8271,6 +8293,7 @@ test("app transport ownerless internal recovery failures terminate without leaki
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8367,6 +8390,7 @@ test("repeated app transport ownerless recovery failures remain terminal without
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const firstTurns = await getJson(`${server.url}turns?chat_id=general`);
     expect(firstTurns.data.turns[0]).toMatchObject({
       id: turnId,
@@ -8565,6 +8589,7 @@ test("late continuation evidence cannot resurrect an already terminal ownerless 
       }),
     );
 
+    await server.store.waitForAppTransportProjection();
     const turns = await getJson(`${server.url}turns?chat_id=general`);
     expect(turns.data.turns[0]).toMatchObject({
       id: turnId,
@@ -8658,6 +8683,7 @@ test("app transport internal recovery failures do not mask prior provider failur
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8760,6 +8786,7 @@ test("app transport no-visible final removes an earlier failure assistant for th
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { role: string; text: string }) => [
@@ -8831,6 +8858,7 @@ test("app transport no-visible final with missing delivery metadata does not cre
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8889,6 +8917,7 @@ test("app transport no-visible final with system delivery state is not projected
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -8954,6 +8983,7 @@ test("app transport preserves marked public progress finalization text", async (
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -9030,6 +9060,7 @@ test("app transport navigation sync skips zero-byte final artifacts", async () =
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const navigation = await getJson(`${server.url}navigation`);
     expect(navigation.data.chats.length).toBeGreaterThan(0);
 
@@ -9097,6 +9128,7 @@ test("app transport final result projection strips Butler final-answer envelope"
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const assistant = messages.data.messages.find(
       (message: { role: string }) => message.role === "assistant",
@@ -9179,6 +9211,7 @@ test("app transport final result projection does not resurrect cancelled turns",
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -9255,6 +9288,7 @@ test("app transport failure projection does not downgrade delivered turns", asyn
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -9358,6 +9392,7 @@ test("app transport final projection does not resurrect timed out failed turns",
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -9482,6 +9517,7 @@ test("recoverable limited final can close a timeout failed app turn", async () =
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -9583,6 +9619,7 @@ test("recoverable limited final without queue claim cannot close a failed app tu
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),
@@ -9670,6 +9707,7 @@ test("app transport queued final waits for matching processed terminal record", 
       }),
     );
 
+    await server.store.waitForAppTransportProjection();
     const sessionViewAfterTerminal = await getJson(
       `${server.url}session-view?session_id=general`,
     );
@@ -9799,8 +9837,9 @@ test("app transport rejects a deferred final when the terminal claim mismatches"
 });
 
 test("app transport retries deferred finals independently by session", async () => {
-  const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
+  const dbPath = join(tempDir, "app.sqlite");
+  let server = createAppServer({
+    dbPath,
     butlerData: tempDir,
     port: 0,
   });
@@ -9859,10 +9898,12 @@ test("app transport retries deferred finals independently by session", async () 
       );
     }
 
-    await getJson(`${server.url}messages?chat_id=general`);
-    await getJson(
-      `${server.url}messages?chat_id=${encodeURIComponent(otherChatId)}`,
-    );
+    await waitForCondition(() => (server.store.db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM app_transport_projection_staged_outbounds
+      WHERE state = 'deferred_final'
+    `).get()?.count ?? 0) === 2);
+    server.stop();
+    server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
     const processedQueueDir = join(
       tempDir,
       "runtime",
@@ -9881,6 +9922,14 @@ test("app transport retries deferred finals independently by session", async () 
         },
       }),
     );
+
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts
+      WHERE action_id = ?
+    `).get("runtime-final:second-independent")));
 
     const secondMessages = await getJson(
       `${server.url}messages?chat_id=${encodeURIComponent(otherChatId)}`,
@@ -9910,6 +9959,13 @@ test("app transport retries deferred finals independently by session", async () 
         },
       }),
     );
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts
+      WHERE action_id = ?
+    `).get("runtime-final:first-independent")));
     const firstMessages = await getJson(
       `${server.url}messages?chat_id=general`,
     );
@@ -9949,6 +10005,7 @@ test("app transport worker result projection is durable and idempotent", async (
 
   const server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const first = await getJson(`${server.url}messages?chat_id=general`);
     const second = await getJson(`${server.url}messages?chat_id=general`);
     const workerMessages = second.data.messages.filter(
@@ -10069,6 +10126,7 @@ test("app transport progress projection recovers queued work blocks after app-se
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const afterSessions = await getJson(`${server.url}sessions`);
     const afterSession = afterSessions.data.sessions.find(
@@ -10205,6 +10263,7 @@ test("app transport progress projection preserves tool-start public notes", asyn
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const rows = messages.data.turn_progress[turnId].safe_progress_rows;
     expect(rows).toContainEqual(
@@ -10276,12 +10335,17 @@ test("app transport progress projection stays idempotent after a large event bac
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    await getJson(`${server.url}messages?chat_id=general`);
+    await server.store.waitForAppTransportProjection();
     for (let index = 0; index < 1_100; index += 1) {
       server.store.appendSafeServerEvent("test.backlog", { index });
     }
 
-    server.store.syncAllAppTransportEvents();
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
+    `).get(`runtime-intermediate:app:${userMessageId}:single-progress`)));
     const replay = await getJson(`${server.url}events?cursor=0`);
     const progressEvents = replay.data.events.filter(
       (event: {
@@ -10331,6 +10395,12 @@ test("navigation sync tolerates replayed model stream sequence strings", async (
   try {
     const navigation = await getJson(`${server.url}navigation`);
     expect(navigation.data.chats.length).toBeGreaterThan(0);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
+    `).get(`app-turn-event:${turnId}:model.stream.text_delta:string-sequence`)));
 
     const replay = await getJson(`${server.url}events?cursor=0`);
     expect(replay.data.events).toContainEqual(
@@ -10392,8 +10462,12 @@ test("app transport sync skips unchanged transcript snapshots", async () => {
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    expect(server.store.syncAllAppTransportEvents()).toBe(0);
-    expect(server.store.syncAllAppTransportEvents()).toBe(0);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
+    `).get(`runtime-intermediate:app:${userMessageId}:snapshot-progress`)));
     const row = server.store.db
       .query<{ count: number }, [string]>(
         `
@@ -10449,7 +10523,12 @@ test("app transport sync includes archived sessions while a turn is active", asy
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    expect(server.store.syncAllAppTransportEvents()).toBe(0);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
+    `).get(`runtime-intermediate:app:${userMessageId}:archived-active-progress`)));
     const progress = server.store.listTurnProgressSnapshotsForMessages([
       result.data.accepted,
     ]);
@@ -10503,7 +10582,12 @@ test("app transport sync projects appended progress and final events once", asyn
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
-    expect(server.store.syncAllAppTransportEvents()).toBe(0);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
+    `).get(`runtime-intermediate:app:${userMessageId}:initial-progress`)));
 
     appendTranscriptEvent(
       createTranscriptEvent({
@@ -10553,8 +10637,12 @@ test("app transport sync projects appended progress and final events once", asyn
       }),
     );
 
-    expect(server.store.syncAllAppTransportEvents()).toBe(2);
-    expect(server.store.syncAllAppTransportEvents()).toBe(0);
+    await waitForCondition(() => Boolean(server.store.db.query<
+      { action_id: string },
+      [string]
+    >(`
+      SELECT action_id FROM app_transport_projection_receipts WHERE action_id = ?
+    `).get(`runtime-final:app:${userMessageId}:appended-final`)));
     const summary = await getJson(
       `${server.url}session-summary?session_id=general`,
     );
@@ -10571,7 +10659,7 @@ test("app transport sync projects appended progress and final events once", asyn
       .query<{ count: number }, [string]>(
         `
       SELECT COUNT(*) AS count
-      FROM projected_transport_events
+      FROM app_transport_projection_receipts
       WHERE action_id = ?
     `,
       )
@@ -10651,6 +10739,7 @@ test("terminal app transport snapshots do not expose stale running progress rows
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     const rows = messages.data.turn_progress[turnId].safe_progress_rows;
     const searchRow = rows.find(
@@ -10732,6 +10821,7 @@ test("app transport failure projection fails queued turns after app-server resta
 
   server = createAppServer({ dbPath, butlerData: tempDir, port: 0 });
   try {
+    await server.store.waitForAppTransportProjection();
     const messages = await getJson(`${server.url}messages?chat_id=general`);
     expect(
       messages.data.messages.map((message: { text: string }) => message.text),

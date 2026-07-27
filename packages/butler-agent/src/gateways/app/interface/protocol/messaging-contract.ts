@@ -7,7 +7,10 @@ import type {
   MessageFileRef,
   SessionArtifactSummary,
 } from "./attachment-contract.ts";
-import type { WorkerActivityWorkBlock } from "./progress-contract.ts";
+import type {
+  ProgressSummaryRow,
+  WorkerActivityWorkBlock,
+} from "./progress-contract.ts";
 import type {
   SessionControlState,
   SessionViewTurnDeliveryState,
@@ -35,6 +38,7 @@ export interface MessageRecord {
   attachments?: MessageFileRef[];
   artifacts?: SessionArtifactSummary[];
   work_blocks?: WorkerActivityWorkBlock[];
+  turn_activity_rows?: ProgressSummaryRow[];
 }
 
 export interface MessageSendRequest {

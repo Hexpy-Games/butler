@@ -31,6 +31,9 @@ test("Stop reloads a typed frontier and a fresh Turn continues only unfinished T
     db.exec(BTCC_SUCCESSOR_SCHEMA);
     seedStoppedProgram(db);
     expect(taskStatuses(db)).toEqual(["accepted", "accepted", "selected", "planned"]);
+    expect(terminalWakeRows(db)).toEqual([
+      { turn_id: "turn-user-stopped", semantic_state: "cancelled" },
+    ]);
     db.close();
 
     db = new Database(dbPath);
@@ -144,4 +147,14 @@ function oldTurnState(db: Database): string | undefined {
   return db.query<{ semantic_state: string }, [string]>(
     "SELECT semantic_state FROM btcc_turns WHERE turn_id = ?",
   ).get("turn-user-stopped")?.semantic_state;
+}
+
+function terminalWakeRows(db: Database) {
+  return db.query<{
+    turn_id: string;
+    semantic_state: string;
+  }, []>(`
+    SELECT turn_id, semantic_state FROM btcc_terminal_settlement_wakes
+    ORDER BY turn_id
+  `).all();
 }

@@ -1,11 +1,15 @@
 import type { Database } from "bun:sqlite";
 import { ensureAppMessageQuerySchema } from "../../../../agent/cognition/memory/exact-query.ts";
+import { ensureColumn, tableExists } from "./schema-migration.ts";
+import { ensureTerminalRetentionSchema } from "../retention/schema.ts";
 
 const DEFAULT_CHAT_ID = "general";
 const DEFAULT_CHAT_TITLE = "Onboarding";
 const DEFAULT_PROJECT_ID = "butler";
 
 export function migrateAppStoreSchema(db: Database): void {
+  const turnsTableIsNew = !tableExists(db, "turns");
+  const eventsTableIsNew = !tableExists(db, "events");
   db.exec(`
     CREATE TABLE IF NOT EXISTS chats (
       id TEXT PRIMARY KEY,
@@ -112,6 +116,7 @@ export function migrateAppStoreSchema(db: Database): void {
     CREATE TABLE IF NOT EXISTS events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       type TEXT NOT NULL,
+      turn_id TEXT NOT NULL DEFAULT '',
       payload_json TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
@@ -121,6 +126,50 @@ export function migrateAppStoreSchema(db: Database): void {
       event_id TEXT NOT NULL,
       chat_id TEXT NOT NULL,
       created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS app_transport_projection_receipts (
+      action_id TEXT PRIMARY KEY,
+      event_id TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS app_transport_projection_migrations (
+      name TEXT PRIMARY KEY,
+      cursor_action_id TEXT NOT NULL,
+      completed INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS app_transport_projection_staged_outbounds (
+      action_id TEXT PRIMARY KEY,
+      chat_id TEXT NOT NULL,
+      event_json TEXT NOT NULL,
+      state TEXT NOT NULL CHECK (
+        state IN ('awaiting_delivery', 'deferred_final')
+      ),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS app_transport_staged_state_action_idx
+    ON app_transport_projection_staged_outbounds(state, action_id);
+
+    CREATE TABLE IF NOT EXISTS app_transcript_projection_checkpoints (
+      chat_id TEXT PRIMARY KEY REFERENCES chats(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      transcript_path TEXT NOT NULL,
+      file_device INTEGER NOT NULL,
+      file_inode INTEGER NOT NULL,
+      projected_bytes INTEGER NOT NULL,
+      modified_at_ms INTEGER NOT NULL,
+      trailing_text TEXT NOT NULL,
+      boundary_anchor_text TEXT NOT NULL DEFAULT '',
+      spool_path TEXT NOT NULL DEFAULT '',
+      spool_bytes INTEGER NOT NULL DEFAULT 0,
+      spool_end_offset INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS app_conversation_projection_state (
@@ -196,16 +245,20 @@ export function migrateAppStoreSchema(db: Database): void {
     CREATE INDEX IF NOT EXISTS events_type_id_idx
     ON events(type, id DESC);
 
-    CREATE INDEX IF NOT EXISTS events_type_turn_id_idx
-    ON events(type, json_extract(payload_json, '$.turn_id'), id DESC);
-
     CREATE INDEX IF NOT EXISTS events_type_session_id_idx
     ON events(type, json_extract(payload_json, '$.session_id'), id DESC);
 
-    CREATE INDEX IF NOT EXISTS events_turn_event_kind_idx
-    ON events(type, json_extract(payload_json, '$.turn_id'), json_extract(payload_json, '$.event.kind'), id DESC);
-
   `);
+  if (turnsTableIsNew) {
+    db.exec("CREATE INDEX turns_state_rowid_idx ON turns(state)");
+  }
+  if (eventsTableIsNew) {
+    db.exec(`
+      CREATE INDEX events_turn_id_idx ON events(turn_id, id DESC)
+      WHERE turn_id <> ''
+    `);
+  }
+  ensureTerminalRetentionSchema(db);
   ensureAppMessageQuerySchema(db);
   ensureColumn(db, "chats", "conversation_session_id", "TEXT");
   ensureColumn(db, "chats", "pinned", "INTEGER NOT NULL DEFAULT 0");
@@ -218,6 +271,16 @@ export function migrateAppStoreSchema(db: Database): void {
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
+  ensureColumn(db, "events", "turn_id", "TEXT");
+  ensureColumn(
+    db,
+    "app_transcript_projection_checkpoints",
+    "boundary_anchor_text",
+    "TEXT NOT NULL DEFAULT ''",
+  );
+  ensureColumn(db, "app_transcript_projection_checkpoints", "spool_path", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "app_transcript_projection_checkpoints", "spool_bytes", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "app_transcript_projection_checkpoints", "spool_end_offset", "INTEGER NOT NULL DEFAULT 0");
   db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS messages_conversation_message_idx
     ON messages(conversation_message_id)
@@ -228,6 +291,7 @@ export function migrateAppStoreSchema(db: Database): void {
 
     CREATE INDEX IF NOT EXISTS chats_conversation_session_idx
     ON chats(conversation_session_id);
+
   `);
   db.query("UPDATE chats SET kind = 'chat' WHERE kind = 'general'").run();
   db.query("UPDATE messages SET updated_at = created_at WHERE updated_at IS NULL").run();
@@ -275,15 +339,4 @@ function removeUnusedSeededButlerProject(db: Database): void {
     `,
     )
     .run(DEFAULT_PROJECT_ID);
-}
-
-function ensureColumn(
-  db: Database,
-  table: string,
-  column: string,
-  definition: string,
-): void {
-  const rows = db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all();
-  if (rows.some((row) => row.name === column)) return;
-  db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
 }

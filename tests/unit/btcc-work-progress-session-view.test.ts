@@ -8,7 +8,7 @@ test("initial and reloaded session messages retain canonical Work progress", () 
   db.exec(`
     CREATE TABLE events (
       id INTEGER PRIMARY KEY, type TEXT NOT NULL, payload_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL, turn_id TEXT NOT NULL DEFAULT ''
     )
   `);
   const progressRows = [{
@@ -35,10 +35,10 @@ test("initial and reloaded session messages retain canonical Work progress", () 
     updated_at: "2026-07-27T00:00:01.000Z",
   }];
   const store = new AppSessionMessageProjectionStore({
-    db,
     listMessages: () => messages as never,
     getTurnRow: () => ({ state: "delivered" }) as never,
     listProgressRowsForTurn: () => progressRows as never,
+    explicitDeliveryMetadataForTurn: () => null,
   });
 
   const first = store.sessionViewMessages("chat-1");

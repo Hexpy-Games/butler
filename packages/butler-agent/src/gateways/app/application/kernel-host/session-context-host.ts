@@ -15,6 +15,8 @@ import type {
   SessionViewTurn,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
+import type { TerminalTurnProjection } from
+  "../../infrastructure/retention/terminal-turn-retention.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
 
@@ -44,7 +46,6 @@ export interface AppStoreKernelSessionContextHost {
   deliveryMetadataForTurnRecord(
     turn: TurnRecord,
   ): DeliveryLimitationMetadata;
-  syncAppTransportEventsForChat(chatId: string): number;
   latestEventCursor(): number;
   appendProgressSummaryEvent(
     sessionId: string,
@@ -52,6 +53,11 @@ export interface AppStoreKernelSessionContextHost {
     input: ProgressSummaryInput,
   ): ProgressSummaryRow;
   listProgressRowsForTurn(turnId: string): ProgressSummaryRow[];
+  terminalProjectionForTurn(turnId: string): TerminalTurnProjection | null;
+  explicitDeliveryMetadataForTurn(
+    turnId: string,
+  ): DeliveryLimitationMetadata | null;
+  hasPublicContinuationProgressSinceLatestQueue(turnId: string): boolean;
   internalContinuationProgressEventIds(turnId: string): Set<string>;
   getChatRow(chatId: string): ChatRow | null;
   getProjectRow(projectId: string): ProjectRow | null;
@@ -105,9 +111,6 @@ export function createSessionContextHost(
         turn,
       );
     },
-    syncAppTransportEventsForChat(chatId) {
-      return kernel.transportProjection.syncChat(chatId);
-    },
     latestEventCursor() {
       return kernel.events.latestCursor();
     },
@@ -120,6 +123,17 @@ export function createSessionContextHost(
     },
     listProgressRowsForTurn(turnId) {
       return kernel.turnProgress.listProgressRowsForTurn(turnId);
+    },
+    terminalProjectionForTurn(turnId) {
+      return kernel.terminalTurnRetention.read(turnId);
+    },
+    explicitDeliveryMetadataForTurn(turnId) {
+      return kernel.events.deliveryMetadataForTurn(turnId) ??
+        kernel.terminalTurnRetention.read(turnId)?.deliveryMetadata ?? null;
+    },
+    hasPublicContinuationProgressSinceLatestQueue(turnId) {
+      return kernel.turnProgress
+        .hasPublicContinuationProgressSinceLatestQueue(turnId);
     },
     internalContinuationProgressEventIds(turnId) {
       return kernel.turnProgress.internalContinuationProgressEventIds(turnId);

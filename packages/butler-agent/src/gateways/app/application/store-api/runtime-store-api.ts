@@ -38,7 +38,8 @@ export interface AppStoreRuntimeApi {
     sessionId?: string;
     sinceTs?: number | null;
   }): UsageMonitorView;
-  syncAllAppTransportEvents(): number;
+  syncNextAppTransportBatch(): boolean;
+  waitForAppTransportProjection(): Promise<void>;
   latestEventCursor(): number;
   replayEvents(cursor?: number): AppEventEnvelope[];
   subscribeEvents(listener: (event: AppEventEnvelope) => void): () => void;
@@ -60,6 +61,8 @@ export function createRuntimeStoreApi(
     close() {
       if (kernel.closed) return;
       try {
+        kernel.terminalTurnRetentionQueue.close();
+        kernel.btccTerminalPhaseRetentionQueue.close();
         kernel.transportProjectionOwner.close();
         kernel.db.query("PRAGMA wal_checkpoint(TRUNCATE)").all();
       } finally {
@@ -104,8 +107,11 @@ export function createRuntimeStoreApi(
     getUsageMonitor(options = {}) {
       return kernel.systemMonitor.getUsageMonitor(options);
     },
-    syncAllAppTransportEvents() {
-      return kernel.transportProjection.syncAll();
+    syncNextAppTransportBatch() {
+      return kernel.transportProjection.syncNextBatch();
+    },
+    async waitForAppTransportProjection() {
+      await kernel.transportProjectionOwner.syncAndWait();
     },
     latestEventCursor() {
       return kernel.events.latestCursor();

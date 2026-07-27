@@ -7,25 +7,36 @@ import {
   safeOptionalShortText,
   safeParseRecord,
 } from "../core/projection-safe-values.ts";
+import { eventTurnMatchSql } from "./event-turn-query.ts";
+import {
+  deliveryLimitationMetadataFromRecord,
+  type DeliveryLimitationMetadata,
+} from "../transport/app-delivery-projection.ts";
 
 export class AppEventStore {
   private readonly subscribers = new Set<(event: AppEventEnvelope) => void>();
   private readonly sessionTurnEventSequences = new Map<string, number>();
   private readonly turnEventSequences = new Map<string, number>();
 
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly onEventAppended: (
+      event: { turnId: string; eventId: number },
+    ) => void = () => undefined,
+  ) {}
 
   append(type: string, payload: Record<string, unknown>): AppEventEnvelope {
     const createdAt = new Date().toISOString();
     const publicPayload = publicAppEventPayload(type, payload);
+    const turnId = eventTurnId(publicPayload);
     this.db
       .query(
         `
-      INSERT INTO events (type, payload_json, created_at)
-      VALUES (?, ?, ?)
+      INSERT INTO events (type, turn_id, payload_json, created_at)
+      VALUES (?, ?, ?, ?)
     `,
       )
-      .run(type, JSON.stringify(publicPayload), createdAt);
+      .run(type, turnId, JSON.stringify(publicPayload), createdAt);
     const inserted = this.db
       .query<{ id: number }, []>("SELECT last_insert_rowid() AS id")
       .get();
@@ -39,6 +50,7 @@ export class AppEventStore {
       )
       .get(inserted?.id ?? 0);
     if (!row) throw new Error("Failed to append event.");
+    this.onEventAppended({ turnId, eventId: row.id });
     const event: AppEventEnvelope = {
       protocol_version: APP_PROTOCOL_VERSION,
       id: row.id,
@@ -122,7 +134,7 @@ export class AppEventStore {
       SELECT id
       FROM events
       WHERE type = 'agent.turn_event'
-        AND json_extract(payload_json, '$.turn_id') = ?
+        AND ${eventTurnMatchSql(this.db)}
         AND json_extract(payload_json, '$.event.kind') = ?
       ORDER BY id DESC
       LIMIT 1
@@ -139,7 +151,7 @@ export class AppEventStore {
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND json_extract(payload_json, '$.turn_id') = ?
+        AND ${eventTurnMatchSql(this.db)}
         AND json_extract(payload_json, '$.event.kind') = 'runtime.fault'
       ORDER BY id DESC
       LIMIT 1
@@ -180,23 +192,52 @@ export class AppEventStore {
     };
   }
 
+  deliveryMetadataForTurn(turnId: string): DeliveryLimitationMetadata | null {
+    const row = this.db.query<EventRow, [string]>(`
+      SELECT id, type, payload_json, created_at
+      FROM events
+      WHERE type = 'agent.turn_event'
+        AND ${eventTurnMatchSql(this.db)}
+        AND (
+          json_type(payload_json, '$.event.payload.delivery_state') IS NOT NULL
+          OR json_type(payload_json, '$.event.payload.deliveryState') IS NOT NULL
+        )
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(turnId);
+    if (!row) return null;
+    const payload = safeParseRecord(row.payload_json);
+    const event = isRecord(payload.event) ? payload.event : null;
+    const eventPayload = event && isRecord(event.payload) ? event.payload : null;
+    return eventPayload
+      ? deliveryLimitationMetadataFromRecord(eventPayload)
+      : null;
+  }
+
   private lastPersistedTurnEventSequence(
     scope: "session" | "turn",
     id: string,
   ): number {
-    const field = scope === "session" ? "$.session_id" : "$.turn_id";
-    const rows = this.db
+    const rows = scope === "session"
+      ? this.db
       .query<EventRow, [string]>(
         `
       SELECT id, type, payload_json, created_at
       FROM events
       WHERE type = 'agent.turn_event'
-        AND json_extract(payload_json, '${field}') = ?
+        AND json_extract(payload_json, '$.session_id') = ?
       ORDER BY id DESC
       LIMIT 20
     `,
       )
-      .all(id);
+      .all(id)
+      : this.db.query<EventRow, [string]>(`
+        SELECT id, type, payload_json, created_at
+        FROM events
+        WHERE type = 'agent.turn_event' AND ${eventTurnMatchSql(this.db)}
+        ORDER BY id DESC
+        LIMIT 20
+      `).all(id);
     for (const row of rows) {
       const payload = safeParseRecord(row.payload_json);
       if (scope === "session" && payload.session_id !== id) continue;
@@ -214,4 +255,12 @@ export class AppEventStore {
     }
     return 0;
   }
+}
+
+function eventTurnId(payload: Record<string, unknown>): string {
+  if (typeof payload.turn_id === "string") return payload.turn_id;
+  const turn = isRecord(payload.turn) ? payload.turn : null;
+  if (typeof turn?.id === "string") return turn.id;
+  const message = isRecord(payload.message) ? payload.message : null;
+  return typeof message?.turn_id === "string" ? message.turn_id : "";
 }

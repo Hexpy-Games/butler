@@ -31,76 +31,82 @@ import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
   AppTransportProjectionStoreOptions,
 } from "./transport-projection-contract.ts";
-import {
-  reconcileBtccTurnProjectionAuthority,
-} from "./btcc-turn-projection-authority.ts";
-import {
-  reconcileBtccTerminalDeliveries,
-} from "./btcc-terminal-projection.ts";
-
-interface PendingAppTurnEventOutbound {
-  chatId: string;
-  event: TranscriptEvent;
-}
-
-type DeferredQueuedFinalOutbound = PendingAppTurnEventOutbound;
+import { AppTransportHistoricalReconciliationStore } from
+  "./historical-reconciliation-store.ts";
+import { StagedTransportOutboundStore } from
+  "./staged-transport-outbound-store.ts";
 
 export class AppTransportProjectionStore {
   private readonly transcriptSync: AppTransportTranscriptSyncStore;
   private readonly projectedEvents: AppProjectedTransportEventStore;
-  private readonly pendingAppTurnEventOutbounds = new Map<
-    string,
-    PendingAppTurnEventOutbound
-  >();
-  private readonly deferredQueuedFinalOutbounds = new Map<
-    string,
-    DeferredQueuedFinalOutbound
-  >();
+  private readonly stagedOutbounds: StagedTransportOutboundStore;
+  private readonly historical: AppTransportHistoricalReconciliationStore;
+  private transcriptCycleComplete = false;
+  private deferredCycleComplete = false;
+  private deferredFinalCursor = "";
 
   constructor(private readonly options: AppTransportProjectionStoreOptions) {
     this.projectedEvents = new AppProjectedTransportEventStore(options.db);
+    this.stagedOutbounds = new StagedTransportOutboundStore(options.db);
+    this.historical = new AppTransportHistoricalReconciliationStore({
+      options,
+      hasProjectedAction: (actionId) =>
+        this.hasProjectedTransportEvent(actionId),
+      markProjectedAction: (actionId, eventId, targetChatId) =>
+        this.markProjectedTransportEvent(actionId, eventId, targetChatId),
+    });
     this.transcriptSync = new AppTransportTranscriptSyncStore({
       db: options.db,
       butlerData: options.butlerData,
       projectDeliveryEvent: (event) => this.projectAppDeliveryEvent(event),
       projectOutboundEvent: (chatId, event) =>
         this.projectAppOutboundEvent(chatId, event),
+      recordDiagnostic: (diagnostic) => options.appendEvent(
+        "app.transport_projection.diagnostic",
+        {
+          chat_id: diagnostic.chatId,
+          byte_offset: diagnostic.byteOffset,
+          code: diagnostic.code,
+        },
+      ),
     });
   }
 
-  syncAll(): number {
-    const authorityReconciliationCount = reconcileBtccTurnProjectionAuthority(
-      this.options.db,
-    );
-    const transcriptProjectionCount = this.transcriptSync.syncAll();
-    const terminalProjectionCount = this.reconcileBtccTerminalDeliveries();
-    return (
-      authorityReconciliationCount + transcriptProjectionCount + terminalProjectionCount +
-      this.reconcileDeferredQueuedFinalOutbounds()
-    );
+  syncNextBatch(): boolean {
+    const transcript = this.transcriptCycleComplete
+      ? { applied: 0, pending: false }
+      : this.transcriptSync.syncNextBatch();
+    this.transcriptCycleComplete = !transcript.pending;
+    const transcriptPending = transcript.pending;
+    const deferredPending = this.deferredCycleComplete
+      ? false
+      : this.reconcileDeferredQueuedFinalOutboundBatch();
+    this.deferredCycleComplete = !deferredPending;
+    if (
+      transcriptPending || deferredPending
+    ) return true;
+    this.resetBatchCycle();
+    return false;
   }
 
-  syncChat(chatId: string): number {
-    const authorityReconciliationCount = reconcileBtccTurnProjectionAuthority(
-      this.options.db,
-      chatId,
-    );
-    const transcriptProjectionCount = this.transcriptSync.syncChat(chatId);
-    const terminalProjectionCount = this.reconcileBtccTerminalDeliveries(chatId);
-    return (
-      authorityReconciliationCount + transcriptProjectionCount + terminalProjectionCount +
-      this.reconcileDeferredQueuedFinalOutbounds(chatId)
-    );
+  reopenCompletedLiveLanes(): void {
+    if (this.deferredCycleComplete) this.deferredFinalCursor = "";
+    this.transcriptCycleComplete = false;
+    this.deferredCycleComplete = false;
   }
 
-  private reconcileBtccTerminalDeliveries(chatId?: string): number {
-    return reconcileBtccTerminalDeliveries({
-      options: this.options,
-      hasProjectedAction: (actionId) => this.hasProjectedTransportEvent(actionId),
-      markProjectedAction: (actionId, eventId, targetChatId) =>
-        this.markProjectedTransportEvent(actionId, eventId, targetChatId),
-      chatId,
-    });
+  reconcileNextHistoricalPage(): boolean {
+    return this.historical.reconcileNextPage();
+  }
+
+  migrateLegacyReceiptsNextBatch(): boolean {
+    return this.projectedEvents.migrateLegacyBatch();
+  }
+
+  private resetBatchCycle(): void {
+    this.transcriptCycleComplete = false;
+    this.deferredCycleComplete = false;
+    this.deferredFinalCursor = "";
   }
 
   private projectAppOutboundEvent(
@@ -132,7 +138,12 @@ export class AppTransportProjectionStore {
     const turnEvent = runtimeTurnEventFromAppOutboundMetadata(metadata);
     if (turnEvent) {
       if (deliveryState !== "delivered") {
-        this.pendingAppTurnEventOutbounds.set(actionId, { chatId, event });
+        this.stagedOutbounds.stage({
+          actionId,
+          chatId,
+          event,
+          state: "awaiting_delivery",
+        });
         return false;
       }
       const alreadyProjectedReceipt =
@@ -201,10 +212,15 @@ export class AppTransportProjectionStore {
       metadata,
     });
     if (queuedFinalProjection === "defer") {
-      this.deferredQueuedFinalOutbounds.set(actionId, { chatId, event });
+      this.stagedOutbounds.stage({
+        actionId,
+        chatId,
+        event,
+        state: "deferred_final",
+      });
       return false;
     }
-    this.deferredQueuedFinalOutbounds.delete(actionId);
+    this.stagedOutbounds.delete(actionId);
     return projectAppFinalResult({
       options: this.options,
       markProjectedTransportEvent: (id, eventId, targetChatId) =>
@@ -220,39 +236,44 @@ export class AppTransportProjectionStore {
     });
   }
 
-  private reconcileDeferredQueuedFinalOutbounds(chatId?: string): number {
-    let projectedCount = 0;
-    for (const [actionId, pending] of [
-      ...this.deferredQueuedFinalOutbounds.entries(),
-    ]) {
-      if (chatId && pending.chatId !== chatId) continue;
-      if (this.hasProjectedTransportEvent(actionId)) {
-        this.deferredQueuedFinalOutbounds.delete(actionId);
+  private reconcileDeferredQueuedFinalOutboundBatch(): boolean {
+    const batch = this.stagedOutbounds.listDeferredBatch(
+      this.deferredFinalCursor,
+    );
+    for (const pending of batch.rows) {
+      if (this.hasProjectedTransportEvent(pending.actionId)) {
+        this.stagedOutbounds.delete(pending.actionId);
         continue;
       }
-      if (this.projectAppOutboundEvent(pending.chatId, pending.event)) {
-        projectedCount += 1;
-      }
-      if (this.hasProjectedTransportEvent(actionId)) {
-        this.deferredQueuedFinalOutbounds.delete(actionId);
+      this.projectAppOutboundEvent(pending.chatId, pending.event);
+      if (this.hasProjectedTransportEvent(pending.actionId)) {
+        this.stagedOutbounds.delete(pending.actionId);
       }
     }
-    return projectedCount;
+    this.deferredFinalCursor = batch.pending ? batch.nextCursor : "";
+    return batch.pending;
   }
 
   private projectAppDeliveryEvent(event: TranscriptEvent): boolean {
     const actionId = safeOptionalShortText(event.payload.actionId);
     if (!actionId) return false;
-    const pending = this.pendingAppTurnEventOutbounds.get(actionId);
-    if (!pending) return false;
-    this.pendingAppTurnEventOutbounds.delete(actionId);
-    if (event.payload.ok !== true) return false;
-    if (this.hasProjectedTransportEvent(actionId)) return false;
-    return this.projectAppOutboundEvent(
+    const pending = this.stagedOutbounds.load(actionId);
+    if (!pending || pending.state !== "awaiting_delivery") return false;
+    if (event.payload.ok !== true) {
+      this.stagedOutbounds.delete(actionId);
+      return false;
+    }
+    if (this.hasProjectedTransportEvent(actionId)) {
+      this.stagedOutbounds.delete(actionId);
+      return false;
+    }
+    const projected = this.projectAppOutboundEvent(
       pending.chatId,
       pending.event,
       "delivered",
     );
+    this.stagedOutbounds.delete(actionId);
+    return projected;
   }
 
   private hasProjectedTransportEvent(actionId: string): boolean {

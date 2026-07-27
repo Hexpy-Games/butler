@@ -168,12 +168,20 @@ export class SqliteTransitionWriter {
     this.db.query(`
       UPDATE btcc_delivery_outbox SET status = 'observed' WHERE outbox_id = ?
     `).run(turn.deliveryOutbox.outboxId);
-    const updated = this.db.query(`
+    const updated = this.db.query<{ turn_id: string }, [
+      string,
+      number,
+      string,
+      number,
+    ]>(`
       UPDATE btcc_turns SET semantic_state = 'delivered', active_checkpoint_id = NULL,
         canonical_assistant_message_id = ?, revision = ?
       WHERE turn_id = ? AND revision = ?
-    `).run(transition.assistantMessageId, nextRevision, turn.turnId, turn.revision);
-    if (updated.changes !== 1) throw new Error("BTCC Delivery commit lost Turn CAS");
+      RETURNING turn_id
+    `).get(transition.assistantMessageId, nextRevision, turn.turnId, turn.revision);
+    if (updated?.turn_id !== turn.turnId) {
+      throw new Error("BTCC Delivery commit lost Turn CAS");
+    }
   }
 
   private advanceWithCheckpoint(

@@ -68,10 +68,11 @@ export function createAppSessionModuleGraph(input: {
     },
   });
   const sessionMessageProjection = new AppSessionMessageProjectionStore({
-    db,
     listMessages: (sessionId) => host.listMessages(sessionId),
     getTurnRow: (turnId) => host.getTurnRow(turnId),
     listProgressRowsForTurn: (turnId) => host.listProgressRowsForTurn(turnId),
+    explicitDeliveryMetadataForTurn: (turnId) =>
+      host.explicitDeliveryMetadataForTurn(turnId),
   });
   const turnProgressView = new AppTurnProgressViewStore({
     getTurnRow: (turnId) => host.getTurnRow(turnId),
@@ -80,7 +81,8 @@ export function createAppSessionModuleGraph(input: {
       host.deliveryMetadataForTurnRecord(turn),
   });
   const limitedDelivery = new AppLimitedDeliveryStore({
-    db,
+    hasPublicContinuationProgressSinceLatestQueue: (turnId) =>
+      host.hasPublicContinuationProgressSinceLatestQueue(turnId),
     hasTurnEventKind: (turnId, kind) => host.hasTurnEventKind(turnId, kind),
     appendTurnEvent: (chatId, turnId, event) => {
       host.appendTurnEvent(chatId, turnId, event);
