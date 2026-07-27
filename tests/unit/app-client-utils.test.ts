@@ -1987,6 +1987,21 @@ test("a delivered deferred Turn does not mark unfinished Work Ledger tasks compl
   ], "delivered").map((row) => row.state)).toEqual(["completed", "pending"]);
 });
 
+test("a cancelled Turn preserves exact canonical Work Ledger task states", async () => {
+  const { todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  );
+  expect(todoRowsForDisplay([
+    canonicalTaskRow("completed"),
+    { ...canonicalTaskRow("active"), id: "task-2", safe_input_label: "task-2" },
+    { ...canonicalTaskRow("planned"), id: "task-3", safe_input_label: "task-3" },
+  ], "cancelled").map((row) => row.state)).toEqual([
+    "completed",
+    "stopped",
+    "pending",
+  ]);
+});
+
 test("terminal SSE and reload preserve exact canonical Work Ledger states", () => {
   const rows = [
     canonicalTaskRow("completed"),

@@ -38,7 +38,11 @@ export function todoRowsForDisplay(
         id: todoId,
         label,
         workLabel: workLabel(row),
-        state: todoState(row.state, turnState),
+        state: todoState(
+          row.state,
+          turnState,
+          row.bridge_phase === "btcc_work_ledger",
+        ),
       },
       order: previous
         ? mergeTodoOrder(previous.order, todoOrder(row.safe_order))
@@ -54,8 +58,27 @@ export function todoRowsForDisplay(
     .map((entry) => entry.item);
 }
 
-function todoState(state?: string, turnState?: string): TodoComposerItem["state"] {
-  if (turnState === "cancelled" && state !== "completed" && state !== "delivered")
+function todoState(
+  state?: string,
+  turnState?: string,
+  canonicalWorkLedger = false,
+): TodoComposerItem["state"] {
+  if (
+    canonicalWorkLedger &&
+    turnState === "cancelled" &&
+    (state === "active" ||
+      state === "running" ||
+      state === "streaming" ||
+      state === "reviewing" ||
+      state === "correction_required")
+  )
+    return "stopped";
+  if (
+    !canonicalWorkLedger &&
+    turnState === "cancelled" &&
+    state !== "completed" &&
+    state !== "delivered"
+  )
     return "stopped";
   if (state === "delivered" || state === "complete" || state === "completed")
     return "completed";
