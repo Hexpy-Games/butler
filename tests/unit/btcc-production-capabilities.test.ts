@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { createProductionToolRuntime } from "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
 import { createProductionOperationRuntime } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/operations/index.ts";
-import type { OperationRequest } from
+import { OperationRejectedError, type OperationRequest } from
   "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import {
   envelope,
@@ -133,6 +133,29 @@ describe("production BTCC capabilities", () => {
       request,
       args: { path: "result.txt" },
     })).toThrow("unavailable for workspace_artifact_action");
+  });
+
+  test("classifies model-authored Review input errors as operation rejection", () => {
+    const root = fixtureRoot();
+    const runtime = createProductionToolRuntime({
+      butlerHome: root,
+      butlerData: root,
+      appMessageDbPath: join(root, "app.sqlite"),
+    });
+    const request: Extract<OperationRequest, { kind: "review_validation" }> = {
+      requestId: "invalid-review-effect",
+      publicTitle: "Validate review source",
+      kind: "review_validation",
+      capabilityRef: "run_command",
+      reviewSourceRef: { id: "review-source", sha256: "review-source-sha" },
+      input: { command: "npm test", state_effect: "read_only" },
+    };
+
+    expect(() => runtime.validateOperationInput({
+      envelope: envelope(),
+      request,
+      args: request.input,
+    })).toThrow(OperationRejectedError);
   });
 
   test("reads only the canonical Ledger bound by the observation scope", async () => {
