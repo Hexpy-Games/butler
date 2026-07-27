@@ -4,20 +4,14 @@ import {
   requireRecord,
   requireString,
   textSchema,
-  type SubmissionSchema,
 } from "../core/index.ts";
 import type { UserReportFacts } from "./contracts.ts";
 
-const factTextSchema = (): SubmissionSchema => ({
-  ...textSchema(),
-  maxLength: 1_000,
-});
-
 export const userReportFactsSubmissionSchema = objectSchema({
-  outcome: factTextSchema(),
-  materialChanges: arraySchema(factTextSchema(), { minItems: 1, maxItems: 12 }),
-  validationResults: arraySchema(factTextSchema(), { minItems: 1, maxItems: 12 }),
-  limitations: arraySchema(factTextSchema(), { maxItems: 12 }),
+  outcome: textSchema(),
+  materialChanges: arraySchema(textSchema(), { minItems: 1 }),
+  validationResults: arraySchema(textSchema(), { minItems: 1 }),
+  limitations: arraySchema(textSchema()),
 });
 
 export function decodeUserReportFacts(value: unknown): UserReportFacts {

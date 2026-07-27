@@ -268,8 +268,8 @@ const DUTIES = {
   assure_integration: "Judge every accepted IntegrationCriterion against current targets or the complete isolated promotion candidates.",
   assure_effects: "Check exact accepted external EffectReceipts and unresolved reconciliation; derive promotion authorization only from observed capabilities, complete candidates, and the accepted lifecycle.",
   assure_deferral_frontier: "For deferred work, bind the exact blocker, anchor, open frontier, accepted Plan authority, completed subset, effects, and workspaces without fabricating repair findings.",
-  render_final_dossier_truthfully: "Render the accepted FinalDossier disposition and its user-facing outcome, material changes, validation results, open frontier, and truthful limitations; never replace them with generic lifecycle language, repair them, or reinterpret them.",
-  guard_public_claims: "Bind every factual public claim to concrete accepted sources and cover every response obligation or dossier statement.",
+  render_final_dossier_truthfully: "Render the accepted FinalDossier disposition and its user-facing outcome, material changes, validation results, open frontier, and truthful limitations; preserve every user-required response element and presentation constraint, and never replace them with generic lifecycle language, repair them, reinterpretation, or a claim that omitted content exists.",
+  guard_public_claims: "Bind every factual public claim to concrete accepted sources, cover every response obligation or dossier statement, and never claim a requested section, enumeration, attachment, or result was delivered unless it is actually present in the public response.",
   guard_model_identity_privacy_omissions: "Use immutable selected-model projection, expose no private prompt, profile, diagnostic, path, or secret content, and state material limitations.",
   author_managed_deferral: "Defer only for concrete user authority, external readiness, or scheduled time, binding the exact goal, authority, model, manifest, frontier, and resumable anchor; internal faults are forbidden.",
 } as const satisfies Record<PromptDutyId, string>;
