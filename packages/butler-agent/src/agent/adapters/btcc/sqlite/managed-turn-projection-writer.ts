@@ -66,17 +66,25 @@ export class ManagedTurnProjectionWriter {
     nextRevision: number,
     managed: ManagedTurnState,
   ): void {
-    const updated = this.db.query(`
+    const updated = this.db.query<{ turn_id: string }, [
+      string,
+      number,
+      string,
+      number,
+    ]>(`
       UPDATE btcc_turns SET semantic_state = 'cancelled', active_checkpoint_id = NULL,
         managed_state_json = ?, revision = ?, route = 'managed',
         final_disposition = 'cancelled'
       WHERE turn_id = ? AND revision = ?
-    `).run(
+      RETURNING turn_id
+    `).get(
       stableJson(persistedManagedState(managed)),
       nextRevision,
       turn.turnId,
       turn.revision,
     );
-    if (updated.changes !== 1) throw new Error("BTCC work cancellation lost Turn CAS");
+    if (updated?.turn_id !== turn.turnId) {
+      throw new Error("BTCC work cancellation lost Turn CAS");
+    }
   }
 }

@@ -3,8 +3,18 @@ import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { AppMessageFileStore } from "../../domain/message-files/message-file-store.ts";
 import { AppTransportProjectionStore } from "./transport-projection-store.ts";
 import { AppTransportProjectionOwner } from "./transport-projection-owner.ts";
+import { AppTransportReceiptMigrationOwner } from
+  "./receipt-migration-owner.ts";
+import { AppTransportHistoricalReconciliationOwner } from
+  "./historical-reconciliation-owner.ts";
 import { AppTransportQueueStore } from "./transport-queue-store.ts";
 import { Database } from "bun:sqlite";
+import { recordOperationalMetric } from
+  "../../../../operations/metrics/operational-metrics.ts";
+import { TerminalSettlementWakeStore } from
+  "../retention/terminal-settlement-wake-store.ts";
+import { TerminalSettlementWakeOwner } from
+  "../retention/terminal-settlement-wake-owner.ts";
 
 export interface AppTransportModuleGraph {
   appTransportQueue: AppTransportQueueStore;
@@ -94,9 +104,58 @@ export function createAppTransportModuleGraph(input: {
     drainQueuedSessionMessages: (chatId) =>
       host.drainQueuedSessionMessages(chatId),
   });
+  const recordProjectionFailure = (name: string, error: unknown) =>
+    recordOperationalMetric({
+      category: "runtime",
+      name,
+      status: "error",
+      dimensions: {
+        error_name: error instanceof Error ? error.name : "unknown",
+      },
+    }, { butlerData });
+  const receiptMigrationOwner = new AppTransportReceiptMigrationOwner({
+    migrateNextBatch: () =>
+      transportProjection.migrateLegacyReceiptsNextBatch(),
+    recordFailure: (error) =>
+      recordProjectionFailure("app.transport_receipt_migration", error),
+  });
+  const historicalReconciliationOwner =
+    new AppTransportHistoricalReconciliationOwner({
+      reconcileNextPage: () =>
+        transportProjection.reconcileNextHistoricalPage(),
+      recordFailure: (error) =>
+        recordProjectionFailure(
+          "app.transport_historical_reconciliation",
+          error,
+        ),
+    });
+  const terminalSettlementWakes = new TerminalSettlementWakeStore(db);
+  const terminalSettlementWakeOwner = new TerminalSettlementWakeOwner({
+    consumeNextBatch: () =>
+      terminalSettlementWakes.consumeNextBatch((turnId) =>
+        host.scheduleTerminalTurnRetention(turnId),
+      ),
+    recordFailure: (error) =>
+      recordProjectionFailure("app.terminal_settlement_wake", error),
+  });
   const transportProjectionOwner = new AppTransportProjectionOwner({
     butlerData,
-    syncAll: () => transportProjection.syncAll(),
+    syncNextBatch: () => transportProjection.syncNextBatch(),
+    reopenCompletedLiveLanes: () =>
+      transportProjection.reopenCompletedLiveLanes(),
+    terminalSettlementWakeOwner,
+    recordFailure: (error) =>
+      recordProjectionFailure("app.transport_projection", error),
+    maintenanceOwner: {
+      start: () => {
+        receiptMigrationOwner.start();
+        historicalReconciliationOwner.start();
+      },
+      close: () => {
+        historicalReconciliationOwner.close();
+        receiptMigrationOwner.close();
+      },
+    },
   });
   return { appTransportQueue, transportProjection, transportProjectionOwner };
 }

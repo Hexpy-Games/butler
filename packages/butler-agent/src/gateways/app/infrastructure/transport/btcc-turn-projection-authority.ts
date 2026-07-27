@@ -1,9 +1,18 @@
 import type { Database } from "bun:sqlite";
+import { loadBoundedTurnPage } from "./bounded-turn-page.ts";
 
 type ProjectionAuthorityRow = {
   turn_id: string;
   semantic_state: string;
 };
+
+export type ProjectionAuthorityBatch = {
+  applied: number;
+  nextCursor: number;
+  pending: boolean;
+};
+
+const AUTHORITY_BATCH_SIZE = 32;
 
 export function btccRetainsTurnAuthority(
   db: Database,
@@ -23,24 +32,29 @@ export function reconcileBtccTurnProjectionAuthority(
   db: Database,
   chatId?: string,
 ): number {
-  let rows: ProjectionAuthorityRow[];
-  try {
-    rows = db.query<ProjectionAuthorityRow, [string | null, string | null]>(`
-      SELECT turns.id AS turn_id, btcc_turns.semantic_state
-      FROM turns
-      JOIN btcc_turns ON btcc_turns.turn_id = turns.id
-      WHERE turns.state IN ('failed', 'runtime_fault')
-        AND btcc_turns.semantic_state NOT IN ('delivered', 'cancelled')
-        AND (? IS NULL OR turns.chat_id = ?)
-      ORDER BY turns.rowid
-    `).all(chatId ?? null, chatId ?? null);
-  } catch {
-    return 0;
+  return reconcileBtccTurnProjectionAuthorityBatch(db, {
+    chatId,
+    afterRowId: 0,
+  }).applied;
+}
+
+export function reconcileBtccTurnProjectionAuthorityBatch(
+  db: Database,
+  input: { chatId?: string; afterRowId: number; limit?: number },
+): ProjectionAuthorityBatch {
+  if (!tableExists(db, "btcc_turns")) {
+    return { applied: 0, nextCursor: input.afterRowId, pending: false };
   }
-  if (rows.length === 0) return 0;
+  const limit = input.limit ?? AUTHORITY_BATCH_SIZE;
+  const page = loadBoundedTurnPage(db, input.afterRowId, limit);
+  const candidates = page.rows.filter((row) =>
+    (row.state === "failed" || row.state === "runtime_fault") &&
+    (!input.chatId || row.chatId === input.chatId),
+  );
+  const batch = activeBtccRows(db, candidates.map((row) => row.turnId));
   const now = new Date().toISOString();
   db.transaction(() => {
-    for (const row of rows) {
+    for (const row of batch) {
       const finalizing = row.semantic_state === "delivery_committed";
       db.query(`
         UPDATE turns
@@ -56,9 +70,32 @@ export function reconcileBtccTurnProjectionAuthority(
       `).run(now, row.turn_id);
     }
   })();
-  return rows.length;
+  return {
+    applied: batch.length,
+    nextCursor: page.nextCursor,
+    pending: page.pending,
+  };
+}
+
+function activeBtccRows(
+  db: Database,
+  turnIds: string[],
+): ProjectionAuthorityRow[] {
+  if (turnIds.length === 0) return [];
+  const placeholders = turnIds.map(() => "?").join(", ");
+  return db.query<ProjectionAuthorityRow, string[]>(`
+    SELECT turn_id, semantic_state FROM btcc_turns
+    WHERE turn_id IN (${placeholders})
+      AND semantic_state NOT IN ('delivered', 'cancelled')
+  `).all(...turnIds);
 }
 
 function isBtccTerminal(state: string): boolean {
   return state === "delivered" || state === "cancelled";
+}
+
+function tableExists(db: Database, name: string): boolean {
+  return Boolean(db.query<{ name: string }, [string]>(`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?
+  `).get(name));
 }

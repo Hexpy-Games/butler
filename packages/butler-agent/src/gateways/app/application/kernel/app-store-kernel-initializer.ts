@@ -38,6 +38,8 @@ import { FileQueueButlerServiceClient } from "../../../core/client.ts";
 import { SessionBindingStore } from "../../../../test-support/harness/session-store.ts";
 import type { AppStoreKernel } from "./app-store-kernel.ts";
 import { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
+import { initializeTerminalTurnRetention } from
+  "./app-terminal-retention-initializer.ts";
 
 export function initializeAppStoreKernel(
   kernel: AppStoreKernel,
@@ -82,7 +84,13 @@ export function initializeAppStoreKernel(
   kernel.operationOutputs = new SqliteOperationOutputReader(kernel.butlerData);
   kernel.db = new Database(options.dbPath ?? ":memory:", { create: true });
   coordinateSharedSqliteWriter(kernel.db);
-  kernel.events = new AppEventStore(kernel.db);
+  let wakeTerminalRetention = (
+    _event: { turnId: string; eventId: number },
+  ): void => undefined;
+  kernel.events = new AppEventStore(
+    kernel.db,
+    (event) => wakeTerminalRetention(event),
+  );
   kernel.turns = new AppTurnRecordStore(kernel.db, (turnId, kind) =>
     kernel.hasTurnEventKind(turnId, kind),
   );
@@ -96,6 +104,8 @@ export function initializeAppStoreKernel(
       kernel.shouldPersistRuntimeTurnEvent(turnId, kind),
     isTerminalTurn: (turnId) => kernel.isTerminalTurn(turnId),
     getTurnRow: (turnId) => kernel.getTurnRow(turnId),
+    terminalProjectionForTurn: (turnId) =>
+      kernel.terminalProjectionForTurn(turnId),
   });
   kernel.settingsPersistence = new AppSettingsPersistence(kernel.db);
   kernel.modelSettingsPolicy = new AppModelSettingsPolicy(
@@ -275,6 +285,7 @@ export function initializeAppStoreKernel(
     },
   });
   migrateAppStoreSchema(kernel.db);
+  wakeTerminalRetention = initializeTerminalTurnRetention(kernel);
   kernel.conversationProjection = new AppConversationProjectionStore({
     db: kernel.db,
     conversationReader: options.conversationProjectionReader,
@@ -286,6 +297,7 @@ export function initializeAppStoreKernel(
   kernel.transportProjectionOwner.start();
   kernel.turnActions.reconcileCancellationSettlements();
   kernel.reconcileCancelledTurnActivityMessages();
+  kernel.compactSettledTerminalTurns();
 }
 
 function safeString(value: unknown): string | undefined {

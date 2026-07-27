@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import type { AppLimitedDelivery } from "../../infrastructure/transport/failure-ux-contract.ts";
 import type { MessageFileRow } from "../message-files/message-file-store.ts";
@@ -24,13 +23,10 @@ import type { TurnExecutionControlsV1 } from "../../../core/turn-execution-contr
 import {
   isInternalContinuationTurnState,
 } from "../../infrastructure/transport/app-transport-metadata.ts";
-import {
-  hasPublicContinuationProgressSinceLatestQueue,
-} from "./continuation-progress-read-model.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
 
 interface LimitedDeliveryStoreInput {
-  db: Database;
+  hasPublicContinuationProgressSinceLatestQueue: (turnId: string) => boolean;
   hasTurnEventKind: (turnId: string, kind: string) => boolean;
   appendTurnEvent: (
     chatId: string,
@@ -184,11 +180,7 @@ export class AppLimitedDeliveryStore {
     const deliveryState = limitedDelivery.delivery.delivery_state;
     const progressedDuringCurrentQueue =
       currentTurn && isInternalContinuationTurnState(currentTurn.state)
-        ? hasPublicContinuationProgressSinceLatestQueue({
-            db: this.input.db,
-            getTurnRow: this.input.getTurnRow,
-            turnId,
-          })
+        ? this.input.hasPublicContinuationProgressSinceLatestQueue(turnId)
         : false;
     const shouldRequeue =
       shouldAutomaticallyRequeueContinuation(currentTurn, deliveryState) ||

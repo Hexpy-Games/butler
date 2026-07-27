@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
-import type { StopPersistenceOutcome } from "../../../btcc/gateway-api.ts";
+import type {
+  ManagedProgramState,
+  StopPersistenceOutcome,
+} from "../../../btcc/gateway-api.ts";
 import { ledgerManifestContentHash } from "../../../btcc/gateway-api.ts";
-import type { ManagedProgramState } from "../../../btcc/work-ledger/contracts.ts";
 import { digest, stableJson } from "./identity.ts";
 
 type TurnControlRow = {
@@ -66,13 +68,19 @@ export class SqliteStopController {
     }
 
     const cancelledRevision = turn.revision + 1;
-    const cancelled = this.db.query(`
+    const cancelled = this.db.query<{ turn_id: string }, [
+      number,
+      string,
+      number,
+      string,
+    ]>(`
       UPDATE btcc_turns SET semantic_state = 'cancelled', active_checkpoint_id = NULL,
         revision = ?, execution_fence = execution_fence + 1,
         final_disposition = 'cancelled'
       WHERE turn_id = ? AND revision = ? AND semantic_state = ?
-    `).run(cancelledRevision, turnId, turn.revision, turn.semantic_state);
-    if (cancelled.changes !== 1) throw new Error("BTCC Stop lost its Turn CAS");
+      RETURNING turn_id
+    `).get(cancelledRevision, turnId, turn.revision, turn.semantic_state);
+    if (cancelled?.turn_id !== turnId) throw new Error("BTCC Stop lost its Turn CAS");
     this.preserveManagedContinuation(turnId, turn);
     this.db.query(`
       UPDATE btcc_checkpoints SET is_active = 0, active_claim_id = NULL

@@ -29,6 +29,12 @@ import type { AppWorkerControlStore } from "../../domain/workers/worker-control-
 import type { SettingsView } from "../../interface/protocol/app-protocol.ts";
 import type { DeveloperLogStore } from "../../../../operations/diagnostics/developer-log-store.ts";
 import type { SqliteOperationOutputReader } from "../../infrastructure/operation-output/sqlite-operation-output-reader.ts";
+import type { TerminalTurnRetention } from
+  "../../infrastructure/retention/terminal-turn-retention.ts";
+import type { TerminalTurnRetentionQueue } from
+  "../../infrastructure/retention/terminal-turn-retention-queue.ts";
+import type { BtccTerminalPhaseRetentionQueue } from
+  "../../../../agent/adapters/btcc/sqlite/index.ts";
 
 export interface AppStoreKernelState {
   db: Database;
@@ -47,6 +53,9 @@ export interface AppStoreKernelState {
   systemMonitor: AppSystemMonitorStore;
   developerLogs: DeveloperLogStore;
   operationOutputs: SqliteOperationOutputReader;
+  terminalTurnRetention: TerminalTurnRetention;
+  terminalTurnRetentionQueue: TerminalTurnRetentionQueue;
+  btccTerminalPhaseRetentionQueue: BtccTerminalPhaseRetentionQueue;
   settingsPersistence: AppSettingsPersistence;
   modelSettingsPolicy: AppModelSettingsPolicy;
   modelRegistry: AppModelRegistryStore;

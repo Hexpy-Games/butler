@@ -30,6 +30,8 @@ export interface AppStoreKernelTurnLifecycleHost {
   reconcileTurnLocalWorkOutcomeForTurn(turn: TurnRecord): void;
   appendTurnAcknowledgedEvent(chatId: string, turnId: string): void;
   appendTerminalTurnStateChanged(turn: TurnRecord): void;
+  compactSettledTerminalTurns(): void;
+  scheduleTerminalTurnRetention(turnId: string): void;
   dispatchDeferredResponderTurn(input: {
     chatId: string;
     turnId: string;
@@ -134,6 +136,14 @@ export function createTurnLifecycleHost(
     appendTerminalTurnStateChanged(turn) {
       kernel.appendEvent("turn.state_changed", { turn });
       kernel.reconcileTurnLocalWorkOutcomeForTurn(turn);
+      kernel.terminalTurnRetentionQueue.schedule(turn.id);
+    },
+    compactSettledTerminalTurns() {
+      kernel.terminalTurnRetentionQueue.sweep();
+      kernel.btccTerminalPhaseRetentionQueue.schedule();
+    },
+    scheduleTerminalTurnRetention(turnId) {
+      if (!kernel.closed) kernel.terminalTurnRetentionQueue.schedule(turnId);
     },
     dispatchDeferredResponderTurn(input) {
       kernel.userMessageTurns.dispatchDeferredResponderTurn(input);

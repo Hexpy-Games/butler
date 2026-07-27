@@ -3,8 +3,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   btccRetainsTurnAuthority,
   reconcileBtccTurnProjectionAuthority,
+  reconcileBtccTurnProjectionAuthorityBatch,
 } from "../../packages/butler-agent/src/gateways/app/infrastructure/transport/btcc-turn-projection-authority.ts";
 import {
+  reconcileBtccTerminalDeliveryBatch,
   reconcileBtccTerminalDeliveries,
 } from "../../packages/butler-agent/src/gateways/app/infrastructure/transport/btcc-terminal-projection.ts";
 import { projectAppTurnFailure } from
@@ -46,6 +48,64 @@ describe("BTCC App projection authority", () => {
       safe_status_label: "Finalizing",
       cancellable: 0,
     });
+  });
+
+  test("authority reconciliation advances with a stable bounded cursor", () => {
+    db = fixtureDb();
+    for (let index = 0; index < 40; index += 1) {
+      insertTurn(db, `turn-${index.toString().padStart(2, "0")}`, "planning");
+    }
+
+    const first = reconcileBtccTurnProjectionAuthorityBatch(db, {
+      afterRowId: 0,
+    });
+    expect(first).toMatchObject({ applied: 32, pending: true });
+    const second = reconcileBtccTurnProjectionAuthorityBatch(db, {
+      afterRowId: first.nextCursor,
+    });
+    expect(second).toMatchObject({ applied: 8, pending: false });
+  });
+
+  test("authority scans raw pages before a late eligible turn", () => {
+    db = fixtureDb();
+    for (let index = 0; index < 64; index += 1) {
+      insertTurn(db, `terminal-${index}`, "cancelled");
+    }
+    insertTurn(db, "late-active", "planning");
+
+    const first = reconcileBtccTurnProjectionAuthorityBatch(db, {
+      afterRowId: 0,
+    });
+    const second = reconcileBtccTurnProjectionAuthorityBatch(db, {
+      afterRowId: first.nextCursor,
+    });
+    const third = reconcileBtccTurnProjectionAuthorityBatch(db, {
+      afterRowId: second.nextCursor,
+    });
+
+    expect(first).toMatchObject({ applied: 0, nextCursor: 32, pending: true });
+    expect(second).toMatchObject({ applied: 0, nextCursor: 64, pending: true });
+    expect(third).toMatchObject({ applied: 1, nextCursor: 65, pending: false });
+  });
+
+  test("authority and terminal page storage failures propagate", () => {
+    const failure = new Error("injected storage failure");
+    const failingDb = {
+      query() {
+        throw failure;
+      },
+    } as unknown as Database;
+
+    expect(() => reconcileBtccTurnProjectionAuthorityBatch(
+      failingDb,
+      { afterRowId: 0 },
+    )).toThrow(failure);
+    expect(() => reconcileBtccTerminalDeliveryBatch({
+      options: { db: failingDb } as never,
+      hasProjectedAction: () => false,
+      markProjectedAction: () => undefined,
+      afterRowId: 0,
+    })).toThrow(failure);
   });
 
   test("never reopens a canonical terminal BTCC Turn", () => {
@@ -131,6 +191,40 @@ describe("BTCC App projection authority", () => {
     expect(reconcile()).toBe(0);
     expect(replies).toHaveLength(1);
   });
+
+  test("terminal discovery advances raw pages before checking eligibility", () => {
+    db = terminalFixtureDb();
+    db.query("UPDATE turns SET state = 'delivered'").run();
+    for (let index = 0; index < 63; index += 1) {
+      db.query("INSERT INTO turns VALUES (?, 'chat-1', 'delivered')")
+        .run(`settled-${index}`);
+    }
+    insertCanonicalTerminal(db, "late-delivery", "late-outbox", "late-message");
+    let eligibilityChecks = 0;
+    const input = {
+      options: { db } as never,
+      hasProjectedAction: () => {
+        eligibilityChecks += 1;
+        return true;
+      },
+      markProjectedAction: () => undefined,
+    };
+
+    const first = reconcileBtccTerminalDeliveryBatch({ ...input, afterRowId: 0 });
+    const second = reconcileBtccTerminalDeliveryBatch({
+      ...input,
+      afterRowId: first.nextCursor,
+    });
+    const third = reconcileBtccTerminalDeliveryBatch({
+      ...input,
+      afterRowId: second.nextCursor,
+    });
+
+    expect(first).toMatchObject({ nextCursor: 32, pending: true });
+    expect(second).toMatchObject({ nextCursor: 64, pending: true });
+    expect(third).toMatchObject({ nextCursor: 65, pending: false });
+    expect(eligibilityChecks).toBe(1);
+  });
 });
 
 function fixtureDb(): Database {
@@ -206,4 +300,21 @@ function terminalFixtureDb(): Database {
     INSERT INTO btcc_messages VALUES ('canonical-1', 'canonical final', '2026-07-26T00:00:00Z')
   `).run();
   return database;
+}
+
+function insertCanonicalTerminal(
+  database: Database,
+  turnId: string,
+  outboxId: string,
+  messageId: string,
+): void {
+  database.query("INSERT INTO turns VALUES (?, 'chat-1', 'thinking')").run(turnId);
+  database.query(`
+    INSERT INTO btcc_turns VALUES (?, 'delivered', 'completed', ?, ?)
+  `).run(turnId, outboxId, messageId);
+  database.query("INSERT INTO btcc_delivery_outbox VALUES (?, 'observed')")
+    .run(outboxId);
+  database.query(`
+    INSERT INTO btcc_messages VALUES (?, 'late canonical', '2026-07-26T00:00:00Z')
+  `).run(messageId);
 }

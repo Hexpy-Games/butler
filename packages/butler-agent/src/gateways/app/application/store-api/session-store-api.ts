@@ -47,7 +47,7 @@ export interface AppStoreSessionApi {
   ): SessionControlState;
   getContextDetails(sessionId: string): ContextDetailsView;
   getSessionSummary(sessionId: string): SessionSummaryView;
-  refreshSessionProjection(sessionId: string): number;
+  refreshSessionProjection(sessionId: string): void;
   getConversationProjectionStatus(): AppConversationProjectionStatus;
   replayConversationProjection(input?: { limit?: number }): AppConversationProjectionReplayResult;
   rebuildConversationProjection(conversationSessionId: string): AppConversationProjectionRebuildResult;
@@ -131,7 +131,6 @@ export function createSessionStoreApi(
     refreshSessionProjection(sessionId) {
       kernel.conversationProjection.replayOutbox();
       kernel.reconcileDeliveredSystemResponderTurns(sessionId);
-      return kernel.syncAppTransportEventsForChat(sessionId);
     },
     getConversationProjectionStatus() {
       return kernel.conversationProjection.status();

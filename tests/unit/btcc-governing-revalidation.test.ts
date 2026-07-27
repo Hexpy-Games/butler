@@ -28,6 +28,7 @@ test("governing revision re-reviews an accepted result without rerunning Executi
     expect(db.query<{ count: number }, []>(`
       SELECT COUNT(*) AS count FROM btcc_records WHERE kind = 'task_review'
     `).get()?.count).toBe(4);
+    expectTerminalWake(db);
   } finally {
     db.close();
   }
@@ -62,6 +63,7 @@ test("Project Work Ledger applies the same governing revalidation path", async (
       logicalId: "SPEC-HARNESS",
       body: expect.stringContaining("Preserve the original request"),
     }]);
+    expectTerminalWake(db);
   } finally {
     db.close();
   }
@@ -109,4 +111,16 @@ async function runRevalidation(projectRef?: string) {
 function expectRevalidationPhases(phases: string[]): void {
   expect(phases.filter((phase) => phase === "task_execution")).toHaveLength(3);
   expect(phases.filter((phase) => phase === "task_review")).toHaveLength(4);
+}
+
+function expectTerminalWake(db: Database): void {
+  expect(db.query<{
+    turn_id: string;
+    semantic_state: string;
+  }, []>(`
+    SELECT turn_id, semantic_state FROM btcc_terminal_settlement_wakes
+  `).all()).toEqual([{
+    turn_id: "turn-governing-revalidation",
+    semantic_state: "delivered",
+  }]);
 }

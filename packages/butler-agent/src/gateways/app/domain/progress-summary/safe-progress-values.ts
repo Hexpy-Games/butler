@@ -3,7 +3,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function safeBooleanLike(value: unknown): boolean {
-  return value === true || value === "true";
+  return value === true || value === "true" || value === 1 || value === "1";
 }
 
 export function safeShortToken(value: unknown, fallback: string): string {
