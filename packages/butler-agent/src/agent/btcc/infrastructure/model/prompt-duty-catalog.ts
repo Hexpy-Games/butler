@@ -1,7 +1,8 @@
 import type {
   PromptDutyId,
-  PromptProhibitionId,
 } from "../../core/prompt-contract.ts";
+export { resolveProhibitionInstructions } from
+  "./prompt-prohibition-catalog.ts";
 
 const DUTIES = {
   preserve_original_goal: "Treat the immutable GoalContract, required outcomes, constraints, non-goals, and acceptance intent as completion authority; never replace it with a later Plan, Task, finding, or local convenience.",
@@ -317,34 +318,13 @@ const DUTIES = {
   author_managed_deferral: "Defer only for concrete user authority, external readiness, or scheduled time, binding the exact goal, authority, model, manifest, frontier, and resumable anchor; internal faults are forbidden.",
 } as const satisfies Record<PromptDutyId, string>;
 
-const PROHIBITIONS = {
-  no_successor_choice: "Do not choose, name, or activate a semantic successor; submit only an available typed exit.",
-  no_runtime_semantic_judgment: "Do not delegate intent, sufficiency, fidelity, correction kind, or deferral meaning to runtime validation.",
-  no_model_substitution: "Do not probe, select, or switch models or controls and do not route by model answerability.",
-  no_heuristic_route: "Do not decide route or completion from keywords, regex, length, counts, elapsed time, or tool names.",
-  no_generic_assurance_layer:
-    "Do not invent a generic assurance layer; use concrete domain records and observations.",
-  no_hidden_retry_loop: "Do not retry unchanged semantic output by count or hide candidate correction inside the phase.",
-  no_mutation: "Do not mutate Work, target, authority, or semantic state in this phase.",
-  no_self_review: "Do not certify your own candidate where an explicit review phase owns that decision.",
-  no_repair: "Do not implement or mutate a correction while reviewing or consolidating.",
-  no_learning_on_delivery_path: "Do not generate learning or profile mutations before canonical answer delivery.",
-} as const satisfies Record<PromptProhibitionId, string>;
-
 export function resolveDutyInstructions(ids: readonly PromptDutyId[]) {
   return ids.map((id) => ({ id, instruction: requireInstruction(DUTIES, id, "duty") }));
 }
 
-export function resolveProhibitionInstructions(ids: readonly PromptProhibitionId[]) {
-  return ids.map((id) => ({
-    id,
-    instruction: requireInstruction(PROHIBITIONS, id, "prohibition"),
-  }));
-}
-
 function requireInstruction(
   catalog: Readonly<Record<string, string>>,
-  id: PromptDutyId | PromptProhibitionId,
+  id: PromptDutyId,
   kind: string,
 ): string {
   const instruction = catalog[id];
