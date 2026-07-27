@@ -9,7 +9,7 @@ import { discoverContinuationCandidates } from "../../packages/butler-agent/src/
 import { openingAnswerCodec } from "../../packages/butler-agent/src/agent/btcc/conception/opening/opening-answer-codec.ts";
 import { decideTransition } from "../../packages/butler-agent/src/agent/btcc/turn/state-machine/decide-transition.ts";
 import type { TurnRecord } from "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
-import { bindAndContinue, freshContinuationCommand, seedManagedProgramForStop, seedStoppedProgram, taskStatuses } from "./support/btcc-stopped-work-fixture.ts";
+import { bindAndContinue, bindStoppedContinuation, continuedPlanningAccepted, freshContinuationCommand, seedManagedProgramForStop, seedStoppedProgram, taskStatuses } from "./support/btcc-stopped-work-fixture.ts";
 import { insertRecord } from "./support/btcc-stopped-work-fixture-internals.ts";
 import { canonicalMutationId } from "./support/btcc-project-ledger-fixture.ts";
 import { SqliteTurnStateRepository } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/turn-state-repository.ts";
@@ -17,6 +17,7 @@ import { SqliteRuntimeOwnerRegistry } from "../../packages/butler-agent/src/agen
 import { SqliteWorkLedgerProgramReader } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/work-ledger/work-ledger-program-reader.ts";
 import type { ProjectWorkLedgerPublicationAdapter } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/index.ts";
 import { ledgerManifestContentHash } from "../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
+import { reduceProjectProgram } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/reduce-program.ts";
 
 test("Stop reloads a typed frontier and a fresh Turn continues only unfinished Tasks", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-stopped-program-"));
@@ -46,9 +47,24 @@ test("Stop reloads a typed frontier and a fresh Turn continues only unfinished T
     expect(continuation.context?.frontier.pendingTasks?.map((item) =>
       item.task.taskLogicalId)).toEqual(["task-d"]);
 
+    const staleCorrectionRef = {
+      id: "stale-continuation-correction",
+      sha256: "stale-continuation-correction-sha256",
+    };
+    insertRecord(db, "correction_plan", staleCorrectionRef, { ref: staleCorrectionRef });
+    db.query(`
+      UPDATE btcc_programs SET pending_correction_plan_ref = ?
+      WHERE program_id = 'program-session'
+    `).run(staleCorrectionRef.id);
+
     bindAndContinue(storage, continuation);
 
     expect(taskStatuses(db)).toEqual(["accepted", "accepted", "planned", "planned"]);
+    const continued = storage.loadProgram("program-session");
+    if (!continued || continued.planningState !== "reviewed") {
+      throw new Error("Reviewed continuation Program expected");
+    }
+    expect(continued.correctionPlanRef).toBeUndefined();
     expect(await discoverContinuationCandidates(db, freshContinuationCommand())).toEqual([]);
     expect(stoppedCandidateStatus(db)).toBe("bound");
     expect(oldTurnState(db)).toBe("cancelled");
@@ -166,6 +182,40 @@ test("attempt correction history does not become pending Program authority", asy
   expect(program.correctionPlanRef).toBeUndefined();
   expect(program.currentTask.attempts.at(-1)?.attemptRecord.correctionPlanRef)
     .toEqual(correctionRef);
+  db.close();
+});
+
+test("Project continuation consumes stale deferral and correction authorities", async () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  const storage = await seedStoppedProgram(db);
+  const continuation = (await discoverContinuationCandidates(
+    db,
+    freshContinuationCommand(),
+  ))[0]!;
+  const rebound = bindStoppedContinuation(storage, continuation);
+  if (rebound.planningState !== "reviewed") {
+    throw new Error("Reviewed rebound Program expected");
+  }
+  rebound.activeDeferral = {
+    kind: "managed_deferral",
+    blocker: { ref: { id: "old-blocker", sha256: "old-blocker-sha" } },
+    anchor: { ref: { id: "old-anchor", sha256: "old-anchor-sha" } },
+  } as never;
+  rebound.correctionPlanRef = { id: "old-correction", sha256: "old-correction-sha" };
+  const product = continuedPlanningAccepted(rebound, continuation);
+  const next = reduceProjectProgram(rebound, {
+    mutationId: "unused-by-reducer",
+    turnId: "turn-fresh-continuation",
+    expectedTurnRevision: 8,
+    mutation: { kind: "install_reviewed_plan", product },
+  });
+
+  if (next.planningState !== "reviewed") {
+    throw new Error("Reviewed Project continuation expected");
+  }
+  expect(next.activeDeferral).toBeUndefined();
+  expect(next.correctionPlanRef).toBeUndefined();
   db.close();
 });
 

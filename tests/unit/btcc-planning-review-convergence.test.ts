@@ -30,8 +30,17 @@ describe("BTCC Planning Review convergence", () => {
   });
 
   test("persists the revised structured candidate into frozen-finding re-review", async () => {
+    const continuation = {
+      kind: "deferred_goal",
+      ref: ref("continuation-binding"),
+      sourceTurnId: "source-turn",
+      anchorRef: ref("deferred-anchor"),
+    };
     const authored = requireCandidate(
-      requirePlanProduct(await proposePlan(planningInvocation(planSubmission()))),
+      requirePlanProduct(await proposePlan(planningInvocation(
+        planSubmission(),
+        { continuation },
+      ))),
     );
     const rejected = capturedSequentialCandidate(authored);
     const initialReview = await rejectOrdinalMismatch(rejected);
@@ -42,6 +51,7 @@ describe("BTCC Planning Review convergence", () => {
       previousCandidateRef: rejected.ref,
       findingSetRef: initialReview.findingSetRef,
       priorPlanningReview: initialReview,
+      continuation,
     }, [{
       findingId: finding.ref.id,
       decision: "apply_now",
@@ -49,8 +59,13 @@ describe("BTCC Planning Review convergence", () => {
     }]));
     const revised = requireCandidate(requirePlanProduct(revisedProduct));
 
-    expect(revised.revisionOrigin).toMatchObject({
-      kind: "review_revision",
+    expect(revised.revisionOrigin).toEqual({
+      kind: "deferred_continuation",
+      continuationBindingRef: continuation.ref,
+      sourceTurnId: continuation.sourceTurnId,
+      deferredAnchorRef: continuation.anchorRef,
+    });
+    expect(revised.reviewRevision).toMatchObject({
       previousCandidateRef: rejected.ref,
       findingSetRef: initialReview.findingSetRef,
     });

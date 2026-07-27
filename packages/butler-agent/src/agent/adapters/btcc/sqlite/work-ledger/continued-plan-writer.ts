@@ -56,7 +56,8 @@ export class SqliteContinuedPlanWriter {
     const continued = this.db.query(`
       UPDATE btcc_programs SET accepted_plan_candidate_ref = ?, planning_review_ref = ?, frontier = ?,
         active_deferral_ref = NULL, active_deferral_turn_id = NULL,
-        promotion_deferral_ref = NULL, available_specs_json = ?,
+        promotion_deferral_ref = NULL, pending_correction_plan_ref = NULL,
+        available_specs_json = ?,
         governing_spec_refs_json = ?, manifest_revision = manifest_revision + 1
       WHERE program_id = ? AND manifest_revision = ?
     `).run(
@@ -85,6 +86,7 @@ export class SqliteContinuedPlanWriter {
         frontier = 'implementation_open', promotion_permit_ref = NULL,
         promotion_assembly_refs_json = NULL, active_deferral_ref = NULL,
         active_deferral_turn_id = NULL, promotion_deferral_ref = NULL,
+        pending_correction_plan_ref = NULL,
         available_specs_json = ?, governing_spec_refs_json = ?,
         manifest_revision = manifest_revision + 1
       WHERE program_id = ? AND manifest_revision = ?

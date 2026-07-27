@@ -12,7 +12,7 @@ import {
 } from "../../../btcc/gateway-api.ts";
 import { acceptManagedDeferral } from "./accept-managed-deferral.ts";
 import { acceptProjectFeedback } from "./revise-program.ts";
-import { canOpenPromotionFrontier } from "../../../btcc/work-ledger/frontier-readiness.ts";
+import { canCloseImplementationFrontier } from "../../../btcc/work-ledger/frontier-readiness.ts";
 
 type Program = BtccPersistenceTypes["managedProgramState"];
 type Reviewed = Extract<Program, { planningState: "reviewed" }>;
@@ -180,6 +180,7 @@ function installContinuedPlan(
   delete next.activeDeferral;
   delete next.promotionDeferral;
   delete next.promotionPermit;
+  delete next.correctionPlanRef;
   for (const work of next.works) {
     if (tasksFor(next, work).every((task) => task.status === "accepted")) {
       work.status = "closed";
@@ -242,7 +243,7 @@ function closeImplementation(
   assemblies: Reviewed["promotionAssemblies"],
   permit: Reviewed["promotionPermit"],
 ): void {
-  if (!canOpenPromotionFrontier(program)) {
+  if (!canCloseImplementationFrontier(program)) {
     throw changed("implementation frontier");
   }
   assertPromotionPermit({

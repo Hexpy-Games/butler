@@ -25,3 +25,19 @@ export function canOpenPromotionFrontier(
   return !nextDependencyReadyTask(program.tasks, (task) => !isPromotion(task)) &&
     Boolean(nextDependencyReadyTask(program.tasks, isPromotion));
 }
+
+export function canCloseImplementationFrontier(
+  program: ReviewedManagedProgramState,
+): boolean {
+  if (program.frontier !== "implementation_open") return false;
+  const isPromotion = (task: ManagedTaskState) =>
+    task.task.artifactPolicy.kind === "repository_promotion";
+  const implementationComplete = !nextDependencyReadyTask(
+    program.tasks,
+    (task) => !isPromotion(task),
+  );
+  return implementationComplete && (
+    Boolean(nextDependencyReadyTask(program.tasks, isPromotion)) ||
+    program.tasks.every((task) => task.status === "accepted")
+  );
+}

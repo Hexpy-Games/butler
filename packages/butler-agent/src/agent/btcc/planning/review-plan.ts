@@ -239,20 +239,20 @@ function preserveRevisionReviewScope(
   current: PlanningReviewSubjectCoverage[],
   stateInput: unknown,
 ): void {
-  if (candidate.revisionOrigin.kind !== "review_revision") return;
+  if (!candidate.reviewRevision) return;
   const state = requireRecord(stateInput, "Planning Review state");
   const prior = state.priorPlanningReview as PlanningReview | undefined;
   if (!prior || prior.verdict !== "revision_required" || !prior.findingSetRef) {
     throw new Error("Planning revision Review is missing its frozen prior finding set");
   }
   if (
-    !sameRef(prior.findingSetRef, candidate.revisionOrigin.findingSetRef) ||
-    !sameRef(prior.candidateRef, candidate.revisionOrigin.previousCandidateRef)
+    !sameRef(prior.findingSetRef, candidate.reviewRevision.findingSetRef) ||
+    !sameRef(prior.candidateRef, candidate.reviewRevision.previousCandidateRef)
   ) {
     throw new Error("Planning revision changed its frozen review lineage");
   }
   const priorBlocking = requiredPlanningFindings(prior);
-  const decisions = candidate.revisionOrigin.findingDecisions;
+  const decisions = candidate.reviewRevision.findingDecisions;
   if (
     decisions.length !== priorBlocking.length ||
     !priorBlocking.every((finding) =>

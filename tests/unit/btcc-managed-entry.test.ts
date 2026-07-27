@@ -293,8 +293,8 @@ describe("BTCC managed executable ingress", () => {
       expect(phaseInputs.get("consolidation")).not.toHaveProperty("managedTasks");
       if (scenario === "managed-planning-revision") {
         expect(planningCandidates).toHaveLength(2);
-        expect(planningCandidates[1]?.revisionOrigin).toEqual({
-          kind: "review_revision",
+        expect(planningCandidates[1]?.revisionOrigin).toEqual({ kind: "initial" });
+        expect(planningCandidates[1]?.reviewRevision).toEqual({
           previousCandidateRef: planningCandidates[0]?.ref,
           findingSetRef: expect.any(Object),
           findingDecisions: [{
