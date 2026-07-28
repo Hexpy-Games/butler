@@ -3,6 +3,8 @@ import { contentRef } from
   "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import { projectDirectSuccessorHandoffs } from
   "../../packages/butler-agent/src/agent/btcc/review/project-successor-handoffs.ts";
+import { projectAcceptedPredecessorHandoffs } from
+  "../../packages/butler-agent/src/agent/btcc/review/project-predecessor-handoffs.ts";
 import type { ReviewedManagedProgramState } from
   "../../packages/butler-agent/src/agent/btcc/work-ledger/index.ts";
 
@@ -75,4 +77,30 @@ test("Review projects only direct successor verification ownership", () => {
     criteria: [criterion],
     verificationQuestions: [question],
   }]);
+});
+
+test("Review receives each direct predecessor's accepted result and review", () => {
+  const predecessorRef = contentRef("task", { id: "implementation" });
+  const currentRef = contentRef("task", { id: "validation" });
+  const predecessorResult = { result: { ref: contentRef("result", { id: "implementation" }) } };
+  const predecessorReview = {
+    review: { ref: contentRef("review", { id: "implementation" }), verdict: "passed" },
+  };
+  const program = {
+    currentTask: { task: { ref: currentRef, dependencyTaskRefs: [predecessorRef] } },
+    tasks: [
+      {
+        task: { ref: predecessorRef, taskLogicalId: "TASK-IMPLEMENTATION" },
+        status: "accepted",
+        currentResult: predecessorResult,
+        currentReview: predecessorReview,
+      },
+      { task: { ref: currentRef, dependencyTaskRefs: [predecessorRef] } },
+    ],
+  } as unknown as ReviewedManagedProgramState;
+
+  const [handoff] = projectAcceptedPredecessorHandoffs(program);
+  expect(handoff?.task.ref).toEqual(predecessorRef);
+  expect(handoff?.result.ref).toEqual(predecessorResult.result.ref);
+  expect(handoff?.review.ref).toEqual(predecessorReview.review.ref);
 });

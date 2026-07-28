@@ -18,6 +18,9 @@ test("Task Review exposes exact result reads and only the immutable workspace so
       workspaceRevisionRef: reviewSourceRef,
       operationResultReadScopeRefs: ["operation-result:result-1"],
     } as never,
+    predecessorResults: [{
+      operationResultReadScopeRefs: ["operation-result:predecessor-result"],
+    } as never],
   });
 
   expect(authority).toEqual({
@@ -25,6 +28,7 @@ test("Task Review exposes exact result reads and only the immutable workspace so
       "ledger:project",
       "web:public",
       "operation-result:result-1",
+      "operation-result:predecessor-result",
     ],
     mutation: { kind: "validation_overlay_only", reviewSourceRef },
   });
