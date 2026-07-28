@@ -12,7 +12,10 @@ describe("BTCC Turn-local effects", () => {
         observationScopeRefs: [],
         mutation: {
           kind: "turn_local_effect_only",
-          capabilityRefs: ["update_onboarding_profile"],
+          capabilities: [{
+            capabilityRef: "update_onboarding_profile",
+            inputSchema: { type: "object" },
+          }],
         },
       },
     });

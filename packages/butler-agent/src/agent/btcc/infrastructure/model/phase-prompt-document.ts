@@ -89,7 +89,8 @@ function dynamicTurnContent(input: Parameters<typeof renderCacheOrderedPhaseProm
       operationContext: promptOperationContext(input.operationContext),
       operationAuthority: input.operationAuthority,
       capabilitySchemas: input.availableCapabilities,
-      availableCarrierKinds: input.availableCapabilities.length > 0
+      availableCarrierKinds: envelope.operationSurface !== "closed" &&
+          input.availableCapabilities.length > 0
         ? ["phase_submission", "operation_requests"]
         : ["phase_submission"],
       providerCorrection: envelope.providerCorrection ?? null,

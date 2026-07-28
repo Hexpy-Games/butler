@@ -182,7 +182,9 @@ function assertAuthorizedOperationKind(
   } else if (
     request.kind === "turn_local_effect" &&
     authority.mutation.kind === "turn_local_effect_only" &&
-    authority.mutation.capabilityRefs.includes(request.capabilityRef)
+    authority.mutation.capabilities.some(
+      (capability) => capability.capabilityRef === request.capabilityRef,
+    )
   ) {
     return;
   } else if (

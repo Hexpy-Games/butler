@@ -23,6 +23,7 @@ import type {
   AvailableSpecRevision,
   GoverningSpecRevision,
 } from "./planning/contracts.ts";
+import type { TurnLocalEffectCapability } from "./core/index.ts";
 import type { WorkProgressTask } from "./work-ledger/index.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -161,6 +162,7 @@ export type BtccRuntimeDependencies = {
   artifacts: ArtifactWorkspaceRuntime;
   messages: CanonicalMessageStore;
   retrospective: RetrospectiveScheduler;
+  turnLocalEffectCapabilities?: TurnLocalEffectCapability[];
   operationalRecovery?: OperationalRecoveryBoundary;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
   governingSpecs?: GoverningSpecAuthority;

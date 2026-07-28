@@ -20,6 +20,7 @@ import {
 import {
   createProductionCapabilityCatalog,
   createProductionToolRuntime,
+  productionTurnLocalEffectCapabilities,
   BtccTurnProgressHub,
 } from "./production-btcc/index.ts";
 import { isAbsolute, join } from "node:path";
@@ -133,6 +134,7 @@ export function createProductionBtccComposition(input: {
     artifacts: operationRuntime.artifacts,
     messages: stores.messages,
     retrospective: stores.retrospective,
+    turnLocalEffectCapabilities: productionTurnLocalEffectCapabilities(),
     operationalRecovery: stores.operationalRecovery,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
     governingSpecs,

@@ -207,6 +207,75 @@ test("projects a closed operation surface before the Opening model call", async 
   expect(accepted).toBe(true);
 });
 
+test("closed Opening exposes terminal local-effect authority without admitting rounds", async () => {
+  const capability = {
+    capabilityRef: "profile:update",
+    inputSchema: { type: "object" },
+  };
+  await runPhaseConversation({
+    binding: {
+      ...binding,
+      semanticState: "conception_opening",
+      checkpointId: "checkpoint-opening-terminal-effect",
+    },
+    modelSelection: selectedModel(),
+    context: openingContext(),
+    phaseContract: {
+      phase: "conception_opening",
+      operationSurface: "closed",
+      objective: "complete_bounded_local_effect",
+      duties: [],
+      prohibitions: [],
+    },
+    codec: {
+      submissionSchema: objectSchema({}),
+      decode: () => ({ kind: "opening_continuation" }),
+    },
+    store: {
+      restore: async (current) => ({
+        binding: current,
+        acceptedProduct: null,
+        operationResults: [],
+      }),
+      appendOperationRound: async () => {
+        throw new Error("Closed Opening must not append an operation round");
+      },
+      appendOperationResults: async () => {
+        throw new Error("No terminal operation was selected");
+      },
+      appendProviderProductRejection: async () => {
+        throw new Error("Opening must not reject a provider product");
+      },
+      appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
+      acceptPhaseProduct: async ({ binding: current }) => nextBinding(current),
+    },
+    model: {
+      runRound: async (envelope) => {
+        expect(envelope.operationSurface).toBe("closed");
+        expect(envelope.operationAuthority).toEqual({
+          observationScopeRefs: [],
+          mutation: { kind: "turn_local_effect_only", capabilities: [capability] },
+        });
+        return {
+          kind: "phase_submission",
+          submission: { kind: "opening_continuation" },
+          actualIdentity: selectedModel(),
+        };
+      },
+    },
+    operations: {
+      perform: async () => {
+        throw new Error("Opening must not perform an operation round");
+      },
+    },
+    operationAuthority: {
+      observationScopeRefs: ["workspace:/repo"],
+      mutation: { kind: "turn_local_effect_only", capabilities: [capability] },
+    },
+    executionPermit: activePermit(),
+  });
+});
+
 test("returns a malformed phase proposal to the same conversation", async () => {
   let appended = false;
   let calls = 0;

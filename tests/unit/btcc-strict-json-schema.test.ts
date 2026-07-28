@@ -158,3 +158,22 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
     requests: operationWitness.requests,
   }, admissionSchema).ok).toBe(false);
 });
+
+test("closed operation surfaces expose a concrete carrier object instead of a unary union", () => {
+  const submissionSchema = objectSchema({
+    kind: literalSchema("sample_submission"),
+    summary: textSchema(),
+  });
+  const authority = {
+    observationScopeRefs: [],
+    mutation: { kind: "forbidden" },
+  } as OperationAuthority;
+
+  for (const schema of [
+    providerCarrierSchema([], submissionSchema),
+    providerCarrierAdmissionSchema([], [], submissionSchema, authority),
+  ]) {
+    expect(schema.type).toBe("object");
+    expect(schema).not.toHaveProperty("anyOf");
+  }
+});

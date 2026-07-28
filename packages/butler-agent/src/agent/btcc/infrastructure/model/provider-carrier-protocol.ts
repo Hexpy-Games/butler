@@ -114,7 +114,9 @@ function bindOperationAuthority(
     value.kind === "turn_local_effect" &&
     authority.mutation.kind === "turn_local_effect_only" &&
     typeof value.capabilityRef === "string" &&
-    authority.mutation.capabilityRefs.includes(value.capabilityRef)
+    authority.mutation.capabilities.some(
+      (capability) => capability.capabilityRef === value.capabilityRef,
+    )
   ) {
     return value as OperationRequest;
   }

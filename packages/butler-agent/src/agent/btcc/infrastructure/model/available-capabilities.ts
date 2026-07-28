@@ -62,7 +62,9 @@ function admittedCapabilities(
       if (mutationIsAuthorized(operationKind, authority.mutation)) {
         if (
           authority.mutation.kind === "turn_local_effect_only" &&
-          !authority.mutation.capabilityRefs.includes(definition.capabilityRef)
+          !authority.mutation.capabilities.some(
+            (capability) => capability.capabilityRef === definition.capabilityRef,
+          )
         ) continue;
         result.push({ ...capability, operationKind, observationScopeRefs: [] });
       }
