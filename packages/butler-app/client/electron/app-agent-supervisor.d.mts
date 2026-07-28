@@ -59,6 +59,7 @@ export function createBundledAgentSupervisor(input: {
   ) => boolean | Promise<boolean>;
   readinessCheck?: (
     localAuth?: { filePath: string; created: boolean; token: string } | null,
+    activeGateway?: Record<string, unknown> | null,
   ) => boolean | Promise<boolean>;
   isPortAvailable: (port: number) => boolean | Promise<boolean>;
   findAvailablePort: (startPort: number) => number | Promise<number>;

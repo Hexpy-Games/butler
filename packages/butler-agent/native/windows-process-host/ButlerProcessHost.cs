@@ -363,8 +363,6 @@ internal static class ButlerProcessHost
         }
         try
         {
-            Console.InputEncoding = new UTF8Encoding(false);
-            Console.OutputEncoding = new UTF8Encoding(false);
             PipeSecurity security = CurrentUserPipeSecurity();
             bool announced = false;
             while (true)
