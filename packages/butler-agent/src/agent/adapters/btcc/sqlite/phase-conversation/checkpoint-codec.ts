@@ -2,6 +2,7 @@ import type {
   ActualModelIdentity,
   OperationRequest,
   PhaseContinuity,
+  ProviderCorrection,
 } from "../../../../btcc/gateway-api.ts";
 import { digest, stableJson } from "../identity.ts";
 
@@ -48,6 +49,18 @@ export function decodePendingSubmission(value: string): {
     ...(parsed.publicActivity ? { publicActivity: parsed.publicActivity } : {}),
     actualIdentity: parsed.actualIdentity,
   };
+}
+
+export function decodeProviderCorrection(value: string): ProviderCorrection {
+  const parsed = JSON.parse(value) as Partial<ProviderCorrection>;
+  if (
+    parsed.kind !== "previous_provider_product_rejected" ||
+    (parsed.code !== "provider_protocol_interruption" &&
+      parsed.code !== "provider_phase_submission_invalid")
+  ) {
+    throw new Error("BTCC provider correction is invalid");
+  }
+  return parsed as ProviderCorrection;
 }
 
 export function optionalJson(value: unknown): string | null {

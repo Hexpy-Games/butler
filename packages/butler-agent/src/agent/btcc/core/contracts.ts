@@ -148,6 +148,7 @@ export type PhaseConversationSnapshot<Product> = {
   binding: PhaseRunBinding;
   acceptedProduct: Product | null;
   acceptedActualIdentity?: ActualModelIdentity;
+  providerCorrection?: ProviderCorrection;
   operationResults: OperationResult[];
   latestOperationResultCount?: number;
   phaseContinuity?: PhaseContinuity;
@@ -175,6 +176,14 @@ export interface PhaseConversationStore {
   appendOperationResults(input: {
     binding: PhaseRunBinding;
     results: Array<{ request: OperationRequest; result: OperationResult }>;
+  }): Promise<PhaseRunBinding>;
+  appendProviderProductRejection(input: {
+    binding: PhaseRunBinding;
+    envelope: PhaseEnvelope;
+    submission: unknown;
+    publicActivity?: PublicPhaseActivity;
+    actualIdentity: ActualModelIdentity;
+    correction: ProviderCorrection;
   }): Promise<PhaseRunBinding>;
   appendPhaseSubmission(input: {
     binding: PhaseRunBinding;

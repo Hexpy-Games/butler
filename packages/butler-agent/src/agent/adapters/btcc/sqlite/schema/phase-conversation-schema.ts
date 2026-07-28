@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS btcc_phase_checkpoint_revisions (
   phase_envelope_json TEXT,
   provider_round_ref TEXT,
   provider_round_json TEXT,
+  provider_correction_json TEXT,
   pending_operation_json TEXT,
   pending_submission_ref TEXT,
   pending_submission_json TEXT,

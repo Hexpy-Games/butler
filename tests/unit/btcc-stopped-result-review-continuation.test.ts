@@ -193,6 +193,9 @@ function reviewPhase(
       restore: async () => ({ binding, acceptedProduct: null, operationResults }),
       appendOperationRound: async () => { throw new Error("unexpected operation round"); },
       appendOperationResults: async () => { throw new Error("unexpected operation results"); },
+      appendProviderProductRejection: async () => {
+        throw new Error("unexpected provider product rejection");
+      },
       appendPhaseSubmission: async ({ binding: current }: { binding: typeof binding }) => ({
         ...current, checkpointRevision: current.checkpointRevision + 1,
       }),
@@ -249,4 +252,3 @@ function reviewPhase(
     },
   };
 }
-

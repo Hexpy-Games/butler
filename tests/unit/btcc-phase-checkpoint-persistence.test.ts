@@ -192,7 +192,7 @@ describe("BTCC phase checkpoint persistence", () => {
       .toEqual(["first", "second"]);
   });
 
-  test("does not persist a malformed phase submission as a resumable boundary", async () => {
+  test("persists one correction and stops a repeated invalid phase product", async () => {
     const { store, binding } = fixture();
     let modelCalls = 0;
     const command = {
@@ -211,8 +211,9 @@ describe("BTCC phase checkpoint persistence", () => {
       },
       store,
       model: {
-        runRound: async () => {
+        runRound: async (envelope: PhaseEnvelope) => {
           modelCalls += 1;
+          expect(Boolean(envelope.providerCorrection)).toBe(modelCalls > 1);
           return {
             kind: "phase_submission" as const,
             submission: { malformed: true },
@@ -226,13 +227,18 @@ describe("BTCC phase checkpoint persistence", () => {
     };
     await expect(runPhaseConversation(command)).rejects.toMatchObject({
       code: "provider_phase_submission_invalid",
-    });
-    await expect(runPhaseConversation(command)).rejects.toMatchObject({
-      code: "provider_phase_submission_invalid",
+      activation: { kind: "runtime_remediation" },
     });
     expect(modelCalls).toBe(2);
     const restored = await store.restore(binding);
     expect(restored.pendingSubmissionRound).toBeUndefined();
+    expect(restored.providerCorrection).toMatchObject({
+      kind: "previous_provider_product_rejected",
+      code: "provider_phase_submission_invalid",
+    });
+    expect(restored.binding.checkpointRevision).toBe(
+      binding.checkpointRevision + 1,
+    );
   });
 });
 

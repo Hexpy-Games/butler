@@ -160,6 +160,9 @@ test("phase orchestration preserves typed SQLite contention for automatic recove
       async restore() { throw error; },
       async appendOperationRound() { throw new Error("unexpected operation round"); },
       async appendOperationResults() { throw new Error("unexpected operation result"); },
+      async appendProviderProductRejection() {
+        throw new Error("unexpected provider product rejection");
+      },
       async appendPhaseSubmission() { throw new Error("unexpected phase submission"); },
       async acceptPhaseProduct() { throw new Error("unexpected accepted product"); },
     },

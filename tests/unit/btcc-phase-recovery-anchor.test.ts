@@ -25,6 +25,9 @@ test("phase recovery uses the latest durable checkpoint revision", async () => {
     async appendOperationResults() {
       throw new Error("operation result must not be appended");
     },
+    async appendProviderProductRejection() {
+      throw new Error("provider product rejection must not be appended");
+    },
     async appendPhaseSubmission() {
       throw new Error("submission must not be appended");
     },
