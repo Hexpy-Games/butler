@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runWindowsAppBtccProductHarness } from
-  "../../packages/butler-app/scripts/windows/windows-app-btcc-product-harness.ts";
+  "../e2e/windows-app-btcc-product-harness.ts";
 
 test("Windows validation runs the full product once and platform lifecycle twice", () => {
   const entrypoint = readFileSync(
@@ -22,7 +22,7 @@ test("Windows validation runs the full product once and platform lifecycle twice
   expect(source).toContain("const fullProductPassCount = 1");
   expect(source).toContain("const platformPassCount = 2");
   expect(source).toContain("platformPasses");
-  expect(source).toContain("windows-app-btcc-product-harness.ts");
+  expect(source).toContain("tests/e2e/windows-app-btcc-product-harness.ts");
   expect(source).toContain('"--browser"');
   expect(source).toContain("browserProjection: appBtcc.browserProjection === true");
   const productMode = entrypoint.match(/"ProductE2E"\s*\{([\s\S]*?)\n {2}\}/u)?.[1];

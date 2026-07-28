@@ -21,7 +21,7 @@ for (let pass = 1; pass <= fullProductPassCount; pass += 1) {
     `app-btcc-${pass}`,
     [
       "run",
-      "packages/butler-app/scripts/windows/windows-app-btcc-product-harness.ts",
+      "tests/e2e/windows-app-btcc-product-harness.ts",
       "--browser",
     ],
   );

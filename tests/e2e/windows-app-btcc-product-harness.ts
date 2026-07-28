@@ -3,41 +3,42 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AgentConversationStore } from
-  "../../../butler-agent/src/agent/conversation/store.ts";
+  "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { PromptAssembler } from
-  "../../../butler-agent/src/agent/prompt/prompt-assembler.ts";
+  "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { createBtccTurnRuntime } from
-  "../../../butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
 import { openBtccSqliteStores } from
-  "../../../butler-agent/src/agent/adapters/index.ts";
+  "../../packages/butler-agent/src/agent/adapters/index.ts";
 import { BtccTurnProgressHub } from
-  "../../../butler-agent/src/agent/composition/production-btcc/index.ts";
+  "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
 import { DirectHarnessModel } from
-  "../../../butler-agent/src/interfaces/btcc-harness/direct-harness-model.ts";
+  "../../packages/butler-agent/src/interfaces/btcc-harness/direct-harness-model.ts";
 import { HarnessArtifactWorkspace } from
-  "../../../butler-agent/src/interfaces/btcc-harness/harness-artifact-workspace.ts";
+  "../../packages/butler-agent/src/interfaces/btcc-harness/harness-artifact-workspace.ts";
 import { HarnessOperationExecutor } from
-  "../../../butler-agent/src/interfaces/btcc-harness/harness-operation-executor.ts";
+  "../../packages/butler-agent/src/interfaces/btcc-harness/harness-operation-executor.ts";
 import {
   BtccGatewayLifecycleService,
   BtccInboundDispatcher,
   createBtccGatewayHandlers,
-} from "../../../butler-agent/src/interfaces/gateway/btcc/index.ts";
+} from "../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
 import { createAppTransportAdapter } from
-  "../../../butler-agent/src/interfaces/transport/app/adapter.ts";
+  "../../packages/butler-agent/src/interfaces/transport/app/adapter.ts";
 import { DeliveryGuard } from
-  "../../../butler-agent/src/interfaces/transport/delivery-guard.ts";
+  "../../packages/butler-agent/src/interfaces/transport/delivery-guard.ts";
 import { createGatewayServer } from
-  "../../../butler-agent/src/gateways/core/server.ts";
+  "../../packages/butler-agent/src/gateways/core/server.ts";
 import { GatewayRouter } from
-  "../../../butler-agent/src/gateways/core/router.ts";
+  "../../packages/butler-agent/src/gateways/core/router.ts";
 import { NativeInboundQueue } from
-  "../../../butler-agent/src/gateways/core/inbound-queue.ts";
+  "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
 import { createAppServer } from
-  "../../../butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+  "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
 import { SessionBindingStore } from
-  "../../../butler-agent/src/test-support/harness/session-store.ts";
-import { launchWindowsAppBrowser } from "./windows-app-browser-harness.ts";
+  "../../packages/butler-agent/src/test-support/harness/session-store.ts";
+import { launchWindowsAppBrowser } from
+  "../../packages/butler-app/scripts/windows/windows-app-browser-harness.ts";
 
 type ApiEnvelope = { data?: Record<string, unknown> };
 type PublicMessage = { id?: string; role?: string; text?: string; turn_id?: string };
