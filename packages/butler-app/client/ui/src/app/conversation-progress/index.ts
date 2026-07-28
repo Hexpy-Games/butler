@@ -17,6 +17,7 @@ export {
 export {
   isInternalProgressRow,
   semanticProgressRows,
+  summaryProgressRows,
   visibleProgressRows,
 } from "./progress-rows.ts";
 export {

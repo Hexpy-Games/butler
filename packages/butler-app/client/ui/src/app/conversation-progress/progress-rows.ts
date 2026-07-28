@@ -12,19 +12,10 @@ const INTERNAL_RAW_TOOL_NAMES = new Set([
   "model_preparation",
 ]);
 const LIFECYCLE_LABELS = new Set([
-  "accepted",
-  "started",
-  "thinking",
-  "queued for butler service",
-  "working on request",
-  "checking response",
-  "response checked",
-  "preparing final answer",
-  "final answer ready",
-  "completed",
-  "delivered",
+  "accepted", "started", "thinking", "queued for butler service",
+  "working on request", "checking response", "response checked",
+  "preparing final answer", "final answer ready", "completed", "delivered",
 ]);
-
 export function visibleProgressRows(rows: ProgressRow[]): ProgressRow[] {
   return rows.filter((row) => !isInternalProgressRow(row));
 }
@@ -56,24 +47,50 @@ export function semanticProgressRows(rows: ProgressRow[]): ProgressRow[] {
 
   const messages = dedupeLast(
     visible.filter(
-      (row) =>
-        row.kind === "message" &&
+      (row) => row.kind === "message" &&
         !LIFECYCLE_LABELS.has(row.safe_label.trim().toLowerCase()),
     ),
     (row) => row.safe_label.trim().toLowerCase() || row.id,
   );
   if (messages.length > 0) return messages.slice(-8);
+  return [];
+}
 
-  return dedupeLast(
+export function summaryProgressRows(rows: ProgressRow[]): ProgressRow[] {
+  const visible = visibleProgressRows(rows).filter(
+    (row) => row.bridge_phase !== "model_round_waiting",
+  );
+  const todos = sortedTodoRows(visible.filter(
+    (row) => row.kind === "todo" && row.bridge_phase === "btcc_work_ledger",
+  ));
+  if (todos.length > 0) return todos.slice(0, 8);
+  const workRows = dedupeLast(
     visible.filter(
-      (row) =>
-        !row.safe_tool_name &&
-        !row.safe_input_label &&
-        !["searched", "read", "ran_command", "edited", "dispatch", "used_tool"]
-          .includes(row.kind ?? ""),
+      (row) => row.kind === "work_block" ||
+        Boolean(row.work_block_id && row.work_block_label && !row.safe_tool_name),
     ),
-    (row) => row.safe_label.trim().toLowerCase() || row.id,
-  ).slice(-8);
+    (row) => row.work_block_id ?? row.id,
+  );
+  if (workRows.length > 0) return workRows.slice(-8);
+  for (let index = visible.length - 1; index >= 0; index -= 1) {
+    const row = visible[index];
+    if (row && isModelAuthoredActivity(row)) return [row];
+  }
+  return [];
+}
+
+function isModelAuthoredActivity(row: ProgressRow): boolean {
+  if (row.kind === "decision") {
+    return row.public_decision_source === "model-authored" &&
+      Boolean(row.public_decision_summary);
+  }
+  return row.kind === "message" &&
+    row.work_decision_source === "model-authored" &&
+    Boolean(
+      row.work_decision_summary &&
+      row.work_decision_rationale &&
+      row.work_decision_next_step,
+    );
 }
 
 function sortedTodoRows(rows: ProgressRow[]): ProgressRow[] {

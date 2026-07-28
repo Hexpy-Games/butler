@@ -13,7 +13,7 @@ import {
 } from "@/butler-ds";
 import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
 import { contextTooltip } from "@/app/utils.ts";
-import { semanticProgressRows } from "@/app/conversation-progress";
+import { summaryProgressRows } from "@/app/conversation-progress";
 import type { SessionSummaryView, StatusPill } from "@/app/types.ts";
 import { inspectorInset } from "./inspectorLayout.ts";
 
@@ -26,7 +26,7 @@ export function SummaryPanel({
   summary?: SessionSummaryView | null;
   onExportTranscript: () => void;
 }) {
-  const progressRows = semanticProgressRows(
+  const progressRows = summaryProgressRows(
     summary?.latest_progress?.safe_progress_rows ?? [],
   );
   const skillsUsed = summary?.skills_used ?? [];
