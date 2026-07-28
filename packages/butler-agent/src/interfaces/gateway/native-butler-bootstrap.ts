@@ -324,7 +324,7 @@ export async function runNativeButlerMain(
     clearAppForegroundExecutorReadiness(butlerData);
     stopTelegramPolling = true;
     stopReconciler?.close();
-    btcc.close();
+    await btcc.close();
     conversationStore.close();
     store.close();
   }

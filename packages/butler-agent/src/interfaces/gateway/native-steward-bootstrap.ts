@@ -276,7 +276,7 @@ export async function handleNativeStewardTelegramTurn(
       delivery,
     };
   } finally {
-    btcc.close();
+    await btcc.close();
     conversationStore.close();
     store.close();
   }

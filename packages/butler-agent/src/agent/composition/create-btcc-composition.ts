@@ -1,7 +1,10 @@
 import {
   createBtccTurnRuntime,
   type BtccRuntimeDependencies,
+  type BtccRunCommand,
+  type BtccStopCommand,
   type BtccTurnProgressObserver,
+  type BtccTurnOutcome,
   type BtccTurnRuntime,
 } from "../btcc/index.ts";
 import { createProductionSelectedModel } from
@@ -26,6 +29,10 @@ import { ensureActiveProjectLedger } from
   "../../integrations/project-ledger/ensure-active-project-ledger.ts";
 import { createProjectGoverningSpecAuthority } from
   "./project-governing-spec-authority.ts";
+import type { SqliteStorageProfile } from
+  "../../foundation/sqlite-writer-coordination.ts";
+
+type ClosableBtccTurnRuntime = BtccTurnRuntime & { close(): Promise<void> };
 
 export function createBtccComposition(input: {
   dbPath: string;
@@ -34,11 +41,13 @@ export function createBtccComposition(input: {
   operations: BtccRuntimeDependencies["operations"];
   artifacts: BtccRuntimeDependencies["artifacts"];
   projectLedger?: BtccProjectLedgerRuntime;
-}): BtccTurnRuntime & { close(): void } {
+  storageProfile?: SqliteStorageProfile;
+}): ClosableBtccTurnRuntime {
   const stores = openBtccSqliteStores({
     dbPath: input.dbPath,
     ownerId: input.ownerId,
     ...(input.projectLedger ? { projectLedger: input.projectLedger } : {}),
+    ...(input.storageProfile ? { storageProfile: input.storageProfile } : {}),
   });
   const governingSpecs = input.projectLedger
     ? createProjectGoverningSpecAuthority(input.projectLedger)
@@ -58,20 +67,10 @@ export function createBtccComposition(input: {
       ? { governingSpecs }
       : {}),
   });
-  const ready = recoverOperationalOwnership(runtime, stores, {
+  const recoveryTasks = recoverOperationalOwnership(runtime, stores, {
     resumePendingTurns: true,
   });
-  return {
-    async runTurn(command) {
-      await ready;
-      return runtime.runTurn(command);
-    },
-    async stopTurn(command) {
-      await ready;
-      return runtime.stopTurn(command);
-    },
-    close: stores.close,
-  };
+  return ownBtccComposition(runtime, stores, recoveryTasks);
 }
 
 export function createProductionBtccComposition(input: {
@@ -139,31 +138,82 @@ export function createProductionBtccComposition(input: {
     governingSpecs,
     progress,
   });
-  const ready = recoverOperationalOwnership(runtime, stores, {
+  const recoveryTasks = recoverOperationalOwnership(runtime, stores, {
     resumePendingTurns: false,
   });
+  const owned = ownBtccComposition(runtime, stores, recoveryTasks);
   return {
-    runtime,
+    runtime: owned,
     contextDocuments: stores.contextDocuments,
     observeTurn: (turnId: string, observer: BtccTurnProgressObserver) =>
       progress.observe(turnId, observer),
-    close: stores.close,
-    ready,
+    close: owned.close,
+    ready: recoveryTasks.then(() => undefined),
   };
+}
+
+function ownBtccComposition(
+  runtime: BtccTurnRuntime,
+  stores: ReturnType<typeof openBtccSqliteStores>,
+  recoveryTasks: Promise<Array<Promise<BtccTurnOutcome>>>,
+): ClosableBtccTurnRuntime {
+  const active = new Set<Promise<BtccTurnOutcome>>();
+  let closePromise: Promise<void> | null = null;
+
+  const track = (
+    start: () => Promise<BtccTurnOutcome>,
+  ): Promise<BtccTurnOutcome> => {
+    if (closePromise) throw new Error("BTCC composition is closing");
+    const tracked = start().finally(() => active.delete(tracked));
+    active.add(tracked);
+    return tracked;
+  };
+
+  return {
+    runTurn(command: BtccRunCommand) {
+      return track(() => recoveryTasks.then(() => runtime.runTurn(command)));
+    },
+    stopTurn(command: BtccStopCommand) {
+      return track(() => recoveryTasks.then(() => runtime.stopTurn(command)));
+    },
+    close() {
+      closePromise ??= closeOwnedBtccComposition(
+        stores,
+        recoveryTasks,
+        active,
+      );
+      return closePromise;
+    },
+  };
+}
+
+async function closeOwnedBtccComposition(
+  stores: ReturnType<typeof openBtccSqliteStores>,
+  recoveryTasks: Promise<Array<Promise<BtccTurnOutcome>>>,
+  active: Set<Promise<BtccTurnOutcome>>,
+): Promise<void> {
+  const recovered = await recoveryTasks;
+  await Promise.allSettled([...active, ...recovered]);
+  await stores.retrospective.flush();
+  stores.close();
 }
 
 async function recoverOperationalOwnership(
   runtime: BtccTurnRuntime,
   stores: ReturnType<typeof openBtccSqliteStores>,
   options: { resumePendingTurns: boolean },
-): Promise<void> {
+): Promise<Array<Promise<BtccTurnOutcome>>> {
   await stores.turns.recoverPendingProjectLedgerPromotions();
   await stores.operationalRecoveryStartup.activateInheritedRuntimeRemediations();
-  if (!options.resumePendingTurns) return;
+  if (!options.resumePendingTurns) return [];
+  const recoveryTasks: Array<Promise<BtccTurnOutcome>> = [];
   const turnIds = await stores.operationalRecovery.pendingTurnIds();
   for (const turnId of turnIds) {
-    void runtime.runTurn({ kind: "resume", turnId }).catch(reportRecoveryFailure);
+    const recovery = runtime.runTurn({ kind: "resume", turnId });
+    recoveryTasks.push(recovery);
+    void recovery.catch(reportRecoveryFailure);
   }
+  return recoveryTasks;
 }
 
 function reportRecoveryFailure(error: unknown): void {

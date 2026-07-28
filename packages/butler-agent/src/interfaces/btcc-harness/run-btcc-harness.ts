@@ -116,6 +116,8 @@ async function runHarness(options: HarnessOptions): Promise<void> {
       process.stderr.write(`BTCC live phase trace: ${JSON.stringify(liveTrace.at(-1))}\n`);
     }
     throw error;
+  } finally {
+    await runtime.close();
   }
   process.stdout.write(`${JSON.stringify({
     initial,

@@ -6,16 +6,22 @@ import type {
 import { digest, stableJson } from "./identity.ts";
 
 export class SqliteRetrospectiveScheduler implements RetrospectiveScheduler {
+  private readonly pending = new Set<Promise<void>>();
+
   constructor(private readonly db: Database) {}
 
   schedule(turn: TurnRecord): void {
-    queueMicrotask(() => {
-      try {
-        this.project(turn);
-      } catch {
+    const projection = Promise.resolve()
+      .then(() => this.project(turn))
+      .catch(() => {
         // Delivery is authoritative. A later projection scan reconciles this gap.
-      }
-    });
+      })
+      .finally(() => this.pending.delete(projection));
+    this.pending.add(projection);
+  }
+
+  async flush(): Promise<void> {
+    await Promise.allSettled([...this.pending]);
   }
 
   private project(turn: TurnRecord): void {

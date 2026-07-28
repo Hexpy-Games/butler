@@ -48,6 +48,7 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
       }),
       resolveProjectRoot: () => project.ledgerRoot,
     },
+    storageProfile: "ephemeral",
   });
   try {
     const outcome = await runtime.runTurn({
@@ -204,6 +205,7 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
     });
     expect(replay.pending_count).toBe(0);
   } finally {
+    await runtime.close();
     clearProjectFixtures();
   }
 });

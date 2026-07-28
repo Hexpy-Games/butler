@@ -23,6 +23,7 @@ test("Stop aborts an operational recovery wait without failing the Turn", async 
     model,
     operations: neverOperations(),
     artifacts: neverArtifacts(),
+    storageProfile: "ephemeral",
   });
   try {
     const command = runCommand();
@@ -37,7 +38,7 @@ test("Stop aborts an operational recovery wait without failing the Turn", async 
     expect(await running).toEqual({ kind: "cancelled", turnId: command.turnId });
     expect(readRecoveryStatus(dbPath)).toBe("interrupted");
   } finally {
-    runtime.close();
+    await runtime.close();
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
