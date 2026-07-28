@@ -286,12 +286,13 @@ switch ($Mode) {
         "tests/unit/butler-cli-command-registry.test.ts",
         "tests/unit/runtime-filesystem.test.ts",
         "tests/unit/app-managed-runtime.test.ts",
-        "tests/unit/principal-turn-cancellation.test.ts",
-        "tests/unit/principal-turn-cancellation-auth.test.ts",
+        "tests/unit/btcc-product-cutover.test.ts",
+        "tests/unit/btcc-stop.test.ts",
+        "tests/unit/btcc-operational-stop.test.ts",
         "tests/unit/windows-process-host-contract.test.ts",
         "tests/unit/app-foreground-lifecycle.test.ts",
-        "tests/unit/app-agent-supervisor-drain.test.ts",
-        "tests/unit/app-quit-state-machine.test.ts",
+        "tests/unit/app-foreground-drain.test.ts",
+        "tests/unit/app-foreground-quit.test.ts",
         "tests/unit/app-update-source.test.ts",
         "tests/unit/app-first-run-setup-bridge-runtime.test.ts",
         "tests/unit/app-windows-squirrel-lifecycle.test.ts",
@@ -320,7 +321,8 @@ switch ($Mode) {
   "ProductE2E" {
     Invoke-StandardUserSmoke `
       -Smoke "packages/butler-app/scripts/windows/windows-product-loop-smoke.ts" `
-      -TimeoutMinutes 20
+      -TimeoutMinutes 20 `
+      -InteractiveDesktop
   }
   "Package" {
     Invoke-WithSignedRuntime {

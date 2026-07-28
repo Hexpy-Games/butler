@@ -81,6 +81,14 @@ test("Windows pull-request CI only builds and verifies the package", () => {
   expect(entrypoint).toContain('"--audit-level=high"');
   expect(entrypoint).toContain("build-process-host.ts");
   expect(entrypoint).toContain("BUTLER_WINDOWS_PROCESS_HOST");
+  expect(entrypoint).toContain("btcc-product-cutover.test.ts");
+  expect(entrypoint).toContain("btcc-stop.test.ts");
+  expect(entrypoint).toContain("btcc-operational-stop.test.ts");
+  expect(entrypoint).toContain("app-foreground-drain.test.ts");
+  expect(entrypoint).toContain("app-foreground-quit.test.ts");
+  expect(entrypoint).not.toMatch(
+    /principal-turn-cancellation|app-agent-supervisor-drain|app-quit-state-machine/iu,
+  );
   expect(entrypoint).toContain('$Mode -notin @("Setup", "Package")');
   expect(entrypoint).toContain(
     "Hosted Windows CI owns package construction only",
