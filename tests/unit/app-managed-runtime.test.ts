@@ -1136,9 +1136,8 @@ test("App-managed foreground command uses the platform owner with a parent lease
         "--owner-pid",
         String(process.pid),
         join(runtimeBin, "bun.exe"),
-        join(command.cwd, "bin", "butler.js"),
-        "gateway",
-        "app",
+        "run",
+        join(command.cwd, "packages/butler-agent/scripts/native-service-daemon.ts"),
       ]);
       expect(command.stdio).toEqual(["ignore", "inherit", "inherit"]);
       expect(command.detached).toBe(false);
