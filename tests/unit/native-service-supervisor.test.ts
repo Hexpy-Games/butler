@@ -277,6 +277,9 @@ test("Windows App-managed native service manifest uses bun.exe and direct TypeSc
       "run",
       join(runtimeHome, "packages", "butler-agent", "scripts", "native-butler-main.ts"),
     ]);
+    const windowsEmbedSocket = specs[0]?.env?.EMBED_SOCKET;
+    expect(windowsEmbedSocket?.startsWith("\\\\.\\pipe\\butler-embed-")).toBeTrue();
+    expect(specs.every((spec) => spec.env?.EMBED_SOCKET === windowsEmbedSocket)).toBeTrue();
     expect(specs.flatMap((spec) => [spec.command, ...spec.args]).some((part) => part === "bash" || part.endsWith(".sh")))
       .toBeFalse();
   } finally {
