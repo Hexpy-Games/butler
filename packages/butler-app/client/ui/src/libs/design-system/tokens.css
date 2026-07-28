@@ -313,6 +313,7 @@
   --automation-details-bg: rgba(248, 248, 247, 0.9);
   /* Tuned for macOS light-mode translucency over Electron under-window material. */
   --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
@@ -518,6 +519,7 @@
   --worker-title-bg: rgba(255, 255, 255, 0.08);
   --automation-details-bg: rgba(255, 255, 255, 0.05);
   --sidebar-bg: rgba(36, 37, 40, 0.72);
+  --windows-sidebar-bg: rgba(24, 25, 28, 0.46);
   --sidebar-collapsed-bg: rgba(20, 21, 23, 0.18);
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
@@ -609,6 +611,7 @@
   --worker-title-bg: rgba(0, 0, 0, 0.14);
   --automation-details-bg: rgba(248, 248, 247, 0.9);
   --sidebar-bg: rgba(255, 255, 255, 0.52);
+  --windows-sidebar-bg: rgba(255, 255, 255, 0.36);
   --sidebar-collapsed-bg: rgba(244, 245, 247, 0.18);
   --text-primary: var(--color-text-primary);
   --text-secondary: var(--color-text-secondary);
@@ -643,14 +646,17 @@
 
 .sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
+  --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
 }
 
 .theme-light.sidebar-solid {
   --sidebar-bg: rgba(246, 247, 249, 0.98);
+  --windows-sidebar-bg: rgba(246, 247, 249, 0.98);
 }
 
 .theme-dark.sidebar-solid {
   --sidebar-bg: rgba(36, 37, 40, 0.98);
+  --windows-sidebar-bg: rgba(36, 37, 40, 0.98);
 }
 
 * {
