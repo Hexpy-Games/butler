@@ -4,6 +4,7 @@ import {
   type OperationRequest,
   type PhaseEnvelope,
 } from "../../btcc/core/index.ts";
+import { turnAccessMode } from "../../btcc/core/operation-access.ts";
 import type {
   ProductionOperationRuntimeOptions,
 } from "../../btcc/infrastructure/operations/index.ts";
@@ -89,7 +90,7 @@ function toolExecutor(
       originalRequest: envelope.context.originalMessage,
       operationKind: request.kind,
       accessMode: request.capabilityRef === "run_command"
-        ? admittedAccessMode(envelope)
+        ? turnAccessMode(envelope)
         : "read_only",
       ...(commandFilesystemBoundary ? { commandFilesystemBoundary } : {}),
       signal: call.signal,
@@ -105,16 +106,6 @@ function isolatedBoundary(envelope: PhaseEnvelope) {
     kind: "isolated_workspace" as const,
     deniedReadWriteRoots: [...new Set(deniedReadWriteRoots)],
   };
-}
-
-function admittedAccessMode(
-  envelope: PhaseEnvelope,
-): "full_access" | "ask_first" | "read_only" {
-  const value = envelope.modelSelection.controls.accessMode;
-  if (value === "full_access" || value === "ask_first" || value === "read_only") {
-    return value;
-  }
-  throw new Error("BTCC command access mode is not admitted");
 }
 
 function workspaceForObservation(
@@ -151,19 +142,8 @@ function validateInput(
       `BTCC capability input is invalid at ${result.path}: ${result.message}`,
     );
   }
-  if (request.kind === "external_effect" && admittedAccessMode(envelope) === "read_only") {
-    rejectInput(
-      "read_only_access_external_effect_denied",
-      "BTCC read-only access mode cannot admit an external effect",
-    );
-  }
   if (request.capabilityRef === "run_command") {
-    validateCommandStateEffect(
-      envelope,
-      request,
-      args,
-      admittedAccessMode(envelope),
-    );
+    validateCommandStateEffect(envelope, request, args);
   }
   if (
     request.kind === "workspace_artifact_action" &&
@@ -181,7 +161,6 @@ function validateCommandStateEffect(
   envelope: PhaseEnvelope,
   request: OperationRequest,
   args: Record<string, unknown>,
-  accessMode: "full_access" | "ask_first" | "read_only",
 ): void {
   const effect = args.state_effect;
   if (request.kind === "observe" && !request.scopeRef.startsWith("workspace:")) {
@@ -215,13 +194,6 @@ function validateCommandStateEffect(
     rejectInput(
       "read_only_task_mutation_denied",
       "BTCC read-only Task cannot admit a mutation command",
-    );
-  }
-  if (request.kind === "workspace_artifact_action" && effect === "mutation" &&
-    accessMode === "read_only") {
-    rejectInput(
-      "read_only_access_mutation_denied",
-      "BTCC read-only access mode cannot admit a mutation command",
     );
   }
 }

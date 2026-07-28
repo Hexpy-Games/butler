@@ -4,6 +4,7 @@ import {
   type ObservationResult,
   type OperationExecutor,
 } from "../../core/index.ts";
+import { assertTurnAccessAllowsOperation } from "../../core/operation-access.ts";
 import {
   isResultReadRequest,
   type OperationResultStore,
@@ -67,6 +68,17 @@ export function createOperationExecutor(
             modelSelection: input.envelope.modelSelection,
           });
         }
+      }
+      try {
+        assertTurnAccessAllowsOperation(input.envelope, input.request);
+      } catch (error) {
+        if (!(error instanceof OperationRejectedError)) throw error;
+        return resultStore.record({
+          binding: input.envelope.binding,
+          request: input.request,
+          result: rejectedOperationResult(input.request, error),
+          modelSelection: input.envelope.modelSelection,
+        });
       }
       const existing = await resultStore.find({
         binding: input.envelope.binding,

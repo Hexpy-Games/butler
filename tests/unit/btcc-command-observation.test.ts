@@ -72,36 +72,6 @@ describe("BTCC read-only command observation", () => {
     })).toThrow("command observation requires an admitted workspace scope");
   });
 
-  test("rejects mutation state effect under admitted read-only access", () => {
-    const fixture = commandFixture();
-    const value = fixture.envelope();
-    const workspaceRef = { id: "workspace", sha256: "workspace-sha" };
-    value.operationAuthority = {
-      observationScopeRefs: [],
-      mutation: {
-        kind: "workspace_only",
-        workspaceRef,
-        operationRoot: { kind: "directory", relativeTarget: "." },
-        mutationScope: { kind: "contained_paths", writablePaths: ["."] },
-      },
-    };
-    const request: Extract<OperationRequest, { kind: "workspace_artifact_action" }> = {
-      requestId: "blocked-access-mode-mutation",
-      publicTitle: "Mutate local workspace",
-      kind: "workspace_artifact_action",
-      capabilityRef: "run_command",
-      workspaceRef,
-      relativeTarget: ".",
-      input: { command: "touch changed.txt", state_effect: "mutation" },
-    };
-
-    expect(() => fixture.tools().validateOperationInput({
-      envelope: value,
-      request,
-      args: request.input,
-    })).toThrow("read-only access mode cannot admit a mutation command");
-  });
-
   test("macOS sandbox denies workspace mutation and network", async () => {
     if (process.platform !== "darwin") return;
     const fixture = commandFixture();
