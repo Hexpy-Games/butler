@@ -135,6 +135,7 @@ function createStore(
     folderSelectionSecret: options.folderSelectionSecret,
     serviceClient: options.serviceClient,
     conversationProjectionReader,
+    sessionBindingStore: options.sessionBindingStore,
   });
 }
 

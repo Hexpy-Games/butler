@@ -1,6 +1,8 @@
 import type { SettingsView } from "../../interface/protocol/app-protocol.ts";
 import type { ButlerServiceClient } from "../../../core/client.ts";
 import type { ConversationProjectionReader } from "../../../../agent/conversation/types.ts";
+import type { SessionBindingStore } from
+  "../../../../test-support/harness/session-store.ts";
 
 export const DEFAULT_CHAT_ID = "general";
 export const DEFAULT_CHAT_TITLE = "Onboarding";
@@ -19,4 +21,5 @@ export interface AppServerStoreOptions {
   bridgeMode?: SettingsView["bridge_mode"];
   serviceClient?: ButlerServiceClient;
   conversationProjectionReader?: ConversationProjectionReader;
+  sessionBindingStore?: SessionBindingStore;
 }
