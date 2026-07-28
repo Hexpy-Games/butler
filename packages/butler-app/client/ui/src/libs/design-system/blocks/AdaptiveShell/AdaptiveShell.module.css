@@ -37,6 +37,11 @@
   );
 }
 
+.root[data-chrome-environment="electron"][data-platform="win32"] {
+  --app-window-radius: 0px;
+  --sidebar-bg: var(--windows-sidebar-bg);
+}
+
 .root[data-chrome-environment="electron"][data-platform="linux"] {
   --app-window-frame-inset: 1px;
 }

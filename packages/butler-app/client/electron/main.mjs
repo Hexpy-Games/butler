@@ -194,7 +194,7 @@ const usesTransparentWindow = isMac || isLinux;
 const macTrafficLightPosition = { x: 20, y: 18 };
 const macTransparentBackground = "#00000000";
 const macVibrancy = "sidebar";
-const windowsBackgroundMaterial = "mica";
+const windowsBackgroundMaterial = "acrylic";
 const appearanceThemeSources = new Set(["system", "light", "dark"]);
 const menuBarHelperPidFile = join(
   butlerDataRoot,

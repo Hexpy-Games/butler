@@ -561,7 +561,7 @@ test("electron shell uses native macOS corners and sidebar vibrancy", () => {
     "const macTrafficLightPosition = { x: 20, y: 18 }",
   );
   expect(electronMain).toContain('const macVibrancy = "sidebar"');
-  expect(electronMain).toContain('const windowsBackgroundMaterial = "mica"');
+  expect(electronMain).toContain('const windowsBackgroundMaterial = "acrylic"');
   expect(electronMain).toContain(
     "trafficLightPosition: macTrafficLightPosition",
   );
@@ -1113,6 +1113,13 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(nativeNotificationStatusPanel).toContain("testDesktopNotification");
   expect(nativeNotificationStatusPanel).toContain("openNativeNotificationSettings");
   expect(adaptiveShellStyles).toContain('[data-platform="win32"]');
+  expect(adaptiveShellStyles).toContain(
+    '[data-chrome-environment="electron"][data-platform="win32"]',
+  );
+  expect(adaptiveShellStyles).toContain("--app-window-radius: 0px");
+  expect(adaptiveShellStyles).toContain(
+    "--sidebar-bg: var(--windows-sidebar-bg)",
+  );
   expect(adaptiveShellStyles).toContain("--window-controls-width");
   expect(adaptiveShellStyles).toContain("--traffic-controls-width: 0px");
   expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 10px");
