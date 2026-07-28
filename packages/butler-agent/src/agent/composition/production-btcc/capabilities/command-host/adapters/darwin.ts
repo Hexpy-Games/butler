@@ -44,6 +44,7 @@ function readOnlyProfile(): string {
     "(version 1)",
     "(allow default)",
     "(deny file-write*)",
+    '(allow file-write-data (literal "/dev/null"))',
     "(deny network*)",
   ].join("\n");
 }
