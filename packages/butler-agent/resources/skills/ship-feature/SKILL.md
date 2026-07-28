@@ -3,8 +3,8 @@ name: butler-ship-feature
 description: "Use for Butler project feature work, migrations, fixes, specs, experimental spikes, reviews, or roadmap execution when Codex must follow the Butler ship-feature loop: spec first, task plan, tests, implementation, internal review, docs/report, validation, and phase commit."
 user-invocable: false
 applicability: Use when Butler project work requires the ship-feature loop: spec, task plan, implementation, tests, review, report, validation, and commit.
-allowed-tools: project-ledger-cli, run_command, dispatch_worker, create_planned_task, run_planned_task, review_planned_task, repair_planned_task
-dispatch: planned
+allowed-tools: project-ledger-cli, run_command
+dispatch: none
 review: required
 reporting: Report spec criteria, tests, validation gates, review findings, residual risk, and commit state before phase completion.
 ---
@@ -68,7 +68,7 @@ Add feature-specific gates when relevant:
 - transport work: transport-agnostic harness tests
 - memory work: stress reports, vector and graph count checks
 - installer work: install/repair smoke tests
-- runtime work: native tool-loop and mock transport tests
+- runtime work: BTCC product-cutover and mock transport tests
 
 If a gate cannot run, record why and what risk remains.
 

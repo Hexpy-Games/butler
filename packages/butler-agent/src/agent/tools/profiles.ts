@@ -16,9 +16,6 @@ export type ButlerToolProfile =
   | "monitoring"
   | "automation"
   | "mcp"
-  | "delegation"
-  | "planned-work"
-  | "orchestration"
   | "artifact-data";
 
 const STARTUP_TOOL_NAMES = [
@@ -98,29 +95,6 @@ const MCP_TOOL_NAMES = [
   "read_mcp_resource",
 ] as const;
 
-const DELEGATION_TOOL_NAMES = [
-  "dispatch_worker",
-  "resume_worker",
-  "list_tasks",
-  "get_task_result",
-] as const;
-
-const PLANNED_WORK_TOOL_NAMES = [
-  "create_planned_task",
-  "run_planned_task",
-  "review_planned_task",
-  "repair_planned_task",
-  "request_principal_decision",
-  "write_planned_public_report",
-] as const;
-
-const ORCHESTRATION_TOOL_NAMES = [
-  "create_work_orchestration",
-  "run_ready_work_streams",
-  "sync_work_orchestration",
-  "write_work_orchestration_report",
-] as const;
-
 const ARTIFACT_DATA_TOOL_NAMES = ["transform_public_data_table"] as const;
 
 const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
@@ -134,9 +108,6 @@ const PROFILE_TOOL_NAMES: Record<ButlerToolProfile, readonly string[]> = {
   monitoring: MONITORING_TOOL_NAMES,
   automation: AUTOMATION_TOOL_NAMES,
   mcp: MCP_TOOL_NAMES,
-  delegation: DELEGATION_TOOL_NAMES,
-  "planned-work": PLANNED_WORK_TOOL_NAMES,
-  orchestration: ORCHESTRATION_TOOL_NAMES,
   "artifact-data": ARTIFACT_DATA_TOOL_NAMES,
 };
 
@@ -172,17 +143,6 @@ const WORKER_DEFAULT_TOOL_NAMES = [
 ] as const;
 
 const WORKER_FORBIDDEN_TOOL_NAMES = new Set([
-  "dispatch_worker",
-  "resume_worker",
-  "create_planned_task",
-  "run_planned_task",
-  "repair_planned_task",
-  "request_principal_decision",
-  "write_planned_public_report",
-  "create_work_orchestration",
-  "run_ready_work_streams",
-  "sync_work_orchestration",
-  "write_work_orchestration_report",
   "complete_project_work",
 ]);
 

@@ -3,12 +3,11 @@
  *
  * Runs every 1 minute and performs:
  * 1. Dead worker cleanup      — RUNNING tasks with dead PIDs → FAILED
- * 2. Timeout enforcement      — worker processes over threshold → killed
- * 3. Telegram polling check   — if getUpdates succeeds (no 409) → restart butler
- * 4. Agent-browser cleanup    — daemon processes older than 1h → killed
- * 5. Orchestrator liveness    — native main pid missing → trigger start-butler.sh
- * 6. MCP server liveness      — MCP dead while butler-main is alive → Telegram alert
- * 7. Orphan MCP server reap   — kill MCP whose parent host is dead
+ * 2. Telegram polling check   — if getUpdates succeeds (no 409) → restart butler
+ * 3. Agent-browser cleanup    — daemon processes older than 1h → killed
+ * 4. Orchestrator liveness    — native main pid missing → trigger start-butler.sh
+ * 5. MCP server liveness      — MCP dead while butler-main is alive → Telegram alert
+ * 6. Orphan MCP server reap   — kill MCP whose parent host is dead
  */
 
 import { join } from "path";
@@ -40,7 +39,6 @@ const MCP_HEALTH_STATE_FILE = join(STATE_DIR, "watchdog-mcp-health.json");
 const INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 const BROWSER_DAEMON_MAX_SECS = 3600; // 1 hour
 
-const WORKER_TIMEOUT_SEC = parseInt(process.env.WORKER_TIMEOUT || "600", 10);
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const SINGLETON_DISABLED = process.env.BUTLER_WATCHDOG_DISABLE_SINGLETON === "true";
 const SERVICE_LIVENESS_DISABLED = process.env.BUTLER_WATCHDOG_DISABLE_SERVICE_LIVENESS === "true";
@@ -56,10 +54,6 @@ export function formatLogLine(msg: string, date: Date = new Date()): string {
   const mi = pad(date.getMinutes());
   const s = pad(date.getSeconds());
   return `[${y}-${mo}-${d} ${h}:${mi}:${s}] [watchdog] ${msg}`;
-}
-
-export function calcTimeoutSecs(workerTimeoutSec: number): number {
-  return Math.floor(workerTimeoutSec * 1.5);
 }
 
 export type TelegramHealthResult = "healthy" | "dead" | "conflict";
@@ -174,58 +168,7 @@ productionDeps.readFile = (path) => {
   }
 };
 
-// ── Check 2: Worker timeout enforcement ──────────────────────────────────────
-
-async function checkWorkerTimeouts(thresholdSecs: number): Promise<number> {
-  let actions = 0;
-
-  let pgrepResult: { stdout: Buffer };
-  try {
-    pgrepResult = await $`pgrep -f "run-worker.ts"`.quiet().nothrow() as any;
-  } catch {
-    return 0;
-  }
-
-  const pids = pgrepResult.stdout
-    .toString()
-    .trim()
-    .split("\n")
-    .map((s) => parseInt(s.trim(), 10))
-    .filter((n) => !isNaN(n) && n > 0);
-
-  for (const pid of pids) {
-    try {
-      const elapsedResult = await $`ps -o etimes= -p ${pid}`.quiet().nothrow() as any;
-      const elapsed = parseInt(elapsedResult.stdout.toString().trim(), 10);
-      if (isNaN(elapsed) || elapsed <= thresholdSecs) continue;
-
-      const cmdResult = await $`ps -o command= -p ${pid}`.quiet().nothrow() as any;
-      const cmd = cmdResult.stdout.toString().trim().slice(0, 80);
-
-      const pgidResult = await $`ps -o pgid= -p ${pid}`.quiet().nothrow() as any;
-      const pgid = parseInt(pgidResult.stdout.toString().trim(), 10);
-
-      if (!isNaN(pgid) && pgid > 1) {
-        try {
-          process.kill(-pgid, "SIGTERM");
-          await new Promise((r) => setTimeout(r, 1000));
-          try { process.kill(-pgid, "SIGKILL"); } catch {}
-          log(`Killed worker PGID ${pgid} (PID ${pid}, elapsed ${elapsed}s): ${cmd}`);
-          actions++;
-          continue;
-        } catch {}
-      }
-
-      process.kill(pid, "SIGKILL");
-      log(`Killed worker PID ${pid} (elapsed ${elapsed}s): ${cmd}`);
-      actions++;
-    } catch {}
-  }
-
-  return actions;
-}
-
-// ── Check 3: Telegram polling health ─────────────────────────────────────────
+// ── Check 2: Telegram polling health ─────────────────────────────────────────
 
 /**
  * checkTelegramHealth — checks bot reachability via getMe (not getUpdates).
@@ -691,23 +634,14 @@ async function runCycle(): Promise<void> {
     log(`checkDeadWorkers error: ${err.message}`);
   }
 
-  // 2. Worker timeout enforcement
-  try {
-    const threshold = calcTimeoutSecs(WORKER_TIMEOUT_SEC);
-    const n = await checkWorkerTimeouts(threshold);
-    totalActions += n;
-  } catch (err: any) {
-    log(`checkWorkerTimeouts error: ${err.message}`);
-  }
-
-  // 3. Telegram polling health
+  // 2. Telegram polling health
   try {
     await checkTelegramHealth();
   } catch (err: any) {
     log(`checkTelegramHealth error: ${err.message}`);
   }
 
-  // 4. Agent-browser daemon cleanup
+  // 3. Agent-browser daemon cleanup
   try {
     const n = await checkAgentBrowserDaemons();
     totalActions += n;

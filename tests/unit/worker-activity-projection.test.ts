@@ -147,32 +147,6 @@ test("worker runner refreshes activity while waiting on model continuation", () 
   expect(provider).toMatch(/workerReportingStatusLine/);
 });
 
-test("App dispatch uses the platform-neutral registered background command runtime", () => {
-  const dispatch = readFileSync(
-    join(root, "packages/butler-agent/src/agent/tool-support/background-worker-dispatch.ts"),
-    "utf8",
-  );
-  const plannedRuntime = readFileSync(
-    join(root, "packages/butler-agent/src/agent/tool-support/planned-worker-runtime.ts"),
-    "utf8",
-  );
-
-  expect(dispatch).toContain("startRegisteredBackgroundCommand");
-  expect(dispatch).toContain("createPlatformCommandExecutor");
-  expect(dispatch).toContain("executable: process.execPath");
-  expect(plannedRuntime).toContain("dispatchBackgroundWorker");
-  expect(plannedRuntime).not.toContain("dispatch.sh");
-  expect(plannedRuntime).not.toContain("/bin/bash");
-});
-
-test("worker runner writes account-model failures into activity before exiting", () => {
-  const runner = readFileSync(join(root, "packages/butler-agent/scripts/run-worker.ts"), "utf8");
-
-  expect(runner).toContain("workerFailureStatusLine");
-  expect(runner).toContain("selected worker model is not available");
-  expect(runner).toContain('writeActivity("failed", workerFailureStatusLine(message))');
-});
-
 test("worker shell semantic phase follows state-machine context, not command kind", () => {
   expect(summarizeWorkerShellActivity("rg -n \"worker\" src", { semanticPhase: "planning" })).toMatchObject({
     phase: "planning",

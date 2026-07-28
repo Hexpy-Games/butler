@@ -15,11 +15,6 @@ test("Windows validation runs the full product once and platform lifecycle twice
   expect(source).toContain("platformPasses");
   expect(source).toContain('BUTLER_APP_CLIENT_E2E_MODE: "deterministic"');
   expect(source).toContain('BUTLER_APP_CLIENT_E2E_MODE: "toolchain"');
-  expect(source).toContain("native runtime can drive the real run_command tool");
-  expect(readFileSync(
-    resolve(import.meta.dir, "native-tool-loop-runtime.test.ts"),
-    "utf8",
-  )).toContain("timeout_ms: 120_000");
   expect(source).toContain("inbound-queue.test.ts");
   expect(source).toContain("app-worker-cancel.test.ts");
   expect(source).toContain("native scheduler claims due automations");

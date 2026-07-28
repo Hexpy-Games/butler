@@ -1,13 +1,11 @@
 import {
   existsSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dispatchBackgroundWorker } from "../../src/agent/tool-support/background-worker-dispatch.ts";
 import {
   backgroundCommandControlPaths,
   registeredBackgroundCommandCount,
@@ -24,30 +22,9 @@ const root = join(tmpdir(), "Butler G2 control 한글 with spaces");
 const butlerHome = join(root, "payload source");
 const butlerData = join(root, "user data");
 const projectPath = join(root, "project source");
-const taskId = "windows-control-worker";
-const workerEntrypoint = join(
-  butlerHome,
-  "packages",
-  "butler-agent",
-  "scripts",
-  "run-worker.ts",
-);
 rmSync(root, { recursive: true, force: true });
-mkdirSync(join(butlerHome, "packages", "butler-agent", "scripts"), {
-  recursive: true,
-});
+mkdirSync(butlerHome, { recursive: true });
 mkdirSync(projectPath, { recursive: true });
-writeFileSync(workerEntrypoint, [
-  "import { writeFileSync } from 'node:fs';",
-  "import { join } from 'node:path';",
-  "const taskDir = process.argv[2];",
-  "writeFileSync(join(taskDir, 'worker-proof.json'), JSON.stringify({",
-  "  worker: process.env.BUTLER_WORKER,",
-  "  taskId: process.env.TASK_ID_OVERRIDE,",
-  "  secretSeen: Boolean(process.env.BUTLER_SECRET_TOKEN),",
-  "}));",
-  "process.stdout.write('worker-command-executor-ok\\n');",
-].join("\n"), "utf8");
 
 const executor = createPlatformCommandExecutor();
 let cancellationResult = false;
@@ -95,16 +72,6 @@ try {
     timeoutMs: 5_000,
   });
 
-  dispatchBackgroundWorker({
-    taskId,
-    butlerHome,
-    butlerData,
-    task: "Produce deterministic worker smoke evidence.",
-    projectPath,
-    commandExecutor: executor,
-  });
-  await waitFor(() => readText(join(butlerData, "tasks", taskId, "status")) === "DONE");
-
   const cancellationId = "windows-control-cancellation";
   const cancellationTaskDir = join(butlerData, "tasks", cancellationId);
   const cancellationControl = backgroundCommandControlPaths(
@@ -139,10 +106,6 @@ try {
   const cancellationAccepted = existsSync(cancellationControl.cancellationFile);
   await waitFor(() => registeredBackgroundCommandCount() === 0);
 
-  const taskDir = join(butlerData, "tasks", taskId);
-  const workerProof = JSON.parse(
-    readFileSync(join(taskDir, "worker-proof.json"), "utf8"),
-  ) as Record<string, unknown>;
   const result = {
     ok:
       structured.stdout === "structured-ok" &&
@@ -153,23 +116,14 @@ try {
       normalizedError.error?.code === "command_spawn_failed" &&
       !JSON.stringify(normalizedError).includes(missingExecutableSecret) &&
       !JSON.stringify(normalizedError).includes("windows-environment-secret") &&
-      readText(join(taskDir, "result.md")) === "worker-command-executor-ok" &&
-      workerProof.worker === "1" &&
-      workerProof.taskId === taskId &&
-      workerProof.secretSeen === false &&
       cancellationAccepted &&
-      cancellationResult &&
-      !existsSync(join(taskDir, "pid")) &&
-      !existsSync(join(taskDir, "pgid")),
+      cancellationResult,
     platform: "win32-x64",
     standardUser: process.env.BUTLER_WINDOWS_STANDARD_USER === "1",
     structuredCommand: structured.exitCode === 0,
     compatibilityBoundary: compatibility.exit_code === 0,
     normalizedError: normalizedError.error?.code === "command_spawn_failed",
-    backgroundWorker: readText(join(taskDir, "status")) === "DONE",
-    sanitizedEnvironment: workerProof.secretSeen === false,
     registeredCancellation: cancellationAccepted && cancellationResult,
-    pidDialectLeak: existsSync(join(taskDir, "pid")) || existsSync(join(taskDir, "pgid")),
     rawTextIncluded: false,
   };
   process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -189,13 +143,5 @@ async function waitFor(predicate: () => boolean, timeoutMs = 15_000): Promise<vo
   while (!predicate()) {
     if (Date.now() >= deadline) throw new Error("Windows control smoke timed out");
     await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-}
-
-function readText(path: string): string {
-  try {
-    return readFileSync(path, "utf8").trim();
-  } catch {
-    return "";
   }
 }

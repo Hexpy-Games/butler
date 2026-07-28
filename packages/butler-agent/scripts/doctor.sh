@@ -435,7 +435,7 @@ check_permissions() {
   local status="PASS" details="" fixes=""
   local exec_count=0
 
-  for script in packages/butler-agent/scripts/start-butler.sh packages/butler-agent/scripts/dispatch.sh packages/butler-agent/scripts/send-telegram.sh; do
+  for script in packages/butler-agent/scripts/start-butler.sh packages/butler-agent/scripts/send-telegram.sh; do
     local full="$BUTLER_HOME/$script"
     [[ -f "$full" ]] || continue
     if [[ -x "$full" ]]; then

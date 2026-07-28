@@ -16,7 +16,6 @@ test("all bundled skills expose machine-readable strategy metadata", () => {
   expect(skills.map((skill) => skill.name)).toEqual([
     "butler-model",
     "butler-ship-feature",
-    "dispatch",
     "persona",
     "project",
     "project-ledger",
@@ -25,25 +24,18 @@ test("all bundled skills expose machine-readable strategy metadata", () => {
     "status",
   ]);
   expect(validateSkillCatalog(skills)).toEqual([]);
-  expect(skills.find((skill) => skill.name === "dispatch")).toMatchObject({
-    dispatchPreference: "auto",
-    reviewRequirement: "recommended",
-  });
 });
 
 test("skill catalog exposes applicability without text selection", () => {
   const skills = loadSkillCatalog(skillsDir);
 
   expect(skills.find((skill) => skill.name === "status")?.applicability).toContain("model decides");
-  expect(skills.find((skill) => skill.name === "dispatch")?.applicability).toContain("model decides");
 });
 
-test("skill prompt section includes dispatch and review guidance", () => {
+test("skill prompt section includes applicability and status guidance", () => {
   const section = renderSkillPromptSection(loadSkillCatalog(skillsDir));
 
-  expect(section).toContain("dispatch: Dispatch a task");
   expect(section).toContain("applicability:");
-  expect(section).toContain("dispatch: auto; review: recommended");
   expect(section).toContain("status: Check butler system status");
 });
 

@@ -1,6 +1,3 @@
-import { PlannedTaskStore } from "../work/planned-task.ts";
-import { TaskStore } from "../work/task-store.ts";
-import { WorkOrchestrationStore } from "../work/work-orchestration.ts";
 import { TodoListStore } from "../work/todo-list.ts";
 import { WorkStreamStore } from "../work/work-stream.ts";
 import type { WebSearchProvider } from "../../integrations/search/provider.ts";
@@ -33,8 +30,6 @@ import { createMcpToolHandlers } from "./mcp/index.ts";
 import { createMemoryToolHandlers } from "./memory/index.ts";
 import { createMonitoringToolHandlers } from "./monitoring/index.ts";
 import { createToolBridgeToolHandlers } from "./tool-bridge/index.ts";
-import { createOrchestrationToolHandlers } from "./orchestration/index.ts";
-import { createPlannedTaskToolHandlers, dispatchBackgroundTask, type WorkerModelSelectionRule } from "./planned-task/index.ts";
 import { createProjectLedgerToolHandlers } from "./project-ledger/index.ts";
 import { createRunCommandToolHandlers } from "./run-command/index.ts";
 import { createFileToolHandlers } from "./file-tools/index.ts";
@@ -42,7 +37,6 @@ import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
-import { createWorkerToolHandlers } from "./worker/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
@@ -123,12 +117,10 @@ export function createButlerToolExecutor(input: {
   turnContext?: string;
   searchPlannerOriginalRequest?: string;
   workerModel?: string;
-  workerModelRules?: WorkerModelSelectionRule[];
   searchPlannerModel?: string;
   memoryRetrievalPlanner?: (input: RetrievalPlanningInput) => Promise<RetrievalPlanningResult>;
   memoryVectorBackend?: VectorEpisodeBackend;
   memoryVectorTimeoutMs?: number;
-  dispatchTask?: typeof dispatchBackgroundTask;
   webSearchProvider?: WebSearchProvider;
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
   pageReader?: typeof readPageConfigured;
@@ -138,12 +130,9 @@ export function createButlerToolExecutor(input: {
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
   activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
 }): ButlerToolExecutor {
-  const taskStore = new TaskStore(input.butlerData);
-  const plannedTaskStore = new PlannedTaskStore(input.butlerData);
   const todoListStore = new TodoListStore(input.butlerData);
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
-  const orchestrationStore = new WorkOrchestrationStore(input.butlerData);
   const toolExecutorRef: { current?: ButlerToolExecutorRegistry } = {};
   const dispatchTool: ButlerToolHandler = async (call) => {
     if (!toolExecutorRef.current) throw new Error("Butler tool registry is not initialized");
@@ -230,48 +219,6 @@ export function createButlerToolExecutor(input: {
       workspacePath: input.workspacePath ?? input.butlerHome,
     }),
     ...createFileToolHandlers({ butlerData: input.butlerData, workspacePath: input.workspacePath ?? input.butlerHome }),
-    ...createWorkerToolHandlers({
-      butlerHome: input.butlerHome,
-      butlerData: input.butlerData,
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-      turnContext: input.turnContext,
-      workerModel: input.workerModel,
-      workerModelRules: input.workerModelRules,
-      taskStore,
-      plannedTaskStore,
-      workStreamStore,
-      orchestrationStore,
-      dispatchTask: input.dispatchTask,
-    }),
-    ...createPlannedTaskToolHandlers({
-      butlerHome: input.butlerHome,
-      butlerData: input.butlerData,
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-      turnContext: input.turnContext,
-      workerModel: input.workerModel,
-      workerModelRules: input.workerModelRules,
-      taskStore,
-      plannedTaskStore,
-      workStreamStore,
-      orchestrationStore,
-      dispatchTask: input.dispatchTask,
-    }),
-    ...createOrchestrationToolHandlers({
-      butlerHome: input.butlerHome,
-      butlerData: input.butlerData,
-      sessionId: input.sessionId,
-      projectId: input.projectId,
-      turnContext: input.turnContext,
-      workerModel: input.workerModel,
-      workerModelRules: input.workerModelRules,
-      taskStore,
-      plannedTaskStore,
-      workStreamStore,
-      orchestrationStore,
-      dispatchTask: input.dispatchTask,
-    }),
   });
   toolExecutorRef.current = toolExecutors;
   return async (call) => executeRegisteredButlerTool(toolExecutors, call);

@@ -24,7 +24,7 @@ function run(): void {
       actionKind: "search",
     });
 
-    assertMatch(summarizeWorkerShellActivity("sed -n '1,80p' packages/butler-agent/scripts/run-worker.ts") as unknown as Record<string, unknown>, {
+    assertMatch(summarizeWorkerShellActivity("sed -n '1,80p' packages/butler-agent/scripts/status-context.ts") as unknown as Record<string, unknown>, {
       phase: "executing",
       semanticPhase: "inspecting",
       actionKind: "read_file",

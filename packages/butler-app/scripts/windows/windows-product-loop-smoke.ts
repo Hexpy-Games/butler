@@ -33,14 +33,6 @@ for (let pass = 1; pass <= fullProductPassCount; pass += 1) {
     { BUTLER_APP_CLIENT_E2E_MODE: "toolchain" },
   );
   await waitForE2eTempCleanup(initialE2eTempDirs);
-  await runExitScenario(`command-${pass}`, [
-    "test",
-    "--timeout",
-    "120000",
-    "tests/unit/native-tool-loop-runtime.test.ts",
-    "--test-name-pattern",
-    "native runtime can drive the real run_command tool through the default executor",
-  ]);
   await runExitScenario(`background-${pass}`, [
     "test",
     "--timeout",

@@ -229,9 +229,6 @@ if [ -d "$TASKS_DIR" ]; then
     echo "FAILED" > "$STATUS_FILE"
   done
 fi
-# Safety net: kill any orphaned worker processes.
-pkill -KILL -f 'run-worker\.ts' 2>/dev/null || true
-
 log "Starting native butler bootstrap (runtime: $BUTLER_RUNTIME_EFFECTIVE)"
 _check_telegram_health
 rm -f "$SESSION_FILE"

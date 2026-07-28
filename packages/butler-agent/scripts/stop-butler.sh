@@ -105,10 +105,7 @@ pkill -TERM -f "$BUTLER_HOME/packages/butler-agent/src/agent/cognition/memory/sc
 pkill -TERM -f "$BUTLER_HOME/packages/butler-agent/src/agent/cognition/memory/scripts/[e]mbed-server.ts" 2>/dev/null || true
 pkill -TERM -f "$BUTLER_HOME/packages/butler-agent/src/interfaces/mcp-server/[w]atchdog.ts" 2>/dev/null || true
 
-# 3. Kill orphaned worker processes
-pkill -KILL -f 'run-worker\.ts' 2>/dev/null || true
-
-# 4. Wait for processes to die
+# 3. Wait for processes to die
 for i in $(seq 1 20); do
   if ! pgrep -f "butler-mcp-server|butler-telegram|butler-embed-server|.butler/packages/butler-agent/src/interfaces/mcp-server" >/dev/null 2>&1; then
     break
