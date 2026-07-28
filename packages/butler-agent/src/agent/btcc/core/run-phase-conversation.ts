@@ -108,11 +108,37 @@ async function runPhaseConversationAtCheckpoint<Product>(
         command.modelSelection,
         conversation.pendingSubmissionRound.actualIdentity,
       );
-      const product = command.codec.decode(
+      let product = command.codec.decode(
         conversation.pendingSubmissionRound.submission,
         envelope,
       );
       command.executionPermit.assertActive();
+      const terminalOperation = command.codec.terminalOperation?.(product, envelope);
+      if (terminalOperation) {
+        const terminalEnvelope = {
+          ...envelope,
+          operationAuthority: command.operationAuthority,
+        };
+        const [completed] = await performOperationBatch(
+          command,
+          terminalEnvelope,
+          [terminalOperation],
+        );
+        if (!completed) throw new Error("BTCC terminal operation returned no result");
+        const operationBinding = await command.store.appendOperationResults({
+          binding: conversation.binding,
+          results: [completed],
+          pendingSubmissionRound: conversation.pendingSubmissionRound,
+        });
+        conversation = {
+          ...conversation,
+          binding: trackCheckpoint(operationBinding, checkpointAdvanced),
+          operationResults: [...conversation.operationResults, completed.result],
+        };
+        product = command.codec.acceptTerminalOperation
+          ? command.codec.acceptTerminalOperation(product, completed.result)
+          : product;
+      }
       const acceptedBinding = await command.store.acceptPhaseProduct({
         binding: conversation.binding,
         product,

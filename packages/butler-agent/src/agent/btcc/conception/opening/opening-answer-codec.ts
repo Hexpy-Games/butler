@@ -1,4 +1,7 @@
-import type { PhaseCodec } from "../../core/index.ts";
+import type {
+  OperationRequest,
+  PhaseCodec,
+} from "../../core/index.ts";
 import { contentRef, digest, stableJson } from "../../core/index.ts";
 import type { ContinuationCandidate } from "../../continuation/index.ts";
 import type {
@@ -11,6 +14,7 @@ import { completionModeFor, isManagedResultKind } from "./fulfillment.ts";
 
 export function openingAnswerCodec(
   continuationCandidates: readonly ContinuationCandidate[],
+  localEffectCapabilityRefs: readonly string[] = [],
 ): PhaseCodec<OpeningProduct> {
   const programCandidateIds = continuationCandidates
     .filter((candidate) => candidate.continuationKind !== "managed_finalization")
@@ -22,6 +26,7 @@ export function openingAnswerCodec(
     submissionSchema: openingSubmissionSchemaFor(
       programCandidateIds,
       finalizationCandidateIds,
+      localEffectCapabilityRefs,
     ),
     decode(submission, envelope) {
       if (
@@ -36,7 +41,29 @@ export function openingAnswerCodec(
       if (isRecord(submission) && submission.kind === "cancel_work") {
         return decodeWorkCancellation(submission, envelope);
       }
-      return decodeOpeningAnswerProduct(submission, envelope);
+      return decodeOpeningAnswerProduct(
+        submission,
+        envelope,
+        localEffectCapabilityRefs,
+      );
+    },
+    terminalOperation(product) {
+      return product.kind === "opening_answer"
+        ? product.localEffect?.request
+        : undefined;
+    },
+    acceptTerminalOperation(product, result) {
+      if (product.kind !== "opening_answer" || !product.localEffect) return product;
+      if (
+        result.outcome !== "turn_local_effect_applied" ||
+        result.requestId !== product.localEffect.request.requestId
+      ) {
+        throw new Error("Opening local effect did not commit successfully");
+      }
+      return {
+        ...product,
+        localEffect: { ...product.localEffect, resultRef: result.resultRef },
+      };
     },
   };
 }
@@ -72,6 +99,7 @@ function decodeWorkCancellation(
 export function decodeOpeningAnswerProduct(
   submission: unknown,
   envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
+  localEffectCapabilityRefs: readonly string[] = [],
 ) {
     const { answer, route, personalizationRefs } = decodeOpeningAnswer(submission, envelope);
     const goalBody = {
@@ -83,13 +111,22 @@ export function decodeOpeningAnswerProduct(
       nonGoals: answer.nonGoals,
     };
     const goalContract = { ref: contentRef("goal", goalBody), ...goalBody };
+    const localEffect = openingLocalEffect(answer, envelope, localEffectCapabilityRefs);
+    const authorityBody = localEffect
+      ? {
+          turnId: envelope.binding.turnId,
+          goalContractRef: goalContract.ref,
+          effectsForbidden: false as const,
+          requiredLocalEffectRef: contentRef("local-effect", localEffect.request),
+        }
+      : {
+          turnId: envelope.binding.turnId,
+          goalContractRef: goalContract.ref,
+          effectsForbidden: true as const,
+        };
     const authority = {
-      ref: contentRef("authority", {
-        turnId: envelope.binding.turnId,
-        goalContractRef: goalContract.ref,
-        effectsForbidden: true,
-      }),
-      effectsForbidden: true as const,
+      ref: contentRef("authority", authorityBody),
+      ...authorityBody,
     };
     const outputDraftBody = {
       content: answer.answer,
@@ -133,6 +170,7 @@ export function decodeOpeningAnswerProduct(
       },
       goalContract,
       authority,
+      ...(localEffect ? { localEffect } : {}),
       continuationBinding: {
         kind: "new_request",
         bindingId: digest(`new-request\0${envelope.binding.turnId}`),
@@ -147,6 +185,29 @@ export function decodeOpeningAnswerProduct(
         content: answer.answer,
       },
     } satisfies Extract<OpeningProduct, { kind: "opening_answer" }>;
+}
+
+function openingLocalEffect(
+  answer: ReturnType<typeof decodeOpeningAnswer>["answer"],
+  envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
+  localEffectCapabilityRefs: readonly string[],
+) {
+  if (answer.kind !== "local_effect_answer") return undefined;
+  if (!localEffectCapabilityRefs.includes(answer.effect.capabilityRef)) {
+    throw new Error("Opening local effect selected an unavailable capability");
+  }
+  const request = {
+    kind: "turn_local_effect",
+    requestId: `local-effect/${digest(stableJson({
+      turnId: envelope.binding.turnId,
+      capabilityRef: answer.effect.capabilityRef,
+      input: answer.effect.input,
+    }))}`,
+    publicTitle: answer.effect.publicTitle,
+    capabilityRef: answer.effect.capabilityRef,
+    input: answer.effect.input,
+  } satisfies Extract<OperationRequest, { kind: "turn_local_effect" }>;
+  return { request };
 }
 
 function decodeOpeningContinuation(

@@ -1,5 +1,6 @@
 import type {
   ContentRef,
+  OperationRequest,
 } from "../../core/index.ts";
 
 export type OpeningAnswerProduct = {
@@ -15,7 +16,17 @@ export type OpeningAnswerProduct = {
     personalizationRefs: string[];
     nonGoals: string[];
   };
-  authority: { ref: ContentRef; effectsForbidden: true };
+  authority:
+    | { ref: ContentRef; effectsForbidden: true }
+    | {
+        ref: ContentRef;
+        effectsForbidden: false;
+        requiredLocalEffectRef: ContentRef;
+      };
+  localEffect?: {
+    request: Extract<OperationRequest, { kind: "turn_local_effect" }>;
+    resultRef?: ContentRef;
+  };
   continuationBinding: { kind: "new_request"; bindingId: string };
   outputDraft: {
     ref: ContentRef;
@@ -147,6 +158,15 @@ export type OpeningAnswerSubmission = OpeningAnswerFields & (
   | {
       kind: "assisted_answer";
       requiredResultKind: "current_observation" | "turn_local_effect";
+    }
+  | {
+      kind: "local_effect_answer";
+      requiredResultKind: "turn_local_effect";
+      effect: {
+        capabilityRef: string;
+        publicTitle: string;
+        input: Record<string, unknown>;
+      };
     }
 );
 

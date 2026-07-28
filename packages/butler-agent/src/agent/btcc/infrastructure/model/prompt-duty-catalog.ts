@@ -50,7 +50,11 @@ const DUTIES = {
   complete_bounded_turn_local_effect: [
     "Use only an explicitly authorized local user/session state capability, such as",
     "update_onboarding_profile, for a confirmed value supplied by the user in this",
-    "conversation. Complete that bounded update and answer in this phase. Do not create",
+    "conversation. When the answer can be authored before a binary successful commit,",
+    "submit local_effect_answer with the exact capability input and the natural reply",
+    "that may be delivered after success. Do not request the tool separately and do not",
+    "require another model round merely to restate that it succeeded. Otherwise continue",
+    "to Assisted Answer. Do not create",
     "a Spec, Work, Task, or Work Ledger and do not mutate project, workspace, public, or",
     "external targets.",
   ].join(" "),

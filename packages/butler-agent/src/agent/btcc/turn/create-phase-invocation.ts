@@ -34,7 +34,8 @@ export function createPhaseInvocation(
     operations: dependencies.operations,
     operationAuthority: {
       observationScopeRefs: turn.context.baselineObservationScopeRefs,
-      mutation: claim.semanticState === "assisted_answer"
+      mutation: claim.semanticState === "conception_opening" ||
+          claim.semanticState === "assisted_answer"
         ? {
             kind: "turn_local_effect_only",
             capabilityRefs: ["update_onboarding_profile"],

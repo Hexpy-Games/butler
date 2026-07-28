@@ -36,6 +36,7 @@ export const openingSubmissionSchema = openingSubmissionSchemaFor([], []);
 export function openingSubmissionSchemaFor(
   programCandidateIds: readonly string[],
   finalizationCandidateIds: readonly string[] = [],
+  localEffectCapabilityRefs: readonly string[] = [],
 ) {
   const programIds = [...new Set(programCandidateIds)];
   const finalizationIds = [...new Set(finalizationCandidateIds)];
@@ -55,6 +56,19 @@ export function openingSubmissionSchemaFor(
     ),
   ];
   const variants = [...common];
+  const localEffectRefs = [...new Set(localEffectCapabilityRefs)];
+  if (localEffectRefs.length > 0) {
+    variants.push(objectSchema({
+      kind: literalSchema("local_effect_answer"),
+      requiredResultKind: literalSchema("turn_local_effect"),
+      effect: objectSchema({
+        capabilityRef: enumSchema(...localEffectRefs),
+        publicTitle: { type: "string", minLength: 1, maxLength: 120 },
+        input: { type: "object", minProperties: 1, additionalProperties: true },
+      }),
+      ...answerFields,
+    }));
+  }
   if (programIds.length > 0) {
     const candidateId = enumSchema(...programIds);
     variants.push(
