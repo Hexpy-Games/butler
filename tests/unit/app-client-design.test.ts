@@ -1120,6 +1120,9 @@ test("desktop native shell supports notifications tray and cross-platform titleb
   expect(adaptiveShellStyles).toContain(
     "--sidebar-bg: var(--windows-sidebar-bg)",
   );
+  expect(adaptiveShellStyles).toContain(
+    "backdrop-filter: var(--windows-sidebar-overlay-filter)",
+  );
   expect(adaptiveShellStyles).toContain("--window-controls-width");
   expect(adaptiveShellStyles).toContain("--traffic-controls-width: 0px");
   expect(adaptiveShellStyles).toContain("--chrome-floating-toggle-left: 10px");

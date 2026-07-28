@@ -209,6 +209,11 @@
     transform: translateX(-100%);
   }
 
+  .root[data-chrome-environment="electron"][data-platform="win32"] .sidebar {
+    background: var(--windows-sidebar-bg);
+    backdrop-filter: var(--windows-sidebar-overlay-filter);
+  }
+
   .inspector {
     right: 0;
     width: min(var(--right-panel-width), 92vw);
