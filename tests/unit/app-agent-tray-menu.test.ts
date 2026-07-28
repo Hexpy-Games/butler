@@ -1,8 +1,44 @@
 import { expect, test } from "bun:test";
 import {
+  bindWindowsTrayInteractions,
   createTrayAgentMenuModel,
   trayAgentServiceLabel,
 } from "../../packages/butler-app/client/electron/tray-agent-menu.mjs";
+
+test("Windows tray left-click opens the menu and double-click restores Butler", () => {
+  const handlers = new Map<string, () => void>();
+  let menuOpenCount = 0;
+  let restoreCount = 0;
+  const tray = {
+    on(event: string, handler: () => void) {
+      handlers.set(event, handler);
+    },
+    popUpContextMenu() {
+      menuOpenCount += 1;
+    },
+  };
+
+  expect(bindWindowsTrayInteractions(tray, () => { restoreCount += 1; })).toBe(true);
+  handlers.get("click")?.();
+  handlers.get("double-click")?.();
+
+  expect(menuOpenCount).toBe(1);
+  expect(restoreCount).toBe(1);
+});
+
+test("Windows tray interaction binding is idempotent per tray instance", () => {
+  const registeredEvents: string[] = [];
+  const tray = {
+    on(event: string) {
+      registeredEvents.push(event);
+    },
+    popUpContextMenu() {},
+  };
+
+  expect(bindWindowsTrayInteractions(tray, () => undefined)).toBe(true);
+  expect(bindWindowsTrayInteractions(tray, () => undefined)).toBe(false);
+  expect(registeredEvents).toEqual(["click", "double-click"]);
+});
 
 test("tray Agent menu disables service actions when service adapter is unavailable", () => {
   expect(createTrayAgentMenuModel({

@@ -77,7 +77,10 @@ import {
   resolvePersistentMenuBarHelperLaunch,
   shouldLaunchPersistentMenuBarHelper,
 } from "./menu-bar-helper-lifecycle.mjs";
-import { createTrayAgentMenuModel } from "./tray-agent-menu.mjs";
+import {
+  bindWindowsTrayInteractions,
+  createTrayAgentMenuModel,
+} from "./tray-agent-menu.mjs";
 import {
   executeWindowsSquirrelLaunch,
   manageWindowsSquirrelShortcut,
@@ -1480,6 +1483,9 @@ async function refreshTrayMenu() {
   if (!tray) {
     tray = new Tray(trayIconForMenuBar());
     tray.setToolTip(appDisplayName);
+    if (process.platform === "win32") {
+      bindWindowsTrayInteractions(tray, openButlerFromTray);
+    }
   } else {
     updateTrayIcon();
   }
