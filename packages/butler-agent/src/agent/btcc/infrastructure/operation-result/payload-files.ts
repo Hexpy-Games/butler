@@ -2,7 +2,6 @@ import {
   closeSync,
   copyFileSync,
   existsSync,
-  fsyncSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -12,10 +11,11 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type { OperationPayloadSource } from "../../core/index.ts";
 import { ref, type ResultRef } from "../../operation-result/index.ts";
+import { syncDirectory, syncFile } from "../filesystem/durable-sync.ts";
 
 export class OperationPayloadFiles {
   constructor(private readonly root: string) {
@@ -73,9 +73,9 @@ export class OperationPayloadFiles {
     const temporary = this.temporaryPath(target);
     try {
       writeFileSync(temporary, payload, { flag: "wx" });
-      this.syncFile(temporary);
+      syncFile(temporary);
       renameSync(temporary, target);
-      this.syncDirectory(target);
+      syncDirectory(this.root);
     } finally {
       if (existsSync(temporary)) unlinkSync(temporary);
     }
@@ -92,16 +92,16 @@ export class OperationPayloadFiles {
     }
     try {
       renameSync(source, target);
-      this.syncFile(target);
-      this.syncDirectory(target);
+      syncFile(target);
+      syncDirectory(this.root);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EXDEV") throw error;
       const temporary = this.temporaryPath(target);
       try {
         copyFileSync(source, temporary);
-        this.syncFile(temporary);
+        syncFile(temporary);
         renameSync(temporary, target);
-        this.syncDirectory(target);
+        syncDirectory(this.root);
         unlinkSync(source);
       } finally {
         if (existsSync(temporary)) unlinkSync(temporary);
@@ -139,22 +139,4 @@ export class OperationPayloadFiles {
     return `${target}.${process.pid}.${randomUUID()}.tmp`;
   }
 
-  private syncFile(path: string): void {
-    const file = openSync(path, process.platform === "win32" ? "r+" : "r");
-    try {
-      fsyncSync(file);
-    } finally {
-      closeSync(file);
-    }
-  }
-
-  private syncDirectory(path: string): void {
-    if (process.platform === "win32") return;
-    const directory = openSync(dirname(path), "r");
-    try {
-      fsyncSync(directory);
-    } finally {
-      closeSync(directory);
-    }
-  }
 }
