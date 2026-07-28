@@ -58,9 +58,13 @@ export function createBtccComposition(input: {
     resumePendingTurns: true,
   });
   return {
-    async handle(command) {
+    async runTurn(command) {
       await ready;
-      return runtime.handle(command);
+      return runtime.runTurn(command);
+    },
+    async stopTurn(command) {
+      await ready;
+      return runtime.stopTurn(command);
     },
   };
 }
@@ -156,7 +160,7 @@ async function recoverOperationalOwnership(
   if (!options.resumePendingTurns) return;
   const turnIds = await stores.operationalRecovery.pendingTurnIds();
   for (const turnId of turnIds) {
-    void runtime.handle({ kind: "resume", turnId }).catch(reportRecoveryFailure);
+    void runtime.runTurn({ kind: "resume", turnId }).catch(reportRecoveryFailure);
   }
 }
 

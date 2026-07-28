@@ -45,6 +45,7 @@ async function refreshDueAutomationsForReadRoutes(
   ) {
     await input.store.dispatchDueAutomations(input.responder, {
       responderTimeoutMs: input.responderTimeoutMs,
+      deferResponderTurns: true,
     });
   }
 }

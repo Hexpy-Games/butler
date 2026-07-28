@@ -109,8 +109,8 @@ async function runHarness(options: HarnessOptions): Promise<void> {
   let initial;
   let replay;
   try {
-    initial = await runtime.handle(command);
-    replay = options.replay ? await runtime.handle(command) : initial;
+    initial = await runtime.runTurn(command);
+    replay = options.replay ? await runtime.runTurn(command) : initial;
   } catch (error) {
     if (liveTrace.length > 0) {
       process.stderr.write(`BTCC live phase trace: ${JSON.stringify(liveTrace.at(-1))}\n`);

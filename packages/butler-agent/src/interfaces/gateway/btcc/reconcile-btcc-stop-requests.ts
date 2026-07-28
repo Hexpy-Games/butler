@@ -39,7 +39,7 @@ export class BtccStopRequestReconciler {
         ORDER BY app_turn_cancel_outbox.created_at
       `).all();
       for (const row of rows) {
-        const outcome = await this.runtime.handle({ kind: "stop", turnId: row.turn_id });
+        const outcome = await this.runtime.stopTurn({ kind: "stop", turnId: row.turn_id });
         if (outcome.kind === "fenced_pending_persistence") continue;
         this.commitProjection(db, row.turn_id, outcome.kind);
       }

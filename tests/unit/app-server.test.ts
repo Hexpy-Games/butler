@@ -14,7 +14,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+import { createTestAppServer as createAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import {
@@ -892,31 +892,29 @@ test("app server migrates event indexes for bounded app event scans", () => {
   }
 });
 
-test("app server defaults app responder turns to ten minutes", () => {
+test("product app server exposes no responder substitution", () => {
   const serverSource = readFileSync(
     join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts"),
     "utf8",
   );
-  const cliSource = readFileSync(
-    join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/cli/app-gateway-cli.ts"),
+  const serverTypes = readFileSync(
+    join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/server/server-types.ts"),
     "utf8",
   );
 
-  expect(serverSource).toContain("const DEFAULT_RESPONDER_TIMEOUT_MS = 600_000;");
-  expect(cliSource).toContain('BUTLER_APP_SERVER_RESPONDER_TIMEOUT_MS ?? "600000"');
-  expect(cliSource).toContain(": 600000");
+  expect(serverSource).toContain("return createComposedAppServer(options, {});");
+  expect(serverTypes.match(/interface CreateAppServerOptions[\s\S]*?\n\}/u)?.[0])
+    .not.toContain("responder");
 });
 
-test("app server keeps long responder requests within Bun idle timeout", () => {
+test("responder injection lives under explicit test support", () => {
   const source = readFileSync(
-    join(process.cwd(), "packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts"),
+    join(process.cwd(), "packages/butler-agent/src/test-support/app-server.ts"),
     "utf8",
   );
 
-  expect(source).toContain("MAX_BUN_IDLE_TIMEOUT_SECONDS");
-  expect(source).toContain("idleTimeout");
-  expect(source).toContain("responderTimeoutMs / 1000");
-  expect(source).toContain("Bun rejects idleTimeout values above 255");
+  expect(source).toContain("createTestAppServer");
+  expect(source).toContain("createAppServerFromTestComposition");
 });
 
 test("app server live events stream matches replay for turn events", async () => {

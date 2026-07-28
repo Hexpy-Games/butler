@@ -50,7 +50,7 @@ test("delivered BTCC trajectories are evaluated, consolidated, and published asy
     },
   });
   try {
-    const outcome = await runtime.handle({
+    const outcome = await runtime.runTurn({
       kind: "run",
       turnId: "turn-retrospective",
       sessionId: "session-retrospective",

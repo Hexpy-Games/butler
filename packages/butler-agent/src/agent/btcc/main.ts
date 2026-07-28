@@ -1,17 +1,20 @@
 import type {
   BtccRuntimeDependencies,
-  BtccTurnCommand,
+  BtccRunCommand,
+  BtccStopCommand,
   BtccTurnOutcome,
   BtccTurnRuntime,
 } from "./contracts.ts";
 import { scheduleRetrospective } from "./delivery/index.ts";
 import { createTurnExecutionSupervisor } from "./recovery/index.ts";
 import {
+  consolidateTurn,
   deliverTurn,
   openTurn,
   projectTerminalOutcome,
+  reportTurn,
   runImmediateTurn,
-  runManagedTurn,
+  runManagedConceptionPlanningExecutionReview,
   stopTurn,
   type ContinuingTurnCommand,
   type TurnExecutionSupervisor,
@@ -24,22 +27,23 @@ class DefaultBtccTurnRuntime implements BtccTurnRuntime {
 
   constructor(private readonly dependencies: BtccRuntimeDependencies) {}
 
-  handle(command: BtccTurnCommand): Promise<BtccTurnOutcome> {
-    if (command.kind === "stop") {
-      return stopAndPublish(command, this.dependencies, this.supervisor);
-    }
+  runTurn(command: BtccRunCommand): Promise<BtccTurnOutcome> {
     const active = this.activeTurns.get(command.turnId);
     if (active) return active;
 
-    const running = runTurn(command, this.dependencies, this.supervisor)
+    const running = runTurnWorkflow(command, this.dependencies, this.supervisor)
       .finally(() => this.activeTurns.delete(command.turnId));
     this.activeTurns.set(command.turnId, running);
     return running;
   }
+
+  stopTurn(command: BtccStopCommand): Promise<BtccTurnOutcome> {
+    return stopAndPublish(command, this.dependencies, this.supervisor);
+  }
 }
 
 async function stopAndPublish(
-  command: Extract<BtccTurnCommand, { kind: "stop" }>,
+  command: BtccStopCommand,
   dependencies: BtccRuntimeDependencies,
   supervisor: TurnExecutionSupervisor,
 ): Promise<BtccTurnOutcome> {
@@ -56,16 +60,22 @@ async function stopAndPublish(
   return outcome;
 }
 
-async function runTurn(
+async function runTurnWorkflow(
   command: ContinuingTurnCommand,
   dependencies: BtccRuntimeDependencies,
   supervisor: TurnExecutionSupervisor,
 ): Promise<BtccTurnOutcome> {
   const opened = await openTurn(command, dependencies, supervisor);
-  const completed = opened.route === "managed"
-    ? await runManagedTurn(opened.turn, dependencies, supervisor)
+  const prepared = opened.route === "managed"
+    ? await runManagedConceptionPlanningExecutionReview(
+      opened.turn,
+      dependencies,
+      supervisor,
+    )
     : await runImmediateTurn(opened.turn);
-  const delivered = await deliverTurn(completed, dependencies, supervisor);
+  const consolidated = await consolidateTurn(prepared, dependencies, supervisor);
+  const reported = await reportTurn(consolidated, dependencies, supervisor);
+  const delivered = await deliverTurn(reported, dependencies, supervisor);
 
   scheduleRetrospective({ turn: delivered, scheduler: dependencies.retrospective });
   return projectTerminalOutcome(delivered);

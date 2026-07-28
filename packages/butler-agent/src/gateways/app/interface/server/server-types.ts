@@ -21,8 +21,6 @@ export interface CreateAppServerOptions {
   hostname?: string;
   uiRoot?: string;
   devCorsOrigin?: string;
-  responder?: AppMessageResponder;
-  responderTimeoutMs?: number;
   serviceClient?: ButlerServiceClient;
   conversationProjectionReader?: ConversationProjectionReader;
   messageRateLimit?: MessageRateLimitOptions;
@@ -48,8 +46,10 @@ export interface AppRouteRequest {
   request: Request;
   store: AppServerStore;
   uiRoot: string;
+  /** @internal Explicit test-support composition only. */
   responder?: AppMessageResponder;
-  responderTimeoutMs: number;
+  /** @internal Explicit test-support composition only. */
+  responderTimeoutMs?: number;
   messageRateLimiter: FixedWindowRateLimiter;
   localAuth: LocalAuthConfig;
 }

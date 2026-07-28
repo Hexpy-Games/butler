@@ -167,7 +167,7 @@ test("runtime hands a rejected internal event to recovery without committing it"
   } satisfies BtccRuntimeDependencies;
 
   try {
-    await createBtccTurnRuntime(dependencies).handle({ kind: "resume", turnId: turn.turnId });
+    await createBtccTurnRuntime(dependencies).runTurn({ kind: "resume", turnId: turn.turnId });
     throw new Error("expected operational interruption");
   } catch (error) {
     expect(isBtccOperationalInterruption(error)).toBe(true);
@@ -219,7 +219,7 @@ test("runtime normalizes a post-claim persistence defect before it reaches ingre
     retrospective: null as never,
   } satisfies BtccRuntimeDependencies;
 
-  await expect(createBtccTurnRuntime(dependencies).handle({
+  await expect(createBtccTurnRuntime(dependencies).runTurn({
     kind: "resume",
     turnId: turn.turnId,
   })).rejects.toMatchObject({
@@ -360,12 +360,12 @@ test("a normalized persistence interruption retains canonical Stop ownership", a
     retrospective: null as never,
   } satisfies BtccRuntimeDependencies;
   const runtime = createBtccTurnRuntime(dependencies);
-  const running = runtime.handle({ kind: "resume", turnId: turn.turnId });
+  const running = runtime.runTurn({ kind: "resume", turnId: turn.turnId });
 
   await started;
   expect(capturedCode).toBe("runtime_unclassified_interruption");
   expect(notices).toEqual(["interrupted"]);
-  expect(await runtime.handle({ kind: "stop", turnId: turn.turnId })).toEqual({
+  expect(await runtime.stopTurn({ kind: "stop", turnId: turn.turnId })).toEqual({
     kind: "cancelled",
     turnId: turn.turnId,
   });

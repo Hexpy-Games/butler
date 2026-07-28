@@ -23,9 +23,6 @@ const appGatewayConfig = resolveAppGatewayRuntimeConfig({
 });
 const port = appGatewayConfig.port;
 const hostname = appGatewayConfig.host;
-const responderTimeoutMs = Number(
-  process.env.BUTLER_APP_SERVER_RESPONDER_TIMEOUT_MS ?? "600000",
-);
 const messageRateLimitMax = Number(
   process.env.BUTLER_APP_SERVER_MESSAGE_RATE_LIMIT_MAX ?? "60",
 );
@@ -73,9 +70,6 @@ const app = createAppServer({
   devCorsOrigin,
   port: Number.isFinite(port) ? port : 18765,
   hostname,
-  responderTimeoutMs: Number.isFinite(responderTimeoutMs)
-    ? responderTimeoutMs
-    : 600000,
   messageRateLimit: {
     max: Number.isFinite(messageRateLimitMax) ? messageRateLimitMax : 60,
     windowMs: Number.isFinite(messageRateLimitWindowMs)

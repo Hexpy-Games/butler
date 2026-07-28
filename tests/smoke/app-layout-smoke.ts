@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { chromium, type Page } from "playwright";
-import { createAppServer } from "../../packages/butler-agent/src/gateways/app/interface/server/create-app-server.ts";
+import { createTestAppServer as createAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
 import {
   readFirstChatOnboardingState,
   writeFirstChatOnboardingState,

@@ -55,16 +55,40 @@ export async function runImmediateTurn(turn: TurnRecord): Promise<TurnRecord> {
   throw new Error(`Immediate Turn stopped before delivery: ${turn.semanticState}`);
 }
 
-export async function runManagedTurn(
+export async function runManagedConceptionPlanningExecutionReview(
   initial: TurnRecord,
   dependencies: BtccRuntimeDependencies,
   supervisor: TurnExecutionSupervisor,
 ): Promise<TurnRecord> {
   let turn = initial;
-  while (!isTerminal(turn) && turn.semanticState !== "delivery_committed") {
+  while (!isFinalizationState(turn) && !isTerminal(turn)) {
     turn = await advanceTurn(turn, dependencies, supervisor);
   }
   return turn;
+}
+
+export async function consolidateTurn(
+  turn: TurnRecord,
+  dependencies: BtccRuntimeDependencies,
+  supervisor: TurnExecutionSupervisor,
+): Promise<TurnRecord> {
+  if (turn.semanticState === "consolidation") {
+    return advanceTurn(turn, dependencies, supervisor);
+  }
+  if (isAfterConsolidation(turn) || isTerminal(turn)) return turn;
+  throw new Error(`Managed Turn stopped before Consolidation: ${turn.semanticState}`);
+}
+
+export async function reportTurn(
+  turn: TurnRecord,
+  dependencies: BtccRuntimeDependencies,
+  supervisor: TurnExecutionSupervisor,
+): Promise<TurnRecord> {
+  if (turn.semanticState === "reporting") {
+    return advanceTurn(turn, dependencies, supervisor);
+  }
+  if (turn.semanticState === "delivery_committed" || isTerminal(turn)) return turn;
+  throw new Error(`Turn stopped before Reporting: ${turn.semanticState}`);
 }
 
 export async function deliverTurn(
@@ -91,6 +115,14 @@ function isOpening(turn: TurnRecord): boolean {
 function isManaged(turn: TurnRecord): boolean {
   if (turn.route === "managed") return true;
   return !isTerminal(turn) && turn.semanticState !== "delivery_committed";
+}
+
+function isFinalizationState(turn: TurnRecord): boolean {
+  return turn.semanticState === "consolidation" || isAfterConsolidation(turn);
+}
+
+function isAfterConsolidation(turn: TurnRecord): boolean {
+  return turn.semanticState === "reporting" || turn.semanticState === "delivery_committed";
 }
 
 function isTerminal(turn: TurnRecord): boolean {

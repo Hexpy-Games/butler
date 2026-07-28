@@ -26,11 +26,11 @@ test("Stop aborts an operational recovery wait without failing the Turn", async 
       artifacts: neverArtifacts(),
     });
     const command = runCommand();
-    const running = runtime.handle(command);
+    const running = runtime.runTurn(command);
     await model.started;
     await waitForRecoveryRecord(dbPath);
 
-    expect(await runtime.handle({ kind: "stop", turnId: command.turnId })).toEqual({
+    expect(await runtime.stopTurn({ kind: "stop", turnId: command.turnId })).toEqual({
       kind: "cancelled",
       turnId: command.turnId,
     });
