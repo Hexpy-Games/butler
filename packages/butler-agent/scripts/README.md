@@ -11,7 +11,7 @@ the product CLI, installer, services, and validation scripts.
   `native-service-daemon.ts`, `os-service-adapter.ts`, and
   `os-service-registration.ts`.
 - Runtime turns: `native-butler-main.ts`, `native-steward-turn.ts`,
-  `run-worker.ts`, `run-text-prompt.ts`, and `run-tool-prompt.ts`.
+  `run-text-prompt.ts`, and `run-tool-prompt.ts`.
 - Maintenance and status: `status-context.ts`, `metrics-status.ts`,
   `prune-context-maintenance.ts`, and diagnostic scripts.
 - Auth and transport helpers: `openai-oauth-login.ts`, `send-telegram.sh`, and

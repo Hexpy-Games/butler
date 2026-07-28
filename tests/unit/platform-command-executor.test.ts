@@ -171,8 +171,6 @@ describe("platform command executor", () => {
     const sources = [
       "packages/butler-agent/src/agent/tools/run-command/run_command/executor.ts",
       "packages/butler-agent/src/integrations/providers/worker/shell.ts",
-      "packages/butler-agent/src/agent/tool-support/planned-worker-runtime.ts",
-      "packages/butler-agent/src/agent/tool-support/background-worker-dispatch.ts",
       "packages/butler-agent/src/gateways/app/domain/workers/worker-control-store.ts",
     ];
     for (const path of sources) {

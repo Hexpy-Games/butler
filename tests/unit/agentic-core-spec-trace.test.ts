@@ -35,7 +35,7 @@ const dedicatedCapabilitySpecs = [
     spec: "project-ledger/projects/butler/specs/agentic-core-tool-capability-discovery.md",
     legacySpec: "docs/specs/agentic-core-tool-capability-discovery.md",
     criteria: ["AC6-SC01", "AC6-SC06"],
-    tests: ["tests/unit/butler-tools.test.ts", "tests/unit/native-tool-loop-runtime.test.ts"],
+    tests: ["tests/unit/butler-tools.test.ts"],
   },
 ];
 

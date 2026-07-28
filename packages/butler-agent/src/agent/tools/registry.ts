@@ -39,20 +39,6 @@ import { updateOnboardingProfileToolDefinition, updateOnboardingProfileToolMetad
 import { readConversationContextToolDefinition, readConversationContextToolMetadata } from "./memory/read_conversation_context/index.ts";
 import { updateExplicitMemoryToolDefinition, updateExplicitMemoryToolMetadata } from "./memory/update_explicit_memory/index.ts";
 import { listSkillsToolDefinition, listSkillsToolMetadata } from "./skills/list_skills/index.ts";
-import { dispatchWorkerToolDefinition, dispatchWorkerToolMetadata } from "./worker/dispatch_worker/index.ts";
-import { createPlannedTaskToolDefinition, createPlannedTaskToolMetadata } from "./planned-task/create_planned_task/index.ts";
-import { runPlannedTaskToolDefinition, runPlannedTaskToolMetadata } from "./planned-task/run_planned_task/index.ts";
-import { reviewPlannedTaskToolDefinition, reviewPlannedTaskToolMetadata } from "./planned-task/review_planned_task/index.ts";
-import { repairPlannedTaskToolDefinition, repairPlannedTaskToolMetadata } from "./planned-task/repair_planned_task/index.ts";
-import { requestPrincipalDecisionToolDefinition, requestPrincipalDecisionToolMetadata } from "./planned-task/request_principal_decision/index.ts";
-import { writePlannedPublicReportToolDefinition, writePlannedPublicReportToolMetadata } from "./planned-task/write_planned_public_report/index.ts";
-import { resumeWorkerToolDefinition, resumeWorkerToolMetadata } from "./worker/resume_worker/index.ts";
-import { createWorkOrchestrationToolDefinition, createWorkOrchestrationToolMetadata } from "./orchestration/create_work_orchestration/index.ts";
-import { runReadyWorkStreamsToolDefinition, runReadyWorkStreamsToolMetadata } from "./orchestration/run_ready_work_streams/index.ts";
-import { syncWorkOrchestrationToolDefinition, syncWorkOrchestrationToolMetadata } from "./orchestration/sync_work_orchestration/index.ts";
-import { writeWorkOrchestrationReportToolDefinition, writeWorkOrchestrationReportToolMetadata } from "./orchestration/write_work_orchestration_report/index.ts";
-import { listTasksToolDefinition, listTasksToolMetadata } from "./worker/list_tasks/index.ts";
-import { getTaskResultToolDefinition, getTaskResultToolMetadata } from "./worker/get_task_result/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
   webSearchToolDefinition,
@@ -97,20 +83,6 @@ export const CORE_BUTLER_TOOLS = [
   readConversationContextToolDefinition,
   updateExplicitMemoryToolDefinition,
   listSkillsToolDefinition,
-  dispatchWorkerToolDefinition,
-  createPlannedTaskToolDefinition,
-  runPlannedTaskToolDefinition,
-  reviewPlannedTaskToolDefinition,
-  repairPlannedTaskToolDefinition,
-  requestPrincipalDecisionToolDefinition,
-  writePlannedPublicReportToolDefinition,
-  resumeWorkerToolDefinition,
-  createWorkOrchestrationToolDefinition,
-  runReadyWorkStreamsToolDefinition,
-  syncWorkOrchestrationToolDefinition,
-  writeWorkOrchestrationReportToolDefinition,
-  listTasksToolDefinition,
-  getTaskResultToolDefinition,
 ] satisfies ButlerToolDefinition[];
 
 export const BUTLER_TOOLS = CORE_BUTLER_TOOLS;
@@ -158,18 +130,4 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [readConversationContextToolDefinition.name]: readConversationContextToolMetadata,
   [updateExplicitMemoryToolDefinition.name]: updateExplicitMemoryToolMetadata,
   [listSkillsToolDefinition.name]: listSkillsToolMetadata,
-  [dispatchWorkerToolDefinition.name]: dispatchWorkerToolMetadata,
-  [createPlannedTaskToolDefinition.name]: createPlannedTaskToolMetadata,
-  [runPlannedTaskToolDefinition.name]: runPlannedTaskToolMetadata,
-  [reviewPlannedTaskToolDefinition.name]: reviewPlannedTaskToolMetadata,
-  [repairPlannedTaskToolDefinition.name]: repairPlannedTaskToolMetadata,
-  [requestPrincipalDecisionToolDefinition.name]: requestPrincipalDecisionToolMetadata,
-  [writePlannedPublicReportToolDefinition.name]: writePlannedPublicReportToolMetadata,
-  [resumeWorkerToolDefinition.name]: resumeWorkerToolMetadata,
-  [createWorkOrchestrationToolDefinition.name]: createWorkOrchestrationToolMetadata,
-  [runReadyWorkStreamsToolDefinition.name]: runReadyWorkStreamsToolMetadata,
-  [syncWorkOrchestrationToolDefinition.name]: syncWorkOrchestrationToolMetadata,
-  [writeWorkOrchestrationReportToolDefinition.name]: writeWorkOrchestrationReportToolMetadata,
-  [listTasksToolDefinition.name]: listTasksToolMetadata,
-  [getTaskResultToolDefinition.name]: getTaskResultToolMetadata,
 };
