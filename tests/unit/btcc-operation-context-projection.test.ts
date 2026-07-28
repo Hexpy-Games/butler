@@ -11,7 +11,7 @@ import { describeOperationSource } from
   "../../packages/butler-agent/src/agent/btcc/operation-result/index.ts";
 import type {
   PhaseEnvelope,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import type { OperationResultProjection } from
   "../../packages/butler-agent/src/agent/btcc/operation-result/index.ts";
 

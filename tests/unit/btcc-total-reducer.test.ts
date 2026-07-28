@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import {
   createBtccTurnRuntime,
-  isBtccOperationalInterruption,
   type BtccRuntimeDependencies,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import { isBtccOperationalInterruption } from
+  "../../packages/butler-agent/src/agent/btcc/recovery/index.ts";
 import {
   decideTransition,
   type StateExecutionClaim,

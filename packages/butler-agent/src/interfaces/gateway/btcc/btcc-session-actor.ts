@@ -1,5 +1,6 @@
 import type { BtccTurnOutcome } from "../../../agent/btcc/index.ts";
-import { isBtccOperationalInterruption } from "../../../agent/btcc/index.ts";
+import { isBtccOperationalInterruption } from
+  "../../../agent/btcc/recovery/index.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import type {
   GatewayActorTurnResult,

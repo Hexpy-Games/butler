@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { once } from "node:events";
 import { finished } from "node:stream/promises";
 import type { Readable } from "node:stream";
-import type { SpooledOperationOutput } from "../../../btcc/index.ts";
+import type { SpooledOperationOutput } from "../../../btcc/core/index.ts";
 
 export type CommandOutputSummary = {
   command: string;
