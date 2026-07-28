@@ -23,6 +23,7 @@ export interface DurableOutboundTranscriptInput {
   delivery?: DeliveryResult;
   metadata?: Record<string, unknown>;
   timestamp?: string;
+  butlerData?: string;
 }
 
 export interface DurableSessionLifecycleInput {
@@ -44,9 +45,9 @@ export interface DurableSystemEventInput {
   timestamp?: string;
 }
 
-function appendEvents(events: TranscriptEvent[]): TranscriptEvent[] {
+function appendEvents(events: TranscriptEvent[], butlerData?: string): TranscriptEvent[] {
   for (const event of events) {
-    appendTranscriptEvent(event);
+    appendTranscriptEvent(event, butlerData);
   }
   return events;
 }
@@ -109,7 +110,7 @@ export function recordDurableOutbound(input: DurableOutboundTranscriptInput): Tr
     );
   }
 
-  return appendEvents(events);
+  return appendEvents(events, input.butlerData);
 }
 
 export function recordSessionLifecycle(input: DurableSessionLifecycleInput): TranscriptEvent[] {

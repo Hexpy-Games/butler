@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { OutboundAction } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
@@ -87,6 +87,34 @@ test("delivery guard deduplicates successful deliveries by session and action", 
   expect(first).toMatchObject({ ok: true, transportMessageId: "1" });
   expect(second).toMatchObject({ ok: true, duplicate: true });
   expect(calls).toBe(1);
+});
+
+test("delivery guard writes transcripts to its explicit Butler data owner", async () => {
+  const ownedData = join(tempDir, "owned-runtime");
+  const guard = new DeliveryGuard({
+    butlerData: ownedData,
+    adapters: [{
+      id: "mock",
+      capabilities: {
+        supportsThreads: false,
+        supportsMessageEdit: false,
+        supportsReactions: false,
+        supportsAttachments: false,
+        supportsStreamingEdits: false,
+        supportsPresence: false,
+      },
+      async start() {},
+      async send() {
+        return { ok: true };
+      },
+    }],
+  });
+
+  await guard.deliver("butler/main", action);
+
+  const transcript = join(ownedData, "transcripts", "butler_main.jsonl");
+  expect(existsSync(transcript)).toBe(true);
+  expect(readFileSync(transcript, "utf8")).toContain('"kind":"outbound"');
 });
 
 test("delivery guard skips metadata-only activity for plain transports", async () => {
