@@ -62,6 +62,7 @@ export {
   OperationRejectedError,
   rejectedOperationResult,
 } from "./operation-rejection.ts";
+export { turnAccessMode } from "./operation-access.ts";
 export {
   isSpooledOperationOutput,
   type SpooledOperationOutput,
