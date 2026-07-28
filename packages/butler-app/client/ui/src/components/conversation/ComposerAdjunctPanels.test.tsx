@@ -9,35 +9,34 @@ test("composer progress owns the canonical Work and Task list", () => {
       onDeleteQueued={() => undefined}
       onEditQueued={() => undefined}
       showWorkers={false}
-      taskProgress={{
-        turn_id: "turn-task-progress",
-        state: "thinking",
-        safe_progress_rows: [
-          {
-            id: "task-1",
-            kind: "todo",
-            state: "reviewing",
-            safe_label: "Exercise the real SSE reducer",
-            safe_input_label: "task-1",
-            bridge_phase: "btcc_work_ledger",
-            safe_detail_rows: [{
+      taskTurnState="thinking"
+      taskRows={[
+        {
+          id: "task-1",
+          kind: "todo",
+          state: "reviewing",
+          safe_label: "Exercise the real SSE reducer",
+          safe_input_label: "task-1",
+          bridge_phase: "btcc_work_ledger",
+          safe_detail_rows: [
+            {
               id: "work",
               kind: "work",
               safe_label: "Work",
               safe_value: "Synchronize canonical progress",
               state: "active",
-            }],
-          },
-          {
-            id: "task-2",
-            kind: "todo",
-            state: "correction_required",
-            safe_label: "Repair the failed review finding",
-            safe_input_label: "task-2",
-            bridge_phase: "btcc_work_ledger",
-          },
-        ],
-      }}
+            },
+          ],
+        },
+        {
+          id: "task-2",
+          kind: "todo",
+          state: "correction_required",
+          safe_label: "Repair the failed review finding",
+          safe_input_label: "task-2",
+          bridge_phase: "btcc_work_ledger",
+        },
+      ]}
     />,
   );
 
