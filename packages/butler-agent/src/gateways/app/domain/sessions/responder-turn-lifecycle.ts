@@ -1,17 +1,11 @@
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
-import { isRuntimeCancellationFailure } from "../../../../agent/turn/runtime-cancellation.ts";
-import { isTurnSchedulerContinuationYieldError } from "../../../../agent/turn/turn-continuation-context.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
 import {
-  appLimitedDeliveryForError,
-  appNonPublicContinuationSafeErrorCode,
   appSafeResponderError,
-  isNonPublicContinuationDeliveryError,
-  type AppLimitedDelivery,
 } from "../../infrastructure/transport/failure-ux-contract.ts";
 import { publicDeliveryMetadataForProjection } from "../../infrastructure/transport/btcc-public-projection.ts";
 import type {
@@ -53,16 +47,6 @@ export interface CompleteResponderTurnContext<FileRecord> {
     responder: AppMessageResponder,
     options: SendMessageOptions,
   ): Promise<void>;
-  finalizeResponderLimitedDelivery(
-    chatId: string,
-    turnId: string,
-    limitedDelivery: AppLimitedDelivery,
-  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
-  markResponderNonPublicContinuation(
-    chatId: string,
-    turnId: string,
-    safeErrorCode?: "provider_round_timeout" | null,
-  ): { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
   finalizeCancelledTurn(chatId: string, turnId: string): TurnRecord;
   hasTurnEventKind(turnId: string, kind: string): boolean;
   insertOrReplaceAssistantReplies(
@@ -188,51 +172,7 @@ export async function completeResponderTurn<FileRecord>(
         next_cursor: cancelledTurn.cursor,
       };
     }
-    const limitedDelivery = appLimitedDeliveryForError(error);
-    if (limitedDelivery) {
-      const delivered = context.finalizeResponderLimitedDelivery(
-        input.chatId,
-        input.turnId,
-        limitedDelivery,
-      );
-      context.touchChat(input.chatId);
-      await context.drainQueuedSessionMessages(
-        input.chatId,
-        input.responder,
-        input.options,
-      );
-      return {
-        reply: delivered.reply,
-        replies: delivered.replies,
-        turn: delivered.turn,
-        next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
-      };
-    }
-    if (isNonPublicContinuationDeliveryError(error)) {
-      const continuation = context.markResponderNonPublicContinuation(
-        input.chatId,
-        input.turnId,
-        appNonPublicContinuationSafeErrorCode(error),
-      );
-      context.touchChat(input.chatId);
-      await context.drainQueuedSessionMessages(
-        input.chatId,
-        input.responder,
-        input.options,
-      );
-      return {
-        reply: continuation.reply,
-        replies: continuation.replies,
-        turn: continuation.turn,
-        next_cursor: continuation.reply?.cursor ?? continuation.turn.cursor,
-      };
-    }
-    const safeError = isTurnSchedulerContinuationYieldError(error)
-      ? {
-        code: "turn_scheduler_continuation_schedule_failed",
-        message: "Butler saved the turn state but could not commit its next continuation owner.",
-      }
-      : appSafeResponderError(error);
+    const safeError = appSafeResponderError(error);
     const failedTurn = context.updateTurnFailed(
       input.chatId,
       input.turnId,
@@ -257,6 +197,7 @@ export function isResponderCancelError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const record = error as { code?: unknown; name?: unknown };
   return record.code === "turn_cancelled" ||
-    record.name === "AppResponderCancelledError" ||
-    isRuntimeCancellationFailure(record);
+    record.code === "ABORT_ERR" ||
+    record.name === "AbortError" ||
+    record.name === "AppResponderCancelledError";
 }

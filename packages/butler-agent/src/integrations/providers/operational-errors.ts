@@ -1,4 +1,3 @@
-import { isRuntimeCancellationFailure } from "../../agent/turn/runtime-cancellation.ts";
 import type { RuntimeFailureDiagnostic } from "./provider-errors.ts";
 
 export function safeOperationalRuntimeFailure(input: {
@@ -66,7 +65,7 @@ export function safeOperationalRuntimeFailure(input: {
 }
 
 function isRuntimeCancellation(input: { code?: string; message: string }): boolean {
-  return isRuntimeCancellationFailure(input);
+  return input.code === "turn_cancelled" || input.code === "ABORT_ERR";
 }
 
 function normalizeOperationalCode(code: string | undefined, fallback: string): string {

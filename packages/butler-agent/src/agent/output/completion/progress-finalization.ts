@@ -2,7 +2,7 @@ import { sanitizePublicText } from "../../events/turn-events.ts";
 import type {
   PublicWorkDecision,
   ToolAuditEntry,
-} from "../../turn/native/output/tool-types.ts";
+} from "../../tool-support/index.ts";
 import type { RuntimeMessageLanguage } from "../messages.ts";
 
 const MAX_PROGRESS_LINES = 4;

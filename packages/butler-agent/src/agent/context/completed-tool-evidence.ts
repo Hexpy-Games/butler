@@ -5,8 +5,8 @@ import {
   type EvidencePacket,
   type ToolEvidenceRetentionContext,
 } from "./tool-evidence-retention.ts";
-import { structuredToolResultModelPreview } from "../turn/tool-result-model-preview.ts";
-import { SEMANTIC_WORK_BLOCK_TOOL_LIMIT } from "../turn/tool-batch-capacity.ts";
+import { structuredToolResultModelPreview } from "../model-tool-loop/index.ts";
+import { SEMANTIC_WORK_BLOCK_TOOL_LIMIT } from "../model-tool-loop/index.ts";
 
 export const COMPLETED_TOOL_EVIDENCE_SCHEMA = "butler.completed-tool-evidence.v1";
 

@@ -1,6 +1,5 @@
 import type { RuntimeTurnEventInput } from "../../../../agent/events/turn-events.ts";
 import type { DeliveryLimitationMetadata } from "../../infrastructure/transport/app-delivery-projection.ts";
-import type { AppLimitedDelivery } from "../../infrastructure/transport/failure-ux-contract.ts";
 import type { MessageFileRow } from "../message-files/message-file-store.ts";
 import type { MessageRow } from "../../infrastructure/core/records.ts";
 import type {
@@ -75,16 +74,6 @@ export interface SystemResponderTurnStoreInput {
   finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   getMessageRow: (messageId: string) => MessageRow | null;
   refsForMessage: (messageId: string) => MessageFileRef[];
-  markResponderNonPublicContinuation: (
-    chatId: string,
-    turnId: string,
-    safeErrorCode?: "provider_round_timeout" | null,
-  ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
-  finalizeResponderLimitedDelivery: (
-    chatId: string,
-    turnId: string,
-    limitedDelivery: AppLimitedDelivery,
-  ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
   upsertAssistantTurnFailure: (
     chatId: string,
     turnId: string,

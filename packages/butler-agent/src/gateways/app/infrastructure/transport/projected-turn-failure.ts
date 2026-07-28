@@ -1,7 +1,3 @@
-import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../../../runtime/internal-recovery-failure.ts";
-import {
-  appLimitedDeliveryForProjectedFailure,
-} from "./app-delivery-projection.ts";
 import {
   projectSafeTurnFailure,
   safeTurnFailureEventPayload,
@@ -30,19 +26,6 @@ export function projectAppTurnFailure(input: {
     return false;
   }
   const safeError = projectSafeTurnFailure({ message, metadata });
-  const mayProjectLimitedFailure =
-    turn.state !== "failed" ||
-    turn.safe_error_code === INTERNAL_RECOVERY_REQUIRED_CODE ||
-    turn.safe_error_code === "inbound_dispatch_timeout";
-  const limitedDelivery = mayProjectLimitedFailure
-    ? appLimitedDeliveryForProjectedFailure(safeError)
-    : null;
-  if (limitedDelivery) {
-    options.finalizeResponderLimitedDelivery(chatId, turnId, limitedDelivery);
-    options.touchChat(chatId);
-    void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
-    return true;
-  }
   const existing = options.getLatestAssistantMessageForTurn(turnId);
   if (
     turn.state === "failed" &&

@@ -3,7 +3,6 @@ import { join, resolve } from "path";
 import { readJsonFile, writeJsonFileAtomic } from "../persistence/atomic-json-store.ts";
 import type { TodoListRecord } from "./todo-list.ts";
 import type { WorkStreamRecord } from "./work-stream.ts";
-import type { BlockerJournal } from "./work-stream-blocker-store.ts";
 import type { AmendmentJournal } from "./work-stream-plan-store.ts";
 import {
   type ReportingCompletionJournal,
@@ -20,7 +19,7 @@ export const ASYNC_RECOVERY_RETRY_DELAY_MS = 50;
 
 export interface WorkStreamRecoveryResult {
   transactionId: string;
-  kind: "plan" | "blocker" | "reporting";
+  kind: "plan" | "reporting";
   status: "committed" | "conflict" | "deferred";
   projection?: {
     workstream: WorkStreamRecord;
@@ -51,13 +50,6 @@ export function reconcilePendingWorkStreamTransactions(input: RecoveryInput): Wo
       matches: (journal) => (!input.workstreamId || journal.before_workstream.id === input.workstreamId) &&
         (!input.todoListId || journal.before_todo.list_id === input.todoListId),
       recover: (journal) => recoverPlan(input.butlerData, journal),
-    }),
-    scanJournals<BlockerJournal>({
-      dir: join(input.butlerData, "workstream-blocker-transactions"),
-      deadline,
-      pending: (journal) => journal.state === "prepared" || journal.state === "artifacts_committed",
-      matches: (journal) => !input.workstreamId || journal.before_workstream.id === input.workstreamId,
-      recover: (journal) => recoverBlocker(input.butlerData, journal),
     }),
     scanJournals<ReportingCompletionJournal>({
       dir: reportingTransactionDirectory(input.butlerData),
@@ -107,41 +99,6 @@ function recoverPlan(butlerData: string, journal: AmendmentJournal): WorkStreamR
     },
   });
   return result ?? deferredResult(journal.transaction_id, "plan", journal.before_workstream, journal.before_todo);
-}
-
-function recoverBlocker(butlerData: string, journal: BlockerJournal): WorkStreamRecoveryResult {
-  const result = withWorkStreamMutationAuthority({
-    butlerData,
-    workstreamId: journal.before_workstream.id,
-    operation: "wait_user",
-    ownerId: `recover-blocker:${journal.transaction_id}`,
-    authorization: { contractId: journal.evidence.contract_id, blockerId: journal.blocker.blocker_id },
-    action: (context) => {
-      const current = readWorkStream(butlerData, journal.before_workstream.id);
-      if (!current || terminal(current)) return markBlockerConflict(butlerData, journal);
-      const fingerprint = workStreamRecordFingerprint(current);
-      const before = fingerprint === journal.before_fingerprint;
-      const after = fingerprint === journal.after_fingerprint;
-      if (!before && !after) return markBlockerConflict(butlerData, journal);
-      persistBlockerArtifacts(butlerData, journal);
-      writeJsonFileAtomic(blockerTransactionPath(butlerData, journal.transaction_id), {
-        ...journal,
-        state: "artifacts_committed",
-        updated_at: new Date().toISOString(),
-      });
-      if (before) {
-        commitWorkStreamMutation({
-          butlerData,
-          context,
-          record: journal.after_workstream,
-          expectedGeneration: journal.before_workstream.record_generation ?? 1,
-        });
-      }
-      writeJsonFileAtomic(blockerTransactionPath(butlerData, journal.transaction_id), { ...journal, state: "committed", updated_at: new Date().toISOString() });
-      return resultFor(journal.transaction_id, "blocker", "committed");
-    },
-  });
-  return result ?? deferredResult(journal.transaction_id, "blocker", journal.before_workstream, null);
 }
 
 function recoverReporting(butlerData: string, journal: ReportingCompletionJournal): WorkStreamRecoveryResult {
@@ -281,26 +238,9 @@ function scheduleRecovery(butlerData: string): void {
   timer.unref?.();
 }
 
-function persistBlockerArtifacts(butlerData: string, journal: BlockerJournal): void {
-  writeIdentity(join(butlerData, "workstream-blockers", `${safeId(journal.blocker.blocker_id)}.json`), journal.blocker);
-  writeIdentity(join(butlerData, "workstream-blocker-evidence", `${safeId(journal.evidence.receipt_id)}.json`), journal.evidence);
-  writeIdentity(join(butlerData, "workstream-claim-receipts", `${safeId(journal.claim_receipt.receipt_id)}.json`), journal.claim_receipt);
-}
-
-function writeIdentity(path: string, value: unknown): void {
-  const existing = readJsonFile<unknown>(path);
-  if (existing && JSON.stringify(existing) !== JSON.stringify(value)) throw new Error("workstream_recovery_identity_conflict");
-  if (!existing) writeJsonFileAtomic(path, value);
-}
-
 function markPlanConflict(butlerData: string, journal: AmendmentJournal): WorkStreamRecoveryResult {
   writeJsonFileAtomic(planTransactionPath(butlerData, journal.transaction_id), { ...journal, state: "conflict", updated_at: new Date().toISOString() });
   return resultFor(journal.transaction_id, "plan", "conflict");
-}
-
-function markBlockerConflict(butlerData: string, journal: BlockerJournal): WorkStreamRecoveryResult {
-  writeJsonFileAtomic(blockerTransactionPath(butlerData, journal.transaction_id), { ...journal, state: "conflict", updated_at: new Date().toISOString() });
-  return resultFor(journal.transaction_id, "blocker", "conflict");
 }
 
 function markReportingConflict(butlerData: string, journal: ReportingCompletionJournal): WorkStreamRecoveryResult {
@@ -312,7 +252,6 @@ function readWorkStream(data: string, id: string): WorkStreamRecord | null { ret
 function readTodo(data: string, id: string): TodoListRecord | null { return readJsonFile<TodoListRecord>(todoPath(data, id)); }
 function todoPath(data: string, id: string): string { return join(data, "todos", `${safeId(id)}.json`); }
 function planTransactionPath(data: string, id: string): string { return join(data, "workstream-plan-transactions", `${safeId(id)}.json`); }
-function blockerTransactionPath(data: string, id: string): string { return join(data, "workstream-blocker-transactions", `${safeId(id)}.json`); }
 function planReceiptPath(data: string, id: string): string { return join(data, "workstream-plan-amendment-receipts", `${safeId(id)}.json`); }
 function terminal(record: WorkStreamRecord): boolean { return record.state === "complete" || record.state === "failed" || record.state === "cancelled"; }
 function resultFor(transactionId: string, kind: WorkStreamRecoveryResult["kind"], status: WorkStreamRecoveryResult["status"]): WorkStreamRecoveryResult { return { transactionId, kind, status }; }

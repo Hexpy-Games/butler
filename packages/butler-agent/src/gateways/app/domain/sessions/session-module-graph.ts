@@ -141,10 +141,6 @@ export function createAppSessionModuleGraph(input: {
       messageFiles.createResponderFiles(chatId, files ?? []),
     drainQueuedSessionMessages: (chatId, responder, options) =>
       host.drainQueuedSessionMessages(chatId, responder, options),
-    finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
-      host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
-    markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
-      host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
     finalizeCancelledTurn: (chatId, turnId) =>
       host.finalizeCancelledTurn(chatId, turnId),
     hasTurnEventKind: (turnId, kind) => host.hasTurnEventKind(turnId, kind),

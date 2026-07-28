@@ -12,9 +12,9 @@ import {
   type RetrievalPlanningResult,
 } from "../cognition/memory/retrieval-planning.ts";
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
-import type { AgentLoopToolDefinition } from "../turn/agent-loop.ts";
+import type { AgentLoopToolDefinition } from "../model-tool-loop/index.ts";
 import type { FunctionToolPromptOptions } from "../../integrations/providers/provider.ts";
-import type { PublicWorkObligationKind } from "../turn/native/output/tool-types.ts";
+import type { PublicWorkObligationKind } from "../tool-support/index.ts";
 import {
   completionObligationEvidenceReceiptsFromResult,
   hasEvidenceCapabilityReceiptField,

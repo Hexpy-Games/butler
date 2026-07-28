@@ -2,7 +2,7 @@ import { sanitizePublicText } from "../../events/turn-events.ts";
 import type {
   PublicWorkDecision,
   ToolAuditEntry,
-} from "../../turn/native/output/tool-types.ts";
+} from "../../tool-support/index.ts";
 import {
   finalResultEvidenceRepairInstructions,
   goalCompletionEvidenceReviewInstructions,

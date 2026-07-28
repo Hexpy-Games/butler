@@ -5,8 +5,8 @@ import { createOpenAIResponse, functionCallContinuationItems, toCodexStatelessIn
 import { logPromptCacheStats, recordPromptCacheMetric } from "./usage.ts";
 import { promptWithAttachmentContext } from "../../../agent/context/attachment-context.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
-import { runAgentLoop } from "../../../agent/turn/agent-loop.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
+import { runAgentLoop } from "../../../agent/model-tool-loop/index.ts";
+import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 

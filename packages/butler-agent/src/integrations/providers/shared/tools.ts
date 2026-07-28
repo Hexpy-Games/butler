@@ -1,4 +1,4 @@
-import type { AgentLoopMessage, AgentLoopModelResponse, AgentLoopToolDefinition } from "../../../agent/turn/agent-loop.ts";
+import type { AgentLoopMessage, AgentLoopModelResponse, AgentLoopToolDefinition } from "../../../agent/model-tool-loop/index.ts";
 import type { FunctionToolCall, FunctionToolDefinition, FunctionToolPromptOptions, OpenAIResponse } from "../runtime-contracts.ts";
 import { extractResponseText } from "./usage.ts";
 

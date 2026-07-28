@@ -16,14 +16,14 @@ import type {
   ContinuityOperation,
   ContinuityScope,
   ContinuityUpdate,
-} from "../../turn/turn-contract-types.ts";
+} from "./contracts.ts";
 import { resolveCanonicalProjectWorkspace } from "./project-workspace.ts";
 import { replaceManagedHotCacheSection } from "./hot-cache-writer.ts";
 import {
   CONTINUITY_KINDS,
   CONTINUITY_OPERATIONS,
   CONTINUITY_SCOPES,
-} from "../../turn/turn-contract-types.ts";
+} from "./contracts.ts";
 
 export const CONTINUITY_STORE_SCHEMA = "butler.continuity-store.v1" as const;
 const MAX_UPDATES_PER_DECISION = 4;

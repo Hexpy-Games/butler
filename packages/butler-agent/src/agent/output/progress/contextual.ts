@@ -1,4 +1,4 @@
-import type { ToolProgressSummary } from "../../turn/native/output/tool-types.ts";
+import type { ToolProgressSummary } from "../../tool-support/index.ts";
 import { safePathishValue, safeTextValue } from "./arguments.ts";
 
 export function contextualToolProgressSummary(

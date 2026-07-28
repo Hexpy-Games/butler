@@ -97,12 +97,6 @@ export interface UserMessageTurnStoreInput {
     responder?: AppMessageResponder,
     options?: SendMessageOptions,
   ) => Promise<void>;
-  finalizeResponderLimitedDelivery: Parameters<
-    typeof completeResponderTurnLifecycle
-  >[1]["finalizeResponderLimitedDelivery"];
-  markResponderNonPublicContinuation: Parameters<
-    typeof completeResponderTurnLifecycle
-  >[1]["markResponderNonPublicContinuation"];
   finalizeCancelledTurn: Parameters<
     typeof completeResponderTurnLifecycle
   >[1]["finalizeCancelledTurn"];

@@ -195,10 +195,6 @@ function createSystemResponderTurns(input: {
       host.finalizeCancelledTurn(chatId, turnId),
     getMessageRow: (messageId) => host.getMessageRow(messageId),
     refsForMessage: (messageId) => messageFiles.refsForMessage(messageId),
-    markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
-      host.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
-    finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
-      host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
     upsertAssistantTurnFailure: (chatId, turnId, safeError, options) =>
       host.upsertAssistantTurnFailure(chatId, turnId, safeError, options),
     runtimeFaultRecordForTurn: (turnId) =>
