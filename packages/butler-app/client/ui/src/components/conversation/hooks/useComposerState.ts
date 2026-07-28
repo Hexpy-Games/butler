@@ -35,11 +35,9 @@ export function useComposerState(
       Boolean(worker && isWorkerVisibleInComposer(worker)),
   );
   const activeProgress = activeTurnProgressSnapshot(summary, turnProgress);
-  const taskProgress = activeProgress?.safe_progress_rows?.some(
-      (row) => row.kind === "todo",
-    )
-    ? activeProgress
-    : undefined;
+  const taskRows = (activeProgress?.safe_progress_rows ?? []).filter(
+    (row) => row.kind === "todo",
+  );
 
   const activeTurn = Boolean(
     activeProgress ||
@@ -69,7 +67,8 @@ export function useComposerState(
     canSend,
     workers,
     activeTurn,
-    taskProgress,
+    taskRows,
+    taskTurnState: activeProgress?.state,
     context,
     models,
     modelState,
