@@ -22,6 +22,8 @@ import {
 import { isAbsolute, join } from "node:path";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { ensureActiveProjectLedger } from
+  "../../integrations/project-ledger/ensure-active-project-ledger.ts";
 import { createProjectGoverningSpecAuthority } from
   "./project-governing-spec-authority.ts";
 
@@ -80,20 +82,17 @@ export function createProductionBtccComposition(input: {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   const resolveProjectRoot = (projectRef: string): string => {
     const binding = decodeProjectLedgerBinding(projectRef);
-    const reference = binding.kind === "canonical_ledger_id"
-      ? projectLedgerResolver.resolve({
-          butlerData: input.butlerData,
-          explicitRef: binding.ledgerProjectId,
-        })
-      : projectLedgerResolver.resolve({
-          butlerData: input.butlerData,
-          appMessageDbPath: input.appMessageDbPath,
-          appProjectId: binding.appProjectId,
-        });
-    if (!reference.initialized) {
-      throw new Error("Project-bound BTCC work requires an initialized Project Ledger");
-    }
-    return reference.ledger_root;
+    return ensureActiveProjectLedger({
+      resolver: projectLedgerResolver,
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      lookup: binding.kind === "canonical_ledger_id"
+        ? { explicitRef: binding.ledgerProjectId }
+        : {
+            appMessageDbPath: input.appMessageDbPath,
+            appProjectId: binding.appProjectId,
+          },
+    }).ledger_root;
   };
   const publications = createProjectWorkLedgerPublicationAdapter({
     stagingRoot: join(input.butlerData, "runtime", "btcc-project-ledger-publications"),
