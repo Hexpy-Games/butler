@@ -1152,22 +1152,26 @@ test("App-managed foreground command uses the platform owner with a parent lease
       expect(command.detached).toBe(true);
     }
     expect(command.env).toMatchObject({
-      BUTLER_APP_FOREGROUND_LEASE: "1",
       BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
       BUTLER_DATA: butlerData,
     });
+    if (process.platform === "win32") {
+      expect(command.env.BUTLER_APP_FOREGROUND_LEASE).toBeUndefined();
+    } else {
+      expect(command.env.BUTLER_APP_FOREGROUND_LEASE).toBe("1");
+    }
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test("Windows App foreground command uses the owner-death Job host and direct gateway", () => {
+test("Windows App foreground command uses the owner-death Job host and foreground daemon", () => {
   const command = windowsAppForegroundCommand({
     runtimeHome: "C:\\Users\\테스터\\Butler Data\\runtime",
     runtime: "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\bun.exe",
     processHost:
       "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler-process-host.exe",
-    launcher: "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler.js",
+    daemon: "C:\\Users\\테스터\\Butler Data\\runtime\\packages\\butler-agent\\scripts\\native-service-daemon.ts",
     ownerPid: 4242,
   });
 
@@ -1178,9 +1182,8 @@ test("Windows App foreground command uses the owner-death Job host and direct ga
       "--owner-pid",
       "4242",
       "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\bun.exe",
-      "C:\\Users\\테스터\\Butler Data\\runtime\\bin\\butler.js",
-      "gateway",
-      "app",
+      "run",
+      "C:\\Users\\테스터\\Butler Data\\runtime\\packages\\butler-agent\\scripts\\native-service-daemon.ts",
     ],
     cwd: "C:\\Users\\테스터\\Butler Data\\runtime",
     stdio: ["ignore", "inherit", "inherit"],
@@ -1190,7 +1193,7 @@ test("Windows App foreground command uses the owner-death Job host and direct ga
     runtimeHome: "C:\\runtime",
     runtime: "bun.exe",
     processHost: "butler-process-host.exe",
-    launcher: "butler.js",
+    daemon: "native-service-daemon.ts",
     ownerPid: 0,
   })).toThrow("owner PID");
 });

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import {
   createConversationProjectionReader,
   type ManagedConversationProjectionReader,
@@ -54,8 +55,11 @@ function createComposedAppServer(
   },
 ): AppServerHandle {
   const ownedConversationReader = createOwnedConversationReader(options);
+  const butlerData = resolve(
+    options.butlerData ?? process.env.BUTLER_DATA ?? join(homedir(), ".butler"),
+  );
   const store = createStore(
-    options,
+    { ...options, butlerData },
     options.conversationProjectionReader ?? ownedConversationReader?.reader,
   );
   const messageRateLimiter = new FixedWindowRateLimiter(
@@ -83,6 +87,7 @@ function createComposedAppServer(
           responderTimeoutMs: composition.responderTimeoutMs,
           messageRateLimiter,
           localAuth,
+          butlerData,
         });
         return withExtraHeaders(response, corsHeaders);
       } catch (error) {

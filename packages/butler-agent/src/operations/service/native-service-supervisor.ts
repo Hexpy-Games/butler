@@ -94,6 +94,7 @@ export interface NativeSupervisorPaths {
 
 interface NativeServiceSpecOptions {
   createProjectFolderTokenSecret?: boolean;
+  platform?: NodeJS.Platform;
 }
 
 interface AppManagedNativeServiceSpecOptions extends NativeServiceSpecOptions {
@@ -320,6 +321,7 @@ function nativeServiceSpecsForRuntime(
 ): NativeServiceSpec[] {
   const createProjectFolderTokenSecret = options.createProjectFolderTokenSecret ?? true;
   const appVersion = safeString(appManaged.appVersion);
+  const platform = options.platform ?? process.platform;
   const bun = resolveBunPath({ butlerData: paths.butlerData });
   const serviceBun = appManaged.runtimeHome
     ? join(
@@ -329,7 +331,7 @@ function nativeServiceSpecsForRuntime(
         "resources",
         "runtime",
         "bin",
-        "bun",
+        platform === "win32" ? "bun.exe" : "bun",
       )
     : bun;
   const commonEnv = {
@@ -357,8 +359,10 @@ function nativeServiceSpecsForRuntime(
   const specs: NativeServiceSpec[] = [
     {
       id: "embed-server",
-      command: "bash",
-      args: [butlerAgentScriptPath(paths.butlerHome, "start-embed-server.sh")],
+      command: appManaged.runtimeHome && platform === "win32" ? serviceBun : "bash",
+      args: appManaged.runtimeHome && platform === "win32"
+        ? ["run", butlerAgentSourcePath(paths.butlerHome, "agent", "cognition", "memory", "scripts", "embed-server.ts")]
+        : [butlerAgentScriptPath(paths.butlerHome, "start-embed-server.sh")],
       cwd: paths.butlerHome,
       env: commonEnv,
       stdoutFile: logPath(paths.butlerData, "embed-server-out.log"),
@@ -401,8 +405,10 @@ function nativeServiceSpecsForRuntime(
     },
     {
       id: "butler-main",
-      command: "bash",
-      args: [butlerAgentScriptPath(paths.butlerHome, "start-butler.sh")],
+      command: appManaged.runtimeHome && platform === "win32" ? serviceBun : "bash",
+      args: appManaged.runtimeHome && platform === "win32"
+        ? ["run", butlerAgentScriptPath(paths.butlerHome, "native-butler-main.ts")]
+        : [butlerAgentScriptPath(paths.butlerHome, "start-butler.sh")],
       cwd: paths.butlerHome,
       env: {
         ...commonEnv,

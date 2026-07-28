@@ -23,6 +23,7 @@ import {
   clearAppGatewayPid,
   readAppGatewayPid,
 } from "../gateway/registry.ts";
+import { nativeServiceChildLifecycle } from "./native-service-child-lifecycle.ts";
 
 export interface DaemonChildHandle {
   pid?: number;
@@ -40,6 +41,7 @@ export interface ManagedServiceDaemonOptions {
   spawnChild?: (spec: NativeServiceSpec, env: Record<string, string>) => DaemonChildHandle;
   killPid?: (pid: number, signal: NodeJS.Signals) => void;
   log?: (line: string) => void;
+  platform?: NodeJS.Platform;
 }
 
 export interface ParentLeaseStream extends EventEmitter {
@@ -64,14 +66,18 @@ function daemonEnv(spec: NativeServiceSpec): Record<string, string> {
   return env;
 }
 
-function defaultSpawnChild(spec: NativeServiceSpec, env: Record<string, string>): ChildProcess {
+function defaultSpawnChild(
+  spec: NativeServiceSpec,
+  env: Record<string, string>,
+  platform: NodeJS.Platform,
+): ChildProcess {
   mkdirSync(dirname(spec.stdoutFile), { recursive: true, mode: 0o700 });
   const stdout = openSync(spec.stdoutFile, "a", 0o600);
   const stderr = openSync(spec.stderrFile, "a", 0o600);
   try {
     return spawn(spec.command, spec.args, {
       cwd: spec.cwd,
-      detached: true,
+      detached: nativeServiceChildLifecycle(platform).detached,
       env,
       stdio: ["ignore", stdout, stderr],
     });
@@ -89,7 +95,10 @@ function serviceStateMatchesSpec(state: { command: string; args: string[]; cwd: 
     && JSON.stringify(state.args) === JSON.stringify(spec.args);
 }
 
-export function defaultDaemonServiceSpecs(input: Partial<NativeSupervisorPaths> = {}): NativeServiceSpec[] {
+export function defaultDaemonServiceSpecs(
+  input: Partial<NativeSupervisorPaths> = {},
+  platform: NodeJS.Platform = process.platform,
+): NativeServiceSpec[] {
   const paths = resolveNativeSupervisorPaths(input);
   const appManagedPointer = process.env.BUTLER_APP_MANAGED_RUNTIME_POINTER?.trim();
   const appManagedLocalAuth = process.env.BUTLER_APP_LOCAL_AUTH_FILE?.trim();
@@ -101,6 +110,7 @@ export function defaultDaemonServiceSpecs(input: Partial<NativeSupervisorPaths> 
     }, {
       appVersion: process.env.BUTLER_APP_VERSION,
       gatewayPort: appManagedGatewayPortFromEnv(),
+      platform,
     });
   }
   return defaultNativeServiceSpecs(paths);
@@ -148,7 +158,7 @@ export class ManagedServiceDaemon {
     const alive = this.options.isPidRunning ?? isPidRunning;
     for (const pid of stoppedPids) {
       if (alive(pid)) {
-        this.kill(-pid, "SIGKILL");
+        this.kill(this.terminationTarget(pid), "SIGKILL");
       }
     }
   }
@@ -158,7 +168,7 @@ export class ManagedServiceDaemon {
     for (const spec of [...this.options.specs].reverse()) {
       const running = this.running.get(spec.id);
       if (running) {
-        this.kill(-running.pid, "SIGTERM");
+        this.kill(this.terminationTarget(running.pid), "SIGTERM");
         stoppedPids.push(running.pid);
         this.running.delete(spec.id);
         removeServiceState(this.options.butlerData, spec.id);
@@ -202,7 +212,10 @@ export class ManagedServiceDaemon {
     }
 
     const env = daemonEnv(spec);
-    const child = (this.options.spawnChild ?? defaultSpawnChild)(spec, env);
+    const lifecycle = nativeServiceChildLifecycle(this.platform());
+    const child = this.options.spawnChild
+      ? this.options.spawnChild(spec, env)
+      : defaultSpawnChild(spec, env, this.platform());
     if (!child.pid) throw new Error(`failed to start ${spec.id}: missing child pid`);
     this.running.set(spec.id, { spec, pid: child.pid });
     writeServiceState(this.options.butlerData, {
@@ -211,7 +224,9 @@ export class ManagedServiceDaemon {
       serviceId: spec.id,
       pid: child.pid,
       parentPid,
-      processGroupId: child.pid,
+      ...(lifecycle.processGroupId(child.pid) !== undefined
+        ? { processGroupId: lifecycle.processGroupId(child.pid) }
+        : {}),
       mode: "daemon-child",
       startedAt: (this.options.now ?? (() => new Date()))().toISOString(),
       command: spec.command,
@@ -246,7 +261,7 @@ export class ManagedServiceDaemon {
     if (!pid) return;
     const alive = this.options.isPidRunning ?? isPidRunning;
     if (alive(pid)) {
-      this.kill(-pid, "SIGTERM");
+      this.kill(this.terminationTarget(pid), "SIGTERM");
       this.log(`stopped legacy app-gateway pid=${pid}`);
     }
     clearAppGatewayPid(this.options.butlerData);
@@ -258,6 +273,14 @@ export class ManagedServiceDaemon {
 
   private parentPid(): number {
     return this.options.parentPid ?? process.pid;
+  }
+
+  private platform(): NodeJS.Platform {
+    return this.options.platform ?? process.platform;
+  }
+
+  private terminationTarget(pid: number): number {
+    return nativeServiceChildLifecycle(this.platform()).terminationTarget(pid);
   }
 }
 

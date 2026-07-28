@@ -176,6 +176,12 @@ test("App-managed native service manifest resolves from active runtime pointer",
     expect(specs.every((spec) => spec.env?.BUTLER_HOME === runtimeHome)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_DATA === butlerData)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_BUN === serviceBun)).toBe(true);
+    expect(specs.find((spec) => spec.id === "embed-server")?.command).toBe("bash");
+    expect(specs.find((spec) => spec.id === "embed-server")?.args[0]?.endsWith("start-embed-server.sh"))
+      .toBeTrue();
+    expect(specs.find((spec) => spec.id === "butler-main")?.command).toBe("bash");
+    expect(specs.find((spec) => spec.id === "butler-main")?.args[0]?.endsWith("start-butler.sh"))
+      .toBeTrue();
     expect(specs.every((spec) => spec.env?.BUTLER_APP_MANAGED_RUNTIME_POINTER === pointerPath))
       .toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_APP_MANAGED_RUNTIME_HOME === runtimeHome))
@@ -224,6 +230,55 @@ test("App-managed native service manifest resolves from active runtime pointer",
       runtimeHome,
       version: "9.9.9",
     });
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("Windows App-managed native service manifest uses bun.exe and direct TypeScript entrypoints", () => {
+  const butlerData = tempRoot();
+  try {
+    const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "9.9.9");
+    const runtimeHome = join(butlerData, runtimeHomeLabel);
+    const pointerPath = appManagedRuntimePointerPath(butlerData);
+    const localAuthFile = join(butlerData, "app", "runtime", "auth", "local-agent-auth.json");
+    mkdirSync(join(runtimeHome, "packages", "butler-agent", "resources", "runtime", "bin"), {
+      recursive: true,
+    });
+    mkdirSync(join(butlerData, "app", "runtime", "agent"), { recursive: true });
+    writeValidAppLocalAuth(localAuthFile);
+    writeFileSync(pointerPath, `${JSON.stringify({
+      schema: "butler.app-managed-agent-runtime-pointer.v1",
+      product: "butler-app",
+      gateway_profile: "electron",
+      version: "9.9.9",
+      runtime_home: runtimeHomeLabel,
+    })}\n`);
+
+    const specs = appManagedNativeServiceSpecs({ butlerData, localAuthFile }, {
+      platform: "win32",
+      createProjectFolderTokenSecret: false,
+    });
+    const bun = join(
+      runtimeHome,
+      "packages",
+      "butler-agent",
+      "resources",
+      "runtime",
+      "bin",
+      "bun.exe",
+    );
+    expect(specs.every((spec) => spec.command === bun)).toBeTrue();
+    expect(specs.find((spec) => spec.id === "embed-server")?.args).toEqual([
+      "run",
+      join(runtimeHome, "packages", "butler-agent", "src", "agent", "cognition", "memory", "scripts", "embed-server.ts"),
+    ]);
+    expect(specs.find((spec) => spec.id === "butler-main")?.args).toEqual([
+      "run",
+      join(runtimeHome, "packages", "butler-agent", "scripts", "native-butler-main.ts"),
+    ]);
+    expect(specs.flatMap((spec) => [spec.command, ...spec.args]).some((part) => part === "bash" || part.endsWith(".sh")))
+      .toBeFalse();
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

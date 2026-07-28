@@ -52,6 +52,7 @@ export interface AppRouteRequest {
   responderTimeoutMs?: number;
   messageRateLimiter: FixedWindowRateLimiter;
   localAuth: LocalAuthConfig;
+  butlerData: string;
 }
 
 export interface AppRouteContext extends Omit<AppRouteRequest, "localAuth"> {

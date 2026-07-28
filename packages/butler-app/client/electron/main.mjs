@@ -510,14 +510,21 @@ async function healthOk(localAuth = null) {
   }
 }
 
-async function gatewayReady(localAuth = null) {
+async function gatewayReady(localAuth = null, activeGateway = null) {
   try {
-    const response = await appServerProbeFetch(new URL("/settings", serverUrl), localAuth);
+    const foregroundRuntime = activeGateway?.foregroundHost === true;
+    const response = await appServerProbeFetch(
+      new URL(foregroundRuntime ? "/runtime-readiness" : "/settings", serverUrl),
+      localAuth,
+    );
     const body = await response.json().catch(() => null);
     return (
       response.ok &&
       body?.protocol_version === appProtocolVersion &&
-      body?.data?.gateway_profile === "electron"
+      (foregroundRuntime
+        ? body?.data?.authenticated_gateway_ready === true &&
+          body?.data?.btcc_executor_ready === true
+        : body?.data?.gateway_profile === "electron")
     );
   } catch {
     return false;
