@@ -121,6 +121,47 @@ describe("production BTCC selected model", () => {
     expect(calls).toBe(1);
   });
 
+  test("states the observe scope ownership consistently across prompt and schema", async () => {
+    let prompt: ProviderPhasePrompt | undefined;
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: capabilityCatalog([{
+        capabilityRef: "result:read",
+        name: "read_result",
+        description: "Read one admitted prior result.",
+        operationKinds: ["observe"],
+        observationScopeRefs: ["result:first", "result:second"],
+        inputSchema: { type: "object" },
+      }]),
+      guidance: guidanceReader(),
+      promptRunner: promptRunner(async (input) => {
+        prompt = input;
+        return {
+          carrier: {
+            kind: "phase_submission",
+            submission: { kind: "complete" },
+            publicActivity,
+          },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+
+    await model.runRound(phaseEnvelope({ emptyContext: true }));
+
+    const rendered = parseCacheOrderedPrompt(prompt!.prompt);
+    expect(prompt?.instructions).toContain("select its required scopeRef");
+    expect(rendered.stable.carrierProtocol.operationRequests).toContain(
+      "select the required scopeRef",
+    );
+    expect(prompt?.carrierFunctions.find((item) =>
+      item.carrierKind === "operation_requests",
+    )?.description).toContain("include one required scopeRef");
+    expect(JSON.stringify(prompt?.responseSchema)).toContain(
+      "Required semantic target selected from the current capabilitySchemas",
+    );
+  });
+
   test("injects accepted external-effect identity instead of trusting provider fields", async () => {
     const effectIntentRef = { id: "effect-1", sha256: "effect-sha" };
     const model = createProductionSelectedModel({

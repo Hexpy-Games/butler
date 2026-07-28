@@ -136,7 +136,8 @@ function carrierProtocolGuidance(allowsOperations: boolean) {
       ? {
           operationRequests: [
             "Apply these instructions only when operation_requests appears in availableCarrierKinds.",
-            "Use a non-empty array of typed requests within authority.",
+            "Use a non-empty array containing only operation-kind and capability pairs listed in capabilitySchemas.",
+            "For observe, select the required scopeRef from that capability's observationScopeRefs; runtime binds the authority identities for mutation operations.",
             "Write each request publicTitle as a concise user-visible action title; describe the concrete action without copying commands, arguments, or hidden reasoning.",
             "Include every currently known independent operation needed for the next decision in this one batch; keep only genuinely result-dependent work for a later round.",
             "Rewrite phaseContinuity to preserve integrated decisions and the purpose of this batch.",

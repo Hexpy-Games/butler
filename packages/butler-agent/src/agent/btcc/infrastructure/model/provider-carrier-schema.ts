@@ -54,7 +54,9 @@ export function providerCarrierFunctions(
       name: "submit_btcc_operation_requests",
       description: [
         "Propose one coherent batch from the stable BTCC operation vocabulary.",
-        "Runtime separately admits the exact current capabilities and authority scopes.",
+        "Choose only operation-kind and capability pairs listed in the current capabilitySchemas.",
+        "For observe, include one required scopeRef from that capability's observationScopeRefs.",
+        "Runtime binds mutation authority identities and admits the exact current scope.",
         "Include every currently known independent operation needed for the next decision.",
       ].join(" "),
       carrierKind: "operation_requests",
@@ -208,8 +210,16 @@ function operationSchema(
       return operationShape("observe", {
         ...common,
         scopeRef: binding.kind === "exact"
-          ? { type: "string", enum: exactObservationScopes(capability) }
-          : { type: "string", minLength: 1 },
+          ? {
+              type: "string",
+              enum: exactObservationScopes(capability),
+              description: "Required semantic target selected from this capability's admitted observationScopeRefs.",
+            }
+          : {
+              type: "string",
+              minLength: 1,
+              description: "Required semantic target selected from the current capabilitySchemas observationScopeRefs.",
+            },
       });
     case "workspace_artifact_action":
       return operationShape("workspace_artifact_action", {
