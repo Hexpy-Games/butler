@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { mkdirSync } from "fs";
 import { homedir } from "os";
 import { dirname, join } from "path";
@@ -13,6 +12,8 @@ import {
   coordinateSharedSqliteWriter,
   type SqliteStorageProfile,
 } from "../../foundation/sqlite-writer-coordination.ts";
+import { openOwnedSqliteConnection, type OwnedSqliteConnection } from
+  "../../foundation/sqlite/owned-sqlite-connection.ts";
 
 interface SessionRow {
   session_id: string;
@@ -99,21 +100,23 @@ export function sessionStorePath(): string {
 }
 
 export class SessionBindingStore {
-  private readonly db: Database;
+  private readonly connection: OwnedSqliteConnection;
+  private readonly db: OwnedSqliteConnection["database"];
 
   constructor(
     private readonly dbPath = sessionStorePath(),
     storageProfile: SqliteStorageProfile = "durable",
   ) {
     mkdirSync(dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
+    this.connection = openOwnedSqliteConnection(dbPath);
+    this.db = this.connection.database;
     coordinateSharedSqliteWriter(this.db, storageProfile);
     this.db.exec("PRAGMA synchronous=NORMAL");
     this.ensureSchema();
   }
 
   close(): void {
-    this.db.close(true);
+    this.connection.close();
   }
 
   get path(): string {
