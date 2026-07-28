@@ -2,8 +2,12 @@ import { ACTIVE_TURN_STATES } from "./constants.ts";
 import { appCopy } from "./copy.ts";
 import {
   progressRowFromSharedTurnEvent,
-  projectSharedWorkBlocks,
 } from "../../../../../butler-progress-projection/src/index.ts";
+import {
+  freezeConversationActivity,
+  freezeMessageActivity,
+  isInternalProgressRow,
+} from "./conversation-progress";
 import type {
   ActiveChatView,
   AppModelSummary,
@@ -27,47 +31,9 @@ import type {
 
 const CLIENT_TURN_PREFIX = "client-turn-";
 const MAX_TURN_PROGRESS_SNAPSHOTS = 80;
-const COLLAPSED_WORK_ACTIVITY_KINDS = new Set([
-  "searched",
-  "read",
-  "ran_command",
-  "edited",
-  "dispatch",
-  "used_tool",
-]);
-const LIFECYCLE_ACTIVITY_LABELS = new Set([
-  "accepted",
-  "started",
-  "thinking",
-  "queued for butler service",
-  "working on request",
-  "checking response",
-  "response checked",
-  "preparing final answer",
-  "final answer ready",
-  "completed",
-  "delivered",
-]);
 const WORK_BLOCK_MARKER_KIND = "work_block";
-const FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX = "first-progress-";
 const TURN_ACKNOWLEDGED_EVENT_KIND = "turn.acknowledged";
 const SESSION_STARTING_STATE = "session_starting";
-const PUBLIC_DECISION_SOURCES = new Set([
-  "assistant-authored",
-  "model-authored",
-  "principal-authored",
-]);
-const INTERNAL_PROGRESS_TOOL_NAMES = new Set([
-  "Update Todo List",
-  "List Todo List",
-  "Model preparation",
-  "모델 준비",
-]);
-const INTERNAL_PROGRESS_RAW_TOOL_NAMES = new Set([
-  "update_todo_list",
-  "list_todo_list",
-  "model_preparation",
-]);
 const INACTIVE_COMPOSER_WORKER_PHASES = new Set([
   "blocked",
   "complete",
@@ -307,7 +273,7 @@ export function applyTimelineEventsToViewState(
     turnProgress,
     visibleMessages,
   );
-  const messages = freezeMessageWorkBlocks(visibleMessages, prunedTurnProgress);
+  const messages = freezeConversationActivity(visibleMessages, prunedTurnProgress);
   return {
     messages,
     summary,
@@ -983,442 +949,10 @@ function capTurnProgressSnapshots(
   );
 }
 
-export function completedTurnActivityRows(rows: ProgressRow[]): ProgressRow[] {
-  const byKey = new Map<string, ProgressRow>();
-  for (const row of rows.filter(isCompletedTurnWorkActivityRow)) {
-    byKey.set(progressRowMergeKey(row), row);
-  }
-  return [...byKey.values()];
-}
-
-export function workBlocksFromProgressRows(
-  rows: ProgressRow[],
-): WorkBlockView[] {
-  return buildWorkBlocks(rows, { completedOnly: false });
-}
-
-export function completedTurnWorkBlocks(rows: ProgressRow[]): WorkBlockView[] {
-  return buildWorkBlocks(rows, { completedOnly: true });
-}
-
-export type TypedUiReadModel =
-  | { type: "receipt"; label: string; state: string; receiptKind: string }
-  | { type: "decision"; summary: string; rationale?: string; nextStep?: string; source: string; modelCallId?: string; latencyMs?: number; evidenceRefs?: string[] }
-  | { type: "work_block"; id: string; label?: string; state: string }
-  | { type: "tool_control"; toolName: string; inputLabel?: string; label: string; toolCallId?: string; workBlockId?: string }
-  | { type: "observation"; label: string; detailRows?: ProgressRow["safe_detail_rows"] }
-  | { type: "outcome"; state: string; publicSummary: string }
-  | { type: "runtime_fault"; faultId: string; kind: string; retryable: boolean; publicSummary: string; safeErrorCode?: string; safeCause?: string };
-
-export function typedUiReadModelsFromProgressRows(
-  rows: ProgressRow[],
-): TypedUiReadModel[] {
-  return rows.flatMap((row): TypedUiReadModel[] => {
-    if (row.runtime_fault_id && row.runtime_fault_kind && row.runtime_fault_public_summary) {
-      return [{
-        type: "runtime_fault",
-        faultId: row.runtime_fault_id,
-        kind: row.runtime_fault_kind,
-        retryable: row.runtime_fault_retryable === true,
-        publicSummary: row.runtime_fault_public_summary,
-        safeErrorCode: row.runtime_fault_safe_error_code,
-        safeCause: row.runtime_fault_safe_cause,
-      }];
-    }
-    if (row.receipt_kind) {
-      return [{
-        type: "receipt",
-        label: row.safe_label,
-        state: row.state,
-        receiptKind: row.receipt_kind,
-      }];
-    }
-    const decision = explicitPublicDecisionFieldsFromRow(row);
-    if (decision.decision_summary && decision.decision_source) {
-      return [{
-        type: "decision",
-        summary: decision.decision_summary,
-        rationale: decision.decision_rationale,
-        nextStep: decision.decision_next_step,
-        source: decision.decision_source,
-        ...(decision.decision_model_call_id ? { modelCallId: decision.decision_model_call_id } : {}),
-        ...(decision.decision_latency_ms !== undefined ? { latencyMs: decision.decision_latency_ms } : {}),
-        ...(decision.decision_evidence_refs ? { evidenceRefs: decision.decision_evidence_refs } : {}),
-      }];
-    }
-    if (row.kind === WORK_BLOCK_MARKER_KIND && row.work_block_id) {
-      return [{
-        type: "work_block",
-        id: row.work_block_id,
-        label: row.work_block_label,
-        state: row.state,
-      }];
-    }
-    if (isToolControlReadModelRow(row)) {
-      const toolName = row.safe_tool_name ?? "Tool";
-      const inputLabel = row.safe_input_label;
-      return [{
-        type: "tool_control",
-        toolName,
-        inputLabel,
-        label: inputLabel && row.safe_tool_name
-          ? `${toolName}: ${inputLabel}`
-          : row.safe_tool_name ?? inputLabel ?? "Tool",
-        toolCallId: row.tool_call_id,
-        workBlockId: row.work_block_id,
-      }];
-    }
-    if (row.kind === "turn" && isTerminalProgressState(row.state)) {
-      return [{ type: "outcome", state: row.state, publicSummary: row.safe_label }];
-    }
-    if (row.safe_detail_rows?.length) {
-      return [{ type: "observation", label: row.safe_label, detailRows: row.safe_detail_rows }];
-    }
-    return [];
-  });
-}
-
 export function isRuntimeFaultRetryableMessage(
   message: Pick<MessageRecord, "retryable" | "safe_error_code">,
 ): boolean {
   return message.retryable === true && message.safe_error_code === "runtime_fault";
-}
-
-export function freezeMessageWorkBlocks(
-  messages: MessageRecord[],
-  turnProgress: Record<string, TurnProgressSnapshot>,
-): MessageRecord[] {
-  let changed = false;
-  const next = messages.map((message) => {
-    const frozen = freezeMessageWorkBlocksForRecord(
-      message,
-      message.turn_id ? turnProgress[message.turn_id] : undefined,
-    );
-    if (frozen !== message) changed = true;
-    return frozen;
-  });
-  return changed ? next : messages;
-}
-
-export function freezeMessageWorkBlocksForRecord(
-  message: MessageRecord,
-  snapshot: TurnProgressSnapshot | null | undefined,
-): MessageRecord {
-  if (message.role !== "assistant" || !message.turn_id) return message;
-  const messageWithActivity = freezeMessagePhaseActivity(message, snapshot);
-  const messageWithCleanBlocks =
-    sanitizeMessageWorkBlocksForRecord(messageWithActivity);
-  const blocks = completedMessageWorkBlocksFromSnapshot(
-    snapshot,
-    terminalProgressStateFromMessageStatus(message.status),
-  );
-  if (blocks.length === 0) {
-    return messageWithCleanBlocks;
-  }
-  if (
-    messageWithCleanBlocks.work_blocks &&
-    workBlockArrayEqual(messageWithCleanBlocks.work_blocks, blocks)
-  ) {
-    return messageWithCleanBlocks;
-  }
-  return { ...messageWithCleanBlocks, work_blocks: blocks };
-}
-
-function freezeMessagePhaseActivity(
-  message: MessageRecord,
-  snapshot: TurnProgressSnapshot | null | undefined,
-): MessageRecord {
-  const activityRows = (snapshot?.safe_progress_rows ?? []).filter(
-    isTurnActivityRow,
-  );
-  if (activityRows.length === 0) return message;
-  if (
-    message.turn_activity_rows &&
-    progressRowArrayEqual(message.turn_activity_rows, activityRows)
-  ) {
-    return message;
-  }
-  return { ...message, turn_activity_rows: activityRows };
-}
-
-function isTurnActivityRow(row: ProgressRow): boolean {
-  if (row.kind === "todo" && row.bridge_phase === "btcc_work_ledger") return true;
-  if (row.bridge_phase === "btcc_operation" && row.semantic_block_id) return true;
-  return Boolean(
-    row.kind === "message" &&
-    !row.work_block_id &&
-    row.semantic_block_id &&
-    row.work_decision_source === "model-authored" &&
-    row.work_decision_summary &&
-    row.work_decision_rationale &&
-    row.work_decision_next_step,
-  );
-}
-
-function sanitizeMessageWorkBlocksForRecord(
-  message: MessageRecord,
-): MessageRecord {
-  const sanitized = sanitizeMessageWorkBlocks(message.work_blocks);
-  if (sanitized === message.work_blocks) return message;
-  if (!sanitized?.length) {
-    const { work_blocks: _workBlocks, ...rest } = message;
-    return rest;
-  }
-  return { ...message, work_blocks: sanitized };
-}
-
-function sanitizeMessageWorkBlocks(
-  blocks: WorkBlockView[] | undefined,
-): WorkBlockView[] | undefined {
-  if (!blocks) return blocks;
-  let changed = false;
-  const sanitized: WorkBlockView[] = [];
-  for (const block of blocks) {
-    const rows = block.rows.filter((row) =>
-      isVisibleToolchainProgressRow(row, block.label),
-    );
-    if (rows.length === 0) {
-      changed = true;
-      continue;
-    }
-    if (rows.length !== block.rows.length) {
-      changed = true;
-      sanitized.push({ ...block, rows });
-      continue;
-    }
-    sanitized.push(block);
-  }
-  if (!changed) return blocks;
-  return sanitized.length > 0 ? sanitized : undefined;
-}
-
-export function completedMessageWorkBlocksFromSnapshot(
-  snapshot: TurnProgressSnapshot | null | undefined,
-  terminalStateOverride?: string,
-): WorkBlockView[] {
-  if (!snapshot) return [];
-  const snapshotState = terminalStateOverride ?? snapshot.state ?? "";
-  const rows = isTerminalProgressState(snapshotState)
-    ? (snapshot.safe_progress_rows ?? [])
-        .filter((row) => !isFirstVisibleProgressRow(row))
-        .map((row) =>
-          isTerminalProgressState(row.state)
-            ? row
-            : { ...row, state: snapshotState },
-        )
-    : (snapshot.safe_progress_rows ?? []);
-  return completedTurnWorkBlocks(rows).filter((block) =>
-    block.rows.some((row) => isVisibleToolchainProgressRow(row, block.label)),
-  );
-}
-
-function terminalProgressStateFromMessageStatus(
-  status?: MessageRecord["status"],
-): string | undefined {
-  if (status === "delivered") return "delivered";
-  if (status === "failed") return "failed";
-  return undefined;
-}
-
-export function isVisibleToolchainProgressRow(
-  row: ProgressRow,
-  blockLabel: string,
-): boolean {
-  const normalizedLabel = row.safe_label.trim();
-  const normalizedBlockLabel = blockLabel.trim();
-  const normalizedToolName = row.safe_tool_name?.trim();
-  if (isInternalProgressRow(row)) return false;
-  if (row.kind === "todo") return false;
-  if (row.kind === "message") return false;
-  if (
-    normalizedLabel &&
-    normalizedLabel === normalizedBlockLabel &&
-    !row.safe_input_label &&
-    row.kind !== "todo"
-  ) {
-    return false;
-  }
-  if (
-    normalizedToolName &&
-    normalizedToolName === normalizedBlockLabel &&
-    !row.tool_call_id &&
-    !row.safe_input_label &&
-    !row.safe_detail_rows?.length
-  ) {
-    return false;
-  }
-  return Boolean(
-    row.tool_call_id ||
-    row.safe_input_label ||
-    row.safe_detail_rows?.length ||
-    COLLAPSED_WORK_ACTIVITY_KINDS.has(row.kind ?? ""),
-  );
-}
-
-function isCompletedTurnWorkActivityRow(row: ProgressRow): boolean {
-  if (!row) return false;
-  if (isFirstVisibleProgressRow(row)) return false;
-  if (isInternalProgressRow(row)) return false;
-  if (row.kind === "todo") return false;
-  if (row.kind === WORK_BLOCK_MARKER_KIND) return false;
-  const kind = row.kind ?? "";
-  if (COLLAPSED_WORK_ACTIVITY_KINDS.has(kind)) return true;
-  if (row.safe_tool_name || row.safe_input_label) return true;
-  if (kind !== "message") return false;
-  return !LIFECYCLE_ACTIVITY_LABELS.has(row.safe_label.trim().toLowerCase());
-}
-
-function isToolControlReadModelRow(row: ProgressRow): boolean {
-  if (row.kind === "decision" || row.kind === WORK_BLOCK_MARKER_KIND) return false;
-  return Boolean(row.safe_tool_name || row.safe_input_label || row.tool_call_id);
-}
-
-function isFirstVisibleProgressRow(row: ProgressRow): boolean {
-  return row.kind === "message" &&
-    Boolean(row.work_block_id?.startsWith(FIRST_VISIBLE_PROGRESS_WORK_BLOCK_ID_PREFIX));
-}
-
-function buildWorkBlocks(
-  rows: ProgressRow[],
-  options: { completedOnly: boolean },
-): WorkBlockView[] {
-  return projectSharedWorkBlocks(rows, options).blocks;
-}
-
-export function isInternalProgressRow(row: ProgressRow): boolean {
-  return (
-    isInternalProgressToolName(row.safe_tool_name) ||
-    isInternalProgressToolName(row.safe_label) ||
-    isInternalProgressToolName(row.safe_input_label)
-  );
-}
-
-function isInternalProgressToolName(value?: string): boolean {
-  if (!value) return false;
-  const trimmed = value.trim();
-  const normalized = trimmed.toLocaleLowerCase("en-US").replace(/\s+/gu, "_");
-  return (
-    INTERNAL_PROGRESS_TOOL_NAMES.has(trimmed) ||
-    INTERNAL_PROGRESS_RAW_TOOL_NAMES.has(normalized)
-  );
-}
-
-export function semanticProgressRows(rows: ProgressRow[]): ProgressRow[] {
-  const visible = rows.filter((row) => !isInternalProgressRow(row));
-  const todoRows = sortProgressRowsForDisplay(
-    dedupeProgressForDisplay(visible.filter((row) => row.kind === "todo")),
-  );
-  if (todoRows.length > 0) return todoRows.slice(0, 8);
-  const workRows = dedupeProgressForDisplay(
-    visible.filter(
-      (row) =>
-        row.kind === WORK_BLOCK_MARKER_KIND ||
-        Boolean(
-          row.work_block_id && row.work_block_label && !row.safe_tool_name,
-        ),
-    ),
-  );
-  if (workRows.length > 0) return workRows.slice(-8);
-  const messageRows = dedupeProgressForDisplay(
-    visible.filter(
-      (row) =>
-        row.kind === "message" &&
-        !LIFECYCLE_ACTIVITY_LABELS.has(row.safe_label.trim().toLowerCase()),
-    ),
-  );
-  if (messageRows.length > 0) return messageRows.slice(-8);
-  return dedupeProgressForDisplay(
-    visible.filter(
-      (row) =>
-        !row.safe_tool_name &&
-        !row.safe_input_label &&
-        !COLLAPSED_WORK_ACTIVITY_KINDS.has(row.kind ?? ""),
-    ),
-  ).slice(-8);
-}
-
-function dedupeProgressForDisplay(rows: ProgressRow[]): ProgressRow[] {
-  const byKey = new Map<string, ProgressRow>();
-  for (const row of rows) {
-    const directKey =
-      todoProgressMergeKey(row) ??
-      row.work_block_id ??
-      row.safe_label.trim().toLowerCase() ??
-      row.id;
-    const key =
-      row.kind === "todo"
-        ? (findProgressRowKey(byKey, (candidate) =>
-            todoProgressRowsDisplayMatch(candidate, row),
-          ) ?? directKey)
-        : directKey;
-    const previous = byKey.get(key);
-    byKey.set(
-      key,
-      previous && row.kind === "todo" ? mergeProgressRow(previous, row) : row,
-    );
-  }
-  return [...byKey.values()];
-}
-
-function todoProgressRowsDisplayMatch(
-  left: ProgressRow,
-  right: ProgressRow,
-): boolean {
-  if (left.kind !== "todo" || right.kind !== "todo") return false;
-  const leftKey = todoProgressMergeKey(left);
-  const rightKey = todoProgressMergeKey(right);
-  return Boolean(leftKey && rightKey && leftKey === rightKey);
-}
-
-function sortProgressRowsForDisplay(rows: ProgressRow[]): ProgressRow[] {
-  return rows
-    .map((row, index) => ({ row, index }))
-    .sort((left, right) => {
-      const orderDelta =
-        progressRowDisplayOrder(left.row) - progressRowDisplayOrder(right.row);
-      return orderDelta || left.index - right.index;
-    })
-    .map(({ row }) => row);
-}
-
-function progressRowDisplayOrder(row: ProgressRow): number {
-  return progressRowFiniteDisplayOrder(row) ?? Number.POSITIVE_INFINITY;
-}
-
-function progressRowFiniteDisplayOrder(row: ProgressRow): number | null {
-  const order = Number(row.safe_order);
-  return Number.isFinite(order) && order >= 0 ? order : null;
-}
-
-function isPublicDecisionSource(source: unknown): source is string {
-  return typeof source === "string" && PUBLIC_DECISION_SOURCES.has(source);
-}
-
-function explicitPublicDecisionFieldsFromRow(row?: ProgressRow): Partial<{
-  decision_summary: string;
-  decision_rationale: string;
-  decision_next_step: string;
-  decision_source: string;
-  decision_model_call_id: string;
-  decision_latency_ms: number;
-  decision_evidence_refs: string[];
-}> {
-  if (
-    !row ||
-    row.kind !== "decision" ||
-    !isPublicDecisionSource(row.public_decision_source)
-  ) {
-    return {};
-  }
-  return {
-    decision_summary: row.public_decision_summary,
-    decision_rationale: row.public_decision_rationale,
-    decision_next_step: row.public_decision_next_step,
-    decision_source: row.public_decision_source,
-    decision_model_call_id: row.public_decision_model_call_id,
-    decision_latency_ms: row.public_decision_latency_ms,
-    decision_evidence_refs: row.public_decision_evidence_refs,
-  };
 }
 
 function systemEventMessageFromEvent(
@@ -1515,7 +1049,7 @@ function mergeMessageRecord(
       turn_activity_rows: previous.turn_activity_rows,
     };
   }
-  const sanitized = sanitizeMessageWorkBlocksForRecord(next);
+  const sanitized = freezeMessageActivity(next, undefined);
   return messageRecordEqual(previous, sanitized) ? previous : sanitized;
 }
 
@@ -1586,10 +1120,6 @@ function findProgressRowKeys(
     if (predicate(row)) matches.push(key);
   }
   return matches;
-}
-
-function progressRowMergeKey(row: ProgressRow): string {
-  return progressRowDirectMergeKey(row);
 }
 
 function progressRowDirectMergeKey(row: ProgressRow): string {

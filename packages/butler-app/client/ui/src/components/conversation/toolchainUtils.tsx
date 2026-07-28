@@ -10,7 +10,7 @@ import {
   type WorkActivityToolItem,
 } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import { isVisibleToolchainProgressRow } from "@/app/utils.ts";
+import { isVisibleToolActivity } from "@/app/conversation-progress";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
 import { OperationOutputDetails } from "./OperationOutputDetails";
 import { publicOperationTitle } from
@@ -59,7 +59,7 @@ export function isVisibleToolchainRow(
   row: ProgressRow,
   blockLabel: string,
 ): boolean {
-  return isVisibleToolchainProgressRow(row, blockLabel);
+  return isVisibleToolActivity(row, blockLabel);
 }
 
 export function isTerminalActivityState(state: string): boolean {

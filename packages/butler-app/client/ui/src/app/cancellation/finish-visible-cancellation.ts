@@ -4,7 +4,9 @@ import type {
   SessionView,
   TurnProgressSnapshot,
 } from "../types.ts";
-import { freezeMessageWorkBlocks } from "../utils.ts";
+import {
+  freezeConversationActivity as freezeMessageWorkBlocks,
+} from "../conversation-progress";
 
 export interface VisibleCancellationState {
   messages: MessageRecord[];

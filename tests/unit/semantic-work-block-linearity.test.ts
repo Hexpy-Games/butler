@@ -5,7 +5,7 @@ import { normalizeProgressSummaryRow } from "../../packages/butler-agent/src/gat
 import { dedupeProgressRows } from "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-merge.ts";
 import { publicProgressRowsForTurn } from "../../packages/butler-agent/src/gateways/app/domain/progress-summary/public-progress-rows.ts";
 import { workBlocksFromTerminalProgressRows } from "../../packages/butler-agent/src/gateways/app/domain/sessions/session-work-blocks.ts";
-import { workBlocksFromProgressRows } from "../../packages/butler-app/client/ui/src/app/utils.ts";
+import { projectWorkBlocks as workBlocksFromProgressRows } from "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts";
 
 const sharedDecision = {
   decisionSummary: "관련 파일을 확인합니다.",

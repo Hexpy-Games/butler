@@ -77,8 +77,6 @@ import {
   clientTurnIdFromMessageId,
   isWorkerVisibleInComposer,
   isDraftChatId,
-  freezeMessageWorkBlocks,
-  freezeMessageWorkBlocksForRecord,
   mergeSessionSummaryForPendingTurn,
   mergeTurnProgressFromSummary,
   mergeTurnProgressSnapshotMap,
@@ -90,6 +88,10 @@ import {
   titleFromPrompt,
   runtimeModels,
 } from "./utils.ts";
+import {
+  freezeConversationActivity as freezeMessageWorkBlocks,
+  freezeMessageActivity as freezeMessageWorkBlocksForRecord,
+} from "./conversation-progress";
 import { isServerBackedSessionId } from "./sessionIds.ts";
 import { finishVisibleCancellation } from "./cancellation/finish-visible-cancellation.ts";
 

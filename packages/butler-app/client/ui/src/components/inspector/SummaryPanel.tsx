@@ -12,7 +12,8 @@ import {
   LoaderCircle,
 } from "@/butler-ds";
 import { Artifact, EmptyPanelLine } from "@/components/common/Display.tsx";
-import { contextTooltip, semanticProgressRows } from "@/app/utils.ts";
+import { contextTooltip } from "@/app/utils.ts";
+import { semanticProgressRows } from "@/app/conversation-progress";
 import type { SessionSummaryView, StatusPill } from "@/app/types.ts";
 import { inspectorInset } from "./inspectorLayout.ts";
 

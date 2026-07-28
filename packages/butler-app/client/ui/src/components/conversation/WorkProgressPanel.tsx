@@ -1,7 +1,10 @@
 import { appCopy } from "@/app/copy.ts";
 import type { ProgressRow } from "@/app/types.ts";
 import { TodoProgressPanel } from "@/butler-ds";
-import { todoRowsForDisplay, type TodoComposerItem } from "./todoComposerRows";
+import {
+  projectComposerTasks,
+  type ComposerTaskItem,
+} from "@/app/conversation-progress";
 
 export function WorkProgressPanel({
   rows,
@@ -10,7 +13,7 @@ export function WorkProgressPanel({
   rows: ProgressRow[];
   turnState?: string;
 }) {
-  const items = todoRowsForDisplay(rows, turnState);
+  const items = projectComposerTasks(rows, turnState);
   if (items.length === 0) return null;
   const copy = appCopy.conversation.work;
   return (
@@ -29,7 +32,7 @@ export function WorkProgressPanel({
   );
 }
 
-function workStatusLabel(state: TodoComposerItem["state"]): string {
+function workStatusLabel(state: ComposerTaskItem["state"]): string {
   const copy = appCopy.conversation.work;
   if (state === "completed") return copy.todoItemCompletedLabel;
   if (state === "reviewing") return copy.todoItemReviewingLabel;

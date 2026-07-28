@@ -4,10 +4,12 @@ import type {
   TurnProgressSnapshot,
 } from "./types.ts";
 import {
-  freezeMessageWorkBlocks,
   mergeMessages,
   mergeTurnProgressSnapshotMap,
 } from "./utils.ts";
+import {
+  freezeConversationActivity as freezeMessageWorkBlocks,
+} from "./conversation-progress";
 
 const MESSAGE_CACHE_SCHEMA = "butler.message-cache.v1";
 const MESSAGE_CACHE_PREFIX = "butler:message-cache:v1:";

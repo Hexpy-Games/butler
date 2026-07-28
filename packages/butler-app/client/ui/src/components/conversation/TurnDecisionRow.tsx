@@ -1,7 +1,7 @@
-import type { TypedUiReadModel } from "@/app/utils.ts";
+import type { ActivityReadModel } from "@/app/conversation-progress";
 import { Stack, Typo } from "@/butler-ds";
 
-type DecisionReadModel = Extract<TypedUiReadModel, { type: "decision" }>;
+type DecisionReadModel = Extract<ActivityReadModel, { type: "decision" }>;
 
 const rowStyle = {
   boxSizing: "border-box",
