@@ -5,6 +5,7 @@ import type {
   StructuralCapabilityDefinition,
 } from "../../btcc/infrastructure/model/index.ts";
 import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
+import type { TurnLocalEffectCapability } from "../../btcc/core/index.ts";
 
 const RESULT_READ_CAPABILITY: StructuralCapabilityDefinition = {
   capabilityRef: READ_OPERATION_RESULT_CAPABILITY,
@@ -83,4 +84,10 @@ export function createProductionCapabilityCatalog(): StructuralCapabilityCatalog
       PROMOTION_CAPABILITY,
     ],
   };
+}
+
+export function productionTurnLocalEffectCapabilities(): TurnLocalEffectCapability[] {
+  return PRODUCTION_CAPABILITIES
+    .filter((capability) => capability.operationKinds.includes("turn_local_effect"))
+    .map(({ capabilityRef, inputSchema }) => ({ capabilityRef, inputSchema }));
 }

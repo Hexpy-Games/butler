@@ -55,6 +55,7 @@ export type {
   OperationRequest,
   OperationResult,
   ObservationResult,
+  TurnLocalEffectCapability,
   WorkspaceMutationScope,
   WorkspaceOperationRoot,
 } from "./operation-contracts.ts";

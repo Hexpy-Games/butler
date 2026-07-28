@@ -63,7 +63,7 @@ export async function openConception(
     codec: openingAnswerCodec(
       command.context.continuationCandidates ?? [],
       command.operationAuthority.mutation.kind === "turn_local_effect_only"
-        ? command.operationAuthority.mutation.capabilityRefs
+        ? command.operationAuthority.mutation.capabilities
         : [],
     ),
   });

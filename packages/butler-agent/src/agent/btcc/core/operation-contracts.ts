@@ -7,6 +7,11 @@ import type { PhaseEnvelope } from "./contracts.ts";
 
 type Ref = { id: string; sha256: string };
 
+export type TurnLocalEffectCapability = {
+  capabilityRef: string;
+  inputSchema: Record<string, unknown>;
+};
+
 export type WorkspaceOperationRoot =
   | { kind: "file"; relativeTarget: "target" }
   | { kind: "directory"; relativeTarget: "." };
@@ -26,7 +31,7 @@ export type OperationAuthority = {
         mutationScope: WorkspaceMutationScope;
       }
     | { kind: "validation_overlay_only"; reviewSourceRef: Ref }
-    | { kind: "turn_local_effect_only"; capabilityRefs: string[] }
+    | { kind: "turn_local_effect_only"; capabilities: TurnLocalEffectCapability[] }
     | {
         kind: "external_effect_only";
         effectIntentRef: Ref;

@@ -140,3 +140,21 @@ test("Opening and Goal Review preserve one exact managed Program proposal", () =
   expect(review).toContain("bind");
   expect(review).toContain("reject");
 });
+
+test("Opening local effects carry their exact capability input schema", () => {
+  const schema = openingSubmissionSchemaFor([], [], [{
+    capabilityRef: "profile:update",
+    inputSchema: {
+      type: "object",
+      properties: { profiling_mode: { type: "string", enum: ["deep"] } },
+      required: ["profiling_mode"],
+      additionalProperties: false,
+    },
+  }]);
+  const serialized = JSON.stringify(schema);
+
+  expect(serialized).toContain('"capabilityRef":{"type":"string","const":"profile:update"}');
+  expect(serialized).toContain('"profiling_mode":{"type":"string","enum":["deep"]}');
+  expect(serialized).not.toContain("minProperties");
+  expect(serialized).not.toContain('"additionalProperties":true');
+});

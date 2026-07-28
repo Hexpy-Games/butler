@@ -27,12 +27,7 @@ export async function renderPhasePrompt(
   capabilityCatalog: StructuralCapabilityCatalog,
   guidanceReader: PhaseGuidanceReader,
 ): Promise<RenderedPhasePrompt> {
-  const operationAuthority = envelope.operationSurface === "closed"
-    ? {
-        observationScopeRefs: [],
-        mutation: { kind: "forbidden" as const },
-      }
-    : envelope.operationAuthority;
+  const operationAuthority = envelope.operationAuthority;
   const [resolvedContext, capabilitySurface, acceptedPhaseGuidance] = await Promise.all([
     resolveButlerContext(envelope, contextResolver),
     resolvePhaseCapabilities({

@@ -8,10 +8,69 @@ import {
   capabilityCatalog,
   emptyContextResolver,
   guidanceReader,
+  parseCacheOrderedPrompt,
   phaseEnvelope,
   phaseContinuity,
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
+
+test("closed phases disclose terminal effect authority without opening operation rounds", async () => {
+  let prompt: ProviderPhasePrompt | undefined;
+  const capability = {
+    capabilityRef: "profile:update",
+    name: "update_profile",
+    description: "Update the local profile.",
+    operationKinds: ["turn_local_effect" as const],
+    inputSchema: {
+      type: "object",
+      properties: { profiling_mode: { type: "string", enum: ["deep"] } },
+      required: ["profiling_mode"],
+      additionalProperties: false,
+    },
+  };
+  const model = createProductionSelectedModel({
+    context: emptyContextResolver(),
+    capabilities: capabilityCatalog([capability]),
+    guidance: guidanceReader(),
+    promptRunner: promptRunner(async (input) => {
+      prompt = input;
+      return {
+        carrier: {
+          kind: "phase_submission",
+          submission: { kind: "complete" },
+          publicActivity: {
+            summary: "프로필 설정을 반영했습니다.",
+            rationale: "사용자의 명시적 요청을 적용했습니다.",
+            nextStep: "완료 결과를 전달합니다.",
+          },
+        },
+        actualIdentity: actualIdentity(),
+      };
+    }),
+  });
+  const envelope = phaseEnvelope({ emptyContext: true });
+  envelope.phase = "conception_opening";
+  envelope.binding.semanticState = "conception_opening";
+  envelope.operationSurface = "closed";
+  envelope.operationAuthority = {
+    observationScopeRefs: [],
+    mutation: {
+      kind: "turn_local_effect_only",
+      capabilities: [{
+        capabilityRef: capability.capabilityRef,
+        inputSchema: capability.inputSchema,
+      }],
+    },
+  };
+
+  await model.runRound(envelope);
+
+  const dynamic = parseCacheOrderedPrompt(prompt!.prompt).dynamic;
+  expect(dynamic.operationAuthority.mutation.kind).toBe("turn_local_effect_only");
+  expect(dynamic.capabilitySchemas).toHaveLength(1);
+  expect(dynamic.availableCarrierKinds).toEqual(["phase_submission"]);
+  expect(JSON.stringify(prompt?.responseSchema)).not.toContain("operation_requests");
+});
 
 test("keeps exact Task target authority out of the stable provider vocabulary", async () => {
   let prompt: ProviderPhasePrompt | undefined;

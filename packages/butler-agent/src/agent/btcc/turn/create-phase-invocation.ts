@@ -38,7 +38,7 @@ export function createPhaseInvocation(
           claim.semanticState === "assisted_answer"
         ? {
             kind: "turn_local_effect_only",
-            capabilityRefs: ["update_onboarding_profile"],
+            capabilities: dependencies.turnLocalEffectCapabilities ?? [],
           }
         : { kind: "forbidden" },
     },

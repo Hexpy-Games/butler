@@ -1,6 +1,7 @@
 import type {
   OperationRequest,
   PhaseCodec,
+  TurnLocalEffectCapability,
 } from "../../core/index.ts";
 import { contentRef, digest, stableJson } from "../../core/index.ts";
 import type { ContinuationCandidate } from "../../continuation/index.ts";
@@ -14,7 +15,7 @@ import { completionModeFor, isManagedResultKind } from "./fulfillment.ts";
 
 export function openingAnswerCodec(
   continuationCandidates: readonly ContinuationCandidate[],
-  localEffectCapabilityRefs: readonly string[] = [],
+  localEffectCapabilities: readonly TurnLocalEffectCapability[] = [],
 ): PhaseCodec<OpeningProduct> {
   const programCandidateIds = continuationCandidates
     .filter((candidate) => candidate.continuationKind !== "managed_finalization")
@@ -26,7 +27,7 @@ export function openingAnswerCodec(
     submissionSchema: openingSubmissionSchemaFor(
       programCandidateIds,
       finalizationCandidateIds,
-      localEffectCapabilityRefs,
+      localEffectCapabilities,
     ),
     decode(submission, envelope) {
       if (
@@ -44,7 +45,7 @@ export function openingAnswerCodec(
       return decodeOpeningAnswerProduct(
         submission,
         envelope,
-        localEffectCapabilityRefs,
+        localEffectCapabilities,
       );
     },
     terminalOperation(product) {
@@ -99,7 +100,7 @@ function decodeWorkCancellation(
 export function decodeOpeningAnswerProduct(
   submission: unknown,
   envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
-  localEffectCapabilityRefs: readonly string[] = [],
+  localEffectCapabilities: readonly TurnLocalEffectCapability[] = [],
 ) {
     const { answer, route, personalizationRefs } = decodeOpeningAnswer(submission, envelope);
     const goalBody = {
@@ -111,7 +112,7 @@ export function decodeOpeningAnswerProduct(
       nonGoals: answer.nonGoals,
     };
     const goalContract = { ref: contentRef("goal", goalBody), ...goalBody };
-    const localEffect = openingLocalEffect(answer, envelope, localEffectCapabilityRefs);
+    const localEffect = openingLocalEffect(answer, envelope, localEffectCapabilities);
     const authorityBody = localEffect
       ? {
           turnId: envelope.binding.turnId,
@@ -190,10 +191,12 @@ export function decodeOpeningAnswerProduct(
 function openingLocalEffect(
   answer: ReturnType<typeof decodeOpeningAnswer>["answer"],
   envelope: Parameters<PhaseCodec<OpeningProduct>["decode"]>[1],
-  localEffectCapabilityRefs: readonly string[],
+  localEffectCapabilities: readonly TurnLocalEffectCapability[],
 ) {
   if (answer.kind !== "local_effect_answer") return undefined;
-  if (!localEffectCapabilityRefs.includes(answer.effect.capabilityRef)) {
+  if (!localEffectCapabilities.some(
+    (capability) => capability.capabilityRef === answer.effect.capabilityRef,
+  )) {
     throw new Error("Opening local effect selected an unavailable capability");
   }
   const request = {

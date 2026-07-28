@@ -11,7 +11,9 @@ export function phaseOperationAuthority(
   if (surface === "closed") {
     return {
       observationScopeRefs: [],
-      mutation: { kind: "forbidden" },
+      mutation: admitted.mutation.kind === "turn_local_effect_only"
+        ? admitted.mutation
+        : { kind: "forbidden" },
     };
   }
   return {

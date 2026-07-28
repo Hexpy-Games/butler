@@ -9,11 +9,13 @@ export function providerCarrierSchema(
   capabilities: readonly ProviderCapabilityVocabularyEntry[],
   submissionSchema: Record<string, unknown>,
 ): Record<string, unknown> {
-  const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
-  if (capabilities.length > 0) {
-    carrierVariants.push(operationRequestsSchema(capabilities, { kind: "vocabulary" }));
-  }
-  return { anyOf: carrierVariants };
+  if (capabilities.length === 0) return phaseSubmissionSchema(submissionSchema);
+  return {
+    anyOf: [
+      phaseSubmissionSchema(submissionSchema),
+      operationRequestsSchema(capabilities, { kind: "vocabulary" }),
+    ],
+  };
 }
 
 export function providerCarrierAdmissionSchema(
@@ -22,12 +24,14 @@ export function providerCarrierAdmissionSchema(
   submissionSchema: Record<string, unknown>,
   authority: OperationAuthority,
 ): Record<string, unknown> {
-  const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
   const capabilities = admissionCapabilities(vocabulary, available);
-  if (capabilities.length > 0) {
-    carrierVariants.push(operationRequestsSchema(capabilities, { kind: "exact", authority }));
-  }
-  return { anyOf: carrierVariants };
+  if (capabilities.length === 0) return phaseSubmissionSchema(submissionSchema);
+  return {
+    anyOf: [
+      phaseSubmissionSchema(submissionSchema),
+      operationRequestsSchema(capabilities, { kind: "exact", authority }),
+    ],
+  };
 }
 
 function admissionCapabilities(
