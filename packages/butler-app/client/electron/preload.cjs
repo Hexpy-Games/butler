@@ -168,6 +168,9 @@ function subscribeLiveEvents({ cursor = 0 } = {}, handlers = {}) {
         );
       }
       buffer = drainSseRecords(buffer + decoder.decode(), onEvent);
+      if (!closed) {
+        throw new Error("Live event stream ended before it was cancelled.");
+      }
     } catch (error) {
       if (!closed && error?.name !== "AbortError") {
         onError(liveEventErrorPayload(error));
