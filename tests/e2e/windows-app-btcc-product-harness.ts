@@ -100,7 +100,10 @@ export async function runWindowsAppBtccProductHarness(
   });
   const dispatcher = new BtccInboundDispatcher();
   const queue = new NativeInboundQueue(root);
-  const deliveryGuard = new DeliveryGuard({ adapters: [createAppTransportAdapter()] });
+  const deliveryGuard = new DeliveryGuard({
+    adapters: [createAppTransportAdapter()],
+    butlerData: root,
+  });
   let browser: Awaited<ReturnType<typeof launchWindowsAppBrowser>> | null = null;
 
   try {
@@ -117,6 +120,7 @@ export async function runWindowsAppBtccProductHarness(
       queue, gateway, bindings, deliveryGuard,
     });
     if (browser) await browser.waitForFinalCount(1);
+    const chatId = browser ? await latestChatId(app.url) : "general";
     if (browser) await browser.send("앞선 대화에 이어 두 번째로 답해주세요.");
     else await postMessage(app.url, "앞선 대화에 이어 두 번째로 답해주세요.");
     const secondDispatch = await waitAndDispatchOne(dispatcher, {
@@ -126,7 +130,7 @@ export async function runWindowsAppBtccProductHarness(
     const browserReload = browser ? await browser.reloadAndVerify(2) : null;
     await browser?.close();
     browser = null;
-    const before = await publicSnapshot(app.url);
+    const before = await publicSnapshot(app.url, chatId);
     app.stop();
     app = createAppServer({
       dbPath,
@@ -135,7 +139,7 @@ export async function runWindowsAppBtccProductHarness(
       port: 0,
       automationSchedulerIntervalMs: false,
     });
-    const after = await publicSnapshot(app.url);
+    const after = await publicSnapshot(app.url, chatId);
     const assistant = after.messages.filter((message) => message.role === "assistant");
     const user = after.messages.filter((message) => message.role === "user");
     const turnCount = new Set(
@@ -151,7 +155,7 @@ export async function runWindowsAppBtccProductHarness(
       turnCount === 2;
     const canonicalProjection =
       after.viewMessageIds.join("|") === after.messageIds.join("|") &&
-      typeof after.turnState === "string";
+      after.turnState === "delivered";
     const restartDataReload = sameMessages(before.messages, after.messages);
     const browserProjection = options.browser
       ? browserFinalCount === 2 && browserReload === true
@@ -228,11 +232,23 @@ async function postMessage(url: string, text: string) {
   return { turnId: (body.data?.turn as Record<string, unknown> | undefined)?.id };
 }
 
-async function publicSnapshot(url: string) {
+async function latestChatId(url: string): Promise<string> {
+  const navigation = await get(`${url}navigation`);
+  const chats = array(navigation.data?.chats);
+  for (const value of chats) {
+    const chat = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    if (typeof chat.id === "string" && chat.id !== "general") return chat.id;
+  }
+  throw new Error("Electron did not create an App conversation");
+}
+
+async function publicSnapshot(url: string, chatId: string) {
   const [view, messages, summary] = await Promise.all([
-    get(`${url}session-view?session_id=general`),
-    get(`${url}messages?chat_id=general&cursor=0`),
-    get(`${url}session-summary?session_id=general`),
+    get(`${url}session-view?session_id=${encodeURIComponent(chatId)}`),
+    get(`${url}messages?chat_id=${encodeURIComponent(chatId)}&cursor=0`),
+    get(`${url}session-summary?session_id=${encodeURIComponent(chatId)}`),
   ]);
   const viewMessages = array((view.data?.messages)).map(publicMessage);
   const replayMessages = array((messages.data?.messages)).map(publicMessage);

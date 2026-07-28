@@ -5,6 +5,7 @@ import { mapTransportAdapters, type TransportAdapterMap } from "./contracts.ts";
 export interface DeliveryGuardOptions {
   adapters: TransportAdapter[] | TransportAdapterMap;
   maxAttempts?: number;
+  butlerData?: string;
 }
 
 export interface DeliveryAttemptResult extends DeliveryResult {
@@ -20,10 +21,12 @@ export class DeliveryGuard {
   private readonly adapters: TransportAdapterMap;
   private readonly deliveredKeys = new Set<string>();
   private readonly maxAttempts: number;
+  private readonly butlerData?: string;
 
   constructor(options: DeliveryGuardOptions) {
     this.adapters = toAdapterMap(options.adapters);
     this.maxAttempts = Math.max(1, options.maxAttempts ?? 1);
+    this.butlerData = options.butlerData;
   }
 
   async deliver(
@@ -48,6 +51,7 @@ export class DeliveryGuard {
         sessionId,
         action,
         delivery,
+        butlerData: this.butlerData,
         metadata: {
           source: "transport/delivery-guard.ts",
           attempts: 0,
@@ -83,6 +87,7 @@ export class DeliveryGuard {
       sessionId,
       action,
       delivery,
+      butlerData: this.butlerData,
       metadata: {
         source: "transport/delivery-guard.ts",
         attempts,

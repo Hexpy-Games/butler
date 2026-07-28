@@ -140,6 +140,7 @@ export async function runNativeButlerMain(
     const appAdapter = createAppTransportAdapter();
     const deliveryGuard = new DeliveryGuard({
       adapters: telegramAdapter ? [telegramAdapter, appAdapter] : [appAdapter],
+      butlerData,
     });
     const deliverThroughEnabledGate = async (
       activeSessionId: string,

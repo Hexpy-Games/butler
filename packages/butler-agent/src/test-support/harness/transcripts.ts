@@ -35,20 +35,20 @@ interface CreateTranscriptEventInput {
   metadata?: Record<string, unknown>;
 }
 
-function getButlerData(): string {
-  return process.env.BUTLER_DATA || join(homedir(), ".butler");
+function getButlerData(butlerData?: string): string {
+  return butlerData || process.env.BUTLER_DATA || join(homedir(), ".butler");
 }
 
 function sanitizeSessionId(sessionId: string): string {
   return sessionId.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-export function transcriptsDir(): string {
-  return join(getButlerData(), "transcripts");
+export function transcriptsDir(butlerData?: string): string {
+  return join(getButlerData(butlerData), "transcripts");
 }
 
-export function transcriptPath(sessionId: string): string {
-  return join(transcriptsDir(), `${sanitizeSessionId(sessionId)}.jsonl`);
+export function transcriptPath(sessionId: string, butlerData?: string): string {
+  return join(transcriptsDir(butlerData), `${sanitizeSessionId(sessionId)}.jsonl`);
 }
 
 export function createTranscriptEvent(input: CreateTranscriptEventInput): TranscriptEvent {
@@ -63,14 +63,14 @@ export function createTranscriptEvent(input: CreateTranscriptEventInput): Transc
   };
 }
 
-export function appendTranscriptEvent(event: TranscriptEvent): void {
-  const path = transcriptPath(event.sessionId);
-  mkdirSync(transcriptsDir(), { recursive: true });
+export function appendTranscriptEvent(event: TranscriptEvent, butlerData?: string): void {
+  const path = transcriptPath(event.sessionId, butlerData);
+  mkdirSync(transcriptsDir(butlerData), { recursive: true });
   appendFileSync(path, `${JSON.stringify(event)}\n`, "utf8");
 }
 
-export function readTranscript(sessionId: string): TranscriptEvent[] {
-  const path = transcriptPath(sessionId);
+export function readTranscript(sessionId: string, butlerData?: string): TranscriptEvent[] {
+  const path = transcriptPath(sessionId, butlerData);
   if (!existsSync(path)) return [];
 
   const raw = readFileSync(path, "utf8");
