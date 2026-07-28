@@ -114,6 +114,7 @@ export interface BtccTurnProgressObserver {
   phaseActivityChanged?(update: {
     turnId: string;
     semanticState: string;
+    activityId: string;
     summary: string;
     rationale: string;
     nextStep: string;
@@ -126,6 +127,7 @@ export interface BtccTurnProgressObserver {
   operationChanged?(update: {
     turnId: string;
     semanticState: string;
+    activityId: string;
     requestId: string;
     publicTitle: string;
     capabilityRef: string;

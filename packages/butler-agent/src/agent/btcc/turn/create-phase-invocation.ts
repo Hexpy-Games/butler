@@ -51,6 +51,7 @@ export function createPhaseInvocation(
             publish: (update) => dependencies.progress?.phaseActivityChanged?.({
               turnId: update.turnId,
               semanticState: update.semanticState,
+              activityId: update.activityId,
               ...update.activity,
             }),
             modelRoundWaiting: (update) =>
@@ -59,6 +60,7 @@ export function createPhaseInvocation(
               dependencies.progress?.operationChanged?.({
                 turnId: update.turnId,
                 semanticState: update.semanticState,
+                activityId: update.activityId,
                 requestId: update.request.requestId,
                 publicTitle: update.request.publicTitle,
                 capabilityRef: update.request.capabilityRef,

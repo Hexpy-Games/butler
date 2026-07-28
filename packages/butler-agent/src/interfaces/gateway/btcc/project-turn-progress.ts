@@ -79,7 +79,7 @@ export function projectTurnProgress(
           decisionRationale: update.rationale,
           decisionNextStep: update.nextStep,
           decisionSource: "model-authored",
-          semanticBlockId: update.semanticState,
+          semanticBlockId: update.activityId,
         },
       });
     },
@@ -104,7 +104,7 @@ export function projectTurnProgress(
           toolCallId: update.requestId,
           activityKind: "used_tool",
           bridgePhase: "btcc_operation",
-          semanticBlockId: update.semanticState,
+          semanticBlockId: update.activityId,
           operationStatus: update.status,
           ...(update.resultRef ? { resultId: update.resultRef.id } : {}),
           ...(update.byteLength !== undefined

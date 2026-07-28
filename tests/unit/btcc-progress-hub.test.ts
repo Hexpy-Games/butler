@@ -21,6 +21,7 @@ test("relays phase activity only to observers of the matching turn", async () =>
   await hub.phaseActivityChanged({
     turnId: "turn-observed",
     semanticState: "planning",
+    activityId: "phase-activity:planning-round",
     summary: "수정 범위를 확인하고 있습니다.",
     rationale: "완결된 계획을 세우기 위해 필요합니다.",
     nextStep: "계획 후보를 작성합니다.",
@@ -29,6 +30,7 @@ test("relays phase activity only to observers of the matching turn", async () =>
   expect(observed).toEqual([{
     turnId: "turn-observed",
     semanticState: "planning",
+    activityId: "phase-activity:planning-round",
     summary: "수정 범위를 확인하고 있습니다.",
     rationale: "완결된 계획을 세우기 위해 필요합니다.",
     nextStep: "계획 후보를 작성합니다.",

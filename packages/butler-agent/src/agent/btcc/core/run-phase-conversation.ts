@@ -14,6 +14,7 @@ import {
   performOperationBatch,
 } from "./operation-round.ts";
 import { phaseOperationAuthority } from "./phase-operation-authority.ts";
+import { phaseActivityId } from "./phase-activity.ts";
 
 export async function runPhaseConversation<Product>(
   command: PhaseConversationCommand<Product>,
@@ -189,6 +190,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
         await command.activity?.publish({
           turnId: conversation.binding.turnId,
           semanticState: conversation.binding.semanticState,
+          activityId: phaseActivityId(conversation.binding),
           activity: round.phaseContinuity.publicActivity,
         });
       }
@@ -232,6 +234,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
       await command.activity?.publish({
         turnId: conversation.binding.turnId,
         semanticState: conversation.binding.semanticState,
+        activityId: phaseActivityId(conversation.binding),
         activity: round.publicActivity,
       });
     }

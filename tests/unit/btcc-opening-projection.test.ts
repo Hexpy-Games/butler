@@ -54,6 +54,7 @@ test("projects model-authored phase activity with intent and next step", async (
   await observer.phaseActivityChanged?.({
     turnId: "turn-phase-activity",
     semanticState: "planning",
+    activityId: "phase-activity:planning-round-2",
     summary: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
     rationale: "기존 설계와 구현을 맞춘 최소 작업 범위를 정하기 위해 필요합니다.",
     nextStep: "확인 결과를 Work와 Task로 나누어 계획 후보를 작성합니다.",
@@ -68,9 +69,29 @@ test("projects model-authored phase activity with intent and next step", async (
       decisionRationale: "기존 설계와 구현을 맞춘 최소 작업 범위를 정하기 위해 필요합니다.",
       decisionNextStep: "확인 결과를 Work와 Task로 나누어 계획 후보를 작성합니다.",
       decisionSource: "model-authored",
-      semanticBlockId: "planning",
+      semanticBlockId: "phase-activity:planning-round-2",
     },
   }]);
+});
+
+test("projects each operation into its exact model-authored activity block", async () => {
+  const events: Array<{ kind: string; payload?: Record<string, unknown> }> = [];
+  const observer = projectTurnProgress(async (event) => {
+    events.push(event);
+  });
+
+  await observer.operationChanged?.({
+    turnId: "turn-phase-activity",
+    semanticState: "task_execution",
+    activityId: "phase-activity:execution-round-7",
+    requestId: "read-current-file",
+    publicTitle: "현재 파일을 확인합니다",
+    capabilityRef: "read_file",
+    status: "completed",
+  });
+
+  expect(events[0]?.payload?.semanticBlockId)
+    .toBe("phase-activity:execution-round-7");
 });
 
 test("projects canonical phase identity and marks only active recovery as operational", async () => {

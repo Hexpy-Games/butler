@@ -135,29 +135,43 @@ export function projectActivityReadModels(rows: ProgressRow[]): ActivityReadMode
 }
 
 function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
-  const operationsByPhase = new Map<string, ProgressRow[]>();
+  const activities: PhaseActivity[] = [];
+  const currentByBlock = new Map<string, PhaseActivity>();
   for (const row of rows) {
-    if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;
-    const operations = operationsByPhase.get(row.semantic_block_id) ?? [];
-    operations.push(row);
-    operationsByPhase.set(row.semantic_block_id, operations);
-  }
-  return rows.flatMap((row): PhaseActivity[] => {
-    if (
-      row.kind !== "message" || row.work_block_id || !row.semantic_block_id ||
-      row.work_decision_source !== "model-authored" || !row.work_decision_summary ||
-      !row.work_decision_rationale || !row.work_decision_next_step
-    ) return [];
-    return [{
+    if (isPhaseActivityRow(row)) {
+      const activity: PhaseActivity = {
       id: row.id,
       phase: row.semantic_block_id,
       summary: row.work_decision_summary,
       rationale: row.work_decision_rationale,
       nextStep: row.work_decision_next_step,
       createdAt: row.created_at,
-      operations: operationsByPhase.get(row.semantic_block_id) ?? [],
-    }];
-  });
+        operations: [],
+      };
+      activities.push(activity);
+      currentByBlock.set(row.semantic_block_id, activity);
+      continue;
+    }
+    if (row.bridge_phase !== "btcc_operation" || !row.semantic_block_id) continue;
+    currentByBlock.get(row.semantic_block_id)?.operations.push(row);
+  }
+  return activities;
+}
+
+function isPhaseActivityRow(row: ProgressRow): row is ProgressRow & {
+  semantic_block_id: string;
+  work_decision_summary: string;
+  work_decision_rationale: string;
+  work_decision_next_step: string;
+} {
+  return row.kind === "message" && !row.work_block_id &&
+    Boolean(row.semantic_block_id) &&
+    row.work_decision_source === "model-authored" &&
+    Boolean(
+      row.work_decision_summary &&
+      row.work_decision_rationale &&
+      row.work_decision_next_step,
+    );
 }
 
 function currentOperationActivity(rows: ProgressRow[]): ProgressRow | undefined {
