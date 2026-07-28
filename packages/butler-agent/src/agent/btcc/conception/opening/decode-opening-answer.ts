@@ -7,7 +7,7 @@ import type {
 
 export function decodeOpeningAnswer(value: unknown, envelope: PhaseEnvelope) {
   const submitted = decodeStructuredAnswer(value);
-  const route = submitted.kind === "assisted_answer" ? "assisted" : "direct";
+  const route = submitted.kind === "direct_answer" ? "direct" : "assisted";
   const admittedPersonalizationRefs = collectPersonalizationRefs(envelope.context);
   const personalizationApplications = admitPersonalization(
     submitted.personalizationApplications,
@@ -26,7 +26,9 @@ export function decodeOpeningAnswer(value: unknown, envelope: PhaseEnvelope) {
 function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
   if (
     !isRecord(value) ||
-    (value.kind !== "direct_answer" && value.kind !== "assisted_answer")
+    (value.kind !== "direct_answer" &&
+      value.kind !== "assisted_answer" &&
+      value.kind !== "local_effect_answer")
   ) {
     throw new Error("Opening submission must be a Direct or Assisted answer");
   }
@@ -44,7 +46,9 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     (value.kind === "direct_answer" && value.requiredResultKind !== "response_content") ||
     (value.kind === "assisted_answer" &&
       value.requiredResultKind !== "current_observation" &&
-      value.requiredResultKind !== "turn_local_effect")
+      value.requiredResultKind !== "turn_local_effect") ||
+    (value.kind === "local_effect_answer" &&
+      (value.requiredResultKind !== "turn_local_effect" || !isLocalEffect(value.effect)))
   ) {
     throw new Error("Opening answer has an invalid structured product");
   }
@@ -66,15 +70,42 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     personalizationApplications,
     publicClaims,
   };
-  return value.kind === "direct_answer"
-    ? { kind: "direct_answer", requiredResultKind: "response_content", ...fields }
-    : {
-        kind: "assisted_answer",
-        requiredResultKind: value.requiredResultKind === "turn_local_effect"
-          ? "turn_local_effect"
-          : "current_observation",
-        ...fields,
-      };
+  if (value.kind === "direct_answer") {
+    return { kind: "direct_answer", requiredResultKind: "response_content", ...fields };
+  }
+  if (value.kind === "local_effect_answer") {
+    return {
+      kind: "local_effect_answer",
+      requiredResultKind: "turn_local_effect",
+      effect: requireLocalEffect(value.effect),
+      ...fields,
+    };
+  }
+  return {
+    kind: "assisted_answer",
+    requiredResultKind: value.requiredResultKind === "turn_local_effect"
+      ? "turn_local_effect"
+      : "current_observation",
+    ...fields,
+  };
+}
+
+function isLocalEffect(value: unknown): value is {
+  capabilityRef: string;
+  publicTitle: string;
+  input: Record<string, unknown>;
+} {
+  return isRecord(value) &&
+    isNonEmptyString(value.capabilityRef) &&
+    isNonEmptyString(value.publicTitle) &&
+    value.publicTitle.length <= 120 &&
+    isRecord(value.input) &&
+    Object.keys(value.input).length > 0;
+}
+
+function requireLocalEffect(value: unknown) {
+  if (!isLocalEffect(value)) throw new Error("Opening local effect is invalid");
+  return value;
 }
 
 function decodePublicClaim(value: unknown): PublicClaim {

@@ -111,6 +111,9 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
   async appendOperationResults(input: {
     binding: PhaseRunBinding;
     results: Array<{ request: OperationRequest; result: OperationResult }>;
+    pendingSubmissionRound?: Awaited<
+      ReturnType<PhaseConversationStore["restore"]>
+    >["pendingSubmissionRound"];
   }): Promise<PhaseRunBinding> {
     if (input.results.length === 0) throw new Error("BTCC operation result append cannot be empty");
     return this.db.transaction(() => {
@@ -123,6 +126,9 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         binding: input.binding,
         status: "operations_applied",
         operationResultRefs: results.map(({ result }) => result.resultRef),
+        ...(input.pendingSubmissionRound
+          ? { pendingSubmission: input.pendingSubmissionRound }
+          : {}),
       });
     })();
   }

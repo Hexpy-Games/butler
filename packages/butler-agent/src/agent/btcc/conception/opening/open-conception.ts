@@ -16,12 +16,19 @@ const OPENING_PHASE_CONTRACT: PhaseContract = {
     "understand_request",
     "apply_profile_feedback_cache",
     "choose_direct_assisted_or_deepen",
+    "complete_bounded_turn_local_effect",
   ],
   exitDuties: {
     direct_answer: [
       "author_minimal_goal",
       "guard_fast_output",
       "apply_accepted_output_preferences",
+    ],
+    local_effect_answer: [
+      "author_minimal_goal",
+      "guard_fast_output",
+      "apply_accepted_output_preferences",
+      "complete_bounded_turn_local_effect",
     ],
     assisted_continuation: [
       "publish_truthful_continuation",
@@ -53,6 +60,11 @@ export async function openConception(
   return runPhaseConversation({
     ...command,
     phaseContract: OPENING_PHASE_CONTRACT,
-    codec: openingAnswerCodec(command.context.continuationCandidates ?? []),
+    codec: openingAnswerCodec(
+      command.context.continuationCandidates ?? [],
+      command.operationAuthority.mutation.kind === "turn_local_effect_only"
+        ? command.operationAuthority.mutation.capabilityRefs
+        : [],
+    ),
   });
 }

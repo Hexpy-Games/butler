@@ -7,6 +7,7 @@ type ProviderRoundValue = Awaited<ReturnType<SelectedModel["runRound"]>>;
 export type NoLedgerScenario =
   | "direct-greeting"
   | "direct-translation"
+  | "onboarding-local-effect"
   | "assisted-weather"
   | "assisted-research";
 
@@ -23,6 +24,9 @@ export class NoLedgerHarnessModel implements SelectedModel {
   }
 
   private roundFor(envelope: PhaseEnvelope): ProviderRoundValue {
+    if (this.scenario === "onboarding-local-effect") {
+      return localEffectAnswer(envelope);
+    }
     if (
       envelope.phase === "conception_opening" &&
       isAssistedScenario(this.scenario)
@@ -63,6 +67,36 @@ export class NoLedgerHarnessModel implements SelectedModel {
     }
     return answer(envelope, this.scenario);
   }
+}
+
+function localEffectAnswer(envelope: PhaseEnvelope): ProviderRoundValue {
+  const personalizationApplications = [
+    ...envelope.context.profileRefs,
+    ...envelope.context.recentFeedbackRefs,
+    ...envelope.context.mandatoryHotCacheRefs,
+    ...envelope.context.optionalHotCacheRefs,
+  ].map((ref) => ({ ref, decision: "applied" as const }));
+  return {
+    kind: "phase_submission",
+    submission: {
+      kind: "local_effect_answer",
+      requiredResultKind: "turn_local_effect",
+      effect: {
+        capabilityRef: "update_onboarding_profile",
+        publicTitle: "선호하는 응답 방식을 반영합니다",
+        input: { profiling_mode: "deep", locale: "ko" },
+      },
+      requestObligation: outcomeFor("onboarding-local-effect"),
+      interpretedIntent: intentFor("onboarding-local-effect"),
+      requiredOutcome: outcomeFor("onboarding-local-effect"),
+      requiredOutcomeResolution: "fulfilled",
+      nonGoals: ["Work Ledger를 만들지 않는다"],
+      answer: answerFor("onboarding-local-effect"),
+      personalizationApplications,
+      publicClaims: [],
+    },
+    actualIdentity: identity(envelope),
+  };
 }
 
 function operations(
@@ -122,6 +156,7 @@ function intentFor(scenario: NoLedgerScenario): string {
   switch (scenario) {
     case "direct-greeting": return "짧고 정중하게 인사한다";
     case "direct-translation": return "주어진 한국어 문장을 영어로 번역한다";
+    case "onboarding-local-effect": return "확인된 심화 프로파일링 선호를 저장한다";
     case "assisted-weather": return "현재 서울 날씨를 확인해 전달한다";
     case "assisted-research": return "현재 유행하는 밈 두 가지를 찾아 요약한다";
   }
@@ -131,6 +166,7 @@ function outcomeFor(scenario: NoLedgerScenario): string {
   switch (scenario) {
     case "direct-greeting": return "개인화된 인사말을 전달한다";
     case "direct-translation": return "정확한 영어 번역문을 전달한다";
+    case "onboarding-local-effect": return "심화 프로파일링 설정을 반영하고 다음 안내를 전달한다";
     case "assisted-weather": return "관찰한 현재 서울 날씨를 전달한다";
     case "assisted-research": return "관찰한 밈 두 가지를 짧게 전달한다";
   }
@@ -140,6 +176,7 @@ function answerFor(scenario: NoLedgerScenario): string {
   switch (scenario) {
     case "direct-greeting": return "안녕하세요. 오늘도 핵심부터 함께 보겠습니다.";
     case "direct-translation": return "Good morning.";
+    case "onboarding-local-effect": return "심화 프로파일링으로 설정했습니다. 이제 온보딩을 마쳤어요.";
     case "assisted-weather": return "서울은 현재 맑고 24도입니다.";
     case "assisted-research": return "요즘은 직장인 고양이 밈과 예상 대 현실 형식이 눈에 띕니다.";
   }

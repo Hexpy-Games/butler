@@ -14,6 +14,7 @@ describe("BTCC no-ledger executable routes", () => {
   test.each([
     ["direct-greeting", "direct", 1, 0],
     ["direct-translation", "direct", 1, 0],
+    ["onboarding-local-effect", "assisted", 1, 1],
     ["assisted-weather", "assisted", 3, 1],
     ["assisted-research", "assisted", 4, 2],
   ] as const)("completes %s without managed records", async (
@@ -68,7 +69,9 @@ describe("BTCC no-ledger executable routes", () => {
     expect(result.replay).toEqual(result.initial);
     expect(result.modelCalls).toBe(expectedModelCalls);
     expect(result.operationCalls).toBe(expectedOperationCalls);
-    expect(result.phases).toEqual(expectedRoute === "assisted"
+    expect(result.phases).toEqual(scenario === "onboarding-local-effect"
+      ? ["conception_opening"]
+      : expectedRoute === "assisted"
       ? [
           "conception_opening",
           ...Array.from({ length: expectedModelCalls - 1 }, () => "assisted_answer"),
@@ -112,15 +115,21 @@ describe("BTCC no-ledger executable routes", () => {
         .toEqual({
           requestObligation: requestObligationFor(scenario),
           requiredResultKind: expectedRoute === "assisted"
-            ? "current_observation"
+            ? scenario === "onboarding-local-effect"
+              ? "turn_local_effect"
+              : "current_observation"
             : "response_content",
           completionMode: expectedRoute === "assisted"
-            ? "bounded_observation_then_answer"
+            ? scenario === "onboarding-local-effect"
+              ? "bounded_local_effect_then_answer"
+              : "bounded_observation_then_answer"
             : "answer_only",
         });
       expect({ programs, works, tasks }).toEqual({ programs: 0, works: 0, tasks: 0 });
       expect(operations).toBe(expectedOperationCalls);
-      expect(openingProjections).toBe(expectedRoute === "assisted" ? 1 : 0);
+      expect(openingProjections).toBe(
+        expectedRoute === "assisted" && scenario !== "onboarding-local-effect" ? 1 : 0,
+      );
       expect(draft.personalizationApplications.map(({ ref }) => ref)).toEqual([
         "profile:concise-korean",
         "feedback:lead-with-result",
@@ -131,7 +140,9 @@ describe("BTCC no-ledger executable routes", () => {
           observationRef: { id: string; sha256: string };
         }).observationRef,
       );
-      expect(draft.publicClaims.flatMap(({ sourceRefs }) => sourceRefs)).toEqual(observedRefs);
+      expect(draft.publicClaims.flatMap(({ sourceRefs }) => sourceRefs)).toEqual(
+        scenario === "onboarding-local-effect" ? [] : observedRefs,
+      );
     } finally {
       db.close();
     }
@@ -146,6 +157,7 @@ function messageFor(scenario: string): string {
   switch (scenario) {
     case "direct-greeting": return "안녕?";
     case "direct-translation": return "이 문장을 영어로 번역해줘: 좋은 아침입니다.";
+    case "onboarding-local-effect": return "심화로 설정해줘.";
     case "assisted-weather": return "현재 서울 날씨를 확인해줘.";
     default: return "요즘 유행하는 밈 두 가지를 찾아서 짧게 알려줘.";
   }
@@ -155,6 +167,7 @@ function requestObligationFor(scenario: string): string {
   switch (scenario) {
     case "direct-greeting": return "개인화된 인사말을 전달한다";
     case "direct-translation": return "정확한 영어 번역문을 전달한다";
+    case "onboarding-local-effect": return "심화 프로파일링 설정을 반영하고 다음 안내를 전달한다";
     case "assisted-weather": return "관찰한 현재 서울 날씨를 전달한다";
     default: return "관찰한 밈 두 가지를 짧게 전달한다";
   }

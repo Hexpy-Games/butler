@@ -176,6 +176,9 @@ export interface PhaseConversationStore {
   appendOperationResults(input: {
     binding: PhaseRunBinding;
     results: Array<{ request: OperationRequest; result: OperationResult }>;
+    pendingSubmissionRound?: NonNullable<
+      PhaseConversationSnapshot<unknown>["pendingSubmissionRound"]
+    >;
   }): Promise<PhaseRunBinding>;
   appendProviderProductRejection(input: {
     binding: PhaseRunBinding;
@@ -209,6 +212,11 @@ export type PhaseContinuity = {
 export type PhaseCodec<Product> = {
   submissionSchema: SubmissionSchema;
   decode(submission: unknown, envelope: PhaseEnvelope): Product;
+  terminalOperation?(product: Product, envelope: PhaseEnvelope): OperationRequest | undefined;
+  acceptTerminalOperation?(
+    product: Product,
+    result: OperationResultProjection,
+  ): Product;
 };
 
 export type PhaseConversationCommand<Product> = {

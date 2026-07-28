@@ -26,6 +26,15 @@ export class HarnessOperationExecutor implements OperationExecutor {
 
   async perform({ request }: PerformInput): Promise<OperationResult> {
     this.callCount += 1;
+    if (request.kind === "turn_local_effect") {
+      const content = JSON.stringify({ applied: request.input });
+      return {
+        requestId: request.requestId,
+        outcome: "turn_local_effect_applied",
+        observationRef: ref("turn-local-effect", request.requestId, content),
+        content,
+      };
+    }
     if (request.kind === "repository_promotion") {
       const content = this.requirePromotionCandidate();
       this.promotedArtifact = content;

@@ -237,6 +237,7 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
   if (
     value === "direct-greeting" ||
     value === "direct-translation" ||
+    value === "onboarding-local-effect" ||
     value === "assisted-weather" ||
     value === "assisted-research"
   ) return value;
