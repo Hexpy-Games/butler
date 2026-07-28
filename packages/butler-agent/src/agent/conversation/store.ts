@@ -1,29 +1,21 @@
 import type { Database } from "bun:sqlite";
-import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { CONVERSATION_STORE_SCHEMA_VERSION } from "./schema.ts";
-import {
-  ConversationStoreInternals,
-  estimatePromptTokens,
-  isoNow,
-  type MessageRow,
-  normalizeLimit,
-} from "./store-internals.ts";
+import { openOwnedSqliteConnection, type OwnedSqliteConnection } from
+  "../../foundation/sqlite/owned-sqlite-connection.ts";
 import {
   defaultConversationIdFactory,
   type ConversationIdFactory,
 } from "./ids.ts";
+import { ConversationStoreInternals } from "./store-internals.ts";
 import type {
   AppendMessageInput,
   AppendToolPartInput,
   BeginTurnInput,
-  ConversationMessage,
+  ConversationBinding,
   ConversationMessageWithParts,
   ConversationPart,
-  ConversationBinding,
   ConversationProjectionEvent,
-  ConversationRole,
   ConversationSession,
   ConversationSummary,
   ConversationSummaryInput,
@@ -37,8 +29,16 @@ import type {
   TurnOutcomeCapsule,
   TurnOutcomeCapsuleInput,
 } from "./types.ts";
-import { openOwnedSqliteConnection, type OwnedSqliteConnection } from
-  "../../foundation/sqlite/owned-sqlite-connection.ts";
+import type { ConversationStoreDependencies } from "./store/dependencies.ts";
+import {
+  ConversationMessageRecords,
+  conversationMessagesSourceHash,
+} from "./store/message-records.ts";
+import { ConversationProjectionRecords } from "./store/projection-records.ts";
+import { ConversationSessionTurnRecords } from "./store/session-turn-records.ts";
+import { ConversationSummaryPromptRecords } from "./store/summary-prompt-records.ts";
+
+export { conversationMessagesSourceHash };
 
 export function conversationStorePath(butlerData: string): string {
   return join(butlerData, "runtime", "conversation-store.sqlite");
@@ -46,20 +46,28 @@ export function conversationStorePath(butlerData: string): string {
 
 export class AgentConversationStore {
   private readonly connection: OwnedSqliteConnection;
-  private readonly db: Database;
-  private readonly idFactory: ConversationIdFactory;
-  private readonly internals: ConversationStoreInternals;
+  private readonly messages: ConversationMessageRecords;
+  private readonly projections: ConversationProjectionRecords;
+  private readonly sessionsAndTurns: ConversationSessionTurnRecords;
+  private readonly summariesAndPrompts: ConversationSummaryPromptRecords;
+
   constructor(input: { butlerData: string; dbPath?: string; idFactory?: ConversationIdFactory }) {
     const dbPath = input.dbPath ?? conversationStorePath(input.butlerData);
     mkdirSync(dirname(dbPath), { recursive: true });
     this.connection = openOwnedSqliteConnection(dbPath);
-    this.db = this.connection.database;
-    this.idFactory = input.idFactory ?? defaultConversationIdFactory;
-    this.internals = new ConversationStoreInternals(this.db, this.idFactory);
-    this.db.exec("PRAGMA journal_mode=WAL");
-    this.db.exec("PRAGMA synchronous=NORMAL");
-    this.db.exec("PRAGMA foreign_keys=ON");
-    this.internals.ensureSchema();
+    const dependencies = createStoreDependencies(
+      this.connection.database,
+      input.idFactory ?? defaultConversationIdFactory,
+    );
+    configureConversationDatabase(dependencies);
+    this.messages = new ConversationMessageRecords(dependencies);
+    this.sessionsAndTurns = new ConversationSessionTurnRecords(dependencies, this.messages);
+    this.summariesAndPrompts = new ConversationSummaryPromptRecords(
+      dependencies,
+      this.messages,
+      this.sessionsAndTurns,
+    );
+    this.projections = new ConversationProjectionRecords(dependencies);
   }
 
   close(): void {
@@ -67,667 +75,134 @@ export class AgentConversationStore {
   }
 
   beginTurn(input: BeginTurnInput): ConversationTurn {
-    const now = input.now ?? isoNow();
-    const sessionId = input.sessionId ?? this.idFactory("cs");
-    const turnId = input.turnId ?? this.idFactory("ct");
-    const tx = this.db.transaction(() => {
-      this.internals.upsertSession({
-        id: sessionId,
-        workspace_id: input.workspaceId ?? null,
-        project_id: input.projectId ?? null,
-        gateway_origin: input.gateway,
-        created_at: now,
-        updated_at: now,
-        status: "active",
-        schema_version: CONVERSATION_STORE_SCHEMA_VERSION,
-      });
-      this.internals.upsertBinding(input.gateway, input.externalSessionId, sessionId, now);
-      this.internals.enqueueProjection(sessionId, 0, "conversation.session_bound", sessionId, now);
-      const existingTurn = this.internals.getTurn(turnId);
-      if (existingTurn) return existingTurn;
-      const turn = this.internals.insertTurn({
-        id: turnId,
-        session_id: sessionId,
-        seq: this.internals.nextSeq("conversation_turns", sessionId),
-        actor: input.actor,
-        status: "running",
-        request_id: input.requestId ?? null,
-        started_at: now,
-        completed_at: null,
-      });
-      this.internals.enqueueProjection(sessionId, turn.seq, "conversation.turn_started", turn.id, now);
-      return turn;
-    });
-    return tx() as ConversationTurn;
-  }
-
-  appendUserMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts {
-    return this.appendMessage({ ...input, role: "user" });
-  }
-
-  appendAssistantMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts {
-    return this.appendMessage({ ...input, role: "assistant" });
-  }
-
-  appendToolCall(input: AppendToolPartInput): ConversationPart {
-    return this.appendToolPart("tool_call", input);
-  }
-
-  appendToolResult(input: AppendToolPartInput): ConversationPart {
-    return this.appendToolPart("tool_result", input);
+    return this.sessionsAndTurns.beginTurn(input);
   }
 
   finalizeTurn(input: FinalizeTurnInput): ConversationTurn {
-    const completedAt = input.completedAt ?? isoNow();
-    const status = input.status ?? "complete";
-    const tx = this.db.transaction(() => {
-      const before = this.internals.getTurn(input.turnId);
-      if (!before) throw new Error(`Conversation turn not found: ${input.turnId}`);
-      if (input.outcomeCapsule) this.writeTurnOutcomeInTransaction(input.outcomeCapsule);
-      this.db.query("UPDATE conversation_turns SET status = ?, completed_at = ? WHERE id = ?")
-        .run(status, completedAt, input.turnId);
-      const turn = this.internals.getTurn(input.turnId);
-      if (!turn) throw new Error(`Conversation turn not found: ${input.turnId}`);
-      return turn;
-    });
-    return tx() as ConversationTurn;
+    return this.sessionsAndTurns.finalizeTurn(input);
   }
 
   readTurn(turnId: string): ConversationTurn | null {
-    return this.internals.getTurn(turnId);
+    return this.sessionsAndTurns.readTurn(turnId);
   }
 
   readTurnOutcome(turnId: string): TurnOutcomeCapsule | null {
-    const row = this.db.query<TurnOutcomeRow, [string]>(`
-      SELECT * FROM conversation_turn_outcomes WHERE turn_id = ?
-    `).get(turnId);
-    if (!row) return null;
-    const capsule = hydrateTurnOutcome(row);
-    return this.turnOutcomeSourceHash(capsule) === capsule.source_hash ? capsule : null;
+    return this.sessionsAndTurns.readTurnOutcome(turnId);
   }
 
   writeTurnOutcome(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {
-    const tx = this.db.transaction(() => this.writeTurnOutcomeInTransaction(input));
-    return tx() as TurnOutcomeCapsule;
+    return this.sessionsAndTurns.writeTurnOutcome(input);
   }
 
-  writeSummary(input: ConversationSummaryInput): ConversationSummary {
-    const now = input.now ?? isoNow();
-    const summary: ConversationSummary = {
-      id: input.summaryId ?? this.idFactory("csm"),
-      session_id: input.sessionId,
-      covers_from_seq: input.coversFromSeq,
-      covers_to_seq: input.coversToSeq,
-      source_hash: input.sourceHash,
-      model: input.model ?? null,
-      summary_text: input.summaryText,
-      created_at: now,
-      invalidated_at: null,
-    };
-    const tx = this.db.transaction(() => {
-      this.db.query(`
-        INSERT INTO conversation_summaries (
-          id, session_id, covers_from_seq, covers_to_seq, source_hash,
-          model, summary_text, created_at, invalidated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        summary.id,
-        summary.session_id,
-        summary.covers_from_seq,
-        summary.covers_to_seq,
-        summary.source_hash,
-        summary.model,
-        summary.summary_text,
-        summary.created_at,
-        summary.invalidated_at,
-      );
-      this.db.query(`
-        UPDATE conversation_messages
-        SET status = 'compacted', compacted_by_summary_id = ?
-        WHERE session_id = ? AND seq BETWEEN ? AND ?
-      `).run(summary.id, summary.session_id, summary.covers_from_seq, summary.covers_to_seq);
-      this.internals.enqueueProjection(summary.session_id, summary.covers_to_seq, "conversation.summary_written", summary.id, now);
-      return summary;
-    });
-    return tx() as ConversationSummary;
-  }
-
-  getSessionByGatewayBinding(gateway: string, externalSessionId: string): ConversationSession | null {
-    return this.db.query<ConversationSession, [string, string]>(`
-      SELECT s.*
-      FROM conversation_sessions s
-      JOIN conversation_bindings b ON b.conversation_session_id = s.id
-      WHERE b.gateway = ? AND b.external_session_id = ?
-      LIMIT 1
-    `).get(gateway, externalSessionId) ?? null;
+  getSessionByGatewayBinding(
+    gateway: string,
+    externalSessionId: string,
+  ): ConversationSession | null {
+    return this.sessionsAndTurns.getSessionByGatewayBinding(gateway, externalSessionId);
   }
 
   getSession(sessionId: string): ConversationSession | null {
-    return this.db.query<ConversationSession, [string]>(`
-      SELECT *
-      FROM conversation_sessions
-      WHERE id = ?
-      LIMIT 1
-    `).get(sessionId) ?? null;
+    return this.sessionsAndTurns.getSession(sessionId);
   }
 
-  getGatewayBindingForConversation(sessionId: string, gateway: string): ConversationBinding | null {
-    return this.db.query<ConversationBinding, [string, string]>(`
-      SELECT gateway, external_session_id, conversation_session_id, created_at
-      FROM conversation_bindings
-      WHERE conversation_session_id = ? AND gateway = ?
-      LIMIT 1
-    `).get(sessionId, gateway) ?? null;
+  getGatewayBindingForConversation(
+    sessionId: string,
+    gateway: string,
+  ): ConversationBinding | null {
+    return this.sessionsAndTurns.getGatewayBindingForConversation(sessionId, gateway);
+  }
+
+  appendUserMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts {
+    return this.messages.appendUserMessage(input);
+  }
+
+  appendAssistantMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts {
+    return this.messages.appendAssistantMessage(input);
+  }
+
+  appendToolCall(input: AppendToolPartInput): ConversationPart {
+    return this.messages.appendToolCall(input);
+  }
+
+  appendToolResult(input: AppendToolPartInput): ConversationPart {
+    return this.messages.appendToolResult(input);
   }
 
   readMessageById(messageId: string): ConversationMessageWithParts | null {
-    const row = this.internals.messageById(messageId);
-    return row ? this.internals.hydrateMessage(row) : null;
+    return this.messages.readMessageById(messageId);
   }
 
-  readMessageBySourceRef(sessionId: string, sourceRef: string): ConversationMessageWithParts | null {
-    const trimmed = sourceRef.trim();
-    if (!trimmed) return null;
-    const row = this.db.query<MessageRow, [string, string]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ? AND source_ref = ?
-      ORDER BY seq ASC
-      LIMIT 1
-    `).get(sessionId, trimmed);
-    return row ? this.internals.hydrateMessage(row) : null;
+  readMessageBySourceRef(
+    sessionId: string,
+    sourceRef: string,
+  ): ConversationMessageWithParts | null {
+    return this.messages.readMessageBySourceRef(sessionId, sourceRef);
   }
 
   readMessageBySourceRefAnySession(sourceRef: string): ConversationMessageWithParts | null {
-    const trimmed = sourceRef.trim();
-    if (!trimmed) return null;
-    const row = this.db.query<MessageRow, [string]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE source_ref = ?
-      ORDER BY created_at ASC, session_id ASC, seq ASC
-      LIMIT 1
-    `).get(trimmed);
-    return row ? this.internals.hydrateMessage(row) : null;
+    return this.messages.readMessageBySourceRefAnySession(sourceRef);
   }
 
   readMessages(input: ReadMessagesInput): ConversationMessageWithParts[] {
-    const capped = normalizeLimit(input.limit ?? 500, 500, 5000);
-    const compacted = input.includeCompacted ? "" : "AND compacted_by_summary_id IS NULL AND status != 'compacted'";
-    const rows = this.db.query<MessageRow, [string, number]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ? ${compacted}
-      ORDER BY seq ASC
-      LIMIT ?
-    `).all(input.sessionId, capped);
-    return rows.map((row) => this.internals.hydrateMessage(row));
+    return this.messages.readMessages(input);
   }
 
   readMessagesForTurn(turnId: string): ConversationMessageWithParts[] {
-    const rows = this.db.query<MessageRow, [string]>(`
-      SELECT * FROM conversation_messages
-      WHERE turn_id = ?
-      ORDER BY seq ASC
-    `).all(turnId);
-    return rows.map((row) => this.internals.hydrateMessage(row));
+    return this.messages.readMessagesForTurn(turnId);
   }
 
-  readCognitionMessages(input: ReadCognitionMessagesInput = {}): ConversationMessageWithParts[] {
-    const capped = normalizeLimit(input.limit ?? 1000, 1000, 5000);
-    const offset = Number.isFinite(input.offset) ? Math.max(0, Math.floor(input.offset!)) : 0;
-    const order = input.order === "desc" ? "DESC" : "ASC";
-    const params: Record<string, string | number> = {
-      $limit: capped,
-      $offset: offset,
-    };
-    const clauses: string[] = [];
-    if (input.sessionId?.trim()) {
-      clauses.push("session_id = $session_id");
-      params.$session_id = input.sessionId.trim();
-    }
-    if (input.roles && input.roles.length > 0) {
-      const roles = [...new Set(input.roles)];
-      clauses.push(`role IN (${roles.map((_, index) => `$role${index}`).join(", ")})`);
-      roles.forEach((role, index) => {
-        params[`$role${index}`] = role;
-      });
-    }
-    if (input.since?.trim()) {
-      clauses.push("created_at >= $since");
-      params.$since = input.since.trim();
-    }
-    clauses.push("visibility = 'model'");
-    if (!input.includeCompacted) {
-      clauses.push("compacted_by_summary_id IS NULL");
-      clauses.push("status != 'compacted'");
-    }
-    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-    const rows = this.db.query<MessageRow, Record<string, string | number>>(`
-      SELECT *
-      FROM conversation_messages
-      ${where}
-      ORDER BY created_at ${order}, seq ${order}, id ${order}
-      LIMIT $limit
-      OFFSET $offset
-    `).all(params);
-    return rows.map((row) => this.internals.hydrateMessage(row));
+  readCognitionMessages(
+    input: ReadCognitionMessagesInput = {},
+  ): ConversationMessageWithParts[] {
+    return this.messages.readCognitionMessages(input);
   }
 
   readProjectionMessages(
     sessionId: string,
     input: { afterSeq?: number; limit?: number } = {},
   ): ConversationMessageWithParts[] {
-    const capped = normalizeLimit(input.limit ?? 500, 500, 1000);
-    const afterSeq = Number.isFinite(input.afterSeq)
-      ? Math.max(0, Math.floor(input.afterSeq!))
-      : 0;
-    const rows = this.db.query<MessageRow, [string, number, number]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ?
-        AND seq > ?
-        AND compacted_by_summary_id IS NULL
-        AND status != 'compacted'
-      ORDER BY seq ASC
-      LIMIT ?
-    `).all(sessionId, afterSeq, capped);
-    return rows.map((row) => this.internals.hydrateMessage(row));
+    return this.messages.readProjectionMessages(sessionId, input);
   }
 
   readSemanticTail(sessionId: string, limit = 20): ConversationMessageWithParts[] {
-    const capped = normalizeLimit(limit, 20, 200);
-    const rows = this.db.query<MessageRow, [string, number]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ? AND compacted_by_summary_id IS NULL AND status != 'compacted'
-      ORDER BY seq DESC
-      LIMIT ?
-    `).all(sessionId, capped).reverse();
-    return rows.map((row) => this.internals.hydrateMessage(row));
+    return this.messages.readSemanticTail(sessionId, limit);
   }
 
   readMessagesAround(input: ReadAroundInput): ConversationMessageWithParts[] {
-    const limit = normalizeLimit(input.limit, 10, 80);
-    const anchor = input.anchorMessageId ? this.internals.messageById(input.anchorMessageId) : null;
-    const compacted = input.includeCompacted ? "" : "AND compacted_by_summary_id IS NULL AND status != 'compacted'";
-    const anchorSeq = anchor?.seq ?? this.internals.maxSeq("conversation_messages", input.sessionId);
-    const range = this.internals.rangeFor(anchorSeq, input.direction ?? "around", limit);
-    const rows = this.db.query<MessageRow, [string, number, number, number]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ? AND seq BETWEEN ? AND ? ${compacted}
-      ORDER BY seq ASC
-      LIMIT ?
-    `).all(input.sessionId, range.start, range.end, limit);
-    return rows.map((row) => this.internals.hydrateMessage(row));
+    return this.messages.readMessagesAround(input);
+  }
+
+  writeSummary(input: ConversationSummaryInput): ConversationSummary {
+    return this.summariesAndPrompts.writeSummary(input);
   }
 
   readSummaries(sessionId: string): ConversationSummary[] {
-    this.invalidateStaleSummaries(sessionId);
-    return this.db.query<ConversationSummary, [string]>(`
-      SELECT *
-      FROM conversation_summaries
-      WHERE session_id = ? AND invalidated_at IS NULL
-      ORDER BY covers_from_seq ASC, covers_to_seq ASC
-    `).all(sessionId);
+    return this.summariesAndPrompts.readSummaries(sessionId);
   }
 
   readPromptMaterial(input: PromptMaterialInput): PromptMaterial {
-    const summaries = this.readSummaries(input.sessionId);
-    const semanticTail = input.tailLimit === undefined
-      ? this.readAllSemanticTail(input.sessionId)
-      : this.readSemanticTail(input.sessionId, input.tailLimit);
-    const turns = Array.from(new Set(
-      semanticTail.map((message) => message.turn_id).filter((turnId): turnId is string => Boolean(turnId)),
-    )).flatMap((turnId) => {
-      const turn = this.readTurn(turnId);
-      return turn ? [turn] : [];
-    });
-    const outcomes = turns.flatMap((turn) => {
-      const outcome = this.readTurnOutcome(turn.id);
-      return outcome ? [outcome] : [];
-    });
-    return {
-      session_id: input.sessionId,
-      summaries,
-      semantic_tail: semanticTail,
-      current_turn: [],
-      turns,
-      outcomes,
-      token_estimate: estimatePromptTokens(semanticTail, summaries),
-      provenance: [
-        ...summaries.map((summary) => ({ kind: "summary" as const, id: summary.id })),
-        ...semanticTail.map((message) => ({ kind: "message" as const, id: message.id })),
-      ],
-    };
-  }
-
-  private readAllSemanticTail(sessionId: string): ConversationMessageWithParts[] {
-    const rows = this.db.query<MessageRow, [string]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ? AND compacted_by_summary_id IS NULL AND status != 'compacted'
-      ORDER BY seq ASC
-    `).all(sessionId);
-    return rows.map((row) => this.internals.hydrateMessage(row));
+    return this.summariesAndPrompts.readPromptMaterial(input);
   }
 
   readProjectionBatch(afterOutboxId: string | null, limit = 100): ConversationProjectionEvent[] {
-    const capped = normalizeLimit(limit, 100, 500);
-    const afterRow = afterOutboxId
-      ? this.db.query<{ outbox_rowid: number }, [string]>(
-        "SELECT outbox_rowid FROM conversation_projection_outbox WHERE outbox_id = ?",
-      ).get(afterOutboxId)?.outbox_rowid ?? 0
-      : 0;
-    return this.db.query<ConversationProjectionEvent, [number, number]>(`
-      SELECT outbox_id, conversation_session_id, seq, kind, payload_ref, created_at
-      FROM conversation_projection_outbox
-      WHERE outbox_rowid > ?
-      ORDER BY outbox_rowid ASC
-      LIMIT ?
-    `).all(afterRow, capped);
-  }
-
-  private appendMessage(input: AppendMessageInput & { role: ConversationRole }): ConversationMessageWithParts {
-    const now = input.now ?? isoNow();
-    const message = this.messageForInsert(input, now);
-    const tx = this.db.transaction(() => {
-      const inserted = this.internals.insertMessage({
-        ...message,
-        seq: this.internals.nextSeq("conversation_messages", input.sessionId),
-      });
-      const parts = input.parts?.length
-        ? input.parts
-        : [{ kind: "text" as const, contentJson: { text: input.text } }];
-      for (const part of parts) {
-        this.internals.insertPart(inserted.id, part.kind, part.contentJson, {
-          toolCallId: part.toolCallId ?? null,
-          parentToolCallId: part.parentToolCallId ?? null,
-          providerShape: part.providerShape ?? null,
-          status: part.status ?? "complete",
-        });
-      }
-      this.internals.enqueueProjection(inserted.session_id, inserted.seq, "conversation.message_committed", inserted.id, now);
-      return this.internals.hydrateMessage(inserted);
-    });
-    return tx() as ConversationMessageWithParts;
-  }
-
-  private appendToolPart(kind: "tool_call" | "tool_result", input: AppendToolPartInput): ConversationPart {
-    const message = this.internals.messageById(input.messageId);
-    if (!message) throw new Error(`Conversation message not found: ${input.messageId}`);
-    const tx = this.db.transaction(() => {
-      const part = this.internals.insertPart(input.messageId, kind, input.contentJson, {
-        toolCallId: input.toolCallId,
-        parentToolCallId: input.parentToolCallId ?? null,
-        providerShape: input.providerShape ?? null,
-        status: input.status ?? "complete",
-      });
-      this.internals.enqueueProjection(
-        message.session_id,
-        message.seq,
-        kind === "tool_call" ? "conversation.tool_call_committed" : "conversation.tool_result_committed",
-        part.id,
-        isoNow(),
-      );
-      return part;
-    });
-    return tx() as ConversationPart;
-  }
-
-  private messageForInsert(input: AppendMessageInput & { role: ConversationRole }, now: string): ConversationMessage {
-    return {
-      id: input.messageId ?? this.idFactory("cm"),
-      session_id: input.sessionId,
-      turn_id: input.turnId ?? null,
-      seq: 0,
-      role: input.role,
-      status: input.status ?? "complete",
-      visibility: input.visibility ?? "model",
-      provenance: input.provenance ?? "trusted",
-      created_at: now,
-      compacted_by_summary_id: null,
-      source_gateway: input.sourceGateway ?? null,
-      source_ref: input.sourceRef ?? null,
-    };
-  }
-
-  private invalidateStaleSummaries(sessionId: string): void {
-    const summaries = this.db.query<ConversationSummary, [string]>(`
-      SELECT *
-      FROM conversation_summaries
-      WHERE session_id = ? AND invalidated_at IS NULL
-      ORDER BY covers_from_seq ASC, covers_to_seq ASC
-    `).all(sessionId);
-    if (summaries.length === 0) return;
-    const stale = summaries.filter((summary) => {
-      const messages = this.readMessagesInSeqRange(
-        summary.session_id,
-        summary.covers_from_seq,
-        summary.covers_to_seq,
-      );
-      return conversationMessagesSourceHash(messages) !== summary.source_hash;
-    });
-    if (stale.length === 0) return;
-    const now = isoNow();
-    const tx = this.db.transaction(() => {
-      for (const summary of stale) {
-        this.db.query("UPDATE conversation_summaries SET invalidated_at = ? WHERE id = ?")
-          .run(now, summary.id);
-        this.db.query(`
-          UPDATE conversation_messages
-          SET status = 'complete', compacted_by_summary_id = NULL
-          WHERE session_id = ? AND compacted_by_summary_id = ?
-        `).run(summary.session_id, summary.id);
-      }
-    });
-    tx();
-  }
-
-  private readMessagesInSeqRange(
-    sessionId: string,
-    fromSeq: number,
-    toSeq: number,
-  ): ConversationMessageWithParts[] {
-    const rows = this.db.query<MessageRow, [string, number, number]>(`
-      SELECT *
-      FROM conversation_messages
-      WHERE session_id = ? AND seq BETWEEN ? AND ?
-      ORDER BY seq ASC
-    `).all(sessionId, fromSeq, toSeq);
-    return rows.map((row) => this.internals.hydrateMessage(row));
-  }
-
-  private writeTurnOutcomeInTransaction(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {
-    const turn = this.internals.getTurn(input.turnId);
-    if (!turn) throw new Error(`Conversation turn not found: ${input.turnId}`);
-    if (turn.session_id !== input.sessionId) throw new Error("Turn outcome session mismatch");
-    const capsule = turnOutcomeCapsuleFromInput(
-      input,
-      this.idFactory("cto"),
-      this.turnOutcomeReferencedMessagesHash(
-        input.requestMessageId ?? null,
-        input.publicAssistantMessageId ?? null,
-      ),
-    );
-    const existing = this.readTurnOutcome(input.turnId);
-    if (existing) {
-      if (input.generation < existing.generation) return existing;
-      if (input.generation === existing.generation) {
-        if (capsule.source_hash !== existing.source_hash) {
-          throw new Error(`Turn outcome generation conflict: ${input.turnId}:${input.generation}`);
-        }
-        return existing;
-      }
-    }
-    this.db.query(`
-      INSERT INTO conversation_turn_outcomes (
-        id, session_id, turn_id, generation, outcome, source_hash,
-        request_message_id, public_assistant_message_id, provider_id, model_ref,
-        evidence_refs_json, unresolved_obligations_json, continuation_json, safe_code, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(turn_id) DO UPDATE SET
-        id = excluded.id,
-        generation = excluded.generation,
-        outcome = excluded.outcome,
-        source_hash = excluded.source_hash,
-        request_message_id = excluded.request_message_id,
-        public_assistant_message_id = excluded.public_assistant_message_id,
-        provider_id = excluded.provider_id,
-        model_ref = excluded.model_ref,
-        evidence_refs_json = excluded.evidence_refs_json,
-        unresolved_obligations_json = excluded.unresolved_obligations_json,
-        continuation_json = excluded.continuation_json,
-        safe_code = excluded.safe_code,
-        created_at = excluded.created_at
-    `).run(
-      capsule.id,
-      capsule.session_id,
-      capsule.turn_id,
-      capsule.generation,
-      capsule.outcome,
-      capsule.source_hash,
-      capsule.request_message_id,
-      capsule.public_assistant_message_id,
-      capsule.provider_id,
-      capsule.model_ref,
-      JSON.stringify(capsule.evidence_refs),
-      JSON.stringify(capsule.unresolved_obligations),
-      capsule.continuation ? JSON.stringify(capsule.continuation) : null,
-      capsule.safe_code,
-      capsule.created_at,
-    );
-    this.internals.enqueueProjection(
-      capsule.session_id,
-      turn.seq,
-      "conversation.turn_outcome_written",
-      capsule.id,
-      capsule.created_at,
-    );
-    return capsule;
-  }
-
-  private turnOutcomeSourceHash(capsule: TurnOutcomeCapsule): string {
-    return turnOutcomeCapsuleSourceHash({
-      session_id: capsule.session_id,
-      turn_id: capsule.turn_id,
-      generation: capsule.generation,
-      outcome: capsule.outcome,
-      request_message_id: capsule.request_message_id,
-      public_assistant_message_id: capsule.public_assistant_message_id,
-      provider_id: capsule.provider_id,
-      model_ref: capsule.model_ref,
-      evidence_refs: capsule.evidence_refs,
-      unresolved_obligations: capsule.unresolved_obligations,
-      continuation: capsule.continuation,
-      safe_code: capsule.safe_code,
-    }, this.turnOutcomeReferencedMessagesHash(
-      capsule.request_message_id,
-      capsule.public_assistant_message_id,
-    ));
-  }
-
-  private turnOutcomeReferencedMessagesHash(
-    requestMessageId: string | null,
-    publicAssistantMessageId: string | null,
-  ): string {
-    const messages = [requestMessageId, publicAssistantMessageId].flatMap((messageId) => {
-      if (!messageId) return [];
-      const row = this.internals.messageById(messageId);
-      return row ? [this.internals.hydrateMessage(row)] : [];
-    });
-    return conversationMessagesSourceHash(messages);
+    return this.projections.readProjectionBatch(afterOutboxId, limit);
   }
 }
 
-interface TurnOutcomeRow extends Omit<TurnOutcomeCapsule, "evidence_refs" | "unresolved_obligations" | "continuation"> {
-  evidence_refs_json: string;
-  unresolved_obligations_json: string;
-  continuation_json: string | null;
-}
-
-function hydrateTurnOutcome(row: TurnOutcomeRow): TurnOutcomeCapsule {
+function createStoreDependencies(
+  db: Database,
+  idFactory: ConversationIdFactory,
+): ConversationStoreDependencies {
   return {
-    id: row.id,
-    session_id: row.session_id,
-    turn_id: row.turn_id,
-    generation: row.generation,
-    outcome: row.outcome,
-    source_hash: row.source_hash,
-    request_message_id: row.request_message_id,
-    public_assistant_message_id: row.public_assistant_message_id,
-    provider_id: row.provider_id,
-    model_ref: row.model_ref,
-    evidence_refs: JSON.parse(row.evidence_refs_json) as string[],
-    unresolved_obligations: JSON.parse(row.unresolved_obligations_json) as string[],
-    continuation: row.continuation_json
-      ? JSON.parse(row.continuation_json) as Record<string, unknown>
-      : null,
-    safe_code: row.safe_code,
-    created_at: row.created_at,
+    db,
+    idFactory,
+    internals: new ConversationStoreInternals(db, idFactory),
   };
 }
 
-function turnOutcomeCapsuleFromInput(
-  input: TurnOutcomeCapsuleInput,
-  id: string,
-  referencedMessagesHash: string,
-): TurnOutcomeCapsule {
-  const canonical = {
-    session_id: input.sessionId,
-    turn_id: input.turnId,
-    generation: Math.max(0, Math.trunc(input.generation)),
-    outcome: input.outcome,
-    request_message_id: input.requestMessageId ?? null,
-    public_assistant_message_id: input.publicAssistantMessageId ?? null,
-    provider_id: input.providerId ?? null,
-    model_ref: input.modelRef ?? null,
-    evidence_refs: [...new Set(input.evidenceRefs ?? [])],
-    unresolved_obligations: [...new Set(input.unresolvedObligations ?? [])],
-    continuation: input.continuation ?? null,
-    safe_code: input.safeCode ?? null,
-  };
-  return {
-    id: input.id ?? id,
-    ...canonical,
-    source_hash: turnOutcomeCapsuleSourceHash(canonical, referencedMessagesHash),
-    created_at: input.createdAt ?? isoNow(),
-  };
-}
-
-function turnOutcomeCapsuleSourceHash(
-  canonical: Omit<TurnOutcomeCapsule, "id" | "source_hash" | "created_at">,
-  referencedMessagesHash: string,
-): string {
-  return createHash("sha256").update(JSON.stringify({
-    ...canonical,
-    referenced_messages_hash: referencedMessagesHash,
-  })).digest("hex");
-}
-
-export function conversationMessagesSourceHash(messages: ConversationMessageWithParts[]): string {
-  const payload = messages.map((message) => ({
-    id: message.id,
-    session_id: message.session_id,
-    turn_id: message.turn_id,
-    seq: message.seq,
-    role: message.role,
-    visibility: message.visibility,
-    provenance: message.provenance,
-    created_at: message.created_at,
-    source_gateway: message.source_gateway,
-    source_ref: message.source_ref,
-    parts: message.parts.map((part) => ({
-      id: part.id,
-      part_index: part.part_index,
-      kind: part.kind,
-      content_json: part.content_json,
-      tool_call_id: part.tool_call_id,
-      parent_tool_call_id: part.parent_tool_call_id,
-      provider_shape: part.provider_shape,
-      status: part.status,
-    })),
-  }));
-  return `sha256:${createHash("sha256").update(JSON.stringify(payload)).digest("hex")}`;
+function configureConversationDatabase(dependencies: ConversationStoreDependencies): void {
+  dependencies.db.exec("PRAGMA journal_mode=WAL");
+  dependencies.db.exec("PRAGMA synchronous=NORMAL");
+  dependencies.db.exec("PRAGMA foreign_keys=ON");
+  dependencies.internals.ensureSchema();
 }
