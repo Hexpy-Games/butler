@@ -24,7 +24,6 @@ export function WorkProgressPanel({
       items={items.map((item) => ({
         id: item.id,
         title: item.label,
-        groupTitle: item.workLabel,
         state: item.state,
         statusLabel: workStatusLabel(item.state),
       }))}
