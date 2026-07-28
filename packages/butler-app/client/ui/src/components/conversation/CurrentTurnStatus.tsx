@@ -14,7 +14,7 @@ export function CurrentTurnStatus({
   publicActivity?: ProgressRow;
 }) {
   const operationLabel = operation
-    ? publicOperationTitle(operation.safe_tool_name)
+    ? operation.safe_label || publicOperationTitle(operation.safe_tool_name)
     : undefined;
   const fullLabel = operationLabel ?? publicActivity?.safe_label;
   return (

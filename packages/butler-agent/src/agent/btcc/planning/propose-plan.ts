@@ -11,7 +11,6 @@ import {
 import type {
   PlanningCandidateProduct,
   PlanningObservationResultIndexEntry,
-  PlanningReview,
 } from "./contracts.ts";
 import type { PlanningContinuation } from "./contracts.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from "./authoring-contracts.ts";
@@ -26,7 +25,6 @@ import {
   decodeFindingDecisions,
   requiredSubjectFindingRefs,
 } from "./finding-decisions.ts";
-import { assertRevisedPlanChanged } from "./assert-revised-plan-changed.ts";
 import {
   applyPlanningDeferralPolicy,
   type PlanningDeferralPolicy,
@@ -113,14 +111,6 @@ function planningCodec(
           ? { continuation: state.continuation as PlanningContinuation }
           : {}),
       });
-      if (state.previousPlanCandidate && state.priorPlanningReview) {
-        assertRevisedPlanChanged({
-          previous: state.previousPlanCandidate as PlanningCandidateProduct["candidate"],
-          revised: candidate,
-          priorReview: state.priorPlanningReview as PlanningReview,
-          decisions: findingDecisions,
-        });
-      }
       return {
         kind: "plan_candidate",
         candidate,

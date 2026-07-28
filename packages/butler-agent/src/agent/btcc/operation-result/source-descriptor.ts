@@ -32,6 +32,13 @@ export function describeOperationSource(
       input: request.input,
     };
   }
+  if (request.kind === "turn_local_effect") {
+    return {
+      kind: request.kind,
+      capabilityRef: request.capabilityRef,
+      input: request.input,
+    };
+  }
   if (request.kind === "workspace_artifact_action") {
     return {
       kind: request.kind,

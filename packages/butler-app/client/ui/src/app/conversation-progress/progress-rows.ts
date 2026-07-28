@@ -38,7 +38,9 @@ export function isInternalProgressRow(row: ProgressRow): boolean {
 }
 
 export function semanticProgressRows(rows: ProgressRow[]): ProgressRow[] {
-  const visible = visibleProgressRows(rows);
+  const visible = visibleProgressRows(rows).filter(
+    (row) => row.bridge_phase !== "model_round_waiting",
+  );
   const todos = sortedTodoRows(visible.filter((row) => row.kind === "todo"));
   if (todos.length > 0) return todos.slice(0, 8);
 

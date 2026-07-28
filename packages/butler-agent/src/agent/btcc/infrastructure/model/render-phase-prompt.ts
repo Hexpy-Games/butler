@@ -126,6 +126,7 @@ function requiredMutationOperation(
   mutation: PhaseEnvelope["operationAuthority"]["mutation"],
 ): OperationRequest["kind"] | undefined {
   if (mutation.kind === "external_effect_only") return "external_effect";
+  if (mutation.kind === "turn_local_effect_only") return "turn_local_effect";
   if (mutation.kind === "repository_promotion_only") return "repository_promotion";
   if (mutation.kind === "validation_overlay_only") return "review_validation";
   if (

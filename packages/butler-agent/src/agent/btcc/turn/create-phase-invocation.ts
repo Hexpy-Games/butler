@@ -34,7 +34,12 @@ export function createPhaseInvocation(
     operations: dependencies.operations,
     operationAuthority: {
       observationScopeRefs: turn.context.baselineObservationScopeRefs,
-      mutation: { kind: "forbidden" },
+      mutation: claim.semanticState === "assisted_answer"
+        ? {
+            kind: "turn_local_effect_only",
+            capabilityRefs: ["update_onboarding_profile"],
+          }
+        : { kind: "forbidden" },
     },
     executionPermit,
     ...(dependencies.progress?.phaseActivityChanged ||

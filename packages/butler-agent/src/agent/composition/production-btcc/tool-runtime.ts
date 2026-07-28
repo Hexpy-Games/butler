@@ -27,6 +27,7 @@ export function createProductionToolRuntime(
   | "createWorkspaceObservationExecutor"
   | "createIsolatedValidationExecutor"
   | "createExternalEffectExecutor"
+  | "createTurnLocalEffectExecutor"
   | "validateOperationInput"
 > {
   return {
@@ -47,6 +48,8 @@ export function createProductionToolRuntime(
     createIsolatedValidationExecutor: ({ workspacePath, envelope, request }) =>
       toolExecutor(options, envelope, workspacePath, request, isolatedBoundary(envelope)),
     createExternalEffectExecutor: ({ envelope, request }) =>
+      toolExecutor(options, envelope, options.butlerHome, request),
+    createTurnLocalEffectExecutor: ({ envelope, request }) =>
       toolExecutor(options, envelope, options.butlerHome, request),
     validateOperationInput: ({ envelope, request, args }) =>
       validateInput(envelope, request, args),
@@ -72,6 +75,7 @@ function toolExecutor(
       throw new Error(`BTCC requested ${request.capabilityRef} but provider invoked ${call.name}`);
     }
     return capability.execute(call.args, {
+      butlerHome: options.butlerHome,
       butlerData: options.butlerData,
       workspacePath,
       ...(request.kind === "observe" ? { observationScopeRef: request.scopeRef } : {}),

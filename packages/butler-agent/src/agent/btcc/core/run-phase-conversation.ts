@@ -170,12 +170,6 @@ async function runPhaseConversationAtCheckpoint<Product>(
     }
     const proposal = decodePhaseSubmissionProposal(command, round.submission, envelope);
     if (proposal.kind === "rejected") {
-      if (providerCorrection) {
-        throw repeatedInvalidProviderProduct(
-          conversation.binding,
-          proposal.correction,
-        );
-      }
       conversation = {
         ...conversation,
         binding: trackCheckpoint(
@@ -216,21 +210,6 @@ async function runPhaseConversationAtCheckpoint<Product>(
       });
     }
   }
-}
-
-function repeatedInvalidProviderProduct(
-  binding: PhaseEnvelope["binding"],
-  correction: ProviderCorrection,
-): OperationalInterruptionError {
-  return new OperationalInterruptionError(
-    correction.code,
-    binding,
-    { kind: "runtime_remediation" },
-    correction.diagnosticMessage
-      ? new Error(correction.diagnosticMessage)
-      : undefined,
-    correction.diagnostic,
-  );
 }
 
 function trackCheckpoint(

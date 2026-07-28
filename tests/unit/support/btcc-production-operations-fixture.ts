@@ -134,6 +134,9 @@ function runtimeOptions(
     createExternalEffectExecutor() {
       return async (call) => fixture.observe?.(call) ?? { ok: true };
     },
+    createTurnLocalEffectExecutor() {
+      return async (call) => fixture.observe?.(call) ?? { ok: true };
+    },
     validateOperationInput() {},
   };
 }

@@ -110,6 +110,14 @@ function bindOperationAuthority(
   ) {
     return { ...value, reviewSourceRef: authority.mutation.reviewSourceRef } as OperationRequest;
   }
+  if (
+    value.kind === "turn_local_effect" &&
+    authority.mutation.kind === "turn_local_effect_only" &&
+    typeof value.capabilityRef === "string" &&
+    authority.mutation.capabilityRefs.includes(value.capabilityRef)
+  ) {
+    return value as OperationRequest;
+  }
   if (value.kind === "external_effect" &&
     authority.mutation.kind === "external_effect_only"
   ) {
@@ -156,6 +164,9 @@ function bindRejectedAuthority(
   }
   if (value.kind === "review_validation") {
     return { ...value, ...marker, reviewSourceRef: rejectedRef } as OperationRequest;
+  }
+  if (value.kind === "turn_local_effect") {
+    return { ...value, ...marker } as OperationRequest;
   }
   if (value.kind === "external_effect") {
     return {

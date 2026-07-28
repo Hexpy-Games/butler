@@ -15,12 +15,13 @@ export function completionModeFor(
 ): OpeningFulfillment["completionMode"] {
   if (kind === "response_content") return "answer_only";
   if (kind === "current_observation") return "bounded_observation_then_answer";
+  if (kind === "turn_local_effect") return "bounded_local_effect_then_answer";
   return "managed_effect_or_artifact";
 }
 
 export function isManagedResultKind(value: unknown): value is Exclude<
   OpeningRequiredResultKind,
-  "response_content" | "current_observation"
+  "response_content" | "current_observation" | "turn_local_effect"
 > {
   return typeof value === "string" && MANAGED_RESULTS.has(value as OpeningRequiredResultKind);
 }

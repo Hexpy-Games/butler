@@ -43,7 +43,8 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
       value.requiredOutcomeResolution !== "truthfully_limited") ||
     (value.kind === "direct_answer" && value.requiredResultKind !== "response_content") ||
     (value.kind === "assisted_answer" &&
-      value.requiredResultKind !== "current_observation")
+      value.requiredResultKind !== "current_observation" &&
+      value.requiredResultKind !== "turn_local_effect")
   ) {
     throw new Error("Opening answer has an invalid structured product");
   }
@@ -69,7 +70,9 @@ function decodeStructuredAnswer(value: unknown): OpeningAnswerSubmission {
     ? { kind: "direct_answer", requiredResultKind: "response_content", ...fields }
     : {
         kind: "assisted_answer",
-        requiredResultKind: "current_observation",
+        requiredResultKind: value.requiredResultKind === "turn_local_effect"
+          ? "turn_local_effect"
+          : "current_observation",
         ...fields,
       };
 }

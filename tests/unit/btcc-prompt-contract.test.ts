@@ -88,6 +88,11 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
   expect(openingRoute).toContain("managed_program_continuation");
   expect(openingRoute).toContain("candidate-free bounded new request");
   expect(openingRoute).toContain("never route by keywords");
+  const effectPlanning = resolveDutyInstructions([
+    "declare_effects_risks_assumptions",
+  ])[0]?.instruction ?? "";
+  expect(effectPlanning).toContain("smallest stable logical scope");
+  expect(effectPlanning).toContain("Execution resolves those connection parameters");
 });
 
 test("Goal authoring distinguishes user artifacts from durable BTCC records", () => {
@@ -114,6 +119,8 @@ test("Opening derives route mode from one typed required result", () => {
   expect(completionModeFor("response_content")).toBe("answer_only");
   expect(completionModeFor("current_observation"))
     .toBe("bounded_observation_then_answer");
+  expect(completionModeFor("turn_local_effect"))
+    .toBe("bounded_local_effect_then_answer");
   expect(completionModeFor("target_change")).toBe("managed_effect_or_artifact");
 });
 

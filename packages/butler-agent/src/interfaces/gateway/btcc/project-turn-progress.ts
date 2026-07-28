@@ -99,7 +99,7 @@ export function projectTurnProgress(
       await publish({
         kind: operationEventKind(update.status),
         payload: {
-          safeLabel: publicOperationTitle(update.capabilityRef),
+          safeLabel: update.publicTitle || publicOperationTitle(update.capabilityRef),
           toolName: update.capabilityRef,
           toolCallId: update.requestId,
           activityKind: "used_tool",

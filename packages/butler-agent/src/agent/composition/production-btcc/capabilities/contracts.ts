@@ -4,6 +4,7 @@ import type {
 } from "../../../btcc/infrastructure/model/index.ts";
 
 export type CapabilityExecutionContext = {
+  butlerHome?: string;
   butlerData: string;
   workspacePath: string;
   observationScopeRef?: string;

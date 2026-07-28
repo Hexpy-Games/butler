@@ -232,6 +232,8 @@ function operationSchema(
       return operationShape("review_validation", {
         ...common,
       });
+    case "turn_local_effect":
+      return operationShape("turn_local_effect", common);
     case "external_effect":
       return operationShape("external_effect", {
         ...common,

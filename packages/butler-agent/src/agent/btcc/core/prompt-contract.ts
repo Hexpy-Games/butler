@@ -1,7 +1,8 @@
 export const PROMPT_DUTY_IDS = [
   "preserve_original_goal", "preserve_selected_model", "state_input_only",
   "understand_request", "apply_profile_feedback_cache",
-  "choose_direct_assisted_or_deepen", "author_minimal_goal", "guard_fast_output",
+  "choose_direct_assisted_or_deepen", "complete_bounded_turn_local_effect",
+  "author_minimal_goal", "guard_fast_output",
   "apply_accepted_output_preferences", "publish_truthful_continuation",
   "candidate_revision_lineage", "apply_exact_review_findings",
   "requested_content", "related_memory",

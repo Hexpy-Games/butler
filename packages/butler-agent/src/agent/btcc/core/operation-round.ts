@@ -178,6 +178,12 @@ function assertAuthorizedOperationKind(
   ) {
     return;
   } else if (
+    request.kind === "turn_local_effect" &&
+    authority.mutation.kind === "turn_local_effect_only" &&
+    authority.mutation.capabilityRefs.includes(request.capabilityRef)
+  ) {
+    return;
+  } else if (
     request.kind === "external_effect" &&
     authority.mutation.kind === "external_effect_only" &&
     sameRef(request.effectIntentRef, authority.mutation.effectIntentRef) &&
