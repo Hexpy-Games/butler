@@ -51,7 +51,18 @@ function readOnlyObservationInvocation(
 }
 
 function shellInvocation(command: string): CommandInvocation {
+  if (process.platform === "win32") return windowsShellInvocation(command);
   return { executable: "/bin/sh", args: ["-lc", command] };
+}
+
+export function windowsShellInvocation(
+  command: string,
+  comspec = process.env.ComSpec,
+): CommandInvocation {
+  return {
+    executable: comspec?.trim() || "cmd.exe",
+    args: ["/d", "/s", "/c", command],
+  };
 }
 
 function macosSandboxProfile(roots: string[]): string {

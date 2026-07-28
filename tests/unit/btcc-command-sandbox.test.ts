@@ -4,9 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { executeCommandCapability } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/capabilities/command-capability.ts";
+import { windowsShellInvocation } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/capabilities/command-sandbox.ts";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
+
+test("Windows commands use the native command interpreter", () => {
+  expect(windowsShellInvocation(
+    "powershell.exe -Command Write-Output ok",
+    "C:\\Windows\\System32\\cmd.exe",
+  )).toEqual({
+    executable: "C:\\Windows\\System32\\cmd.exe",
+    args: ["/d", "/s", "/c", "powershell.exe -Command Write-Output ok"],
+  });
+});
 
 test("isolated commands cannot read or write the original project root", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-command-sandbox-"));
