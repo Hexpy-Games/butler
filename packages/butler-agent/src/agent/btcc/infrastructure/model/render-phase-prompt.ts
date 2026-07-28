@@ -68,7 +68,9 @@ export async function renderPhasePrompt(
   const instructions = [
     "Return exactly one BTCC provider carrier matching the supplied JSON schema.",
     "Do not add prose outside the carrier and do not choose a successor phase or model.",
-    "Choose semantic operations only; the runtime binds immutable authority references.",
+    "Choose only operations listed in the current capabilitySchemas.",
+    "For observe, select its required scopeRef from that capability's observationScopeRefs.",
+    "The runtime binds mutation, validation, effect, and promotion authority references.",
     "Read the stablePhasePrefix JSON document before the dynamicTurnContent document.",
     "Within the stable promptHierarchy, earlier layers override later layers.",
   ].join(" ");
