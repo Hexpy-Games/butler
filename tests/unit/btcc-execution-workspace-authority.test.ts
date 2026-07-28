@@ -3,6 +3,8 @@ import { scopeTaskExecution } from
   "../../packages/butler-agent/src/agent/btcc/execution/scope-task-execution.ts";
 import { resolveAvailableCapabilities } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/available-capabilities.ts";
+import { createProductionCapabilityCatalog } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
 
 const workspaceRef = { id: "workspace-current", sha256: "workspace-current-sha" };
 
@@ -151,5 +153,27 @@ describe("BTCC Task Execution workspace authority", () => {
         mutationScope: { kind: "read_only" },
       },
     })).toThrow("missing its artifact target scope");
+  });
+
+  test("admits command validation without admitting mutation for a read-only workspace Task", async () => {
+    const capabilities = await resolveAvailableCapabilities({
+      authority: {
+        observationScopeRefs: [],
+        mutation: {
+          kind: "workspace_only",
+          workspaceRef,
+          operationRoot: { kind: "directory", relativeTarget: "." },
+          mutationScope: { kind: "read_only" },
+        },
+      },
+      catalog: createProductionCapabilityCatalog(),
+    });
+    const commands = capabilities.filter(({ capabilityRef }) =>
+      capabilityRef === "run_command",
+    );
+
+    expect(commands).toEqual([expect.objectContaining({
+      operationKind: "workspace_artifact_observation",
+    })]);
   });
 });

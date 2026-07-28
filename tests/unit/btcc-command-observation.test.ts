@@ -73,6 +73,41 @@ describe("BTCC read-only command observation", () => {
     })).toThrow("command observation requires an admitted workspace scope");
   });
 
+  test("read-only workspace commands admit validation but reject mutation structurally", () => {
+    const fixture = commandFixture();
+    const tools = fixture.tools();
+    const phase = fixture.envelope();
+    const workspaceRef = { id: "workspace", sha256: "workspace-sha" };
+    phase.operationAuthority = {
+      observationScopeRefs: [],
+      mutation: {
+        kind: "workspace_only",
+        workspaceRef,
+        operationRoot: { kind: "directory", relativeTarget: "." },
+        mutationScope: { kind: "read_only" },
+      },
+    };
+    const request: Extract<OperationRequest, { kind: "workspace_artifact_observation" }> = {
+      requestId: "workspace-validation",
+      publicTitle: "Validate isolated workspace",
+      kind: "workspace_artifact_observation",
+      capabilityRef: "run_command",
+      workspaceRef,
+      input: { command: "npm test", state_effect: "validation" },
+    };
+
+    expect(() => tools.validateOperationInput({
+      envelope: phase,
+      request,
+      args: request.input,
+    })).not.toThrow();
+    expect(() => tools.validateOperationInput({
+      envelope: phase,
+      request,
+      args: { ...request.input, state_effect: "mutation" },
+    })).toThrow("requires read_only or validation state_effect");
+  });
+
   test("macOS sandbox denies workspace mutation and network", async () => {
     if (process.platform !== "darwin") return;
     const fixture = commandFixture();

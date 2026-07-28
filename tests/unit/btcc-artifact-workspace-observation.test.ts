@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createProductionSelectedModel } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/index.ts";
@@ -57,6 +57,37 @@ describe("artifact workspace observation", () => {
     expect(observed.targetSnapshotRef).toBeDefined();
     expect(new ArtifactStore(fixture.dataRoot).loadSnapshot(observed.targetSnapshotRef!.id))
       .toMatchObject({ ref: observed.targetSnapshotRef });
+  });
+
+  test("rejects and restores a persistent delta from a read-only command", async () => {
+    const fixture = createDirectoryFixture();
+    fixture.workspace = ({ workspacePath }) => {
+      writeFileSync(join(workspacePath, "unexpected.txt"), "unexpected\n");
+      return { exitCode: 0 };
+    };
+    const runtime = createRuntime(fixture);
+    const provision = await provisionWorkspace(runtime.artifacts, fixture.targetPath);
+    const phase = workspaceEnvelope(provision);
+
+    const result = await runtime.operations.perform({
+      request: {
+        requestId: "read-only-command",
+        publicTitle: "Run validation",
+        kind: "workspace_artifact_observation",
+        capabilityRef: "run_command",
+        workspaceRef: provision.workspace.ref,
+        input: { command: "validate", state_effect: "validation" },
+      },
+      envelope: phase,
+    });
+
+    expect(result.outcome).toBe("operation_rejected");
+    expect(result.preview).toContain("read_only_task_mutated_workspace");
+
+    const workspace = new ArtifactStore(fixture.dataRoot)
+      .loadWorkspaceByRef(provision.workspace.ref.id)!;
+    expect(existsSync(join(workspace.workspaceRoot, "content", "unexpected.txt")))
+      .toBe(false);
   });
 });
 
