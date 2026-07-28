@@ -27,7 +27,7 @@ const result = spawnSync(
     "/nologo",
     "/optimize+",
     "/platform:x64",
-    "/target:exe",
+    "/target:winexe",
     `/out:${output}`,
     source,
   ],

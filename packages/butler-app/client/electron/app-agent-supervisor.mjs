@@ -216,6 +216,8 @@ export function createBundledAgentSupervisor({
         env,
         stdio: gateway.stdio ?? stdio,
         detached: gateway.detached === true,
+        shell: false,
+        windowsHide: true,
       });
     } catch (error) {
       rollbackGatewayActivation(gateway, error);
@@ -450,7 +452,7 @@ export function createBundledAgentSupervisor({
     if (!healthy) {
       return { healthy: false, ready: false, timedOut: health.timedOut };
     }
-    const readiness = await runBoundedProbe(() => readinessCheck(localAuth));
+    const readiness = await runBoundedProbe(() => readinessCheck(localAuth, activeGateway));
     return {
       healthy: true,
       ready: readiness.value,

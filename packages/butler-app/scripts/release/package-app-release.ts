@@ -707,6 +707,19 @@ export function isWindowsX64Pe(bytes: Buffer): boolean {
   );
 }
 
+export function isWindowsGuiSubsystemPe(bytes: Buffer): boolean {
+  if (!isWindowsX64Pe(bytes)) return false;
+  const peOffset = bytes.readUInt32LE(0x3c);
+  const optionalHeaderOffset = peOffset + 24;
+  const subsystemOffset = optionalHeaderOffset + 0x44;
+  if (subsystemOffset > bytes.length - 2) return false;
+  const optionalHeaderMagic = bytes.readUInt16LE(optionalHeaderOffset);
+  if (optionalHeaderMagic !== 0x10b && optionalHeaderMagic !== 0x20b) {
+    return false;
+  }
+  return bytes.readUInt16LE(subsystemOffset) === 2;
+}
+
 function assertWindowsX64Pe(path: string, label: string): void {
   if (!isWindowsX64Pe(readFileSync(path))) {
     throw new Error(`${label} is not a Windows x64 PE executable: ${path}`);

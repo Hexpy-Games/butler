@@ -97,6 +97,7 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
     let resolved = 0;
     let gatewayStarts = 0;
     let port = 18765;
+    let readinessGateway: Record<string, unknown> | null = null;
     const healthAuthTokens: string[] = [];
     const supervisor = createBundledAgentSupervisor({
       butlerData: join(tempDir, "data"),
@@ -108,6 +109,7 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
           cwd: "/runtime",
           env: { BUTLER_HOME: "/runtime" },
           appManaged: true,
+          foregroundHost: true,
           bundledAgentVersion: "1.2.3",
           containmentKind: "windows_job_object",
           containmentVerified: true,
@@ -128,6 +130,10 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
         healthChecks += 1;
         if (localAuth?.token) healthAuthTokens.push(localAuth.token);
         return healthChecks >= 2;
+      },
+      readinessCheck: (_localAuth, activeGateway) => {
+        readinessGateway = activeGateway ?? null;
+        return true;
       },
       isPortAvailable: () => true,
       findAvailablePort: (startPort) => startPort,
@@ -156,11 +162,18 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
     expect(committed).toBe(1);
     expect(healthAuthTokens.every((token) => token.length >= 32)).toBe(true);
     expect(healthAuthTokens).not.toHaveLength(0);
+    expect(readinessGateway).toMatchObject({
+      appManaged: true,
+      foregroundHost: true,
+    });
     expect(spawned[0]?.spawn).toMatchObject({
       command: "/runtime/bun",
       args: ["/runtime/bin/butler.js", "gateway", "app"],
       options: {
         cwd: "/runtime",
+        detached: false,
+        shell: false,
+        windowsHide: true,
         env: {
           BUTLER_APP_SERVER_HOST: "127.0.0.1",
           BUTLER_APP_SERVER_PORT: "18765",

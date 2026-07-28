@@ -26,6 +26,7 @@ import {
 import {
   appReleaseIconPath,
   appReleasePackagerIconPath,
+  isWindowsGuiSubsystemPe,
   isWindowsX64Pe,
   createAppReleasePackage,
   prepareBundledAgentResource,
@@ -457,12 +458,20 @@ test("Windows managed runtime validation accepts only x64 PE images", () => {
   x64.writeUInt32LE(0x80, 0x3c);
   x64.write("PE\0\0", 0x80, "binary");
   x64.writeUInt16LE(0x8664, 0x84);
+  x64.writeUInt16LE(0x20b, 0x98);
+  x64.writeUInt16LE(2, 0xdc);
   expect(isWindowsX64Pe(x64)).toBe(true);
+  expect(isWindowsGuiSubsystemPe(x64)).toBe(true);
 
   const x86 = Buffer.from(x64);
   x86.writeUInt16LE(0x014c, 0x84);
   expect(isWindowsX64Pe(x86)).toBe(false);
+  expect(isWindowsGuiSubsystemPe(x86)).toBe(false);
+  const console = Buffer.from(x64);
+  console.writeUInt16LE(3, 0xdc);
+  expect(isWindowsGuiSubsystemPe(console)).toBe(false);
   expect(isWindowsX64Pe(Buffer.from("not-a-pe"))).toBe(false);
+  expect(isWindowsGuiSubsystemPe(Buffer.from("not-a-pe"))).toBe(false);
 });
 
 test("app release manifest validation enforces bundled Agent version coupling", () => {
