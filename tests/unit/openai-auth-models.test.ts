@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -659,7 +659,7 @@ test("registered Z.AI typed tool batches hand off before hidden final synthesis"
   expect(bodies).toHaveLength(1);
 });
 
-test("registered Z.AI hosted tool result compaction emits rehydratable evidence packet", async () => {
+test("registered Z.AI hosted tool result preserves exact structured payload", async () => {
   registerHostedModelConfig({
     providerId: "zai",
     modelId: "glm-5.2",
@@ -727,30 +727,17 @@ test("registered Z.AI hosted tool result compaction emits rehydratable evidence 
   expect(bodies).toHaveLength(2);
   const toolMessage = bodies[1]!.messages.find((message: Record<string, unknown>) => message.role === "tool");
   const content = String(toolMessage.content);
-  expect(content).not.toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
+  expect(content).toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
   const parsed = JSON.parse(content) as Record<string, any>;
-  expect(parsed.output).toMatchObject({
-    schema: "butler.completed-tool-evidence.v1",
-    status: "complete",
+  expect(parsed).toMatchObject({
+    ok: true,
+    output: { ok: true, title: "Large hosted tool result" },
   });
-  const packet = parsed.output.evidence_packet;
-  expect(packet).toMatchObject({
-    schema: "butler.evidence-packet.v1",
-    tool_name: "lookup",
-    tool_call_id: "call_large",
-    turn_id: "turn-hosted-evidence",
-    rehydrate: {
-      kind: "tool_evidence_artifact",
-      tool: "read_tool_evidence_artifact",
-    },
-  });
-  expect(existsSync(packet.rehydrate.path)).toBe(true);
-  const artifact = JSON.parse(readFileSync(packet.rehydrate.path, "utf8")) as Record<string, any>;
-  expect(artifact.serialized_text).toContain("RAW_MIDDLE_ONLY_IN_HOSTED_ARTIFACT");
-  expect(artifact.digest).toBe(packet.digest);
+  expect(content).not.toContain("completed-tool-evidence");
+  expect(content).not.toContain("evidence_packet");
 });
 
-test("registered Z.AI packetizes every completed tool batch with only bounded inline previews", async () => {
+test("registered Z.AI preserves every completed tool result exactly", async () => {
   registerHostedModelConfig({
     providerId: "zai",
     modelId: "glm-5.2",
@@ -818,11 +805,10 @@ test("registered Z.AI packetizes every completed tool batch with only bounded in
   expect(bodies).toHaveLength(3);
   const secondRequest = JSON.stringify(bodies[1]!.messages);
   const thirdRequest = JSON.stringify(bodies[2]!.messages);
-  expect(secondRequest).not.toContain("OLD_RAW_RESULT_".repeat(50));
-  expect(thirdRequest).not.toContain("OLD_RAW_RESULT_".repeat(50));
-  expect(secondRequest).toContain("butler.completed-tool-evidence.v1");
-  expect(thirdRequest).toContain("butler.completed-tool-evidence.v1");
-  expect(thirdRequest).toContain("butler.evidence-packet.v1");
+  expect(secondRequest).toContain("OLD_RAW_RESULT_".repeat(50));
+  expect(thirdRequest).toContain("OLD_RAW_RESULT_".repeat(50));
+  expect(secondRequest).not.toContain("completed-tool-evidence");
+  expect(thirdRequest).not.toContain("evidence_packet");
   expect(thirdRequest).toContain("Latest result");
 });
 
@@ -1539,7 +1525,7 @@ test("registered local OpenAI-compatible model handles function tool continuatio
       role: "tool",
       tool_call_id: "call_1",
       name: "lookup",
-      content: expect.stringContaining("butler.completed-tool-evidence.v1"),
+      content: expect.stringContaining("\"ok\":true"),
     }));
     expect(seenBodies[2]!.tools).toBeUndefined();
     expect(seenBodies[2]!.messages.at(-1)).toMatchObject({
@@ -2224,7 +2210,7 @@ test("registered local OpenAI-compatible model normalizes text-only tool call ma
     expect(seenBodies[1]!.messages).toContainEqual(expect.objectContaining({
       role: "tool",
       name: "web_search",
-      content: expect.stringContaining("butler.completed-tool-evidence.v1"),
+      content: expect.stringContaining("\"ok\":true"),
     }));
     const replayMessages = JSON.stringify(seenBodies[1]!.messages.slice(1));
     expect(replayMessages).not.toContain("<|tool_call>");
@@ -2648,7 +2634,7 @@ test("local provider overflow cannot authorize a tool-schema fallback request", 
   }
 });
 
-test("local admission packetizes a tool result before the immediate follow-up", async () => {
+test("local admission preserves a tool result before the immediate follow-up", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let immediateToolContent = "";
   let finalSynthesisToolContent = "";
@@ -2711,14 +2697,14 @@ test("local admission packetizes a tool result before the immediate follow-up", 
         },
       }],
       executeTool: async () => ({
-        rows: Array.from({ length: 80 }, (_, index) => ({
+        rows: Array.from({ length: 20 }, (_, index) => ({
           id: `row-${index}`,
-          value: `public evidence ${index} `.repeat(20),
+          value: `public evidence ${index} `.repeat(5),
         })),
         middle: "RAW_MIDDLE_SHOULD_BE_COMPACTED",
-        tailRows: Array.from({ length: 80 }, (_, index) => ({
+        tailRows: Array.from({ length: 20 }, (_, index) => ({
           id: `tail-row-${index}`,
-          value: `tail evidence ${index} `.repeat(20),
+          value: `tail evidence ${index} `.repeat(5),
         })),
         source_urls: ["https://example.com/critical-source-at-end"],
       }),
@@ -2726,12 +2712,12 @@ test("local admission packetizes a tool result before the immediate follow-up", 
 
     expect(text).toBe("used compact tool evidence");
     expect(seenBodies).toHaveLength(2);
-    expect(immediateToolContent).toContain("butler.completed-tool-evidence.v1");
-    expect(immediateToolContent).toContain("butler.evidence-packet.v1");
+    expect(immediateToolContent).not.toContain("completed-tool-evidence");
+    expect(immediateToolContent).not.toContain("evidence_packet");
     expect(immediateToolContent).toContain("critical-source-at-end");
-    expect(immediateToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
-    expect(finalSynthesisToolContent).toContain("butler.completed-tool-evidence.v1");
-    expect(finalSynthesisToolContent).not.toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(immediateToolContent).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
+    expect(finalSynthesisToolContent).not.toContain("completed-tool-evidence");
+    expect(finalSynthesisToolContent).toContain("RAW_MIDDLE_SHOULD_BE_COMPACTED");
     expect(seenBodies.every((body) =>
       Array.isArray(body.tools) || body.messages.some((message: any) => message.role === "tool"),
     )).toBe(true);
@@ -2740,7 +2726,7 @@ test("local admission packetizes a tool result before the immediate follow-up", 
   }
 });
 
-test("local function tool prompts use packetized evidence without overflow retry", async () => {
+test("local function tool prompts preserve exact multi-tool results", async () => {
   const seenBodies: Array<Record<string, any>> = [];
   let totalToolContentLength = 0;
   const localServer = Bun.serve({
@@ -2772,25 +2758,11 @@ test("local function tool prompts use packetized evidence without overflow retry
         (sum: number, message: any) => sum + String(message.content || "").length,
         0,
       );
-      if (totalToolContentLength > 12_000) {
-        return Response.json({
-          error: {
-            message: "request (17200 tokens) exceeds the available context size (16384 tokens), try increasing it",
-          },
-        }, { status: 400 });
-      }
-      if (toolMessages.some((message: any) => String(message.content || "").includes("RAW_MULTI_MIDDLE"))) {
-        return Response.json({
-          error: {
-            message: "expected cumulative compaction",
-          },
-        }, { status: 400 });
-      }
       return Response.json({
         choices: [{
           message: {
             role: "assistant",
-            content: finalEnvelope("used cumulatively compacted evidence"),
+            content: finalEnvelope("used exact tool results"),
           },
         }],
       });
@@ -2820,21 +2792,22 @@ test("local function tool prompts use packetized evidence without overflow retry
       log: (line) => logs.push(line),
       executeTool: async (call) => ({
         query: call.args.query,
-        rows: Array.from({ length: 60 }, (_, index) => ({
+        rows: Array.from({ length: 5 }, (_, index) => ({
           id: `${call.args.query}-row-${index}`,
-          value: `public evidence ${index} `.repeat(18),
+          value: `public evidence ${index} `.repeat(2),
         })),
         middle: "RAW_MULTI_MIDDLE",
-        tailRows: Array.from({ length: 60 }, (_, index) => ({
+        tailRows: Array.from({ length: 5 }, (_, index) => ({
           id: `${call.args.query}-tail-row-${index}`,
-          value: `tail evidence ${index} `.repeat(18),
+          value: `tail evidence ${index} `.repeat(2),
         })),
         source_urls: [`https://example.com/${call.args.query}/source-at-end`],
       }),
     });
 
-    expect(text).toBe("used cumulatively compacted evidence");
-    expect(totalToolContentLength).toBeLessThanOrEqual(12_000);
+    expect(text).toBe("used exact tool results");
+    expect(totalToolContentLength).toBeGreaterThan(0);
+    expect(JSON.stringify(seenBodies[1])).toContain("RAW_MULTI_MIDDLE");
     expect(logs.some((line) => line.includes("final_synthesis_context_retry"))).toBe(false);
     expect(seenBodies).toHaveLength(2);
   } finally {
@@ -2935,9 +2908,11 @@ test("local final synthesis overflow after admission fails as an invariant viola
       }),
     });
 
-    await expect(promise).rejects.toMatchObject({ code: "admission_invariant_violation" });
+    await expect(promise).rejects.toMatchObject({
+      code: "model_request_context_capacity_exceeded",
+    });
     expect(compactFinalRequestSeen).toBe(false);
-    expect(seenBodies).toHaveLength(3);
+    expect(seenBodies).toHaveLength(1);
   } finally {
     localServer.stop(true);
   }
@@ -3382,7 +3357,7 @@ test("Codex subscription tool continuation is sent as stateless input without pr
     {
       type: "function_call_output",
       call_id: "call_1",
-      output: expect.stringContaining("butler.completed-tool-evidence.v1"),
+      output: expect.stringContaining("\"ok\":true"),
     },
   ]);
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("large-hidden-reasoning-state");
@@ -3801,7 +3776,7 @@ test("OpenAI function tool prompt refreshes promoted dynamic schemas between too
   expect(seenBodies[1]!.input).toEqual([{
     type: "function_call_output",
     call_id: "call_1",
-    output: expect.stringContaining("butler.completed-tool-evidence.v1"),
+    output: expect.stringContaining("\"ok\":true"),
   }]);
 });
 
@@ -3926,7 +3901,7 @@ test("function tool prompt synthesizes a final answer instead of exposing tool b
   expect(seenBodies[2]!.input).toEqual([{
     type: "function_call_output",
     call_id: "call_2",
-    output: expect.stringContaining("butler.completed-tool-evidence.v1"),
+    output: expect.stringContaining("\"ok\":true"),
   }]);
 });
 
