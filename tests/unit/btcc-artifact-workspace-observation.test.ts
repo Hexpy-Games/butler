@@ -21,6 +21,8 @@ import {
   phaseContinuity,
   promptRunner,
 } from "./support/btcc-production-selected-model-fixtures.ts";
+import { ArtifactStore } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/operations/artifact-store.ts";
 
 afterEach(cleanupProductionOperationsFixtures);
 
@@ -52,6 +54,9 @@ describe("artifact workspace observation", () => {
     });
     expect(readFileSync(join(fixture.targetPath, "guide.md"), "utf8")).toBe(fixture.original);
     expect(observed.artifactRevisionRef).toBeUndefined();
+    expect(observed.targetSnapshotRef).toBeDefined();
+    expect(new ArtifactStore(fixture.dataRoot).loadSnapshot(observed.targetSnapshotRef!.id))
+      .toMatchObject({ ref: observed.targetSnapshotRef });
   });
 });
 

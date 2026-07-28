@@ -82,6 +82,21 @@ test("workspace execution records a snapshot-only revision after validation", as
   ]);
 });
 
+test("read-only workspace execution records its observed snapshot without an artifact revision", async () => {
+  const observation = observedWorkspaceReadResult("read", "snapshot-read");
+  const product = await performTask(executionInvocation([observation], "read_only"));
+
+  expect(product.kind).toBe("result_candidate");
+  if (product.kind !== "result_candidate" || product.result.kind !== "workspace_artifact") {
+    throw new Error("expected read-only workspace revision");
+  }
+  expect(product.result.artifactRevisionRefs).toEqual([]);
+  expect(product.result.workspaceRevision.targetSnapshotRef).toEqual(ref("snapshot-read"));
+  expect(product.result.workspaceRevision.producedByOperationRefs).toEqual([
+    ref("observation-read"),
+  ]);
+});
+
 test("workspace review cannot pass when validation was rejected", async () => {
   const rejectedValidation: OperationResult = {
     requestId: "review-validation",
@@ -273,7 +288,10 @@ test("workspace review diagnoses a duplicate current Task criterion", async () =
   });
 });
 
-function executionInvocation(results: OperationResult[]): PhaseInvocation {
+function executionInvocation(
+  results: OperationResult[],
+  mutationScope: "read_only" | "contained_paths" = "contained_paths",
+): PhaseInvocation {
   return invocation("task_execution", results, {
     goalContractRef: ref("goal"),
     authorityRef: ref("authority"),
@@ -288,6 +306,10 @@ function executionInvocation(results: OperationResult[]): PhaseInvocation {
         workspaceRef,
         baselineSnapshotRef: ref("baseline-snapshot"),
         acceptedBaseRevisionRefs: [],
+        operationRoot: { kind: "file", relativeTarget: "target" },
+        mutationScope: mutationScope === "read_only"
+          ? { kind: "read_only" }
+          : { kind: "contained_paths", writablePaths: ["target"] },
       },
     },
     targetScopeRefs: ["guide.md"],
@@ -570,6 +592,24 @@ function observedWorkspaceResult(suffix: string, snapshot: string): OperationRes
     observationRef: ref(`observation-${suffix}`),
     targetSnapshotRef: ref(snapshot),
     content: "validation passed without changing artifact bytes",
+  };
+}
+
+function observedWorkspaceReadResult(suffix: string, snapshot: string): OperationResult {
+  return {
+    requestId: `workspace-read-${suffix}`,
+    request: {
+      requestId: `workspace-read-${suffix}`,
+      publicTitle: "Read current workspace bytes",
+      kind: "workspace_artifact_observation",
+      capabilityRef: "read-file",
+      workspaceRef,
+      input: { path: "guide.md" },
+    },
+    outcome: "observed",
+    observationRef: ref(`observation-${suffix}`),
+    targetSnapshotRef: ref(snapshot),
+    content: "current workspace bytes",
   };
 }
 
