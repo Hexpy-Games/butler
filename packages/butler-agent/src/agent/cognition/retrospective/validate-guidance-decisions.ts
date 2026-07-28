@@ -118,6 +118,14 @@ function validateAcceptedScope(
     decision.acceptedScopeKind === "project" &&
     decision.acceptedGeneralityBoundary !== "project_bound_strategy"
   ) throw new Error("Project guidance requires a project-bound strategy boundary");
+  if (
+    decision.acceptedScopeKind === "session" &&
+    decision.acceptedGeneralityBoundary !== "session_bound_strategy"
+  ) throw new Error("Session guidance requires a session-bound strategy boundary");
+  if (
+    decision.acceptedScopeKind === "global" &&
+    decision.acceptedGeneralityBoundary !== "global_phase_practice"
+  ) throw new Error("Global guidance requires a global phase-practice boundary");
   if (decision.acceptedScopeKind === "project" && !trajectory.projectRef) {
     throw new Error("Project guidance requires a project-bound trajectory");
   }
@@ -127,9 +135,12 @@ function acceptedScope(
   decision: Extract<GuidanceDecision, { disposition: "promote" | "merge" | "supersede" }>,
   trajectory: BtccTrajectory,
 ): PhaseGuidanceScope {
-  return decision.acceptedScopeKind === "project"
-    ? { kind: "project", projectRef: trajectory.projectRef! }
-    : { kind: "user", userRef: trajectory.userRef };
+  switch (decision.acceptedScopeKind) {
+    case "user": return { kind: "user", userRef: trajectory.userRef };
+    case "project": return { kind: "project", projectRef: trajectory.projectRef! };
+    case "session": return { kind: "session", sessionId: trajectory.sessionId };
+    case "global": return { kind: "global" };
+  }
 }
 
 function findGuidance(
@@ -161,11 +172,18 @@ type GuidanceRevisionTarget = Extract<
 >["targetRevision"];
 
 function sameScope(left: PhaseGuidanceScope, right: PhaseGuidanceScope): boolean {
-  return left.kind === right.kind && (
-    left.kind === "user"
-      ? left.userRef === (right as Extract<PhaseGuidanceScope, { kind: "user" }>).userRef
-      : left.projectRef === (right as Extract<PhaseGuidanceScope, { kind: "project" }>).projectRef
-  );
+  if (left.kind !== right.kind) return false;
+  switch (left.kind) {
+    case "user":
+      return left.userRef === (right as Extract<PhaseGuidanceScope, { kind: "user" }>).userRef;
+    case "project":
+      return left.projectRef ===
+        (right as Extract<PhaseGuidanceScope, { kind: "project" }>).projectRef;
+    case "session":
+      return left.sessionId ===
+        (right as Extract<PhaseGuidanceScope, { kind: "session" }>).sessionId;
+    case "global": return true;
+  }
 }
 
 function sameRevisionRef(

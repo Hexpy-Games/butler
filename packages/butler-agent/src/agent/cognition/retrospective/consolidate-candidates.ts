@@ -58,11 +58,12 @@ export async function consolidateCandidates(input: {
           disposition: "one supplied disposition",
           guidanceId: "stable accepted guidance id",
           rationale: "string",
-          acceptedScopeKind: "required for promote|merge|supersede: user|project",
+          acceptedScopeKind:
+            "required for promote|merge|supersede: user|project|session|global",
           acceptedScopeRationale: "required for promote|merge|supersede",
           acceptedScopeSourceRefs: ["required exact allowed source ref"],
           acceptedGeneralityBoundary:
-            "required: cross_project_user_preference|project_bound_strategy",
+            "required: cross_project_user_preference|project_bound_strategy|session_bound_strategy|global_phase_practice",
           acceptedGuidance: "required final publishable guidance bytes",
           acceptedAppliesWhen: ["reviewed final applicability condition"],
           acceptedDoesNotApplyWhen: ["reviewed final exclusion condition"],
@@ -70,7 +71,7 @@ export async function consolidateCandidates(input: {
             requiredFor: "merge|supersede only; exact existingAcceptedGuidance revision",
             guidanceId: "string",
             phase: "BTCC model phase",
-            scope: "exact user or project scope object",
+            scope: "exact user, project, session, or global scope object",
             revision: "positive integer",
             contentSha256: "exact content hash",
           },

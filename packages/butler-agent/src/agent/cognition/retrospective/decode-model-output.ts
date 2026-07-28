@@ -9,6 +9,8 @@ import {
   type BtccRetrospective,
   type GuidanceDecision,
   type GuidanceDisposition,
+  type GuidanceGeneralityBoundary,
+  type GuidanceScopeKind,
   type PhaseGuidanceCandidate,
   type RetrospectiveDecisionSet,
   type RetrospectiveDimension,
@@ -89,7 +91,7 @@ function decodeCandidate(value: unknown): PhaseGuidanceCandidate {
   const phase = string(candidate.phase, "candidate phase");
   if (!PHASES.has(phase as ModelPhaseState)) throw new Error(`Unknown guidance phase: ${phase}`);
   const scopeKind = string(candidate.scopeKind, "candidate scopeKind");
-  if (scopeKind !== "user" && scopeKind !== "project") {
+  if (!isGuidanceScopeKind(scopeKind)) {
     throw new Error(`Unknown guidance scope: ${scopeKind}`);
   }
   const confidence = number(candidate.confidence, "candidate confidence");
@@ -190,6 +192,10 @@ function decodeGuidanceScope(value: unknown): PhaseGuidanceScope {
   if (kind === "project") {
     return { kind, projectRef: string(scope.projectRef, "target guidance project ref") };
   }
+  if (kind === "session") {
+    return { kind, sessionId: string(scope.sessionId, "target guidance session id") };
+  }
+  if (kind === "global") return { kind };
   throw new Error(`Unknown target guidance scope: ${kind}`);
 }
 
@@ -206,20 +212,29 @@ function rejectDuplicateCandidateIds(candidates: PhaseGuidanceCandidate[]): void
 function guidanceBoundary(
   value: unknown,
   label: string,
-): PhaseGuidanceCandidate["generalityBoundary"] {
+): GuidanceGeneralityBoundary {
   const boundary = string(value, label);
-  if (boundary !== "cross_project_user_preference" && boundary !== "project_bound_strategy") {
+  if (
+    boundary !== "cross_project_user_preference" &&
+    boundary !== "project_bound_strategy" &&
+    boundary !== "session_bound_strategy" &&
+    boundary !== "global_phase_practice"
+  ) {
     throw new Error(`Unknown guidance generality boundary: ${boundary}`);
   }
   return boundary;
 }
 
-function guidanceScopeKind(value: unknown, label: string): "user" | "project" {
+function guidanceScopeKind(value: unknown, label: string): GuidanceScopeKind {
   const scope = string(value, label);
-  if (scope !== "user" && scope !== "project") {
+  if (!isGuidanceScopeKind(scope)) {
     throw new Error(`Unknown accepted guidance scope: ${scope}`);
   }
   return scope;
+}
+
+function isGuidanceScopeKind(value: string): value is GuidanceScopeKind {
+  return value === "user" || value === "project" || value === "session" || value === "global";
 }
 
 function parseJson(text: string): unknown {

@@ -2,7 +2,9 @@ import type { ModelPhaseState } from "../core/index.ts";
 
 export type PhaseGuidanceScope =
   | { kind: "user"; userRef: string }
-  | { kind: "project"; projectRef: string };
+  | { kind: "project"; projectRef: string }
+  | { kind: "session"; sessionId: string }
+  | { kind: "global" };
 
 export type PhaseGuidanceRevisionRef = {
   guidanceId: string;
@@ -18,7 +20,11 @@ export type AcceptedPhaseGuidance = {
   scope: PhaseGuidanceScope;
   scopeRationale: string;
   scopeSourceRefs: string[];
-  generalityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+  generalityBoundary:
+    | "cross_project_user_preference"
+    | "project_bound_strategy"
+    | "session_bound_strategy"
+    | "global_phase_practice";
   revisionKind: "promote" | "merge" | "supersede";
   predecessor?: PhaseGuidanceRevisionRef;
   revision: number;
@@ -46,6 +52,7 @@ export interface PhaseGuidanceReader {
   list(input: {
     phase: ModelPhaseState;
     userRef: string;
+    sessionId: string;
     projectRef?: string;
   }): Promise<AcceptedPhaseGuidance[]> | AcceptedPhaseGuidance[];
 }

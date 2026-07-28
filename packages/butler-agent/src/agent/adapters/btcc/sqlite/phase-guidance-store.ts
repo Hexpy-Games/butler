@@ -37,22 +37,30 @@ export class SqlitePhaseGuidanceStore implements PhaseGuidanceRepository {
   list(input: {
     phase: ModelPhaseState;
     userRef: string;
+    sessionId: string;
     projectRef?: string;
   }): AcceptedPhaseGuidance[] {
-    const rows = this.db.query<GuidanceRow, [string, string, string]>(`
+    const rows = this.db.query<GuidanceRow, [string, string, string, string]>(`
       SELECT guidance_json
       FROM btcc_phase_guidance
       WHERE status = 'active'
         AND phase = ?
         AND (
-          (scope_kind = 'project' AND scope_id = ?)
+          (scope_kind = 'session' AND scope_id = ?)
+          OR (scope_kind = 'project' AND scope_id = ?)
           OR (scope_kind = 'user' AND scope_id = ?)
+          OR (scope_kind = 'global' AND scope_id = 'global')
         )
       ORDER BY
-        CASE scope_kind WHEN 'project' THEN 0 ELSE 1 END,
+        CASE scope_kind
+          WHEN 'session' THEN 0
+          WHEN 'project' THEN 1
+          WHEN 'user' THEN 2
+          ELSE 3
+        END,
         guidance_id ASC,
         revision DESC
-    `).all(input.phase, input.projectRef ?? "", input.userRef);
+    `).all(input.phase, input.sessionId, input.projectRef ?? "", input.userRef);
     const guidanceIds = new Set<string>();
     return rows.flatMap((row) => {
       const guidance = decodeGuidance(row.guidance_json);
@@ -190,9 +198,12 @@ export class SqlitePhaseGuidanceStore implements PhaseGuidanceRepository {
 }
 
 function storageScope(scope: PhaseGuidanceScope) {
-  return scope.kind === "project"
-    ? { kind: "project" as const, id: scope.projectRef }
-    : { kind: "user" as const, id: scope.userRef };
+  switch (scope.kind) {
+    case "user": return { kind: "user" as const, id: scope.userRef };
+    case "project": return { kind: "project" as const, id: scope.projectRef };
+    case "session": return { kind: "session" as const, id: scope.sessionId };
+    case "global": return { kind: "global" as const, id: "global" };
+  }
 }
 
 function validateInput(
@@ -212,6 +223,14 @@ function validateInput(
     input.scope.kind === "project" &&
     input.generalityBoundary !== "project_bound_strategy"
   ) throw new Error("Project guidance requires a project-bound boundary");
+  if (
+    input.scope.kind === "session" &&
+    input.generalityBoundary !== "session_bound_strategy"
+  ) throw new Error("Session guidance requires a session-bound boundary");
+  if (
+    input.scope.kind === "global" &&
+    input.generalityBoundary !== "global_phase_practice"
+  ) throw new Error("Global guidance requires a global phase-practice boundary");
   const scope = storageScope(input.scope);
   if (!scope.id.trim()) throw new Error("BTCC phase guidance requires a scope id");
 }
@@ -263,9 +282,17 @@ function sameRevision(
 
 function sameScope(left: PhaseGuidanceScope, right: PhaseGuidanceScope): boolean {
   if (left.kind !== right.kind) return false;
-  return left.kind === "user"
-    ? left.userRef === (right as Extract<PhaseGuidanceScope, { kind: "user" }>).userRef
-    : left.projectRef === (right as Extract<PhaseGuidanceScope, { kind: "project" }>).projectRef;
+  switch (left.kind) {
+    case "user":
+      return left.userRef === (right as Extract<PhaseGuidanceScope, { kind: "user" }>).userRef;
+    case "project":
+      return left.projectRef ===
+        (right as Extract<PhaseGuidanceScope, { kind: "project" }>).projectRef;
+    case "session":
+      return left.sessionId ===
+        (right as Extract<PhaseGuidanceScope, { kind: "session" }>).sessionId;
+    case "global": return true;
+  }
 }
 
 function union(left: string[], right: string[]): string[] {
@@ -283,7 +310,9 @@ function decodeGuidance(value: string): AcceptedPhaseGuidance | null {
       typeof parsed.scopeRationale !== "string" ||
       !Array.isArray(parsed.scopeSourceRefs) ||
       (parsed.generalityBoundary !== "cross_project_user_preference" &&
-        parsed.generalityBoundary !== "project_bound_strategy") ||
+        parsed.generalityBoundary !== "project_bound_strategy" &&
+        parsed.generalityBoundary !== "session_bound_strategy" &&
+        parsed.generalityBoundary !== "global_phase_practice") ||
       !Number.isInteger(parsed.revision) || Number(parsed.revision) < 1 ||
       (parsed.revisionKind !== "promote" && parsed.revisionKind !== "merge" &&
         parsed.revisionKind !== "supersede") ||
@@ -297,7 +326,11 @@ function decodeGuidance(value: string): AcceptedPhaseGuidance | null {
       (parsed.scope.kind === "user" &&
         parsed.generalityBoundary !== "cross_project_user_preference") ||
       (parsed.scope.kind === "project" &&
-        parsed.generalityBoundary !== "project_bound_strategy")
+        parsed.generalityBoundary !== "project_bound_strategy") ||
+      (parsed.scope.kind === "session" &&
+        parsed.generalityBoundary !== "session_bound_strategy") ||
+      (parsed.scope.kind === "global" &&
+        parsed.generalityBoundary !== "global_phase_practice")
     ) return null;
     if (
       (parsed.revisionKind === "promote" && parsed.predecessor !== undefined) ||
@@ -329,8 +362,14 @@ function validRevisionRef(value: unknown): value is PhaseGuidanceRevisionRef {
 function validScope(value: unknown): value is PhaseGuidanceScope {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const scope = value as Partial<PhaseGuidanceScope> & Record<string, unknown>;
-  return scope.kind === "user"
-    ? typeof scope.userRef === "string" && Boolean(scope.userRef)
-    : scope.kind === "project" && typeof scope.projectRef === "string" &&
-      Boolean(scope.projectRef);
+  if (scope.kind === "user") {
+    return typeof scope.userRef === "string" && Boolean(scope.userRef);
+  }
+  if (scope.kind === "project") {
+    return typeof scope.projectRef === "string" && Boolean(scope.projectRef);
+  }
+  if (scope.kind === "session") {
+    return typeof scope.sessionId === "string" && Boolean(scope.sessionId);
+  }
+  return scope.kind === "global";
 }

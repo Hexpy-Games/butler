@@ -20,7 +20,7 @@ export const RETROSPECTIVE_RUBRIC: Record<RetrospectiveDimension, string> = {
   user_stewardship:
     "Check truthful progress, remembered preferences, respectful interaction, material limitations, and avoidance of needless user intervention.",
   learning_calibration:
-    "Test confidence, counterexamples, reuse scope, overfitting risk, and whether the lesson belongs to user guidance, exact-project guidance, or neither.",
+    "Test confidence, counterexamples, reuse scope, overfitting risk, and whether the lesson belongs to user, exact-project, exact-session, global phase-practice guidance, or neither.",
 };
 
 export const GUIDANCE_SCOPE_RULES = {
@@ -28,6 +28,10 @@ export const GUIDANCE_SCOPE_RULES = {
     "Use only for a durable preference or resolution strategy that has credible evidence of applying across the user's projects; never use for repository, project, session, or one-turn facts.",
   project:
     "Use only for a strategy or constraint tied to the exact current project; it must not leak to another project.",
+  session:
+    "Use only for a strategy tied to the exact current conversation session; it must not leak to another session.",
+  global:
+    "Use only for stable phase practice supported across users and projects; it cannot change the algorithm, model, provider, code, version, schema, or authority.",
   reject:
     "Reject or defer one-turn noise, unsupported generalization, and lessons whose safe scope cannot be established from exact source references.",
 } as const;

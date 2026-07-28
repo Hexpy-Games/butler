@@ -147,11 +147,15 @@ function acceptedGuidance(
   candidate: PhaseGuidanceCandidate,
   decision: Extract<GuidanceDecision, { disposition: "promote" | "merge" | "supersede" }>,
 ) {
-  const scope = decision.acceptedScopeKind === "project"
-    ? trajectory.projectRef
-      ? { kind: "project" as const, projectRef: trajectory.projectRef }
-      : null
-    : { kind: "user" as const, userRef: trajectory.userRef };
+  const scope = decision.acceptedScopeKind === "user"
+    ? { kind: "user" as const, userRef: trajectory.userRef }
+    : decision.acceptedScopeKind === "project"
+      ? trajectory.projectRef
+        ? { kind: "project" as const, projectRef: trajectory.projectRef }
+        : null
+      : decision.acceptedScopeKind === "session"
+        ? { kind: "session" as const, sessionId: trajectory.sessionId }
+        : { kind: "global" as const };
   if (!scope) throw new Error("Project guidance candidate requires a project-bound trajectory");
   return {
     guidanceId: decision.guidanceId,

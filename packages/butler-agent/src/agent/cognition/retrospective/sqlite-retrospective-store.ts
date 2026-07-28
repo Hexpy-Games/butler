@@ -22,6 +22,7 @@ type PendingRow = {
   source_id: string;
   source_json: string;
   original_message: string;
+  session_id: string;
   context_json: string;
   final_payload_json: string;
 };
@@ -35,6 +36,7 @@ type CheckpointRow = {
 type JsonRow = { value: string };
 type MissingSourceRow = {
   turn_id: string;
+  session_id: string;
   final_payload_json: string;
   managed_state_json: string | null;
   opening_answer_json: string | null;
@@ -57,7 +59,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
   loadPendingTrajectories(limit = 20): BtccTrajectory[] {
     this.reconcileMissingSources();
     const rows = this.db.query<PendingRow, [number]>(`
-      SELECT o.outbox_id, s.source_id, s.source_json,
+      SELECT o.outbox_id, s.source_id, s.source_json, t.session_id,
              t.original_message, t.context_json, t.final_payload_json
       FROM btcc_learning_candidate_outbox o
       JOIN btcc_learning_sources s ON s.source_id = o.source_id
@@ -117,6 +119,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
       this.guidance.list({
         phase,
         userRef: trajectory.userRef,
+        sessionId: trajectory.sessionId,
         ...(trajectory.projectRef ? { projectRef: trajectory.projectRef } : {}),
       }).filter((entry) => {
         const key = `${entry.guidanceId}:${entry.phase}:${entry.scope.kind}:${entry.revision}`;
@@ -167,6 +170,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
       sourceId: row.source_id,
       outboxId: row.outbox_id,
       turnId,
+      sessionId: row.session_id,
       userRef: requiredString(context.userRef, "turn userRef"),
       ...(typeof context.projectRef === "string" ? { projectRef: context.projectRef } : {}),
       originalRequest: row.original_message,
@@ -218,7 +222,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
 
   private reconcileMissingSources(): void {
     const rows = this.db.query<MissingSourceRow, []>(`
-      SELECT t.turn_id, t.final_payload_json, t.managed_state_json,
+      SELECT t.turn_id, t.session_id, t.final_payload_json, t.managed_state_json,
              t.opening_answer_json, t.context_json
       FROM btcc_turns t
       LEFT JOIN btcc_learning_sources s ON s.turn_id = t.turn_id
@@ -245,6 +249,7 @@ export class SqliteBtccRetrospectiveStore implements BtccRetrospectiveStore {
     const source = {
       sourceId,
       turnId: row.turn_id,
+      sessionId: row.session_id,
       finalPayloadRef,
       ...(goalContractRef ? { goalContractRef } : {}),
       ...(finalDossierRef ? { finalDossierRef } : {}),
