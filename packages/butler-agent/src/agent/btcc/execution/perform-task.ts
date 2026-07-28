@@ -154,25 +154,26 @@ function workspaceResult(
   operationResults: OperationResultProjection[],
 ) {
   const workspaceRef = requireContentRef(target.workspaceRef, "workspaceRef");
-  const workspaceActions = operationResults.filter(
+  const requiredOperationKind = requiredWorkspaceOperationKind(target);
+  const workspaceOperations = operationResults.filter(
     (result) =>
       (result.outcome === "observed" || result.outcome === "workspace_artifact_applied") &&
-      result.request.kind === "workspace_artifact_action" &&
+      result.request.kind === requiredOperationKind &&
       sameContentRef(result.request.workspaceRef, workspaceRef) &&
       result.targetSnapshotRef,
   );
-  if (workspaceActions.length === 0) {
+  if (workspaceOperations.length === 0) {
     throw new Error(
-      "Workspace artifact Execution requires a successful snapshot-bearing workspace action",
+      `Workspace artifact Execution requires a successful snapshot-bearing ${requiredOperationKind}`,
     );
   }
-  const applied = workspaceActions.filter(
+  const applied = workspaceOperations.filter(
     (result) => result.outcome === "workspace_artifact_applied",
   );
   const artifactRevisionRefs = applied.map((result, index) =>
     requireContentRef(result.artifactRevisionRef, `artifactRevisionRef[${index}]`));
   const targetSnapshotRef = requireContentRef(
-    workspaceActions.at(-1)!.targetSnapshotRef,
+    workspaceOperations.at(-1)!.targetSnapshotRef,
     "targetSnapshotRef",
   );
   const body = {
@@ -186,7 +187,7 @@ function workspaceResult(
     ),
     artifactRevisionRefs,
     targetSnapshotRef,
-    producedByOperationRefs: workspaceActions.map((result) => result.observationRef),
+    producedByOperationRefs: workspaceOperations.map((result) => result.observationRef),
   };
   const revision: WorkspaceRevision = {
     ref: contentRef("workspace-revision", body), ...body,
@@ -199,6 +200,14 @@ function workspaceResult(
     workspaceRevision: revision,
     artifactRevisionRefs,
   };
+}
+
+function requiredWorkspaceOperationKind(target: Record<string, unknown>) {
+  const mutationScope = requireRecord(target.mutationScope, "mutationScope");
+  const kind = requireString(mutationScope.kind, "mutationScope.kind");
+  if (kind === "read_only") return "workspace_artifact_observation" as const;
+  requireLiteral(kind, "contained_paths", "mutationScope.kind");
+  return "workspace_artifact_action" as const;
 }
 
 function sameContentRef(left: ContentRef, right: ContentRef): boolean {

@@ -38,6 +38,11 @@ export async function performWorkspaceObservation(input: {
   });
   assertActive(input.signal);
   const payload = operationContent(output);
+  const targetSnapshotRef = input.store.snapshots.captureWorkspace(
+    workspace.workspaceRoot,
+    workspace.targetKind,
+    workspace.baselineTargetState,
+  ).ref;
   return {
     requestId: input.request.requestId,
     outcome: "observed",
@@ -45,6 +50,7 @@ export async function performWorkspaceObservation(input: {
       requestId: input.request.requestId,
       capabilityRef: input.request.capabilityRef,
       workspaceRef: input.request.workspaceRef,
+      targetSnapshotRef,
       payload: payload.payloadSource
         ? {
             sha256: payload.payloadSource.sha256,
@@ -52,6 +58,7 @@ export async function performWorkspaceObservation(input: {
           }
         : payload.content,
     }),
+    targetSnapshotRef,
     content: payload.content,
     ...(payload.payloadSource ? { payloadSource: payload.payloadSource } : {}),
     ...(payload.executionSummary ? { executionSummary: payload.executionSummary } : {}),
