@@ -41,10 +41,6 @@ export async function runOpenAIFunctionToolPromptText(
     messages: [{ role: "user", content: promptForAgentLoop }],
     tools: agentLoopTools,
     maxIterations: maxRounds,
-    evidenceRetention: {
-      butlerData: options.butlerData,
-      turnId: options.usageAttribution?.turnId,
-    },
     callModel: async ({ messages }) => {
       const activeTools = activeFunctionTools(options);
       const allowedNames = new Set(activeTools.map((tool) => tool.name));

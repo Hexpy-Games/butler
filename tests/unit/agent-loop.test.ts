@@ -1,12 +1,8 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync, mkdtempSync, rmSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
 import {
   runAgentLoop,
   type AgentLoopToolDefinition,
 } from "../../packages/butler-agent/src/agent/model-tool-loop/index.ts";
-import { readToolEvidenceArtifactSlice } from "../../packages/butler-agent/src/agent/context/tool-evidence-retention.ts";
 
 const tools: AgentLoopToolDefinition[] = [{
   name: "echo",
@@ -125,156 +121,27 @@ test("agent loop serializes schema validation failures as structured observation
   expect(context).toContain("\"model_visible_content\"");
 });
 
-test("agent loop stores completed tool evidence in a rehydratable artifact", async () => {
-  const root = mkdtempSync(join(tmpdir(), "butler-agent-loop-evidence-"));
-  try {
-    let immediateMessage = "";
-    const result = await runAgentLoop({
-      messages: [{ role: "user", content: "inspect a noisy command compactly with evidence retention" }],
-      tools,
-      evidenceRetention: {
-        butlerData: root,
-        turnId: "turn-1",
-        semanticWorkBlockId: "work-block-1",
-        now: new Date("2026-07-09T00:00:00.000Z"),
-      },
-      callModel: async (input) => {
-        if (input.iteration === 0) {
-          return {
-            toolCalls: [{
-              id: "call-1",
-              name: "echo",
-              arguments: { message: "large" },
-            }],
-          };
-        }
-        immediateMessage = input.messages.find((message) => message.role === "tool")?.content ?? "";
-        return { text: "artifact packet received" };
-      },
-      executeTool: async () => ({
-        ok: true,
-        title: "Large retained command output",
-        stdout: [
-          "HEAD_START",
-          "A".repeat(30_000),
-          "RAW_MIDDLE_ONLY_IN_ARTIFACT",
-          "B".repeat(30_000),
-          "TAIL_END",
-        ].join("\n"),
-      }),
-    });
+test("agent loop preserves the exact structured successful result", async () => {
+  let observed = "";
+  await runAgentLoop({
+    messages: [{ role: "user", content: "read exact result" }],
+    tools,
+    callModel: async (input) => {
+      if (input.iteration === 0) return {
+        toolCalls: [{ id: "call-exact", name: "echo", arguments: { message: "exact" } }],
+      };
+      observed = input.messages.find((message) => message.role === "tool")?.content ?? "";
+      return { text: "done" };
+    },
+    executeTool: async () => ({ text: "RAW_EXACT_RESULT", nested: { count: 7 } }),
+  });
 
-    const immediate = JSON.parse(immediateMessage) as Record<string, any>;
-    const packet = immediate.output.evidence_packet;
-    expect(result.finalText).toBe("artifact packet received");
-    expect(immediate.output.schema).toBe("butler.completed-tool-evidence.v1");
-    expect(immediateMessage).not.toContain("RAW_MIDDLE_ONLY_IN_ARTIFACT");
-    expect(packet).toMatchObject({
-      schema: "butler.evidence-packet.v1",
-      tool_name: "echo",
-      tool_call_id: "call-1",
-      turn_id: "turn-1",
-      semantic_work_block_id: "work-block-1",
-      rehydrate: {
-        kind: "tool_evidence_artifact",
-        tool: "read_tool_evidence_artifact",
-      },
-    });
-    expect(packet.digest).toMatch(/^[a-f0-9]{64}$/);
-    expect(packet.raw_estimated_tokens).toBeGreaterThan(6_000);
-    expect(existsSync(packet.rehydrate.path)).toBe(true);
-
-    const artifact = JSON.parse(readFileSync(packet.rehydrate.path, "utf8")) as Record<string, any>;
-    expect(artifact.schema).toBe("butler.raw-tool-artifact.v1");
-    expect(artifact.id).toBe(packet.artifact_id);
-    expect(artifact.serialized_text).toContain("RAW_MIDDLE_ONLY_IN_ARTIFACT");
-    expect(artifact.digest).toBe(packet.digest);
-
-    const focused = readToolEvidenceArtifactSlice({
-      butlerData: root,
-      artifactId: packet.artifact_id,
-      offsetLines: 9,
-      limitLines: 1,
-      maxTokens: 200,
-    });
-    expect(focused.ok).toBe(true);
-    expect(focused.artifact?.id).toBe(packet.artifact_id);
-    expect(focused.text?.text).toContain("RAW_MIDDLE_ONLY_IN_ARTIFACT");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("agent loop applies one durable evidence boundary to small and large successful results", async () => {
-  const root = mkdtempSync(join(tmpdir(), "butler-agent-loop-boundary-"));
-  try {
-    const observed: string[] = [];
-    await runAgentLoop({
-      messages: [{ role: "user", content: "run two tools" }],
-      tools,
-      maxIterations: 3,
-      evidenceRetention: { butlerData: root, turnId: "turn-boundary" },
-      callModel: async (input) => {
-        if (input.iteration < 2) {
-          return {
-            toolCalls: [{
-              id: `call-${input.iteration}`,
-              name: "echo",
-              arguments: { message: String(input.iteration) },
-            }],
-          };
-        }
-        observed.push(
-          ...input.messages
-            .filter((message) => message.role === "tool")
-            .map((message) => message.content),
-        );
-        return { text: "done" };
-      },
-      executeTool: async (call) => call.id === "call-0"
-        ? { value: "small" }
-        : { value: "RAW_LARGE_RESULT".repeat(10_000) },
-    });
-
-    expect(observed).toHaveLength(2);
-    for (const content of observed) {
-      const completed = JSON.parse(content).output;
-      expect(completed.schema).toBe("butler.completed-tool-evidence.v1");
-      expect(completed.evidence_packet.schema).toBe("butler.evidence-packet.v1");
-      expect(completed.evidence_packet.rehydrate.kind).toBe("tool_evidence_artifact");
-    }
-    expect(observed.join("\n")).not.toContain("RAW_LARGE_RESULT");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("agent loop rehydrates exact successful evidence from its digest-bound artifact", async () => {
-  const root = mkdtempSync(join(tmpdir(), "butler-agent-loop-rehydrate-"));
-  try {
-    let observed = "";
-    await runAgentLoop({
-      messages: [{ role: "user", content: "read evidence" }],
-      tools,
-      evidenceRetention: { butlerData: root, turnId: "turn-rehydrate" },
-      callModel: async (input) => {
-        if (input.iteration === 0) return {
-          toolCalls: [{ id: "call-exact", name: "echo", arguments: { message: "exact" } }],
-        };
-        observed = input.messages.find((message) => message.role === "tool")?.content ?? "";
-        return { text: "done" };
-      },
-      executeTool: async () => ({ text: "RAW_EXACT_EVIDENCE", count: 7 }),
-    });
-
-    const packet = JSON.parse(observed).output.evidence_packet;
-    const artifact = JSON.parse(readFileSync(packet.rehydrate.path, "utf8"));
-    expect(artifact.digest).toBe(packet.digest);
-    expect(artifact.raw).toEqual({ text: "RAW_EXACT_EVIDENCE", count: 7 });
-    expect(observed).not.toContain("RAW_EXACT_EVIDENCE");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  expect(JSON.parse(observed)).toEqual({
+    ok: true,
+    output: { text: "RAW_EXACT_RESULT", nested: { count: 7 } },
+  });
+  expect(observed).not.toContain("completed-tool-evidence");
+  expect(observed).not.toContain("evidence_packet");
 });
 
 test("agent loop exposes assistant text before executing selected tools", async () => {

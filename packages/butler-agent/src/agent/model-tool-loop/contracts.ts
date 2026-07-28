@@ -1,5 +1,3 @@
-import type { ToolEvidenceRetentionContext } from "../context/tool-evidence-retention.ts";
-
 export type AgentLoopRole = "system" | "user" | "assistant" | "tool";
 
 export interface AgentLoopMessage {
@@ -59,7 +57,6 @@ export interface AgentLoopInput {
   messages: AgentLoopMessage[];
   tools: AgentLoopToolDefinition[];
   maxIterations?: number;
-  evidenceRetention?: ToolEvidenceRetentionContext;
   callModel: (input: AgentLoopModelInput) => Promise<AgentLoopModelResponse>;
   onAssistantTextBeforeTools?: (input: {
     text: string;

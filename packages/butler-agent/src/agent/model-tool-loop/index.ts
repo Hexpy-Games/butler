@@ -20,3 +20,7 @@ export {
   toolBatchCompletedHandoffText,
 } from "./tool-batch-handoff.ts";
 export { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
+export {
+  serializeToolResultPayloadForProvider,
+  toolResultPayloadForProvider,
+} from "./tool-result-serialization.ts";
