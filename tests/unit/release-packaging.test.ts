@@ -818,7 +818,10 @@ test("agent release packager creates an installable artifact with app web client
     expect(entries).toContain(`./${currentCliLauncher}`);
     expect(entries).toContain("./packages/butler-agent/scripts/service-control.sh");
     expect(entries).toContain(
-      "./packages/butler-agent/src/foundation/atomic-root-exchange.ts",
+      "./packages/butler-agent/src/foundation/complete-root-commit/index.ts",
+    );
+    expect(entries).toContain(
+      "./packages/butler-agent/src/foundation/complete-root-commit/adapters/windows.ts",
     );
     expect(entries).toContain("./packages/project-ledger/bin/project-ledger");
     expect(entries).toContain(`./${SERVICE_APP_WEB_CLIENT_DIST}/index.html`);

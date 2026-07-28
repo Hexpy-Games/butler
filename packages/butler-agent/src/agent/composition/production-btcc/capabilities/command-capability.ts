@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
 import { OperationRejectedError } from "../../../btcc/index.ts";
-import { isolatedCommandInvocation } from "./command-sandbox.ts";
+import { commandHost } from "./command-host/index.ts";
 import {
   CommandOutputSpool,
   type CommandOutputSummary,
@@ -15,19 +15,18 @@ export async function executeCommandCapability(
   const command = requireString(args.command, "command");
   const cwd = await resolveCommandDirectory(context.workspacePath, args.cwd);
   const timeoutMs = number(args.timeout_ms, 120_000);
-  const invocation = isolatedCommandInvocation(command, context);
+  const invocation = commandHost.invocation(command, context);
   return new Promise((resolve, reject) => {
     const spool = new CommandOutputSpool(context.butlerData);
     const child = spawn(invocation.executable, invocation.args, {
       cwd,
-      detached: process.platform !== "win32",
+      detached: commandHost.detached,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let timedOut = false;
     spool.capture(child.stdout, child.stderr);
     const terminate = () => {
-      if (child.pid && process.platform !== "win32") process.kill(-child.pid, "SIGTERM");
-      else child.kill("SIGTERM");
+      commandHost.terminate(child);
     };
     const timer = setTimeout(() => { timedOut = true; terminate(); }, timeoutMs);
     const abort = () => terminate();

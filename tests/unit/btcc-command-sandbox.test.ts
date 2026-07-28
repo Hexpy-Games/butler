@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { executeCommandCapability } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/capabilities/command-capability.ts";
 import { windowsShellInvocation } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/capabilities/command-sandbox.ts";
+  "../../packages/butler-agent/src/agent/composition/production-btcc/capabilities/command-host/adapters/windows.ts";
 
 const roots: string[] = [];
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));

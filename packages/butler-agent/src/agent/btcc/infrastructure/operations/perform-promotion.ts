@@ -11,7 +11,8 @@ import { ArtifactStore, type PromotionIntent } from "./artifact-store.ts";
 import {
   exchangeCompleteRoots,
   installCompleteRoot,
-} from "../../../../foundation/atomic-root-exchange.ts";
+  reconcileCompleteRootExchange,
+} from "../../../../foundation/complete-root-commit/index.ts";
 import { assertActive, sameRef } from "./operation-helpers.ts";
 import {
   copyWorkspaceControls,
@@ -58,8 +59,11 @@ export function performPromotion(input: {
   if (!sameRef(currentWorkspace.ref, candidate.ref)) {
     throw new Error("BTCC workspace changed after the reviewed candidate was accepted");
   }
-  const targetSnapshot = input.store.snapshots.captureTarget(workspace.targetPath);
   let intent = input.store.loadPromotion(scopeId, input.request);
+  if (intent?.status === "commit_intent_durable" || intent?.status === "committed") {
+    reconcileCompleteRootExchange(intent.stagedPath, workspace.targetPath);
+  }
+  const targetSnapshot = input.store.snapshots.captureTarget(workspace.targetPath);
   if (!intent) {
     if (!sameRef(targetSnapshot.ref, workspace.baselineSnapshotRef)) {
       throw new Error("BTCC promotion target drifted from its accepted baseline");

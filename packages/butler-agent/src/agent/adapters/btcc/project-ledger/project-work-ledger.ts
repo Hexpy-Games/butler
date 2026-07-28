@@ -8,7 +8,7 @@ import {
   ProjectLedgerMutationClaimConflictError,
   ProjectLedgerPublicationClaimConflictError,
 } from "./contracts.ts";
-import { exchangeCompleteRoots } from "../../../../foundation/atomic-root-exchange.ts";
+import { exchangeCompleteRoots } from "../../../../foundation/complete-root-commit/index.ts";
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 import { prepareProjectCommit } from "./prepare-project-commit.ts";
