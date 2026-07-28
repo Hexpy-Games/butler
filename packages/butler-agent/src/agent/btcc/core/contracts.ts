@@ -152,16 +152,8 @@ export type PhaseConversationSnapshot<Product> = {
   operationResults: OperationResult[];
   latestOperationResultCount?: number;
   phaseContinuity?: PhaseContinuity;
-  pendingOperationRound?: {
-    requests: OperationRequest[];
-    phaseContinuity?: PhaseContinuity;
-    actualIdentity: ActualModelIdentity;
-  };
-  pendingSubmissionRound?: {
-    submission: unknown;
-    publicActivity?: PublicPhaseActivity;
-    actualIdentity: ActualModelIdentity;
-  };
+  pendingOperationRound?: Extract<ProviderRoundValue, { kind: "operation_requests" }>;
+  pendingSubmissionRound?: Extract<ProviderRoundValue, { kind: "phase_submission" }>;
 };
 
 export interface PhaseConversationStore {

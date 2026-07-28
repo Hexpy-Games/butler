@@ -160,6 +160,44 @@ describe("BTCC phase checkpoint persistence", () => {
     expect(modelCalls).toBe(0);
   });
 
+  test("preserves a restored terminal submission while its local effect is recorded", async () => {
+    const { store, binding } = fixture();
+    const request = {
+      requestId: "local-effect-1",
+      publicTitle: "Update the local preference",
+      kind: "turn_local_effect" as const,
+      capabilityRef: "update_onboarding_profile",
+      input: { profiling_mode: "basic" },
+    };
+    const submitted = await store.appendPhaseSubmission({
+      binding,
+      envelope: phaseEnvelope(binding),
+      submission: { kind: "opening_answer", answer: "updated" },
+      actualIdentity: selectedModel(),
+    });
+    const restored = await store.restore(submitted);
+    expect(restored.pendingSubmissionRound?.kind).toBe("phase_submission");
+
+    const applied = await store.appendOperationResults({
+      binding: restored.binding,
+      results: [{
+        request,
+        result: {
+          requestId: request.requestId,
+          request,
+          outcome: "observed",
+          observationRef: { id: "local-effect-result", sha256: "result-sha" },
+          content: "updated",
+        },
+      }],
+      pendingSubmissionRound: restored.pendingSubmissionRound,
+    });
+    await expect(store.acceptPhaseProduct({
+      binding: applied,
+      product: { kind: "opening_answer", answer: "updated" },
+    })).resolves.toMatchObject({ checkpointRevision: 4 });
+  });
+
   test("stores the same local request ID independently in later provider rounds", async () => {
     const { db, store, binding } = fixture();
     const first = observationRequest();

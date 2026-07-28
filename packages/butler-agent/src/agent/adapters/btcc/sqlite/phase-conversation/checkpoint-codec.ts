@@ -7,6 +7,7 @@ import type {
 import { digest, stableJson } from "../identity.ts";
 
 export function decodePendingOperation(value: string): {
+  kind: "operation_requests";
   requests: OperationRequest[];
   phaseContinuity?: PhaseContinuity;
   actualIdentity: ActualModelIdentity;
@@ -24,6 +25,7 @@ export function decodePendingOperation(value: string): {
     throw new Error("BTCC pending operation carrier is invalid");
   }
   return {
+    kind: "operation_requests",
     requests: parsed.requests,
     ...(parsed.phaseContinuity ? { phaseContinuity: parsed.phaseContinuity } : {}),
     actualIdentity: parsed.actualIdentity,
@@ -31,6 +33,7 @@ export function decodePendingOperation(value: string): {
 }
 
 export function decodePendingSubmission(value: string): {
+  kind: "phase_submission";
   submission: unknown;
   publicActivity?: PhaseContinuity["publicActivity"];
   actualIdentity: ActualModelIdentity;
@@ -45,6 +48,7 @@ export function decodePendingSubmission(value: string): {
     throw new Error("BTCC pending phase submission carrier is invalid");
   }
   return {
+    kind: "phase_submission",
     submission: parsed.submission,
     ...(parsed.publicActivity ? { publicActivity: parsed.publicActivity } : {}),
     actualIdentity: parsed.actualIdentity,
