@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { installCompleteRoot } from
-  "../../packages/butler-agent/src/foundation/atomic-root-exchange.ts";
+  "../../packages/butler-agent/src/foundation/complete-root-commit/index.ts";
 import { ArtifactSnapshotRepository } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/artifact-snapshot/index.ts";
 

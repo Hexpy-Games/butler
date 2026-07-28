@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { exchangeCompleteRoots } from "../../../../foundation/atomic-root-exchange.ts";
+import { exchangeCompleteRoots } from "../../../../foundation/complete-root-commit/index.ts";
 import { writeJsonFileAtomic } from "../../../persistence/atomic-json-store.ts";
 import type { ProjectLedgerCorePublication, ProjectLedgerHead } from "./contracts.ts";
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";

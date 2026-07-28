@@ -1,5 +1,5 @@
 import { existsSync, rmSync } from "node:fs";
-import { syncTree } from "../filesystem/durable-sync.ts";
+import { syncTree } from "../filesystem/durable-sync/index.ts";
 
 export function syncCompleteTarget(targetPath: string): void {
   syncTree(targetPath);

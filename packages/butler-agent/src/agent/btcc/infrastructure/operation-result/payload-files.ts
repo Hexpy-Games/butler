@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import type { OperationPayloadSource } from "../../core/index.ts";
 import { ref, type ResultRef } from "../../operation-result/index.ts";
-import { syncDirectory, syncFile } from "../filesystem/durable-sync.ts";
+import { syncDirectory, syncFile } from "../filesystem/durable-sync/index.ts";
 
 export class OperationPayloadFiles {
   constructor(private readonly root: string) {
