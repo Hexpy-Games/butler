@@ -2,6 +2,7 @@ import type { FirstRunState } from "@/app/firstRunSetup.ts";
 import { SetupWizardShell } from "@/butler-ds";
 import { FirstRunStepContent } from "./FirstRunStepContent";
 import { useFirstRunSetupController } from "./useFirstRunSetupController";
+import { WindowControls } from "@/components/layout/WindowControls";
 
 interface FirstRunSetupProps {
   initialState: FirstRunState;
@@ -21,6 +22,7 @@ export function FirstRunSetup({
       progressLabel="First-run setup steps"
       steps={setup.copy.steps.map((label) => ({ id: label, label }))}
       title={setup.copy.product}
+      windowControls={<WindowControls />}
     >
       <FirstRunStepContent
         copy={setup.copy}

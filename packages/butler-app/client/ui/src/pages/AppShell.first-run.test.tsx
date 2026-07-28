@@ -200,6 +200,18 @@ test("AppShell gates workspace behind pending first-run setup", async () => {
 
   expect(rendered.container.textContent).toContain("언어 선택");
   expect(rendered.container.textContent).not.toContain("Workspace");
+  expect(
+    rendered.container.querySelector('[data-test-class="app-window-controls"]'),
+  ).not.toBeNull();
+  expect(
+    rendered.container.querySelector('[data-test-class="app-window-minimize"]'),
+  ).not.toBeNull();
+  expect(
+    rendered.container.querySelector('[data-test-class="app-window-maximize"]'),
+  ).not.toBeNull();
+  expect(
+    rendered.container.querySelector('[data-test-class="app-window-close"]'),
+  ).not.toBeNull();
 
   await clickButton(rendered.container, "계속");
   await clickButton(rendered.container, "동의");
@@ -294,6 +306,10 @@ async function renderAppShell(
         };
       },
       updateSettings: async () => ({}),
+      platform: "win32",
+      minimizeWindow: async () => ({}),
+      toggleWindowMaximize: async () => ({}),
+      closeWindow: async () => ({}),
     },
   });
 

@@ -269,6 +269,9 @@ test("manual first-run test environment launches isolated Electron state", () =>
   expect(script).toContain("BUTLER_APP_SYSTEMD_UNIT: systemdUnit");
   expect(script).toContain("BUTLER_APP_BUNDLED_AGENT_DIR");
   expect(script).toContain("prepareBundledAgentResource");
+  expect(script.indexOf("prepareBundledAgentResource(")).toBeLessThan(
+    script.indexOf("...(options.nativeService"),
+  );
   expect(script).toContain("cleanupNativeService({ serviceLabel, systemdUnit })");
   expect(script).toContain("Refusing to use the production LaunchAgent label");
   expect(script).toContain("Refusing to use the production systemd unit");

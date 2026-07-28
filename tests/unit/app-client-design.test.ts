@@ -561,6 +561,7 @@ test("electron shell uses native macOS corners and sidebar vibrancy", () => {
     "const macTrafficLightPosition = { x: 20, y: 18 }",
   );
   expect(electronMain).toContain('const macVibrancy = "sidebar"');
+  expect(electronMain).toContain('const windowsBackgroundMaterial = "mica"');
   expect(electronMain).toContain(
     "trafficLightPosition: macTrafficLightPosition",
   );
@@ -568,6 +569,9 @@ test("electron shell uses native macOS corners and sidebar vibrancy", () => {
   expect(electronMain).toContain("transparent: usesTransparentWindow");
   expect(electronMain).toContain("vibrancy: isMac ? macVibrancy : undefined");
   expect(electronMain).toContain("win.setVibrancy(macVibrancy)");
+  expect(electronMain).toContain(
+    "win.setBackgroundMaterial(windowsBackgroundMaterial)",
+  );
   expect(electronMain).toContain(
     "win.setBackgroundColor(macTransparentBackground)",
   );
@@ -621,7 +625,7 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(electronMain).toContain('new URL("/health", serverUrl).toString()');
   expect(electronMain).toContain("body?.protocol_version === appProtocolVersion");
   expect(electronMain).toContain("body?.data?.ok === true");
-  expect(electronMain).toContain('foregroundRuntime ? "/runtime-readiness" : "/settings"');
+  expect(electronMain).toContain('new URL("/runtime-readiness", serverUrl)');
   expect(electronMain).toContain("body?.data?.authenticated_gateway_ready === true");
   expect(electronMain).toContain("body?.data?.btcc_executor_ready === true");
   expect(electronMain).toContain("createBundledAgentSupervisor");

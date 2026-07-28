@@ -26,6 +26,15 @@
   app-region: drag;
 }
 
+.windowControls {
+  position: fixed;
+  z-index: 3;
+  top: var(--space-sm);
+  right: var(--space-sm);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 .header {
   color: var(--text-primary);
 }
