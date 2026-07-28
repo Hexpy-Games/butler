@@ -6,31 +6,33 @@ import {
   applyTimelineEventsToViewState,
   activeTurnProgressSnapshot,
   clientTurnIdFromMessageId,
-  completedTurnActivityRows,
-  completedTurnWorkBlocks,
   firstCancellableWorker,
-  freezeMessageWorkBlocks,
   groupWorkerActivities,
   hasFollowableWorkerActivity,
-  isInternalProgressRow,
   isRuntimeFaultRetryableMessage,
-  isVisibleToolchainProgressRow,
   mergeMessages,
   mergeTurnProgressFromSummary,
   mergeTurnProgressSnapshotMap,
   mergeSessionSummaryForPendingTurn,
   isWorkerVisibleInComposer,
   phaseLabel,
-  semanticProgressRows,
   shouldShowTurnActivity,
   workerActivityCollapsedSummaryLine,
   workerActivityDisplayName,
   workerActivityDescription,
   workerActivityMeta,
   workerActivityStatusLine,
-  typedUiReadModelsFromProgressRows,
-  workBlocksFromProgressRows,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
+import {
+  freezeConversationActivity as freezeMessageWorkBlocks,
+  isInternalProgressRow,
+  isVisibleToolActivity as isVisibleToolchainProgressRow,
+  projectActivityReadModels as typedUiReadModelsFromProgressRows,
+  projectCompletedActivityRows as completedTurnActivityRows,
+  projectCompletedWorkBlocks as completedTurnWorkBlocks,
+  projectWorkBlocks as workBlocksFromProgressRows,
+  semanticProgressRows,
+} from "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts";
 import {
   browserRandomId,
   browserRandomUUID,
@@ -1978,8 +1980,8 @@ function canonicalTaskRow(state: string) {
 }
 
 test("a delivered deferred Turn does not mark unfinished Work Ledger tasks complete", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   expect(todoRowsForDisplay([
     canonicalTaskRow("completed"),
@@ -1988,8 +1990,8 @@ test("a delivered deferred Turn does not mark unfinished Work Ledger tasks compl
 });
 
 test("a cancelled Turn preserves exact canonical Work Ledger task states", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   expect(todoRowsForDisplay([
     canonicalTaskRow("completed"),
@@ -2443,8 +2445,8 @@ test("authoritative summary replaces legacy live todo rows without identity", ()
 });
 
 test("todo composer updates one captured Sandy row by stable identity", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   const liveRow = sharedProgressRowFromTurnEvent(
     createAgentTurnEvent({
@@ -2486,8 +2488,8 @@ test("todo composer updates one captured Sandy row by stable identity", async ()
 });
 
 test("captured Sandy todo transitions keep six rows across live and replay", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   const initialLabels = [
     "T-WCAP-01 타입 확장 검증 중",
@@ -2572,8 +2574,8 @@ test("captured Sandy todo transitions keep six rows across live and replay", asy
 });
 
 test("todo composer does not collapse different ids with the same label", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   const rows = todoRowsForDisplay([
     {
@@ -2667,8 +2669,8 @@ test("completed todo updates cannot move an established display ordinal", () => 
 });
 
 test("todo composer rows keep ordered steps across repeated stable projections", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   const rows = todoRowsForDisplay([
     {
@@ -2763,8 +2765,8 @@ test("todo composer rows keep ordered steps across repeated stable projections",
 });
 
 test("todo composer rows do not infer identity from matching labels", async () => {
-  const { todoRowsForDisplay } = await import(
-    "../../packages/butler-app/client/ui/src/components/conversation/todoComposerRows.ts",
+  const { projectComposerTasks: todoRowsForDisplay } = await import(
+    "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts",
   );
   const rows = todoRowsForDisplay([
     {

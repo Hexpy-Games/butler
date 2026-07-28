@@ -1,7 +1,7 @@
 import {
-  completedTurnWorkBlocks,
   resolveAppearanceTheme,
 } from "@/app/utils.ts";
+import { projectCompletedWorkBlocks } from "@/app/conversation-progress";
 import type {
   MessageRecord,
   TurnProgressSnapshot,
@@ -64,7 +64,7 @@ export function finalWorkBlocksFromSnapshot(
           : { ...row, state: snapshotState },
       )
     : (snapshot.safe_progress_rows ?? []);
-  return completedTurnWorkBlocks(rows)
+  return projectCompletedWorkBlocks(rows)
     .filter((block) => toolchainRowsForBlock(block).length > 0)
     .slice(-6);
 }

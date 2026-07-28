@@ -4,10 +4,10 @@ import { ACTIVE_TURN_STATES } from "@/app/constants.ts";
 import {
   activeTurnProgressSnapshot,
   collapseAssistantAttempts,
-  isInternalProgressRow,
   isWorkerVisibleInComposer,
   shouldShowTurnActivity,
 } from "@/app/utils.ts";
+import { visibleProgressRows } from "@/app/conversation-progress";
 import type {
   MessageRecord,
   SessionSummaryView,
@@ -56,11 +56,11 @@ export function useMessageList(
       (summary?.turn_state && ACTIVE_TURN_STATES.has(summary.turn_state)),
   );
 
-  const progressRows = (
+  const progressRows = visibleProgressRows(
     activeSnapshot?.safe_progress_rows ??
     summary?.latest_progress?.safe_progress_rows ??
-    []
-  ).filter((row) => !isInternalProgressRow(row));
+    [],
+  );
   const timelineProgressRows = progressRows.filter((row) => row.kind !== "todo");
   const hasTodoProgress = progressRows.length !== timelineProgressRows.length;
   const turnState =

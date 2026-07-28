@@ -7,7 +7,7 @@ import {
   Typo,
   WorkActivityBlock,
 } from "@/butler-ds";
-import type { PhaseActivity } from "./turnActivityRows";
+import type { PhaseActivity } from "@/app/conversation-progress";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
 import { workActivityToolsFromRows } from "./toolchainUtils";

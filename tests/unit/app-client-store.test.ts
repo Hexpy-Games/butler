@@ -10,10 +10,12 @@ import { useButlerStore } from "../../packages/butler-app/client/ui/src/app/stor
 import {
   activeTurnProgressSnapshot,
   applyTimelineEvents,
-  freezeMessageWorkBlocks,
-  freezeMessageWorkBlocksForRecord,
   mergeTurnProgressFromSummary,
 } from "../../packages/butler-app/client/ui/src/app/utils.ts";
+import {
+  freezeConversationActivity as freezeMessageWorkBlocks,
+  freezeMessageActivity as freezeMessageWorkBlocksForRecord,
+} from "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts";
 import {
   editablePersonaText,
   personalizationDraftHasChanges,

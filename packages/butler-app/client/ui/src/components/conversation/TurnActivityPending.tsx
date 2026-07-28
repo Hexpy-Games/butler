@@ -1,6 +1,6 @@
 import { Skeleton, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
-import type { TypedUiReadModel } from "@/app/utils.ts";
+import type { ActivityReadModel } from "@/app/conversation-progress";
 
 const SESSION_STARTING_STATE = "session_starting";
 const SKELETON_WIDTH = "min(420px, 100%)";
@@ -11,7 +11,7 @@ export function TurnActivityPending({
   readModels,
   state,
 }: {
-  readModels: TypedUiReadModel[];
+  readModels: ActivityReadModel[];
   state?: string;
 }) {
   const receipt = acknowledgedReceipt(readModels);
@@ -74,10 +74,10 @@ function pendingStateLabel(state?: string): string {
 }
 
 function acknowledgedReceipt(
-  readModels: TypedUiReadModel[],
-): Extract<TypedUiReadModel, { type: "receipt" }> | undefined {
+  readModels: ActivityReadModel[],
+): Extract<ActivityReadModel, { type: "receipt" }> | undefined {
   return readModels.find(
-    (model): model is Extract<TypedUiReadModel, { type: "receipt" }> =>
+    (model): model is Extract<ActivityReadModel, { type: "receipt" }> =>
       model.type === "receipt" && model.receiptKind === "turn.acknowledged",
   );
 }

@@ -1,15 +1,8 @@
-import {
-  typedUiReadModelsFromProgressRows,
-  isInternalProgressRow,
-  workBlocksFromProgressRows,
-  type TypedUiReadModel,
-} from "@/app/utils.ts";
+import { projectTurnActivity } from "@/app/conversation-progress";
 import type { ProgressRow } from "@/app/types.ts";
 import { CurrentTurnStatus } from "./CurrentTurnStatus";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
 import { TurnDecisionRow } from "./TurnDecisionRow";
-import { currentModelRoundWait, currentSemanticState, latestPublicActivity,
-  currentOperationActivity, phaseActivityRows } from "./turnActivityRows";
 import { Stack } from "@/butler-ds";
 import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
@@ -24,16 +17,16 @@ export function TurnActivityPanel({
   state?: string;
   turnId?: string;
 }) {
-  const visibleRows = rows.filter((row) => !isInternalProgressRow(row));
-  const readModels = typedUiReadModelsFromProgressRows(visibleRows);
-  const activityRows = visibleRows.filter((row) => row.kind !== "todo");
-  const decisions = readModels.filter(isDecisionReadModel);
-  const workBlocks = workBlocksFromProgressRows(activityRows);
-  const phaseActivities = phaseActivityRows(activityRows);
-  const publicActivity = latestPublicActivity(activityRows, phaseActivities.length > 0);
-  const semanticState = currentSemanticState(activityRows, phaseActivities);
-  const modelRoundWait = currentModelRoundWait(activityRows);
-  const operation = currentOperationActivity(activityRows);
+  const {
+    decisions,
+    modelRoundWait,
+    operation,
+    phaseActivities,
+    publicActivity,
+    readModels,
+    semanticState,
+    workBlocks,
+  } = projectTurnActivity(rows);
   if (
     decisions.length === 0 &&
     workBlocks.length === 0 &&
@@ -79,10 +72,4 @@ export function TurnActivityPanel({
       ) : null}
     </Stack>
   );
-}
-
-function isDecisionReadModel(
-  model: TypedUiReadModel,
-): model is Extract<TypedUiReadModel, { type: "decision" }> {
-  return model.type === "decision";
 }

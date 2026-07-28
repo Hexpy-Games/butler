@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ProgressRow } from "@/app/types.ts";
-import { phaseActivityRows } from "./turnActivityRows";
+import { projectTurnActivity } from "@/app/conversation-progress";
 import { TurnActivityTimeline } from "./TurnActivityTimeline";
 
 export const CompletedTurnActivity = memo(function CompletedTurnActivity({
@@ -11,7 +11,7 @@ export const CompletedTurnActivity = memo(function CompletedTurnActivity({
   turnId?: string;
   turnState?: string;
 }) {
-  const activities = phaseActivityRows(rows ?? []);
+  const activities = projectTurnActivity(rows ?? []).phaseActivities;
   if (activities.length === 0) return null;
   return <TurnActivityTimeline activities={activities} turnId={turnId} />;
 });
