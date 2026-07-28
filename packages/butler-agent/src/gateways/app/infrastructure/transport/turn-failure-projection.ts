@@ -31,7 +31,9 @@ export function safeTurnFailureEventPayload(
   return {
     safeLabel: safeError.message,
     safeErrorCode: safeError.code,
-    ...(safeError.cause ? { safeCause: safeError.cause } : {}),
+    ...(safeError.code !== "gateway_failed" && safeError.cause
+      ? { safeCause: safeError.cause }
+      : {}),
   };
 }
 
