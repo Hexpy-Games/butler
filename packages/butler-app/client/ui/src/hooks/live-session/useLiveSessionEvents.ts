@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { subscribeLiveEvents } from "@/app/api.ts";
-import { notifyError } from "@/app/notifications.ts";
 import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -79,11 +78,10 @@ export function useLiveSessionEvents(): void {
       unsubscribe = subscribeLiveEvents(
         eventCursorRef.current,
         applyEvent,
-        (error) => {
+        () => {
           if (cancelled) return;
           unsubscribe?.();
           reconcileActiveSession();
-          notifyError(error, "Live updates paused", { id: "live-events" });
           reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
         },
       );
