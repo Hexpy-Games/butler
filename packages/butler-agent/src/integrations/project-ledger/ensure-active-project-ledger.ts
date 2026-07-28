@@ -26,7 +26,7 @@ export function ensureActiveProjectLedger(input: {
     [
       "init",
       "--project",
-      reference.workspace_path,
+      reference.ledger_root,
       "--id",
       reference.app_project_id,
       "--name",
