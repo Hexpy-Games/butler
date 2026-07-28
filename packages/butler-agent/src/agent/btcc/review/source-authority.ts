@@ -11,10 +11,14 @@ export type ReviewValidationSourceProjection =
 export function taskReviewAuthority(input: {
   baseline: OperationAuthority;
   result: ResultCandidateProduct["result"];
+  predecessorResults?: ResultCandidateProduct["result"][];
 }): OperationAuthority {
   const observationScopeRefs = unique([
     ...input.baseline.observationScopeRefs,
     ...input.result.operationResultReadScopeRefs,
+    ...(input.predecessorResults ?? []).flatMap(
+      (result) => result.operationResultReadScopeRefs,
+    ),
   ]);
   if (input.result.kind !== "workspace_artifact") {
     return { ...input.baseline, observationScopeRefs };

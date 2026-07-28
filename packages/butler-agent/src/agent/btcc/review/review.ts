@@ -7,6 +7,7 @@ import {
   type TurnRecord,
 } from "../turn/index.ts";
 import { reviewTask } from "./review-task.ts";
+import { projectAcceptedPredecessorHandoffs } from "./project-predecessor-handoffs.ts";
 import { projectDirectSuccessorHandoffs } from "./project-successor-handoffs.ts";
 import {
   projectReviewValidationSource,
@@ -37,12 +38,14 @@ export async function review(command: {
   const correctionContext = priorFindings.length > 0
     ? projectCorrectionContext(command.turn, program, priorFindings)
     : undefined;
+  const acceptedPredecessorHandoffs = projectAcceptedPredecessorHandoffs(program);
   const invocation = withManagedDeferralState(command.phase, command.turn, {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
     acceptedPlanRef: program.plan.ref,
     currentWork: program.currentWork.work,
     currentTask: program.currentTask.task,
+    acceptedPredecessorHandoffs,
     directSuccessorHandoffs: projectDirectSuccessorHandoffs(program),
     resultCandidate: result,
     reviewAuthorityRef: program.authorityRef,
@@ -57,6 +60,7 @@ export async function review(command: {
     operationAuthority: taskReviewAuthority({
       baseline: command.phase.operationAuthority,
       result: result.result,
+      predecessorResults: acceptedPredecessorHandoffs.map((handoff) => handoff.result),
     }),
   });
   if (isManagedDeferral(product)) return { kind: "ManagedDeferralAccepted", product };
