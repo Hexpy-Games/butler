@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -96,6 +97,24 @@ describe("BTCC read-only command observation", () => {
     expect(mutation.executionSummary?.exitCode).not.toBe(0);
     expect(existsSync(join(fixture.workspace, "forbidden.txt"))).toBe(false);
     expect(network.executionSummary?.exitCode).not.toBe(0);
+  });
+
+  test("macOS sandbox permits Git observations that use the null device", async () => {
+    if (process.platform !== "darwin") return;
+    const fixture = commandFixture();
+    execFileSync("git", ["-C", fixture.workspace, "init", "--quiet"]);
+
+    const result = await fixture.runtime().operations.perform({
+      request: observationRequest(
+        "git-status",
+        fixture.scopeRef,
+        "git status --short && git diff --stat",
+      ),
+      envelope: fixture.envelope(),
+    });
+
+    expect(result.executionSummary?.exitCode).toBe(0);
+    expect(result.outcome).toBe("observed");
   });
 });
 
