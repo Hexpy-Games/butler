@@ -1,5 +1,9 @@
 import { join } from "node:path";
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
+import {
+  openOwnedSqliteConnection,
+  type OwnedSqliteConnection,
+} from "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import type {
   ObservationResult,
   OperationRequest,
@@ -28,14 +32,16 @@ type StoredResult = {
 
 export class SqliteOperationResultStore implements OperationResultStore {
   private readonly database: Database;
+  private readonly connection: OwnedSqliteConnection;
   private readonly payloads: OperationPayloadFiles;
 
   constructor(butlerData: string) {
     const runtimeRoot = join(butlerData, "runtime", "btcc");
     this.payloads = new OperationPayloadFiles(join(runtimeRoot, "result-payloads"));
-    this.database = new Database(join(runtimeRoot, "operation-results.sqlite"), {
+    this.connection = openOwnedSqliteConnection(join(runtimeRoot, "operation-results.sqlite"), {
       create: true,
     });
+    this.database = this.connection.database;
     this.database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS btcc_operation_results (
@@ -178,7 +184,7 @@ export class SqliteOperationResultStore implements OperationResultStore {
   }
 
   close(): void {
-    this.database.close();
+    this.connection.close();
   }
 
   private insertRecord(

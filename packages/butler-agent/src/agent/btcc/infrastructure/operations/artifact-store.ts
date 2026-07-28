@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
+import {
+  openOwnedSqliteConnection,
+  type OwnedSqliteConnection,
+} from "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import type { WorkspaceProvision } from "../../artifact/index.ts";
 import type {
   ObservationResult,
@@ -55,13 +59,15 @@ export type WorkspaceActionJournal = {
 
 export class ArtifactStore {
   private readonly database: Database;
+  private readonly connection: OwnedSqliteConnection;
   readonly snapshots: ArtifactSnapshotRepository;
 
   constructor(butlerData: string) {
     const path = join(butlerData, "runtime", "btcc-artifacts.sqlite");
     mkdirSync(dirname(path), { recursive: true });
     removeLegacyArtifactRuntime(path, butlerData);
-    this.database = new Database(path, { create: true });
+    this.connection = openOwnedSqliteConnection(path, { create: true });
+    this.database = this.connection.database;
     this.database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS btcc_artifact_workspaces (
@@ -117,6 +123,10 @@ export class ArtifactStore {
 
   loadSnapshot(snapshotId: string): MaterializedSnapshot | null {
     return this.snapshots.load(snapshotId);
+  }
+
+  close(): void {
+    this.connection.close();
   }
 
   loadPromotion(
@@ -199,7 +209,8 @@ function removeLegacyArtifactRuntime(path: string, butlerData: string): void {
 }
 
 function isLegacyArtifactDatabase(path: string): boolean {
-  const database = new Database(path, { readonly: true });
+  const connection = openOwnedSqliteConnection(path, { readonly: true });
+  const database = connection.database;
   try {
     const row = database
       .query<{ name: string }, []>(
@@ -209,7 +220,7 @@ function isLegacyArtifactDatabase(path: string): boolean {
       .get();
     return Boolean(row);
   } finally {
-    database.close();
+    connection.close();
   }
 }
 
