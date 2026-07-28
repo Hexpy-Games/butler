@@ -2,8 +2,7 @@ import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contra
 import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
-import { rebudgetLocalToolMessages, runLocalCompactFinalAnswerText } from "./evidence.ts";
-import { serializeToolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
+import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import type { LocalModelConfig } from "./models.ts";
@@ -99,9 +98,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
     } catch (error) {
       if (!isLocalContextOverflowError(error)) throw error;
       if (executedToolCalls > 0) {
-        log("local model tool prompt exceeded context window after tool results; synthesizing from compacted tool evidence without more tools");
-        throwIfAborted(options.signal);
-        break;
+        throw error;
       }
       const compactTools = localCompactEvidenceTools(activeTools);
       if (compactTools.length > 0 && compactTools.length < activeTools.length) {
@@ -130,9 +127,6 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         },
         requests,
       );
-    }
-    if (executedToolCalls > 0) {
-      rebudgetLocalToolMessages({ messages, config, log });
     }
     const assistant = firstLocalAssistantMessage(response);
     const text = extractLocalChatText(assistant);
@@ -261,15 +255,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: serializeToolResultPayloadForProvider({
-          payload,
-          toolName: call.function.name,
-          toolCallId: call.id,
-          evidenceRetention: {
-            butlerData: options.butlerData,
-            turnId: options.usageAttribution?.turnId,
-          },
-        }),
+        content: serializeToolResultPayloadForProvider(payload),
       });
     }
     for (const call of batch.deferred) {
@@ -284,13 +270,8 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         tool_call_id: call.id,
         name: call.function.name,
         content: serializeToolResultPayloadForProvider({
-          payload: { ok: false, output: blockCapacityToolOutput(observation) },
-          toolName: call.function.name,
-          toolCallId: call.id,
-          evidenceRetention: {
-            butlerData: options.butlerData,
-            turnId: options.usageAttribution?.turnId,
-          },
+          ok: false,
+          output: blockCapacityToolOutput(observation),
         }),
       });
     }
@@ -303,75 +284,24 @@ export async function runLocalFunctionToolPromptTextWithConfig(
     role: "user",
     content: finalNoToolInstructions(),
   });
-  let response;
-  try {
-    response = await attributedLocalCompletion(config, options, requests, {
-      model: config.model_id,
-      messages,
-      ...localReasoningRequestParams(config),
-      stream: false,
-    });
-  } catch (error) {
-    if (!isLocalContextOverflowError(error)) throw error;
-    const compacted = rebudgetLocalToolMessages({ messages, config, log, aggressive: true });
-    if (!compacted) throw error;
-    log("local model final synthesis exceeded context window; retrying with tighter compacted tool evidence");
-    try {
-      response = await attributedLocalCompletion(config, options, requests, {
-        model: config.model_id,
-        messages,
-        ...localReasoningRequestParams(config),
-        stream: false,
-      });
-    } catch (retryError) {
-      if (!isLocalContextOverflowError(retryError)) throw retryError;
-      return await runLocalCompactFinalAnswerText({
-        config,
-        options,
-        messages,
-        log,
-        requestCompletion: async (body) =>
-          await attributedLocalCompletion(config, options, requests, body),
-      });
-    }
-  }
+  let response = await attributedLocalCompletion(config, options, requests, {
+    model: config.model_id,
+    messages,
+    ...localReasoningRequestParams(config),
+    stream: false,
+  });
   let text = extractLocalFinalEnvelopeText(firstLocalAssistantMessage(response));
   if (!text) {
     messages.push({
       role: "user",
       content: finalEnvelopeRetryInstructions(),
     });
-    try {
-      response = await attributedLocalCompletion(config, options, requests, {
-        model: config.model_id,
-        messages,
-        ...localReasoningRequestParams(config),
-        stream: false,
-      });
-    } catch (error) {
-      if (!isLocalContextOverflowError(error)) throw error;
-      const compacted = rebudgetLocalToolMessages({ messages, config, log, aggressive: true });
-      if (!compacted) throw error;
-      log("local model final envelope retry exceeded context window; retrying with tighter compacted tool evidence");
-      try {
-        response = await attributedLocalCompletion(config, options, requests, {
-          model: config.model_id,
-          messages,
-          ...localReasoningRequestParams(config),
-          stream: false,
-        });
-      } catch (retryError) {
-        if (!isLocalContextOverflowError(retryError)) throw retryError;
-        return await runLocalCompactFinalAnswerText({
-          config,
-          options,
-          messages,
-          log,
-          requestCompletion: async (body) =>
-            await attributedLocalCompletion(config, options, requests, body),
-        });
-      }
-    }
+    response = await attributedLocalCompletion(config, options, requests, {
+      model: config.model_id,
+      messages,
+      ...localReasoningRequestParams(config),
+      stream: false,
+    });
     text = extractLocalFinalEnvelopeText(firstLocalAssistantMessage(response));
   }
   if (!text) {

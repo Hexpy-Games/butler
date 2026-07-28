@@ -11,7 +11,7 @@ import {
 } from "../../../agent/turn/tool-batch-capacity.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { serializeToolResultPayloadForProvider } from "../../../agent/context/completed-tool-evidence.ts";
+import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
 import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
@@ -248,15 +248,7 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: serializeToolResultPayloadForProvider({
-            payload,
-            toolName: call.name,
-            toolCallId: call.id,
-            evidenceRetention: {
-              butlerData: options.butlerData,
-              turnId: options.usageAttribution?.turnId,
-            },
-          }),
+          content: serializeToolResultPayloadForProvider(payload),
         }],
       });
     }
@@ -273,13 +265,8 @@ export async function runAnthropicFunctionToolPromptText(
           type: "tool_result",
           tool_use_id: call.id,
           content: serializeToolResultPayloadForProvider({
-            payload: { ok: false, output: blockCapacityToolOutput(observation) },
-            toolName: call.name,
-            toolCallId: call.id,
-            evidenceRetention: {
-              butlerData: options.butlerData,
-              turnId: options.usageAttribution?.turnId,
-            },
+            ok: false,
+            output: blockCapacityToolOutput(observation),
           }),
         }],
       });

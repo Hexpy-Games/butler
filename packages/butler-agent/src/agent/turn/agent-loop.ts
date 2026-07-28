@@ -1,5 +1,4 @@
-import { serializeToolResultPayloadForProvider } from "../context/completed-tool-evidence.ts";
-import type { ToolEvidenceRetentionContext } from "../context/tool-evidence-retention.ts";
+import { serializeToolResultPayloadForProvider } from "../model-tool-loop/index.ts";
 import {
   blockCapacityObservation,
   blockCapacityToolOutput,
@@ -70,7 +69,6 @@ export interface AgentLoopInput {
   messages: AgentLoopMessage[];
   tools: AgentLoopToolDefinition[];
   maxIterations?: number;
-  evidenceRetention?: ToolEvidenceRetentionContext;
   callModel: (input: AgentLoopModelInput) => Promise<AgentLoopModelResponse>;
   onAssistantTextBeforeTools?: (input: {
     text: string;
@@ -140,7 +138,6 @@ function validateToolInput(
 
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
-  evidenceRetention?: ToolEvidenceRetentionContext;
 }): AgentLoopMessage {
   const payload = input.result.ok ? { ok: true, output: input.result.output } : {
     ok: false,
@@ -152,12 +149,7 @@ function toolResultToMessage(input: {
     role: "tool",
     toolCallId: input.result.toolCallId,
     name: input.result.name,
-    content: serializeToolResultPayloadForProvider({
-      payload,
-      toolName: input.result.name,
-      toolCallId: input.result.toolCallId,
-      evidenceRetention: input.evidenceRetention,
-    }),
+    content: serializeToolResultPayloadForProvider(payload),
   };
 }
 
@@ -289,10 +281,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   }): Promise<ToolStopCandidate | null> => {
     const { call, evaluateStop = true, result, iteration } = inputRecord;
     toolResults.push(result);
-    const toolMessage = toolResultToMessage({
-      result,
-      evidenceRetention: input.evidenceRetention,
-    });
+    const toolMessage = toolResultToMessage({ result });
     messages.push(toolMessage);
     emit(events, input.onEvent, {
       type: "tool_result",
@@ -398,7 +387,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
           toolCallId: call.id,
           toolName: call.name,
           deferredCount: batch.deferred.length,
-          turnId: input.evidenceRetention?.turnId,
         });
         await recordToolResult({
           call,

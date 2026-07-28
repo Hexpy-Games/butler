@@ -109,12 +109,12 @@ test("every provider family preserves decisions results and usage across native 
       "tool:2",
       "model:3",
     ]);
-    expect(JSON.stringify(bodies[1]), harness.family).toContain("butler.completed-tool-evidence.v1");
-    expect(JSON.stringify(bodies[2]), harness.family).toContain("butler.completed-tool-evidence.v1");
-    expect(JSON.stringify(bodies[1]), harness.family).toContain("butler.evidence-packet.v1");
-    expect(JSON.stringify(bodies[2]), harness.family).toContain("butler.evidence-packet.v1");
     expect(JSON.stringify(bodies[1]), harness.family).toContain("evidence-step-1");
     expect(JSON.stringify(bodies[2]), harness.family).toContain("evidence-step-2");
+    expect(JSON.stringify(bodies[1]), harness.family).not.toContain("completed-tool-evidence");
+    expect(JSON.stringify(bodies[2]), harness.family).not.toContain("completed-tool-evidence");
+    expect(JSON.stringify(bodies[1]), harness.family).not.toContain("evidence_packet");
+    expect(JSON.stringify(bodies[2]), harness.family).not.toContain("evidence_packet");
   }
 });
 
@@ -236,7 +236,7 @@ test("every provider family receives bounded conversation context inline on the 
 
     expect(result, harness.family).toBe("Provider loop complete.");
     expect(JSON.stringify(bodies[1]), harness.family).toContain(marker);
-    expect(JSON.stringify(bodies[1]), harness.family).not.toContain("private-runtime-session");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("private-runtime-session");
   }
 });
 

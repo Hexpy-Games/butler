@@ -161,10 +161,6 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           toolName: call.function.name,
           toolCallId: call.id,
           log,
-          evidenceRetention: {
-            butlerData: options.butlerData,
-            turnId: options.usageAttribution?.turnId,
-          },
         }),
       });
     }
@@ -184,10 +180,6 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           toolName: call.function.name,
           toolCallId: call.id,
           log,
-          evidenceRetention: {
-            butlerData: options.butlerData,
-            turnId: options.usageAttribution?.turnId,
-          },
         }),
       });
     }

@@ -6,7 +6,6 @@ import {
   modelRequestContextAdmissionMetric,
   type ModelRequestContextAdmissionMetric,
 } from "./request-context-admission-metrics.ts";
-import { compileCompletedToolEvidencePointers } from "../../../agent/context/completed-tool-evidence.ts";
 import type { PromptUsageAttribution } from "../runtime-contracts.ts";
 import { estimateTokensForModel } from "../model-catalog.ts";
 
@@ -132,13 +131,7 @@ export function admitSerializedProviderRequest(
     configuredInputCapacity ?? capacity.contextWindowTokens,
     contextInputCapacity,
   );
-  const compiledBody = compileCompletedToolEvidencePointers({
-    body: input.body,
-    maxSerializedTokens: Math.max(0, inputCapacityTokens - providerEnvelopeTokens),
-    measureSerializedTokens: (value) =>
-      estimateTokensForModel(JSON.stringify(value), capacity.modelRef).tokens,
-  });
-  const serializedRequest = JSON.stringify(compiledBody);
+  const serializedRequest = JSON.stringify(input.body);
   const serializedRequestHash = sha256(serializedRequest);
   const estimatedInputTokens = estimateTokensForModel(serializedRequest, capacity.modelRef).tokens;
   const compiledInputTokens = estimatedInputTokens + providerEnvelopeTokens;
