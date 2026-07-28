@@ -1,4 +1,4 @@
-import type { BtccTurnProgressObserver } from "../../../agent/btcc/gateway-api.ts";
+import type { BtccTurnProgressObserver } from "../../../agent/btcc/index.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import { publicOperationTitle } from "../../../agent/events/progress-projection.ts";
 
