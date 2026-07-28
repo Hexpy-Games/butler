@@ -20,8 +20,7 @@ interface ComposerProps {
   large: boolean;
 }
 
-export function Composer(props: ComposerProps) {
-  const { large, onOpenContext, onReserveChange } = props;
+export function Composer({ large, onOpenContext, onReserveChange }: ComposerProps) {
   const session = useComposerSession();
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
