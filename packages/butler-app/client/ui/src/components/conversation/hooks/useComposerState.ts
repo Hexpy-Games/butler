@@ -36,7 +36,7 @@ export function useComposerState(
   );
   const activeProgress = activeTurnProgressSnapshot(summary, turnProgress);
   const taskRows = (activeProgress?.safe_progress_rows ?? []).filter(
-    (row) => row.kind === "todo",
+    (row) => row.kind === "todo" && row.bridge_phase === "btcc_work_ledger",
   );
 
   const activeTurn = Boolean(
