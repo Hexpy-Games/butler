@@ -130,6 +130,7 @@ test("publishes committed model-authored activity before an operation batch", as
     {
       turnId: binding.turnId,
       semanticState: "planning",
+      activityId: `phase-activity:${binding.checkpointId}:2`,
       activity: {
         summary: "현재 구현 경계를 확인하고 있습니다.",
         rationale: "설계에 맞는 최소 변경 범위를 정하기 위해 필요합니다.",
@@ -139,6 +140,7 @@ test("publishes committed model-authored activity before an operation batch", as
     {
       turnId: binding.turnId,
       semanticState: "planning",
+      activityId: `phase-activity:${binding.checkpointId}:4`,
       activity: {
         summary: "구현 경계를 반영한 계획 후보를 만들었습니다.",
         rationale: "확인한 현재 구조와 요청 목표를 함께 보존했습니다.",

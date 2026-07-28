@@ -13,6 +13,7 @@ import type {
   PhaseConversationCommand,
   PhaseEnvelope,
 } from "./contracts.ts";
+import { phaseActivityId } from "./phase-activity.ts";
 
 export function normalizeOperationResult(
   result: OperationResult,
@@ -103,6 +104,7 @@ async function publishOperation<Product>(
     turnId: envelope.binding.turnId,
     semanticState: envelope.binding.semanticState,
     request,
+    activityId: phaseActivityId(envelope.binding),
     status,
     ...(result ? { resultRef: result.resultRef, byteLength: result.byteLength } : {}),
   });

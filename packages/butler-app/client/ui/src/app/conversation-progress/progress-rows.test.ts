@@ -2,6 +2,7 @@
 
 import { expect, test } from "bun:test";
 import type { ProgressRow } from "../types.ts";
+import { projectTurnActivity } from "./activity.ts";
 import { summaryProgressRows } from "./progress-rows.ts";
 
 test("summary progress keeps only the latest model-authored semantic state", () => {
@@ -43,6 +44,39 @@ test("summary progress keeps only the latest model-authored semantic state", () 
   ];
 
   expect(summaryProgressRows(rows).map((row) => row.id)).toEqual(["plan"]);
+});
+
+test("repeated execution activities own only their following tools", () => {
+  const activity = (id: string, label: string): ProgressRow => ({
+    id,
+    kind: "message",
+    state: "running",
+    safe_label: label,
+    semantic_block_id: "task_execution",
+    work_decision_source: "model-authored",
+    work_decision_summary: label,
+    work_decision_rationale: "검증 이유",
+    work_decision_next_step: "다음 작업",
+  });
+  const tool = (id: string): ProgressRow => ({
+    id,
+    kind: "used_tool",
+    state: "delivered",
+    safe_label: id,
+    semantic_block_id: "task_execution",
+    bridge_phase: "btcc_operation",
+    safe_tool_name: "run_command",
+  });
+
+  const projected = projectTurnActivity([
+    activity("activity-a", "첫 실행"),
+    tool("tool-a"),
+    activity("activity-b", "두 번째 실행"),
+    tool("tool-b"),
+  ]);
+
+  expect(projected.phaseActivities.map((item) => item.operations.map(({ id }) => id)))
+    .toEqual([["tool-a"], ["tool-b"]]);
 });
 
 test("summary progress prefers the canonical current task list", () => {
