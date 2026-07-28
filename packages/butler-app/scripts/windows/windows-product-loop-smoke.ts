@@ -1,7 +1,4 @@
 import { spawn, spawnSync } from "node:child_process";
-import { readdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { windowsValidationToken } from "./windows-validation-token.ts";
 
 if (process.platform !== "win32" || process.arch !== "x64") {
@@ -16,23 +13,32 @@ const standardUser = validationToken.standardUser;
 if (!validationToken.accepted) {
   throw new Error("Windows product loop smoke requires a standard user token");
 }
-const initialE2eTempDirs = currentE2eTempDirs();
 
 const passes: Array<Record<string, unknown>> = [];
 const platformPasses: Array<Record<string, unknown>> = [];
 for (let pass = 1; pass <= fullProductPassCount; pass += 1) {
-  const chat = await runJsonScenario(
-    `chat-${pass}`,
-    ["run", "tests/e2e/app-client-multiturn-e2e.ts"],
-    { BUTLER_APP_CLIENT_E2E_MODE: "deterministic" },
+  const appBtcc = await runJsonScenario(
+    `app-btcc-${pass}`,
+    [
+      "run",
+      "packages/butler-app/scripts/windows/windows-app-btcc-product-harness.ts",
+      "--browser",
+    ],
   );
-  await waitForE2eTempCleanup(initialE2eTempDirs);
-  const project = await runJsonScenario(
-    `project-${pass}`,
-    ["run", "tests/e2e/app-client-multiturn-e2e.ts"],
-    { BUTLER_APP_CLIENT_E2E_MODE: "toolchain" },
-  );
-  await waitForE2eTempCleanup(initialE2eTempDirs);
+  const projectContracts = await runExitScenario(`project-btcc-${pass}`, [
+    "test",
+    "--timeout",
+    "120000",
+    "tests/unit/btcc-project-work-ledger-session.test.ts",
+    "tests/unit/btcc-production-operations.test.ts",
+  ]);
+  const commandRuntime = await runExitScenario(`command-${pass}`, [
+    "test",
+    "--timeout",
+    "120000",
+    "tests/unit/platform-command-executor.test.ts",
+    "tests/unit/btcc-command-sandbox.test.ts",
+  ]);
   await runExitScenario(`background-${pass}`, [
     "test",
     "--timeout",
@@ -62,30 +68,21 @@ for (let pass = 1; pass <= fullProductPassCount; pass += 1) {
     ["run", "packages/butler-app/scripts/windows/unpacked-foreground-app-smoke.ts"],
   );
 
-  const chatChecks = stringArray(chat.checks);
-  const projectChecks = stringArray(project.checks);
-  const projectTools = stringArray(project.toolCalls);
   const platformChecks = platformGateChecks(containment, desktop);
   const passResult = {
     pass,
-    deterministicChat:
-      chatChecks.includes("composer-two-turn-flow") &&
-      chatChecks.includes("durable-final-transcript-continuity"),
-    projectToolchain:
-      projectChecks.includes("project-ledger-read-write-toolchain") &&
-      [
-        "inspect_project_status",
-        "query_project_work",
-        "render_project_dashboard",
-      ].every((name) => projectTools.includes(name)),
-    commandTool: true,
+    appIngress: appBtcc.appIngress === true,
+    deterministicConversation: appBtcc.deterministicConversation === true,
+    conversationContinuity: appBtcc.conversationContinuity === true,
+    canonicalProjection: appBtcc.canonicalProjection === true,
+    browserProjection: appBtcc.browserProjection === true,
+    projectContracts,
+    commandRuntime,
     stopAndBackgroundWork:
       stop.exactTurnCancellation === true &&
       stop.exactWorkerCancellation === true &&
       stop.boundedDrain === true,
-    restartDataReload:
-      chatChecks.includes("electron-reload-preserved-session-state") &&
-      chatChecks.includes("canonical-session-view-consistent"),
+    restartDataReload: appBtcc.restartDataReload === true,
     ...platformChecks,
     rawTextIncluded: false,
   };
@@ -115,7 +112,6 @@ for (
   assertAllGates(`Windows platform lifecycle pass ${pass}`, platformResult);
   platformPasses.push(platformResult);
 }
-await waitForE2eTempCleanup(initialE2eTempDirs);
 
 const result = {
   ok:
@@ -154,8 +150,9 @@ async function runExitScenario(
   label: string,
   args: string[],
   environment: Record<string, string> = {},
-): Promise<void> {
+): Promise<boolean> {
   await runScenario(label, args, environment);
+  return true;
 }
 
 async function runScenario(
@@ -220,12 +217,6 @@ function scenarioDiagnostic(output: string): string {
   ].join("\n");
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
-}
-
 function objectRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -256,37 +247,4 @@ function assertAllGates(label: string, result: Record<string, unknown>): void {
   )) {
     throw new Error(`${label} did not satisfy every gate`);
   }
-}
-
-function currentE2eTempDirs(): Set<string> {
-  return new Set(
-    readdirSync(tmpdir(), { withFileTypes: true })
-      .filter((entry) =>
-        entry.isDirectory() &&
-        entry.name.startsWith("butler-app-client-multiturn-e2e-"),
-      )
-      .map((entry) => entry.name),
-  );
-}
-
-async function waitForE2eTempCleanup(initial: Set<string>): Promise<void> {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const remaining = [...currentE2eTempDirs()]
-      .filter((name) => !initial.has(name));
-    if (remaining.length === 0) return;
-    for (const name of remaining) {
-      try {
-        rmSync(join(tmpdir(), name), { recursive: true, force: true });
-      } catch (error) {
-        if (!["EBUSY", "EPERM", "ENOTEMPTY"].includes(
-          String((error as NodeJS.ErrnoException)?.code),
-        )) {
-          throw error;
-        }
-      }
-    }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
-  }
-  throw new Error("Windows E2E temporary data cleanup did not settle");
 }
