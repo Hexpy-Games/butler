@@ -1,7 +1,7 @@
+import type { OperationRequest } from "../../../btcc/core/index.ts";
 import type {
-  OperationRequest,
   StructuralCapabilityDefinition,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/infrastructure/model/index.ts";
 
 export type CapabilityExecutionContext = {
   butlerData: string;

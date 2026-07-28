@@ -2,7 +2,7 @@ import {
   applyProjectLedgerRecordUpdates,
   type ProjectLedgerRecordUpdate,
 } from "../../../adapters/index.ts";
-import { OperationRejectedError } from "../../../btcc/index.ts";
+import { OperationRejectedError } from "../../../btcc/core/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 
 export async function updateProjectLedger(

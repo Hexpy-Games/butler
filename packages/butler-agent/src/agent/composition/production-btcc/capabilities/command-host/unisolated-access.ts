@@ -1,5 +1,5 @@
 import type { CapabilityExecutionContext } from "../contracts.ts";
-import { OperationRejectedError } from "../../../../btcc/index.ts";
+import { OperationRejectedError } from "../../../../btcc/core/index.ts";
 
 export function assertUnisolatedCommandAccess(
   context: CapabilityExecutionContext,

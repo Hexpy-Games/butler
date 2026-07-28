@@ -1,11 +1,13 @@
 import {
   createBtccTurnRuntime,
-  createProductionOperationRuntime,
-  createProductionSelectedModel,
   type BtccRuntimeDependencies,
   type BtccTurnProgressObserver,
   type BtccTurnRuntime,
 } from "../btcc/index.ts";
+import { createProductionSelectedModel } from
+  "../btcc/infrastructure/model/index.ts";
+import { createProductionOperationRuntime } from
+  "../btcc/infrastructure/operations/index.ts";
 import {
   createProjectWorkLedgerPublicationAdapter,
   decodeProjectLedgerBinding,

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
-import { OperationRejectedError } from "../../../btcc/index.ts";
+import { OperationRejectedError } from "../../../btcc/core/index.ts";
 import { commandHost } from "./command-host/index.ts";
 import {
   CommandOutputSpool,

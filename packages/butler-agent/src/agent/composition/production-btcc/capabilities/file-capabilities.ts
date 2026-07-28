@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
-import { OperationRejectedError } from "../../../btcc/index.ts";
+import { OperationRejectedError } from "../../../btcc/core/index.ts";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { pathMatchesFilters } from "./path-glob-filter.ts";
 

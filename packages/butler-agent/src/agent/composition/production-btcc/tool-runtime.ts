@@ -3,8 +3,10 @@ import {
   OperationRejectedError,
   type OperationRequest,
   type PhaseEnvelope,
-  type ProductionOperationRuntimeOptions,
-} from "../../btcc/index.ts";
+} from "../../btcc/core/index.ts";
+import type {
+  ProductionOperationRuntimeOptions,
+} from "../../btcc/infrastructure/operations/index.ts";
 import { validateJsonObjectSchema } from "../../tools/tool-bridge/schema-validation.ts";
 import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
 

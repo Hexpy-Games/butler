@@ -38,6 +38,12 @@ function isPublicDomainBoundary(
   targetPath: string,
 ): boolean {
   if (resolve(targetPath) === resolve(targetDomain.indexPath)) return true;
+  const pathWithinTarget = relative(targetDomain.path, targetPath);
+  if (pathWithinTarget !== "index.ts"
+    && pathWithinTarget.endsWith(`${sep}index.ts`)
+    && !pathWithinTarget.startsWith(`..${sep}`)) {
+    return true;
+  }
   return sourceDomain.name === "adapters"
     && targetDomain.name === "btcc"
     && resolve(targetPath) === resolve(targetDomain.path, "gateway-api.ts");

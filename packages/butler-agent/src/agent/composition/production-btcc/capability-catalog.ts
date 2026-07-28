@@ -1,8 +1,9 @@
-import {
-  READ_OPERATION_RESULT_CAPABILITY,
-  type StructuralCapabilityCatalog,
-  type StructuralCapabilityDefinition,
-} from "../../btcc/index.ts";
+import { READ_OPERATION_RESULT_CAPABILITY } from
+  "../../btcc/operation-result/index.ts";
+import type {
+  StructuralCapabilityCatalog,
+  StructuralCapabilityDefinition,
+} from "../../btcc/infrastructure/model/index.ts";
 import { PRODUCTION_CAPABILITIES } from "./capabilities/index.ts";
 
 const RESULT_READ_CAPABILITY: StructuralCapabilityDefinition = {

@@ -210,6 +210,38 @@ describe("BTCC successor source shape", () => {
     expect(findingCodes(repository)).toEqual(["cross_domain_deep_import"]);
   });
 
+  test("allows cross-domain imports through a cohesive child public index", () => {
+    const repository = fixture();
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/index.ts",
+      'export { runTurn } from "./run-turn.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/run-turn.ts",
+      "export const runTurn = true;\n",
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/infrastructure/model/index.ts",
+      'export { createModel } from "./create-model.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/btcc/infrastructure/model/create-model.ts",
+      "export const createModel = () => ({ kind: 'model' });\n",
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/composition/index.ts",
+      'export { composeTurn } from "./compose-turn.ts";\n',
+    );
+    repository.write(
+      "packages/butler-agent/src/agent/composition/compose-turn.ts",
+      'import { runTurn } from "../btcc/index.ts";\n'
+        + 'import { createModel } from "../btcc/infrastructure/model/index.ts";\n'
+        + "export const composeTurn = () => ({ runTurn, model: createModel() });\n",
+    );
+
+    expect(inspect(repository).findings).toEqual([]);
+  });
+
   test("allows adapters to consume the explicit BTCC gateway boundary", () => {
     const repository = fixture();
     repository.write(
