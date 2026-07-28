@@ -1,4 +1,7 @@
-import { safeRuntimeFailure } from "../../../../integrations/providers/provider-errors.ts";
+import {
+  providerNetworkError,
+  safeRuntimeFailure,
+} from "../../../../integrations/providers/provider-errors.ts";
 import { safeLimitationText } from "../core/projection-safe-values.ts";
 import type { AppProjectionDeliveryState } from "./btcc-public-projection.ts";
 
@@ -38,6 +41,20 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
       };
     }
   }
+  if (isUnownedResponderAbort(error)) {
+    const failure = providerNetworkError({
+      provider: "model-provider",
+      api: "model-api",
+      error,
+    }).diagnostic();
+    return {
+      code: failure.code,
+      message: failure.message,
+      ...(safeResponderCause(failure.cause)
+        ? { cause: safeResponderCause(failure.cause) }
+        : {}),
+    };
+  }
   const failure = safeRuntimeFailure(error);
   return {
     code: failure.code,
@@ -46,6 +63,12 @@ export function appSafeResponderError(error: unknown): AppResponderSafeError {
       ? { cause: safeResponderCause(failure.cause) }
       : {}),
   };
+}
+
+function isUnownedResponderAbort(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as { code?: unknown; name?: unknown };
+  return record.code === "ABORT_ERR" || record.name === "AbortError";
 }
 
 function safeResponderCause(value: unknown): string | undefined {

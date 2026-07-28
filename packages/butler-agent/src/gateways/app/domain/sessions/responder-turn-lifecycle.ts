@@ -197,7 +197,5 @@ export function isResponderCancelError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const record = error as { code?: unknown; name?: unknown };
   return record.code === "turn_cancelled" ||
-    record.code === "ABORT_ERR" ||
-    record.name === "AbortError" ||
     record.name === "AppResponderCancelledError";
 }
