@@ -278,6 +278,29 @@ export const HARNESS_SUMMARY: SessionSummaryView = {
     turn_id: "turn-2",
     safe_progress_rows: [
       {
+        id: "todo-progress-surface",
+        kind: "todo",
+        state: "running",
+        safe_label: "Keep task progress attached to the composer",
+        safe_input_label: "task-progress-surface",
+        bridge_phase: "btcc_work_ledger",
+        safe_detail_rows: [{
+          id: "todo-progress-work",
+          kind: "work",
+          state: "active",
+          safe_label: "Work",
+          safe_value: "Complete the conversation progress surface",
+        }],
+      },
+      {
+        id: "todo-activity-surface",
+        kind: "todo",
+        state: "pending",
+        safe_label: "Keep live activity in the conversation timeline",
+        safe_input_label: "activity-surface",
+        bridge_phase: "btcc_work_ledger",
+      },
+      {
         id: "p1",
         kind: "searched",
         state: "running",

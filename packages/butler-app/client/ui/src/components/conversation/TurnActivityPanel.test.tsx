@@ -266,7 +266,7 @@ test("turn activity panel keeps decision text out of tool controls", () => {
   expect(html).not.toContain(unsafeToolLabel);
 });
 
-test("turn activity panel owns the canonical Work and Task list", () => {
+test("turn activity panel leaves the canonical Work and Task list to the composer", () => {
   const html = renderPanel([
     {
       id: "task-1",
@@ -293,11 +293,9 @@ test("turn activity panel owns the canonical Work and Task list", () => {
     },
   ]);
 
-  expect(html).toContain("work-progress-panel");
-  expect(html).toContain("Synchronize canonical progress");
-  expect(html).toContain("Exercise the real SSE reducer");
-  expect(html).toContain('data-state="reviewing"');
-  expect(html).toContain('data-state="correction-required"');
+  expect(html).not.toContain("work-progress-panel");
+  expect(html).not.toContain("Synchronize canonical progress");
+  expect(html).not.toContain("Exercise the real SSE reducer");
 });
 
 function renderPanel(rows: ProgressRow[], state = "running"): string {

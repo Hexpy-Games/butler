@@ -1,5 +1,6 @@
 import {
   typedUiReadModelsFromProgressRows,
+  isInternalProgressRow,
   workBlocksFromProgressRows,
   type TypedUiReadModel,
 } from "@/app/utils.ts";
@@ -13,7 +14,6 @@ import { Stack } from "@/butler-ds";
 import { TurnActivityPending } from "./TurnActivityPending";
 import { appCopy } from "@/app/copy.ts";
 import { CollapsedTurnActivity } from "./WorkBlocks";
-import { WorkProgressPanel } from "./WorkProgressPanel";
 
 export function TurnActivityPanel({
   rows,
@@ -24,9 +24,9 @@ export function TurnActivityPanel({
   state?: string;
   turnId?: string;
 }) {
-  const readModels = typedUiReadModelsFromProgressRows(rows);
-  const todoRows = rows.filter((row) => row.kind === "todo");
-  const activityRows = rows.filter((row) => row.kind !== "todo");
+  const visibleRows = rows.filter((row) => !isInternalProgressRow(row));
+  const readModels = typedUiReadModelsFromProgressRows(visibleRows);
+  const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const decisions = readModels.filter(isDecisionReadModel);
   const workBlocks = workBlocksFromProgressRows(activityRows);
   const phaseActivities = phaseActivityRows(activityRows);
@@ -40,8 +40,7 @@ export function TurnActivityPanel({
     phaseActivities.length === 0 &&
     !publicActivity &&
     !modelRoundWait &&
-    !operation &&
-    todoRows.length === 0
+    !operation
   ) {
     return <TurnActivityPending readModels={readModels} state={state} />;
   }
@@ -53,7 +52,6 @@ export function TurnActivityPanel({
       data-test-class="turn-activity-panel turn-work-panel turn-decision-work-panel"
       aria-label={appCopy.conversation.work.historyRegionLabel}
     >
-      <WorkProgressPanel rows={todoRows} turnState={state} />
       {phaseActivities.length > 0 ? (
         <TurnActivityTimeline
           activities={phaseActivities}
