@@ -34,7 +34,7 @@ export function createBtccComposition(input: {
   operations: BtccRuntimeDependencies["operations"];
   artifacts: BtccRuntimeDependencies["artifacts"];
   projectLedger?: BtccProjectLedgerRuntime;
-}): BtccTurnRuntime {
+}): BtccTurnRuntime & { close(): void } {
   const stores = openBtccSqliteStores({
     dbPath: input.dbPath,
     ownerId: input.ownerId,
@@ -70,6 +70,7 @@ export function createBtccComposition(input: {
       await ready;
       return runtime.stopTurn(command);
     },
+    close: stores.close,
   };
 }
 

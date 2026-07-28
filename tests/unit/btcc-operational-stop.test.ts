@@ -16,15 +16,15 @@ type SelectedModel = BtccRuntimeDependencies["model"];
 test("Stop aborts an operational recovery wait without failing the Turn", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-recovery-stop-"));
   const dbPath = join(dataRoot, "btcc.sqlite");
+  const model = new ActionRequiredModel();
+  const runtime = createBtccComposition({
+    dbPath,
+    ownerId: "btcc-recovery-stop-test",
+    model,
+    operations: neverOperations(),
+    artifacts: neverArtifacts(),
+  });
   try {
-    const model = new ActionRequiredModel();
-    const runtime = createBtccComposition({
-      dbPath,
-      ownerId: "btcc-recovery-stop-test",
-      model,
-      operations: neverOperations(),
-      artifacts: neverArtifacts(),
-    });
     const command = runCommand();
     const running = runtime.runTurn(command);
     await model.started;
@@ -37,6 +37,7 @@ test("Stop aborts an operational recovery wait without failing the Turn", async 
     expect(await running).toEqual({ kind: "cancelled", turnId: command.turnId });
     expect(readRecoveryStatus(dbPath)).toBe("interrupted");
   } finally {
+    runtime.close();
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });

@@ -21,6 +21,7 @@ type SelectedModel = BtccRuntimeDependencies["model"];
 
 test("Stop aborts the active model owner and converges run plus repeat Stop", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-stop-"));
+  const runtimes: Array<ReturnType<typeof createBtccComposition>> = [];
   try {
     const model = new BlockingModel();
     const dbPath = join(dataRoot, "btcc.sqlite");
@@ -31,6 +32,7 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
       operations: neverOperations(),
       artifacts: neverArtifacts(),
     });
+    runtimes.push(runtime);
     const command = runCommand();
     const running = runtime.runTurn(command);
     await model.started;
@@ -74,16 +76,19 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
       db.close();
     }
   } finally {
+    closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
 
 test("Stop fences a Turn before Admission and the later inbound cannot start work", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-stop-before-admission-"));
+  const runtimes: Array<ReturnType<typeof createBtccComposition>> = [];
   try {
     const dbPath = join(dataRoot, "btcc.sqlite");
     const model = new NeverCalledModel();
     const runtime = runtimeFor(dbPath, model, "pre-admission-stop-owner");
+    runtimes.push(runtime);
     const command = {
       ...runCommand(),
       turnId: "turn-stopped-before-admission",
@@ -122,6 +127,7 @@ test("Stop fences a Turn before Admission and the later inbound cannot start wor
       db.close();
     }
   } finally {
+    closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -129,8 +135,10 @@ test("Stop fences a Turn before Admission and the later inbound cannot start wor
 test("Stop has one explicit outcome for every semantic state", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-stop-states-"));
   const dbPath = join(dataRoot, "btcc.sqlite");
+  const runtimes: Array<ReturnType<typeof createBtccComposition>> = [];
   try {
     const seedRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "seed-owner");
+    runtimes.push(seedRuntime);
     const command = { ...runCommand(), turnId: "turn-stop-state-table" };
     const delivered = await seedRuntime.runTurn(command);
     expect(delivered.kind).toBe("delivered");
@@ -145,6 +153,7 @@ test("Stop has one explicit outcome for every semantic state", async () => {
     for (const [index, state] of cancellableStates.entries()) {
       resetTurn(dbPath, command.turnId, state);
       const runtime = runtimeFor(dbPath, new DirectHarnessModel(), `state-owner:${index}`);
+      runtimes.push(runtime);
       expect(await runtime.stopTurn({ kind: "stop", turnId: command.turnId })).toEqual({
         kind: "cancelled",
         turnId: command.turnId,
@@ -154,6 +163,7 @@ test("Stop has one explicit outcome for every semantic state", async () => {
     resetTurn(dbPath, command.turnId, "delivery_committed");
     setDeliveryOutboxStatus(dbPath, command.turnId, "inserted");
     const finalizingRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "finalizing-owner");
+    runtimes.push(finalizingRuntime);
     expect(await finalizingRuntime.stopTurn({ kind: "stop", turnId: command.turnId })).toEqual({
       kind: "already_finalizing",
       turnId: command.turnId,
@@ -163,9 +173,11 @@ test("Stop has one explicit outcome for every semantic state", async () => {
 
     resetTurn(dbPath, command.turnId, "delivered", "completed");
     const deliveredRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "delivered-owner");
+    runtimes.push(deliveredRuntime);
     expect((await deliveredRuntime.stopTurn({ kind: "stop", turnId: command.turnId })).kind)
       .toBe("already_delivered");
   } finally {
+    closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -257,11 +269,13 @@ test("Stop publishes the canonical cancelled Work frontier without changing its 
 
 test("one runtime owns a persisted state while a concurrent runtime is excluded", async () => {
   const dataRoot = mkdtempSync(join(tmpdir(), "butler-btcc-owner-"));
+  const runtimes: Array<ReturnType<typeof createBtccComposition>> = [];
   try {
     const dbPath = join(dataRoot, "btcc.sqlite");
     const owner = new DelayedDirectModel();
     const firstRuntime = runtimeFor(dbPath, owner, "first-owner");
     const secondRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "second-owner");
+    runtimes.push(firstRuntime, secondRuntime);
     const command = { ...runCommand(), turnId: "turn-concurrent-owner" };
 
     const first = firstRuntime.runTurn(command);
@@ -286,6 +300,7 @@ test("one runtime owns a persisted state while a concurrent runtime is excluded"
       db.close();
     }
   } finally {
+    closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -399,6 +414,12 @@ function runtimeFor(
     operations: neverOperations(),
     artifacts: neverArtifacts(),
   });
+}
+
+function closeRuntimes(
+  runtimes: Array<ReturnType<typeof createBtccComposition>>,
+): void {
+  for (const runtime of runtimes.reverse()) runtime.close();
 }
 
 function resetTurn(
