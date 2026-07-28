@@ -100,6 +100,7 @@ export type RenderedPhasePrompt = {
   prompt: string;
   promptCacheBoundary: PromptCacheBoundary;
   responseSchema: Record<string, unknown>;
+  carrierAdmissionSchema: Record<string, unknown>;
   carrierFunctions: readonly ProviderCarrierFunction[];
 };
 

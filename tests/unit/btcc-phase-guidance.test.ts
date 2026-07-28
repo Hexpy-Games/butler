@@ -4,8 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { phaseGuidanceRevisionRef } from "../../packages/butler-agent/src/agent/btcc/guidance/index.ts";
+import {
+  createProductionSelectedModel,
+  type ProviderPhasePrompt,
+} from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/index.ts";
+import {
+  actualIdentity,
+  emptyCapabilityCatalog,
+  emptyContextResolver,
+  parseCacheOrderedPrompt,
+  phaseEnvelope,
+  promptRunner,
+  publicActivity,
+} from "./support/btcc-production-selected-model-fixtures.ts";
 
-test("phase guidance is versioned, idempotent, scoped, ordered, and restart-safe", () => {
+test("phase guidance is versioned, idempotent, scoped, rendered, and restart-safe", async () => {
   const root = join(tmpdir(), `btcc-phase-guidance-${Date.now()}`);
   const dbPath = join(root, "btcc.sqlite");
   const stores = openBtccSqliteStores({ dbPath, ownerId: "owner-1" });
@@ -18,6 +31,16 @@ test("phase guidance is versioned, idempotent, scoped, ordered, and restart-safe
     scopeRationale: "The strategy is specific to project-1.",
     scopeSourceRefs: ["source-project"],
     generalityBoundary: "project_bound_strategy" as const,
+  };
+  const sessionScopeEvidence = {
+    scopeRationale: "The strategy is specific to session-1.",
+    scopeSourceRefs: ["source-session"],
+    generalityBoundary: "session_bound_strategy" as const,
+  };
+  const globalScopeEvidence = {
+    scopeRationale: "The practice is stable across users, projects, and sessions.",
+    scopeSourceRefs: ["source-global"],
+    generalityBoundary: "global_phase_practice" as const,
   };
 
   try {
@@ -168,22 +191,73 @@ test("phase guidance is versioned, idempotent, scoped, ordered, and restart-safe
         sourceIds: ["source-project"],
       },
     });
+    const sessionGuidance = stores.phaseGuidance.publish({
+      disposition: "promote",
+      guidance: {
+        guidanceId: "session-check-frontier",
+        phase: "planning",
+        scope: { kind: "session", sessionId: "session-1" },
+        ...sessionScopeEvidence,
+        guidance: "Preserve this session's accepted frontier while planning the next step.",
+        appliesWhen: ["session-1 continues"],
+        doesNotApplyWhen: [],
+        sourceIds: ["source-session"],
+      },
+    });
+    const globalGuidance = stores.phaseGuidance.publish({
+      disposition: "promote",
+      guidance: {
+        guidanceId: "global-state-input",
+        phase: "planning",
+        scope: { kind: "global" },
+        ...globalScopeEvidence,
+        guidance: "Treat accepted state as input and never select a successor phase.",
+        appliesWhen: ["planning runs"],
+        doesNotApplyWhen: [],
+        sourceIds: ["source-global"],
+      },
+    });
 
     expect(stores.phaseGuidance.list({
       phase: "planning",
       userRef: "user-1",
+      sessionId: "session-1",
       projectRef: "project-1",
-    })).toEqual([projectOverride, projectGuidance]);
+    })).toEqual([sessionGuidance, projectOverride, projectGuidance, globalGuidance]);
     expect(stores.phaseGuidance.list({
       phase: "planning",
       userRef: "user-1",
+      sessionId: "session-2",
       projectRef: "project-2",
-    })).toEqual([superseded]);
+    })).toEqual([superseded, globalGuidance]);
     expect(stores.phaseGuidance.list({
       phase: "reporting",
       userRef: "user-1",
+      sessionId: "session-1",
       projectRef: "project-1",
     })).toEqual([]);
+
+    const calls: ProviderPhasePrompt[] = [];
+    const model = createProductionSelectedModel({
+      context: emptyContextResolver(),
+      capabilities: emptyCapabilityCatalog(),
+      guidance: stores.phaseGuidance,
+      promptRunner: promptRunner(async (input) => {
+        calls.push(input);
+        return {
+          carrier: { kind: "phase_submission", submission: { kind: "plan" }, publicActivity },
+          actualIdentity: actualIdentity(),
+        };
+      }),
+    });
+    await model.runRound(phaseEnvelope({ emptyContext: true }));
+    const { stable } = parseCacheOrderedPrompt(calls[0]!.prompt);
+    const guidanceLayer = stable.promptHierarchy.find(
+      (layer: { layer: string }) => layer.layer === "acceptedPhaseGuidance",
+    );
+    expect(guidanceLayer.content.map(
+      (entry: { scope: { kind: string } }) => entry.scope.kind,
+    )).toEqual(["global", "project", "project", "session"]);
   } finally {
     stores.close();
   }
@@ -193,10 +267,13 @@ test("phase guidance is versioned, idempotent, scoped, ordered, and restart-safe
     expect(reopened.phaseGuidance.list({
       phase: "planning",
       userRef: "user-1",
+      sessionId: "session-1",
       projectRef: "project-1",
     }).map((entry) => [entry.guidanceId, entry.revision])).toEqual([
+      ["session-check-frontier", 1],
       ["preserve-original-goal", 1],
       ["project-spec-first", 1],
+      ["global-state-input", 1],
     ]);
   } finally {
     reopened.close();

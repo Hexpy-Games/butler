@@ -238,6 +238,60 @@ test("retrospective model failure stays pending and cannot reopen the delivered 
   }
 });
 
+test("retrospective publishes reviewed session and global phase guidance", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-retrospective-scopes-"));
+  const dbPath = join(root, "btcc.sqlite");
+  seedDeliveredSource(dbPath);
+  try {
+    const output = retrospectiveOutput("turn-failure");
+    output.candidates = [
+      {
+        ...output.candidates[0]!,
+        candidateId: "candidate-session",
+        scopeKind: "session",
+        scopeRationale: "The evidence applies only to this conversation session.",
+        generalityBoundary: "session_bound_strategy",
+      },
+      {
+        ...output.candidates[0]!,
+        candidateId: "candidate-global",
+        scopeKind: "global",
+        scopeRationale: "The evidence supports stable phase practice across contexts.",
+        generalityBoundary: "global_phase_practice",
+      },
+    ];
+    const result = await runBtccRetrospective({
+      butlerData: root,
+      dbPath,
+      modelRunner: async (input) => input.kind === "evaluate"
+        ? JSON.stringify(output)
+        : JSON.stringify({
+            contractRevision: "btcc.guidance-decision.v1",
+            decisions: [
+              acceptedScopeDecision("candidate-session", "session", "session_bound_strategy"),
+              acceptedScopeDecision("candidate-global", "global", "global_phase_practice"),
+            ],
+          }),
+    });
+    expect(result).toMatchObject({ processed_count: 1, promoted_guidance_count: 2 });
+    const stores = openBtccSqliteStores({ dbPath, ownerId: "scope-reader" });
+    try {
+      expect(stores.phaseGuidance.list({
+        phase: "conception_opening",
+        userRef: "user-1",
+        sessionId: "session-failure",
+      }).map(({ scope }) => scope)).toEqual([
+        { kind: "session", sessionId: "session-failure" },
+        { kind: "global" },
+      ]);
+    } finally {
+      stores.close();
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("invalid retrospective candidate identity and source refs stay pending", async () => {
   for (const invalid of [
     "duplicate_candidate",
@@ -336,11 +390,31 @@ function retrospectiveOutput(sourceRef = "turn-retrospective") {
   };
 }
 
+function acceptedScopeDecision(
+  candidateId: string,
+  scopeKind: "session" | "global",
+  boundary: "session_bound_strategy" | "global_phase_practice",
+) {
+  return {
+    candidateId,
+    disposition: "promote",
+    guidanceId: `guidance-${scopeKind}`,
+    rationale: "The reviewed evidence supports this exact scope.",
+    acceptedScopeKind: scopeKind,
+    acceptedScopeRationale: "The accepted scope is explicitly supported by this trajectory.",
+    acceptedScopeSourceRefs: ["turn-failure"],
+    acceptedGeneralityBoundary: boundary,
+    acceptedGuidance: "Preserve the accepted phase contract while improving phase-local strategy.",
+    acceptedAppliesWhen: ["the phase contract remains unchanged"],
+    acceptedDoesNotApplyWhen: ["the lesson would change algorithm or model selection"],
+  };
+}
+
 function seedDeliveredSource(dbPath: string): void {
   const db = new Database(dbPath);
   try {
     db.exec(`
-      CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, original_message TEXT, context_json TEXT,
+      CREATE TABLE btcc_turns (turn_id TEXT PRIMARY KEY, session_id TEXT, original_message TEXT, context_json TEXT,
         managed_state_json TEXT, opening_answer_json TEXT,
         final_payload_json TEXT, semantic_state TEXT);
       CREATE TABLE btcc_learning_sources (source_id TEXT PRIMARY KEY, turn_id TEXT, source_json TEXT);
@@ -349,8 +423,9 @@ function seedDeliveredSource(dbPath: string): void {
       CREATE TABLE btcc_records (record_id TEXT, content_json TEXT);
       CREATE TABLE btcc_context_documents (context_ref TEXT, content TEXT);
     `);
-    db.query("INSERT INTO btcc_turns VALUES (?, ?, ?, NULL, NULL, ?, ?)").run(
-      "turn-failure", "hello", JSON.stringify({ userRef: "user-1" }), JSON.stringify({ content: "hello" }), "delivered",
+    db.query("INSERT INTO btcc_turns VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)").run(
+      "turn-failure", "session-failure", "hello", JSON.stringify({ userRef: "user-1" }),
+      JSON.stringify({ content: "hello" }), "delivered",
     );
     db.query("INSERT INTO btcc_learning_sources VALUES (?, ?, ?)").run(
       "source-failure", "turn-failure", JSON.stringify({ turnId: "turn-failure", recentFeedbackRefs: [] }),

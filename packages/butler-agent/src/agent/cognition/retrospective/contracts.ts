@@ -20,12 +20,20 @@ export const RETROSPECTIVE_DIMENSIONS = [
 ] as const;
 export const GUIDANCE_DECISION_CONTRACT_REVISION = "btcc.guidance-decision.v1" as const;
 
+export type GuidanceScopeKind = "user" | "project" | "session" | "global";
+export type GuidanceGeneralityBoundary =
+  | "cross_project_user_preference"
+  | "project_bound_strategy"
+  | "session_bound_strategy"
+  | "global_phase_practice";
+
 export type RetrospectiveDimension = typeof RETROSPECTIVE_DIMENSIONS[number];
 
 export type BtccTrajectory = {
   sourceId: string;
   outboxId: string;
   turnId: string;
+  sessionId: string;
   userRef: string;
   projectRef?: string;
   originalRequest: string;
@@ -49,10 +57,10 @@ export type RetrospectiveFinding = {
 export type PhaseGuidanceCandidate = {
   candidateId: string;
   phase: ModelPhaseState;
-  scopeKind: "user" | "project";
+  scopeKind: GuidanceScopeKind;
   scopeRationale: string;
   scopeSourceRefs: string[];
-  generalityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+  generalityBoundary: GuidanceGeneralityBoundary;
   problem: string;
   guidance: string;
   appliesWhen: string[];
@@ -95,10 +103,10 @@ type GuidanceDecisionBase = {
 export type GuidanceDecision = GuidanceDecisionBase & (
   | {
       disposition: "promote";
-      acceptedScopeKind: "user" | "project";
+      acceptedScopeKind: GuidanceScopeKind;
       acceptedScopeRationale: string;
       acceptedScopeSourceRefs: string[];
-      acceptedGeneralityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+      acceptedGeneralityBoundary: GuidanceGeneralityBoundary;
       acceptedGuidance: string;
       acceptedAppliesWhen: string[];
       acceptedDoesNotApplyWhen: string[];
@@ -106,10 +114,10 @@ export type GuidanceDecision = GuidanceDecisionBase & (
   | {
       disposition: "merge" | "supersede";
       targetRevision: PhaseGuidanceRevisionRef;
-      acceptedScopeKind: "user" | "project";
+      acceptedScopeKind: GuidanceScopeKind;
       acceptedScopeRationale: string;
       acceptedScopeSourceRefs: string[];
-      acceptedGeneralityBoundary: "cross_project_user_preference" | "project_bound_strategy";
+      acceptedGeneralityBoundary: GuidanceGeneralityBoundary;
       acceptedGuidance: string;
       acceptedAppliesWhen: string[];
       acceptedDoesNotApplyWhen: string[];

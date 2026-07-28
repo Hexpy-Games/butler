@@ -9,7 +9,10 @@ import type {
   StructuralCapabilityCatalog,
 } from "./contracts.ts";
 import { resolvePhaseCapabilities } from "./available-capabilities.ts";
-import { providerCarrierSchema } from "./provider-carrier-schema.ts";
+import {
+  providerCarrierAdmissionSchema,
+  providerCarrierSchema,
+} from "./provider-carrier-schema.ts";
 import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
 import type { PhaseGuidanceReader } from "../../guidance/index.ts";
 import {
@@ -39,6 +42,7 @@ export async function renderPhasePrompt(
     guidanceReader.list({
       phase: envelope.phase,
       userRef: envelope.context.userRef,
+      sessionId: envelope.context.sessionId,
       ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
     }),
   ]);
@@ -50,6 +54,11 @@ export async function renderPhasePrompt(
   const responseSchema = providerCarrierSchema(
     providerVocabulary,
     envelope.submissionSchema,
+  );
+  const carrierAdmissionSchema = providerCarrierAdmissionSchema(
+    availableCapabilities,
+    envelope.submissionSchema,
+    operationAuthority,
   );
   const carrierFunctions = providerCarrierFunctions(
     providerVocabulary,
@@ -96,6 +105,7 @@ export async function renderPhasePrompt(
     instructions,
     ...renderedPrompt,
     responseSchema,
+    carrierAdmissionSchema,
     carrierFunctions,
   };
 }

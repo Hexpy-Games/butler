@@ -30,6 +30,7 @@ export class SqliteRetrospectiveScheduler implements RetrospectiveScheduler {
     const source = {
       sourceId,
       turnId: turn.turnId,
+      sessionId: turn.sessionId,
       finalPayloadRef: finalPayload.ref,
       ...(goalContractRef ? { goalContractRef } : {}),
       ...(finalDossierRef ? { finalDossierRef } : {}),

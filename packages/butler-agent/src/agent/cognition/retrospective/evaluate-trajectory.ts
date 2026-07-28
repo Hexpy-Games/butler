@@ -48,10 +48,12 @@ export async function evaluateTrajectory(input: {
         strengths: ["string"],
         misses: ["string"],
         candidates: [{
-          candidateId: "string", phase: "BTCC model phase", scopeKind: "user|project",
+          candidateId: "string", phase: "BTCC model phase",
+          scopeKind: "user|project|session|global",
           scopeRationale: "why the evidence supports exactly this scope",
           scopeSourceRefs: ["exact trajectory source ref"],
-          generalityBoundary: "cross_project_user_preference|project_bound_strategy",
+          generalityBoundary:
+            "cross_project_user_preference|project_bound_strategy|session_bound_strategy|global_phase_practice",
           problem: "string", guidance: "string", appliesWhen: ["string"],
           doesNotApplyWhen: ["string"], expectedBenefit: "string", risks: ["string"],
           confidence: "number 0..1", sourceRefs: ["string"],

@@ -80,7 +80,7 @@ async function runSelectedModelRound(
     }
     try {
       return acceptProviderCarrier(result.carrier, {
-        responseSchema: rendered.responseSchema,
+        responseSchema: rendered.carrierAdmissionSchema,
         authority: envelope.operationAuthority,
         actualIdentity: result.actualIdentity,
       });

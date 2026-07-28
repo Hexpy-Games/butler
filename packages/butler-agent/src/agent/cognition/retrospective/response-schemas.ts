@@ -1,10 +1,18 @@
 const text = { type: "string", minLength: 1 } as const;
 const texts = { type: "array", items: text } as const;
 const nonEmptyTexts = { type: "array", items: text, minItems: 1 } as const;
-const scopeKind = { type: "string", enum: ["user", "project"] } as const;
+const scopeKind = {
+  type: "string",
+  enum: ["user", "project", "session", "global"],
+} as const;
 const boundary = {
   type: "string",
-  enum: ["cross_project_user_preference", "project_bound_strategy"],
+  enum: [
+    "cross_project_user_preference",
+    "project_bound_strategy",
+    "session_bound_strategy",
+    "global_phase_practice",
+  ],
 } as const;
 const phase = {
   type: "string",
@@ -82,6 +90,8 @@ const guidanceScope = {
   anyOf: [
     closed({ kind: { type: "string", const: "user" }, userRef: text }),
     closed({ kind: { type: "string", const: "project" }, projectRef: text }),
+    closed({ kind: { type: "string", const: "session" }, sessionId: text }),
+    closed({ kind: { type: "string", const: "global" } }),
   ],
 };
 
