@@ -127,6 +127,7 @@ export function projectTurnProgress(
         });
         return;
       }
+      if (update.activationKind === "runtime_remediation") return;
       await publish({
         kind: "assistant.public_note",
         payload: {
@@ -153,27 +154,24 @@ function operationEventKind(
 
 function operationalProgressLabel(
   activation: "automatic_provider_recovery" | "provider_action_required" |
-    "automatic_storage_recovery" | "runtime_remediation" | "cancelled" | undefined,
+    "automatic_storage_recovery" | "cancelled" | undefined,
   code?: string,
 ): string {
-  if (activation === "runtime_remediation") {
-    return "현재 작업을 저장된 지점에 안전하게 보류했습니다. 중지 기능은 계속 사용할 수 있습니다";
-  }
   if (activation === "automatic_provider_recovery" &&
     (code === "provider_phase_submission_invalid" ||
       code === "provider_protocol_interruption")) {
-    return "모델 출력 계약을 바로잡고 있습니다. 완료된 작업은 그대로 보존됩니다";
+    return "모델 출력 형식을 바로잡고 있습니다";
   }
   if (activation === "automatic_provider_recovery") {
-    return "모델 연결을 복구하고 있습니다. 현재 작업은 안전하게 보존되어 있으며 중지할 수 있습니다";
+    return "모델 연결을 복구하고 있습니다";
   }
   if (activation === "provider_action_required") {
-    return "선택한 모델 연결 설정을 확인하면 저장된 지점부터 이어갈 수 있습니다";
+    return "선택한 모델 연결 설정을 확인해 주세요";
   }
   if (activation === "automatic_storage_recovery") {
-    return "저장소 쓰기 순서를 조정하고 있습니다. 현재 작업은 안전하게 보존되어 있으며 중지할 수 있습니다";
+    return "저장소 쓰기 순서를 조정하고 있습니다";
   }
-  return "현재 작업은 안전하게 보존되어 있으며 중지할 수 있습니다";
+  return "요청을 중지하고 있습니다";
 }
 
 function progressLabel(state: string): string {

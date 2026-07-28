@@ -70,7 +70,8 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       outcome = await this.handleCommand(command, stopObserving);
     } catch (error) {
       if (isBtccOperationalInterruption(error)) {
-        await this.publish(envelope, route, operationalNotice(error.activation.kind));
+        const notice = operationalNotice(error.activation.kind);
+        if (notice) await this.publish(envelope, route, notice);
       }
       throw error;
     }
@@ -123,14 +124,13 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
 
 function operationalNotice(
   activation: import("../../../agent/btcc/recovery/index.ts").OperationalActivation["kind"],
-): RuntimeTurnEventInput {
+): RuntimeTurnEventInput | null {
   if (activation === "cancelled") return { kind: "turn.cancelled" };
+  if (activation === "runtime_remediation") return null;
   const note = activation === "automatic_provider_recovery"
-    ? "모델 연결이 복구되면 저장된 지점부터 이어서 진행합니다"
+    ? "모델 연결을 복구하고 있습니다"
     : activation === "automatic_storage_recovery"
-      ? "저장소 쓰기 순서가 확보되면 저장된 지점부터 이어서 진행합니다"
-    : activation === "provider_action_required"
-      ? "선택한 모델 연결 설정을 확인하면 저장된 지점부터 이어갈 수 있습니다"
-      : "버틀러가 현재 작업을 안전하게 보류했습니다. 중지 기능은 계속 사용할 수 있습니다";
+      ? "저장소 쓰기 순서를 조정하고 있습니다"
+      : "선택한 모델 연결 설정을 확인해 주세요";
   return { kind: "assistant.public_note", payload: { note, operational: true } };
 }
