@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {
@@ -28,6 +27,8 @@ import {
   type ProcessLiveness,
   type RuntimeOwnerIdentity,
 } from "./runtime-owner/index.ts";
+import { openOwnedSqliteConnection } from
+  "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 
 export type BtccProjectLedgerRuntime = {
   publications: ProjectWorkLedgerPublicationAdapter;
@@ -43,7 +44,8 @@ export function openBtccSqliteStores(input: {
   storageProfile?: SqliteStorageProfile;
 }) {
   mkdirSync(dirname(input.dbPath), { recursive: true });
-  const db = new Database(input.dbPath);
+  const connection = openOwnedSqliteConnection(input.dbPath);
+  const db = connection.database;
   coordinateSharedSqliteWriter(db, input.storageProfile);
   db.exec("PRAGMA synchronous=NORMAL");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
@@ -86,7 +88,7 @@ export function openBtccSqliteStores(input: {
     close: () => {
       owner.close();
       if (db.inTransaction) throw new Error("BTCC database transaction remained open at close");
-      db.close();
+      connection.close();
     },
   };
 }
