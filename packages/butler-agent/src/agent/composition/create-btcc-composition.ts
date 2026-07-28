@@ -141,7 +141,12 @@ export function createProductionBtccComposition(input: {
   const recoveryTasks = recoverOperationalOwnership(runtime, stores, {
     resumePendingTurns: false,
   });
-  const owned = ownBtccComposition(runtime, stores, recoveryTasks);
+  const owned = ownBtccComposition(
+    runtime,
+    stores,
+    recoveryTasks,
+    operationRuntime.close,
+  );
   return {
     runtime: owned,
     contextDocuments: stores.contextDocuments,
@@ -156,6 +161,7 @@ function ownBtccComposition(
   runtime: BtccTurnRuntime,
   stores: ReturnType<typeof openBtccSqliteStores>,
   recoveryTasks: Promise<Array<Promise<BtccTurnOutcome>>>,
+  closeOperations?: () => void,
 ): ClosableBtccTurnRuntime {
   const active = new Set<Promise<BtccTurnOutcome>>();
   let closePromise: Promise<void> | null = null;
@@ -181,6 +187,7 @@ function ownBtccComposition(
         stores,
         recoveryTasks,
         active,
+        closeOperations,
       );
       return closePromise;
     },
@@ -191,10 +198,12 @@ async function closeOwnedBtccComposition(
   stores: ReturnType<typeof openBtccSqliteStores>,
   recoveryTasks: Promise<Array<Promise<BtccTurnOutcome>>>,
   active: Set<Promise<BtccTurnOutcome>>,
+  closeOperations?: () => void,
 ): Promise<void> {
   const recovered = await recoveryTasks;
   await Promise.allSettled([...active, ...recovered]);
   await stores.retrospective.flush();
+  closeOperations?.();
   stores.close();
 }
 

@@ -34,6 +34,10 @@ export function createProductionOperationRuntime(
   return {
     artifacts: new ProductionArtifactWorkspaceRuntime(options, store),
     operations: createOperationExecutor(options, store, undefined, results),
+    close() {
+      results.close();
+      store.close();
+    },
   };
 }
 

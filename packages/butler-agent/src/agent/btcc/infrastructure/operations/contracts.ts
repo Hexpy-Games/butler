@@ -44,4 +44,5 @@ export type ProductionOperationRuntimeOptions = {
 export type ProductionOperationRuntime = {
   artifacts: ArtifactWorkspaceRuntime;
   operations: OperationExecutor;
+  close(): void;
 };

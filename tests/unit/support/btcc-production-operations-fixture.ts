@@ -19,12 +19,15 @@ import {
 } from "../../../packages/butler-agent/src/agent/btcc/infrastructure/operations/index.ts";
 import { ArtifactStore } from "../../../packages/butler-agent/src/agent/btcc/infrastructure/operations/artifact-store.ts";
 import { ProductionArtifactWorkspaceRuntime } from "../../../packages/butler-agent/src/agent/btcc/infrastructure/operations/artifact-workspace-runtime.ts";
+import { SqliteOperationResultStore } from
+  "../../../packages/butler-agent/src/agent/btcc/infrastructure/operation-result/index.ts";
 import {
   createOperationExecutor,
   type OperationRuntimeBoundary,
 } from "../../../packages/butler-agent/src/agent/btcc/infrastructure/operations/production-operation-runtime.ts";
 
 const temporaryRoots: string[] = [];
+const runtimeClosers: Array<() => void> = [];
 
 export type ProductionOperationsFixture = {
   root: string;
@@ -42,6 +45,7 @@ export type ProductionOperationsFixture = {
 };
 
 export function cleanupProductionOperationsFixtures(): void {
+  for (const close of runtimeClosers.splice(0).reverse()) close();
   for (const root of temporaryRoots.splice(0)) rmSync(root, { recursive: true, force: true });
 }
 
@@ -69,7 +73,9 @@ export function createAbsentDirectoryFixture(): ProductionOperationsFixture {
 }
 
 export function createRuntime(fixture: ProductionOperationsFixture) {
-  return createProductionOperationRuntime(runtimeOptions(fixture));
+  const runtime = createProductionOperationRuntime(runtimeOptions(fixture));
+  runtimeClosers.push(runtime.close);
+  return runtime;
 }
 
 export function createFaultableRuntime(
@@ -78,10 +84,17 @@ export function createFaultableRuntime(
 ) {
   const options = runtimeOptions(fixture);
   const store = new ArtifactStore(fixture.dataRoot);
-  return {
+  const results = new SqliteOperationResultStore(fixture.dataRoot);
+  const runtime = {
     artifacts: new ProductionArtifactWorkspaceRuntime(options, store),
-    operations: createOperationExecutor(options, store, afterBoundary),
+    operations: createOperationExecutor(options, store, afterBoundary, results),
+    close() {
+      results.close();
+      store.close();
+    },
   };
+  runtimeClosers.push(runtime.close);
+  return runtime;
 }
 
 function runtimeOptions(
