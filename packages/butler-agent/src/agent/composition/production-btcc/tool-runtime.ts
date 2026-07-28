@@ -185,6 +185,15 @@ function validateCommandStateEffect(
       "BTCC Review command requires state_effect validation",
     );
   }
+  if (
+    request.kind === "workspace_artifact_observation" &&
+    effect !== "read_only" && effect !== "validation"
+  ) {
+    rejectInput(
+      "workspace_observation_effect_denied",
+      "BTCC read-only workspace command requires read_only or validation state_effect",
+    );
+  }
   if (request.kind === "workspace_artifact_action" &&
     effect !== "read_only" && effect !== "validation" && effect !== "mutation") {
     rejectInput(

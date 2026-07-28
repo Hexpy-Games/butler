@@ -124,7 +124,12 @@ export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
     capabilityRef: "run_command",
     name: "run_command",
     description: "Run one structurally classified non-interactive local command.",
-    operationKinds: ["observe", "workspace_artifact_action", "review_validation"],
+    operationKinds: [
+      "observe",
+      "workspace_artifact_observation",
+      "workspace_artifact_action",
+      "review_validation",
+    ],
     observationScopeKinds: ["workspace"],
     inputSchema: object({
       command: string(),
