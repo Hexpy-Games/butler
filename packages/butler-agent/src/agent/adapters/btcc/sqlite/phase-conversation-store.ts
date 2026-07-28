@@ -7,17 +7,21 @@ import type {
   PhaseContinuity,
   PhaseEnvelope,
   PhaseRunBinding,
+  ProviderCorrection,
 } from "../../../btcc/gateway-api.ts";
-import { digest, stableJson } from "./identity.ts";
+import { stableJson } from "./identity.ts";
 import {
   contentRefId,
   decodePendingOperation,
   decodePendingSubmission,
+  decodeProviderCorrection,
   optionalJson,
   revisionRef,
 } from "./phase-conversation/checkpoint-codec.ts";
 import { PhaseOperationResultLinks } from
   "./phase-conversation/operation-result-links.ts";
+import { PhaseModelRoundLog } from
+  "./phase-conversation/model-round-log.ts";
 
 type PhaseConversationStore = BtccRuntimeDependencies["phaseConversations"];
 type CheckpointHead = {
@@ -30,9 +34,11 @@ type CheckpointHead = {
 
 export class SqlitePhaseConversationStore implements PhaseConversationStore {
   private readonly operationResults: PhaseOperationResultLinks;
+  private readonly modelRounds: PhaseModelRoundLog;
 
   constructor(private readonly db: Database) {
     this.operationResults = new PhaseOperationResultLinks(db);
+    this.modelRounds = new PhaseModelRoundLog(db);
   }
 
   async restore<Product>(binding: PhaseRunBinding) {
@@ -40,8 +46,10 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
     const revision = this.db.query<{
       pending_operation_json: string | null;
       pending_submission_json: string | null;
+      provider_correction_json: string | null;
     }, [string, number]>(`
-      SELECT pending_operation_json, pending_submission_json
+      SELECT pending_operation_json, pending_submission_json,
+        provider_correction_json
       FROM btcc_phase_checkpoint_revisions
       WHERE checkpoint_id = ? AND checkpoint_revision = ?
     `).get(binding.checkpointId, head.checkpoint_revision);
@@ -54,6 +62,9 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         : null,
       ...(head.actual_identity_json
         ? { acceptedActualIdentity: JSON.parse(head.actual_identity_json) as ActualModelIdentity }
+        : {}),
+      ...(revision?.provider_correction_json
+        ? { providerCorrection: decodeProviderCorrection(revision.provider_correction_json) }
         : {}),
       operationResults: this.operationResults.load(currentBinding),
       latestOperationResultCount: this.operationResults.loadLatestBatchSize(currentBinding),
@@ -92,7 +103,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         providerRound: carrier,
         pendingOperation: carrier,
       });
-      this.insertModelRound(input.binding, next.checkpointRevision, carrier);
+      this.modelRounds.append(input.binding, next.checkpointRevision, carrier);
       return next;
     })();
   }
@@ -138,7 +149,35 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         providerRound,
         pendingSubmission: providerRound,
       });
-      this.insertModelRound(input.binding, next.checkpointRevision, providerRound);
+      this.modelRounds.append(input.binding, next.checkpointRevision, providerRound);
+      return next;
+    })();
+  }
+
+  async appendProviderProductRejection(input: {
+    binding: PhaseRunBinding;
+    envelope: PhaseEnvelope;
+    submission: unknown;
+    publicActivity?: PhaseContinuity["publicActivity"];
+    actualIdentity: ActualModelIdentity;
+    correction: ProviderCorrection;
+  }): Promise<PhaseRunBinding> {
+    const providerRound = {
+      kind: "phase_submission" as const,
+      submission: input.submission,
+      ...(input.publicActivity ? { publicActivity: input.publicActivity } : {}),
+      actualIdentity: input.actualIdentity,
+    };
+    return this.db.transaction(() => {
+      this.loadHead(input.binding, true);
+      const next = this.appendRevision({
+        binding: input.binding,
+        status: "provider_product_rejected",
+        envelope: input.envelope,
+        providerRound,
+        providerCorrection: input.correction,
+      });
+      this.modelRounds.append(input.binding, next.checkpointRevision, providerRound);
       return next;
     })();
   }
@@ -171,9 +210,10 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
   private appendRevision(input: {
     binding: PhaseRunBinding;
     status: "pending_operations" | "operations_applied" | "pending_boundary" |
-      "accepted_boundary";
+      "accepted_boundary" | "provider_product_rejected";
     envelope?: PhaseEnvelope;
     providerRound?: unknown;
+    providerCorrection?: ProviderCorrection;
     pendingOperation?: unknown;
     pendingSubmission?: unknown;
     productBundle?: unknown;
@@ -184,6 +224,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
     const nextRevision = input.binding.checkpointRevision + 1;
     const envelopeJson = optionalJson(input.envelope);
     const providerRoundJson = optionalJson(input.providerRound);
+    const providerCorrectionJson = optionalJson(input.providerCorrection);
     const pendingSubmissionJson = optionalJson(input.pendingSubmission);
     const productBundleJson = optionalJson(input.productBundle);
     this.db.query(`
@@ -191,10 +232,11 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
         checkpoint_id, checkpoint_revision, previous_revision_ref,
         phase_envelope_ref, phase_envelope_json,
         provider_round_ref, provider_round_json,
+        provider_correction_json,
         pending_operation_json, pending_submission_ref, pending_submission_json,
         product_bundle_ref, product_bundle_json, operation_result_refs_json,
         state_claim_id, execution_fence, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.binding.checkpointId,
       nextRevision,
@@ -203,6 +245,7 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       envelopeJson,
       contentRefId("provider-round", providerRoundJson),
       providerRoundJson,
+      providerCorrectionJson,
       optionalJson(input.pendingOperation),
       contentRefId("pending-boundary-submission", pendingSubmissionJson),
       pendingSubmissionJson,
@@ -245,31 +288,6 @@ export class SqlitePhaseConversationStore implements PhaseConversationStore {
       throw new Error("BTCC phase checkpoint append lost its exact CAS");
     }
     return { ...input.binding, checkpointRevision: nextRevision };
-  }
-
-  private insertModelRound(
-    binding: PhaseRunBinding,
-    checkpointRevision: number,
-    round: { kind: string; actualIdentity: ActualModelIdentity },
-  ): void {
-    const previous = this.db.query<{ ordinal: number }, [string]>(`
-      SELECT COALESCE(MAX(round_ordinal), 0) AS ordinal FROM btcc_phase_model_rounds
-      WHERE checkpoint_id = ?
-    `).get(binding.checkpointId);
-    const ordinal = (previous?.ordinal ?? 0) + 1;
-    this.db.query(`
-      INSERT INTO btcc_phase_model_rounds (
-        round_id, checkpoint_id, checkpoint_revision, round_ordinal,
-        carrier_kind, actual_identity_json
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      digest(`btcc-phase-model-round.v1\0${binding.checkpointId}\0${checkpointRevision}`),
-      binding.checkpointId,
-      checkpointRevision,
-      ordinal,
-      round.kind,
-      stableJson(round.actualIdentity),
-    );
   }
 
   private loadPendingSubmission(binding: PhaseRunBinding) {

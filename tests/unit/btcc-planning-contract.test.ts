@@ -675,6 +675,10 @@ function reviewInvocation(
       restore: async (binding: any) => ({ binding, acceptedProduct: null, operationResults: [] }),
       appendOperationRound: async () => { throw new Error("unexpected operation round"); },
       appendOperationResults: async () => { throw new Error("unexpected operation results"); },
+      appendProviderProductRejection: async ({ binding }: any) => ({
+        ...binding,
+        checkpointRevision: binding.checkpointRevision + 1,
+      }),
       appendPhaseSubmission: async ({ binding }: any) => ({
         ...binding,
         checkpointRevision: binding.checkpointRevision + 1,

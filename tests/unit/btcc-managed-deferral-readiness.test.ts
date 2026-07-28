@@ -99,6 +99,9 @@ describe("BTCC managed deferral readiness", () => {
       async appendOperationResults() {
         throw new Error("operation results are not expected");
       },
+      async appendProviderProductRejection({ binding: current }) {
+        return { ...current, checkpointRevision: current.checkpointRevision + 1 };
+      },
       async appendPhaseSubmission() {
         throw new Error("invalid submission must not be persisted");
       },

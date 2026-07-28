@@ -68,15 +68,28 @@ export async function runManagedConceptionPlanningExecutionReview(
 }
 
 export async function consolidateTurn(
-  turn: TurnRecord,
+  initial: TurnRecord,
   dependencies: BtccRuntimeDependencies,
   supervisor: TurnExecutionSupervisor,
 ): Promise<TurnRecord> {
-  if (turn.semanticState === "consolidation") {
-    return advanceTurn(turn, dependencies, supervisor);
+  if (isAfterConsolidation(initial) || isTerminal(initial)) return initial;
+  if (initial.semanticState !== "consolidation") {
+    throw new Error(`Managed Turn stopped before Consolidation: ${initial.semanticState}`);
+  }
+
+  let turn = initial;
+  while (turn.semanticState === "consolidation") {
+    turn = await advanceTurn(turn, dependencies, supervisor);
+    if (turn.semanticState === "feedback_conception") {
+      turn = await runManagedConceptionPlanningExecutionReview(
+        turn,
+        dependencies,
+        supervisor,
+      );
+    }
   }
   if (isAfterConsolidation(turn) || isTerminal(turn)) return turn;
-  throw new Error(`Managed Turn stopped before Consolidation: ${turn.semanticState}`);
+  throw new Error(`Consolidation correction stopped at ${turn.semanticState}`);
 }
 
 export async function reportTurn(

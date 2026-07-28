@@ -39,6 +39,7 @@ import type {
   PhaseEnvelope,
   PhaseContinuity,
   PhaseRunBinding,
+  ProviderCorrection,
 } from "./core/index.ts";
 
 export {
@@ -124,6 +125,7 @@ export type {
   PhaseGuidanceRevisionRef,
   PhaseGuidanceScope,
   PhaseRunBinding,
+  ProviderCorrection,
   PublishPhaseGuidanceCommand,
   ContinuationBinding,
   ContinuationContext,

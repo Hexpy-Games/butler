@@ -60,6 +60,9 @@ test("accepts a corrected request that reuses its local ID in a later model roun
           results.push(...appended.map((item) => item.result));
           return nextBinding(current);
         },
+        appendProviderProductRejection: async () => {
+          throw new Error("unexpected provider product rejection");
+        },
         appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
         acceptPhaseProduct: async ({ binding: current }) => nextBinding(current),
       },
@@ -163,6 +166,9 @@ test("projects a closed operation surface before the Opening model call", async 
       appendOperationResults: async () => {
         throw new Error("Opening must not append operation results");
       },
+      appendProviderProductRejection: async () => {
+        throw new Error("Opening must not reject a provider product");
+      },
       appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
       acceptPhaseProduct: async ({ binding: current }) => {
         accepted = true;
@@ -233,6 +239,8 @@ test("returns a malformed phase proposal to the same conversation", async () => 
       }),
       appendOperationRound: async () => { throw new Error("unexpected operation"); },
       appendOperationResults: async () => { throw new Error("unexpected result"); },
+      appendProviderProductRejection: async ({ binding: current }) =>
+        nextBinding(current),
       appendPhaseSubmission: async ({ binding: current }) => {
         appended = true;
         return nextBinding(current);
@@ -303,6 +311,9 @@ test("anchors provider recovery after the latest operation checkpoint", async ()
       }),
       appendOperationRound: async ({ binding: current }) => nextBinding(current),
       appendOperationResults: async ({ binding: current }) => nextBinding(current),
+      appendProviderProductRejection: async () => {
+        throw new Error("unexpected provider product rejection");
+      },
       appendPhaseSubmission: async () => { throw new Error("unexpected submission"); },
       acceptPhaseProduct: async () => { throw new Error("unexpected product"); },
     },
@@ -365,6 +376,9 @@ test("returns a phase authority rejection without dispatching the operation", as
       appendOperationResults: async ({ binding: current, results: appended }) => {
         results.push(...appended.map((item) => item.result));
         return nextBinding(current);
+      },
+      appendProviderProductRejection: async () => {
+        throw new Error("unexpected provider product rejection");
       },
       appendPhaseSubmission: async ({ binding: current }) => nextBinding(current),
       acceptPhaseProduct: async ({ binding: current }) => nextBinding(current),

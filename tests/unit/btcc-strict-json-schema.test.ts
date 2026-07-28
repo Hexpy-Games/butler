@@ -96,6 +96,7 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
     submissionSchema,
   );
   const admissionSchema = providerCarrierAdmissionSchema(
+    vocabulary,
     [capability],
     submissionSchema,
     authority,

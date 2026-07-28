@@ -252,6 +252,9 @@ function invocation(
       async restore() { return { binding, acceptedProduct: null, operationResults: [] }; },
       async appendOperationRound() { throw new Error("unexpected operation"); },
       async appendOperationResults() { throw new Error("unexpected operation result"); },
+      async appendProviderProductRejection({ binding: current }) {
+        return { ...current, checkpointRevision: current.checkpointRevision + 1 };
+      },
       async appendPhaseSubmission({ binding: current }) {
         return { ...current, checkpointRevision: current.checkpointRevision + 1 };
       },

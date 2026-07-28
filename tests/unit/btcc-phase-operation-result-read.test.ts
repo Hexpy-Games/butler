@@ -59,6 +59,9 @@ test("authorizes an exact read from a prior operation result without rerunning i
         results.push(...appended.map((item) => item.result));
         return next(current);
       },
+      appendProviderProductRejection: async () => {
+        throw new Error("unexpected provider product rejection");
+      },
       appendPhaseSubmission: async ({ binding: current }) => next(current),
       acceptPhaseProduct: async ({ binding: current }) => next(current),
     },

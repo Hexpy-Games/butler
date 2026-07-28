@@ -17,15 +17,27 @@ export function providerCarrierSchema(
 }
 
 export function providerCarrierAdmissionSchema(
-  capabilities: readonly AvailablePhaseCapability[],
+  vocabulary: readonly ProviderCapabilityVocabularyEntry[],
+  available: readonly AvailablePhaseCapability[],
   submissionSchema: Record<string, unknown>,
   authority: OperationAuthority,
 ): Record<string, unknown> {
   const carrierVariants = [phaseSubmissionSchema(submissionSchema)];
+  const capabilities = admissionCapabilities(vocabulary, available);
   if (capabilities.length > 0) {
     carrierVariants.push(operationRequestsSchema(capabilities, { kind: "exact", authority }));
   }
   return { anyOf: carrierVariants };
+}
+
+function admissionCapabilities(
+  vocabulary: readonly ProviderCapabilityVocabularyEntry[],
+  available: readonly AvailablePhaseCapability[],
+): CarrierCapability[] {
+  return [
+    ...available.filter((capability) => capability.operationKind === "observe"),
+    ...vocabulary.filter((capability) => capability.operationKind !== "observe"),
+  ];
 }
 
 export function providerCarrierFunctions(

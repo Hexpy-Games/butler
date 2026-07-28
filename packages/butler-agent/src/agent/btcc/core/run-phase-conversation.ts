@@ -55,7 +55,7 @@ async function runPhaseConversationAtCheckpoint<Product>(
 ): Promise<Product> {
   command.executionPermit.assertActive();
   let conversation = await command.store.restore<Product>(command.binding);
-  let providerCorrection = command.providerCorrection;
+  let providerCorrection = conversation.providerCorrection ?? command.providerCorrection;
   checkpointAdvanced(conversation.binding);
   command.executionPermit.assertActive();
   if (conversation.acceptedProduct) {
@@ -170,6 +170,27 @@ async function runPhaseConversationAtCheckpoint<Product>(
     }
     const proposal = decodePhaseSubmissionProposal(command, round.submission, envelope);
     if (proposal.kind === "rejected") {
+      if (providerCorrection) {
+        throw repeatedInvalidProviderProduct(
+          conversation.binding,
+          proposal.correction,
+        );
+      }
+      conversation = {
+        ...conversation,
+        binding: trackCheckpoint(
+          await command.store.appendProviderProductRejection({
+            binding: conversation.binding,
+            envelope,
+            submission: round.submission,
+            publicActivity: round.publicActivity,
+            actualIdentity: round.actualIdentity,
+            correction: proposal.correction,
+          }),
+          checkpointAdvanced,
+        ),
+        providerCorrection: proposal.correction,
+      };
       providerCorrection = proposal.correction;
       continue;
     }
@@ -195,6 +216,21 @@ async function runPhaseConversationAtCheckpoint<Product>(
       });
     }
   }
+}
+
+function repeatedInvalidProviderProduct(
+  binding: PhaseEnvelope["binding"],
+  correction: ProviderCorrection,
+): OperationalInterruptionError {
+  return new OperationalInterruptionError(
+    correction.code,
+    binding,
+    { kind: "runtime_remediation" },
+    correction.diagnosticMessage
+      ? new Error(correction.diagnosticMessage)
+      : undefined,
+    correction.diagnostic,
+  );
 }
 
 function trackCheckpoint(

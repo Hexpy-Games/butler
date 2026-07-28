@@ -43,6 +43,9 @@ test("publishes committed model-authored activity before an operation batch", as
       async appendOperationResults({ binding: current }) {
         return nextBinding(current);
       },
+      async appendProviderProductRejection() {
+        throw new Error("unexpected provider product rejection");
+      },
       async appendPhaseSubmission({ binding: current }) {
         return nextBinding(current);
       },

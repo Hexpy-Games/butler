@@ -56,6 +56,7 @@ export async function renderPhasePrompt(
     envelope.submissionSchema,
   );
   const carrierAdmissionSchema = providerCarrierAdmissionSchema(
+    providerVocabulary,
     availableCapabilities,
     envelope.submissionSchema,
     operationAuthority,
@@ -114,18 +115,21 @@ function assertRequiredMutationCapability(
   authority: PhaseEnvelope["operationAuthority"],
   capabilities: readonly AvailablePhaseCapability[],
 ): void {
-  const required = requiredMutationOperation(authority.mutation.kind);
+  const required = requiredMutationOperation(authority.mutation);
   if (!required || capabilities.some((item) => item.operationKind === required)) return;
   throw new Error(`required_mutation_capability_unavailable:${required}`);
 }
 
 function requiredMutationOperation(
-  kind: PhaseEnvelope["operationAuthority"]["mutation"]["kind"],
+  mutation: PhaseEnvelope["operationAuthority"]["mutation"],
 ): OperationRequest["kind"] | undefined {
-  if (kind === "external_effect_only") return "external_effect";
-  if (kind === "repository_promotion_only") return "repository_promotion";
-  if (kind === "validation_overlay_only") return "review_validation";
-  if (kind === "workspace_only") return "workspace_artifact_action";
+  if (mutation.kind === "external_effect_only") return "external_effect";
+  if (mutation.kind === "repository_promotion_only") return "repository_promotion";
+  if (mutation.kind === "validation_overlay_only") return "review_validation";
+  if (
+    mutation.kind === "workspace_only" &&
+    mutation.mutationScope.kind === "contained_paths"
+  ) return "workspace_artifact_action";
   return undefined;
 }
 
