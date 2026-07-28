@@ -41,7 +41,7 @@ test("composer progress owns the canonical Work and Task list", () => {
   );
 
   expect(html).toContain("work-progress-panel");
-  expect(html).toContain("Synchronize canonical progress");
+  expect(html).not.toContain("Synchronize canonical progress");
   expect(html).toContain("Exercise the real SSE reducer");
   expect(html).toContain('data-state="reviewing"');
   expect(html).toContain('data-state="correction-required"');

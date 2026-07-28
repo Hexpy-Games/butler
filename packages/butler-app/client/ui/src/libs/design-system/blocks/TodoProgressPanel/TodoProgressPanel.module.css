@@ -53,13 +53,6 @@
   min-width: 0;
 }
 
-.group {
-  overflow: hidden;
-  color: var(--text-tertiary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .status {
   color: var(--text-tertiary);
   white-space: nowrap;

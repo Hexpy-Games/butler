@@ -4,7 +4,6 @@ import { semanticProgressRows } from "./progress-rows.ts";
 export interface ComposerTaskItem {
   id: string;
   label: string;
-  workLabel?: string;
   state:
     | "pending"
     | "running"
@@ -26,9 +25,6 @@ export function projectComposerTasks(
     return [{
       id,
       label,
-      workLabel: row.safe_detail_rows
-        ?.find((detail) => detail.kind === "work" && detail.id === "work")
-        ?.safe_value?.trim() || undefined,
       state: taskState(
         row.state,
         turnState,
