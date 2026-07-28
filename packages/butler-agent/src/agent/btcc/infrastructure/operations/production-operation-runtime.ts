@@ -20,6 +20,7 @@ import { performObservation } from "./perform-observation.ts";
 import { performPromotion } from "./perform-promotion.ts";
 import { performReviewValidation } from "./perform-review-validation.ts";
 import { performExternalEffect } from "./perform-external-effect.ts";
+import { performTurnLocalEffect } from "./perform-turn-local-effect.ts";
 import { performWorkspaceAction } from "./perform-workspace-action.ts";
 import type { WorkspaceActionBoundary } from "./perform-workspace-action.ts";
 import { performWorkspaceObservation } from "./perform-workspace-observation.ts";
@@ -169,6 +170,14 @@ async function performOperation(
   }
   if (input.request.kind === "external_effect") {
     return performExternalEffect({
+      request: input.request,
+      envelope: input.envelope,
+      options,
+      signal: input.signal,
+    });
+  }
+  if (input.request.kind === "turn_local_effect") {
+    return performTurnLocalEffect({
       request: input.request,
       envelope: input.envelope,
       options,

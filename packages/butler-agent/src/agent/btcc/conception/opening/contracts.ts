@@ -108,12 +108,14 @@ export type OpeningFulfillment = {
   completionMode:
     | "answer_only"
     | "bounded_observation_then_answer"
+    | "bounded_local_effect_then_answer"
     | "managed_effect_or_artifact";
 };
 
 export type OpeningRequiredResultKind =
   | "response_content"
   | "current_observation"
+  | "turn_local_effect"
   | "target_change"
   | "persistent_artifact"
   | "external_effect"
@@ -144,7 +146,7 @@ export type OpeningAnswerSubmission = OpeningAnswerFields & (
   | { kind: "direct_answer"; requiredResultKind: "response_content" }
   | {
       kind: "assisted_answer";
-      requiredResultKind: "current_observation";
+      requiredResultKind: "current_observation" | "turn_local_effect";
     }
 );
 
@@ -158,7 +160,7 @@ type OpeningContinuationFields = {
 export type OpeningContinuationSubmission = OpeningContinuationFields & (
   | {
       kind: "assisted_continuation";
-      requiredResultKind: "current_observation";
+      requiredResultKind: "current_observation" | "turn_local_effect";
     }
   | {
       kind: "managed_continuation";

@@ -17,6 +17,7 @@ const CONTRACT: PhaseContract = {
     "state_input_only",
     "understand_request",
     "apply_profile_feedback_cache",
+    "complete_bounded_turn_local_effect",
     "guard_public_claims",
     "apply_accepted_output_preferences",
   ],
@@ -27,7 +28,6 @@ const CONTRACT: PhaseContract = {
     "no_heuristic_route",
     "no_generic_assurance_layer",
     "no_hidden_retry_loop",
-    "no_mutation",
   ],
 };
 

@@ -93,7 +93,7 @@ describe("BTCC Planning Review convergence", () => {
     }]);
   });
 
-  test("rejects an unchanged apply-now candidate before another semantic review", async () => {
+  test("leaves unchanged finding judgment to the semantic re-review", async () => {
     const candidate = requireCandidate(
       requirePlanProduct(await proposePlan(planningInvocation(planSubmission()))),
     );
@@ -109,12 +109,7 @@ describe("BTCC Planning Review convergence", () => {
       findingId: finding.ref.id,
       decision: "apply_now",
       rationale: "Apply the frozen correction.",
-    }]))).rejects.toMatchObject({
-      code: "provider_phase_submission_invalid",
-      cause: expect.objectContaining({
-        message: expect.stringContaining("did not change an affected subject"),
-      }),
-    });
+    }]))).resolves.toMatchObject({ kind: "plan_candidate" });
   });
 });
 

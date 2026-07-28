@@ -60,6 +60,10 @@ function admittedCapabilities(
         continue;
       }
       if (mutationIsAuthorized(operationKind, authority.mutation)) {
+        if (
+          authority.mutation.kind === "turn_local_effect_only" &&
+          !authority.mutation.capabilityRefs.includes(definition.capabilityRef)
+        ) continue;
         result.push({ ...capability, operationKind, observationScopeRefs: [] });
       }
     }
@@ -118,6 +122,9 @@ function mutationIsAuthorized(
   }
   if (operationKind === "review_validation") {
     return mutation.kind === "validation_overlay_only";
+  }
+  if (operationKind === "turn_local_effect") {
+    return mutation.kind === "turn_local_effect_only";
   }
   if (operationKind === "external_effect") {
     return mutation.kind === "external_effect_only";

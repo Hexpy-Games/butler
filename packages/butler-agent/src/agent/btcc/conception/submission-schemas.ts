@@ -47,7 +47,7 @@ export function openingSubmissionSchemaFor(
     }),
     openingContinuationSchema(
       "assisted_continuation",
-      literalSchema("current_observation"),
+      enumSchema("current_observation", "turn_local_effect"),
     ),
     openingContinuationSchema(
       "managed_continuation",
@@ -76,7 +76,7 @@ export function openingSubmissionSchemaFor(
 }
 export const assistedAnswerSubmissionSchema = objectSchema({
   kind: literalSchema("assisted_answer"),
-  requiredResultKind: literalSchema("current_observation"),
+  requiredResultKind: enumSchema("current_observation", "turn_local_effect"),
   ...answerFields,
 });
 

@@ -34,6 +34,10 @@ export type ProductionOperationRuntimeOptions = {
     envelope: PhaseEnvelope;
     request: Extract<OperationRequest, { kind: "external_effect" }>;
   }): ButlerOperationToolExecutor;
+  createTurnLocalEffectExecutor(input: {
+    envelope: PhaseEnvelope;
+    request: Extract<OperationRequest, { kind: "turn_local_effect" }>;
+  }): ButlerOperationToolExecutor;
   validateOperationInput(input: {
     envelope: PhaseEnvelope;
     request: OperationRequest;

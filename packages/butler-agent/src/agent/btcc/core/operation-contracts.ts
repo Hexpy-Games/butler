@@ -26,6 +26,7 @@ export type OperationAuthority = {
         mutationScope: WorkspaceMutationScope;
       }
     | { kind: "validation_overlay_only"; reviewSourceRef: Ref }
+    | { kind: "turn_local_effect_only"; capabilityRefs: string[] }
     | {
         kind: "external_effect_only";
         effectIntentRef: Ref;
@@ -64,6 +65,11 @@ export type OperationRequest = {
   | { kind: "review_validation"; capabilityRef: string; reviewSourceRef: Ref;
       input: Record<string, unknown> }
   | {
+      kind: "turn_local_effect";
+      capabilityRef: string;
+      input: Record<string, unknown>;
+    }
+  | {
       kind: "external_effect";
       capabilityRef: string;
       effectIntentRef: Ref;
@@ -88,7 +94,8 @@ export type OperationResult = {
   request: OperationRequest;
   outcome:
     | "observed" | "operation_rejected" | "workspace_artifact_applied"
-    | "external_effect_applied" | "review_validated" | "promoted";
+    | "external_effect_applied" | "review_validated" | "promoted"
+    | "turn_local_effect_applied";
   observationRef: Ref;
   content?: string;
   completeness?: OperationResultCompleteness;

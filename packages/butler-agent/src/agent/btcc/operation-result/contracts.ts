@@ -27,6 +27,11 @@ export type OperationSourceDescriptor =
       input: Record<string, unknown>;
     }
   | {
+      kind: "turn_local_effect";
+      capabilityRef: string;
+      input: Record<string, unknown>;
+    }
+  | {
       kind: "workspace_artifact_action";
       capabilityRef: string;
       workspaceRef: ResultRef;

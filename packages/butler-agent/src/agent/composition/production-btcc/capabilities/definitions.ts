@@ -4,6 +4,9 @@ import { executeCommandCapability } from "./command-capability.ts";
 import { executeWebCapability } from "./web-capabilities.ts";
 import { readProjectLedger } from "./project-ledger-capability.ts";
 import { updateProjectLedger } from "./project-ledger-mutation-capability.ts";
+import { updateOnboardingProfile } from "./onboarding-profile-capability.ts";
+import { updateOnboardingProfileToolDefinition } from
+  "../../../tools/memory/update_onboarding_profile/definition.ts";
 
 const object = (
   properties: Record<string, unknown>,
@@ -52,6 +55,14 @@ const projectLedgerUpdate = () => object({
 }, ["id"]);
 
 export const PRODUCTION_CAPABILITIES: readonly ProductionCapability[] = [
+  {
+    capabilityRef: "update_onboarding_profile",
+    name: "update_onboarding_profile",
+    description: updateOnboardingProfileToolDefinition.description,
+    operationKinds: ["turn_local_effect"],
+    inputSchema: updateOnboardingProfileToolDefinition.parameters,
+    execute: updateOnboardingProfile,
+  },
   {
     capabilityRef: "list_files",
     name: "list_files",

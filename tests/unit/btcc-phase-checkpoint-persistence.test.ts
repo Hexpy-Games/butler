@@ -192,7 +192,7 @@ describe("BTCC phase checkpoint persistence", () => {
       .toEqual(["first", "second"]);
   });
 
-  test("persists one correction and stops a repeated invalid phase product", async () => {
+  test("keeps provider product correction inside the phase until the schema is satisfied", async () => {
     const { store, binding } = fixture();
     let modelCalls = 0;
     const command = {
@@ -207,7 +207,12 @@ describe("BTCC phase checkpoint persistence", () => {
       },
       codec: {
         submissionSchema: objectSchema({}),
-        decode: () => { throw new Error("malformed exact submission"); },
+        decode: (submission: unknown) => {
+          if ((submission as { valid?: boolean }).valid !== true) {
+            throw new Error("malformed exact submission");
+          }
+          return { valid: true };
+        },
       },
       store,
       model: {
@@ -216,7 +221,7 @@ describe("BTCC phase checkpoint persistence", () => {
           expect(Boolean(envelope.providerCorrection)).toBe(modelCalls > 1);
           return {
             kind: "phase_submission" as const,
-            submission: { malformed: true },
+            submission: modelCalls < 3 ? { malformed: true } : { valid: true },
             actualIdentity: selectedModel(),
           };
         },
@@ -225,18 +230,12 @@ describe("BTCC phase checkpoint persistence", () => {
       operationAuthority: { observationScopeRefs: [], mutation: { kind: "forbidden" as const } },
       executionPermit: activePermit(),
     };
-    await expect(runPhaseConversation(command)).rejects.toMatchObject({
-      code: "provider_phase_submission_invalid",
-      activation: { kind: "runtime_remediation" },
-    });
-    expect(modelCalls).toBe(2);
+    await expect(runPhaseConversation(command)).resolves.toEqual({ valid: true });
+    expect(modelCalls).toBe(3);
     const restored = await store.restore(binding);
     expect(restored.pendingSubmissionRound).toBeUndefined();
-    expect(restored.providerCorrection).toMatchObject({
-      kind: "previous_provider_product_rejected",
-      code: "provider_phase_submission_invalid",
-    });
-    expect(restored.binding.checkpointRevision).toBe(
+    expect(restored.acceptedProduct).toEqual({ valid: true });
+    expect(restored.binding.checkpointRevision).toBeGreaterThan(
       binding.checkpointRevision + 1,
     );
   });

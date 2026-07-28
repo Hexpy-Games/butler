@@ -242,9 +242,11 @@ function requireContinuationProposal(
   };
 }
 
-function requireAssistedResult(value: unknown): "current_observation" {
-  if (value !== "current_observation") {
-    throw new Error("Assisted Opening requires a current observation result");
+function requireAssistedResult(
+  value: unknown,
+): "current_observation" | "turn_local_effect" {
+  if (value !== "current_observation" && value !== "turn_local_effect") {
+    throw new Error("Assisted Opening requires an observation or Turn-local effect");
   }
   return value;
 }

@@ -93,7 +93,7 @@ export function toolchainLabel(row: ProgressRow): string {
 
 export function toolchainSummaryLabel(row: ProgressRow): string {
   if (row.bridge_phase === "btcc_operation") {
-    return publicOperationTitle(row.safe_tool_name);
+    return row.safe_label || publicOperationTitle(row.safe_tool_name);
   }
   const detailCount = row.safe_detail_rows?.length ?? 0;
   const firstDetail = row.safe_detail_rows?.[0];
