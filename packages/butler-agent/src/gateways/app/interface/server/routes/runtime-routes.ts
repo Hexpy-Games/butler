@@ -5,6 +5,7 @@ import {
   isUpdateApplyRequest,
   isUpdateCheckRequest,
   type AppInfoView,
+  type AppRuntimeReadinessView,
   type EventReplayView,
   type HealthView,
   type SystemEventListView,
@@ -12,6 +13,7 @@ import {
   type UpdateStatusView,
   type UsageMonitorView,
 } from "../../protocol/app-protocol.ts";
+import { readAppForegroundExecutorReadiness } from "../../../../../operations/service/app-foreground-readiness.ts";
 import { liveEventsResponse } from "../live-events.ts";
 import { paginationFromSearchParams, usageMonitorFromSearchParams } from "../route-params.ts";
 import { json, parseJson, RequestError } from "../responses.ts";
@@ -30,6 +32,16 @@ export async function handleRuntimeRoutes(
         protocol_version: APP_PROTOCOL_VERSION,
       }),
     );
+  }
+  if (input.request.method === "GET" && url.pathname === "/runtime-readiness") {
+    const executor = readAppForegroundExecutorReadiness(input.butlerData);
+    return json(apiEnvelope<AppRuntimeReadinessView>({
+      authenticated_gateway_ready: true,
+      btcc_executor_ready: executor.ready,
+      executor_pid: executor.pid,
+      executor_ready_at: executor.readyAt,
+      raw_text_included: false,
+    }));
   }
   if (input.request.method === "GET" && url.pathname === "/app-info") {
     return json(apiEnvelope<AppInfoView>(input.store.getAppInfo()));

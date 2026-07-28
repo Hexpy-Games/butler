@@ -49,6 +49,10 @@ import {
   waitForShutdown,
   writeStartupGraceMarker,
 } from "./native-butler/index.ts";
+import {
+  clearAppForegroundExecutorReadiness,
+  publishAppForegroundExecutorReadiness,
+} from "../../operations/service/app-foreground-readiness.ts";
 
 
 export interface NativeButlerMainOptions {
@@ -236,6 +240,7 @@ export async function runNativeButlerMain(
       message: startupText,
       sendTelegram: input.sendTelegram,
     }) : undefined;
+    publishAppForegroundExecutorReadiness(butlerData);
 
     let shutdownReason: NativeButlerMainResult["shutdownReason"] = "bootstrap-only";
     if (input.waitForShutdown !== false) {
@@ -316,6 +321,7 @@ export async function runNativeButlerMain(
     }
     throw error;
   } finally {
+    clearAppForegroundExecutorReadiness(butlerData);
     stopTelegramPolling = true;
     stopReconciler?.close();
     btcc.close();

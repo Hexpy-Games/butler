@@ -63,6 +63,10 @@ import {
   StoppableBtccGatewayRuntime,
 } from "./support/fake-btcc-gateway-runtime.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import {
+  clearAppForegroundExecutorReadiness,
+  publishAppForegroundExecutorReadiness,
+} from "../../packages/butler-agent/src/operations/service/app-foreground-readiness.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -281,6 +285,46 @@ test("app server enforces App local auth for API routes without blocking static 
     expect(staticUi.status).toBe(200);
     expect(await staticUi.text()).toContain("Butler");
   } finally {
+    server.stop();
+  }
+});
+
+test("authenticated runtime readiness stays false until the current BTCC executor publishes ready state", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "runtime-readiness.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+    localAuth: { required: true, token: "runtime-readiness-token" },
+  });
+  const headers = { authorization: "Bearer runtime-readiness-token" };
+  try {
+    const unauthenticated = await fetch(`${server.url}runtime-readiness`);
+    expect(unauthenticated.status).toBe(401);
+
+    const before = await fetch(`${server.url}runtime-readiness`, { headers });
+    expect(before.status).toBe(200);
+    expect((await before.json()).data).toMatchObject({
+      authenticated_gateway_ready: true,
+      btcc_executor_ready: false,
+      executor_pid: null,
+      raw_text_included: false,
+    });
+
+    publishAppForegroundExecutorReadiness(tempDir, {
+      pid: process.pid,
+      now: () => new Date("2026-07-28T00:00:00.000Z"),
+    });
+    const after = await fetch(`${server.url}runtime-readiness`, { headers });
+    expect(after.status).toBe(200);
+    expect((await after.json()).data).toEqual({
+      authenticated_gateway_ready: true,
+      btcc_executor_ready: true,
+      executor_pid: process.pid,
+      executor_ready_at: "2026-07-28T00:00:00.000Z",
+      raw_text_included: false,
+    });
+  } finally {
+    clearAppForegroundExecutorReadiness(tempDir);
     server.stop();
   }
 });

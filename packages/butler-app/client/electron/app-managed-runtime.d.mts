@@ -169,7 +169,7 @@ export function windowsAppForegroundCommand(input: {
   runtimeHome: string;
   runtime: string;
   processHost: string;
-  launcher: string;
+  daemon: string;
   ownerPid: number;
 }): {
   command: string;

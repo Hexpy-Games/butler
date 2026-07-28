@@ -8,6 +8,7 @@ import {
   ManagedServiceDaemon,
   defaultDaemonServiceSpecs,
 } from "../../packages/butler-agent/src/operations/service/native-service-daemon.ts";
+import { nativeServiceChildLifecycle } from "../../packages/butler-agent/src/operations/service/native-service-child-lifecycle.ts";
 
 test("App foreground parent lease shuts the service daemon down on EOF", () => {
   const stream = new EventEmitter() as EventEmitter & { resume: () => void };
@@ -542,6 +543,41 @@ test("foreground daemon escalates shutdown to SIGKILL when a child ignores SIGTE
       { pid: -10_100, signal: "SIGKILL" },
     ]);
     expect(existsSync(serviceStatePath(butlerData, "embed-server"))).toBe(false);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("Windows foreground daemon keeps children attached and terminates positive child PIDs", async () => {
+  const butlerHome = "C:\\Butler";
+  const butlerData = tempRoot();
+  const killed: Array<{ pid: number; signal: string }> = [];
+  try {
+    const lifecycle = nativeServiceChildLifecycle("win32");
+    expect(lifecycle.detached).toBeFalse();
+    expect(lifecycle.terminationTarget(10_100)).toBe(10_100);
+    expect(lifecycle.processGroupId(10_100)).toBeUndefined();
+
+    const daemon = new ManagedServiceDaemon({
+      butlerData,
+      specs: [smallSpecs(butlerHome, butlerData)[0]],
+      platform: "win32",
+      parentPid: 10_000,
+      killGraceMs: 1,
+      sleep: async () => {},
+      isPidRunning: (pid) => pid === 10_100,
+      spawnChild: () => ({ pid: 10_100 }),
+      killPid: (pid, signal) => killed.push({ pid, signal }),
+    });
+
+    daemon.startAll();
+    const state = JSON.parse(readFileSync(serviceStatePath(butlerData, "embed-server"), "utf8"));
+    expect(state.processGroupId).toBeUndefined();
+    await daemon.shutdownAll();
+    expect(killed).toEqual([
+      { pid: 10_100, signal: "SIGTERM" },
+      { pid: 10_100, signal: "SIGKILL" },
+    ]);
   } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }

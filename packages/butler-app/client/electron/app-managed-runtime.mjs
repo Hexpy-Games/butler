@@ -759,6 +759,13 @@ export function resolveAppManagedForegroundCommand({
     activation.runtimeHome,
     platform,
   );
+  const daemon = join(
+    activation.runtimeHome,
+    "packages",
+    "butler-agent",
+    "scripts",
+    "native-service-daemon.ts",
+  );
   if (platform === "win32") {
     const processHost = join(
       activation.runtimeHome,
@@ -769,8 +776,7 @@ export function resolveAppManagedForegroundCommand({
       "bin",
       "butler-process-host.exe",
     );
-    const launcher = join(activation.runtimeHome, "bin", "butler.js");
-    if (!existsSync(processHost) || !existsSync(launcher)) {
+    if (!existsSync(processHost) || !existsSync(daemon)) {
       activation.rollbackActivation(
         new Error("bundled Windows Agent foreground host is missing"),
       );
@@ -782,7 +788,7 @@ export function resolveAppManagedForegroundCommand({
         runtimeHome: activation.runtimeHome,
         runtime,
         processHost,
-        launcher,
+        daemon,
         ownerPid,
       }),
       appManaged: true,
@@ -800,20 +806,12 @@ export function resolveAppManagedForegroundCommand({
         BUTLER_WINDOWS_PROCESS_HOST: processHost,
         BUTLER_APP_MANAGED_RUNTIME_POINTER: activation.pointerPath,
         BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
-        BUTLER_APP_FOREGROUND_LEASE: "1",
       },
       commitActivation: activation.commitActivation,
       publishLaunchPointer: activation.publishLaunchPointer,
       rollbackActivation: activation.rollbackActivation,
     };
   }
-  const daemon = join(
-    activation.runtimeHome,
-    "packages",
-    "butler-agent",
-    "scripts",
-    "native-service-daemon.ts",
-  );
   if (!existsSync(daemon)) {
     activation.rollbackActivation(
       new Error("bundled Agent foreground host is missing"),
@@ -852,7 +850,7 @@ export function windowsAppForegroundCommand({
   runtimeHome,
   runtime,
   processHost,
-  launcher,
+  daemon,
   ownerPid,
 }) {
   if (!Number.isInteger(ownerPid) || ownerPid <= 0) {
@@ -864,9 +862,8 @@ export function windowsAppForegroundCommand({
       "--owner-pid",
       String(ownerPid),
       runtime,
-      launcher,
-      "gateway",
-      "app",
+      "run",
+      daemon,
     ],
     cwd: runtimeHome,
     stdio: ["ignore", "inherit", "inherit"],

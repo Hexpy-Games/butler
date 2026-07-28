@@ -1,6 +1,14 @@
 import { APP_PROTOCOL_VERSION } from "./base-contract.ts";
 import type { PaginationView } from "./navigation-contract.ts";
 
+export interface AppRuntimeReadinessView {
+  authenticated_gateway_ready: true;
+  btcc_executor_ready: boolean;
+  executor_pid: number | null;
+  executor_ready_at: string | null;
+  raw_text_included: false;
+}
+
 export interface AppInfoView {
   name: string;
   version: string;
