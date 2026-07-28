@@ -55,6 +55,7 @@ export function VisualHarness() {
   const setSettings = useButlerStore((state) => state.setSettings);
   const setModelCatalog = useButlerStore((state) => state.setModelCatalog);
   const setSummary = useButlerStore((state) => state.setSummary);
+  const setTurnProgress = useButlerStore((state) => state.setTurnProgress);
   const setStatus = useButlerStore((state) => state.setStatus);
   const visualTheme =
     new URLSearchParams(window.location.search).get("theme") === "dark"
@@ -103,6 +104,16 @@ export function VisualHarness() {
     setSettings(harnessSettings);
     setModelCatalog(HARNESS_MODEL_CATALOG);
     setSummary(HARNESS_SUMMARY);
+    setTurnProgress(
+      HARNESS_SUMMARY.latest_progress?.turn_id
+        ? {
+            [HARNESS_SUMMARY.latest_progress.turn_id]: {
+              ...HARNESS_SUMMARY.latest_progress,
+              state: HARNESS_SUMMARY.turn_state,
+            },
+          }
+        : {},
+    );
     setStatus({ label: "ready", tone: "ok" });
   }, [
     harnessSettings,
@@ -117,6 +128,7 @@ export function VisualHarness() {
     setStatus,
     setView,
     setSummary,
+    setTurnProgress,
   ]);
   return (
     <AdaptiveShell
