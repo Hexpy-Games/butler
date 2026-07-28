@@ -25,8 +25,8 @@ import {
   asArray,
   asRecord,
   executionTargetKind,
-  nestedValue,
 } from "./managed-harness-state.ts";
+import { artifactExecutionOperation } from "./managed-harness-artifact-operation.ts";
 
 type SelectedModel = BtccRuntimeDependencies["model"];
 type PhaseEnvelope = Parameters<SelectedModel["runRound"]>[0];
@@ -177,41 +177,13 @@ export class ManagedHarnessModel implements SelectedModel {
           this.deferralSubmitted = true;
           return deferredForUserAuthority("promotion_deferral");
         }
-        if (this.artifactPlan && executionTargetKind(state) === "repository_promotion" &&
-            envelope.operationResults.length === 0) {
-          const target = asRecord(nestedValue(state, "executionTarget", "target"));
-          return {
-            kind: "operation_requests",
-            requests: [{
-              requestId: `repository-promotion:${envelope.binding.checkpointId}`,
-              publicTitle: "승인된 결과를 프로젝트에 반영합니다",
-              kind: "repository_promotion",
-              capabilityRef: "harness:promote-artifact",
-              authorizationRef: target.authorizationRef,
-              candidateRef: target.candidateRef,
-              resolutionRef: target.resolutionRef,
-              baselineRef: target.baselineRef,
-              finalSnapshotRef: target.finalSnapshotRef,
-              input: { operation: "승인된 후보를 완전 대상 교환으로 반영한다" },
-            }],
-          };
-        }
-        if (this.artifactPlan && executionTargetKind(state) === "provisioned_workspace" &&
-            envelope.operationResults.length === 0) {
-          return {
-            kind: "operation_requests",
-            requests: [{
-              requestId: `workspace-action:${envelope.binding.checkpointId}`,
-              publicTitle: "격리된 작업공간에 결과를 작성합니다",
-              kind: "workspace_artifact_action",
-              capabilityRef: "harness:write-artifact",
-              workspaceRef: nestedValue(
-                state, "executionTarget", "target", "workspaceRef",
-              ),
-              relativeTarget: "guide.md",
-              input: { content: "승인된 작업 내용을 격리 작업공간에 작성한다" },
-            }],
-          };
+        if (this.artifactPlan) {
+          const operation = artifactExecutionOperation({
+            state,
+            checkpointId: envelope.binding.checkpointId,
+            operationResultCount: envelope.operationResults.length,
+          });
+          if (operation) return operation;
         }
         return {
           kind: "result_candidate",

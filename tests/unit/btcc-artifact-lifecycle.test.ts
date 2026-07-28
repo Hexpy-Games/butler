@@ -148,7 +148,9 @@ test("keeps artifact work isolated until reviewed Work grants a promotion permit
         .toBeLessThan(mutationKinds.indexOf("close_promotion_frontier"));
       expect(mutationKinds).not.toContain("authorize_promotion");
       expect(operationRequests.filter((request) =>
-        request.kind === "workspace_artifact_action")).toHaveLength(3);
+        request.kind === "workspace_artifact_action")).toHaveLength(2);
+      expect(operationRequests.filter((request) =>
+        request.kind === "workspace_artifact_observation")).toHaveLength(1);
       expect(operationRequests.filter((request) =>
         request.kind === "review_validation")).toHaveLength(3);
       expect(operationRequests.at(-1)?.kind).toBe("repository_promotion");
