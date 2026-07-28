@@ -17,7 +17,7 @@ import {
   createProductionToolRuntime,
   BtccTurnProgressHub,
 } from "./production-btcc/index.ts";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { createProjectGoverningSpecAuthority } from
@@ -175,7 +175,7 @@ function resolveWorkspaceTargetScope(targetScopeRef: string): string {
     throw new Error(`BTCC artifact target scope is not a workspace: ${targetScopeRef}`);
   }
   const targetPath = targetScopeRef.slice(prefix.length);
-  if (!targetPath.startsWith("/")) {
+  if (!isAbsolute(targetPath)) {
     throw new Error("BTCC workspace target scope must contain an absolute path");
   }
   return targetPath;
