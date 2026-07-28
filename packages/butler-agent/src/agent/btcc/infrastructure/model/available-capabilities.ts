@@ -110,7 +110,8 @@ function mutationIsAuthorized(
   mutation: OperationAuthority["mutation"],
 ): boolean {
   if (operationKind === "workspace_artifact_action") {
-    return mutation.kind === "workspace_only";
+    return mutation.kind === "workspace_only" &&
+      mutation.mutationScope.kind === "contained_paths";
   }
   if (operationKind === "workspace_artifact_observation") {
     return mutation.kind === "workspace_only";

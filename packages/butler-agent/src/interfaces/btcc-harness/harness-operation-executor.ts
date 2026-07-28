@@ -96,6 +96,16 @@ export class HarnessOperationExecutor implements OperationExecutor {
         content,
       };
     }
+    if (request.kind === "workspace_artifact_observation") {
+      const content = this.requireReviewSource();
+      return {
+        requestId: request.requestId,
+        outcome: "observed",
+        observationRef: ref("workspace-observation", request.requestId, content),
+        targetSnapshotRef: ref("materializable-snapshot", request.requestId, content),
+        content,
+      };
+    }
     if (request.kind === "review_validation") {
       const artifact = this.requireReviewSource();
       const content = `validated artifact sha256:${digest(artifact)}`;

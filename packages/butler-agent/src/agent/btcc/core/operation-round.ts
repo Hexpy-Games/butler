@@ -159,9 +159,15 @@ function assertAuthorizedOperationKind(
   if (request.kind === "observe") {
     if (authority.observationScopeRefs.includes(request.scopeRef)) return;
   } else if (
-    (request.kind === "workspace_artifact_observation" ||
-      request.kind === "workspace_artifact_action") &&
+    request.kind === "workspace_artifact_observation" &&
     authority.mutation.kind === "workspace_only" &&
+    sameRef(request.workspaceRef, authority.mutation.workspaceRef)
+  ) {
+    return;
+  } else if (
+    request.kind === "workspace_artifact_action" &&
+    authority.mutation.kind === "workspace_only" &&
+    authority.mutation.mutationScope.kind === "contained_paths" &&
     sameRef(request.workspaceRef, authority.mutation.workspaceRef)
   ) {
     return;
