@@ -1,4 +1,4 @@
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -37,19 +37,23 @@ import type {
   TurnOutcomeCapsule,
   TurnOutcomeCapsuleInput,
 } from "./types.ts";
+import { openOwnedSqliteConnection, type OwnedSqliteConnection } from
+  "../../foundation/sqlite/owned-sqlite-connection.ts";
 
 export function conversationStorePath(butlerData: string): string {
   return join(butlerData, "runtime", "conversation-store.sqlite");
 }
 
 export class AgentConversationStore {
+  private readonly connection: OwnedSqliteConnection;
   private readonly db: Database;
   private readonly idFactory: ConversationIdFactory;
   private readonly internals: ConversationStoreInternals;
   constructor(input: { butlerData: string; dbPath?: string; idFactory?: ConversationIdFactory }) {
     const dbPath = input.dbPath ?? conversationStorePath(input.butlerData);
     mkdirSync(dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
+    this.connection = openOwnedSqliteConnection(dbPath);
+    this.db = this.connection.database;
     this.idFactory = input.idFactory ?? defaultConversationIdFactory;
     this.internals = new ConversationStoreInternals(this.db, this.idFactory);
     this.db.exec("PRAGMA journal_mode=WAL");
@@ -59,7 +63,7 @@ export class AgentConversationStore {
   }
 
   close(): void {
-    this.db.close();
+    this.connection.close();
   }
 
   beginTurn(input: BeginTurnInput): ConversationTurn {

@@ -1,5 +1,6 @@
-import { Database } from "bun:sqlite";
 import { coordinateSharedSqliteWriter } from "../../../../foundation/sqlite-writer-coordination.ts";
+import { openOwnedSqliteConnection } from
+  "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { AppAutomationStore } from "../../domain/automations/automation-store.ts";
@@ -82,7 +83,11 @@ export function initializeAppStoreKernel(
   kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
   kernel.operationOutputs = new SqliteOperationOutputReader(kernel.butlerData);
-  kernel.db = new Database(options.dbPath ?? ":memory:", { create: true });
+  kernel.dbConnection = openOwnedSqliteConnection(
+    options.dbPath ?? ":memory:",
+    { create: true },
+  );
+  kernel.db = kernel.dbConnection.database;
   coordinateSharedSqliteWriter(kernel.db);
   let wakeTerminalRetention = (
     _event: { turnId: string; eventId: number },

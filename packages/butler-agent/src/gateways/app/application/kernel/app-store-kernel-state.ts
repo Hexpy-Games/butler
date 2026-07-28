@@ -35,9 +35,12 @@ import type { TerminalTurnRetentionQueue } from
   "../../infrastructure/retention/terminal-turn-retention-queue.ts";
 import type { BtccTerminalPhaseRetentionQueue } from
   "../../../../agent/adapters/btcc/sqlite/index.ts";
+import type { OwnedSqliteConnection } from
+  "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 
 export interface AppStoreKernelState {
   db: Database;
+  dbConnection: OwnedSqliteConnection;
   closed: boolean;
   projectWorkspaceRoot: string;
   folderSelectionSecret?: string;
