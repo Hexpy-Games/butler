@@ -21,6 +21,7 @@ import {
   readAppGatewayPid,
   resolveAppGatewayRuntimeConfig,
 } from "../gateway/registry.ts";
+import { windowsEmbedPipe } from "./windows-service-endpoints.ts";
 
 export const NATIVE_SUPERVISOR_ID = "native-supervisor";
 
@@ -339,6 +340,9 @@ function nativeServiceSpecsForRuntime(
     BUTLER_HOME: paths.butlerHome,
     BUTLER_DATA: paths.butlerData,
     BUTLER_BUN: serviceBun,
+    ...(platform === "win32"
+      ? { EMBED_SOCKET: windowsEmbedPipe(paths.butlerData) }
+      : {}),
     ...(appManaged.runtimePointerPath
       ? { BUTLER_APP_MANAGED_RUNTIME_POINTER: appManaged.runtimePointerPath }
       : {}),
