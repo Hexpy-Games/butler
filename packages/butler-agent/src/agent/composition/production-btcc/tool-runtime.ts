@@ -1,10 +1,10 @@
 import { resolve } from "node:path";
 import {
   OperationRejectedError,
+  turnAccessMode,
   type OperationRequest,
   type PhaseEnvelope,
 } from "../../btcc/core/index.ts";
-import { turnAccessMode } from "../../btcc/core/operation-access.ts";
 import type {
   ProductionOperationRuntimeOptions,
 } from "../../btcc/infrastructure/operations/index.ts";
