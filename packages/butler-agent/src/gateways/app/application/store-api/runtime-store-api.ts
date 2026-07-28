@@ -66,7 +66,7 @@ export function createRuntimeStoreApi(
         kernel.transportProjectionOwner.close();
         kernel.db.query("PRAGMA wal_checkpoint(TRUNCATE)").all();
       } finally {
-        kernel.sessionBindingStore.close();
+        if (kernel.ownsSessionBindingStore) kernel.sessionBindingStore.close();
         kernel.db.close();
         kernel.closed = true;
       }

@@ -69,9 +69,9 @@ export function initializeAppStoreKernel(
   kernel.serviceClient =
     options.serviceClient ??
     new FileQueueButlerServiceClient({ butlerData: kernel.butlerData });
-  kernel.sessionBindingStore = new SessionBindingStore(
-    join(kernel.butlerData, "runtime", "session-store.sqlite"),
-  );
+  kernel.sessionBindingStore = options.sessionBindingStore ??
+    new SessionBindingStore(join(kernel.butlerData, "runtime", "session-store.sqlite"));
+  kernel.ownsSessionBindingStore = !options.sessionBindingStore;
   kernel.runtimeInfo = new AppRuntimeInfoStore(
     kernel.butlerHome,
     kernel.butlerData,

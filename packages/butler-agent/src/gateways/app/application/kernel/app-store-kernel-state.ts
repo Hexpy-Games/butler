@@ -49,6 +49,7 @@ export interface AppStoreKernelState {
   bridgeMode: SettingsView["bridge_mode"];
   serviceClient: ButlerServiceClient;
   sessionBindingStore: SessionBindingStore;
+  ownsSessionBindingStore: boolean;
   runtimeInfo: AppRuntimeInfoStore;
   systemMonitor: AppSystemMonitorStore;
   developerLogs: DeveloperLogStore;

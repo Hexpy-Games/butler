@@ -50,12 +50,17 @@ export async function runWindowsAppBtccProductHarness(
   const dbPath = join(root, "app.sqlite");
   const btccPath = join(root, "runtime", "btcc-successor.sqlite");
   markExecutorReady(root);
+  const bindings = new SessionBindingStore(
+    join(root, "runtime", "session-store.sqlite"),
+    "ephemeral",
+  );
   let app = createAppServer({
     dbPath,
     butlerData: root,
     butlerHome: process.cwd(),
     port: 0,
     automationSchedulerIntervalMs: false,
+    sessionBindingStore: bindings,
   });
   const stores = openBtccSqliteStores({
     dbPath: btccPath,
@@ -77,10 +82,6 @@ export async function runWindowsAppBtccProductHarness(
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
     progress,
   });
-  const bindings = new SessionBindingStore(
-    join(root, "runtime", "session-store.sqlite"),
-    "ephemeral",
-  );
   const conversations = new AgentConversationStore({ butlerData: root });
   const lifecycle = new BtccGatewayLifecycleService({
     store: bindings,
