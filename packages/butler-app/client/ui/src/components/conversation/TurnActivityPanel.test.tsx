@@ -149,7 +149,7 @@ test("turn activity panel keeps liveness beneath the one latest intent", () => {
   expect(html).toContain("응답 생성 중");
 });
 
-test("turn activity panel replaces model waiting with a parked runtime interruption", () => {
+test("turn activity panel replaces model waiting with visible provider recovery", () => {
   const html = renderPanel([
     phaseActivityRow(),
     {
@@ -161,10 +161,10 @@ test("turn activity panel replaces model waiting with a parked runtime interrupt
       bridge_phase: "model_round_waiting",
     },
     {
-      id: "runtime-remediation",
+      id: "provider-recovery",
       kind: "message",
       state: "running",
-      safe_label: "현재 작업을 저장된 지점에 안전하게 보류했습니다. 중지 기능은 계속 사용할 수 있습니다",
+      safe_label: "모델 연결을 복구하고 있습니다",
       semantic_block_id: "task_review",
       bridge_phase: "operational_recovery",
     },
@@ -172,7 +172,7 @@ test("turn activity panel replaces model waiting with a parked runtime interrupt
 
   expect(html).not.toContain("turn-model-round-waiting");
   expect(html).not.toContain("응답 생성 중");
-  expect(html).toContain("안전하게 보류했습니다");
+  expect(html).toContain("모델 연결을 복구하고 있습니다");
 });
 
 test("turn activity panel nests the model-authored operation under its phase", () => {
