@@ -1,3 +1,11 @@
+export function bindWindowsTrayInteractions(
+  tray: {
+    on(event: "click" | "double-click", handler: () => void): unknown;
+    popUpContextMenu(): unknown;
+  },
+  openButler: () => void,
+): boolean;
+
 export function createTrayAgentMenuModel(status?: {
   status?: string;
   service_available?: boolean;

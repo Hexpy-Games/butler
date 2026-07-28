@@ -26,6 +26,7 @@ import type {
   SessionView,
   SettingsView,
 } from "@/app/types.ts";
+import { recoverBootstrapResource } from "./bootstrapResource.ts";
 import { useLiveSessionEvents } from "./live-session/useLiveSessionEvents.ts";
 
 export function useAppBootstrap() {
@@ -110,50 +111,44 @@ export function useAppBootstrap() {
   }, [hydrateUiState]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadNavigation() {
-      try {
-        const data = await api<NavigationView>("/navigation");
-        if (!cancelled) setNavigation(data);
-      } catch {
-        if (!cancelled) setNavigation(EMPTY_NAVIGATION);
-      }
-    }
-    loadNavigation();
+    const abortController = new AbortController();
+    void recoverBootstrapResource({
+      load: () => api<NavigationView>("/navigation"),
+      onReady: setNavigation,
+      onUnavailable: () => setNavigation(EMPTY_NAVIGATION),
+      isCancelled: () => abortController.signal.aborted,
+      signal: abortController.signal,
+    });
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, [setNavigation]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadModelCatalog() {
-      try {
-        const data = await api<ModelCatalogView>("/model-catalog");
-        if (!cancelled) setModelCatalog(data);
-      } catch {
-        if (!cancelled) setModelCatalogState("error");
-      }
-    }
-    loadModelCatalog();
+    const abortController = new AbortController();
+    void recoverBootstrapResource({
+      load: () => api<ModelCatalogView>("/model-catalog"),
+      onReady: setModelCatalog,
+      onUnavailable: () => setModelCatalogState("error"),
+      isCancelled: () => abortController.signal.aborted,
+      signal: abortController.signal,
+    });
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, [setModelCatalog, setModelCatalogState]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadSettings() {
-      try {
-        const data = await api<SettingsView>("/settings");
-        if (!cancelled) setSettings(data);
-      } catch {
-        if (!cancelled) setSettings(readCachedSettings());
-      }
-    }
-    loadSettings();
+    const abortController = new AbortController();
+    void recoverBootstrapResource({
+      load: () => api<SettingsView>("/settings"),
+      onReady: setSettings,
+      onUnavailable: () => setSettings(readCachedSettings()),
+      isCancelled: () => abortController.signal.aborted,
+      signal: abortController.signal,
+    });
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, [setSettings]);
 
