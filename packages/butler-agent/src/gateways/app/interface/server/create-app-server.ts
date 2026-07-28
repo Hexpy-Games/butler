@@ -5,9 +5,9 @@ import {
   type ManagedConversationProjectionReader,
 } from "../../../../agent/conversation/projection-reader.ts";
 import {
-  AppResponderTimeoutError,
   AppServerStore,
   AppStoreOperationError,
+  type AppMessageResponder,
 } from "../../application/store/app-server-store.ts";
 import { apiError } from "../protocol/app-protocol.ts";
 import {
@@ -30,13 +30,28 @@ export type {
   MessageRateLimitOptions,
 } from "./server-types.ts";
 
-const DEFAULT_RESPONDER_TIMEOUT_MS = 600_000;
-// Bun rejects idleTimeout values above 255, so keep direct HTTP requests at
-// Bun's maximum while the responder timeout budget remains configurable.
-const MAX_BUN_IDLE_TIMEOUT_SECONDS = 255;
-
 export function createAppServer(
   options: CreateAppServerOptions = {},
+): AppServerHandle {
+  return createComposedAppServer(options, {});
+}
+
+export function createAppServerFromTestComposition(
+  options: CreateAppServerOptions,
+  testComposition: {
+    responder?: AppMessageResponder;
+    responderTimeoutMs?: number;
+  },
+): AppServerHandle {
+  return createComposedAppServer(options, testComposition);
+}
+
+function createComposedAppServer(
+  options: CreateAppServerOptions,
+  composition: {
+    responder?: AppMessageResponder;
+    responderTimeoutMs?: number;
+  },
 ): AppServerHandle {
   const ownedConversationReader = createOwnedConversationReader(options);
   const store = createStore(
@@ -46,8 +61,6 @@ export function createAppServer(
   const messageRateLimiter = new FixedWindowRateLimiter(
     options.messageRateLimit,
   );
-  const responderTimeoutMs =
-    options.responderTimeoutMs ?? DEFAULT_RESPONDER_TIMEOUT_MS;
   const devCorsPolicy = normalizeDevCorsPolicy(options.devCorsOrigin);
   const localAuth = normalizeLocalAuth(options.localAuth);
   const uiRoot = resolveUiRoot(options);
@@ -56,7 +69,6 @@ export function createAppServer(
   const server = Bun.serve({
     port: options.port ?? 18765,
     hostname: options.hostname ?? "127.0.0.1",
-    idleTimeout: bunIdleTimeoutSeconds(responderTimeoutMs),
     async fetch(request) {
       const corsHeaders = devCorsHeaders(request, devCorsPolicy);
       if (isCorsPreflight(request, corsHeaders)) {
@@ -67,8 +79,8 @@ export function createAppServer(
           request,
           store,
           uiRoot,
-          responder: options.responder,
-          responderTimeoutMs,
+          responder: composition.responder,
+          responderTimeoutMs: composition.responderTimeoutMs,
           messageRateLimiter,
           localAuth,
         });
@@ -81,8 +93,8 @@ export function createAppServer(
 
   const automationScheduler = createAutomationScheduler({
     store,
-    responder: options.responder,
-    responderTimeoutMs,
+    responder: composition.responder,
+    responderTimeoutMs: composition.responderTimeoutMs,
     intervalMs: options.automationSchedulerIntervalMs,
     isRunning: () => automationSchedulerRunning,
     setRunning: (running) => {
@@ -156,13 +168,6 @@ function resolveUiRoot(options: CreateAppServerOptions): string {
   );
 }
 
-function bunIdleTimeoutSeconds(responderTimeoutMs: number): number {
-  return Math.min(
-    MAX_BUN_IDLE_TIMEOUT_SECONDS,
-    Math.max(30, Math.ceil(responderTimeoutMs / 1000)),
-  );
-}
-
 function isCorsPreflight(
   request: Request,
   corsHeaders: Record<string, string>,
@@ -183,9 +188,6 @@ function corsPreflightResponse(corsHeaders: Record<string, string>): Response {
 }
 
 function errorResponse(error: unknown, extraHeaders: HeadersInit): Response {
-  if (error instanceof AppResponderTimeoutError) {
-    return json(apiError(error.code, error.message), 504, extraHeaders);
-  }
   if (error instanceof AppStoreOperationError) {
     return json(apiError(error.code, error.message), error.status, extraHeaders);
   }
@@ -197,8 +199,8 @@ function errorResponse(error: unknown, extraHeaders: HeadersInit): Response {
 
 function createAutomationScheduler(input: {
   store: AppServerStore;
-  responder: CreateAppServerOptions["responder"];
-  responderTimeoutMs: number;
+  responder?: AppMessageResponder;
+  responderTimeoutMs?: number;
   intervalMs: CreateAppServerOptions["automationSchedulerIntervalMs"];
   isRunning: () => boolean;
   setRunning: (running: boolean) => void;
@@ -211,6 +213,7 @@ function createAutomationScheduler(input: {
     input.store
       .dispatchDueAutomations(input.responder, {
         responderTimeoutMs: input.responderTimeoutMs,
+        deferResponderTurns: true,
       })
       .catch((error) => {
         input.store.appendSafeServerEvent("automation.scheduler_error", {

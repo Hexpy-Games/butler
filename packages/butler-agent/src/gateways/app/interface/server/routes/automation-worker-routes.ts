@@ -51,6 +51,7 @@ export async function handleAutomationWorkerRoutes(
       apiEnvelope(
         await input.store.dispatchDueAutomations(input.responder, {
           responderTimeoutMs: input.responderTimeoutMs,
+          deferResponderTurns: true,
         }),
       ),
       202,
@@ -94,6 +95,7 @@ export async function handleAutomationWorkerRoutes(
         apiEnvelope<AutomationRunResult>(
           await input.store.runAutomationNow(automationId, input.responder, {
             responderTimeoutMs: input.responderTimeoutMs,
+            deferResponderTurns: true,
           }),
         ),
         202,

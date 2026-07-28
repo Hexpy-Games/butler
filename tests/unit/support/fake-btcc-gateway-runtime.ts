@@ -15,7 +15,12 @@ export class ScriptedBtccGatewayRuntime implements BtccGatewayRuntime {
       return ref;
     },
   };
-  readonly runtime = { handle: (command: BtccTurnCommand) => this.handle(command) };
+  readonly runtime = {
+    runTurn: (command: Exclude<BtccTurnCommand, { kind: "stop" }>) =>
+      this.handle(command),
+    stopTurn: (command: Extract<BtccTurnCommand, { kind: "stop" }>) =>
+      this.handle(command),
+  };
   private readonly observers = new Map<string, Set<BtccTurnProgressObserver>>();
 
   constructor(private readonly answer: string | ((command: BtccTurnCommand) => string)) {}

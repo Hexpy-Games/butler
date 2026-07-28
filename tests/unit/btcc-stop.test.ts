@@ -32,14 +32,14 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
       artifacts: neverArtifacts(),
     });
     const command = runCommand();
-    const running = runtime.handle(command);
+    const running = runtime.runTurn(command);
     await model.started;
-    const concurrentReplay = runtime.handle(command);
+    const concurrentReplay = runtime.runTurn(command);
 
-    const stopped = await runtime.handle({ kind: "stop", turnId: command.turnId });
+    const stopped = await runtime.stopTurn({ kind: "stop", turnId: command.turnId });
     const runningOutcome = await running;
     const replayOutcome = await concurrentReplay;
-    const repeated = await runtime.handle({ kind: "stop", turnId: command.turnId });
+    const repeated = await runtime.stopTurn({ kind: "stop", turnId: command.turnId });
 
     expect(stopped).toEqual({ kind: "cancelled", turnId: command.turnId });
     expect(runningOutcome).toEqual({ kind: "cancelled", turnId: command.turnId });
@@ -94,11 +94,11 @@ test("Stop fences a Turn before Admission and the later inbound cannot start wor
       },
     };
 
-    expect(await runtime.handle({ kind: "stop", turnId: command.turnId })).toEqual({
+    expect(await runtime.stopTurn({ kind: "stop", turnId: command.turnId })).toEqual({
       kind: "cancelled",
       turnId: command.turnId,
     });
-    expect(await runtime.handle(command)).toEqual({
+    expect(await runtime.runTurn(command)).toEqual({
       kind: "cancelled",
       turnId: command.turnId,
     });
@@ -132,7 +132,7 @@ test("Stop has one explicit outcome for every semantic state", async () => {
   try {
     const seedRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "seed-owner");
     const command = { ...runCommand(), turnId: "turn-stop-state-table" };
-    const delivered = await seedRuntime.handle(command);
+    const delivered = await seedRuntime.runTurn(command);
     expect(delivered.kind).toBe("delivered");
 
     const cancellableStates = [
@@ -145,7 +145,7 @@ test("Stop has one explicit outcome for every semantic state", async () => {
     for (const [index, state] of cancellableStates.entries()) {
       resetTurn(dbPath, command.turnId, state);
       const runtime = runtimeFor(dbPath, new DirectHarnessModel(), `state-owner:${index}`);
-      expect(await runtime.handle({ kind: "stop", turnId: command.turnId })).toEqual({
+      expect(await runtime.stopTurn({ kind: "stop", turnId: command.turnId })).toEqual({
         kind: "cancelled",
         turnId: command.turnId,
       });
@@ -154,16 +154,16 @@ test("Stop has one explicit outcome for every semantic state", async () => {
     resetTurn(dbPath, command.turnId, "delivery_committed");
     setDeliveryOutboxStatus(dbPath, command.turnId, "inserted");
     const finalizingRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "finalizing-owner");
-    expect(await finalizingRuntime.handle({ kind: "stop", turnId: command.turnId })).toEqual({
+    expect(await finalizingRuntime.stopTurn({ kind: "stop", turnId: command.turnId })).toEqual({
       kind: "already_finalizing",
       turnId: command.turnId,
     });
-    const finalized = await finalizingRuntime.handle(command);
+    const finalized = await finalizingRuntime.runTurn(command);
     expect(finalized.kind).toBe("delivered");
 
     resetTurn(dbPath, command.turnId, "delivered", "completed");
     const deliveredRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "delivered-owner");
-    expect((await deliveredRuntime.handle({ kind: "stop", turnId: command.turnId })).kind)
+    expect((await deliveredRuntime.stopTurn({ kind: "stop", turnId: command.turnId })).kind)
       .toBe("already_delivered");
   } finally {
     rmSync(dataRoot, { recursive: true, force: true });
@@ -237,7 +237,7 @@ test("Stop publishes the canonical cancelled Work frontier without changing its 
     turns,
     progress,
   } as never);
-  const outcome = await runtime.handle({
+  const outcome = await runtime.stopTurn({
     kind: "stop",
     turnId: "turn-cancelled-progress",
   });
@@ -264,9 +264,9 @@ test("one runtime owns a persisted state while a concurrent runtime is excluded"
     const secondRuntime = runtimeFor(dbPath, new DirectHarnessModel(), "second-owner");
     const command = { ...runCommand(), turnId: "turn-concurrent-owner" };
 
-    const first = firstRuntime.handle(command);
+    const first = firstRuntime.runTurn(command);
     await owner.started;
-    await expect(secondRuntime.handle(command)).rejects.toThrow(
+    await expect(secondRuntime.runTurn(command)).rejects.toThrow(
       "BTCC state is actively owned by another live runtime",
     );
     owner.release();

@@ -8,6 +8,8 @@ export { createProductionOperationRuntime } from "./infrastructure/operations/in
 export type {
   AdmittedModelSelection,
   BtccRuntimeDependencies,
+  BtccRunCommand,
+  BtccStopCommand,
   BtccTurnCommand,
   BtccTurnOutcome,
   BtccTurnProgressObserver,

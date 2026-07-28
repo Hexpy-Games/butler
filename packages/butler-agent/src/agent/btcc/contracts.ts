@@ -75,6 +75,8 @@ export type BtccTurnCommand =
   | { kind: "stop"; turnId: string };
 
 export type FreshBtccTurnCommand = Extract<BtccTurnCommand, { kind: "run" | "wake" }>;
+export type BtccRunCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
+export type BtccStopCommand = Extract<BtccTurnCommand, { kind: "stop" }>;
 
 export type BtccTurnOutcome =
   | { kind: "delivered"; turnId: string; messageId: string; content: string }
@@ -85,7 +87,8 @@ export type BtccTurnOutcome =
   | Extract<StopPersistenceOutcome, { kind: "already_delivered" }>;
 
 export interface BtccTurnRuntime {
-  handle(command: BtccTurnCommand): Promise<BtccTurnOutcome>;
+  runTurn(command: BtccRunCommand): Promise<BtccTurnOutcome>;
+  stopTurn(command: BtccStopCommand): Promise<BtccTurnOutcome>;
 }
 
 export interface BtccTurnProgressObserver {

@@ -90,11 +90,11 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
   async close(): Promise<void> {}
 
   private async handleCommand(
-    command: Parameters<BtccGatewayActorOptions["runtime"]["handle"]>[0],
+    command: Parameters<BtccGatewayActorOptions["runtime"]["runTurn"]>[0],
     stopObserving: () => void,
   ): Promise<BtccTurnOutcome> {
     try {
-      return await this.options.runtime.handle(command);
+      return await this.options.runtime.runTurn(command);
     } finally {
       stopObserving();
     }

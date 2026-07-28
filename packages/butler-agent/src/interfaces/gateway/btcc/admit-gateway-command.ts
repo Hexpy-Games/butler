@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
   AdmittedModelSelection,
-  BtccTurnCommand,
+  BtccRunCommand,
 } from "../../../agent/btcc/index.ts";
 import type { ButlerContextSnapshot } from "../../../agent/btcc/context/index.ts";
 import { verifyTurnExecutionControls } from "../../../gateways/core/turn-execution-controls.ts";
@@ -16,7 +16,7 @@ export function admitGatewayCommand(input: {
   envelope: InboundEnvelope;
   turnId: string;
   context: ButlerContextSnapshot;
-}): BtccTurnCommand {
+}): BtccRunCommand {
   const raw = record(input.envelope.raw) ?? {};
   if (raw.btccResume === true) return { kind: "resume", turnId: input.turnId };
 
@@ -45,7 +45,7 @@ function admitWakeCommand(
     context: ButlerContextSnapshot;
   },
   wake: Record<string, unknown>,
-): BtccTurnCommand {
+): BtccRunCommand {
   const resultScopeRef = optionalText(wake.resultScopeRef);
   return {
     kind: "wake",

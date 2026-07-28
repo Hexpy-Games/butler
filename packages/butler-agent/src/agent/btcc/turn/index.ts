@@ -5,10 +5,12 @@ export {
 } from "./load-or-admit-turn.ts";
 export { projectTerminalOutcome } from "./project-terminal-outcome.ts";
 export {
+  consolidateTurn,
   deliverTurn,
   openTurn,
+  reportTurn,
   runImmediateTurn,
-  runManagedTurn,
+  runManagedConceptionPlanningExecutionReview,
 } from "./run-turn.ts";
 export { decideTransition } from "./state-machine/index.ts";
 export { stopTurn } from "./stop-turn.ts";
