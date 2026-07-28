@@ -31,14 +31,6 @@ export class AppUserMessageResponderTurn {
         this.input.createResponderMessageFiles(chatId, files ?? []),
       drainQueuedSessionMessages: (chatId, responder, options) =>
         this.input.drainQueuedSessionMessages(chatId, responder, options),
-      finalizeResponderLimitedDelivery: (chatId, turnId, limitedDelivery) =>
-        this.input.finalizeResponderLimitedDelivery(
-          chatId,
-          turnId,
-          limitedDelivery,
-        ),
-      markResponderNonPublicContinuation: (chatId, turnId, safeErrorCode) =>
-        this.input.markResponderNonPublicContinuation(chatId, turnId, safeErrorCode),
       finalizeCancelledTurn: (chatId, turnId) =>
         this.input.finalizeCancelledTurn(chatId, turnId),
       hasTurnEventKind: (turnId, kind) =>

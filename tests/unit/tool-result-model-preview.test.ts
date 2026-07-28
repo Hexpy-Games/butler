@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { structuredToolResultModelPreview } from "../../packages/butler-agent/src/agent/turn/tool-result-model-preview.ts";
+import { structuredToolResultModelPreview } from "../../packages/butler-agent/src/agent/model-tool-loop/index.ts";
 
 test("grep model preview preserves bounded candidate paths and actionable matches", () => {
   const preview = structuredToolResultModelPreview({

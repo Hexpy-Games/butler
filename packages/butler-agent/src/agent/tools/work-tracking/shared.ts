@@ -1,7 +1,6 @@
 import { performWorkControl } from "../../work/work-dashboard.ts";
 import { type TodoItemInput, type TodoPhase, type TodoPriority, type TodoStatus, TodoListStore } from "../../work/todo-list.ts";
 import { type WorkStreamState, WorkStreamStore } from "../../work/work-stream.ts";
-import { RUNTIME_SEMANTIC_TODO_LIST_ID } from "../../turn/direct-work-continuation.ts";
 import {
   amendBoundWorkStreamPlan,
   assertBoundWorkStreamId,
@@ -10,6 +9,8 @@ import {
 } from "./workstream-authority.ts";
 
 type ToolCall = { args: Record<string, unknown> };
+
+const RUNTIME_SEMANTIC_TODO_LIST_ID = "runtime-semantic";
 
 export const WORK_TRACKING_TOOL_NAMES = [
   "update_todo_list",

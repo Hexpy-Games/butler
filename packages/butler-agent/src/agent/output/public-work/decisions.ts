@@ -2,7 +2,7 @@ import type { RuntimeMessageLanguage } from "../messages.ts";
 import type {
   PublicWorkDecision,
   ToolProgressSummary,
-} from "../../turn/native/output/tool-types.ts";
+} from "../../tool-support/index.ts";
 import { isAuthoredDecisionSource } from "../../events/turn-state-contract.ts";
 import {
   isUsablePublicDecisionText,

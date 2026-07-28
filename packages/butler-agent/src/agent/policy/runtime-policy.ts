@@ -1,6 +1,6 @@
 import type { RuntimeTurnInput } from "../../test-support/harness/contracts.ts";
 import type { RuntimeMessageLanguage } from "../output/messages.ts";
-import type { ToolAuditEntry } from "../turn/native/output/tool-types.ts";
+import type { ToolAuditEntry } from "../tool-support/index.ts";
 
 export interface RuntimeIntentGuardDecision {
   text: string;

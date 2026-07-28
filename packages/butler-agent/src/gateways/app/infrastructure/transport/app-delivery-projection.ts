@@ -1,10 +1,5 @@
-import { deliveredWithLimitationsState } from "../../../../agent/turn/runtime-delivery-state.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../../../runtime/internal-recovery-failure.ts";
-import type { ProjectedSafeTurnFailure } from "./turn-failure-projection.ts";
-import {
-  appLimitedDeliveryForError,
-  type AppLimitedDelivery,
-} from "./failure-ux-contract.ts";
+import type { AppLimitedDelivery } from "./failure-ux-contract.ts";
 import {
   continuationDeliveryFromState,
   isContinuationDeliveryState,
@@ -68,20 +63,15 @@ export function deliveryStateFromProjectedNoVisibleFinal(
   if (delivery && isContinuationDeliveryState(delivery.delivery_state)) {
     return continuationDeliveryFromState(delivery.delivery_state, limitationCodes);
   }
-  return deliveredWithLimitationsState({
-    limitationCodes,
+  return {
+    delivery_state: "delivered_with_limitations",
+    terminal: true,
+    issue_kind: "limitation",
+    visibility: "assistant_output",
+    failure_notice: false,
+    limitation_codes: limitationCodes,
     limitations: [],
-  });
-}
-
-export function appLimitedDeliveryForProjectedFailure(
-  safeError: ProjectedSafeTurnFailure,
-): AppLimitedDelivery | null {
-  return appLimitedDeliveryForError({
-    name: "AppTransportTurnFailure",
-    code: safeError.code,
-    message: safeError.message,
-  });
+  };
 }
 
 export function shouldTreatLimitedFinalAsNoVisible(

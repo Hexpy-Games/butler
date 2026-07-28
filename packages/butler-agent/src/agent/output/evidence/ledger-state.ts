@@ -1,4 +1,4 @@
-import type { PublicWorkObligationKind } from "../../turn/native/output/tool-types.ts";
+import type { PublicWorkObligationKind } from "../../tool-support/index.ts";
 import {
   createEvidenceCapabilityReceipt,
   parseEvidenceCapabilityReceipt,

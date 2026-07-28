@@ -5,12 +5,12 @@ import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChat
 import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
+import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import {
   blockCapacityObservation,
   blockCapacityToolOutput,
   partitionSemanticToolBatch,
-} from "../../../agent/turn/tool-batch-capacity.ts";
+} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "./final-candidate-review.ts";
 
 

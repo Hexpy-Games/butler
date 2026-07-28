@@ -4,7 +4,7 @@ import type {
   PublicWorkDecision,
   PublicWorkObligationKind,
   ToolAuditEntry,
-} from "../../turn/native/output/tool-types.ts";
+} from "../../tool-support/index.ts";
 import {
   type CompletionObligationEvidenceOutcome,
   readCompletionObligationEvidenceFromAudit,

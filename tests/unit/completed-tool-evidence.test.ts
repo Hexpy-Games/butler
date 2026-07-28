@@ -556,7 +556,7 @@ test("capacity compilation leaves unrelated JSON text byte-stable", () => {
 test("all registered provider tool loops use the provider-neutral evidence boundary", () => {
   const root = join(import.meta.dir, "../..");
   const providerFiles = [
-    "packages/butler-agent/src/agent/turn/agent-loop.ts",
+    "packages/butler-agent/src/agent/model-tool-loop/index.ts",
     "packages/butler-agent/src/integrations/providers/shared/hosted-tool-result-context.ts",
     "packages/butler-agent/src/integrations/providers/anthropic/runtime.ts",
     "packages/butler-agent/src/integrations/providers/google/runtime.ts",

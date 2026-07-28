@@ -27,7 +27,7 @@ import type {
   EvidenceArtifactRef,
   EvidenceReceipt,
   EvidenceReference,
-} from "../../turn/native/output/tool-types.ts";
+} from "../../tool-support/index.ts";
 
 export const TOOL_RESULT_EVIDENCE_TRANSCRIPT_SCHEMA =
   "butler.tool-result-evidence-transcript.v1" as const;

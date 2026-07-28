@@ -1,7 +1,7 @@
 import type {
   PublicWorkObligationKind,
   ToolAuditEntry,
-} from "../../turn/native/output/tool-types.ts";
+} from "../../tool-support/index.ts";
 import {
   buildEvidenceCapabilityLedger,
   missingCompletionObligationsFromLedger,

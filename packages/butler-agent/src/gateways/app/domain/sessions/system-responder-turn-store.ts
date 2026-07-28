@@ -1,8 +1,5 @@
 import {
-  appLimitedDeliveryForError,
-  appNonPublicContinuationSafeErrorCode,
   appSafeResponderError,
-  isNonPublicContinuationDeliveryError,
 } from "../../infrastructure/transport/failure-ux-contract.ts";
 import { messageFromRow } from "./message-read-model.ts";
 import type {
@@ -125,44 +122,6 @@ export class AppSystemResponderTurnStore {
         replies: [],
         turn: cancelledTurn,
         next_cursor: cancelledTurn.cursor,
-      };
-    }
-    if (isNonPublicContinuationDeliveryError(input.error)) {
-      const continuation = this.input.markResponderNonPublicContinuation(
-        input.chatId,
-        input.turn.id,
-        appNonPublicContinuationSafeErrorCode(input.error),
-      );
-      this.input.touchChat(input.chatId);
-      return {
-        accepted: this.acceptedMessageForExistingOrSynthetic(
-          input.chatId,
-          input.messageId,
-          continuation.turn,
-        ),
-        replies: [],
-        turn: continuation.turn,
-        next_cursor: continuation.turn.cursor,
-      };
-    }
-    const limitedDelivery = appLimitedDeliveryForError(input.error);
-    if (limitedDelivery) {
-      const delivered = this.input.finalizeResponderLimitedDelivery(
-        input.chatId,
-        input.turn.id,
-        limitedDelivery,
-      );
-      this.input.touchChat(input.chatId);
-      return {
-        accepted: this.acceptedMessageForExistingOrSynthetic(
-          input.chatId,
-          input.messageId,
-          delivered.turn,
-        ),
-        reply: delivered.reply,
-        replies: delivered.replies,
-        turn: delivered.turn,
-        next_cursor: delivered.reply?.cursor ?? delivered.turn.cursor,
       };
     }
     this.failTurn(input.chatId, input.turn, input.error);

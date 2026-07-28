@@ -4,7 +4,7 @@ import {
   validationCapabilityReceipt,
 } from "../../../output/evidence/ledger.ts";
 import { evidenceReceipt } from "../../../tool-support/executor-support.ts";
-import type { EvidenceReceipt, PublicWorkObligationKind } from "../../../turn/native/output/tool-types.ts";
+import type { EvidenceReceipt, PublicWorkObligationKind } from "../../../tool-support/index.ts";
 import type { EvidenceCapabilityReceipt } from "../../../output/evidence/ledger.ts";
 
 type CommandExecutionStatus = "succeeded" | "failed" | "timed_out";

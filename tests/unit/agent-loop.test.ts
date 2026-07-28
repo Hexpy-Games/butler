@@ -5,7 +5,7 @@ import { join } from "path";
 import {
   runAgentLoop,
   type AgentLoopToolDefinition,
-} from "../../packages/butler-agent/src/agent/turn/agent-loop.ts";
+} from "../../packages/butler-agent/src/agent/model-tool-loop/index.ts";
 import { readToolEvidenceArtifactSlice } from "../../packages/butler-agent/src/agent/context/tool-evidence-retention.ts";
 
 const tools: AgentLoopToolDefinition[] = [{

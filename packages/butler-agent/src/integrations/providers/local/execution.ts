@@ -7,12 +7,12 @@ import { serializeToolResultPayloadForProvider } from "../../../agent/context/co
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import type { LocalModelConfig } from "./models.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/turn/tool-batch-handoff.ts";
+import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import {
   blockCapacityObservation,
   blockCapacityToolOutput,
   partitionSemanticToolBatch,
-} from "../../../agent/turn/tool-batch-capacity.ts";
+} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 

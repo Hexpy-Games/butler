@@ -7,7 +7,7 @@ import type {
   OutboundAction,
   SessionRole,
 } from "../../gateways/core/contracts.ts";
-import type { RuntimeDeliveryClassification } from "../../agent/turn/runtime-delivery-state.ts";
+import type { GatewayDeliveryMetadata } from "../../gateways/core/contracts.ts";
 import type {
   ModelProviderAdapter,
   ModelToolCall,
@@ -82,7 +82,7 @@ export interface RuntimeTurnResult {
   text: string;
   providerThreadRef?: string;
   runtimeSessionRef?: string;
-  delivery?: RuntimeDeliveryClassification;
+  delivery?: GatewayDeliveryMetadata;
   deliveries?: OutboundAction[];
   artifacts?: ArtifactRef[];
   raw?: unknown;

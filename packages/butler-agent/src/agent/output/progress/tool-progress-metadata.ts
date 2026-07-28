@@ -1,6 +1,6 @@
 import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 import type { ToolCapabilityCategory } from "../../tools/types.ts";
-import type { ToolProgressSummary } from "../../turn/native/output/tool-types.ts";
+import type { ToolProgressSummary } from "../../tool-support/index.ts";
 
 const TOOL_PROGRESS_KIND_BY_CATEGORY: Record<ToolCapabilityCategory, ToolProgressSummary["kind"]> = {
   search: "searched",

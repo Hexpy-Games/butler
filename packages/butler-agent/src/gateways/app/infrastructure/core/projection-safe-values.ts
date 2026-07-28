@@ -1,5 +1,3 @@
-import { safeLimitationText } from "../../../../agent/turn/runtime-delivery-state.ts";
-
 export function safeParseRecord(value: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -60,6 +58,22 @@ export function safeOptionalShortText(value: unknown): string | undefined {
     .slice(0, 180);
 }
 
+export function safeLimitationText(value: unknown, fallback: string): string {
+  const text = typeof value === "string" ? value : "";
+  const normalized = text
+    .replace(/^(?:INCOMPLETE|미완료)\s*[:：]\s*/iu, "")
+    .replace(/<think\b[^>]*>[\s\S]*?<\/think>/giu, "")
+    .replace(
+      /\b(?:api[_-]?key|token|secret|password|authorization)\s*[:=]\s*\S+/giu,
+      "[redacted]",
+    )
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gu, "Bearer [redacted]")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!normalized || containsPrivatePath(normalized)) return fallback;
+  return normalized.slice(0, 240);
+}
+
 export function safeOptionalNumber(value: unknown): number | undefined {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
@@ -71,4 +85,9 @@ export function stripControlCharacters(value: string): string {
     const code = character.charCodeAt(0);
     return code < 32 || code === 127 ? " " : character;
   }).join("");
+}
+
+function containsPrivatePath(value: string): boolean {
+  return /(?:\/Users\/[^/\s]+|\/home\/[^/\s]+|\/private\/[^/\s]+|~\/|\$HOME\/|[A-Za-z]:\\Users\\[^\\\s]+)/u
+    .test(value) || /raw prompt text/iu.test(value);
 }

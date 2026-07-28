@@ -759,7 +759,6 @@ export class WorkStreamStore {
     return this.withMutation(input.id, "legacy_transition", (context, record) => {
       if (!record) throw new Error(`work stream ${input.id} not found`);
       const state = normalizeState(input.state);
-      if (state === "waiting_user" && record.active_contract_id) throw new Error("waiting_user transition requires WorkStreamClaimStore.waitForUser");
       assertWorkStreamTransition(record.state, state);
       const updated: WorkStreamRecord = {
         ...record,

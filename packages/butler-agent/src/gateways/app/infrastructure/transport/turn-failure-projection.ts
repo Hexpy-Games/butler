@@ -1,4 +1,4 @@
-import { safeLimitationText } from "../../../../agent/turn/runtime-delivery-state.ts";
+import { safeLimitationText } from "../core/projection-safe-values.ts";
 import { INTERNAL_RECOVERY_REQUIRED_CODE } from "../../../../runtime/internal-recovery-failure.ts";
 
 export interface ProjectedSafeTurnFailure {

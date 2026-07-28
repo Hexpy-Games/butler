@@ -1,6 +1,6 @@
 import { extname } from "node:path";
 import { sanitizePublicText } from "../../events/turn-events.ts";
-import type { ToolAuditEntry } from "../../turn/native/output/tool-types.ts";
+import type { ToolAuditEntry } from "../../tool-support/index.ts";
 import { createEvidenceCapabilityReceipt } from "../evidence/ledger.ts";
 import type {
   EvidenceCapabilityReceipt,
