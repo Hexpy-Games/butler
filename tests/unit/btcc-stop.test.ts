@@ -31,6 +31,7 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
       model,
       operations: neverOperations(),
       artifacts: neverArtifacts(),
+      storageProfile: "ephemeral",
     });
     runtimes.push(runtime);
     const command = runCommand();
@@ -76,7 +77,7 @@ test("Stop aborts the active model owner and converges run plus repeat Stop", as
       db.close();
     }
   } finally {
-    closeRuntimes(runtimes);
+    await closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -127,7 +128,7 @@ test("Stop fences a Turn before Admission and the later inbound cannot start wor
       db.close();
     }
   } finally {
-    closeRuntimes(runtimes);
+    await closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -177,7 +178,7 @@ test("Stop has one explicit outcome for every semantic state", async () => {
     expect((await deliveredRuntime.stopTurn({ kind: "stop", turnId: command.turnId })).kind)
       .toBe("already_delivered");
   } finally {
-    closeRuntimes(runtimes);
+    await closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -300,7 +301,7 @@ test("one runtime owns a persisted state while a concurrent runtime is excluded"
       db.close();
     }
   } finally {
-    closeRuntimes(runtimes);
+    await closeRuntimes(runtimes);
     rmSync(dataRoot, { recursive: true, force: true });
   }
 });
@@ -413,13 +414,14 @@ function runtimeFor(
     model,
     operations: neverOperations(),
     artifacts: neverArtifacts(),
+    storageProfile: "ephemeral",
   });
 }
 
-function closeRuntimes(
+async function closeRuntimes(
   runtimes: Array<ReturnType<typeof createBtccComposition>>,
-): void {
-  for (const runtime of runtimes.reverse()) runtime.close();
+): Promise<void> {
+  for (const runtime of runtimes.reverse()) await runtime.close();
 }
 
 function resetTurn(

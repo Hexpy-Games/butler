@@ -60,6 +60,7 @@ export async function runWindowsAppBtccProductHarness(
   const stores = openBtccSqliteStores({
     dbPath: btccPath,
     ownerId: `windows-product-harness:${process.pid}`,
+    storageProfile: "ephemeral",
   });
   const progress = new BtccTurnProgressHub();
   const model = new DirectHarnessModel();
@@ -78,6 +79,7 @@ export async function runWindowsAppBtccProductHarness(
   });
   const bindings = new SessionBindingStore(
     join(root, "runtime", "session-store.sqlite"),
+    "ephemeral",
   );
   const conversations = new AgentConversationStore({ butlerData: root });
   const lifecycle = new BtccGatewayLifecycleService({
@@ -181,6 +183,7 @@ export async function runWindowsAppBtccProductHarness(
     app.stop();
     conversations.close();
     bindings.close();
+    await stores.retrospective.flush();
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }

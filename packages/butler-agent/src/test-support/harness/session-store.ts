@@ -9,6 +9,10 @@ import type {
   SessionTransportBinding,
   StoredSessionBinding,
 } from "./contracts.ts";
+import {
+  coordinateSharedSqliteWriter,
+  type SqliteStorageProfile,
+} from "../../foundation/sqlite-writer-coordination.ts";
 
 interface SessionRow {
   session_id: string;
@@ -97,17 +101,19 @@ export function sessionStorePath(): string {
 export class SessionBindingStore {
   private readonly db: Database;
 
-  constructor(private readonly dbPath = sessionStorePath()) {
+  constructor(
+    private readonly dbPath = sessionStorePath(),
+    storageProfile: SqliteStorageProfile = "durable",
+  ) {
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
-    this.db.exec("PRAGMA journal_mode=WAL");
+    coordinateSharedSqliteWriter(this.db, storageProfile);
     this.db.exec("PRAGMA synchronous=NORMAL");
-    this.db.exec("PRAGMA foreign_keys=ON");
     this.ensureSchema();
   }
 
   close(): void {
-    this.db.close();
+    this.db.close(true);
   }
 
   get path(): string {
@@ -126,7 +132,7 @@ export class SessionBindingStore {
     const metadata = binding.metadata ?? existing?.metadata;
     const transportBindings = dedupeTransportBindings(binding.transportBindings);
 
-    const upsertSession = this.db.prepare(`
+    const upsertSession = this.db.query(`
       INSERT INTO session_bindings (
         session_id,
         role,
@@ -157,11 +163,11 @@ export class SessionBindingStore {
         last_active_at = excluded.last_active_at,
         metadata_json = excluded.metadata_json
     `);
-    const deleteBindings = this.db.prepare(`
+    const deleteBindings = this.db.query(`
       DELETE FROM session_transport_bindings
       WHERE session_id = ?
     `);
-    const insertBinding = this.db.prepare(`
+    const insertBinding = this.db.query(`
       INSERT INTO session_transport_bindings (
         session_id,
         transport,
@@ -205,7 +211,7 @@ export class SessionBindingStore {
   }
 
   getBySessionId(sessionId: string): StoredSessionBinding | null {
-    const row = this.db.prepare(`
+    const row = this.db.query(`
       SELECT
         session_id,
         role,
@@ -240,7 +246,7 @@ export class SessionBindingStore {
     const where = states.length > 0
       ? `WHERE lifecycle_state IN (${states.map(() => "?").join(", ")})`
       : "";
-    const rows = this.db.prepare(`
+    const rows = this.db.query(`
       SELECT
         session_id,
         role,
@@ -271,7 +277,7 @@ export class SessionBindingStore {
 
     if (threadId) {
       const exactWhere = this.lifecycleFilter(states, "s");
-      const exactRow = this.db.prepare(`
+      const exactRow = this.db.query(`
         SELECT
           s.session_id,
           s.role,
@@ -307,7 +313,7 @@ export class SessionBindingStore {
     }
 
     const baseWhere = this.lifecycleFilter(states, "s");
-    const row = this.db.prepare(`
+    const row = this.db.query(`
       SELECT
         s.session_id,
         s.role,
@@ -345,7 +351,7 @@ export class SessionBindingStore {
     const nextLastActiveAt =
       lifecycleState === "active" || lifecycleState === "closing" ? at : null;
 
-    this.db.prepare(`
+    this.db.query(`
       UPDATE session_bindings
       SET lifecycle_state = ?, updated_at = ?, last_active_at = ?
       WHERE session_id = ?
@@ -355,7 +361,7 @@ export class SessionBindingStore {
   }
 
   touchSession(sessionId: string, at = new Date().toISOString()): StoredSessionBinding | null {
-    this.db.prepare(`
+    this.db.query(`
       UPDATE session_bindings
       SET updated_at = ?, last_active_at = ?
       WHERE session_id = ?
@@ -365,7 +371,7 @@ export class SessionBindingStore {
   }
 
   deleteSession(sessionId: string): void {
-    this.db.prepare(`
+    this.db.query(`
       DELETE FROM session_bindings
       WHERE session_id = ?
     `).run(sessionId);
@@ -431,7 +437,7 @@ export class SessionBindingStore {
   }
 
   private transportBindingsForSession(sessionId: string): SessionTransportBinding[] {
-    const rows = this.db.prepare(`
+    const rows = this.db.query(`
       SELECT transport, account_id, peer_id, thread_id
       FROM session_transport_bindings
       WHERE session_id = ?

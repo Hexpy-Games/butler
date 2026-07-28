@@ -1,7 +1,10 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { coordinateSharedSqliteWriter } from "../../../../foundation/sqlite-writer-coordination.ts";
+import {
+  coordinateSharedSqliteWriter,
+  type SqliteStorageProfile,
+} from "../../../../foundation/sqlite-writer-coordination.ts";
 import { SqliteCanonicalMessageStore } from "./canonical-message-store.ts";
 import { SqlitePhaseConversationStore } from "./phase-conversation-store.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from "./schema.ts";
@@ -37,10 +40,11 @@ export function openBtccSqliteStores(input: {
   projectLedger?: BtccProjectLedgerRuntime;
   runtimeOwnerIdentity?: RuntimeOwnerIdentity;
   processLiveness?: ProcessLiveness;
+  storageProfile?: SqliteStorageProfile;
 }) {
   mkdirSync(dirname(input.dbPath), { recursive: true });
   const db = new Database(input.dbPath);
-  coordinateSharedSqliteWriter(db);
+  coordinateSharedSqliteWriter(db, input.storageProfile);
   db.exec("PRAGMA synchronous=NORMAL");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   migrateBtccSchema(db);
@@ -81,6 +85,7 @@ export function openBtccSqliteStores(input: {
     committedSuccessorReadiness: sqliteWriteReadiness,
     close: () => {
       owner.close();
+      if (db.inTransaction) throw new Error("BTCC database transaction remained open at close");
       db.close();
     },
   };

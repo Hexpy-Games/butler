@@ -14,7 +14,10 @@ import { SessionBindingStore } from
 test("product App ingress is handled once by the BTCC dispatcher", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-cutover-"));
   const queue = new NativeInboundQueue(butlerData);
-  const store = new SessionBindingStore(join(butlerData, "runtime", "sessions.sqlite"));
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
   try {
     const sessionId = "butler/app-general";
     store.upsert({
@@ -110,7 +113,10 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
 test("a cancelling App Turn is terminalized without entering BTCC", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-cancelled-ingress-"));
   const queue = new NativeInboundQueue(butlerData);
-  const store = new SessionBindingStore(join(butlerData, "runtime", "sessions.sqlite"));
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
   try {
     queue.enqueue({
       eventId: "app:cancelled-before-claim",
@@ -161,7 +167,10 @@ test("a cancelling App Turn is terminalized without entering BTCC", async () => 
 test("a BTCC runtime interruption parks the exact queue item for process replacement", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-runtime-interruption-"));
   const queue = new NativeInboundQueue(butlerData);
-  const store = new SessionBindingStore(join(butlerData, "runtime", "sessions.sqlite"));
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
   try {
     const queued = queue.enqueue({
       eventId: "app:runtime-interruption",
@@ -226,7 +235,10 @@ test("a BTCC runtime interruption parks the exact queue item for process replace
 test("a recovered runtime interruption resumes its admitted Turn", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-runtime-resume-"));
   const queue = new NativeInboundQueue(butlerData);
-  const store = new SessionBindingStore(join(butlerData, "runtime", "sessions.sqlite"));
+  const store = new SessionBindingStore(
+    join(butlerData, "runtime", "sessions.sqlite"),
+    "ephemeral",
+  );
   try {
     queue.enqueue({
       eventId: "app:runtime-resume",
