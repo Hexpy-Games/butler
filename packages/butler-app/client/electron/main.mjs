@@ -194,6 +194,7 @@ const usesTransparentWindow = isMac || isLinux;
 const macTrafficLightPosition = { x: 20, y: 18 };
 const macTransparentBackground = "#00000000";
 const macVibrancy = "sidebar";
+const windowsBackgroundMaterial = "mica";
 const appearanceThemeSources = new Set(["system", "light", "dark"]);
 const menuBarHelperPidFile = join(
   butlerDataRoot,
@@ -510,21 +511,18 @@ async function healthOk(localAuth = null) {
   }
 }
 
-async function gatewayReady(localAuth = null, activeGateway = null) {
+async function gatewayReady(localAuth = null) {
   try {
-    const foregroundRuntime = activeGateway?.foregroundHost === true;
     const response = await appServerProbeFetch(
-      new URL(foregroundRuntime ? "/runtime-readiness" : "/settings", serverUrl),
+      new URL("/runtime-readiness", serverUrl),
       localAuth,
     );
     const body = await response.json().catch(() => null);
     return (
       response.ok &&
       body?.protocol_version === appProtocolVersion &&
-      (foregroundRuntime
-        ? body?.data?.authenticated_gateway_ready === true &&
-          body?.data?.btcc_executor_ready === true
-        : body?.data?.gateway_profile === "electron")
+      body?.data?.authenticated_gateway_ready === true &&
+      body?.data?.btcc_executor_ready === true
     );
   } catch {
     return false;
@@ -840,6 +838,7 @@ function beginOAuthLoginProcess(command, args, env) {
       cwd: env.BUTLER_HOME,
       env,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
     session.child = child;
     let stderr = "";
@@ -1245,6 +1244,7 @@ function spawnDetachedProcess(
         ...env,
       },
       stdio: "ignore",
+      windowsHide: true,
     });
     child.once("error", (error) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -1932,6 +1932,7 @@ async function createWindow() {
     transparent: usesTransparentWindow,
     vibrancy: isMac ? macVibrancy : undefined,
     visualEffectState: isMac ? "active" : undefined,
+    backgroundMaterial: isWindows ? windowsBackgroundMaterial : undefined,
     roundedCorners: true,
     hasShadow: true,
     autoHideMenuBar: true,
@@ -1959,6 +1960,7 @@ async function createWindow() {
     win.setBackgroundColor(macTransparentBackground);
     win.setVibrancy(macVibrancy);
   }
+  if (isWindows) win.setBackgroundMaterial(windowsBackgroundMaterial);
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (openExternalUrl(url)) return { action: "deny" };
     return { action: "deny" };

@@ -13,6 +13,7 @@ interface SetupWizardShellProps
   steps: ProgressStepperStep[];
   title: ReactNode;
   progressLabel?: string;
+  windowControls?: ReactNode;
 }
 
 interface SetupWizardContentProps {
@@ -26,6 +27,7 @@ export function SetupWizardShell({
   progressLabel,
   steps,
   title,
+  windowControls,
   ...props
 }: SetupWizardShellProps) {
   const regionLabel = typeof title === "string" ? title : undefined;
@@ -38,6 +40,11 @@ export function SetupWizardShell({
         className={`${styles.dragLane} drag-region`}
         data-test-class="setup-wizard-drag-lane"
       />
+      {windowControls ? (
+        <div className={`${styles.windowControls} no-drag`}>
+          {windowControls}
+        </div>
+      ) : null}
       <Stack
         as="section"
         className={styles.shell}

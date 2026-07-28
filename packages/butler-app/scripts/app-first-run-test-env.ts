@@ -422,9 +422,10 @@ if (options.nativeService) {
   cleanupNativeService({ serviceLabel, systemdUnit });
 }
 
-const bundledAgentResourceDir = options.nativeService
-  ? prepareBundledAgentResource(root, join(runRoot, "bundled-agent-resource")).resourceDir
-  : null;
+const bundledAgentResourceDir = prepareBundledAgentResource(
+  root,
+  join(runRoot, "bundled-agent-resource"),
+).resourceDir;
 
 const env: NodeJS.ProcessEnv = {
   ...buildBaseEnv(
@@ -437,10 +438,10 @@ const env: NodeJS.ProcessEnv = {
   BUTLER_BUN: runtimePath,
   BUTLER_APP_SERVER_PORT: String(serverPort),
   BUTLER_APP_GATEWAY_PID_FILE: "off",
+  BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir,
   ...(options.nativeService
     ? {
         BUTLER_APP_ALLOW_NATIVE_SERVICE_TEST_ENV: "1",
-        BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir ?? "",
         BUTLER_APP_FORCE_NATIVE_SERVICE_BRIDGE: "1",
         BUTLER_APP_SERVICE_LABEL: serviceLabel,
         BUTLER_APP_SYSTEMD_UNIT: systemdUnit,
@@ -475,6 +476,7 @@ const electron = spawn(
     cwd: root,
     env,
     stdio: "inherit",
+    windowsHide: true,
   },
 );
 
