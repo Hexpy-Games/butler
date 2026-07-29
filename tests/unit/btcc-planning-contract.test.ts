@@ -160,6 +160,7 @@ describe("BTCC Planning contract", () => {
       "A model rewrite that must not replace a stopped Task dependency.";
     revisedSubmission.works[0]!.tasks[1]!.intendedOutcome =
       "A model rewrite that must not replace the stopped Result Task.";
+    revisedSubmission.works[0]!.tasks[1]!.dependencyTaskIds = [];
     const continuation = {
       kind: "stopped_program",
       ref: ref("continuation"),

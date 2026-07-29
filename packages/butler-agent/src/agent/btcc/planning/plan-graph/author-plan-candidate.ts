@@ -25,6 +25,8 @@ import {
 import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
 import { resumeStoppedAcceptedPlan } from "./resume-stopped-accepted-plan.ts";
 import { validateArtifactPersistence } from "./validate-artifact-persistence.ts";
+import { preserveAcceptedTaskDrafts } from
+  "../plan-revision/preserve-unaffected-tasks.ts";
 
 export type AuthoringState = {
   ledgerId: string;
@@ -56,6 +58,7 @@ export function authorPlanCandidate(
     : resumeStoppedAcceptedPlan(submission, state);
   if (resumed) return resumed;
   state = preserveStoppedResultTask(state);
+  submission = preserveRequiredTaskDrafts(submission, state);
   const { authoredSpecs, governingSpecRefs } = authorGoverningSpecs(
     submission.specifications,
     submission.governingSpecSelections,
@@ -230,6 +233,18 @@ export function authorPlanCandidate(
     bundle,
   };
   return { ref: contentRef("plan-candidate", candidateBody), ...candidateBody };
+}
+
+function preserveRequiredTaskDrafts(
+  submission: Record<string, unknown>,
+  state: AuthoringState,
+): Record<string, unknown> {
+  if (!state.preservedPlan || !state.preservedTaskLogicalIds?.length) return submission;
+  return preserveAcceptedTaskDrafts({
+    revisedPlan: submission,
+    taskLogicalIds: state.preservedTaskLogicalIds,
+    acceptedPlan: state.preservedPlan,
+  });
 }
 
 function preserveStoppedResultTask(state: AuthoringState): AuthoringState {
