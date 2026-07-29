@@ -26,6 +26,13 @@ export function projectFeedbackPlanningContext(
     ?? [program.currentTask.task.ref];
   const selectedSpecs = specsForTask(program, program.currentTask.task.governingSpecRefs);
   const acceptedPlan = currentAcceptedPlan(program, managed);
+  const currentTaskRefs = new Set(acceptedPlan.tasks.map((task) => refKey(task.ref)));
+  const carriedArtifactTasks = program.tasks
+    .filter((state) =>
+      state.status === "accepted" && state.currentResult &&
+      state.task.artifactPolicy.kind === "workspace_artifact" &&
+      !currentTaskRefs.has(refKey(state.task.ref)))
+    .map((state) => state.task);
   const common = {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -64,6 +71,7 @@ export function projectFeedbackPlanningContext(
     availableSpecs: program.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
     acceptedPlan,
+    carriedArtifactTasks,
     taskImpactIndex: program.tasks.map((state) => ({
       task: {
         ref: state.task.ref,

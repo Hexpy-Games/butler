@@ -15,17 +15,17 @@ export function rejectHistoricalTaskReferences(input: {
   }));
   if (historical.size === 0) return;
 
-  const referenced = revisedPlanTaskReferences(input.revisedPlan)
+  const referenced = revisedPlanTaskDefinitions(input.revisedPlan)
     .find((taskId) => historical.has(taskId));
   if (!referenced) return;
   throw new Error(
     `Historical accepted Task ${referenced} is not current Plan authority; ` +
-    "keep it unaffected and omit it from revised Plan Tasks and lifecycle selectors. " +
-    "A current integration or verification Task must represent the inherited workspace bytes.",
+    "keep it unaffected and omit it from revised Plan Task definitions. " +
+    "An admitted carried artifact may still be named by lifecycle selectors.",
   );
 }
 
-function revisedPlanTaskReferences(plan: Record<string, unknown>): string[] {
+function revisedPlanTaskDefinitions(plan: Record<string, unknown>): string[] {
   const refs: string[] = [];
   for (const value of array(plan.works)) {
     const work = requireRecord(value, "revisedPlan.work");
@@ -34,25 +34,9 @@ function revisedPlanTaskReferences(plan: Record<string, unknown>): string[] {
       refs.push(requireString(task.logicalId, "revisedPlan.task.logicalId"));
     }
   }
-  for (const value of array(plan.promotionSelectors)) {
-    const selector = requireRecord(value, "revisedPlan.promotionSelector");
-    refs.push(...strings(selector.implementationTaskIds));
-    refs.push(requireString(selector.integrationTaskId, "integrationTaskId"));
-    refs.push(requireString(selector.promotionTaskId, "promotionTaskId"));
-  }
-  for (const value of array(plan.integrationCriteria)) {
-    const criterion = requireRecord(value, "revisedPlan.integrationCriterion");
-    refs.push(...strings(criterion.participatingTaskIds));
-    refs.push(requireString(criterion.integrationTaskId, "integrationTaskId"));
-    refs.push(requireString(criterion.promotionTaskId, "promotionTaskId"));
-  }
   return refs;
 }
 
 function array(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
-}
-
-function strings(value: unknown): string[] {
-  return array(value).map((item) => requireString(item, "Task logical id"));
 }

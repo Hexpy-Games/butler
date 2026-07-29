@@ -146,6 +146,9 @@ function feedbackPlanningCodec(
           requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
           artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
           workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
+          carriedArtifactTasks: Array.isArray(state.carriedArtifactTasks)
+            ? state.carriedArtifactTasks as ManagedTask[]
+            : [],
           preservedPlan: acceptedPlan,
           preservedTaskLogicalIds: acceptedUnaffectedTaskIds(value.impactMap, acceptedPlan),
         },

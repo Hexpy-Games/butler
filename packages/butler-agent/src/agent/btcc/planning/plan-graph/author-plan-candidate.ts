@@ -47,6 +47,7 @@ export type AuthoringState = {
   specParentRootId?: string;
   preservedPlan?: PlanningCandidate;
   preservedTaskLogicalIds?: string[];
+  carriedArtifactTasks?: ManagedTask[];
 };
 
 export function authorPlanCandidate(
@@ -128,7 +129,7 @@ export function authorPlanCandidate(
     programId: state.programId,
     requiredOutcomeId: state.requiredOutcomeId,
     authorityRef: state.authorityRef,
-  });
+  }, state.carriedArtifactTasks ?? []);
   const artifactLifecycle = authoredLifecycle.lifecycle;
   validateArtifactPersistence(state.artifactPersistence, artifactLifecycle);
   const { risks, assumptions } = authorPlanningConsiderations(

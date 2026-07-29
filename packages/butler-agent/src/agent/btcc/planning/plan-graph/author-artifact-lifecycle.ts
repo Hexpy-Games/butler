@@ -81,17 +81,29 @@ export function authorArtifactLifecycle(
     requiredOutcomeId: string;
     authorityRef: ContentRef;
   },
+  carriedArtifactTasks: ManagedTask[] = [],
 ): {
   lifecycle: PlanningCandidate["artifactLifecycle"];
   effectIntents: ManagedEffectIntent[];
   integrationCriteria: ManagedIntegrationCriterion[];
 } {
-  const selectors = materializePromotionSelectors(submission, tasks);
+  const selectableTasks = [...carriedArtifactTasks, ...tasks];
+  const carriedTaskIds = new Set(carriedArtifactTasks.map((task) => task.ref.id));
+  const selectors = materializePromotionSelectors(
+    submission,
+    selectableTasks,
+    carriedTaskIds,
+  );
   const effects = materializeEffectIntents(submission, tasks, selectors, authority);
-  const integration = materializeIntegrationCriteria(submission, tasks, selectors, authority);
+  const integration = materializeIntegrationCriteria(
+    submission,
+    selectableTasks,
+    selectors,
+    authority,
+  );
   const body = {
     programId: authority.programId,
-    taskPolicies: tasks.map((task) => ({
+    taskPolicies: selectableTasks.map((task) => ({
       taskRef: task.ref,
       policy: task.artifactPolicy,
       effectIntentRefs: effects
