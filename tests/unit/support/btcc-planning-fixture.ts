@@ -10,7 +10,9 @@ export function artifactTask(
     intendedOutcome: `${logicalId} outcome`,
     dependencyTaskIds,
     targetScopeRefs: [],
-    effectClass: kind === "repository_promotion" ? "external_effect" as const : "none" as const,
+    effectClass: kind === "repository_promotion"
+      ? "repository_promotion" as const
+      : "none" as const,
     artifactPolicy: kind === "workspace_artifact"
       ? {
           kind,

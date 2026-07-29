@@ -123,7 +123,7 @@ export type ManagedTask = {
   intendedOutcome: string;
   executionOrdinal: number;
   dependencyTaskRefs: ContentRef[];
-  effectClass: "none" | "external_effect";
+  effectClass: "none" | "external_effect" | "repository_promotion";
   targetScopeRefs: string[];
   artifactPolicy: TaskArtifactPolicy;
   criterionRefs: ContentRef[];

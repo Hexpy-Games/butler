@@ -11,6 +11,7 @@ test("read-only workspace lineage may own one exact external effect", () => {
       dependencyWorkIds: [],
       tasks: [{
         logicalId: "reconcile-ledger",
+        displayTitle: "Ledger reconcile",
         intendedOutcome: "Read the workspace result and reconcile the exact Ledger target.",
         dependencyTaskIds: [],
         targetScopeRefs: ["workspace:/repo", "ledger:project"],

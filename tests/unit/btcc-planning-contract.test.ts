@@ -353,7 +353,7 @@ describe("BTCC Planning contract", () => {
     const missing = artifactPlan();
     missing.effectIntents = [];
     expect(() => authorPlanCandidate(missing, authoringState()))
-      .toThrow("External-effect Task has no EffectIntent");
+      .toThrow("Promotion Task requires exactly one EffectIntent");
 
     const duplicate = artifactPlan();
     duplicate.effectIntents.push({ ...duplicate.effectIntents[0]! });
@@ -364,6 +364,18 @@ describe("BTCC Planning contract", () => {
     dangling.effectIntents[0]!.taskId = "missing";
     expect(() => authorPlanCandidate(dangling, authoringState()))
       .toThrow("Planning reference has no Task: missing");
+  });
+
+  test("keeps repository promotion distinct from external target effects", () => {
+    const conflatedBoundary = artifactPlan();
+    conflatedBoundary.works[0]!.tasks[2]!.effectClass = "external_effect" as never;
+    expect(() => authorPlanCandidate(conflatedBoundary, authoringState()))
+      .toThrow("Repository promotion Task requires the repository_promotion effect class");
+
+    const conflatedIntent = artifactPlan();
+    conflatedIntent.effectIntents[0]!.actionKind = "external_target_mutation" as never;
+    expect(() => authorPlanCandidate(conflatedIntent, authoringState()))
+      .toThrow("External target mutation requires a separate external_effect Task");
   });
 
   test("rejects dangling integration refs and incompatible promotion targets", () => {
