@@ -62,7 +62,7 @@ test("stopped ResultCandidate resumes the exact Task at Review without Execution
   db.close();
 });
 
-test("a one-Task stopped ResultCandidate permits an empty continuation Plan", async () => {
+test("a one-Task stopped ResultCandidate resumes through the typed continuation contract", async () => {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   const storage = await seedSingleResultSubmittedStoppedProgram(db);

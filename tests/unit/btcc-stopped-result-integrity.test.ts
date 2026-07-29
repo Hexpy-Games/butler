@@ -6,7 +6,7 @@ import { reduceProjectProgram } from "../../packages/butler-agent/src/agent/adap
 import { authorReplannedStoppedTask, authorResumedStoppedPlan, bindAndContinue, bindStoppedContinuation, continuedPlanningAccepted, freshContinuationCommand } from "./support/btcc-stopped-work-fixture.ts";
 import { seedResultSubmittedStoppedProgram } from "./support/btcc-stopped-result-fixture.ts";
 
-test("Planning rejects a same-logical-id replacement before Plan installation", async () => {
+test("Planning rejects a replacement graph when the stopped Plan resume contract is required", async () => {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
   const storage = await seedResultSubmittedStoppedProgram(db);
