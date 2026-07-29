@@ -2,6 +2,7 @@ import {
   contentRef,
   requireRecord,
   requireString,
+  turnAccessMode,
   type PhaseCodec,
   type PhaseEnvelope,
 } from "../core/index.ts";
@@ -114,12 +115,14 @@ function decodeReadiness(
 ): ManagedReadinessCondition {
   const readiness = requireRecord(value, "Managed deferral readiness");
   if (readiness.kind === "user_authority") {
+    const requiredAuthorityScopeRefs = requireNonEmptyStrings(
+      readiness.requiredAuthorityScopeRefs,
+      "requiredAuthorityScopeRefs",
+    );
+    rejectAuthorityAlreadyGranted(requiredAuthorityScopeRefs, envelope);
     return {
       kind: "user_authority",
-      requiredAuthorityScopeRefs: requireNonEmptyStrings(
-        readiness.requiredAuthorityScopeRefs,
-        "requiredAuthorityScopeRefs",
-      ),
+      requiredAuthorityScopeRefs,
     };
   }
   if (readiness.kind === "external_readiness") {
@@ -150,6 +153,20 @@ function decodeReadiness(
     };
   }
   throw new Error("Managed deferral readiness kind is invalid");
+}
+
+function rejectAuthorityAlreadyGranted(
+  requiredScopeRefs: string[],
+  envelope: PhaseEnvelope,
+): void {
+  if (turnAccessMode(envelope) !== "full_access") return;
+  const admittedScopes = new Set(envelope.context.baselineObservationScopeRefs);
+  const alreadyGranted = requiredScopeRefs.filter((scopeRef) => admittedScopes.has(scopeRef));
+  if (alreadyGranted.length === 0) return;
+  throw new Error(
+    "user_authority names a scope already granted by the full-access Turn; " +
+      "revise the internal Plan or Task authority",
+  );
 }
 
 function currentObservationRefs(

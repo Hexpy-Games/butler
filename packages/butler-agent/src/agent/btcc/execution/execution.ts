@@ -38,6 +38,9 @@ export async function execution(command: {
     admittedAuthority: command.phase.operationAuthority,
     target,
     artifactTargetScopeRef: artifactTargetScopeRef(program),
+    ...(correctionContext
+      ? { correctionRequirement: correctionContext.correctionPlan.executionRequirement }
+      : {}),
     ...(externalEffect ? { externalEffect } : {}),
   });
   const invocation = withManagedDeferralState(command.phase, command.turn, {

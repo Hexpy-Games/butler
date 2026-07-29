@@ -73,22 +73,34 @@ describe("BTCC managed deferral readiness", () => {
       kind: "user_authority",
       requiredAuthorityScopeRefs: ["deployment:production"],
     });
-    const sameTargetAuthority = managedCodec.decode({
+    expect(() => managedCodec.decode({
       kind: "managed_deferral",
       reason: "Request mutation approval for an observable target",
       readiness: {
         kind: "user_authority",
         requiredAuthorityScopeRefs: ["workspace:/repo"],
       },
-    }, envelope) as ManagedDeferralProduct;
+    }, envelope)).toThrow("already granted by the full-access Turn");
+
+    const sameTargetAuthority = managedCodec.decode({
+      kind: "managed_deferral",
+      reason: "Request mutation approval for a read-only Turn",
+      readiness: {
+        kind: "user_authority",
+        requiredAuthorityScopeRefs: ["workspace:/repo"],
+      },
+    }, phaseEnvelope("planning", ["workspace:/repo"], [], "read_only")) as
+      ManagedDeferralProduct;
     expect(sameTargetAuthority.blocker.readiness).toEqual({
       kind: "user_authority",
       requiredAuthorityScopeRefs: ["workspace:/repo"],
     });
   });
 
-  test("surfaces a false Task external blocker as a provider contract interruption", async () => {
+  test("corrects a false Task blocker inside the same phase conversation", async () => {
     const binding = phaseEnvelope("task_execution", ["workspace:/repo"], []).binding;
+    let rejectionCount = 0;
+    let modelRound = 0;
     const store: PhaseConversationStore = {
       async restore<Product>() {
         return { binding, acceptedProduct: null as Product | null, operationResults: [] };
@@ -100,17 +112,18 @@ describe("BTCC managed deferral readiness", () => {
         throw new Error("operation results are not expected");
       },
       async appendProviderProductRejection({ binding: current }) {
+        rejectionCount += 1;
         return { ...current, checkpointRevision: current.checkpointRevision + 1 };
       },
-      async appendPhaseSubmission() {
-        throw new Error("invalid submission must not be persisted");
+      async appendPhaseSubmission({ binding: current }) {
+        return { ...current, checkpointRevision: current.checkpointRevision + 1 };
       },
-      async acceptPhaseProduct() {
-        throw new Error("invalid deferral must not be accepted");
+      async acceptPhaseProduct({ binding: current }) {
+        return { ...current, checkpointRevision: current.checkpointRevision + 1 };
       },
     };
 
-    await expect(runPhaseConversation({
+    const result = await runPhaseConversation({
       binding,
       modelSelection,
       context: openingContext("task_execution"),
@@ -125,9 +138,12 @@ describe("BTCC managed deferral readiness", () => {
       store,
       model: {
         async runRound() {
+          modelRound += 1;
           return {
             kind: "phase_submission" as const,
-            submission: externalReadiness("workspace:/repo"),
+            submission: modelRound === 1
+              ? externalReadiness("workspace:/repo")
+              : { kind: "ordinary" },
             actualIdentity: modelSelection,
           };
         },
@@ -142,7 +158,10 @@ describe("BTCC managed deferral readiness", () => {
         assertActive() {},
         close() {},
       },
-    })).rejects.toMatchObject({ code: "provider_phase_submission_invalid" });
+    });
+
+    expect(result).toEqual({ kind: "ordinary" });
+    expect(rejectionCount).toBe(1);
   });
 });
 
@@ -156,7 +175,7 @@ const modelSelection = {
   provider: "openai",
   model: "gpt-5.6-sol",
   reasoningEffort: "low" as const,
-  controls: {},
+  controls: { accessMode: "full_access" },
   controlsHash: "controls",
 };
 
@@ -172,6 +191,7 @@ function phaseEnvelope(
   phase: "planning" | "task_execution",
   observationScopeRefs: string[],
   operationResults: OperationResultProjection[],
+  accessMode: "full_access" | "ask_first" | "read_only" = "full_access",
 ): PhaseEnvelope {
   return {
     binding: {
@@ -188,7 +208,7 @@ function phaseEnvelope(
     objective: "test managed deferral",
     duties: [],
     prohibitions: [],
-    modelSelection,
+    modelSelection: { ...modelSelection, controls: { accessMode } },
     context: openingContext(phase),
     operationAuthority: { observationScopeRefs, mutation: { kind: "forbidden" } },
     operationResults,
