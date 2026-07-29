@@ -79,7 +79,12 @@ export function authorPlanCandidate(
   );
   const orderedTasks = drafts.flatMap((work) => work.tasks)
     .sort((left, right) => left.executionOrdinal - right.executionOrdinal);
-  validateGraph(drafts, orderedTasks, state.requiredOutcomeId);
+  validateGraph(
+    drafts,
+    orderedTasks,
+    state.requiredOutcomeId,
+    new Set(state.preservedTaskLogicalIds ?? []),
+  );
 
   const criteria: ManagedCriterion[] = [];
   const questions: ManagedVerificationQuestion[] = [];
