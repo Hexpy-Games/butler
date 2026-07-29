@@ -60,10 +60,12 @@ export function bindAndContinue(
   mutatePlan?: (candidate: ReturnType<typeof fourTaskPlan>) => void,
 ): void {
   const rebound = bindStoppedContinuation(storage, continuation);
-  const plan = authorPlanCandidate(
-    { kind: "stopped_plan_resume" },
-    planAuthoringState(rebound, continuation),
-  );
+  const plan = continuation.context?.frontier.interruptedTask?.resultRef
+    ? authorPlanCandidate(
+        { kind: "stopped_plan_resume" },
+        planAuthoringState(rebound, continuation),
+      )
+    : fourTaskPlan(rebound, continuation);
   mutatePlan?.(plan);
   const commit: WorkLedgerCommit = {
     mutationId: "",
@@ -110,10 +112,13 @@ export function continuedPlanningAccepted(
   authority: Program,
   continuation: StoppedCandidate,
 ) {
-  return planningAccepted(authorPlanCandidate(
-    { kind: "stopped_plan_resume" },
-    planAuthoringState(authority, continuation),
-  ));
+  const candidate = continuation.context?.frontier.interruptedTask?.resultRef
+    ? authorPlanCandidate(
+        { kind: "stopped_plan_resume" },
+        planAuthoringState(authority, continuation),
+      )
+    : fourTaskPlan(authority, continuation);
+  return planningAccepted(candidate);
 }
 
 export function freshContinuationCommand() {

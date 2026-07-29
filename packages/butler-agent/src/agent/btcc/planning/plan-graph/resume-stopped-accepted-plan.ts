@@ -46,6 +46,7 @@ export function resumeStoppedAcceptedPlan(
     stoppedAnchorRef: continuation.anchorRef,
     stoppedTaskRef: interrupted.task.ref,
     stoppedResultRef: interrupted.resultRef,
+    ...(interrupted.reviewRef ? { stoppedReviewRef: interrupted.reviewRef } : {}),
     stoppedPlanGoalContractRef: prior.goalContractRef,
   };
   const bundleBody = {

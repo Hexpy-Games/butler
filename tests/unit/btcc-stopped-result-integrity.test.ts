@@ -5,6 +5,7 @@ import { discoverContinuationCandidates } from "../../packages/butler-agent/src/
 import { reduceProjectProgram } from "../../packages/butler-agent/src/agent/adapters/btcc/project-ledger/reduce-program.ts";
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import type { PlanningAcceptedProduct } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
+import { decideTransition } from "../../packages/butler-agent/src/agent/btcc/turn/state-machine/index.ts";
 import { authorReplannedStoppedTask, authorResumedStoppedPlan, bindAndContinue, bindStoppedContinuation, continuedPlanningAccepted, freshContinuationCommand } from "./support/btcc-stopped-work-fixture.ts";
 import { seedResultSubmittedStoppedProgram } from "./support/btcc-stopped-result-fixture.ts";
 
@@ -154,5 +155,54 @@ test("Project materialization accepts an attested non-blocking Planning backlog 
     expectedTurnRevision: 8,
     mutation: { kind: "install_reviewed_plan", product },
   })).not.toThrow();
+  db.close();
+});
+
+test("a stopped failed Review resumes its feedback loop without repeating Task Review", async () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  const storage = await seedResultSubmittedStoppedProgram(db);
+  const [continuation] = await discoverContinuationCandidates(db, freshContinuationCommand());
+  if (!continuation?.context?.frontier.interruptedTask) {
+    throw new Error("Stopped Task continuation expected");
+  }
+  const rebound = bindStoppedContinuation(storage, continuation);
+  if (rebound.planningState !== "reviewed") throw new Error("Reviewed Program expected");
+  const attempt = rebound.currentTask.attempts.at(-1);
+  if (!attempt) throw new Error("Stopped Attempt expected");
+  const failedReviewRef = contentRef("task-review", {
+    taskRef: rebound.currentTask.task.ref,
+    verdict: "not_passed",
+  });
+  rebound.currentTask.status = "review_failed";
+  attempt.status = "review_failed";
+  rebound.currentTask.currentReview = {
+    kind: "task_review",
+    review: { ref: failedReviewRef },
+  } as never;
+  continuation.context.frontier.interruptedTask.reviewRef = failedReviewRef;
+  const product: PlanningAcceptedProduct = continuedPlanningAccepted(rebound, continuation);
+
+  const continued = reduceProjectProgram(rebound, {
+    mutationId: "project-continuation-from-failed-review",
+    turnId: "turn-fresh-continuation",
+    expectedTurnRevision: 8,
+    mutation: { kind: "install_reviewed_plan", product },
+  });
+  if (continued.planningState !== "reviewed") throw new Error("Reviewed Program expected");
+  expect(continued.currentTask.status).toBe("review_failed");
+  expect(continued.currentTask.currentReview?.review.ref).toEqual(failedReviewRef);
+  expect(decideTransition({
+    turnId: "turn-fresh-continuation",
+    revision: 8,
+    semanticState: "planning_review",
+    managed: { program: rebound },
+  } as never, {
+    kind: "PlanningReviewAccepted",
+    product,
+  })).toMatchObject({
+    kind: "accepted",
+    transition: { kind: "accept_plan", successor: "feedback_conception" },
+  });
   db.close();
 });
