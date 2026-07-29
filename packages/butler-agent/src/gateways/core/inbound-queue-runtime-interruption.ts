@@ -67,6 +67,8 @@ export function parkQueueItemForProcessReplacement(input: {
     metadata: {
       ...input.item.metadata,
       ...input.metadata,
+      recoveredFromRuntimeInterruption: true,
+      sameLogicalTurnContinuation: true,
       interruptedAt: input.now.toISOString(),
       interruptionError: input.error.slice(0, 500),
       resumeAfterProcessId: process.pid,

@@ -154,6 +154,13 @@ async function dispatchItem(
     summary.delivered = delivered;
     return summary;
   } catch (error) {
+    if (process.env.BUTLER_OPERATIONAL_DIAGNOSTICS === "1") {
+      console.error(JSON.stringify({
+        event: "btcc_inbound_dispatch_interrupted",
+        name: error instanceof Error ? error.name : "UnknownError",
+        message: error instanceof Error ? error.message : String(error),
+      }));
+    }
     options.queue.parkForProcessReplacement(item, privateFailureMessage(error), {
       source: "gateway/btcc/btcc-inbound-dispatcher.ts",
       dispatchStatus: "runtime-interrupted",

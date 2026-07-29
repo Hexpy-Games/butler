@@ -37,6 +37,29 @@ test("native inbound queue requeues a legacy runtime interruption", () => {
   }
 });
 
+test("process replacement preserves the interrupted item as the same Turn", () => {
+  const butlerData = join(tmpdir(), `butler-inbound-replacement-${Date.now()}`);
+  mkdirSync(butlerData, { recursive: true });
+  try {
+    const queue = new NativeInboundQueue(butlerData);
+    const queued = queue.enqueue(envelope());
+    const [claimed] = queue.claim(1);
+
+    expect(queue.parkForProcessReplacement(claimed!, "provider unavailable")).toBe(true);
+    const pending = JSON.parse(readFileSync(join(
+      butlerData,
+      "runtime",
+      "inbound-events",
+      "pending",
+      `${queued.queueId}.json`,
+    ), "utf8")) as QueuedInboundEvent;
+    expect(pending.metadata.recoveredFromRuntimeInterruption).toBe(true);
+    expect(pending.metadata.sameLogicalTurnContinuation).toBe(true);
+  } finally {
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
 test("native inbound queue recovers an eligible dead-owner claim before lease expiry", () => {
   const butlerData = join(tmpdir(), `butler-inbound-dead-owner-${Date.now()}`);
   mkdirSync(butlerData, { recursive: true });
