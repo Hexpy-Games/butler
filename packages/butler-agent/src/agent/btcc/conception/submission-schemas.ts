@@ -205,6 +205,7 @@ export const GOAL_REVIEW_SUBJECTS = [
   "goal:intended_result",
   "goal:acceptance_intent",
   "goal:artifact_persistence",
+  "goal:required_target_effects",
   "goal:governing_specs",
   "goal:non_goals",
   "lens:requested_content",
