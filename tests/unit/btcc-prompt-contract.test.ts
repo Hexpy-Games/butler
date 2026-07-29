@@ -65,6 +65,10 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
     .toContain("blocker");
   expect(resolveDutyInstructions(["review_continuation_coherence"])[0]?.instruction)
     .toContain("new Program");
+  expect(resolveDutyInstructions(["review_continuation_coherence"])[0]?.instruction)
+    .toContain("not current-state proof");
+  expect(resolveDutyInstructions(["review_continuation_coherence"])[0]?.instruction)
+    .toContain("delete an outcome explicitly requested");
   const persistenceAuthoring = resolveDutyInstructions(["define_artifact_persistence"])[0]
     ?.instruction ?? "";
   expect(persistenceAuthoring).toContain("userArtifactTargetRequirement");
@@ -73,11 +77,13 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
   expect(persistenceAuthoring).toContain("internally persisted lifecycle records");
   expect(persistenceAuthoring).toContain("independent of route, Task, tool, or storage");
   expect(persistenceAuthoring).toContain("no_user_artifact_target");
+  expect(persistenceAuthoring).toContain("projected completed predecessor");
   const persistenceReview = resolveDutyInstructions(["review_artifact_persistence"])[0]
     ?.instruction ?? "";
   expect(persistenceReview).toContain("user-requested, reviewed product bytes");
   expect(persistenceReview).toContain("internally persisted lifecycle records");
   expect(persistenceReview).toContain("independent of route, Task, tool, or storage");
+  expect(persistenceReview).toContain("candidate projects a predecessor as completed");
   const openingRoute = resolveDutyInstructions(["choose_direct_assisted_or_deepen"])[0]
     ?.instruction ?? "";
   expect(openingRoute).toContain("requestObligation");
@@ -93,6 +99,9 @@ test("every typed phase duty and prohibition has one prompt instruction", () => 
   ])[0]?.instruction ?? "";
   expect(effectPlanning).toContain("smallest stable logical scope");
   expect(effectPlanning).toContain("Execution resolves those connection parameters");
+  const planReview = resolveDutyInstructions(["review_plan_exactly"])[0]?.instruction ?? "";
+  expect(planReview).toContain("rather than evergreen proof of a mutable postcondition");
+  expect(planReview).toContain("explicit successor repair or reconciliation Task");
 });
 
 test("Goal authoring distinguishes user artifacts from durable BTCC records", () => {

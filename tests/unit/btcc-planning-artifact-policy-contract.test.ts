@@ -9,6 +9,16 @@ import { resolveDutyInstructions } from
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
 
 describe("BTCC Planning artifact-policy contract", () => {
+  test("treats carried completion as history rather than current mutable truth", () => {
+    const continuationRule = PLANNING_AUTHORING_CONTRACTS[0]?.applicableRules
+      .find((rule) => rule.includes("evergreen proof")) ?? "";
+
+    expect(continuationRule).toContain("fresh observations");
+    expect(continuationRule).toContain("preserve the historical record");
+    expect(continuationRule).toContain("successor repair or reconciliation Task");
+    expect(continuationRule).toContain("never silently treat the stale postcondition as satisfied");
+  });
+
   test("states the semantic boundary between transient results and workspace lineage", () => {
     const artifactBoundary = PLANNING_AUTHORING_CONTRACTS[0]?.applicableRules
       .filter((rule) =>
@@ -43,6 +53,7 @@ describe("BTCC Planning artifact-policy contract", () => {
         dependencyWorkIds: [],
         tasks: [{
           logicalId: "observe-datum",
+          displayTitle: "Observe datum",
           intendedOutcome: "Return the transient observation.",
           dependencyTaskIds: [],
           effectClass: "none",
@@ -90,6 +101,7 @@ describe("BTCC Planning artifact-policy contract", () => {
         dependencyWorkIds: [],
         tasks: commands.map((command, index) => ({
           logicalId: `observe-command-${index + 1}`,
+          displayTitle: `Observe command ${index + 1}`,
           intendedOutcome: `Return the transient output of ${command}.`,
           dependencyTaskIds: index === 0 ? [] : [`observe-command-${index}`],
           effectClass: "none",
