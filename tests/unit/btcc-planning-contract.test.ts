@@ -117,6 +117,18 @@ describe("BTCC Planning contract", () => {
     expect(schema.properties).toHaveProperty("promotionSelectors");
   });
 
+  test("stopped ResultCandidate Planning exposes only the typed resume decision", () => {
+    const schema = planCandidateSubmissionSchema([], [], true) as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+    };
+
+    expect(schema.required).toEqual(["kind"]);
+    expect(Object.keys(schema.properties ?? {})).toEqual(["kind"]);
+    expect(JSON.stringify(schema)).toContain('"const":"stopped_plan_resume"');
+    expect(JSON.stringify(schema)).not.toContain('"works"');
+  });
+
   test("requires a compact Task display title separately from its full outcome", () => {
     const candidate = authorPlanCandidate(artifactPlan(), authoringState());
     expect(candidate.tasks[0]?.displayTitle).toBe("implement task");

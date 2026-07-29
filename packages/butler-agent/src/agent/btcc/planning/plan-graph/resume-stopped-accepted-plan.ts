@@ -20,10 +20,10 @@ export function resumeStoppedAcceptedPlan(
     ? continuation.context?.frontier.interruptedTask
     : undefined;
   if (!interrupted?.resultRef) return null;
-  if (!Array.isArray(submission.works) || submission.works.length !== 0) {
+  if (submission.kind !== "stopped_plan_resume") {
     rejectPlanningProposal(
       "stopped_result_plan_must_resume",
-      "Planning must submit no replacement Work graph when the stopped Program already has a ResultCandidate",
+      "Planning must use the stopped Plan resume contract when the interrupted Task already has a ResultCandidate",
     );
   }
   const prior = continuation?.context?.acceptedPlan;

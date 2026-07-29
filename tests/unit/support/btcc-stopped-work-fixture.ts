@@ -5,7 +5,10 @@ import { SqliteRuntimeOwnerRegistry } from "../../../packages/butler-agent/src/a
 import { canonicalMutationId } from "./btcc-project-ledger-fixture.ts";
 import type { WorkLedgerCommit } from "../../../packages/butler-agent/src/agent/btcc/gateway-api.ts";
 import type { ReviewedManagedProgramState } from "../../../packages/butler-agent/src/agent/btcc/work-ledger/index.ts";
-import { authorPlanningProposal } from "../../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
+import {
+  authorPlanCandidate,
+  authorPlanningProposal,
+} from "../../../packages/butler-agent/src/agent/btcc/planning/plan-graph/index.ts";
 import type { discoverContinuationCandidates } from "../../../packages/butler-agent/src/agent/adapters/btcc/sqlite/continuation-candidate-discovery.ts";
 import { fourTaskPlan, insertManagedTurn, planningAccepted, planAuthoringState, planSubmission, requireProgram, seedFrontier, sessionProgramCommit, stoppedBindingCommit } from "./btcc-stopped-work-fixture-internals.ts";
 
@@ -57,7 +60,10 @@ export function bindAndContinue(
   mutatePlan?: (candidate: ReturnType<typeof fourTaskPlan>) => void,
 ): void {
   const rebound = bindStoppedContinuation(storage, continuation);
-  const plan = fourTaskPlan(rebound, continuation);
+  const plan = authorPlanCandidate(
+    { kind: "stopped_plan_resume" },
+    planAuthoringState(rebound, continuation),
+  );
   mutatePlan?.(plan);
   const commit: WorkLedgerCommit = {
     mutationId: "",
@@ -95,7 +101,7 @@ export function authorResumedStoppedPlan(
   continuation: StoppedCandidate,
 ) {
   return authorPlanningProposal(
-    planSubmission(authority, []),
+    { kind: "stopped_plan_resume" },
     planAuthoringState(authority, continuation),
   );
 }
@@ -104,7 +110,10 @@ export function continuedPlanningAccepted(
   authority: Program,
   continuation: StoppedCandidate,
 ) {
-  return planningAccepted(fourTaskPlan(authority, continuation));
+  return planningAccepted(authorPlanCandidate(
+    { kind: "stopped_plan_resume" },
+    planAuthoringState(authority, continuation),
+  ));
 }
 
 export function freshContinuationCommand() {

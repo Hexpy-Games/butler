@@ -59,16 +59,22 @@ function planningCodec(
   selectableSpecIds: string[],
   priorFindingRefs: ContentRef[],
   deferralPolicy: PlanningDeferralPolicy,
+  resumeStoppedPlan: boolean,
 ) {
   const codec: PhaseCodec<PlanningCandidateProduct> = {
     submissionSchema: planCandidateSubmissionSchema(
       selectableSpecIds,
       priorFindingRefs.map((ref) => ref.id),
+      resumeStoppedPlan,
     ),
     decode(submission, envelope) {
       const state = requireRecord(envelope.context.stateInput, "Planning state");
       const value = requireRecord(submission, "Planning submission");
-      requireLiteral(value.kind, "plan_candidate", "Planning kind");
+      requireLiteral(
+        value.kind,
+        resumeStoppedPlan ? "stopped_plan_resume" : "plan_candidate",
+        "Planning kind",
+      );
       const findingDecisions = state.findingSetRef
         ? decodeFindingDecisions(value.findingDecisions, priorFindingRefs)
         : [];
@@ -148,6 +154,7 @@ export function proposePlan(
     "governingSpecRefs",
   );
   const priorFindingRefs = requiredSubjectFindingRefs(state.priorPlanningReview);
+  const resumeStoppedPlan = hasStoppedResultCandidate(state.continuation);
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
@@ -155,8 +162,16 @@ export function proposePlan(
       selectableGoverningSpecIds(availableSpecs, admittedGoverningSpecRefs),
       priorFindingRefs,
       deferralPolicy,
+      resumeStoppedPlan,
     ),
   });
+}
+
+function hasStoppedResultCandidate(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const continuation = value as PlanningContinuation;
+  return continuation.kind === "stopped_program" &&
+    Boolean(continuation.context?.frontier.interruptedTask?.resultRef);
 }
 
 function requireWorkspaceScope(scopeRefs: readonly string[]): string {

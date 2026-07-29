@@ -152,13 +152,15 @@ export function revisedPlanSubmissionSchema(
 export function planCandidateSubmissionSchema(
   logicalIds: string[],
   findingIds: string[] = [],
+  resumeStoppedPlan = false,
 ): SubmissionSchema {
   const prefix = {
-    kind: literalSchema("plan_candidate"),
+    kind: literalSchema(resumeStoppedPlan ? "stopped_plan_resume" : "plan_candidate"),
     ...(findingIds.length > 0
       ? { findingDecisions: findingDecisionSchema(findingIds) }
       : {}),
   };
+  if (resumeStoppedPlan) return objectSchema(prefix);
   return canonicalPlanSchema(prefix, logicalIds);
 }
 
