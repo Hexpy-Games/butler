@@ -63,6 +63,25 @@ test("Planning rejects forged stopped Plan, Goal, and Task identities", async ()
   db.close();
 });
 
+test("Planning resumes a stopped ResultCandidate after an earlier continuation changed the outer Goal", async () => {
+  const db = new Database(":memory:");
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  const storage = await seedResultSubmittedStoppedProgram(db);
+  const [continuation] = await discoverContinuationCandidates(db, freshContinuationCommand());
+  if (!continuation) throw new Error("Stopped continuation expected");
+  const rebound = bindStoppedContinuation(storage, continuation);
+  const multiHopContinuation = structuredClone(continuation);
+  multiHopContinuation.originalGoalContractRef = rebound.goalContractRef;
+
+  expect(authorResumedStoppedPlan(rebound, multiHopContinuation)).toMatchObject({
+    revisionOrigin: {
+      kind: "stopped_continuation",
+      stoppedPlanGoalContractRef: continuation.context?.acceptedPlan?.goalContractRef,
+    },
+  });
+  db.close();
+});
+
 test("Project materialization preserves the same reviewed stopped-result Plan", async () => {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
@@ -97,4 +116,3 @@ test("Project materialization preserves the same reviewed stopped-result Plan", 
     .toEqual(rebound.currentTask.currentResult?.result.ref);
   db.close();
 });
-

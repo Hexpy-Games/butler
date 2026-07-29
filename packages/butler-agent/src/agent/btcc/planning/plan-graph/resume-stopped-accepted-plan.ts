@@ -33,7 +33,7 @@ export function resumeStoppedAcceptedPlan(
       "Planning cannot resume without the immutable accepted Plan",
     );
   }
-  if (!matchesPriorPlan(prior, interrupted.task.ref, continuation.originalGoalContractRef, state)) {
+  if (!matchesPriorPlan(prior, interrupted.task.ref, state)) {
     rejectPlanningProposal(
       "stopped_result_plan_identity_mismatch",
       "The immutable accepted Plan does not contain the exact stopped Task",
@@ -71,7 +71,6 @@ export function resumeStoppedAcceptedPlan(
 function matchesPriorPlan(
   prior: PlanningCandidate,
   taskRef: ContentRef,
-  originalGoalContractRef: ContentRef,
   state: ResumeState,
 ): boolean {
   const { ref: priorRef, ...priorBody } = prior;
@@ -79,7 +78,6 @@ function matchesPriorPlan(
   return prior.ledgerId === state.ledgerId &&
     prior.programId === state.programId &&
     sameRef(priorRef, canonicalRef) &&
-    sameRef(prior.goalContractRef, originalGoalContractRef) &&
     prior.tasks.some((task) =>
       task.ref.id === taskRef.id && task.ref.sha256 === taskRef.sha256);
 }
