@@ -96,6 +96,43 @@ test("provider readiness deadline survives interruption persistence", async () =
   }
 });
 
+test("repeated provider interruption follows the claim's latest durable checkpoint", async () => {
+  const db = new Database(":memory:");
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    migrateBtccSchema(db);
+    const store = new SqliteOperationalRecoveryStore(db);
+    const initial = {
+      turnId: "turn-provider-continuation",
+      turnRevision: 7,
+      semanticState: "task_execution",
+      checkpointId: "checkpoint-provider-continuation",
+      checkpointRevision: 3,
+      claimId: "claim-provider-continuation",
+      executionFence: 0,
+    };
+    const interruption = (anchor: typeof initial) => new OperationalInterruptionError(
+      "provider_api_error",
+      anchor,
+      { kind: "automatic_provider_recovery" },
+    );
+    const first = await store.record(interruption(initial));
+    await store.markReady(first);
+    const advanced = { ...initial, checkpointRevision: 5 };
+
+    const second = await store.record(interruption(advanced));
+
+    expect(second.activationCount).toBe(2);
+    expect(await store.pending(initial)).toBeNull();
+    expect(await store.pending(advanced)).toMatchObject({
+      status: "interrupted",
+      interruption: { anchor: advanced },
+    });
+  } finally {
+    db.close();
+  }
+});
+
 test("optional diagnostic corruption never blocks pending checkpoint recovery", async () => {
   const db = new Database(":memory:");
   try {

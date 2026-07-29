@@ -41,6 +41,11 @@ export class SqliteOperationalRecoveryStore implements OperationalRecoveryStore 
       ON CONFLICT(claim_id, code, activation_kind) DO UPDATE SET
         activation_count = CASE WHEN status = 'interrupted'
           THEN activation_count ELSE activation_count + 1 END,
+        turn_revision = excluded.turn_revision,
+        semantic_state = excluded.semantic_state,
+        checkpoint_id = excluded.checkpoint_id,
+        checkpoint_revision = excluded.checkpoint_revision,
+        execution_fence = excluded.execution_fence,
         retry_at = excluded.retry_at,
         diagnostic_message = excluded.diagnostic_message,
         diagnostic_json = excluded.diagnostic_json,
