@@ -23,7 +23,7 @@ export function preserveUnaffectedTaskDrafts(input: {
 
   for (const taskId of unaffected) {
     const priorTask = priorTasks.get(taskId);
-    if (!priorTask) throw new Error(`Unaffected Task is absent from accepted Plan: ${taskId}`);
+    if (!priorTask) continue;
     rejectMovedTask(nextWorks, priorTask);
     const work = findOrRestoreWork(nextWorks, priorTask, input.acceptedPlan);
     restoreTaskAtAcceptedPosition(work, priorTask, input.acceptedPlan);

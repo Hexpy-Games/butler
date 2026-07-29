@@ -34,6 +34,8 @@ export const FEEDBACK_LOOP_DUTIES = {
     "unaffected and revalidate. Rework may name a replacement successor identity;",
     "replan may omit a successor when the prior Task is retired or decomposed.",
     "Unaffected means the exact accepted Task revision is carried forward by Planning;",
+    "when an accepted historical Task is absent from the current accepted Plan, keep its",
+    "durable Program revision unchanged instead of adding it back to the revised Plan.",
     "do not use unaffected when governing Spec refs, outcome, dependencies, scope,",
     "criteria, verification questions, artifact policy, effect class, Work ownership,",
     "or execution ordinal should change. Classify that Task as revalidate, rework, or",

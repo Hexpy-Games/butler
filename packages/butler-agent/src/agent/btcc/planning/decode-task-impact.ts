@@ -56,6 +56,12 @@ export function decodeTaskImpact(input: {
     const successor = successorTaskLogicalId
       ? next.get(successorTaskLogicalId)
       : undefined;
+    if (
+      disposition === "unaffected" &&
+      successorTaskLogicalId !== priorTaskLogicalId
+    ) {
+      throw new Error("unaffected impact must preserve Task logical identity");
+    }
     validateSuccessor({ disposition, prior, successor });
     if (successor) {
       if (visitedSuccessor.has(successor.taskLogicalId)) {
@@ -70,6 +76,9 @@ export function decodeTaskImpact(input: {
       reason: requireString(record.reason, `impactMap[${index}].reason`),
     };
     if (disposition === "replan") return { ...base, disposition };
+    if (disposition === "unaffected" && !successor) {
+      return { ...base, disposition, successorTaskRef: prior.task.ref };
+    }
     if (!successor) throw new Error(`${disposition} impact lost its successor Task`);
     if (disposition === "revalidate") {
       return {
@@ -125,7 +134,9 @@ function validateSuccessor(input: {
   prior: CurrentTaskState;
   successor?: ManagedTask;
 }): void {
-  if (input.disposition !== "replan" && !input.successor) {
+  const preservedHistoricalTask = input.disposition === "unaffected" &&
+    input.prior.status === "accepted" && input.prior.hasCurrentResult;
+  if (input.disposition !== "replan" && !input.successor && !preservedHistoricalTask) {
     throw new Error(
       `${input.disposition} impact requires a current successor Task`,
     );

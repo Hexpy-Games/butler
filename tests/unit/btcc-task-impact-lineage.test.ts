@@ -184,6 +184,41 @@ test("unaffected lineage preserves the exact Task revision", () => {
   );
 });
 
+test("unaffected historical Task keeps its durable revision without reauthoring", () => {
+  const prior = task("historical-task", "accepted-revision");
+
+  expect(decodeTaskImpact({
+    submission: [{
+      priorTaskLogicalId: prior.taskLogicalId,
+      disposition: "unaffected",
+      successorTaskLogicalId: prior.taskLogicalId,
+      reason: "The accepted historical result remains valid.",
+    }],
+    currentTasks: [{ task: prior, status: "accepted", hasCurrentResult: true }],
+    nextTasks: [],
+  })).toEqual([{
+    priorTaskRef: prior.ref,
+    disposition: "unaffected",
+    reason: "The accepted historical result remains valid.",
+    successorTaskRef: prior.ref,
+  }]);
+});
+
+test("non-accepted Task cannot disappear behind an unaffected impact", () => {
+  const prior = task("review-failed-task", "failed-revision");
+
+  expect(() => decodeTaskImpact({
+    submission: [{
+      priorTaskLogicalId: prior.taskLogicalId,
+      disposition: "unaffected",
+      successorTaskLogicalId: prior.taskLogicalId,
+      reason: "Incorrectly claimed unchanged.",
+    }],
+    currentTasks: [{ task: prior, status: "review_failed", hasCurrentResult: true }],
+    nextTasks: [],
+  })).toThrow("unaffected impact requires a current successor Task");
+});
+
 test("impact schema requires successors except when replanning", () => {
   const schema = feedbackPlanSubmissionSchema([], "governing_revision", [], 4) as any;
   const variants = schema.properties.impactMap.items.anyOf;
