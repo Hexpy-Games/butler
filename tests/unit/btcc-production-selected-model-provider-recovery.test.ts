@@ -63,7 +63,7 @@ describe("production BTCC selected model", () => {
     expect(await model.runRound(phaseEnvelope({ emptyContext: true }))).toEqual({
       kind: "interruption",
       code: "provider_rate_limited",
-      activation: { kind: "provider_action_required" },
+      activation: { kind: "automatic_provider_recovery" },
       diagnostic: providerDiagnostic("openai", "responses", true, {
         statusCode: 429,
       }),
