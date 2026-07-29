@@ -39,6 +39,7 @@ test("closed phases disclose terminal effect authority without opening operation
           kind: "phase_submission",
           submission: { kind: "complete" },
           publicActivity: {
+            title: "프로필 설정 반영",
             summary: "프로필 설정을 반영했습니다.",
             rationale: "사용자의 명시적 요청을 적용했습니다.",
             nextStep: "완료 결과를 전달합니다.",
@@ -91,6 +92,7 @@ test("keeps exact Task target authority out of the stable provider vocabulary", 
           kind: "phase_submission",
           submission: { kind: "complete" },
           publicActivity: {
+            title: "작업 대상 확인",
             summary: "허용된 작업 대상을 확인했습니다.",
             rationale: "실행 권한과 계획 범위를 일치시켰습니다.",
             nextStep: "정확한 대상만 실행합니다.",

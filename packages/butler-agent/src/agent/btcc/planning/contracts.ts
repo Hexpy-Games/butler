@@ -115,6 +115,7 @@ export type ManagedVerificationQuestion = {
 export type ManagedTask = {
   ref: ContentRef;
   taskLogicalId: string;
+  displayTitle?: string;
   programId: string;
   workLogicalId: string;
   goalContractRef: ContentRef;

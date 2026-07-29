@@ -7,6 +7,7 @@ import {
   variantsSchema,
   type SubmissionSchema,
 } from "../core/index.ts";
+import { DISPLAY_TITLE_MAX_LENGTH } from "../core/display-title.ts";
 
 export {
   feedbackPlanReviewSubmissionSchema,
@@ -24,6 +25,11 @@ const criterion = objectSchema({
 });
 const taskFields = {
   logicalId: textSchema(),
+  displayTitle: {
+    type: "string",
+    minLength: 1,
+    maxLength: DISPLAY_TITLE_MAX_LENGTH,
+  },
   intendedOutcome: textSchema(),
   dependencyTaskIds: textList(),
   targetScopeRefs: textList(),

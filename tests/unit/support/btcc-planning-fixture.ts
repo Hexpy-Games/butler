@@ -6,6 +6,7 @@ export function artifactTask(
 ) {
   return {
     logicalId,
+    displayTitle: `${logicalId} task`,
     intendedOutcome: `${logicalId} outcome`,
     dependencyTaskIds,
     targetScopeRefs: [],

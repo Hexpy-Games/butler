@@ -55,6 +55,7 @@ test("projects model-authored phase activity with intent and next step", async (
     turnId: "turn-phase-activity",
     semanticState: "planning",
     activityId: "phase-activity:planning-round-2",
+    title: "수정 범위 확인",
     summary: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
     rationale: "기존 설계와 구현을 맞춘 최소 작업 범위를 정하기 위해 필요합니다.",
     nextStep: "확인 결과를 Work와 Task로 나누어 계획 후보를 작성합니다.",
@@ -65,6 +66,7 @@ test("projects model-authored phase activity with intent and next step", async (
     payload: {
       note: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
       btccState: "planning",
+      decisionTitle: "수정 범위 확인",
       decisionSummary: "수정할 모듈과 검증 경로를 확인하고 있습니다.",
       decisionRationale: "기존 설계와 구현을 맞춘 최소 작업 범위를 정하기 위해 필요합니다.",
       decisionNextStep: "확인 결과를 Work와 Task로 나누어 계획 후보를 작성합니다.",
@@ -201,6 +203,7 @@ test("projects canonical Work Ledger tasks without deriving labels or lifecycle"
       {
         taskId: "task-1",
         taskTitle: "Implement the canonical projection",
+        taskOutcome: "The canonical projection is implemented across the product path.",
         taskOrder: 1,
         taskState: "reviewing",
         workId: "work-1",
@@ -226,13 +229,21 @@ test("projects canonical Work Ledger tasks without deriving labels or lifecycle"
     work_stream_id: "work-1",
     semantic_block_id: "work-ledger-program-1",
     safe_order: 1,
-    safe_detail_rows: [{
-      id: "work",
-      kind: "work",
-      safe_label: "Work",
-      safe_value: "Synchronize Work progress",
-      state: "active",
-    }],
+    safe_detail_rows: [
+      {
+        id: "work",
+        kind: "work",
+        safe_label: "Work",
+        safe_value: "Synchronize Work progress",
+        state: "active",
+      },
+      {
+        id: "task-outcome",
+        kind: "task_outcome",
+        safe_label: "Task outcome",
+        safe_value: "The canonical projection is implemented across the product path.",
+      },
+    ],
   });
 });
 
@@ -248,6 +259,7 @@ test("committed BTCC successor publishes the installed Planning graph", async ()
   const task = {
     taskLogicalId: "task-1",
     workLogicalId: "work-1",
+    displayTitle: "작업 상태 반영",
     intendedOutcome: "Publish accepted Task state",
     executionOrdinal: 1,
   };
@@ -272,7 +284,7 @@ test("committed BTCC successor publishes the installed Planning graph", async ()
   ]);
   expect(events[0]?.payload).toMatchObject({
     todoId: "task-1",
-    safeLabel: "Publish accepted Task state",
+    safeLabel: "작업 상태 반영",
     state: "reviewing",
     workstreamId: "work-1",
   });

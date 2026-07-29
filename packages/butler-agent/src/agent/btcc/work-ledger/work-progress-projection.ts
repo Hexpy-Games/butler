@@ -1,4 +1,5 @@
 import type { ReviewedManagedProgramState } from "./contracts.ts";
+import { legacyDisplayTitle } from "../core/display-title.ts";
 
 export type WorkProgressTaskState =
   | "planned"
@@ -11,6 +12,7 @@ export type WorkProgressTaskState =
 export type WorkProgressTask = {
   taskId: string;
   taskTitle: string;
+  taskOutcome: string;
   taskOrder: number;
   taskState: WorkProgressTaskState;
   workId: string;
@@ -39,7 +41,8 @@ export function projectWorkProgress(
       const canonicalTaskState = taskProgressState(status);
       return {
         taskId: task.taskLogicalId,
-        taskTitle: task.intendedOutcome,
+        taskTitle: task.displayTitle ?? legacyDisplayTitle(task.intendedOutcome),
+        taskOutcome: task.intendedOutcome,
         taskOrder: task.executionOrdinal,
         taskState: stopped &&
             task.taskLogicalId === program.currentTask.task.taskLogicalId &&

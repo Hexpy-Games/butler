@@ -121,6 +121,7 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
     kind: "phase_submission",
     submission: { kind: "sample_submission", summary: "done" },
     publicActivity: {
+      title: "단계 산출물 완성",
       summary: "현재 단계 산출물을 완성했습니다.",
       rationale: "단계 계약을 충족하는 결과를 만들었습니다.",
       nextStep: "다음 단계가 결과를 이어받습니다.",
@@ -134,6 +135,7 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
       unresolved: ["The current status is unknown."],
       nextOperationPurpose: "Read the current status.",
       publicActivity: {
+        title: "작업 상태 확인",
         summary: "현재 작업 상태를 확인하고 있습니다.",
         rationale: "다음 판단을 현재 상태에 근거하기 위해 필요합니다.",
         nextStep: "확인 결과를 바탕으로 단계 산출물을 작성합니다.",
@@ -153,6 +155,13 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
   expect(validateJsonObjectSchema({ carrier: operationWitness }, normalized).ok).toBe(true);
   expect(validateJsonObjectSchema(submissionWitness, admissionSchema).ok).toBe(true);
   expect(validateJsonObjectSchema(operationWitness, admissionSchema).ok).toBe(true);
+  expect(validateJsonObjectSchema({
+    ...submissionWitness,
+    publicActivity: {
+      ...submissionWitness.publicActivity,
+      title: "가".repeat(33),
+    },
+  }, admissionSchema).ok).toBe(false);
   expect(validateJsonObjectSchema({
     ...submissionWitness,
     requests: operationWitness.requests,

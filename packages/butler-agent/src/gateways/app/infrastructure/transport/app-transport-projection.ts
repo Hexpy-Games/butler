@@ -29,6 +29,7 @@ export function progressRowFromAppOutbound(
       tool_call_id: safeOptionalShortToken(metadata.toolCallId),
       work_block_id: safeOptionalShortToken(metadata.workBlockId),
       work_block_label: safeOptionalShortText(metadata.workBlockLabel),
+      work_decision_title: safeOptionalShortText(metadata.decisionTitle),
       work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
       work_decision_rationale: safeOptionalShortText(
         metadata.decisionRationale,
@@ -69,6 +70,7 @@ export function progressRowFromAppOutbound(
         safe_label: safeOptionalShortText(text) ?? label,
         work_block_id: safeOptionalShortToken(metadata.workBlockId) ?? actionId,
         work_block_label: label,
+        work_decision_title: safeOptionalShortText(metadata.decisionTitle),
         work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
         work_decision_rationale: safeOptionalShortText(
           metadata.decisionRationale,

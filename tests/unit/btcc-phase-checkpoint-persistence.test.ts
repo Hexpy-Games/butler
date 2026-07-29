@@ -28,6 +28,7 @@ describe("BTCC phase checkpoint persistence", () => {
       unresolved: ["The current file content is unknown."],
       nextOperationPurpose: "Read the current file once.",
       publicActivity: {
+        title: "현재 파일 확인",
         summary: "현재 파일의 내용을 확인하고 있습니다.",
         rationale: "계획을 현재 구현 상태에 맞추기 위해 필요합니다.",
         nextStep: "확인한 내용으로 다음 작업 범위를 결정합니다.",
@@ -58,6 +59,7 @@ describe("BTCC phase checkpoint persistence", () => {
     });
     const product = { kind: "goal_contract_candidate", exact: "product bytes" };
     const submissionActivity = {
+      title: "목표 계약 완성",
       summary: "목표 계약 후보를 완성했습니다.",
       rationale: "확인한 현재 상태와 사용자의 요청을 함께 반영했습니다.",
       nextStep: "후보가 원래 의도와 완료 기준을 보존하는지 검토합니다.",
