@@ -1,4 +1,7 @@
-import { submitInitialPlan } from "./managed-harness-planning.ts";
+import {
+  submitArtifactPlan,
+  submitInitialPlan,
+} from "./managed-harness-planning.ts";
 
 export type HarnessCorrectionKind =
   | "implementation_repair"
@@ -9,6 +12,7 @@ export function submitFeedbackPlan(
   state: Record<string, unknown>,
   correctionKind: HarnessCorrectionKind,
   revalidateAcceptedTask = false,
+  reopenArtifactTasks = false,
 ) {
   if (correctionKind === "implementation_repair") {
     return {
@@ -16,32 +20,43 @@ export function submitFeedbackPlan(
       ...feedbackPlanningFindingDecisions(state),
       correctionKind,
       correctionAction: "같은 Task에서 고객 응대 원칙별 실행 지침을 추가한다",
-      executionRequirement: correctionExecutionRequirement(state),
+      executionRequirement: reopenArtifactTasks
+        ? predecessorOwnedMutationRequirement(state)
+        : correctionExecutionRequirement(state),
     };
   }
+  const revisedPlan = reopenArtifactTasks
+    ? revisedArtifactPlanSubmission(state)
+    : revalidateAcceptedTask
+      ? unchangedTaskRevision(state)
+      : revisedPlanSubmission(state);
   return {
     kind: "feedback_plan_candidate",
     ...feedbackPlanningFindingDecisions(state),
     correctionKind,
     correctionAction: "리뷰 피드백에 맞춰 Task 경계와 의존 순서를 다시 승인한다",
-    executionRequirement: correctionExecutionRequirement(state),
-    revisedPlan: revalidateAcceptedTask
-      ? unchangedTaskRevision(state)
-      : revisedPlanSubmission(state),
+    executionRequirement: reopenArtifactTasks
+      ? artifactRepairExecutionRequirement(state, revisedPlan)
+      : correctionExecutionRequirement(state),
+    revisedPlan,
     impactMap: asArray(state.taskImpactIndex).map((taskState, index) => ({
       priorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId,
-      disposition: revalidateAcceptedTask && index === 0
+      disposition: reopenArtifactTasks
+        ? "rework"
+        : revalidateAcceptedTask && index === 0
         ? "revalidate"
         : index === 0 || revalidateAcceptedTask
           ? "rework"
           : "replan",
-      ...(index === 0 || revalidateAcceptedTask
+      ...(reopenArtifactTasks || index === 0 || revalidateAcceptedTask
         ? { successorTaskLogicalId: asRecord(asRecord(taskState).task).taskLogicalId }
         : {}),
       ...(revalidateAcceptedTask && index === 0
         ? { revalidationPrerequisiteTaskLogicalIds: [] }
         : {}),
-      reason: revalidateAcceptedTask && index === 0
+      reason: reopenArtifactTasks
+        ? "읽기 전용 검증에서 발견한 수정은 구현 Task를 다시 열고 후속 Task를 재실행해야 한다"
+        : revalidateAcceptedTask && index === 0
         ? "변경된 governing authority 아래에서 기존 통과 결과를 다시 검토해야 한다"
         : index === 0
           ? "리뷰에서 발견한 구현 누락을 같은 Task에서 다시 수행해야 한다"
@@ -50,6 +65,31 @@ export function submitFeedbackPlan(
     ...(correctionKind === "authority_scope_revision"
       ? { authorityChange: "사용자가 승인한 확장 범위를 적용한다" }
       : {}),
+  };
+}
+
+function predecessorOwnedMutationRequirement(state: Record<string, unknown>) {
+  const policy = asRecord(asRecord(state.currentArtifactPolicy).policy);
+  return {
+    kind: "workspace_mutation",
+    workspaceScopeRef: policy.workspaceScopeRef,
+    writablePaths: ["guide.md"],
+  };
+}
+
+function artifactRepairExecutionRequirement(
+  state: Record<string, unknown>,
+  revisedPlan: Record<string, unknown>,
+) {
+  const currentPolicy = asRecord(asRecord(state.currentArtifactPolicy).policy);
+  const firstWork = asRecord(asArray(revisedPlan.works)[0]);
+  const implementationTask = asRecord(asArray(firstWork.tasks)[0]);
+  const policy = asRecord(implementationTask.artifactPolicy);
+  const mutationScope = asRecord(policy.mutationScope);
+  return {
+    kind: "workspace_mutation",
+    workspaceScopeRef: currentPolicy.workspaceScopeRef,
+    writablePaths: asArray(mutationScope.writablePaths),
   };
 }
 
@@ -217,6 +257,21 @@ function revisedPlanSubmission(state: Record<string, unknown>) {
   };
 }
 
+function revisedArtifactPlanSubmission(state: Record<string, unknown>) {
+  const { kind: _kind, ...plan } = submitArtifactPlan(state);
+  const works = structuredClone(asArray(plan.works));
+  const firstWork = asRecord(works[0]);
+  const tasks = asArray(firstWork.tasks);
+  const implementation = asRecord(tasks[0]);
+  implementation.intendedOutcome =
+    `${String(implementation.intendedOutcome)} 검증에서 발견된 누락을 함께 수정한다`;
+  return {
+    ...plan,
+    works,
+    strategy: "구현 Task를 다시 열어 수정한 뒤 읽기 전용 검증과 프로모션을 순서대로 재실행한다",
+  };
+}
+
 function governingSelection(state: Record<string, unknown>): Record<string, unknown> {
   const logicalIds = asArray(state.availableSpecs)
     .map((spec) => asRecord(spec).logicalId)
@@ -236,6 +291,10 @@ function taskSubmission(input: {
 }) {
   return {
     logicalId: input.logicalId,
+    displayTitle: input.logicalId
+      .split("-")
+      .map((part) => part[0]?.toUpperCase() + part.slice(1))
+      .join(" "),
     intendedOutcome: input.intendedOutcome,
     executionOrdinal: input.executionOrdinal,
     dependencyTaskIds: input.dependencyTaskIds,

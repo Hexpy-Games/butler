@@ -284,6 +284,7 @@ function taskSubmission(input: {
 }) {
   return {
     logicalId: input.logicalId,
+    displayTitle: displayTitle(input.logicalId),
     intendedOutcome: input.intendedOutcome,
     executionOrdinal: input.executionOrdinal,
     dependencyTaskIds: input.dependencyTaskIds,
@@ -296,6 +297,13 @@ function taskSubmission(input: {
       sourceRequiredOutcomeRefs: [input.outcome],
     }],
   };
+}
+
+function displayTitle(logicalId: string): string {
+  return logicalId
+    .split("-")
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function emptyPlanningConsiderations() {
