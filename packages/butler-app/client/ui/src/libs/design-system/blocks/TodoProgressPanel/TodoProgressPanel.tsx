@@ -16,6 +16,7 @@ export type TodoProgressPanelItemState =
 export interface TodoProgressPanelItem {
   id: string;
   title: string;
+  fullTitle?: string;
   state: TodoProgressPanelItemState;
   statusLabel: string;
 }

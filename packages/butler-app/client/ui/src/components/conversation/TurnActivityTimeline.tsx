@@ -98,10 +98,11 @@ function ActivityBlock({
     <WorkActivityBlock
       density="compact"
       connected={connected}
-      title={activity.summary}
+      title={activity.title}
       description={
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
+          <Typo.Caption as="span">내용: {activity.summary}</Typo.Caption>
           <Typo.Caption as="span">의도: {activity.rationale}</Typo.Caption>
           <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
         </Stack>

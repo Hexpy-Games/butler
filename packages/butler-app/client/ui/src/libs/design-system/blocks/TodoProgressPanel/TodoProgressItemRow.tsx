@@ -18,7 +18,12 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
         {itemIcon(item.state)}
       </span>
       <span className={styles.content}>
-        <Typo.Body as="span" className={styles.title} title={item.title}>
+        <Typo.Body
+          as="span"
+          aria-label={item.fullTitle ?? item.title}
+          className={styles.title}
+          title={item.fullTitle ?? item.title}
+        >
           {item.title}
         </Typo.Body>
       </span>
@@ -30,6 +35,7 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
 }, (previous, next) =>
   previous.item.id === next.item.id &&
   previous.item.title === next.item.title &&
+  previous.item.fullTitle === next.item.fullTitle &&
   previous.item.state === next.item.state &&
   previous.item.statusLabel === next.item.statusLabel,
 );

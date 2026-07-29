@@ -1,10 +1,12 @@
 import { projectSharedWorkBlocks } from "../../../../../../butler-progress-projection/src/index.ts";
 import type { ProgressRow, WorkBlockView } from "../types.ts";
 import { visibleProgressRows } from "./progress-rows.ts";
+import { compactLegacyDisplayTitle } from "./compact-display-title.ts";
 
 export type PhaseActivity = {
   id: string;
   phase?: string;
+  title: string;
   summary: string;
   rationale: string;
   nextStep: string;
@@ -140,12 +142,14 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
   for (const row of rows) {
     if (isPhaseActivityRow(row)) {
       const activity: PhaseActivity = {
-      id: row.id,
-      phase: row.semantic_block_id,
-      summary: row.work_decision_summary,
-      rationale: row.work_decision_rationale,
-      nextStep: row.work_decision_next_step,
-      createdAt: row.created_at,
+        id: row.id,
+        phase: row.semantic_block_id,
+        title: row.work_decision_title ??
+          compactLegacyDisplayTitle(row.work_decision_summary),
+        summary: row.work_decision_summary,
+        rationale: row.work_decision_rationale,
+        nextStep: row.work_decision_next_step,
+        createdAt: row.created_at,
         operations: [],
       };
       activities.push(activity);

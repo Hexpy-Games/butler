@@ -41,6 +41,7 @@ test("turn activity keeps one latest item until view all expands in place", asyn
           {
             id: "conception",
             phase: "conception_deliberation",
+            title: "이전 목표 확인",
             summary: "이전 목표를 확인했습니다.",
             rationale: "의도를 보존하기 위해서입니다.",
             nextStep: "계획을 만듭니다.",
@@ -49,6 +50,7 @@ test("turn activity keeps one latest item until view all expands in place", asyn
           {
             id: "planning",
             phase: "planning",
+            title: "구현 순서 확정",
             summary: "구현 순서를 정했습니다.",
             rationale: "작업 경계를 분명히 하기 위해서입니다.",
             nextStep: "첫 작업을 실행합니다.",
@@ -119,6 +121,7 @@ function activity(id: string, summary: string) {
   return {
     id,
     phase: id,
+    title: summary,
     summary,
     rationale: "목표를 지키기 위해서입니다.",
     nextStep: "다음 단계를 진행합니다.",
