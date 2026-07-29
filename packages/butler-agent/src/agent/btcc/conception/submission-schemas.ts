@@ -162,6 +162,11 @@ export function goalCandidateSubmissionSchema(
       "no_user_artifact_target",
       "reviewed_artifact_bytes_at_admitted_target_required",
     ),
+    requiredTargetEffects: arraySchema(objectSchema({
+      effectId: textSchema(),
+      targetScopeRef: textSchema(),
+      desiredOutcome: textSchema(),
+    })),
     nonGoals: textList(),
     personalizationRefs: textList(),
     governingSpecApplications: governingSpecApplicationsSchema(

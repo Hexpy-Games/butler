@@ -119,6 +119,7 @@ function goalCodec(
         outcomeId: digest(`btcc-required-outcome.v1\0${envelope.binding.turnId}`),
         sourceGoalFieldIds: ["request", "intended_result"] as const,
       },
+      requiredTargetEffects: decodeRequiredTargetEffects(value.requiredTargetEffects),
       lensAssessments,
       personalizationRefs,
       governingSpecApplications: requireGoverningSpecApplications(
@@ -150,6 +151,29 @@ function goalCodec(
     };
   },
 };
+}
+
+function decodeRequiredTargetEffects(value: unknown) {
+  if (!Array.isArray(value)) throw new Error("requiredTargetEffects must be an array");
+  const effects = value.map((item: unknown, index: number) => {
+    const effect = requireRecord(item, `requiredTargetEffects[${index}]`);
+    return {
+      effectId: requireString(effect.effectId, `requiredTargetEffects[${index}].effectId`),
+      targetScopeRef: requireString(
+        effect.targetScopeRef,
+        `requiredTargetEffects[${index}].targetScopeRef`,
+      ),
+      desiredOutcome: requireString(
+        effect.desiredOutcome,
+        `requiredTargetEffects[${index}].desiredOutcome`,
+      ),
+    };
+  });
+  if (new Set(effects.map((effect: { effectId: string }) => effect.effectId)).size !==
+    effects.length) {
+    throw new Error("requiredTargetEffects effectId must be unique");
+  }
+  return effects;
 }
 
 export function bindGoalRevision(

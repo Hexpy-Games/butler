@@ -77,6 +77,7 @@ export type ManagedEffectIntent = {
   owningTaskKey: { programId: string; taskLogicalId: string };
   sourceGoalFieldIds: Array<"request" | "intended_result">;
   sourceRequiredOutcomeRefs: string[];
+  sourceRequiredTargetEffectId?: string;
   targetScopeRef: string;
   action:
     | { kind: "external_target_mutation"; action: string }

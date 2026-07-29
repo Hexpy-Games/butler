@@ -11,6 +11,7 @@ import type {
   ManagedTask,
   PlanningCandidate,
 } from "../contracts.ts";
+import type { GoalRequiredTargetEffect } from "../../conception/index.ts";
 import {
   assertExactStrings,
   readGoalFields,
@@ -81,7 +82,12 @@ export function materializeEffectIntents(
   submission: Record<string, unknown>,
   tasks: ManagedTask[],
   selectors: PromotionSelector[],
-  authority: { programId: string; requiredOutcomeId: string; authorityRef: ContentRef },
+  authority: {
+    programId: string;
+    requiredOutcomeId: string;
+    authorityRef: ContentRef;
+    requiredTargetEffects: GoalRequiredTargetEffect[];
+  },
 ): ManagedEffectIntent[] {
   const drafts = requireArray(submission.effectIntents, "effectIntents");
   const byId = taskMap(tasks);
@@ -106,8 +112,17 @@ export function materializeEffectIntents(
       : actionKind === "external_target_mutation"
         ? externalTargetMutationAction(task, requireString(draft.action, "effect.action"))
         : invalidAction();
+    const requiredTargetEffect = actionKind === "external_target_mutation"
+      ? requiredGoalEffect(draft, task, authority.requiredTargetEffects)
+      : undefined;
     const normalizedPayload = requireString(draft.payload, "effect.payload");
     const desiredOutcome = requireString(draft.desiredOutcome, "effect.desiredOutcome");
+    if (requiredTargetEffect && desiredOutcome !== requiredTargetEffect.desiredOutcome) {
+      rejectPlanningProposal(
+        "required_target_effect_outcome_mismatch",
+        "External EffectIntent must preserve the exact required target outcome",
+      );
+    }
     const body = {
       programId: authority.programId,
       occurrenceKey: requireString(draft.occurrenceKey, "effect.occurrenceKey"),
@@ -117,6 +132,9 @@ export function materializeEffectIntents(
         draft.sourceRequiredOutcomeRefs,
         authority.requiredOutcomeId,
       ),
+      ...(requiredTargetEffect
+        ? { sourceRequiredTargetEffectId: requiredTargetEffect.effectId }
+        : {}),
       targetScopeRef: effectTarget(task),
       action,
       normalizedPayload,
@@ -129,7 +147,49 @@ export function materializeEffectIntents(
   });
   uniqueStrings(effects.map((effect) => effect.occurrenceKey), "Effect occurrence key");
   for (const task of tasks) validateTaskEffects(task, effects);
+  validateRequiredTargetEffectCoverage(effects, authority.requiredTargetEffects);
   return effects;
+}
+
+function requiredGoalEffect(
+  draft: Record<string, unknown>,
+  task: ManagedTask,
+  required: GoalRequiredTargetEffect[],
+): GoalRequiredTargetEffect {
+  const effectId = requireString(
+    draft.requiredTargetEffectId,
+    "effect.requiredTargetEffectId",
+  );
+  const effect = required.find((candidate) => candidate.effectId === effectId);
+  if (!effect) {
+    rejectPlanningProposal(
+      "required_target_effect_unknown",
+      `EffectIntent references an unknown required target effect: ${effectId}`,
+    );
+  }
+  if (effectTarget(task) !== effect.targetScopeRef) {
+    rejectPlanningProposal(
+      "required_target_effect_scope_mismatch",
+      `EffectIntent target does not match required target effect: ${effectId}`,
+    );
+  }
+  return effect;
+}
+
+function validateRequiredTargetEffectCoverage(
+  effects: ManagedEffectIntent[],
+  required: GoalRequiredTargetEffect[],
+): void {
+  const bound = effects.flatMap((effect) =>
+    effect.sourceRequiredTargetEffectId ? [effect.sourceRequiredTargetEffectId] : []);
+  uniqueStrings(bound, "Required target effect binding");
+  const missing = required.filter((effect) => !bound.includes(effect.effectId));
+  if (missing.length > 0) {
+    rejectPlanningProposal(
+      "required_target_effect_missing",
+      `Plan omits required target effects: ${missing.map((effect) => effect.effectId).join(", ")}`,
+    );
+  }
 }
 
 export function materializeIntegrationCriteria(

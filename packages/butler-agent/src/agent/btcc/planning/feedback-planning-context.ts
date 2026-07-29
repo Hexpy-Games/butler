@@ -51,6 +51,7 @@ export function projectFeedbackPlanningContext(
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
     requiredOutcomeId: program.requiredOutcomeId,
+    requiredTargetEffects: accepted.goalContract.requiredTargetEffects ?? [],
     artifactPersistence: accepted.goalContract.artifactPersistence,
     ...projectReviewValidationSource(currentResult.result),
     ...revisionContext(managed),

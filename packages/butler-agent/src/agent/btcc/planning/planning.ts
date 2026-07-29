@@ -119,6 +119,7 @@ async function authorInitialPlan(command: {
     goalContractRef: authority.goalContractRef,
     authorityRef: authority.authorityRef,
     requiredOutcomeId: authority.requiredOutcomeId,
+    requiredTargetEffects: accepted.goalContract.requiredTargetEffects ?? [],
     artifactPersistence: accepted.goalContract.artifactPersistence,
     ledgerId: authority.ledgerId,
     ...(specParentRootId(accepted.authority) ? {

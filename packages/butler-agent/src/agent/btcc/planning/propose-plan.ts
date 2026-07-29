@@ -82,6 +82,9 @@ function planningCodec(
         goalContractRef: requireContentRef(state.goalContractRef, "goalContractRef"),
         authorityRef: requireContentRef(state.authorityRef, "authorityRef"),
         requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+        requiredTargetEffects: Array.isArray(state.requiredTargetEffects)
+          ? state.requiredTargetEffects
+          : [],
         artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
         workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
         ledgerId: requireString(state.ledgerId, "ledgerId"),

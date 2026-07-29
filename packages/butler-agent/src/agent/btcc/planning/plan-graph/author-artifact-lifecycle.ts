@@ -6,6 +6,7 @@ import type {
   PlanningCandidate,
   TaskMutationScope,
 } from "../contracts.ts";
+import type { GoalRequiredTargetEffect } from "../../conception/index.ts";
 import {
   materializeEffectIntents,
   materializeIntegrationCriteria,
@@ -80,6 +81,7 @@ export function authorArtifactLifecycle(
     programId: string;
     requiredOutcomeId: string;
     authorityRef: ContentRef;
+    requiredTargetEffects: GoalRequiredTargetEffect[];
   },
   carriedArtifactTasks: ManagedTask[] = [],
 ): {

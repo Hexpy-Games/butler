@@ -144,6 +144,9 @@ function feedbackPlanningCodec(
           } : {}),
           requireGoverningSpec: Boolean(state.requireGoverningSpec),
           requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
+          requiredTargetEffects: Array.isArray(state.requiredTargetEffects)
+            ? state.requiredTargetEffects
+            : [],
           artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
           workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
           carriedArtifactTasks: Array.isArray(state.carriedArtifactTasks)

@@ -174,6 +174,9 @@ const DUTIES = {
     "remote/ref, or named production service. Do not discover credentials, SSH hostnames,",
     "ports, or deployment paths merely to author the Plan; Execution resolves those",
     "connection parameters immediately before the authorized effect.",
+    "Bind each external_target_mutation to one exact GoalContract requiredTargetEffectId,",
+    "copy its targetScopeRef and desiredOutcome exactly, and cover that set exactly once.",
+    "Repository promotion is runtime-owned and binds no requiredTargetEffectId.",
   ].join(" "),
   author_artifact_lifecycle: "Bind one exact artifact policy per Task and complete selectors, integration, promotion protocol, target derivation, immutable Review sources, and disposable validation. Repository promotion atomically exchanges reviewed workspace bytes only; Git commit, push, and deployment require explicit successor effect Tasks.",
   review_plan_exactly: [
