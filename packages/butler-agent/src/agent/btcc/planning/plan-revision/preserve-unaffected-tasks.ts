@@ -2,6 +2,7 @@ import { requireRecord, requireString, type ContentRef } from "../../core/index.
 import { legacyDisplayTitle } from "../../core/display-title.ts";
 import type {
   ManagedTask,
+  ManagedWork,
   PlanningCandidate,
   TaskArtifactPolicy,
 } from "../contracts.ts";
@@ -17,40 +18,97 @@ export function preserveUnaffectedTaskDrafts(input: {
   const priorTasks = new Map(
     input.acceptedPlan.tasks.map((task) => [task.taskLogicalId, task]),
   );
-  const reconstructed = new Set<string>();
-  const works = requiredArray(input.revisedPlan.works, "revisedPlan.works");
-  const nextWorks = works.map((value, workIndex) => {
-    const work = requireRecord(value, `revisedPlan.works[${workIndex}]`);
-    const workId = requireString(work.logicalId, `revisedPlan.works[${workIndex}].logicalId`);
-    const tasks = requiredArray(work.tasks, `revisedPlan.works[${workIndex}].tasks`);
-    return {
-      ...work,
-      tasks: tasks.map((taskValue, taskIndex) => {
-        const task = requireRecord(
-          taskValue,
-          `revisedPlan.works[${workIndex}].tasks[${taskIndex}]`,
-        );
-        const taskId = requireString(task.logicalId, "revised Task logicalId");
-        if (!unaffected.has(taskId)) return task;
-        const prior = priorTasks.get(taskId);
-        if (!prior) throw new Error(`Unaffected Task is absent from accepted Plan: ${taskId}`);
-        if (prior.workLogicalId !== workId) {
-          throw new Error(
-            `Unaffected Task ${taskId} must remain in Work ${prior.workLogicalId}`,
-          );
-        }
-        reconstructed.add(taskId);
-        return reconstructTaskDraft(prior, input.acceptedPlan);
-      }),
-    };
-  });
+  const nextWorks = requiredArray(input.revisedPlan.works, "revisedPlan.works")
+    .map((value, index) => decodeWorkDraft(value, index));
 
   for (const taskId of unaffected) {
-    if (!reconstructed.has(taskId)) {
-      throw new Error(`Unaffected Task is missing from revised Plan: ${taskId}`);
-    }
+    const priorTask = priorTasks.get(taskId);
+    if (!priorTask) throw new Error(`Unaffected Task is absent from accepted Plan: ${taskId}`);
+    rejectMovedTask(nextWorks, priorTask);
+    const work = findOrRestoreWork(nextWorks, priorTask, input.acceptedPlan);
+    restoreTaskAtAcceptedPosition(work, priorTask, input.acceptedPlan);
   }
   return { ...input.revisedPlan, works: nextWorks };
+}
+
+type WorkDraft = Record<string, unknown> & {
+  logicalId: string;
+  tasks: Record<string, unknown>[];
+};
+
+function decodeWorkDraft(value: unknown, workIndex: number): WorkDraft {
+  const work = requireRecord(value, `revisedPlan.works[${workIndex}]`);
+  const logicalId = requireString(
+    work.logicalId,
+    `revisedPlan.works[${workIndex}].logicalId`,
+  );
+  const tasks = requiredArray(work.tasks, `revisedPlan.works[${workIndex}].tasks`)
+    .map((task, taskIndex) =>
+      requireRecord(task, `revisedPlan.works[${workIndex}].tasks[${taskIndex}]`));
+  return { ...work, logicalId, tasks };
+}
+
+function rejectMovedTask(works: WorkDraft[], prior: ManagedTask): void {
+  for (const work of works) {
+    if (work.logicalId === prior.workLogicalId) continue;
+    if (work.tasks.some((task) => task.logicalId === prior.taskLogicalId)) {
+      throw new Error(
+        `Unaffected Task ${prior.taskLogicalId} must remain in Work ${prior.workLogicalId}`,
+      );
+    }
+  }
+}
+
+function findOrRestoreWork(
+  works: WorkDraft[],
+  priorTask: ManagedTask,
+  plan: PlanningCandidate,
+): WorkDraft {
+  const existing = works.find((work) => work.logicalId === priorTask.workLogicalId);
+  if (existing) return existing;
+  const priorWork = plan.works.find(
+    (work) => work.workLogicalId === priorTask.workLogicalId,
+  );
+  if (!priorWork) throw new Error(`Accepted Plan is missing Work ${priorTask.workLogicalId}`);
+  const restored = reconstructWorkDraft(priorWork, plan);
+  works.splice(Math.min(plan.works.indexOf(priorWork), works.length), 0, restored);
+  return restored;
+}
+
+function restoreTaskAtAcceptedPosition(
+  work: WorkDraft,
+  priorTask: ManagedTask,
+  plan: PlanningCandidate,
+): void {
+  const existingIndexes = work.tasks.flatMap((task, index) =>
+    task.logicalId === priorTask.taskLogicalId ? [index] : []);
+  if (existingIndexes.length > 1) {
+    throw new Error(`Revised Plan duplicates Task ${priorTask.taskLogicalId}`);
+  }
+  const restored = reconstructTaskDraft(priorTask, plan);
+  if (existingIndexes.length === 1) {
+    work.tasks[existingIndexes[0]!] = restored;
+    return;
+  }
+  const priorWork = plan.works.find((candidate) =>
+    candidate.workLogicalId === priorTask.workLogicalId);
+  if (!priorWork) throw new Error(`Accepted Plan is missing Work ${priorTask.workLogicalId}`);
+  const acceptedIndex = priorWork.taskRefs.findIndex((ref) => refKey(ref) === refKey(priorTask.ref));
+  if (acceptedIndex < 0) throw new Error(`Accepted Work is missing Task ${priorTask.taskLogicalId}`);
+  work.tasks.splice(Math.min(acceptedIndex, work.tasks.length), 0, restored);
+}
+
+function reconstructWorkDraft(work: ManagedWork, plan: PlanningCandidate): WorkDraft {
+  const workIdsByRef = new Map(
+    plan.works.map((candidate) => [refKey(candidate.ref), candidate.workLogicalId]),
+  );
+  return {
+    logicalId: work.workLogicalId,
+    outcome: work.outcome,
+    dependencyWorkIds: work.dependencyWorkRefs.map((ref) =>
+      requiredLookup(workIdsByRef, ref, "dependency Work")),
+    tasks: [],
+  };
 }
 
 function unaffectedTaskIds(value: unknown): Set<string> {

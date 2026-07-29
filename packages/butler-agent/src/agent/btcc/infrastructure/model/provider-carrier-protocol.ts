@@ -32,9 +32,27 @@ export function acceptProviderCarrier(
   carrier: unknown,
   acceptance: CarrierAcceptance,
 ): ProviderRoundValue {
-  const value = requireCarrierObject(carrier);
+  const value = canonicalizeCarrierPresentation(requireCarrierObject(carrier));
   assertRenderedSchema(value, acceptance.responseSchema);
   return decodeCarrier(value, acceptance.authority, acceptance.actualIdentity);
+}
+
+function canonicalizeCarrierPresentation(
+  carrier: Record<string, unknown>,
+): Record<string, unknown> {
+  if (carrier.kind !== "phase_submission" || !isRecord(carrier.submission)) {
+    return carrier;
+  }
+  const nestedActivity = carrier.submission.publicActivity;
+  if (!isRecord(nestedActivity)) return carrier;
+  const { publicActivity: _nested, ...submission } = carrier.submission;
+  return {
+    ...carrier,
+    submission,
+    publicActivity: isRecord(carrier.publicActivity)
+      ? carrier.publicActivity
+      : nestedActivity,
+  };
 }
 
 function requireCarrierObject(carrier: unknown): Record<string, unknown> {

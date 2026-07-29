@@ -229,6 +229,7 @@ export function feedbackPlanSubmissionSchema(
     | "governing_revision"
     | "authority_scope_revision",
   findingIds: string[] = [],
+  currentTaskCount = 1,
 ): SubmissionSchema {
   const revisedPlan = revisedPlanSubmissionSchema(logicalIds);
   const decisions: Record<string, SubmissionSchema> =
@@ -250,7 +251,10 @@ export function feedbackPlanSubmissionSchema(
       correctionAction: textSchema(),
       executionRequirement: correctionExecutionRequirement,
       revisedPlan,
-      impactMap: arraySchema(impact, { minItems: 1 }),
+      impactMap: arraySchema(impact, {
+        minItems: currentTaskCount,
+        maxItems: currentTaskCount,
+      }),
     }),
     authority_scope_revision: objectSchema({
       kind: literalSchema("feedback_plan_candidate"),
@@ -259,7 +263,10 @@ export function feedbackPlanSubmissionSchema(
       correctionAction: textSchema(),
       executionRequirement: correctionExecutionRequirement,
       revisedPlan,
-      impactMap: arraySchema(impact, { minItems: 1 }),
+      impactMap: arraySchema(impact, {
+        minItems: currentTaskCount,
+        maxItems: currentTaskCount,
+      }),
       authorityChange: textSchema(),
     }),
   };

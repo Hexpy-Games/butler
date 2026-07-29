@@ -185,8 +185,11 @@ test("unaffected lineage preserves the exact Task revision", () => {
 });
 
 test("impact schema requires successors except when replanning", () => {
-  const schema = feedbackPlanSubmissionSchema([], "governing_revision") as any;
+  const schema = feedbackPlanSubmissionSchema([], "governing_revision", [], 4) as any;
   const variants = schema.properties.impactMap.items.anyOf;
+
+  expect(schema.properties.impactMap.minItems).toBe(4);
+  expect(schema.properties.impactMap.maxItems).toBe(4);
 
   expect(variants[0].properties.disposition).toEqual({
     type: "string",

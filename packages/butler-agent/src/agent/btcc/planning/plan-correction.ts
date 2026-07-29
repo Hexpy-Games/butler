@@ -54,12 +54,14 @@ function feedbackPlanningCodec(
   availableSpecIds: string[],
   correctionKind: FeedbackIntentProduct["feedbackIntent"]["correctionKind"],
   priorFindingRefs: ContentRef[],
+  currentTaskCount: number,
 ) {
   return withManagedDeferral<FeedbackPlanProduct>({
     submissionSchema: feedbackPlanSubmissionSchema(
       availableSpecIds,
       correctionKind,
       priorFindingRefs.map((ref) => ref.id),
+      currentTaskCount,
     ),
     decode(submission, envelope) {
       const state = requireRecord(envelope.context.stateInput, "Feedback Planning state");
@@ -194,6 +196,7 @@ export function proposeCorrectionOrRevision(command: PhaseInvocation) {
       availableSpecs.map((spec) => spec.logicalId),
       correctionKind,
       priorFindingRefs,
+      requireTaskImpactIndex(state.taskImpactIndex).length,
     ),
   });
 }
