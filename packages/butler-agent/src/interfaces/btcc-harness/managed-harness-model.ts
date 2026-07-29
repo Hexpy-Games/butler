@@ -58,6 +58,7 @@ export class ManagedHarnessModel implements SelectedModel {
     private readonly reviewFindingDecision:
       "apply_now" | "dispute" | "split_to_backlog" = "apply_now",
     private readonly reviseFeedbackIntent = false,
+    private readonly reopenArtifactTasks = false,
   ) {}
 
   async runRound(envelope: PhaseEnvelope): Promise<ProviderRoundValue> {
@@ -272,6 +273,7 @@ export class ManagedHarnessModel implements SelectedModel {
           state,
           intent.correctionKind as HarnessCorrectionKind,
           this.revalidateAcceptedTask,
+          this.reopenArtifactTasks,
         );
       }
       case "feedback_planning_review":

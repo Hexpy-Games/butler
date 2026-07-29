@@ -47,6 +47,7 @@ type HarnessOptions = {
     | "managed-goal-revision"
     | "managed-feedback-planning-revision"
     | "managed-feedback-intent-revision"
+    | "managed-readonly-mutation-routing"
     | "managed-governing-revision"
     | "managed-governing-revalidation"
     | "managed-authority-revision"
@@ -78,7 +79,7 @@ async function runHarness(options: HarnessOptions): Promise<void> {
     artifacts: new HarnessArtifactWorkspace(),
     ...(projectLedger ? { projectLedger } : {}),
   });
-  const controls = { reasoningEffort: options.effort };
+  const controls = { reasoningEffort: options.effort, accessMode: "full_access" as const };
   const messageId = digest(`btcc-user-message.v1\0${options.sessionId}\0${options.message}`);
   const command: Extract<BtccTurnCommand, { kind: "run" }> = {
     kind: "run",
@@ -223,6 +224,7 @@ function parseScenario(value: string | undefined): HarnessOptions["scenario"] {
     value === "managed-goal-revision" ||
     value === "managed-feedback-planning-revision" ||
     value === "managed-feedback-intent-revision" ||
+    value === "managed-readonly-mutation-routing" ||
     value === "managed-governing-revision" ||
     value === "managed-governing-revalidation" ||
     value === "managed-authority-revision" ||
@@ -263,6 +265,7 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
     scenario === "managed-goal-revision" ||
     scenario === "managed-feedback-planning-revision" ||
     scenario === "managed-feedback-intent-revision" ||
+    scenario === "managed-readonly-mutation-routing" ||
     scenario === "managed-governing-revision" ||
     scenario === "managed-governing-revalidation" ||
     scenario === "managed-authority-revision"
@@ -285,7 +288,9 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
         : scenario === "managed-authority-revision"
           ? "authority_scope_revision"
           : "implementation_repair",
-      scenario === "managed-artifact" || scenario === "managed-promotion-deferral",
+      scenario === "managed-artifact" ||
+        scenario === "managed-promotion-deferral" ||
+        scenario === "managed-readonly-mutation-routing",
       scenario === "managed-deferral"
         ? "planning"
         : scenario === "managed-promotion-deferral"
@@ -294,14 +299,17 @@ function createHarnessModel(scenario: HarnessOptions["scenario"], dataRoot?: str
       scenario === "managed-continuation",
       scenario === "managed-consolidation-repair",
       scenario === "managed-goal-revision",
-      scenario === "managed-governing-revalidation" ? 2 : 1,
+      scenario === "managed-governing-revalidation" ||
+        scenario === "managed-readonly-mutation-routing" ? 2 : 1,
       scenario === "managed-governing-revalidation",
       scenario === "managed-review-dispute"
         ? "dispute"
         : scenario === "managed-review-backlog"
           ? "split_to_backlog"
           : "apply_now",
-      scenario === "managed-feedback-intent-revision",
+      scenario === "managed-feedback-intent-revision" ||
+        scenario === "managed-readonly-mutation-routing",
+      scenario === "managed-readonly-mutation-routing",
     );
   }
   return new NoLedgerHarnessModel(scenario);
