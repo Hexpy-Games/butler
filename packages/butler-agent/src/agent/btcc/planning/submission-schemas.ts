@@ -57,7 +57,7 @@ const task = variantsSchema(
   }),
   objectSchema({
     ...taskFields,
-    effectClass: literalSchema("external_effect"),
+    effectClass: literalSchema("repository_promotion"),
     artifactPolicy: objectSchema({
       kind: literalSchema("repository_promotion"),
       targetPath: textSchema(),

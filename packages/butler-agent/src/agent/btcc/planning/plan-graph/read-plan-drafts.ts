@@ -12,7 +12,7 @@ export type TaskDraft = {
   intendedOutcome: string;
   executionOrdinal: number;
   dependencyTaskIds: string[];
-  effectClass: "none" | "external_effect";
+  effectClass: "none" | "external_effect" | "repository_promotion";
   targetScopeRefs: string[];
   artifactPolicy?: DraftArtifactPolicy;
   criteria: CriterionDraft[];
@@ -168,7 +168,8 @@ function readTaskDraft(
   }
   const artifactPolicy = readArtifactPolicy(task.artifactPolicy, label, workspaceScopeRef);
   const effectClass = requireString(task.effectClass, `${label}.effectClass`);
-  if (effectClass !== "none" && effectClass !== "external_effect") {
+  if (effectClass !== "none" && effectClass !== "external_effect" &&
+    effectClass !== "repository_promotion") {
     rejectPlanningProposal("effect_class_invalid", `${label}.effectClass is invalid`);
   }
   if (artifactPolicy?.kind === "workspace_artifact" && effectClass === "external_effect" &&
@@ -178,10 +179,16 @@ function readTaskDraft(
       "External-effect Task may observe workspace bytes only through a read-only artifact policy",
     );
   }
-  if (artifactPolicy?.kind === "repository_promotion" && effectClass !== "external_effect") {
+  if (artifactPolicy?.kind === "repository_promotion" && effectClass !== "repository_promotion") {
     rejectPlanningProposal(
       "promotion_effect_missing",
-      "Repository promotion Task requires an external effect",
+      "Repository promotion Task requires the repository_promotion effect class",
+    );
+  }
+  if (artifactPolicy?.kind !== "repository_promotion" && effectClass === "repository_promotion") {
+    rejectPlanningProposal(
+      "promotion_policy_missing",
+      "repository_promotion effect class requires a repository promotion policy",
     );
   }
   const declaredTargetScopes = requireStringArray(task.targetScopeRefs, "targetScopeRefs");

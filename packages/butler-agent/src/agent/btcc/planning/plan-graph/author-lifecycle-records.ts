@@ -88,11 +88,19 @@ export function materializeEffectIntents(
   const effects = drafts.map((item, index) => {
     const draft = requireRecord(item, `effectIntents[${index}]`);
     const task = requiredTaskRecord(byId, requireString(draft.taskId, "effect.taskId"));
-    if (task.effectClass !== "external_effect") {
+    if (task.effectClass === "none") {
       rejectPlanningProposal("effect_boundary_missing",
-        "EffectIntent names a Task without an external-effect boundary");
+        "EffectIntent names an effect-free Task");
     }
     const actionKind = requireString(draft.actionKind, "effect.actionKind");
+    if (actionKind === "repository_promotion" && task.effectClass !== "repository_promotion") {
+      rejectPlanningProposal("promotion_effect_boundary_mismatch",
+        "Repository promotion EffectIntent requires a repository_promotion Task");
+    }
+    if (actionKind === "external_target_mutation" && task.effectClass !== "external_effect") {
+      rejectPlanningProposal("external_effect_boundary_mismatch",
+        "External target mutation requires a separate external_effect Task");
+    }
     const action = actionKind === "repository_promotion"
       ? repositoryPromotionAction(task, selectors)
       : actionKind === "external_target_mutation"
@@ -199,13 +207,13 @@ function validateTaskEffects(task: ManagedTask, effects: ManagedEffectIntent[]):
     rejectPlanningProposal("effect_intent_missing",
       `External-effect Task has no EffectIntent: ${task.taskLogicalId}`);
   }
+  if (task.effectClass === "repository_promotion" && owned.length !== 1) {
+    rejectPlanningProposal("promotion_effect_intent_count",
+      `Promotion Task requires exactly one EffectIntent: ${task.taskLogicalId}`);
+  }
   if (task.effectClass === "none" && owned.length !== 0) {
     rejectPlanningProposal("unexpected_effect_intent",
       `Effect-free Task has EffectIntents: ${task.taskLogicalId}`);
-  }
-  if (task.artifactPolicy.kind === "repository_promotion" && owned.length !== 1) {
-    rejectPlanningProposal("promotion_effect_intent_count",
-      `Promotion Task requires exactly one EffectIntent: ${task.taskLogicalId}`);
   }
 }
 
