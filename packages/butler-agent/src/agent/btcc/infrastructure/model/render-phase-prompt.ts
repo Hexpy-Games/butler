@@ -41,7 +41,9 @@ export async function renderPhasePrompt(
       ...(envelope.context.projectRef ? { projectRef: envelope.context.projectRef } : {}),
     }),
   ]);
-  const availableCapabilities = capabilitySurface.availableCapabilities;
+  const availableCapabilities = envelope.operationSurface === "closed"
+    ? []
+    : capabilitySurface.availableCapabilities;
   assertRequiredMutationCapability(operationAuthority, availableCapabilities);
   const providerVocabulary = envelope.operationSurface === "closed"
     ? []
@@ -77,7 +79,6 @@ export async function renderPhasePrompt(
     resolvedContext,
     availableCapabilities,
     acceptedPhaseGuidance,
-    operationAuthority,
     operationContext,
   }).prompt;
   const operationContext = fitOperationContext({
@@ -96,7 +97,6 @@ export async function renderPhasePrompt(
     resolvedContext,
     availableCapabilities,
     acceptedPhaseGuidance,
-    operationAuthority,
     operationContext,
   });
   return {

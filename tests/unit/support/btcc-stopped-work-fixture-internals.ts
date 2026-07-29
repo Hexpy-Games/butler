@@ -104,6 +104,7 @@ export function planSubmission(
       dependencyWorkIds: [],
       tasks: suffixes.map((suffix, index) => ({
         logicalId: `task-${suffix}`,
+        displayTitle: `Task ${suffix.toUpperCase()}`,
         intendedOutcome: `Complete task ${suffix.toUpperCase()}.`,
         dependencyTaskIds: index === 0 ? [] : [`task-${suffixes[index - 1]}`],
         targetScopeRefs: ["session:session-fixture"],

@@ -205,6 +205,9 @@ const DUTIES = {
   review_executability: [
     "Require every Task to have sufficient inputs, authority, target, criteria,",
     "and verification to execute and review independently. Simulate the projected Task",
+    "from its accepted artifact policy, EffectIntents, and lifecycle. The current phase",
+    "tool surface is not future Task authority; never treat an absent mutation capability",
+    "during Planning or Review as evidence that an accepted execution Task is blocked.",
     "alone and reject a boundary whose ordinary findings would reopen several separable",
     "storage, evaluation, policy, integration, or verification programs. Reject a Task",
     "that combines unresolved production-path discovery with multi-layer implementation.",

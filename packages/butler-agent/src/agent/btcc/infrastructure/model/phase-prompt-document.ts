@@ -25,7 +25,6 @@ export function renderCacheOrderedPhasePrompt(input: {
   };
   availableCapabilities: AvailablePhaseCapability[];
   acceptedPhaseGuidance: AcceptedPhaseGuidance[];
-  operationAuthority: PhaseEnvelope["operationAuthority"];
   operationContext: ProjectedOperationContext;
 }): { prompt: string; promptCacheBoundary: PromptCacheBoundary } {
   const stablePrefix = canonicalJson(stablePhasePrefix(input)) + DOCUMENT_BOUNDARY;
@@ -87,7 +86,6 @@ function dynamicTurnContent(input: Parameters<typeof renderCacheOrderedPhaseProm
         baselineObservationScopeRefs: envelope.context.baselineObservationScopeRefs,
       },
       operationContext: promptOperationContext(input.operationContext),
-      operationAuthority: input.operationAuthority,
       capabilitySchemas: input.availableCapabilities,
       availableCarrierKinds: envelope.operationSurface !== "closed" &&
           input.availableCapabilities.length > 0

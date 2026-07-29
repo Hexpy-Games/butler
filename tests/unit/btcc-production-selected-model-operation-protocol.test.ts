@@ -62,16 +62,13 @@ describe("production BTCC selected model", () => {
       layer: "immutablePhaseContract",
       content: expect.objectContaining({ operationSurface: "closed" }),
     });
-    expect(rendered.dynamic.operationAuthority).toEqual({
-      observationScopeRefs: [],
-      mutation: { kind: "forbidden" },
-    });
+    expect(rendered.dynamic).not.toHaveProperty("operationAuthority");
     expect(rendered.dynamic.capabilitySchemas).toEqual([]);
     expect(rendered.dynamic.availableCarrierKinds).toEqual(["phase_submission"]);
     expect(rendered.stable.carrierProtocol).toEqual({
       phaseSubmission: [
         "Use one submission object allowed by the exact phase exits.",
-        "Write publicActivity as a concise user-visible handoff: name the concrete target and decision or result, why it matters to the accepted Goal, governing Spec, Plan, or review finding, and the next observable action or transition.",
+        "Write publicActivity as a user-visible handoff: title is a concrete display label normally around 20 characters and never over 32 Unicode characters; summary names the complete target and decision or result; rationale explains why it matters; nextStep names the next observable action or transition.",
         "Do not substitute a generic phase label for useful activity detail.",
         "Do not expose hidden chain-of-thought or copy raw operation output.",
       ].join(" "),
