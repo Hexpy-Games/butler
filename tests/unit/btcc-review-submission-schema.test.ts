@@ -3,33 +3,17 @@ import { taskReviewSubmissionSchema } from "../../packages/butler-agent/src/agen
 import { feedbackPlanReviewSubmissionSchema } from
   "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
 
-test("promotion Review exposes only a satisfied criterion verdict", () => {
-  const schema = taskReviewSubmissionSchema("promotion_identity");
+test("Task Review can reject an unmet promotion criterion", () => {
+  const schema = taskReviewSubmissionSchema();
   const verdict = criterionVerdictSchema(schema);
 
   expect(schema.anyOf).toBeUndefined();
-  expect(verdict).toEqual({
-    type: "object",
-    properties: {
-      criterionRef: {
-        type: "object",
-        properties: {
-          id: { type: "string", minLength: 1 },
-          sha256: { type: "string", minLength: 1 },
-        },
-        required: ["id", "sha256"],
-        additionalProperties: false,
-      },
-      observation: { type: "string", minLength: 1 },
-      verdict: { type: "string", const: "satisfied" },
-    },
-    required: ["criterionRef", "observation", "verdict"],
-    additionalProperties: false,
-  });
+  expect(JSON.stringify(verdict)).toContain('"enum":["satisfied","not_satisfied"]');
+  expect(JSON.stringify(rootFindingSchema(schema))).toContain('"const":"required_now"');
 });
 
 test("ordinary Task Review separates pass, backlog, and blocking findings", () => {
-  const schema = taskReviewSubmissionSchema("semantic");
+  const schema = taskReviewSubmissionSchema();
   const verdict = criterionVerdictSchema(schema);
   const findings = rootFindingSchema(schema);
 
@@ -39,7 +23,7 @@ test("ordinary Task Review separates pass, backlog, and blocking findings", () =
 });
 
 test("correction Task Review judges frozen root causes without re-authoring them", () => {
-  const schema = taskReviewSubmissionSchema("semantic", ["root-cause-1"]);
+  const schema = taskReviewSubmissionSchema(["root-cause-1"]);
   const serialized = JSON.stringify(schema);
   const properties = schema.properties as Record<string, Record<string, unknown>>;
 

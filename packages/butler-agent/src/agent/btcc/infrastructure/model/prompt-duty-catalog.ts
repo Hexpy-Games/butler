@@ -164,7 +164,7 @@ const DUTIES = {
     "ports, or deployment paths merely to author the Plan; Execution resolves those",
     "connection parameters immediately before the authorized effect.",
   ].join(" "),
-  author_artifact_lifecycle: "Bind one exact artifact policy per Task and complete selectors, integration, promotion protocol, target derivation, immutable Review sources, disposable validation, and promotion identity Review.",
+  author_artifact_lifecycle: "Bind one exact artifact policy per Task and complete selectors, integration, promotion protocol, target derivation, immutable Review sources, and disposable validation. Repository promotion atomically exchanges reviewed workspace bytes only; Git commit, push, and deployment require explicit successor effect Tasks.",
   review_plan_exactly: [
     "Review the complete materialized candidate bytes against the immutable GoalContract,",
     "the exact governing Spec bodies in currentPlanningAuthority.governingSpecs, and",
@@ -221,7 +221,7 @@ const DUTIES = {
   review_dependencies: "Check exact graph membership, acyclicity, ordinals, frontier reachability, and replacement boundaries.",
   review_verification_integration: "Check every criterion, verification question, and integration branch for complete RequiredOutcome coverage and observable compatibility.",
   review_effect_authority: "Check every external EffectIntent against accepted authority, target, idempotency, reconciliation, and least scope.",
-  review_artifact_lifecycle: "Review the exact artifact lifecycle for policy and selector equality, containment, integration, promotion frontier, atomic protocol, immutable Review sources, disposable validation, and identity-only promotion Review.",
+  review_artifact_lifecycle: "Review the exact artifact lifecycle for policy and selector equality, containment, integration, promotion frontier, atomic protocol, immutable Review sources, and disposable validation. Reject a repository-promotion Task that assigns Git commit, push, deployment, or another effect outside atomic reviewed-byte exchange to that boundary.",
   review_goal_artifact_persistence: "Verify that the complete Plan implements the accepted Goal artifactPersistence value exactly: required owns one valid repository-promotion path, while not_required owns none.",
   execute_accepted_task: [
     "Execute only the current accepted Task and execution target within its exact",

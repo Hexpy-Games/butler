@@ -43,7 +43,6 @@ function semanticReviewCodec(
 ): PhaseCodec<TaskReviewProduct> {
   return {
   submissionSchema: taskReviewSubmissionSchema(
-    "semantic",
     priorFindings.map((finding) => finding.rootCauseKey),
   ),
   decode(submission, envelope) {
@@ -79,9 +78,6 @@ function semanticReviewCodec(
       );
       validateCorrectionFindingScope(orderedFindings, priorFindings);
     const passed = decoded.verdicts.every((verdict) => verdict.verdict === "satisfied");
-    if (result.result.kind === "repository_promotion" && !passed) {
-      throw new Error("Promotion Review is identity-only and cannot fail semantically");
-    }
     const validationReceiptRefs = envelope.operationResults
       .filter((operation) =>
         operation.outcome === "review_validated" &&
@@ -202,13 +198,6 @@ function requireCorrectionContext(
   }
 }
 
-function promotionCodec() {
-  return {
-  ...semanticReviewCodec([]),
-  submissionSchema: taskReviewSubmissionSchema("promotion_identity"),
-};
-}
-
 export function reviewTask(command: PhaseInvocation) {
   const state = requireRecord(command.context.stateInput, "Task Review state");
   const result = state.resultCandidate as ResultCandidateProduct | undefined;
@@ -219,8 +208,6 @@ export function reviewTask(command: PhaseInvocation) {
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,
-    codec: result.result.kind === "repository_promotion"
-      ? promotionCodec()
-      : withManagedDeferral(semanticReviewCodec(priorFindings)),
+    codec: withManagedDeferral(semanticReviewCodec(priorFindings)),
   });
 }
