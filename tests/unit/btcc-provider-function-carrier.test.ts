@@ -5,6 +5,8 @@ import { providerCarrierFunctions } from
   "../../packages/butler-agent/src/agent/btcc/infrastructure/model/provider-carrier-schema.ts";
 import { taskReviewSubmissionSchema } from
   "../../packages/butler-agent/src/agent/btcc/review/submission-schema.ts";
+import { validateJsonObjectSchema } from
+  "../../packages/butler-agent/src/agent/tools/tool-bridge/schema-validation.ts";
 
 test("function-tool phase carrier fields bind without an alternate flat shape", () => {
   const publicActivity = {
@@ -49,6 +51,58 @@ test("function-tool operation arguments retain carrier fields", () => {
     phaseContinuity: { objectiveState: "inspect" },
     requests: [{ requestId: "read-1" }],
   });
+});
+
+test("function-tool operations expose only the exact admitted capability surface", () => {
+  const definition = providerCarrierFunctions([{
+    capabilityRef: "read_file",
+    name: "read_file",
+    description: "Read an admitted file.",
+    operationKind: "observe",
+    observationScopeRefs: ["workspace:current"],
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  }], taskReviewSubmissionSchema("semantic")).find(
+    (candidate) => candidate.carrierKind === "operation_requests",
+  );
+  expect(definition).toBeDefined();
+  const continuity = {
+    objectiveState: "Inspect the file.",
+    decisions: [],
+    unresolved: [],
+    nextOperationPurpose: "Read it.",
+    publicActivity: {
+      title: "파일 확인",
+      summary: "현재 파일을 확인합니다.",
+      rationale: "다음 판단에 필요합니다.",
+      nextStep: "읽은 내용을 검토합니다.",
+    },
+  };
+  const request = {
+    requestId: "read-1",
+    kind: "observe",
+    capabilityRef: "read_file",
+    scopeRef: "workspace:current",
+    publicTitle: "현재 파일 확인",
+    input: { path: "src/main.ts" },
+  };
+
+  expect(validateJsonObjectSchema({
+    phaseContinuity: continuity,
+    requests: [request],
+  }, definition!.parameters).ok).toBe(true);
+  expect(validateJsonObjectSchema({
+    phaseContinuity: continuity,
+    requests: [{ ...request, capabilityRef: "run_command" }],
+  }, definition!.parameters).ok).toBe(false);
+  expect(validateJsonObjectSchema({
+    phaseContinuity: continuity,
+    requests: [{ ...request, scopeRef: "workspace:other" }],
+  }, definition!.parameters).ok).toBe(false);
 });
 
 test("task-review function exposes and binds the exact explicit submission carrier", () => {

@@ -8,11 +8,8 @@ import type {
   ResolvedContextDocument,
   StructuralCapabilityCatalog,
 } from "./contracts.ts";
-import { resolvePhaseCapabilities } from "./available-capabilities.ts";
-import {
-  providerCarrierAdmissionSchema,
-  providerCarrierSchema,
-} from "./provider-carrier-schema.ts";
+import { resolveAvailableCapabilities } from "./available-capabilities.ts";
+import { providerCarrierSchema } from "./provider-carrier-schema.ts";
 import { providerCarrierFunctions } from "./provider-carrier-schema.ts";
 import type { PhaseGuidanceReader } from "../../guidance/index.ts";
 import {
@@ -30,7 +27,7 @@ export async function renderPhasePrompt(
   const operationAuthority = envelope.operationAuthority;
   const [resolvedContext, capabilitySurface, acceptedPhaseGuidance] = await Promise.all([
     resolveButlerContext(envelope, contextResolver),
-    resolvePhaseCapabilities({
+    resolveAvailableCapabilities({
       authority: operationAuthority,
       catalog: capabilityCatalog,
     }),
@@ -43,25 +40,16 @@ export async function renderPhasePrompt(
   ]);
   const availableCapabilities = envelope.operationSurface === "closed"
     ? []
-    : capabilitySurface.availableCapabilities;
+    : capabilitySurface;
   if (envelope.operationSurface === "authorized") {
     assertRequiredMutationCapability(operationAuthority, availableCapabilities);
   }
-  const providerVocabulary = envelope.operationSurface === "closed"
-    ? []
-    : capabilitySurface.providerVocabulary;
   const responseSchema = providerCarrierSchema(
-    providerVocabulary,
-    envelope.submissionSchema,
-  );
-  const carrierAdmissionSchema = providerCarrierAdmissionSchema(
-    providerVocabulary,
     availableCapabilities,
     envelope.submissionSchema,
-    operationAuthority,
   );
   const carrierFunctions = providerCarrierFunctions(
-    providerVocabulary,
+    availableCapabilities,
     envelope.submissionSchema,
   );
   const instructions = [
@@ -105,7 +93,6 @@ export async function renderPhasePrompt(
     instructions,
     ...renderedPrompt,
     responseSchema,
-    carrierAdmissionSchema,
     carrierFunctions,
   };
 }

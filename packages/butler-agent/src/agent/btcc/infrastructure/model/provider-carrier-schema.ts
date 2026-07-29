@@ -1,65 +1,34 @@
 import type {
   AvailablePhaseCapability,
-  ProviderCapabilityVocabularyEntry,
   ProviderCarrierFunction,
 } from "./contracts.ts";
-import type { OperationAuthority } from "../../core/index.ts";
 import { DISPLAY_TITLE_MAX_LENGTH } from "../../core/display-title.ts";
 
 export function providerCarrierSchema(
-  capabilities: readonly ProviderCapabilityVocabularyEntry[],
+  capabilities: readonly AvailablePhaseCapability[],
   submissionSchema: Record<string, unknown>,
 ): Record<string, unknown> {
   if (capabilities.length === 0) return phaseSubmissionSchema(submissionSchema);
   return {
     anyOf: [
       phaseSubmissionSchema(submissionSchema),
-      operationRequestsSchema(capabilities, { kind: "vocabulary" }),
+      operationRequestsSchema(capabilities),
     ],
   };
-}
-
-export function providerCarrierAdmissionSchema(
-  vocabulary: readonly ProviderCapabilityVocabularyEntry[],
-  available: readonly AvailablePhaseCapability[],
-  submissionSchema: Record<string, unknown>,
-  authority: OperationAuthority,
-): Record<string, unknown> {
-  const capabilities = admissionCapabilities(vocabulary, available);
-  if (capabilities.length === 0) return phaseSubmissionSchema(submissionSchema);
-  return {
-    anyOf: [
-      phaseSubmissionSchema(submissionSchema),
-      operationRequestsSchema(capabilities, { kind: "exact", authority }),
-    ],
-  };
-}
-
-function admissionCapabilities(
-  vocabulary: readonly ProviderCapabilityVocabularyEntry[],
-  available: readonly AvailablePhaseCapability[],
-): CarrierCapability[] {
-  return [
-    ...available.filter((capability) => capability.operationKind === "observe"),
-    ...vocabulary.filter((capability) => capability.operationKind !== "observe"),
-  ];
 }
 
 export function providerCarrierFunctions(
-  capabilities: readonly ProviderCapabilityVocabularyEntry[],
+  capabilities: readonly AvailablePhaseCapability[],
   submissionSchema: Record<string, unknown>,
 ): ProviderCarrierFunction[] {
   const functions = phaseSubmissionFunctions(submissionSchema);
   if (capabilities.length > 0) {
-    const carrier = operationRequestsSchema(
-      capabilities,
-      { kind: "vocabulary" },
-    ).properties as Record<string, unknown>;
+    const carrier = operationRequestsSchema(capabilities).properties as Record<string, unknown>;
     functions.push({
       name: "submit_btcc_operation_requests",
       description: [
-        "Propose one coherent batch from the stable BTCC operation vocabulary.",
-        "Choose only operation-kind and capability pairs listed in the current capabilitySchemas.",
+        "Propose one coherent batch from the exact currently admitted BTCC operations.",
+        "Choose only operation-kind and capability pairs encoded by this function schema.",
         "For observe, include one required scopeRef from that capability's observationScopeRefs.",
         "Runtime binds mutation authority identities and admits the exact current scope.",
         "Include every currently known independent operation needed for the next decision.",
@@ -137,8 +106,7 @@ function phaseSubmissionSchema(submissionSchema: Record<string, unknown>): Recor
 }
 
 function operationRequestsSchema(
-  capabilities: readonly CarrierCapability[],
-  binding: CarrierSchemaBinding,
+  capabilities: readonly AvailablePhaseCapability[],
 ): Record<string, unknown> {
   return {
     type: "object",
@@ -148,7 +116,7 @@ function operationRequestsSchema(
       requests: {
         type: "array",
         minItems: 1,
-        items: { anyOf: capabilities.map((capability) => operationSchema(capability, binding)) },
+        items: { anyOf: capabilities.map(operationSchema) },
       },
     },
     required: ["kind", "phaseContinuity", "requests"],
@@ -204,8 +172,7 @@ function publicActivitySchema(moment: string): Record<string, unknown> {
 }
 
 function operationSchema(
-  capability: CarrierCapability,
-  binding: CarrierSchemaBinding,
+  capability: AvailablePhaseCapability,
 ): Record<string, unknown> {
   const common = {
     publicTitle: {
@@ -221,17 +188,11 @@ function operationSchema(
     case "observe":
       return operationShape("observe", {
         ...common,
-        scopeRef: binding.kind === "exact"
-          ? {
-              type: "string",
-              enum: exactObservationScopes(capability),
-              description: "Required semantic target selected from this capability's admitted observationScopeRefs.",
-            }
-          : {
-              type: "string",
-              minLength: 1,
-              description: "Required semantic target selected from the current capabilitySchemas observationScopeRefs.",
-            },
+        scopeRef: {
+          type: "string",
+          enum: exactObservationScopes(capability),
+          description: "Required semantic target selected from this capability's admitted observationScopeRefs.",
+        },
       });
     case "workspace_artifact_action":
       return operationShape("workspace_artifact_action", {
@@ -257,16 +218,7 @@ function operationSchema(
   }
 }
 
-type CarrierCapability = AvailablePhaseCapability | ProviderCapabilityVocabularyEntry;
-
-type CarrierSchemaBinding =
-  | { kind: "vocabulary" }
-  | { kind: "exact"; authority: OperationAuthority };
-
-function exactObservationScopes(capability: CarrierCapability): readonly string[] {
-  if (!("observationScopeRefs" in capability)) {
-    throw new Error("Exact carrier admission requires bound observation scopes");
-  }
+function exactObservationScopes(capability: AvailablePhaseCapability): readonly string[] {
   return capability.observationScopeRefs;
 }
 

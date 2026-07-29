@@ -876,7 +876,6 @@ test("registered Qwen Kimi and Z.AI models use their OpenAI-compatible endpoints
     modelId: "glm-5.2",
     authType: "api_key",
     apiKey: "zai-secret",
-    apiBaseUrl: "https://api.z.ai/api/coding/paas/v4/",
   }, tempDir);
 
   const calls: Array<{ url: string; authorization: string; body: Record<string, any> }> = [];
