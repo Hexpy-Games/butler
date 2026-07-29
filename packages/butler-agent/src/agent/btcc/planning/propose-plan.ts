@@ -154,7 +154,8 @@ export function proposePlan(
     "governingSpecRefs",
   );
   const priorFindingRefs = requiredSubjectFindingRefs(state.priorPlanningReview);
-  const resumeStoppedPlan = hasStoppedResultCandidate(state.continuation);
+  const resumeStoppedPlan = hasStoppedResultCandidate(state.continuation) &&
+    !state.previousCandidateRef && !state.findingSetRef;
   return runPhaseConversation({
     ...command,
     phaseContract: CONTRACT,

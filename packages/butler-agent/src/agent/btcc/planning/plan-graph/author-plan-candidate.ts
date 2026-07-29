@@ -51,7 +51,9 @@ export function authorPlanCandidate(
   submission: Record<string, unknown>,
   state: AuthoringState,
 ): PlanningCandidate {
-  const resumed = resumeStoppedAcceptedPlan(submission, state);
+  const resumed = state.previousCandidateRef || state.findingSetRef
+    ? null
+    : resumeStoppedAcceptedPlan(submission, state);
   if (resumed) return resumed;
   const { authoredSpecs, governingSpecRefs } = authorGoverningSpecs(
     submission.specifications,

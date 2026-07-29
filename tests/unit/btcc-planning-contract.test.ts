@@ -7,6 +7,7 @@ import { reviewPlan } from "../../packages/butler-agent/src/agent/btcc/planning/
 import { contentRef } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
 import type {
   PlanningCandidate,
+  PlanningContinuation,
   PlanningReviewDimension,
 } from "../../packages/butler-agent/src/agent/btcc/planning/contracts.ts";
 import { planningReviewSubjects } from
@@ -149,6 +150,38 @@ describe("BTCC Planning contract", () => {
     expect(Object.keys(schema.properties ?? {})).toEqual(["kind"]);
     expect(JSON.stringify(schema)).toContain('"const":"stopped_plan_resume"');
     expect(JSON.stringify(schema)).not.toContain('"works"');
+  });
+
+  test("a rejected stopped Plan revision uses the submitted Plan instead of replaying resume", () => {
+    const accepted = authorPlanCandidate(artifactPlan(), authoringState());
+    const revisedSubmission = artifactPlan();
+    revisedSubmission.strategy = "Apply the frozen review findings before continuing.";
+    const continuation = {
+      kind: "stopped_program",
+      ref: ref("continuation"),
+      sourceTurnId: "turn-stopped",
+      anchorRef: ref("stopped-anchor"),
+      context: {
+        acceptedPlan: accepted,
+        frontier: {
+          interruptedTask: {
+            task: accepted.tasks[0]!,
+            resultRef: ref("stopped-result"),
+          },
+        },
+      },
+    } as unknown as PlanningContinuation;
+
+    const revised = authorPlanCandidate(revisedSubmission, {
+      ...authoringState(),
+      continuation,
+      previousCandidateRef: accepted.ref,
+      findingSetRef: ref("finding-set"),
+      findingDecisions: [],
+    });
+
+    expect(revised.plan.strategy).toBe(revisedSubmission.strategy);
+    expect(revised.reviewRevision?.previousCandidateRef).toEqual(accepted.ref);
   });
 
   test("requires a compact Task display title separately from its full outcome", () => {
