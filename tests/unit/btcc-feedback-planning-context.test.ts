@@ -37,6 +37,7 @@ test("governing revision projects the latest Work Ledger Plan and compact impact
     hasCurrentResult: true,
   });
   expect(JSON.stringify(index)).not.toContain("UNRELATED_RESULT_BODY");
+  expect(context.requiredOutcomeId).toBe("original-program-outcome");
 });
 
 test("implementation repair schema cannot request a replacement Program", () => {
@@ -57,12 +58,16 @@ test("legacy checkpoint uses its latest accepted governing revision", () => {
   fixture.managed.feedbackAcceptance = {
     candidate: {
       correctionKind: "governing_revision",
-      nextPlanCandidate: { marker: "LATEST_FEEDBACK_PLAN" },
+      nextPlanCandidate: {
+        marker: "LATEST_FEEDBACK_PLAN",
+        criteria: [{ sourceRequiredOutcomeRefs: ["original-program-outcome"] }],
+      },
     },
   };
 
   expect(projectFeedbackPlanningContext(fixture).acceptedPlan).toEqual({
     marker: "LATEST_FEEDBACK_PLAN",
+    criteria: [{ sourceRequiredOutcomeRefs: ["original-program-outcome"] }],
   });
 });
 
@@ -101,8 +106,11 @@ function feedbackFixture(
     manifestRevision: 7,
     goalContractRef: ref("goal"),
     authorityRef: ref("authority"),
-    requiredOutcomeId: "outcome-1",
-    acceptedPlan: { marker: "CURRENT_WORK_LEDGER_PLAN" },
+    requiredOutcomeId: "continued-turn-outcome",
+    acceptedPlan: {
+      marker: "CURRENT_WORK_LEDGER_PLAN",
+      criteria: [{ sourceRequiredOutcomeRefs: ["original-program-outcome"] }],
+    },
     plan: { ref: ref("plan") },
     works: [{ work: { ref: ref("work"), workLogicalId: "work-1" }, status: "active" }],
     currentWork: { work: { ref: ref("work"), workLogicalId: "work-1" }, status: "active" },
