@@ -6,6 +6,7 @@ import type {
   PlanningAcceptedProduct,
 } from "../planning/contracts.ts";
 import { planningReviewSubjects } from "../planning/review-subjects.ts";
+import { contentRef } from "../core/index.ts";
 import type {
   ManagedProgramAuthority,
   ManagedProgramState,
@@ -149,8 +150,11 @@ function assertNewProgramBinding(mutation: BindProgram): void {
 
 function assertAcceptedReview(product: PlanningAcceptedProduct): void {
   const { candidate, review } = product;
+  const { ref: _reviewRef, ...reviewBody } = review;
   if (
     review.verdict !== "accepted" ||
+    review.findings.length !== 0 ||
+    !sameRef(review.ref, contentRef("planning-review", reviewBody)) ||
     !sameRef(review.candidateRef, candidate.ref) ||
     !sameRef(review.originalGoalContractRef, candidate.goalContractRef) ||
     !sameRef(review.reviewedBundleRef, candidate.bundle.ref) ||
@@ -310,7 +314,8 @@ function sameReviewedSubjects(
         item.kind === subject.kind &&
         sameRef(item.subjectRef, subject.subjectRef) &&
         item.verdict === "passed" &&
-        item.findings.length === 0;
+        item.findings.every((finding) =>
+          finding.recommendedDisposition !== "required_now");
     });
 }
 
