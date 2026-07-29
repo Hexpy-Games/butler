@@ -88,6 +88,7 @@ export function validateGraph(
   drafts: WorkDraft[],
   tasks: TaskDraft[],
   requiredOutcomeId: string,
+  preservedTaskIds: ReadonlySet<string> = new Set(),
 ): void {
   assertUnique(drafts.map((work) => work.logicalId), "Work logical id");
   assertUnique(tasks.map((task) => task.logicalId), "Task logical id");
@@ -102,7 +103,9 @@ export function validateGraph(
     workIds.add(work.logicalId);
   }
   const taskOrdinals = new Map(tasks.map((task) => [task.logicalId, task.executionOrdinal]));
-  for (const task of tasks) validateTask(task, taskOrdinals, requiredOutcomeId);
+  for (const task of tasks) {
+    validateTask(task, taskOrdinals, requiredOutcomeId, preservedTaskIds.has(task.logicalId));
+  }
   validateArtifactDependencyContinuity(tasks);
   const coveredFields = new Set(tasks.flatMap((task) =>
     task.criteria.flatMap((criterion) => criterion.sourceGoalFieldIds)));
@@ -222,6 +225,7 @@ function validateTask(
   task: TaskDraft,
   ordinals: Map<string, number>,
   requiredOutcomeId: string,
+  preservesAcceptedOutcome: boolean,
 ): void {
   if (task.artifactPolicy?.kind !== "repository_promotion" && task.targetScopeRefs.length === 0) {
     rejectPlanningProposal(
@@ -242,10 +246,10 @@ function validateTask(
     if (criterion.sourceGoalFieldIds.length === 0) {
       rejectPlanningProposal("criterion_goal_trace_empty", "Criterion Goal trace is empty");
     }
-    if (
+    if (!preservesAcceptedOutcome && (
       criterion.sourceRequiredOutcomeRefs.length !== 1 ||
       criterion.sourceRequiredOutcomeRefs[0] !== requiredOutcomeId
-    ) {
+    )) {
       rejectPlanningProposal(
         "criterion_required_outcome_mismatch",
         "Criterion does not trace the accepted required outcome",

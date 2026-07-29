@@ -60,14 +60,28 @@ test("legacy checkpoint uses its latest accepted governing revision", () => {
       correctionKind: "governing_revision",
       nextPlanCandidate: {
         marker: "LATEST_FEEDBACK_PLAN",
-        criteria: [{ sourceRequiredOutcomeRefs: ["original-program-outcome"] }],
+        tasks: [{
+          ref: fixture.program.currentTask.task.ref,
+          criterionRefs: [ref("latest-criterion")],
+        }],
+        criteria: [{
+          ref: ref("latest-criterion"),
+          sourceRequiredOutcomeRefs: ["original-program-outcome"],
+        }],
       },
     },
   };
 
   expect(projectFeedbackPlanningContext(fixture).acceptedPlan).toEqual({
     marker: "LATEST_FEEDBACK_PLAN",
-    criteria: [{ sourceRequiredOutcomeRefs: ["original-program-outcome"] }],
+    tasks: [{
+      ref: fixture.program.currentTask.task.ref,
+      criterionRefs: [ref("latest-criterion")],
+    }],
+    criteria: [{
+      ref: ref("latest-criterion"),
+      sourceRequiredOutcomeRefs: ["original-program-outcome"],
+    }],
   });
 });
 
@@ -109,7 +123,16 @@ function feedbackFixture(
     requiredOutcomeId: "continued-turn-outcome",
     acceptedPlan: {
       marker: "CURRENT_WORK_LEDGER_PLAN",
-      criteria: [{ sourceRequiredOutcomeRefs: ["original-program-outcome"] }],
+      tasks: tasks.map((state, index) => ({
+        ...state.task,
+        criterionRefs: [ref(`criterion-${index + 1}`)],
+      })),
+      criteria: tasks.map((_, index) => ({
+        ref: ref(`criterion-${index + 1}`),
+        sourceRequiredOutcomeRefs: [
+          index < 6 ? "original-program-outcome" : "continued-turn-outcome",
+        ],
+      })),
     },
     plan: { ref: ref("plan") },
     works: [{ work: { ref: ref("work"), workLogicalId: "work-1" }, status: "active" }],
