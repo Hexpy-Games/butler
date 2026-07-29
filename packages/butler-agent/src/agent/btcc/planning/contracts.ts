@@ -217,6 +217,7 @@ export type PlanningCandidate = {
         stoppedAnchorRef: ContentRef;
         stoppedTaskRef?: ContentRef;
         stoppedResultRef?: ContentRef;
+        stoppedReviewRef?: ContentRef;
         stoppedPlanGoalContractRef?: ContentRef;
       };
   reviewRevision?: {

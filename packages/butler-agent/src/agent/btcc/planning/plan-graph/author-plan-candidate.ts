@@ -222,12 +222,13 @@ export function authorPlanCandidate(
 
 function stoppedTaskProvenance(
   continuation: Extract<NonNullable<AuthoringState["continuation"]>, { kind: "stopped_program" }>,
-): { stoppedTaskRef?: ContentRef; stoppedResultRef?: ContentRef } {
+): { stoppedTaskRef?: ContentRef; stoppedResultRef?: ContentRef; stoppedReviewRef?: ContentRef } {
   const interrupted = continuation.context?.frontier.interruptedTask;
   if (!interrupted) return {};
   return {
     stoppedTaskRef: interrupted.task.ref,
     ...(interrupted.resultRef ? { stoppedResultRef: interrupted.resultRef } : {}),
+    ...(interrupted.reviewRef ? { stoppedReviewRef: interrupted.reviewRef } : {}),
   };
 }
 

@@ -134,9 +134,12 @@ function acceptedTransition(
     return { kind: "request_plan_revision", successor: "planning", product: event.product };
   }
   if (turn.semanticState === "planning_review" && event.kind === "PlanningReviewAccepted") {
+    const origin = event.product.candidate.revisionOrigin;
     return {
       kind: "accept_plan",
-      successor: "work_frontier",
+      successor: origin.kind === "stopped_continuation" && origin.stoppedReviewRef
+        ? "feedback_conception"
+        : "work_frontier",
       product: event.product,
       ledgerCommit: ledgerCommit(turn, {
         kind: "install_reviewed_plan",

@@ -180,7 +180,7 @@ export type AcceptedTurnTransition =
     }
   | {
       kind: "accept_plan";
-      successor: "work_frontier";
+      successor: "work_frontier" | "feedback_conception";
       product: PlanningAcceptedProduct;
       ledgerCommit: WorkLedgerCommit & {
         mutation: Extract<WorkLedgerMutation, { kind: "install_reviewed_plan" }>;
