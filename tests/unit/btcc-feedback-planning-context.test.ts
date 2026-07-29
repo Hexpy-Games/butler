@@ -44,6 +44,8 @@ test("implementation repair schema cannot request a replacement Program", () => 
   const serialized = JSON.stringify(schema);
 
   expect(serialized).toContain("implementation_repair");
+  expect(serialized).toContain("executionRequirement");
+  expect(serialized).toContain("workspace_mutation");
   expect(serialized).not.toContain("governing_revision");
   expect(serialized).not.toContain("revisedPlan");
   expect(serialized).not.toContain("impactMap");

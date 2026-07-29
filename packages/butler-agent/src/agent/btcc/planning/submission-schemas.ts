@@ -213,6 +213,15 @@ const impact = variantsSchema(
   }),
 );
 
+const correctionExecutionRequirement = variantsSchema(
+  objectSchema({ kind: literalSchema("observation_only") }),
+  objectSchema({
+    kind: literalSchema("workspace_mutation"),
+    workspaceScopeRef: textSchema(),
+    writablePaths: arraySchema(textSchema(), { minItems: 1 }),
+  }),
+);
+
 export function feedbackPlanSubmissionSchema(
   logicalIds: string[],
   correctionKind?:
@@ -232,12 +241,14 @@ export function feedbackPlanSubmissionSchema(
       ...decisions,
       correctionKind: literalSchema("implementation_repair"),
       correctionAction: textSchema(),
+      executionRequirement: correctionExecutionRequirement,
     }),
     governing_revision: objectSchema({
       kind: literalSchema("feedback_plan_candidate"),
       ...decisions,
       correctionKind: literalSchema("governing_revision"),
       correctionAction: textSchema(),
+      executionRequirement: correctionExecutionRequirement,
       revisedPlan,
       impactMap: arraySchema(impact, { minItems: 1 }),
     }),
@@ -246,6 +257,7 @@ export function feedbackPlanSubmissionSchema(
       ...decisions,
       correctionKind: literalSchema("authority_scope_revision"),
       correctionAction: textSchema(),
+      executionRequirement: correctionExecutionRequirement,
       revisedPlan,
       impactMap: arraySchema(impact, { minItems: 1 }),
       authorityChange: textSchema(),
