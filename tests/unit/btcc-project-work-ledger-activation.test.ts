@@ -18,6 +18,25 @@ import { LocalProcessLiveness } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/runtime-owner/index.ts";
 
 describe("BTCC Project Ledger activation gate", () => {
+  test("reuses an identical Planning base and rejects conflicting candidate ownership", () => {
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const writer = new ProjectLedgerPromotionWriter(db);
+    const base = {
+      candidateRef: "candidate-1",
+      programId: "program-1",
+      projectRef: "project-1",
+      head: preparedPublication().canonicalBase,
+    };
+
+    writer.recordPlanningBase(base);
+    writer.recordPlanningBase(base);
+    expect(writer.loadPlanningBase(base.candidateRef)).toEqual(base);
+    expect(() => writer.recordPlanningBase({ ...base, programId: "program-2" }))
+      .toThrow("Project Planning base changed for an existing candidate");
+    db.close();
+  });
+
   test("binds the exact publication atomically and observes it before successor claims", async () => {
     const db = new Database(":memory:");
     db.exec(BTCC_SUCCESSOR_SCHEMA);

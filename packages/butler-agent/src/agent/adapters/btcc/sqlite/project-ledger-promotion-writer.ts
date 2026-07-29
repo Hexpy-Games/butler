@@ -35,7 +35,17 @@ export class ProjectLedgerPromotionWriter {
       INSERT INTO btcc_project_planning_bases (
         candidate_ref, program_id, project_ref, head_json
       ) VALUES (?, ?, ?, ?)
+      ON CONFLICT(candidate_ref) DO NOTHING
     `).run(base.candidateRef, base.programId, base.projectRef, stableJson(base.head));
+    const recorded = this.loadPlanningBase(base.candidateRef);
+    if (
+      !recorded ||
+      recorded.programId !== base.programId ||
+      recorded.projectRef !== base.projectRef ||
+      stableJson(recorded.head) !== stableJson(base.head)
+    ) {
+      throw new Error("Project Planning base changed for an existing candidate");
+    }
   }
 
   loadPlanningBase(candidateRef: string): ProjectPlanningBase | null {
