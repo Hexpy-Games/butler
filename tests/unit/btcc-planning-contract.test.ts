@@ -169,7 +169,10 @@ describe("BTCC Planning contract", () => {
   test("keeps accepted historical Tasks outside a revised Plan", () => {
     const accepted = authorPlanCandidate(artifactPlan(), authoringState());
     const revised = artifactPlan();
-    revised.promotionSelectors[0]!.implementationTaskIds.push("historical-implementation");
+    revised.works[0]!.tasks.push({
+      ...revised.works[0]!.tasks[0]!,
+      logicalId: "historical-implementation",
+    });
 
     expect(() => rejectHistoricalTaskReferences({
       revisedPlan: revised,
@@ -182,6 +185,32 @@ describe("BTCC Planning contract", () => {
         },
       ],
     })).toThrow("Historical accepted Task historical-implementation is not current Plan authority");
+  });
+
+  test("selects an accepted carried artifact without reauthoring its Task", () => {
+    const accepted = authorPlanCandidate(artifactPlan(), authoringState());
+    const { ref: _priorRef, ...priorBody } = accepted.tasks[0]!;
+    const carriedBody = {
+      ...priorBody,
+      taskLogicalId: "historical-implementation",
+      dependencyTaskRefs: [],
+    };
+    const carried = {
+      ref: contentRef("task", carriedBody),
+      ...carriedBody,
+    };
+    const revised = artifactPlan();
+    revised.promotionSelectors[0]!.implementationTaskIds.push(carried.taskLogicalId);
+    revised.integrationCriteria[0]!.participatingTaskIds.push(carried.taskLogicalId);
+
+    const candidate = authorPlanCandidate(revised, {
+      ...authoringState(),
+      carriedArtifactTasks: [carried],
+    });
+
+    expect(candidate.tasks.some((task) => task.taskLogicalId === carried.taskLogicalId)).toBe(false);
+    expect(candidate.artifactLifecycle.promotionSelectors[0]?.implementationTaskRefs)
+      .toContainEqual(carried.ref);
   });
 
   test("stopped ResultCandidate Planning exposes only the typed resume decision", () => {

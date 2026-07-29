@@ -29,6 +29,7 @@ type PromotionSelector = PlanningCandidate["artifactLifecycle"]["promotionSelect
 export function materializePromotionSelectors(
   submission: Record<string, unknown>,
   tasks: ManagedTask[],
+  carriedTaskIds: ReadonlySet<string> = new Set(),
 ): PromotionSelector[] {
   const drafts = requireArray(submission.promotionSelectors ?? [], "promotionSelectors");
   const byId = taskMap(tasks);
@@ -53,7 +54,7 @@ export function materializePromotionSelectors(
     const promotionTask = taskByRef(tasks, promotionTaskRef);
     const requiredPredecessors = uniqueRefs([...implementationTaskRefs, integrationTaskRef]);
     assertDirectDependency(integrationTaskRef, promotionTask.dependencyTaskRefs);
-    assertDependencyClosure(requiredPredecessors, promotionTask, tasks);
+    assertDependencyClosure(requiredPredecessors, promotionTask, tasks, carriedTaskIds);
     const targetScopeRef = promotionTarget(promotionTask);
     assertArtifactTarget(tasks, requiredPredecessors, targetScopeRef);
     const body = {
@@ -293,9 +294,10 @@ function assertDependencyClosure(
   required: ContentRef[],
   successor: ManagedTask,
   tasks: ManagedTask[],
+  carriedTaskIds: ReadonlySet<string>,
 ): void {
   const byRef = new Map(tasks.map((task) => [task.ref.id, task]));
-  const reachable = new Set<string>();
+  const reachable = new Set(carriedTaskIds);
   const frontier = [...successor.dependencyTaskRefs];
   while (frontier.length > 0) {
     const ref = frontier.pop()!;
