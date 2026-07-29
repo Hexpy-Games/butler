@@ -36,7 +36,7 @@ export function preserveAcceptedTaskDrafts(input: {
   for (const taskId of preserved) {
     const priorTask = priorTasks.get(taskId);
     if (!priorTask) continue;
-    rejectMovedTask(nextWorks, priorTask);
+    removeTaskDraft(nextWorks, priorTask.taskLogicalId);
     const work = findOrRestoreWork(nextWorks, priorTask, input.acceptedPlan);
     restoreTaskAtAcceptedPosition(work, priorTask, input.acceptedPlan);
   }
@@ -68,14 +68,9 @@ function decodeWorkDraft(value: unknown, workIndex: number): WorkDraft {
   return { ...work, logicalId, tasks };
 }
 
-function rejectMovedTask(works: WorkDraft[], prior: ManagedTask): void {
+function removeTaskDraft(works: WorkDraft[], taskLogicalId: string): void {
   for (const work of works) {
-    if (work.logicalId === prior.workLogicalId) continue;
-    if (work.tasks.some((task) => task.logicalId === prior.taskLogicalId)) {
-      throw new Error(
-        `Unaffected Task ${prior.taskLogicalId} must remain in Work ${prior.workLogicalId}`,
-      );
-    }
+    work.tasks = work.tasks.filter((task) => task.logicalId !== taskLogicalId);
   }
 }
 
