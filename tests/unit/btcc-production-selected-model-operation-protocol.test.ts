@@ -18,7 +18,7 @@ import {
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
 describe("production BTCC selected model", () => {
-  test("closes the operation carrier for Conception Opening", async () => {
+  test("closes the operation carrier for Conception Opening without rejecting its submitted local effect", async () => {
     let prompt: ProviderPhasePrompt | undefined;
     const model = createProductionSelectedModel({
       context: emptyContextResolver(),
@@ -28,6 +28,12 @@ describe("production BTCC selected model", () => {
         description: "Inspect an authorized workspace.",
         operationKinds: ["observe"],
         observationScopeKinds: ["workspace"],
+        inputSchema: { type: "object" },
+      }, {
+        capabilityRef: "update_onboarding_profile",
+        name: "update_onboarding_profile",
+        description: "Persist an admitted onboarding profile update.",
+        operationKinds: ["turn_local_effect"],
         inputSchema: { type: "object" },
       }]),
       guidance: guidanceReader(),
@@ -48,7 +54,13 @@ describe("production BTCC selected model", () => {
     envelope.operationSurface = "closed";
     envelope.operationAuthority = {
       observationScopeRefs: ["workspace:/repo"],
-      mutation: { kind: "forbidden" },
+      mutation: {
+        kind: "turn_local_effect_only",
+        capabilities: [{
+          capabilityRef: "update_onboarding_profile",
+          inputSchema: { type: "object" },
+        }],
+      },
     };
 
     await model.runRound(envelope);

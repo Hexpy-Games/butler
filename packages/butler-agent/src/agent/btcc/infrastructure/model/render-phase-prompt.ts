@@ -44,7 +44,9 @@ export async function renderPhasePrompt(
   const availableCapabilities = envelope.operationSurface === "closed"
     ? []
     : capabilitySurface.availableCapabilities;
-  assertRequiredMutationCapability(operationAuthority, availableCapabilities);
+  if (envelope.operationSurface === "authorized") {
+    assertRequiredMutationCapability(operationAuthority, availableCapabilities);
+  }
   const providerVocabulary = envelope.operationSurface === "closed"
     ? []
     : capabilitySurface.providerVocabulary;
