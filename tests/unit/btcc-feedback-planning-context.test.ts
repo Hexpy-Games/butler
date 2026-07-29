@@ -37,7 +37,7 @@ test("governing revision projects the latest Work Ledger Plan and compact impact
     hasCurrentResult: true,
   });
   expect(JSON.stringify(index)).not.toContain("UNRELATED_RESULT_BODY");
-  expect(context.requiredOutcomeId).toBe("original-program-outcome");
+  expect(context.requiredOutcomeId).toBe("continued-turn-outcome");
 });
 
 test("implementation repair schema cannot request a replacement Program", () => {

@@ -43,7 +43,7 @@ export function projectFeedbackPlanningContext(
     ) ?? null,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
-    requiredOutcomeId: acceptedPlanRequiredOutcomeId(acceptedPlan, affectedTaskRefs),
+    requiredOutcomeId: program.requiredOutcomeId,
     artifactPersistence: accepted.goalContract.artifactPersistence,
     ...projectReviewValidationSource(currentResult.result),
     ...revisionContext(managed),
@@ -73,27 +73,6 @@ export function projectFeedbackPlanningContext(
       hasCurrentResult: Boolean(state.currentResult),
     })),
   };
-}
-
-function acceptedPlanRequiredOutcomeId(
-  plan: ReviewedManagedProgramState["acceptedPlan"],
-  affectedTaskRefs: ContentRef[],
-): string {
-  const affected = new Set(affectedTaskRefs.map(refKey));
-  const criterionRefs = new Set(
-    plan.tasks
-      .filter((task) => affected.has(refKey(task.ref)))
-      .flatMap((task) => task.criterionRefs.map(refKey)),
-  );
-  const ids = new Set(
-    plan.criteria
-      .filter((criterion) => criterionRefs.has(refKey(criterion.ref)))
-      .flatMap((criterion) => criterion.sourceRequiredOutcomeRefs),
-  );
-  if (ids.size !== 1) {
-    throw new Error("Feedback Planning correction scope has ambiguous outcome lineage");
-  }
-  return [...ids][0]!;
 }
 
 function currentAcceptedPlan(
