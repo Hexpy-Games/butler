@@ -60,10 +60,13 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
     const blocking = reviewedFindings
       .filter((finding) => finding.recommendedDisposition === "required_now");
     const findings = blocking.map((finding) => finding.statement);
-    if (value.verdict === "accepted" && blocking.length > 0) {
+    const verdict = priorFindings.length > 0
+      ? blocking.length > 0 ? "revision_required" : "accepted"
+      : value.verdict;
+    if (verdict === "accepted" && blocking.length > 0) {
       throw new Error("Accepted Feedback Planning Review cannot carry findings");
     }
-    if (value.verdict === "revision_required" && blocking.length === 0) {
+    if (verdict === "revision_required" && blocking.length === 0) {
       throw new Error("Feedback Planning revision requires findings");
     }
     const reviewBase = {
@@ -73,7 +76,7 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
       reviewedFindings,
       findingVerdicts: decoded.verdicts,
     };
-    if (value.verdict === "accepted") {
+    if (verdict === "accepted") {
       const currentTask = state.currentTask as Parameters<
         typeof assertAcceptedCorrectionFitsCurrentTask
       >[1] | undefined;

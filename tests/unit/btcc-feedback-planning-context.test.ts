@@ -93,6 +93,7 @@ function feedbackFixture(
       ref: ref(`task-${index + 1}`),
       taskLogicalId: `task-${index + 1}`,
       governingSpecRefs: index === 4 ? [ref("spec-current")] : [ref("spec-other")],
+      artifactPolicy: { kind: "non_artifact", targetScopeRefs: [] },
     },
     status: index < 4 ? "accepted" : index === 4 ? "review_failed" : "planned",
     attempts: [],
