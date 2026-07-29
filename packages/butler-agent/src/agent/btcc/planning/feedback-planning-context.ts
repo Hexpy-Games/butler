@@ -25,6 +25,7 @@ export function projectFeedbackPlanningContext(
   const affectedTaskRefs = managed.consolidationRepair?.repair.correctionScope.affectedTaskRefs
     ?? [program.currentTask.task.ref];
   const selectedSpecs = specsForTask(program, program.currentTask.task.governingSpecRefs);
+  const acceptedPlan = currentAcceptedPlan(program, managed);
   const common = {
     acceptedGoalContract: accepted.goalContract,
     acceptedAuthority: accepted.authority,
@@ -42,7 +43,7 @@ export function projectFeedbackPlanningContext(
     ) ?? null,
     goalContractRef: program.goalContractRef,
     authorityRef: program.authorityRef,
-    requiredOutcomeId: program.requiredOutcomeId,
+    requiredOutcomeId: acceptedPlanRequiredOutcomeId(acceptedPlan),
     artifactPersistence: accepted.goalContract.artifactPersistence,
     ...projectReviewValidationSource(currentResult.result),
     ...revisionContext(managed),
@@ -62,7 +63,7 @@ export function projectFeedbackPlanningContext(
     governingSpecs: program.governingSpecs,
     availableSpecs: program.availableSpecs,
     requireGoverningSpec: accepted.authority.ledgerScope.kind === "project",
-    acceptedPlan: currentAcceptedPlan(program, managed),
+    acceptedPlan,
     taskImpactIndex: program.tasks.map((state) => ({
       task: {
         ref: state.task.ref,
@@ -72,6 +73,18 @@ export function projectFeedbackPlanningContext(
       hasCurrentResult: Boolean(state.currentResult),
     })),
   };
+}
+
+function acceptedPlanRequiredOutcomeId(
+  plan: ReviewedManagedProgramState["acceptedPlan"],
+): string {
+  const ids = new Set(
+    plan.criteria.flatMap((criterion) => criterion.sourceRequiredOutcomeRefs),
+  );
+  if (ids.size !== 1) {
+    throw new Error("Feedback Planning accepted Plan has ambiguous outcome lineage");
+  }
+  return [...ids][0]!;
 }
 
 function currentAcceptedPlan(
