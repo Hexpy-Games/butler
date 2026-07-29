@@ -245,13 +245,35 @@ function preserveStoppedResultTask(state: AuthoringState): AuthoringState {
   if (!acceptedTask) {
     throw new Error("Stopped Result Task is absent from the accepted Plan revision");
   }
+  const preservedTaskLogicalIds = stoppedTaskDependencyClosure(acceptedPlan, acceptedTask);
   return {
     ...state,
     preservedPlan: acceptedPlan,
     preservedTaskLogicalIds: [
-      ...new Set([...(state.preservedTaskLogicalIds ?? []), acceptedTask.taskLogicalId]),
+      ...new Set([...(state.preservedTaskLogicalIds ?? []), ...preservedTaskLogicalIds]),
     ],
   };
+}
+
+function stoppedTaskDependencyClosure(
+  plan: PlanningCandidate,
+  stoppedTask: ManagedTask,
+): string[] {
+  const tasksByRef = new Map(plan.tasks.map((task) => [refKey(task.ref), task]));
+  const preserved = new Set<string>();
+  const visit = (task: ManagedTask): void => {
+    if (preserved.has(task.taskLogicalId)) return;
+    for (const dependencyRef of task.dependencyTaskRefs) {
+      const dependency = tasksByRef.get(refKey(dependencyRef));
+      if (!dependency) {
+        throw new Error(`Stopped Task dependency is absent from the accepted Plan: ${dependencyRef.id}`);
+      }
+      visit(dependency);
+    }
+    preserved.add(task.taskLogicalId);
+  };
+  visit(stoppedTask);
+  return [...preserved];
 }
 
 function preservedTask(
@@ -308,6 +330,10 @@ function sameRefs(left: ContentRef[], right: ContentRef[]): boolean {
 
 function sameRef(left: ContentRef, right: ContentRef): boolean {
   return left.id === right.id && left.sha256 === right.sha256;
+}
+
+function refKey(ref: ContentRef): string {
+  return `${ref.id}\0${ref.sha256}`;
 }
 
 function stoppedTaskProvenance(
