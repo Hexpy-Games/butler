@@ -47,11 +47,26 @@ export class SqliteReviewedGraphInstaller {
       next.observedManifestRevision,
     );
     if (updated.changes !== 1) throw new Error("Governing revision lost its manifest base");
+    const carriedHistory = this.acceptedHistoryOutside(next);
     this.prepareAffectedAttempts(candidate.impactMap);
     this.deactivateCurrentGraph(next.programId);
     this.installWorks(next);
     this.installTasks(next, candidate.impactMap);
+    this.restoreAcceptedHistory(carriedHistory);
     this.synchronizeWorkStatuses(next.programId);
+  }
+
+  private acceptedHistoryOutside(candidate: RevisedPlan): Array<{
+    taskId: string;
+    workId: string;
+  }> {
+    const candidateTaskIds = new Set(candidate.tasks.map((task) => task.ref.id));
+    return this.db.query<{ task_id: string; work_id: string }, [string]>(`
+      SELECT task_id, work_id FROM btcc_tasks
+      WHERE program_id = ? AND status = 'accepted' AND is_active = 1
+    `).all(candidate.programId)
+      .filter((task) => !candidateTaskIds.has(task.task_id))
+      .map((task) => ({ taskId: task.task_id, workId: task.work_id }));
   }
 
   private prepareAffectedAttempts(impactMap: TaskImpact[]): void {
@@ -108,6 +123,21 @@ export class SqliteReviewedGraphInstaller {
       const workRef = workRefs.get(task.workLogicalId);
       if (!workRef) throw new Error("Revised Task has no Work");
       this.installTask(candidate.programId, workRef.id, task, impacts.get(task.ref.id));
+    }
+  }
+
+  private restoreAcceptedHistory(history: Array<{ taskId: string; workId: string }>): void {
+    for (const item of history) {
+      const task = this.db.query(`
+        UPDATE btcc_tasks SET is_active = 1
+        WHERE task_id = ? AND work_id = ? AND status = 'accepted'
+      `).run(item.taskId, item.workId);
+      if (task.changes !== 1) throw new Error("Accepted Task history disappeared");
+      const work = this.db.query(`
+        UPDATE btcc_work_items SET is_active = 1, status = 'closed'
+        WHERE work_id = ?
+      `).run(item.workId);
+      if (work.changes !== 1) throw new Error("Accepted Work history disappeared");
     }
   }
 

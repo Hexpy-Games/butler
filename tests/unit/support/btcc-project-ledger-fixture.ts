@@ -85,6 +85,7 @@ export function reviewedPlan(options: {
       dependencyWorkIds: [],
       tasks: [{
         logicalId: "produce-result",
+        displayTitle: "결과 생성 및 검증",
         intendedOutcome: "Produce and verify the requested result.",
         dependencyTaskIds: [],
         targetScopeRefs: ["workspace:/fixture"],

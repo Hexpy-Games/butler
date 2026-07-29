@@ -95,9 +95,22 @@ function installRevisedProgram(
   const impacts = new Map(candidate.impactMap
     .filter((impact) => impact.successorTaskRef)
     .map((impact) => [impact.successorTaskRef!.id, impact]));
-  const works = plan.works.map((work) => ({ work, status: "planned" as const }));
-  const tasks = plan.tasks.map((task) =>
-    applyTaskImpact(task, impacts.get(task.ref.id), previous));
+  const candidateTaskIds = new Set(plan.tasks.map((task) => task.ref.id));
+  const carriedTasks = program.tasks.filter((task) =>
+    task.status === "accepted" && !candidateTaskIds.has(task.task.ref.id));
+  const tasks = [
+    ...plan.tasks.map((task) => applyTaskImpact(task, impacts.get(task.ref.id), previous)),
+    ...structuredClone(carriedTasks),
+  ];
+  const candidateWorkIds = new Set(plan.works.map((work) => work.workLogicalId));
+  const carriedWorkIds = new Set(carriedTasks.map((task) => task.task.workLogicalId));
+  const carriedWorks = program.works.filter((work) =>
+    carriedWorkIds.has(work.work.workLogicalId) &&
+    !candidateWorkIds.has(work.work.workLogicalId));
+  const works = [
+    ...plan.works.map((work) => ({ work, status: "planned" as const })),
+    ...structuredClone(carriedWorks),
+  ];
   const next: Program = {
     ...program,
     ...authority,
