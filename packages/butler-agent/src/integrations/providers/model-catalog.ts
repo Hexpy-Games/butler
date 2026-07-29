@@ -149,7 +149,7 @@ export function defaultHostedProviderApiBaseUrl(
   if (providerId === "xai") return "https://api.x.ai/v1";
   if (providerId === "qwen") return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   if (providerId === "kimi") return "https://api.moonshot.ai/v1";
-  if (providerId === "zai") return "https://api.z.ai/api/paas/v4";
+  if (providerId === "zai") return "https://api.z.ai/api/coding/paas/v4";
   if (providerId === "opencode-go") return "https://opencode.ai/zen/go/v1";
   return undefined;
 }

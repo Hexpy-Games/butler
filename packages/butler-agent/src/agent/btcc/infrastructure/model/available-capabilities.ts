@@ -2,42 +2,18 @@ import type { OperationAuthority } from "../../core/index.ts";
 import type {
   AvailablePhaseCapability,
   ObservationScopeKind,
-  ProviderCapabilityVocabularyEntry,
   ResolvePhaseCapabilitiesInput,
   StructuralCapabilityDefinition,
 } from "./contracts.ts";
 
-export async function resolvePhaseCapabilities(
+export async function resolveAvailableCapabilities(
   input: ResolvePhaseCapabilitiesInput,
-): Promise<{
-  providerVocabulary: ProviderCapabilityVocabularyEntry[];
-  availableCapabilities: AvailablePhaseCapability[];
-}> {
+): Promise<AvailablePhaseCapability[]> {
   const definitions = [...await input.catalog.list()].sort((left, right) =>
     left.capabilityRef.localeCompare(right.capabilityRef) || left.name.localeCompare(right.name),
   );
   assertUniqueCapabilityRefs(definitions);
-  return {
-    providerVocabulary: providerVocabulary(definitions),
-    availableCapabilities: admittedCapabilities(definitions, input.authority),
-  };
-}
-
-export async function resolveAvailableCapabilities(
-  input: ResolvePhaseCapabilitiesInput,
-): Promise<AvailablePhaseCapability[]> {
-  return (await resolvePhaseCapabilities(input)).availableCapabilities;
-}
-
-function providerVocabulary(
-  definitions: readonly StructuralCapabilityDefinition[],
-): ProviderCapabilityVocabularyEntry[] {
-  return definitions.flatMap((definition) => {
-    return [...definition.operationKinds].sort().map((operationKind) => ({
-      ...carrierDefinition(definition),
-      operationKind,
-    }));
-  });
+  return admittedCapabilities(definitions, input.authority);
 }
 
 function admittedCapabilities(

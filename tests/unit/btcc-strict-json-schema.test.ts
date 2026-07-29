@@ -3,21 +3,16 @@ import {
   normalizeStrictTransportSchema,
   restoreTransportOmissions,
 } from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/strict-json-schema.ts";
-import {
-  providerCarrierAdmissionSchema,
-  providerCarrierSchema,
-} from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/provider-carrier-schema.ts";
+import { providerCarrierSchema } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/model/provider-carrier-schema.ts";
 import {
   literalSchema,
   objectSchema,
   textSchema,
 } from "../../packages/butler-agent/src/agent/btcc/core/submission-schema.ts";
 import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/tool-bridge/schema-validation.ts";
-import type {
-  AvailablePhaseCapability,
-  ProviderCapabilityVocabularyEntry,
-} from "../../packages/butler-agent/src/agent/btcc/infrastructure/model/contracts.ts";
-import type { OperationAuthority } from "../../packages/butler-agent/src/agent/btcc/core/contracts.ts";
+import type { AvailablePhaseCapability } from
+  "../../packages/butler-agent/src/agent/btcc/infrastructure/model/contracts.ts";
 
 test("strict transport schema makes every object property required and nullable when optional", () => {
   const schema = normalizeStrictTransportSchema({
@@ -80,26 +75,9 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
     inputSchema: objectSchema({ query: textSchema() }),
     observationScopeRefs: ["workspace"],
   } as AvailablePhaseCapability;
-  const vocabulary = [{
-    capabilityRef: capability.capabilityRef,
-    name: capability.name,
-    description: capability.description,
-    operationKind: capability.operationKind,
-    inputSchema: capability.inputSchema,
-  }] as ProviderCapabilityVocabularyEntry[];
-  const authority = {
-    observationScopeRefs: ["workspace"],
-    mutation: { kind: "forbidden" },
-  } as OperationAuthority;
   const carrierSchema = providerCarrierSchema(
-    vocabulary,
-    submissionSchema,
-  );
-  const admissionSchema = providerCarrierAdmissionSchema(
-    vocabulary,
     [capability],
     submissionSchema,
-    authority,
   );
   const normalized = normalizeStrictTransportSchema({
     type: "object",
@@ -153,19 +131,19 @@ test("strict transport keeps carrier unions satisfiable and admission-equivalent
 
   expect(validateJsonObjectSchema({ carrier: submissionWitness }, normalized).ok).toBe(true);
   expect(validateJsonObjectSchema({ carrier: operationWitness }, normalized).ok).toBe(true);
-  expect(validateJsonObjectSchema(submissionWitness, admissionSchema).ok).toBe(true);
-  expect(validateJsonObjectSchema(operationWitness, admissionSchema).ok).toBe(true);
+  expect(validateJsonObjectSchema(submissionWitness, carrierSchema).ok).toBe(true);
+  expect(validateJsonObjectSchema(operationWitness, carrierSchema).ok).toBe(true);
   expect(validateJsonObjectSchema({
     ...submissionWitness,
     publicActivity: {
       ...submissionWitness.publicActivity,
       title: "가".repeat(33),
     },
-  }, admissionSchema).ok).toBe(false);
+  }, carrierSchema).ok).toBe(false);
   expect(validateJsonObjectSchema({
     ...submissionWitness,
     requests: operationWitness.requests,
-  }, admissionSchema).ok).toBe(false);
+  }, carrierSchema).ok).toBe(false);
 });
 
 test("closed operation surfaces expose a concrete carrier object instead of a unary union", () => {
@@ -173,16 +151,7 @@ test("closed operation surfaces expose a concrete carrier object instead of a un
     kind: literalSchema("sample_submission"),
     summary: textSchema(),
   });
-  const authority = {
-    observationScopeRefs: [],
-    mutation: { kind: "forbidden" },
-  } as OperationAuthority;
-
-  for (const schema of [
-    providerCarrierSchema([], submissionSchema),
-    providerCarrierAdmissionSchema([], [], submissionSchema, authority),
-  ]) {
-    expect(schema.type).toBe("object");
-    expect(schema).not.toHaveProperty("anyOf");
-  }
+  const schema = providerCarrierSchema([], submissionSchema);
+  expect(schema.type).toBe("object");
+  expect(schema).not.toHaveProperty("anyOf");
 });
