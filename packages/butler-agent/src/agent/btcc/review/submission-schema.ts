@@ -52,28 +52,14 @@ function semanticRootFinding(priorRootCauseKeys: string[]) {
   );
 }
 
-export type TaskReviewMode = "semantic" | "promotion_identity";
-
 export function taskReviewSubmissionSchema(
-  mode: TaskReviewMode,
   priorRootCauseKeys: string[] = [],
 ) {
-  const criterionVerdict = mode === "promotion_identity"
-    ? objectSchema({
-        ...commonCriterionFields,
-        verdict: literalSchema("satisfied"),
-      })
-    : objectSchema({
-        ...commonCriterionFields,
-        verdict: enumSchema("satisfied", "not_satisfied"),
-      });
-  const rootFinding = mode === "promotion_identity"
-    ? objectSchema({
-        ...findingFields,
-        recommendedDisposition: literalSchema("backlog"),
-        findingOrigin: literalSchema("backlog_candidate"),
-      })
-    : semanticRootFinding(priorRootCauseKeys);
+  const criterionVerdict = objectSchema({
+    ...commonCriterionFields,
+    verdict: enumSchema("satisfied", "not_satisfied"),
+  });
+  const rootFinding = semanticRootFinding(priorRootCauseKeys);
   const fields = {
     kind: literalSchema("task_review"),
     criterionVerdicts: arraySchema(criterionVerdict, { minItems: 1 }),

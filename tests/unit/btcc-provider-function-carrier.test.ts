@@ -66,7 +66,7 @@ test("function-tool operations expose only the exact admitted capability surface
       required: ["path"],
       additionalProperties: false,
     },
-  }], taskReviewSubmissionSchema("semantic")).find(
+  }], taskReviewSubmissionSchema()).find(
     (candidate) => candidate.carrierKind === "operation_requests",
   );
   expect(definition).toBeDefined();
@@ -106,7 +106,7 @@ test("function-tool operations expose only the exact admitted capability surface
 });
 
 test("task-review function exposes and binds the exact explicit submission carrier", () => {
-  const submissionSchema = taskReviewSubmissionSchema("semantic");
+  const submissionSchema = taskReviewSubmissionSchema();
   const [definition] = providerCarrierFunctions([], submissionSchema);
   expect(definition?.parameters).toEqual({
     type: "object",

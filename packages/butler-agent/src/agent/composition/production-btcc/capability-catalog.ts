@@ -66,7 +66,7 @@ const RESULT_READ_CAPABILITY: StructuralCapabilityDefinition = {
 const PROMOTION_CAPABILITY: StructuralCapabilityDefinition = {
   capabilityRef: "promote_reviewed_candidate",
   name: "promote_reviewed_candidate",
-  description: "Atomically promote the exact reviewed candidate under its accepted authorization.",
+  description: "Atomically exchange the exact reviewed candidate into the target working tree. This does not create a Git commit, push a remote, or deploy.",
   operationKinds: ["repository_promotion"],
   inputSchema: {
     type: "object",
