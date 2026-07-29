@@ -22,6 +22,8 @@ import {
   "../../packages/butler-agent/src/agent/btcc/planning/submission-schemas.ts";
 import { PLANNING_AUTHORING_CONTRACTS } from
   "../../packages/butler-agent/src/agent/btcc/planning/authoring-contracts.ts";
+import { preserveAcceptedTaskDrafts } from
+  "../../packages/butler-agent/src/agent/btcc/planning/plan-revision/preserve-unaffected-tasks.ts";
 import { artifactTask } from "./support/btcc-planning-fixture.ts";
 
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
@@ -138,6 +140,28 @@ describe("BTCC Planning contract", () => {
       accepted.criteria.filter((criterion) =>
         accepted.tasks[0]!.criterionRefs.some((ref) => ref.id === criterion.ref.id)),
     ));
+  });
+
+  test("restores an accepted Task from any provisional Work placement", () => {
+    const accepted = authorPlanCandidate(artifactPlan(), authoringState());
+    const revised = artifactPlan();
+    const acceptedWork = revised.works[0]!;
+    const movedTask = acceptedWork.tasks.shift()!;
+    revised.works.push({
+      logicalId: "provisional",
+      outcome: "A provisional model grouping that runtime will normalize.",
+      dependencyWorkIds: [],
+      tasks: [movedTask],
+    });
+
+    const normalized = preserveAcceptedTaskDrafts({
+      revisedPlan: revised,
+      taskLogicalIds: ["implement"],
+      acceptedPlan: accepted,
+    }) as typeof revised;
+
+    expect(normalized.works[0]!.tasks[0]!.logicalId).toBe("implement");
+    expect(normalized.works[1]!.tasks).toEqual([]);
   });
 
   test("stopped ResultCandidate Planning exposes only the typed resume decision", () => {
