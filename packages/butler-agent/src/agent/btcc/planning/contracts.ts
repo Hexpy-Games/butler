@@ -283,6 +283,8 @@ export type PlanningFindingDecision = {
 };
 
 export type {
+  CorrectionExecutionRequirement,
+  CorrectionPlan,
   FeedbackPlanProduct,
   FeedbackPlanningAcceptedProduct,
   FeedbackPlanningFinding,

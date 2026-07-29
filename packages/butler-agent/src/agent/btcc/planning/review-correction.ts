@@ -17,6 +17,7 @@ import type {
 } from "./contracts.ts";
 import { withManagedDeferral } from "../deferral/index.ts";
 import { feedbackPlanReviewSubmissionSchema } from "./submission-schemas.ts";
+import { assertAcceptedCorrectionFitsCurrentTask } from "./correction-authority.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning_review",
@@ -73,6 +74,13 @@ function correctionReviewCodec(prior?: FeedbackPlanningReview) {
       findingVerdicts: decoded.verdicts,
     };
     if (value.verdict === "accepted") {
+      const currentTask = state.currentTask as Parameters<
+        typeof assertAcceptedCorrectionFitsCurrentTask
+      >[1] | undefined;
+      if (!currentTask) {
+        throw new Error("Feedback Planning Review is missing the current Task");
+      }
+      assertAcceptedCorrectionFitsCurrentTask(candidate.candidate, currentTask);
       const body = { ...reviewBase, verdict: "accepted" as const, findings: [] as [] };
       return {
         kind: "feedback_planning_accepted",

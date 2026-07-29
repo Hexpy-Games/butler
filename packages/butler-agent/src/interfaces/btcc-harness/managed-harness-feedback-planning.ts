@@ -16,6 +16,7 @@ export function submitFeedbackPlan(
       ...feedbackPlanningFindingDecisions(state),
       correctionKind,
       correctionAction: "같은 Task에서 고객 응대 원칙별 실행 지침을 추가한다",
+      executionRequirement: correctionExecutionRequirement(state),
     };
   }
   return {
@@ -23,6 +24,7 @@ export function submitFeedbackPlan(
     ...feedbackPlanningFindingDecisions(state),
     correctionKind,
     correctionAction: "리뷰 피드백에 맞춰 Task 경계와 의존 순서를 다시 승인한다",
+    executionRequirement: correctionExecutionRequirement(state),
     revisedPlan: revalidateAcceptedTask
       ? unchangedTaskRevision(state)
       : revisedPlanSubmission(state),
@@ -49,6 +51,20 @@ export function submitFeedbackPlan(
       ? { authorityChange: "사용자가 승인한 확장 범위를 적용한다" }
       : {}),
   };
+}
+
+function correctionExecutionRequirement(state: Record<string, unknown>) {
+  const lifecycleEntry = asRecord(state.currentArtifactPolicy);
+  const policy = asRecord(lifecycleEntry.policy);
+  const mutationScope = asRecord(policy.mutationScope);
+  if (policy.kind === "workspace_artifact" && mutationScope.kind === "contained_paths") {
+    return {
+      kind: "workspace_mutation",
+      workspaceScopeRef: policy.workspaceScopeRef,
+      writablePaths: asArray(mutationScope.writablePaths),
+    };
+  }
+  return { kind: "observation_only" };
 }
 
 export function submitFeedbackPlanningReview(

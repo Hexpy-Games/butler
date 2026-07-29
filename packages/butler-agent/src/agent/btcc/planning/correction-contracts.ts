@@ -22,12 +22,21 @@ export type TaskImpact = TaskImpactBase & (
     }
 );
 
+export type CorrectionExecutionRequirement =
+  | { kind: "observation_only" }
+  | {
+      kind: "workspace_mutation";
+      workspaceScopeRef: string;
+      writablePaths: string[];
+    };
+
 export type CorrectionPlan = {
   ref: ContentRef;
   kind: "correction_plan";
   governingWorkPlanRef: ContentRef;
   targetTaskRefs: [ContentRef, ...ContentRef[]];
   correctionAction: string;
+  executionRequirement: CorrectionExecutionRequirement;
   findingDecisions: PlanningFindingDecision[];
   artifactLifecycleRef: ContentRef;
 };

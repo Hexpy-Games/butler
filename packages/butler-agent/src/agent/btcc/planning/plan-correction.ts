@@ -25,6 +25,7 @@ import {
   decodeFindingDecisions,
   requiredFeedbackFindingRefs,
 } from "./finding-decisions.ts";
+import { decodeCorrectionExecutionRequirement } from "./correction-authority.ts";
 import { preserveUnaffectedTaskDrafts } from
   "./plan-revision/preserve-unaffected-tasks.ts";
 
@@ -88,6 +89,7 @@ function feedbackPlanningCodec(
           affectedTaskRefs,
           lifecycleRef,
           value.correctionAction,
+          value.executionRequirement,
           intent.feedbackIntent.findingDecisions,
         );
         return feedbackProduct({
@@ -149,6 +151,7 @@ function feedbackPlanningCodec(
         revisedTargets as [ContentRef, ...ContentRef[]],
         revisedPlan.artifactLifecycle.ref,
         value.correctionAction,
+        value.executionRequirement,
         intent.feedbackIntent.findingDecisions,
       );
       const common = {
@@ -225,6 +228,7 @@ function correctionPlanFor(
   targetTaskRefs: [ContentRef, ...ContentRef[]],
   artifactLifecycleRef: ContentRef,
   action: unknown,
+  executionRequirement: unknown,
   findingDecisions: PlanningFindingDecision[],
 ) {
   const body = {
@@ -232,6 +236,7 @@ function correctionPlanFor(
     governingWorkPlanRef,
     targetTaskRefs,
     correctionAction: requireString(action, "correctionAction"),
+    executionRequirement: decodeCorrectionExecutionRequirement(executionRequirement),
     findingDecisions,
     artifactLifecycleRef,
   };

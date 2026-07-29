@@ -1,6 +1,7 @@
 export { planning } from "./planning.ts";
 export { planningCandidateBundleEntries } from "./candidate-bundle.ts";
 export type {
+  CorrectionExecutionRequirement,
   FeedbackPlanProduct,
   FeedbackPlanningAcceptedProduct,
   FeedbackPlanningReviewProduct,
