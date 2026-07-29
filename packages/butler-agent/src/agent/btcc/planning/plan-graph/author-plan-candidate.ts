@@ -55,6 +55,7 @@ export function authorPlanCandidate(
     ? null
     : resumeStoppedAcceptedPlan(submission, state);
   if (resumed) return resumed;
+  state = preserveStoppedResultTask(state);
   const { authoredSpecs, governingSpecRefs } = authorGoverningSpecs(
     submission.specifications,
     submission.governingSpecSelections,
@@ -229,6 +230,28 @@ export function authorPlanCandidate(
     bundle,
   };
   return { ref: contentRef("plan-candidate", candidateBody), ...candidateBody };
+}
+
+function preserveStoppedResultTask(state: AuthoringState): AuthoringState {
+  const continuation = state.continuation;
+  const interrupted = continuation?.kind === "stopped_program"
+    ? continuation.context?.frontier.interruptedTask
+    : undefined;
+  const acceptedPlan = continuation?.kind === "stopped_program"
+    ? continuation.context?.acceptedPlan
+    : undefined;
+  if (!state.previousCandidateRef || !interrupted?.resultRef || !acceptedPlan) return state;
+  const acceptedTask = acceptedPlan.tasks.find((task) => sameRef(task.ref, interrupted.task.ref));
+  if (!acceptedTask) {
+    throw new Error("Stopped Result Task is absent from the accepted Plan revision");
+  }
+  return {
+    ...state,
+    preservedPlan: acceptedPlan,
+    preservedTaskLogicalIds: [
+      ...new Set([...(state.preservedTaskLogicalIds ?? []), acceptedTask.taskLogicalId]),
+    ],
+  };
 }
 
 function preservedTask(

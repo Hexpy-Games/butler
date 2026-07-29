@@ -156,6 +156,8 @@ describe("BTCC Planning contract", () => {
     const accepted = authorPlanCandidate(artifactPlan(), authoringState());
     const revisedSubmission = artifactPlan();
     revisedSubmission.strategy = "Apply the frozen review findings before continuing.";
+    revisedSubmission.works[0]!.tasks[0]!.intendedOutcome =
+      "A model rewrite that must not replace the stopped Result Task.";
     const continuation = {
       kind: "stopped_program",
       ref: ref("continuation"),
@@ -182,6 +184,8 @@ describe("BTCC Planning contract", () => {
 
     expect(revised.plan.strategy).toBe(revisedSubmission.strategy);
     expect(revised.reviewRevision?.previousCandidateRef).toEqual(accepted.ref);
+    expect(revised.tasks.find((task) => task.taskLogicalId === "implement")?.ref)
+      .toEqual(accepted.tasks[0]!.ref);
   });
 
   test("requires a compact Task display title separately from its full outcome", () => {
