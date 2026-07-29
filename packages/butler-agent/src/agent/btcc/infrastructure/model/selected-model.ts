@@ -204,9 +204,10 @@ function activationForProviderFailure(
   error: ModelProviderRequestError,
 ): OperationalActivation {
   if (error.statusCode === 429) {
-    return error.retryAt
-      ? { kind: "automatic_provider_recovery", retryAt: error.retryAt }
-      : { kind: "provider_action_required" };
+    return {
+      kind: "automatic_provider_recovery",
+      ...(error.retryAt ? { retryAt: error.retryAt } : {}),
+    };
   }
   if (error.statusCode !== undefined && error.statusCode >= 500) {
     return {
