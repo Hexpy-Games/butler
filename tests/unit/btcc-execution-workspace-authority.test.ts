@@ -176,4 +176,65 @@ describe("BTCC Task Execution workspace authority", () => {
       operationKind: "workspace_artifact_observation",
     })]);
   });
+
+  test("narrows a corrective Attempt to the accepted correction paths", () => {
+    const scoped = scopeTaskExecution({
+      admittedAuthority: {
+        observationScopeRefs: ["workspace:/project"],
+        mutation: { kind: "forbidden" },
+      },
+      artifactTargetScopeRef: "workspace:/project",
+      target: workspaceTarget({
+        kind: "contained_paths",
+        writablePaths: ["src", "tests"],
+      }),
+      correctionRequirement: {
+        kind: "workspace_mutation",
+        workspaceScopeRef: "workspace:/project",
+        writablePaths: ["tests/word-chain.test.ts"],
+      },
+    });
+
+    expect(scoped.operationAuthority.mutation).toMatchObject({
+      kind: "workspace_only",
+      mutationScope: {
+        kind: "contained_paths",
+        writablePaths: ["tests/word-chain.test.ts"],
+      },
+    });
+  });
+
+  test("keeps observation-only correction attempts non-mutating", () => {
+    const scoped = scopeTaskExecution({
+      admittedAuthority: {
+        observationScopeRefs: ["workspace:/project"],
+        mutation: { kind: "forbidden" },
+      },
+      artifactTargetScopeRef: "workspace:/project",
+      target: workspaceTarget({ kind: "contained_paths", writablePaths: ["src"] }),
+      correctionRequirement: { kind: "observation_only" },
+    });
+
+    expect(scoped.operationAuthority.mutation).toMatchObject({
+      kind: "workspace_only",
+      mutationScope: { kind: "read_only" },
+    });
+  });
 });
+
+function workspaceTarget(
+  mutationScope:
+    | { kind: "read_only" }
+    | { kind: "contained_paths"; writablePaths: string[] },
+) {
+  return {
+    kind: "provisioned_workspace" as const,
+    provisionOutcomeRef: { id: "provision", sha256: "provision-sha" },
+    workspaceRef,
+    baselineRef: { id: "baseline", sha256: "baseline-sha" },
+    baselineSnapshotRef: { id: "snapshot", sha256: "snapshot-sha" },
+    acceptedBaseRevisionRefs: [],
+    operationRoot: { kind: "directory" as const, relativeTarget: "." as const },
+    mutationScope,
+  };
+}
