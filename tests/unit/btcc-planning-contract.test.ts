@@ -157,6 +157,8 @@ describe("BTCC Planning contract", () => {
     const revisedSubmission = artifactPlan();
     revisedSubmission.strategy = "Apply the frozen review findings before continuing.";
     revisedSubmission.works[0]!.tasks[0]!.intendedOutcome =
+      "A model rewrite that must not replace a stopped Task dependency.";
+    revisedSubmission.works[0]!.tasks[1]!.intendedOutcome =
       "A model rewrite that must not replace the stopped Result Task.";
     const continuation = {
       kind: "stopped_program",
@@ -167,7 +169,7 @@ describe("BTCC Planning contract", () => {
         acceptedPlan: accepted,
         frontier: {
           interruptedTask: {
-            task: accepted.tasks[0]!,
+            task: accepted.tasks[1]!,
             resultRef: ref("stopped-result"),
           },
         },
@@ -186,6 +188,8 @@ describe("BTCC Planning contract", () => {
     expect(revised.reviewRevision?.previousCandidateRef).toEqual(accepted.ref);
     expect(revised.tasks.find((task) => task.taskLogicalId === "implement")?.ref)
       .toEqual(accepted.tasks[0]!.ref);
+    expect(revised.tasks.find((task) => task.taskLogicalId === "integrate")?.ref)
+      .toEqual(accepted.tasks[1]!.ref);
   });
 
   test("requires a compact Task display title separately from its full outcome", () => {
