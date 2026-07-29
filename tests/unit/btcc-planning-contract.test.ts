@@ -24,6 +24,8 @@ import { PLANNING_AUTHORING_CONTRACTS } from
   "../../packages/butler-agent/src/agent/btcc/planning/authoring-contracts.ts";
 import { preserveAcceptedTaskDrafts } from
   "../../packages/butler-agent/src/agent/btcc/planning/plan-revision/preserve-unaffected-tasks.ts";
+import { rejectHistoricalTaskReferences } from
+  "../../packages/butler-agent/src/agent/btcc/planning/plan-revision/reject-historical-task-references.ts";
 import { artifactTask } from "./support/btcc-planning-fixture.ts";
 
 const ref = (id: string) => ({ id, sha256: `${id}-sha` });
@@ -162,6 +164,24 @@ describe("BTCC Planning contract", () => {
 
     expect(normalized.works[0]!.tasks[0]!.logicalId).toBe("implement");
     expect(normalized.works[1]!.tasks).toEqual([]);
+  });
+
+  test("keeps accepted historical Tasks outside a revised Plan", () => {
+    const accepted = authorPlanCandidate(artifactPlan(), authoringState());
+    const revised = artifactPlan();
+    revised.promotionSelectors[0]!.implementationTaskIds.push("historical-implementation");
+
+    expect(() => rejectHistoricalTaskReferences({
+      revisedPlan: revised,
+      acceptedPlan: accepted,
+      taskImpactIndex: [
+        ...accepted.tasks.map((task) => ({ task, status: "planned" })),
+        {
+          task: { ref: ref("historical"), taskLogicalId: "historical-implementation" },
+          status: "accepted",
+        },
+      ],
+    })).toThrow("Historical accepted Task historical-implementation is not current Plan authority");
   });
 
   test("stopped ResultCandidate Planning exposes only the typed resume decision", () => {

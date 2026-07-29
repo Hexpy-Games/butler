@@ -30,6 +30,8 @@ import { preserveUnaffectedTaskDrafts } from
   "./plan-revision/preserve-unaffected-tasks.ts";
 import { acceptedUnaffectedTaskIds } from
   "./plan-revision/preserve-unaffected-tasks.ts";
+import { rejectHistoricalTaskReferences } from
+  "./plan-revision/reject-historical-task-references.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -110,9 +112,16 @@ function feedbackPlanningCodec(
         ? authorityRevision(currentAuthorityRef, value.authorityChange)
         : undefined;
       const acceptedPlan = requirePlanningCandidate(state.acceptedPlan);
+      const taskImpactIndex = requireTaskImpactIndex(state.taskImpactIndex);
+      const revisedPlanSubmission = requireRecord(value.revisedPlan, "revisedPlan");
+      rejectHistoricalTaskReferences({
+        revisedPlan: revisedPlanSubmission,
+        acceptedPlan,
+        taskImpactIndex,
+      });
       const revisedPlan = authorPlanCandidate(
         preserveUnaffectedTaskDrafts({
-          revisedPlan: requireRecord(value.revisedPlan, "revisedPlan"),
+          revisedPlan: revisedPlanSubmission,
           impactMap: value.impactMap,
           acceptedPlan,
         }),
@@ -143,7 +152,7 @@ function feedbackPlanningCodec(
       );
       const impactMap = decodeTaskImpact({
         submission: value.impactMap,
-        currentTasks: requireTaskImpactIndex(state.taskImpactIndex),
+        currentTasks: taskImpactIndex,
         nextTasks: revisedPlan.tasks,
       });
       const revisedTargets = impactMap

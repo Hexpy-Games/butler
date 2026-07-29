@@ -48,6 +48,7 @@ const COMPACT_CONTRACTS = [
       "Planning Review separates complete subject coverage from root causes: one required correction has one rootCauseKey, one top-level immutable Finding, every affected subject id, the highest applicable priority, and one correction decision; runtime projects that one Finding to its affected subjects, so subjects never duplicate Finding links or bodies.",
       "A PlanningDraft validation finding is already one runtime-owned P0 root cause; Planning Review never restates that defect as a second semantic Finding and adds only independent root causes established by the same complete pass.",
       "A revised candidate is checked only against the exact frozen prior finding set and accepted finding decisions; re-review returns one resolution verdict per frozen root cause and cannot add another Finding.",
+      "Feedback taskImpactIndex may include accepted historical Tasks that are not members of acceptedPlan. Keep those entries unaffected with their prior logical identity, but omit them from revised Plan Tasks and lifecycle selectors; a current integration or verification Task represents inherited workspace bytes for current promotion.",
       "Implementation repair preserves the accepted graph; graph changes require governing review.",
     ],
   },
