@@ -28,6 +28,8 @@ import {
 import { decodeCorrectionExecutionRequirement } from "./correction-authority.ts";
 import { preserveUnaffectedTaskDrafts } from
   "./plan-revision/preserve-unaffected-tasks.ts";
+import { acceptedUnaffectedTaskIds } from
+  "./plan-revision/preserve-unaffected-tasks.ts";
 
 const CONTRACT: PhaseContract = {
   phase: "feedback_planning",
@@ -135,6 +137,8 @@ function feedbackPlanningCodec(
           requiredOutcomeId: requireString(state.requiredOutcomeId, "requiredOutcomeId"),
           artifactPersistence: requireArtifactPersistence(state.artifactPersistence),
           workspaceScopeRef: requireWorkspaceScope(envelope.context.baselineObservationScopeRefs),
+          preservedPlan: acceptedPlan,
+          preservedTaskLogicalIds: acceptedUnaffectedTaskIds(value.impactMap, acceptedPlan),
         },
       );
       const impactMap = decodeTaskImpact({

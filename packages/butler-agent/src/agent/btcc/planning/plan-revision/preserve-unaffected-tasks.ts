@@ -31,6 +31,14 @@ export function preserveUnaffectedTaskDrafts(input: {
   return { ...input.revisedPlan, works: nextWorks };
 }
 
+export function acceptedUnaffectedTaskIds(
+  impactMap: unknown,
+  acceptedPlan: PlanningCandidate,
+): string[] {
+  const accepted = new Set(acceptedPlan.tasks.map((task) => task.taskLogicalId));
+  return [...unaffectedTaskIds(impactMap)].filter((taskId) => accepted.has(taskId));
+}
+
 type WorkDraft = Record<string, unknown> & {
   logicalId: string;
   tasks: Record<string, unknown>[];

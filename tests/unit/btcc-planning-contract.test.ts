@@ -117,6 +117,28 @@ describe("BTCC Planning contract", () => {
     expect(schema.properties).toHaveProperty("promotionSelectors");
   });
 
+  test("reuses the exact unaffected Task record across a governing Spec revision", () => {
+    const accepted = authorPlanCandidate(artifactPlan(), authoringState());
+    const revisedSubmission = artifactPlan();
+    revisedSubmission.works[0]!.tasks[1]!.intendedOutcome =
+      "Integrate the revised governing behavior.";
+    const revised = authorPlanCandidate(revisedSubmission, {
+      ...authoringState(),
+      governingSpecRefs: [ref("spec-v2")],
+      preservedPlan: accepted,
+      preservedTaskLogicalIds: ["implement"],
+    });
+
+    expect(revised.tasks.find((task) => task.taskLogicalId === "implement")?.ref)
+      .toEqual(accepted.tasks.find((task) => task.taskLogicalId === "implement")?.ref);
+    expect(revised.tasks.find((task) => task.taskLogicalId === "integrate")?.ref)
+      .not.toEqual(accepted.tasks.find((task) => task.taskLogicalId === "integrate")?.ref);
+    expect(revised.criteria).toEqual(expect.arrayContaining(
+      accepted.criteria.filter((criterion) =>
+        accepted.tasks[0]!.criterionRefs.some((ref) => ref.id === criterion.ref.id)),
+    ));
+  });
+
   test("stopped ResultCandidate Planning exposes only the typed resume decision", () => {
     const schema = planCandidateSubmissionSchema([], [], true) as {
       properties?: Record<string, unknown>;

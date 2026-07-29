@@ -43,6 +43,8 @@ export type AuthoringState = {
   continuation?: import("../contracts.ts").PlanningContinuation;
   requireGoverningSpec?: boolean;
   specParentRootId?: string;
+  preservedPlan?: PlanningCandidate;
+  preservedTaskLogicalIds?: string[];
 };
 
 export function authorPlanCandidate(
@@ -79,6 +81,13 @@ export function authorPlanCandidate(
   const tasks: ManagedTask[] = [];
 
   for (const draft of orderedTasks) {
+    const preserved = preservedTask(draft, drafts, taskRefs, state);
+    if (preserved) {
+      appendPreservedTaskRecords(preserved, state.preservedPlan!, criteria, questions);
+      taskRefs.set(draft.logicalId, preserved.ref);
+      tasks.push(preserved);
+      continue;
+    }
     const taskCriteria = materializeCriteria(draft, state, criteria, questions);
     const taskBody = {
       taskLogicalId: draft.logicalId,
@@ -218,6 +227,62 @@ export function authorPlanCandidate(
     bundle,
   };
   return { ref: contentRef("plan-candidate", candidateBody), ...candidateBody };
+}
+
+function preservedTask(
+  draft: TaskDraft,
+  drafts: WorkDraft[],
+  taskRefs: Map<string, ContentRef>,
+  state: AuthoringState,
+): ManagedTask | undefined {
+  if (!state.preservedTaskLogicalIds?.includes(draft.logicalId)) return undefined;
+  const task = state.preservedPlan?.tasks.find(
+    (candidate) => candidate.taskLogicalId === draft.logicalId,
+  );
+  if (!task) throw new Error(`Preserved Task is absent from the accepted Plan: ${draft.logicalId}`);
+  if (
+    task.workLogicalId !== owningWork(drafts, draft.logicalId).logicalId ||
+    task.executionOrdinal !== draft.executionOrdinal
+  ) {
+    throw new Error(`Unaffected Task topology changed: ${draft.logicalId}`);
+  }
+  const dependencyRefs = draft.dependencyTaskIds.map((id) => requiredRef(taskRefs, id, "Task"));
+  if (!sameRefs(dependencyRefs, task.dependencyTaskRefs)) {
+    throw new Error(`Unaffected Task dependencies changed: ${draft.logicalId}`);
+  }
+  return task;
+}
+
+function appendPreservedTaskRecords(
+  task: ManagedTask,
+  plan: PlanningCandidate,
+  criteria: ManagedCriterion[],
+  questions: ManagedVerificationQuestion[],
+): void {
+  for (const ref of task.criterionRefs) {
+    criteria.push(requiredRecord(plan.criteria, ref, "criterion"));
+  }
+  for (const ref of task.verificationQuestionRefs) {
+    questions.push(requiredRecord(plan.verificationQuestions, ref, "verification question"));
+  }
+}
+
+function requiredRecord<T extends { ref: ContentRef }>(
+  records: T[],
+  ref: ContentRef,
+  kind: string,
+): T {
+  const record = records.find((candidate) => sameRef(candidate.ref, ref));
+  if (!record) throw new Error(`Accepted Plan is missing preserved ${kind}: ${ref.id}`);
+  return record;
+}
+
+function sameRefs(left: ContentRef[], right: ContentRef[]): boolean {
+  return left.length === right.length && left.every((ref, index) => sameRef(ref, right[index]!));
+}
+
+function sameRef(left: ContentRef, right: ContentRef): boolean {
+  return left.id === right.id && left.sha256 === right.sha256;
 }
 
 function stoppedTaskProvenance(
