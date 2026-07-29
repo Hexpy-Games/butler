@@ -12,8 +12,20 @@ export function preserveUnaffectedTaskDrafts(input: {
   impactMap: unknown;
   acceptedPlan: PlanningCandidate;
 }): Record<string, unknown> {
-  const unaffected = unaffectedTaskIds(input.impactMap);
-  if (unaffected.size === 0) return input.revisedPlan;
+  return preserveAcceptedTaskDrafts({
+    revisedPlan: input.revisedPlan,
+    taskLogicalIds: [...unaffectedTaskIds(input.impactMap)],
+    acceptedPlan: input.acceptedPlan,
+  });
+}
+
+export function preserveAcceptedTaskDrafts(input: {
+  revisedPlan: Record<string, unknown>;
+  taskLogicalIds: string[];
+  acceptedPlan: PlanningCandidate;
+}): Record<string, unknown> {
+  const preserved = new Set(input.taskLogicalIds);
+  if (preserved.size === 0) return input.revisedPlan;
 
   const priorTasks = new Map(
     input.acceptedPlan.tasks.map((task) => [task.taskLogicalId, task]),
@@ -21,7 +33,7 @@ export function preserveUnaffectedTaskDrafts(input: {
   const nextWorks = requiredArray(input.revisedPlan.works, "revisedPlan.works")
     .map((value, index) => decodeWorkDraft(value, index));
 
-  for (const taskId of unaffected) {
+  for (const taskId of preserved) {
     const priorTask = priorTasks.get(taskId);
     if (!priorTask) continue;
     rejectMovedTask(nextWorks, priorTask);
