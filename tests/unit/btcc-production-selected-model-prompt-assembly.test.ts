@@ -230,7 +230,7 @@ describe("production BTCC selected model", () => {
       selectedOperationResultViews: [],
       priorOperationResultIndex: [],
     });
-    expect(dynamic.operationAuthority).toEqual(phaseEnvelope().operationAuthority);
+    expect(dynamic).not.toHaveProperty("operationAuthority");
     expect(dynamic.butlerContext).toEqual({
       sessionId: "session-1",
       userRef: "user-1",

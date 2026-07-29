@@ -15,6 +15,7 @@ import {
 } from "./support/btcc-production-selected-model-fixtures.ts";
 
 const publicActivity = {
+  title: "단계 판단 완료",
   summary: "현재 단계의 판단을 마쳤습니다.",
   rationale: "요청 목표와 단계 계약을 함께 확인했습니다.",
   nextStep: "다음 단계가 이 판단을 이어받습니다.",
