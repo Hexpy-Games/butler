@@ -4,6 +4,7 @@ import type {
   ProviderCarrierFunction,
 } from "./contracts.ts";
 import type { OperationAuthority } from "../../core/index.ts";
+import { DISPLAY_TITLE_MAX_LENGTH } from "../../core/display-title.ts";
 
 export function providerCarrierSchema(
   capabilities: readonly ProviderCapabilityVocabularyEntry[],
@@ -180,12 +181,19 @@ function phaseContinuitySchema(): Record<string, unknown> {
 function publicActivitySchema(moment: string): Record<string, unknown> {
   return {
     ...objectParameters({
+      title: {
+        type: "string",
+        minLength: 1,
+        maxLength: DISPLAY_TITLE_MAX_LENGTH,
+      },
       summary: { type: "string", minLength: 1 },
       rationale: { type: "string", minLength: 1 },
       nextStep: { type: "string", minLength: 1 },
-    }, ["summary", "rationale", "nextStep"]),
+    }, ["title", "summary", "rationale", "nextStep"]),
     description: [
       `User-visible activity record for the ${moment}.`,
+      "Write title as a concrete display label, normally 8 to 24 Unicode characters in Korean or 3 to 8 short English words, and never more than 32 Unicode characters.",
+      "Do not put identifiers, Spec lists, rationale, or a full sentence in title.",
       "Name the concrete target and current action, decision, or result.",
       "Explain why it matters to the accepted Goal, governing Spec, Plan, or current review finding.",
       "Name the next observable action or state transition.",

@@ -4,9 +4,11 @@ import {
   type DraftArtifactPolicy,
 } from "./author-artifact-lifecycle.ts";
 import { rejectPlanningProposal } from "./planning-proposal-defect.ts";
+import { requireDisplayTitle } from "../../core/display-title.ts";
 
 export type TaskDraft = {
   logicalId: string;
+  displayTitle: string;
   intendedOutcome: string;
   executionOrdinal: number;
   dependencyTaskIds: string[];
@@ -187,6 +189,7 @@ function readTaskDraft(
       : declaredTargetScopes;
   return {
     logicalId: requireString(task.logicalId, `${label}.logicalId`),
+    displayTitle: requireDisplayTitle(task.displayTitle, `${label}.displayTitle`),
     intendedOutcome: requireString(task.intendedOutcome, `${label}.intendedOutcome`),
     executionOrdinal,
     dependencyTaskIds: requireStringArray(task.dependencyTaskIds, "dependencyTaskIds"),

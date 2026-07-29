@@ -1,4 +1,5 @@
 import { requireRecord, requireString, type ContentRef } from "../../core/index.ts";
+import { legacyDisplayTitle } from "../../core/display-title.ts";
 import type {
   ManagedTask,
   PlanningCandidate,
@@ -75,6 +76,7 @@ function reconstructTaskDraft(
   );
   return {
     logicalId: task.taskLogicalId,
+    displayTitle: task.displayTitle ?? legacyDisplayTitle(task.intendedOutcome),
     intendedOutcome: task.intendedOutcome,
     dependencyTaskIds: task.dependencyTaskRefs.map((ref) =>
       requiredLookup(taskIdsByRef, ref, "dependency Task")),

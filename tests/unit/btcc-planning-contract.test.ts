@@ -117,6 +117,17 @@ describe("BTCC Planning contract", () => {
     expect(schema.properties).toHaveProperty("promotionSelectors");
   });
 
+  test("requires a compact Task display title separately from its full outcome", () => {
+    const candidate = authorPlanCandidate(artifactPlan(), authoringState());
+    expect(candidate.tasks[0]?.displayTitle).toBe("implement task");
+    expect(candidate.tasks[0]?.intendedOutcome).toBe("implement outcome");
+
+    const plan = artifactPlan();
+    plan.works[0]!.tasks[0]!.displayTitle = "가".repeat(33);
+    expect(() => authorPlanCandidate(plan, authoringState()))
+      .toThrow("displayTitle must not exceed 32 Unicode characters");
+  });
+
   test("constrains feedback review findings by priority, scope, and frozen identity", () => {
     const planningRevision = JSON.stringify(
       planReviewSubmissionSchema(["task:one"], ["planning-root-cause-1"]),

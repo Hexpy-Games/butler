@@ -64,6 +64,11 @@ export function projectTurnProgress(
               safe_label: "Work",
               safe_value: task.workTitle,
               state: task.workState,
+            }, {
+              id: "task-outcome",
+              kind: "task_outcome",
+              safe_label: "Task outcome",
+              safe_value: task.taskOutcome,
             }],
           },
         });
@@ -75,6 +80,7 @@ export function projectTurnProgress(
         payload: {
           note: update.summary,
           btccState: update.semanticState,
+          decisionTitle: update.title,
           decisionSummary: update.summary,
           decisionRationale: update.rationale,
           decisionNextStep: update.nextStep,

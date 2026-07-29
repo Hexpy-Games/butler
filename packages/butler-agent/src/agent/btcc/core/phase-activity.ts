@@ -3,6 +3,7 @@ import type { OperationRequest } from "./contracts.ts";
 import type { PhaseRunBinding } from "./contracts.ts";
 
 export type PublicPhaseActivity = {
+  title: string;
   summary: string;
   rationale: string;
   nextStep: string;

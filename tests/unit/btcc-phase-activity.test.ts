@@ -66,6 +66,7 @@ test("publishes committed model-authored activity before an operation batch", as
               unresolved: ["The current implementation boundary is unknown."],
               nextOperationPurpose: "Read the current module.",
               publicActivity: {
+                title: "구현 경계 확인",
                 summary: "현재 구현 경계를 확인하고 있습니다.",
                 rationale: "설계에 맞는 최소 변경 범위를 정하기 위해 필요합니다.",
                 nextStep: "확인 결과로 계획 후보를 작성합니다.",
@@ -78,6 +79,7 @@ test("publishes committed model-authored activity before an operation batch", as
           kind: "phase_submission" as const,
           submission: { kind: "plan_candidate" },
           publicActivity: {
+            title: "계획 후보 작성",
             summary: "구현 경계를 반영한 계획 후보를 만들었습니다.",
             rationale: "확인한 현재 구조와 요청 목표를 함께 보존했습니다.",
             nextStep: "계획의 완전성과 실행 가능성을 검토합니다.",
@@ -132,6 +134,7 @@ test("publishes committed model-authored activity before an operation batch", as
       semanticState: "planning",
       activityId: `phase-activity:${binding.checkpointId}:2`,
       activity: {
+        title: "구현 경계 확인",
         summary: "현재 구현 경계를 확인하고 있습니다.",
         rationale: "설계에 맞는 최소 변경 범위를 정하기 위해 필요합니다.",
         nextStep: "확인 결과로 계획 후보를 작성합니다.",
@@ -142,6 +145,7 @@ test("publishes committed model-authored activity before an operation batch", as
       semanticState: "planning",
       activityId: `phase-activity:${binding.checkpointId}:4`,
       activity: {
+        title: "계획 후보 작성",
         summary: "구현 경계를 반영한 계획 후보를 만들었습니다.",
         rationale: "확인한 현재 구조와 요청 목표를 함께 보존했습니다.",
         nextStep: "계획의 완전성과 실행 가능성을 검토합니다.",

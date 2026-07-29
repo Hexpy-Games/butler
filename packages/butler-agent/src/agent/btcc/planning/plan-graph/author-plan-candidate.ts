@@ -82,6 +82,7 @@ export function authorPlanCandidate(
     const taskCriteria = materializeCriteria(draft, state, criteria, questions);
     const taskBody = {
       taskLogicalId: draft.logicalId,
+      displayTitle: draft.displayTitle,
       programId: state.programId,
       workLogicalId: owningWork(drafts, draft.logicalId).logicalId,
       goalContractRef: state.goalContractRef,

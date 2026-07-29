@@ -12,6 +12,7 @@ const COMPACT_CONTRACTS = [
       "Every authored Spec declares parentId and concernId in reviewed bytes; use specParentRootId for a project-root Spec and an exact Spec logical id for a child.",
       "A Work is a cohesive product outcome, never a phase, file bucket, or agent assignment.",
       "A Task is the smallest independently executable and reviewable semantic contribution.",
+      "Give every Task a compact displayTitle for user-facing progress: normally 8 to 24 Unicode characters in Korean or 3 to 8 short English words, never more than 32 Unicode characters. Keep the complete semantic result in intendedOutcome; never copy identifiers, Spec lists, rationale, or the full outcome into displayTitle.",
       "Split independently deliverable persistence, semantic evaluation, policy, product-path integration, and durable verification contributions by their real dependencies; never collapse a layered feature into one broad implementation Task.",
       "Task granularity is never decided by file count, path count, token budget, tool calls, model rounds, or elapsed time.",
       "Planning Review simulates each projected Task alone and rejects a boundary whose ordinary findings would reopen several separable correction programs.",

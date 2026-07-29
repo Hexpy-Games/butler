@@ -11,6 +11,7 @@ import type {
 import type { AcceptedPhaseGuidance } from "../../../packages/butler-agent/src/agent/btcc/guidance/index.ts";
 
 export const publicActivity = {
+  title: "단계 판단 완료",
   summary: "현재 단계의 판단을 마쳤습니다.",
   rationale: "요청 목표와 단계 계약을 함께 확인했습니다.",
   nextStep: "다음 단계가 이 판단을 이어받습니다.",
@@ -135,6 +136,7 @@ export function phaseContinuity() {
     unresolved: ["The requested operation must be observed."],
     nextOperationPurpose: "Resolve the remaining phase question.",
     publicActivity: {
+      title: "단계 내용 확인",
       summary: "현재 단계에 필요한 내용을 확인하고 있습니다.",
       rationale: "정확한 다음 판단에 필요한 현재 상태를 확보합니다.",
       nextStep: "확인한 내용을 바탕으로 단계 결과를 작성합니다.",
