@@ -3,7 +3,10 @@ import {
   requireString,
   type ContentRef,
 } from "../../core/index.ts";
-import type { GoalArtifactPersistence } from "../../conception/index.ts";
+import type {
+  GoalArtifactPersistence,
+  GoalRequiredTargetEffect,
+} from "../../conception/index.ts";
 import type {
   ManagedCriterion,
   ManagedTask,
@@ -37,6 +40,7 @@ export type AuthoringState = {
   governingSpecRefs: ContentRef[];
   availableSpecs?: import("../contracts.ts").AvailableSpecRevision[];
   requiredOutcomeId: string;
+  requiredTargetEffects?: GoalRequiredTargetEffect[];
   artifactPersistence: GoalArtifactPersistence;
   workspaceScopeRef: string;
   previousCandidateRef?: ContentRef;
@@ -129,6 +133,7 @@ export function authorPlanCandidate(
     programId: state.programId,
     requiredOutcomeId: state.requiredOutcomeId,
     authorityRef: state.authorityRef,
+    requiredTargetEffects: state.requiredTargetEffects ?? [],
   }, state.carriedArtifactTasks ?? []);
   const artifactLifecycle = authoredLifecycle.lifecycle;
   validateArtifactPersistence(state.artifactPersistence, artifactLifecycle);

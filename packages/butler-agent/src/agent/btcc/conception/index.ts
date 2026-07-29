@@ -6,6 +6,7 @@ export type {
   GoalArtifactPersistence,
   GoalContractCandidateProduct,
   GoalContractRecord,
+  GoalRequiredTargetEffect,
   GoalContractRevisionRequiredProduct,
   GoalContractReviewProduct,
   GoverningSpecApplication,

@@ -35,6 +35,7 @@ test("read-only workspace lineage may own one exact external effect", () => {
       occurrenceKey: "reconcile-ledger",
       taskId: "reconcile-ledger",
       actionKind: "external_target_mutation",
+      requiredTargetEffectId: "reconcile-ledger",
       action: "reconcile_project_ledger",
       payload: "Bind the exact accepted result.",
       desiredOutcome: "Ledger and workspace agree.",
@@ -53,6 +54,11 @@ test("read-only workspace lineage may own one exact external effect", () => {
     availableSpecs: [],
     requireGoverningSpec: false,
     requiredOutcomeId: "required-outcome",
+    requiredTargetEffects: [{
+      effectId: "reconcile-ledger",
+      targetScopeRef: "ledger:project",
+      desiredOutcome: "Ledger and workspace agree.",
+    }],
     artifactPersistence: "not_required",
     workspaceScopeRef: "workspace:/repo",
   });
@@ -73,4 +79,72 @@ test("read-only workspace lineage may own one exact external effect", () => {
   expect(candidate.effectIntents[0]?.desiredOutcomeSha256).toBe(
     contentRef("effect-desired-outcome", "Ledger and workspace agree.").sha256,
   );
+});
+
+test("every Goal target mutation has one exact external effect boundary", () => {
+  const requiredTargetEffects = [{
+    effectId: "commit-local-main",
+    targetScopeRef: "git:local/main",
+    desiredOutcome: "Local main points to the reviewed commit.",
+  }];
+  const submission = {
+    strategy: "Commit the reviewed target through its exact Git ref boundary.",
+    works: [{
+      logicalId: "commit-work",
+      outcome: "The local Git ref contains the reviewed change.",
+      dependencyWorkIds: [],
+      tasks: [{
+        logicalId: "commit-main",
+        displayTitle: "Commit local main",
+        intendedOutcome: requiredTargetEffects[0]!.desiredOutcome,
+        dependencyTaskIds: [],
+        targetScopeRefs: [requiredTargetEffects[0]!.targetScopeRef],
+        effectClass: "external_effect" as const,
+        criteria: [{
+          statement: requiredTargetEffects[0]!.desiredOutcome,
+          question: "Does local main point to the reviewed commit?",
+          sourceGoalFieldIds: ["request", "intended_result"] as const,
+          sourceRequiredOutcomeRefs: ["required-outcome"],
+        }],
+      }],
+    }],
+    risks: [],
+    assumptions: [],
+    effectIntents: [{
+      occurrenceKey: "commit-main-once",
+      taskId: "commit-main",
+      actionKind: "external_target_mutation" as const,
+      requiredTargetEffectId: "commit-local-main",
+      action: "commit_reviewed_bytes",
+      payload: "Create one local main commit.",
+      desiredOutcome: requiredTargetEffects[0]!.desiredOutcome,
+      sourceGoalFieldIds: ["request", "intended_result"] as const,
+      sourceRequiredOutcomeRefs: ["required-outcome"],
+    }],
+    integrationCriteria: [],
+    promotionSelectors: [],
+  };
+  const state = {
+    ledgerId: "ledger:project",
+    programId: "program",
+    observedManifestRevision: 1,
+    goalContractRef: contentRef("goal", { request: "commit" }),
+    authorityRef: contentRef("authority", { scope: "project" }),
+    governingSpecRefs: [],
+    availableSpecs: [],
+    requireGoverningSpec: false,
+    requiredOutcomeId: "required-outcome",
+    requiredTargetEffects,
+    artifactPersistence: "not_required" as const,
+    workspaceScopeRef: "workspace:/repo",
+  };
+
+  const candidate = authorPlanCandidate(submission, state);
+  expect(candidate.effectIntents[0]).toMatchObject({
+    sourceRequiredTargetEffectId: "commit-local-main",
+    targetScopeRef: "git:local/main",
+  });
+
+  expect(() => authorPlanCandidate({ ...submission, effectIntents: [] }, state))
+    .toThrow("External-effect Task has no EffectIntent");
 });

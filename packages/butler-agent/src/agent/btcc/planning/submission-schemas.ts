@@ -100,10 +100,25 @@ const planFields = {
     }),
   ),
   effectIntents: arraySchema(
-    objectSchema({
+    variantsSchema(
+      objectSchema({
+        occurrenceKey: textSchema(),
+        taskId: textSchema(),
+        actionKind: literalSchema("external_target_mutation"),
+        requiredTargetEffectId: textSchema(),
+        action: textSchema(),
+        payload: textSchema(),
+        desiredOutcome: textSchema(),
+        sourceGoalFieldIds: arraySchema(
+          enumSchema("request", "intended_result"),
+          { minItems: 1 },
+        ),
+        sourceRequiredOutcomeRefs: arraySchema(textSchema(), { minItems: 1 }),
+      }),
+      objectSchema({
       occurrenceKey: textSchema(),
       taskId: textSchema(),
-      actionKind: enumSchema("external_target_mutation", "repository_promotion"),
+      actionKind: literalSchema("repository_promotion"),
       action: textSchema(),
       payload: textSchema(),
       desiredOutcome: textSchema(),
@@ -112,7 +127,8 @@ const planFields = {
         { minItems: 1 },
       ),
       sourceRequiredOutcomeRefs: arraySchema(textSchema(), { minItems: 1 }),
-    }),
+      }),
+    ),
   ),
   integrationCriteria: arraySchema(
     objectSchema({

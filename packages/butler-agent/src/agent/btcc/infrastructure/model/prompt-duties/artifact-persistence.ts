@@ -10,6 +10,11 @@ export const ARTIFACT_PERSISTENCE_DUTIES = {
     "For a continuation, keep persistence required when the current user still asks to",
     "create, commit, push, or otherwise persist reviewed product bytes. A projected",
     "completed predecessor is resumable history, not authority to remove that outcome.",
+    "List every requested durable target mutation in requiredTargetEffects, one exact",
+    "entry per independently mutable target occurrence. This includes local Git refs,",
+    "remote Git refs, deployments, Ledgers, messages, or other external systems, but",
+    "excludes the runtime-owned repository-promotion byte exchange. Use an empty array",
+    "when no such target mutation is required. Do not combine distinct targets.",
   ].join(" "),
   review_artifact_persistence: [
     "Independently compare the exact artifactPersistence value with the immutable",
@@ -21,5 +26,8 @@ export const ARTIFACT_PERSISTENCE_DUTIES = {
     "continuation, reject not_required when the current message still requires creating,",
     "committing, pushing, or otherwise persisting reviewed product bytes, even if the",
     "candidate projects a predecessor as completed.",
+    "Review requiredTargetEffects against the complete request and intended result.",
+    "Reject any missing, combined, invented, or ambiguously scoped target mutation,",
+    "especially local Git ref commit, remote ref push, deployment, and Ledger closure.",
   ].join(" "),
 } as const;

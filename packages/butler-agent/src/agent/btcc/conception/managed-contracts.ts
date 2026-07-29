@@ -19,6 +19,7 @@ export type GoalContractRecord = {
     outcomeId: string;
     sourceGoalFieldIds: readonly ["request", "intended_result"];
   };
+  requiredTargetEffects?: GoalRequiredTargetEffect[];
   lensAssessments: Record<ConceptionLensId, {
     disposition: "adopted" | "non_applicable";
     assessment: string;
@@ -27,6 +28,12 @@ export type GoalContractRecord = {
   personalizationRefs: string[];
   governingSpecApplications: GoverningSpecApplication[];
   nonGoals: string[];
+};
+
+export type GoalRequiredTargetEffect = {
+  effectId: string;
+  targetScopeRef: string;
+  desiredOutcome: string;
 };
 
 export type GoalArtifactPersistence = "not_required" | "required";
