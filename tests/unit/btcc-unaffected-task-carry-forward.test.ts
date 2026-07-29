@@ -84,6 +84,25 @@ test("restores an omitted Work that owns an unaffected Task", () => {
   }]);
 });
 
+test("does not reinsert an unaffected historical Task outside the current accepted Plan", () => {
+  const revisedPlan = {
+    strategy: "Repair the current Plan only.",
+    works: [{ logicalId: "W-MAIN", outcome: "Complete the work.", tasks: [] }],
+  };
+  const preserved = preserveUnaffectedTaskDrafts({
+    revisedPlan,
+    impactMap: [{
+      priorTaskLogicalId: "T-HISTORICAL",
+      disposition: "unaffected",
+      successorTaskLogicalId: "T-HISTORICAL",
+      reason: "The accepted historical result remains valid.",
+    }],
+    acceptedPlan: stableAcceptedPlan(),
+  });
+
+  expect(preserved).toEqual(revisedPlan);
+});
+
 test("does not silently move an unaffected Task to another Work", () => {
   const acceptedPlan = {
     tasks: [{
