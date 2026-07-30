@@ -6,7 +6,10 @@ import {
   snapshotButlerContext,
   type ContextDocumentWriter,
 } from "../../packages/butler-agent/src/agent/btcc/context/index.ts";
-import { PromptAssembler } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
+import {
+  PromptAssembler,
+  type ContextAssembly,
+} from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { snapshotGatewayContext } from "../../packages/butler-agent/src/interfaces/gateway/btcc/snapshot-gateway-context.ts";
 import type { StoredSessionBinding } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
@@ -64,6 +67,52 @@ test("BTCC rejects project-scoped context when no project binding exists", () =>
   expect(documents.records).toEqual([]);
 });
 
+test("Gateway context does not grant write access when the binding has no access policy", () => {
+  const documents = new RecordingContextDocuments();
+  const assembly: ContextAssembly = {
+    staticContext: [],
+    liveConfiguration: [],
+    runtimeState: [],
+    workingContext: [],
+    retrievedContext: [],
+    currentInput: [],
+    references: [],
+    liveConfigHash: "empty",
+  };
+  const snapshot = snapshotGatewayContext({
+    binding: sessionBinding("/workspace"),
+    assembly,
+    documents,
+  });
+
+  expect(snapshot.executionPolicy?.accessMode).toBe("read_only");
+});
+
+test("Gateway context snapshots the queued Turn access instead of a later wider session setting", () => {
+  const binding = sessionBinding("/workspace");
+  binding.metadata = {
+    runtimePolicy: { accessMode: "full_access", trackingMode: "none" },
+  };
+  const assembly: ContextAssembly = {
+    staticContext: [],
+    liveConfiguration: [],
+    runtimeState: [],
+    workingContext: [],
+    retrievedContext: [],
+    currentInput: [],
+    references: [],
+    liveConfigHash: "empty",
+  };
+  const snapshot = snapshotGatewayContext({
+    binding,
+    assembly,
+    documents: new RecordingContextDocuments(),
+    turnAccessMode: "read_only",
+  });
+
+  expect(snapshot.executionPolicy?.accessMode).toBe("read_only");
+});
+
 test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path", () => {
   const root = join(tmpdir(), `btcc-context-projection-${Date.now()}`);
   const butlerHome = join(root, "home");
@@ -79,6 +128,15 @@ test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path",
 
   try {
     const binding = sessionBinding(workspacePath);
+    binding.metadata = {
+      ...binding.metadata,
+      runtimePolicy: {
+        accessMode: "read_only",
+        trackingMode: "local",
+        requiredNativeToolProfiles: ["public-web"],
+        requiredNativeTools: ["web_search"],
+      },
+    };
     const assembly = new PromptAssembler({ butlerHome, butlerData }).buildButlerContextAssembly({
       binding,
       envelope: {
@@ -101,7 +159,20 @@ test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path",
     });
 
     const documents = new RecordingContextDocuments();
-    const snapshot = snapshotGatewayContext({ binding, assembly, documents });
+    const snapshot = snapshotGatewayContext({
+      binding,
+      assembly,
+      documents,
+      attachments: [{
+        id: "file-attachment",
+        kind: "document",
+        mimeType: "text/csv",
+        fileName: "products.csv",
+        sizeBytes: 42,
+        localPath: join(root, "products.csv"),
+        metadata: { transient: "not-admitted" },
+      }],
+    });
     const persistedRules = documents.records.find((record) => record.sourceId === "rules");
     expect(persistedRules).toMatchObject({
       projectionClass: "mandatory_hot_cache",
@@ -111,6 +182,22 @@ test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path",
     expect(snapshot.mandatoryHotCacheRefs).toContain(
       `context:${documents.records.indexOf(persistedRules!) + 1}`,
     );
+    expect(snapshot.executionPolicy).toEqual({
+      role: "butler",
+      accessMode: "read_only",
+      trackingMode: "local",
+      requiredNativeToolProfiles: ["public-web"],
+      requiredNativeTools: ["web_search"],
+      workspacePath,
+    });
+    expect(snapshot.attachments).toEqual([{
+      id: "file-attachment",
+      kind: "document",
+      mimeType: "text/csv",
+      fileName: "products.csv",
+      sizeBytes: 42,
+      localPath: join(root, "products.csv"),
+    }]);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

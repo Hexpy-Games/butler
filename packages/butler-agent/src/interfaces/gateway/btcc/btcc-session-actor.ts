@@ -17,6 +17,8 @@ import { projectTurnOutcome } from "./project-turn-outcome.ts";
 import { projectTurnProgress } from "./project-turn-progress.ts";
 import { snapshotGatewayContext } from "./snapshot-gateway-context.ts";
 import { GatewayConversationTurn } from "./conversation/index.ts";
+import { verifyTurnExecutionControls } from
+  "../../../gateways/core/turn-execution-controls.ts";
 
 export class BtccGatewaySessionActor implements GatewaySessionActor {
   readonly sessionId: string;
@@ -51,6 +53,13 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       binding,
       assembly,
       documents: this.options.contextDocuments,
+      attachments: envelope.message.attachments,
+      ...(envelope.executionControls
+        ? {
+            turnAccessMode: verifyTurnExecutionControls(envelope.executionControls)
+              .access_mode,
+          }
+        : {}),
     });
     const command = admitGatewayCommand({ binding, envelope, turnId, context });
     const publish = async (event: RuntimeTurnEventInput) => {

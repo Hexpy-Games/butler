@@ -1,0 +1,234 @@
+import { Database } from "bun:sqlite";
+import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createGuidedTurnRuntime,
+  type BtccRunCommand,
+  type GuidedTurnAgent,
+} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import { openBtccSqliteStores } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+
+test("Guided Turn answers directly through only durable admission and delivery states", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-direct-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-direct",
+    storageProfile: "ephemeral",
+  });
+  const states: string[] = [];
+  let calls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    retrospective: stores.retrospective,
+    committedSuccessorReadiness: stores.committedSuccessorReadiness,
+    progress: { stateChanged(update) { states.push(update.semanticState); } },
+    agent: {
+      async run() {
+        calls += 1;
+        return { route: "direct", content: "안녕하세요. 무엇을 도와드릴까요?" };
+      },
+    },
+  });
+  try {
+    const command = runCommand("guided-direct-turn");
+    const first = await runtime.runTurn(command);
+    const replay = await runtime.runTurn(command);
+
+    expect(first).toMatchObject({
+      kind: "delivered",
+      turnId: command.turnId,
+      content: "안녕하세요. 무엇을 도와드릴까요?",
+    });
+    expect(replay).toEqual(first);
+    expect(calls).toBe(1);
+    expect(states).toEqual(["delivery_committed", "delivered", "delivered"]);
+
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ semantic_state: string }, []>(`
+        SELECT semantic_state FROM btcc_turns
+      `).get()?.semantic_state).toBe("delivered");
+      expect(db.query<{ semantic_state: string }, []>(`
+        SELECT semantic_state FROM btcc_checkpoints ORDER BY turn_revision
+      `).all().map((row) => row.semantic_state)).toEqual([
+        "admitted",
+        "delivery_committed",
+      ]);
+    } finally {
+      db.close();
+    }
+  } finally {
+    await stores.retrospective.flush();
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn delivers an explicit operational failure when the model produces no final answer", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-provider-failure-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "guided-provider-failure",
+    storageProfile: "ephemeral",
+  });
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    retrospective: stores.retrospective,
+    agent: {
+      async run() {
+        throw new Error("provider disconnected before final answer");
+      },
+    },
+  });
+  try {
+    expect(await runtime.runTurn(runCommand("guided-provider-failure-turn")))
+      .toMatchObject({
+        kind: "delivered",
+        content: "요청을 처리하는 중 일시적인 문제가 발생했습니다. 작업은 안전하게 중단되었으며, 다시 요청해 주시면 이어서 처리하겠습니다.",
+      });
+  } finally {
+    await stores.retrospective.flush();
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn resumes a committed delivery without another model call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-delivery-resume-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const command = runCommand("guided-delivery-resume-turn");
+  const firstStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-resume-first",
+    storageProfile: "ephemeral",
+  });
+  let firstCalls = 0;
+  const firstRuntime = createGuidedTurnRuntime({
+    admission: firstStores.admission,
+    turns: firstStores.turns,
+    messages: {
+      async insertCanonicalAssistantMessage() {
+        throw new Error("simulated delivery interruption");
+      },
+    },
+    retrospective: firstStores.retrospective,
+    agent: {
+      async run() {
+        firstCalls += 1;
+        return { route: "direct", content: "persisted final" };
+      },
+    },
+  });
+  try {
+    await expect(firstRuntime.runTurn(command)).rejects.toThrow("simulated delivery interruption");
+    expect(firstCalls).toBe(1);
+    expect((await firstStores.turns.findTurn(command.turnId))?.semanticState)
+      .toBe("delivery_committed");
+  } finally {
+    firstStores.close();
+  }
+
+  const resumedStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-resume-second",
+    storageProfile: "ephemeral",
+  });
+  let resumedCalls = 0;
+  const resumedRuntime = createGuidedTurnRuntime({
+    admission: resumedStores.admission,
+    turns: resumedStores.turns,
+    messages: resumedStores.messages,
+    retrospective: resumedStores.retrospective,
+    agent: {
+      async run() {
+        resumedCalls += 1;
+        throw new Error("model must not run after final commit");
+      },
+    },
+  });
+  try {
+    expect(await resumedRuntime.runTurn({ kind: "resume", turnId: command.turnId }))
+      .toMatchObject({ kind: "delivered", content: "persisted final" });
+    expect(resumedCalls).toBe(0);
+  } finally {
+    await resumedStores.retrospective.flush();
+    resumedStores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn Stop aborts the model and durably cancels the Turn", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-stop-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "guided-stop",
+    storageProfile: "ephemeral",
+  });
+  let releaseStarted!: () => void;
+  const started = new Promise<void>((resolve) => { releaseStarted = resolve; });
+  let observedAbort = false;
+  const agent: GuidedTurnAgent = {
+    async run({ signal }) {
+      releaseStarted();
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          observedAbort = true;
+          reject(new Error("aborted"));
+        }, { once: true });
+      });
+      return { route: "direct", content: "unreachable" };
+    },
+  };
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    retrospective: stores.retrospective,
+    agent,
+  });
+  try {
+    const command = runCommand("guided-stop-turn");
+    const running = runtime.runTurn(command);
+    await started;
+    expect(await runtime.stopTurn({ kind: "stop", turnId: command.turnId }))
+      .toEqual({ kind: "cancelled", turnId: command.turnId });
+    expect(await running).toEqual({ kind: "cancelled", turnId: command.turnId });
+    expect(observedAbort).toBe(true);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function runCommand(turnId: string): Extract<BtccRunCommand, { kind: "run" }> {
+  return {
+    kind: "run",
+    turnId,
+    sessionId: "guided-session",
+    triggerKey: `message:${turnId}`,
+    message: { messageId: `message:${turnId}`, content: "안녕" },
+    modelSelection: {
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "low",
+      controls: { accessMode: "full_access" },
+      controlsHash: "controls",
+    },
+    context: {
+      userRef: "local-user",
+      profileRefs: [],
+      recentFeedbackRefs: [],
+      mandatoryHotCacheRefs: [],
+      optionalHotCacheRefs: [],
+      baselineObservationScopeRefs: ["workspace:/tmp"],
+    },
+  };
+}

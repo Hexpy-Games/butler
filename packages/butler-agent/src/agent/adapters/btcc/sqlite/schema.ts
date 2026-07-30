@@ -206,6 +206,24 @@ CREATE TABLE IF NOT EXISTS btcc_delivery_outbox (
   status TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
+  call_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  raw_arguments TEXT NOT NULL,
+  arguments_json TEXT NOT NULL,
+  status TEXT NOT NULL,
+  result_json TEXT,
+  result_sha256 TEXT,
+  error_code TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  UNIQUE(turn_id, call_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_turn
+ON btcc_guided_tool_calls(turn_id, started_at);
+
 CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (
   turn_id TEXT PRIMARY KEY,
   outbox_id TEXT NOT NULL UNIQUE,

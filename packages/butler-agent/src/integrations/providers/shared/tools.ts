@@ -116,12 +116,12 @@ export function newToolMessages(
 
 export function responseToAgentModelResponse(
   response: OpenAIResponse,
-  allowedNames: Set<string>,
+  _allowedNames?: Set<string>,
 ): AgentLoopModelResponse {
   return {
     text: extractResponseText(response) || undefined,
     raw: response,
-    toolCalls: getFunctionCalls(response, allowedNames).map((call) => ({
+    toolCalls: getFunctionCalls(response).map((call) => ({
       id: call.call_id,
       name: call.name,
       arguments: parseToolArguments(call.arguments),
