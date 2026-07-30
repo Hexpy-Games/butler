@@ -126,6 +126,14 @@ export type StateExecutionClaim = {
 
 export type AcceptedTurnTransition =
   | {
+      kind: "accept_guided_final";
+      successor: "delivery_committed";
+      successorCheckpointKind: "runtime";
+      route: "direct" | "assisted" | "managed";
+      finalPayload: NonNullable<TurnRecord["finalPayload"]>;
+      deliveryOutbox: DeliveryOutbox;
+    }
+  | {
       kind: "activate_opening";
       successor: "conception_opening";
       successorCheckpointKind: "phase";

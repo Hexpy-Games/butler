@@ -9,7 +9,7 @@ export type ContinuingTurnCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
 
 export async function loadOrAdmitTurn(
   command: ContinuingTurnCommand,
-  dependencies: BtccRuntimeDependencies,
+  dependencies: Pick<BtccRuntimeDependencies, "admission" | "turns">,
 ): Promise<TurnRecord> {
   const existing = await dependencies.turns.findTurn(command.turnId);
   if (existing) {

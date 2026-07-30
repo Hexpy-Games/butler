@@ -35,6 +35,9 @@ export class SqliteTransitionWriter {
       const nextRevision = input.turn.revision + 1;
 
       switch (input.transition.kind) {
+        case "accept_guided_final":
+          this.acceptGuidedFinal(input.turn, nextRevision, input.transition);
+          return;
         case "activate_opening":
           this.advanceWithCheckpoint(input.turn, nextRevision, input.transition);
           return;
@@ -53,6 +56,57 @@ export class SqliteTransitionWriter {
       }
     });
     transaction();
+  }
+
+  private acceptGuidedFinal(
+    turn: TurnRecord,
+    nextRevision: number,
+    transition: Extract<AcceptedTurnTransition, { kind: "accept_guided_final" }>,
+  ): void {
+    this.records.insert(
+      transition.finalPayload.ref.id,
+      "final_payload",
+      transition.finalPayload.ref.sha256,
+      stableJson(transition.finalPayload),
+    );
+    const outbox = transition.deliveryOutbox;
+    this.db.query(`
+      INSERT INTO btcc_delivery_outbox (
+        outbox_id, turn_id, committed_turn_revision, payload_id, payload_sha256,
+        expected_message_id, content, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+    `).run(
+      outbox.outboxId,
+      turn.turnId,
+      nextRevision,
+      outbox.finalPayloadRef.id,
+      outbox.finalPayloadRef.sha256,
+      outbox.expectedMessageId,
+      outbox.content,
+    );
+    const checkpoint = checkpointFor(
+      turn.turnId,
+      nextRevision,
+      transition.successor,
+      transition.successorCheckpointKind,
+    );
+    const updated = this.db.query(`
+      UPDATE btcc_turns SET semantic_state = ?, active_checkpoint_id = ?,
+        route = ?, final_payload_json = ?, delivery_outbox_id = ?,
+        revision = ?, final_disposition = 'completed'
+      WHERE turn_id = ? AND revision = ?
+    `).run(
+      transition.successor,
+      checkpoint.checkpointId,
+      transition.route,
+      stableJson(transition.finalPayload),
+      outbox.outboxId,
+      nextRevision,
+      turn.turnId,
+      turn.revision,
+    );
+    if (updated.changes !== 1) throw new Error("BTCC Guided final commit lost Turn CAS");
+    this.insertCheckpoint(turn.turnId, nextRevision, checkpoint);
   }
 
   private acceptOpeningAnswer(

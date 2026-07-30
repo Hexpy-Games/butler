@@ -29,6 +29,7 @@ import {
 } from "./runtime-owner/index.ts";
 import { openOwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
+import { SqliteGuidedToolJournal } from "./guided-tool-journal.ts";
 
 export type BtccProjectLedgerRuntime = {
   publications: ProjectWorkLedgerPublicationAdapter;
@@ -79,6 +80,7 @@ export function openBtccSqliteStores(input: {
     retrospective: new SqliteRetrospectiveScheduler(db),
     phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
+    guidedToolJournal: new SqliteGuidedToolJournal(db),
     operationalRecovery,
     operationalRecoveryStartup: {
       activateInheritedRuntimeRemediations: () =>

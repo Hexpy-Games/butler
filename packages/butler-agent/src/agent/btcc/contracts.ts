@@ -46,6 +46,28 @@ export type ButlerContextInput = {
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
   continuationCandidates?: ContinuationCandidate[];
+  executionPolicy?: ButlerExecutionPolicy;
+  attachments?: ButlerAttachmentRef[];
+};
+
+export type ButlerExecutionPolicy = {
+  role: string;
+  accessMode: "full_access" | "ask_first" | "read_only";
+  trackingMode: "ledger" | "local" | "none";
+  requiredNativeToolProfiles: string[];
+  requiredNativeTools: string[];
+  workspacePath: string;
+  projectId?: string;
+};
+
+export type ButlerAttachmentRef = {
+  id: string;
+  kind: "image" | "audio" | "video" | "document" | "binary";
+  mimeType?: string;
+  fileName?: string;
+  sizeBytes?: number;
+  url?: string;
+  localPath?: string;
 };
 
 export type BtccTurnCommand =

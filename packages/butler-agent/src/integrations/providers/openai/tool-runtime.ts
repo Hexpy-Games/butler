@@ -43,7 +43,6 @@ export async function runOpenAIFunctionToolPromptText(
     maxIterations: maxRounds,
     callModel: async ({ messages }) => {
       const activeTools = activeFunctionTools(options);
-      const allowedNames = new Set(activeTools.map((tool) => tool.name));
       agentLoopTools.splice(0, agentLoopTools.length, ...activeTools.map(functionToolToAgentTool));
       const input = previousResponseId
         ? newToolMessages(messages, sentToolMessages)
@@ -93,7 +92,7 @@ export async function runOpenAIFunctionToolPromptText(
         roundIndex: modelCallRound,
       });
       previousResponseId = response.id;
-      const functionCallItems = functionCallContinuationItems(response, allowedNames);
+      const functionCallItems = functionCallContinuationItems(response);
       if (functionCallItems.length > 0) {
         codexStatelessInput.push(...functionCallItems);
       }
@@ -110,7 +109,7 @@ export async function runOpenAIFunctionToolPromptText(
       });
       modelCallRound += 1;
       logPromptCacheStats(response, log, promptCache);
-      return responseToAgentModelResponse(response, allowedNames);
+      return responseToAgentModelResponse(response);
     },
     executeTool: async (call) => {
       log(`tool ${call.name}: ${JSON.stringify(call.arguments)}`);

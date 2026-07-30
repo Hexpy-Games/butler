@@ -1,4 +1,5 @@
 import {
+  createGuidedTurnRuntime,
   createBtccTurnRuntime,
   type BtccRuntimeDependencies,
   type BtccRunCommand,
@@ -7,10 +8,6 @@ import {
   type BtccTurnOutcome,
   type BtccTurnRuntime,
 } from "../btcc/index.ts";
-import { createProductionSelectedModel } from
-  "../btcc/infrastructure/model/index.ts";
-import { createProductionOperationRuntime } from
-  "../btcc/infrastructure/operations/index.ts";
 import {
   createProjectWorkLedgerPublicationAdapter,
   decodeProjectLedgerBinding,
@@ -18,12 +15,10 @@ import {
   type BtccProjectLedgerRuntime,
 } from "../adapters/index.ts";
 import {
-  createProductionCapabilityCatalog,
-  createProductionToolRuntime,
-  productionTurnLocalEffectCapabilities,
   BtccTurnProgressHub,
+  createProductionGuidedTurnAgent,
 } from "./production-btcc/index.ts";
-import { isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { ensureActiveProjectLedger } from
@@ -106,39 +101,21 @@ export function createProductionBtccComposition(input: {
       resolveProjectRoot,
     },
   });
-  const operationRuntime = createProductionOperationRuntime({
-    butlerData: input.butlerData,
-    resolveTargetScope: async (targetScopeRef) => ({
-      targetPath: resolveWorkspaceTargetScope(targetScopeRef),
-    }),
-    ...createProductionToolRuntime({ ...input, resolveProjectLedgerRoot: resolveProjectRoot }),
-  });
   const progress = new BtccTurnProgressHub();
-  const governingSpecs = createProjectGoverningSpecAuthority({
-    publications,
-    resolveProjectRoot,
-  });
-  if (!governingSpecs) {
-    throw new Error("Production Project Ledger has no governing Spec authority");
-  }
-  const runtime = createBtccTurnRuntime({
+  const runtime = createGuidedTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
-    phaseConversations: stores.phaseConversations,
-    model: createProductionSelectedModel({
-      context: stores.contextDocuments,
-      capabilities: createProductionCapabilityCatalog(),
-      guidance: stores.phaseGuidance,
-    }),
-    operations: operationRuntime.operations,
-    artifacts: operationRuntime.artifacts,
     messages: stores.messages,
     retrospective: stores.retrospective,
-    turnLocalEffectCapabilities: productionTurnLocalEffectCapabilities(),
-    operationalRecovery: stores.operationalRecovery,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
-    governingSpecs,
     progress,
+    agent: createProductionGuidedTurnAgent({
+      butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      appMessageDbPath: input.appMessageDbPath,
+      contextDocuments: stores.contextDocuments,
+      toolJournal: stores.guidedToolJournal,
+    }),
   });
   const recoveryTasks = recoverOperationalOwnership(runtime, stores, {
     resumePendingTurns: false,
@@ -147,7 +124,6 @@ export function createProductionBtccComposition(input: {
     runtime,
     stores,
     recoveryTasks,
-    operationRuntime.close,
   );
   return {
     runtime: owned,
@@ -234,16 +210,4 @@ function reportRecoveryFailure(error: unknown): void {
     name: error instanceof Error ? error.name : "UnknownError",
     message: error instanceof Error ? error.message : String(error),
   }));
-}
-
-function resolveWorkspaceTargetScope(targetScopeRef: string): string {
-  const prefix = "workspace:";
-  if (!targetScopeRef.startsWith(prefix)) {
-    throw new Error(`BTCC artifact target scope is not a workspace: ${targetScopeRef}`);
-  }
-  const targetPath = targetScopeRef.slice(prefix.length);
-  if (!isAbsolute(targetPath)) {
-    throw new Error("BTCC workspace target scope must contain an absolute path");
-  }
-  return targetPath;
 }
