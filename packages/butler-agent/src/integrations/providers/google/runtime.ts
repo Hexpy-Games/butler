@@ -254,6 +254,7 @@ export async function runGeminiFunctionToolPromptText(
               name: call.name,
               args: call.args,
               rawArguments: call.raw,
+              signal: options.signal,
             }),
           };
         } catch (error) {

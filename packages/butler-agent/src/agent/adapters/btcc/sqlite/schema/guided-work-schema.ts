@@ -108,4 +108,15 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_mutations (
   record_id TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_legacy_imports (
+  import_id TEXT PRIMARY KEY,
+  legacy_program_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session', 'project')),
+  scope_ref TEXT NOT NULL,
+  work_id TEXT NOT NULL UNIQUE,
+  imported_at TEXT NOT NULL,
+  UNIQUE(legacy_program_id, session_id, scope_kind, scope_ref)
+);
 `;

@@ -1,5 +1,8 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createDurableWorkService,
   type DurableWorkService,
@@ -12,6 +15,8 @@ import {
 } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { backfillTurnToolResults } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-work-runtime.ts";
 
 test("first Plan opens scoped Work without making Direct or Assisted Turns pay for it", async () => {
   const fixture = durableWorkFixture();
@@ -55,6 +60,15 @@ test("fresh Turns continue only the exact Session head scope and startNew preser
       projectRef: "project-a",
     });
     const next = fixture.turn("turn-project-b", "session-project", "프로젝트 B 작업");
+    expect(await fixture.service.loadContext({
+      ...next,
+      projectRef: "project-b",
+    })).toBeNull();
+    expect(await fixture.service.loadContext(next)).toBeNull();
+    expect(await fixture.service.bindOpenWork({
+      ...next,
+      projectRef: "project-b",
+    }, firstView.workId)).toBeNull();
     await expect(fixture.service.replacePlan({
       ...planInput(next, "project-b-implicit"),
       projectRef: "project-b",
@@ -73,11 +87,14 @@ test("fresh Turns continue only the exact Session head scope and startNew preser
     expect(fixture.count("btcc_guided_works")).toBe(2);
     expect(fixture.count("btcc_guided_work_plan_revisions")).toBe(2);
 
-    const continuation = fixture.turn(
-      "turn-project-b-continue",
-      "session-project",
-      "계속 진행해 주세요.",
-    );
+    const continuation = {
+      ...fixture.turn(
+        "turn-project-b-continue",
+        "session-project",
+        "계속 진행해 주세요.",
+      ),
+      projectRef: "project-b",
+    };
     const continued = await fixture.service.replacePlan({
       ...planInput(continuation, "project-b-plan-2"),
       projectRef: "project-b",
@@ -153,6 +170,126 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
       })).rejects.toThrow("control result cannot be attached");
     }
     expect(fixture.count("btcc_guided_work_results")).toBe(2);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a committed Turn tool result backfills once after storage restart", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-backfill-"));
+  const dbPath = join(root, "butler.sqlite");
+  const scope = {
+    turnId: "turn-backfill",
+    sessionId: "session-backfill",
+  };
+  let db: Database | null = new Database(dbPath);
+  try {
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const firstService = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const firstJournal = new SqliteGuidedToolJournal(db);
+    const origin = insertGuidedTurn(
+      db,
+      "turn-backfill-origin",
+      scope.sessionId,
+      "파일을 읽고 결과를 정리해 주세요.",
+    );
+    const opened = await firstService.replacePlan(
+      planInput(origin, "backfill-plan"),
+    );
+    insertGuidedTurn(
+      db,
+      scope.turnId,
+      scope.sessionId,
+      "열린 작업을 이어서 파일을 확인해 주세요.",
+    );
+    expect((await firstService.loadContext(scope))?.work.workId).toBe(opened.workId);
+    expect(await firstService.bindOpenWork(scope, opened.workId)).toMatchObject({
+      workId: opened.workId,
+    });
+    firstJournal.start({
+      turnId: scope.turnId,
+      callId: "backfill-read",
+      toolName: "read_file",
+      rawArguments: JSON.stringify({ path: "fact.txt" }),
+      arguments: { path: "fact.txt" },
+    });
+    firstJournal.finish({
+      callId: "backfill-read",
+      status: "completed",
+      result: { content: "observed before interruption" },
+    });
+    expect((await firstService.boundWorkForTurn(scope.turnId))?.resultRefs).toEqual([]);
+    db.close();
+    db = null;
+
+    db = new Database(dbPath);
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const resumedService = createDurableWorkService(new SqliteGuidedWorkStore(db));
+    const resumedJournal = new SqliteGuidedToolJournal(db);
+    await backfillTurnToolResults({
+      durableWork: resumedService,
+      toolJournal: resumedJournal,
+    }, scope);
+    await backfillTurnToolResults({
+      durableWork: resumedService,
+      toolJournal: resumedJournal,
+    }, scope);
+
+    expect((await resumedService.boundWorkForTurn(scope.turnId))?.resultRefs)
+      .toEqual([expect.objectContaining({
+        toolCallId: "backfill-read",
+        toolName: "read_file",
+        status: "completed",
+      })]);
+    expect(db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM btcc_guided_work_results
+    `).get()?.count).toBe(1);
+    expect(db.query<{ count: number }, []>(`
+      SELECT COUNT(*) AS count FROM btcc_guided_work_mutations
+      WHERE operation = 'attach_tool_result'
+    `).get()?.count).toBe(1);
+
+    const next = insertGuidedTurn(
+      db,
+      "turn-after-backfill",
+      scope.sessionId,
+      "직전 결과를 이어서 알려 주세요.",
+    );
+    expect((await resumedService.loadContext(next))?.resultFacts).toEqual([{
+      toolName: "read_file",
+      status: "completed",
+      resultJson: { content: "observed before interruption" },
+    }]);
+  } finally {
+    db?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("continuation keeps every result ref but bounds prompt facts to the latest 50", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn(
+      "turn-result-window",
+      "session-result-window",
+      "많은 자료를 확인해 주세요.",
+    );
+    await fixture.service.replacePlan(planInput(scope, "result-window-plan"));
+    for (let index = 0; index < 55; index += 1) {
+      const toolCallId = `window-read-${index}`;
+      fixture.tool(scope.turnId, toolCallId, "read_file", { index });
+      await fixture.service.attachToolResult({
+        ...scope,
+        mutationCallId: `window-attach-${index}`,
+        toolCallId,
+      });
+    }
+
+    const context = await fixture.service.loadContext(scope);
+    expect(context?.work.resultRefs).toHaveLength(55);
+    expect(context?.resultFacts).toHaveLength(50);
+    expect(context?.resultFacts[0]?.resultJson).toEqual({ index: 5 });
+    expect(context?.resultFacts[49]?.resultJson).toEqual({ index: 54 });
   } finally {
     fixture.close();
   }
@@ -288,22 +425,7 @@ function durableWorkFixture(): {
     db,
     service,
     turn(turnId, sessionId, message) {
-      db.query(`
-        INSERT INTO btcc_turns (
-          turn_id, session_id, inbox_id, trigger_key, original_message_id,
-          original_message, admission_snapshot_ref, model_selection_json,
-          context_json, continuation_snapshot_json, semantic_state,
-          revision, execution_fence
-        ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', '[]', 'admitted', 1, 1)
-      `).run(
-        turnId,
-        sessionId,
-        `inbox-${turnId}`,
-        `trigger-${turnId}`,
-        `message-${turnId}`,
-        message,
-      );
-      return { turnId, sessionId };
+      return insertGuidedTurn(db, turnId, sessionId, message);
     },
     tool(turnId, callId, name, result) {
       journal.start({
@@ -327,6 +449,30 @@ function durableWorkFixture(): {
       db.close();
     },
   };
+}
+
+function insertGuidedTurn(
+  db: Database,
+  turnId: string,
+  sessionId: string,
+  message: string,
+): WorkTurnScope {
+  db.query(`
+    INSERT INTO btcc_turns (
+      turn_id, session_id, inbox_id, trigger_key, original_message_id,
+      original_message, admission_snapshot_ref, model_selection_json,
+      context_json, continuation_snapshot_json, semantic_state,
+      revision, execution_fence
+    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', '[]', 'admitted', 1, 1)
+  `).run(
+    turnId,
+    sessionId,
+    `inbox-${turnId}`,
+    `trigger-${turnId}`,
+    `message-${turnId}`,
+    message,
+  );
+  return { turnId, sessionId };
 }
 
 function planInput(

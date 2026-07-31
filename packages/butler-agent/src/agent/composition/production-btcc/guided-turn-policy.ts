@@ -155,7 +155,19 @@ export function visibleToolDefinitions(
     "project_ledger_status",
     ...(accessMode === "full_access" ? ["run_command", "write_file"] : []),
   ]);
-  return authorized.filter((tool) => visible.has(tool.name));
+  return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
+}
+
+function guidedToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
+  if (tool.name !== "write_file") return tool;
+  const properties = tool.parameters.properties;
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return tool;
+  const { expected_sha256: _runtimeOwnedHash, ...modelProperties } =
+    properties as Record<string, unknown>;
+  return {
+    ...tool,
+    parameters: { ...tool.parameters, properties: modelProperties },
+  };
 }
 
 export function selectedModelRef(turn: TurnRecord): string {

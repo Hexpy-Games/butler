@@ -39,6 +39,17 @@ export async function safeLoadWorkContext(
   }
 }
 
+export async function safeImportOpenLegacyWork(
+  service: DurableWorkService,
+  scope: WorkTurnScope,
+): Promise<void> {
+  try {
+    await service.importOpenLegacyWork(scope);
+  } catch {
+    // Legacy continuity is best effort and cannot veto the current Turn.
+  }
+}
+
 export async function safeBoundWork(
   service: DurableWorkService,
   turnId: string,
@@ -53,12 +64,26 @@ export async function safeBoundWork(
 export async function safeBindOpenWork(
   service: DurableWorkService,
   scope: WorkTurnScope,
+  expectedWorkId?: string,
 ): Promise<DurableWorkView | null> {
   try {
-    return await service.bindOpenWork(scope);
+    return await service.bindOpenWork(scope, expectedWorkId);
   } catch {
     return null;
   }
+}
+
+export async function bindPresentedWorkForToolDispatch(
+  input: GuidedWorkRuntimeInput,
+  scope: WorkTurnScope,
+  presentedWorkId: string,
+): Promise<void> {
+  const current = await safeBoundWork(input.durableWork, scope.turnId);
+  if (current && current.workId !== presentedWorkId) return;
+  const bound = current ??
+    await safeBindOpenWork(input.durableWork, scope, presentedWorkId);
+  if (bound?.workId !== presentedWorkId) return;
+  await backfillTurnToolResults(input, scope);
 }
 
 export async function safeAttachToolResult(

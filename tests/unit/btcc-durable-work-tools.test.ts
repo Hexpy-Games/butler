@@ -156,6 +156,7 @@ function fakeService(
 ): DurableWorkService {
   return {
     loadContext: async () => null,
+    importOpenLegacyWork: async () => null,
     bindOpenWork: async () => null,
     replacePlan: async () => workView(),
     recordCheckpoint: async () => workView(),

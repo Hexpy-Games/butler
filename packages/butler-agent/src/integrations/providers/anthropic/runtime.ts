@@ -235,6 +235,7 @@ export async function runAnthropicFunctionToolPromptText(
               name: call.name,
               args: call.input,
               rawArguments,
+              signal: options.signal,
             }),
           };
         } catch (error) {

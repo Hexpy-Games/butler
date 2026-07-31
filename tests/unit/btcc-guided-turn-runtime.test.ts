@@ -165,6 +165,142 @@ test("Guided Turn resumes a committed delivery without another model call", asyn
   }
 });
 
+test("Guided Turn recovers a crash after canonical insertion without a duplicate message", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-delivery-insert-crash-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const command = runCommand("guided-delivery-insert-crash-turn");
+  const firstStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-insert-crash-first",
+    storageProfile: "ephemeral",
+  });
+  let inserted = false;
+  const firstRuntime = createGuidedTurnRuntime({
+    admission: firstStores.admission,
+    turns: firstStores.turns,
+    messages: {
+      async insertCanonicalAssistantMessage(input) {
+        const message = await firstStores.messages.insertCanonicalAssistantMessage(input);
+        if (!inserted) {
+          inserted = true;
+          throw new Error("simulated crash after canonical insert");
+        }
+        return message;
+      },
+    },
+    retrospective: firstStores.retrospective,
+    agent: {
+      async run() {
+        return { route: "direct", content: "one canonical answer" };
+      },
+    },
+  });
+  try {
+    await expect(firstRuntime.runTurn(command))
+      .rejects.toThrow("simulated crash after canonical insert");
+    expect((await firstStores.turns.findTurn(command.turnId))?.semanticState)
+      .toBe("delivery_committed");
+  } finally {
+    firstStores.close();
+  }
+
+  const resumedStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-insert-crash-second",
+    storageProfile: "ephemeral",
+  });
+  const resumedRuntime = createGuidedTurnRuntime({
+    admission: resumedStores.admission,
+    turns: resumedStores.turns,
+    messages: resumedStores.messages,
+    retrospective: resumedStores.retrospective,
+    agent: {
+      async run() {
+        throw new Error("model must not rerun after delivery commit");
+      },
+    },
+  });
+  try {
+    expect(await resumedRuntime.runTurn({ kind: "resume", turnId: command.turnId }))
+      .toMatchObject({ kind: "delivered", content: "one canonical answer" });
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_messages
+        WHERE turn_id = 'guided-delivery-insert-crash-turn' AND role = 'assistant'
+      `).get()?.count).toBe(1);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_canonical_deliveries
+        WHERE turn_id = 'guided-delivery-insert-crash-turn'
+      `).get()?.count).toBe(1);
+    } finally {
+      db.close();
+    }
+  } finally {
+    await resumedStores.retrospective.flush();
+    resumedStores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Stop during committed delivery lets the immutable Outbox finish once", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-stop-delivery-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-stop-delivery",
+    storageProfile: "ephemeral",
+  });
+  let releaseInserted!: () => void;
+  let announceInserted!: () => void;
+  const inserted = new Promise<void>((resolve) => { announceInserted = resolve; });
+  const released = new Promise<void>((resolve) => { releaseInserted = resolve; });
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: {
+      async insertCanonicalAssistantMessage(input) {
+        const result = await stores.messages.insertCanonicalAssistantMessage(input);
+        announceInserted();
+        await released;
+        return result;
+      },
+    },
+    retrospective: stores.retrospective,
+    agent: {
+      async run() {
+        return { route: "direct", content: "committed before Stop" };
+      },
+    },
+  });
+  const command = runCommand("guided-stop-delivery-turn");
+  try {
+    const running = runtime.runTurn(command);
+    await inserted;
+    expect(await runtime.stopTurn({ kind: "stop", turnId: command.turnId }))
+      .toEqual({ kind: "already_finalizing", turnId: command.turnId });
+    releaseInserted();
+    expect(await running).toMatchObject({
+      kind: "delivered",
+      content: "committed before Stop",
+    });
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_messages
+        WHERE turn_id = 'guided-stop-delivery-turn' AND role = 'assistant'
+      `).get()?.count).toBe(1);
+    } finally {
+      db.close();
+    }
+  } finally {
+    releaseInserted();
+    await stores.retrospective.flush();
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Guided Turn Stop aborts the model and durably cancels the Turn", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-stop-"));
   const stores = openBtccSqliteStores({

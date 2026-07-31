@@ -8,7 +8,6 @@ export {
   resolveButlerData,
   resolveButlerHome,
   resolveButlerSession,
-  shouldEnterBtcc,
   type ButlerConfig,
 } from "./runtime-identity.ts";
 export {

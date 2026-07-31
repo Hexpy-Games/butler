@@ -210,6 +210,7 @@ async function waitAndDispatchOne(
       server: input.gateway,
       store: input.bindings,
       deliveryGuard: input.deliveryGuard,
+      decideEntry: () => ({ kind: "fresh" }),
       limit: 1,
     });
     if (summary.claimed > 0) {

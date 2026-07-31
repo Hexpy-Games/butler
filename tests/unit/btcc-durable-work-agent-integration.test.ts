@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -11,6 +12,8 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+import { seedManagedProgramForStop } from
+  "./support/btcc-stopped-work-fixture.ts";
 
 test("R3 managed Work survives a store restart and continues in a fresh Turn", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-integration-"));
@@ -165,6 +168,7 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
     storageProfile: "ephemeral",
   });
   let originalWorkId = "";
+  let postStopReview = "not-attempted";
   try {
     const runtime = createRuntime({
       root,
@@ -188,7 +192,20 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
         });
         releaseStarted();
         return await new Promise<string>((_resolve, reject) => {
-          options.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+          options.signal?.addEventListener("abort", async () => {
+            try {
+              await call(options, "record_work_review", {
+                subject: "result",
+                verdict: "accept",
+                summary: "This late review must not be recorded after Stop.",
+                corrections: [],
+              });
+              postStopReview = "recorded";
+            } catch {
+              postStopReview = "fenced";
+            }
+            reject(new Error("aborted"));
+          }, {
             once: true,
           });
         });
@@ -203,11 +220,14 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
     expect(await runtime.stopTurn({ kind: "stop", turnId: stoppedTurnId }))
       .toEqual({ kind: "cancelled", turnId: stoppedTurnId });
     expect(await running).toEqual({ kind: "cancelled", turnId: stoppedTurnId });
+    expect(postStopReview).toBe("fenced");
     expect(await firstStores.durableWork.boundWorkForTurn(stoppedTurnId)).toMatchObject({
       workId: originalWorkId,
       status: "open",
       latestCheckpoint: { stage: "execution" },
     });
+    expect((await firstStores.durableWork.boundWorkForTurn(stoppedTurnId))
+      ?.latestResultReview).toBeUndefined();
   } finally {
     await firstStores.retrospective.flush();
     firstStores.close();
@@ -250,6 +270,127 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
     expect(prompt).toContain("Latest progress (execution)");
     expect(await resumedStores.durableWork.boundWorkForTurn(resumedTurnId))
       .toMatchObject({ workId: originalWorkId, status: "open" });
+  } finally {
+    await resumedStores.retrospective.flush();
+    resumedStores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a presented open Work binds only at the first real tool and exposes its result to the next Turn", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-late-bind-"));
+  const dbPath = join(root, "butler.sqlite");
+  const sourcePath = join(root, "source.txt");
+  writeFileSync(sourcePath, "durable observed fact\n");
+  const originTurnId = "late-bind-origin";
+  const directTurnId = "late-bind-direct";
+  const toolTurnId = "late-bind-tool";
+  const firstStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "work-late-bind-first",
+    storageProfile: "ephemeral",
+  });
+  let workId = "";
+  try {
+    const originRuntime = createRuntime({
+      root,
+      dbPath,
+      stores: firstStores,
+      promptRunner: async (options) => {
+        const opened = await call(options, "replace_work_plan", {
+          objective: "Read source.txt and report the observed fact",
+          actions: [{
+            action_key: "read_source",
+            description: "Read the source file",
+            dependency_keys: [],
+          }],
+          checks: ["The reported fact matches source.txt"],
+        }) as { work?: { work_id?: string } };
+        workId = opened.work?.work_id ?? "";
+        return "작업 기록을 준비했습니다.";
+      },
+    });
+    await originRuntime.runTurn(command(
+      root,
+      originTurnId,
+      "source.txt를 확인하고 결과를 알려 주세요.",
+    ));
+
+    let directPrompt = "";
+    const directRuntime = createRuntime({
+      root,
+      dbPath,
+      stores: firstStores,
+      promptRunner: async (options) => {
+        directPrompt = options.prompt;
+        return "별개의 간단한 질문에는 바로 답합니다.";
+      },
+    });
+    expect(await directRuntime.runTurn(command(
+      root,
+      directTurnId,
+      "별개의 간단한 질문입니다.",
+    ))).toMatchObject({ kind: "delivered" });
+    expect(directPrompt).toContain("## Current Work");
+    expect(await firstStores.durableWork.boundWorkForTurn(directTurnId)).toBeNull();
+
+    const interruptedRuntime = createRuntime({
+      root,
+      dbPath,
+      stores: firstStores,
+      promptRunner: async (options) => {
+        expect(await call(options, "read_file", { path: "source.txt" }))
+          .toMatchObject({ content: "durable observed fact\n" });
+        throw new Error("provider disconnected after the committed tool result");
+      },
+    });
+    await interruptedRuntime.runTurn(command(
+      root,
+      toolTurnId,
+      "열린 작업을 이어서 파일부터 확인해 주세요.",
+    ));
+    expect(await firstStores.durableWork.boundWorkForTurn(toolTurnId)).toMatchObject({
+      workId,
+      resultRefs: [{
+        toolName: "read_file",
+        status: "completed",
+        originTurnId: toolTurnId,
+      }],
+    });
+  } finally {
+    await firstStores.retrospective.flush();
+    firstStores.close();
+  }
+
+  const resumedStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "work-late-bind-second",
+    storageProfile: "ephemeral",
+  });
+  try {
+    const nextTurnId = "late-bind-next";
+    let nextPrompt = "";
+    const resumedRuntime = createRuntime({
+      root,
+      dbPath,
+      stores: resumedStores,
+      promptRunner: async (options) => {
+        nextPrompt = options.prompt;
+        return "이전 도구 결과를 확인했습니다.";
+      },
+    });
+    await resumedRuntime.runTurn(command(
+      root,
+      nextTurnId,
+      "방금 확인한 결과를 이어서 알려 주세요.",
+    ));
+    expect(nextPrompt).toContain("Result (read_file, completed)");
+    expect(nextPrompt).toContain("durable observed fact");
+    expect(await resumedStores.durableWork.boundWorkForTurn(nextTurnId)).toBeNull();
+    expect((await resumedStores.durableWork.loadContext({
+      turnId: nextTurnId,
+      sessionId: "durable-work-session",
+    }))?.work.resultRefs).toHaveLength(1);
   } finally {
     await resumedStores.retrospective.flush();
     resumedStores.close();
@@ -334,6 +475,53 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
   }
 });
 
+test("the production R3 agent imports and continues open R2 Session Work", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-product-legacy-work-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "work-product-legacy-import",
+    storageProfile: "ephemeral",
+  });
+  const legacyDb = new Database(dbPath);
+  seedManagedProgramForStop(legacyDb);
+  legacyDb.close();
+  writeFileSync(join(root, "legacy-source.txt"), "fact carried from the R2 task\n");
+  const turnId = "r3-product-legacy-import-turn";
+  try {
+    let prompt = "";
+    const runtime = createRuntime({
+      root,
+      dbPath,
+      stores,
+      promptRunner: async (options) => {
+        prompt = options.prompt;
+        expect(await call(options, "read_file", { path: "legacy-source.txt" }))
+          .toMatchObject({ content: "fact carried from the R2 task\n" });
+        return "R2에서 열려 있던 작업과 현재 파일을 확인해 이어서 처리했습니다.";
+      },
+    });
+
+    expect(await runtime.runTurn(command(
+      root,
+      turnId,
+      "이전 작업을 이어서 처리해 주세요.",
+      "session-fixture",
+    ))).toMatchObject({ kind: "delivered" });
+    expect(prompt).toContain("## Current Work");
+    expect(prompt).toContain("Original request: Start the four-task Program");
+    expect(prompt).toContain("Imported prior progress: 2 of 4 planned actions");
+    expect(await stores.durableWork.boundWorkForTurn(turnId)).toMatchObject({
+      status: "open",
+      resultRefs: [{ toolName: "read_file", originTurnId: turnId }],
+    });
+  } finally {
+    await stores.retrospective.flush();
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function createRuntime(input: {
   root: string;
   dbPath: string;
@@ -365,11 +553,12 @@ function command(
   root: string,
   turnId: string,
   content: string,
+  sessionId = "durable-work-session",
 ): Extract<BtccRunCommand, { kind: "run" }> {
   return {
     kind: "run",
     turnId,
-    sessionId: "durable-work-session",
+    sessionId,
     triggerKey: `message:${turnId}`,
     message: { messageId: `message:${turnId}`, content },
     modelSelection: {

@@ -4,6 +4,7 @@ import type {
   DurableWorkContext,
   DurableWorkStore,
   DurableWorkView,
+  LegacyOpenWorkImportResult,
   RecordWorkCheckpointInput,
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
@@ -16,6 +17,7 @@ import {
   type GuidedWorkMutationOperation,
 } from "./guided-work-mutation-journal.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
+import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
 import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkToolResultWriter } from "./guided-work-tool-result-writer.ts";
@@ -27,6 +29,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private readonly statuses: GuidedWorkStatusWriter;
   private readonly mutations: GuidedWorkMutationJournal;
   private readonly toolResults: GuidedWorkToolResultWriter;
+  private readonly legacyImporter: GuidedWorkLegacyImporter;
 
   constructor(private readonly db: Database) {
     this.reader = new GuidedWorkViewReader(db);
@@ -34,19 +37,29 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     this.statuses = new GuidedWorkStatusWriter(db, this.reader);
     this.mutations = new GuidedWorkMutationJournal(db);
     this.toolResults = new GuidedWorkToolResultWriter(db);
+    this.legacyImporter = new GuidedWorkLegacyImporter(db, this.reader);
   }
 
   async loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null> {
     return this.reader.loadContext(scope);
   }
 
+  async importOpenLegacyWork(
+    scope: WorkTurnScope,
+  ): Promise<LegacyOpenWorkImportResult | null> {
+    return this.db.transaction(() => this.legacyImporter.import(scope))();
+  }
+
   async boundWorkForTurn(turnId: string): Promise<DurableWorkView | null> {
     return this.reader.boundView(turnId);
   }
 
-  async bindOpenWork(scope: WorkTurnScope): Promise<DurableWorkView | null> {
+  async bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null> {
     return this.db.transaction(() => {
-      const work = this.sessions.bindOpenHead(scope);
+      const work = this.sessions.bindOpenHead(scope, expectedWorkId);
       return work ? this.reader.view(work.work_id) : null;
     })();
   }

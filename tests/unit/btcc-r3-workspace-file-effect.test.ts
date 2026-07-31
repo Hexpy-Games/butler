@@ -62,6 +62,12 @@ test("workspace file adapter keeps target syntax simple and preserves file guard
       content: "private",
       overwrite: false,
     })).toThrow("workspace-relative");
+    expect(adapter.normalizeInput({
+      path: "reports/summary.md",
+      content: "safe",
+      overwrite: false,
+      expected_sha256: "",
+    })).not.toHaveProperty("expected_sha256");
 
     const protectedInput = adapter.normalizeInput({
       path: "butler-data/project-ledger/projects/demo/specs/feature.md",
@@ -80,6 +86,45 @@ test("workspace file adapter keeps target syntax simple and preserves file guard
       error: { code: "protected_path" },
     });
     expect(dispatches).toBe(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("workspace file adapter ignores model hashes and owns the overwrite guard", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-file-runtime-hash-"));
+  const original = "before\n";
+  await writeFile(join(root, "existing.md"), original, "utf8");
+  const writeFileHandler = createFileToolHandlers({ workspacePath: root }).write_file;
+  if (!writeFileHandler) throw new Error("registered write_file handler is missing");
+  let registeredInput: Record<string, unknown> | null = null;
+  const adapter = createGuidedWorkspaceFileEffectAdapter({
+    workspacePath: root,
+    async executeWriteFile(args) {
+      registeredInput = args;
+      return await writeFileHandler({
+        name: "write_file",
+        args,
+        rawArguments: JSON.stringify(args),
+      });
+    },
+  });
+  try {
+    const normalized = adapter.normalizeInput({
+      path: "existing.md",
+      content: "after\n",
+      overwrite: true,
+      expected_sha256: "0".repeat(64),
+    });
+    expect(normalized).not.toHaveProperty("expected_sha256");
+    expect(await adapter.dispatch({
+      normalizedTarget: workspaceFileEffectTarget(normalized.path),
+      normalizedInput: normalized,
+      idempotencyKey: "runtime-hash",
+      signal: new AbortController().signal,
+    })).toMatchObject({ status: "applied" });
+    expect(registeredInput).toMatchObject({ expected_sha256: sha256(original) });
+    expect(await readFile(join(root, "existing.md"), "utf8")).toBe("after\n");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -105,6 +150,7 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
       normalizedInput: createInput,
       idempotencyKey: "create",
       signal,
+      dispatchAttempts: 0,
     })).toEqual({ status: "not_applied" });
 
     const original = "original";
@@ -113,13 +159,13 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
       path: "existing.md",
       content: "desired",
       overwrite: true,
-      expected_sha256: sha256(original),
     });
     expect(await adapter.reconcile({
       normalizedTarget: workspaceFileEffectTarget(guardedOverwrite.path),
       normalizedInput: guardedOverwrite,
       idempotencyKey: "guarded-overwrite",
       signal,
+      dispatchAttempts: 0,
     })).toEqual({ status: "not_applied" });
 
     const unguardedOverwrite = adapter.normalizeInput({
@@ -132,6 +178,7 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
       normalizedInput: unguardedOverwrite,
       idempotencyKey: "unguarded-overwrite",
       signal,
+      dispatchAttempts: 1,
     })).toMatchObject({
       status: "uncertain",
       error: { code: "workspace_file_state_mismatch" },
@@ -143,6 +190,7 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
       normalizedInput: unguardedOverwrite,
       idempotencyKey: "observed",
       signal,
+      dispatchAttempts: 1,
     })).toMatchObject({
       status: "applied",
       result: {
@@ -344,7 +392,9 @@ function registeredWriteFile(input: {
   });
   const writeFile = handlers.write_file;
   if (!writeFile) throw new Error("registered write_file handler is missing");
-  return async (args: GuidedWorkspaceFileInput): Promise<unknown> => {
+  return async (args: GuidedWorkspaceFileInput & {
+    expected_sha256?: string;
+  }): Promise<unknown> => {
     const result = await writeFile({
       name: "write_file",
       args,

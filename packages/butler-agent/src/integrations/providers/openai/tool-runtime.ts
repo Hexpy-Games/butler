@@ -117,6 +117,7 @@ export async function runOpenAIFunctionToolPromptText(
         name: call.name,
         args: call.arguments,
         rawArguments: JSON.stringify(call.arguments),
+        signal: options.signal,
       });
     },
     finalTextFromToolResult: async ({ toolCall, toolResult }) =>

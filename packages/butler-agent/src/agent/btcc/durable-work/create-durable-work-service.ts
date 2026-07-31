@@ -15,9 +15,16 @@ export function createDurableWorkService(
       validateScope(scope);
       return store.loadContext(scope);
     },
-    bindOpenWork(scope) {
+    importOpenLegacyWork(scope) {
       validateScope(scope);
-      return store.bindOpenWork(scope);
+      return store.importOpenLegacyWork(scope);
+    },
+    bindOpenWork(scope, expectedWorkId) {
+      validateScope(scope);
+      if (expectedWorkId !== undefined) {
+        requiredText(expectedWorkId, "expectedWorkId");
+      }
+      return store.bindOpenWork(scope, expectedWorkId);
     },
     replacePlan(input) {
       validateReplacePlan(input);

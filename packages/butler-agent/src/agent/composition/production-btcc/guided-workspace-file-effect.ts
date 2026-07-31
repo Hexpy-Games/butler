@@ -8,7 +8,6 @@ import type {
 import {
   expectedWorkspaceFileSha256,
   guardWorkspaceFileTarget,
-  normalizeExpectedSha256,
   normalizeWorkspaceFileTarget,
   normalizeWorkspaceRelativePath,
   observeWorkspaceFileTarget,
@@ -24,8 +23,11 @@ export type GuidedWorkspaceFileInput = {
   path: string;
   content: string;
   overwrite: boolean;
-  expected_sha256?: string;
   create_parents: boolean;
+};
+
+type RegisteredWriteFileInput = GuidedWorkspaceFileInput & {
+  expected_sha256?: string;
 };
 
 export type GuidedWorkspaceFileResult = {
@@ -40,7 +42,7 @@ export type GuidedWorkspaceFileResult = {
 };
 
 export type RegisteredWriteFile = (
-  input: GuidedWorkspaceFileInput,
+  input: RegisteredWriteFileInput,
 ) => Promise<unknown>;
 
 type WorkspaceFileAdapterOptions = {
@@ -97,9 +99,10 @@ export function createGuidedWorkspaceFileEffectAdapter(
         });
       }
 
-      const registeredResult = await options.executeWriteFile(
-        input.normalizedInput,
-      );
+      const before = await observeWorkspaceFileTarget(guarded.target);
+      const prepared = prepareRegisteredWrite(input.normalizedInput, before);
+      if (!prepared.ok) return prepared.outcome;
+      const registeredResult = await options.executeWriteFile(prepared.input);
       const observation = await observeWorkspaceFileTarget(guarded.target);
       if (
         observation.status === "file" &&
@@ -125,7 +128,11 @@ export function createGuidedWorkspaceFileEffectAdapter(
       });
       if (!guarded.ok) return { status: "uncertain", error: guarded.error };
       const observation = await observeWorkspaceFileTarget(guarded.target);
-      return reconcileObservation(input.normalizedInput, observation);
+      return reconcileObservation(
+        input.normalizedInput,
+        observation,
+        input.dispatchAttempts,
+      );
     },
   };
 }
@@ -151,12 +158,10 @@ function normalizeWorkspaceFileInput(input: unknown): GuidedWorkspaceFileInput {
   ) {
     throw new Error("write_file effect create_parents must be a boolean");
   }
-  const expected = normalizeExpectedSha256(record.expected_sha256);
   return {
     path: normalizeWorkspaceRelativePath(requiredString(record.path, "path")),
     content: record.content,
     overwrite: record.overwrite,
-    ...(expected ? { expected_sha256: expected } : {}),
     create_parents: record.create_parents ?? false,
   };
 }
@@ -164,6 +169,7 @@ function normalizeWorkspaceFileInput(input: unknown): GuidedWorkspaceFileInput {
 function reconcileObservation(
   input: GuidedWorkspaceFileInput,
   observation: ObservedWorkspaceFileTarget,
+  dispatchAttempts = 1,
 ): EffectReconciliation<GuidedWorkspaceFileResult> {
   if (
     observation.status === "file" &&
@@ -174,20 +180,55 @@ function reconcileObservation(
   if (observation.status === "missing" && !input.overwrite) {
     return { status: "not_applied" };
   }
-  if (
-    observation.status === "file" &&
-    input.overwrite &&
-    input.expected_sha256 === observation.sha256
-  ) {
+  if (observation.status === "file" && !input.overwrite) {
     return { status: "not_applied" };
   }
   if (
-    observation.status === "missing" &&
-    input.expected_sha256 !== undefined
+    observation.status === "file" &&
+    input.overwrite &&
+    dispatchAttempts === 0
   ) {
     return { status: "not_applied" };
   }
   return { status: "uncertain", error: observationError(observation) };
+}
+
+function prepareRegisteredWrite(
+  input: GuidedWorkspaceFileInput,
+  observation: ObservedWorkspaceFileTarget,
+):
+  | { ok: true; input: RegisteredWriteFileInput }
+  | { ok: false; outcome: EffectDispatchOutcome<GuidedWorkspaceFileResult> } {
+  if (observation.status === "unavailable") {
+    return { ok: false, outcome: uncertain(observation.error) };
+  }
+  if (observation.status === "file" && !input.overwrite) {
+    return {
+      ok: false,
+      outcome: notApplied({
+        code: "file_exists",
+        message: "write_file refused to replace an existing file without overwrite.",
+      }),
+    };
+  }
+  if (observation.status === "missing" && input.overwrite) {
+    return {
+      ok: false,
+      outcome: notApplied({
+        code: "overwrite_target_missing",
+        message: "write_file overwrite requires an existing target; retry as a new file.",
+      }),
+    };
+  }
+  return {
+    ok: true,
+    input: {
+      ...input,
+      ...(observation.status === "file"
+        ? { expected_sha256: observation.sha256 }
+        : {}),
+    },
+  };
 }
 
 function targetInputMismatch(
