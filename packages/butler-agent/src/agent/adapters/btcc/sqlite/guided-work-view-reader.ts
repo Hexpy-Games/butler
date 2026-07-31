@@ -16,6 +16,14 @@ import type {
   GuidedWorkRow,
   GuidedWorkTurn,
 } from "./guided-work-records.ts";
+import { guidedWorkMatchesScope } from "./guided-work-scope.ts";
+
+const MAX_CONTEXT_RESULT_FACTS = 50;
+
+type GuidedWorkContextResultRow = Pick<
+  GuidedWorkResultRow,
+  "tool_name" | "status" | "result_json" | "error_code"
+>;
 
 export class GuidedWorkViewReader {
   constructor(private readonly db: Database) {}
@@ -51,7 +59,9 @@ export class GuidedWorkViewReader {
   loadContext(scope: WorkTurnScope): DurableWorkContext | null {
     this.turn(scope);
     const bound = this.boundWork(scope.turnId);
-    const work = bound ?? this.openSessionHead(scope.sessionId);
+    const work = bound
+      ? (guidedWorkMatchesScope(bound, scope) ? bound : null)
+      : this.openSessionHead(scope);
     if (!work) return null;
     return this.contextFor(work);
   }
@@ -69,9 +79,10 @@ export class GuidedWorkViewReader {
     return this.viewFor(work);
   }
 
-  private openSessionHead(sessionId: string): GuidedWorkRow | null {
-    const work = this.sessionHead(sessionId);
-    return work?.status === "open" || work?.status === "blocked" ? work : null;
+  private openSessionHead(scope: WorkTurnScope): GuidedWorkRow | null {
+    const work = this.sessionHead(scope.sessionId);
+    if (!work || !guidedWorkMatchesScope(work, scope)) return null;
+    return work.status === "open" || work.status === "blocked" ? work : null;
   }
 
   private contextFor(work: GuidedWorkRow): DurableWorkContext {
@@ -83,6 +94,7 @@ export class GuidedWorkViewReader {
       throw new Error(`Durable Work original request is unavailable: ${work.work_id}`);
     }
     const results = this.results(work.work_id);
+    const contextResults = this.contextResults(work.work_id);
     return {
       work: this.viewFor(work, results),
       originalRequest: {
@@ -90,7 +102,7 @@ export class GuidedWorkViewReader {
         messageId: origin.original_message_id,
         content: origin.original_message,
       },
-      resultFacts: results.map((result) => ({
+      resultFacts: contextResults.map((result) => ({
         toolName: result.tool_name,
         status: result.status,
         ...(result.result_json !== null
@@ -210,12 +222,22 @@ export class GuidedWorkViewReader {
   private results(workId: string): GuidedWorkResultRow[] {
     return this.db.query<GuidedWorkResultRow, [string]>(`
       SELECT result.result_ref, result.sequence, result.tool_call_id,
-        call.tool_name, call.status, call.result_json, call.result_sha256,
+        call.tool_name, call.status, NULL AS result_json, call.result_sha256,
         call.error_code, result.origin_turn_id, result.attached_at
       FROM btcc_guided_work_results result
       JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
       WHERE result.work_id = ? ORDER BY result.sequence
     `).all(workId);
+  }
+
+  private contextResults(workId: string): GuidedWorkContextResultRow[] {
+    return this.db.query<GuidedWorkContextResultRow, [string, number]>(`
+      SELECT call.tool_name, call.status, call.result_json, call.error_code
+      FROM btcc_guided_work_results result
+      JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
+      WHERE result.work_id = ?
+      ORDER BY result.sequence DESC LIMIT ?
+    `).all(workId, MAX_CONTEXT_RESULT_FACTS).reverse();
   }
 }
 

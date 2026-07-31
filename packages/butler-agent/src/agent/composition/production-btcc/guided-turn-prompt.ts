@@ -50,10 +50,12 @@ export function guidedInstructions(
     "Use Work when the task needs continuation across turns, a persistent artifact, several dependent actions, or an external effect.",
     "Skip Work for simple conversation, stable knowledge, or a single-step read-only lookup.",
     "Multi-source or multi-step research that must produce a meaningful synthesized result is substantial Work even when every source tool is read-only.",
+    "When the request asks you to inspect multiple sources and compare or synthesize them, start Work before the first source tool.",
     "When Work is useful, call replace_work_plan before the dependent work and use record_work_review to review the plan and the actual result.",
     "Before a persistent change, include one matching Plan action and accept the current Plan review. Use the actual tool name as capability and an exact target: write_file uses workspace:<relative-path>; Project Ledger mutations use project-ledger:<kind>:<id>.",
     "The runtime creates effect ids, hashes, revisions, and receipts. Never invent or copy them into a Plan.",
     "record_work_checkpoint is optional and should mark only meaningful stage changes.",
+    "Before reporting a substantial Work turn, record a result review: accept only for a completed result; use partial or revise when useful work remains, then still report truthfully.",
     "If Work bookkeeping fails, continue and deliver any truthful artifact or final answer you can support.",
     ...(policy.trackingMode === "ledger"
       ? ["For substantial project work, use the internal Work record for continuity and use Project Ledger reads as context. Do not attempt to mutate the Project Ledger unless a reviewed effect tool is explicitly available."]

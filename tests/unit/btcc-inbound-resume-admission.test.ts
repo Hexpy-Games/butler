@@ -1,14 +1,14 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { QueuedInboundEvent } from
   "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
-import { shouldEnterBtcc } from
-  "../../packages/butler-agent/src/interfaces/gateway/native-butler/runtime-identity.ts";
+import { createBtccQueueEntryDecider } from
+  "../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
 
-test("runtime interruption recovery admits only resumable BTCC Turns", () => {
+test("queue entry distinguishes fresh, resumable, and terminal Turns from durable state", () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-inbound-resume-admission-"));
   const dbPath = join(butlerData, "app-server", "butler-client.sqlite");
   mkdirSync(join(butlerData, "app-server"), { recursive: true });
@@ -20,17 +20,45 @@ test("runtime interruption recovery admits only resumable BTCC Turns", () => {
       INSERT INTO turns VALUES ('turn-active', 'thinking');
       INSERT INTO turns VALUES ('turn-delivered', 'thinking');
       INSERT INTO turns VALUES ('turn-unadmitted', 'thinking');
+      INSERT INTO turns VALUES ('turn-app-cancelled', 'cancelled');
+      INSERT INTO turns VALUES ('turn-app-delivered', 'delivered');
+      INSERT INTO turns VALUES ('turn-app-failed', 'failed');
+      INSERT INTO turns VALUES ('turn-app-runtime-fault', 'runtime_fault');
+      INSERT INTO turns VALUES ('turn-app-cancelling', 'cancelling');
       INSERT INTO btcc_turns VALUES ('turn-active', 'task_execution');
       INSERT INTO btcc_turns VALUES ('turn-delivered', 'delivered');
     `);
-    const shouldEnter = shouldEnterBtcc(butlerData);
+    const decide = createBtccQueueEntryDecider(dbPath);
 
-    expect(shouldEnter(queueItem("turn-active", true))).toBe(true);
-    expect(shouldEnter(queueItem("turn-delivered", true))).toBe(false);
-    expect(shouldEnter(queueItem("turn-unadmitted", true))).toBe(false);
-    expect(shouldEnter(queueItem("turn-fresh", false))).toBe(true);
+    expect(decide(queueItem("turn-active", true))).toEqual({ kind: "resume" });
+    expect(decide(queueItem("turn-active", false))).toEqual({ kind: "resume" });
+    expect(decide(queueItem("turn-delivered", true))).toEqual({ kind: "terminal" });
+    expect(decide(queueItem("turn-unadmitted", true))).toEqual({ kind: "fresh" });
+    expect(decide(queueItem("turn-unadmitted", false))).toEqual({ kind: "fresh" });
+    expect(decide(queueItem("turn-fresh", false))).toEqual({ kind: "fresh" });
+    expect(decide(queueItem("turn-app-cancelled", true))).toEqual({ kind: "terminal" });
+    expect(decide(queueItem("turn-app-delivered", true))).toEqual({ kind: "terminal" });
+    expect(decide(queueItem("turn-app-failed", true))).toEqual({ kind: "terminal" });
+    expect(decide(queueItem("turn-app-runtime-fault", true))).toEqual({
+      kind: "terminal",
+    });
+    expect(decide(queueItem("turn-app-cancelling", true))).toEqual({ kind: "terminal" });
   } finally {
     db.close();
+    rmSync(butlerData, { recursive: true, force: true });
+  }
+});
+
+test("queue entry remains undecided when durable state cannot be read", () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "butler-inbound-state-unavailable-"));
+  const dbPath = join(butlerData, "app-server", "butler-client.sqlite");
+  mkdirSync(join(butlerData, "app-server"), { recursive: true });
+  try {
+    writeFileSync(dbPath, "not a sqlite database", "utf8");
+    const decide = createBtccQueueEntryDecider(dbPath);
+
+    expect(decide(queueItem("turn-unreadable", true))).toBeUndefined();
+  } finally {
     rmSync(butlerData, { recursive: true, force: true });
   }
 });

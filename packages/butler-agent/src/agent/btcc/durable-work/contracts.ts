@@ -132,6 +132,12 @@ export type AttachToolResultInput = WorkTurnScope & {
   toolCallId: string;
 };
 
+export type LegacyOpenWorkImportResult = {
+  sourceProgramId: string;
+  imported: boolean;
+  work: DurableWorkView;
+};
+
 export type ReplaceWorkPlanCommand = Omit<ReplaceWorkPlanInput, "startNew"> & {
   startNew: boolean;
 };
@@ -142,7 +148,13 @@ export type RecordWorkReviewCommand = RecordWorkReviewInput & {
 
 export interface DurableWorkService {
   loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null>;
-  bindOpenWork(scope: WorkTurnScope): Promise<DurableWorkView | null>;
+  importOpenLegacyWork(
+    scope: WorkTurnScope,
+  ): Promise<LegacyOpenWorkImportResult | null>;
+  bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null>;
   replacePlan(input: ReplaceWorkPlanInput): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewInput): Promise<DurableWorkView>;
@@ -152,7 +164,13 @@ export interface DurableWorkService {
 
 export interface DurableWorkStore {
   loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null>;
-  bindOpenWork(scope: WorkTurnScope): Promise<DurableWorkView | null>;
+  importOpenLegacyWork(
+    scope: WorkTurnScope,
+  ): Promise<LegacyOpenWorkImportResult | null>;
+  bindOpenWork(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): Promise<DurableWorkView | null>;
   replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView>;
   recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView>;

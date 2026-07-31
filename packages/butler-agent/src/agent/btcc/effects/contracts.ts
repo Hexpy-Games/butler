@@ -85,6 +85,7 @@ export type EffectAdapter<TNormalizedInput = unknown, TResult = unknown> = {
     normalizedInput: TNormalizedInput;
     idempotencyKey: string;
     signal: AbortSignal;
+    dispatchAttempts: number;
   }): Promise<EffectReconciliation<TResult>>;
 };
 

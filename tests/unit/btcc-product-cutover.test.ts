@@ -57,6 +57,7 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      decideEntry: () => ({ kind: "fresh" }),
       deliverAction: async (_sessionId, action) => {
         delivered.push(action.message.text ?? "");
         return { ok: true };
@@ -140,7 +141,7 @@ test("a cancelling App Turn is terminalized without entering BTCC", async () => 
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
-      shouldHandleItem: () => false,
+      decideEntry: () => ({ kind: "terminal" }),
       server: {
         async handleInbound() {
           handled = true;
@@ -193,6 +194,7 @@ test("a BTCC runtime interruption parks the exact queue item for process replace
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      decideEntry: () => ({ kind: "fresh" }),
       server: {
         async handleInbound() {
           throw new Error("post-commit activation interrupted");
@@ -266,6 +268,7 @@ test("a recovered runtime interruption resumes its admitted Turn", async () => {
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
+      decideEntry: () => ({ kind: "resume" }),
       server: {
         async handleInbound(envelope) {
           resumeMarker = (envelope.raw as Record<string, unknown>)?.btccResume === true;

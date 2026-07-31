@@ -11,6 +11,7 @@ export type {
   DurableWorkStore,
   DurableWorkToolResultRef,
   DurableWorkView,
+  LegacyOpenWorkImportResult,
   RecordWorkCheckpointInput,
   RecordWorkReviewCommand,
   RecordWorkReviewInput,

@@ -53,7 +53,9 @@ import {
 } from "./durable-work-tools.ts";
 import {
   backfillTurnToolResults,
+  bindPresentedWorkForToolDispatch,
   safeBindOpenWork,
+  safeImportOpenLegacyWork,
   publishWorkCheckpoint,
   safeAttachToolResult,
   safeBoundWork,
@@ -68,6 +70,8 @@ import {
   toolResultSucceeded,
   unauthorizedToolResult,
 } from "./guided-tool-progress.ts";
+import { runGuidedPromptWithOperationalReport } from
+  "./guided-operational-report.ts";
 
 type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
 
@@ -80,15 +84,30 @@ export function createProductionGuidedTurnAgent(input: {
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   promptRunner?: PromptRunner;
+  turnLeaseMs?: number;
+  finalReportMs?: number;
 }): GuidedTurnAgent {
   const promptRunner = input.promptRunner ?? runFunctionToolPromptText;
   return {
     async run({ turn, signal, progress }): Promise<GuidedTurnResult> {
+      const leaseStartedAt = Date.now();
       const policy = guidedPolicy(turn);
       const workScope = workScopeForTurn(turn, policy.trackingMode);
-      const initialWork = policy.trackingMode === "none"
+      let initialWork = policy.trackingMode === "none"
         ? null
         : await safeLoadWorkContext(input.durableWork, workScope);
+      if (!initialWork && policy.trackingMode === "local") {
+        await safeImportOpenLegacyWork(input.durableWork, workScope);
+        initialWork = await safeLoadWorkContext(input.durableWork, workScope);
+      }
+      if (initialWork) {
+        const boundWork = await safeBoundWork(input.durableWork, turn.turnId);
+        if (boundWork?.workId === initialWork.work.workId) {
+          await backfillTurnToolResults(input, workScope);
+          initialWork = await safeLoadWorkContext(input.durableWork, workScope);
+        }
+      }
+      const presentedWorkId = initialWork?.work.workId;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
       const visibleTools = visibleToolDefinitions(authorizedTools, policy.accessMode);
@@ -167,7 +186,7 @@ export function createProductionGuidedTurnAgent(input: {
           },
         }),
       });
-      const text = await promptRunner({
+      const promptOptions: FunctionToolPromptOptions = {
           prompt: renderGuidedPrompt(turn, {
             ...input,
             workContext: renderDurableWorkContext(initialWork),
@@ -187,6 +206,8 @@ export function createProductionGuidedTurnAgent(input: {
           tools: visibleTools,
           maxToolRounds: 12,
           async executeTool(call) {
+            const toolSignal = call.signal ?? signal;
+            throwIfToolAborted(toolSignal);
             const effectiveToolName = effectiveToolNameForCall(call.name, call.args);
             const callId = digest([
               "btcc-guided-tool-call.v1",
@@ -270,6 +291,13 @@ export function createProductionGuidedTurnAgent(input: {
               toolName: effectiveToolName,
               status: "started",
             });
+            if (!isDurableWorkTool(call.name) && presentedWorkId) {
+              await bindPresentedWorkForToolDispatch(
+                input,
+                workScope,
+                presentedWorkId,
+              );
+            }
             try {
               if (isDurableWorkTool(call.name) && call.name !== "replace_work_plan") {
                 await safeBindOpenWork(input.durableWork, workScope);
@@ -285,7 +313,7 @@ export function createProductionGuidedTurnAgent(input: {
                   })
                 : await execute({
                     ...call,
-                    signal: call.signal ?? signal,
+                    signal: toolSignal,
                   });
               rememberDescribedTools(call.name, result, describedToolIds);
               input.toolJournal.finish({ callId, status: "completed", result });
@@ -306,7 +334,7 @@ export function createProductionGuidedTurnAgent(input: {
               });
               return result;
             } catch (error) {
-              const cancelled = signal.aborted || call.signal?.aborted;
+              const cancelled = signal.aborted || toolSignal.aborted;
               if (!cancelled) {
                 const result = ordinaryToolError(effectiveToolName, error);
                 input.toolJournal.finish({ callId, status: "completed", result });
@@ -336,7 +364,28 @@ export function createProductionGuidedTurnAgent(input: {
               throw error;
             }
           },
-        });
+        };
+      const text = await runGuidedPromptWithOperationalReport({
+        promptRunner,
+        options: promptOptions,
+        parentSignal: signal,
+        leaseStartedAt,
+        leaseMs: input.turnLeaseMs,
+        finalReportMs: input.finalReportMs,
+        async loadFacts() {
+          const currentWork = await safeLoadWorkContext(input.durableWork, workScope) ??
+            await safeBoundWork(input.durableWork, turn.turnId) ?? initialWork;
+          const workId = currentWork && "work" in currentWork
+            ? currentWork.work.workId
+            : currentWork?.workId;
+          return {
+            originalRequest: turn.originalMessage,
+            work: currentWork,
+            toolCalls: input.toolJournal.list(turn.turnId),
+            effects: workId ? input.effectJournal.listForWork(workId) : [],
+          };
+        },
+      });
       return {
         content: text,
         route: routeForUsedTools(
@@ -346,4 +395,10 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
+}
+
+function throwIfToolAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Guided tool execution was cancelled");
 }

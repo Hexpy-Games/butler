@@ -226,6 +226,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
             name: call.function.name,
             args: args.parsed,
             rawArguments: args.raw,
+            signal: options.signal,
           });
           payload = { ok: true, output: result };
           writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {

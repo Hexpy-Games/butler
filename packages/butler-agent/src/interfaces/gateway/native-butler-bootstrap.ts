@@ -28,6 +28,7 @@ import {
   BtccGatewayLifecycleService,
   BtccStopRequestReconciler,
   bindBtccGatewayRuntime,
+  createBtccQueueEntryDecider,
   createBtccGatewayHandlers,
   type BtccGatewayRuntime,
 } from "./btcc/index.ts";
@@ -43,7 +44,6 @@ import {
   resolveButlerHome,
   resolveButlerSession,
   sendStartupNotification,
-  shouldEnterBtcc,
   startupMessage,
   statusText,
   waitForShutdown,
@@ -190,9 +190,9 @@ export async function runNativeButlerMain(
     stopReconciler = new BtccStopRequestReconciler(appMessageDbPath, btcc.runtime);
     await stopReconciler.reconcile();
     await lifecycle.getOrCreate(binding.sessionId, "butler");
-    const recoverableInbound = shouldEnterBtcc(butlerData);
+    const decideInboundEntry = createBtccQueueEntryDecider(appMessageDbPath);
     const recovered = inboundQueue.recoverRuntimeInterruptions(
-      recoverableInbound,
+      (item) => decideInboundEntry(item) !== undefined,
     );
     if (recovered.requeued > 0) {
       process.stdout.write(
@@ -257,7 +257,7 @@ export async function runNativeButlerMain(
             store,
             deliveryGuard,
             deliverAction: deliverThroughEnabledGate,
-            shouldHandleItem: recoverableInbound,
+            decideEntry: decideInboundEntry,
             limit: 5,
             maxConcurrentSessions: 5,
             onOutcome: (outcome) => {

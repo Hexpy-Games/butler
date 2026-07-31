@@ -5,6 +5,7 @@ import type {
 } from "../../../btcc/durable-work/index.ts";
 import type { GuidedWorkRow, GuidedWorkTurn } from "./guided-work-records.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
+import { guidedWorkMatchesScope } from "./guided-work-scope.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
 export class GuidedWorkSessionWriter {
@@ -21,7 +22,7 @@ export class GuidedWorkSessionWriter {
       throw new Error("Durable Work Turn binding is no longer the Session head");
     }
     const current = bound ?? head;
-    if (current && !input.startNew && !sameScope(current, input)) {
+    if (current && !input.startNew && !guidedWorkMatchesScope(current, input)) {
       throw new Error("Durable Work scope changed; startNew is required");
     }
     if (input.startNew) {
@@ -37,21 +38,30 @@ export class GuidedWorkSessionWriter {
     return this.createAndBind(input, turn);
   }
 
-  bindOpenHead(scope: WorkTurnScope): GuidedWorkRow | null {
+  bindOpenHead(
+    scope: WorkTurnScope,
+    expectedWorkId?: string,
+  ): GuidedWorkRow | null {
     const turn = this.reader.turn(scope);
     const bound = this.reader.boundWork(scope.turnId);
     const head = this.reader.sessionHead(scope.sessionId);
+    if (expectedWorkId && bound?.work_id !== expectedWorkId &&
+      head?.work_id !== expectedWorkId) {
+      return null;
+    }
     if (bound) {
+      if (expectedWorkId && bound.work_id !== expectedWorkId) return null;
       if (!head || bound.work_id !== head.work_id) {
         throw new Error("Durable Work Turn binding is no longer the Session head");
       }
-      if (!sameScope(bound, scope)) {
+      if (!guidedWorkMatchesScope(bound, scope)) {
         throw new Error("Durable Work Turn scope does not match its bound Work");
       }
       return bound.status === "open" || bound.status === "blocked" ? bound : null;
     }
     if (!head || (head.status !== "open" && head.status !== "blocked")) return null;
-    if (!sameScope(head, scope)) return null;
+    if (expectedWorkId && head.work_id !== expectedWorkId) return null;
+    if (!guidedWorkMatchesScope(head, scope)) return null;
     this.bind(turn, head.work_id);
     return head;
   }
@@ -84,7 +94,7 @@ export class GuidedWorkSessionWriter {
     ) {
       throw new Error(`Durable Work is not open: ${bound.work_id}`);
     }
-    if (!sameScope(bound, scope)) {
+    if (!guidedWorkMatchesScope(bound, scope)) {
       throw new Error("Durable Work Turn scope does not match its bound Work");
     }
     return bound;
@@ -163,10 +173,4 @@ export class GuidedWorkSessionWriter {
       new Date().toISOString(),
     );
   }
-}
-
-function sameScope(work: GuidedWorkRow, scope: WorkTurnScope): boolean {
-  return scope.projectRef === undefined
-    ? work.scope_kind === "session" && work.scope_ref === scope.sessionId
-    : work.scope_kind === "project" && work.scope_ref === scope.projectRef;
 }

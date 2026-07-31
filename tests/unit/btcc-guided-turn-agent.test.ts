@@ -67,9 +67,13 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     }))).toBeUndefined();
 
     let visibleNames: string[] = [];
+    let writeFileSchema = "";
     let instructions = "";
     const projectAgent = fixture.agent(async (options) => {
       visibleNames = options.tools.map((tool) => tool.name);
+      writeFileSchema = JSON.stringify(
+        options.tools.find((tool) => tool.name === "write_file")?.parameters,
+      );
       instructions = options.instructions ?? "";
       return "준비했습니다.";
     });
@@ -83,6 +87,7 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       signal: new AbortController().signal,
     });
     expect(visibleNames).toContain("write_file");
+    expect(writeFileSchema).not.toContain("expected_sha256");
     expect(visibleNames).toContain("project_ledger_status");
     expect(visibleNames).not.toContain("project_ledger_create");
     expect(instructions).toContain("use the internal Work record for continuity");
@@ -430,20 +435,39 @@ test("Guided agent replays completed tool results and fences uncertain mutations
   }
 });
 
-test("Guided agent rejects provider failure instead of completing with pre-tool text and treats read-only commands as assisted", async () => {
+test("Guided agent turns provider failure into one fact-based final report", async () => {
   const fixture = createFixture("guided-fallback");
   try {
+    writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
+    let calls = 0;
     const fallbackAgent = fixture.agent(async (options) => {
+      calls += 1;
+      if (calls === 2) {
+        expect(options.tools).toEqual([]);
+        expect(options.prompt).toContain("Tool read_file: completed");
+        expect(options.prompt).toContain('enabled\\":true');
+        return "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.";
+      }
       await options.onAssistantTextBeforeTools?.({
-        text: "확인한 범위에서는 설정 파일이 존재합니다.",
+        text: "설정 파일을 확인하겠습니다.",
         toolCalls: [{ name: "read_file", args: { path: "settings.json" } }],
+      });
+      await options.executeTool({
+        name: "read_file",
+        args: { path: "settings.json" },
+        rawArguments: JSON.stringify({ path: "settings.json" }),
+        signal: options.signal,
       });
       throw new Error("provider disconnected after usable text");
     });
-    await expect(fallbackAgent.run({
+    expect(await fallbackAgent.run({
       turn: turnRecord(fixture.root),
       signal: new AbortController().signal,
-    })).rejects.toThrow("provider disconnected after usable text");
+    })).toEqual({
+      route: "assisted",
+      content: "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.",
+    });
+    expect(calls).toBe(2);
 
     const commandAgent = fixture.agent(async (options) => {
       await options.executeTool({
@@ -462,6 +486,42 @@ test("Guided agent rejects provider failure instead of completing with pre-tool 
   }
 });
 
+test("Guided agent bounds the main loop and falls back after one failed final report", async () => {
+  const fixture = createFixture("guided-lease-fallback");
+  try {
+    let calls = 0;
+    const preservedDraft = `확인 중인 초안 ${"가".repeat(600)} 초안 끝`;
+    const agent = fixture.agent(async (options) => {
+      calls += 1;
+      if (calls === 2) throw new Error("final report provider failure");
+      await options.onAssistantTextBeforeTools?.({
+        text: preservedDraft,
+        toolCalls: [],
+      });
+      return await new Promise<string>((_resolve, reject) => {
+        options.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+          once: true,
+        });
+      });
+    }, { turnLeaseMs: 80, finalReportMs: 40 });
+
+    const startedAt = Date.now();
+    const outcome = await agent.run({
+      turn: turnRecord(fixture.root, { turnId: "guided-lease-turn" }),
+      signal: new AbortController().signal,
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(calls).toBe(2);
+    expect(outcome.route).toBe("direct");
+    expect(outcome.content).toContain("모델 연결 또는 실행 시간이 종료");
+    expect(outcome.content).toContain(preservedDraft);
+    expect(outcome.content).toContain("완료되었다고 처리하지 않았");
+  } finally {
+    fixture.close();
+  }
+});
+
 function createFixture(label: string) {
   const root = mkdtempSync(join(tmpdir(), `${label}-`));
   const dbPath = join(root, "butler.sqlite");
@@ -473,7 +533,13 @@ function createFixture(label: string) {
   return {
     root,
     stores,
-    agent(promptRunner: Parameters<typeof createProductionGuidedTurnAgent>[0]["promptRunner"]) {
+    agent(
+      promptRunner: Parameters<typeof createProductionGuidedTurnAgent>[0]["promptRunner"],
+      operational: Pick<
+        Parameters<typeof createProductionGuidedTurnAgent>[0],
+        "turnLeaseMs" | "finalReportMs"
+      > = {},
+    ) {
       return createProductionGuidedTurnAgent({
         butlerHome: root,
         butlerData: root,
@@ -483,6 +549,7 @@ function createFixture(label: string) {
         effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
         promptRunner,
+        ...operational,
       });
     },
     close() {

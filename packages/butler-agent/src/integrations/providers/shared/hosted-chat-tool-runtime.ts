@@ -141,6 +141,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
               name: call.function.name,
               args: args.parsed,
               rawArguments: args.raw,
+              signal: options.signal,
             }),
           };
         } catch (error) {
