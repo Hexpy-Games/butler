@@ -95,7 +95,6 @@
           "status": "open",
           "planRevisionAtLeast": 1,
           "planReviewVerdict": "accept",
-          "resultReviewVerdict": "partial",
           "resultToolNamesInclude": ["read_file", "write_file"]
         }
       }
