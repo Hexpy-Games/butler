@@ -40,6 +40,7 @@ export const transformPublicDataTableToolDefinition = {
       "rows",
     ],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

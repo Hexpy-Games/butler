@@ -41,7 +41,7 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
             action_key: "write_report",
             description: "Write the requested report",
             dependency_keys: [],
-            effect: { capability: "workspace.file", target: "report.md" },
+            effect: { capability: "write_file", target: "workspace:report.md" },
           }],
           checks: ["report.md contains the requested result"],
         })).toMatchObject({ ok: true, work: { status: "open" } });
@@ -55,7 +55,14 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
           path: "report.md",
           content: "# Verified report\n\nThe durable artifact is ready.\n",
           overwrite: false,
-        })).toMatchObject({ ok: true, created: true });
+        })).toMatchObject({
+          ok: true,
+          effect: "workspace_file_write",
+          effect_receipt: {
+            capability: "write_file",
+            target: "workspace:report.md",
+          },
+        });
         expect(await call(options, "record_work_checkpoint", {
           stage: "review",
           public_summary: "보고서를 작성하고 실제 파일을 확인했습니다.",
@@ -250,7 +257,7 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
   }
 });
 
-test("invalid Work bookkeeping does not block a truthful artifact and final answer", async () => {
+test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can still deliver", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-nonblocking-"));
   const dbPath = join(root, "butler.sqlite");
   const stores = openBtccSqliteStores({
@@ -277,7 +284,34 @@ test("invalid Work bookkeeping does not block a truthful artifact and final answ
           path: "answer.txt",
           content: "actual result\n",
           overwrite: false,
+        })).toMatchObject({
+          ok: false,
+          error: { code: "effect_work_required" },
+        });
+        expect(await call(options, "replace_work_plan", {
+          objective: "Create answer.txt",
+          actions: [{
+            action_key: "write_answer",
+            description: "Write the requested answer file",
+            dependency_keys: [],
+            effect: {
+              capability: "write_file",
+              target: "workspace:answer.txt",
+            },
+          }],
+          checks: ["answer.txt contains the requested result"],
         })).toMatchObject({ ok: true });
+        expect(await call(options, "record_work_review", {
+          subject: "plan",
+          verdict: "accept",
+          summary: "The exact file target matches the request.",
+          corrections: [],
+        })).toMatchObject({ ok: true });
+        expect(await call(options, "write_file", {
+          path: "answer.txt",
+          content: "actual result\n",
+          overwrite: false,
+        })).toMatchObject({ ok: true, effect: "workspace_file_write" });
         return "요청하신 파일을 실제로 작성했습니다.";
       },
     });
@@ -288,8 +322,11 @@ test("invalid Work bookkeeping does not block a truthful artifact and final answ
         content: "요청하신 파일을 실제로 작성했습니다.",
       });
     expect(readFileSync(join(root, "answer.txt"), "utf8")).toBe("actual result\n");
-    expect(await stores.durableWork.boundWorkForTurn(turnId)).toBeNull();
-    expect((await stores.turns.findTurn(turnId))?.route).toBe("assisted");
+    expect(await stores.durableWork.boundWorkForTurn(turnId)).toMatchObject({
+      status: "open",
+      latestPlanReview: { verdict: "accept" },
+    });
+    expect((await stores.turns.findTurn(turnId))?.route).toBe("managed");
   } finally {
     await stores.retrospective.flush();
     stores.close();
@@ -317,6 +354,7 @@ function createRuntime(input: {
       appMessageDbPath: input.dbPath,
       contextDocuments: input.stores.contextDocuments,
       toolJournal: input.stores.guidedToolJournal,
+      effectJournal: input.stores.guidedEffectJournal,
       durableWork: input.stores.durableWork,
       promptRunner: input.promptRunner,
     }),

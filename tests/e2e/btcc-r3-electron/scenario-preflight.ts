@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { isAbsolute, relative, resolve } from "node:path";
+import {
+  existsSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+} from "node:path";
 import {
   BTCC_R3_ELECTRON_SCENARIO_SCHEMA,
   type ElectronScenario,
@@ -25,8 +35,20 @@ export function safeSegment(value: string, fallback: string): string {
 }
 
 export function isInside(parent: string, candidate: string): boolean {
-  const diff = relative(resolve(parent), resolve(candidate));
+  const diff = relative(canonicalPath(parent), canonicalPath(candidate));
   return diff === "" || (!diff.startsWith("..") && !isAbsolute(diff));
+}
+
+function canonicalPath(candidate: string): string {
+  let existing = resolve(candidate);
+  const missingSegments: string[] = [];
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) break;
+    missingSegments.unshift(basename(existing));
+    existing = parent;
+  }
+  return resolve(realpathSync(existing), ...missingSegments);
 }
 
 export function resolveFixturePath(root: string, candidate: string): string {
@@ -58,6 +80,21 @@ export function validateElectronScenario(value: unknown): ElectronScenario {
   assert(typeof value.id === "string" && value.id.trim(), "Scenario id is required.");
   assert(Array.isArray(value.steps), "Scenario steps must be an array.");
   const scenario = value as unknown as ElectronScenario;
+  const sessionKind = scenario.session?.kind;
+  if (sessionKind !== undefined) {
+    assert(
+      sessionKind === "chat" || sessionKind === "project",
+      "Scenario session kind must be chat or project.",
+    );
+  }
+  if (scenario.session?.projectDisplayName !== undefined) {
+    assert(
+      sessionKind === "project" &&
+        typeof scenario.session.projectDisplayName === "string" &&
+        Boolean(scenario.session.projectDisplayName.trim()),
+      "Scenario projectDisplayName requires a non-empty project session.",
+    );
+  }
   for (const step of scenario.steps) {
     assert(step && typeof step === "object", "Scenario step must be an object.");
     assert(typeof step.id === "string" && step.id.trim(), "Scenario step id is required.");

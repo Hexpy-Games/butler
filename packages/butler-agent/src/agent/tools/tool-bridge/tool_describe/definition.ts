@@ -16,6 +16,7 @@ export const toolDescribeToolDefinition = {
     },
     required: ["ids"],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

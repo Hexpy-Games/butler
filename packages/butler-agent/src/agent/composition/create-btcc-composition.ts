@@ -115,6 +115,7 @@ export function createProductionBtccComposition(input: {
       appMessageDbPath: input.appMessageDbPath,
       contextDocuments: stores.contextDocuments,
       toolJournal: stores.guidedToolJournal,
+      effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
     }),
   });

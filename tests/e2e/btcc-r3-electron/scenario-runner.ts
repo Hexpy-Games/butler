@@ -55,8 +55,10 @@ export async function runBtccR3ElectronHarness(
     repoRoot: run.repoRoot,
     runId: run.runId,
     runRoot: run.runRoot,
+    sessionKind: run.sessionKind,
     sessionId: run.sessionId,
     sourceDataReadOnly: run.sourceData,
+    projectWorkspaceRoot: run.projectWorkspaceRoot,
     workspaceRoot: run.workspaceRoot,
   };
   if (options.dryRun) return preflight;
@@ -81,7 +83,7 @@ export async function runBtccR3ElectronHarness(
       startedAtMs: launch.startedAtMs,
       stoppedAtMs: null,
     });
-    await ensureSession(run, launch);
+    await ensureSession(run, launch, scenario.fixtures ?? []);
     const settings = await bridgeCall<AppSettingsView>(launch.page, "getSettings");
     assert(
       settings.model === run.model,

@@ -30,6 +30,7 @@ import {
 import { openOwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import { SqliteGuidedToolJournal } from "./guided-tool-journal.ts";
+import { SqliteGuidedEffectJournal } from "./guided-effect-store.ts";
 import { SqliteGuidedWorkStore } from "./guided-work-store.ts";
 import { createDurableWorkService } from "../../../btcc/durable-work/index.ts";
 
@@ -84,6 +85,7 @@ export function openBtccSqliteStores(input: {
     phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),
+    guidedEffectJournal: new SqliteGuidedEffectJournal(db),
     durableWork,
     operationalRecovery,
     operationalRecoveryStartup: {

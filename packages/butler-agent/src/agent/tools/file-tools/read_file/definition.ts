@@ -18,6 +18,7 @@ export const readFileToolDefinition: ButlerToolDefinition = {
     },
     required: ["path"],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

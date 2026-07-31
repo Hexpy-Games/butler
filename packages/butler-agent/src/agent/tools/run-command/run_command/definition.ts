@@ -54,6 +54,7 @@ export const runCommandToolDefinition = {
       "command",
     ],
   },
+  effectBoundary: "dynamic",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

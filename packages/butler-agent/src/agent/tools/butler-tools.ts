@@ -39,8 +39,10 @@ import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
+import type { ButlerToolDefinition } from "./types.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
+  ButlerToolEffectBoundary,
   ButlerToolDefinition,
   ToolCapabilityCategory,
   ToolCapabilityMetadata,
@@ -50,6 +52,15 @@ export type ButlerToolExecutor = FunctionToolPromptOptions["executeTool"];
 export type ButlerToolCall = Parameters<ButlerToolExecutor>[0];
 export type ButlerToolHandler = (call: ButlerToolCall) => Promise<unknown> | unknown;
 export type ButlerToolExecutorRegistry = Record<string, ButlerToolHandler>;
+export type ButlerToolExecutionBoundary = (input: {
+  call: ButlerToolCall;
+  definition: ButlerToolDefinition;
+  execute(): Promise<unknown>;
+}) => Promise<unknown>;
+
+const BUTLER_TOOL_DEFINITIONS_BY_NAME = new Map(
+  BUTLER_TOOLS.map((definition) => [definition.name, definition] as const),
+);
 
 export function createButlerToolExecutorRegistry<T extends ButlerToolExecutorRegistry>(handlers: T): T {
   return handlers;
@@ -130,15 +141,22 @@ export function createButlerToolExecutor(input: {
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
   activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
+  executionBoundary?: ButlerToolExecutionBoundary;
 }): ButlerToolExecutor {
   const todoListStore = new TodoListStore(input.butlerData);
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
   const toolExecutorRef: { current?: ButlerToolExecutorRegistry } = {};
-  const dispatchTool: ButlerToolHandler = async (call) => {
+  const executeActualTool = async (call: ButlerToolCall): Promise<unknown> => {
     if (!toolExecutorRef.current) throw new Error("Butler tool registry is not initialized");
-    return await executeRegisteredButlerTool(toolExecutorRef.current, call);
+    const definition = BUTLER_TOOL_DEFINITIONS_BY_NAME.get(call.name);
+    if (!definition) throw new Error(`Unknown Butler tool: ${call.name}`);
+    const execute = () => executeRegisteredButlerTool(toolExecutorRef.current!, call);
+    return input.executionBoundary
+      ? input.executionBoundary({ call, definition, execute })
+      : execute();
   };
+  const dispatchTool: ButlerToolHandler = executeActualTool;
   const toolExecutors = createButlerToolExecutorRegistry({
     ...createProjectLedgerToolHandlers({
       butlerHome: input.butlerHome,
@@ -224,5 +242,5 @@ export function createButlerToolExecutor(input: {
     ...createFileToolHandlers({ butlerData: input.butlerData, workspacePath: input.workspacePath ?? input.butlerHome }),
   });
   toolExecutorRef.current = toolExecutors;
-  return async (call) => executeRegisteredButlerTool(toolExecutors, call);
+  return executeActualTool;
 }

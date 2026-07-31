@@ -3,6 +3,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
@@ -170,13 +171,75 @@ function prepareConfig(
   writeJson(join(run.dataRoot, "butler.config.json"), config);
 }
 
-function writeFixtures(workspaceRoot: string, fixtures: ElectronFixtureFile[]): void {
+function writeFixtures(
+  workspaceRoot: string,
+  fixtures: readonly ElectronFixtureFile[],
+): void {
   for (const fixture of fixtures) {
     assert(typeof fixture.text === "string", `Fixture ${fixture.path} text is invalid.`);
     const path = resolveFixturePath(workspaceRoot, fixture.path);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, fixture.text, "utf8");
   }
+}
+
+function bindPreparedSession(run: PreparedRun): void {
+  const bindingStore = new SessionBindingStore(
+    join(run.dataRoot, "runtime", "session-store.sqlite"),
+  );
+  try {
+    bindingStore.upsert({
+      sessionId: sessionHintForRow(run.sessionId),
+      role: "butler",
+      ...(run.projectId ? { projectId: run.projectId } : {}),
+      workspacePath: run.workspaceRoot,
+      runtimeAdapterId: "btcc-turn-runtime",
+      modelProviderId: run.model.split("/", 1)[0] || "openai",
+      modelRef: run.model as `${string}/${string}`,
+      transportBindings: [],
+      metadata: { source: "btcc-r3-electron-e2e-fixture" },
+    });
+  } finally {
+    bindingStore.close();
+  }
+}
+
+export function activateProjectSessionWorkspace(
+  run: PreparedRun,
+  projectId: string,
+  fixtures: readonly ElectronFixtureFile[],
+): void {
+  assert(run.sessionKind === "project", "Only project sessions can adopt a project.");
+  const appDbPath = join(run.dataRoot, "app-server", "butler-client.sqlite");
+  assert(existsSync(appDbPath), "Electron App database is missing after project creation.");
+  const db = new Database(appDbPath, { readonly: true });
+  let workspacePath: string | null;
+  try {
+    workspacePath = db
+      .query<{ workspace_path: string }, [string]>(`
+        SELECT workspace_path
+        FROM projects
+        WHERE id = ? AND archived = 0
+        LIMIT 1
+      `)
+      .get(projectId)?.workspace_path ?? null;
+  } finally {
+    db.close();
+  }
+  assert(workspacePath, "Electron App did not persist the created project.");
+  const resolvedWorkspace = resolve(workspacePath);
+  assert(
+    isInside(run.projectWorkspaceRoot, resolvedWorkspace),
+    "Electron App scratch project escaped the isolated project workspace root.",
+  );
+  assert(
+    existsSync(resolvedWorkspace) && statSync(resolvedWorkspace).isDirectory(),
+    "Electron App scratch project workspace is unavailable.",
+  );
+  run.projectId = projectId;
+  run.workspaceRoot = resolvedWorkspace;
+  writeFixtures(resolvedWorkspace, fixtures);
+  bindPreparedSession(run);
 }
 
 export async function prepareElectronRun(
@@ -197,7 +260,11 @@ export async function prepareElectronRun(
   assert(runRoot !== repoRoot, "Run root must not be the source repository.");
   const dataRoot = join(runRoot, "data");
   const electronProfile = join(runRoot, "electron-profile");
-  const workspaceRoot = join(runRoot, "workspace");
+  const projectWorkspaceRoot = join(dataRoot, "project-workspaces");
+  const sessionKind = scenario.session?.kind ?? "chat";
+  const workspaceRoot = sessionKind === "project"
+    ? projectWorkspaceRoot
+    : join(runRoot, "workspace");
   const evidencePath = join(runRoot, "evidence.json");
   const debugPort = await freePort();
   const serverPort = await freePort();
@@ -233,12 +300,19 @@ export async function prepareElectronRun(
     evidencePath,
     interruptedExecutorReplacementUsed: false,
     model,
+    projectDisplayName: sessionKind === "project"
+      ? scenario.session?.projectDisplayName?.trim() ||
+        `BTCC R3 E2E ${scenario.id}`
+      : null,
+    projectId: null,
+    projectWorkspaceRoot,
     reasoningEffort,
     repoRoot,
     runId,
     runRoot,
     serverPort,
     sessionId,
+    sessionKind,
     sessionTitle: scenario.session?.title?.trim() || `BTCC R3 E2E ${scenario.id}`,
     sourceData,
     workspaceRoot,
@@ -247,27 +321,13 @@ export async function prepareElectronRun(
 
   mkdirSync(dataRoot, { recursive: true, mode: 0o700 });
   mkdirSync(electronProfile, { recursive: true, mode: 0o700 });
-  mkdirSync(workspaceRoot, { recursive: true });
+  if (sessionKind === "chat") mkdirSync(workspaceRoot, { recursive: true });
   prepareConfig(sourceConfig, run);
   copyCredentialIfPresent(sourceData, dataRoot, "model-provider-credentials.json");
   copyCredentialIfPresent(sourceData, dataRoot, "openai-codex.json");
-  writeFixtures(workspaceRoot, scenario.fixtures ?? []);
-  const bindingStore = new SessionBindingStore(
-    join(dataRoot, "runtime", "session-store.sqlite"),
-  );
-  try {
-    bindingStore.upsert({
-      sessionId: sessionHintForRow(sessionId),
-      role: "butler",
-      workspacePath: workspaceRoot,
-      runtimeAdapterId: "btcc-turn-runtime",
-      modelProviderId: model.split("/", 1)[0] || "openai",
-      modelRef: model as `${string}/${string}`,
-      transportBindings: [],
-      metadata: { source: "btcc-r3-electron-e2e-fixture" },
-    });
-  } finally {
-    bindingStore.close();
+  if (sessionKind === "chat") {
+    writeFixtures(workspaceRoot, scenario.fixtures ?? []);
+    bindPreparedSession(run);
   }
   return run;
 }

@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import type { CapabilityExecutionContext } from "./contracts.ts";
 import { resolveWorkspacePathGuard } from "../../../tools/file-tools/shared/workspace-path-guard.ts";
 import { OperationRejectedError } from "../../../btcc/core/index.ts";
+import { butlerToolProcessEnvironment } from
+  "../../../tool-support/executor-support.ts";
 import { commandHost } from "./command-host/index.ts";
 import {
   CommandOutputSpool,
@@ -22,6 +24,7 @@ export async function executeCommandCapability(
       cwd,
       detached: commandHost.detached,
       stdio: ["ignore", "pipe", "pipe"],
+      env: butlerToolProcessEnvironment({ butlerData: context.butlerData }),
     });
     let timedOut = false;
     spool.capture(child.stdout, child.stderr);

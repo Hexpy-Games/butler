@@ -10,6 +10,7 @@ export const listSkillsToolDefinition = {
     properties: {},
     required: [],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

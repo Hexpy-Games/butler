@@ -53,9 +53,22 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
             effect: {
               type: "object",
               additionalProperties: false,
+              description: [
+                "Only for an action that will make a persistent change.",
+                "Use the actual tool name as capability.",
+                "Targets are workspace:<relative-path> for write_file or project-ledger:<kind>:<id> for Project Ledger mutations.",
+              ].join(" "),
               properties: {
-                capability: { type: "string", minLength: 1 },
-                target: { type: "string", minLength: 1 },
+                capability: {
+                  type: "string",
+                  minLength: 1,
+                  description: "Actual persistent-effect tool name, such as write_file or project_ledger_update.",
+                },
+                target: {
+                  type: "string",
+                  minLength: 1,
+                  description: "Exact logical target; never include a private absolute path.",
+                },
               },
               required: ["capability", "target"],
             },

@@ -72,7 +72,6 @@ const projectMetadataToolNames: string[] = [
   "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
-  "render_project_dashboard",
   ...startupOnlyToolNames,
 ];
 const projectLifecycleWorkspaceToolNames: string[] = [
@@ -649,8 +648,14 @@ test("Project Ledger mutation policy covers every mutating native Project Ledger
     .map((tool) => tool.name)
     .sort();
 
-  const expectedMutationTools: string[] = [...PROJECT_LEDGER_MUTATION_TOOL_NAMES].sort();
+  const expectedMutationTools: string[] = [...PROJECT_LEDGER_MUTATION_TOOL_NAMES]
+    .filter((name) => name.startsWith("project_ledger_"))
+    .sort();
   expect(expectedMutationTools).toEqual(mutatingNativeLedgerTools);
+  expect(PROJECT_LEDGER_MUTATION_TOOL_NAMES).toEqual(expect.arrayContaining([
+    "render_project_dashboard",
+    "complete_project_work",
+  ]));
 });
 
 test("Butler tool registry exposes stable native tool contracts", () => {
@@ -858,7 +863,8 @@ test("Butler tool executor dispatch is registry-based instead of a call-name if-
   );
   const executorSource = source.slice(source.indexOf("export function createButlerToolExecutor("));
   expect(executorSource).toContain("createButlerToolExecutorRegistry");
-  expect(executorSource).toContain("executeRegisteredButlerTool(toolExecutors, call)");
+  expect(executorSource).toContain("executeRegisteredButlerTool(toolExecutorRef.current!, call)");
+  expect(executorSource).toContain("input.executionBoundary");
   expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
 });
 

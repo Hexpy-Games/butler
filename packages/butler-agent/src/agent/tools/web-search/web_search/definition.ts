@@ -39,6 +39,7 @@ export const webSearchToolDefinition = {
       "query",
     ],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

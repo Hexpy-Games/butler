@@ -46,6 +46,30 @@ For the complete R3-02 exit path (direct/no Work, multi-source read-only Work,
 artifact Work, and fresh-Turn continuation of the same Work after restart), use
 `tests/e2e/btcc-r3-electron-exit-scenario.json` with the same command.
 
+## Isolated project-session effect scenario
+
+`tests/e2e/btcc-r3-electron-project-effect-scenario.json` creates a scratch
+project and a project chat through the real Electron preload bridge. The App
+chooses and persists the scratch workspace; the harness verifies that it is
+inside the isolated run data before binding the runtime session to it.
+
+The first Turn creates one reviewed `project_ledger_create` effect and checks
+that its tool result is attached to durable Work. After a full Electron restart,
+the second Turn uses a native Project Ledger read to confirm the persisted
+marker:
+
+```sh
+bun run e2e:btcc-r3:electron -- \
+  --scenario tests/e2e/btcc-r3-electron-project-effect-scenario.json \
+  --run-root /absolute/path/to/a/new/run-directory \
+  --model openai/gpt-5.6-sol \
+  --reasoning low \
+  --keep-logs
+```
+
+To verify only project/session creation and restart without sending a provider
+request, add `--smoke`.
+
 ## Scenario format
 
 ```json
@@ -57,6 +81,7 @@ artifact Work, and fresh-Turn continuation of the same Work after restart), use
   "accessMode": "full_access",
   "session": {
     "id": "durable-work-continuation",
+    "kind": "chat",
     "title": "BTCC R3 Durable Work continuation"
   },
   "fixtures": [
@@ -102,6 +127,8 @@ artifact Work, and fresh-Turn continuation of the same Work after restart), use
 
 `{{WORKSPACE}}` and `{{DATA_ROOT}}` are the only prompt placeholders. Fixture and
 expected file paths must be relative and may not escape the fixture workspace.
+`session.kind` defaults to `chat`; use `project` with an optional
+`projectDisplayName` to create an isolated scratch project through the App.
 Every run root must be a new, previously nonexistent path; this avoids deleting
 or overwriting user data. The final `evidence.json` records the actual model,
 Turn IDs, renderer-visible final text, timings, reload/restart parity, expected
