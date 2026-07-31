@@ -37,4 +37,39 @@ ON btcc_guided_effects(work_id, plan_revision_id, action_key);
 
 CREATE INDEX IF NOT EXISTS idx_btcc_guided_effects_recovery
 ON btcc_guided_effects(status, updated_at);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_effect_blockers (
+  blocker_id TEXT PRIMARY KEY,
+  source_turn_id TEXT NOT NULL,
+  source_program_id TEXT,
+  source_occurrence_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  work_id TEXT,
+  capability TEXT NOT NULL,
+  target TEXT NOT NULL,
+  input_json TEXT NOT NULL,
+  input_sha256 TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  detail TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (
+    status IN ('unresolved', 'applied', 'not_applied')
+  ),
+  resolution_json TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT,
+  UNIQUE(source_occurrence_id, target),
+  CHECK (
+    (status = 'unresolved' AND resolution_json IS NULL AND resolved_at IS NULL)
+    OR
+    (status != 'unresolved' AND resolution_json IS NOT NULL AND resolved_at IS NOT NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_effect_blockers_work
+ON btcc_guided_work_effect_blockers(work_id, status, target);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_effect_blockers_source
+ON btcc_guided_work_effect_blockers(
+  session_id, source_program_id, source_turn_id, status
+);
 `;

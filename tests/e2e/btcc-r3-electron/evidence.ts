@@ -12,6 +12,8 @@ import { bindingWorkspace } from "./isolation-config.ts";
 import { isInside } from "./scenario-preflight.ts";
 
 export interface LaunchObservation {
+  electronPid: number | null;
+  executorPid: number | null;
   interruptedExecutorReplaced: boolean;
   startedAtMs: number;
   stoppedAtMs: number | null;
@@ -72,12 +74,14 @@ export function successEvidence(input: {
     run: {
       accessMode: run.accessMode,
       dataRoot: run.dataRoot,
+      debugPort: run.debugPort,
       electronProfile: run.electronProfile,
       model: run.model,
       reasoningEffort: run.reasoningEffort,
       repoRoot: run.repoRoot,
       runId: run.runId,
       runRoot: run.runRoot,
+      serverPort: run.serverPort,
       projectWorkspaceRoot: run.projectWorkspaceRoot,
       workspaceRoot: run.workspaceRoot,
     },
@@ -104,6 +108,7 @@ export function failureEvidence(input: {
   electronOutput?: string[];
   error: unknown;
   executorOutput?: string[];
+  launches?: LaunchObservation[];
   observations: StepObservation[];
   options: ElectronHarnessOptions;
   run: PreparedRun;
@@ -116,10 +121,14 @@ export function failureEvidence(input: {
     error: error instanceof Error ? error.message : String(error),
     run: {
       dataRoot: run.dataRoot,
+      debugPort: run.debugPort,
+      electronProfile: run.electronProfile,
       runId: run.runId,
       runRoot: run.runRoot,
+      serverPort: run.serverPort,
       workspaceRoot: run.workspaceRoot,
     },
+    launches: input.launches ?? [],
     observations,
     generatedAt: new Date().toISOString(),
     ...(options.keepLogs && input.electronOutput

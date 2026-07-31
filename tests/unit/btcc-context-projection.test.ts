@@ -3,9 +3,9 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  snapshotButlerContext,
+  snapshotContextDocuments,
   type ContextDocumentWriter,
-} from "../../packages/butler-agent/src/agent/btcc/context/index.ts";
+} from "../../packages/butler-agent/src/interfaces/gateway/btcc/context-documents.ts";
 import {
   PromptAssembler,
   type ContextAssembly,
@@ -26,7 +26,7 @@ class RecordingContextDocuments implements ContextDocumentWriter {
 
 test("BTCC projects context from typed metadata without interpreting the section id", () => {
   const documents = new RecordingContextDocuments();
-  const snapshot = snapshotButlerContext({
+  const snapshot = snapshotContextDocuments({
     userRef: "user-1",
     sessionId: "session-1",
     workspacePath: "/workspace",
@@ -52,7 +52,7 @@ test("BTCC projects context from typed metadata without interpreting the section
 test("BTCC rejects project-scoped context when no project binding exists", () => {
   const documents = new RecordingContextDocuments();
 
-  expect(() => snapshotButlerContext({
+  expect(() => snapshotContextDocuments({
     userRef: "user-1",
     sessionId: "session-1",
     workspacePath: "/workspace",

@@ -7,13 +7,19 @@ import type {
   GuidedEffectReceipt,
   PrepareGuidedEffectResult,
 } from "../../../btcc/effects/index.ts";
+import { SqliteGuidedEffectBlockerStore } from
+  "./guided-effect-blocker-store.ts";
 import {
   type GuidedEffectRow,
   hydrateGuidedEffect,
 } from "./guided-effect-records.ts";
 
 export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
-  constructor(private readonly db: Database) {}
+  private readonly blockers: SqliteGuidedEffectBlockerStore;
+
+  constructor(private readonly db: Database) {
+    this.blockers = new SqliteGuidedEffectBlockerStore(db);
+  }
 
   prepare(identity: GuidedEffectIdentity): PrepareGuidedEffectResult {
     return this.db.transaction(() => {
@@ -80,6 +86,24 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
       ORDER BY updated_at DESC, effect_id DESC
       LIMIT ?
     `).all(workId, boundedLimit).map(hydrateGuidedEffect);
+  }
+
+  listEffectBlockersForReconciliation(
+    workId: string,
+  ) {
+    return this.blockers.listForReconciliation(workId);
+  }
+
+  resolveBlockerOccurrence(
+    workId: string,
+    sourceOccurrenceId: string,
+    resolution: "applied" | "not_applied",
+  ): boolean {
+    return this.blockers.resolveOccurrence(
+      workId,
+      sourceOccurrenceId,
+      resolution,
+    );
   }
 
   claimDispatch(

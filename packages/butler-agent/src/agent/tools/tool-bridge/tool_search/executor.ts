@@ -4,8 +4,18 @@ import { buildExternalToolCatalog, buildNativeToolCatalog, type ExternalToolCata
 import { buildMcpToolCatalog } from "../../progressive-mcp-catalog.ts";
 import { searchToolCatalog } from "../../progressive-search.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
-import type { ToolCapabilityCategory, ToolCatalogProvider } from "../../types.ts";
-import { canBridgeMcpTool, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
+import type {
+  NativeToolAvailabilityOverrides,
+  ToolCapabilityCategory,
+  ToolCatalogEntry,
+  ToolCatalogProvider,
+} from "../../types.ts";
+import {
+  canDiscoverMcpTools,
+  mcpBridgeAvailability,
+  nativeBridgeAvailability,
+  scopedOutDisabledReason,
+} from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -16,6 +26,7 @@ export function createToolSearchToolHandler(input: {
   pluginCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   currentToolNames?: readonly string[] | (() => readonly string[]);
   hiddenNativeToolNames?: readonly string[];
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }) {
   return async (call: ToolCall) => {
     const category = parseCategory(call.args.category);
@@ -49,6 +60,8 @@ export function createToolSearchToolHandler(input: {
             toolName: tool.name,
             metadata,
             currentToolNames: input.currentToolNames,
+            nativeToolAvailabilityOverrides:
+              input.nativeToolAvailabilityOverrides,
           });
           if (!bridgeAvailability.enabled) {
             return bridgeAvailability;
@@ -135,6 +148,7 @@ async function maybeBuildMcpToolCatalog(input: {
     butlerData: string;
     mcpTimeoutMs?: number;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   };
   provider?: ToolCatalogProvider;
   category?: ToolCapabilityCategory;
@@ -142,12 +156,33 @@ async function maybeBuildMcpToolCatalog(input: {
 }) {
   if (input.provider && input.provider !== "mcp") return [];
   if (!input.provider && input.category !== "mcp") return [];
-  if (!canBridgeMcpTool(input.input)) return [];
-  return await buildMcpToolCatalog({
+  if (!canDiscoverMcpTools(input.input)) return [];
+  const catalog = await buildMcpToolCatalog({
     butlerData: input.input.butlerData,
     includeDisabled: input.includeDisabled,
     timeoutMs: input.input.mcpTimeoutMs,
   });
+  const availability = mcpBridgeAvailability(input.input);
+  return availability.enabled
+    ? catalog
+    : disableMcpCatalog(catalog, availability);
+}
+
+function disableMcpCatalog(
+  catalog: readonly ToolCatalogEntry[],
+  availability: {
+    disabledReason: string | null;
+    recoveryHint: string | null;
+  },
+): ToolCatalogEntry[] {
+  const disabledReason = availability.disabledReason ??
+    scopedOutDisabledReason("mcp");
+  return catalog.map((tool) => ({
+    ...tool,
+    enabled: false,
+    disabledReason,
+    recoveryHint: availability.recoveryHint,
+  }));
 }
 
 function disablePluginCatalog(catalog: readonly ExternalToolCatalogInput[]): ExternalToolCatalogInput[] {

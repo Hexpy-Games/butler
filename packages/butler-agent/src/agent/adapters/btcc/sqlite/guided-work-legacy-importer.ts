@@ -1,14 +1,12 @@
 import type { Database } from "bun:sqlite";
 import type {
   LegacyOpenWorkImportResult,
+  LegacyWorkRecordSnapshot,
   WorkTurnScope,
 } from "../../../btcc/durable-work/index.ts";
 import type { GuidedWorkTurn } from "./guided-work-records.ts";
-import {
-  projectLegacyOpenWork,
-  type LegacyWorkRecordSnapshot,
-} from "./guided-work-legacy-projection.ts";
-import { guidedWorkRecordId } from "./guided-work-record-id.ts";
+import { projectLegacyOpenWork } from "./guided-work-legacy-projection.ts";
+import { GuidedWorkLegacyWriter } from "./guided-work-legacy-writer.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
 type LegacyProgramRow = {
@@ -18,14 +16,7 @@ type LegacyProgramRow = {
   scope_id: string;
   goal_contract_ref: string;
   accepted_plan_ref: string | null;
-};
-
-type LegacyImportRow = {
-  legacy_program_id: string;
-  session_id: string;
-  scope_kind: "session" | "project";
-  scope_ref: string;
-  work_id: string;
+  manifest_revision: number;
 };
 
 type LegacyItemRow = {
@@ -35,21 +26,19 @@ type LegacyItemRow = {
 };
 
 export class GuidedWorkLegacyImporter {
+  private readonly writer: GuidedWorkLegacyWriter;
+
   constructor(
     private readonly db: Database,
     private readonly reader: GuidedWorkViewReader,
-  ) {}
+  ) {
+    this.writer = new GuidedWorkLegacyWriter(db, reader);
+  }
 
   import(scope: WorkTurnScope): LegacyOpenWorkImportResult | null {
     const fallbackTurn = this.reader.turn(scope);
     const program = this.findOpenProgram(scope);
     if (!program) return null;
-    const importId = legacyImportId(program.program_id, scope);
-    const replay = this.replay(importId, program, scope);
-    if (replay) return replay;
-    const head = this.reader.sessionHead(scope.sessionId);
-    if (head?.status === "open" || head?.status === "blocked") return null;
-
     const goal = this.readRecord(program.goal_contract_ref);
     const plan = program.accepted_plan_ref
       ? this.readRecord(program.accepted_plan_ref)
@@ -65,92 +54,13 @@ export class GuidedWorkLegacyImporter {
     });
     const origin = this.findOriginTurn(program, projection.originalMessageId)
       ?? fallbackTurn;
-    const workId = guidedWorkRecordId("work", importId);
-    const planId = projection.plan
-      ? guidedWorkRecordId("plan", importId)
-      : null;
-    const checkpointId = projection.checkpoint
-      ? guidedWorkRecordId("checkpoint", importId)
-      : null;
-    const now = new Date().toISOString();
-    const scopeKind = scope.projectRef ? "project" : "session";
-    const scopeRef = scope.projectRef ?? scope.sessionId;
-    this.db.query(`
-      INSERT INTO btcc_guided_works (
-        work_id, session_id, scope_kind, scope_ref, origin_turn_id,
-        origin_message_id, objective, status, current_plan_revision_id,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
-    `).run(
-      workId,
-      scope.sessionId,
-      scopeKind,
-      scopeRef,
-      origin.turn_id,
-      origin.original_message_id,
-      projection.objective,
-      planId,
-      now,
-      now,
-    );
-    if (projection.plan && planId) {
-      this.db.query(`
-        INSERT INTO btcc_guided_work_plan_revisions (
-          plan_revision_id, work_id, revision, objective, actions_json,
-          checks_json, origin_turn_id, created_at
-        ) VALUES (?, ?, 1, ?, ?, ?, ?, ?)
-      `).run(
-        planId,
-        workId,
-        projection.objective,
-        JSON.stringify(projection.plan.actions),
-        JSON.stringify(projection.plan.checks),
-        origin.turn_id,
-        now,
-      );
-    }
-    if (projection.checkpoint && checkpointId) {
-      this.db.query(`
-        INSERT INTO btcc_guided_work_checkpoint_revisions (
-          checkpoint_revision_id, work_id, revision, stage, public_summary,
-          next_step, result_sequence, origin_turn_id, created_at
-        ) VALUES (?, ?, 1, ?, ?, ?, 0, ?, ?)
-      `).run(
-        checkpointId,
-        workId,
-        projection.checkpoint.stage,
-        projection.checkpoint.publicSummary,
-        projection.checkpoint.nextStep,
-        origin.turn_id,
-        now,
-      );
-    }
-    this.db.query(`
-      INSERT INTO btcc_guided_work_session_heads (session_id, work_id, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(session_id) DO UPDATE SET
-        work_id = excluded.work_id,
-        updated_at = excluded.updated_at
-    `).run(scope.sessionId, workId, now);
-    this.db.query(`
-      INSERT INTO btcc_guided_work_legacy_imports (
-        import_id, legacy_program_id, session_id, scope_kind, scope_ref,
-        work_id, imported_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      importId,
-      program.program_id,
-      scope.sessionId,
-      scopeKind,
-      scopeRef,
-      workId,
-      now,
-    );
-    return {
+    return this.writer.import(scope, {
       sourceProgramId: program.program_id,
-      imported: true,
-      work: this.reader.view(workId),
-    };
+      sourceAuthority: "session_sqlite",
+      sourceRevision: String(program.manifest_revision),
+      projection,
+      origin,
+    });
   }
 
   private findOpenProgram(scope: WorkTurnScope): LegacyProgramRow | null {
@@ -164,7 +74,7 @@ export class GuidedWorkLegacyImporter {
     `;
     return this.db.query<LegacyProgramRow, [string, string]>(`
       SELECT program_id, session_id, scope_kind, scope_id,
-        goal_contract_ref, accepted_plan_ref
+        goal_contract_ref, accepted_plan_ref, manifest_revision
       FROM btcc_programs program
       WHERE scope_kind = 'session' AND scope_id = ? AND session_id = ?
         AND frontier NOT IN ('closed', 'cancelled')
@@ -185,33 +95,6 @@ export class GuidedWorkLegacyImporter {
       WHERE type = 'table' AND name IN (${required.map(() => "?").join(", ")})
     `).get(...required)?.count ?? 0;
     return count === required.length;
-  }
-
-  private replay(
-    importId: string,
-    program: LegacyProgramRow,
-    scope: WorkTurnScope,
-  ): LegacyOpenWorkImportResult | null {
-    const row = this.db.query<LegacyImportRow, [string]>(`
-      SELECT legacy_program_id, session_id, scope_kind, scope_ref, work_id
-      FROM btcc_guided_work_legacy_imports WHERE import_id = ?
-    `).get(importId);
-    if (!row) return null;
-    const scopeKind = scope.projectRef ? "project" : "session";
-    const scopeRef = scope.projectRef ?? scope.sessionId;
-    if (
-      row.legacy_program_id !== program.program_id ||
-      row.session_id !== scope.sessionId ||
-      row.scope_kind !== scopeKind ||
-      row.scope_ref !== scopeRef
-    ) {
-      throw new Error("Legacy Work import identity conflict");
-    }
-    return {
-      sourceProgramId: row.legacy_program_id,
-      imported: false,
-      work: this.reader.view(row.work_id),
-    };
   }
 
   private loadItems(
@@ -280,13 +163,6 @@ export class GuidedWorkLegacyImporter {
       return null;
     }
   }
-}
-
-function legacyImportId(programId: string, scope: WorkTurnScope): string {
-  return guidedWorkRecordId(
-    "legacy-import",
-    `${programId}\0${scope.sessionId}\0${scope.projectRef ?? ""}`,
-  );
 }
 
 function storedReferenceId(value: string): string | null {

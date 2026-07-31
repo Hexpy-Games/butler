@@ -70,6 +70,15 @@ export type DurableWorkReview = {
   createdAt: string;
 };
 
+export type DurableWorkEffectBlocker = {
+  blockerId: string;
+  sourceTurnId: string;
+  capability: string;
+  target: string;
+  detail: string;
+  createdAt: string;
+};
+
 export type DurableWorkView = {
   workId: string;
   sessionId: string;
@@ -84,6 +93,7 @@ export type DurableWorkView = {
   latestCheckpoint?: DurableWorkCheckpoint;
   latestPlanReview?: DurableWorkReview;
   latestResultReview?: DurableWorkReview;
+  effectBlockers?: DurableWorkEffectBlocker[];
   resultRefs: DurableWorkToolResultRef[];
   createdAt: string;
   updatedAt: string;

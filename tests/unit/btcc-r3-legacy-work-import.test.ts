@@ -9,8 +9,8 @@ import { SqliteGuidedWorkStore } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
-import { seedManagedProgramForStop } from
-  "./support/btcc-stopped-work-fixture.ts";
+import { seedLegacySessionWork } from
+  "./support/btcc-r3-legacy-session-work-fixture.ts";
 
 test("open R2 Session Work imports once as concise R3 Work across restart", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-legacy-import-"));
@@ -23,13 +23,7 @@ test("open R2 Session Work imports once as concise R3 Work across restart", asyn
   let workId: string;
   try {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    seedManagedProgramForStop(db);
-    db.query(`
-      UPDATE btcc_turns SET goal_contract_ref = (
-        SELECT goal_contract_ref FROM btcc_programs
-        WHERE program_id = 'program-session'
-      ) WHERE turn_id = 'turn-user-stopped'
-    `).run();
+    seedLegacySessionWork(db);
     insertTurn(db, scope.turnId, scope.sessionId, "이전 작업을 이어서 진행해 주세요.");
     const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
 
@@ -113,7 +107,7 @@ test("SQLite importer ignores local Project rows and closed R2 Programs", async 
   const db = new Database(":memory:");
   try {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    seedManagedProgramForStop(db);
+    seedLegacySessionWork(db);
     db.query(`
       UPDATE btcc_programs SET scope_kind = 'project', scope_id = 'project-a'
       WHERE program_id = 'program-session'
@@ -146,13 +140,6 @@ test("fresh R3 storage without legacy Work tables returns no import", async () =
   const db = new Database(":memory:");
   try {
     db.exec(BTCC_SUCCESSOR_SCHEMA);
-    db.exec(`
-      DROP TABLE btcc_ledger_mutations;
-      DROP TABLE btcc_tasks;
-      DROP TABLE btcc_work_items;
-      DROP TABLE btcc_programs;
-      DROP TABLE btcc_records;
-    `);
     insertTurn(db, "turn-fresh-r3", "session-fresh-r3", "새 작업입니다.");
     const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
     expect(await service.importOpenLegacyWork({
@@ -175,9 +162,9 @@ function insertTurn(
     INSERT INTO btcc_turns (
       turn_id, session_id, inbox_id, trigger_key, original_message_id,
       original_message, admission_snapshot_ref, model_selection_json,
-      context_json, continuation_snapshot_json, semantic_state,
+      context_json, semantic_state,
       revision, execution_fence
-    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', '[]', 'admitted', 1, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', 'admitted', 1, 1)
   `).run(
     turnId,
     sessionId,

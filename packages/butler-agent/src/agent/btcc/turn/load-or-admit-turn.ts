@@ -1,15 +1,19 @@
-import type {
-  BtccRuntimeDependencies,
-  BtccTurnCommand,
-} from "../contracts.ts";
+import type { BtccTurnCommand } from "../contracts.ts";
 import { admitTurn } from "./admission/index.ts";
 import type { TurnRecord } from "./contracts.ts";
+import type {
+  TurnAdmissionRepository,
+  TurnStateRepository,
+} from "./contracts.ts";
 
 export type ContinuingTurnCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
 
 export async function loadOrAdmitTurn(
   command: ContinuingTurnCommand,
-  dependencies: Pick<BtccRuntimeDependencies, "admission" | "turns">,
+  dependencies: {
+    admission: TurnAdmissionRepository;
+    turns: TurnStateRepository;
+  },
 ): Promise<TurnRecord> {
   const existing = await dependencies.turns.findTurn(command.turnId);
   if (existing) {

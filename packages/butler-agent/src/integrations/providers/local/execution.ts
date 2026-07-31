@@ -131,6 +131,22 @@ export async function runLocalFunctionToolPromptTextWithConfig(
     const assistant = firstLocalAssistantMessage(response);
     const text = extractLocalChatText(assistant);
     const toolCalls = extractLocalToolCalls(assistant, allowedNames);
+    if (
+      text &&
+      (!Array.isArray(assistant?.tool_calls) || assistant.tool_calls.length === 0) &&
+      toolCalls.length > 0 &&
+      toolCalls.every((call) => !allowedNames.has(call.function.name))
+    ) {
+      const disposition = await reviewProviderFinalCandidate({
+        options,
+        text,
+        roundIndex: round,
+      });
+      if (disposition.kind === "final") return disposition.text;
+      messages.push({ role: "assistant", content: assistant.content ?? text });
+      messages.push({ role: "user", content: disposition.observation });
+      continue;
+    }
     if (toolCalls.length === 0) {
       if (executedToolCalls > 0) {
         const finalText = extractLocalFinalEnvelopeText(assistant);

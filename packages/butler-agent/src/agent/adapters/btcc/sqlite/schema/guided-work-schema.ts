@@ -115,6 +115,10 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_legacy_imports (
   session_id TEXT NOT NULL,
   scope_kind TEXT NOT NULL CHECK (scope_kind IN ('session', 'project')),
   scope_ref TEXT NOT NULL,
+  source_authority TEXT NOT NULL CHECK (
+    source_authority IN ('session_sqlite', 'project_ledger')
+  ),
+  source_revision TEXT NOT NULL,
   work_id TEXT NOT NULL UNIQUE,
   imported_at TEXT NOT NULL,
   UNIQUE(legacy_program_id, session_id, scope_kind, scope_ref)

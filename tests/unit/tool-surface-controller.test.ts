@@ -130,7 +130,6 @@ test("initial surface selection uses structured controller state without prompt 
     "project_ledger_check",
     "inspect_project_status",
     "query_project_work",
-    "render_project_dashboard",
     "get_context_monitor",
     "read_tool_evidence_artifact",
     "read_tool_output_artifact",

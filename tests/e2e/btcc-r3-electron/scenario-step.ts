@@ -15,7 +15,6 @@ import {
   type ProductLaunch,
 } from "./product-launch.ts";
 import {
-  assert,
   hashText,
   materializePrompt,
   safeSegment,
@@ -116,8 +115,11 @@ export async function verifyDurableFinal(
     sessionId: run.sessionId,
   });
   const assistant = assistantForTurn(view, turnId);
+  if (!assistant || !expectedFinal.trim() || assistant.text !== expectedFinal) {
+    return false;
+  }
   const rendered = await rendererFinalText(launch.page);
-  return assistant?.text === expectedFinal && rendered.trim().length > 0;
+  return rendered.trim().length > 0;
 }
 
 export async function runScenarioStep(
@@ -142,9 +144,10 @@ export async function runScenarioStep(
     submittedAtMs,
   );
   const assistant = assistantForTurn(terminal.view, terminal.turnId);
-  assert(assistant, `Terminal Turn ${terminal.turnId} has no assistant projection.`);
-  const finalText = assistant.text ?? "";
-  const renderedFinal = await rendererFinalText(launch.page);
+  const finalText = assistant?.text ?? "";
+  const renderedFinal = assistant
+    ? await rendererFinalText(launch.page)
+    : "";
   const work = readGuidedWorkObservation(run, terminal.turnId);
   const screenshotDir = join(run.runRoot, "screenshots");
   mkdirSync(screenshotDir, { recursive: true });

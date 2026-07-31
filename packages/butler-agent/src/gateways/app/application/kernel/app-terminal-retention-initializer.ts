@@ -1,9 +1,4 @@
 import type { Database } from "bun:sqlite";
-import {
-  BtccTerminalPhaseRetentionQueue,
-  SqliteBtccTerminalPhaseRetention,
-} from
-  "../../../../agent/adapters/btcc/sqlite/index.ts";
 import { recordOperationalMetric } from
   "../../../../operations/metrics/operational-metrics.ts";
 import { TerminalTurnRetention } from
@@ -17,11 +12,9 @@ import type { AppStoreKernel } from "./app-store-kernel.ts";
 export function initializeTerminalTurnRetention(
   kernel: AppStoreKernel,
 ): (event: { turnId: string; eventId: number }) => void {
-  const btccRetention = new SqliteBtccTerminalPhaseRetention(
-    kernel.db,
-    (turnId) => appTurnState(kernel.db, turnId),
-    (turnId) => retainedProjectionExists(kernel.db, turnId),
-  );
+  const btccRetention = {
+    isSettled: (turnId: string) => btccTurnSettled(kernel.db, turnId),
+  };
   kernel.terminalTurnRetention = new TerminalTurnRetention(
     kernel.db,
     btccRetention,
@@ -44,16 +37,10 @@ export function initializeTerminalTurnRetention(
     },
     recordFailure: (error) => recordRetentionFailure(kernel, error),
   });
-  kernel.btccTerminalPhaseRetentionQueue =
-    new BtccTerminalPhaseRetentionQueue({
-      compactBatch: () => btccRetention.compactSettledBatch(),
-      recordFailure: (error) => recordRetentionFailure(kernel, error),
-    });
   return ({ turnId, eventId }) => {
     kernel.terminalTurnRetentionQueue.advanceEventCursor(eventId);
     if (!kernel.closed && turnId && kernel.isTerminalTurn(turnId)) {
       kernel.terminalTurnRetentionQueue.schedule(turnId);
-      kernel.btccTerminalPhaseRetentionQueue.schedule();
     }
   };
 }
@@ -120,16 +107,16 @@ function hasTerminalSweepIndex(db: Database): boolean {
   `).get());
 }
 
-function appTurnState(db: Database, turnId: string): string | null {
-  return db.query<{ state: string }, [string]>(`
-    SELECT state FROM turns WHERE id = ?
-  `).get(turnId)?.state ?? null;
-}
-
-function retainedProjectionExists(db: Database, turnId: string): boolean {
-  return Boolean(db.query<{ turn_id: string }, [string]>(`
-    SELECT turn_id FROM app_terminal_turn_projections WHERE turn_id = ?
-  `).get(turnId));
+function btccTurnSettled(db: Database, turnId: string): boolean {
+  const hasTurns = db.query<{ name: string }, []>(`
+    SELECT name FROM sqlite_master
+    WHERE type = 'table' AND name = 'btcc_turns'
+  `).get();
+  if (!hasTurns) return true;
+  const row = db.query<{ semantic_state: string }, [string]>(`
+    SELECT semantic_state FROM btcc_turns WHERE turn_id = ?
+  `).get(turnId);
+  return !row || row.semantic_state === "delivered" || row.semantic_state === "cancelled";
 }
 
 function recordRetentionFailure(kernel: AppStoreKernel, error: unknown): void {

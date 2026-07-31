@@ -37,6 +37,15 @@ export interface ToolCapabilityMetadata {
   satisfiesCompletionObligations?: PublicWorkObligationKind[];
 }
 
+export interface NativeToolAvailabilityOverride {
+  disabledReason: string;
+  recoveryHint: string;
+}
+
+export type NativeToolAvailabilityOverrides = Readonly<
+  Record<string, NativeToolAvailabilityOverride>
+>;
+
 export type ToolCatalogProvider = "native" | "mcp" | "plugin";
 
 export type ToolCatalogRiskLevel = "low" | "medium" | "high";

@@ -12,8 +12,8 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
-import { seedManagedProgramForStop } from
-  "./support/btcc-stopped-work-fixture.ts";
+import { seedLegacySessionWork } from
+  "./support/btcc-r3-legacy-session-work-fixture.ts";
 
 test("R3 managed Work survives a store restart and continues in a fresh Turn", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-integration-"));
@@ -93,7 +93,6 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
     });
     expect(firstWork?.resultRefs.map((result) => result.toolName)).toEqual(["write_file"]);
   } finally {
-    await firstStores.retrospective.flush();
     firstStores.close();
   }
 
@@ -150,7 +149,6 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
     expect(completed?.origin.turnId).toBe(firstTurnId);
     expect((await secondStores.turns.findTurn(secondTurnId))?.route).toBe("managed");
   } finally {
-    await secondStores.retrospective.flush();
     secondStores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -229,7 +227,6 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
     expect((await firstStores.durableWork.boundWorkForTurn(stoppedTurnId))
       ?.latestResultReview).toBeUndefined();
   } finally {
-    await firstStores.retrospective.flush();
     firstStores.close();
   }
 
@@ -271,7 +268,6 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
     expect(await resumedStores.durableWork.boundWorkForTurn(resumedTurnId))
       .toMatchObject({ workId: originalWorkId, status: "open" });
   } finally {
-    await resumedStores.retrospective.flush();
     resumedStores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -358,7 +354,6 @@ test("a presented open Work binds only at the first real tool and exposes its re
       }],
     });
   } finally {
-    await firstStores.retrospective.flush();
     firstStores.close();
   }
 
@@ -392,7 +387,6 @@ test("a presented open Work binds only at the first real tool and exposes its re
       sessionId: "durable-work-session",
     }))?.work.resultRefs).toHaveLength(1);
   } finally {
-    await resumedStores.retrospective.flush();
     resumedStores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -469,7 +463,6 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
     });
     expect((await stores.turns.findTurn(turnId))?.route).toBe("managed");
   } finally {
-    await stores.retrospective.flush();
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -484,7 +477,7 @@ test("the production R3 agent imports and continues open R2 Session Work", async
     storageProfile: "ephemeral",
   });
   const legacyDb = new Database(dbPath);
-  seedManagedProgramForStop(legacyDb);
+  seedLegacySessionWork(legacyDb);
   legacyDb.close();
   writeFileSync(join(root, "legacy-source.txt"), "fact carried from the R2 task\n");
   const turnId = "r3-product-legacy-import-turn";
@@ -516,7 +509,6 @@ test("the production R3 agent imports and continues open R2 Session Work", async
       resultRefs: [{ toolName: "read_file", originTurnId: turnId }],
     });
   } finally {
-    await stores.retrospective.flush();
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -533,7 +525,6 @@ function createRuntime(input: {
     admission: input.stores.admission,
     turns: input.stores.turns,
     messages: input.stores.messages,
-    retrospective: input.stores.retrospective,
     committedSuccessorReadiness: input.stores.committedSuccessorReadiness,
     ...(input.progress ? { progress: input.progress } : {}),
     agent: createProductionGuidedTurnAgent({

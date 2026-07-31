@@ -4,6 +4,7 @@ import type {
 } from "../../btcc/index.ts";
 import type { TurnRecord } from "../../btcc/turn/index.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
+import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
   "../../tools/project-ledger/mutation-tools.ts";
 import { selectInitialToolsFromSurfaceController } from
@@ -11,6 +12,8 @@ import { selectInitialToolsFromSurfaceController } from
 import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
 import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
+import type { NativeToolAvailabilityOverrides } from
+  "../../tools/types.ts";
 import {
   DURABLE_WORK_TOOL_DEFINITIONS,
   isDurableWorkTool,
@@ -48,6 +51,29 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_skills",
   "transform_public_data_table",
 ]);
+
+const GUIDED_AUTOMATION_EFFECT_UNAVAILABLE = {
+  disabledReason:
+    "This guided runtime does not yet have a typed automation effect adapter. Automation changes are unavailable; read-only automation listing remains available.",
+  recoveryHint:
+    "Use list_automations for read-only inspection, or report that creating, deleting, and running automations is unavailable in this runtime.",
+} as const;
+
+export const GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES = {
+  create_automation: GUIDED_AUTOMATION_EFFECT_UNAVAILABLE,
+  delete_automation: GUIDED_AUTOMATION_EFFECT_UNAVAILABLE,
+  run_due_automations: GUIDED_AUTOMATION_EFFECT_UNAVAILABLE,
+  call_mcp_tool: {
+    disabledReason:
+      "This guided runtime does not yet have a guarded MCP effect adapter. MCP tool dispatch is unavailable; MCP capability discovery and resource reads remain available.",
+    recoveryHint:
+      "Use list_mcp_capabilities or read_mcp_resource for read-only evidence, choose an enabled native tool, or report the limitation.",
+  },
+} as const satisfies NativeToolAvailabilityOverrides;
+
+const GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES = new Set(
+  Object.keys(GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES),
+);
 
 export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
   if (turn.context.executionPolicy) {
@@ -104,8 +130,16 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
     "read_file",
     "grep_files",
   ]) names.add(name);
-  for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
+  for (const name of GUIDED_UNAVAILABLE_NATIVE_TOOL_NAMES) names.delete(name);
   if (policy.accessMode === "full_access") {
+    for (const tool of BUTLER_TOOLS) {
+      if (
+        tool.effectBoundary === "none" &&
+        TOOL_CAPABILITY_METADATA[tool.name]?.category !== "project"
+      ) {
+        names.add(tool.name);
+      }
+    }
     names.add("run_command");
     names.add("write_file");
   } else {
@@ -113,6 +147,7 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
       if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) names.delete(name);
     }
   }
+  for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
     policy.accessMode === "full_access" && (policy.projectId || turn.context.projectRef)
       ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES
@@ -197,25 +232,13 @@ export function routeForUsedTools(
 
 export function isReplaySafeTool(name: string): boolean {
   if (isDurableWorkTool(name)) return true;
+  const nativeTool = BUTLER_TOOLS.find((tool) => tool.name === name);
+  if (nativeTool?.effectBoundary === "none") return true;
   if (name === "write_file" || name === "run_command" ||
       GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.includes(
         name as typeof GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES[number],
       )) return true;
-  return [
-    "tool_search",
-    "tool_describe",
-    "web_search",
-    "web_read",
-    "read_file",
-    "grep_files",
-    "project_ledger_status",
-    "project_ledger_list",
-    "project_ledger_show",
-    "project_ledger_check",
-    "inspect_project_status",
-    "query_project_work",
-    "render_project_dashboard",
-  ].includes(name);
+  return false;
 }
 
 export function priorToolFailure(

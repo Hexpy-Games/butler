@@ -25,6 +25,8 @@ import {
   replayAppliedEffect,
 } from "./effect-receipt.ts";
 import { resolveReviewedEffect } from "./resolve-reviewed-effect.ts";
+import { reconcileWorkEffectBlockers } from
+  "./reconcile-work-effect-blockers.ts";
 
 type GuidedEffectServiceOptions = {
   now?: () => string;
@@ -66,8 +68,11 @@ export function createGuidedEffectService(
         ));
       }
       if (prepared.created) await faultHook("after_intent", identity);
+      if (prepared.record.status === "applied") {
+        return replayAppliedEffect<TResult>(prepared.record);
+      }
 
-      return continueEffect({
+      const context = {
         input,
         identity,
         initial: prepared.record,
@@ -76,7 +81,15 @@ export function createGuidedEffectService(
         faultHook,
         normalizedTarget: resolved.value.normalizedTarget,
         normalizedInput: resolved.value.normalizedInput,
-      });
+      };
+      if (prepared.record.status !== "failed") {
+        const blockerOutcome = await reconcileWorkEffectBlockers({
+          ...context,
+          current: prepared.record,
+        });
+        if (blockerOutcome) return blockerOutcome;
+      }
+      return continueEffect(context);
     },
   };
 }

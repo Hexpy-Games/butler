@@ -2591,6 +2591,12 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
     butlerHome: process.cwd(),
     port: 0,
   });
+  const btccSchema = new Database(dbPath);
+  try {
+    btccSchema.exec(BTCC_SUCCESSOR_SCHEMA);
+  } finally {
+    btccSchema.close();
+  }
   const nativeMain = runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData: tempDir,
@@ -2628,10 +2634,9 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
         INSERT INTO btcc_turns (
           turn_id, session_id, inbox_id, trigger_key, original_message_id,
           original_message, admission_snapshot_ref, model_selection_json,
-          context_json, continuation_snapshot_json, semantic_state,
-          revision, execution_fence
-        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}', '[]',
-          'conception_opening', 1, 1)
+          context_json, semantic_state, revision, execution_fence
+        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}',
+          'admitted', 1, 1)
       `).run(
         turnId,
         `inbox:${turnId}`,
@@ -3895,7 +3900,8 @@ test("hosted model registration uses masked credentials without pre-release migr
     const zaiProvider = catalog.data.providers.find(
       (provider: { provider_id: string }) => provider.provider_id === "zai",
     );
-    expect(zaiProvider?.default_api_base_url).toBe("https://api.z.ai/api/paas/v4");
+    expect(zaiProvider?.default_api_base_url)
+      .toBe("https://api.z.ai/api/coding/paas/v4");
     const openCodeGoProvider = catalog.data.providers.find(
       (provider: { provider_id: string }) => provider.provider_id === "opencode-go",
     );

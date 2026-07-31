@@ -114,11 +114,9 @@ export class TerminalTurnRetention {
         DELETE FROM app_terminal_turn_snapshot_state WHERE turn_id = ?
       `).run(input.turnId);
       this.deleteTurnEventJournal(input.turnId, snapshot.target_event_id);
-      const phasePending = this.btcc.compactTurn(input.turnId);
-      if (
-        phasePending ||
-        this.hasCompactableEvents(input.turnId, snapshot.target_event_id)
-      ) return "pending";
+      if (this.hasCompactableEvents(input.turnId, snapshot.target_event_id)) {
+        return "pending";
+      }
       const eventCursor = this.nextReplayTailWake(
         input.turnId,
         snapshot.target_event_id,

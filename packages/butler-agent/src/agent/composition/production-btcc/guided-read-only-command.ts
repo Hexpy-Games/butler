@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { budgetToolOutput } from "../../context/tool-output-budgeter.ts";
-import { executeCommandCapability } from "./capabilities/command-capability.ts";
+import { executeGuidedCommand } from "./guided-command/execute-command.ts";
 
 type SpooledCommandResult = {
   summary: {
@@ -27,13 +27,12 @@ export async function executeGuidedReadOnlyCommand(input: {
     );
   }
   try {
-    const spooled = await executeCommandCapability(input.args, {
+    const spooled = await executeGuidedCommand(input.args, {
       butlerData: input.butlerData,
       workspacePath: input.workspacePath,
       originalRequest: input.originalRequest,
-      operationKind: "observe",
       accessMode: "read_only",
-      commandFilesystemBoundary: { kind: "read_only_observation" },
+      filesystemBoundary: { kind: "read_only_observation" },
       signal: input.signal,
     }) as SpooledCommandResult;
     const streams = readSpooledStreams(spooled.payloadSource.path);
