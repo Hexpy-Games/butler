@@ -68,22 +68,7 @@ let hasLauncher = false;
 let verifiedFiles = 0;
 
 try {
-  for await (const chunk of gunzip) {
-    archiveBytes += chunk.length;
-    if (archiveBytes > maxArchiveBytes) {
-      throw new Error("bundled Agent artifact exceeds the extraction limit");
-    }
-    if (sawEnd) continue;
-    pending =
-      pending.length === 0
-        ? chunk
-        : Buffer.concat([pending, chunk], pending.length + chunk.length);
-    consumePending();
-  }
-  consumePending();
-  if (!sawEnd || state !== "header" || current) {
-    throw new Error("bundled Agent artifact is truncated");
-  }
+  await consumeArchiveStream(source, gunzip);
   const artifactSha256 = artifactHash.digest("hex");
   if (mode === "extract") {
     writeFileSync(
@@ -121,6 +106,51 @@ try {
 } catch (error) {
   closeCurrentFile();
   throw error;
+}
+
+function consumeArchiveStream(sourceStream, gunzipStream) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      sourceStream.destroy();
+      gunzipStream.destroy();
+      reject(error);
+    };
+    sourceStream.once("error", fail);
+    gunzipStream.once("error", fail);
+    gunzipStream.on("data", (chunk) => {
+      if (settled) return;
+      try {
+        archiveBytes += chunk.length;
+        if (archiveBytes > maxArchiveBytes) {
+          throw new Error("bundled Agent artifact exceeds the extraction limit");
+        }
+        if (sawEnd) return;
+        pending =
+          pending.length === 0
+            ? chunk
+            : Buffer.concat([pending, chunk], pending.length + chunk.length);
+        consumePending();
+      } catch (error) {
+        fail(error);
+      }
+    });
+    gunzipStream.once("end", () => {
+      if (settled) return;
+      try {
+        consumePending();
+        if (!sawEnd || state !== "header" || current) {
+          throw new Error("bundled Agent artifact is truncated");
+        }
+        settled = true;
+        resolve();
+      } catch (error) {
+        fail(error);
+      }
+    });
+  });
 }
 
 function consumePending() {

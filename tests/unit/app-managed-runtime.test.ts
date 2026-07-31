@@ -734,6 +734,17 @@ test("App-managed runtime activation does not shell out to host tar", () => {
     join(repoRoot, "packages", "butler-app", "client", "electron", "app-managed-runtime.mjs"),
     "utf8",
   );
+  const posixWorker = readFileSync(
+    join(
+      repoRoot,
+      "packages",
+      "butler-agent",
+      "resources",
+      "runtime",
+      "posix-archive-worker.mjs",
+    ),
+    "utf8",
+  );
   expect(source).toContain("managedRuntimeSourceExecutablePath");
   expect(source).toContain("windows-archive-worker.mjs");
   expect(source).toContain("posix-archive-worker.mjs");
@@ -744,6 +755,9 @@ test("App-managed runtime activation does not shell out to host tar", () => {
   expect(source).not.toContain("npm install");
   expect(source).not.toContain("brew install");
   expect(source).not.toContain("apt install");
+  expect(posixWorker).toContain('gunzipStream.on("data"');
+  expect(posixWorker).not.toContain("for await (const chunk of gunzip");
+  expect(posixWorker).not.toContain("DecompressionStream");
 });
 
 test.skipIf(process.platform === "win32")(
