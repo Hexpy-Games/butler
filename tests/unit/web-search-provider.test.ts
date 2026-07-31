@@ -140,6 +140,24 @@ test("DuckDuckGo HTML provider parses no-key search results", async () => {
   }]);
 });
 
+test("DuckDuckGo HTML provider reports HTTP 200 anti-bot challenges as failures", async () => {
+  globalThis.fetch = stubFetch(async () => new Response(`
+    <html>
+      <body>
+        <form id="challenge-form" action="//duckduckgo.com/anomaly.js?sv=html"></form>
+        <div class="anomaly-modal">Unfortunately, bots use DuckDuckGo too.</div>
+      </body>
+    </html>
+  `, {
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  }));
+  const provider = new DuckDuckGoHtmlSearchProvider();
+
+  await expect(provider.search({ query: "current market data" }))
+    .rejects.toThrow("blocked by an anti-bot challenge");
+});
+
 test("configured provider defaults to DuckDuckGo no-key search", async () => {
   globalThis.fetch = stubFetch(async () => new Response(duckDuckGoFixture()));
   const provider = createConfiguredWebSearchProvider({ butlerData: tempDir });

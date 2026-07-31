@@ -140,7 +140,6 @@ function benchmarkScenario(
           ? {
             exists: true,
             status: "completed",
-            checkpointStage: "reporting",
             planReviewVerdict: "accept",
             resultReviewVerdict: "accept",
           }

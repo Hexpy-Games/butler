@@ -122,6 +122,7 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   description: [
     "Record a concise review of the current Work plan or actual result.",
     "Accepting a result completes Work; revise or partial keeps it open.",
+    "Judge against the original user request: disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
     "A review records judgment but never replaces real tool evidence.",
   ].join(" "),
   parameters: {

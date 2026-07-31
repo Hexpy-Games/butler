@@ -88,8 +88,8 @@ function readGuidedWork(
     projectLedgerEffects,
     closeoutObserved:
       work.status === "completed" &&
-      checkpointRecords > 0 &&
-      reviewRecords > 0 &&
+      resultRecords > 0 &&
+      reviewRecords >= 2 &&
       (work.scope_kind !== "project" || projectLedgerEffects > 0),
     evidenceRefs: [
       "btcc_guided_turn_work_bindings",

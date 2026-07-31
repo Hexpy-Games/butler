@@ -1,5 +1,7 @@
 import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,6 +19,8 @@ import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { backfillTurnToolResults } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-work-runtime.ts";
+import { coordinateSharedSqliteWriter } from
+  "../../packages/butler-agent/src/foundation/sqlite-writer-coordination.ts";
 
 test("first Plan opens scoped Work without making Direct or Assisted Turns pay for it", async () => {
   const fixture = durableWorkFixture();
@@ -405,6 +409,62 @@ test("Stop changes Turn state without changing the bound Work", async () => {
     expect(context?.work.status).toBe("open");
   } finally {
     fixture.close();
+  }
+});
+
+test("Work review waits for a concurrent shared SQLite writer", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-contention-"));
+  const dbPath = join(root, "butler.sqlite");
+  const db = new Database(dbPath, { create: true });
+  coordinateSharedSqliteWriter(db);
+  db.exec(BTCC_SUCCESSOR_SCHEMA);
+  const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+  const scope = insertGuidedTurn(
+    db,
+    "turn-contention",
+    "session-contention",
+    "보고서를 작성해 주세요.",
+  );
+  try {
+    await service.replacePlan(planInput(scope, "contention-plan"));
+    await service.recordReview({
+      ...scope,
+      mutationCallId: "contention-plan-review",
+      subject: "plan",
+      verdict: "accept",
+      summary: "현재 계획으로 진행합니다.",
+      corrections: [],
+    });
+    const child = spawn(process.execPath, ["-e", `
+      import { Database } from "bun:sqlite";
+      const db = new Database(process.env.TEST_DB_PATH);
+      db.exec("PRAGMA busy_timeout=5000");
+      db.exec("PRAGMA journal_mode=WAL");
+      db.exec("BEGIN IMMEDIATE");
+      process.stdout.write("locked\\n");
+      await Bun.sleep(200);
+      db.exec("COMMIT");
+      db.close();
+    `], {
+      env: { ...process.env, TEST_DB_PATH: dbPath },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    await once(child.stdout!, "data");
+
+    const completed = await service.recordReview({
+      ...scope,
+      mutationCallId: "contention-result-review",
+      subject: "result",
+      verdict: "accept",
+      summary: "요청한 결과를 확인했습니다.",
+      corrections: [],
+    });
+
+    expect(completed.status).toBe("completed");
+    expect((await once(child, "exit"))[0]).toBe(0);
+  } finally {
+    db.close();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

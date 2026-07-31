@@ -1,4 +1,5 @@
 import { serializeToolResultPayloadForProvider } from "./tool-result-serialization.ts";
+import { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
 import {
   blockCapacityObservation,
   blockCapacityToolOutput,
@@ -31,11 +32,13 @@ function emit(
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
 }): AgentLoopMessage {
-  const payload = input.result.ok ? { ok: true, output: input.result.output } : {
+  const providerOutput = modelFacingToolOutput(input.result);
+  const payload = input.result.ok ? { ok: true, output: providerOutput } : {
     ok: false,
-    ...(input.result.output !== undefined
-      ? { output: input.result.output }
-      : { error: input.result.error ?? "unknown tool error" }),
+    error: input.result.error ?? "unknown tool error",
+    ...(providerOutput !== undefined
+      ? { output: providerOutput }
+      : {}),
   };
   return {
     role: "tool",
@@ -43,6 +46,17 @@ function toolResultToMessage(input: {
     name: input.result.name,
     content: serializeToolResultPayloadForProvider(payload),
   };
+}
+
+function modelFacingToolOutput(result: AgentLoopToolResult): unknown {
+  if (
+    result.output === undefined ||
+    (result.name !== "web_search" && result.name !== "web_read")
+  ) return result.output;
+  return structuredToolResultModelPreview({
+    toolName: result.name,
+    output: result.output,
+  }) ?? result.output;
 }
 
 function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {

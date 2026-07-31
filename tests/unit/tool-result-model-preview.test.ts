@@ -257,3 +257,101 @@ test("public web previews retain bounded evidence IDs and source content for res
     }],
   });
 });
+
+test("public web previews retain partial-search recovery guidance", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output: {
+      ok: true,
+      query: "market research",
+      provider: "duckduckgo-html",
+      public_web_evidence_items: [],
+      search_warnings: [
+        "1 of 4 planned web searches failed; successful results were preserved.",
+      ],
+      failed_queries: [{
+        query: "KOSPI latest flow",
+        error: "anti-bot challenge",
+      }],
+      coverage_budget: {
+        result_count: 3,
+        stop_reason: "provider_results_exhausted",
+        next_search_guidance: "Search only for a missing outcome.",
+      },
+      read_required: true,
+      read_reason: "Verify source-backed claims.",
+      recommended_read_urls: ["https://example.com/source"],
+    },
+  });
+
+  expect(preview).toMatchObject({
+    query: "market research",
+    provider: "duckduckgo-html",
+    search_warnings: [
+      "1 of 4 planned web searches failed; successful results were preserved.",
+    ],
+    failed_query_count: 1,
+    failed_queries: [{
+      query: "KOSPI latest flow",
+      error: "anti-bot challenge",
+    }],
+    coverage_budget: {
+      result_count: 3,
+      stop_reason: "provider_results_exhausted",
+    },
+    read_required: true,
+    recommended_read_urls: ["https://example.com/source"],
+  });
+});
+
+test("public web previews retain resolved ordinary tool errors", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output: {
+      ok: false,
+      error: {
+        code: "web_search_provider_error",
+        message: "Search provider was blocked by an anti-bot challenge.",
+        internal_detail: "must not enter the model context",
+      },
+      public_web_evidence_items: [],
+    },
+  });
+
+  expect(preview).toEqual({
+    tool_name: "web_search",
+    ok: false,
+    error: {
+      code: "web_search_provider_error",
+      message: "Search provider was blocked by an anti-bot challenge.",
+    },
+    evidence_items: [],
+    evidence_item_count: 0,
+  });
+});
+
+test("web read previews retain the default bounded page body", () => {
+  const pageBody = `${"first-section ".repeat(80)}LATE_PAGE_FACT${
+    " final-section".repeat(35)
+  }`;
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      requested_url: "https://example.com/report",
+      source_url: "https://example.com/report",
+      markdown: pageBody,
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-short-chunk",
+        source_url: "https://example.com/report",
+        source_identity: "example.com",
+        content_kind: "page_chunk",
+        bounded_content: pageBody.slice(0, 320),
+        limitations: [],
+      }],
+    },
+  });
+
+  expect(preview?.page_excerpt).toContain("LATE_PAGE_FACT");
+  expect(String(preview?.page_excerpt).length).toBeLessThanOrEqual(2_000);
+});

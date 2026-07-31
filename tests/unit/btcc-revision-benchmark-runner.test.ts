@@ -16,6 +16,7 @@ describe("BTCC revision Electron benchmark runner", () => {
   test("runs all 72 observations sequentially in paired order and persists timeouts", async () => {
     const evidence = createEmptyBenchmarkEvidence(plan());
     const calls: Array<{
+      checkpointExpected: boolean;
       promptId: string;
       revision: string;
       workExpected: boolean;
@@ -30,6 +31,8 @@ describe("BTCC revision Electron benchmark runner", () => {
           const promptId = scenario.steps[0]!.id;
           const revision = options.repoRoot?.endsWith("-r2") ? "r2" : "r3";
           calls.push({
+            checkpointExpected:
+              scenario.steps[0]?.expect?.work?.checkpointStage !== undefined,
             promptId,
             revision,
             workExpected: scenario.steps[0]?.expect?.work?.exists === true,
@@ -62,6 +65,9 @@ describe("BTCC revision Electron benchmark runner", () => {
     expect(calls.find((call) =>
       call.promptId === "work_market_research__run_1",
     )?.workExpected).toBe(true);
+    expect(calls.find((call) =>
+      call.promptId === "work_market_research__run_1",
+    )?.checkpointExpected).toBe(false);
     expect(result.observations.find((observation) =>
       observation.promptId === "work_market_research__run_1" &&
       observation.revision === "r2",

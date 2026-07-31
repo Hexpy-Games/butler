@@ -55,7 +55,7 @@ export function guidedInstructions(
     "Before a persistent change, include one matching Plan action and accept the current Plan review. Use the actual tool name as capability and an exact target: write_file uses workspace:<relative-path>; Project Ledger mutations use project-ledger:<kind>:<id>.",
     "The runtime creates effect ids, hashes, revisions, and receipts. Never invent or copy them into a Plan.",
     "record_work_checkpoint is optional and should mark only meaningful stage changes.",
-    "Before reporting a substantial Work turn, record a result review: accept only for a completed result; use partial or revise when useful work remains, then still report truthfully.",
+    "Before reporting substantial Work, review against the original user request. Accept a usable requested outcome despite disclosed non-critical limits. Use partial or revise only for a material unfinished outcome with a concrete continuation or blocker; do not keep Work open for optional improvements.",
     "If Work bookkeeping fails, continue and deliver any truthful artifact or final answer you can support.",
     ...(policy.trackingMode === "ledger"
       ? ["For substantial project work, use the internal Work record for continuity and use Project Ledger reads as context. Do not attempt to mutate the Project Ledger unless a reviewed effect tool is explicitly available."]

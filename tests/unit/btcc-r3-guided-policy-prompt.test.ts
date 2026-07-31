@@ -105,6 +105,18 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("Multi-source or multi-step research");
   expect(instructions).toContain("call replace_work_plan before the dependent work");
   expect(instructions).toContain("record_work_checkpoint is optional");
+  expect(instructions).toContain(
+    "review against the original user request",
+  );
+  expect(instructions).toContain(
+    "despite disclosed non-critical limits",
+  );
+  expect(instructions).toContain(
+    "only for a material unfinished outcome",
+  );
+  expect(instructions).toContain(
+    "do not keep Work open for optional improvements",
+  );
   expect(instructions).toContain("If Work bookkeeping fails, continue");
   expect(instructions).not.toContain("tracking=");
   expect(instructions).not.toContain("BTCC states");

@@ -34,7 +34,7 @@ describe("BTCC revision benchmark ledger evidence", () => {
       INSERT INTO btcc_guided_works VALUES ('work-1', 'session', 'completed');
       INSERT INTO btcc_guided_turn_work_bindings VALUES ('turn-1', 'work-1', 1);
       INSERT INTO btcc_guided_work_results VALUES ('work-1');
-      INSERT INTO btcc_guided_work_checkpoint_revisions VALUES ('work-1');
+      INSERT INTO btcc_guided_work_review_revisions VALUES ('work-1');
       INSERT INTO btcc_guided_work_review_revisions VALUES ('work-1');
       INSERT INTO btcc_guided_work_mutations VALUES ('work-1');
     `);
@@ -48,12 +48,25 @@ describe("BTCC revision benchmark ledger evidence", () => {
         status: "completed",
         workRecords: 1,
         resultRecords: 1,
-        checkpointRecords: 1,
-        reviewRecords: 1,
+        checkpointRecords: 0,
+        reviewRecords: 2,
         mutationRecords: 1,
         projectLedgerEffects: 0,
         closeoutObserved: true,
       });
+      db.exec(`
+        DELETE FROM btcc_guided_work_review_revisions
+        WHERE rowid IN (
+          SELECT rowid FROM btcc_guided_work_review_revisions LIMIT 1
+        )
+      `);
+      expect(readLedgerObservation(db, "turn-1", "work")).toMatchObject({
+        status: "completed",
+        resultRecords: 1,
+        reviewRecords: 1,
+        closeoutObserved: false,
+      });
+      db.exec("INSERT INTO btcc_guided_work_review_revisions VALUES ('work-1')");
       db.exec("UPDATE btcc_guided_works SET scope_kind = 'project'");
       expect(readLedgerObservation(db, "turn-1", "project")).toMatchObject({
         observedRoute: "project",
