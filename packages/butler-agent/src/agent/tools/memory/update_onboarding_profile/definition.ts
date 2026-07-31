@@ -71,6 +71,7 @@ export const updateOnboardingProfileToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "turn_local",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

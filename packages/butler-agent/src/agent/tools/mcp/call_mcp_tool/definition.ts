@@ -27,6 +27,7 @@ export const callMcpToolToolDefinition = {
       "tool_name",
     ],
   },
+  effectBoundary: "dynamic",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

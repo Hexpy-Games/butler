@@ -36,6 +36,7 @@ export const webReadToolDefinition = {
       "url",
     ],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

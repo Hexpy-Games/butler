@@ -23,6 +23,7 @@ export const toolCallToolDefinition = {
       "arguments",
     ],
   },
+  effectBoundary: "dynamic",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

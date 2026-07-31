@@ -33,6 +33,7 @@ export const queryProjectWorkToolDefinition = {
       "kind",
     ],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

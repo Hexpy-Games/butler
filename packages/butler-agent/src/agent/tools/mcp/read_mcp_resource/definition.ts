@@ -22,6 +22,7 @@ export const readMcpResourceToolDefinition = {
       "uri",
     ],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

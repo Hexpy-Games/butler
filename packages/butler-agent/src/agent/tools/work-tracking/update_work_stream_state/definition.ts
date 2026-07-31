@@ -43,6 +43,7 @@ export const updateWorkStreamStateToolDefinition = {
       "state",
     ],
   },
+  effectBoundary: "turn_local",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

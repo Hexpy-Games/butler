@@ -78,6 +78,7 @@ export function successEvidence(input: {
       repoRoot: run.repoRoot,
       runId: run.runId,
       runRoot: run.runRoot,
+      projectWorkspaceRoot: run.projectWorkspaceRoot,
       workspaceRoot: run.workspaceRoot,
     },
     isolation: {
@@ -88,6 +89,8 @@ export function successEvidence(input: {
     },
     session: {
       id: run.sessionId,
+      kind: run.sessionKind,
+      projectId: run.projectId,
       runtimeId: sessionHintForRow(run.sessionId),
       title: run.sessionTitle,
     },

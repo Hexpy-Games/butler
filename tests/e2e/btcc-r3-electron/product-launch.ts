@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type {
   AppSessionView,
+  ElectronFixtureFile,
   PreparedRun,
 } from "./contracts.ts";
 import {
@@ -16,11 +17,13 @@ import {
   stopChildProcess,
   stopNativeExecutor,
 } from "./native-executor.ts";
+import { activateProjectSessionWorkspace } from "./isolation-config.ts";
 import { assert } from "./scenario-preflight.ts";
 
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
 type BridgeMethod =
+  | "createProject"
   | "createSession"
   | "getSessionView"
   | "getSettings"
@@ -167,6 +170,7 @@ export async function launchProduct(run: PreparedRun): Promise<ProductLaunch> {
     BUTLER_BUN: process.execPath,
     BUTLER_DATA: run.dataRoot,
     BUTLER_HOME: run.repoRoot,
+    BUTLER_PROJECT_WORKSPACE: run.projectWorkspaceRoot,
   };
   delete env.BUTLER_APP_BUTLER_HOME;
   delete env.BUTLER_APP_DEV_ORIGIN;
@@ -255,23 +259,49 @@ export async function openSession(
     sessionId: run.sessionId,
   });
   assert(view.session_id === run.sessionId, "Renderer opened an unexpected session.");
+  assert(view.kind === run.sessionKind, "Renderer opened an unexpected session kind.");
+  if (run.sessionKind === "project") {
+    assert(
+      view.project_id === run.projectId,
+      "Renderer opened a project session for an unexpected project.",
+    );
+  }
 }
 
 export async function ensureSession(
   run: PreparedRun,
   launch: ProductLaunch,
+  fixtures: readonly ElectronFixtureFile[] = [],
 ): Promise<void> {
   await bridgeCall<Record<string, unknown>>(launch.page, "health");
+  if (run.sessionKind === "project" && !run.projectId) {
+    const createdProject = await bridgeCall<{
+      project?: { id?: string; display_name?: string };
+    }>(launch.page, "createProject", {
+      displayName: run.projectDisplayName,
+      idempotencyKey: `btcc-r3-e2e:${run.runId}:create-project`,
+      source: "scratch",
+    });
+    const projectId = createdProject.project?.id;
+    assert(projectId, "Electron App did not return the created scratch project.");
+    activateProjectSessionWorkspace(run, projectId, fixtures);
+  }
   const listed = await bridgeCall<{
-    sessions?: Array<{ id?: string; title?: string }>;
-  }>(launch.page, "listSessions", { kind: "chat" });
+    sessions?: Array<{ id?: string; project_id?: string; title?: string }>;
+  }>(launch.page, "listSessions", {
+    kind: run.sessionKind,
+    ...(run.projectId ? { projectId: run.projectId } : {}),
+  });
   if (!(listed.sessions ?? []).some((session) => session.id === run.sessionId)) {
-    const created = await bridgeCall<{ session?: { id?: string } }>(
+    const created = await bridgeCall<{
+      session?: { id?: string; project_id?: string };
+    }>(
       launch.page,
       "createSession",
       {
         idempotencyKey: `btcc-r3-e2e:${run.runId}:create-session`,
-        kind: "chat",
+        kind: run.sessionKind,
+        ...(run.projectId ? { projectId: run.projectId } : {}),
         sessionHint: run.sessionId,
         title: run.sessionTitle,
       },
@@ -280,6 +310,12 @@ export async function ensureSession(
       created.session?.id === run.sessionId,
       "Electron App created an unexpected session.",
     );
+    if (run.sessionKind === "project") {
+      assert(
+        created.session?.project_id === run.projectId,
+        "Electron App created the session under an unexpected project.",
+      );
+    }
   }
   await bridgeCall(launch.page, "updateSessionControls", {
     sessionId: run.sessionId,

@@ -1,7 +1,14 @@
 import type { FunctionToolDefinition } from "../../integrations/providers/provider.ts";
 import type { PublicWorkObligationKind } from "../tool-support/index.ts";
 
+export type ButlerToolEffectBoundary =
+  | "none"
+  | "turn_local"
+  | "reviewed_persistent"
+  | "dynamic";
+
 export interface ButlerToolDefinition extends FunctionToolDefinition {
+  effectBoundary: ButlerToolEffectBoundary;
   concurrencySafe: boolean;
   interruptBehavior: "continue" | "cancel";
   transcriptVisibility: "visible";

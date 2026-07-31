@@ -5,6 +5,7 @@ export const BTCC_R3_ELECTRON_EVIDENCE_SCHEMA =
 
 export type AccessMode = "ask_first" | "full_access" | "read_only";
 export type ReasoningEffort = "high" | "low" | "max" | "medium" | "none" | "xhigh";
+export type ElectronSessionKind = "chat" | "project";
 export type TerminalState = "cancelled" | "delivered" | "failed";
 
 export interface ElectronFixtureFile {
@@ -50,6 +51,8 @@ export interface ElectronScenario {
   accessMode?: AccessMode;
   session?: {
     id?: string;
+    kind?: ElectronSessionKind;
+    projectDisplayName?: string;
     title?: string;
   };
   fixtures?: ElectronFixtureFile[];
@@ -76,12 +79,16 @@ export interface PreparedRun {
   evidencePath: string;
   interruptedExecutorReplacementUsed: boolean;
   model: string;
+  projectDisplayName: string | null;
+  projectId: string | null;
+  projectWorkspaceRoot: string;
   reasoningEffort: ReasoningEffort;
   repoRoot: string;
   runId: string;
   runRoot: string;
   serverPort: number;
   sessionId: string;
+  sessionKind: ElectronSessionKind;
   sessionTitle: string;
   sourceData: string;
   workspaceRoot: string;
@@ -114,8 +121,10 @@ export interface AppTurnView {
 
 export interface AppSessionView {
   active_turn?: AppTurnView | null;
+  kind?: ElectronSessionKind;
   latest_turn?: AppTurnView | null;
   messages?: AppMessageView[];
+  project_id?: string;
   session_id?: string;
   status?: string;
 }

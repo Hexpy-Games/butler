@@ -15,6 +15,8 @@ import {
   DURABLE_WORK_TOOL_DEFINITIONS,
   isDurableWorkTool,
 } from "./durable-work-tools.ts";
+import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
+  "./guided-project-ledger-effect.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",
@@ -111,13 +113,29 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
       if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) names.delete(name);
     }
   }
-  // R3 publishes Project Ledger changes only through the reviewed effect gate.
-  // Until that boundary owns these capabilities, discovery must not expose a
-  // direct mutation path that can bypass it.
+  const guidedLedgerEffects = new Set<string>(
+    policy.accessMode === "full_access" && (policy.projectId || turn.context.projectRef)
+      ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES
+      : [],
+  );
   for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
+  for (const name of guidedLedgerEffects) names.add(name);
   return [
     ...BUTLER_TOOLS.filter((tool) => names.has(tool.name)),
     ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
+  ];
+}
+
+export function hiddenNativeToolNamesForGuidedTurn(
+  enableProjectLedgerEffects: boolean,
+): string[] {
+  const supported = new Set<string>(
+    enableProjectLedgerEffects ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES : [],
+  );
+  return [
+    ...WORK_TRACKING_TOOL_NAMES,
+    ...[...PROJECT_LEDGER_MUTATION_TOOL_NAME_SET]
+      .filter((name) => !supported.has(name)),
   ];
 }
 
@@ -167,6 +185,10 @@ export function routeForUsedTools(
 
 export function isReplaySafeTool(name: string): boolean {
   if (isDurableWorkTool(name)) return true;
+  if (name === "write_file" || name === "run_command" ||
+      GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.includes(
+        name as typeof GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES[number],
+      )) return true;
   return [
     "tool_search",
     "tool_describe",

@@ -10,7 +10,7 @@ import { openBtccSqliteStores } from
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
 
-test("Guided agent keeps Project Ledger mutation behind the future reviewed effect gate", async () => {
+test("Guided agent exposes only typed Project Ledger effects in a writable project turn", async () => {
   const fixture = createFixture("guided-policy");
   try {
     const availability = async (turn: TurnRecord, query = "project_ledger_create") => {
@@ -28,12 +28,33 @@ test("Guided agent keeps Project Ledger mutation behind the future reviewed effe
       return results.find((entry) => entry.id === `native:${query}`)?.enabled;
     };
 
+    let updateDescription: unknown;
+    const descriptionAgent = fixture.agent(async (options) => {
+      updateDescription = await options.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:project_ledger_update"] },
+        rawArguments: JSON.stringify({ ids: ["native:project_ledger_update"] }),
+      });
+      return "확인했습니다.";
+    });
+
     const fullAccessProjectTurn = turnRecord(fixture.root, {
       accessMode: "full_access",
       trackingMode: "ledger",
       projectId: "project-1",
     });
-    expect(await availability(fullAccessProjectTurn)).toBeUndefined();
+    expect(await availability(fullAccessProjectTurn)).toBe(true);
+    await descriptionAgent.run({
+      turn: {
+        ...fullAccessProjectTurn,
+        turnId: "turn-project-description",
+        inboxId: "inbox:turn-project-description",
+        triggerKey: "trigger:turn-project-description",
+        originalMessageId: "message:turn-project-description",
+      },
+      signal: new AbortController().signal,
+    });
+    expect(JSON.stringify(updateDescription)).toContain('"required":["kind","id"]');
     expect(await availability(fullAccessProjectTurn, "render_project_dashboard"))
       .toBeUndefined();
     expect(await availability(fullAccessProjectTurn, "complete_project_work"))
@@ -63,8 +84,9 @@ test("Guided agent keeps Project Ledger mutation behind the future reviewed effe
     });
     expect(visibleNames).toContain("write_file");
     expect(visibleNames).toContain("project_ledger_status");
+    expect(visibleNames).not.toContain("project_ledger_create");
     expect(instructions).toContain("use the internal Work record for continuity");
-    expect(instructions).toContain("Do not attempt to mutate the Project Ledger");
+    expect(instructions).toContain("unless a reviewed effect tool is explicitly available");
   } finally {
     fixture.close();
   }
@@ -149,6 +171,64 @@ test("Guided agent treats admitted Turn access as the upper permission bound", a
       error: { code: "tool_not_authorized" },
     });
     expect(existsSync(join(fixture.root, "forbidden.txt"))).toBe(false);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("direct and tool_call file mutations use the same reviewed effect gate", async () => {
+  const fixture = createFixture("guided-effect-bridge");
+  try {
+    let direct: unknown;
+    let bridged: unknown;
+    const agent = fixture.agent(async (options) => {
+      direct = await options.executeTool({
+        name: "write_file",
+        args: { path: "direct.txt", content: "blocked", overwrite: false },
+        rawArguments: JSON.stringify({
+          path: "direct.txt",
+          content: "blocked",
+          overwrite: false,
+        }),
+      });
+      bridged = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:write_file",
+          arguments: {
+            path: "bridged.txt",
+            content: "blocked",
+            overwrite: false,
+          },
+        },
+        rawArguments: JSON.stringify({
+          id: "native:write_file",
+          arguments: {
+            path: "bridged.txt",
+            content: "blocked",
+            overwrite: false,
+          },
+        }),
+      });
+      return "검토된 Plan이 없어 파일을 변경하지 않았습니다.";
+    });
+
+    await agent.run({
+      turn: turnRecord(fixture.root, { turnId: "turn-effect-bridge" }),
+      signal: new AbortController().signal,
+    });
+
+    expect(direct).toMatchObject({
+      ok: false,
+      error: { code: "effect_work_required" },
+    });
+    expect(bridged).toMatchObject({
+      ok: false,
+      error: { code: "effect_work_required" },
+      bridge_invocation: { id: "native:write_file" },
+    });
+    expect(existsSync(join(fixture.root, "direct.txt"))).toBe(false);
+    expect(existsSync(join(fixture.root, "bridged.txt"))).toBe(false);
   } finally {
     fixture.close();
   }
@@ -309,6 +389,7 @@ test("Guided agent replays completed tool results and fences uncertain mutations
     const mutationArgs = {
       path: "out.txt",
       content: "durable output",
+      overwrite: false,
     };
     const rawMutation = JSON.stringify(mutationArgs);
     const callId = digest([
@@ -340,8 +421,9 @@ test("Guided agent replays completed tool results and fences uncertain mutations
     });
     expect(uncertain).toMatchObject({
       ok: false,
-      error: { code: "prior_mutation_completion_unknown" },
+      error: { code: "effect_work_required" },
     });
+    expect(existsSync(join(fixture.root, "out.txt"))).toBe(false);
     expect(outcome.route).toBe("assisted");
   } finally {
     fixture.close();
@@ -398,6 +480,7 @@ function createFixture(label: string) {
         appMessageDbPath: dbPath,
         contextDocuments: stores.contextDocuments,
         toolJournal: stores.guidedToolJournal,
+        effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
         promptRunner,
       });

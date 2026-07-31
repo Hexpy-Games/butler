@@ -1,5 +1,6 @@
 export { openBtccSqliteStores } from "./btcc/sqlite/index.ts";
 export { SqliteGuidedToolJournal } from "./btcc/sqlite/index.ts";
+export { SqliteGuidedEffectJournal } from "./btcc/sqlite/index.ts";
 export { SqliteGuidedWorkStore } from "./btcc/sqlite/index.ts";
 export type {
   BtccProjectLedgerRuntime,
@@ -9,6 +10,7 @@ export {
   createProjectWorkLedgerPublicationAdapter,
   decodeProjectLedgerBinding,
   applyProjectLedgerRecordUpdates,
+  reconcileProjectLedgerRecordUpdates,
   observeProjectLedgerHead,
   readCanonicalProjectLedger,
 } from "./btcc/project-ledger/index.ts";

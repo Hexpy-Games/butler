@@ -1,4 +1,5 @@
 import { BTCC_PHASE_CONVERSATION_SCHEMA } from "./schema/phase-conversation-schema.ts";
+import { BTCC_GUIDED_EFFECT_SCHEMA } from "./schema/guided-effect-schema.ts";
 import { BTCC_GUIDED_WORK_SCHEMA } from "./schema/guided-work-schema.ts";
 import { BTCC_WORK_LEDGER_SCHEMA } from "./schema/work-ledger-schema.ts";
 import { BTCC_TERMINAL_SETTLEMENT_WAKE_SCHEMA } from
@@ -226,6 +227,7 @@ CREATE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_turn
 ON btcc_guided_tool_calls(turn_id, started_at);
 
 ${BTCC_GUIDED_WORK_SCHEMA}
+${BTCC_GUIDED_EFFECT_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_canonical_deliveries (
   turn_id TEXT PRIMARY KEY,

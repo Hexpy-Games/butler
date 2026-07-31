@@ -4,12 +4,15 @@ import type {
 } from "../../btcc/index.ts";
 import { digest } from "../../btcc/core/index.ts";
 import type { DurableWorkService } from "../../btcc/durable-work/index.ts";
+import { createGuidedEffectService } from "../../btcc/effects/index.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
-import { PROJECT_LEDGER_MUTATION_TOOL_NAMES } from
-  "../../tools/project-ledger/mutation-tools.ts";
-import type { SqliteGuidedToolJournal } from
+import type {
+  SqliteGuidedEffectJournal,
+  SqliteGuidedToolJournal,
+} from
   "../../adapters/index.ts";
+import { projectLedgerProjectPath } from
+  "../../../integrations/project-ledger/client.ts";
 import { runFunctionToolPromptText } from
   "../../../integrations/providers/runtime.ts";
 import type { FunctionToolPromptOptions } from
@@ -23,6 +26,7 @@ import {
   authorizedToolDefinitions,
   effectiveToolNameForCall,
   guidedPolicy,
+  hiddenNativeToolNamesForGuidedTurn,
   isReplaySafeTool,
   priorToolFailure,
   routeForUsedTools,
@@ -30,6 +34,18 @@ import {
   uncertainPriorMutation,
   visibleToolDefinitions,
 } from "./guided-turn-policy.ts";
+import { createGuidedToolExecutionBoundary } from
+  "./guided-tool-execution-boundary.ts";
+import {
+  createGuidedProjectLedgerEffectAdapter,
+  isGuidedProjectLedgerEffectTool,
+} from "./guided-project-ledger-effect.ts";
+import { executeGuidedReadOnlyCommand } from "./guided-read-only-command.ts";
+import { renderGuidedEffectContext } from "./guided-effect-context.ts";
+import {
+  createGuidedWorkspaceFileEffectAdapter,
+  workspaceFileEffectTarget,
+} from "./guided-workspace-file-effect.ts";
 import {
   executeDurableWorkTool,
   isDurableWorkTool,
@@ -61,6 +77,7 @@ export function createProductionGuidedTurnAgent(input: {
   appMessageDbPath: string;
   contextDocuments: { resolve(contextRef: string): string };
   toolJournal: SqliteGuidedToolJournal;
+  effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   promptRunner?: PromptRunner;
 }): GuidedTurnAgent {
@@ -79,6 +96,7 @@ export function createProductionGuidedTurnAgent(input: {
       const describedToolIds = new Set<string>();
       const usedTools: string[] = [];
       let callIndex = 0;
+      const effectService = createGuidedEffectService(input.effectJournal);
       const execute = createButlerToolExecutor({
         butlerHome: input.butlerHome,
         butlerData: input.butlerData,
@@ -93,16 +111,71 @@ export function createProductionGuidedTurnAgent(input: {
         workerModel: selectedModelRef(turn),
         searchPlannerModel: selectedModelRef(turn),
         currentToolNames: () => [...authorizedNames],
-        hiddenNativeToolNames: [
-          ...WORK_TRACKING_TOOL_NAMES,
-          ...PROJECT_LEDGER_MUTATION_TOOL_NAMES,
-        ],
+        hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
+          policy.accessMode === "full_access" && Boolean(policy.projectId),
+        ),
         describedToolIds: () => [...describedToolIds],
+        executionBoundary: createGuidedToolExecutionBoundary({
+          durableWork: input.durableWork,
+          workScope,
+          effectService,
+          accessMode: policy.accessMode,
+          signal,
+          executeReadOnlyCommand: (call) => executeGuidedReadOnlyCommand({
+            args: call.args,
+            butlerData: input.butlerData,
+            workspacePath: policy.workspacePath,
+            originalRequest: turn.originalMessage,
+            signal: call.signal ?? signal,
+          }),
+          resolvePersistentEffect(call, executeRegistered) {
+            if (call.name === "write_file") {
+              const adapter = createGuidedWorkspaceFileEffectAdapter({
+                workspacePath: policy.workspacePath,
+                butlerData: input.butlerData,
+                executeWriteFile: async () => executeRegistered(),
+              });
+              const normalizedInput = adapter.normalizeInput(call.args);
+              return {
+                target: workspaceFileEffectTarget(normalizedInput.path),
+                input: normalizedInput,
+                adapter,
+              };
+            }
+            if (!isGuidedProjectLedgerEffectTool(call.name) || !policy.projectId) {
+              return null;
+            }
+            const projectRoot = projectLedgerProjectPath({
+              butlerHome: input.butlerHome,
+              butlerData: input.butlerData,
+              appMessageDbPath: input.appMessageDbPath,
+              workspacePath: policy.workspacePath,
+              projectId: policy.projectId,
+            }, {});
+            const effect = createGuidedProjectLedgerEffectAdapter({
+              name: call.name,
+              args: call.args,
+              butlerData: input.butlerData,
+              projectRoot,
+              projectRef: policy.projectId,
+            });
+            return {
+              target: effect.target,
+              input: effect.normalizedInput,
+              adapter: effect.adapter,
+            };
+          },
+        }),
       });
       const text = await promptRunner({
           prompt: renderGuidedPrompt(turn, {
             ...input,
             workContext: renderDurableWorkContext(initialWork),
+            effectContext: initialWork
+              ? renderGuidedEffectContext(
+                  input.effectJournal.listForWork(initialWork.work.workId),
+                )
+              : "",
           }),
           instructions: guidedInstructions(policy),
           model: selectedModelRef(turn),
