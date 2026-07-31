@@ -125,6 +125,64 @@ export class CdpPage {
     assert(clicked, `Renderer button click failed: ${name}`);
   }
 
+  async hasNamedElement(selector: string, name: string): Promise<boolean> {
+    return await this.evaluate<boolean>(`Array.from(
+      document.querySelectorAll(${JSON.stringify(selector)})
+    ).some((element) =>
+      element.getAttribute('aria-label')?.trim() === ${JSON.stringify(name)} ||
+      element.textContent?.trim() === ${JSON.stringify(name)}
+    )`);
+  }
+
+  async waitForNamedElement(selector: string, name: string): Promise<void> {
+    await this.waitFor(
+      `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).some(
+        (element) =>
+          element.getAttribute('aria-label')?.trim() === ${JSON.stringify(name)} ||
+          element.textContent?.trim() === ${JSON.stringify(name)}
+      )`,
+      `${selector} named ${name}`,
+    );
+  }
+
+  async namedElementVisible(selector: string, name: string): Promise<boolean> {
+    return await this.evaluate<boolean>(`Array.from(
+      document.querySelectorAll(${JSON.stringify(selector)})
+    ).some((element) => !element.closest('[aria-hidden="true"]') && (
+      element.getAttribute('aria-label')?.trim() === ${JSON.stringify(name)} ||
+      element.textContent?.trim() === ${JSON.stringify(name)}
+    ))`);
+  }
+
+  async clickNamedElement(selector: string, name: string): Promise<void> {
+    const lookup = `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(
+      (element) => !element.closest('[aria-hidden="true"]') && (
+        element.getAttribute('aria-label')?.trim() === ${JSON.stringify(name)} ||
+        element.textContent?.trim() === ${JSON.stringify(name)}
+      )
+    )`;
+    await this.waitFor(`Boolean(${lookup})`, `${selector} named ${name}`);
+    const clicked = await this.evaluate<boolean>(`(() => {
+      const element = ${lookup};
+      if (!(element instanceof HTMLElement)) return false;
+      element.click();
+      return true;
+    })()`);
+    assert(clicked, `Renderer named element click failed: ${selector} / ${name}`);
+  }
+
+  async waitForNamedElementCurrent(selector: string, name: string): Promise<void> {
+    await this.waitFor(
+      `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).some(
+        (element) => (
+          element.getAttribute('aria-label')?.trim() === ${JSON.stringify(name)} ||
+          element.textContent?.trim() === ${JSON.stringify(name)}
+        ) && element.getAttribute('aria-current') === 'page'
+      )`,
+      `${selector} named ${name} to become current`,
+    );
+  }
+
   async innerText(
     selector: string,
     options: { last?: boolean } = {},

@@ -24,7 +24,7 @@ export function createGuidedToolExecutionBoundary(input: {
   effectService: GuidedEffectService;
   accessMode: GuidedEffectAccessMode;
   signal: AbortSignal;
-  executeReadOnlyCommand(call: ButlerToolCall): Promise<unknown>;
+  executeCommand(call: ButlerToolCall): Promise<unknown>;
   resolvePersistentEffect(
     call: ButlerToolCall,
     execute: () => Promise<unknown>,
@@ -37,7 +37,7 @@ export function createGuidedToolExecutionBoundary(input: {
     }
     if (definition.effectBoundary === "dynamic") {
       if (call.name === "tool_call") return execute();
-      if (call.name === "run_command") return input.executeReadOnlyCommand(call);
+      if (call.name === "run_command") return input.executeCommand(call);
       return unavailableEffect(call.name);
     }
     const request = input.resolvePersistentEffect(call, execute);

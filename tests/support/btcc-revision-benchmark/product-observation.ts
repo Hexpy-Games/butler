@@ -11,11 +11,13 @@ import type {
   BtccRevision,
   MaterializedBenchmarkPrompt,
   RawBenchmarkObservation,
+  ProjectDeliverableValidation,
 } from "./contracts.ts";
 import { BTCC_REVISION_BENCHMARK_SCHEMA } from "./contracts.ts";
 import {
   openBenchmarkAppDatabase,
   readLedgerObservation,
+  resolveBenchmarkLedgerProjectId,
   tableExists,
 } from "./ledger-observation.ts";
 import { readValidatorRejections } from "./loop-observation.ts";
@@ -39,12 +41,14 @@ export interface ProductObservationInput {
   runRoot: string;
   target: BenchmarkTarget;
   timedOut: boolean;
+  deliverableValidation?: ProjectDeliverableValidation | null;
 }
 
 export function collectRawProductObservation(
   input: ProductObservationInput,
 ): RawBenchmarkObservation {
   const run = record(input.evidence.run);
+  const session = record(input.evidence.session);
   const step = firstRecord(input.evidence.observations);
   const launch = firstRecord(input.evidence.launches);
   const dataRoot = stringValue(run.dataRoot) ?? join(input.runRoot, "data");
@@ -73,7 +77,22 @@ export function collectRawProductObservation(
   const reload = record(step.reload);
   const beforeReload = finalMessageCount(appDb, turnId);
   const reloadMatched = booleanValue(reload.finalMatched);
-  const ledger = readLedgerObservation(appDb, turnId, input.prompt.expectedLedgerRoute);
+  const appProjectId = stringValue(session.projectId) ?? undefined;
+  const ledger = readLedgerObservation(
+    appDb,
+    turnId,
+    input.prompt.expectedLedgerRoute,
+    dataRoot,
+    input.prompt.expectedLedgerRoute === "project"
+      ? resolveBenchmarkLedgerProjectId({
+          appProjectId,
+          dataRoot,
+          db: appDb,
+          revision: input.revision,
+          workspaceRoot,
+        })
+      : undefined,
+  );
   const validatorRejections = readValidatorRejections(appDb, turnId);
   const unsuccessfulProviderRequests = providerRequests.filter((request) =>
     request.completedAtMs === null || request.status === null ||
@@ -190,6 +209,7 @@ export function collectRawProductObservation(
       executorProcessId: numberValue(launch.executorPid),
     },
     ledger,
+    deliverableValidation: input.deliverableValidation ?? null,
     artifacts,
     artifactRefs,
   };

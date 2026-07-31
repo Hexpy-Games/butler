@@ -1985,9 +1985,10 @@ test("scratch project creation makes a collision-free folder backed project with
 test("existing folder project creation requires a signed selection token and reuses active projects", async () => {
   const folderSelectionSecret = "test-folder-selection-secret";
   const selectedFolder = join(tempDir, "selected-project");
+  const dbPath = join(tempDir, "app.sqlite");
   mkdirSync(selectedFolder, { recursive: true });
   const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
+    dbPath,
     folderSelectionSecret,
     port: 0,
   });
@@ -2011,6 +2012,16 @@ test("existing folder project creation requires a signed selection token and reu
       workspace_label: "selected-project",
     });
     expect(second.data.project.id).toBe(first.data.project.id);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ ledger_project_id: string }, [string]>(`
+        SELECT ledger_project_id FROM projects WHERE id = ?
+      `).get(first.data.project.id)?.ledger_project_id).toBe(
+        first.data.project.id,
+      );
+    } finally {
+      db.close(false);
+    }
     expect(JSON.stringify(first)).not.toContain(tempDir);
     expect(JSON.stringify(second)).not.toContain(tempDir);
   } finally {

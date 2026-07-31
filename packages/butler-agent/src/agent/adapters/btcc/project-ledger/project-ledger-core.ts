@@ -2,7 +2,14 @@ import { fileURLToPath } from "node:url";
 
 type ProjectLedgerRecord = {
   filePath: string;
-  record: { id: string; kind: string; status?: string; parentId?: string };
+  record: {
+    id: string;
+    kind: string;
+    status?: string;
+    parentId?: string;
+    spec?: string;
+    specExemption?: boolean;
+  };
 };
 
 export type ProjectLedgerCore = {

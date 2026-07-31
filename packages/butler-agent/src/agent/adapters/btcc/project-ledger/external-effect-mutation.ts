@@ -93,12 +93,6 @@ export async function applyProjectLedgerRecordUpdates(input: {
           for (const view of ["dashboard", "handoff", "roadmap"]) {
             core.render(projectRoot, view, { write: true });
           }
-          const check = core.check(projectRoot);
-          if (!check.ok) {
-            throw new Error(
-              `Prepared Project Ledger effect failed validation: ${stableJson(check.issues ?? [])}`,
-            );
-          }
         },
       }) as ProjectLedgerCorePublication;
   writeJsonFileAtomic(occurrencePath, {

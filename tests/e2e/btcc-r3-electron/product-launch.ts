@@ -260,7 +260,22 @@ export async function openSession(
   run: PreparedRun,
   page: CdpPage,
 ): Promise<void> {
-  await page.clickButtonByName(run.sessionTitle);
+  const sessionSelector = run.sessionKind === "project"
+    ? '[data-test-class="project-session-row"]'
+    : ".chat-row";
+  await page.waitForNamedElement(sessionSelector, run.sessionTitle);
+  if (
+    run.sessionKind === "project" &&
+    !(await page.namedElementVisible(sessionSelector, run.sessionTitle))
+  ) {
+    assert(run.projectDisplayName, "Project display name is missing.");
+    await page.clickNamedElement(
+      '[data-test-class="project-group-row"]',
+      run.projectDisplayName,
+    );
+  }
+  await page.clickNamedElement(sessionSelector, run.sessionTitle);
+  await page.waitForNamedElementCurrent(sessionSelector, run.sessionTitle);
   await page.waitFor(
     `document.querySelector(${JSON.stringify("[data-test-class=\"composer-card\"] textarea")}) !== null`,
     "composer",

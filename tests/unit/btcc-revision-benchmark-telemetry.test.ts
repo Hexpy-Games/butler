@@ -98,7 +98,7 @@ describe("BTCC revision benchmark product telemetry", () => {
       revision: "r3" as const,
       worktreePath: "/tmp/r3",
       commit: "3".repeat(40),
-      buildId: "r3-test",
+      buildId: `sha256:${"3".repeat(64)}`,
       appBaseUrl: "http://127.0.0.1:28766",
       electronDebugPort: 29766,
       dataRoot,

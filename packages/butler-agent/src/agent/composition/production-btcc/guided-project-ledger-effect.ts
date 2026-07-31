@@ -4,6 +4,10 @@ import {
 } from "../../adapters/index.ts";
 import type { EffectAdapter } from "../../btcc/effects/index.ts";
 import {
+  type ActiveProjectLedgerReference,
+  projectLedgerRootInitialized,
+} from "../../../integrations/project-ledger/active-project-ledger-reference.ts";
+import {
   guidedProjectLedgerEffect,
   type GuidedProjectLedgerEffect,
 } from "./guided-project-ledger-effect-input.ts";
@@ -45,7 +49,9 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
   args: Record<string, unknown>;
   butlerData: string;
   projectRoot: string;
-  projectRef?: string;
+  projectRef: string;
+  resolveActiveProjectReference(): ActiveProjectLedgerReference;
+  initializeForCreate?: () => void | Promise<void>;
 }): {
   target: string;
   normalizedInput: Record<string, unknown>;
@@ -69,8 +75,28 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
         });
       },
       async dispatch({ idempotencyKey, normalizedInput }) {
+        const bindingError = projectLedgerMutationBindingError(input);
+        if (bindingError) {
+          return { status: "not_applied", error: bindingError };
+        }
         const updates = projectLedgerUpdates(normalizedInput, effect);
+        if (!projectLedgerRootInitialized(input.projectRoot)) {
+          if (
+            input.name !== "project_ledger_create" ||
+            !input.initializeForCreate
+          ) {
+            return {
+              status: "not_applied",
+              error: {
+                code: "project_ledger_not_initialized",
+                message: "The active Project Ledger has no records yet. Create the first reviewed record before using update or completion tools.",
+                recoverable: true,
+              },
+            };
+          }
+        }
         try {
+          await input.initializeForCreate?.();
           const result = await applyProjectLedgerRecordUpdates({
             butlerData: input.butlerData,
             projectRoot: input.projectRoot,
@@ -111,7 +137,14 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
         }
       },
       async reconcile({ idempotencyKey, normalizedInput }) {
+        const bindingError = projectLedgerMutationBindingError(input);
+        if (bindingError) {
+          return { status: "uncertain", error: bindingError };
+        }
         const updates = projectLedgerUpdates(normalizedInput, effect);
+        if (!projectLedgerRootInitialized(input.projectRoot)) {
+          return { status: "not_applied" };
+        }
         const reconciled = await reconcileProjectLedgerRecordUpdates({
           butlerData: input.butlerData,
           projectRoot: input.projectRoot,
@@ -135,6 +168,35 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
         };
       },
     },
+  };
+}
+
+function projectLedgerMutationBindingError(input: {
+  projectRoot: string;
+  projectRef: string;
+  resolveActiveProjectReference(): ActiveProjectLedgerReference;
+}): {
+  code: "project_ledger_active_app_binding_required";
+  message: string;
+  recoverable: true;
+} | null {
+  try {
+    const reference = input.resolveActiveProjectReference();
+    if (
+      reference.source === "app_project_db" &&
+      reference.degradation_code === undefined &&
+      reference.app_project_id === input.projectRef &&
+      reference.ledger_root === input.projectRoot
+    ) {
+      return null;
+    }
+  } catch {
+    // A lookup failure is the same safety outcome as a missing exact App row.
+  }
+  return {
+    code: "project_ledger_active_app_binding_required",
+    message: "Project Ledger changes require the exact active App project binding. Refresh the project session before retrying.",
+    recoverable: true,
   };
 }
 

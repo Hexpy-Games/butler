@@ -49,22 +49,29 @@ function recordUpdate(
   args: Record<string, unknown>,
 ): ProjectLedgerRecordUpdate {
   if (name === "project_ledger_create") {
+    const kind = requiredString(args.kind, "kind");
+    const fields = commonFields(args);
     return {
       operation: "create",
       id: requiredString(args.id, "id"),
-      kind: requiredString(args.kind, "kind"),
+      kind,
       title: requiredString(args.title, "title"),
-      ...commonFields(args),
+      ...fields,
+      ...(kind === "work" && !fields.spec ? { specExemption: true } : {}),
       ...parentFields(args),
     };
   }
   const id = requiredString(args.id, "id");
   const kind = fixedKind(name) ?? requiredString(args.kind, "kind");
+  const fields = commonFields(args);
   return {
     operation: "update",
     id,
     kind,
-    ...commonFields(args),
+    ...fields,
+    ...(name === "project_ledger_work_complete" && !fields.spec
+      ? { specExemption: true }
+      : {}),
     ...(name === "project_ledger_work_complete" ||
         name === "project_ledger_task_complete"
       ? { status: "done" }
@@ -108,6 +115,7 @@ function commonFields(args: Record<string, unknown>): Partial<ProjectLedgerRecor
     ledgerCommits: optionalString(args.ledger_commits),
     priority: optionalNumber(args.priority),
     requiresCommitEvidence: optionalBoolean(args.requires_commit_evidence),
+    specExemption: optionalBoolean(args.spec_exemption),
   });
 }
 

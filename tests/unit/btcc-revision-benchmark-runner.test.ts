@@ -16,12 +16,12 @@ describe("BTCC revision Electron benchmark runner", () => {
   test("runs all 72 observations sequentially in paired order and persists timeouts", async () => {
     const evidence = createEmptyBenchmarkEvidence(plan());
     const calls: Array<{
-      checkpointExpected: boolean;
+      harnessWorkExpectation: boolean;
       promptId: string;
       revision: string;
-      workExpected: boolean;
     }> = [];
     let persisted = 0;
+    let projectValidations = 0;
     const result = await runBenchmarkPairs({
       config: runnerConfig(),
       evidence,
@@ -31,11 +31,10 @@ describe("BTCC revision Electron benchmark runner", () => {
           const promptId = scenario.steps[0]!.id;
           const revision = options.repoRoot?.endsWith("-r2") ? "r2" : "r3";
           calls.push({
-            checkpointExpected:
-              scenario.steps[0]?.expect?.work?.checkpointStage !== undefined,
+            harnessWorkExpectation:
+              scenario.steps[0]?.expect?.work !== undefined,
             promptId,
             revision,
-            workExpected: scenario.steps[0]?.expect?.work?.exists === true,
           });
           if (promptId === "work_market_research__run_1" && revision === "r2") {
             throw new Error(
@@ -45,6 +44,12 @@ describe("BTCC revision Electron benchmark runner", () => {
           return { run: {}, observations: [{}] };
         },
         collectObservation: (input) => fakeObservation(input),
+        validateProjectDeliverable: async () => {
+          projectValidations += 1;
+          return projectValidation({
+            buildExitCode: projectValidations === 1 ? 1 : 0,
+          });
+        },
         persist: () => {
           persisted += 1;
         },
@@ -53,6 +58,7 @@ describe("BTCC revision Electron benchmark runner", () => {
 
     expect(result.observations).toHaveLength(72);
     expect(persisted).toBe(72);
+    expect(projectValidations).toBe(18);
     expect(calls.slice(0, 4).map(({ promptId, revision }) => [
       promptId,
       revision,
@@ -64,14 +70,18 @@ describe("BTCC revision Electron benchmark runner", () => {
     ]);
     expect(calls.find((call) =>
       call.promptId === "work_market_research__run_1",
-    )?.workExpected).toBe(true);
-    expect(calls.find((call) =>
-      call.promptId === "work_market_research__run_1",
-    )?.checkpointExpected).toBe(false);
+    )?.harnessWorkExpectation).toBe(false);
+    expect(calls.every((call) => !call.harnessWorkExpectation)).toBe(true);
     expect(result.observations.find((observation) =>
       observation.promptId === "work_market_research__run_1" &&
       observation.revision === "r2",
     )?.terminalState).toBe("timed_out");
+    expect(result.observations.filter((observation) =>
+      observation.deliverableValidation !== null,
+    )).toHaveLength(18);
+    expect(result.observations.some((observation) =>
+      observation.deliverableValidation?.build.exitCode === 1,
+    )).toBe(true);
   });
 
   test("resumes without rerunning an already recorded arm", async () => {
@@ -99,6 +109,7 @@ describe("BTCC revision Electron benchmark runner", () => {
           return { run: {}, observations: [{}] };
         },
         collectObservation: (input) => fakeObservation(input),
+        validateProjectDeliverable: async () => projectValidation(),
       },
     });
     expect(calls).toBe(71);
@@ -127,12 +138,47 @@ function plan() {
   });
 }
 
+function projectValidation(input: { buildExitCode?: number } = {}) {
+  return {
+    browserExecutablePath: "/test/chrome",
+    entryPath: "/test/workspace/index.html",
+    build: {
+      command: "npm run build",
+      exitCode: input.buildExitCode ?? 0,
+      timedOut: false,
+      outputTail: "test build",
+    },
+    desktop: {
+      requestedWidth: 1_440,
+      requestedHeight: 900,
+      innerWidth: 1_440,
+      clientWidth: 1_440,
+      scrollWidth: 1_440,
+      bodyTextLength: 100,
+      loaded: true,
+      screenshotPath: "/test/desktop.png",
+      error: null,
+    },
+    mobile: {
+      requestedWidth: 390,
+      requestedHeight: 844,
+      innerWidth: 390,
+      clientWidth: 390,
+      scrollWidth: 390,
+      bodyTextLength: 100,
+      loaded: true,
+      screenshotPath: "/test/mobile.png",
+      error: null,
+    },
+  };
+}
+
 function target(revision: BtccRevision): BenchmarkTarget {
   return {
     revision,
     worktreePath: `/tmp/butler-${revision}`,
     commit: revision.repeat(40),
-    buildId: `build-${revision}`,
+    buildId: `sha256:${revision === "r2" ? "2".repeat(64) : "3".repeat(64)}`,
     appBaseUrl: `http://127.0.0.1:${revision === "r2" ? 28765 : 28766}`,
     electronDebugPort: revision === "r2" ? 29765 : 29766,
     dataRoot: `/tmp/butler-${revision}/data`,
@@ -252,6 +298,7 @@ function fakeObservation(input: ProductObservationInput): RawBenchmarkObservatio
       closeoutObserved: observedRoute !== "none",
       evidenceRefs: [],
     },
+    deliverableValidation: input.deliverableValidation ?? null,
     artifacts: input.artifactPaths.map((path) => ({
       path,
       exists: true,

@@ -127,8 +127,34 @@ export interface RawBenchmarkObservation {
     executorProcessId: number | null;
   };
   ledger: BenchmarkLedgerObservation;
+  deliverableValidation: ProjectDeliverableValidation | null;
   artifacts: BenchmarkArtifactObservation[];
   artifactRefs: string[];
+}
+
+export interface ProjectDeliverableValidation {
+  browserExecutablePath: string;
+  entryPath: string;
+  build: {
+    command: string;
+    exitCode: number | null;
+    timedOut: boolean;
+    outputTail: string;
+  };
+  desktop: ProjectViewportObservation;
+  mobile: ProjectViewportObservation;
+}
+
+export interface ProjectViewportObservation {
+  requestedWidth: number;
+  requestedHeight: number;
+  innerWidth: number | null;
+  clientWidth: number | null;
+  scrollWidth: number | null;
+  bodyTextLength: number | null;
+  loaded: boolean;
+  screenshotPath: string | null;
+  error: string | null;
 }
 
 export interface BenchmarkArtifactObservation {

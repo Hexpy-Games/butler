@@ -22,13 +22,22 @@ export async function executeGuidedCommand(
   const cwd = await resolveCommandDirectory(context.workspacePath, args.cwd);
   const timeoutMs = number(args.timeout_ms, 120_000);
   const invocation = commandHost.invocation(command, context);
+  const environment = butlerToolProcessEnvironment({ butlerData: context.butlerData });
+  if (context.filesystemBoundary.kind === "isolated_validation") {
+    environment.HOME = context.filesystemBoundary.homeRoot;
+    environment.TMPDIR = context.filesystemBoundary.tempRoot;
+    environment.TMP = context.filesystemBoundary.tempRoot;
+    environment.TEMP = context.filesystemBoundary.tempRoot;
+    environment.BUTLER_ARTIFACTS_DIR = context.filesystemBoundary.artifactRoot;
+    environment.BUTLER_ARTIFACT_DIR = context.filesystemBoundary.artifactRoot;
+  }
   return new Promise((resolve, reject) => {
     const spool = new CommandOutputSpool(context.butlerData);
     const child = spawn(invocation.executable, invocation.args, {
       cwd,
       detached: commandHost.detached,
       stdio: ["ignore", "pipe", "pipe"],
-      env: butlerToolProcessEnvironment({ butlerData: context.butlerData }),
+      env: environment,
     });
     let timedOut = false;
     spool.capture(child.stdout, child.stderr);
@@ -48,6 +57,7 @@ export async function executeGuidedCommand(
     child.once("close", async (exitCode, signal) => {
       clearTimeout(timer);
       context.signal?.removeEventListener("abort", abort);
+      commandHost.terminateDescendants(child);
       if (context.signal?.aborted) {
         spool.discard();
         reject(context.signal.reason ?? new Error("Command cancelled"));

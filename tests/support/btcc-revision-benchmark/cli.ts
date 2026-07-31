@@ -2,7 +2,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import type {
   BenchmarkAssessmentFile,
   BenchmarkEvidenceFile,
-  BenchmarkTarget,
   BtccRevision,
 } from "./contracts.ts";
 import { applyProductAssessments } from "./assess.ts";
@@ -15,11 +14,15 @@ import {
   runBenchmarkPairs,
   type BenchmarkRunnerConfig,
 } from "./runner.ts";
+import {
+  buildBenchmarkTargets,
+  type BenchmarkTargetBeforeBuild,
+} from "./target-build.ts";
 
 interface BenchmarkInitConfig {
   runId: string;
   createdAt: string;
-  targets: Record<BtccRevision, BenchmarkTarget>;
+  targets: Record<BtccRevision, BenchmarkTargetBeforeBuild>;
   fixtures: Record<string, string>;
 }
 
@@ -27,7 +30,10 @@ export async function runBtccRevisionBenchmarkCli(argv: string[]): Promise<void>
   const command = argv[0];
   if (command === "init") {
     const config = readJson<BenchmarkInitConfig>(requiredOption(argv, "--config"));
-    const plan = createBenchmarkPlan(config);
+    const plan = createBenchmarkPlan({
+      ...config,
+      targets: buildBenchmarkTargets(config.targets),
+    });
     writeJson(requiredOption(argv, "--output"), createEmptyBenchmarkEvidence(plan));
     return;
   }

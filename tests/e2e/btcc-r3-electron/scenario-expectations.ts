@@ -61,6 +61,14 @@ function checkWorkExpectation(
       failures.push(`work_result_tool_missing:${toolName}`);
     }
   }
+  if (
+    expected.projectLedgerCloseout !== undefined &&
+    work.projectLedgerCloseoutObserved !== expected.projectLedgerCloseout
+  ) {
+    failures.push(
+      `project_ledger_closeout:${work.projectLedgerCloseoutObserved}:expected:${expected.projectLedgerCloseout}`,
+    );
+  }
   if (expected.sameWorkAsStep) {
     const previousWork = prior.get(expected.sameWorkAsStep)?.work;
     if (!previousWork) {

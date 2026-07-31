@@ -149,7 +149,9 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
   }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
-    policy.accessMode === "full_access" && (policy.projectId || turn.context.projectRef)
+    policy.accessMode === "full_access" &&
+      policy.trackingMode === "ledger" &&
+      (policy.projectId || turn.context.projectRef)
       ? GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES
       : [],
   );
@@ -176,8 +178,13 @@ export function hiddenNativeToolNamesForGuidedTurn(
 
 export function visibleToolDefinitions(
   authorized: readonly FunctionToolDefinition[],
-  accessMode: ButlerExecutionPolicy["accessMode"],
+  policy: Pick<
+    ButlerExecutionPolicy,
+    "accessMode" | "trackingMode" | "projectId"
+  >,
 ): FunctionToolDefinition[] {
+  const projectLedgerWork =
+    policy.trackingMode === "ledger" && Boolean(policy.projectId);
   const visible = new Set([
     "tool_search",
     "tool_describe",
@@ -188,7 +195,16 @@ export function visibleToolDefinitions(
     "grep_files",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
-    ...(accessMode === "full_access" ? ["run_command", "write_file"] : []),
+    ...(projectLedgerWork
+      ? ["project_ledger_list"]
+      : []),
+    ...(projectLedgerWork && policy.accessMode === "full_access"
+      ? [
+          "project_ledger_create",
+          "project_ledger_work_complete",
+        ]
+      : []),
+    ...(policy.accessMode === "full_access" ? ["run_command", "write_file"] : []),
   ]);
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }

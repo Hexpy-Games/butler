@@ -26,6 +26,7 @@ export interface ElectronWorkExpectation {
   planReviewVerdict?: "accept" | "partial" | "revise";
   resultReviewVerdict?: "accept" | "partial" | "revise";
   resultToolNamesInclude?: string[];
+  projectLedgerCloseout?: boolean;
   sameWorkAsStep?: string;
 }
 
@@ -143,6 +144,9 @@ export interface GuidedWorkObservation {
   planReviewVerdict: string | null;
   resultReviewVerdict: string | null;
   resultToolNames: string[];
+  projectLedgerWorkRecords: number;
+  projectLedgerCompletedWorkRecords: number;
+  projectLedgerCloseoutObserved: boolean;
 }
 
 export interface StepObservation {

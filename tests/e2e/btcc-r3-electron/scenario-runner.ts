@@ -161,6 +161,7 @@ export async function runBtccR3ElectronHarness(
       }
     }
     await stopCurrent();
+    await providerProxy.close();
     const evidence = successEvidence({
       launches,
       observations,

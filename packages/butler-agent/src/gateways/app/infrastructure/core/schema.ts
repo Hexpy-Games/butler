@@ -2,12 +2,16 @@ import type { Database } from "bun:sqlite";
 import { ensureAppMessageQuerySchema } from "../../../../agent/cognition/memory/exact-query.ts";
 import { ensureColumn, tableExists } from "./schema-migration.ts";
 import { ensureTerminalRetentionSchema } from "../retention/schema.ts";
+import { initializeProjectLedgerBindings } from "./project-ledger-binding-migration.ts";
 
 const DEFAULT_CHAT_ID = "general";
 const DEFAULT_CHAT_TITLE = "Onboarding";
 const DEFAULT_PROJECT_ID = "butler";
 
-export function migrateAppStoreSchema(db: Database): void {
+export function migrateAppStoreSchema(
+  db: Database,
+  options: { butlerData?: string } = {},
+): void {
   const turnsTableIsNew = !tableExists(db, "turns");
   const eventsTableIsNew = !tableExists(db, "events");
   db.exec(`
@@ -30,6 +34,7 @@ export function migrateAppStoreSchema(db: Database): void {
       workspace_path TEXT NOT NULL,
       workspace_label TEXT NOT NULL,
       safe_path_label TEXT NOT NULL,
+      ledger_project_id TEXT,
       pinned INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       error_summary TEXT,
@@ -270,6 +275,7 @@ export function migrateAppStoreSchema(db: Database): void {
   ensureColumn(db, "messages", "updated_at", "TEXT");
   ensureColumn(db, "messages", "safe_error_code", "TEXT");
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "projects", "ledger_project_id", "TEXT");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
   ensureColumn(db, "events", "turn_id", "TEXT");
   ensureColumn(
@@ -295,6 +301,7 @@ export function migrateAppStoreSchema(db: Database): void {
   `);
   db.query("UPDATE chats SET kind = 'chat' WHERE kind = 'general'").run();
   db.query("UPDATE messages SET updated_at = created_at WHERE updated_at IS NULL").run();
+  initializeProjectLedgerBindings(db, options);
 }
 
 export function seedAppStoreDefaults(db: Database): void {

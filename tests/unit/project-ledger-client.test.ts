@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
-import { projectLedgerProjectPath } from "../../packages/butler-agent/src/integrations/project-ledger/client.ts";
+import {
+  ProjectLedgerProjectScopeError,
+  projectLedgerProjectPath,
+} from "../../packages/butler-agent/src/integrations/project-ledger/client.ts";
 
 const tempDirs: string[] = [];
 
@@ -29,6 +32,7 @@ function writeAppProjectDb(path: string, input: {
   workspacePath: string;
   workspaceLabel?: string;
   safePathLabel?: string;
+  ledgerProjectId?: string;
 }): void {
   const db = new Database(path);
   db.run(`
@@ -38,21 +42,24 @@ function writeAppProjectDb(path: string, input: {
       workspace_path TEXT NOT NULL,
       workspace_label TEXT NOT NULL,
       safe_path_label TEXT NOT NULL,
+      ledger_project_id TEXT,
       archived INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     )
   `);
   db.query(`
     INSERT INTO projects (
-      id, display_name, workspace_path, workspace_label, safe_path_label, archived, updated_at
+      id, display_name, workspace_path, workspace_label, safe_path_label,
+      ledger_project_id, archived, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, 0, ?)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
   `).run(
     input.id,
     input.displayName,
     input.workspacePath,
     input.workspaceLabel ?? input.displayName,
     input.safePathLabel ?? input.displayName,
+    input.ledgerProjectId ?? input.id,
     new Date().toISOString(),
   );
   db.close(false);
@@ -107,6 +114,7 @@ describe("projectLedgerProjectPath", () => {
       id: "project-sandy-bot-35a0e102",
       displayName: "Sandy Bot",
       workspacePath: workspace,
+      ledgerProjectId: "sandy-bot",
     });
 
     expect(projectLedgerProjectPath({
@@ -114,7 +122,52 @@ describe("projectLedgerProjectPath", () => {
       butlerData,
       appMessageDbPath: appDbPath,
       projectId: "project-sandy-bot-35a0e102",
-    }, {})).toBe(join(butlerData, "project-ledger", "projects", "sandy-bot"));
+    }, {})).toBe(join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+    ));
+  });
+
+  test("pins explicit references to the active App project id", () => {
+    const butlerHome = makeTempDir();
+    const butlerData = makeTempDir();
+    const workspace = join(makeTempDir(), "sandy-workspace-folder");
+    const appDbPath = join(makeTempDir(), "butler-client.sqlite");
+    mkdirSync(workspace, { recursive: true });
+    writeAppProjectDb(appDbPath, {
+      id: "project-sandy-bot-35a0e102",
+      displayName: "Sandy Bot",
+      workspacePath: workspace,
+      ledgerProjectId: "sandy-bot",
+    });
+    const input = {
+      butlerHome,
+      butlerData,
+      appMessageDbPath: appDbPath,
+      projectId: "project-sandy-bot-35a0e102",
+    };
+
+    expect(projectLedgerProjectPath(input, {
+      project_ref: "project-sandy-bot-35a0e102",
+    })).toBe(join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+    ));
+    for (const args of [
+      { project_ref: "other-project" },
+      { project_path: workspace },
+      {
+        project_ref: "project-sandy-bot-35a0e102",
+        project_path: "other-project",
+      },
+    ]) {
+      expect(() => projectLedgerProjectPath(input, args))
+        .toThrow(ProjectLedgerProjectScopeError);
+    }
   });
 
   test("does not turn an unmapped app project id into a Butler default", () => {
@@ -151,13 +204,19 @@ describe("projectLedgerProjectPath", () => {
       id: "project-sandy-bot-35a0e102",
       displayName: "Sandy Bot",
       workspacePath: workspace,
+      ledgerProjectId: "sandy-bot",
     });
 
     expect(projectLedgerProjectPath({
       butlerHome,
       butlerData,
       appMessageDbPath: appDbPath,
-    }, { project_path: "Sandy Bot" })).toBe(join(butlerData, "project-ledger", "projects", "sandy-bot"));
+    }, { project_path: "Sandy Bot" })).toBe(join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+    ));
   });
 
   test("falls back to the Butler repository only when no session workspace is available", () => {

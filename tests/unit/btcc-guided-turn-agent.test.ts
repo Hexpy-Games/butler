@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import {
+  createGuidedTurnRuntime,
+  type BtccRunCommand,
+} from "../../packages/butler-agent/src/agent/btcc/index.ts";
 import { digest } from "../../packages/butler-agent/src/agent/btcc/identity.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
@@ -73,12 +78,14 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     let visibleNames: string[] = [];
     let writeFileSchema = "";
     let instructions = "";
+    let maxToolRounds = 0;
     const projectAgent = fixture.agent(async (options) => {
       visibleNames = options.tools.map((tool) => tool.name);
       writeFileSchema = JSON.stringify(
         options.tools.find((tool) => tool.name === "write_file")?.parameters,
       );
       instructions = options.instructions ?? "";
+      maxToolRounds = options.maxToolRounds ?? 0;
       return "준비했습니다.";
     });
     await projectAgent.run({
@@ -93,11 +100,307 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(visibleNames).toContain("write_file");
     expect(writeFileSchema).not.toContain("expected_sha256");
     expect(visibleNames).toContain("project_ledger_status");
-    expect(visibleNames).not.toContain("project_ledger_create");
-    expect(instructions).toContain("use the internal Work record for continuity");
-    expect(instructions).toContain("unless a reviewed effect tool is explicitly available");
+    expect(visibleNames).toContain("project_ledger_list");
+    expect(visibleNames).not.toContain("project_ledger_show");
+    expect(visibleNames).toContain("project_ledger_create");
+    expect(visibleNames).not.toContain("project_ledger_work_update");
+    expect(visibleNames).toContain("project_ledger_work_complete");
+    expect(instructions).toContain("keep one concise Project Ledger Work record");
+    expect(instructions).toContain("Check for related Work first and reuse it");
+    expect(instructions).toContain("complete the Ledger Work after validating");
+    expect(instructions).not.toContain(
+      "Do not attempt to mutate the Project Ledger",
+    );
+    expect(maxToolRounds).toBe(60);
+
+    let localVisibleNames: string[] = [];
+    let localSearch: unknown;
+    let localDescription: unknown;
+    let localCatalogCall: unknown;
+    let localDirectCall: unknown;
+    const localAgent = fixture.agent(async (options) => {
+      localVisibleNames = options.tools.map((tool) => tool.name);
+      localSearch = await options.executeTool({
+        name: "tool_search",
+        args: { query: "project_ledger_create", include_disabled: true },
+        rawArguments: JSON.stringify({
+          query: "project_ledger_create",
+          include_disabled: true,
+        }),
+      });
+      localDescription = await options.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:project_ledger_create"] },
+        rawArguments: JSON.stringify({ ids: ["native:project_ledger_create"] }),
+      });
+      localCatalogCall = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:project_ledger_create",
+          arguments: {
+            kind: "work",
+            id: "W-MUST-NOT-EXIST",
+            title: "Must not exist",
+            acceptance: "Must remain unavailable",
+          },
+        },
+        rawArguments: JSON.stringify({
+          id: "native:project_ledger_create",
+          arguments: {
+            kind: "work",
+            id: "W-MUST-NOT-EXIST",
+            title: "Must not exist",
+            acceptance: "Must remain unavailable",
+          },
+        }),
+      });
+      localDirectCall = await options.executeTool({
+        name: "project_ledger_create",
+        args: {
+          kind: "work",
+          id: "W-MUST-NOT-EXIST",
+          title: "Must not exist",
+          acceptance: "Must remain unavailable",
+        },
+        rawArguments: JSON.stringify({
+          kind: "work",
+          id: "W-MUST-NOT-EXIST",
+          title: "Must not exist",
+          acceptance: "Must remain unavailable",
+        }),
+      });
+      return "세션 작업으로 처리했습니다.";
+    });
+    await localAgent.run({
+      turn: turnRecord(fixture.root, {
+        accessMode: "full_access",
+        trackingMode: "local",
+        projectId: "project-local",
+        turnId: "turn-project-local-work",
+      }),
+      signal: new AbortController().signal,
+    });
+    expect(localVisibleNames).not.toContain("project_ledger_create");
+    expect(localVisibleNames).not.toContain("project_ledger_work_complete");
+    expect((localSearch as { results?: Array<{ id: string }> }).results ?? [])
+      .not.toContainEqual(expect.objectContaining({
+        id: "native:project_ledger_create",
+      }));
+    expect(localDescription).toMatchObject({
+      ok: false,
+      descriptions: [],
+      missing: [{
+        id: "native:project_ledger_create",
+        error: "unknown_tool_catalog_id",
+      }],
+    });
+    expect(localCatalogCall).toMatchObject({ ok: false });
+    expect(localDirectCall).toMatchObject({
+      ok: false,
+      error: { code: "tool_not_authorized" },
+    });
   } finally {
     fixture.close();
+  }
+});
+
+test("Guided project Work initializes and closes Project Ledger through reviewed effects", async () => {
+  const fixture = createFixture("guided-project-ledger-lifecycle");
+  const ledgerRoot = join(
+    fixture.root,
+    "project-ledger",
+    "projects",
+    "guided-ledger-project",
+  );
+  writeFileSync(
+    join(fixture.root, "package.json"),
+    `${JSON.stringify({ name: "guided-ledger-project" })}\n`,
+  );
+  bindAppProject(fixture.dbPath, {
+    id: "guided-project-session",
+    workspacePath: fixture.root,
+    ledgerProjectId: "guided-ledger-project",
+  });
+  try {
+    const results: unknown[] = [];
+    const agent = fixture.agent(async (options) => {
+      const call = async (name: string, args: Record<string, unknown>) => {
+        const result = await options.executeTool({
+          name,
+          args,
+          rawArguments: JSON.stringify(args),
+        });
+        results.push(result);
+        return result;
+      };
+      await call("replace_work_plan", {
+        objective: "Complete one tracked project change",
+        actions: [{
+          action_key: "create-ledger-work",
+          description: "Create one concise Project Ledger Work record",
+          effect: {
+            capability: "project_ledger_create",
+            target: "project-ledger:work:W-GUIDED-LIFECYCLE",
+          },
+        }, {
+          action_key: "complete-ledger-work",
+          description: "Complete the Project Ledger Work after validation",
+          dependency_keys: ["create-ledger-work"],
+          effect: {
+            capability: "project_ledger_work_complete",
+            target: "project-ledger:work:W-GUIDED-LIFECYCLE",
+          },
+        }],
+        checks: ["The canonical Project Ledger Work is done"],
+      });
+      await call("record_work_review", {
+        subject: "plan",
+        verdict: "accept",
+        summary: "The plan is concise and matches the project request.",
+      });
+      expect(existsSync(ledgerRoot)).toBe(false);
+      await call("project_ledger_create", {
+        kind: "work",
+        id: "W-GUIDED-LIFECYCLE",
+        title: "Guided project lifecycle",
+        status: "proposed",
+        spec: "SPEC-GUIDED-LIFECYCLE",
+        acceptance: "The tracked project result is validated and reported",
+      });
+      await call("project_ledger_work_complete", {
+        id: "W-GUIDED-LIFECYCLE",
+        validation: "Lifecycle integration test passed",
+        review: "The requested tracked outcome is complete",
+        report: "The Guided result contains the completed outcome",
+      });
+      await call("record_work_review", {
+        subject: "result",
+        verdict: "accept",
+        summary: "The Project Ledger Work was created and completed.",
+      });
+      return "프로젝트 작업과 기록을 완료했습니다.";
+    }, { butlerHome: process.cwd() });
+    const turnId = "turn-guided-project-ledger-lifecycle";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    expect(await runtime.runTurn(projectRunCommand(fixture.root, turnId)))
+      .toMatchObject({
+      kind: "delivered",
+      content: "프로젝트 작업과 기록을 완료했습니다.",
+    });
+    for (const result of results) {
+      expect(result).toMatchObject({ ok: true });
+    }
+    expect(existsSync(join(ledgerRoot, "project.json"))).toBe(true);
+    expect(existsSync(join(ledgerRoot, "work", "W-GUIDED-LIFECYCLE", "work.md")))
+      .toBe(true);
+    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+    expect(work).toMatchObject({
+      status: "completed",
+      latestResultReview: { verdict: "accept" },
+    });
+    expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
+      .toHaveLength(2);
+    expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided Project Ledger mutation fails closed for missing or archived App rows", async () => {
+  for (const archived of [false, true]) {
+    const fixture = createFixture(
+      archived ? "guided-archived-project-binding" : "guided-missing-project-binding",
+    );
+    const ledgerId = archived
+      ? "archived-ledger-must-not-exist"
+      : "missing-ledger-must-not-exist";
+    writeFileSync(
+      join(fixture.root, "package.json"),
+      `${JSON.stringify({ name: ledgerId })}\n`,
+    );
+    prepareAppProjectsTable(fixture.dbPath);
+    if (archived) {
+      bindAppProject(fixture.dbPath, {
+        id: "guided-project-session",
+        workspacePath: fixture.root,
+        ledgerProjectId: ledgerId,
+        archived: true,
+      });
+    }
+    try {
+      let mutationResult: unknown;
+      const agent = fixture.agent(async (options) => {
+        await options.executeTool({
+          name: "replace_work_plan",
+          args: {
+            objective: "Verify the persistent mutation boundary",
+            actions: [{
+              action_key: "create-ledger-work",
+              description: "Create one Project Ledger Work",
+              effect: {
+                capability: "project_ledger_create",
+                target: "project-ledger:work:W-BINDING-FAIL-CLOSED",
+              },
+            }],
+            checks: ["No mutation occurs without the exact App project row"],
+          },
+          rawArguments: "{}",
+        });
+        await options.executeTool({
+          name: "record_work_review",
+          args: {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The boundary check is safe and scoped.",
+          },
+          rawArguments: "{}",
+        });
+        mutationResult = await options.executeTool({
+          name: "project_ledger_create",
+          args: {
+            kind: "work",
+            id: "W-BINDING-FAIL-CLOSED",
+            title: "Must not be created",
+            acceptance: "The exact App row is required",
+          },
+          rawArguments: "{}",
+        });
+        return "바인딩이 없어 변경하지 않았습니다.";
+      }, { butlerHome: process.cwd() });
+      const runtime = createGuidedTurnRuntime({
+        admission: fixture.stores.admission,
+        turns: fixture.stores.turns,
+        messages: fixture.stores.messages,
+        committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+        agent,
+      });
+      const turnId = archived
+        ? "turn-archived-project-binding"
+        : "turn-missing-project-binding";
+      await runtime.runTurn(projectRunCommand(fixture.root, turnId));
+
+      expect(mutationResult).toMatchObject({
+        ok: false,
+        error: {
+          code: "effect_reconciliation_required",
+          message: expect.stringContaining("exact active App project binding"),
+        },
+      });
+      expect(existsSync(join(
+        fixture.root,
+        "project-ledger",
+        "projects",
+        ledgerId,
+      ))).toBe(false);
+    } finally {
+      fixture.close();
+    }
   }
 });
 
@@ -896,16 +1199,18 @@ function createFixture(label: string) {
   });
   return {
     root,
+    dbPath,
     stores,
     agent(
       promptRunner: Parameters<typeof createProductionGuidedTurnAgent>[0]["promptRunner"],
       operational: Pick<
         Parameters<typeof createProductionGuidedTurnAgent>[0],
         "turnLeaseMs" | "finalReportMs"
-      > = {},
+      > & { butlerHome?: string } = {},
     ) {
+      const { butlerHome = root, ...timing } = operational;
       return createProductionGuidedTurnAgent({
-        butlerHome: root,
+        butlerHome,
         butlerData: root,
         appMessageDbPath: dbPath,
         contextDocuments: stores.contextDocuments,
@@ -913,7 +1218,7 @@ function createFixture(label: string) {
         effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
         promptRunner,
-        ...operational,
+        ...timing,
       });
     },
     close() {
@@ -921,6 +1226,56 @@ function createFixture(label: string) {
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+function prepareAppProjectsTable(dbPath: string): void {
+  const db = new Database(dbPath);
+  try {
+    db.run(`CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      display_name TEXT,
+      workspace_path TEXT,
+      workspace_label TEXT,
+      safe_path_label TEXT,
+      ledger_project_id TEXT,
+      archived INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL
+    )`);
+  } finally {
+    db.close(false);
+  }
+}
+
+function bindAppProject(
+  dbPath: string,
+  input: {
+    id: string;
+    workspacePath: string;
+    ledgerProjectId: string;
+    archived?: boolean;
+  },
+): void {
+  prepareAppProjectsTable(dbPath);
+  const db = new Database(dbPath);
+  try {
+    db.query(`
+      INSERT INTO projects (
+        id, display_name, workspace_path, workspace_label, safe_path_label,
+        ledger_project_id, archived, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.id,
+      input.id,
+      input.workspacePath,
+      input.id,
+      input.ledgerProjectId,
+      input.ledgerProjectId,
+      input.archived ? 1 : 0,
+      "2026-07-31T00:00:00.000Z",
+    );
+  } finally {
+    db.close(false);
+  }
 }
 
 function fixtureMcpServerEval(): string {
@@ -993,5 +1348,46 @@ function turnRecord(
     },
     revision: 0,
     executionFence: 0,
+  };
+}
+
+function projectRunCommand(
+  workspacePath: string,
+  turnId: string,
+): Extract<BtccRunCommand, { kind: "run" }> {
+  return {
+    kind: "run",
+    turnId,
+    sessionId: "guided-project-session",
+    triggerKey: `message:${turnId}`,
+    message: {
+      messageId: `message:${turnId}`,
+      content: "프로젝트 작업을 만들고 기록해 주세요",
+    },
+    modelSelection: {
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "low",
+      controls: { accessMode: "full_access" },
+      controlsHash: "controls",
+    },
+    context: {
+      userRef: "local-user",
+      projectRef: "guided-project-session",
+      profileRefs: [],
+      recentFeedbackRefs: [],
+      mandatoryHotCacheRefs: [],
+      optionalHotCacheRefs: [],
+      baselineObservationScopeRefs: [`workspace:${workspacePath}`],
+      executionPolicy: {
+        role: "butler",
+        accessMode: "full_access",
+        trackingMode: "ledger",
+        requiredNativeToolProfiles: ["workspace", "project", "project-lifecycle"],
+        requiredNativeTools: [],
+        workspacePath,
+        projectId: "guided-project-session",
+      },
+    },
   };
 }
