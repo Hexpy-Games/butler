@@ -4,11 +4,6 @@ import { providerEmptyResponseError, providerHttpError, providerNetworkError, pr
 import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import { toolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
@@ -232,14 +227,13 @@ export async function runGeminiFunctionToolPromptText(
         model: config.modelId,
       });
     }
-    const batch = partitionSemanticToolBatch(calls);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => ({ name: call.name, args: call.args })),
+      toolCalls: calls.map((call) => ({ name: call.name, args: call.args })),
     });
     contents.push({ role: "model", parts: responseParts });
     toolBatchExecuted = true;
-    for (const call of batch.executable) {
+    for (const call of calls) {
       log(`tool ${call.name}: ${call.raw}`);
       let payload = unavailableFunctionToolPayload({
         name: call.name,
@@ -275,26 +269,6 @@ export async function runGeminiFunctionToolPromptText(
           functionResponse: {
             name: call.name,
             response: toolResultPayloadForProvider(payload),
-          },
-        }],
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      contents.push({
-        role: "user",
-        parts: [{
-          functionResponse: {
-            name: call.name,
-            response: toolResultPayloadForProvider({
-              ok: false,
-              output: blockCapacityToolOutput(observation),
-            }),
           },
         }],
       });

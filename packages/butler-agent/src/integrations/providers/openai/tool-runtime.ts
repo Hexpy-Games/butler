@@ -44,20 +44,23 @@ export async function runOpenAIFunctionToolPromptText(
     callModel: async ({ messages }) => {
       const activeTools = activeFunctionTools(options);
       agentLoopTools.splice(0, agentLoopTools.length, ...activeTools.map(functionToolToAgentTool));
-      const input = previousResponseId
-        ? newToolMessages(messages, sentToolMessages)
-        : { items: initialPromptInput, sentCount: sentToolMessages };
-      sentToolMessages = input.sentCount;
-      if (previousResponseId && pendingFinalCandidateObservation && Array.isArray(input.items)) {
-        input.items.push({
+      const toolInput = previousResponseId
+        ? newToolMessages(messages, sentToolMessages, options.butlerData)
+        : null;
+      const requestItems = toolInput?.items ?? initialPromptInput;
+      let finalCandidateObservationIncluded = false;
+      if (toolInput && pendingFinalCandidateObservation) {
+        const observationItem = {
           role: "user",
           content: [{ type: "input_text", text: pendingFinalCandidateObservation }],
-        });
-        pendingFinalCandidateObservation = null;
+        };
+        toolInput.items.push(observationItem);
+        toolInput.statelessItems.push(observationItem);
+        finalCandidateObservationIncluded = true;
       }
-      if (previousResponseId && Array.isArray(input.items)) {
-        codexStatelessInput.push(...input.items);
-      }
+      const statelessRequestInput = toolInput
+        ? [...codexStatelessInput, ...toolInput.items]
+        : codexStatelessInput;
 
       beforeAttributedModelRequest({
         attribution: options.usageAttribution,
@@ -74,11 +77,11 @@ export async function runOpenAIFunctionToolPromptText(
         ...(previousResponseId
           ? {
               previous_response_id: previousResponseId,
-              input: input.items,
-              __butler_codex_stateless_input: codexStatelessInput,
+              input: requestItems,
+              __butler_codex_stateless_input: statelessRequestInput,
             }
           : {
-              input: input.items,
+              input: requestItems,
               __butler_codex_stateless_input: codexStatelessInput,
             }),
       }, options.signal, authOverride, options.onProviderStreamEvent, {
@@ -91,6 +94,13 @@ export async function runOpenAIFunctionToolPromptText(
         response,
         roundIndex: modelCallRound,
       });
+      if (toolInput) {
+        sentToolMessages = toolInput.sentCount;
+        codexStatelessInput.push(...toolInput.statelessItems);
+      }
+      if (finalCandidateObservationIncluded) {
+        pendingFinalCandidateObservation = null;
+      }
       previousResponseId = response.id;
       const functionCallItems = functionCallContinuationItems(response);
       if (functionCallItems.length > 0) {
@@ -152,10 +162,13 @@ export async function runOpenAIFunctionToolPromptText(
         return toolBatchCompletedHandoffText();
       }
       if (!previousResponseId) return "";
-      const pending = newToolMessages(messages, sentToolMessages);
+      const pending = newToolMessages(
+        messages,
+        sentToolMessages,
+        options.butlerData,
+      );
       if (pending.items.length === 0) return "";
-      sentToolMessages = pending.sentCount;
-      codexStatelessInput.push(...pending.items);
+      const statelessRequestInput = [...codexStatelessInput, ...pending.items];
       try {
         beforeAttributedModelRequest({
           attribution: options.usageAttribution,
@@ -169,7 +182,7 @@ export async function runOpenAIFunctionToolPromptText(
           reasoning,
           previous_response_id: previousResponseId,
           input: pending.items,
-          __butler_codex_stateless_input: codexStatelessInput,
+          __butler_codex_stateless_input: statelessRequestInput,
         }, options.signal, authOverride, options.onProviderStreamEvent, {
           attribution: options.usageAttribution,
           roundIndex: modelCallRound,
@@ -180,6 +193,8 @@ export async function runOpenAIFunctionToolPromptText(
           response,
           roundIndex: modelCallRound,
         });
+        sentToolMessages = pending.sentCount;
+        codexStatelessInput.push(...pending.statelessItems);
         previousResponseId = response.id;
         recordPromptCacheMetric(response, {
           model,

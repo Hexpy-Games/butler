@@ -118,6 +118,52 @@ test("every provider family preserves decisions results and usage across native 
   }
 });
 
+test("every provider family executes all tool calls from one model response", async () => {
+  for (const harness of providerHarnesses()) {
+    const executedSteps: number[] = [];
+    const visibleSteps: number[][] = [];
+    let responseRound = 0;
+    globalThis.fetch = (async () => {
+      responseRound += 1;
+      return Response.json(
+        responseRound === 1
+          ? providerBatchResponse(harness.family, 7)
+          : harness.response(3),
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Inspect all seven requested targets and report.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 2,
+      butlerData: makeTempDir(`${harness.family}-full-tool-batch`),
+      tools: [{
+        type: "function",
+        name: "probe",
+        description: "Inspect one requested target.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: { step: { type: "number" } },
+          required: ["step"],
+        },
+      }],
+      onAssistantTextBeforeTools: ({ toolCalls }) => {
+        visibleSteps.push(toolCalls.map((call) => Number(call.args.step)));
+      },
+      executeTool: async (call) => {
+        executedSteps.push(Number(call.args.step));
+        return { observed: call.args.step };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(responseRound, harness.family).toBe(2);
+    expect(visibleSteps, harness.family).toEqual([[1, 2, 3, 4, 5, 6, 7]]);
+    expect(executedSteps, harness.family).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  }
+});
+
 test("every provider family continues a rejected final candidate in the same native conversation", async () => {
   for (const harness of providerHarnesses()) {
     const operations: string[] = [];
@@ -333,6 +379,77 @@ function decisionText(step: number): string {
     "rationale: The next action depends on the exact observed result.",
     "next_step: Return this result before choosing the following step.",
   ].join("\n");
+}
+
+function providerBatchResponse(
+  family: ProviderFamily,
+  count: number,
+): Record<string, unknown> {
+  const steps = Array.from({ length: count }, (_, index) => index + 1);
+  const text = "Inspect all requested targets before reporting.";
+  if (family === "openai") {
+    return {
+      id: "response-batch",
+      output: [
+        { type: "message", content: [{ type: "output_text", text }] },
+        ...steps.map((step) => ({
+          type: "function_call",
+          call_id: `call-${step}`,
+          name: "probe",
+          arguments: JSON.stringify({ step }),
+        })),
+      ],
+      usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [
+        { type: "text", text },
+        ...steps.map((step) => ({
+          type: "tool_use",
+          id: `call-${step}`,
+          name: "probe",
+          input: { step },
+        })),
+      ],
+      usage: { input_tokens: 10, output_tokens: 2 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{
+        content: {
+          role: "model",
+          parts: [
+            { text },
+            ...steps.map((step) => ({
+              functionCall: { name: "probe", args: { step } },
+            })),
+          ],
+        },
+      }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 2,
+        totalTokenCount: 12,
+      },
+    };
+  }
+  return {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: text,
+        tool_calls: steps.map((step) => ({
+          id: `call-${step}`,
+          type: "function",
+          function: { name: "probe", arguments: JSON.stringify({ step }) },
+        })),
+      },
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  };
 }
 
 function openAIResponse(round: number, toolName = "probe"): Record<string, unknown> {

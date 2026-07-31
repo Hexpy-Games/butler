@@ -9,6 +9,7 @@ const expectedNamesByBoundary = {
     "web_read",
     "read_file",
     "grep_files",
+    "inspect_workspace_page",
     "project_ledger_status",
     "project_ledger_list",
     "project_ledger_show",

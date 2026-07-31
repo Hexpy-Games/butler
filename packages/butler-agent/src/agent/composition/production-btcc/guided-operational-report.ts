@@ -7,7 +7,7 @@ import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
 import type { FunctionToolPromptOptions } from
   "../../../integrations/providers/runtime-contracts.ts";
 
-export const DEFAULT_GUIDED_TURN_LEASE_MS = 300_000;
+export const DEFAULT_GUIDED_TURN_LEASE_MS = 600_000;
 export const DEFAULT_GUIDED_FINAL_REPORT_MS = 30_000;
 
 const FACT_LIMIT = 12;
@@ -32,21 +32,22 @@ export async function runGuidedPromptWithOperationalReport(input: {
   const mainDeadline = input.leaseStartedAt + leaseMs - finalReportMs;
   let assistantDraft = "";
   try {
+    const runMain = (signal: AbortSignal) => input.promptRunner({
+      ...input.options,
+      signal,
+      executeTool: (call) => input.options.executeTool({
+        ...call,
+        signal: call.signal ?? signal,
+      }),
+      async onAssistantTextBeforeTools(candidate) {
+        if (candidate.text.trim()) assistantDraft = candidate.text.trim();
+        await input.options.onAssistantTextBeforeTools?.(candidate);
+      },
+    });
     const text = await runInGuidedOperationalWindow({
       parentSignal: input.parentSignal,
       timeoutMs: Math.max(1, mainDeadline - Date.now()),
-      run: (signal) => input.promptRunner({
-        ...input.options,
-        signal,
-        executeTool: (call) => input.options.executeTool({
-          ...call,
-          signal: call.signal ?? signal,
-        }),
-        async onAssistantTextBeforeTools(candidate) {
-          if (candidate.text.trim()) assistantDraft = candidate.text.trim();
-          await input.options.onAssistantTextBeforeTools?.(candidate);
-        },
-      }),
+      run: runMain,
     });
     if (!text.trim()) throw new Error("Guided model returned no final text");
     return text;

@@ -76,6 +76,7 @@ export function successEvidence(input: {
       ],
     run: {
       accessMode: run.accessMode,
+      agentOwnership: run.agentOwnership,
       dataRoot: run.dataRoot,
       debugPort: run.debugPort,
       electronProfile: run.electronProfile,
@@ -125,6 +126,7 @@ export function failureEvidence(input: {
     ok: false,
     error: error instanceof Error ? error.message : String(error),
     run: {
+      agentOwnership: run.agentOwnership,
       dataRoot: run.dataRoot,
       debugPort: run.debugPort,
       electronProfile: run.electronProfile,

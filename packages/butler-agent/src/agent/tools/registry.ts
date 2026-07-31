@@ -39,6 +39,10 @@ import { updateOnboardingProfileToolDefinition, updateOnboardingProfileToolMetad
 import { readConversationContextToolDefinition, readConversationContextToolMetadata } from "./memory/read_conversation_context/index.ts";
 import { updateExplicitMemoryToolDefinition, updateExplicitMemoryToolMetadata } from "./memory/update_explicit_memory/index.ts";
 import { listSkillsToolDefinition, listSkillsToolMetadata } from "./skills/list_skills/index.ts";
+import {
+  inspectWorkspacePageToolDefinition,
+  inspectWorkspacePageToolMetadata,
+} from "./workspace-page-preview/index.ts";
 
 export const CORE_BUTLER_TOOLS = [
   webSearchToolDefinition,
@@ -48,6 +52,7 @@ export const CORE_BUTLER_TOOLS = [
   readFileToolDefinition,
   writeFileToolDefinition,
   grepFilesToolDefinition,
+  inspectWorkspacePageToolDefinition,
   ...projectLedgerNativeToolDefinitions,
   getWorkDashboardToolDefinition,
   inspectProjectStatusToolDefinition,
@@ -95,6 +100,7 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [readFileToolDefinition.name]: readFileToolMetadata,
   [writeFileToolDefinition.name]: writeFileToolMetadata,
   [grepFilesToolDefinition.name]: grepFilesToolMetadata,
+  [inspectWorkspacePageToolDefinition.name]: inspectWorkspacePageToolMetadata,
   ...projectLedgerNativeToolMetadata,
   [getWorkDashboardToolDefinition.name]: getWorkDashboardToolMetadata,
   [inspectProjectStatusToolDefinition.name]: inspectProjectStatusToolMetadata,

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { isAbsolute, resolve } from "node:path";
 import { resolveWorkspacePathGuard } from
   "../../../tools/file-tools/shared/workspace-path-guard.ts";
 import { butlerToolProcessEnvironment } from
@@ -81,9 +82,13 @@ export async function executeGuidedCommand(
 
 async function resolveCommandDirectory(workspaceRoot: string, value: unknown): Promise<string> {
   if (value === undefined || value === "") return workspaceRoot;
+  const requested = requireString(value, "cwd");
+  if (isAbsolute(requested) && resolve(requested) === resolve(workspaceRoot)) {
+    return workspaceRoot;
+  }
   const guarded = await resolveWorkspacePathGuard({
     workspaceRoot,
-    relativePath: requireString(value, "cwd"),
+    relativePath: requested,
     allowDirectories: true,
   });
   if (!guarded.ok || !guarded.absolutePath) {

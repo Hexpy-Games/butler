@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
   BTCC_REVISION_BENCHMARK_SCHEMA,
   createBenchmarkPlan,
   createEmptyBenchmarkEvidence,
@@ -11,26 +19,35 @@ import {
 } from "../support/btcc-revision-benchmark/index.ts";
 import type { ProductObservationInput } from
   "../support/btcc-revision-benchmark/product-observation.ts";
+import { prepareBenchmarkBundledAgentResource } from
+  "../support/btcc-revision-benchmark/bundled-agent-resource-cache.ts";
 
 describe("BTCC revision Electron benchmark runner", () => {
   test("runs all 72 observations sequentially in paired order and persists timeouts", async () => {
     const evidence = createEmptyBenchmarkEvidence(plan());
     const calls: Array<{
+      bundledAgentResourceDir: string | undefined;
       harnessWorkExpectation: boolean;
       promptId: string;
       revision: string;
     }> = [];
     let persisted = 0;
     let projectValidations = 0;
+    let sharedAgentPreparations = 0;
     const result = await runBenchmarkPairs({
       config: runnerConfig(),
       evidence,
       dependencies: {
         verifyTargets: () => undefined,
+        prepareSharedAgentResource: () => {
+          sharedAgentPreparations += 1;
+          return "/tmp/btcc-formal-run/shared-r3-agent";
+        },
         runHarness: async (scenario, options) => {
           const promptId = scenario.steps[0]!.id;
           const revision = options.repoRoot?.endsWith("-r2") ? "r2" : "r3";
           calls.push({
+            bundledAgentResourceDir: options.bundledAgentResourceDir,
             harnessWorkExpectation:
               scenario.steps[0]?.expect?.work !== undefined,
             promptId,
@@ -57,6 +74,7 @@ describe("BTCC revision Electron benchmark runner", () => {
     });
 
     expect(result.observations).toHaveLength(72);
+    expect(sharedAgentPreparations).toBe(1);
     expect(persisted).toBe(72);
     expect(projectValidations).toBe(18);
     expect(calls.slice(0, 4).map(({ promptId, revision }) => [
@@ -72,6 +90,12 @@ describe("BTCC revision Electron benchmark runner", () => {
       call.promptId === "work_market_research__run_1",
     )?.harnessWorkExpectation).toBe(false);
     expect(calls.every((call) => !call.harnessWorkExpectation)).toBe(true);
+    expect(calls.filter((call) => call.revision === "r3").every((call) =>
+      call.bundledAgentResourceDir === "/tmp/btcc-formal-run/shared-r3-agent",
+    )).toBe(true);
+    expect(calls.filter((call) => call.revision === "r2").every((call) =>
+      call.bundledAgentResourceDir === undefined,
+    )).toBe(true);
     expect(result.observations.find((observation) =>
       observation.promptId === "work_market_research__run_1" &&
       observation.revision === "r2",
@@ -104,6 +128,7 @@ describe("BTCC revision Electron benchmark runner", () => {
       evidence,
       dependencies: {
         verifyTargets: () => undefined,
+        prepareSharedAgentResource: () => "/tmp/btcc-formal-run/shared-r3-agent",
         runHarness: async () => {
           calls += 1;
           return { run: {}, observations: [{}] };
@@ -114,6 +139,29 @@ describe("BTCC revision Electron benchmark runner", () => {
     });
     expect(calls).toBe(71);
     expect(evidence.observations).toHaveLength(72);
+  });
+
+  test("reuses one complete bundled Agent resource for the same R3 commit and build", () => {
+    const runRoot = mkdtempSync(join(tmpdir(), "btcc-agent-resource-cache-"));
+    let preparations = 0;
+    try {
+      const prepare = (_repoRoot: string, workDir: string) => {
+        preparations += 1;
+        const resourceDir = join(workDir, "darwin-arm64", "bundled-agent");
+        mkdirSync(join(resourceDir, "runtime"), { recursive: true });
+        writeFileSync(join(resourceDir, "agent-release-manifest.json"), "{}\n");
+        writeFileSync(join(resourceDir, "agent-update-manifest.json"), "{}\n");
+        return { resourceDir };
+      };
+      const input = { runRoot, target: target("r3") };
+      const first = prepareBenchmarkBundledAgentResource(input, prepare);
+      const second = prepareBenchmarkBundledAgentResource(input, prepare);
+
+      expect(second).toBe(first);
+      expect(preparations).toBe(1);
+    } finally {
+      rmSync(runRoot, { recursive: true, force: true });
+    }
   });
 });
 

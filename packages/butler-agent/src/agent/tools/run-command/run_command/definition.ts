@@ -14,7 +14,7 @@ export const runCommandToolDefinition = {
       },
       cwd: {
         type: "string",
-        description: "Optional working directory. Relative paths resolve from the active session workspace.",
+        description: "Optional working directory inside the active session workspace. Relative paths resolve from the workspace; a contained absolute path is also accepted.",
       },
       timeout_ms: {
         type: "integer",

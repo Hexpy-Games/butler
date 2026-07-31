@@ -278,36 +278,21 @@ test("agent loop exposes assistant text before executing selected tools", async 
   )).toBe(true);
 });
 
-test("agent loop defers a seventh tool until the model authors the next decision", async () => {
+test("agent loop executes every tool requested in one model response", async () => {
   const executed: string[] = [];
   const visibleBatches: string[][] = [];
-  let capacityResult = "";
   const result = await runAgentLoop({
-    messages: [{ role: "user", content: "inspect seven targets in small steps" }],
+    messages: [{ role: "user", content: "inspect seven targets" }],
     tools,
-    maxIterations: 3,
     callModel: async (input) => {
       if (input.iteration === 0) {
         return {
-          text: "title: 첫 여섯 항목 확인\nsummary: 우선 여섯 항목을 확인합니다.\nrationale: 결과를 본 뒤 남은 항목의 필요성을 판단합니다.\nnext_step: 확인 결과로 다음 작은 단계를 정합니다.",
+          text: "Inspect all seven requested targets.",
           toolCalls: Array.from({ length: 7 }, (_, index) => ({
             id: `call-${index + 1}`,
             name: "echo",
             arguments: { message: String(index + 1) },
           })),
-        };
-      }
-      if (input.iteration === 1) {
-        capacityResult = input.messages
-          .filter((message) => message.role === "tool")
-          .at(-1)?.content ?? "";
-        return {
-          text: "title: 남은 항목 확인\nsummary: 앞선 결과를 바탕으로 마지막 항목을 확인합니다.\nrationale: 누락된 항목을 별도 단계로 검증해야 합니다.\nnext_step: 마지막 결과를 포함해 결론을 작성합니다.",
-          toolCalls: [{
-            id: "call-7-retry",
-            name: "echo",
-            arguments: { message: "7" },
-          }],
         };
       }
       return { text: "all seven results observed" };
@@ -323,14 +308,11 @@ test("agent loop defers a seventh tool until the model authors the next decision
 
   expect(result.finalText).toBe("all seven results observed");
   expect(visibleBatches).toEqual([
-    ["call-1", "call-2", "call-3", "call-4", "call-5", "call-6"],
-    ["call-7-retry"],
+    ["call-1", "call-2", "call-3", "call-4", "call-5", "call-6", "call-7"],
   ]);
   expect(executed).toEqual([
-    "call-1", "call-2", "call-3", "call-4", "call-5", "call-6", "call-7-retry",
+    "call-1", "call-2", "call-3", "call-4", "call-5", "call-6", "call-7",
   ]);
-  expect(capacityResult).toContain('"observation_kind":"block_capacity"');
-  expect(capacityResult).toContain('"executed":false');
 });
 
 test("agent loop returns validation errors as tool results", async () => {

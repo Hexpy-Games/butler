@@ -8,8 +8,8 @@ import type {
 import {
   expectedWorkspaceFileSha256,
   guardWorkspaceFileTarget,
+  normalizeWorkspaceContainedPath,
   normalizeWorkspaceFileTarget,
-  normalizeWorkspaceRelativePath,
   observeWorkspaceFileTarget,
   type ObservedWorkspaceFileTarget,
   workspaceFileEffectTarget,
@@ -71,6 +71,7 @@ export function createGuidedWorkspaceFileEffectAdapter(
 
   return {
     capability: GUIDED_WORKSPACE_FILE_CAPABILITY,
+    reviewedPlanBinding: "accepted_plan",
     normalizeTarget(target) {
       return normalizeWorkspaceFileTarget(target);
     },
@@ -78,7 +79,7 @@ export function createGuidedWorkspaceFileEffectAdapter(
       return normalizedTarget;
     },
     normalizeInput(input) {
-      return normalizeWorkspaceFileInput(input);
+      return normalizeWorkspaceFileInput(input, options.workspacePath);
     },
     async dispatch(input) {
       const mismatch = targetInputMismatch(
@@ -137,7 +138,10 @@ export function createGuidedWorkspaceFileEffectAdapter(
   };
 }
 
-function normalizeWorkspaceFileInput(input: unknown): GuidedWorkspaceFileInput {
+function normalizeWorkspaceFileInput(
+  input: unknown,
+  workspacePath: string,
+): GuidedWorkspaceFileInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("write_file effect input must be an object");
   }
@@ -159,7 +163,10 @@ function normalizeWorkspaceFileInput(input: unknown): GuidedWorkspaceFileInput {
     throw new Error("write_file effect create_parents must be a boolean");
   }
   return {
-    path: normalizeWorkspaceRelativePath(requiredString(record.path, "path")),
+    path: normalizeWorkspaceContainedPath(
+      workspacePath,
+      requiredString(record.path, "path"),
+    ),
     content: record.content,
     overwrite: record.overwrite,
     create_parents: record.create_parents ?? false,

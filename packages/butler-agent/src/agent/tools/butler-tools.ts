@@ -37,6 +37,10 @@ import { createSkillToolHandlers } from "./skills/index.ts";
 import { createWebReadHandler } from "./web-read/index.ts";
 import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
+import {
+  createWorkspacePagePreviewToolHandlers,
+  workspacePagePreviewAvailabilityOverride,
+} from "./workspace-page-preview/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
 import type {
@@ -53,10 +57,21 @@ export type {
 
 export type ButlerToolExecutor = FunctionToolPromptOptions["executeTool"];
 export type ButlerToolCall = Parameters<ButlerToolExecutor>[0];
-export type ButlerToolHandler = (call: ButlerToolCall) => Promise<unknown> | unknown;
+export type ButlerToolRuntimeContext = {
+  effectOccurrenceId?: string;
+};
+export type ContextualButlerToolExecutor = (
+  call: ButlerToolCall,
+  context?: ButlerToolRuntimeContext,
+) => Promise<unknown>;
+export type ButlerToolHandler = (
+  call: ButlerToolCall,
+  context?: ButlerToolRuntimeContext,
+) => Promise<unknown> | unknown;
 export type ButlerToolExecutorRegistry = Record<string, ButlerToolHandler>;
 export type ButlerToolExecutionBoundary = (input: {
   call: ButlerToolCall;
+  context: ButlerToolRuntimeContext;
   definition: ButlerToolDefinition;
   execute(): Promise<unknown>;
 }) => Promise<unknown>;
@@ -72,10 +87,11 @@ export function createButlerToolExecutorRegistry<T extends ButlerToolExecutorReg
 async function executeRegisteredButlerTool(
   registry: ButlerToolExecutorRegistry,
   call: ButlerToolCall,
+  context: ButlerToolRuntimeContext,
 ): Promise<unknown> {
   const execute = registry[call.name];
   if (!execute) throw new Error(`Unknown Butler tool: ${call.name}`);
-  return await execute(call);
+  return await execute(call, context);
 }
 
 export function butlerToolsForAgentLoop(): AgentLoopToolDefinition[] {
@@ -146,18 +162,30 @@ export function createButlerToolExecutor(input: {
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
   activeWorkStreamBinding?: () => { contractId: string; workStreamId: string } | null;
   executionBoundary?: ButlerToolExecutionBoundary;
-}): ButlerToolExecutor {
+}): ContextualButlerToolExecutor {
   const todoListStore = new TodoListStore(input.butlerData);
   const workStreamStore = new WorkStreamStore(input.butlerData);
   const automationStore = new AutomationStore(input.butlerData);
+  const previewOverride = workspacePagePreviewAvailabilityOverride();
+  const nativeToolAvailabilityOverrides = {
+    ...(previewOverride ? { inspect_workspace_page: previewOverride } : {}),
+    ...(input.nativeToolAvailabilityOverrides ?? {}),
+  };
   const toolExecutorRef: { current?: ButlerToolExecutorRegistry } = {};
-  const executeActualTool = async (call: ButlerToolCall): Promise<unknown> => {
+  const executeActualTool: ContextualButlerToolExecutor = async (
+    call,
+    context = {},
+  ) => {
     if (!toolExecutorRef.current) throw new Error("Butler tool registry is not initialized");
     const definition = BUTLER_TOOL_DEFINITIONS_BY_NAME.get(call.name);
     if (!definition) throw new Error(`Unknown Butler tool: ${call.name}`);
-    const execute = () => executeRegisteredButlerTool(toolExecutorRef.current!, call);
+    const execute = () => executeRegisteredButlerTool(
+      toolExecutorRef.current!,
+      call,
+      context,
+    );
     return input.executionBoundary
-      ? input.executionBoundary({ call, definition, execute })
+      ? input.executionBoundary({ call, context, definition, execute })
       : execute();
   };
   const dispatchTool: ButlerToolHandler = executeActualTool;
@@ -175,7 +203,7 @@ export function createButlerToolExecutor(input: {
       webSearchProvider: input.webSearchProvider,
       currentToolNames: input.currentToolNames,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
-      nativeToolAvailabilityOverrides: input.nativeToolAvailabilityOverrides,
+      nativeToolAvailabilityOverrides,
     }),
     ...createToolBridgeToolHandlers({
       butlerData: input.butlerData,
@@ -184,7 +212,7 @@ export function createButlerToolExecutor(input: {
       pluginToolDescriber: input.pluginToolDescriber,
       currentToolNames: input.currentToolNames,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
-      nativeToolAvailabilityOverrides: input.nativeToolAvailabilityOverrides,
+      nativeToolAvailabilityOverrides,
       describedToolIds: input.describedToolIds,
       dispatchTool,
     }),
@@ -242,6 +270,10 @@ export function createButlerToolExecutor(input: {
     }),
     ...createRunCommandToolHandlers({
       butlerHome: input.butlerHome,
+      butlerData: input.butlerData,
+      workspacePath: input.workspacePath ?? input.butlerHome,
+    }),
+    ...createWorkspacePagePreviewToolHandlers({
       butlerData: input.butlerData,
       workspacePath: input.workspacePath ?? input.butlerHome,
     }),

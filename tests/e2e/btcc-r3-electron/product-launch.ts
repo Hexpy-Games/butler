@@ -12,13 +12,15 @@ import {
   type CdpClient,
 } from "./cdp-page.ts";
 import {
+  foregroundReadinessPath,
   hasInterruptedInboundForExecutor,
   startNativeExecutor,
   stopChildProcess,
   stopNativeExecutor,
+  waitForNativeExecutorReadiness,
 } from "./native-executor.ts";
 import { activateProjectSessionWorkspace } from "./isolation-config.ts";
-import { assert } from "./scenario-preflight.ts";
+import { assert, isRecord, parseJsonFile } from "./scenario-preflight.ts";
 
 const FIRST_RUN_STORAGE_KEY = "butler:first-run-setup:v1";
 
@@ -35,7 +37,8 @@ type BridgeMethod =
 export interface ProductLaunch {
   child: ChildProcess;
   client: CdpClient;
-  executor: ChildProcess;
+  executor: ChildProcess | null;
+  executorPid: number;
   executorOutput: string[];
   interruptedExecutorReplaced: boolean;
   output: string[];
@@ -156,6 +159,48 @@ function uiIndex(repoRoot: string): string {
   );
 }
 
+export function productLaunchEnvironment(
+  run: PreparedRun,
+  providerEndpoint: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const bundledAgentResourceDir = run.bundledAgentResourceDir ?? undefined;
+  if (run.agentOwnership === "electron") {
+    assert(
+      bundledAgentResourceDir,
+      "Electron-owned Agent launch requires a prepared bundled Agent resource.",
+    );
+  }
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    BUTLER_APP_ELECTRON_USER_DATA_DIR: run.electronProfile,
+    BUTLER_APP_GATEWAY_PID_FILE: "off",
+    BUTLER_APP_SERVER_PORT: String(run.serverPort),
+    BUTLER_BUN: process.execPath,
+    BUTLER_CODEX_BASE_URL: providerEndpoint,
+    BUTLER_DATA: run.dataRoot,
+    BUTLER_HOME: run.repoRoot,
+    BUTLER_PROJECT_WORKSPACE: run.projectWorkspaceRoot,
+    ...(run.agentOwnership === "electron"
+      ? {
+        BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir,
+        BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT: "1",
+      }
+      : {}),
+  };
+  delete env.BUTLER_APP_BUTLER_HOME;
+  if (run.agentOwnership === "harness") {
+    delete env.BUTLER_APP_BUNDLED_AGENT_DIR;
+    delete env.BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT;
+  }
+  delete env.BUTLER_APP_DEV_ORIGIN;
+  delete env.BUTLER_APP_SERVER_BRIDGE;
+  delete env.BUTLER_APP_SERVER_DB;
+  delete env.BUTLER_APP_SERVER_URL;
+  delete env.BUTLER_APP_UI_URL;
+  return env;
+}
+
 export async function launchProduct(
   run: PreparedRun,
   providerEndpoint: string,
@@ -165,25 +210,12 @@ export async function launchProduct(
   assert(existsSync(uiIndex(run.repoRoot)), "UI dist is missing; build the App UI first.");
   assert(listenerPids(run.serverPort).length === 0, `App server port is in use: ${run.serverPort}`);
   assert(listenerPids(run.debugPort).length === 0, `Electron debug port is in use: ${run.debugPort}`);
-  const executor = await startNativeExecutor(run, providerEndpoint);
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
-    BUTLER_APP_ELECTRON_USER_DATA_DIR: run.electronProfile,
-    BUTLER_APP_GATEWAY_PID_FILE: "off",
-    BUTLER_APP_SERVER_PORT: String(run.serverPort),
-    BUTLER_BUN: process.execPath,
-    BUTLER_CODEX_BASE_URL: providerEndpoint,
-    BUTLER_DATA: run.dataRoot,
-    BUTLER_HOME: run.repoRoot,
-    BUTLER_PROJECT_WORKSPACE: run.projectWorkspaceRoot,
-  };
-  delete env.BUTLER_APP_BUTLER_HOME;
-  delete env.BUTLER_APP_DEV_ORIGIN;
-  delete env.BUTLER_APP_SERVER_BRIDGE;
-  delete env.BUTLER_APP_SERVER_DB;
-  delete env.BUTLER_APP_SERVER_URL;
-  delete env.BUTLER_APP_UI_URL;
+  const executor = run.agentOwnership === "harness"
+    ? await startNativeExecutor(run, providerEndpoint)
+    : null;
+  const env = productLaunchEnvironment(run, providerEndpoint);
   const output: string[] = [];
+  const startedAtMs = Date.now();
   const child = spawn(
     binary,
     [
@@ -202,19 +234,28 @@ export async function launchProduct(
   try {
     const connected = await connectElectronPage(run.debugPort, child);
     await seedCompletedFirstRun(connected.page);
+    const executorPid = executor?.child.pid ??
+      await waitForNativeExecutorReadiness(run, {
+        notBeforeMs: startedAtMs,
+        owner: child,
+      });
+    assert(executorPid, "Native Butler executor did not expose a PID.");
     return {
       ...connected,
       child,
-      executor: executor.child,
-      executorOutput: executor.output,
+      executor: executor?.child ?? null,
+      executorPid,
+      executorOutput: executor?.output ?? [],
       interruptedExecutorReplaced: false,
       output,
       providerEndpoint,
-      startedAtMs: Date.now(),
+      startedAtMs,
     };
   } catch (error) {
     await stopChildProcess(child);
-    await stopNativeExecutor(run, executor.child);
+    await stopOwnedPortListeners(run.serverPort).catch(() => undefined);
+    await stopOwnedPortListeners(run.debugPort).catch(() => undefined);
+    if (executor) await stopNativeExecutor(run, executor.child);
     throw error;
   }
 }
@@ -223,7 +264,9 @@ export async function replaceInterruptedExecutorOnce(
   run: PreparedRun,
   launch: ProductLaunch,
 ): Promise<boolean> {
-  if (!hasInterruptedInboundForExecutor(run, launch.executor.pid)) return false;
+  if (run.agentOwnership === "electron") return false;
+  assert(launch.executor, "Harness-owned native executor process is missing.");
+  if (!hasInterruptedInboundForExecutor(run, launch.executorPid)) return false;
   assert(
     !run.interruptedExecutorReplacementUsed,
     "A second native executor process-replacement recovery was requested.",
@@ -235,6 +278,8 @@ export async function replaceInterruptedExecutorOnce(
     launch.executorOutput,
   );
   launch.executor = replacement.child;
+  assert(replacement.child.pid, "Replacement native executor did not expose a PID.");
+  launch.executorPid = replacement.child.pid;
   launch.interruptedExecutorReplaced = true;
   run.interruptedExecutorReplacementUsed = true;
   return true;
@@ -375,13 +420,106 @@ export async function stopProduct(
   launch: ProductLaunch,
 ): Promise<void> {
   try {
-    await bridgeCall(launch.page, "quitApp");
+    await bridgeCall(
+      launch.page,
+      "quitApp",
+      run.agentOwnership === "electron" ? { confirmed: true } : undefined,
+    );
   } catch {
     // Renderer may disconnect while the quit request is acknowledged.
   }
-  await stopChildProcess(launch.child);
+  if (run.agentOwnership === "electron") {
+    const exitedAfterAppQuit = await waitForChildExit(launch.child, 30_000);
+    if (!exitedAfterAppQuit) await stopChildProcess(launch.child);
+  } else {
+    await stopChildProcess(launch.child);
+  }
   launch.client.close();
+  let productOwnershipError: unknown;
+  if (run.agentOwnership === "electron") {
+    try {
+      await waitForPidExit(launch.executorPid);
+    } catch (error) {
+      productOwnershipError = error;
+    }
+  }
   await stopOwnedPortListeners(run.serverPort);
   await stopOwnedPortListeners(run.debugPort);
-  await stopNativeExecutor(run, launch.executor);
+  if (run.agentOwnership === "harness") {
+    assert(launch.executor, "Harness-owned native executor process is missing.");
+    await stopNativeExecutor(run, launch.executor);
+  } else if (productOwnershipError !== undefined) {
+    await stopElectronOwnedExecutorFallback(run, launch.executorPid);
+    throw productOwnershipError;
+  }
+}
+
+async function waitForChildExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return await Promise.race([
+    new Promise<boolean>((resolveExit) =>
+      child.once("exit", () => resolveExit(true)),
+    ),
+    new Promise<boolean>((resolveWait) =>
+      setTimeout(() => resolveWait(false), timeoutMs),
+    ),
+  ]);
+}
+
+async function waitForPidExit(pid: number, timeoutMs = 12_000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!isPidRunning(pid)) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  throw new Error(
+    `Electron quit did not stop its owned native Butler executor: ${pid}`,
+  );
+}
+
+async function stopElectronOwnedExecutorFallback(
+  run: PreparedRun,
+  pid: number,
+): Promise<void> {
+  try {
+    const readiness = parseJsonFile(foregroundReadinessPath(run));
+    if (!isRecord(readiness) || readiness.pid !== pid || !isPidRunning(pid)) return;
+  } catch {
+    return;
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    return;
+  }
+  await waitForPidExit(pid, 5_000).catch(() => {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // The fixture-owned executor may exit between inspection and signal.
+    }
+  });
+}
+
+function isPidRunning(pid: number): boolean {
+  if (process.platform !== "win32") {
+    const processState = spawnSync(
+      "ps",
+      ["-o", "stat=", "-p", String(pid)],
+      { encoding: "utf8" },
+    );
+    if (processState.status === 0) {
+      const state = processState.stdout.trim();
+      return Boolean(state) && !state.startsWith("Z");
+    }
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }

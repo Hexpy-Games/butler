@@ -10,12 +10,6 @@ export type {
   AgentLoopToolResult,
 } from "./contracts.ts";
 export {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-  SEMANTIC_WORK_BLOCK_TOOL_LIMIT,
-} from "./tool-batch-capacity.ts";
-export {
   isToolBatchCompletedHandoffText,
   toolBatchCompletedHandoffText,
 } from "./tool-batch-handoff.ts";

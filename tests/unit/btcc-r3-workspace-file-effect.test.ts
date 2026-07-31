@@ -57,11 +57,16 @@ test("workspace file adapter keeps target syntax simple and preserves file guard
       .toBe("workspace:reports/summary.md");
     expect(adapter.normalizeTarget("workspace:./reports/summary.md"))
       .toBe("workspace:reports/summary.md");
-    expect(() => adapter.normalizeInput({
-      path: "/tmp/report.md",
+    expect(adapter.normalizeInput({
+      path: join(root, "report.md"),
       content: "private",
       overwrite: false,
-    })).toThrow("workspace-relative");
+    })).toMatchObject({ path: "report.md" });
+    expect(() => adapter.normalizeInput({
+      path: join(tmpdir(), "outside-report.md"),
+      content: "private",
+      overwrite: false,
+    })).toThrow("inside the workspace");
     expect(adapter.normalizeInput({
       path: "reports/summary.md",
       content: "safe",
@@ -87,6 +92,279 @@ test("workspace file adapter keeps target syntax simple and preserves file guard
     });
     expect(dispatches).toBe(0);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("one accepted high-level Plan authorizes distinct contained file targets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-file-plan-"));
+  const workspacePath = join(root, "workspace");
+  const butlerData = join(root, "butler-data");
+  const db = openEffectDatabase(join(root, "effects.sqlite"));
+  await mkdir(workspacePath, { recursive: true });
+
+  let registeredDispatches = 0;
+  const adapter = createGuidedWorkspaceFileEffectAdapter({
+    workspacePath,
+    butlerData,
+    executeWriteFile: registeredWriteFile({
+      workspacePath,
+      butlerData,
+      onDispatch() {
+        registeredDispatches += 1;
+      },
+    }),
+  });
+  const work = reviewedFileWork("workspace:landing-page-source-files");
+  work.currentPlan!.actions[0]!.effect = {
+    capability: "workspace mutation",
+    target: "workspace:landing-page-source-files",
+  };
+  const firstInput: GuidedWorkspaceFileInput = {
+    path: "index.html",
+    content: "<main>Butler</main>\n",
+    overwrite: false,
+    create_parents: false,
+  };
+  const secondInput: GuidedWorkspaceFileInput = {
+    path: "src/app.js",
+    content: "export const ready = true;\n",
+    overwrite: false,
+    create_parents: true,
+  };
+  const service = createGuidedEffectService(new SqliteGuidedEffectJournal(db));
+
+  try {
+    expect(adapter.reviewedPlanBinding).toBe("accepted_plan");
+    const unreviewedWork = { ...work };
+    delete unreviewedWork.latestPlanReview;
+    expect(await service.execute({
+      work: unreviewedWork,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-file-1",
+      signal: new AbortController().signal,
+      target: workspaceFileEffectTarget(firstInput.path),
+      input: firstInput,
+      adapter,
+    })).toMatchObject({
+      ok: false,
+      error: { code: "effect_plan_review_required" },
+    });
+    const noEffectWork: DurableWorkView = {
+      ...work,
+      currentPlan: {
+        ...work.currentPlan!,
+        actions: work.currentPlan!.actions.map(({ effect: _, ...action }) =>
+          action,
+        ),
+      },
+    };
+    expect(await service.execute({
+      work: noEffectWork,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-file-1",
+      signal: new AbortController().signal,
+      target: workspaceFileEffectTarget(firstInput.path),
+      input: firstInput,
+      adapter,
+    })).toMatchObject({
+      ok: false,
+      error: { code: "effect_action_not_found" },
+    });
+    expect(registeredDispatches).toBe(0);
+    const first = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-file-1",
+      signal: new AbortController().signal,
+      target: workspaceFileEffectTarget(firstInput.path),
+      input: firstInput,
+      adapter,
+    });
+    const conflictingTargetReuse = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-file-1",
+      signal: new AbortController().signal,
+      target: workspaceFileEffectTarget(secondInput.path),
+      input: secondInput,
+      adapter,
+    });
+    const second = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-file-2",
+      signal: new AbortController().signal,
+      target: workspaceFileEffectTarget(secondInput.path),
+      input: secondInput,
+      adapter,
+    });
+
+    expect(first).toMatchObject({
+      ok: true,
+      status: "applied",
+      receipt: {
+        actionKey: "accepted-plan",
+        sanitizedTarget: "workspace:index.html",
+      },
+    });
+    expect(conflictingTargetReuse).toMatchObject({
+      ok: false,
+      error: { code: "effect_identity_conflict" },
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      status: "applied",
+      receipt: {
+        actionKey: "accepted-plan",
+        sanitizedTarget: "workspace:src/app.js",
+      },
+    });
+    if (!first.ok || !second.ok) {
+      throw new Error("Expected both contained workspace writes to apply");
+    }
+    expect(first.receipt.effectId).not.toBe(second.receipt.effectId);
+    expect(first.receipt.targetSha256).not.toBe(second.receipt.targetSha256);
+    expect(first.receipt.identitySha256).not.toBe(
+      second.receipt.identitySha256,
+    );
+    expect(registeredDispatches).toBe(2);
+    expect(await readFile(join(workspacePath, firstInput.path), "utf8"))
+      .toBe(firstInput.content);
+    expect(await readFile(join(workspacePath, secondInput.path), "utf8"))
+      .toBe(secondInput.content);
+
+    expect(await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-file-1",
+      signal: new AbortController().signal,
+      target: workspaceFileEffectTarget(firstInput.path),
+      input: firstInput,
+      adapter,
+    })).toMatchObject({ ok: true, status: "applied", replayed: true });
+    expect(registeredDispatches).toBe(2);
+  } finally {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("one accepted high-level Plan authorizes successive corrections to the same file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-file-correction-"));
+  const workspacePath = join(root, "workspace");
+  const butlerData = join(root, "butler-data");
+  const db = openEffectDatabase(join(root, "effects.sqlite"));
+  await mkdir(workspacePath, { recursive: true });
+
+  let registeredDispatches = 0;
+  const adapter = createGuidedWorkspaceFileEffectAdapter({
+    workspacePath,
+    butlerData,
+    executeWriteFile: registeredWriteFile({
+      workspacePath,
+      butlerData,
+      onDispatch() {
+        registeredDispatches += 1;
+      },
+    }),
+  });
+  const work = reviewedFileWork("workspace:landing-page-source-files");
+  work.currentPlan!.actions[0]!.effect = {
+    capability: "workspace mutation",
+    target: "workspace:landing-page-source-files",
+  };
+  const target = workspaceFileEffectTarget("styles.css");
+  const initial: GuidedWorkspaceFileInput = {
+    path: "styles.css",
+    content: "main { overflow-x: auto; }\n",
+    overwrite: true,
+    create_parents: false,
+  };
+  const correction: GuidedWorkspaceFileInput = {
+    ...initial,
+    content: "main { overflow-x: hidden; }\n",
+    overwrite: true,
+  };
+  const revert: GuidedWorkspaceFileInput = {
+    ...initial,
+    overwrite: true,
+  };
+  await writeFile(
+    join(workspacePath, initial.path),
+    "main { overflow-x: scroll; }\n",
+    "utf8",
+  );
+  const service = createGuidedEffectService(new SqliteGuidedEffectJournal(db));
+
+  try {
+    const first = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-style-1",
+      signal: new AbortController().signal,
+      target,
+      input: initial,
+      adapter,
+    });
+    const conflictingReuse = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-style-1",
+      signal: new AbortController().signal,
+      target,
+      input: correction,
+      adapter,
+    });
+    const second = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-style-2",
+      signal: new AbortController().signal,
+      target,
+      input: correction,
+      adapter,
+    });
+    const third = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-style-3",
+      signal: new AbortController().signal,
+      target,
+      input: revert,
+      adapter,
+    });
+    const replay = await service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-style-3",
+      signal: new AbortController().signal,
+      target,
+      input: revert,
+      adapter,
+    });
+
+    expect(first).toMatchObject({ ok: true, replayed: false });
+    expect(conflictingReuse).toMatchObject({
+      ok: false,
+      error: { code: "effect_identity_conflict" },
+    });
+    expect(second).toMatchObject({ ok: true, replayed: false });
+    expect(third).toMatchObject({ ok: true, replayed: false });
+    expect(replay).toMatchObject({ ok: true, replayed: true });
+    if (!first.ok || !second.ok || !third.ok) {
+      throw new Error("Expected all accepted-Plan writes to apply");
+    }
+    expect(first.receipt.effectId).not.toBe(second.receipt.effectId);
+    expect(first.receipt.effectId).not.toBe(third.receipt.effectId);
+    expect(first.receipt.targetSha256).toBe(second.receipt.targetSha256);
+    expect(first.receipt.inputSha256).toBe(third.receipt.inputSha256);
+    expect(first.receipt.inputSha256).not.toBe(second.receipt.inputSha256);
+    expect(registeredDispatches).toBe(3);
+    expect(await readFile(join(workspacePath, correction.path), "utf8"))
+      .toBe(revert.content);
+  } finally {
+    db.close();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -234,6 +512,7 @@ test("first execution adopts already-present desired bytes without dispatch", as
     ).execute({
       work: reviewedFileWork(target),
       accessMode: "full_access",
+      occurrenceId: "tool-call-adopt-1",
       signal: new AbortController().signal,
       target,
       input: effectInput,
@@ -305,6 +584,7 @@ test("rename then crash is reconciled after restart without a duplicate register
     await expect(firstService.execute({
       work,
       accessMode: "full_access",
+      occurrenceId: "tool-call-restart-1",
       signal: new AbortController().signal,
       target,
       input: effectInput,
@@ -336,6 +616,7 @@ test("rename then crash is reconciled after restart without a duplicate register
     const resumed = await resumedService.execute({
       work,
       accessMode: "full_access",
+      occurrenceId: "tool-call-restart-1",
       signal: new AbortController().signal,
       target,
       input: effectInput,
@@ -363,6 +644,7 @@ test("rename then crash is reconciled after restart without a duplicate register
     const replayed = await resumedService.execute({
       work,
       accessMode: "full_access",
+      occurrenceId: "tool-call-restart-1",
       signal: new AbortController().signal,
       target,
       input: effectInput,

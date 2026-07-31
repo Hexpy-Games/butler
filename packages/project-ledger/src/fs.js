@@ -137,22 +137,26 @@ export function ledgerDisplayPrefix(project) {
   const resolvedProject = resolve(project);
   const root = ledgerRoot(resolvedProject);
   const repoLocal = repoLocalLedgerRoot(resolvedProject);
-  if (root === repoLocal) return ".project-ledger";
+  if (root === repoLocal || basename(root) === ".project-ledger") {
+    return ".project-ledger";
+  }
 
   for (const butlerData of butlerDataCandidates().map((candidate) => resolve(String(candidate)))) {
-    if (isPathInside(butlerData, root)) {
+    const projectsRoot = join(butlerData, "project-ledger", "projects");
+    if (isPathInside(projectsRoot, root)) {
       return relative(butlerData, root).split("\\").join("/");
     }
   }
 
   for (const ledgerRepo of externalLedgerRepoCandidates()) {
-    if (isPathInside(ledgerRepo, root)) {
+    const projectsRoot = join(ledgerRepo, "projects");
+    if (isPathInside(projectsRoot, root)) {
       const rel = relative(ledgerRepo, root).split("\\").join("/");
       return rel.startsWith("projects/") ? `project-ledger/${rel}` : rel;
     }
   }
 
-  return `project-ledger/projects/${safeProjectSegment(basename(root))}`;
+  return `project-ledger/projects/${safeProjectSegment(readProjectId(root) ?? basename(root))}`;
 }
 
 function isLedgerRootRelativePath(path) {

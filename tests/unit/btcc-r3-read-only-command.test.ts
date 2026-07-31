@@ -48,6 +48,21 @@ describe("R3 read-only command boundary", () => {
     expect(String(result.stdout)).toContain(root);
   });
 
+  test("accepts the displayed workspace root as cwd", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-root-cwd-"));
+    roots.push(root);
+    const result = await executeGuidedReadOnlyCommand({
+      args: { command: "pwd", cwd: root, state_effect: "read_only" },
+      butlerData: join(root, "data"),
+      workspacePath: root,
+      originalRequest: "show the current directory",
+    });
+
+    if (process.platform !== "darwin") return;
+    expect(result).toMatchObject({ ok: true, cwd: root });
+    expect(String(result.stdout)).toContain(root);
+  });
+
   test("does not trust a read_only label when the command attempts a write", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-write-"));
     roots.push(root);
@@ -133,6 +148,39 @@ describe("R3 read-only command boundary", () => {
     expect(existsSync(join(workspace, "validation-only.txt"))).toBe(false);
     expect(readFileSync(join(artifactBase, "result.txt"), "utf8")).toBe("prior");
     expect(readFileSync(join(data, artifacts[0]!.path), "utf8")).toBe("evidence");
+  });
+
+  test("maps a displayed absolute workspace cwd into the disposable validation copy", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-validation-cwd-"));
+    roots.push(root);
+    const data = join(root, "data");
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    writeFileSync(join(workspace, "package.json"), "{}\n");
+    const result = await executeGuidedCommandCall({
+      call: {
+        name: "run_command",
+        rawArguments: "{}",
+        args: {
+          command: "test -f package.json",
+          cwd: workspace,
+          state_effect: "validation",
+          validation_suite: "absolute-workspace-cwd",
+        },
+      },
+      accessMode: "full_access",
+      butlerData: data,
+      workspacePath: workspace,
+      originalRequest: "validate the project",
+      signal: new AbortController().signal,
+    });
+
+    if (process.platform !== "darwin") return;
+    expect(result).toMatchObject({
+      ok: true,
+      cwd: workspace,
+      sandbox: "isolated_validation_no_network",
+    });
   });
 
   test("isolated validation removes artifact symlinks instead of verifying them", async () => {

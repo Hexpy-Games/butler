@@ -320,4 +320,10 @@ test("catalog search supports provider, category, capability, and query ranking 
     category: "automation",
     query: "calendar",
   }).map((entry) => entry.id)).toEqual(["plugin:calendar:create_event"]);
+
+  expect(searchToolCatalog({
+    catalog,
+    capability: "event",
+    query: "browser screenshot",
+  })).toEqual([]);
 });

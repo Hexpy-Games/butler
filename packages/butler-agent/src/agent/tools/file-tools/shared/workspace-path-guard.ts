@@ -48,13 +48,21 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
   const requestedPath = input.relativePath;
   const workspaceRoot = resolve(input.workspaceRoot || ".");
   if (!requestedPath || typeof requestedPath !== "string") return { ok: false, workspaceRoot, requestedPath, reason: "missing_path" };
-  if (isAbsolute(requestedPath)) return { ok: false, workspaceRoot, requestedPath, reason: "absolute_path_not_allowed" };
-  if (requestedPath.split(/[\\/]+/).includes("..")) return { ok: false, workspaceRoot, requestedPath, reason: "parent_traversal_not_allowed" };
-  if (looksSensitiveWorkspacePath(requestedPath)) return { ok: false, workspaceRoot, requestedPath, reason: "sensitive_path_blocked" };
-
   const rootReal = await realpath(workspaceRoot);
-  const absolutePath = resolve(rootReal, requestedPath);
+  if (!isAbsolute(requestedPath) && requestedPath.split(/[\\/]+/).includes("..")) {
+    return { ok: false, workspaceRoot: rootReal, requestedPath, reason: "parent_traversal_not_allowed" };
+  }
+  const unresolvedAbsolutePath = isAbsolute(requestedPath)
+    ? resolve(requestedPath)
+    : resolve(workspaceRoot, requestedPath);
+  const absolutePath = isInside(workspaceRoot, unresolvedAbsolutePath)
+    ? resolve(rootReal, relative(workspaceRoot, unresolvedAbsolutePath))
+    : unresolvedAbsolutePath;
   if (!isInside(rootReal, absolutePath)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, reason: "path_escape" };
+  const workspaceRelativePath = relative(rootReal, absolutePath);
+  if (looksSensitiveWorkspacePath(workspaceRelativePath)) {
+    return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, reason: "sensitive_path_blocked" };
+  }
   if (input.rejectProtectedProjectLedgerPaths || input.rejectProtectedProjectLedgerWrites) {
     const protectedPath = projectLedgerProtectedPath({
       workspaceRoot: rootReal,

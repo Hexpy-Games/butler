@@ -4,6 +4,7 @@ import type { TurnRecord } from
 import type { SqliteGuidedToolJournal } from
   "../../packages/butler-agent/src/agent/adapters/index.ts";
 import {
+  authorizedToolDefinitions,
   guidedPolicy,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
@@ -12,6 +13,8 @@ import {
   renderGuidedPrompt,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-prompt.ts";
+import { DURABLE_WORK_TOOL_DEFINITIONS } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/durable-work-tool-definitions.ts";
 import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-work-runtime.ts";
 import { appRuntimePolicy } from
@@ -106,7 +109,18 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("Use typed tools for intended source");
   expect(instructions).toContain("Multi-source or multi-step research");
   expect(instructions).toContain("call replace_work_plan before the dependent work");
+  expect(instructions).toContain(
+    "accepted Plan as a whole covers contained workspace writes",
+  );
+  expect(instructions).toContain("do not enumerate files");
+  expect(instructions).toContain(
+    "typed Project Ledger changes in the active project",
+  );
   expect(instructions).toContain("record_work_checkpoint is optional");
+  expect(instructions).toContain("not a demand for endless polish");
+  expect(instructions).toContain(
+    "correct and re-inspect only when a visible defect materially harms",
+  );
   expect(instructions).toContain(
     "review against the original user request",
   );
@@ -131,7 +145,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "Check for related Work first and reuse it when present",
   );
   expect(projectInstructions).toContain(
-    "complete the Ledger Work after validating the requested outcome",
+    "then complete it after validating the requested outcome",
   );
   expect(projectInstructions).toContain(
     "An uninitialized Project Ledger has no existing Work to reuse",
@@ -162,6 +176,19 @@ test("R3 guided prompt reports disabled Work without inventing a Work context", 
   expect(guidedInstructions(guidedPolicy(turn))).toContain("Work storage is disabled.");
 });
 
+test("R3 Plan tool describes workspace writes as accepted-Plan work", () => {
+  const replacePlan = DURABLE_WORK_TOOL_DEFINITIONS.find(
+    (definition) => definition.name === "replace_work_plan",
+  );
+  const schema = JSON.stringify(replacePlan);
+
+  expect(schema).toContain(
+    "contained workspace and active Project Ledger work",
+  );
+  expect(schema).toContain("do not enumerate files");
+  expect(schema).not.toContain("workspace:<relative-path>");
+});
+
 test("R3 Work scope follows explicit storage mode instead of project shell presence", () => {
   const projectTurn = turnRecord({
     projectRef: "butler",
@@ -179,7 +206,24 @@ test("R3 Work scope follows explicit storage mode instead of project shell prese
   });
 });
 
+test("R3 hides page preview when the foreground App host is unavailable", () => {
+  const turn = turnRecord({
+    accessMode: "full_access",
+    executionPolicy: {
+      ...executionPolicy("local"),
+      accessMode: "full_access",
+    },
+  });
+
+  expect(
+    authorizedToolDefinitions(turn, {}).some(
+      (definition) => definition.name === "inspect_workspace_page",
+    ),
+  ).toBe(false);
+});
+
 function turnRecord(options: {
+  accessMode?: "read_only" | "ask_first" | "full_access";
   projectRef?: string;
   executionPolicy?: TurnRecord["context"]["executionPolicy"];
 } = {}): TurnRecord {
@@ -194,7 +238,7 @@ function turnRecord(options: {
       provider: "openai",
       model: "gpt-5.6-sol",
       reasoningEffort: "low",
-      controls: { accessMode: "read_only" },
+      controls: { accessMode: options.accessMode ?? "read_only" },
       controlsHash: "controls",
     },
     context: {

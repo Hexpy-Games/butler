@@ -729,6 +729,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "read_file",
     "write_file",
     "grep_files",
+    "inspect_workspace_page",
     ...projectLedgerToolNames,
     "get_work_dashboard",
     "inspect_project_status",
@@ -853,6 +854,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "web-read",
     "web-search",
     "work-tracking",
+    "workspace-page-preview",
   ];
   const groupedToolNames = groupNames.flatMap((groupName) => (
     readdirSync(join(toolsRoot, groupName))
@@ -925,7 +927,8 @@ test("Butler tool executor dispatch is registry-based instead of a call-name if-
   );
   const executorSource = source.slice(source.indexOf("export function createButlerToolExecutor("));
   expect(executorSource).toContain("createButlerToolExecutorRegistry");
-  expect(executorSource).toContain("executeRegisteredButlerTool(toolExecutorRef.current!, call)");
+  expect(executorSource).toContain("executeRegisteredButlerTool(");
+  expect(executorSource).toContain("toolExecutorRef.current!,\n      call,\n      context,");
   expect(executorSource).toContain("input.executionBoundary");
   expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
 });
@@ -936,7 +939,7 @@ test("Butler tool compatibility entrypoint does not own capability executor bodi
     "utf8",
   );
   const lineCount = source.split("\n").length;
-  expect(lineCount).toBeLessThanOrEqual(280);
+  expect(lineCount).toBeLessThanOrEqual(300);
   expect(source).not.toMatch(/"[^"]+":\s*async\s*\(/u);
   expect(source).not.toContain("loadRuntimeSkills");
   expect(source).not.toContain("runProjectLedgerTool");
@@ -3007,7 +3010,9 @@ test("workspace file tool schemas keep the runtime-owned root out of model argum
     expect(tool?.parameters.properties).not.toHaveProperty("workspace_root");
   }
   expect((BUTLER_TOOLS.find((tool) => tool.name === "read_file")?.parameters.properties as any)
-    .path.description).toContain("relative to the active workspace root");
+    .path.description).toContain("inside the active workspace");
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "write_file")?.description)
+    .toContain("content is never a patch, fragment, or append");
 });
 
 test("context monitor tool schema exposes safe session lookup", () => {

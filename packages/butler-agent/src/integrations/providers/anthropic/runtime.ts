@@ -4,11 +4,6 @@ import { providerEmptyResponseError, providerHttpError, providerNetworkError, pr
 import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
@@ -212,14 +207,13 @@ export async function runAnthropicFunctionToolPromptText(
         model: config.modelId,
       });
     }
-    const batch = partitionSemanticToolBatch(toolUses);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => ({ name: call.name, args: call.input })),
+      toolCalls: toolUses.map((call) => ({ name: call.name, args: call.input })),
     });
     messages.push({ role: "assistant", content });
     toolBatchExecuted = true;
-    for (const call of batch.executable) {
+    for (const call of toolUses) {
       const rawArguments = JSON.stringify(call.input);
       log(`tool ${call.name}: ${rawArguments}`);
       let payload = unavailableFunctionToolPayload({
@@ -256,25 +250,6 @@ export async function runAnthropicFunctionToolPromptText(
           type: "tool_result",
           tool_use_id: call.id,
           content: serializeToolResultPayloadForProvider(payload),
-        }],
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      messages.push({
-        role: "user",
-        content: [{
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: serializeToolResultPayloadForProvider({
-            ok: false,
-            output: blockCapacityToolOutput(observation),
-          }),
         }],
       });
     }

@@ -1,4 +1,6 @@
 import type { AgentLoopMessage, AgentLoopModelResponse, AgentLoopToolDefinition } from "../../../agent/model-tool-loop/index.ts";
+import { agentLoopImageDataUrl } from
+  "../../../agent/model-tool-loop/tool-result-media.ts";
 import type { FunctionToolCall, FunctionToolDefinition, FunctionToolPromptOptions, OpenAIResponse } from "../runtime-contracts.ts";
 import { extractResponseText } from "./usage.ts";
 
@@ -96,19 +98,37 @@ export function withoutDynamicTools(options: FunctionToolPromptOptions): Functio
 export function newToolMessages(
   messages: AgentLoopMessage[],
   alreadySent: number,
+  butlerData?: string,
 ): {
   items: Array<Record<string, unknown>>;
+  statelessItems: Array<Record<string, unknown>>;
   sentCount: number;
 } {
   const toolMessages = messages.filter((message) => message.role === "tool");
   const next = toolMessages.slice(alreadySent);
+  const statelessItems = next.map((message) => ({
+    type: "function_call_output",
+    call_id: message.toolCallId,
+    output: message.content,
+  }));
   return {
     sentCount: toolMessages.length,
-    items: next.map((message) => ({
-      type: "function_call_output",
-      call_id: message.toolCallId,
-      output: message.content,
-    })),
+    statelessItems,
+    items: next.map((message) => {
+      const images = (message.imageAttachments ?? []).flatMap((attachment) => {
+        const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
+        return imageUrl
+          ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
+          : [];
+      });
+      return {
+        type: "function_call_output",
+        call_id: message.toolCallId,
+        output: images.length > 0
+          ? [{ type: "input_text", text: message.content }, ...images]
+          : message.content,
+      };
+    }),
   };
 }
 

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   createServer,
+  request as httpRequest,
   type IncomingMessage,
   type Server,
   type ServerResponse,
@@ -240,7 +241,7 @@ test("provider observation proxy classifies title calls without retaining sensit
   }
 });
 
-test("non-streaming responses keep first-delta timing null and failure evidence embeds only safe observations", async () => {
+test("non-streaming provider failures keep safe failed terminal evidence", async () => {
   const upstream = await listen((_request, response) => {
     response.writeHead(429, {
       "content-type": "application/json",
@@ -265,12 +266,13 @@ test("non-streaming responses keep first-delta timing null and failure evidence 
     expect(response.status).toBe(429);
     expect(response.headers.get("retry-after")).toBe("1");
     await response.text();
-    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+    await waitFor(() => proxy.observations()[0]?.termination !== null);
     const providerRequests = proxy.observations();
     expect(providerRequests[0]).toMatchObject({
       requestKind: "main",
       firstContentBearingDeltaAtMs: null,
-      termination: "completed",
+      completedAtMs: null,
+      termination: "failed",
       status: 429,
       hasTextContent: false,
       hasToolArgumentContent: false,
@@ -344,6 +346,46 @@ test("completed SSE content sets safe shape flags without inventing a first-delt
   }
 });
 
+test("failed SSE terminal events are distinguished without retaining provider text", async () => {
+  const privateFailure = "private provider failure detail";
+  const upstream = await listen(async (request, response) => {
+    await bodyOf(request);
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+    });
+    response.end([
+      `data: ${JSON.stringify({
+        type: "response.failed",
+        response: { error: { message: privateFailure } },
+      })}`,
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"));
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: "{}",
+    });
+    await response.text();
+    await waitFor(() => proxy.observations()[0]?.termination !== null);
+    expect(proxy.observations()[0]).toMatchObject({
+      completedAtMs: null,
+      status: 200,
+      termination: "failed",
+    });
+    expect(JSON.stringify(proxy.observations())).not.toContain(privateFailure);
+  } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
 test("upstream SSE abort terminates the downstream response and records failed evidence", async () => {
   let abortUpstream: (() => void) | undefined;
   const abortGate = new Promise<void>((resolve) => {
@@ -381,7 +423,7 @@ test("upstream SSE abort terminates the downstream response and records failed e
         setTimeout(() => resolve("timeout"), 500),
       ),
     ]);
-    expect(outcome).not.toBe("timeout");
+    expect(outcome).toBe("rejected");
     await waitFor(() => proxy.observations()[0]?.termination !== null);
     expect(proxy.observations()[0]).toMatchObject({
       status: 200,
@@ -451,17 +493,120 @@ test("closing the proxy cancels active provider work without waiting for the ups
     const firstClose = proxy.close();
     const concurrentClose = proxy.close();
     const closeOutcome = await Promise.race([
-      Promise.all([firstClose, concurrentClose]).then(() => "closed" as const),
+      Promise.all([firstClose, concurrentClose]).then(
+        (snapshots) => ({ state: "closed" as const, snapshots }),
+      ),
       new Promise<"timeout">((resolve) =>
         setTimeout(() => resolve("timeout"), 500),
       ),
     ]);
-    expect(closeOutcome).toBe("closed");
+    expect(closeOutcome).not.toBe("timeout");
+    if (closeOutcome === "timeout") throw new Error("Proxy close timed out.");
+    expect(closeOutcome.state).toBe("closed");
+    expect(closeOutcome.snapshots[0]?.[0]?.termination).toBe("cancelled");
+    expect(closeOutcome.snapshots[1]?.[0]?.termination).toBe("cancelled");
     expect(proxy.observations()[0]?.completedAtMs).toBeNull();
     expect(proxy.observations()[0]?.termination).toBe("cancelled");
     expect(proxy.observations()[0]?.terminatedAtMs).not.toBeNull();
     await pendingFetch;
   } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("closing the proxy cancels an active upstream response stream", async () => {
+  const upstream = await listen(async (request, response) => {
+    await bodyOf(request);
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+    });
+    response.write(
+      'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+    );
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: "{}",
+    });
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    expect((await reader!.read()).done).toBe(false);
+    const closeOutcome = await Promise.race([
+      proxy.close().then((snapshot) => ({
+        state: "closed" as const,
+        snapshot,
+      })),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 500),
+      ),
+    ]);
+    expect(closeOutcome).not.toBe("timeout");
+    if (closeOutcome === "timeout") throw new Error("Proxy close timed out.");
+    expect(closeOutcome.snapshot[0]).toMatchObject({
+      completedAtMs: null,
+      status: 200,
+      termination: "cancelled",
+    });
+    const downstreamOutcome = await Promise.race([
+      reader!.read().then(
+        (result) => result.done ? "closed" as const : "data" as const,
+        () => "closed" as const,
+      ),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 500),
+      ),
+    ]);
+    expect(downstreamOutcome).toBe("closed");
+  } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("closing the proxy cancels a partially uploaded inbound request", async () => {
+  const upstream = await listen((_request, response) => {
+    response.end();
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+  const request = httpRequest(proxy.endpoint, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+  });
+  const requestClosed = new Promise<void>((resolve) => {
+    request.once("close", resolve);
+    request.once("error", () => resolve());
+  });
+  request.flushHeaders();
+  request.write("{");
+
+  try {
+    await waitFor(() => proxy.observations().length === 1);
+    const closeOutcome = await Promise.race([
+      proxy.close().then((snapshot) => ({
+        state: "closed" as const,
+        snapshot,
+      })),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 500),
+      ),
+    ]);
+    expect(closeOutcome).not.toBe("timeout");
+    if (closeOutcome === "timeout") throw new Error("Proxy close timed out.");
+    expect(closeOutcome.snapshot[0]).toMatchObject({
+      completedAtMs: null,
+      termination: "cancelled",
+    });
+    await requestClosed;
+  } finally {
+    request.destroy();
     await proxy.close();
     await upstream.close();
   }

@@ -63,6 +63,7 @@ describe("R3 guided Project Ledger effect", () => {
       },
       adapter: { capability: "project_ledger_create" },
     });
+    expect(create.adapter.reviewedPlanBinding).toBe("accepted_plan");
 
     const created = await create.adapter.dispatch(effectDispatch("create-report"));
     expect(created).toMatchObject({

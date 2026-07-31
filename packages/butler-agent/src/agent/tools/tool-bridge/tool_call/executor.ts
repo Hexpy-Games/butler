@@ -1,5 +1,9 @@
 import type { WebSearchProvider } from "../../../../integrations/search/provider.ts";
-import type { ButlerToolCall, ButlerToolHandler } from "../../butler-tools.ts";
+import type {
+  ButlerToolCall,
+  ButlerToolHandler,
+  ButlerToolRuntimeContext,
+} from "../../butler-tools.ts";
 import type { ExternalToolCatalogInput } from "../../progressive-catalog.ts";
 import type { NativeToolAvailabilityOverrides } from "../../types.ts";
 import { disabledToolRecovery } from "../audit.ts";
@@ -53,7 +57,10 @@ export function createToolCallToolHandler(input: {
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   describedToolIds?: readonly string[] | (() => readonly string[]);
 }) {
-  return async (call: ToolCall) => {
+  return async (
+    call: ToolCall,
+    context?: ButlerToolRuntimeContext,
+  ) => {
     const resolved = await resolveToolCallTarget(call, input);
     if (!resolved.ok) {
       return resolved.result;
@@ -63,7 +70,7 @@ export function createToolCallToolHandler(input: {
     }
     try {
       return withBridgeInvocation(
-        await input.dispatchTool(resolved.targetCall),
+        await input.dispatchTool(resolved.targetCall, context),
         resolved.bridgeInvocation,
       );
     } catch (error) {

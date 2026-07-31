@@ -14,6 +14,8 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+import { createGuidedToolCallExecutor } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-call-execution.ts";
 import { authorizedToolDefinitions, isReplaySafeTool } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
 import { upsertMcpServer } from
@@ -107,7 +109,9 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(visibleNames).toContain("project_ledger_work_complete");
     expect(instructions).toContain("keep one concise Project Ledger Work record");
     expect(instructions).toContain("Check for related Work first and reuse it");
-    expect(instructions).toContain("complete the Ledger Work after validating");
+    expect(instructions).toContain(
+      "complete it after validating the requested outcome",
+    );
     expect(instructions).not.toContain(
       "Do not attempt to mutate the Project Ledger",
     );
@@ -1102,6 +1106,103 @@ test("Guided agent replays completed tool results and fences uncertain mutations
   }
 });
 
+test("Guided tool restart reuses a prestarted occurrence after call order changes", async () => {
+  const fixture = createFixture("guided-restart-call-order");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "turn-restart-call-order",
+    });
+    const writeArgs = {
+      path: "out.txt",
+      content: "durable output",
+      overwrite: false,
+    };
+    const rawWrite = JSON.stringify(writeArgs);
+    const prestartedCallId = digest([
+      "btcc-guided-tool-call.v1",
+      turn.turnId,
+      "0",
+      "write_file",
+      rawWrite,
+    ].join("\0"));
+    fixture.stores.guidedToolJournal.start({
+      turnId: turn.turnId,
+      callId: prestartedCallId,
+      toolName: "write_file",
+      rawArguments: rawWrite,
+      arguments: writeArgs,
+    });
+
+    const occurrences: Array<{ toolName: string; occurrenceId?: string }> = [];
+    const toolCalls = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: {
+        turnId: turn.turnId,
+        sessionId: turn.sessionId,
+      },
+      authorizedNames: new Set(["grep_files", "write_file"]),
+      visibleNames: new Set(["grep_files", "write_file"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async (call, context) => {
+        occurrences.push({
+          toolName: call.name,
+          occurrenceId: context?.effectOccurrenceId,
+        });
+        return { ok: true, tool: call.name };
+      },
+    });
+
+    await toolCalls.executeTool({
+      name: "grep_files",
+      args: { query: "fact", path: "." },
+      rawArguments: JSON.stringify({ query: "fact", path: "." }),
+    });
+    await toolCalls.executeTool({
+      name: "write_file",
+      args: writeArgs,
+      rawArguments: rawWrite,
+    });
+    await toolCalls.executeTool({
+      name: "write_file",
+      args: writeArgs,
+      rawArguments: rawWrite,
+    });
+
+    const reorderedCallId = digest([
+      "btcc-guided-tool-call.v1",
+      turn.turnId,
+      "1",
+      "write_file",
+      rawWrite,
+    ].join("\0"));
+    const newOccurrenceCallId = digest([
+      "btcc-guided-tool-call.v1",
+      turn.turnId,
+      "2",
+      "write_file",
+      rawWrite,
+    ].join("\0"));
+    expect(occurrences[1]).toEqual({
+      toolName: "write_file",
+      occurrenceId: prestartedCallId,
+    });
+    expect(occurrences[2]).toEqual({
+      toolName: "write_file",
+      occurrenceId: newOccurrenceCallId,
+    });
+    expect(fixture.stores.guidedToolJournal.find(prestartedCallId)?.status)
+      .toBe("completed");
+    expect(fixture.stores.guidedToolJournal.find(reorderedCallId)).toBeNull();
+    expect(fixture.stores.guidedToolJournal.find(newOccurrenceCallId)?.status)
+      .toBe("completed");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent turns provider failure into one fact-based final report", async () => {
   const fixture = createFixture("guided-fallback");
   try {
@@ -1148,6 +1249,32 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       turn: turnRecord(fixture.root, { turnId: "turn-command" }),
       signal: new AbortController().signal,
     })).route).toBe("assisted");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided agent gives a normally progressing Turn one operational lease", async () => {
+  const fixture = createFixture("guided-caller-boundary");
+  try {
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    const agent = fixture.agent(async (options) => {
+      observedSignal = options.signal;
+      return "요청을 정상적으로 마쳤습니다.";
+    });
+
+    const outcome = await agent.run({
+      turn: turnRecord(fixture.root, { turnId: "guided-caller-boundary-turn" }),
+      signal: controller.signal,
+    });
+
+    expect(observedSignal).not.toBe(controller.signal);
+    expect(observedSignal?.aborted).toBe(false);
+    expect(outcome).toEqual({
+      route: "direct",
+      content: "요청을 정상적으로 마쳤습니다.",
+    });
   } finally {
     fixture.close();
   }

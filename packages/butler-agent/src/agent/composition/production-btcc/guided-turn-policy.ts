@@ -20,6 +20,8 @@ import {
 } from "./durable-work-tools.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
   "./guided-project-ledger-effect.ts";
+import { workspacePagePreviewAvailabilityOverride } from
+  "../../tools/workspace-page-preview/index.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",
@@ -96,7 +98,10 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
   };
 }
 
-export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinition[] {
+export function authorizedToolDefinitions(
+  turn: TurnRecord,
+  env: NodeJS.ProcessEnv = process.env,
+): FunctionToolDefinition[] {
   const policy = guidedPolicy(turn);
   const requiredProfiles = new Set([
     ...policy.requiredNativeToolProfiles,
@@ -146,6 +151,9 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
     for (const name of names) {
       if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) names.delete(name);
     }
+  }
+  if (workspacePagePreviewAvailabilityOverride(env)) {
+    names.delete("inspect_workspace_page");
   }
   for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   const guidedLedgerEffects = new Set<string>(
@@ -204,7 +212,9 @@ export function visibleToolDefinitions(
           "project_ledger_work_complete",
         ]
       : []),
-    ...(policy.accessMode === "full_access" ? ["run_command", "write_file"] : []),
+    ...(policy.accessMode === "full_access"
+      ? ["run_command", "write_file", "inspect_workspace_page"]
+      : []),
   ]);
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
@@ -284,6 +294,7 @@ export function publicToolTitle(name: string): string {
   if (name === "web_search") return "웹 검색";
   if (name === "web_read") return "웹 문서 읽기";
   if (name === "read_file" || name === "grep_files") return "작업공간 확인";
+  if (name === "inspect_workspace_page") return "작업 화면 확인";
   if (name === "run_command") return "작업 실행";
   if (name.startsWith("project_ledger")) return "프로젝트 기록 확인";
   if (isDurableWorkTool(name)) return "작업 진행 기록";
