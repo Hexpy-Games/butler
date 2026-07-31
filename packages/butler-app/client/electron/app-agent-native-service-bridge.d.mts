@@ -42,3 +42,10 @@ export function listNativeServiceProjections(input: {
   pid: number | null;
   status: "online" | "offline" | "stale";
 }>;
+
+export function prepareAppManagedEmbedSocket(input: {
+  butlerData: string;
+  platform?: string;
+  socketRoot?: string;
+  uid?: number | null;
+}): string;

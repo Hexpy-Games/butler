@@ -4,8 +4,11 @@ import { showDesktopNotification } from "@/app/nativeNotifications.ts";
 import { isServerBackedSessionId } from "@/app/sessionIds.ts";
 import { useButlerStore } from "@/app/store.ts";
 import type { TimelineEvent } from "@/app/types.ts";
+import {
+  LIVE_EVENT_STABLE_CONNECTION_MS,
+  liveEventReconnectDelayMs,
+} from "./liveEventReconnect.ts";
 
-const RECONNECT_DELAY_MS = 1_000;
 const RECONCILE_SETTLE_MS = 100;
 const DESKTOP_NOTIFICATION_RECENT_WINDOW_MS = 60_000;
 const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
@@ -43,6 +46,14 @@ export function useLiveSessionEvents(): void {
     let unsubscribe: (() => void) | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
+    let stableConnectionTimer: ReturnType<typeof setTimeout> | undefined;
+    let consecutiveFailures = 0;
+
+    const markStreamHealthy = () => {
+      consecutiveFailures = 0;
+      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
+      stableConnectionTimer = undefined;
+    };
 
     const reconcileActiveSession = () => {
       if (reconcileTimer) clearTimeout(reconcileTimer);
@@ -57,16 +68,21 @@ export function useLiveSessionEvents(): void {
 
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
-      eventCursorRef.current = Math.max(
-        eventCursorRef.current,
-        Number(event.id ?? 0),
-      );
+      markStreamHealthy();
       if (event.type === "stream.reconcile_required") {
+        eventCursorRef.current = Math.max(
+          eventCursorRef.current,
+          Number(event.id ?? 0),
+        );
         reconcileActiveSession();
         return;
       }
       const state = useButlerStore.getState();
       state.applyTimelineEvents([event]);
+      eventCursorRef.current = Math.max(
+        eventCursorRef.current,
+        Number(event.id ?? 0),
+      );
       notifyDesktopEvent(event, notifiedMessageIdsRef, notifiedTurnIdsRef);
       if (isTerminalEventForSession(event, activeChatIdRef.current)) {
         reconcileActiveSession();
@@ -75,16 +91,30 @@ export function useLiveSessionEvents(): void {
 
     const connect = () => {
       if (cancelled) return;
-      unsubscribe = subscribeLiveEvents(
+      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
+      stableConnectionTimer = setTimeout(() => {
+        stableConnectionTimer = undefined;
+        consecutiveFailures = 0;
+      }, LIVE_EVENT_STABLE_CONNECTION_MS);
+      const nextUnsubscribe = subscribeLiveEvents(
         eventCursorRef.current,
         applyEvent,
         () => {
-          if (cancelled) return;
+          if (cancelled || reconnectTimer) return;
+          if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
+          stableConnectionTimer = undefined;
           unsubscribe?.();
-          reconcileActiveSession();
-          reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
+          unsubscribe = undefined;
+          const delayMs = liveEventReconnectDelayMs(consecutiveFailures);
+          consecutiveFailures += 1;
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = undefined;
+            connect();
+          }, delayMs);
         },
       );
+      if (reconnectTimer) nextUnsubscribe();
+      else unsubscribe = nextUnsubscribe;
     };
 
     connect();
@@ -93,6 +123,7 @@ export function useLiveSessionEvents(): void {
       unsubscribe?.();
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (reconcileTimer) clearTimeout(reconcileTimer);
+      if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
     };
   }, [shouldFollow]);
 }

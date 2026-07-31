@@ -2,10 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  closeSync,
   copyFileSync,
   existsSync,
   mkdirSync,
+  openSync,
   readlinkSync,
+  readSync,
   readdirSync,
   readFileSync,
   rmSync,
@@ -14,16 +17,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
 import {
   archiveTargetPath,
-  assertSafeExtractionTarget,
   managedRuntimeExecutablePath,
   managedRuntimeSourceExecutablePath,
   normalizeArchivePath,
   removeStaleRuntimeSiblingsSync,
   renameWithRetrySync,
-  safeArchiveSymlinkTarget,
 } from "./runtime-filesystem.mjs";
 
 export const APP_MANAGED_RUNTIME_SCHEMA = "butler.app-managed-agent-runtime.v1";
@@ -31,7 +31,7 @@ export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
   "butler.app-managed-agent-runtime-pointer.v1";
 export const APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA =
   "butler.app-managed-agent-runtime-update-transaction.v1";
-const maxAgentArchiveUncompressedBytes = 2 * 1024 * 1024 * 1024;
+const sha256ReadBufferBytes = 1024 * 1024;
 
 export function appManagedAgentPointerPath(butlerData) {
   return join(butlerData, "app", "runtime", "agent", "current.json");
@@ -430,6 +430,7 @@ export function prepareAppManagedAgentRuntime({
     artifactPath,
     artifactDigest: digest,
     managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
+    resourceRoot: root,
   };
 
   const runtimeHome = join(butlerData, runtimeHomeLabel);
@@ -1205,7 +1206,12 @@ function runtimeHomeReadinessIssue(
   }
   if (
     !freshlyExtracted &&
-    !archiveFilesInstalled(expected.artifactPath, runtimeHome, platform)
+    !archiveFilesInstalled(
+      expected.artifactPath,
+      runtimeHome,
+      platform,
+      expected.resourceRoot,
+    )
   ) {
     return "bundled Agent payload files mismatch";
   }
@@ -1331,19 +1337,17 @@ function archiveFilesInstalled(
   artifactPath,
   runtimeHome,
   platform = process.platform,
+  resourceRoot = null,
 ) {
   if (platform === "win32") {
     return windowsArchiveFilesInstalled(artifactPath, runtimeHome);
   }
-  for (const entry of parseTarGz(artifactPath)) {
-    if (entry.type !== "file") continue;
-    if (isManagedRuntimeArchivePath(entry.name)) continue;
-    const target = join(runtimeHome, entry.name);
-    if (!isFile(target) || sha256File(target) !== sha256Bytes(entry.data)) {
-      return false;
-    }
-  }
-  return true;
+  return posixArchiveFilesInstalled(
+    artifactPath,
+    runtimeHome,
+    platform,
+    resourceRoot,
+  );
 }
 
 function isManagedRuntimeArchivePath(entryName) {
@@ -1366,33 +1370,62 @@ function extractAgentArchive(
       resourceRoot,
     );
   }
-  let hasLauncher = false;
-  for (const entry of parseTarGz(artifactPath)) {
-    const normalized = normalizeArchivePath(entry.name, platform);
-    if (!normalized) continue;
-    if (entry.type === "directory") {
-      const directory = archiveTargetPath(runtimeHome, normalized, platform);
-      assertSafeExtractionTarget(runtimeHome, directory, { platform });
-      mkdirSync(directory, { recursive: true });
-      continue;
-    }
-    const target = archiveTargetPath(runtimeHome, normalized, platform);
-    assertSafeExtractionTarget(runtimeHome, target, { platform });
-    mkdirSync(dirname(target), { recursive: true });
-    if (entry.type === "symlink") {
-      const linkTarget = safeArchiveSymlinkTarget(
-        runtimeHome,
-        target,
-        entry.linkName,
-        platform,
-      );
-      symlinkSync(linkTarget, target);
-      continue;
-    }
-    writeFileSync(target, entry.data, { mode: entry.mode || 0o644 });
-    if (normalized === "bin/butler.js") hasLauncher = true;
+  return extractPosixAgentArchive(
+    artifactPath,
+    runtimeHome,
+    resourceRoot,
+    platform,
+  );
+}
+
+function extractPosixAgentArchive(
+  artifactPath,
+  runtimeHome,
+  resourceRoot,
+  platform,
+) {
+  if (!resourceRoot) {
+    throw new Error("POSIX bundled Agent extraction is missing its runtime resource");
   }
-  return { hasLauncher };
+  const runtimeExecutable = managedRuntimeSourceExecutablePath(
+    resourceRoot,
+    platform,
+  );
+  const worker = join(
+    resourceRoot,
+    "runtime",
+    "posix-archive-worker.mjs",
+  );
+  const inventoryPath = agentArchiveInventoryPath(runtimeHome);
+  if (!isFile(runtimeExecutable) || !isFile(worker)) {
+    throw new Error("POSIX bundled Agent extraction worker is missing");
+  }
+  const result = spawnSync(
+    runtimeExecutable,
+    [worker, artifactPath, runtimeHome, inventoryPath],
+    {
+      encoding: "utf8",
+      shell: false,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `bundled Agent artifact extraction failed: ${String(result.stderr || result.stdout).trim().slice(-4000)}`,
+    );
+  }
+  const inventory = readJson(inventoryPath);
+  if (
+    inventory?.schema !== "butler.posix-agent-archive-inventory.v1" ||
+    inventory?.rawTextIncluded !== false ||
+    !Array.isArray(inventory?.files)
+  ) {
+    throw new Error("POSIX bundled Agent extraction inventory is invalid");
+  }
+  if (inventory?.hasLauncher !== true) {
+    throw new Error("bundled Agent artifact is missing bin/butler.js");
+  }
+  return { hasLauncher: true };
 }
 
 function extractWindowsAgentArchive(artifactPath, runtimeHome, resourceRoot) {
@@ -1408,7 +1441,7 @@ function extractWindowsAgentArchive(artifactPath, runtimeHome, resourceRoot) {
     "runtime",
     "windows-archive-worker.mjs",
   );
-  const inventoryPath = windowsArchiveInventoryPath(runtimeHome);
+  const inventoryPath = agentArchiveInventoryPath(runtimeHome);
   if (!isFile(runtimeExecutable) || !isFile(worker)) {
     throw new Error("Windows bundled Agent extraction worker is missing");
   }
@@ -1443,7 +1476,7 @@ function extractWindowsAgentArchive(artifactPath, runtimeHome, resourceRoot) {
 function windowsArchiveFilesInstalled(artifactPath, runtimeHome) {
   let inventory;
   try {
-    inventory = readJson(windowsArchiveInventoryPath(runtimeHome));
+    inventory = readJson(agentArchiveInventoryPath(runtimeHome));
   } catch {
     return false;
   }
@@ -1472,123 +1505,49 @@ function windowsArchiveFilesInstalled(artifactPath, runtimeHome) {
   return true;
 }
 
-function windowsArchiveInventoryPath(runtimeHome) {
-  return join(runtimeHome, ".butler-agent-archive-inventory.json");
-}
-
-function parseTarGz(artifactPath) {
+function posixArchiveFilesInstalled(
+  artifactPath,
+  runtimeHome,
+  platform = process.platform,
+  resourceRoot = null,
+) {
+  if (!resourceRoot) return false;
+  const runtimeExecutable = managedRuntimeSourceExecutablePath(
+    resourceRoot,
+    platform,
+  );
+  const worker = join(
+    resourceRoot,
+    "runtime",
+    "posix-archive-worker.mjs",
+  );
+  if (!isFile(runtimeExecutable) || !isFile(worker)) return false;
+  const result = spawnSync(
+    runtimeExecutable,
+    [
+      worker,
+      artifactPath,
+      runtimeHome,
+      agentArchiveInventoryPath(runtimeHome),
+      "verify",
+    ],
+    {
+      encoding: "utf8",
+      shell: false,
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  if (result.status !== 0) return false;
   try {
-    return parseTarBuffer(
-      gunzipSync(readFileSync(artifactPath), {
-        maxOutputLength: maxAgentArchiveUncompressedBytes,
-      }),
-    );
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.startsWith("bundled Agent artifact")
-    ) {
-      throw error;
-    }
-    throw new Error("bundled Agent artifact extraction failed", {
-      cause: error,
-    });
+    const verification = JSON.parse(result.stdout.trim());
+    return verification?.ok === true && verification?.verified === true;
+  } catch {
+    return false;
   }
 }
 
-function parseTarBuffer(buffer) {
-  const entries = [];
-  let offset = 0;
-  let nextPath = null;
-  let nextLinkPath = null;
-  while (offset + 512 <= buffer.length) {
-    const header = buffer.subarray(offset, offset + 512);
-    offset += 512;
-    if (header.every((byte) => byte === 0)) break;
-
-    const size = parseOctal(header.subarray(124, 136));
-    const typeFlag = String.fromCharCode(header[156] || 0);
-    const data = buffer.subarray(offset, offset + size);
-    offset += Math.ceil(size / 512) * 512;
-
-    if (typeFlag === "L") {
-      nextPath = trimNull(data.toString("utf8"));
-      continue;
-    }
-    if (typeFlag === "x" || typeFlag === "g") {
-      const pax = parsePax(data);
-      if (typeFlag === "x" && typeof pax.path === "string") {
-        nextPath = pax.path;
-      }
-      if (typeFlag === "x" && typeof pax.linkpath === "string") {
-        nextLinkPath = pax.linkpath;
-      }
-      continue;
-    }
-
-    const name = nextPath ?? tarHeaderPath(header);
-    const linkName =
-      nextLinkPath ?? trimNull(header.subarray(157, 257).toString("utf8"));
-    nextPath = null;
-    nextLinkPath = null;
-    const normalized = normalizeArchivePath(name);
-    if (!normalized) continue;
-    if (normalized.startsWith("/") || normalized.split("/").includes("..")) {
-      throw new Error("bundled Agent artifact contains an unsafe path");
-    }
-    if (
-      typeFlag !== "0" &&
-      typeFlag !== "\0" &&
-      typeFlag !== "" &&
-      typeFlag !== "5" &&
-      typeFlag !== "2"
-    ) {
-      throw new Error("bundled Agent artifact contains an unsafe entry type");
-    }
-    entries.push({
-      name: normalized,
-      type:
-        typeFlag === "5" ? "directory" : typeFlag === "2" ? "symlink" : "file",
-      linkName,
-      mode: parseOctal(header.subarray(100, 108)),
-      data,
-    });
-  }
-  return entries;
-}
-
-function tarHeaderPath(header) {
-  const name = trimNull(header.subarray(0, 100).toString("utf8"));
-  const prefix = trimNull(header.subarray(345, 500).toString("utf8"));
-  return prefix ? `${prefix}/${name}` : name;
-}
-
-function parseOctal(bytes) {
-  const text = trimNull(bytes.toString("utf8")).trim();
-  return text ? Number.parseInt(text, 8) : 0;
-}
-
-function parsePax(data) {
-  const result = {};
-  let cursor = 0;
-  const text = data.toString("utf8");
-  while (cursor < text.length) {
-    const space = text.indexOf(" ", cursor);
-    if (space < 0) break;
-    const length = Number.parseInt(text.slice(cursor, space), 10);
-    if (!Number.isFinite(length) || length <= 0) break;
-    const record = text.slice(space + 1, cursor + length - 1);
-    const equals = record.indexOf("=");
-    if (equals > 0) {
-      result[record.slice(0, equals)] = record.slice(equals + 1);
-    }
-    cursor += length;
-  }
-  return result;
-}
-
-function trimNull(value) {
-  return value.replace(/\0.*$/u, "");
+function agentArchiveInventoryPath(runtimeHome) {
+  return join(runtimeHome, ".butler-agent-archive-inventory.json");
 }
 
 function isFile(path) {
@@ -1600,15 +1559,23 @@ function isFile(path) {
 }
 
 function sha256File(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  const hash = createHash("sha256");
+  const buffer = Buffer.allocUnsafe(sha256ReadBufferBytes);
+  const descriptor = openSync(path, "r");
+  try {
+    let bytesRead;
+    do {
+      bytesRead = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (bytesRead > 0) hash.update(buffer.subarray(0, bytesRead));
+    } while (bytesRead > 0);
+  } finally {
+    closeSync(descriptor);
+  }
+  return hash.digest("hex");
 }
 
 function sha256Text(value) {
   return createHash("sha256").update(String(value)).digest("hex");
-}
-
-function sha256Bytes(bytes) {
-  return createHash("sha256").update(bytes).digest("hex");
 }
 
 function sha256Directory(path) {

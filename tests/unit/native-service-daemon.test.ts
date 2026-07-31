@@ -149,6 +149,8 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
   const previousAuth = process.env.BUTLER_APP_LOCAL_AUTH_FILE;
   const previousPort = process.env.BUTLER_APP_SERVER_PORT;
   const previousAppVersion = process.env.BUTLER_APP_VERSION;
+  const previousEmbedSocket = process.env.EMBED_SOCKET;
+  const previousEmbedHealthPort = process.env.EMBED_HEALTH_PORT;
   let spawnedEnv: Record<string, string> | null = null;
   try {
     const runtimeHomeLabel = join("app", "runtime", "agent", "versions", "9.9.9");
@@ -180,6 +182,8 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
     process.env.BUTLER_APP_LOCAL_AUTH_FILE = localAuthFile;
     process.env.BUTLER_APP_SERVER_PORT = "19123";
     process.env.BUTLER_APP_VERSION = "2.3.4";
+    process.env.EMBED_SOCKET = "/tmp/butler-embed-daemon-test.sock";
+    process.env.EMBED_HEALTH_PORT = "0";
 
     const specs = defaultDaemonServiceSpecs({
       butlerHome: "/standalone/ignored",
@@ -192,6 +196,8 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
       BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
       BUTLER_APP_SERVER_PORT: "19123",
       BUTLER_APP_VERSION: "2.3.4",
+      EMBED_SOCKET: "/tmp/butler-embed-daemon-test.sock",
+      EMBED_HEALTH_PORT: "0",
     });
 
     const daemon = new ManagedServiceDaemon({
@@ -209,6 +215,8 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
       BUTLER_APP_LOCAL_AUTH_FILE: localAuthFile,
       BUTLER_APP_SERVER_PORT: "19123",
       BUTLER_APP_VERSION: "2.3.4",
+      EMBED_SOCKET: "/tmp/butler-embed-daemon-test.sock",
+      EMBED_HEALTH_PORT: "0",
     });
     const state = JSON.parse(readFileSync(serviceStatePath(butlerData, "app-gateway"), "utf8"));
     expect(state.runtime).toMatchObject({
@@ -226,6 +234,10 @@ test("foreground daemon uses App-managed specs when runtime pointer env is prese
     else process.env.BUTLER_APP_SERVER_PORT = previousPort;
     if (previousAppVersion === undefined) delete process.env.BUTLER_APP_VERSION;
     else process.env.BUTLER_APP_VERSION = previousAppVersion;
+    if (previousEmbedSocket === undefined) delete process.env.EMBED_SOCKET;
+    else process.env.EMBED_SOCKET = previousEmbedSocket;
+    if (previousEmbedHealthPort === undefined) delete process.env.EMBED_HEALTH_PORT;
+    else process.env.EMBED_HEALTH_PORT = previousEmbedHealthPort;
     rmSync(butlerData, { recursive: true, force: true });
   }
 });

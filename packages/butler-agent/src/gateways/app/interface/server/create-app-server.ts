@@ -42,6 +42,7 @@ export function createAppServerFromTestComposition(
   testComposition: {
     responder?: AppMessageResponder;
     responderTimeoutMs?: number;
+    serverIdleTimeoutSeconds?: number;
   },
 ): AppServerHandle {
   return createComposedAppServer(options, testComposition);
@@ -52,6 +53,7 @@ function createComposedAppServer(
   composition: {
     responder?: AppMessageResponder;
     responderTimeoutMs?: number;
+    serverIdleTimeoutSeconds?: number;
   },
 ): AppServerHandle {
   const ownedConversationReader = createOwnedConversationReader(options);
@@ -68,12 +70,16 @@ function createComposedAppServer(
   const devCorsPolicy = normalizeDevCorsPolicy(options.devCorsOrigin);
   const localAuth = normalizeLocalAuth(options.localAuth);
   const uiRoot = resolveUiRoot(options);
+  const serverShutdownController = new AbortController();
   let automationSchedulerRunning = false;
 
   const server = Bun.serve({
     port: options.port ?? 18765,
     hostname: options.hostname ?? "127.0.0.1",
-    async fetch(request) {
+    ...(composition.serverIdleTimeoutSeconds === undefined
+      ? {}
+      : { idleTimeout: composition.serverIdleTimeoutSeconds }),
+    async fetch(request, bunServer) {
       const corsHeaders = devCorsHeaders(request, devCorsPolicy);
       if (isCorsPreflight(request, corsHeaders)) {
         return corsPreflightResponse(corsHeaders);
@@ -88,6 +94,10 @@ function createComposedAppServer(
           messageRateLimiter,
           localAuth,
           butlerData,
+          serverShutdownSignal: serverShutdownController.signal,
+          setRequestIdleTimeout(seconds) {
+            bunServer.timeout(request, seconds);
+          },
         });
         return withExtraHeaders(response, corsHeaders);
       } catch (error) {
@@ -112,6 +122,7 @@ function createComposedAppServer(
     store,
     stop() {
       if (automationScheduler) clearInterval(automationScheduler);
+      serverShutdownController.abort();
       server.stop();
       store.close();
       ownedConversationReader?.close();

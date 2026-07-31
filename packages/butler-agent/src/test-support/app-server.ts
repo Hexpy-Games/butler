@@ -8,14 +8,21 @@ import {
 export type CreateTestAppServerOptions = CreateAppServerOptions & {
   responder?: AppMessageResponder;
   responderTimeoutMs?: number;
+  serverIdleTimeoutSeconds?: number;
 };
 
 export function createTestAppServer(
   options: CreateTestAppServerOptions = {},
 ): AppServerHandle {
-  const { responder, responderTimeoutMs, ...serverOptions } = options;
+  const {
+    responder,
+    responderTimeoutMs,
+    serverIdleTimeoutSeconds,
+    ...serverOptions
+  } = options;
   return createAppServerFromTestComposition(serverOptions, {
     responder,
     responderTimeoutMs,
+    serverIdleTimeoutSeconds,
   });
 }
