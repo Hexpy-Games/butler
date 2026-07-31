@@ -4,6 +4,7 @@ import {
   type GuidedTurnAgent,
   type GuidedTurnResult,
 } from "../../btcc/index.ts";
+import { acceptedPlanEffectId } from "../../btcc/effects/index.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import type {
   SqliteGuidedEffectJournal,
@@ -46,7 +47,12 @@ import {
   createGuidedWorkspaceFileEffectAdapter,
   workspaceFileEffectTarget,
 } from "./guided-workspace-file-effect.ts";
-import { renderDurableWorkContext } from "./durable-work-tools.ts";
+import { prepareGuidedWorkspaceFileEdit } from
+  "./guided-workspace-file-edit-effect.ts";
+import {
+  isDurableWorkTool,
+  renderDurableWorkContext,
+} from "./durable-work-tools.ts";
 import {
   backfillTurnToolResults,
   safeImportOpenLegacyWork,
@@ -137,14 +143,46 @@ export function createProductionGuidedTurnAgent(input: {
             originalRequest: turn.originalMessage,
             signal,
           }),
-          resolvePersistentEffect(call, executeRegistered) {
+          async resolvePersistentEffect(
+            call,
+            executeRegistered,
+            effectContext,
+          ) {
+            if (call.name === "edit_file") {
+              const planRevisionId =
+                effectContext.work.currentPlan?.planRevisionId;
+              const prior = planRevisionId && effectContext.occurrenceId
+                ? input.effectJournal.find(acceptedPlanEffectId({
+                    workId: effectContext.work.workId,
+                    planRevisionId,
+                    capability: "edit_file",
+                    occurrenceId: effectContext.occurrenceId,
+                  }))
+                : null;
+              const prepared = await prepareGuidedWorkspaceFileEdit({
+                args: call.args,
+                workspacePath: policy.workspacePath,
+                butlerData: input.butlerData,
+                ...(prior ? { priorInputSha256: prior.inputSha256 } : {}),
+                executeEditFile: async (preparedInput) => executeRegistered({
+                  args: preparedInput,
+                  rawArguments: JSON.stringify(preparedInput),
+                }),
+              });
+              return prepared.ok ? prepared.effect : { error: prepared.error };
+            }
             if (call.name === "write_file") {
               const adapter = createGuidedWorkspaceFileEffectAdapter({
                 workspacePath: policy.workspacePath,
                 butlerData: input.butlerData,
-                executeWriteFile: async () => executeRegistered(),
+                executeWriteFile: async (preparedInput) => executeRegistered({
+                  args: preparedInput,
+                  rawArguments: JSON.stringify(preparedInput),
+                }),
               });
-              const normalizedInput = adapter.normalizeInput(call.args);
+              const normalizedInput = adapter.normalizeInput(
+                withoutRuntimeOwnedHash(call.args),
+              );
               return {
                 target: workspaceFileEffectTarget(normalizedInput.path),
                 input: normalizedInput,
@@ -265,9 +303,17 @@ export function createProductionGuidedTurnAgent(input: {
         content: text,
         route: routeForUsedTools(
           toolCalls.usedTools,
-          Boolean(await safeBoundWork(input.durableWork, turn.turnId)),
+          Boolean(await safeBoundWork(input.durableWork, turn.turnId)) ||
+            toolCalls.usedTools.some(isDurableWorkTool),
         ),
       };
     },
   };
+}
+
+function withoutRuntimeOwnedHash(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { expected_sha256: _runtimeOwned, ...modelInput } =
+    value as Record<string, unknown>;
+  return modelInput;
 }

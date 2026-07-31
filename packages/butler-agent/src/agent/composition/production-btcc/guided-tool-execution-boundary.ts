@@ -1,9 +1,11 @@
 import type {
   EffectAdapter,
+  EffectAdapterError,
   GuidedEffectAccessMode,
   GuidedEffectService,
 } from "../../btcc/effects/index.ts";
 import type {
+  DurableWorkView,
   DurableWorkService,
   WorkTurnScope,
 } from "../../btcc/durable-work/index.ts";
@@ -18,6 +20,15 @@ export type GuidedPersistentEffectRequest = {
   adapter: EffectAdapter<unknown, unknown>;
 };
 
+export type GuidedPersistentEffectResolution =
+  | GuidedPersistentEffectRequest
+  | { error: EffectAdapterError };
+
+export type GuidedPersistentEffectContext = {
+  work: DurableWorkView;
+  occurrenceId?: string;
+};
+
 export function createGuidedToolExecutionBoundary(input: {
   durableWork: DurableWorkService;
   workScope: WorkTurnScope;
@@ -27,8 +38,15 @@ export function createGuidedToolExecutionBoundary(input: {
   executeCommand(call: ButlerToolCall): Promise<unknown>;
   resolvePersistentEffect(
     call: ButlerToolCall,
-    execute: () => Promise<unknown>,
-  ): GuidedPersistentEffectRequest | null;
+    execute: (prepared?: {
+      args: ButlerToolCall["args"];
+      rawArguments?: ButlerToolCall["rawArguments"];
+    }) => Promise<unknown>,
+    context: GuidedPersistentEffectContext,
+  ):
+    | GuidedPersistentEffectResolution
+    | null
+    | Promise<GuidedPersistentEffectResolution | null>;
 }): ButlerToolExecutionBoundary {
   return async ({ call, context, definition, execute }) => {
     if (definition.effectBoundary === "none" ||
@@ -40,8 +58,6 @@ export function createGuidedToolExecutionBoundary(input: {
       if (call.name === "run_command") return input.executeCommand(call);
       return unavailableEffect(call.name);
     }
-    const request = input.resolvePersistentEffect(call, execute);
-    if (!request) return unavailableEffect(call.name);
     const work = await loadEffectWork(input.durableWork, input.workScope);
     if (!work) {
       return ordinaryEffectError(
@@ -49,6 +65,20 @@ export function createGuidedToolExecutionBoundary(input: {
         "Create concise Work, record its Plan Review, then retry this persistent effect.",
       );
     }
+    const resolution = await input.resolvePersistentEffect(call, execute, {
+      work,
+      ...(context.effectOccurrenceId
+        ? { occurrenceId: context.effectOccurrenceId }
+        : {}),
+    });
+    if (!resolution) return unavailableEffect(call.name);
+    if ("error" in resolution) {
+      return ordinaryEffectError(
+        resolution.error.code,
+        resolution.error.message,
+      );
+    }
+    const request = resolution;
     const outcome = await input.effectService.execute({
       work,
       accessMode: input.accessMode,

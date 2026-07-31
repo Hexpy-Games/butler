@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import type { GuidedEffectIdentity } from "./contracts.ts";
 
+export const ACCEPTED_PLAN_EFFECT_ACTION_KEY = "accepted-plan";
+
 type EffectIdentityInput = {
   workId: string;
   planRevisionId: string;
@@ -49,7 +51,14 @@ export function createGuidedEffectIdentity(
       capability: input.capability,
       targetSha256,
     };
-  const slotSha256 = digest(stableEffectJson(slotBody));
+  const effectId = occurrenceSha256
+    ? acceptedPlanEffectId({
+        workId: input.workId,
+        planRevisionId: input.planRevisionId,
+        capability: input.capability,
+        occurrenceId: requiredOccurrenceId(input.occurrenceId),
+      })
+    : `guided-effect-${digest(stableEffectJson(slotBody))}`;
   const identitySha256 = digest(stableEffectJson(identityBody));
   const requestSha256 = digest(stableEffectJson({
     capability: input.capability,
@@ -57,7 +66,7 @@ export function createGuidedEffectIdentity(
     normalizedInput: input.normalizedInput,
   }));
   return {
-    effectId: `guided-effect-${slotSha256}`,
+    effectId,
     receiptId: `guided-effect-receipt-${identitySha256}`,
     idempotencyKey: `guided-effect-idempotency-${identitySha256}`,
     identitySha256,
@@ -70,6 +79,23 @@ export function createGuidedEffectIdentity(
     capability: input.capability,
     sanitizedTarget: input.sanitizedTarget,
   };
+}
+
+export function acceptedPlanEffectId(input: {
+  workId: string;
+  planRevisionId: string;
+  capability: string;
+  occurrenceId: string;
+}): string {
+  const slotBody = {
+    version: 1,
+    workId: input.workId,
+    planRevisionId: input.planRevisionId,
+    actionKey: ACCEPTED_PLAN_EFFECT_ACTION_KEY,
+    capability: input.capability,
+    occurrenceSha256: digest(requiredOccurrenceId(input.occurrenceId)),
+  };
+  return `guided-effect-${digest(stableEffectJson(slotBody))}`;
 }
 
 function requiredOccurrenceId(value: string | undefined): string {

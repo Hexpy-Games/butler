@@ -29,6 +29,7 @@ const TOOL_PROGRESS_KIND_BY_TOOL_NAME: Record<string, ToolProgressSummary["kind"
   create_work_orchestration: "dispatch",
   delete_automation: "edited",
   dispatch_worker: "dispatch",
+  edit_file: "edited",
   get_task_result: "read",
   get_work_dashboard: "read",
   grep_files: "searched",

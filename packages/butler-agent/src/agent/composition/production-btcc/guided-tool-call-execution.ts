@@ -1,5 +1,6 @@
 import {
   digest,
+  stableJson,
   type BtccTurnProgressObserver,
   type DurableWorkService,
   type TurnRecord,
@@ -73,7 +74,7 @@ export function createGuidedToolCallExecutor(
       input.turn.turnId,
       String(callIndex++),
       call.name,
-      call.rawArguments,
+      stableJson(call.args),
     ].join("\0"));
     const exactRecord = input.toolJournal.find(computedCallId);
     let callId = computedCallId;
@@ -82,7 +83,7 @@ export function createGuidedToolCallExecutor(
     } else {
       callId = resumePool.claim(
         effectiveToolName,
-        call.rawArguments,
+        call.args,
       ) ?? computedCallId;
     }
     usedTools.push(effectiveToolName);
@@ -201,7 +202,7 @@ export function createGuidedToolCallExecutor(
 }
 
 type GuidedToolResumePool = {
-  claim(toolName: string, rawArguments: string): string | undefined;
+  claim(toolName: string, args: Record<string, unknown>): string | undefined;
   discard(callId: string): void;
 };
 
@@ -213,16 +214,16 @@ function createGuidedToolResumePool(
   for (const record of records) {
     const signature = guidedToolResumeSignature(
       record.toolName,
-      record.rawArguments,
+      record.arguments,
     );
     const calls = callsBySignature.get(signature) ?? [];
     calls.push(record.callId);
     callsBySignature.set(signature, calls);
   }
   return {
-    claim(toolName, rawArguments) {
+    claim(toolName, args) {
       const calls = callsBySignature.get(
-        guidedToolResumeSignature(toolName, rawArguments),
+        guidedToolResumeSignature(toolName, args),
       );
       while (calls?.length) {
         const callId = calls.shift()!;
@@ -239,9 +240,9 @@ function createGuidedToolResumePool(
 
 function guidedToolResumeSignature(
   toolName: string,
-  rawArguments: string,
+  args: Record<string, unknown>,
 ): string {
-  return JSON.stringify([toolName, rawArguments]);
+  return stableJson([toolName, args]);
 }
 
 async function denyUnauthorizedTool(

@@ -1,4 +1,5 @@
 const PUBLIC_OPERATION_TITLES: Readonly<Record<string, string>> = {
+  edit_file: "수정: 계획한 파일 변경을 적용 중",
   grep_files: "검색: 관련 구현을 찾는 중",
   list_files: "조회: 관련 파일 목록을 확인 중",
   project_ledger_read: "조회: 작업 원장을 확인 중",

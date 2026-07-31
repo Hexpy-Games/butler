@@ -58,7 +58,7 @@ export function nativeBridgeAvailability(input: {
     return {
       enabled: false,
       disabledReason: "Project Ledger mutation tools require a Ledger-tracked project turn with mutation tools in the current native surface.",
-      recoveryHint: "Use or resume a project turn whose runtime policy has tracking_mode=ledger. Do not mutate Project Ledger records through run_command or write_file.",
+      recoveryHint: "Use or resume a project turn whose runtime policy has tracking_mode=ledger. Do not mutate Project Ledger records through run_command, write_file, or edit_file.",
     };
   }
   if (input.metadata.tags.includes("project-ledger") && currentToolNames.has("project_ledger_status")) {

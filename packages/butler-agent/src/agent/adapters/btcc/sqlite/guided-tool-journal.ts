@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { digest } from "./identity.ts";
+import { digest, stableJson } from "./identity.ts";
 
 export type GuidedToolJournalRecord = {
   callId: string;
@@ -33,7 +33,7 @@ export class SqliteGuidedToolJournal {
     rawArguments: string;
     arguments: Record<string, unknown>;
   }): void {
-    const argumentsJson = json(input.arguments);
+    const argumentsJson = stableJson(input.arguments);
     this.db.query(`
       INSERT OR IGNORE INTO btcc_guided_tool_calls (
         call_id, turn_id, tool_name, raw_arguments, arguments_json,
@@ -56,8 +56,11 @@ export class SqliteGuidedToolJournal {
       SELECT turn_id, tool_name, raw_arguments, arguments_json
       FROM btcc_guided_tool_calls WHERE call_id = ?
     `).get(input.callId);
+    const currentArgumentsJson = current
+      ? stableJson(JSON.parse(current.arguments_json) as unknown)
+      : null;
     if (!current || current.turn_id !== input.turnId || current.tool_name !== input.toolName ||
-      current.raw_arguments !== input.rawArguments || current.arguments_json !== argumentsJson) {
+      currentArgumentsJson !== argumentsJson) {
       throw new Error("Guided tool call identity conflict");
     }
   }

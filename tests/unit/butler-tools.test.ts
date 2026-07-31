@@ -78,6 +78,7 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "run_command",
   "read_file",
   "write_file",
+  "edit_file",
   "grep_files",
   "project_ledger_status",
   "project_ledger_list",
@@ -728,6 +729,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "run_command",
     "read_file",
     "write_file",
+    "edit_file",
     "grep_files",
     "inspect_workspace_page",
     ...projectLedgerToolNames,
@@ -770,6 +772,7 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_read")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "transform_public_data_table")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "run_command")?.concurrencySafe).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "edit_file")?.concurrencySafe).toBe(false);
   for (const name of projectLedgerToolNames) {
     expect(BUTLER_TOOLS.find((tool) => tool.name === name)).toBeDefined();
   }
@@ -928,7 +931,7 @@ test("Butler tool executor dispatch is registry-based instead of a call-name if-
   const executorSource = source.slice(source.indexOf("export function createButlerToolExecutor("));
   expect(executorSource).toContain("createButlerToolExecutorRegistry");
   expect(executorSource).toContain("executeRegisteredButlerTool(");
-  expect(executorSource).toContain("toolExecutorRef.current!,\n      call,\n      context,");
+  expect(executorSource).toContain("toolExecutorRef.current!,\n      prepared");
   expect(executorSource).toContain("input.executionBoundary");
   expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
 });
@@ -1042,7 +1045,7 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(24_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(25_500);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -3004,7 +3007,7 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
 });
 
 test("workspace file tool schemas keep the runtime-owned root out of model arguments", () => {
-  for (const name of ["grep_files", "read_file", "write_file"]) {
+  for (const name of ["grep_files", "read_file", "write_file", "edit_file"]) {
     const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
     expect(tool).toBeDefined();
     expect(tool?.parameters.properties).not.toHaveProperty("workspace_root");

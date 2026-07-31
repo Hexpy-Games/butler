@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord } from
@@ -9,7 +15,10 @@ import {
   createGuidedTurnRuntime,
   type BtccRunCommand,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
-import { digest } from "../../packages/butler-agent/src/agent/btcc/identity.ts";
+import {
+  digest,
+  stableJson,
+} from "../../packages/butler-agent/src/agent/btcc/identity.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
@@ -79,12 +88,16 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
 
     let visibleNames: string[] = [];
     let writeFileSchema = "";
+    let editFileSchema = "";
     let instructions = "";
     let maxToolRounds = 0;
     const projectAgent = fixture.agent(async (options) => {
       visibleNames = options.tools.map((tool) => tool.name);
       writeFileSchema = JSON.stringify(
         options.tools.find((tool) => tool.name === "write_file")?.parameters,
+      );
+      editFileSchema = JSON.stringify(
+        options.tools.find((tool) => tool.name === "edit_file")?.parameters,
       );
       instructions = options.instructions ?? "";
       maxToolRounds = options.maxToolRounds ?? 0;
@@ -100,7 +113,9 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
       signal: new AbortController().signal,
     });
     expect(visibleNames).toContain("write_file");
+    expect(visibleNames).toContain("edit_file");
     expect(writeFileSchema).not.toContain("expected_sha256");
+    expect(editFileSchema).not.toContain("expected_sha256");
     expect(visibleNames).toContain("project_ledger_status");
     expect(visibleNames).toContain("project_ledger_list");
     expect(visibleNames).not.toContain("project_ledger_show");
@@ -424,6 +439,7 @@ test("Guided agent legacy fallback never grants full access without an admitted 
     await agent.run({ turn, signal: new AbortController().signal });
     expect(names).not.toContain("run_command");
     expect(names).not.toContain("write_file");
+    expect(names).not.toContain("edit_file");
     expect(prompt).toContain("access: read_only");
   } finally {
     fixture.close();
@@ -910,6 +926,95 @@ test("direct and tool_call file mutations use the same reviewed effect gate", as
   }
 });
 
+test("Guided agent applies a small edit through the reviewed durable effect", async () => {
+  const fixture = createFixture("guided-edit-file");
+  try {
+    writeFileSync(
+      join(fixture.root, "styles.css"),
+      "body {\n  overflow-x: auto;\n}\n",
+    );
+    const results: unknown[] = [];
+    let editResult: unknown;
+    const agent = fixture.agent(async (options) => {
+      const call = async (name: string, args: Record<string, unknown>) => {
+        const result = await options.executeTool({
+          name,
+          args,
+          rawArguments: JSON.stringify(args),
+        });
+        results.push(result);
+        return result;
+      };
+      await call("replace_work_plan", {
+        objective: "Correct the visible horizontal overflow",
+        actions: [{
+          action_key: "correct-style",
+          description: "Make the requested contained workspace correction",
+          effect: {
+            capability: "workspace mutation",
+            target: "workspace:requested-source-change",
+          },
+        }],
+        checks: ["The resulting stylesheet contains the requested correction"],
+      });
+      await call("record_work_review", {
+        subject: "plan",
+        verdict: "accept",
+        summary: "The small contained correction matches the request.",
+      });
+      editResult = await call("edit_file", {
+        path: "styles.css",
+        start_line: 2,
+        old_text: "  overflow-x: auto;\n",
+        new_text: "  overflow-x: hidden;\n",
+        expected_sha256: "0".repeat(64),
+      });
+      await call("record_work_review", {
+        subject: "result",
+        verdict: "accept",
+        summary: "The requested stylesheet correction is present.",
+      });
+      return "가로 넘침 수정을 완료했습니다.";
+    });
+    const turnId = "turn-guided-edit-file";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    expect(await runtime.runTurn(localRunCommand(fixture.root, turnId)))
+      .toMatchObject({
+      kind: "delivered",
+      content: "가로 넘침 수정을 완료했습니다.",
+    });
+    for (const result of results) expect(result).toMatchObject({ ok: true });
+    expect(editResult).toMatchObject({
+      ok: true,
+      effect_receipt: {
+        capability: "edit_file",
+        target: "workspace:styles.css",
+      },
+    });
+    expect(readFileSync(join(fixture.root, "styles.css"), "utf8"))
+      .toBe("body {\n  overflow-x: hidden;\n}\n");
+    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+    expect(work?.status).toBe("completed");
+    expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
+      .toEqual([
+        expect.objectContaining({
+          capability: "edit_file",
+          sanitizedTarget: "workspace:styles.css",
+          status: "applied",
+        }),
+      ]);
+    expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent renders CSV text once and passes image attachments to the provider", async () => {
   const fixture = createFixture("guided-attachments");
   try {
@@ -1073,7 +1178,7 @@ test("Guided agent replays completed tool results and fences uncertain mutations
       mutationTurn.turnId,
       "0",
       "write_file",
-      rawMutation,
+      stableJson(mutationArgs),
     ].join("\0"));
     fixture.stores.guidedToolJournal.start({
       turnId: mutationTurn.turnId,
@@ -1123,7 +1228,7 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
       turn.turnId,
       "0",
       "write_file",
-      rawWrite,
+      stableJson(writeArgs),
     ].join("\0"));
     fixture.stores.guidedToolJournal.start({
       turnId: turn.turnId,
@@ -1162,8 +1267,13 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
     });
     await toolCalls.executeTool({
       name: "write_file",
-      args: writeArgs,
-      rawArguments: rawWrite,
+      args: {
+        overwrite: false,
+        content: "durable output",
+        path: "out.txt",
+      },
+      rawArguments:
+        '{ "overwrite": false, "content": "durable output", "path": "out.txt" }',
     });
     await toolCalls.executeTool({
       name: "write_file",
@@ -1176,14 +1286,14 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
       turn.turnId,
       "1",
       "write_file",
-      rawWrite,
+      stableJson(writeArgs),
     ].join("\0"));
     const newOccurrenceCallId = digest([
       "btcc-guided-tool-call.v1",
       turn.turnId,
       "2",
       "write_file",
-      rawWrite,
+      stableJson(writeArgs),
     ].join("\0"));
     expect(occurrences[1]).toEqual({
       toolName: "write_file",
@@ -1475,6 +1585,45 @@ function turnRecord(
     },
     revision: 0,
     executionFence: 0,
+  };
+}
+
+function localRunCommand(
+  workspacePath: string,
+  turnId: string,
+): Extract<BtccRunCommand, { kind: "run" }> {
+  return {
+    kind: "run",
+    turnId,
+    sessionId: "guided-local-session",
+    triggerKey: `message:${turnId}`,
+    message: {
+      messageId: `message:${turnId}`,
+      content: "기존 파일을 작게 수정해 주세요",
+    },
+    modelSelection: {
+      provider: "openai",
+      model: "gpt-5.6-sol",
+      reasoningEffort: "low",
+      controls: { accessMode: "full_access" },
+      controlsHash: "controls",
+    },
+    context: {
+      userRef: "local-user",
+      profileRefs: [],
+      recentFeedbackRefs: [],
+      mandatoryHotCacheRefs: [],
+      optionalHotCacheRefs: [],
+      baselineObservationScopeRefs: [`workspace:${workspacePath}`],
+      executionPolicy: {
+        role: "butler",
+        accessMode: "full_access",
+        trackingMode: "local",
+        requiredNativeToolProfiles: ["workspace"],
+        requiredNativeTools: [],
+        workspacePath,
+      },
+    },
   };
 }
 

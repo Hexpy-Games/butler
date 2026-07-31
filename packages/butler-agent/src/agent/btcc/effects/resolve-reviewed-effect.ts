@@ -3,8 +3,7 @@ import type {
   ExecuteGuidedEffectInput,
   GuidedEffectError,
 } from "./contracts.ts";
-
-const ACCEPTED_PLAN_ACTION_KEY = "accepted-plan";
+import { ACCEPTED_PLAN_EFFECT_ACTION_KEY } from "./effect-identity.ts";
 
 export type ResolvedReviewedEffect<TNormalizedInput> = {
   workId: string;
@@ -101,7 +100,7 @@ function resolveActionKey<TNormalizedInput, TResult>(input: {
         "The accepted Plan must mark at least one high-level persistent effect action before this change.",
       );
     }
-    return { ok: true, value: ACCEPTED_PLAN_ACTION_KEY };
+    return { ok: true, value: ACCEPTED_PLAN_EFFECT_ACTION_KEY };
   }
   const matches = matchingActions(
     input.actions,

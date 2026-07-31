@@ -47,6 +47,7 @@ const expectedNamesByBoundary = {
   reviewed_persistent: [
     "transform_public_data_table",
     "write_file",
+    "edit_file",
     "project_ledger_index",
     "project_ledger_create",
     "project_ledger_update",

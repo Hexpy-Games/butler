@@ -412,7 +412,16 @@ async function capturePageSamples(win, viewport, scrollHeight) {
       width: viewport.width,
       height: viewport.height,
     });
-    const jpeg = capture.toJPEG(68);
+    const captureSize = capture.getSize();
+    const viewportCapture =
+      captureSize.width > viewport.width || captureSize.height > viewport.height
+        ? capture.resize({
+            width: viewport.width,
+            height: viewport.height,
+            quality: "best",
+          })
+        : capture;
+    const jpeg = viewportCapture.toJPEG(68);
     if (!jpeg?.length) throw new Error("Electron did not return screenshot bytes");
     screenshots.push({
       position: position.name,

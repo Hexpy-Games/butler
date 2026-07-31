@@ -73,6 +73,7 @@ test("native progressive catalog assigns conservative risk levels from real tool
 
   expect(byName.get("run_command")?.riskLevel).toBe("high");
   expect(byName.get("write_file")?.riskLevel).toBe("high");
+  expect(byName.get("edit_file")?.riskLevel).toBe("high");
   expect(byName.get("grep_files")).toEqual(expect.objectContaining({
     category: "file",
     riskLevel: "medium",
@@ -127,7 +128,7 @@ test("Project Ledger mutation tools are discoverable in the progressive native c
     name: "project_ledger_task_complete",
     enabled: false,
     disabled_reason: expect.stringContaining("Ledger-tracked project turn"),
-    recovery_hint: expect.stringContaining("Do not mutate Project Ledger records through run_command or write_file"),
+    recovery_hint: expect.stringContaining("Do not mutate Project Ledger records through run_command, write_file, or edit_file"),
   }));
 
   const closeoutSearch = createToolSearchToolHandler({
@@ -195,7 +196,7 @@ test("Project Ledger mutation cannot bridge from read-only project surface", asy
       id: "native:project_ledger_task_complete",
       enabled: false,
       disabled_reason: expect.stringContaining("Ledger-tracked project turn"),
-      recovery_hint: expect.stringContaining("Do not mutate Project Ledger records through run_command or write_file"),
+      recovery_hint: expect.stringContaining("Do not mutate Project Ledger records through run_command, write_file, or edit_file"),
       call_affordance: { type: "disabled", reason: expect.any(String) },
     }),
     expect.objectContaining({

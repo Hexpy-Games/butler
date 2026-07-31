@@ -147,6 +147,7 @@ export function authorizedToolDefinitions(
     }
     names.add("run_command");
     names.add("write_file");
+    names.add("edit_file");
   } else {
     for (const name of names) {
       if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) names.delete(name);
@@ -213,14 +214,14 @@ export function visibleToolDefinitions(
         ]
       : []),
     ...(policy.accessMode === "full_access"
-      ? ["run_command", "write_file", "inspect_workspace_page"]
+      ? ["run_command", "write_file", "edit_file", "inspect_workspace_page"]
       : []),
   ]);
   return authorized.filter((tool) => visible.has(tool.name)).map(guidedToolDefinition);
 }
 
 function guidedToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
-  if (tool.name !== "write_file") return tool;
+  if (tool.name !== "write_file" && tool.name !== "edit_file") return tool;
   const properties = tool.parameters.properties;
   if (!properties || typeof properties !== "object" || Array.isArray(properties)) return tool;
   const { expected_sha256: _runtimeOwnedHash, ...modelProperties } =
@@ -260,7 +261,7 @@ export function isReplaySafeTool(name: string): boolean {
   if (isDurableWorkTool(name)) return true;
   const nativeTool = BUTLER_TOOLS.find((tool) => tool.name === name);
   if (nativeTool?.effectBoundary === "none") return true;
-  if (name === "write_file" || name === "run_command" ||
+  if (name === "write_file" || name === "edit_file" || name === "run_command" ||
       GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES.includes(
         name as typeof GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES[number],
       )) return true;
@@ -294,6 +295,7 @@ export function publicToolTitle(name: string): string {
   if (name === "web_search") return "웹 검색";
   if (name === "web_read") return "웹 문서 읽기";
   if (name === "read_file" || name === "grep_files") return "작업공간 확인";
+  if (name === "write_file" || name === "edit_file") return "작업공간 변경";
   if (name === "inspect_workspace_page") return "작업 화면 확인";
   if (name === "run_command") return "작업 실행";
   if (name.startsWith("project_ledger")) return "프로젝트 기록 확인";
