@@ -9,6 +9,8 @@ import {
   type StepObservation,
 } from "./contracts.ts";
 import { bindingWorkspace } from "./isolation-config.ts";
+import type { ProviderRequestObservation } from
+  "./provider-observation-proxy.ts";
 import { isInside } from "./scenario-preflight.ts";
 
 export interface LaunchObservation {
@@ -42,9 +44,10 @@ export function successEvidence(input: {
   launches: LaunchObservation[];
   observations: StepObservation[];
   options: ElectronHarnessOptions;
+  providerRequests: ProviderRequestObservation[];
   run: PreparedRun;
 }): Record<string, unknown> {
-  const { launches, observations, options, run } = input;
+  const { launches, observations, options, providerRequests, run } = input;
   const allPassed = observations.every((item) =>
     item.expectations.passed &&
     item.reload.finalMatched !== false &&
@@ -100,6 +103,7 @@ export function successEvidence(input: {
     },
     launches,
     observations,
+    providerRequests,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -111,6 +115,7 @@ export function failureEvidence(input: {
   launches?: LaunchObservation[];
   observations: StepObservation[];
   options: ElectronHarnessOptions;
+  providerRequests: ProviderRequestObservation[];
   run: PreparedRun;
 }): Record<string, unknown> {
   const { error, observations, options, run } = input;
@@ -130,6 +135,7 @@ export function failureEvidence(input: {
     },
     launches: input.launches ?? [],
     observations,
+    providerRequests: input.providerRequests,
     generatedAt: new Date().toISOString(),
     ...(options.keepLogs && input.electronOutput
       ? { sanitizedElectronLogTail: safeOutputTail(input.electronOutput) }

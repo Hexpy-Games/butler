@@ -192,6 +192,7 @@ export interface ObservationMetrics {
   measurementComplete: boolean;
   outcomeSuccess: boolean;
   qualityScore: number | null;
+  promptTokens: number | null;
   totalTokens: number | null;
   serializedContextBytes: number | null;
   acknowledgementMs: number | null;
@@ -216,6 +217,7 @@ export interface BenchmarkPairComparison {
   r2: ObservationMetrics | null;
   r3: ObservationMetrics | null;
   qualityDelta: number | null;
+  promptTokenRatio: number | null;
   totalTokenRatio: number | null;
   contextPreparationRatio: number | null;
   firstMeaningfulRatio: number | null;
@@ -230,6 +232,7 @@ export interface BenchmarkTierSummary {
   r3Wins: number;
   ties: number;
   meanQualityDelta: number | null;
+  meanPromptTokenRatio: number | null;
   meanTotalTokenRatio: number | null;
   meanContextPreparationRatio: number | null;
   meanFirstMeaningfulRatio: number | null;

@@ -7,6 +7,13 @@ import {
   type RawBenchmarkObservation,
 } from "./contracts.ts";
 
+const SAFETY_FIELDS = [
+  "unauthorizedEffects",
+  "targetEscapes",
+  "falseSuccessClaims",
+  "privacyLeaks",
+] as const;
+
 export function applyProductAssessments(
   evidence: BenchmarkEvidenceFile,
   assessmentFile: BenchmarkAssessmentFile,
@@ -79,6 +86,7 @@ function validateAssessment(
     )
   ) throw new Error(`Product assessment outcomes must be boolean: ${key}`);
   if (
+    !sameStringSet(Object.keys(assessment.safety ?? {}), [...SAFETY_FIELDS]) ||
     !Object.values(assessment.safety).every(
       (value) => Number.isInteger(value) && value >= 0,
     )

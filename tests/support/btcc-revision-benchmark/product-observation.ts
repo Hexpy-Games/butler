@@ -18,9 +18,11 @@ import {
   readLedgerObservation,
   tableExists,
 } from "./ledger-observation.ts";
+import { readValidatorRejections } from "./loop-observation.ts";
 import {
   countProtocolJargon,
   eventTime,
+  firstMeaningfulEventTime,
   maxSilentGap,
   readProductUsage,
   readTurnEvents,
@@ -60,12 +62,29 @@ export function collectRawProductObservation(
   const terminalAtMs = numberValue(timing.terminalAtMs) ?? Date.now();
   const events = readTurnEvents(dataRoot, turnId);
   const usage = readProductUsage(dataRoot, input.target);
+  const providerRequests = readProviderRequests(input.evidence.providerRequests)
+    .filter((request) => request.requestKind === "main");
+  const firstProviderRequest = providerRequests[0] ?? null;
+  const firstProviderDeltaAtMs = providerRequests
+    .map((request) => request.firstContentBearingDeltaAtMs)
+    .find((value): value is number => value !== null) ?? null;
   const tools = summarizeTools(events, terminalState === "delivered", terminalAtMs);
   const progressMessages = stringArray(step.progressMessages);
   const reload = record(step.reload);
   const beforeReload = finalMessageCount(appDb, turnId);
   const reloadMatched = booleanValue(reload.finalMatched);
   const ledger = readLedgerObservation(appDb, turnId, input.prompt.expectedLedgerRoute);
+  const validatorRejections = readValidatorRejections(appDb, turnId);
+  const unsuccessfulProviderRequests = providerRequests.filter((request) =>
+    request.completedAtMs === null || request.status === null ||
+    request.status < 200 || request.status >= 300,
+  ).length;
+  const emptySuccessfulProviderRequests = providerRequests.filter((request) =>
+    request.completedAtMs !== null && request.status !== null &&
+    request.status >= 200 && request.status < 300 &&
+    !request.hasTextContent &&
+    !request.hasToolArgumentContent,
+  ).length;
   appDb?.close();
   const artifacts = input.artifactPaths.map((path) =>
     observeArtifact(workspaceRoot, path, input.fixtures),
@@ -96,21 +115,28 @@ export function collectRawProductObservation(
       assessmentNote: input.timedOut ? "Product exceeded the tier deadline." : null,
     },
     usage: {
-      modelRequests: usage.modelRequests,
+      modelRequests: providerRequests.length > 0
+        ? providerRequests.length
+        : usage.modelRequests,
       promptTokens: usage.promptTokens,
       cachedPromptTokens: usage.cachedPromptTokens,
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
-      serializedContextBytes: null,
+      serializedContextBytes: providerRequests.length > 0
+        ? providerRequests.reduce(
+          (total, request) => total + request.serializedRequestBytes,
+          0,
+        )
+        : null,
     },
     timing: {
       submittedAtMs,
       acknowledgedAtMs: numberValue(timing.acknowledgedAtMs),
       admittedAtMs: eventTime(events, "turn.started") ??
         numberValue(timing.acknowledgedAtMs),
-      modelRequestStartedAtMs: null,
-      firstProviderTokenAtMs: null,
-      firstMeaningfulAtMs: numberValue(timing.firstRenderedActivityAtMs) ??
+      modelRequestStartedAtMs: firstProviderRequest?.requestStartedAtMs ?? null,
+      firstProviderTokenAtMs: firstProviderDeltaAtMs,
+      firstMeaningfulAtMs: firstMeaningfulEventTime(events) ??
         (delivered ? terminalAtMs : null),
       finalVisibleAtMs: delivered ? terminalAtMs : null,
       terminalAtMs,
@@ -122,8 +148,11 @@ export function collectRawProductObservation(
       userInterventions: 0,
     },
     loop: {
-      noProgressTurns: null,
-      validatorRejections: null,
+      noProgressTurns: validatorRejections === null || providerRequests.length === 0
+        ? null
+        : validatorRejections + unsuccessfulProviderRequests +
+          emptySuccessfulProviderRequests,
+      validatorRejections,
     },
     tools: {
       calls: tools.calls,
@@ -276,4 +305,44 @@ function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+interface ProviderRequestObservation {
+  requestKind: "main" | "title";
+  requestStartedAtMs: number;
+  serializedRequestBytes: number;
+  firstContentBearingDeltaAtMs: number | null;
+  completedAtMs: number | null;
+  status: number | null;
+  hasTextContent: boolean;
+  hasToolArgumentContent: boolean;
+}
+
+function readProviderRequests(value: unknown): ProviderRequestObservation[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    const item = record(candidate);
+    const requestKind = item.requestKind;
+    const requestStartedAtMs = numberValue(item.requestStartedAtMs);
+    const serializedRequestBytes = numberValue(item.serializedRequestBytes);
+    if (
+      (requestKind !== "main" && requestKind !== "title") ||
+      requestStartedAtMs === null || serializedRequestBytes === null ||
+      serializedRequestBytes < 0
+    ) return [];
+    return [{
+      requestKind,
+      requestStartedAtMs,
+      serializedRequestBytes,
+      firstContentBearingDeltaAtMs: nullableNumber(item.firstContentBearingDeltaAtMs),
+      completedAtMs: nullableNumber(item.completedAtMs),
+      status: nullableNumber(item.status),
+      hasTextContent: item.hasTextContent === true,
+      hasToolArgumentContent: item.hasToolArgumentContent === true,
+    }];
+  });
+}
+
+function nullableNumber(value: unknown): number | null {
+  return value === null ? null : numberValue(value);
 }

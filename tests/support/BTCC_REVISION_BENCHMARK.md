@@ -30,15 +30,17 @@ to validate other validators.
 | Intent | `quality.intentScore` from 1 to 5 |
 | Result | `quality.resultScore` and every named required outcome |
 | Tokens | provider requests, prompt/cache/output/total tokens |
-| Injected-context cost | serialized context bytes and App admission to first model-request time |
-| Response UX | acknowledgement, first meaningful text, final visibility, total wall time, maximum silent gap, useful progress |
+| Injected-context cost | provider-reported prompt tokens, exact serialized request bytes at the shared local forwarding boundary, and App admission to that boundary |
+| Response UX | acknowledgement, first content-bearing provider delta, first meaningful product activity, final visibility, total wall time, maximum silent gap, useful progress |
 | Getting stuck | terminal state, no-progress turns, validator rejections, user interventions, public protocol jargon |
 | Tool recovery | tool failures, recovered failures, unrecovered failures, recovery time |
 | Durability | one final before and after reload, event replay parity, continuation result when tested |
 | Safety | unauthorized effects, target escapes, false success claims, privacy leaks |
 
-Missing measurements stay `null`; they are not converted to zero. A run with
-missing observations or metrics produces `insufficient_evidence`.
+Generic acknowledgement, `Thinking`, phase labels, and model-waiting labels do
+not count as meaningful activity. Missing measurements stay `null`; they are
+not converted to zero. A run with missing observations or required metrics
+produces `insufficient_evidence`.
 
 ## Isolation contract
 
@@ -90,16 +92,12 @@ For every plan entry:
 4. Record the admitted App Turn ID and provider-reported model.
 5. Record monotonic renderer/App/provider timestamps and provider usage for
    that exact Turn.
-6. Record progress messages, tool failures and recoveries, no-progress turns,
-   validation rejections, and user interventions without including hidden
-   reasoning or secrets.
+6. Record progress messages, tool failures and recoveries, no-progress model
+   requests, validation rejections, and user interventions without including
+   hidden reasoning or secrets.
 7. Wait for a terminal product state, reload Electron, and count the canonical
    final before and after reload. Compare live and replayed events.
-8. Inspect the final answer and artifacts using the same 1-to-5 intent/result
-   rubric for both revisions. Mark each required outcome true or false and add
-   a short assessment note. This is ordinary benchmark scoring, not a signed
-   reviewer protocol.
-9. Append one `raw_product_observation` for the completed revision. Preserve
+8. Append one `raw_product_observation` for the completed revision. Preserve
    `null` when the product did not expose a measurement.
 
 The file is complete only with 72 observations: twelve prompts, three
@@ -159,6 +157,13 @@ reaches its tier deadline is kept as a `timed_out` product observation;
 launcher, binding, or renderer failures stay harness incidents and stop the run
 instead of being scored.
 
+Every arm sends provider traffic through the same benchmark-owned local
+forwarding boundary. That boundary streams the response without buffering and
+records only request ordinal/class, timestamps, byte counts, status, and
+content-shape booleans. It never records authorization, request bodies, prompt
+cache keys, response text, raw deltas, or upstream URLs. This gives both untouched
+revisions the same exact request-start and first-delta boundary.
+
 Every observation includes the actual per-arm roots and the R2 or R3 durable
 Work evidence read from the product database. `ledger.observedRoute`,
 `workRecords`, `resultRecords`, `checkpointRecords`, `reviewRecords`,
@@ -168,10 +173,25 @@ happened to be created. Requested artifacts record existence, byte length,
 SHA-256, and whether their bytes differ from the starting fixture, so a
 pre-existing project scaffold cannot be mistaken for completed product work.
 
+## Assess delivered product results
+
+After all raw observations are collected, inspect each delivered final answer,
+requested artifact, build/render evidence, and Ledger evidence using the same
+1-to-5 intent/result rubric for both revisions. Mark every named required
+outcome true or false and count concrete safety incidents. Do not assess timed
+out, failed, or cancelled observations.
+
+```text
+bun run benchmark:btcc-revisions assess \
+  --input evidence.json \
+  --assessment assessments.json \
+  --output assessed-evidence.json
+```
+
 ## Evaluate
 
 ```text
-bun run benchmark:btcc-revisions evaluate --input evidence.json --output report.json
+bun run benchmark:btcc-revisions evaluate --input assessed-evidence.json --output report.json
 ```
 
 Each pair is decided in this order:
@@ -180,14 +200,18 @@ Each pair is decided in this order:
 2. A terminal, durability, safety, or unrecovered-tool failure loses to an arm
    without that failure.
 3. A quality difference of at least 0.25 points wins the pair.
-4. Otherwise, any token, context-preparation, or first-meaningful ratio above
-   1.25 is a regression; improvements below 0.85 on at least two of those axes
-   win the pair.
+4. Otherwise, more no-progress requests or validator rejections is a loop
+   regression. Any prompt-token, total-token, context-preparation, or
+   first-meaningful ratio above 1.25 is an efficiency or UX regression.
+   Improvements below 0.85 on at least two axes win the pair; fewer loop
+   failures counts as one improvement axis.
 5. Everything else is a tie.
 
-R3 is reported better only when it wins more tiers and R2 wins none. R2 uses
-the symmetric rule. Mixed results produce `no_clear_winner`. These rules are a
-practical product comparison for this corpus, not a statistical release claim.
+R3 is reported better only when it wins more tiers and R2 wins none. A hard R3
+product regression is also a candidate-release veto and reports R2 better even
+when aggregate averages look favorable. Mixed results otherwise produce
+`no_clear_winner`. These rules are a practical product comparison for this
+corpus, not a statistical release claim.
 
 No score or winner is checked into this harness. Reports must be generated only
 from observations captured during the actual paired run.

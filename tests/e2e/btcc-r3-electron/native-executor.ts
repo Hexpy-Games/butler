@@ -32,6 +32,7 @@ function writeJson(path: string, value: unknown): void {
 
 export async function startNativeExecutor(
   run: PreparedRun,
+  providerEndpoint: string,
   output: string[] = [],
 ): Promise<{
   child: ChildProcess;
@@ -50,6 +51,7 @@ export async function startNativeExecutor(
     env: {
       ...process.env,
       BUTLER_BUN: process.execPath,
+      BUTLER_CODEX_BASE_URL: providerEndpoint,
       BUTLER_DATA: run.dataRoot,
       BUTLER_HOME: run.repoRoot,
     },
