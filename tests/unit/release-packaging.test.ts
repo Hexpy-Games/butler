@@ -1457,6 +1457,11 @@ test("app package smoke uses real bundled Agent release resources", () => {
       "packages/butler-agent/resources/runtime/bun-version",
     );
     expect(existsSync(join(bundledAgent.resourceDir, "runtime", "bin", "bun"))).toBe(true);
+    expect(
+      existsSync(
+        join(bundledAgent.resourceDir, "runtime", "posix-archive-worker.mjs"),
+      ),
+    ).toBe(true);
 
     const releaseManifest = JSON.parse(
       readText(join(bundledAgent.resourceDir, "agent-release-manifest.json")),

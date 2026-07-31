@@ -1,9 +1,72 @@
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 import { createServer as netCreateServer } from "net";
 import { createServer as httpCreateServer } from "http";
-import { existsSync, unlinkSync } from "fs";
+import { chmodSync, existsSync, unlinkSync } from "fs";
 
 const DEFAULT_SOCKET = process.env.EMBED_SOCKET ?? "/tmp/butler-embed.sock";
+
+type PipelineLoader = () => Promise<FeatureExtractionPipeline>;
+
+async function loadDefaultPipeline(): Promise<FeatureExtractionPipeline> {
+  const { pipeline } = await import("@huggingface/transformers");
+  const createPipeline = pipeline as unknown as (
+    task: "feature-extraction",
+    model: string,
+    options: { dtype: "q8" },
+  ) => Promise<FeatureExtractionPipeline>;
+  return createPipeline("feature-extraction", "Xenova/bge-m3", { dtype: "q8" });
+}
+
+export function createLazyEmbeddingFunctions({
+  loadPipeline = loadDefaultPipeline,
+  log = (message: string) => console.log(message),
+}: {
+  loadPipeline?: PipelineLoader;
+  log?: (message: string) => void;
+} = {}) {
+  let pipePromise: Promise<FeatureExtractionPipeline> | null = null;
+  let loaded = false;
+
+  async function getPipe(): Promise<FeatureExtractionPipeline> {
+    if (!pipePromise) {
+      log("Loading bge-m3 model on first embedding request...");
+      pipePromise = loadPipeline()
+        .then((pipe) => {
+          loaded = true;
+          log("bge-m3 model ready");
+          return pipe;
+        })
+        .catch((error) => {
+          pipePromise = null;
+          throw error;
+        });
+    }
+    return pipePromise;
+  }
+
+  async function embedText(text: string): Promise<number[]> {
+    const pipe = await getPipe();
+    const out = await pipe(text, { pooling: "mean", normalize: true });
+    return Array.from(out.data) as number[];
+  }
+
+  async function embedTexts(texts: string[]): Promise<number[][]> {
+    const pipe = await getPipe();
+    const out = await pipe(texts, { pooling: "mean", normalize: true });
+    const dims = out.data.length / texts.length;
+    const result: number[][] = [];
+    for (let i = 0; i < texts.length; i++) {
+      result.push(Array.from(out.data.slice(i * dims, (i + 1) * dims)) as number[]);
+    }
+    return result;
+  }
+
+  return {
+    embedText,
+    embedTexts,
+    isLoaded: () => loaded,
+  };
+}
 
 export function createServer(
   embedFn: (text: string) => Promise<number[]>,
@@ -85,6 +148,9 @@ export function createServer(
     socket.on("error", () => {});
   });
 
+  server.on("listening", () => {
+    if (process.platform !== "win32") chmodSync(socketPath, 0o600);
+  });
   server.listen(socketPath);
 
   const cleanup = () => {
@@ -105,58 +171,32 @@ export function createServer(
 }
 
 if (import.meta.main) {
-  let _pipe: FeatureExtractionPipeline | null = null;
-
-  async function getPipe(): Promise<FeatureExtractionPipeline> {
-    if (!_pipe) {
-      const createPipeline = pipeline as unknown as (
-        task: "feature-extraction",
-        model: string,
-        options: { dtype: "q8" },
-      ) => Promise<FeatureExtractionPipeline>;
-      _pipe = await createPipeline("feature-extraction", "Xenova/bge-m3", { dtype: "q8" });
-    }
-    return _pipe;
-  }
-
-  async function embedText(text: string): Promise<number[]> {
-    const pipe = await getPipe();
-    const out = await pipe(text, { pooling: "mean", normalize: true });
-    return Array.from(out.data) as number[];
-  }
-
-  async function embedTexts(texts: string[]): Promise<number[][]> {
-    const pipe = await getPipe();
-    const out = await pipe(texts, { pooling: "mean", normalize: true });
-    const dims = out.data.length / texts.length;
-    const result: number[][] = [];
-    for (let i = 0; i < texts.length; i++) {
-      result.push(Array.from(out.data.slice(i * dims, (i + 1) * dims)) as number[]);
-    }
-    return result;
-  }
-
-  console.log("Loading bge-m3 model...");
-  await getPipe();
-  console.log(`embed-server ready on socket ${DEFAULT_SOCKET}`);
-
-  createServer(embedText, DEFAULT_SOCKET, embedTexts);
+  const embedding = createLazyEmbeddingFunctions();
+  createServer(embedding.embedText, DEFAULT_SOCKET, embedding.embedTexts);
+  console.log(`embed-server ready on socket ${DEFAULT_SOCKET}; model loads on first request`);
 
   // Health check HTTP endpoint for monitoring
-  const HEALTH_PORT = parseInt(process.env.EMBED_HEALTH_PORT ?? "9847", 10);
-  const healthServer = httpCreateServer((req, res) => {
-    if (req.url === "/health") {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", socket: DEFAULT_SOCKET, uptime: process.uptime() }));
-    } else {
-      res.writeHead(404);
-      res.end();
-    }
-  });
-  healthServer.on("error", (err: NodeJS.ErrnoException) => {
-    console.warn(`embed-server health check failed to bind port ${HEALTH_PORT}: ${err.message} — continuing without health endpoint`);
-  });
-  healthServer.listen(HEALTH_PORT, "127.0.0.1", () => {
-    console.log(`embed-server health check on http://127.0.0.1:${HEALTH_PORT}/health`);
-  });
+  const healthPort = Number.parseInt(process.env.EMBED_HEALTH_PORT ?? "9847", 10);
+  if (Number.isInteger(healthPort) && healthPort > 0) {
+    const healthServer = httpCreateServer((req, res) => {
+      if (req.url === "/health") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          status: "ok",
+          socket: DEFAULT_SOCKET,
+          model_loaded: embedding.isLoaded(),
+          uptime: process.uptime(),
+        }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+    healthServer.on("error", (err: NodeJS.ErrnoException) => {
+      console.warn(`embed-server health check failed to bind port ${healthPort}: ${err.message} — continuing without health endpoint`);
+    });
+    healthServer.listen(healthPort, "127.0.0.1", () => {
+      console.log(`embed-server health check on http://127.0.0.1:${healthPort}/health`);
+    });
+  }
 }

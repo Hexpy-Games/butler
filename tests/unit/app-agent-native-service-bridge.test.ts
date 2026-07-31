@@ -1,12 +1,58 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   createAppAgentNativeServiceBridge,
   listNativeServiceProjections,
+  prepareAppManagedEmbedSocket,
 } from "../../packages/butler-app/client/electron/app-agent-native-service-bridge.mjs";
 import { APP_MANAGED_RUNTIME_POINTER_SCHEMA } from "../../packages/butler-app/client/electron/app-managed-runtime.mjs";
+
+test("App-managed embed socket uses a private per-user directory", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-embed-socket-"));
+  const uid = process.getuid?.();
+  try {
+    expect(uid).toBeNumber();
+    const socketPath = prepareAppManagedEmbedSocket({
+      butlerData: "/private/example/butler-data",
+      platform: "darwin",
+      socketRoot: tempDir,
+      uid,
+    });
+    const ownerDir = dirname(socketPath);
+    expect(socketPath).toMatch(/\/butler-\d+\/embed-[a-f0-9]{20}\.sock$/);
+    expect(lstatSync(ownerDir).mode & 0o777).toBe(0o700);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("App-managed embed socket rejects a symlinked owner directory", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-embed-socket-symlink-"));
+  const uid = process.getuid?.();
+  try {
+    expect(uid).toBeNumber();
+    const target = join(tempDir, "target");
+    mkdirSync(target);
+    symlinkSync(target, join(tempDir, `butler-${uid}`));
+    expect(() => prepareAppManagedEmbedSocket({
+      butlerData: "/private/example/butler-data",
+      platform: "darwin",
+      socketRoot: tempDir,
+      uid,
+    })).toThrow("unsafe App-managed embed socket directory");
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
 
 test("App Agent native service bridge installs launchd service with App-managed env", async () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-native-bridge-launchd-"));
@@ -43,7 +89,7 @@ test("App Agent native service bridge installs launchd service with App-managed 
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_LOCAL_AUTH_REQUIRED</key>");
     expect(writes[0]?.body).toContain("<key>BUTLER_APP_GATEWAY_PID_FILE</key>");
     expect(writes[0]?.body).toContain("<key>EMBED_SOCKET</key>");
-    expect(writes[0]?.body).toContain("/app/runtime/embed/embed.sock");
+    expect(writes[0]?.body).toMatch(/\/tmp\/butler-\d+\/embed-[a-f0-9]{20}\.sock/);
     expect(writes[0]?.body).toContain("<key>EMBED_HEALTH_PORT</key>");
     expect(writes[0]?.body).toContain("<string>0</string>");
     expect(writes[0]?.body).toContain("<string>19123</string>");
@@ -599,7 +645,7 @@ test("App Agent native service bridge installs systemd service with escaped env"
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_GATEWAY_PID_FILE="off"');
     expect(writes[0]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
     expect(writes[0]?.body).toContain('Environment=EMBED_SOCKET="');
-    expect(writes[0]?.body).toContain('/app/runtime/embed/embed.sock"');
+    expect(writes[0]?.body).toMatch(/Environment=EMBED_SOCKET="\/tmp\/butler-\d+\/embed-[a-f0-9]{20}\.sock"/);
     expect(writes[0]?.body).toContain('Environment=EMBED_HEALTH_PORT="0"');
     expect(writes[1]?.body).toContain('Environment=BUTLER_APP_SERVER_PORT="19123"');
     expect(commands).toEqual([

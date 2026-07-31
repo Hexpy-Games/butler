@@ -96,6 +96,8 @@ export interface NativeSupervisorPaths {
 interface NativeServiceSpecOptions {
   createProjectFolderTokenSecret?: boolean;
   platform?: NodeJS.Platform;
+  embedSocket?: string;
+  embedHealthPort?: string;
 }
 
 interface AppManagedNativeServiceSpecOptions extends NativeServiceSpecOptions {
@@ -342,6 +344,11 @@ function nativeServiceSpecsForRuntime(
     BUTLER_BUN: serviceBun,
     ...(platform === "win32"
       ? { EMBED_SOCKET: windowsEmbedPipe(paths.butlerData) }
+      : safeString(options.embedSocket)
+        ? { EMBED_SOCKET: safeString(options.embedSocket)! }
+        : {}),
+    ...(safeString(options.embedHealthPort)
+      ? { EMBED_HEALTH_PORT: safeString(options.embedHealthPort)! }
       : {}),
     ...(appManaged.runtimePointerPath
       ? { BUTLER_APP_MANAGED_RUNTIME_POINTER: appManaged.runtimePointerPath }

@@ -114,11 +114,11 @@ export async function handleRuntimeRoutes(
   }
   if (input.request.method === "GET" && url.pathname === "/events/live") {
     const cursor = Number(url.searchParams.get("cursor") ?? "0");
-    return liveEventsResponse(
-      input.store,
-      Number.isFinite(cursor) ? cursor : 0,
-      input.request.signal,
-    );
+    input.setRequestIdleTimeout(0);
+    return liveEventsResponse(input.store, Number.isFinite(cursor) ? cursor : 0, {
+      clientDisconnectSignal: input.request.signal,
+      serverShutdownSignal: input.serverShutdownSignal,
+    });
   }
   return null;
 }

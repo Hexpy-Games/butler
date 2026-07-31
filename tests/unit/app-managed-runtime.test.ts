@@ -367,6 +367,28 @@ test.skipIf(process.platform === "win32")(
   },
 );
 
+test.skipIf(process.platform === "win32")(
+  "App-managed runtime rejects an archive-owned extraction inventory",
+  () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-inventory-"));
+    try {
+      const resourceRoot = createBundledAgentResource(tempDir, {
+        version: "4.0.1",
+        reservedInventoryEntry: true,
+      });
+      expect(() =>
+        activateAppManagedAgentRuntime({
+          butlerData: join(tempDir, "data"),
+          resourceRoot,
+          now: fixedNow,
+        }),
+      ).toThrow("reserved inventory path");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+);
+
 test("App-managed runtime rejects directory launcher archive entries", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-dir-launcher-"));
   try {
@@ -542,6 +564,60 @@ test("App-managed runtime repairs damaged selected runtime from App-owned payloa
   }
 });
 
+test.skipIf(process.platform === "win32")(
+  "App-managed POSIX readiness ignores a forged extraction inventory",
+  () => {
+    for (const strategy of ["delete-entry", "replace-hash"] as const) {
+      const tempDir = mkdtempSync(
+        join(tmpdir(), `butler-app-runtime-forged-inventory-${strategy}-`),
+      );
+      try {
+        const butlerData = join(tempDir, "data");
+        const resourceRoot = createBundledAgentResource(tempDir, {
+          version: strategy === "delete-entry" ? "6.1.0" : "6.2.0",
+        });
+        const installed = activateAppManagedAgentRuntime({
+          butlerData,
+          resourceRoot,
+          now: fixedNow,
+        });
+        const inventoryPath = join(
+          installed.runtimeHome,
+          ".butler-agent-archive-inventory.json",
+        );
+        const inventory = readJson(inventoryPath);
+        const ownedPath = "packages/butler-agent/owned-file.txt";
+        const ownedFile = join(installed.runtimeHome, ...ownedPath.split("/"));
+
+        if (strategy === "delete-entry") {
+          inventory.files = inventory.files.filter(
+            (entry: any) => entry.path !== ownedPath,
+          );
+          rmSync(ownedFile, { force: true });
+        } else {
+          writeFileSync(ownedFile, "forged runtime content\n");
+          const entry = inventory.files.find((item: any) => item.path === ownedPath);
+          expect(entry).toBeDefined();
+          entry.size = statSync(ownedFile).size;
+          entry.sha256 = sha256File(ownedFile);
+        }
+        writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+
+        const repaired = activateAppManagedAgentRuntime({
+          butlerData,
+          resourceRoot,
+          now: fixedNow,
+        });
+        expect(repaired.activated).toBe(true);
+        expect(readFileSync(ownedFile, "utf8")).toBe("owned\n");
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+  },
+  20_000,
+);
+
 test("App-managed runtime can roll back a committed service registration activation", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-post-commit-rollback-"));
   try {
@@ -660,12 +736,82 @@ test("App-managed runtime activation does not shell out to host tar", () => {
   );
   expect(source).toContain("managedRuntimeSourceExecutablePath");
   expect(source).toContain("windows-archive-worker.mjs");
+  expect(source).toContain("posix-archive-worker.mjs");
+  expect(source).toContain("readSync(descriptor");
+  expect(source).not.toContain("gunzipSync");
   expect(source).not.toContain('spawnSync("tar"');
   expect(source).not.toContain('"tar", ["-xzf"');
   expect(source).not.toContain("npm install");
   expect(source).not.toContain("brew install");
   expect(source).not.toContain("apt install");
 });
+
+test.skipIf(process.platform === "win32")(
+  "App-managed POSIX runtime streams a large archive in a bounded worker",
+  () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-streaming-"));
+    try {
+      const butlerData = join(tempDir, "data");
+      const largeFileBytes = 128 * 1024 * 1024;
+      const resourceRoot = createBundledAgentResource(tempDir, {
+        version: "41.0.0",
+        largeFileBytes,
+      });
+      const runtimeModule = join(
+        repoRoot,
+        "packages",
+        "butler-app",
+        "client",
+        "electron",
+        "app-managed-runtime.mjs",
+      );
+      const activation = spawnSync(process.execPath, ["-e", `
+        const { activateAppManagedAgentRuntime } = await import(${JSON.stringify(runtimeModule)});
+        const input = {
+          butlerData: ${JSON.stringify(butlerData)},
+          resourceRoot: ${JSON.stringify(resourceRoot)},
+          now: () => new Date("2026-05-15T12:00:00.000Z"),
+        };
+        const activated = activateAppManagedAgentRuntime(input);
+        const selected = activateAppManagedAgentRuntime(input);
+        console.log(JSON.stringify({
+          runtimeHome: activated.runtimeHome,
+          activated: activated.activated,
+          selectedActivated: selected.activated,
+          selectedRuntimeHome: selected.runtimeHome,
+          parentRssBytes: process.memoryUsage().rss,
+        }));
+        process.exit(0);
+      `], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+      });
+      expect(activation.status).toBe(0);
+      const result = JSON.parse(activation.stdout.trim());
+      const inventory = readJson(
+        join(result.runtimeHome, ".butler-agent-archive-inventory.json"),
+      );
+
+      expect(inventory).toMatchObject({
+        schema: "butler.posix-agent-archive-inventory.v1",
+        hasLauncher: true,
+        rawTextIncluded: false,
+      });
+      expect(inventory.workerRssBytes).toBeLessThan(160 * 1024 * 1024);
+      expect(result.parentRssBytes).toBeLessThan(160 * 1024 * 1024);
+      expect(statSync(join(result.runtimeHome, "fixtures", "large.bin")).size).toBe(
+        largeFileBytes,
+      );
+      expect(result.activated).toBe(true);
+      expect(result.selectedActivated).toBe(false);
+      expect(result.selectedRuntimeHome).toBe(result.runtimeHome);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+  20_000,
+);
 
 test("App-managed runtime prepares bundled-Agent-only update and rolls back without host tools", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-agent-only-smoke-"));
@@ -1207,6 +1353,8 @@ function createBundledAgentResource(
     signature?: string;
     omitLauncher?: boolean;
     launcherDirectory?: boolean;
+    largeFileBytes?: number;
+    reservedInventoryEntry?: boolean;
   },
 ): string {
   const resourceRoot = join(root, `resource-${input.version}`);
@@ -1232,6 +1380,24 @@ function createBundledAgentResource(
     "await Promise.resolve();\n",
   );
   writeFileSync(join(stageRoot, "packages", "butler-agent", "owned-file.txt"), "owned\n");
+  if (input.largeFileBytes) {
+    mkdirSync(join(stageRoot, "fixtures"), { recursive: true });
+    const largeFile = join(stageRoot, "fixtures", "large.bin");
+    const chunk = Buffer.alloc(Math.min(input.largeFileBytes, 1024 * 1024), 0x61);
+    let remaining = input.largeFileBytes;
+    writeFileSync(largeFile, "");
+    while (remaining > 0) {
+      const bytes = Math.min(remaining, chunk.length);
+      writeFileSync(largeFile, chunk.subarray(0, bytes), { flag: "a" });
+      remaining -= bytes;
+    }
+  }
+  if (input.reservedInventoryEntry) {
+    writeFileSync(
+      join(stageRoot, ".butler-agent-archive-inventory.json"),
+      "archive-owned inventory\n",
+    );
+  }
   writeFileSync(
     join(stageRoot, "packages", "butler-agent", "resources", "runtime", "bun-version"),
     "1.3.11\n",
@@ -1260,9 +1426,22 @@ function createBundledAgentResource(
     );
   } else {
     mkdirSync(join(resourceRoot, "runtime", "bin"), { recursive: true });
-    writeFileSync(join(resourceRoot, "runtime", "bin", "bun"), "#!/bin/sh\n", {
-      mode: 0o755,
-    });
+    writeFileSync(
+      join(resourceRoot, "runtime", "bin", "bun"),
+      `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} "$@"\n`,
+      { mode: 0o755 },
+    );
+    copyFileSync(
+      join(
+        repoRoot,
+        "packages",
+        "butler-agent",
+        "resources",
+        "runtime",
+        "posix-archive-worker.mjs",
+      ),
+      join(resourceRoot, "runtime", "posix-archive-worker.mjs"),
+    );
   }
   const sha256 = input.sha256 ?? sha256File(artifactPath);
   writeFileSync(

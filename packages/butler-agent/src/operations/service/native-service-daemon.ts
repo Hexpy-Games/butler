@@ -111,6 +111,8 @@ export function defaultDaemonServiceSpecs(
       appVersion: process.env.BUTLER_APP_VERSION,
       gatewayPort: appManagedGatewayPortFromEnv(),
       platform,
+      embedSocket: process.env.EMBED_SOCKET,
+      embedHealthPort: process.env.EMBED_HEALTH_PORT,
     });
   }
   return defaultNativeServiceSpecs(paths);
