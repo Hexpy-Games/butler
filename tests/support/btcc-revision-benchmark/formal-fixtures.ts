@@ -125,10 +125,14 @@ export function formalBenchmarkPlaceholders(observationDate: string) {
 export function formalBenchmarkRunnerConfig(input: {
   runRoot: string;
   sourceData?: string;
+  browserExecutablePath?: string;
 }): BenchmarkRunnerConfig {
   return {
     runRoot: input.runRoot,
     ...(input.sourceData ? { sourceData: input.sourceData } : {}),
+    ...(input.browserExecutablePath
+      ? { browserExecutablePath: input.browserExecutablePath }
+      : {}),
     fixtures: FORMAL_BENCHMARK_FIXTURES.map((fixture) => ({ ...fixture })),
     artifactPathsByPrompt: Object.fromEntries(
       Object.entries(FORMAL_BENCHMARK_ARTIFACT_PATHS).map(([key, paths]) => [

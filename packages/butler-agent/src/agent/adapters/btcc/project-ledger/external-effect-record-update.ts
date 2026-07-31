@@ -20,6 +20,7 @@ export type ProjectLedgerRecordUpdate = {
   ledgerCommits?: string;
   priority?: number;
   requiresCommitEvidence?: boolean;
+  specExemption?: boolean;
 };
 
 export function applyProjectLedgerRecordUpdate(
@@ -35,8 +36,11 @@ export function applyProjectLedgerRecordUpdate(
     id: update.id,
     ...(update.kind ? { kind: update.kind } : {}),
   }).record;
+  const effectiveUpdate = current.spec && update.specExemption
+    ? { ...update, specExemption: undefined }
+    : update;
   if (!update.status || !["work", "task", "attempt"].includes(current.kind)) {
-    core.updateRecord(projectRoot, updateOptions(update));
+    core.updateRecord(projectRoot, updateOptions(effectiveUpdate));
     return;
   }
   const path = core.planTransitionPath(current.kind, current.status, update.status);
@@ -45,7 +49,7 @@ export function applyProjectLedgerRecordUpdate(
   }
   if (path.length > 0 || hasNonStatusUpdate(update)) {
     core.updateRecord(projectRoot, {
-      ...updateOptions(update),
+      ...updateOptions(effectiveUpdate),
       kind: current.kind,
       status: update.status,
     });
@@ -117,10 +121,16 @@ function updateOptions(update: ProjectLedgerRecordUpdate): Record<string, unknow
   const options = Object.fromEntries(
     Object.entries(update).filter(([key, value]) =>
       value !== undefined &&
-      !["operation", "parentId", "requiresCommitEvidence"].includes(key)),
+      ![
+        "operation",
+        "parentId",
+        "requiresCommitEvidence",
+        "specExemption",
+      ].includes(key)),
   );
   if (update.requiresCommitEvidence === true) {
     options["requires-commit-evidence"] = true;
   }
+  if (update.specExemption === true) options["spec-exemption"] = true;
   return options;
 }

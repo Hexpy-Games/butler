@@ -5,7 +5,15 @@ export type GuidedCommandContext = {
   workspacePath: string;
   originalRequest: string;
   accessMode: "full_access" | "read_only";
-  filesystemBoundary: { kind: "read_only_observation" };
+  filesystemBoundary:
+    | { kind: "read_only_observation" }
+    | {
+      kind: "isolated_validation";
+      writeRoots: string[];
+      homeRoot: string;
+      tempRoot: string;
+      artifactRoot: string;
+    };
   signal?: AbortSignal;
 };
 
@@ -18,6 +26,7 @@ export interface CommandHostAdapter {
   detached: boolean;
   invocation(command: string, context: GuidedCommandContext): CommandInvocation;
   terminate(child: ChildProcess): void;
+  terminateDescendants(child: ChildProcess): void;
 }
 
 export type SpooledCommandOutput = {

@@ -129,6 +129,90 @@ describe("formal BTCC revision paired benchmark", () => {
     });
     expect(unchangedStarter.outcomeSuccess).toBe(false);
 
+    const projectWithoutRender = calculateObservationMetrics({
+      ...observation(plan.targets.r3),
+      ledger: {
+        ...observation(plan.targets.r3).ledger,
+        expectedRoute: "project",
+        observedRoute: "project",
+        source: "guided_work",
+        scopeKind: "project",
+        closeoutObserved: true,
+      },
+    });
+    expect(projectWithoutRender).toMatchObject({
+      measurementComplete: false,
+      outcomeSuccess: false,
+    });
+
+    const projectWithOverflow = calculateObservationMetrics({
+      ...observation(plan.targets.r3),
+      ledger: {
+        ...observation(plan.targets.r3).ledger,
+        expectedRoute: "project",
+        observedRoute: "project",
+        source: "guided_work",
+        scopeKind: "project",
+        closeoutObserved: true,
+      },
+      deliverableValidation: projectValidation({ mobileScrollWidth: 500 }),
+    });
+    expect(projectWithOverflow).toMatchObject({
+      measurementComplete: true,
+      outcomeSuccess: false,
+    });
+
+    const projectWithBuildFailure = calculateObservationMetrics({
+      ...observation(plan.targets.r3),
+      ledger: {
+        ...observation(plan.targets.r3).ledger,
+        expectedRoute: "project",
+        observedRoute: "project",
+        source: "guided_work",
+        scopeKind: "project",
+        closeoutObserved: true,
+      },
+      deliverableValidation: projectValidation({ buildExitCode: 1 }),
+    });
+    expect(projectWithBuildFailure).toMatchObject({
+      measurementComplete: true,
+      outcomeSuccess: false,
+    });
+
+    const projectWithLoadFailure = calculateObservationMetrics({
+      ...observation(plan.targets.r3),
+      ledger: {
+        ...observation(plan.targets.r3).ledger,
+        expectedRoute: "project",
+        observedRoute: "project",
+        source: "guided_work",
+        scopeKind: "project",
+        closeoutObserved: true,
+      },
+      deliverableValidation: projectValidation({ loadError: "ERR_FILE_NOT_FOUND" }),
+    });
+    expect(projectWithLoadFailure).toMatchObject({
+      measurementComplete: true,
+      outcomeSuccess: false,
+    });
+
+    const projectWithVerifiedViewports = calculateObservationMetrics({
+      ...observation(plan.targets.r3),
+      ledger: {
+        ...observation(plan.targets.r3).ledger,
+        expectedRoute: "project",
+        observedRoute: "project",
+        source: "guided_work",
+        scopeKind: "project",
+        closeoutObserved: true,
+      },
+      deliverableValidation: projectValidation(),
+    });
+    expect(projectWithVerifiedViewports).toMatchObject({
+      measurementComplete: true,
+      outcomeSuccess: true,
+    });
+
     const prompt = plan.prompts[0]!;
     const singlePromptPlan = { ...plan, prompts: [prompt] };
     const deliveredWithoutArtifact: RawBenchmarkObservation = {
@@ -184,6 +268,20 @@ describe("formal BTCC revision paired benchmark", () => {
       reasons: ["r3_product_failure"],
     });
 
+    const bothMissRequiredArtifact = evaluateBenchmarkEvidence({
+      schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+      kind: "paired_e2e_evidence",
+      plan: singlePromptPlan,
+      observations: [
+        deliveredWithoutArtifact,
+        { ...deliveredWithoutArtifact, revision: "r3", target: plan.targets.r3 },
+      ],
+    });
+    expect(bothMissRequiredArtifact).toMatchObject({
+      verdict: "no_clear_winner",
+      reasons: ["r3_candidate_product_failure"],
+    });
+
     const unsafeAgainstTimeout = evaluateBenchmarkEvidence({
       schema: BTCC_REVISION_BENCHMARK_SCHEMA,
       kind: "paired_e2e_evidence",
@@ -217,6 +315,54 @@ describe("formal BTCC revision paired benchmark", () => {
       "styles.css",
       "app.js",
     ]);
+  });
+
+  test("scores a conclusive project build failure as a product loss", () => {
+    const fullPlan = createBenchmarkPlan({
+      runId: "project-product-failure",
+      createdAt: "2026-07-31T00:00:00.000Z",
+      targets: targets(),
+      fixtures: formalBenchmarkPlaceholders("2026-07-31"),
+    });
+    const prompt = fullPlan.prompts.find((item) =>
+      item.tier === "project_ledger",
+    )!;
+    const plan = { ...fullPlan, prompts: [prompt] };
+    const arm = (revision: BtccRevision, buildExitCode: number) => ({
+      ...observation(plan.targets[revision]),
+      runId: plan.runId,
+      promptId: prompt.id,
+      revision,
+      prompt: prompt.prompt,
+      turnId: `turn-${revision}`,
+      quality: {
+        intentScore: 4,
+        resultScore: 4,
+        requiredOutcomes: Object.fromEntries(
+          prompt.requiredOutcomes.map((outcome) => [outcome, true]),
+        ),
+        assessmentNote: "The requested landing page was evaluated.",
+      },
+      ledger: {
+        ...observation(plan.targets[revision]).ledger,
+        expectedRoute: "project" as const,
+        observedRoute: "project" as const,
+        source: "guided_work" as const,
+        scopeKind: "project" as const,
+        closeoutObserved: true,
+      },
+      deliverableValidation: projectValidation({ buildExitCode }),
+    });
+    const report = evaluateBenchmarkEvidence({
+      schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+      kind: "paired_e2e_evidence",
+      plan,
+      observations: [arm("r2", 0), arm("r3", 1)],
+    });
+    expect(report.pairs[0]).toMatchObject({
+      winner: "r2",
+      reasons: ["r3_product_failure"],
+    });
   });
 
   test("uses provider input tokens as an explicit context-overhead comparison", () => {
@@ -431,7 +577,7 @@ function target(revision: BtccRevision, port: number): BenchmarkTarget {
     revision,
     worktreePath: `/tmp/btcc-${revision}`,
     commit: revision === "r2" ? "1".repeat(40) : "2".repeat(40),
-    buildId: `build-${revision}`,
+    buildId: `sha256:${revision === "r2" ? "2".repeat(64) : "3".repeat(64)}`,
     appBaseUrl: `http://127.0.0.1:${port}`,
     electronDebugPort: port + 1_000,
     dataRoot: `/tmp/btcc-${revision}/data`,
@@ -526,7 +672,58 @@ function observation(targetValue: BenchmarkTarget): RawBenchmarkObservation {
       closeoutObserved: false,
       evidenceRefs: [],
     },
+    deliverableValidation: null,
     artifacts: [],
     artifactRefs: [],
+  };
+}
+
+function projectValidation(input: {
+  buildExitCode?: number;
+  loadError?: string;
+  mobileScrollWidth?: number;
+} = {}) {
+  const failedViewport = (requestedWidth: number, requestedHeight: number) => ({
+    requestedWidth,
+    requestedHeight,
+    innerWidth: null,
+    clientWidth: null,
+    scrollWidth: null,
+    bodyTextLength: null,
+    loaded: false,
+    screenshotPath: null,
+    error: input.loadError ?? null,
+  });
+  return {
+    browserExecutablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    entryPath: "/tmp/project/index.html",
+    build: {
+      command: "npm run build",
+      exitCode: input.buildExitCode ?? 0,
+      timedOut: false,
+      outputTail: "build passed",
+    },
+    desktop: input.loadError ? failedViewport(1_440, 900) : {
+      requestedWidth: 1_440,
+      requestedHeight: 900,
+      innerWidth: 1_440,
+      clientWidth: 1_440,
+      scrollWidth: 1_440,
+      bodyTextLength: 120,
+      loaded: true,
+      screenshotPath: "/tmp/desktop.png",
+      error: null,
+    },
+    mobile: input.loadError ? failedViewport(390, 844) : {
+      requestedWidth: 390,
+      requestedHeight: 844,
+      innerWidth: 390,
+      clientWidth: 390,
+      scrollWidth: input.mobileScrollWidth ?? 390,
+      bodyTextLength: 120,
+      loaded: true,
+      screenshotPath: "/tmp/mobile.png",
+      error: null,
+    },
   };
 }

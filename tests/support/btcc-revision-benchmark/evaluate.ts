@@ -165,11 +165,16 @@ function resolveVerdict(
   if (reasons.length > 0 || pairs.some((pair) => pair.winner === "undecided")) {
     return "insufficient_evidence";
   }
-  if (pairs.some((pair) =>
-    pair.r3 && hardFailure(pair.r3) && pair.r2 && !hardFailure(pair.r2),
-  )) {
-    reasons.push("r3_hard_product_regression");
-    return "r2_better";
+  const r3HardFailures = pairs.filter((pair) =>
+    pair.r3?.measurementComplete && hardFailure(pair.r3),
+  );
+  if (r3HardFailures.length > 0) {
+    reasons.push("r3_candidate_product_failure");
+    return r3HardFailures.some((pair) =>
+        pair.r2?.measurementComplete && !hardFailure(pair.r2),
+      )
+      ? "r2_better"
+      : "no_clear_winner";
   }
   const r2Tiers = tiers.filter((tier) => tier.r2Wins > tier.r3Wins).length;
   const r3Tiers = tiers.filter((tier) => tier.r3Wins > tier.r2Wins).length;

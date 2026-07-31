@@ -14,6 +14,8 @@ import type {
 } from "../e2e/btcc-r3-electron/contracts.ts";
 import { prepareElectronRun } from
   "../e2e/btcc-r3-electron/isolation-config.ts";
+import { openSession } from
+  "../e2e/btcc-r3-electron/product-launch.ts";
 import { checkScenarioExpectations } from
   "../e2e/btcc-r3-electron/scenario-expectations.ts";
 import { readElectronScenario } from
@@ -76,6 +78,49 @@ test("project Electron scenario prepares an isolated scratch root without changi
   }
 });
 
+test("project Electron navigation selects the session row when project and session titles match", async () => {
+  const clicks: Array<[string, string]> = [];
+  let projectSessionVisible = false;
+  const page = {
+    async waitForNamedElement() {},
+    async namedElementVisible() {
+      return projectSessionVisible;
+    },
+    async clickNamedElement(selector: string, name: string) {
+      clicks.push([selector, name]);
+      if (selector === '[data-test-class="project-group-row"]') {
+        projectSessionVisible = true;
+      }
+    },
+    async waitForNamedElementCurrent() {},
+    async waitFor() {},
+    async evaluate() {
+      return {
+        session_id: "project-session",
+        kind: "project",
+        project_id: "project-1",
+      };
+    },
+  };
+  const run = {
+    projectDisplayName: "Same title",
+    projectId: "project-1",
+    sessionId: "project-session",
+    sessionKind: "project",
+    sessionTitle: "Same title",
+  } as Parameters<typeof openSession>[0];
+
+  await openSession(
+    run,
+    page as unknown as Parameters<typeof openSession>[1],
+  );
+
+  expect(clicks).toEqual([
+    ['[data-test-class="project-group-row"]', "Same title"],
+    ['[data-test-class="project-session-row"]', "Same title"],
+  ]);
+});
+
 test("project effect scenario requires typed-effect Work evidence and persisted marker", async () => {
   const scenario = readElectronScenario(PROJECT_SCENARIO_PATH);
   const [createStep, readStep] = scenario.steps;
@@ -89,6 +134,9 @@ test("project effect scenario requires typed-effect Work evidence and persisted 
     planReviewVerdict: "accept",
     resultReviewVerdict: "accept",
     resultToolNames: ["project_ledger_create", "project_ledger_show"],
+    projectLedgerWorkRecords: 0,
+    projectLedgerCompletedWorkRecords: 0,
+    projectLedgerCloseoutObserved: false,
   };
   const run = {
     workspaceRoot: "/isolated/workspace",
@@ -120,6 +168,30 @@ test("project effect scenario requires typed-effect Work evidence and persisted 
   );
   expect(missingEffect.failures).toContain(
     "work_result_tool_missing:project_ledger_create",
+  );
+
+  const closeoutStep = {
+    ...createStep!,
+    expect: {
+      ...createStep!.expect,
+      work: {
+        ...createStep!.expect?.work,
+        projectLedgerCloseout: true,
+      },
+    },
+  };
+  expect(checkScenarioExpectations(
+    run,
+    closeoutStep,
+    "delivered",
+    [
+      "SPEC-BTCC-R3-E2E-PROJECT-EFFECT",
+      "BTCC_R3_PROJECT_LEDGER_EFFECT_MARKER_20260731",
+    ].join(" "),
+    work,
+    new Map(),
+  ).failures).toContain(
+    "project_ledger_closeout:false:expected:true",
   );
 
   const missingPersistedMarker = checkScenarioExpectations(
@@ -171,7 +243,17 @@ test("Electron Work evidence preserves the effective project_ledger_create tool 
       );
       CREATE TABLE btcc_guided_tool_calls (
         call_id TEXT PRIMARY KEY,
-        tool_name TEXT NOT NULL
+        turn_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_json TEXT
+      );
+      CREATE TABLE btcc_guided_effects (
+        receipt_id TEXT PRIMARY KEY,
+        work_id TEXT NOT NULL,
+        capability TEXT NOT NULL,
+        sanitized_target TEXT NOT NULL,
+        status TEXT NOT NULL
       );
       CREATE TABLE btcc_guided_work_results (
         work_id TEXT NOT NULL,
@@ -191,17 +273,46 @@ test("Electron Work evidence preserves the effective project_ledger_create tool 
       INSERT INTO btcc_guided_work_review_revisions
         VALUES ('work-1', 2, 'result', 'accept');
       INSERT INTO btcc_guided_tool_calls
-        VALUES ('call-1', 'project_ledger_create');
+        VALUES ('call-1', 'turn-1', 'project_ledger_create', 'completed', '{"ok":true}');
+      INSERT INTO btcc_guided_tool_calls VALUES (
+        'call-2', 'turn-1', 'project_ledger_work_complete', 'completed',
+        '{"ok":true,"effect_receipt":{"receipt_id":"receipt-2"}}'
+      );
+      INSERT INTO btcc_guided_effects VALUES (
+        'receipt-2', 'work-1', 'project_ledger_work_complete',
+        'project-ledger:work:W-FIXTURE', 'applied'
+      );
       INSERT INTO btcc_guided_work_results
         VALUES ('work-1', 'call-1', 1);
+      INSERT INTO btcc_guided_work_results
+        VALUES ('work-1', 'call-2', 2);
     `);
   } finally {
     db.close();
   }
 
   try {
+    const projectWorkDir = join(
+      root,
+      "project-ledger",
+      "projects",
+      "fixture",
+      "work",
+      "W-FIXTURE",
+    );
+    mkdirSync(projectWorkDir, { recursive: true });
+    const projectWorkPath = join(projectWorkDir, "work.md");
+    writeFileSync(projectWorkPath, [
+      "---",
+      'id: "W-FIXTURE"',
+      'status: "in_progress"',
+      "---",
+      "",
+    ].join("\n"));
     const observed = readGuidedWorkObservation(
-      { dataRoot: root } as Parameters<typeof readGuidedWorkObservation>[0],
+      { dataRoot: root, projectId: "fixture" } as Parameters<
+        typeof readGuidedWorkObservation
+      >[0],
       "turn-1",
     );
     expect(observed).toMatchObject({
@@ -209,7 +320,69 @@ test("Electron Work evidence preserves the effective project_ledger_create tool 
       planRevision: 1,
       planReviewVerdict: "accept",
       resultReviewVerdict: "accept",
-      resultToolNames: ["project_ledger_create"],
+      resultToolNames: ["project_ledger_create", "project_ledger_work_complete"],
+      projectLedgerWorkRecords: 1,
+      projectLedgerCompletedWorkRecords: 0,
+      projectLedgerCloseoutObserved: false,
+    });
+    const unrelatedProjectWorkDir = join(
+      root,
+      "project-ledger",
+      "projects",
+      "fixture",
+      "work",
+      "W-UNRELATED",
+    );
+    mkdirSync(unrelatedProjectWorkDir, { recursive: true });
+    writeFileSync(join(unrelatedProjectWorkDir, "work.md"), [
+      "---",
+      'id: "W-UNRELATED"',
+      'status: "done"',
+      "---",
+      "",
+    ].join("\n"));
+    const sameIdOtherProjectWorkDir = join(
+      root,
+      "project-ledger",
+      "projects",
+      "other-project",
+      "work",
+      "W-FIXTURE",
+    );
+    mkdirSync(sameIdOtherProjectWorkDir, { recursive: true });
+    writeFileSync(join(sameIdOtherProjectWorkDir, "work.md"), [
+      "---",
+      'id: "W-FIXTURE"',
+      'status: "done"',
+      "---",
+      "",
+    ].join("\n"));
+    expect(readGuidedWorkObservation(
+      { dataRoot: root, projectId: "fixture" } as Parameters<
+        typeof readGuidedWorkObservation
+      >[0],
+      "turn-1",
+    )).toMatchObject({
+      projectLedgerWorkRecords: 2,
+      projectLedgerCompletedWorkRecords: 0,
+      projectLedgerCloseoutObserved: false,
+    });
+    writeFileSync(projectWorkPath, [
+      "---",
+      'id: "W-FIXTURE"',
+      'status: "done"',
+      "---",
+      "",
+    ].join("\n"));
+    expect(readGuidedWorkObservation(
+      { dataRoot: root, projectId: "fixture" } as Parameters<
+        typeof readGuidedWorkObservation
+      >[0],
+      "turn-1",
+    )).toMatchObject({
+      projectLedgerWorkRecords: 2,
+      projectLedgerCompletedWorkRecords: 1,
+      projectLedgerCloseoutObserved: true,
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

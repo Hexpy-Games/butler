@@ -25,6 +25,11 @@ import {
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-project-ledger-effect.ts";
 import {
+  ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
+  type ActiveProjectLedgerReference,
+} from
+  "../../packages/butler-agent/src/integrations/project-ledger/active-project-ledger-reference.ts";
+import {
   createLegacyR2BtccDatabase,
   seedLegacyR2Turn,
   seedPendingLegacyOperation,
@@ -134,6 +139,7 @@ test("a current Project Ledger create is not aliased to the legacy update family
     butlerData: join(project.root, "data"),
     projectRoot: project.ledgerRoot,
     projectRef: "fixture-project",
+    resolveActiveProjectReference: exactAppBinding(project.ledgerRoot),
   });
 
   expect(await create.adapter.classifyEffectBlocker?.({
@@ -584,6 +590,7 @@ async function createHarness(input: HarnessInput) {
       butlerData,
       projectRoot: project.ledgerRoot,
       projectRef: "fixture-project",
+      resolveActiveProjectReference: exactAppBinding(project.ledgerRoot),
     }));
   await stores.durableWork.replacePlan({
     ...scope,
@@ -777,4 +784,20 @@ function stableValue(value: unknown): unknown {
 
 function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function exactAppBinding(
+  projectRoot: string,
+): () => ActiveProjectLedgerReference {
+  return () => ({
+    schema_version: ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
+    app_project_id: "fixture-project",
+    workspace_path: projectRoot,
+    ledger_project_id: "legacy-fixture-alias",
+    ledger_root: projectRoot,
+    source: "app_project_db",
+    resolved_at: "2026-07-31T00:00:00.000Z",
+    initialized: true,
+    initialization_generation: "test",
+  });
 }

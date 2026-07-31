@@ -5,6 +5,11 @@ import type {
   GuidedWorkObservation,
   PreparedRun,
 } from "./contracts.ts";
+import {
+  projectLedgerWorkIdFromEffectTarget,
+  readCanonicalProjectLedgerWorks,
+} from
+  "../../support/project-ledger-work-observation.ts";
 
 interface WorkRow {
   work_id: string;
@@ -94,6 +99,18 @@ export function readGuidedWorkObservation(
       WHERE result.work_id = ?
       ORDER BY result.sequence
     `).all(work.work_id).map((row) => row.tool_name);
+    const projectLedgerWorks = run.projectId
+      ? readCanonicalProjectLedgerWorks(run.dataRoot, run.projectId)
+      : [];
+    const completedProjectLedgerWorkIds = projectLedgerCloseoutWorkIds(
+      db,
+      turnId,
+      work.work_id,
+    );
+    const projectLedgerCompletedWorkRecords = projectLedgerWorks.filter(
+      (record) =>
+        completedProjectLedgerWorkIds.has(record.id) && record.status === "done",
+    ).length;
     return {
       workId: work.work_id,
       status: work.status,
@@ -119,8 +136,41 @@ export function readGuidedWorkObservation(
         "result",
       ),
       resultToolNames,
+      projectLedgerWorkRecords: projectLedgerWorks.length,
+      projectLedgerCompletedWorkRecords,
+      projectLedgerCloseoutObserved: projectLedgerCompletedWorkRecords > 0,
     };
   } finally {
     db.close();
   }
+}
+
+function projectLedgerCloseoutWorkIds(
+  db: Database,
+  turnId: string,
+  workId: string,
+): Set<string> {
+  if (
+    !tableExists(db, "btcc_guided_tool_calls") ||
+    !tableExists(db, "btcc_guided_effects")
+  ) return new Set();
+  const rows = db.query<{ sanitized_target: string }, [string, string]>(`
+    SELECT effect.sanitized_target
+    FROM btcc_guided_tool_calls call
+    JOIN btcc_guided_effects effect
+      ON effect.receipt_id = json_extract(
+        call.result_json,
+        '$.effect_receipt.receipt_id'
+      )
+    WHERE call.turn_id = ?
+      AND effect.work_id = ?
+      AND call.tool_name = 'project_ledger_work_complete'
+      AND effect.capability = 'project_ledger_work_complete'
+      AND call.status = 'completed'
+      AND effect.status = 'applied'
+  `).all(turnId, workId);
+  return new Set(rows.flatMap((row) => {
+    const id = projectLedgerWorkIdFromEffectTarget(row.sanitized_target);
+    return id ? [id] : [];
+  }));
 }

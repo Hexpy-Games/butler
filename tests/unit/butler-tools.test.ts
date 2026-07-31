@@ -170,6 +170,7 @@ function writeAppProjectDb(path: string, input: {
   id: string;
   displayName: string;
   workspacePath: string;
+  ledgerProjectId?: string;
 }): void {
   const db = new Database(path);
   db.run(`
@@ -179,16 +180,26 @@ function writeAppProjectDb(path: string, input: {
       workspace_path TEXT NOT NULL,
       workspace_label TEXT NOT NULL,
       safe_path_label TEXT NOT NULL,
+      ledger_project_id TEXT,
       archived INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     )
   `);
   db.query(`
     INSERT INTO projects (
-      id, display_name, workspace_path, workspace_label, safe_path_label, archived, updated_at
+      id, display_name, workspace_path, workspace_label, safe_path_label,
+      ledger_project_id, archived, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `).run(input.id, input.displayName, input.workspacePath, input.displayName, input.displayName, new Date().toISOString());
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+  `).run(
+    input.id,
+    input.displayName,
+    input.workspacePath,
+    input.displayName,
+    input.displayName,
+    input.ledgerProjectId ?? input.id,
+    new Date().toISOString(),
+  );
   db.close(false);
 }
 
@@ -248,6 +259,7 @@ test("Project Ledger tool wrappers resolve active app project id through the app
     id: "project-sandy-bot-35a0e102",
     displayName: "Sandy Bot",
     workspacePath,
+    ledgerProjectId: "sandy-bot",
   });
   writeFileSync(
     cliPath,
@@ -271,9 +283,59 @@ test("Project Ledger tool wrappers resolve active app project id through the app
   expect(result.data.argv).toEqual([
     "status",
     "--project",
-    join(butlerData, "project-ledger", "projects", "sandy-bot"),
+    join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+    ),
     "--json",
   ]);
+});
+
+test("Project Ledger read tools cannot leave the active App project", async () => {
+  const butlerHome = join(tempDir, "butler-home");
+  const butlerData = join(tempDir, "butler-data");
+  const workspacePath = join(tempDir, "workspaces", "sandy-folder");
+  const appDbPath = join(tempDir, "butler-client.sqlite");
+  mkdirSync(workspacePath, { recursive: true });
+  writeAppProjectDb(appDbPath, {
+    id: "project-sandy-bot-35a0e102",
+    displayName: "Sandy Bot",
+    workspacePath,
+    ledgerProjectId: "sandy-bot",
+  });
+  const execute = createButlerToolExecutor({
+    butlerHome,
+    butlerData,
+    appMessageDbPath: appDbPath,
+    projectId: "project-sandy-bot-35a0e102",
+  });
+  const calls = [
+    { name: "project_ledger_status", args: { project_ref: "other-project" } },
+    { name: "project_ledger_list", args: { project_path: workspacePath, kind: "work" } },
+    { name: "project_ledger_show", args: { project_ref: "other-project", kind: "work", id: "W-OTHER" } },
+  ];
+
+  for (const call of calls) {
+    const result = await execute({
+      ...call,
+      rawArguments: JSON.stringify(call.args),
+    }) as Record<string, any>;
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "project_ledger_project_scope_mismatch",
+        message: "Explicit Project Ledger reference must match the active project id or be omitted.",
+      },
+    });
+  }
+
+  await expect(execute({
+    name: "inspect_project_status",
+    args: { project_ref: "other-project" },
+    rawArguments: "{\"project_ref\":\"other-project\"}",
+  })).rejects.toThrow("Explicit Project Ledger reference must match the active project id or be omitted.");
 });
 
 test("Project Ledger native tools route task completion through task handlers", async () => {

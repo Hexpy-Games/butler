@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -22,6 +23,11 @@ import {
   guidedProjectLedgerEffect,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-project-ledger-effect.ts";
+import {
+  ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
+  type ActiveProjectLedgerReference,
+} from
+  "../../packages/butler-agent/src/integrations/project-ledger/active-project-ledger-reference.ts";
 
 const roots: string[] = [];
 
@@ -46,6 +52,7 @@ describe("R3 guided Project Ledger effect", () => {
       butlerData: fixture.butlerData,
       projectRoot: fixture.projectRoot,
       projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
     });
     expect(create).toMatchObject({
       target: "project-ledger:report:REPORT-R3",
@@ -85,6 +92,7 @@ describe("R3 guided Project Ledger effect", () => {
       butlerData: fixture.butlerData,
       projectRoot: fixture.projectRoot,
       projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
     });
     expect(update).toMatchObject({
       target: "project-ledger:report:REPORT-R3",
@@ -104,6 +112,281 @@ describe("R3 guided Project Ledger effect", () => {
       reason: "Reviewed update",
     });
     expect(observedOccurrences(fixture.butlerData)).toHaveLength(2);
+  });
+
+  test("initializes the Ledger only when the reviewed adapter execution begins", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-project-ledger-init-"));
+    roots.push(root);
+    const butlerData = join(root, "butler-data");
+    const projectRoot = join(root, "project-ledger", "projects", "fixture");
+    let ensureCalls = 0;
+    const effect = createGuidedProjectLedgerEffectAdapter({
+      name: "project_ledger_create",
+      args: {
+        kind: "work",
+        id: "W-R3-INIT",
+        title: "Initialize during reviewed effect",
+        status: "proposed",
+        spec: "SPEC-R3-INIT",
+        acceptance: "The Ledger is initialized and the Work is recorded",
+      },
+      butlerData,
+      projectRoot,
+      projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(projectRoot),
+      initializeForCreate() {
+        ensureCalls += 1;
+        mkdirSync(projectRoot, { recursive: true });
+        if (!existsSync(join(projectRoot, "project.json"))) {
+          writeFileSync(join(projectRoot, "project.json"), `${JSON.stringify({
+            schema: "project-ledger.project.v1",
+            id: "fixture",
+            name: "Fixture",
+            status: "active",
+          }, null, 2)}\n`);
+          writeFileSync(join(projectRoot, "ledger.jsonl"), "");
+        }
+      },
+    });
+
+    expect(ensureCalls).toBe(0);
+    expect(existsSync(projectRoot)).toBe(false);
+
+    expect(await effect.adapter.reconcile({
+      ...effectDispatch("init-work"),
+      dispatchAttempts: 0,
+    })).toEqual({ status: "not_applied" });
+    expect(ensureCalls).toBe(0);
+    expect(existsSync(projectRoot)).toBe(false);
+
+    expect(await effect.adapter.dispatch(effectDispatch("init-work"))).toMatchObject({
+      status: "applied",
+      result: {
+        updated_records: [{ id: "W-R3-INIT", kind: "work" }],
+      },
+    });
+    expect(ensureCalls).toBe(1);
+
+    expect(await effect.adapter.reconcile({
+      ...effectDispatch("init-work"),
+      dispatchAttempts: 1,
+    })).toMatchObject({ status: "applied" });
+    expect(ensureCalls).toBe(1);
+    const core = await loadProjectLedgerCore();
+    expect(core.buildIndex(projectRoot).records.filter(
+      (record) => record.id === "W-R3-INIT",
+    )).toHaveLength(1);
+  });
+
+  test("publishes useful Work when Project Ledger reports only advisory warnings", async () => {
+    const fixture = await projectLedgerFixture();
+    fixture.core.createWork(fixture.projectRoot, {
+      project: fixture.projectRoot,
+      id: "W-EXISTING-WARNING",
+      title: "Existing warning",
+      status: "in_progress",
+      acceptance: "This deliberately exercises warning-only publication",
+    });
+    const effect = createGuidedProjectLedgerEffectAdapter({
+      name: "project_ledger_create",
+      args: {
+        kind: "report",
+        id: "REPORT-WITH-WARNING",
+        title: "Published while a warning exists",
+      },
+      butlerData: fixture.butlerData,
+      projectRoot: fixture.projectRoot,
+      projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
+    });
+
+    expect(await effect.adapter.dispatch(effectDispatch("warning-only-work")))
+      .toMatchObject({
+        status: "applied",
+        result: {
+          updated_records: [{ id: "REPORT-WITH-WARNING", kind: "report" }],
+        },
+      });
+    const check = fixture.core.check(fixture.projectRoot);
+    expect(check.ok).toBe(false);
+    expect(check.issues).toContainEqual(expect.objectContaining({
+      code: "missing_spec",
+      severity: "warning",
+    }));
+  });
+
+  test("completes concise guided Work without requiring a separate spec record", async () => {
+    const fixture = await projectLedgerFixture();
+    await dispatchProjectLedgerEffect(
+      fixture,
+      "create-concise-work",
+      "project_ledger_create",
+      {
+        kind: "work",
+        id: "W-R3-CONCISE",
+        title: "Concise guided work",
+        status: "in_progress",
+        acceptance: "The requested result is delivered and validated",
+      },
+    );
+
+    const created = fixture.core.resolveRecord(fixture.projectRoot, {
+      kind: "work",
+      id: "W-R3-CONCISE",
+    });
+    expect(created.record.status).toBe("in_progress");
+    expect(created.record.specExemption).toBe(true);
+
+    await dispatchProjectLedgerEffect(
+      fixture,
+      "complete-concise-work",
+      "project_ledger_work_complete",
+      {
+        id: "W-R3-CONCISE",
+        validation: "The requested output passed its checks",
+        review: "The result satisfies the request",
+        report: "Delivered in the final response",
+      },
+    );
+
+    const work = fixture.core.resolveRecord(fixture.projectRoot, {
+      kind: "work",
+      id: "W-R3-CONCISE",
+    });
+    expect(fixture.core.readRecordData(work.filePath)).toMatchObject({
+      status: "done",
+      specExemption: true,
+    });
+    expect(fixture.core.check(fixture.projectRoot).issues).not.toContainEqual(
+      expect.objectContaining({ code: "missing_spec" }),
+    );
+  });
+
+  test("completes an existing concise Work without losing effect identity", async () => {
+    const fixture = await projectLedgerFixture();
+    fixture.core.createWork(fixture.projectRoot, {
+      project: fixture.projectRoot,
+      id: "W-R3-EXISTING-CONCISE",
+      title: "Existing concise work",
+      status: "in_progress",
+      acceptance: "The resumed request is validated and reported",
+    });
+    const effect = createGuidedProjectLedgerEffectAdapter({
+      name: "project_ledger_work_complete",
+      args: {
+        id: "W-R3-EXISTING-CONCISE",
+        validation: "The resumed result passed its checks",
+        review: "The result satisfies the original request",
+        report: "The completed result was delivered",
+      },
+      butlerData: fixture.butlerData,
+      projectRoot: fixture.projectRoot,
+      projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
+    });
+
+    expect(effect.normalizedInput).toMatchObject({
+      id: "W-R3-EXISTING-CONCISE",
+      status: "done",
+      specExemption: true,
+    });
+    expect(await effect.adapter.dispatch(effectDispatch("complete-existing-concise")))
+      .toMatchObject({ status: "applied" });
+    const completed = fixture.core.resolveRecord(fixture.projectRoot, {
+      kind: "work",
+      id: "W-R3-EXISTING-CONCISE",
+    });
+    expect(completed.record).toMatchObject({
+      status: "done",
+      specExemption: true,
+    });
+  });
+
+  test("does not initialize an empty Ledger for update or completion calls", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-project-ledger-no-init-"));
+    roots.push(root);
+    const projectRoot = join(root, "project-ledger", "projects", "fixture");
+    let initializeCalls = 0;
+    const effect = createGuidedProjectLedgerEffectAdapter({
+      name: "project_ledger_work_complete",
+      args: {
+        id: "W-MISSING",
+        validation: "No validation exists",
+        review: "No Work exists",
+        report: "No report exists",
+      },
+      butlerData: join(root, "butler-data"),
+      projectRoot,
+      projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding(projectRoot),
+      initializeForCreate() {
+        initializeCalls += 1;
+      },
+    });
+
+    expect(await effect.adapter.reconcile({
+      ...effectDispatch("complete-missing-work"),
+      dispatchAttempts: 0,
+    })).toEqual({ status: "not_applied" });
+    expect(await effect.adapter.dispatch(effectDispatch("complete-missing-work")))
+      .toMatchObject({
+        status: "not_applied",
+        error: { code: "project_ledger_not_initialized" },
+      });
+    expect(initializeCalls).toBe(0);
+    expect(existsSync(projectRoot)).toBe(false);
+  });
+
+  test("fails closed before mutation without the exact active App project row", async () => {
+    const fixture = await projectLedgerFixture();
+    const before = fixture.core.observeProjectLedgerSourceHead(
+      fixture.projectRoot,
+    );
+    const invalidBindings: Array<Partial<ActiveProjectLedgerReference>> = [{
+      source: "workspace_metadata",
+    }, {
+      degradation_code: "app_project_db_missing",
+    }, {
+      app_project_id: "other-app-project",
+    }, {
+      ledger_root: join(fixture.root, "other-ledger-root"),
+    }];
+
+    for (const [index, override] of invalidBindings.entries()) {
+      const effect = createGuidedProjectLedgerEffectAdapter({
+        name: "project_ledger_create",
+        args: {
+          kind: "report",
+          id: `REPORT-BOUNDARY-${index}`,
+          title: "Must not be published",
+        },
+        butlerData: fixture.butlerData,
+        projectRoot: fixture.projectRoot,
+        projectRef: "fixture",
+        resolveActiveProjectReference: exactAppBinding(
+          fixture.projectRoot,
+          override,
+        ),
+      });
+
+      expect(await effect.adapter.reconcile({
+        ...effectDispatch(`binding-reconcile-${index}`),
+        dispatchAttempts: 0,
+      })).toMatchObject({
+        status: "uncertain",
+        error: { code: "project_ledger_active_app_binding_required" },
+      });
+      expect(await effect.adapter.dispatch(
+        effectDispatch(`binding-dispatch-${index}`),
+      )).toMatchObject({
+        status: "not_applied",
+        error: { code: "project_ledger_active_app_binding_required" },
+      });
+    }
+
+    expect(fixture.core.observeProjectLedgerSourceHead(fixture.projectRoot))
+      .toEqual(before);
+    expect(observedOccurrences(fixture.butlerData)).toHaveLength(0);
   });
 
   test("preserves hierarchical create fields and applies lifecycle tools", async () => {
@@ -176,10 +459,13 @@ describe("R3 guided Project Ledger effect", () => {
       kind: "attempt",
       id: "A-R3",
     }).record.status).toBe("succeeded");
-    expect(fixture.core.resolveRecord(fixture.projectRoot, {
+    const completedWork = fixture.core.resolveRecord(fixture.projectRoot, {
       kind: "work",
       id: "W-R3",
-    }).record.status).toBe("done");
+    });
+    expect(completedWork.record.status).toBe("done");
+    expect(completedWork.record.spec).toBe("SPEC-R3");
+    expect(completedWork.record.specExemption).toBe(false);
     expect(observedOccurrences(fixture.butlerData)).toHaveLength(6);
   });
 
@@ -360,9 +646,28 @@ describe("R3 guided Project Ledger effect", () => {
       butlerData: "/tmp/unused",
       projectRoot: "/tmp/unused-project",
       projectRef: "fixture",
+      resolveActiveProjectReference: exactAppBinding("/tmp/unused-project"),
     })).toThrow("differs from the active project");
   });
 });
+
+function exactAppBinding(
+  projectRoot: string,
+  overrides: Partial<ActiveProjectLedgerReference> = {},
+): () => ActiveProjectLedgerReference {
+  return () => ({
+    schema_version: ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
+    app_project_id: "fixture",
+    workspace_path: projectRoot,
+    ledger_project_id: "legacy-fixture-alias",
+    ledger_root: projectRoot,
+    source: "app_project_db",
+    resolved_at: "2026-07-31T00:00:00.000Z",
+    initialized: existsSync(join(projectRoot, "project.json")),
+    initialization_generation: "test",
+    ...overrides,
+  });
+}
 
 function effectDispatch(idempotencyKey: string) {
   return {
@@ -385,6 +690,7 @@ async function dispatchProjectLedgerEffect(
     butlerData: fixture.butlerData,
     projectRoot: fixture.projectRoot,
     projectRef: "fixture",
+    resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
   });
   expect(await effect.adapter.dispatch(effectDispatch(effectKey))).toMatchObject({
     status: "applied",

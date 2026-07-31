@@ -102,6 +102,8 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("Use Work when the task needs continuation across turns");
   expect(instructions).toContain("Skip Work for simple conversation");
   expect(instructions).toContain("single-step read-only lookup");
+  expect(instructions).toContain("state_effect validation");
+  expect(instructions).toContain("Use typed tools for intended source");
   expect(instructions).toContain("Multi-source or multi-step research");
   expect(instructions).toContain("call replace_work_plan before the dependent work");
   expect(instructions).toContain("record_work_checkpoint is optional");
@@ -120,6 +122,29 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("If Work bookkeeping fails, continue");
   expect(instructions).not.toContain("tracking=");
   expect(instructions).not.toContain("BTCC states");
+
+  const projectInstructions = guidedInstructions(guidedPolicy(projectTurn));
+  expect(projectInstructions).toContain(
+    "keep one concise Project Ledger Work record",
+  );
+  expect(projectInstructions).toContain(
+    "Check for related Work first and reuse it when present",
+  );
+  expect(projectInstructions).toContain(
+    "complete the Ledger Work after validating the requested outcome",
+  );
+  expect(projectInstructions).toContain(
+    "An uninitialized Project Ledger has no existing Work to reuse",
+  );
+  expect(projectInstructions).toContain(
+    "Do not create Project Ledger task or attempt hierarchies unless",
+  );
+  expect(projectInstructions).toContain(
+    "If Project Ledger bookkeeping fails, still deliver the truthful result",
+  );
+  expect(projectInstructions).not.toContain(
+    "Do not attempt to mutate the Project Ledger",
+  );
 });
 
 test("R3 guided prompt reports disabled Work without inventing a Work context", () => {

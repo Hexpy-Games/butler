@@ -7,6 +7,15 @@ import { ActiveProjectLedgerResolver } from "./active-project-ledger-reference.t
 
 const activeProjectLedgerResolver = new ActiveProjectLedgerResolver();
 
+export class ProjectLedgerProjectScopeError extends Error {
+  readonly code = "project_ledger_project_scope_mismatch";
+
+  constructor() {
+    super("Explicit Project Ledger reference must match the active project id or be omitted.");
+    this.name = "ProjectLedgerProjectScopeError";
+  }
+}
+
 export function projectLedgerPath(input: { butlerHome: string }): string {
   const packagedPath = join(input.butlerHome, "packages", "project-ledger", "bin", "project-ledger");
   if (existsSync(packagedPath)) return packagedPath;
@@ -23,7 +32,15 @@ export function projectLedgerProjectPath(
   },
   args: Record<string, unknown>,
 ): string {
-  const explicitRef = stringArg(args, "project_ref") || stringArg(args, "project_path");
+  const explicitRefs = [
+    stringArg(args, "project_ref"),
+    stringArg(args, "project_path"),
+  ].filter(Boolean);
+  const activeProjectId = input.projectId?.trim() || "";
+  if (activeProjectId && explicitRefs.some((reference) => reference !== activeProjectId)) {
+    throw new ProjectLedgerProjectScopeError();
+  }
+  const explicitRef = explicitRefs[0] ?? "";
   if (!input.butlerData) return explicitRef || input.workspacePath || input.butlerHome;
   try {
     return activeProjectLedgerResolver.resolve({

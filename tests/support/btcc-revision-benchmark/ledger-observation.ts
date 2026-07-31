@@ -1,10 +1,16 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { Database } from "bun:sqlite";
 import type {
   BenchmarkLedgerObservation,
   BenchmarkLedgerRoute,
+  BtccRevision,
 } from "./contracts.ts";
+import {
+  projectLedgerWorkIdFromEffectTarget,
+  readCanonicalProjectLedgerWorks,
+} from
+  "../project-ledger-work-observation.ts";
 
 export function openBenchmarkAppDatabase(dataRoot: string): Database | null {
   for (const path of [
@@ -16,22 +22,77 @@ export function openBenchmarkAppDatabase(dataRoot: string): Database | null {
   return null;
 }
 
+export function resolveBenchmarkLedgerProjectId(input: {
+  appProjectId?: string;
+  dataRoot: string;
+  db: Database | null;
+  revision: BtccRevision;
+  workspaceRoot: string;
+}): string | undefined {
+  if (input.revision === "r3") {
+    return safeLedgerProjectId(input.appProjectId);
+  }
+  const row = input.db && input.appProjectId && tableExists(input.db, "projects")
+    ? input.db.query<{
+        display_name: string;
+        id: string;
+        safe_path_label: string;
+        workspace_label: string;
+      }, [string]>(`
+        SELECT id, display_name, workspace_label, safe_path_label
+        FROM projects WHERE archived = 0 AND id = ? LIMIT 1
+      `).get(input.appProjectId)
+    : null;
+  const candidates = uniqueSafeLedgerProjectIds([
+    readJsonString(join(input.workspaceRoot, "project.json"), "id"),
+    readJsonString(join(input.workspaceRoot, "package.json"), "name"),
+    basename(input.workspaceRoot),
+    row?.safe_path_label,
+    row?.workspace_label,
+    row?.display_name,
+    row?.id,
+    input.appProjectId,
+  ]);
+  const initialized = candidates.find((candidate) => {
+    const root = join(input.dataRoot, "project-ledger", "projects", candidate);
+    return existsSync(join(root, "project.json")) &&
+      existsSync(join(root, "ledger.jsonl"));
+  });
+  return initialized ?? candidates[0];
+}
+
 export function readLedgerObservation(
   db: Database | null,
   turnId: string,
   expectedRoute: BenchmarkLedgerRoute,
+  dataRoot?: string,
+  projectId?: string,
 ): BenchmarkLedgerObservation {
   const none = emptyLedger(expectedRoute);
   if (!db || !turnId) return none;
-  const guided = readGuidedWork(db, turnId, expectedRoute);
+  const guided = readGuidedWork(
+    db,
+    turnId,
+    expectedRoute,
+    dataRoot,
+    projectId,
+  );
   if (guided) return guided;
-  return readLegacyProgram(db, turnId, expectedRoute) ?? none;
+  return readLegacyProgram(
+    db,
+    turnId,
+    expectedRoute,
+    dataRoot,
+    projectId,
+  ) ?? none;
 }
 
 function readGuidedWork(
   db: Database,
   turnId: string,
   expectedRoute: BenchmarkLedgerRoute,
+  dataRoot?: string,
+  projectId?: string,
 ): BenchmarkLedgerObservation | null {
   if (!tableExists(db, "btcc_guided_turn_work_bindings")) return null;
   const work = db.query<{
@@ -65,8 +126,20 @@ function readGuidedWork(
     work.work_id,
   );
   const projectLedgerEffects = work.scope_kind === "project"
-    ? countProjectLedgerEffects(db, turnId)
+    ? countProjectLedgerEffects(db, turnId, work.work_id)
     : 0;
+  const projectLedgerWorks = work.scope_kind === "project" && dataRoot && projectId
+    ? readCanonicalProjectLedgerWorks(dataRoot, projectId)
+    : [];
+  const effectWorkIds = work.scope_kind === "project"
+    ? completedProjectLedgerWorkIds(db, turnId, work.work_id)
+    : new Set<string>();
+  const currentProjectLedgerWorks = projectLedgerWorks.filter((record) =>
+    effectWorkIds.has(record.id),
+  );
+  const canonicalProjectLedgerCloseout = currentProjectLedgerWorks.some(
+    (record) => record.status === "done",
+  );
   return {
     expectedRoute,
     observedRoute: work.scope_kind === "project" ? "project" : "work",
@@ -90,7 +163,7 @@ function readGuidedWork(
       work.status === "completed" &&
       resultRecords > 0 &&
       reviewRecords >= 2 &&
-      (work.scope_kind !== "project" || projectLedgerEffects > 0),
+      (work.scope_kind !== "project" || canonicalProjectLedgerCloseout),
     evidenceRefs: [
       "btcc_guided_turn_work_bindings",
       "btcc_guided_works",
@@ -98,7 +171,13 @@ function readGuidedWork(
       "btcc_guided_work_checkpoint_revisions",
       "btcc_guided_work_review_revisions",
       "btcc_guided_work_mutations",
-      ...(work.scope_kind === "project" ? ["btcc_guided_tool_calls"] : []),
+      ...(work.scope_kind === "project"
+        ? [
+          "btcc_guided_tool_calls",
+          "btcc_guided_effects",
+          ...currentProjectLedgerWorks.map((record) => record.ref),
+        ]
+        : []),
     ],
   };
 }
@@ -107,23 +186,25 @@ function readLegacyProgram(
   db: Database,
   turnId: string,
   expectedRoute: BenchmarkLedgerRoute,
+  dataRoot?: string,
+  projectId?: string,
 ): BenchmarkLedgerObservation | null {
-  if (!tableExists(db, "btcc_programs") || !tableExists(db, "btcc_turns")) return null;
-  const session = db.query<{ session_id: string }, [string]>(
-    "SELECT session_id FROM btcc_turns WHERE turn_id = ? LIMIT 1",
-  ).get(turnId)?.session_id;
-  if (!session) return null;
+  if (
+    !tableExists(db, "btcc_programs") ||
+    !tableExists(db, "btcc_ledger_mutations")
+  ) return null;
   const program = db.query<{
     frontier: string;
     program_id: string;
     scope_kind: string;
   }, [string]>(`
-    SELECT program_id, scope_kind, frontier
-    FROM btcc_programs
-    WHERE session_id = ?
-    ORDER BY manifest_revision DESC
+    SELECT program.program_id, program.scope_kind, program.frontier
+    FROM btcc_ledger_mutations mutation
+    JOIN btcc_programs program ON program.program_id = mutation.program_id
+    WHERE mutation.turn_id = ?
+    ORDER BY mutation.rowid DESC
     LIMIT 1
-  `).get(session);
+  `).get(turnId);
   if (!program) return null;
   const workRecords = countWhere(db, "btcc_work_items", "program_id", program.program_id);
   const taskRecords = countWhere(db, "btcc_tasks", "program_id", program.program_id);
@@ -135,6 +216,18 @@ function readLegacyProgram(
     )
     : 0;
   const scopeKind = program.scope_kind === "project" ? "project" : "session";
+  const projectLedgerWorks = scopeKind === "project" && dataRoot && projectId
+    ? readCanonicalProjectLedgerWorks(dataRoot, projectId)
+    : [];
+  const programWorkIds = scopeKind === "project"
+    ? workIdsForProgram(db, program.program_id)
+    : new Set<string>();
+  const currentProjectLedgerWorks = projectLedgerWorks.filter((record) =>
+    programWorkIds.has(record.id),
+  );
+  const canonicalProjectLedgerCloseout = currentProjectLedgerWorks.some(
+    (record) => record.status === "done",
+  );
   const mutationRecords = countWhere(
     db,
     "btcc_ledger_mutations",
@@ -160,15 +253,19 @@ function readLegacyProgram(
     closeoutObserved:
       /complete|closed|reported/iu.test(program.frontier) &&
       workRecords > 0 &&
-      resultRecords > 0,
+      resultRecords > 0 &&
+      (scopeKind !== "project" || canonicalProjectLedgerCloseout),
     evidenceRefs: [
-      "btcc_turns",
-      "btcc_programs",
-      "btcc_work_items",
-      "btcc_tasks",
-      "btcc_checkpoints",
-      "btcc_ledger_mutations",
-    ].filter((table) => tableExists(db, table)),
+      ...[
+        "btcc_turns",
+        "btcc_programs",
+        "btcc_work_items",
+        "btcc_tasks",
+        "btcc_checkpoints",
+        "btcc_ledger_mutations",
+      ].filter((table) => tableExists(db, table)),
+      ...currentProjectLedgerWorks.map((record) => record.ref),
+    ],
   };
 }
 
@@ -198,6 +295,36 @@ export function tableExists(db: Database, table: string): boolean {
   `).get(table));
 }
 
+function uniqueSafeLedgerProjectIds(
+  values: Array<string | null | undefined>,
+): string[] {
+  const seen = new Set<string>();
+  return values.flatMap((value) => {
+    const normalized = safeLedgerProjectId(value);
+    if (!normalized || seen.has(normalized)) return [];
+    seen.add(normalized);
+    return [normalized];
+  });
+}
+
+function safeLedgerProjectId(value: string | null | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized && /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/u.test(normalized)
+    ? normalized
+    : undefined;
+}
+
+function readJsonString(path: string, key: string): string | null {
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return typeof value[key] === "string" && value[key].trim()
+      ? value[key].trim()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function countWhere(
   db: Database,
   table: string,
@@ -216,12 +343,16 @@ function countQuery(db: Database, query: string, value: string): number {
   return db.query<{ count: number }, [string]>(query).get(value)?.count ?? 0;
 }
 
-function countProjectLedgerEffects(db: Database, turnId: string): number {
+function countProjectLedgerEffects(
+  db: Database,
+  turnId: string,
+  workId: string,
+): number {
   if (
     !tableExists(db, "btcc_guided_tool_calls") ||
     !tableExists(db, "btcc_guided_effects")
   ) return 0;
-  return db.query<{ count: number }, [string]>(`
+  return db.query<{ count: number }, [string, string]>(`
     SELECT COUNT(*) AS count
     FROM btcc_guided_tool_calls call
     JOIN btcc_guided_effects effect
@@ -230,6 +361,8 @@ function countProjectLedgerEffects(db: Database, turnId: string): number {
         '$.effect_receipt.receipt_id'
       )
     WHERE call.turn_id = ?
+      AND effect.work_id = ?
+      AND effect.capability = call.tool_name
       AND call.tool_name IN (
         'project_ledger_create',
         'project_ledger_update',
@@ -242,5 +375,42 @@ function countProjectLedgerEffects(db: Database, turnId: string): number {
       )
       AND call.status = 'completed'
       AND effect.status = 'applied'
-  `).get(turnId)?.count ?? 0;
+  `).get(turnId, workId)?.count ?? 0;
+}
+
+function completedProjectLedgerWorkIds(
+  db: Database,
+  turnId: string,
+  workId: string,
+): Set<string> {
+  if (
+    !tableExists(db, "btcc_guided_tool_calls") ||
+    !tableExists(db, "btcc_guided_effects")
+  ) return new Set();
+  const rows = db.query<{ sanitized_target: string }, [string, string]>(`
+    SELECT effect.sanitized_target
+    FROM btcc_guided_tool_calls call
+    JOIN btcc_guided_effects effect
+      ON effect.receipt_id = json_extract(
+        call.result_json,
+        '$.effect_receipt.receipt_id'
+      )
+    WHERE call.turn_id = ?
+      AND effect.work_id = ?
+      AND call.tool_name = 'project_ledger_work_complete'
+      AND effect.capability = 'project_ledger_work_complete'
+      AND call.status = 'completed'
+      AND effect.status = 'applied'
+  `).all(turnId, workId);
+  return new Set(rows.flatMap((row) => {
+    const id = projectLedgerWorkIdFromEffectTarget(row.sanitized_target);
+    return id ? [id] : [];
+  }));
+}
+
+function workIdsForProgram(db: Database, programId: string): Set<string> {
+  if (!tableExists(db, "btcc_work_items")) return new Set();
+  return new Set(db.query<{ work_id: string }, [string]>(`
+    SELECT work_id FROM btcc_work_items WHERE program_id = ?
+  `).all(programId).map((row) => row.work_id));
 }

@@ -19,7 +19,7 @@ export async function executeGuidedReadOnlyCommand(input: {
   originalRequest: string;
   signal?: AbortSignal;
 }): Promise<Record<string, unknown>> {
-  const stateEffect = input.args.state_effect;
+  const stateEffect = input.args.state_effect ?? "read_only";
   if (stateEffect !== "read_only" && stateEffect !== "validation") {
     return commandBoundaryError(
       "command_mutation_requires_typed_effect",

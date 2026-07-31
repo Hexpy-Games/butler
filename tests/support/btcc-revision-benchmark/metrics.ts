@@ -42,12 +42,18 @@ export function calculateObservationMetrics(
       observation.artifacts.every((artifact) => artifact.exists) &&
       observation.artifacts.some((artifact) => artifact.changedFromFixture === true)
     );
+  const projectValidationRequired = observation.ledger.expectedRoute === "project";
+  const projectValidationComplete = !projectValidationRequired ||
+    completeProjectDeliverableValidation(observation.deliverableValidation);
+  const projectValidationPass = !projectValidationRequired ||
+    passingProjectDeliverableValidation(observation.deliverableValidation);
   const metrics: ObservationMetrics = {
     measurementComplete: false,
     outcomeSuccess: observation.terminalState === "delivered" &&
       observation.finalText.trim().length > 0 &&
       outcomesComplete && outcomes.every(Boolean) &&
-      artifactResultPass,
+      artifactResultPass &&
+      projectValidationPass,
     qualityScore,
     promptTokens: nonNegativeOrNull(observation.usage.promptTokens),
     totalTokens: nonNegativeOrNull(observation.usage.totalTokens),
@@ -88,7 +94,7 @@ export function calculateObservationMetrics(
     noProgressTurns: nonNegativeOrNull(observation.loop.noProgressTurns),
     validatorRejections: nonNegativeOrNull(observation.loop.validatorRejections),
   };
-  metrics.measurementComplete = outcomesComplete && [
+  metrics.measurementComplete = outcomesComplete && projectValidationComplete && [
     metrics.qualityScore,
     metrics.promptTokens,
     metrics.totalTokens,
@@ -115,6 +121,33 @@ export function calculateObservationMetrics(
     metrics.validatorRejections,
   ].every((value) => value !== null);
   return metrics;
+}
+
+export function passingProjectDeliverableValidation(
+  validation: RawBenchmarkObservation["deliverableValidation"],
+): boolean {
+  if (!completeProjectDeliverableValidation(validation) || !validation) return false;
+  return validation.build.exitCode === 0 && !validation.build.timedOut &&
+    viewportPasses(validation.desktop) && viewportPasses(validation.mobile);
+}
+
+function completeProjectDeliverableValidation(
+  validation: RawBenchmarkObservation["deliverableValidation"],
+): boolean {
+  if (!validation) return false;
+  // A returned record is conclusive product evidence. Browser/setup failures
+  // throw before persistence; build/load/render failures are complete negatives.
+  return validation.build.timedOut || validation.build.exitCode !== null;
+}
+
+function viewportPasses(
+  viewport: NonNullable<RawBenchmarkObservation["deliverableValidation"]>["desktop"],
+): boolean {
+  return viewport.loaded && viewport.screenshotPath !== null &&
+    viewport.innerWidth === viewport.requestedWidth &&
+    viewport.clientWidth === viewport.requestedWidth &&
+    viewport.scrollWidth !== null && viewport.clientWidth !== null &&
+    viewport.scrollWidth <= viewport.clientWidth;
 }
 
 function scoreOrNull(value: number | null): number | null {

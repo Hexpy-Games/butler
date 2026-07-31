@@ -79,6 +79,9 @@ bun run benchmark:btcc-revisions init --config config.json --output evidence.jso
 
 The actual generated plan contains all 36 materialized prompts and both
 targets. The abbreviated example above is not benchmark evidence.
+During `init`, each clean target checkout runs the App UI build once. The plan
+records `buildId` as `sha256:<digest>` over the sorted relative paths and bytes
+inside that target's `packages/butler-app/client/ui/dist` directory.
 
 ## Run the pairs
 
@@ -118,6 +121,7 @@ those helpers to JSON rather than creating different fixtures for the two arms.
 {
   "runRoot": "/absolute/benchmark-output/formal-01",
   "sourceData": "/Users/example/.butler",
+  "browserExecutablePath": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "fixtures": [
     {
       "path": "fixtures/inputs/january.csv",
@@ -152,7 +156,8 @@ The runner starts a fresh Electron profile, Butler data root, session, and
 workspace for every arm. It follows each prompt's alternating R2/R3 order,
 writes the evidence file after every observation, and skips observations
 already present when resumed. Before the first sample it verifies that each
-worktree is clean and exactly at the commit declared by the plan. A Turn that
+worktree is clean and exactly at the commit declared by the plan, and that its
+current UI dist digest still matches the recorded `buildId`. A Turn that
 reaches its tier deadline is kept as a `timed_out` product observation;
 launcher, binding, or renderer failures stay harness incidents and stop the run
 instead of being scored.
@@ -172,12 +177,28 @@ Work or Project Ledger use visible independently of whether an artifact
 happened to be created. Requested artifacts record existence, byte length,
 SHA-256, and whether their bytes differ from the starting fixture, so a
 pre-existing project scaffold cannot be mistaken for completed product work.
+The shared Electron scenario does not assert the R3-only guided Work schema;
+after the Turn, the benchmark observer reads each frozen revision's own durable
+Work representation and applies the same route and closeout requirements.
+
+After each Project arm, the runner executes the fixture's real build and opens
+the generated `index.html` in the same explicit Chrome binary. CDP requests a
+1440x900 desktop viewport and a 390x844 mobile viewport, records the actual
+`innerWidth`, `clientWidth`, and `scrollWidth`, and saves both screenshots under
+that arm's run directory. Build failure, load failure, viewport mismatch, or
+horizontal overflow is a complete negative product result, not a missing
+measurement. A missing browser or browser-launch failure is a benchmark
+infrastructure incident and stops the run. Visual polish, brand fit, and content
+quality remain human assessment from the screenshots; the harness does not use
+DOM checklists or automatic aesthetic scoring.
 
 An R3 reporting checkpoint is useful resume context but remains optional. The
 benchmark therefore does not require one merely to satisfy the benchmark.
 R3 closeout evidence requires a completed Work with a recorded result and the
 plan/result review lifecycle; Project cases additionally require an observed
-Project Ledger effect.
+canonical Project Ledger Work whose stored status is `done`. Applied Project
+Ledger effects remain supporting evidence, but a create or update receipt alone
+does not count as Project closeout.
 
 ## Assess delivered product results
 
@@ -213,9 +234,10 @@ Each pair is decided in this order:
    failures counts as one improvement axis.
 5. Everything else is a tie.
 
-R3 is reported better only when it wins more tiers and R2 wins none. A hard R3
-product regression is also a candidate-release veto and reports R2 better even
-when aggregate averages look favorable. Mixed results otherwise produce
+R3 is reported better only when it wins more tiers and R2 wins none. Any
+complete R3 hard product failure is a candidate-release veto. It reports R2
+better when the paired R2 arm is healthy, otherwise `no_clear_winner` with an
+explicit `r3_candidate_product_failure` reason. Mixed results otherwise produce
 `no_clear_winner`. These rules are a practical product comparison for this
 corpus, not a statistical release claim.
 

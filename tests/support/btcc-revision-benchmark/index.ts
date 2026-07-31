@@ -19,6 +19,8 @@ export type {
   BtccRevision,
   MaterializedBenchmarkPrompt,
   ObservationMetrics,
+  ProjectDeliverableValidation,
+  ProjectViewportObservation,
   RawBenchmarkObservation,
 } from "./contracts.ts";
 export {
@@ -37,7 +39,10 @@ export {
   formalBenchmarkPlaceholders,
   formalBenchmarkRunnerConfig,
 } from "./formal-fixtures.ts";
-export { calculateObservationMetrics } from "./metrics.ts";
+export {
+  calculateObservationMetrics,
+  passingProjectDeliverableValidation,
+} from "./metrics.ts";
 export {
   createBenchmarkPlan,
   createEmptyBenchmarkEvidence,

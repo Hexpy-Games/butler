@@ -141,6 +141,8 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       serializedRequestBytes: requestBody.byteLength,
       firstContentBearingDeltaAtMs: 200,
       completedAtMs: 300,
+      terminatedAtMs: 300,
+      termination: "completed",
       status: 202,
       hasTextContent: true,
       hasToolArgumentContent: true,
@@ -268,6 +270,7 @@ test("non-streaming responses keep first-delta timing null and failure evidence 
     expect(providerRequests[0]).toMatchObject({
       requestKind: "main",
       firstContentBearingDeltaAtMs: null,
+      termination: "completed",
       status: 429,
       hasTextContent: false,
       hasToolArgumentContent: false,
@@ -330,6 +333,7 @@ test("completed SSE content sets safe shape flags without inventing a first-delt
     await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
     expect(proxy.observations()[0]).toMatchObject({
       firstContentBearingDeltaAtMs: null,
+      termination: "completed",
       hasTextContent: true,
       hasToolArgumentContent: true,
       hasReasoningContent: true,
@@ -340,7 +344,7 @@ test("completed SSE content sets safe shape flags without inventing a first-delt
   }
 });
 
-test("upstream SSE abort terminates the downstream response and remains incomplete evidence", async () => {
+test("upstream SSE abort terminates the downstream response and records failed evidence", async () => {
   let abortUpstream: (() => void) | undefined;
   const abortGate = new Promise<void>((resolve) => {
     abortUpstream = resolve;
@@ -378,18 +382,48 @@ test("upstream SSE abort terminates the downstream response and remains incomple
       ),
     ]);
     expect(outcome).not.toBe("timeout");
-    await waitFor(() =>
-      proxy.observations()[0]?.firstContentBearingDeltaAtMs !== null,
-    );
+    await waitFor(() => proxy.observations()[0]?.termination !== null);
     expect(proxy.observations()[0]).toMatchObject({
       status: 200,
       completedAtMs: null,
+      termination: "failed",
       hasTextContent: true,
     });
+    expect(proxy.observations()[0]?.terminatedAtMs).not.toBeNull();
   } finally {
     abortUpstream?.();
     await proxy.close();
     await upstream.close();
+  }
+});
+
+test("upstream connection failure returns a generic 502 and records failed evidence", async () => {
+  const unavailableUpstream = await listen((_request, response) => {
+    response.end();
+  });
+  const unavailableBaseUrl = unavailableUpstream.baseUrl;
+  await unavailableUpstream.close();
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: unavailableBaseUrl,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: "{}",
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).toBe(
+      "Provider observation proxy could not reach the upstream provider.",
+    );
+    await waitFor(() => proxy.observations()[0]?.termination !== null);
+    expect(proxy.observations()[0]).toMatchObject({
+      completedAtMs: null,
+      status: null,
+      termination: "failed",
+    });
+  } finally {
+    await proxy.close();
   }
 });
 
@@ -414,14 +448,18 @@ test("closing the proxy cancels active provider work without waiting for the ups
 
   try {
     await accepted;
+    const firstClose = proxy.close();
+    const concurrentClose = proxy.close();
     const closeOutcome = await Promise.race([
-      proxy.close().then(() => "closed" as const),
+      Promise.all([firstClose, concurrentClose]).then(() => "closed" as const),
       new Promise<"timeout">((resolve) =>
         setTimeout(() => resolve("timeout"), 500),
       ),
     ]);
     expect(closeOutcome).toBe("closed");
     expect(proxy.observations()[0]?.completedAtMs).toBeNull();
+    expect(proxy.observations()[0]?.termination).toBe("cancelled");
+    expect(proxy.observations()[0]?.terminatedAtMs).not.toBeNull();
     await pendingFetch;
   } finally {
     await proxy.close();

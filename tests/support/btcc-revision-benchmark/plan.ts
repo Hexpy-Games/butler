@@ -7,6 +7,8 @@ import {
 } from "./contracts.ts";
 import { materializeBenchmarkCorpus } from "./corpus.ts";
 
+const BUILD_ID_PATTERN = /^sha256:[a-f0-9]{64}$/u;
+
 export function createBenchmarkPlan(input: {
   runId: string;
   createdAt: string;
@@ -67,5 +69,10 @@ function validateIsolatedTargets(targets: Record<BtccRevision, BenchmarkTarget>)
       !Number.isSafeInteger(target.electronDebugPort) ||
       target.electronDebugPort <= 0
     ) throw new Error(`Benchmark ${target.revision} target identity is incomplete`);
+    if (!BUILD_ID_PATTERN.test(target.buildId)) {
+      throw new Error(
+        `Benchmark ${target.revision} buildId must be sha256:<digest>`,
+      );
+    }
   }
 }

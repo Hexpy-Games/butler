@@ -15,12 +15,19 @@ export function selectCommandHostAdapter(platform: NodeJS.Platform): CommandHost
 
 const darwinCommandHost: CommandHostAdapter = {
   detached: true,
-  invocation(command) {
-    return sandboxInvocation(command, readOnlyProfile());
+  invocation(command, context) {
+    return sandboxInvocation(
+      command,
+      context.filesystemBoundary.kind === "isolated_validation"
+        ? isolatedValidationProfile(context.filesystemBoundary.writeRoots)
+        : readOnlyProfile(),
+    );
   },
   terminate(child) {
-    if (child.pid) process.kill(-child.pid, "SIGTERM");
-    else child.kill("SIGTERM");
+    terminateProcessGroup(child, "SIGTERM");
+  },
+  terminateDescendants(child) {
+    terminateProcessGroup(child, "SIGKILL");
   },
 };
 
@@ -31,8 +38,10 @@ const posixCommandHost: CommandHostAdapter = {
     return shellInvocation(command);
   },
   terminate(child) {
-    if (child.pid) process.kill(-child.pid, "SIGTERM");
-    else child.kill("SIGTERM");
+    terminateProcessGroup(child, "SIGTERM");
+  },
+  terminateDescendants(child) {
+    terminateProcessGroup(child, "SIGKILL");
   },
 };
 
@@ -45,7 +54,23 @@ const windowsCommandHost: CommandHostAdapter = {
   terminate(child) {
     child.kill("SIGTERM");
   },
+  terminateDescendants() {},
 };
+
+function terminateProcessGroup(
+  child: Parameters<CommandHostAdapter["terminate"]>[0],
+  signal: NodeJS.Signals,
+): void {
+  try {
+    if (child.pid) process.kill(-child.pid, signal);
+    else child.kill(signal);
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) ||
+      (error as { code?: unknown }).code !== "ESRCH") {
+      throw error;
+    }
+  }
+}
 
 function shellInvocation(command: string): CommandInvocation {
   return { executable: "/bin/sh", args: ["-lc", command] };
@@ -69,6 +94,18 @@ function readOnlyProfile(): string {
     "(allow default)",
     "(deny file-write*)",
     '(allow file-write-data (literal "/dev/null"))',
+    "(deny network*)",
+  ].join("\n");
+}
+
+function isolatedValidationProfile(writeRoots: readonly string[]): string {
+  return [
+    "(version 1)",
+    "(allow default)",
+    "(deny file-write*)",
+    '(allow file-write-data (literal "/dev/null"))',
+    ...writeRoots.map((root) =>
+      `(allow file-write* (subpath ${JSON.stringify(canonicalCommandRoot(root))}))`),
     "(deny network*)",
   ].join("\n");
 }

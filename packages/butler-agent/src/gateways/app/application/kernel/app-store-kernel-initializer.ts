@@ -289,7 +289,7 @@ export function initializeAppStoreKernel(
       },
     },
   });
-  migrateAppStoreSchema(kernel.db);
+  migrateAppStoreSchema(kernel.db, { butlerData: kernel.butlerData });
   wakeTerminalRetention = initializeTerminalTurnRetention(kernel);
   kernel.conversationProjection = new AppConversationProjectionStore({
     db: kernel.db,

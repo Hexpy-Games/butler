@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -11,9 +10,15 @@ import type {
   BenchmarkEvidenceFile,
   BtccRevision,
   MaterializedBenchmarkPrompt,
+  ProjectDeliverableValidation,
 } from "./contracts.ts";
 import { BTCC_REVISION_BENCHMARK_SCHEMA } from "./contracts.ts";
 import { collectRawProductObservation } from "./product-observation.ts";
+import { verifyBenchmarkTargets } from "./target-build.ts";
+import {
+  resolveBenchmarkBrowserExecutable,
+  validateProjectDeliverable,
+} from "./project-deliverable-validation.ts";
 
 export interface BenchmarkRunnerFixture {
   path: string;
@@ -23,6 +28,7 @@ export interface BenchmarkRunnerFixture {
 export interface BenchmarkRunnerConfig {
   runRoot: string;
   sourceData?: string;
+  browserExecutablePath?: string;
   fixtures: BenchmarkRunnerFixture[];
   artifactPathsByPrompt: Record<string, string[]>;
 }
@@ -37,6 +43,11 @@ export interface BenchmarkRunnerDependencies {
     scenario: ElectronScenario,
     options: ElectronHarnessOptions,
   ) => Promise<Record<string, unknown>>;
+  validateProjectDeliverable?: (input: {
+    browserExecutablePath: string;
+    runRoot: string;
+    workspaceRoot: string;
+  }) => Promise<ProjectDeliverableValidation>;
 }
 
 export async function runBenchmarkPairs(input: {
@@ -49,11 +60,23 @@ export async function runBenchmarkPairs(input: {
   const collectObservation =
     input.dependencies?.collectObservation ?? collectRawProductObservation;
   const persist = input.dependencies?.persist ?? (() => undefined);
-  const verifyTargets = input.dependencies?.verifyTargets ?? verifyTargetCheckouts;
+  const verifyTargets = input.dependencies?.verifyTargets ?? verifyBenchmarkTargets;
   await verifyTargets(input.evidence.plan.targets);
   const completed = new Set(input.evidence.observations.map((observation) =>
     observationKey(observation.promptId, observation.revision),
   ));
+  const pendingProjectArm = input.evidence.plan.prompts.some((prompt) =>
+    prompt.tier === "project_ledger" && prompt.order.some((revision) =>
+      !completed.has(observationKey(prompt.id, revision)),
+    ),
+  );
+  const projectValidator = input.dependencies?.validateProjectDeliverable ??
+    validateProjectDeliverable;
+  const browserExecutablePath = pendingProjectArm
+    ? input.dependencies?.validateProjectDeliverable
+      ? input.config.browserExecutablePath ?? "injected-benchmark-browser"
+      : resolveBenchmarkBrowserExecutable(input.config.browserExecutablePath)
+    : null;
   for (const prompt of input.evidence.plan.prompts) {
     for (const revision of prompt.order) {
       const key = observationKey(prompt.id, revision);
@@ -89,6 +112,17 @@ export async function runBenchmarkPairs(input: {
         timedOut = true;
         productEvidence = readHarnessEvidence(runRoot);
       }
+      let deliverableValidation: ProjectDeliverableValidation | null = null;
+      if (prompt.tier === "project_ledger") {
+        if (!browserExecutablePath) {
+          throw new Error("Benchmark browser was not prepared for a project arm");
+        }
+        deliverableValidation = await projectValidator({
+          browserExecutablePath,
+          runRoot,
+          workspaceRoot: productWorkspaceRoot(productEvidence, runRoot),
+        });
+      }
       const observation = collectObservation({
         artifactPaths: artifactPaths(input.config, prompt.id),
         evidence: productEvidence,
@@ -99,6 +133,7 @@ export async function runBenchmarkPairs(input: {
         runRoot,
         target: input.evidence.plan.targets[revision],
         timedOut,
+        deliverableValidation,
       });
       input.evidence.observations.push(observation);
       completed.add(key);
@@ -108,6 +143,18 @@ export async function runBenchmarkPairs(input: {
   return input.evidence;
 }
 
+function productWorkspaceRoot(
+  evidence: Record<string, unknown>,
+  runRoot: string,
+): string {
+  const run = evidence.run;
+  if (run && typeof run === "object" && !Array.isArray(run)) {
+    const value = (run as Record<string, unknown>).workspaceRoot;
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return join(runRoot, "workspace");
+}
+
 function benchmarkScenario(
   runId: string,
   prompt: MaterializedBenchmarkPrompt,
@@ -115,7 +162,6 @@ function benchmarkScenario(
   config: BenchmarkRunnerConfig,
 ): ElectronScenario {
   const artifacts = artifactPaths(config, prompt.id);
-  const expectsWork = prompt.expectedLedgerRoute !== "none";
   return {
     schema: "butler.btcc-r3-electron-scenario.v1",
     id: `${runId}-${prompt.id}-${revision}`,
@@ -136,14 +182,6 @@ function benchmarkScenario(
       expect: {
         terminalState: "delivered",
         files: artifacts.map((path) => ({ path })),
-        work: expectsWork
-          ? {
-            exists: true,
-            status: "completed",
-            planReviewVerdict: "accept",
-            resultReviewVerdict: "accept",
-          }
-          : { exists: false },
       },
     }],
   };
@@ -227,27 +265,4 @@ function reasoningEffort(
     value === "medium" || value === "none" || value === "xhigh"
   ) return value;
   throw new Error(`Unsupported benchmark reasoning effort: ${value}`);
-}
-
-function verifyTargetCheckouts(
-  targets: BenchmarkEvidenceFile["plan"]["targets"],
-): void {
-  for (const target of Object.values(targets)) {
-    const head = execFileSync("git", ["rev-parse", "HEAD"], {
-      cwd: target.worktreePath,
-      encoding: "utf8",
-    }).trim();
-    if (head !== target.commit) {
-      throw new Error(
-        `Benchmark ${target.revision} checkout is ${head}, expected ${target.commit}`,
-      );
-    }
-    const status = execFileSync("git", ["status", "--short"], {
-      cwd: target.worktreePath,
-      encoding: "utf8",
-    }).trim();
-    if (status) {
-      throw new Error(`Benchmark ${target.revision} checkout is not clean`);
-    }
-  }
 }

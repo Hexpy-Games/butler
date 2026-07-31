@@ -10,10 +10,14 @@ import type {
   SqliteGuidedToolJournal,
 } from
   "../../adapters/index.ts";
-import { projectLedgerProjectPath } from
-  "../../../integrations/project-ledger/client.ts";
+import { ActiveProjectLedgerResolver } from
+  "../../../integrations/project-ledger/active-project-ledger-reference.ts";
+import { ensureActiveProjectLedger } from
+  "../../../integrations/project-ledger/ensure-active-project-ledger.ts";
 import { runFunctionToolPromptText } from
   "../../../integrations/providers/runtime.ts";
+import { MAX_TOOL_ROUNDS } from
+  "../../../integrations/providers/shared/runtime-support.ts";
 import type { FunctionToolPromptOptions } from
   "../../../integrations/providers/runtime-contracts.ts";
 import {
@@ -36,7 +40,7 @@ import {
   createGuidedProjectLedgerEffectAdapter,
   isGuidedProjectLedgerEffectTool,
 } from "./guided-project-ledger-effect.ts";
-import { executeGuidedReadOnlyCommand } from "./guided-read-only-command.ts";
+import { executeGuidedCommandCall } from "./guided-command-execution.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import {
   createGuidedWorkspaceFileEffectAdapter,
@@ -70,6 +74,7 @@ export function createProductionGuidedTurnAgent(input: {
   finalReportMs?: number;
 }): GuidedTurnAgent {
   const promptRunner = input.promptRunner ?? runFunctionToolPromptText;
+  const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
     async run({ turn, signal, progress }): Promise<GuidedTurnResult> {
       const leaseStartedAt = Date.now();
@@ -92,7 +97,7 @@ export function createProductionGuidedTurnAgent(input: {
       const presentedWorkId = initialWork?.work.workId;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
-      const visibleTools = visibleToolDefinitions(authorizedTools, policy.accessMode);
+      const visibleTools = visibleToolDefinitions(authorizedTools, policy);
       const visibleNames = new Set(visibleTools.map((tool) => tool.name));
       const describedToolIds = new Set<string>();
       const effectService = createGuidedEffectService(input.effectJournal);
@@ -111,7 +116,9 @@ export function createProductionGuidedTurnAgent(input: {
         searchPlannerModel: selectedModelRef(turn),
         currentToolNames: () => [...authorizedNames],
         hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
-          policy.accessMode === "full_access" && Boolean(policy.projectId),
+          policy.accessMode === "full_access" &&
+            policy.trackingMode === "ledger" &&
+            Boolean(policy.projectId),
         ),
         nativeToolAvailabilityOverrides:
           GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
@@ -122,12 +129,13 @@ export function createProductionGuidedTurnAgent(input: {
           effectService,
           accessMode: policy.accessMode,
           signal,
-          executeReadOnlyCommand: (call) => executeGuidedReadOnlyCommand({
-            args: call.args,
+          executeCommand: (call) => executeGuidedCommandCall({
+            call,
+            accessMode: policy.accessMode,
             butlerData: input.butlerData,
             workspacePath: policy.workspacePath,
             originalRequest: turn.originalMessage,
-            signal: call.signal ?? signal,
+            signal,
           }),
           resolvePersistentEffect(call, executeRegistered) {
             if (call.name === "write_file") {
@@ -143,22 +151,52 @@ export function createProductionGuidedTurnAgent(input: {
                 adapter,
               };
             }
-            if (!isGuidedProjectLedgerEffectTool(call.name) || !policy.projectId) {
+            if (
+              !isGuidedProjectLedgerEffectTool(call.name) ||
+              policy.trackingMode !== "ledger" ||
+              !policy.projectId
+            ) {
               return null;
             }
-            const projectRoot = projectLedgerProjectPath({
-              butlerHome: input.butlerHome,
-              butlerData: input.butlerData,
+            const ledgerLookup = {
               appMessageDbPath: input.appMessageDbPath,
+              appProjectId: policy.projectId,
               workspacePath: policy.workspacePath,
-              projectId: policy.projectId,
-            }, {});
+            };
+            const resolveActiveProjectReference = () => {
+              projectLedgerResolver.clear();
+              return projectLedgerResolver.resolve({
+                butlerData: input.butlerData,
+                ...ledgerLookup,
+              });
+            };
+            const projectReference = resolveActiveProjectReference();
+            const projectRoot = projectReference.ledger_root;
             const effect = createGuidedProjectLedgerEffectAdapter({
               name: call.name,
               args: call.args,
               butlerData: input.butlerData,
               projectRoot,
               projectRef: policy.projectId,
+              resolveActiveProjectReference,
+              ...(call.name === "project_ledger_create"
+                ? {
+                    initializeForCreate() {
+                      const initialized = ensureActiveProjectLedger({
+                        resolver: projectLedgerResolver,
+                        butlerHome: input.butlerHome,
+                        butlerData: input.butlerData,
+                        lookup: ledgerLookup,
+                        reference: projectReference,
+                      });
+                      if (initialized.ledger_root !== projectRoot) {
+                        throw new Error(
+                          "Project Ledger identity changed before the reviewed effect was applied",
+                        );
+                      }
+                    },
+                  }
+                : {}),
             });
             return {
               target: effect.target,
@@ -199,7 +237,7 @@ export function createProductionGuidedTurnAgent(input: {
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
         tools: visibleTools,
-        maxToolRounds: 12,
+        maxToolRounds: MAX_TOOL_ROUNDS,
         executeTool: toolCalls.executeTool,
       };
       const text = await runGuidedPromptWithOperationalReport({
