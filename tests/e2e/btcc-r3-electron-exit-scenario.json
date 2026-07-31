@@ -118,7 +118,7 @@
           "planRevisionAtLeast": 1,
           "planReviewVerdict": "accept",
           "resultReviewVerdict": "accept",
-          "resultToolNamesInclude": ["read_file", "write_file"],
+          "resultToolNamesInclude": ["read_file", "edit_file"],
           "sameWorkAsStep": "open-work-before-restart"
         }
       }

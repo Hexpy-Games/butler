@@ -66,6 +66,7 @@ export function guidedInstructions(
       : []),
     "Use tool_search, then tool_describe, then tool_call for capabilities not already visible.",
     "A wrong tool or invalid arguments are ordinary feedback: correct the call and continue.",
+    "Use edit_file for a small exact change to an existing file. Use write_file for a new file or an intentional complete replacement.",
     "When a local page's actual appearance matters, use inspect_workspace_page after build or structural validation to inspect desktop and mobile screenshots before the result review. Screenshots are evidence for material defects, not a demand for endless polish: when the requested content is present and the page is responsive, readable, and usable, proceed to result review; correct and re-inspect only when a visible defect materially harms the requested result. If the App preview host is unavailable, treat that as an ordinary disclosed limitation rather than a completion gate.",
     "run_command is read-only and has no network access by default. Under admitted full access, a command with state_effect validation and a stable validation_suite runs in a disposable no-network workspace copy; persist screenshots and similar evidence under $BUTLER_ARTIFACTS_DIR. Use typed tools for intended source or Project Ledger changes.",
     "Never claim a mutation or completed result without tool evidence. Respect the admitted access.",

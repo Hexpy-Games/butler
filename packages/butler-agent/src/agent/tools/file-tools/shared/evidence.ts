@@ -7,7 +7,9 @@ export function sha256Hex(data: string | Uint8Array): string {
 
 function operationCover(toolName: string): string {
   if (toolName === "read_file") return "workspace_file_read";
-  if (toolName === "write_file") return "workspace_file_written";
+  if (toolName === "write_file" || toolName === "edit_file") {
+    return "workspace_file_written";
+  }
   if (toolName === "grep_files") return "workspace_search_result";
   return "workspace_file_operation";
 }
@@ -41,19 +43,23 @@ function safeWorkspacePath(path: unknown): string | null {
 }
 
 export function fileToolCapabilityReceipt(input: {
-  toolName: "read_file" | "write_file" | "grep_files";
+  toolName: "read_file" | "write_file" | "edit_file" | "grep_files";
   ok: boolean;
   path?: unknown;
   error?: unknown;
   truncated?: unknown;
   created?: unknown;
   overwritten?: unknown;
+  edited?: unknown;
   bytes?: unknown;
   filesSearched?: unknown;
   filesSkipped?: unknown;
   matches?: unknown;
 }) {
-  if (input.toolName === "write_file" && input.ok) {
+  if (
+    (input.toolName === "write_file" || input.toolName === "edit_file") &&
+    input.ok
+  ) {
     const path = safeWorkspacePath(input.path);
     const receipts = [createEvidenceCapabilityReceipt({
       producer: { kind: "tool", name: input.toolName },
@@ -64,7 +70,9 @@ export function fileToolCapabilityReceipt(input: {
       confidence: 1,
       summary: "File mutation completed with redacted path metadata.",
       scope: {
-        operation: input.created ? "created" : input.overwritten ? "overwritten" : "written",
+        operation: input.created
+          ? "created"
+          : input.edited ? "edited" : input.overwritten ? "overwritten" : "written",
         created: Boolean(input.created),
         overwritten: Boolean(input.overwritten),
         bytes: typeof input.bytes === "number" ? input.bytes : undefined,
@@ -81,7 +89,9 @@ export function fileToolCapabilityReceipt(input: {
         confidence: 0.95,
         summary: "File mutation produced durable workspace file evidence.",
         scope: {
-          operation: input.created ? "created" : input.overwritten ? "overwritten" : "written",
+          operation: input.created
+            ? "created"
+            : input.edited ? "edited" : input.overwritten ? "overwritten" : "written",
           bytes: typeof input.bytes === "number" ? input.bytes : undefined,
         },
         references: [{ path }],

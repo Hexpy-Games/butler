@@ -3,6 +3,7 @@ import { access, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/pr
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { resolveWorkspacePathGuard } from "../shared/workspace-path-guard.ts";
+import { withButlerFileMutationLock } from "../shared/workspace-file-mutation-lock.ts";
 import { fileToolCapabilityReceipt, fileToolEvidenceReceipt, sha256Hex } from "../shared/evidence.ts";
 import { getWorkspaceRoot, tryParseToolArgs } from "../shared/args.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
@@ -54,31 +55,34 @@ export async function executeWriteFileTool(call: { arguments?: unknown; input?: 
   });
   if (!guard.ok) return { ok: false, error: guard.reason, path, guard, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: guard.reason }) };
 
-  const existing = await inspectExistingTarget(guard.absolutePath!, path);
-  if (!existing.ok) return { ...existing, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: existing.error }) };
-  if (existing.existed && !overwrite) return { ok: false, error: "file_exists", path, before_sha256: existing.beforeSha256, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "file_exists" }) };
-  if (existing.existed && expected && existing.beforeSha256 !== expected) return { ok: false, error: "expected_sha256_mismatch", path, before_sha256: existing.beforeSha256, expected_sha256: expected, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "expected_sha256_mismatch" }) };
-  if (!existing.existed && expected) return { ok: false, error: "expected_sha256_on_missing_file", path, expected_sha256: expected, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "expected_sha256_on_missing_file" }) };
+  const filePath = guard.absolutePath!;
+  return withButlerFileMutationLock(async () => {
+    const existing = await inspectExistingTarget(filePath, path);
+    if (!existing.ok) return { ...existing, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: existing.error }) };
+    if (existing.existed && !overwrite) return { ok: false, error: "file_exists", path, before_sha256: existing.beforeSha256, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "file_exists" }) };
+    if (existing.existed && expected && existing.beforeSha256 !== expected) return { ok: false, error: "expected_sha256_mismatch", path, before_sha256: existing.beforeSha256, expected_sha256: expected, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "expected_sha256_mismatch" }) };
+    if (!existing.existed && expected) return { ok: false, error: "expected_sha256_on_missing_file", path, expected_sha256: expected, evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: "expected_sha256_on_missing_file" }) };
 
-  try {
-    await ensureParentPolicy(guard.absolutePath!, createParents);
-  } catch (error) {
-    const code = isNodeFsError(error) ? error.code : undefined;
-    const failure = code === "ENOENT" ? "parent_directory_missing" : "parent_directory_unwritable";
-    return { ok: false, error: failure, path, create_parents: createParents, detail: error instanceof Error ? error.message : String(error), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: failure }) };
-  }
+    try {
+      await ensureParentPolicy(filePath, createParents);
+    } catch (error) {
+      const code = isNodeFsError(error) ? error.code : undefined;
+      const failure = code === "ENOENT" ? "parent_directory_missing" : "parent_directory_unwritable";
+      return { ok: false, error: failure, path, create_parents: createParents, detail: error instanceof Error ? error.message : String(error), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: false, path, error: failure }) };
+    }
 
-  const tmp = `${guard.absolutePath!}.butler-${process.pid}-${randomUUID()}.tmp`;
-  const data = Buffer.from(content, "utf8");
-  try {
-    await writeFile(tmp, data, { flag: "wx" });
-    await rename(tmp, guard.absolutePath!);
-  } catch (error) {
-    await rm(tmp, { force: true }).catch(() => {});
-    throw error;
-  }
+    const tmp = `${filePath}.butler-${process.pid}-${randomUUID()}.tmp`;
+    const data = Buffer.from(content, "utf8");
+    try {
+      await writeFile(tmp, data, { flag: "wx" });
+      await rename(tmp, filePath);
+    } catch (error) {
+      await rm(tmp, { force: true }).catch(() => {});
+      throw error;
+    }
 
-  const after = await readFile(guard.absolutePath!);
-  const afterSha256 = sha256Hex(after);
-  return { ok: true, path, created: !existing.existed, overwritten: existing.existed, bytes: after.length, before_sha256: existing.beforeSha256, after_sha256: afterSha256, atomic_write: true, create_parents: createParents, evidence_receipts: fileToolEvidenceReceipt({ toolName: "write_file", summary: `${existing.existed ? "Overwrote" : "Created"} workspace file ${path}`, references: { path, created: !existing.existed, overwritten: existing.existed, before_sha256: existing.beforeSha256, after_sha256: afterSha256, atomic_write: true, create_parents: createParents }, satisfies: ["durable_artifact"] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: true, path, created: !existing.existed, overwritten: existing.existed, bytes: after.length }) };
+    const after = await readFile(filePath);
+    const afterSha256 = sha256Hex(after);
+    return { ok: true, path, created: !existing.existed, overwritten: existing.existed, bytes: after.length, before_sha256: existing.beforeSha256, after_sha256: afterSha256, atomic_write: true, create_parents: createParents, evidence_receipts: fileToolEvidenceReceipt({ toolName: "write_file", summary: `${existing.existed ? "Overwrote" : "Created"} workspace file ${path}`, references: { path, created: !existing.existed, overwritten: existing.existed, before_sha256: existing.beforeSha256, after_sha256: afterSha256, atomic_write: true, create_parents: createParents }, satisfies: ["durable_artifact"] }), evidence_capability_receipts: fileToolCapabilityReceipt({ toolName: "write_file", ok: true, path, created: !existing.existed, overwritten: existing.existed, bytes: after.length }) };
+  });
 }

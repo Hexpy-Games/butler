@@ -8,6 +8,7 @@ import type {
 import {
   expectedWorkspaceFileSha256,
   guardWorkspaceFileTarget,
+  normalizeExpectedSha256,
   normalizeWorkspaceContainedPath,
   normalizeWorkspaceFileTarget,
   observeWorkspaceFileTarget,
@@ -24,11 +25,10 @@ export type GuidedWorkspaceFileInput = {
   content: string;
   overwrite: boolean;
   create_parents: boolean;
-};
-
-type RegisteredWriteFileInput = GuidedWorkspaceFileInput & {
   expected_sha256?: string;
 };
+
+type RegisteredWriteFileInput = GuidedWorkspaceFileInput;
 
 export type GuidedWorkspaceFileResult = {
   ok: true;
@@ -170,6 +170,9 @@ function normalizeWorkspaceFileInput(
     content: record.content,
     overwrite: record.overwrite,
     create_parents: record.create_parents ?? false,
+    ...(record.expected_sha256 === undefined
+      ? {}
+      : { expected_sha256: normalizeExpectedSha256(record.expected_sha256) }),
   };
 }
 
@@ -209,6 +212,27 @@ function prepareRegisteredWrite(
   if (observation.status === "unavailable") {
     return { ok: false, outcome: uncertain(observation.error) };
   }
+  if (input.expected_sha256 && observation.status === "missing") {
+    return {
+      ok: false,
+      outcome: notApplied({
+        code: "expected_sha256_on_missing_file",
+        message: "The expected workspace file no longer exists.",
+      }),
+    };
+  }
+  if (
+    input.expected_sha256 && observation.status === "file" &&
+    observation.sha256 !== input.expected_sha256
+  ) {
+    return {
+      ok: false,
+      outcome: notApplied({
+        code: "expected_sha256_mismatch",
+        message: "The workspace file changed before the reviewed edit was applied.",
+      }),
+    };
+  }
   if (observation.status === "file" && !input.overwrite) {
     return {
       ok: false,
@@ -232,7 +256,7 @@ function prepareRegisteredWrite(
     input: {
       ...input,
       ...(observation.status === "file"
-        ? { expected_sha256: observation.sha256 }
+        ? { expected_sha256: input.expected_sha256 ?? observation.sha256 }
         : {}),
     },
   };

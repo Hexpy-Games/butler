@@ -22,7 +22,10 @@ test("Electron local page preview host authenticates and serves only workspace c
   );
   const loadedBodies: string[] = [];
   const securityObservations: string[] = [];
-  const BrowserWindow = fakeBrowserWindow(loadedBodies, securityObservations);
+  const imageEncodingObservations: ImageEncodingObservation[] = [];
+  const BrowserWindow = fakeBrowserWindow(loadedBodies, securityObservations, {
+    imageEncodingObservations,
+  });
   const token = "p".repeat(43);
   const host = createLocalPagePreviewHost({ BrowserWindow, token });
   try {
@@ -84,6 +87,28 @@ test("Electron local page preview host authenticates and serves only workspace c
       "download-denied",
       "window-open-denied",
       "external-request-denied",
+    ]);
+    expect(imageEncodingObservations).toEqual([
+      {
+        sourceSize: { width: 2_880, height: 1_800 },
+        resizedTo: { width: 1_440, height: 900, quality: "best" },
+        jpegQuality: 68,
+      },
+      {
+        sourceSize: { width: 2_880, height: 1_800 },
+        resizedTo: { width: 1_440, height: 900, quality: "best" },
+        jpegQuality: 68,
+      },
+      {
+        sourceSize: { width: 780, height: 1_688 },
+        resizedTo: { width: 390, height: 844, quality: "best" },
+        jpegQuality: 68,
+      },
+      {
+        sourceSize: { width: 780, height: 1_688 },
+        resizedTo: { width: 390, height: 844, quality: "best" },
+        jpegQuality: 68,
+      },
     ]);
   } finally {
     await host.stop();
@@ -172,9 +197,16 @@ interface ContentFetchObservation {
   status: number;
 }
 
+interface ImageEncodingObservation {
+  sourceSize: { width: number; height: number };
+  resizedTo: null | { width: number; height: number; quality: string };
+  jpegQuality: number | null;
+}
+
 interface FakeBrowserWindowOptions {
-  contentObservations: ContentFetchObservation[];
-  contentPaths: string[];
+  contentObservations?: ContentFetchObservation[];
+  contentPaths?: string[];
+  imageEncodingObservations?: ImageEncodingObservation[];
 }
 
 function fakeBrowserWindow(
@@ -184,6 +216,7 @@ function fakeBrowserWindow(
 ) {
   return class FakeBrowserWindow {
     destroyed = false;
+    viewport = { width: 0, height: 0 };
     beforeRequest: null | ((
       details: { url: string },
       callback: (decision: { cancel?: boolean; redirectURL?: string }) => void,
@@ -214,9 +247,36 @@ function fakeBrowserWindow(
           });
         },
       },
-      capturePage: async () => ({
-        toJPEG: () => Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
-      }),
+      capturePage: async () => {
+        const sourceSize = {
+          width: this.viewport.width * 2,
+          height: this.viewport.height * 2,
+        };
+        const observation: ImageEncodingObservation = {
+          sourceSize,
+          resizedTo: null,
+          jpegQuality: null,
+        };
+        options?.imageEncodingObservations?.push(observation);
+        const encodedImage = {
+          toJPEG: (quality: number) => {
+            observation.jpegQuality = quality;
+            return Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+          },
+        };
+        return {
+          getSize: () => sourceSize,
+          resize: (resizeOptions: {
+            width: number;
+            height: number;
+            quality: string;
+          }) => {
+            observation.resizedTo = resizeOptions;
+            return encodedImage;
+          },
+          toJPEG: encodedImage.toJPEG,
+        };
+      },
       setWindowOpenHandler: (handler: () => { action: string }) => {
         if (handler().action === "deny") securityObservations.push("window-open-denied");
       },
@@ -234,6 +294,10 @@ function fakeBrowserWindow(
         : undefined,
     };
 
+    constructor(input: { width: number; height: number }) {
+      this.viewport = { width: input.width, height: input.height };
+    }
+
     async loadURL(url: string) {
       loadedBodies.push(await (await fetch(await this.admittedUrl(url))).text());
       const absoluteAssetUrl = `${new URL(url).origin}/assets/theme.css`;
@@ -242,7 +306,7 @@ function fakeBrowserWindow(
       );
       for (const path of options?.contentPaths ?? []) {
         const response = await fetch(await this.admittedUrl(new URL(path, url).href));
-        options?.contentObservations.push({ path, status: response.status });
+        options?.contentObservations?.push({ path, status: response.status });
       }
       const external = await this.requestDecision("https://example.com/tracker.js");
       if (external.cancel) securityObservations.push("external-request-denied");

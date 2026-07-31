@@ -2,10 +2,14 @@ import { Database } from "bun:sqlite";
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
   rm,
+  stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -26,6 +30,8 @@ import {
   workspaceFileEffectTarget,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-workspace-file-effect.ts";
+import { prepareGuidedWorkspaceFileEdit } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-workspace-file-edit-effect.ts";
 import { createFileToolHandlers } from
   "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
 
@@ -67,12 +73,12 @@ test("workspace file adapter keeps target syntax simple and preserves file guard
       content: "private",
       overwrite: false,
     })).toThrow("inside the workspace");
-    expect(adapter.normalizeInput({
+    expect(() => adapter.normalizeInput({
       path: "reports/summary.md",
       content: "safe",
       overwrite: false,
       expected_sha256: "",
-    })).not.toHaveProperty("expected_sha256");
+    })).toThrow("expected_sha256 must be a SHA-256 hex value");
 
     const protectedInput = adapter.normalizeInput({
       path: "butler-data/project-ledger/projects/demo/specs/feature.md",
@@ -369,7 +375,7 @@ test("one accepted high-level Plan authorizes successive corrections to the same
   }
 });
 
-test("workspace file adapter ignores model hashes and owns the overwrite guard", async () => {
+test("workspace file adapter enforces its runtime-provided overwrite hash", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-file-runtime-hash-"));
   const original = "before\n";
   await writeFile(join(root, "existing.md"), original, "utf8");
@@ -394,16 +400,262 @@ test("workspace file adapter ignores model hashes and owns the overwrite guard",
       overwrite: true,
       expected_sha256: "0".repeat(64),
     });
-    expect(normalized).not.toHaveProperty("expected_sha256");
+    expect(normalized).toHaveProperty("expected_sha256", "0".repeat(64));
     expect(await adapter.dispatch({
       normalizedTarget: workspaceFileEffectTarget(normalized.path),
       normalizedInput: normalized,
       idempotencyKey: "runtime-hash",
       signal: new AbortController().signal,
-    })).toMatchObject({ status: "applied" });
-    expect(registeredInput).toMatchObject({ expected_sha256: sha256(original) });
-    expect(await readFile(join(root, "existing.md"), "utf8")).toBe("after\n");
+    })).toMatchObject({
+      status: "not_applied",
+      error: { code: "expected_sha256_mismatch" },
+    });
+    expect(registeredInput).toBeNull();
+    expect(await readFile(join(root, "existing.md"), "utf8")).toBe(original);
   } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit prepares a small exact replacement with a runtime-owned stale-write guard", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-cas-"));
+  const original = "alpha\nbeta\ngamma\n";
+  await writeFile(join(root, "notes.txt"), original, "utf8");
+  let registeredDispatches = 0;
+  const prepared = await prepareGuidedWorkspaceFileEdit({
+    args: {
+      path: "notes.txt",
+      start_line: 2,
+      old_text: "beta\n",
+      new_text: "better\n",
+      expected_sha256: "0".repeat(64),
+    },
+    workspacePath: root,
+    executeEditFile: registeredEditFile({
+      workspacePath: root,
+      butlerData: join(root, "butler-data"),
+      onDispatch() {
+        registeredDispatches += 1;
+      },
+    }),
+  });
+  try {
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) throw new Error(prepared.error.message);
+    expect(prepared.effect.input).toMatchObject({
+      path: "notes.txt",
+      start_line: 2,
+      old_text: "beta\n",
+      new_text: "better\n",
+      before_sha256: sha256(original),
+      after_sha256: sha256("alpha\nbetter\ngamma\n"),
+    });
+
+    await writeFile(join(root, "notes.txt"), "concurrent change\n", "utf8");
+    expect(await prepared.effect.adapter.dispatch({
+      normalizedTarget: prepared.effect.target,
+      normalizedInput: prepared.effect.input,
+      idempotencyKey: "edit-cas",
+      signal: new AbortController().signal,
+    })).toMatchObject({
+      status: "not_applied",
+      error: { code: "expected_sha256_mismatch" },
+    });
+    expect(registeredDispatches).toBe(0);
+    expect(await readFile(join(root, "notes.txt"), "utf8"))
+      .toBe("concurrent change\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit keeps native mode, deletion, and symlink semantics", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-native-"));
+  const butlerData = join(root, "butler-data");
+  const filePath = join(root, "notes.txt");
+  await writeFile(filePath, "keep\nremove\nend\n", "utf8");
+  await chmod(filePath, 0o600);
+  let dispatches = 0;
+  const executeEditFile = registeredEditFile({
+    workspacePath: root,
+    butlerData,
+    onDispatch() {
+      dispatches += 1;
+    },
+  });
+  try {
+    const deletion = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "remove\n",
+        new_text: "",
+      },
+      workspacePath: root,
+      butlerData,
+      executeEditFile,
+    });
+    expect(deletion.ok).toBe(true);
+    if (!deletion.ok) throw new Error(deletion.error.message);
+    expect(await deletion.effect.adapter.dispatch({
+      normalizedTarget: deletion.effect.target,
+      normalizedInput: deletion.effect.input,
+      idempotencyKey: "edit-delete",
+      signal: new AbortController().signal,
+    })).toMatchObject({ status: "applied" });
+    expect(await readFile(filePath, "utf8")).toBe("keep\nend\n");
+    expect((await stat(filePath)).mode & 0o777).toBe(0o600);
+    expect(dispatches).toBe(1);
+
+    await writeFile(join(root, "referent.txt"), "old\n", "utf8");
+    await symlink("referent.txt", join(root, "link.txt"));
+    expect(await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "link.txt",
+        start_line: 1,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      butlerData,
+      executeEditFile,
+    })).toMatchObject({
+      ok: false,
+      error: { code: "target_not_regular_file" },
+    });
+    expect((await lstat(join(root, "link.txt"))).isSymbolicLink()).toBe(true);
+    expect(await readFile(join(root, "referent.txt"), "utf8")).toBe("old\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit does not infer a fresh success from matching replacement text", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-fresh-"));
+  await writeFile(join(root, "styles.css"), "overflow-x: hidden;\n", "utf8");
+  try {
+    expect(await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "styles.css",
+        start_line: 1,
+        old_text: "overflow-x: auto;\n",
+        new_text: "overflow-x: hidden;\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => {
+        throw new Error("fresh mismatches must not dispatch");
+      },
+    })).toMatchObject({
+      ok: false,
+      error: { code: "old_text_mismatch" },
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit reconciles an atomic replacement after restart", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-restart-"));
+  const workspacePath = join(root, "workspace");
+  const butlerData = join(root, "butler-data");
+  const dbPath = join(root, "effects.sqlite");
+  const original = "body {\n  overflow-x: auto;\n}\n";
+  const expected = "body {\n  overflow-x: hidden;\n}\n";
+  const args = {
+    path: "styles.css",
+    start_line: 2,
+    old_text: "  overflow-x: auto;\n",
+    new_text: "  overflow-x: hidden;\n",
+  };
+  await mkdir(workspacePath, { recursive: true });
+  await writeFile(join(workspacePath, args.path), original, "utf8");
+  let registeredDispatches = 0;
+  const executeEditFile = registeredEditFile({
+    workspacePath,
+    butlerData,
+    onDispatch() {
+      registeredDispatches += 1;
+    },
+  });
+  const work = reviewedFileWork("workspace:landing-page-source-files");
+  work.currentPlan!.actions[0]!.effect = {
+    capability: "workspace mutation",
+    target: "workspace:landing-page-source-files",
+  };
+  let firstDb: Database | undefined;
+  let resumedDb: Database | undefined;
+  try {
+    const firstPrepared = await prepareGuidedWorkspaceFileEdit({
+      args,
+      workspacePath,
+      butlerData,
+      executeEditFile,
+    });
+    expect(firstPrepared.ok).toBe(true);
+    if (!firstPrepared.ok) throw new Error(firstPrepared.error.message);
+    firstDb = openEffectDatabase(dbPath);
+    const crashing = createGuidedEffectService(
+      new SqliteGuidedEffectJournal(firstDb),
+      {
+        faultHook(point) {
+          if (point === "after_dispatch") {
+            throw new Error("simulated stop after edit rename");
+          }
+        },
+      },
+    );
+    await expect(crashing.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-edit-restart-1",
+      signal: new AbortController().signal,
+      target: firstPrepared.effect.target,
+      input: firstPrepared.effect.input,
+      adapter: firstPrepared.effect.adapter,
+    })).rejects.toThrow("simulated stop after edit rename");
+    expect(await readFile(join(workspacePath, args.path), "utf8")).toBe(expected);
+    expect(registeredDispatches).toBe(1);
+    const priorInputSha256 = new SqliteGuidedEffectJournal(firstDb)
+      .listForWork(work.workId)[0]?.inputSha256;
+    expect(priorInputSha256).toBeString();
+    if (!priorInputSha256) throw new Error("Missing durable edit input hash");
+    firstDb.close();
+    firstDb = undefined;
+
+    const resumedPrepared = await prepareGuidedWorkspaceFileEdit({
+      args,
+      workspacePath,
+      butlerData,
+      executeEditFile,
+      priorInputSha256,
+    });
+    expect(resumedPrepared.ok).toBe(true);
+    if (!resumedPrepared.ok) throw new Error(resumedPrepared.error.message);
+    expect(resumedPrepared.effect.input).toEqual(firstPrepared.effect.input);
+    resumedDb = openEffectDatabase(dbPath);
+    const resumed = await createGuidedEffectService(
+      new SqliteGuidedEffectJournal(resumedDb),
+    ).execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-edit-restart-1",
+      signal: new AbortController().signal,
+      target: resumedPrepared.effect.target,
+      input: resumedPrepared.effect.input,
+      adapter: resumedPrepared.effect.adapter,
+    });
+    expect(resumed).toMatchObject({
+      ok: true,
+      status: "applied",
+      receipt: {
+        capability: "edit_file",
+        sanitizedTarget: "workspace:styles.css",
+      },
+    });
+    expect(registeredDispatches).toBe(1);
+  } finally {
+    firstDb?.close();
+    resumedDb?.close();
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -679,6 +931,34 @@ function registeredWriteFile(input: {
   }): Promise<unknown> => {
     const result = await writeFile({
       name: "write_file",
+      args,
+      rawArguments: JSON.stringify(args),
+    });
+    input.onDispatch(result);
+    return result;
+  };
+}
+
+function registeredEditFile(input: {
+  workspacePath: string;
+  butlerData: string;
+  onDispatch(result: unknown): void;
+}) {
+  const handlers = createFileToolHandlers({
+    workspacePath: input.workspacePath,
+    butlerData: input.butlerData,
+  });
+  const editFile = handlers.edit_file;
+  if (!editFile) throw new Error("registered edit_file handler is missing");
+  return async (args: {
+    path: string;
+    start_line: number;
+    old_text: string;
+    new_text: string;
+    expected_sha256: string;
+  }): Promise<unknown> => {
+    const result = await editFile({
+      name: "edit_file",
       args,
       rawArguments: JSON.stringify(args),
     });

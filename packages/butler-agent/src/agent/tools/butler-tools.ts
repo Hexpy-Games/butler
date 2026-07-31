@@ -73,7 +73,10 @@ export type ButlerToolExecutionBoundary = (input: {
   call: ButlerToolCall;
   context: ButlerToolRuntimeContext;
   definition: ButlerToolDefinition;
-  execute(): Promise<unknown>;
+  execute(prepared?: {
+    args: ButlerToolCall["args"];
+    rawArguments?: ButlerToolCall["rawArguments"];
+  }): Promise<unknown>;
 }) => Promise<unknown>;
 
 const BUTLER_TOOL_DEFINITIONS_BY_NAME = new Map(
@@ -179,9 +182,20 @@ export function createButlerToolExecutor(input: {
     if (!toolExecutorRef.current) throw new Error("Butler tool registry is not initialized");
     const definition = BUTLER_TOOL_DEFINITIONS_BY_NAME.get(call.name);
     if (!definition) throw new Error(`Unknown Butler tool: ${call.name}`);
-    const execute = () => executeRegisteredButlerTool(
+    const execute = (prepared?: {
+      args: ButlerToolCall["args"];
+      rawArguments?: ButlerToolCall["rawArguments"];
+    }) => executeRegisteredButlerTool(
       toolExecutorRef.current!,
-      call,
+      prepared
+        ? {
+            ...call,
+            args: prepared.args,
+            ...(prepared.rawArguments === undefined
+              ? {}
+              : { rawArguments: prepared.rawArguments }),
+          }
+        : call,
       context,
     );
     return input.executionBoundary

@@ -76,7 +76,7 @@ function claimsUnsupportedEvidence(value: string): boolean {
 
 function mentionsForbiddenOperationalInternals(value: string): boolean {
   const forbiddenPatterns = [
-    /\b(?:bash|shell|read_file|write_file|apply_patch|update_todo_list)\b/iu,
+    /\b(?:bash|shell|read_file|write_file|edit_file|apply_patch|update_todo_list)\b/iu,
     /\b(?:token|model)[-\s]+budgets?\b/iu,
     /\bmax\s*output\s*tokens?\b/iu,
     /\bmax[-\s]+output\b/iu,

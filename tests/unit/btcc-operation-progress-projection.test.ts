@@ -28,6 +28,9 @@ test("BTCC operation titles come from typed capability metadata", () => {
   expect(publicOperationTitle("run_command")).toBe(
     "실행: 계획한 작업을 처리 중",
   );
+  expect(publicOperationTitle("edit_file")).toBe(
+    "수정: 계획한 파일 변경을 적용 중",
+  );
   expect(publicOperationTitle("read_operation_result")).toBe(
     "확인: 저장된 작업 결과를 검토 중",
   );

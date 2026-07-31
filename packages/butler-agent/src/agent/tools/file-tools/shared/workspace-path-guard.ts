@@ -97,7 +97,8 @@ export async function resolveWorkspacePathGuard(input: WorkspacePathGuardInput):
       const parentReal = await realpath(parent).catch(() => undefined);
       if (parentReal) {
         if (!isInside(rootReal, parentReal)) return { ok: false, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: parentReal, reason: "parent_escape" };
-        return { ok: true, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: absolutePath };
+        const real = resolve(parentReal, relative(parent, absolutePath));
+        return { ok: true, workspaceRoot: rootReal, requestedPath, absolutePath, realPath: real };
       }
       const next = dirname(parent);
       if (next === parent) break;

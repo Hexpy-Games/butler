@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sha256Hex } from "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
@@ -27,6 +27,14 @@ describe("workspace path guard", () => {
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "config/models/chatgpt-oauth.json", allowMissingLeaf: true })).reason).toBe("sensitive_path_blocked");
     await symlink(tmpdir(), join(root, "escape"));
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "escape" })).reason).toBe("symlink_escape");
+    await mkdir(join(root, "real"));
+    await symlink("real", join(root, "alias"));
+    const missing = await resolveWorkspacePathGuard({
+      workspaceRoot: root,
+      relativePath: "alias/new.txt",
+      allowMissingLeaf: true,
+    });
+    expect(missing.realPath).toBe(join(await realpath(join(root, "real")), "new.txt"));
   });
 });
 
