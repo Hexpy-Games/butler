@@ -30,6 +30,8 @@ import {
 import { openOwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 import { SqliteGuidedToolJournal } from "./guided-tool-journal.ts";
+import { SqliteGuidedWorkStore } from "./guided-work-store.ts";
+import { createDurableWorkService } from "../../../btcc/durable-work/index.ts";
 
 export type BtccProjectLedgerRuntime = {
   publications: ProjectWorkLedgerPublicationAdapter;
@@ -67,6 +69,7 @@ export function openBtccSqliteStores(input: {
     operationalRecoveryStore,
     sqliteWriteReadiness,
   );
+  const durableWork = createDurableWorkService(new SqliteGuidedWorkStore(db));
   return {
     admission: new SqliteTurnAdmissionRepository(
       db,
@@ -81,6 +84,7 @@ export function openBtccSqliteStores(input: {
     phaseGuidance: new SqlitePhaseGuidanceStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),
+    durableWork,
     operationalRecovery,
     operationalRecoveryStartup: {
       activateInheritedRuntimeRemediations: () =>

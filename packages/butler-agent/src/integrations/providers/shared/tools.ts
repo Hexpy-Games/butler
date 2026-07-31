@@ -212,7 +212,36 @@ export function normalizeLocalTextToolName(rawName: string, allowedNames: Set<st
     trimmed,
     segments.length > 0 ? segments[segments.length - 1] : "",
   ].filter(Boolean);
-  return candidates.find((candidate) => allowedNames.has(candidate)) ?? null;
+  // Prefer the exact advertised name (including a known namespaced alias), but
+  // preserve an explicit unknown structured call so the runtime can return
+  // ordinary, model-visible tool feedback instead of silently deleting it.
+  return candidates.find((candidate) => allowedNames.has(candidate))
+    ?? candidates[candidates.length - 1]
+    ?? null;
+}
+
+export function unavailableFunctionToolPayload(input: {
+  name: string;
+  args: Record<string, unknown>;
+  allowedNames: ReadonlySet<string>;
+}): Record<string, unknown> | null {
+  if (input.allowedNames.has(input.name)) return null;
+  const message = `No such tool available: ${input.name}`;
+  return {
+    ok: false,
+    error: message,
+    output: {
+      ok: false,
+      error: { code: "tool_unavailable", message },
+      observation_kind: "tool_unavailable",
+      model_visible_content: [
+        `Tool: ${input.name}`,
+        `Observation: ${message}`,
+        `Arguments: ${JSON.stringify(input.args)}`,
+        "Select one of the currently available tools or continue without it.",
+      ].join("\n"),
+    },
+  };
 }
 
 

@@ -1,0 +1,127 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "r3-02-exit-paths",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "low",
+  "accessMode": "full_access",
+  "session": {
+    "id": "r3-02-exit-paths",
+    "title": "BTCC R3-02 product paths"
+  },
+  "fixtures": [
+    {
+      "path": "research/sausage-a.txt",
+      "text": "A 소시지\n돼지고기 함량: 62%\n나트륨: 510mg\n"
+    },
+    {
+      "path": "research/sausage-b.txt",
+      "text": "B 소시지\n돼지고기 함량: 88%\n나트륨: 430mg\n"
+    },
+    {
+      "path": "artifact/alpha.txt",
+      "text": "alpha orchard\nshared theme: durable evidence\n"
+    },
+    {
+      "path": "artifact/beta.txt",
+      "text": "beta harbor\nshared theme: durable evidence\n"
+    },
+    {
+      "path": "continuation/source.txt",
+      "text": "north: ready\nsouth: ready\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "direct-no-work",
+      "prompt": "'안녕하세요'를 영어로 번역해 주세요. 번역만 짧게 답해 주세요.",
+      "expect": {
+        "terminalState": "delivered",
+        "finalIncludes": ["Hello"],
+        "work": { "exists": false }
+      }
+    },
+    {
+      "id": "read-only-research-work",
+      "prompt": "research/sausage-a.txt와 research/sausage-b.txt를 모두 확인한 뒤 돈육 함량과 나트륨을 비교하고, 어떤 제품이 돈육 함량이 높은지 근거 수치와 함께 요약해 주세요. 파일은 변경하지 마세요.",
+      "expect": {
+        "terminalState": "delivered",
+        "finalIncludes": ["62", "88"],
+        "work": {
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept",
+          "resultToolNamesInclude": ["read_file"]
+        }
+      }
+    },
+    {
+      "id": "artifact-work",
+      "prompt": "artifact/alpha.txt와 artifact/beta.txt를 확인하고, 각 파일의 핵심 단어와 공통 주제를 정리한 artifact/report.md를 만들어 주세요. 작성 후 파일을 다시 확인해 alpha, beta, durable evidence가 모두 들어갔는지 검토하고 결과를 보고해 주세요.",
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          {
+            "path": "artifact/report.md",
+            "contains": ["alpha", "beta", "durable evidence"]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept",
+          "resultToolNamesInclude": ["read_file", "write_file"]
+        }
+      }
+    },
+    {
+      "id": "open-work-before-restart",
+      "prompt": "최종 목표는 continuation/source.txt를 근거로 continuation/draft.md를 만들고 다음 턴에서 별도 검증까지 마치는 것입니다. 이번 턴에는 source.txt를 확인해 north와 south 상태를 담은 초안만 작성해 주세요. 아직 전체 작업을 완료로 판단하지 말고, 다음 요청에서 검증을 이어갈 수 있도록 진행 상태를 남긴 뒤 초안 작성 결과만 보고해 주세요.",
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          {
+            "path": "continuation/draft.md",
+            "contains": ["north", "south"]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "open",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "partial",
+          "resultToolNamesInclude": ["read_file", "write_file"]
+        }
+      }
+    },
+    {
+      "id": "fresh-turn-same-work",
+      "prompt": "앞선 작업을 이어서 continuation/draft.md를 다시 읽고 source.txt와 대조해 주세요. 내용이 맞으면 draft.md 마지막 줄에 `검증 완료`를 추가하고, 실제 파일을 다시 확인한 뒤 전체 작업을 완료해 주세요.",
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          {
+            "path": "continuation/draft.md",
+            "contains": ["north", "south", "검증 완료"]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept",
+          "resultToolNamesInclude": ["read_file", "write_file"],
+          "sameWorkAsStep": "open-work-before-restart"
+        }
+      }
+    }
+  ]
+}

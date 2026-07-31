@@ -188,6 +188,46 @@ test("every provider family continues a rejected final candidate in the same nat
   }
 });
 
+test("every provider family returns unknown structured tools as correctable feedback", async () => {
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    let executorCalls = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return Response.json(
+        responseRound === 1
+          ? harness.response(1, "hallucinated_tool")
+          : harness.response(3),
+      );
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Recover from one unavailable tool and answer.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 3,
+      butlerData: makeTempDir(`${harness.family}-unknown-tool`),
+      tools: [{
+        type: "function",
+        name: "probe",
+        description: "The only available tool.",
+        parameters: { type: "object", properties: {} },
+      }],
+      executeTool: async () => {
+        executorCalls += 1;
+        return { unreachable: true };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(executorCalls, harness.family).toBe(0);
+    expect(responseRound, harness.family).toBe(2);
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("tool_unavailable");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("hallucinated_tool");
+  }
+});
+
 test("every provider family receives bounded conversation context inline on the next request", async () => {
   for (const harness of providerHarnesses()) {
     const bodies: Array<Record<string, unknown>> = [];

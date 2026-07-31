@@ -3,7 +3,11 @@ import type {
   GuidedTurnResult,
 } from "../../btcc/index.ts";
 import { digest } from "../../btcc/core/index.ts";
+import type { DurableWorkService } from "../../btcc/durable-work/index.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
+import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
+import { PROJECT_LEDGER_MUTATION_TOOL_NAMES } from
+  "../../tools/project-ledger/mutation-tools.ts";
 import type { SqliteGuidedToolJournal } from
   "../../adapters/index.ts";
 import { runFunctionToolPromptText } from
@@ -21,12 +25,33 @@ import {
   guidedPolicy,
   isReplaySafeTool,
   priorToolFailure,
-  publicToolTitle,
   routeForUsedTools,
   selectedModelRef,
   uncertainPriorMutation,
   visibleToolDefinitions,
 } from "./guided-turn-policy.ts";
+import {
+  executeDurableWorkTool,
+  isDurableWorkTool,
+  renderDurableWorkContext,
+} from "./durable-work-tools.ts";
+import {
+  backfillTurnToolResults,
+  safeBindOpenWork,
+  publishWorkCheckpoint,
+  safeAttachToolResult,
+  safeBoundWork,
+  safeLoadWorkContext,
+  workScopeForTurn,
+} from "./guided-work-runtime.ts";
+import {
+  ordinaryToolError,
+  publishOperation,
+  rememberDescribedTools,
+  safeJson,
+  toolResultSucceeded,
+  unauthorizedToolResult,
+} from "./guided-tool-progress.ts";
 
 type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
 
@@ -36,12 +61,17 @@ export function createProductionGuidedTurnAgent(input: {
   appMessageDbPath: string;
   contextDocuments: { resolve(contextRef: string): string };
   toolJournal: SqliteGuidedToolJournal;
+  durableWork: DurableWorkService;
   promptRunner?: PromptRunner;
 }): GuidedTurnAgent {
   const promptRunner = input.promptRunner ?? runFunctionToolPromptText;
   return {
     async run({ turn, signal, progress }): Promise<GuidedTurnResult> {
       const policy = guidedPolicy(turn);
+      const workScope = workScopeForTurn(turn, policy.trackingMode);
+      const initialWork = policy.trackingMode === "none"
+        ? null
+        : await safeLoadWorkContext(input.durableWork, workScope);
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
       const visibleTools = visibleToolDefinitions(authorizedTools, policy.accessMode);
@@ -63,10 +93,17 @@ export function createProductionGuidedTurnAgent(input: {
         workerModel: selectedModelRef(turn),
         searchPlannerModel: selectedModelRef(turn),
         currentToolNames: () => [...authorizedNames],
+        hiddenNativeToolNames: [
+          ...WORK_TRACKING_TOOL_NAMES,
+          ...PROJECT_LEDGER_MUTATION_TOOL_NAMES,
+        ],
         describedToolIds: () => [...describedToolIds],
       });
       const text = await promptRunner({
-          prompt: renderGuidedPrompt(turn, input),
+          prompt: renderGuidedPrompt(turn, {
+            ...input,
+            workContext: renderDurableWorkContext(initialWork),
+          }),
           instructions: guidedInstructions(policy),
           model: selectedModelRef(turn),
           reasoningEffort: turn.modelSelection.reasoningEffort,
@@ -77,9 +114,6 @@ export function createProductionGuidedTurnAgent(input: {
           tools: visibleTools,
           maxToolRounds: 12,
           async executeTool(call) {
-            if (!visibleNames.has(call.name) || !authorizedNames.has(call.name)) {
-              throw new Error(`Tool is not authorized for this turn: ${call.name}`);
-            }
             const effectiveToolName = effectiveToolNameForCall(call.name, call.args);
             const callId = digest([
               "btcc-guided-tool-call.v1",
@@ -89,8 +123,33 @@ export function createProductionGuidedTurnAgent(input: {
               call.rawArguments,
             ].join("\0"));
             usedTools.push(effectiveToolName);
+            if (!visibleNames.has(call.name) || !authorizedNames.has(call.name)) {
+              const denied = unauthorizedToolResult(effectiveToolName);
+              const recorded = input.toolJournal.find(callId);
+              if (!recorded) {
+                input.toolJournal.start({
+                  turnId: turn.turnId,
+                  callId,
+                  toolName: effectiveToolName,
+                  rawArguments: call.rawArguments,
+                  arguments: call.args,
+                });
+                input.toolJournal.finish({ callId, status: "completed", result: denied });
+              }
+              await publishOperation(progress, {
+                turnId: turn.turnId,
+                requestId: callId,
+                toolName: effectiveToolName,
+                status: "failed",
+                resultJson: safeJson(recorded?.result ?? denied),
+              });
+              return recorded?.result ?? denied;
+            }
             const recorded = input.toolJournal.find(callId);
             if (recorded?.status === "completed") {
+              if (!isDurableWorkTool(call.name)) {
+                await safeAttachToolResult(input, workScope, recorded.callId);
+              }
               rememberDescribedTools(call.name, recorded.result, describedToolIds);
               await publishOperation(progress, {
                 turnId: turn.turnId,
@@ -139,12 +198,32 @@ export function createProductionGuidedTurnAgent(input: {
               status: "started",
             });
             try {
-              const result = await execute({
-                ...call,
-                signal: call.signal ?? signal,
-              });
+              if (isDurableWorkTool(call.name) && call.name !== "replace_work_plan") {
+                await safeBindOpenWork(input.durableWork, workScope);
+                await backfillTurnToolResults(input, workScope);
+              }
+              const result = isDurableWorkTool(call.name)
+                ? await executeDurableWorkTool({
+                    service: input.durableWork,
+                    scope: workScope,
+                    mutationCallId: callId,
+                    name: call.name,
+                    args: call.args,
+                  })
+                : await execute({
+                    ...call,
+                    signal: call.signal ?? signal,
+                  });
               rememberDescribedTools(call.name, result, describedToolIds);
               input.toolJournal.finish({ callId, status: "completed", result });
+              if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
+                await backfillTurnToolResults(input, workScope);
+              } else if (!isDurableWorkTool(call.name)) {
+                await safeAttachToolResult(input, workScope, callId);
+              }
+              if (call.name === "record_work_checkpoint" && toolResultSucceeded(result)) {
+                await publishWorkCheckpoint(progress, turn.turnId, input.durableWork);
+              }
               await publishOperation(progress, {
                 turnId: turn.turnId,
                 requestId: callId,
@@ -155,16 +234,31 @@ export function createProductionGuidedTurnAgent(input: {
               return result;
             } catch (error) {
               const cancelled = signal.aborted || call.signal?.aborted;
+              if (!cancelled) {
+                const result = ordinaryToolError(effectiveToolName, error);
+                input.toolJournal.finish({ callId, status: "completed", result });
+                if (!isDurableWorkTool(call.name)) {
+                  await safeAttachToolResult(input, workScope, callId);
+                }
+                await publishOperation(progress, {
+                  turnId: turn.turnId,
+                  requestId: callId,
+                  toolName: effectiveToolName,
+                  status: "failed",
+                  resultJson: safeJson(result),
+                });
+                return result;
+              }
               input.toolJournal.finish({
                 callId,
-                status: cancelled ? "cancelled" : "failed",
-                errorCode: cancelled ? "cancelled" : "tool_error",
+                status: "cancelled",
+                errorCode: "cancelled",
               });
               await publishOperation(progress, {
                 turnId: turn.turnId,
                 requestId: callId,
                 toolName: effectiveToolName,
-                status: cancelled ? "cancelled" : "failed",
+                status: "cancelled",
               });
               throw error;
             }
@@ -172,73 +266,11 @@ export function createProductionGuidedTurnAgent(input: {
         });
       return {
         content: text,
-        route: routeForUsedTools(usedTools),
+        route: routeForUsedTools(
+          usedTools,
+          Boolean(await safeBoundWork(input.durableWork, turn.turnId)),
+        ),
       };
     },
   };
-}
-
-function rememberDescribedTools(
-  toolName: string,
-  result: unknown,
-  described: Set<string>,
-): void {
-  if (toolName !== "tool_describe" || !result || typeof result !== "object") return;
-  const descriptions = (result as { descriptions?: unknown }).descriptions;
-  if (!Array.isArray(descriptions)) return;
-  for (const value of descriptions) {
-    if (!value || typeof value !== "object") continue;
-    const id = (value as { id?: unknown }).id;
-    if (typeof id === "string" && id) described.add(id);
-  }
-}
-
-async function publishOperation(
-  progress: Parameters<GuidedTurnAgent["run"]>[0]["progress"],
-  input: {
-    turnId: string;
-    requestId: string;
-    toolName: string;
-    status: "started" | "completed" | "failed" | "cancelled";
-    resultJson?: string;
-  },
-): Promise<void> {
-  if (!progress?.operationChanged) return;
-  try {
-    await progress.operationChanged({
-      turnId: input.turnId,
-      semanticState: "admitted",
-      activityId: `guided-tools:${input.turnId}`,
-      requestId: input.requestId,
-      publicTitle: publicToolTitle(input.toolName),
-      capabilityRef: input.toolName,
-      status: input.status,
-      ...(input.resultJson
-        ? {
-            resultRef: {
-              id: digest(`btcc-guided-tool-result.v1\0${digest(input.resultJson)}`),
-              sha256: digest(input.resultJson),
-            },
-            byteLength: Buffer.byteLength(input.resultJson),
-          }
-        : {}),
-    });
-  } catch {
-    // Public progress cannot veto tool execution.
-  }
-}
-
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? "null";
-  } catch {
-    return JSON.stringify({ unavailable: true });
-  }
-}
-
-function toolResultSucceeded(result: unknown): boolean {
-  if (!result || typeof result !== "object" || Array.isArray(result)) return true;
-  const record = result as Record<string, unknown>;
-  if (record.ok === false || record.timed_out === true) return false;
-  return typeof record.exit_code !== "number" || record.exit_code === 0;
 }

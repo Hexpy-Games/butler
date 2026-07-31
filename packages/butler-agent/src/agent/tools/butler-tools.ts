@@ -125,6 +125,7 @@ export function createButlerToolExecutor(input: {
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  hiddenNativeToolNames?: readonly string[];
   describedToolIds?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
@@ -151,6 +152,7 @@ export function createButlerToolExecutor(input: {
       sessionId: input.sessionId,
       webSearchProvider: input.webSearchProvider,
       currentToolNames: input.currentToolNames,
+      hiddenNativeToolNames: input.hiddenNativeToolNames,
     }),
     ...createToolBridgeToolHandlers({
       butlerData: input.butlerData,
@@ -158,6 +160,7 @@ export function createButlerToolExecutor(input: {
       pluginCatalog: input.pluginToolCatalog,
       pluginToolDescriber: input.pluginToolDescriber,
       currentToolNames: input.currentToolNames,
+      hiddenNativeToolNames: input.hiddenNativeToolNames,
       describedToolIds: input.describedToolIds,
       dispatchTool,
     }),

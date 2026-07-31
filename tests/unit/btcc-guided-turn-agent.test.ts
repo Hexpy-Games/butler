@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord } from
@@ -10,35 +10,40 @@ import { openBtccSqliteStores } from
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
 
-test("Guided agent authorizes the full Project Ledger mutation surface only for ledger full access", async () => {
+test("Guided agent keeps Project Ledger mutation behind the future reviewed effect gate", async () => {
   const fixture = createFixture("guided-policy");
   try {
-    const availability = async (turn: TurnRecord) => {
+    const availability = async (turn: TurnRecord, query = "project_ledger_create") => {
       let result: unknown;
       const agent = fixture.agent(async (options) => {
         result = await options.executeTool({
           name: "tool_search",
-          args: { query: "project_ledger_create", include_disabled: true },
-          rawArguments: JSON.stringify({ query: "project_ledger_create", include_disabled: true }),
+          args: { query, include_disabled: true },
+          rawArguments: JSON.stringify({ query, include_disabled: true }),
         });
         return "확인했습니다.";
       });
       await agent.run({ turn, signal: new AbortController().signal });
       const results = (result as { results?: Array<{ id: string; enabled: boolean }> }).results ?? [];
-      return results.find((entry) => entry.id === "native:project_ledger_create")?.enabled;
+      return results.find((entry) => entry.id === `native:${query}`)?.enabled;
     };
 
-    expect(await availability(turnRecord(fixture.root, {
+    const fullAccessProjectTurn = turnRecord(fixture.root, {
       accessMode: "full_access",
       trackingMode: "ledger",
       projectId: "project-1",
-    }))).toBe(true);
+    });
+    expect(await availability(fullAccessProjectTurn)).toBeUndefined();
+    expect(await availability(fullAccessProjectTurn, "render_project_dashboard"))
+      .toBeUndefined();
+    expect(await availability(fullAccessProjectTurn, "complete_project_work"))
+      .toBeUndefined();
     expect(await availability(turnRecord(fixture.root, {
       accessMode: "read_only",
       trackingMode: "ledger",
       projectId: "project-1",
       turnId: "turn-read-only",
-    }))).toBe(false);
+    }))).toBeUndefined();
 
     let visibleNames: string[] = [];
     let instructions = "";
@@ -58,7 +63,8 @@ test("Guided agent authorizes the full Project Ledger mutation surface only for 
     });
     expect(visibleNames).toContain("write_file");
     expect(visibleNames).toContain("project_ledger_status");
-    expect(instructions).toContain("Ledger bookkeeping must never block");
+    expect(instructions).toContain("use the internal Work record for continuity");
+    expect(instructions).toContain("Do not attempt to mutate the Project Ledger");
   } finally {
     fixture.close();
   }
@@ -106,6 +112,7 @@ test("Guided agent treats admitted Turn access as the upper permission bound", a
     ];
     let names: string[] = [];
     const unsafeAvailability: boolean[] = [];
+    let deniedMutation: unknown;
     const agent = fixture.agent(async (options) => {
       names = options.tools.map((tool) => tool.name);
       for (const name of [
@@ -122,12 +129,26 @@ test("Guided agent treats admitted Turn access as the upper permission bound", a
           result.results?.find((entry) => entry.name === name)?.enabled ?? false,
         );
       }
+      deniedMutation = await options.executeTool({
+        name: "write_file",
+        args: { path: "forbidden.txt", content: "no", overwrite: false },
+        rawArguments: JSON.stringify({
+          path: "forbidden.txt",
+          content: "no",
+          overwrite: false,
+        }),
+      });
       return "읽기 권한 범위에서 확인했습니다.";
     });
     await agent.run({ turn, signal: new AbortController().signal });
     expect(names).not.toContain("run_command");
     expect(names).not.toContain("write_file");
     expect(unsafeAvailability).toEqual([false, false, false]);
+    expect(deniedMutation).toMatchObject({
+      ok: false,
+      error: { code: "tool_not_authorized" },
+    });
+    expect(existsSync(join(fixture.root, "forbidden.txt"))).toBe(false);
   } finally {
     fixture.close();
   }
@@ -177,7 +198,88 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
   }
 });
 
-test("Guided agent replays completed tool results and fences uncertain durable mutations", async () => {
+test("Guided agent offers only the three optional R3 Work tools and keeps direct turns free of Work", async () => {
+  const fixture = createFixture("guided-work-surface");
+  try {
+    let visibleNames: string[] = [];
+    const turn = turnRecord(fixture.root, {
+      turnId: "turn-direct-with-work-available",
+      trackingMode: "local",
+    });
+    const agent = fixture.agent(async (options) => {
+      visibleNames = options.tools.map((tool) => tool.name);
+      return "안녕하세요.";
+    });
+
+    const outcome = await agent.run({
+      turn,
+      signal: new AbortController().signal,
+    });
+
+    expect(visibleNames).toContain("replace_work_plan");
+    expect(visibleNames).toContain("record_work_checkpoint");
+    expect(visibleNames).toContain("record_work_review");
+    expect(visibleNames).not.toContain("update_todo_list");
+    expect(visibleNames).not.toContain("list_todo_list");
+    expect(visibleNames).not.toContain("list_work_streams");
+    expect(visibleNames).not.toContain("update_work_stream_state");
+    expect(outcome.route).toBe("direct");
+    expect(await fixture.stores.durableWork.boundWorkForTurn(turn.turnId)).toBeNull();
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided tool discovery hides the retired R2 Work catalog", async () => {
+  const fixture = createFixture("guided-work-catalog");
+  try {
+    let searchResult: unknown;
+    let describeResult: unknown;
+    const agent = fixture.agent(async (options) => {
+      searchResult = await options.executeTool({
+        name: "tool_search",
+        args: { query: "work", include_disabled: true },
+        rawArguments: JSON.stringify({ query: "work", include_disabled: true }),
+      });
+      describeResult = await options.executeTool({
+        name: "tool_describe",
+        args: { ids: ["native:list_work_streams", "native:control_work"] },
+        rawArguments: JSON.stringify({
+          ids: ["native:list_work_streams", "native:control_work"],
+        }),
+      });
+      return "현재 작업 도구를 확인했습니다.";
+    });
+
+    await agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "turn-work-catalog",
+        trackingMode: "local",
+      }),
+      signal: new AbortController().signal,
+    });
+
+    const encodedSearch = JSON.stringify(searchResult);
+    expect(encodedSearch).not.toContain("list_work_streams");
+    expect(encodedSearch).not.toContain("update_work_stream_state");
+    expect(encodedSearch).not.toContain("control_work");
+    expect(encodedSearch).not.toContain("project_ledger_work_update");
+    expect(encodedSearch).not.toContain("project_ledger_work_complete");
+    expect(encodedSearch).not.toContain("complete_project_work");
+    expect(describeResult).toMatchObject({
+      ok: false,
+      descriptions: [],
+      missing: [
+        { id: "native:list_work_streams", error: "unknown_tool_catalog_id" },
+        { id: "native:control_work", error: "unknown_tool_catalog_id" },
+      ],
+    });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided agent replays completed tool results and fences uncertain mutations", async () => {
   const fixture = createFixture("guided-replay");
   try {
     const factPath = join(fixture.root, "fact.txt");
@@ -205,31 +307,28 @@ test("Guided agent replays completed tool results and fences uncertain durable m
 
     const mutationTurn = turnRecord(fixture.root, { turnId: "turn-uncertain-mutation" });
     const mutationArgs = {
-      todos: [{
-        content: "Do work",
-        active_form: "Doing work",
-        status: "in_progress",
-      }],
+      path: "out.txt",
+      content: "durable output",
     };
     const rawMutation = JSON.stringify(mutationArgs);
     const callId = digest([
       "btcc-guided-tool-call.v1",
       mutationTurn.turnId,
       "0",
-      "update_todo_list",
+      "write_file",
       rawMutation,
     ].join("\0"));
     fixture.stores.guidedToolJournal.start({
       turnId: mutationTurn.turnId,
       callId,
-      toolName: "update_todo_list",
+      toolName: "write_file",
       rawArguments: rawMutation,
       arguments: mutationArgs,
     });
     let uncertain: unknown;
     const mutationAgent = fixture.agent(async (options) => {
       uncertain = await options.executeTool({
-        name: "update_todo_list",
+        name: "write_file",
         args: mutationArgs,
         rawArguments: rawMutation,
       });
@@ -243,7 +342,7 @@ test("Guided agent replays completed tool results and fences uncertain durable m
       ok: false,
       error: { code: "prior_mutation_completion_unknown" },
     });
-    expect(outcome.route).toBe("managed");
+    expect(outcome.route).toBe("assisted");
   } finally {
     fixture.close();
   }
@@ -299,6 +398,7 @@ function createFixture(label: string) {
         appMessageDbPath: dbPath,
         contextDocuments: stores.contextDocuments,
         toolJournal: stores.guidedToolJournal,
+        durableWork: stores.durableWork,
         promptRunner,
       });
     },

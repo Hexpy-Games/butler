@@ -15,6 +15,7 @@ export function createToolSearchToolHandler(input: {
   mcpTimeoutMs?: number;
   pluginCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  hiddenNativeToolNames?: readonly string[];
 }) {
   return async (call: ToolCall) => {
     const category = parseCategory(call.args.category);
@@ -37,7 +38,8 @@ export function createToolSearchToolHandler(input: {
 
     const catalog = [
       ...buildNativeToolCatalog({
-        tools: BUTLER_TOOLS,
+        tools: BUTLER_TOOLS.filter((tool) =>
+          !input.hiddenNativeToolNames?.includes(tool.name)),
         metadata: TOOL_CAPABILITY_METADATA,
         resolveAvailability: (tool) => {
           const availability = nativeToolAvailability(tool, input);
