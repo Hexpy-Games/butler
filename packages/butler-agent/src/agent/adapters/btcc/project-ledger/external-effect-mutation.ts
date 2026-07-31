@@ -93,6 +93,7 @@ export async function applyProjectLedgerRecordUpdates(input: {
           for (const view of ["dashboard", "handoff", "roadmap"]) {
             core.render(projectRoot, view, { write: true });
           }
+          core.writeIndex(projectRoot);
         },
       }) as ProjectLedgerCorePublication;
   writeJsonFileAtomic(occurrencePath, {

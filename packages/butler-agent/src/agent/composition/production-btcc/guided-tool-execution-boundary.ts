@@ -30,7 +30,7 @@ export function createGuidedToolExecutionBoundary(input: {
     execute: () => Promise<unknown>,
   ): GuidedPersistentEffectRequest | null;
 }): ButlerToolExecutionBoundary {
-  return async ({ call, definition, execute }) => {
+  return async ({ call, context, definition, execute }) => {
     if (definition.effectBoundary === "none" ||
         definition.effectBoundary === "turn_local") {
       return execute();
@@ -52,6 +52,7 @@ export function createGuidedToolExecutionBoundary(input: {
     const outcome = await input.effectService.execute({
       work,
       accessMode: input.accessMode,
+      occurrenceId: context.effectOccurrenceId,
       signal: call.signal ?? input.signal,
       target: request.target,
       input: request.input,

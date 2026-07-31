@@ -64,6 +64,7 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
     normalizedInput: effect.normalizedInput,
     adapter: {
       capability: input.name,
+      reviewedPlanBinding: "accepted_plan",
       normalizeTarget: normalizeProjectLedgerTarget,
       sanitizeTarget: normalizeProjectLedgerTarget,
       normalizeInput: normalizeProjectLedgerInput,

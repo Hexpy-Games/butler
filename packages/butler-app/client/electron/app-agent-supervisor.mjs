@@ -60,6 +60,7 @@ export function buildBundledAgentSupervisorEnv({
   rendererOrigin,
   explicitUiUrl = null,
   projectFolderTokenSecret,
+  localPagePreviewUrl = null,
   localAuth,
 }) {
   return {
@@ -77,6 +78,9 @@ export function buildBundledAgentSupervisorEnv({
     ...(projectFolderTokenSecret
       ? { BUTLER_PROJECT_FOLDER_TOKEN_SECRET: projectFolderTokenSecret }
       : {}),
+    ...(safeString(localPagePreviewUrl)
+      ? { BUTLER_APP_LOCAL_PAGE_PREVIEW_URL: safeString(localPagePreviewUrl) }
+      : {}),
   };
 }
 
@@ -93,6 +97,7 @@ export function createBundledAgentSupervisor({
   getServerUrl,
   getAppVersion = () => null,
   getRendererOrigin,
+  getLocalPagePreviewUrl = () => null,
   explicitServerUrl = null,
   explicitUiUrl = null,
   projectFolderTokenSecret = null,
@@ -207,6 +212,7 @@ export function createBundledAgentSupervisor({
       rendererOrigin: getRendererOrigin(),
       explicitUiUrl,
       projectFolderTokenSecret,
+      localPagePreviewUrl: getLocalPagePreviewUrl(),
       localAuth,
     });
     try {

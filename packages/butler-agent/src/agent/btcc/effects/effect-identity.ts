@@ -5,6 +5,8 @@ type EffectIdentityInput = {
   workId: string;
   planRevisionId: string;
   actionKey: string;
+  reviewedPlanBinding: "exact_action" | "accepted_plan";
+  occurrenceId?: string;
   capability: string;
   normalizedTarget: string;
   sanitizedTarget: string;
@@ -17,6 +19,9 @@ export function createGuidedEffectIdentity(
   const inputJson = stableEffectJson(input.normalizedInput);
   const inputSha256 = digest(inputJson);
   const targetSha256 = digest(input.normalizedTarget);
+  const occurrenceSha256 = input.reviewedPlanBinding === "accepted_plan"
+    ? digest(requiredOccurrenceId(input.occurrenceId))
+    : undefined;
   const identityBody = {
     version: 1,
     workId: input.workId,
@@ -25,15 +30,26 @@ export function createGuidedEffectIdentity(
     capability: input.capability,
     targetSha256,
     inputSha256,
+    ...(occurrenceSha256 ? { occurrenceSha256 } : {}),
   };
-  const slotSha256 = digest(stableEffectJson({
-    version: 1,
-    workId: input.workId,
-    planRevisionId: input.planRevisionId,
-    actionKey: input.actionKey,
-    capability: input.capability,
-    targetSha256,
-  }));
+  const slotBody = occurrenceSha256
+    ? {
+      version: 1,
+      workId: input.workId,
+      planRevisionId: input.planRevisionId,
+      actionKey: input.actionKey,
+      capability: input.capability,
+      occurrenceSha256,
+    }
+    : {
+      version: 1,
+      workId: input.workId,
+      planRevisionId: input.planRevisionId,
+      actionKey: input.actionKey,
+      capability: input.capability,
+      targetSha256,
+    };
+  const slotSha256 = digest(stableEffectJson(slotBody));
   const identitySha256 = digest(stableEffectJson(identityBody));
   const requestSha256 = digest(stableEffectJson({
     capability: input.capability,
@@ -54,6 +70,14 @@ export function createGuidedEffectIdentity(
     capability: input.capability,
     sanitizedTarget: input.sanitizedTarget,
   };
+}
+
+function requiredOccurrenceId(value: string | undefined): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    throw new Error("accepted_plan effect requires a runtime occurrence");
+  }
+  return normalized;
 }
 
 export function stableEffectJson(value: unknown): string {

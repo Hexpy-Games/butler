@@ -5,8 +5,14 @@ import {
   type TurnRecord,
   type WorkTurnScope,
 } from "../../btcc/index.ts";
-import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
-import type { ButlerToolExecutor } from "../../tools/butler-tools.ts";
+import type {
+  GuidedToolJournalRecord,
+  SqliteGuidedToolJournal,
+} from "../../adapters/index.ts";
+import type {
+  ButlerToolExecutor,
+  ContextualButlerToolExecutor,
+} from "../../tools/butler-tools.ts";
 import {
   effectiveToolNameForCall,
   isReplaySafeTool,
@@ -44,7 +50,7 @@ type GuidedToolCallExecutionInput = {
   describedToolIds: Set<string>;
   durableWork: DurableWorkService;
   toolJournal: SqliteGuidedToolJournal;
-  executeButlerTool: ButlerToolExecutor;
+  executeButlerTool: ContextualButlerToolExecutor;
 };
 
 export function createGuidedToolCallExecutor(
@@ -55,17 +61,30 @@ export function createGuidedToolCallExecutor(
 } {
   let callIndex = 0;
   const usedTools: string[] = [];
+  const resumePool = createGuidedToolResumePool(
+    input.toolJournal.list(input.turn.turnId),
+  );
   const executeTool: ButlerToolExecutor = async (call) => {
     const toolSignal = call.signal ?? input.signal;
     throwIfToolAborted(toolSignal);
     const effectiveToolName = effectiveToolNameForCall(call.name, call.args);
-    const callId = digest([
+    const computedCallId = digest([
       "btcc-guided-tool-call.v1",
       input.turn.turnId,
       String(callIndex++),
       call.name,
       call.rawArguments,
     ].join("\0"));
+    const exactRecord = input.toolJournal.find(computedCallId);
+    let callId = computedCallId;
+    if (exactRecord) {
+      resumePool.discard(computedCallId);
+    } else {
+      callId = resumePool.claim(
+        effectiveToolName,
+        call.rawArguments,
+      ) ?? computedCallId;
+    }
     usedTools.push(effectiveToolName);
 
     if (
@@ -181,6 +200,50 @@ export function createGuidedToolCallExecutor(
   return { executeTool, usedTools };
 }
 
+type GuidedToolResumePool = {
+  claim(toolName: string, rawArguments: string): string | undefined;
+  discard(callId: string): void;
+};
+
+function createGuidedToolResumePool(
+  records: readonly GuidedToolJournalRecord[],
+): GuidedToolResumePool {
+  const availableCallIds = new Set(records.map((record) => record.callId));
+  const callsBySignature = new Map<string, string[]>();
+  for (const record of records) {
+    const signature = guidedToolResumeSignature(
+      record.toolName,
+      record.rawArguments,
+    );
+    const calls = callsBySignature.get(signature) ?? [];
+    calls.push(record.callId);
+    callsBySignature.set(signature, calls);
+  }
+  return {
+    claim(toolName, rawArguments) {
+      const calls = callsBySignature.get(
+        guidedToolResumeSignature(toolName, rawArguments),
+      );
+      while (calls?.length) {
+        const callId = calls.shift()!;
+        if (!availableCallIds.delete(callId)) continue;
+        return callId;
+      }
+      return undefined;
+    },
+    discard(callId) {
+      availableCallIds.delete(callId);
+    },
+  };
+}
+
+function guidedToolResumeSignature(
+  toolName: string,
+  rawArguments: string,
+): string {
+  return JSON.stringify([toolName, rawArguments]);
+}
+
 async function denyUnauthorizedTool(
   input: GuidedToolCallExecutionInput,
   callId: string,
@@ -232,7 +295,7 @@ async function executeFreshTool(
   return input.executeButlerTool({
     ...call,
     signal: toolSignal,
-  });
+  }, { effectOccurrenceId: callId });
 }
 
 async function finishFailedTool(

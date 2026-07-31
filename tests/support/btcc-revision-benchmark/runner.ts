@@ -13,6 +13,8 @@ import type {
   ProjectDeliverableValidation,
 } from "./contracts.ts";
 import { BTCC_REVISION_BENCHMARK_SCHEMA } from "./contracts.ts";
+import { prepareBenchmarkBundledAgentResource } from
+  "./bundled-agent-resource-cache.ts";
 import { collectRawProductObservation } from "./product-observation.ts";
 import { verifyBenchmarkTargets } from "./target-build.ts";
 import {
@@ -43,6 +45,7 @@ export interface BenchmarkRunnerDependencies {
     scenario: ElectronScenario,
     options: ElectronHarnessOptions,
   ) => Promise<Record<string, unknown>>;
+  prepareSharedAgentResource?: typeof prepareBenchmarkBundledAgentResource;
   validateProjectDeliverable?: (input: {
     browserExecutablePath: string;
     runRoot: string;
@@ -65,6 +68,16 @@ export async function runBenchmarkPairs(input: {
   const completed = new Set(input.evidence.observations.map((observation) =>
     observationKey(observation.promptId, observation.revision),
   ));
+  const hasPendingR3Arm = input.evidence.plan.prompts.some((prompt) =>
+    !completed.has(observationKey(prompt.id, "r3")),
+  );
+  const sharedR3AgentResourceDir = hasPendingR3Arm
+    ? (input.dependencies?.prepareSharedAgentResource ??
+      prepareBenchmarkBundledAgentResource)({
+        runRoot: input.config.runRoot,
+        target: input.evidence.plan.targets.r3,
+      })
+    : null;
   const pendingProjectArm = input.evidence.plan.prompts.some((prompt) =>
     prompt.tier === "project_ledger" && prompt.order.some((revision) =>
       !completed.has(observationKey(prompt.id, revision)),
@@ -100,6 +113,9 @@ export async function runBenchmarkPairs(input: {
           ),
           repoRoot: input.evidence.plan.targets[revision].worktreePath,
           runRoot,
+          ...(revision === "r3" && sharedR3AgentResourceDir
+            ? { bundledAgentResourceDir: sharedR3AgentResourceDir }
+            : {}),
           ...(input.config.sourceData ? { sourceData: input.config.sourceData } : {}),
         });
       } catch (error) {

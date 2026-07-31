@@ -4,7 +4,7 @@ import {
   reviewedWork,
 } from "./support/guided-effect-test-fixture.ts";
 
-test("effect dispatch binds one exact action in the accepted current Plan", async () => {
+test("effect dispatch defaults to one exact action in the accepted current Plan", async () => {
   const fixture = new GuidedEffectTestFixture();
   try {
     const missingPlan = await fixture.execute({
@@ -79,7 +79,7 @@ test("effect dispatch binds one exact action in the accepted current Plan", asyn
   }
 });
 
-test("effect binding rejects missing and ambiguous capability-target actions", async () => {
+test("default effect binding rejects missing and ambiguous capability-target actions", async () => {
   const fixture = new GuidedEffectTestFixture();
   try {
     const missing = await fixture.execute({ target: "/private/other.md" });

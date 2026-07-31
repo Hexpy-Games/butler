@@ -6,7 +6,7 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 import type {
   ProjectDeliverableValidation,
   ProjectViewportObservation,
@@ -160,6 +160,7 @@ async function observeViewport(input: {
           new Promise<void>((resolveWait) => setTimeout(resolveWait, 10_000)),
         ]);
       });
+      await revealLazyPageContent(page);
       facts = await page.evaluate(() => ({
         bodyTextLength: document.body?.innerText.trim().length ?? 0,
         clientWidth: document.documentElement.clientWidth,
@@ -196,6 +197,32 @@ async function observeViewport(input: {
   } finally {
     await context.close();
   }
+}
+
+async function revealLazyPageContent(
+  page: Page,
+): Promise<void> {
+  await page.evaluate(async () => {
+    const root = document.documentElement;
+    const previousScrollBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    const pause = () => new Promise<void>((resolvePause) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolvePause()));
+    });
+    const maxY = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    const step = Math.max(240, Math.floor(innerHeight * 0.7));
+    for (let y = 0, count = 0; y <= maxY && count < 50; y += step, count += 1) {
+      scrollTo(0, y);
+      await pause();
+    }
+    scrollTo(0, maxY);
+    await pause();
+    scrollTo(0, 0);
+    await new Promise<void>((resolveSettle) => {
+      setTimeout(resolveSettle, 850);
+    });
+    root.style.scrollBehavior = previousScrollBehavior;
+  });
 }
 
 async function runProjectBuild(

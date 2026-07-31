@@ -34,6 +34,12 @@ interface TerminalObservation {
   view: AppSessionView;
 }
 
+export function isTransientSessionReadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:Request failed|Failed to fetch|fetch failed|ECONNREFUSED)/iu
+    .test(message);
+}
+
 function progressLabels(view: AppSessionView): string[] {
   const turn = view.active_turn ?? view.latest_turn;
   const labels = (turn?.progress?.safe_progress_rows ?? [])
@@ -68,9 +74,16 @@ async function waitForTurn(
   const progress = new Set<string>();
   while (Date.now() - startedAt < timeoutMs) {
     await replaceInterruptedExecutorOnce(run, launch);
-    const view = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
-      sessionId: run.sessionId,
-    });
+    let view: AppSessionView;
+    try {
+      view = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
+        sessionId: run.sessionId,
+      });
+    } catch (error) {
+      if (!isTransientSessionReadError(error)) throw error;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+      continue;
+    }
     const candidate = view.active_turn ?? view.latest_turn;
     if (candidate?.id && candidate.id !== previousTurnId) {
       turnId ??= candidate.id;

@@ -52,7 +52,7 @@ interface MutableProviderRequestObservation extends ProviderRequestObservation {
 export interface ProviderObservationProxy {
   endpoint: string;
   observations(): ProviderRequestObservation[];
-  close(): Promise<void>;
+  close(): Promise<ProviderRequestObservation[]>;
 }
 
 export interface ProviderObservationProxyOptions {
@@ -310,6 +310,7 @@ function contentObservation(
 class SseObservationTransform extends Transform {
   readonly #decoder = new TextDecoder();
   #buffer = "";
+  #providerFailed = false;
 
   constructor(
     private readonly observation: MutableProviderRequestObservation,
@@ -334,6 +335,10 @@ class SseObservationTransform extends Transform {
     callback();
   }
 
+  providerFailed(): boolean {
+    return this.#providerFailed;
+  }
+
   #observeText(text: string): void {
     this.#buffer += text;
     while (true) {
@@ -348,6 +353,14 @@ class SseObservationTransform extends Transform {
   #observeFrame(frame: string): void {
     const event = sseEventFromFrame(frame);
     if (!event) return;
+    if (
+      event.type === "response.failed" ||
+      event.type === "response.incomplete" ||
+      event.type === "response.cancelled" ||
+      event.type === "error"
+    ) {
+      this.#providerFailed = true;
+    }
     const content = contentObservation(event);
     this.observation.hasTextContent ||= content.text;
     this.observation.hasToolArgumentContent ||= content.toolArguments;
@@ -422,82 +435,105 @@ async function forwardRequest(input: {
     return;
   }
 
-  const requestUpstream = upstream.protocol === "https:"
-    ? httpsRequest
-    : httpRequest;
-  const upstreamRequest = requestUpstream(upstream, {
-    method: request.method,
-    headers: forwardedRequestHeaders(request.headers),
-  });
-  let upstreamResponseForClient: IncomingMessage | null = null;
-  let downstreamCancelled = false;
-  let upstreamFailed = false;
-  activeUpstreamRequests.add(upstreamRequest);
-  response.once("close", () => {
-    if (response.writableFinished) return;
-    downstreamCancelled = true;
-    if (upstreamResponseForClient === null) {
-      terminateObservation(observation, "cancelled", now);
-    }
-    upstreamResponseForClient?.destroy();
-    upstreamRequest.destroy();
-  });
-  upstreamRequest.once("close", () => {
-    activeUpstreamRequests.delete(upstreamRequest);
-  });
-  upstreamRequest.once("error", () => {
-    activeUpstreamRequests.delete(upstreamRequest);
-    terminateObservation(
-      observation,
-      isClosing() ? "cancelled" : "failed",
-      now,
-    );
-    sendProxyFailure(response);
-  });
-  upstreamRequest.once("response", (upstreamResponse) => {
-    upstreamResponseForClient = upstreamResponse;
-    activeUpstreamRequests.delete(upstreamRequest);
-    activeUpstreamResponses.add(upstreamResponse);
-    const recordUpstreamFailure = () => {
-      if (!downstreamCancelled) upstreamFailed = true;
-    };
-    upstreamResponse.once("aborted", recordUpstreamFailure);
-    upstreamResponse.once("error", recordUpstreamFailure);
-    upstreamResponse.once("close", () => {
-      activeUpstreamResponses.delete(upstreamResponse);
+  await new Promise<void>((resolve) => {
+    const requestUpstream = upstream.protocol === "https:"
+      ? httpsRequest
+      : httpRequest;
+    const upstreamRequest = requestUpstream(upstream, {
+      method: request.method,
+      headers: forwardedRequestHeaders(request.headers),
     });
-    observation.status = upstreamResponse.statusCode ?? null;
-    if (isClosing() || response.destroyed) {
-      terminateObservation(observation, "cancelled", now);
-      upstreamResponse.destroy();
-      return;
-    }
-    response.writeHead(
-      upstreamResponse.statusCode ?? 502,
-      upstreamResponse.statusMessage,
-      forwardedResponseHeaders(upstreamResponse.headers),
-    );
-    // Codex response bodies use SSE framing even when an intermediary omits or
-    // rewrites Content-Type. Parsing every byte stream is safe: non-SSE bodies
-    // have no `data:` frames and still pass through unchanged.
-    const stream = new SseObservationTransform(observation, now);
-    pipeline(upstreamResponse, stream, response, (error) => {
-      activeUpstreamResponses.delete(upstreamResponse);
-      if (error) {
-        terminateObservation(
-          observation,
-          isClosing() || (!upstreamFailed && downstreamCancelled)
-            ? "cancelled"
-            : "failed",
-          now,
-        );
-        if (!response.destroyed) response.destroy(error);
+    let upstreamResponseForClient: IncomingMessage | null = null;
+    let observationStream: SseObservationTransform | null = null;
+    let downstreamCancelled = false;
+    let upstreamFailed = false;
+    let settled = false;
+    const settle = (termination: ProviderRequestTermination): void => {
+      if (settled) return;
+      settled = true;
+      terminateObservation(observation, termination, now);
+      resolve();
+    };
+    const propagateUpstreamFailure = (): void => {
+      if (downstreamCancelled || isClosing()) return;
+      upstreamFailed = true;
+      const failure = new Error("provider_observation_upstream_stream_failed");
+      observationStream?.destroy(failure);
+      if (!response.destroyed) response.destroy(failure);
+    };
+
+    const cancelDownstream = (): void => {
+      if (response.writableFinished) return;
+      downstreamCancelled = true;
+      upstreamResponseForClient?.destroy();
+      observationStream?.destroy(
+        new Error("provider_observation_downstream_cancelled"),
+      );
+      upstreamRequest.destroy();
+      settle(upstreamFailed ? "failed" : "cancelled");
+    };
+    activeUpstreamRequests.add(upstreamRequest);
+    response.once("close", cancelDownstream);
+    request.once("aborted", cancelDownstream);
+    upstreamRequest.once("close", () => {
+      activeUpstreamRequests.delete(upstreamRequest);
+    });
+    upstreamRequest.once("error", () => {
+      activeUpstreamRequests.delete(upstreamRequest);
+      if (upstreamResponseForClient !== null) {
+        propagateUpstreamFailure();
         return;
       }
-      terminateObservation(observation, "completed", now);
+      settle(isClosing() || downstreamCancelled ? "cancelled" : "failed");
+      sendProxyFailure(response);
     });
+    upstreamRequest.once("response", (upstreamResponse) => {
+      upstreamResponseForClient = upstreamResponse;
+      activeUpstreamRequests.delete(upstreamRequest);
+      activeUpstreamResponses.add(upstreamResponse);
+      observation.status = upstreamResponse.statusCode ?? null;
+      if (isClosing() || response.destroyed) {
+        settle("cancelled");
+        upstreamResponse.destroy();
+        return;
+      }
+      response.writeHead(
+        upstreamResponse.statusCode ?? 502,
+        upstreamResponse.statusMessage,
+        forwardedResponseHeaders(upstreamResponse.headers),
+      );
+      // Codex response bodies use SSE framing even when an intermediary omits or
+      // rewrites Content-Type. Parsing every byte stream is safe: non-SSE bodies
+      // have no `data:` frames and still pass through unchanged.
+      const stream = new SseObservationTransform(observation, now);
+      observationStream = stream;
+      upstreamResponse.once("aborted", propagateUpstreamFailure);
+      upstreamResponse.once("error", propagateUpstreamFailure);
+      upstreamResponse.once("close", () => {
+        activeUpstreamResponses.delete(upstreamResponse);
+      });
+      pipeline(upstreamResponse, stream, response, (error) => {
+        activeUpstreamResponses.delete(upstreamResponse);
+        if (error) {
+          settle(
+            isClosing() || (!upstreamFailed && downstreamCancelled)
+              ? "cancelled"
+              : "failed",
+          );
+          if (!response.destroyed) response.destroy(error);
+          return;
+        }
+        const status = observation.status;
+        settle(
+          stream.providerFailed() || status === null ||
+              status < 200 || status >= 300
+            ? "failed"
+            : "completed",
+        );
+      });
+    });
+    upstreamRequest.end(body);
   });
-  upstreamRequest.end(body);
 }
 
 async function closeServer(
@@ -518,8 +554,11 @@ export async function startProviderObservationProxy(
   const upstream = codexResponsesUrl(options.upstreamBaseUrl);
   const now = options.now ?? Date.now;
   const observed: MutableProviderRequestObservation[] = [];
+  const activeInboundRequests = new Set<IncomingMessage>();
+  const activeDownstreamResponses = new Set<ServerResponse>();
   const activeUpstreamRequests = new Set<ClientRequest>();
   const activeUpstreamResponses = new Set<IncomingMessage>();
+  const activeForwards = new Set<Promise<void>>();
   const inboundSockets = new Set<Socket>();
   let nextOrdinal = 1;
   let closing = false;
@@ -556,7 +595,15 @@ export async function startProviderObservationProxy(
     };
     nextOrdinal += 1;
     observed.push(observation);
-    void forwardRequest({
+    activeInboundRequests.add(request);
+    activeDownstreamResponses.add(response);
+    request.once("close", () => activeInboundRequests.delete(request));
+    const releaseDownstream = () => {
+      activeDownstreamResponses.delete(response);
+    };
+    response.once("close", releaseDownstream);
+    response.once("finish", releaseDownstream);
+    const forwarding = forwardRequest({
       request,
       response,
       upstream,
@@ -568,11 +615,15 @@ export async function startProviderObservationProxy(
     }).catch(() => {
       terminateObservation(
         observation,
-        closing ? "cancelled" : "failed",
+        closing || request.aborted || response.destroyed
+          ? "cancelled"
+          : "failed",
         now,
       );
       sendProxyFailure(response);
     });
+    activeForwards.add(forwarding);
+    void forwarding.then(() => activeForwards.delete(forwarding));
   });
   server.on("connection", (socket) => {
     inboundSockets.add(socket);
@@ -598,19 +649,27 @@ export async function startProviderObservationProxy(
     endpoint: `http://127.0.0.1:${address.port}${CODEX_RESPONSES_PATH}`,
     observations: () => observed.map(safeObservation),
     close: async () => {
-      if (closePromise) return await closePromise;
-      closing = true;
-      closePromise = (async () => {
-        for (const observation of observed) {
-          if (observation.termination === null) {
-            terminateObservation(observation, "cancelled", now);
+      if (!closePromise) {
+        closing = true;
+        closePromise = (async () => {
+          const serverClosed = closeServer(server, inboundSockets);
+          for (const response of [...activeDownstreamResponses]) {
+            response.destroy();
           }
-        }
-        for (const response of [...activeUpstreamResponses]) response.destroy();
-        for (const request of [...activeUpstreamRequests]) request.destroy();
-        await closeServer(server, inboundSockets);
-      })();
+          for (const request of [...activeInboundRequests]) request.destroy();
+          for (const response of [...activeUpstreamResponses]) response.destroy();
+          for (const request of [...activeUpstreamRequests]) request.destroy();
+          await Promise.allSettled([...activeForwards]);
+          await serverClosed;
+          for (const observation of observed) {
+            if (observation.termination === null) {
+              terminateObservation(observation, "cancelled", now);
+            }
+          }
+        })();
+      }
       await closePromise;
+      return observed.map(safeObservation);
     },
   };
 }

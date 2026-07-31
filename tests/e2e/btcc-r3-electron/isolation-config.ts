@@ -10,12 +10,15 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Database } from "bun:sqlite";
+import { prepareBundledAgentResource } from
+  "../../../packages/butler-app/scripts/release/package-app-release.ts";
 import { sessionHintForRow } from
   "../../../packages/butler-agent/src/gateways/app/domain/sessions/session-read-model.ts";
 import { SessionBindingStore } from
   "../../../packages/butler-agent/src/test-support/harness/session-store.ts";
 import type {
   AccessMode,
+  AgentOwnership,
   ElectronFixtureFile,
   ElectronHarnessOptions,
   ElectronScenario,
@@ -30,6 +33,20 @@ import {
   resolveFixturePath,
   safeSegment,
 } from "./scenario-preflight.ts";
+
+const ELECTRON_OWNED_PREVIEW_HOST = join(
+  "packages",
+  "butler-app",
+  "client",
+  "electron",
+  "local-page-preview-host.mjs",
+);
+
+export function productAgentOwnership(repoRoot: string): AgentOwnership {
+  return existsSync(join(resolve(repoRoot), ELECTRON_OWNED_PREVIEW_HOST))
+    ? "electron"
+    : "harness";
+}
 
 function writeJson(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -290,10 +307,18 @@ export async function prepareElectronRun(
   );
   const accessMode = options.accessMode ?? scenario.accessMode ??
     sourceAppSettings.accessMode ?? "full_access";
+  const agentOwnership = productAgentOwnership(repoRoot);
+  const providedBundledAgentResourceDir = options.bundledAgentResourceDir?.trim()
+    ? resolve(options.bundledAgentResourceDir)
+    : null;
   const sessionSuffix = safeSegment(scenario.session?.id ?? scenario.id, "r3-e2e");
   const sessionId = `chat-btcc-r3-e2e-${sessionSuffix}`;
   const run: PreparedRun = {
     accessMode,
+    agentOwnership,
+    bundledAgentResourceDir: agentOwnership === "electron"
+      ? providedBundledAgentResourceDir
+      : null,
     dataRoot,
     debugPort,
     electronProfile,
@@ -325,6 +350,20 @@ export async function prepareElectronRun(
   prepareConfig(sourceConfig, run);
   copyCredentialIfPresent(sourceData, dataRoot, "model-provider-credentials.json");
   copyCredentialIfPresent(sourceData, dataRoot, "openai-codex.json");
+  if (agentOwnership === "electron") {
+    if (providedBundledAgentResourceDir) {
+      assert(
+        existsSync(providedBundledAgentResourceDir) &&
+          statSync(providedBundledAgentResourceDir).isDirectory(),
+        `Prepared bundled Agent resource is unavailable: ${providedBundledAgentResourceDir}`,
+      );
+    } else {
+      run.bundledAgentResourceDir = prepareBundledAgentResource(
+        repoRoot,
+        join(runRoot, "bundled-agent-resource"),
+      ).resourceDir;
+    }
+  }
   if (sessionKind === "chat") {
     writeFixtures(workspaceRoot, scenario.fixtures ?? []);
     bindPreparedSession(run);

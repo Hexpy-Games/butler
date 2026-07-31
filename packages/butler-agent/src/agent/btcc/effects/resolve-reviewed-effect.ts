@@ -4,10 +4,14 @@ import type {
   GuidedEffectError,
 } from "./contracts.ts";
 
+const ACCEPTED_PLAN_ACTION_KEY = "accepted-plan";
+
 export type ResolvedReviewedEffect<TNormalizedInput> = {
   workId: string;
   planRevisionId: string;
   actionKey: string;
+  reviewedPlanBinding: "exact_action" | "accepted_plan";
+  occurrenceId?: string;
   capability: string;
   normalizedTarget: string;
   sanitizedTarget: string;
@@ -43,23 +47,17 @@ export function resolveReviewedEffect<TNormalizedInput, TResult>(
       input.adapter.normalizeTarget(input.target),
       "normalized target",
     );
-    const matches = matchingActions(
-      plan.actions,
-      input.adapter,
+    const actionKey = resolveActionKey({
+      actions: plan.actions,
+      adapter: input.adapter,
       normalizedTarget,
-    );
-    if (matches.length === 0) {
-      return rejected(
-        "effect_action_not_found",
-        "No action in the reviewed current Plan matches this capability and exact target.",
-      );
-    }
-    if (matches.length !== 1) {
-      return rejected(
-        "effect_action_ambiguous",
-        "More than one action in the reviewed current Plan matches this effect.",
-      );
-    }
+    });
+    if (!actionKey.ok) return actionKey;
+    const reviewedPlanBinding = input.adapter.reviewedPlanBinding ??
+      "exact_action";
+    const occurrenceId = reviewedPlanBinding === "accepted_plan"
+      ? requiredText(input.occurrenceId, "runtime effect occurrence")
+      : undefined;
     const normalizedInput = input.adapter.normalizeInput(input.input);
     const sanitizedTarget = requiredText(
       input.adapter.sanitizeTarget(normalizedTarget),
@@ -70,7 +68,9 @@ export function resolveReviewedEffect<TNormalizedInput, TResult>(
       value: {
         workId: input.work.workId,
         planRevisionId: plan.planRevisionId,
-        actionKey: matches[0]!.actionKey,
+        actionKey: actionKey.value,
+        reviewedPlanBinding,
+        ...(occurrenceId ? { occurrenceId } : {}),
         capability: input.adapter.capability,
         normalizedTarget,
         sanitizedTarget,
@@ -83,6 +83,44 @@ export function resolveReviewedEffect<TNormalizedInput, TResult>(
       error instanceof Error ? error.message : "The effect request is invalid.",
     );
   }
+}
+
+function resolveActionKey<TNormalizedInput, TResult>(input: {
+  actions: NonNullable<ExecuteGuidedEffectInput<TNormalizedInput, TResult>[
+    "work"
+  ]["currentPlan"]>["actions"];
+  adapter: EffectAdapter<TNormalizedInput, TResult>;
+  normalizedTarget: string;
+}):
+  | { ok: true; value: string }
+  | { ok: false; error: GuidedEffectError } {
+  if (input.adapter.reviewedPlanBinding === "accepted_plan") {
+    if (!input.actions.some((action) => action.effect !== undefined)) {
+      return rejected(
+        "effect_action_not_found",
+        "The accepted Plan must mark at least one high-level persistent effect action before this change.",
+      );
+    }
+    return { ok: true, value: ACCEPTED_PLAN_ACTION_KEY };
+  }
+  const matches = matchingActions(
+    input.actions,
+    input.adapter,
+    input.normalizedTarget,
+  );
+  if (matches.length === 0) {
+    return rejected(
+      "effect_action_not_found",
+      "No action in the reviewed current Plan matches this capability and exact target.",
+    );
+  }
+  if (matches.length !== 1) {
+    return rejected(
+      "effect_action_ambiguous",
+      "More than one action in the reviewed current Plan matches this effect.",
+    );
+  }
+  return { ok: true, value: matches[0]!.actionKey };
 }
 
 function matchingActions<TNormalizedInput, TResult>(
@@ -105,8 +143,8 @@ function rejected(
   return { ok: false, error: { code, message, recoverable: true } };
 }
 
-function requiredText(value: string, label: string): string {
-  const normalized = value.trim();
+function requiredText(value: unknown, label: string): string {
+  const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized) throw new Error(`Effect ${label} must not be empty`);
   return normalized;
 }

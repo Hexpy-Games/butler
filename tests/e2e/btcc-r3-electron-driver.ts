@@ -23,6 +23,7 @@ function usage(): string {
   return [
     "BTCC R3 real Electron E2E driver",
     "  --scenario FILE [--run-root DIR] [--source-data DIR]",
+    "                  [--bundled-agent-resource DIR]",
     "                  [--model provider/model] [--reasoning low]",
     "                  [--access-mode full_access] [--keep-logs]",
     "  --smoke [--run-root DIR] [--source-data DIR]",
@@ -51,6 +52,7 @@ async function main(argv: string[]): Promise<void> {
     };
   const options: ElectronHarnessOptions = {
     accessMode: option(argv, "--access-mode") as ElectronHarnessOptions["accessMode"],
+    bundledAgentResourceDir: option(argv, "--bundled-agent-resource"),
     dryRun: flag(argv, "--dry-run"),
     keepLogs: flag(argv, "--keep-logs"),
     model: option(argv, "--model"),

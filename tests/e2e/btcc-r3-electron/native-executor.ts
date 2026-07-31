@@ -18,7 +18,7 @@ function nativeExecutorStatePath(run: PreparedRun): string {
   return join(run.dataRoot, "state", "butler-main-native.json");
 }
 
-function foregroundReadinessPath(run: PreparedRun): string {
+export function foregroundReadinessPath(run: PreparedRun): string {
   return join(run.dataRoot, "state", "app-foreground", "executor-ready.json");
 }
 
@@ -60,33 +60,81 @@ export async function startNativeExecutor(
   child.stdout?.on("data", (chunk) => output.push(String(chunk)));
   child.stderr?.on("data", (chunk) => output.push(String(chunk)));
   assert(child.pid, "Native Butler executor did not expose a PID.");
+  try {
+    await waitForNativeExecutorReadiness(run, {
+      expectedPid: child.pid,
+      owner: child,
+    });
+    writeJson(nativeExecutorStatePath(run), {
+      pid: child.pid,
+      startedAt: new Date().toISOString(),
+      runtime: "codex-api",
+      launcher: "btcc-r3-electron-e2e",
+    });
+    return { child, output };
+  } catch (error) {
+    child.kill("SIGTERM");
+    throw error;
+  }
+}
+
+export async function waitForNativeExecutorReadiness(
+  run: PreparedRun,
+  input: {
+    expectedPid?: number;
+    notBeforeMs?: number;
+    owner?: ChildProcess;
+    timeoutMs?: number;
+  } = {},
+): Promise<number> {
   const startedAt = Date.now();
-  while (Date.now() - startedAt < 120_000) {
-    if (child.exitCode !== null) {
-      throw new Error(`Native Butler executor exited before readiness: ${child.exitCode}`);
+  const timeoutMs = input.timeoutMs ?? 120_000;
+  while (Date.now() - startedAt < timeoutMs) {
+    if (
+      input.owner &&
+      (input.owner.exitCode !== null || input.owner.signalCode !== null)
+    ) {
+      throw new Error(
+        `Native Butler owner exited before executor readiness: ${
+          input.owner.exitCode ?? input.owner.signalCode
+        }`,
+      );
     }
     try {
       const readiness = parseJsonFile(foregroundReadinessPath(run));
+      const pid = isRecord(readiness) && Number.isInteger(readiness.pid)
+        ? Number(readiness.pid)
+        : null;
+      const readyAtMs = isRecord(readiness) && typeof readiness.readyAt === "string"
+        ? Date.parse(readiness.readyAt)
+        : Number.NaN;
       if (
         isRecord(readiness) &&
         readiness.schema === "butler.app-foreground-executor-readiness.v1" &&
-        readiness.pid === child.pid
+        pid !== null &&
+        pid > 0 &&
+        (input.expectedPid === undefined || pid === input.expectedPid) &&
+        (input.notBeforeMs === undefined ||
+          (Number.isFinite(readyAtMs) && readyAtMs >= input.notBeforeMs)) &&
+        isPidRunning(pid)
       ) {
-        writeJson(nativeExecutorStatePath(run), {
-          pid: child.pid,
-          startedAt: new Date().toISOString(),
-          runtime: "codex-api",
-          launcher: "btcc-r3-electron-e2e",
-        });
-        return { child, output };
+        return pid;
       }
     } catch {
       // Readiness is published atomically by the production runtime.
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 150));
   }
-  child.kill("SIGTERM");
   throw new Error("Timed out waiting for the native Butler executor.");
+}
+
+function isPidRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function hasInterruptedInboundForExecutor(

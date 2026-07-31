@@ -79,6 +79,8 @@ export type MaybePromise<T> = T | Promise<T>;
 
 export type EffectAdapter<TNormalizedInput = unknown, TResult = unknown> = {
   readonly capability: string;
+  /** Defaults to exact_action; accepted_plan still requires an accepted Plan. */
+  readonly reviewedPlanBinding?: "exact_action" | "accepted_plan";
   normalizeTarget(target: string): string;
   sanitizeTarget(normalizedTarget: string): string;
   normalizeInput(input: unknown): TNormalizedInput;
@@ -110,6 +112,8 @@ export type ExecuteGuidedEffectInput<
 > = {
   work: DurableWorkView;
   accessMode: GuidedEffectAccessMode;
+  /** Runtime-owned tool occurrence; required by accepted_plan adapters. */
+  occurrenceId?: string;
   signal: AbortSignal;
   target: string;
   input: unknown;

@@ -27,6 +27,7 @@ import {
 import {
   startProviderObservationProxy,
   type ProviderObservationProxy,
+  type ProviderRequestObservation,
 } from "./provider-observation-proxy.ts";
 import {
   assert,
@@ -51,6 +52,7 @@ export async function runBtccR3ElectronHarness(
   const preflight = {
     ok: true,
     actualProductPath: true,
+    agentOwnership: run.agentOwnership,
     credentialsCopiedToIsolatedData: !options.dryRun,
     dataRoot: run.dataRoot,
     electronProfile: run.electronProfile,
@@ -72,6 +74,10 @@ export async function runBtccR3ElectronHarness(
   const launches: LaunchObservation[] = [];
   const observations: StepObservation[] = [];
   const prior = new Map<string, StepObservation>();
+  let runError: unknown;
+  let runFailed = false;
+  let electronOutput: string[] | undefined;
+  let executorOutput: string[] | undefined;
   const stopCurrent = async (): Promise<void> => {
     if (!launch) return;
     const current = launch;
@@ -88,7 +94,7 @@ export async function runBtccR3ElectronHarness(
     launch = await launchProduct(run, providerProxy.endpoint);
     launches.push({
       electronPid: launch.child.pid ?? null,
-      executorPid: launch.executor.pid ?? null,
+      executorPid: launch.executorPid,
       interruptedExecutorReplaced: false,
       startedAtMs: launch.startedAtMs,
       stoppedAtMs: null,
@@ -111,7 +117,7 @@ export async function runBtccR3ElectronHarness(
       launch = await launchProduct(run, providerProxy.endpoint);
       launches.push({
         electronPid: launch.child.pid ?? null,
-        executorPid: launch.executor.pid ?? null,
+        executorPid: launch.executorPid,
         interruptedExecutorReplaced: false,
         startedAtMs: launch.startedAtMs,
         stoppedAtMs: null,
@@ -136,7 +142,7 @@ export async function runBtccR3ElectronHarness(
           launch = await launchProduct(run, providerProxy.endpoint);
           launches.push({
             electronPid: launch.child.pid ?? null,
-            executorPid: launch.executor.pid ?? null,
+            executorPid: launch.executorPid,
             interruptedExecutorReplaced: false,
             startedAtMs: launch.startedAtMs,
             stoppedAtMs: null,
@@ -160,39 +166,61 @@ export async function runBtccR3ElectronHarness(
         }
       }
     }
-    await stopCurrent();
-    await providerProxy.close();
-    const evidence = successEvidence({
-      launches,
-      observations,
-      options,
-      providerRequests: providerProxy.observations(),
-      run,
-    });
-    writeEvidence(run.evidencePath, evidence);
-    return { ...evidence, evidencePath: run.evidencePath };
   } catch (error) {
-    const electronOutput = launch?.output;
-    const executorOutput = launch?.executorOutput;
+    runFailed = true;
+    runError = error;
+    electronOutput = launch?.output;
+    executorOutput = launch?.executorOutput;
+  }
+
+  let cleanupError: unknown;
+  electronOutput ??= launch?.output;
+  executorOutput ??= launch?.executorOutput;
+  try {
+    await stopCurrent();
+  } catch (error) {
+    cleanupError = error;
     await stopCurrent().catch(() => undefined);
-    await providerProxy?.close().catch(() => undefined);
+  }
+  let providerRequests: ProviderRequestObservation[] = [];
+  if (providerProxy) {
+    try {
+      providerRequests = await providerProxy.close();
+    } catch (error) {
+      cleanupError ??= error;
+      providerRequests = providerProxy.observations();
+    }
+  }
+  if (!runFailed && cleanupError !== undefined) {
+    runFailed = true;
+    runError = cleanupError;
+  }
+
+  if (runFailed) {
     const failure = failureEvidence({
       electronOutput,
-      error,
+      error: runError,
       executorOutput,
       launches,
       observations,
       options,
-      providerRequests: providerProxy?.observations() ?? [],
+      providerRequests,
       run,
     });
     writeEvidence(run.evidencePath, failure);
     throw new Error(
       `${String(failure.error)}\nEvidence: ${run.evidencePath}`,
-      { cause: error },
+      { cause: runError },
     );
-  } finally {
-    await stopCurrent().catch(() => undefined);
-    await providerProxy?.close().catch(() => undefined);
   }
+
+  const evidence = successEvidence({
+    launches,
+    observations,
+    options,
+    providerRequests,
+    run,
+  });
+  writeEvidence(run.evidencePath, evidence);
+  return { ...evidence, evidencePath: run.evidencePath };
 }

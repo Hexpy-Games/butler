@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { isAbsolute, posix, win32 } from "node:path";
+import { isAbsolute, posix, relative, resolve, win32 } from "node:path";
 import type { EffectAdapterError } from "../../btcc/effects/index.ts";
 import { resolveWorkspacePathGuard } from "../../tools/file-tools/index.ts";
 
@@ -47,6 +47,27 @@ export function normalizeWorkspaceRelativePath(value: string): string {
     throw new Error("write_file effect path must identify one workspace file");
   }
   return normalized;
+}
+
+export function normalizeWorkspaceContainedPath(
+  workspacePath: string,
+  value: string,
+): string {
+  const trimmed = requiredString(value, "path");
+  if (!isAbsolute(trimmed) && !win32.isAbsolute(trimmed)) {
+    return normalizeWorkspaceRelativePath(trimmed);
+  }
+  const workspace = resolve(workspacePath);
+  const absolute = resolve(trimmed);
+  const contained = relative(workspace, absolute);
+  if (
+    contained === "" ||
+    contained.startsWith("..") ||
+    isAbsolute(contained)
+  ) {
+    throw new Error("write_file effect path must identify a file inside the workspace");
+  }
+  return normalizeWorkspaceRelativePath(contained);
 }
 
 export function normalizeExpectedSha256(value: unknown): string | undefined {

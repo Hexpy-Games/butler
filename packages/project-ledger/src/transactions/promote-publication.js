@@ -86,7 +86,10 @@ function receipt(publication, status) {
   return {
     schema: "project-ledger.promotion-receipt.v1",
     publicationId: publication.publicationId,
-    activeHead: publication.candidateHead,
+    activeHead: {
+      ...publication.candidateHead,
+      projectRoot: publication.canonicalRoot,
+    },
     status,
   };
 }

@@ -7,11 +7,6 @@ import { providerEmptyResponseError, safeEndpointLabel } from "../provider-error
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import type { LocalModelConfig } from "./models.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
@@ -204,10 +199,9 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       tool_names: toolCalls.map((call) => call.function.name),
       executed_tool_calls: executedToolCalls,
     });
-    const batch = partitionSemanticToolBatch(toolCalls);
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => {
+      toolCalls: toolCalls.map((call) => {
         const args = localToolArguments(call.function.arguments);
         return {
           name: call.function.name,
@@ -222,7 +216,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       tool_calls: toolCalls,
     });
 
-    for (const call of batch.executable) {
+    for (const call of toolCalls) {
       const args = localToolArguments(call.function.arguments);
       log(`tool ${call.function.name}: ${args.raw}`);
       writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.start", {
@@ -286,23 +280,6 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         tool_call_id: call.id,
         name: call.function.name,
         content: serializeToolResultPayloadForProvider(payload),
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.function.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content: serializeToolResultPayloadForProvider({
-          ok: false,
-          output: blockCapacityToolOutput(observation),
-        }),
       });
     }
   }

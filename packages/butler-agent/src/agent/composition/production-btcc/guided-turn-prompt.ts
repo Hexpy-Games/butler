@@ -52,20 +52,21 @@ export function guidedInstructions(
     "Multi-source or multi-step research that must produce a meaningful synthesized result is substantial Work even when every source tool is read-only.",
     "When the request asks you to inspect multiple sources and compare or synthesize them, start Work before the first source tool.",
     "When Work is useful, call replace_work_plan before the dependent work and use record_work_review to review the plan and the actual result.",
-    "Before a persistent change, include one matching Plan action and accept the current Plan review. Use the actual tool name as capability and an exact target: write_file uses workspace:<relative-path>; Project Ledger mutations use project-ledger:<kind>:<id>.",
+    "Before persistent changes, make a concise Plan, mark the relevant action with a plain-language effect capability and outcome, and accept the current Plan review. The accepted Plan as a whole covers contained workspace writes and typed Project Ledger changes in the active project, so do not enumerate files or invent internal target strings.",
     "The runtime creates effect ids, hashes, revisions, and receipts. Never invent or copy them into a Plan.",
     "record_work_checkpoint is optional and should mark only meaningful stage changes.",
     "Before reporting substantial Work, review against the original user request. Accept a usable requested outcome despite disclosed non-critical limits. Use partial or revise only for a material unfinished outcome with a concrete continuation or blocker; do not keep Work open for optional improvements.",
     "If Work bookkeeping fails, continue and deliver any truthful artifact or final answer you can support.",
     ...(policy.trackingMode === "ledger"
       ? [
-          "For substantial project work, keep one concise Project Ledger Work record alongside the internal Work record. Check for related Work first and reuse it when present; otherwise create one. Put each intended Project Ledger change and its exact target in the Plan before review, and complete the Ledger Work after validating the requested outcome.",
+          "For substantial project work, keep one concise Project Ledger Work record alongside the internal Work record. Check for related Work first and reuse it when present; otherwise create one, then complete it after validating the requested outcome.",
           "An uninitialized Project Ledger has no existing Work to reuse; the first reviewed create effect initializes it.",
           "Do not create Project Ledger task or attempt hierarchies unless they make the user's work easier to continue. If Project Ledger bookkeeping fails, still deliver the truthful result and disclose the limitation.",
         ]
       : []),
     "Use tool_search, then tool_describe, then tool_call for capabilities not already visible.",
     "A wrong tool or invalid arguments are ordinary feedback: correct the call and continue.",
+    "When a local page's actual appearance matters, use inspect_workspace_page after build or structural validation to inspect desktop and mobile screenshots before the result review. Screenshots are evidence for material defects, not a demand for endless polish: when the requested content is present and the page is responsive, readable, and usable, proceed to result review; correct and re-inspect only when a visible defect materially harms the requested result. If the App preview host is unavailable, treat that as an ordinary disclosed limitation rather than a completion gate.",
     "run_command is read-only and has no network access by default. Under admitted full access, a command with state_effect validation and a stable validation_suite runs in a disposable no-network workspace copy; persist screenshots and similar evidence under $BUTLER_ARTIFACTS_DIR. Use typed tools for intended source or Project Ledger changes.",
     "Never claim a mutation or completed result without tool evidence. Respect the admitted access.",
     `The admitted access is ${policy.accessMode}. Work storage is ${workStorageForPolicy(policy)}.`,

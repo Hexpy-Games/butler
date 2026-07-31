@@ -39,12 +39,17 @@ export function searchToolCatalog(input: ToolSearchInput): ToolSearchResult[] {
     .filter((entry) => includeDisabled || entry.enabled)
     .filter((entry) => !input.category || entry.category === input.category)
     .filter((entry) => !input.provider || entry.provider === input.provider)
-    .map((entry) => ({
-      entry,
-      score: scoreEntry(entry, queryTerms, capabilityTerms),
+    .map((entry) => {
+      const queryScore = scoreEntry(entry, queryTerms, []);
+      const capabilityScore = scoreEntry(entry, [], capabilityTerms);
+      return { entry, queryScore, capabilityScore };
+    })
+    .filter((ranked) => queryTerms.length === 0 || ranked.queryScore > 0)
+    .filter((ranked) => capabilityTerms.length === 0 || ranked.capabilityScore > 0)
+    .map((ranked) => ({
+      entry: ranked.entry,
+      score: ranked.queryScore + ranked.capabilityScore,
     }))
-    .filter((ranked) => queryTerms.length === 0 || ranked.score > 0)
-    .filter((ranked) => capabilityTerms.length === 0 || scoreEntry(ranked.entry, [], capabilityTerms) > 0)
     .sort((a, b) => b.score - a.score || compareStableStrings(a.entry.id, b.entry.id))
     .slice(0, limit)
     .map((ranked) => compactToolSearchResult(ranked.entry));

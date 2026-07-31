@@ -26,7 +26,10 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createBundledAgentSupervisor } from "./app-agent-supervisor.mjs";
+import {
+  createBundledAgentSupervisor,
+  prepareAppLocalAuth,
+} from "./app-agent-supervisor.mjs";
 import { createAppForegroundDoctorView } from "./app-foreground-doctor.mjs";
 import { drainAppForegroundActiveWork } from "./app-foreground-drain.mjs";
 import { quitAndInstallAppUpdate } from "./app-foreground-update.mjs";
@@ -64,6 +67,7 @@ import { migrateLegacyAppService } from "./app-legacy-service-migration.mjs";
 import { resolveOpenAIOAuthLoginHelper } from "./openai-oauth-login-helper.mjs";
 import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
+import { createLocalPagePreviewHost } from "./local-page-preview-host.mjs";
 import {
   MENU_BAR_HELPER_ARG,
   argsForNavigationRequest,
@@ -212,6 +216,7 @@ let isQuitting = false;
 let finalQuitAllowed = false;
 let foregroundInstance = null;
 let foregroundQuitSnapshot = null;
+let preconfirmedE2eQuit = false;
 let legacyMigrationPromise = null;
 let suppressInitialWindowForLogin = false;
 const foregroundRecoveryBudget = createRecoveryBudget();
@@ -234,6 +239,11 @@ autoUpdater.on("before-quit-for-update", () => {
 });
 const explicitElectronUserDataDir = process.env.BUTLER_APP_ELECTRON_USER_DATA_DIR?.trim();
 let openAIOAuthLoginSession = null;
+const localPagePreviewAuth = prepareAppLocalAuth({ butlerData: butlerDataRoot });
+const localPagePreviewHost = createLocalPagePreviewHost({
+  BrowserWindow,
+  token: localPagePreviewAuth.token,
+});
 const bundledAgentSupervisor = createBundledAgentSupervisor({
   butlerData: butlerDataRoot,
   resolveGateway: managedGatewayCommand,
@@ -247,6 +257,7 @@ const bundledAgentSupervisor = createBundledAgentSupervisor({
   getServerUrl: () => serverUrl,
   getAppVersion: () => appInfoView().version,
   getRendererOrigin: () => rendererOrigin,
+  getLocalPagePreviewUrl: () => localPagePreviewHost.endpoint(),
   explicitServerUrl,
   explicitUiUrl,
   projectFolderTokenSecret,
@@ -547,6 +558,11 @@ async function appServerProbeFetch(url, localAuth = null) {
 }
 
 async function ensureServer() {
+  if (isQuitting) {
+    const error = new Error("Butler App is shutting down.");
+    error.code = "app_shutting_down";
+    throw error;
+  }
   if (shouldUseAppAgentNativeServiceBridge()) {
     await waitForNativeServiceGatewayReady();
     return;
@@ -2161,7 +2177,9 @@ ipcMain.handle("butler:agent-service-diagnostics", () =>
   agentServiceControl.readAgentServiceDiagnostics(),
 );
 
-ipcMain.handle("butler:quit-app", () => {
+ipcMain.handle("butler:quit-app", (_event, input = {}) => {
+  preconfirmedE2eQuit = input?.confirmed === true &&
+    process.env.BUTLER_APP_ALLOW_PRECONFIRMED_E2E_QUIT === "1";
   app.quit();
   return { quitting: true };
 });
@@ -2438,6 +2456,11 @@ if (appSingleInstanceLock) {
         await runMenuBarHelper();
         return;
       }
+      try {
+        await localPagePreviewHost.start();
+      } catch (error) {
+        console.error("Local page preview is unavailable", error);
+      }
       await installDevtools();
       await createWindow();
       flushPendingNativeNavigation();
@@ -2454,6 +2477,7 @@ app.on("activate", activateButlerApp);
 
 app.on("before-quit", (event) => {
   if (finalQuitAllowed) {
+    void localPagePreviewHost.stop();
     if (tray) {
       tray.destroy();
       tray = null;
@@ -2474,6 +2498,10 @@ app.on("before-quit", (event) => {
       reason: "app_quit",
       activeWorkSnapshot: foregroundQuitSnapshot,
     });
+  }).then(async (stopped) => {
+    if (stopped === undefined && !isQuitting) return stopped;
+    await localPagePreviewHost.stop();
+    return stopped;
   }).then((stopped) => {
     if (stopped === undefined && !isQuitting) return;
     finalQuitAllowed = true;
@@ -2487,7 +2515,9 @@ app.on("before-quit", (event) => {
 async function confirmForegroundQuitIfNeeded() {
   if (!usesAppForegroundLifecycle || !foregroundInstance) return true;
   const snapshot = await readForegroundActiveWorkSnapshot();
-  const confirmed = await confirmAppForegroundQuit({
+  const preconfirmed = preconfirmedE2eQuit;
+  preconfirmedE2eQuit = false;
+  const confirmed = preconfirmed || await confirmAppForegroundQuit({
     snapshot,
     showMessageBox: (options) => dialog.showMessageBox(options),
   });

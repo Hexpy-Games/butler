@@ -65,6 +65,7 @@ test("supervisor env binds bundled Agent to localhost and keeps auth token out o
     rendererOrigin: "http://127.0.0.1:18888",
     explicitUiUrl: null,
     projectFolderTokenSecret: "folder-secret",
+    localPagePreviewUrl: "http://127.0.0.1:29991/v1/preview",
     localAuth: {
       filePath: "/data/app/runtime/auth/local-agent-auth.json",
       token: "super-secret-local-auth-token",
@@ -83,6 +84,8 @@ test("supervisor env binds bundled Agent to localhost and keeps auth token out o
     BUTLER_APP_LOCAL_AUTH_REQUIRED: "1",
     BUTLER_APP_LOCAL_AUTH_FILE: "/data/app/runtime/auth/local-agent-auth.json",
     BUTLER_PROJECT_FOLDER_TOKEN_SECRET: "folder-secret",
+    BUTLER_APP_LOCAL_PAGE_PREVIEW_URL:
+      "http://127.0.0.1:29991/v1/preview",
   });
   expect(JSON.stringify(env)).not.toContain("super-secret-local-auth-token");
 });

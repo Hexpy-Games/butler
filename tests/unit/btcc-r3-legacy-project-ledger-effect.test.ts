@@ -628,6 +628,7 @@ async function createHarness(input: HarnessInput) {
       work: reviewed,
       accessMode: "full_access",
       signal: new AbortController().signal,
+      occurrenceId: `fixture-effect-call-${index}`,
       target: effect.target,
       input: effect.normalizedInput,
       adapter: effect.adapter,

@@ -4,6 +4,7 @@ export const BTCC_R3_ELECTRON_EVIDENCE_SCHEMA =
   "butler.btcc-r3-electron-evidence.v1" as const;
 
 export type AccessMode = "ask_first" | "full_access" | "read_only";
+export type AgentOwnership = "electron" | "harness";
 export type ReasoningEffort = "high" | "low" | "max" | "medium" | "none" | "xhigh";
 export type ElectronSessionKind = "chat" | "project";
 export type TerminalState = "cancelled" | "delivered" | "failed";
@@ -64,6 +65,7 @@ export interface ElectronHarnessOptions {
   repoRoot?: string;
   runRoot?: string;
   sourceData?: string;
+  bundledAgentResourceDir?: string;
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;
@@ -74,6 +76,8 @@ export interface ElectronHarnessOptions {
 
 export interface PreparedRun {
   accessMode: AccessMode;
+  agentOwnership: AgentOwnership;
+  bundledAgentResourceDir: string | null;
   dataRoot: string;
   debugPort: number;
   electronProfile: string;

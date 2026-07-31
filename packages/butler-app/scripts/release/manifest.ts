@@ -368,6 +368,8 @@ export function createAppReleaseManifest(
     "packages/butler-app/client/README.md",
     "packages/butler-app/client/electron/package.json",
     "packages/butler-app/client/electron/main.mjs",
+    "packages/butler-app/client/electron/local-page-preview-host.mjs",
+    "packages/butler-app/client/electron/local-page-preview-path-policy.mjs",
     "packages/butler-app/client/electron/preload.cjs",
     "packages/butler-app/client/electron/scripts",
     "packages/butler-app/client/electron/assets/butler-icon.svg",
@@ -726,6 +728,8 @@ export function createAppDependencyClosureManifest(input: {
       ownedDependency("electron-shell", "Electron shell", [
         "packages/butler-app/client/electron/package.json",
         "packages/butler-app/client/electron/main.mjs",
+        "packages/butler-app/client/electron/local-page-preview-host.mjs",
+        "packages/butler-app/client/electron/local-page-preview-path-policy.mjs",
         "packages/butler-app/client/electron/preload.cjs",
       ], null),
       ownedDependency("renderer-assets", "Renderer assets", [

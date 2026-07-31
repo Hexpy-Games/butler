@@ -104,6 +104,33 @@ test("shared provider admission measures and admits the exact request body", () 
   expect(receipt.serialized_request).not.toContain("evidence_packet");
 });
 
+test("image inputs keep exact transport bytes without counting base64 as text", () => {
+  const imageUrl = `data:image/jpeg;base64,${"A".repeat(600_000)}`;
+  const body = {
+    model: "gpt-5.4-mini",
+    input: [{
+      role: "user",
+      content: [
+        { type: "input_text", text: "Inspect this rendered page." },
+        { type: "input_image", image_url: imageUrl, detail: "high" },
+      ],
+    }],
+  };
+  const receipt = admitSerializedProviderRequest({
+    providerId: "openai",
+    modelRef: "openai/gpt-5.4-mini",
+    body,
+    requestedOutputTokens: 1_024,
+    maxInputTokens: 20_000,
+  });
+
+  expect(receipt.plan.admission).toBe("admitted");
+  expect(receipt.plan.compiled_input_tokens).toBeGreaterThanOrEqual(8_192);
+  expect(receipt.plan.compiled_input_tokens).toBeLessThan(20_000);
+  expect(receipt.serialized_request).toBe(JSON.stringify(body));
+  expect(receipt.serialized_request).toContain(imageUrl.slice(-1_000));
+});
+
 test("Codex subscription transport reserves output spend without sending an unsupported field", async () => {
   const observations: Array<Record<string, unknown>> = [];
   let requestBody: Record<string, unknown> = {};

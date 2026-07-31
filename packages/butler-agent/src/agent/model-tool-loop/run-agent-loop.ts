@@ -1,10 +1,5 @@
 import { serializeToolResultPayloadForProvider } from "./tool-result-serialization.ts";
 import { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "./tool-batch-capacity.ts";
 import type {
   AgentLoopEvent,
   AgentLoopInput,
@@ -17,6 +12,10 @@ import {
   executePreparedToolCall,
   prepareToolCall,
 } from "./tool-call-execution.ts";
+import {
+  extractAgentLoopImageAttachments,
+  withoutAgentLoopImageAttachments,
+} from "./tool-result-media.ts";
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
@@ -32,7 +31,13 @@ function emit(
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
 }): AgentLoopMessage {
-  const providerOutput = modelFacingToolOutput(input.result);
+  const imageAttachments = extractAgentLoopImageAttachments(
+    input.result.output,
+    input.result.name,
+  );
+  const providerOutput = withoutAgentLoopImageAttachments(
+    modelFacingToolOutput(input.result),
+  );
   const payload = input.result.ok ? { ok: true, output: providerOutput } : {
     ok: false,
     error: input.result.error ?? "unknown tool error",
@@ -45,6 +50,7 @@ function toolResultToMessage(input: {
     toolCallId: input.result.toolCallId,
     name: input.result.name,
     content: serializeToolResultPayloadForProvider(payload),
+    ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
   };
 }
 
@@ -187,35 +193,13 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       };
     }
 
-    const batch = partitionSemanticToolBatch(calls);
     await input.onAssistantTextBeforeTools?.({
       text: response.text?.trim() ?? "",
-      toolCalls: batch.executable,
+      toolCalls: calls,
       iteration,
     });
 
-    const preparedCalls = batch.executable.map((call) => prepareToolCall(input, call));
-    const recordDeferredCalls = async (): Promise<void> => {
-      for (const call of batch.deferred) {
-        const observation = blockCapacityObservation({
-          toolCallId: call.id,
-          toolName: call.name,
-          deferredCount: batch.deferred.length,
-        });
-        await recordToolResult({
-          call,
-          result: {
-            toolCallId: call.id,
-            name: call.name,
-            ok: false,
-            error: observation.summary,
-            output: blockCapacityToolOutput(observation),
-          },
-          iteration,
-          evaluateStop: false,
-        });
-      }
-    };
+    const preparedCalls = calls.map((call) => prepareToolCall(input, call));
     const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null &&
       prepared.tool?.concurrencySafe === true,
@@ -242,7 +226,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         });
         if (!stop && candidate) stop = candidate;
       }
-      await recordDeferredCalls();
       if (stop) return finishWithStopCandidate(stop);
       continue;
     }
@@ -261,7 +244,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       });
       if (stop) return finishWithStopCandidate(stop);
     }
-    await recordDeferredCalls();
   }
 
   emit(events, input.onEvent, {
