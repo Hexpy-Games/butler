@@ -79,6 +79,8 @@ export async function runBtccR3ElectronHarness(
   try {
     launch = await launchProduct(run);
     launches.push({
+      electronPid: launch.child.pid ?? null,
+      executorPid: launch.executor.pid ?? null,
       interruptedExecutorReplaced: false,
       startedAtMs: launch.startedAtMs,
       stoppedAtMs: null,
@@ -100,6 +102,8 @@ export async function runBtccR3ElectronHarness(
       await stopCurrent();
       launch = await launchProduct(run);
       launches.push({
+        electronPid: launch.child.pid ?? null,
+        executorPid: launch.executor.pid ?? null,
         interruptedExecutorReplaced: false,
         startedAtMs: launch.startedAtMs,
         stoppedAtMs: null,
@@ -123,6 +127,8 @@ export async function runBtccR3ElectronHarness(
           await stopCurrent();
           launch = await launchProduct(run);
           launches.push({
+            electronPid: launch.child.pid ?? null,
+            executorPid: launch.executor.pid ?? null,
             interruptedExecutorReplaced: false,
             startedAtMs: launch.startedAtMs,
             stoppedAtMs: null,
@@ -155,6 +161,7 @@ export async function runBtccR3ElectronHarness(
       electronOutput: launch?.output,
       error,
       executorOutput: launch?.executorOutput,
+      launches,
       observations,
       options,
       run,

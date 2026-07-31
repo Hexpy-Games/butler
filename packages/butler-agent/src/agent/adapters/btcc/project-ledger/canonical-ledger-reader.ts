@@ -34,6 +34,18 @@ export async function readCanonicalProjectLedger(projectRoot: string) {
   };
 }
 
+export async function findCanonicalProjectLedgerRecordKinds(
+  projectRoot: string,
+  recordId: string,
+): Promise<string[]> {
+  const core = await loadProjectLedgerCore();
+  return [...new Set(
+    core.buildIndex(projectRoot).records
+      .filter((record) => record.id === recordId)
+      .map((record) => record.kind),
+  )].sort();
+}
+
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
 }

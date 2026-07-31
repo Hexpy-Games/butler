@@ -25,7 +25,6 @@ test("Guided Turn answers directly through only durable admission and delivery s
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
-    retrospective: stores.retrospective,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
     progress: { stateChanged(update) { states.push(update.semanticState); } },
     agent: {
@@ -64,7 +63,6 @@ test("Guided Turn answers directly through only durable admission and delivery s
       db.close();
     }
   } finally {
-    await stores.retrospective.flush();
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -81,7 +79,6 @@ test("Guided Turn delivers an explicit operational failure when the model produc
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
-    retrospective: stores.retrospective,
     agent: {
       async run() {
         throw new Error("provider disconnected before final answer");
@@ -95,7 +92,6 @@ test("Guided Turn delivers an explicit operational failure when the model produc
         content: "요청을 처리하는 중 일시적인 문제가 발생했습니다. 작업은 안전하게 중단되었으며, 다시 요청해 주시면 이어서 처리하겠습니다.",
       });
   } finally {
-    await stores.retrospective.flush();
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -119,7 +115,6 @@ test("Guided Turn resumes a committed delivery without another model call", asyn
         throw new Error("simulated delivery interruption");
       },
     },
-    retrospective: firstStores.retrospective,
     agent: {
       async run() {
         firstCalls += 1;
@@ -146,7 +141,6 @@ test("Guided Turn resumes a committed delivery without another model call", asyn
     admission: resumedStores.admission,
     turns: resumedStores.turns,
     messages: resumedStores.messages,
-    retrospective: resumedStores.retrospective,
     agent: {
       async run() {
         resumedCalls += 1;
@@ -159,7 +153,6 @@ test("Guided Turn resumes a committed delivery without another model call", asyn
       .toMatchObject({ kind: "delivered", content: "persisted final" });
     expect(resumedCalls).toBe(0);
   } finally {
-    await resumedStores.retrospective.flush();
     resumedStores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -188,7 +181,6 @@ test("Guided Turn recovers a crash after canonical insertion without a duplicate
         return message;
       },
     },
-    retrospective: firstStores.retrospective,
     agent: {
       async run() {
         return { route: "direct", content: "one canonical answer" };
@@ -213,7 +205,6 @@ test("Guided Turn recovers a crash after canonical insertion without a duplicate
     admission: resumedStores.admission,
     turns: resumedStores.turns,
     messages: resumedStores.messages,
-    retrospective: resumedStores.retrospective,
     agent: {
       async run() {
         throw new Error("model must not rerun after delivery commit");
@@ -237,7 +228,6 @@ test("Guided Turn recovers a crash after canonical insertion without a duplicate
       db.close();
     }
   } finally {
-    await resumedStores.retrospective.flush();
     resumedStores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -266,7 +256,6 @@ test("Stop during committed delivery lets the immutable Outbox finish once", asy
         return result;
       },
     },
-    retrospective: stores.retrospective,
     agent: {
       async run() {
         return { route: "direct", content: "committed before Stop" };
@@ -295,7 +284,6 @@ test("Stop during committed delivery lets the immutable Outbox finish once", asy
     }
   } finally {
     releaseInserted();
-    await stores.retrospective.flush();
     stores.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -327,7 +315,6 @@ test("Guided Turn Stop aborts the model and durably cancels the Turn", async () 
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
-    retrospective: stores.retrospective,
     agent,
   });
   try {

@@ -461,9 +461,8 @@ function insertGuidedTurn(
     INSERT INTO btcc_turns (
       turn_id, session_id, inbox_id, trigger_key, original_message_id,
       original_message, admission_snapshot_ref, model_selection_json,
-      context_json, continuation_snapshot_json, semantic_state,
-      revision, execution_fence
-    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', '[]', 'admitted', 1, 1)
+      context_json, semantic_state, revision, execution_fence
+    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', 'admitted', 1, 1)
   `).run(
     turnId,
     sessionId,

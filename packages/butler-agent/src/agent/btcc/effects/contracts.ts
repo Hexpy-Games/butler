@@ -69,11 +69,26 @@ export type EffectReconciliation<TResult> =
   | { status: "not_applied" }
   | { status: "uncertain"; error?: EffectAdapterError };
 
+export type EffectBlockerRelation =
+  | "unrelated"
+  | "overlapping"
+  | "equivalent"
+  | "ambiguous";
+
+export type MaybePromise<T> = T | Promise<T>;
+
 export type EffectAdapter<TNormalizedInput = unknown, TResult = unknown> = {
   readonly capability: string;
   normalizeTarget(target: string): string;
   sanitizeTarget(normalizedTarget: string): string;
   normalizeInput(input: unknown): TNormalizedInput;
+  classifyEffectBlocker?(input: {
+    blockerCapability: string;
+    blockerTarget: string;
+    blockerInput: Record<string, unknown>;
+    normalizedTarget: string;
+    normalizedInput: TNormalizedInput;
+  }): MaybePromise<EffectBlockerRelation>;
   dispatch(input: {
     normalizedTarget: string;
     normalizedInput: TNormalizedInput;
@@ -134,11 +149,25 @@ export type GuidedEffectJournalRecord = GuidedEffectIdentity & {
   updatedAt: string;
 };
 
+export type GuidedWorkEffectBlockerRecord = {
+  blockerId: string;
+  sourceTurnId: string;
+  sourceOccurrenceId: string;
+  workId: string;
+  capability: string;
+  target: string;
+  input: Record<string, unknown>;
+  inputSha256: string;
+  idempotencyKey: string;
+  detail: string;
+  status: "unresolved" | "applied";
+  resolution?: { status: "applied" | "not_applied" };
+  createdAt: string;
+};
+
 export type PrepareGuidedEffectResult =
   | { ok: true; created: boolean; record: GuidedEffectJournalRecord }
   | { ok: false; message: string };
-
-export type MaybePromise<T> = T | Promise<T>;
 
 export interface GuidedEffectJournal {
   prepare(identity: GuidedEffectIdentity): MaybePromise<PrepareGuidedEffectResult>;
@@ -147,6 +176,14 @@ export interface GuidedEffectJournal {
     workId: string,
     limit?: number,
   ): MaybePromise<GuidedEffectJournalRecord[]>;
+  listEffectBlockersForReconciliation(
+    workId: string,
+  ): MaybePromise<GuidedWorkEffectBlockerRecord[]>;
+  resolveBlockerOccurrence(
+    workId: string,
+    sourceOccurrenceId: string,
+    resolution: "applied" | "not_applied",
+  ): MaybePromise<boolean>;
   claimDispatch(
     effectId: string,
     expectedJournalRevision: number,
@@ -176,6 +213,7 @@ export interface GuidedEffectJournal {
 export type GuidedEffectFaultPoint =
   | "before_intent"
   | "after_intent"
+  | "after_blocker_resolution"
   | "after_dispatch_marker"
   | "after_dispatch"
   | "after_receipt";

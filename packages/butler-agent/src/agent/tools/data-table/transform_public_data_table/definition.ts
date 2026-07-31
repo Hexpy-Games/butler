@@ -40,8 +40,8 @@ export const transformPublicDataTableToolDefinition = {
       "rows",
     ],
   },
-  effectBoundary: "none",
-  concurrencySafe: true,
+  effectBoundary: "reviewed_persistent",
+  concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",
 } satisfies ButlerToolDefinition;

@@ -34,11 +34,17 @@ export function calculateObservationMetrics(
   const outcomes = Object.values(observation.quality.requiredOutcomes);
   const outcomesComplete = outcomes.length > 0 &&
     outcomes.every((value) => typeof value === "boolean");
+  const artifactResultPass = observation.artifacts.length === 0 ||
+    (
+      observation.artifacts.every((artifact) => artifact.exists) &&
+      observation.artifacts.some((artifact) => artifact.changedFromFixture === true)
+    );
   const metrics: ObservationMetrics = {
     measurementComplete: false,
     outcomeSuccess: observation.terminalState === "delivered" &&
       observation.finalText.trim().length > 0 &&
-      outcomesComplete && outcomes.every(Boolean),
+      outcomesComplete && outcomes.every(Boolean) &&
+      artifactResultPass,
     qualityScore,
     totalTokens: nonNegativeOrNull(observation.usage.totalTokens),
     serializedContextBytes: nonNegativeOrNull(observation.usage.serializedContextBytes),
@@ -70,28 +76,25 @@ export function calculateObservationMetrics(
     unrecoveredToolErrors,
     durabilityPass,
     safetyPass,
+    ledgerRoutePass:
+      observation.ledger.observedRoute === observation.ledger.expectedRoute,
+    ledgerCloseoutPass:
+      observation.ledger.expectedRoute === "none" ||
+      observation.ledger.closeoutObserved,
     noProgressTurns: nonNegativeOrNull(observation.loop.noProgressTurns),
     validatorRejections: nonNegativeOrNull(observation.loop.validatorRejections),
   };
   metrics.measurementComplete = outcomesComplete && [
     metrics.qualityScore,
     metrics.totalTokens,
-    metrics.serializedContextBytes,
-    metrics.acknowledgementMs,
-    metrics.contextPreparationMs,
-    metrics.providerFirstTokenMs,
     metrics.firstMeaningfulMs,
-    metrics.finalVisibleMs,
     metrics.productWallMs,
     metrics.maxSilentGapMs,
     metrics.unrecoveredToolErrors,
     metrics.durabilityPass,
     metrics.safetyPass,
-    metrics.noProgressTurns,
-    metrics.validatorRejections,
     nonNegativeOrNull(observation.usage.modelRequests),
     nonNegativeOrNull(observation.usage.promptTokens),
-    nonNegativeOrNull(observation.usage.cachedPromptTokens),
     nonNegativeOrNull(observation.usage.outputTokens),
     nonNegativeOrNull(observation.tools.calls),
     nonNegativeOrNull(observation.tools.recoveryTimeMs),

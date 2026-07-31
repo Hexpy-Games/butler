@@ -331,10 +331,17 @@ export async function ensureSession(
 }
 
 export async function rendererFinalText(page: CdpPage): Promise<string> {
-  await page.waitFor(
-    `document.querySelectorAll(${JSON.stringify("[data-test-class=\"turn-result-section\"]")}).length > 0`,
-    "final result",
-  );
+  try {
+    await page.waitFor(
+      `document.querySelectorAll(${JSON.stringify("[data-test-class=\"turn-result-section\"]")}).length > 0`,
+      "final result",
+    );
+  } catch {
+    return await page.innerText(
+      '[data-test-class="turn-result-section"]',
+      { last: true },
+    );
+  }
   return await page.innerText('[data-test-class="turn-result-section"]', { last: true });
 }
 

@@ -57,6 +57,13 @@ export function renderDurableWorkContext(
     );
     pushCorrections(rows, "Result corrections", work.latestResultReview.corrections);
   }
+  for (const blocker of work.effectBlockers ?? []) {
+    rows.push(
+      `Unresolved prior effect (${singleLine(blocker.capability, 100)} -> ` +
+        `${singleLine(blocker.target, 240)}): ${singleLine(blocker.detail, 500)} ` +
+        "The runtime will reconcile this exact target before allowing another effect.",
+    );
+  }
   for (const fact of context.resultFacts.slice(-8)) {
     rows.push(
       `Result (${singleLine(fact.toolName, 100)}, ${fact.status}): ` +

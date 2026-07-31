@@ -1,16 +1,11 @@
 import type {
   DurableWorkPlanAction,
+  LegacyWorkRecordSnapshot,
   WorkStage,
 } from "../../../btcc/durable-work/index.ts";
 
 const MAX_IMPORTED_ACTIONS = 20;
 const MAX_IMPORTED_CHECKS = 16;
-
-export type LegacyWorkRecordSnapshot = {
-  recordId: string;
-  status: string;
-  content: unknown;
-};
 
 export type LegacyWorkProjection = {
   objective: string;

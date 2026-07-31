@@ -34,7 +34,12 @@ export function evaluateBenchmarkEvidence(evidence: BenchmarkEvidenceFile): Benc
       observation.prompt !== prompt.prompt ||
       !sameStringSet(Object.keys(observation.quality.requiredOutcomes), prompt.requiredOutcomes) ||
       !sameTarget(observation.target, target) ||
-      observation.providerReportedModel !== target.model
+      observation.ledger.expectedRoute !== prompt.expectedLedgerRoute ||
+      (
+        observation.providerReportedModel !== target.model &&
+        !(observation.terminalState !== "delivered" &&
+          observation.providerReportedModel === null)
+      )
     ) reasons.push(`invalid_observation:${key}`);
     else if (observationMap.has(key)) reasons.push(`duplicate_observation:${key}`);
     else observationMap.set(key, observation);
@@ -74,7 +79,19 @@ function comparePair(
   const firstMeaningfulRatio = ratio(r3?.firstMeaningfulMs, r2?.firstMeaningfulMs);
   const reasons: string[] = [];
   let winner: BenchmarkPairComparison["winner"] = "tie";
-  if (!r2?.measurementComplete || !r3?.measurementComplete) {
+  if (
+    knownTerminalFailure(r3Observation) &&
+    knownDeliveredOutcome(r2Observation)
+  ) {
+    winner = "r2";
+    reasons.push("r3_product_failure");
+  } else if (
+    knownTerminalFailure(r2Observation) &&
+    knownDeliveredOutcome(r3Observation)
+  ) {
+    winner = "r3";
+    reasons.push("r2_product_failure");
+  } else if (!r2?.measurementComplete || !r3?.measurementComplete) {
     winner = "undecided";
     reasons.push("measurement_incomplete");
   } else if (hardFailure(r3) && !hardFailure(r2)) {
@@ -173,7 +190,24 @@ function hardFailure(metrics: ObservationMetrics): boolean {
   return !metrics.outcomeSuccess ||
     metrics.durabilityPass !== true ||
     metrics.safetyPass !== true ||
+    !metrics.ledgerRoutePass ||
+    !metrics.ledgerCloseoutPass ||
     (metrics.unrecoveredToolErrors ?? 1) > 0;
+}
+
+function knownTerminalFailure(
+  observation: RawBenchmarkObservation | undefined,
+): boolean {
+  return Boolean(observation && observation.terminalState !== "delivered");
+}
+
+function knownDeliveredOutcome(
+  observation: RawBenchmarkObservation | undefined,
+): boolean {
+  return Boolean(
+    observation &&
+    calculateObservationMetrics(observation).outcomeSuccess,
+  );
 }
 
 function observationKey(promptId: string, revision: BtccRevision): string {

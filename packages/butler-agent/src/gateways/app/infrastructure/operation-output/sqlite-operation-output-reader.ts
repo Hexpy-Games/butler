@@ -1,18 +1,20 @@
-import { existsSync, closeSync, openSync, readSync } from "node:fs";
-import { join } from "node:path";
-import { Database } from "bun:sqlite";
-import type { OperationOutputView } from "../../interface/protocol/app-protocol.ts";
+import type { Database } from "bun:sqlite";
+import { digest } from
+  "../../../../agent/btcc/identity.ts";
+import type { OperationOutputView } from
+  "../../interface/protocol/app-protocol.ts";
 
 const OUTPUT_PAGE_BYTES = 64 * 1024;
 
-type StoredOperationResult = {
-  request_scope: string;
-  request_id: string;
-  record_json: string;
+type GuidedToolResult = {
+  turn_id: string;
+  call_id: string;
+  result_json: string;
+  result_sha256: string;
 };
 
 export class SqliteOperationOutputReader {
-  constructor(private readonly butlerData: string) {}
+  constructor(private readonly db: Database) {}
 
   read(input: {
     turnId: string;
@@ -21,73 +23,52 @@ export class SqliteOperationOutputReader {
     byteStart: number;
     allowAliasedRequest?: boolean;
   }): OperationOutputView | null {
-    const databasePath = join(
-      this.butlerData,
-      "runtime",
-      "btcc",
-      "operation-results.sqlite",
+    const exact = this.db.query<GuidedToolResult, [string, string]>(`
+      SELECT turn_id, call_id, result_json, result_sha256
+      FROM btcc_guided_tool_calls
+      WHERE turn_id = ? AND call_id = ? AND result_json IS NOT NULL
+        AND result_sha256 IS NOT NULL
+    `).get(input.turnId, input.requestId);
+    const stored = exact && resultId(exact.result_sha256) === input.resultId
+      ? exact
+      : input.allowAliasedRequest === true
+        ? this.findAliased(input.turnId, input.resultId)
+        : null;
+    if (!stored || digest(stored.result_json) !== stored.result_sha256) return null;
+
+    const payload = Buffer.from(stored.result_json, "utf8");
+    const byteStart = Math.max(0, Math.min(input.byteStart, payload.byteLength));
+    const bytes = payload.subarray(
+      byteStart,
+      Math.min(payload.byteLength, byteStart + OUTPUT_PAGE_BYTES),
     );
-    if (!existsSync(databasePath)) return null;
-    const database = new Database(databasePath, { readonly: true });
-    try {
-      const stored = database.query<StoredOperationResult, [string]>(`
-        SELECT request_scope, request_id, record_json
-        FROM btcc_operation_results
-        WHERE result_id = ?
-      `).get(input.resultId);
-      if (!stored) return null;
-      if (
-        stored.request_id !== input.requestId &&
-        input.allowAliasedRequest !== true
-      ) return null;
-      if (!stored.request_scope.startsWith(`${input.turnId}:`)) return null;
-      const record = JSON.parse(stored.record_json) as {
-        resultRef?: { id?: string };
-        payloadRef?: { sha256?: string };
-        byteLength?: number;
-      };
-      if (record.resultRef?.id !== input.resultId) return null;
-      const payloadSha256 = record.payloadRef?.sha256;
-      const totalBytes = record.byteLength;
-      if (
-        !payloadSha256 ||
-        !/^[a-f0-9]{64}$/u.test(payloadSha256) ||
-        !Number.isSafeInteger(totalBytes) ||
-        totalBytes === undefined ||
-        totalBytes < 0
-      ) {
-        return null;
-      }
-      const payloadPath = join(
-        this.butlerData,
-        "runtime",
-        "btcc",
-        "result-payloads",
-        payloadSha256,
-      );
-      if (!existsSync(payloadPath)) return null;
-      const byteStart = Math.min(input.byteStart, totalBytes);
-      const bytes = readRange(
-        payloadPath,
-        byteStart,
-        Math.min(OUTPUT_PAGE_BYTES, totalBytes - byteStart),
-      );
-      const contentBytes = completeUtf8Prefix(bytes);
-      const byteEnd = byteStart + contentBytes.byteLength;
-      return {
-        turn_id: input.turnId,
-        request_id: input.requestId,
-        result_id: input.resultId,
-        content: contentBytes.toString("utf8"),
-        byte_start: byteStart,
-        byte_end: byteEnd,
-        byte_length: totalBytes,
-        complete: byteEnd >= totalBytes,
-      };
-    } finally {
-      database.close();
-    }
+    const contentBytes = completeUtf8Prefix(bytes);
+    const byteEnd = byteStart + contentBytes.byteLength;
+    return {
+      turn_id: input.turnId,
+      request_id: input.requestId,
+      result_id: input.resultId,
+      content: contentBytes.toString("utf8"),
+      byte_start: byteStart,
+      byte_end: byteEnd,
+      byte_length: payload.byteLength,
+      complete: byteEnd >= payload.byteLength,
+    };
   }
+
+  private findAliased(turnId: string, expectedResultId: string): GuidedToolResult | null {
+    return this.db.query<GuidedToolResult, [string]>(`
+      SELECT turn_id, call_id, result_json, result_sha256
+      FROM btcc_guided_tool_calls
+      WHERE turn_id = ? AND result_json IS NOT NULL AND result_sha256 IS NOT NULL
+      ORDER BY started_at, call_id
+    `).all(turnId).find((row) => resultId(row.result_sha256) === expectedResultId)
+      ?? null;
+  }
+}
+
+function resultId(resultSha256: string): string {
+  return digest(`btcc-guided-tool-result.v1\0${resultSha256}`);
 }
 
 function completeUtf8Prefix(bytes: Buffer): Buffer {
@@ -109,15 +90,4 @@ function utf8SequenceLength(value: number): number {
   if ((value & 0xf0) === 0xe0) return 3;
   if ((value & 0xf8) === 0xf0) return 4;
   return 1;
-}
-
-function readRange(path: string, start: number, length: number): Buffer {
-  const output = Buffer.alloc(length);
-  const file = openSync(path, "r");
-  try {
-    const bytesRead = readSync(file, output, 0, length, start);
-    return output.subarray(0, bytesRead);
-  } finally {
-    closeSync(file);
-  }
 }

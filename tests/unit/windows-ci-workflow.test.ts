@@ -82,8 +82,8 @@ test("Windows pull-request CI only builds and verifies the package", () => {
   expect(entrypoint).toContain("build-process-host.ts");
   expect(entrypoint).toContain("BUTLER_WINDOWS_PROCESS_HOST");
   expect(entrypoint).toContain("btcc-product-cutover.test.ts");
-  expect(entrypoint).toContain("btcc-stop.test.ts");
-  expect(entrypoint).toContain("btcc-operational-stop.test.ts");
+  expect(entrypoint).toContain("btcc-guided-turn-runtime.test.ts");
+  expect(entrypoint).toContain("btcc-guided-sqlite-turn-state.test.ts");
   expect(entrypoint).toContain("app-foreground-drain.test.ts");
   expect(entrypoint).toContain("app-foreground-quit.test.ts");
   expect(entrypoint).not.toMatch(

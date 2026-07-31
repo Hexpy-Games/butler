@@ -37,7 +37,6 @@ export function createBtccQueueEntryDecider(
       if (appState && APP_TERMINAL_STATES.has(appState)) {
         return { kind: "terminal" };
       }
-
       const btccState = db.query<{ semantic_state: string }, [string]>(
         "SELECT semantic_state FROM btcc_turns WHERE turn_id = ?",
       ).get(turnId)?.semantic_state;

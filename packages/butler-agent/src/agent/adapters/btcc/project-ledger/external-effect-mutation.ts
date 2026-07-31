@@ -3,7 +3,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { exchangeCompleteRoots } from "../../../../foundation/complete-root-commit/index.ts";
 import { writeJsonFileAtomic } from "../../../persistence/atomic-json-store.ts";
-import type { ProjectLedgerCorePublication, ProjectLedgerHead } from "./contracts.ts";
+import type {
+  ProjectLedgerCorePublication,
+  ProjectLedgerHead,
+} from "./runtime-types.ts";
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
 import {

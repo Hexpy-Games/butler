@@ -168,7 +168,6 @@ function createHarness(turnId: string, legacyEvents = false) {
   const events = new AppEventStore(db);
   const retention = new TerminalTurnRetention(db, {
     isSettled: () => true,
-    compactTurn: () => false,
   });
   let sequence = 0;
   const progress = new AppTurnProgressEventStore({

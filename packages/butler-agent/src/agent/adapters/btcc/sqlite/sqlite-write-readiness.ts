@@ -1,24 +1,15 @@
 import { Database } from "bun:sqlite";
 import type {
   CommittedSuccessorReadiness,
-  OperationalRecoveryReadiness,
-} from "../../../btcc/gateway-api.ts";
+} from "../../../btcc/index.ts";
 import { isSqliteContention } from "../../../../foundation/sqlite-contention.ts";
 
 const WRITE_PROBE_BUSY_WINDOW_MS = 250;
 
 export function createSqliteWriteReadiness(
   dbPath: string,
-  fallback: OperationalRecoveryReadiness,
-): OperationalRecoveryReadiness & CommittedSuccessorReadiness {
+): CommittedSuccessorReadiness {
   return {
-    async wait(input) {
-      if (input.interruption.activation.kind !== "automatic_storage_recovery") {
-        await fallback.wait(input);
-        return;
-      }
-      await waitUntilWritable(dbPath, input.signal);
-    },
     waitForStorageReadiness(signal) {
       return waitUntilWritable(dbPath, signal);
     },

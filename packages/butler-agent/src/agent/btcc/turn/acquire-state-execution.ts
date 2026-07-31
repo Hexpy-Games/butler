@@ -1,13 +1,17 @@
 import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
-import type { BtccRuntimeDependencies } from "../contracts.ts";
+import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { ExecutionPermit } from "../recovery/index.ts";
 import type { StateExecutionClaim, TurnRecord } from "./contracts.ts";
 import { publishOperationalNotice } from "./turn-progress.ts";
 
-type StateClaimDependencies = Pick<
-  BtccRuntimeDependencies,
-  "turns" | "committedSuccessorReadiness" | "progress"
->;
+import type { CommittedSuccessorReadiness } from "../recovery/contracts.ts";
+import type { TurnStateRepository } from "./contracts.ts";
+
+type StateClaimDependencies = {
+  turns: TurnStateRepository;
+  committedSuccessorReadiness?: CommittedSuccessorReadiness;
+  progress?: BtccTurnProgressObserver;
+};
 
 export async function acquireStateExecution(
   turn: TurnRecord,

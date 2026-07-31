@@ -5,6 +5,7 @@ import type {
   DurableWorkStore,
   DurableWorkView,
   LegacyOpenWorkImportResult,
+  LegacyProjectWorkSource,
   RecordWorkCheckpointInput,
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
@@ -17,7 +18,10 @@ import {
   type GuidedWorkMutationOperation,
 } from "./guided-work-mutation-journal.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
+import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
+import { GuidedWorkLegacyProjectImporter } from
+  "./guided-work-legacy-project-importer.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
 import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkToolResultWriter } from "./guided-work-tool-result-writer.ts";
@@ -30,14 +34,22 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private readonly mutations: GuidedWorkMutationJournal;
   private readonly toolResults: GuidedWorkToolResultWriter;
   private readonly legacyImporter: GuidedWorkLegacyImporter;
+  private readonly legacyProjectImporter: GuidedWorkLegacyProjectImporter;
 
-  constructor(private readonly db: Database) {
+  constructor(
+    private readonly db: Database,
+    private readonly legacyProjectWork?: LegacyProjectWorkSource,
+  ) {
     this.reader = new GuidedWorkViewReader(db);
     this.sessions = new GuidedWorkSessionWriter(db, this.reader);
     this.statuses = new GuidedWorkStatusWriter(db, this.reader);
     this.mutations = new GuidedWorkMutationJournal(db);
     this.toolResults = new GuidedWorkToolResultWriter(db);
     this.legacyImporter = new GuidedWorkLegacyImporter(db, this.reader);
+    this.legacyProjectImporter = new GuidedWorkLegacyProjectImporter(
+      db,
+      this.reader,
+    );
   }
 
   async loadContext(scope: WorkTurnScope): Promise<DurableWorkContext | null> {
@@ -47,6 +59,21 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   async importOpenLegacyWork(
     scope: WorkTurnScope,
   ): Promise<LegacyOpenWorkImportResult | null> {
+    if (scope.projectRef) {
+      if (!this.legacyProjectWork) return null;
+      const programIds = this.legacyProjectImporter.locateProgramIds(scope);
+      if (programIds.length === 0) return null;
+      const replay = this.db.transaction(() =>
+        this.legacyProjectImporter.replay(scope, programIds))();
+      if (replay) return replay;
+      const snapshot = await this.legacyProjectWork.loadOpenWork({
+        projectRef: scope.projectRef,
+        programIds,
+      });
+      if (!snapshot) return null;
+      return this.db.transaction(() =>
+        this.legacyProjectImporter.import(scope, snapshot))();
+    }
     return this.db.transaction(() => this.legacyImporter.import(scope))();
   }
 
@@ -96,6 +123,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
           status = 'open', updated_at = ? WHERE work_id = ?
       `).run(input.objective, planRevisionId, now, work.work_id);
       if (updated.changes !== 1) throw new Error("Durable Work Plan lost its Work");
+      preserveBlockedStatus(this.db, work.work_id);
       this.mutations.record({
         mutationCallId: input.mutationCallId,
         operation: "replace_plan",

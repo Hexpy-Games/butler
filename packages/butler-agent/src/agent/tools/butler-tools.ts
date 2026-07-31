@@ -39,7 +39,10 @@ import { createWebSearchHandler } from "./web-search/index.ts";
 import { createWorkTrackingToolHandlers } from "./work-tracking/index.ts";
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
-import type { ButlerToolDefinition } from "./types.ts";
+import type {
+  ButlerToolDefinition,
+  NativeToolAvailabilityOverrides,
+} from "./types.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
   ButlerToolEffectBoundary,
@@ -137,6 +140,7 @@ export function createButlerToolExecutor(input: {
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
   hiddenNativeToolNames?: readonly string[];
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   describedToolIds?: readonly string[] | (() => readonly string[]);
   pluginToolCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   pluginToolDescriber?: (input: { id: string; namespace: string; name: string }) => Promise<ExternalToolCatalogInput | null | undefined>;
@@ -171,6 +175,7 @@ export function createButlerToolExecutor(input: {
       webSearchProvider: input.webSearchProvider,
       currentToolNames: input.currentToolNames,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
+      nativeToolAvailabilityOverrides: input.nativeToolAvailabilityOverrides,
     }),
     ...createToolBridgeToolHandlers({
       butlerData: input.butlerData,
@@ -179,6 +184,7 @@ export function createButlerToolExecutor(input: {
       pluginToolDescriber: input.pluginToolDescriber,
       currentToolNames: input.currentToolNames,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
+      nativeToolAvailabilityOverrides: input.nativeToolAvailabilityOverrides,
       describedToolIds: input.describedToolIds,
       dispatchTool,
     }),

@@ -1,12 +1,12 @@
-import type { BtccTurnProgressObserver } from "../../btcc/index.ts";
-import { digest } from "../../btcc/core/index.ts";
-import type {
-  DurableWorkContext,
-  DurableWorkService,
-  DurableWorkView,
-  WorkTurnScope,
-} from "../../btcc/durable-work/index.ts";
-import type { TurnRecord } from "../../btcc/turn/index.ts";
+import {
+  digest,
+  type BtccTurnProgressObserver,
+  type DurableWorkContext,
+  type DurableWorkService,
+  type DurableWorkView,
+  type TurnRecord,
+  type WorkTurnScope,
+} from "../../btcc/index.ts";
 import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
 import { isDurableWorkTool } from "./durable-work-tools.ts";
 

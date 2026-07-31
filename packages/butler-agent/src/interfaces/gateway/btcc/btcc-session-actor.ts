@@ -1,6 +1,4 @@
 import type { BtccTurnOutcome } from "../../../agent/btcc/index.ts";
-import { isBtccOperationalInterruption } from
-  "../../../agent/btcc/recovery/index.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import type {
   GatewayActorTurnResult,
@@ -74,16 +72,7 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       turnId,
       projectTurnProgress(publish),
     );
-    let outcome: BtccTurnOutcome;
-    try {
-      outcome = await this.handleCommand(command, stopObserving);
-    } catch (error) {
-      if (isBtccOperationalInterruption(error)) {
-        const notice = operationalNotice(error.activation.kind);
-        if (notice) await this.publish(envelope, route, notice);
-      }
-      throw error;
-    }
+    const outcome = await this.handleCommand(command, stopObserving);
     const result = projectTurnOutcome(outcome);
     const generatedSessionTitle = result.text
       ? await this.options.generateSessionTitle?.({ binding, envelope, route }) ?? null
@@ -129,17 +118,4 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       event: { visibility: "public", ...event },
     });
   }
-}
-
-function operationalNotice(
-  activation: import("../../../agent/btcc/recovery/index.ts").OperationalActivation["kind"],
-): RuntimeTurnEventInput | null {
-  if (activation === "cancelled") return { kind: "turn.cancelled" };
-  if (activation === "runtime_remediation") return null;
-  const note = activation === "automatic_provider_recovery"
-    ? "모델 연결을 복구하고 있습니다"
-    : activation === "automatic_storage_recovery"
-      ? "저장소 쓰기 순서를 조정하고 있습니다"
-      : "선택한 모델 연결 설정을 확인해 주세요";
-  return { kind: "assistant.public_note", payload: { note, operational: true } };
 }

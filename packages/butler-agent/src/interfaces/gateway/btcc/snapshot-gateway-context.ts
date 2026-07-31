@@ -1,12 +1,10 @@
 import { createHash } from "node:crypto";
-import {
-  snapshotButlerContext,
-  type ButlerContextSnapshot,
-} from "../../../agent/btcc/context/index.ts";
+import type { ButlerContextInput } from "../../../agent/btcc/contracts.ts";
 import type { ContextAssembly, PromptSection } from "../../../agent/prompt/prompt-assembler.ts";
 import type { StoredSessionBinding } from "../../../test-support/harness/contracts.ts";
 import type { AttachmentRef } from "../../../test-support/harness/contracts.ts";
 import type { BtccGatewayActorOptions } from "./contracts.ts";
+import { snapshotContextDocuments } from "./context-documents.ts";
 
 export function snapshotGatewayContext(input: {
   binding: StoredSessionBinding;
@@ -14,8 +12,8 @@ export function snapshotGatewayContext(input: {
   documents: BtccGatewayActorOptions["contextDocuments"];
   attachments?: AttachmentRef[];
   turnAccessMode?: "full_access" | "ask_first" | "read_only";
-}): ButlerContextSnapshot {
-  const snapshot = snapshotButlerContext({
+}): ButlerContextInput {
+  const snapshot = snapshotContextDocuments({
     userRef: principalRef(input.binding),
     sessionId: input.binding.sessionId,
     ...(input.binding.projectId ? { projectRef: input.binding.projectId } : {}),
@@ -77,7 +75,7 @@ function trackingMode(
   binding: StoredSessionBinding,
 ): "ledger" | "local" | "none" {
   if (value === "ledger" || value === "local" || value === "none") return value;
-  return binding.projectId ? "ledger" : "none";
+  return binding.projectId ? "ledger" : "local";
 }
 
 function stringArray(value: unknown): string[] {

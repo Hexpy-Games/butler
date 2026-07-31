@@ -5,15 +5,9 @@ import type {
   BtccTurnProgressObserver,
   BtccTurnRuntime,
 } from "../contracts.ts";
-import type {
-  CanonicalMessageStore,
-  RetrospectiveScheduler,
-} from "../delivery/index.ts";
-import {
-  insertCanonicalMessage,
-  scheduleRetrospective,
-} from "../delivery/index.ts";
-import { contentRef, digest } from "../core/index.ts";
+import type { CanonicalMessageStore } from "../delivery/index.ts";
+import { insertCanonicalMessage } from "../delivery/index.ts";
+import { contentRef, digest } from "../identity.ts";
 import { createTurnExecutionSupervisor } from "../recovery/index.ts";
 import type { CommittedSuccessorReadiness } from "../recovery/index.ts";
 import {
@@ -31,7 +25,6 @@ export type GuidedTurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
   messages: CanonicalMessageStore;
-  retrospective: RetrospectiveScheduler;
   agent: GuidedTurnAgent;
   progress?: BtccTurnProgressObserver;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
@@ -74,7 +67,6 @@ class DefaultGuidedTurnRuntime implements BtccTurnRuntime {
       return projectTerminalOutcome(turn);
     }
     const delivered = await this.deliver(turn);
-    scheduleRetrospective({ turn: delivered, scheduler: this.dependencies.retrospective });
     return projectTerminalOutcome(delivered);
   }
 

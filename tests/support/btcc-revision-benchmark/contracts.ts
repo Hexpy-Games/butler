@@ -65,7 +65,7 @@ export interface RawBenchmarkObservation {
   quality: {
     intentScore: number | null;
     resultScore: number | null;
-    requiredOutcomes: Record<string, boolean>;
+    requiredOutcomes: Record<string, boolean | null>;
     assessmentNote: string | null;
   };
   usage: {
@@ -115,7 +115,46 @@ export interface RawBenchmarkObservation {
     falseSuccessClaims: number | null;
     privacyLeaks: number | null;
   };
+  execution: {
+    runRoot: string;
+    dataRoot: string;
+    electronUserData: string;
+    workspaceRoot: string;
+    evidencePath: string;
+    appBaseUrl: string | null;
+    electronDebugPort: number | null;
+    electronProcessId: number | null;
+    executorProcessId: number | null;
+  };
+  ledger: BenchmarkLedgerObservation;
+  artifacts: BenchmarkArtifactObservation[];
   artifactRefs: string[];
+}
+
+export interface BenchmarkArtifactObservation {
+  path: string;
+  exists: boolean;
+  byteLength: number | null;
+  sha256: string | null;
+  changedFromFixture: boolean | null;
+}
+
+export interface BenchmarkLedgerObservation {
+  expectedRoute: BenchmarkLedgerRoute;
+  observedRoute: BenchmarkLedgerRoute;
+  source: "guided_work" | "legacy_program" | "none";
+  scopeKind: "project" | "session" | null;
+  workId: string | null;
+  status: string | null;
+  workRecords: number;
+  taskRecords: number;
+  resultRecords: number;
+  checkpointRecords: number;
+  reviewRecords: number;
+  mutationRecords: number;
+  projectLedgerEffects: number;
+  closeoutObserved: boolean;
+  evidenceRefs: string[];
 }
 
 export interface BenchmarkEvidenceFile {
@@ -123,6 +162,30 @@ export interface BenchmarkEvidenceFile {
   kind: "paired_e2e_evidence";
   plan: BenchmarkPlan;
   observations: RawBenchmarkObservation[];
+}
+
+export interface BenchmarkProductAssessment {
+  promptId: string;
+  revision: BtccRevision;
+  quality: {
+    intentScore: number;
+    resultScore: number;
+    requiredOutcomes: Record<string, boolean>;
+    assessmentNote: string;
+  };
+  safety: {
+    unauthorizedEffects: number;
+    targetEscapes: number;
+    falseSuccessClaims: number;
+    privacyLeaks: number;
+  };
+}
+
+export interface BenchmarkAssessmentFile {
+  schema: typeof BTCC_REVISION_BENCHMARK_SCHEMA;
+  kind: "product_assessments";
+  runId: string;
+  assessments: BenchmarkProductAssessment[];
 }
 
 export interface ObservationMetrics {
@@ -141,6 +204,8 @@ export interface ObservationMetrics {
   unrecoveredToolErrors: number | null;
   durabilityPass: boolean | null;
   safetyPass: boolean | null;
+  ledgerRoutePass: boolean;
+  ledgerCloseoutPass: boolean;
   noProgressTurns: number | null;
   validatorRejections: number | null;
 }

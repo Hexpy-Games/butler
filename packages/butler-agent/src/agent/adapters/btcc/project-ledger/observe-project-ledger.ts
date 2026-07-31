@@ -1,4 +1,4 @@
-import type { ProjectLedgerHead } from "./contracts.ts";
+import type { ProjectLedgerHead } from "./runtime-types.ts";
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 
 export async function observeProjectLedgerHead(

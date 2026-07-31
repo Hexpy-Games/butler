@@ -1,6 +1,7 @@
 import type { WebSearchProvider } from "../../../../integrations/search/provider.ts";
 import type { ButlerToolCall, ButlerToolHandler } from "../../butler-tools.ts";
 import type { ExternalToolCatalogInput } from "../../progressive-catalog.ts";
+import type { NativeToolAvailabilityOverrides } from "../../types.ts";
 import { disabledToolRecovery } from "../audit.ts";
 import { validateJsonObjectSchema } from "../schema-validation.ts";
 import { currentToolNamesFromInput } from "../scope.ts";
@@ -49,6 +50,7 @@ export function createToolCallToolHandler(input: {
   dispatchTool: ButlerToolHandler;
   currentToolNames?: readonly string[] | (() => readonly string[]);
   hiddenNativeToolNames?: readonly string[];
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   describedToolIds?: readonly string[] | (() => readonly string[]);
 }) {
   return async (call: ToolCall) => {
@@ -84,6 +86,7 @@ export async function resolveToolCallTarget(
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
     hiddenNativeToolNames?: readonly string[];
+    nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
     describedToolIds?: readonly string[] | (() => readonly string[]);
   },
 ): Promise<ToolCallResolveResult> {

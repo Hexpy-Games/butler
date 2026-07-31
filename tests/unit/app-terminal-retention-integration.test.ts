@@ -93,10 +93,9 @@ test("a completed transport cycle wakes a BTCC-settled dormant App turn", async 
       INSERT INTO btcc_turns (
         turn_id, session_id, inbox_id, trigger_key, original_message_id,
         original_message, admission_snapshot_ref, model_selection_json,
-        context_json, continuation_snapshot_json, semantic_state,
-        revision, execution_fence
+        context_json, semantic_state, revision, execution_fence
       ) VALUES ('turn-settle', 'chat-settle', 'inbox', 'trigger', 'message',
-        'request', 'admission', '{}', '{}', '[]', 'execution', 1, 1)
+        'request', 'admission', '{}', '{}', 'admitted', 1, 1)
     `).run();
     kernel.appendEvent("turn.state_changed", {
       turn: { id: "turn-settle", state: "delivered" },
@@ -107,7 +106,8 @@ test("a completed transport cycle wakes a BTCC-settled dormant App turn", async 
 
     kernel.db.query(`
       UPDATE btcc_turns
-      SET semantic_state = 'delivered', final_disposition = 'completed'
+      SET semantic_state = 'delivered', final_disposition = 'completed',
+        revision = revision + 1
       WHERE turn_id = 'turn-settle'
     `).run();
     expect(settlementWakeCount(kernel)).toBe(1);

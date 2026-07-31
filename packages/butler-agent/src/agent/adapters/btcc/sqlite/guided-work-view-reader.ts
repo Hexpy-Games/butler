@@ -16,6 +16,8 @@ import type {
   GuidedWorkRow,
   GuidedWorkTurn,
 } from "./guided-work-records.ts";
+import { unresolvedEffectBlockersForWork } from
+  "./guided-work-effect-blockers.ts";
 import { guidedWorkMatchesScope } from "./guided-work-scope.ts";
 
 const MAX_CONTEXT_RESULT_FACTS = 50;
@@ -127,6 +129,7 @@ export class GuidedWorkViewReader {
     const checkpoint = this.latestCheckpoint(work.work_id);
     const planReview = this.latestReview(work.work_id, "plan");
     const resultReview = this.latestReview(work.work_id, "result");
+    const effectBlockers = unresolvedEffectBlockersForWork(this.db, work.work_id);
     return {
       workId: work.work_id,
       sessionId: work.session_id,
@@ -146,6 +149,7 @@ export class GuidedWorkViewReader {
       ...(resultReview
         ? { latestResultReview: this.hydrateReview(work.work_id, resultReview) }
         : {}),
+      ...(effectBlockers.length > 0 ? { effectBlockers } : {}),
       resultRefs: results.map(hydrateResultRef),
       createdAt: work.created_at,
       updatedAt: work.updated_at,

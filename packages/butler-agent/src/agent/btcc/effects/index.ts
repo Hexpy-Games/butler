@@ -6,6 +6,7 @@ export {
 export type {
   EffectAdapter,
   EffectAdapterError,
+  EffectBlockerRelation,
   EffectDispatchOutcome,
   EffectReconciliation,
   ExecuteGuidedEffectInput,
@@ -20,6 +21,7 @@ export type {
   GuidedEffectOutcome,
   GuidedEffectReceipt,
   GuidedEffectService,
+  GuidedWorkEffectBlockerRecord,
   MaybePromise,
   PrepareGuidedEffectResult,
 } from "./contracts.ts";

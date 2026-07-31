@@ -29,15 +29,15 @@ for (let pass = 1; pass <= fullProductPassCount; pass += 1) {
     "test",
     "--timeout",
     "120000",
-    "tests/unit/btcc-project-work-ledger-session.test.ts",
-    "tests/unit/btcc-production-operations.test.ts",
+    "tests/unit/btcc-durable-work-agent-integration.test.ts",
+    "tests/unit/btcc-r3-workspace-file-effect.test.ts",
   ]);
   const commandRuntime = await runExitScenario(`command-${pass}`, [
     "test",
     "--timeout",
     "120000",
     "tests/unit/platform-command-executor.test.ts",
-    "tests/unit/btcc-command-sandbox.test.ts",
+    "tests/unit/btcc-r3-read-only-command.test.ts",
   ]);
   await runExitScenario(`background-${pass}`, [
     "test",

@@ -2,7 +2,6 @@ import type {
   BtccTurnProgressObserver,
   BtccTurnRuntime,
 } from "../../../agent/btcc/index.ts";
-import type { ContextDocumentWriter } from "../../../agent/btcc/context/index.ts";
 import type { PromptAssembler } from "../../../agent/prompt/prompt-assembler.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import type {
@@ -12,6 +11,7 @@ import type {
 import type { GatewayRoute } from "../../../gateways/core/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { GatewayConversationStore } from "./conversation/index.ts";
+import type { ContextDocumentWriter } from "./context-documents.ts";
 
 export type BtccGatewayRuntime = {
   runtime: BtccTurnRuntime;

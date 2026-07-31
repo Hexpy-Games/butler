@@ -4,11 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
-import { digest } from "../../packages/butler-agent/src/agent/btcc/core/index.ts";
+import { digest } from "../../packages/butler-agent/src/agent/btcc/identity.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+import { authorizedToolDefinitions, isReplaySafeTool } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
+import { upsertMcpServer } from
+  "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
 
 test("Guided agent exposes only typed Project Ledger effects in a writable project turn", async () => {
   const fixture = createFixture("guided-policy");
@@ -179,6 +183,366 @@ test("Guided agent treats admitted Turn access as the upper permission bound", a
   } finally {
     fixture.close();
   }
+});
+
+test("Guided discovery exposes registry read tools without enabling unsupported effects", async () => {
+  const fixture = createFixture("guided-unsupported-effects");
+  try {
+    upsertMcpServer(fixture.root, {
+      id: "fixture",
+      display_name: "Fixture MCP",
+      enabled: true,
+      transport: "stdio",
+      command: process.execPath,
+      args: ["--eval", fixtureMcpServerEval()],
+      cwd: process.cwd(),
+    });
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-unsupported-effects-turn",
+      accessMode: "full_access",
+      trackingMode: "local",
+    });
+    const authorizedNames = authorizedToolDefinitions(turn)
+      .map((tool) => tool.name);
+    expect(authorizedNames).toContain("list_automations");
+    expect(authorizedNames).toContain("list_mcp_capabilities");
+    expect(authorizedNames).toContain("read_mcp_resource");
+    expect(authorizedNames).toContain("query_memory");
+    expect(authorizedNames).toContain("get_usage_monitor");
+    expect(authorizedNames).not.toContain("create_automation");
+    expect(authorizedNames).not.toContain("call_mcp_tool");
+    expect(authorizedNames).not.toContain("transform_public_data_table");
+
+    let initialNames: string[] = [];
+    let automationSearch: unknown;
+    let mcpSearch: unknown;
+    let descriptions: unknown;
+    let automationList: unknown;
+    let capabilityList: unknown;
+    let mcpCapabilities: unknown;
+    let mcpResource: unknown;
+    let memoryQuery: unknown;
+    let usageMonitor: unknown;
+    let mcpCall: unknown;
+    const agent = fixture.agent(async (options) => {
+      initialNames = options.tools.map((tool) => tool.name);
+      automationSearch = await options.executeTool({
+        name: "tool_search",
+        args: {
+          provider: "native",
+          category: "automation",
+          include_disabled: true,
+        },
+        rawArguments: JSON.stringify({
+          provider: "native",
+          category: "automation",
+          include_disabled: true,
+        }),
+      });
+      mcpSearch = await options.executeTool({
+        name: "tool_search",
+        args: {
+          provider: "mcp",
+          category: "mcp",
+          capability: "issue",
+          include_disabled: true,
+        },
+        rawArguments: JSON.stringify({
+          provider: "mcp",
+          category: "mcp",
+          capability: "issue",
+          include_disabled: true,
+        }),
+      });
+      descriptions = await options.executeTool({
+        name: "tool_describe",
+        args: {
+          ids: [
+            "native:create_automation",
+            "native:list_automations",
+            "native:list_tool_capabilities",
+            "native:call_mcp_tool",
+            "native:list_mcp_capabilities",
+            "native:read_mcp_resource",
+            "native:query_memory",
+            "native:get_usage_monitor",
+            "mcp:fixture:find_issue",
+          ],
+        },
+        rawArguments: JSON.stringify({
+          ids: [
+            "native:create_automation",
+            "native:list_automations",
+            "native:list_tool_capabilities",
+            "native:call_mcp_tool",
+            "native:list_mcp_capabilities",
+            "native:read_mcp_resource",
+            "native:query_memory",
+            "native:get_usage_monitor",
+            "mcp:fixture:find_issue",
+          ],
+        }),
+      });
+      automationList = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:list_automations",
+          arguments: {},
+        },
+        rawArguments: JSON.stringify({
+          id: "native:list_automations",
+          arguments: {},
+        }),
+      });
+      capabilityList = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:list_tool_capabilities",
+          arguments: { include_disabled: true },
+        },
+        rawArguments: JSON.stringify({
+          id: "native:list_tool_capabilities",
+          arguments: { include_disabled: true },
+        }),
+      });
+      mcpCapabilities = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:list_mcp_capabilities",
+          arguments: {},
+        },
+        rawArguments: JSON.stringify({
+          id: "native:list_mcp_capabilities",
+          arguments: {},
+        }),
+      });
+      mcpResource = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:read_mcp_resource",
+          arguments: {
+            server_id: "fixture",
+            uri: "butler://fixture",
+          },
+        },
+        rawArguments: JSON.stringify({
+          id: "native:read_mcp_resource",
+          arguments: {
+            server_id: "fixture",
+            uri: "butler://fixture",
+          },
+        }),
+      });
+      memoryQuery = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:query_memory",
+          arguments: { scope: "session" },
+        },
+        rawArguments: JSON.stringify({
+          id: "native:query_memory",
+          arguments: { scope: "session" },
+        }),
+      });
+      usageMonitor = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "native:get_usage_monitor",
+          arguments: {},
+        },
+        rawArguments: JSON.stringify({
+          id: "native:get_usage_monitor",
+          arguments: {},
+        }),
+      });
+      mcpCall = await options.executeTool({
+        name: "tool_call",
+        args: {
+          id: "mcp:fixture:find_issue",
+          arguments: { query: "BTCC" },
+        },
+        rawArguments: JSON.stringify({
+          id: "mcp:fixture:find_issue",
+          arguments: { query: "BTCC" },
+        }),
+      });
+      return "현재 R3에서 실행 가능한 도구 범위를 확인했습니다.";
+    });
+
+    await agent.run({
+      turn,
+      signal: new AbortController().signal,
+    });
+
+    for (const name of [
+      "list_automations",
+      "list_mcp_capabilities",
+      "read_mcp_resource",
+      "query_memory",
+      "get_usage_monitor",
+    ]) {
+      expect(initialNames).not.toContain(name);
+    }
+
+    const automationResults = (
+      automationSearch as {
+        results: Array<{
+          name: string;
+          enabled: boolean;
+          disabled_reason: string | null;
+        }>;
+      }
+    ).results;
+    expect(automationResults.find((item) => item.name === "list_automations"))
+      .toEqual(expect.objectContaining({
+        enabled: true,
+        disabled_reason: null,
+      }));
+    for (const name of [
+      "create_automation",
+      "delete_automation",
+      "run_due_automations",
+    ]) {
+      expect(automationResults.find((item) => item.name === name))
+        .toEqual(expect.objectContaining({
+          enabled: false,
+          disabled_reason: expect.stringContaining(
+            "does not yet have a typed automation effect adapter",
+          ),
+        }));
+    }
+
+    expect(
+      (mcpSearch as {
+        results: Array<{
+          id: string;
+          enabled: boolean;
+          disabled_reason: string | null;
+        }>;
+      }).results,
+    ).toContainEqual(expect.objectContaining({
+      id: "mcp:fixture:find_issue",
+      enabled: false,
+      disabled_reason: expect.stringContaining(
+        "does not yet have a guarded MCP effect adapter",
+      ),
+    }));
+
+    const byId = new Map(
+      (descriptions as {
+        descriptions: Array<{
+          id: string;
+          enabled: boolean;
+          disabled_reason: string | null;
+        }>;
+      }).descriptions.map((item) => [item.id, item]),
+    );
+    expect(byId.get("native:list_automations")?.enabled).toBe(true);
+    expect(byId.get("native:list_mcp_capabilities")?.enabled).toBe(true);
+    expect(byId.get("native:read_mcp_resource")?.enabled).toBe(true);
+    expect(byId.get("native:query_memory")?.enabled).toBe(true);
+    expect(byId.get("native:get_usage_monitor")?.enabled).toBe(true);
+    expect(byId.get("native:create_automation")).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        disabled_reason: expect.stringContaining(
+          "does not yet have a typed automation effect adapter",
+        ),
+      }),
+    );
+    expect(byId.get("native:call_mcp_tool")).toEqual(expect.objectContaining({
+      enabled: false,
+      disabled_reason: expect.stringContaining(
+        "does not yet have a guarded MCP effect adapter",
+      ),
+    }));
+    expect(byId.get("mcp:fixture:find_issue")).toEqual(expect.objectContaining({
+      enabled: false,
+      disabled_reason: expect.stringContaining(
+        "does not yet have a guarded MCP effect adapter",
+      ),
+    }));
+    expect(automationList).toMatchObject({
+      ok: true,
+      automations: [],
+    });
+    const capabilityByName = new Map(
+      (capabilityList as {
+        capabilities: Array<{
+          name: string;
+          enabled: boolean;
+          current_turn_callable: boolean;
+          disabled_reason: string | null;
+        }>;
+      }).capabilities.map((item) => [item.name, item]),
+    );
+    expect(capabilityByName.get("list_automations")).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        current_turn_callable: true,
+      }),
+    );
+    expect(capabilityByName.get("create_automation")).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        current_turn_callable: false,
+        disabled_reason: expect.stringContaining(
+          "does not yet have a typed automation effect adapter",
+        ),
+      }),
+    );
+    expect(capabilityByName.get("call_mcp_tool")).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        current_turn_callable: false,
+        disabled_reason: expect.stringContaining(
+          "does not yet have a guarded MCP effect adapter",
+        ),
+      }),
+    );
+    expect(mcpCapabilities).toMatchObject({
+      ok: true,
+      servers: [
+        {
+          id: "fixture",
+          ok: true,
+        },
+      ],
+    });
+    expect(mcpResource).toMatchObject({
+      ok: true,
+      server_id: "fixture",
+      uri: "butler://fixture",
+    });
+    expect(JSON.stringify(mcpResource)).toContain("fixture");
+    expect(memoryQuery).toMatchObject({ ok: true });
+    expect(usageMonitor).toMatchObject({ ok: true });
+    expect(mcpCall).toMatchObject({
+      ok: false,
+      error: {
+        code: "disabled_tool",
+        message: expect.stringContaining(
+          "does not yet have a guarded MCP effect adapter",
+        ),
+      },
+    });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided replay keeps native read-only MCP and automation tools retryable", () => {
+  for (const name of [
+    "list_automations",
+    "list_mcp_capabilities",
+    "read_mcp_resource",
+    "list_tool_capabilities",
+  ]) {
+    expect(isReplaySafeTool(name)).toBe(true);
+  }
+  expect(isReplaySafeTool("create_automation")).toBe(false);
+  expect(isReplaySafeTool("call_mcp_tool")).toBe(false);
+  expect(isReplaySafeTool("transform_public_data_table")).toBe(false);
 });
 
 test("direct and tool_call file mutations use the same reviewed effect gate", async () => {
@@ -559,6 +923,23 @@ function createFixture(label: string) {
   };
 }
 
+function fixtureMcpServerEval(): string {
+  return `
+    import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+    import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+    import { z } from "zod";
+
+    const server = new McpServer({ name: "guided-tool-fixture", version: "1.0.0" });
+    server.tool("find_issue", "Find issue records", { query: z.string() }, async ({ query }) => ({
+      content: [{ type: "text", text: "issue:" + query }],
+    }));
+    server.resource("fixture", "butler://fixture", async (uri) => ({
+      contents: [{ uri: uri.href, mimeType: "text/plain", text: "fixture" }],
+    }));
+    await server.connect(new StdioServerTransport());
+  `;
+}
+
 function turnRecord(
   workspacePath: string,
   options: {
@@ -603,7 +984,6 @@ function turnRecord(
       },
       ...(options.attachments ? { attachments: options.attachments } : {}),
     },
-    continuationCandidates: [],
     semanticState: "admitted",
     checkpoint: {
       checkpointId: `checkpoint:${turnId}`,

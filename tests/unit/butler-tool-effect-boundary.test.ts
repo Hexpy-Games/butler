@@ -7,7 +7,6 @@ const expectedNamesByBoundary = {
   none: [
     "web_search",
     "web_read",
-    "transform_public_data_table",
     "read_file",
     "grep_files",
     "project_ledger_status",
@@ -45,6 +44,7 @@ const expectedNamesByBoundary = {
     "update_explicit_memory",
   ],
   reviewed_persistent: [
+    "transform_public_data_table",
     "write_file",
     "project_ledger_index",
     "project_ledger_create",
@@ -87,4 +87,3 @@ test("generated Project Ledger definitions derive the boundary from mutation beh
     expect(tool.effectBoundary).toBe(tool.concurrencySafe ? "none" : "reviewed_persistent");
   }
 });
-

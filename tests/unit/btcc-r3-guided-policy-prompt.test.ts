@@ -172,7 +172,6 @@ function turnRecord(options: {
         ? { executionPolicy: options.executionPolicy }
         : {}),
     },
-    continuationCandidates: [],
     semanticState: "admitted",
     checkpoint: {
       checkpointId: "checkpoint-r3-policy",

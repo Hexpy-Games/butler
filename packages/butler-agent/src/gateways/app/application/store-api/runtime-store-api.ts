@@ -62,7 +62,6 @@ export function createRuntimeStoreApi(
       if (kernel.closed) return;
       try {
         kernel.terminalTurnRetentionQueue.close();
-        kernel.btccTerminalPhaseRetentionQueue.close();
         kernel.transportProjectionOwner.close();
         kernel.db.query("PRAGMA wal_checkpoint(TRUNCATE)").all();
       } finally {

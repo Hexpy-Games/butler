@@ -7,6 +7,10 @@ import {
   guidedProjectLedgerEffect,
   type GuidedProjectLedgerEffect,
 } from "./guided-project-ledger-effect-input.ts";
+import {
+  classifyLegacyProjectLedgerEffect,
+  normalizeLegacyProjectLedgerUpdates,
+} from "./guided-project-ledger-legacy-effect.ts";
 export {
   GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES,
   guidedProjectLedgerEffect,
@@ -57,23 +61,32 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
       normalizeTarget: normalizeProjectLedgerTarget,
       sanitizeTarget: normalizeProjectLedgerTarget,
       normalizeInput: normalizeProjectLedgerInput,
-      async dispatch({ idempotencyKey }) {
+      classifyEffectBlocker(blocker) {
+        return classifyLegacyProjectLedgerEffect({
+          ...blocker,
+          currentCapability: input.name,
+          projectRoot: input.projectRoot,
+        });
+      },
+      async dispatch({ idempotencyKey, normalizedInput }) {
+        const updates = projectLedgerUpdates(normalizedInput, effect);
         try {
+          const result = await applyProjectLedgerRecordUpdates({
+            butlerData: input.butlerData,
+            projectRoot: input.projectRoot,
+            effectKey: idempotencyKey,
+            updates,
+          });
           return {
             status: "applied",
-            result: await executeGuidedProjectLedgerEffect({
-              butlerData: input.butlerData,
-              projectRoot: input.projectRoot,
-              effectKey: idempotencyKey,
-              effect,
-            }),
+            result: publicProjectLedgerResult(result),
           };
         } catch (error) {
           const observed = await reconcileProjectLedgerRecordUpdates({
             butlerData: input.butlerData,
             projectRoot: input.projectRoot,
             effectKey: idempotencyKey,
-            updates: effect.updates,
+            updates,
           });
           if (observed.status === "applied") {
             return {
@@ -97,12 +110,13 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
           };
         }
       },
-      async reconcile({ idempotencyKey }) {
+      async reconcile({ idempotencyKey, normalizedInput }) {
+        const updates = projectLedgerUpdates(normalizedInput, effect);
         const reconciled = await reconcileProjectLedgerRecordUpdates({
           butlerData: input.butlerData,
           projectRoot: input.projectRoot,
           effectKey: idempotencyKey,
-          updates: effect.updates,
+          updates,
         });
         if (reconciled.status === "not_applied") return reconciled;
         if (reconciled.status === "uncertain") {
@@ -122,6 +136,14 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
       },
     },
   };
+}
+
+function projectLedgerUpdates(
+  input: Record<string, unknown>,
+  current: GuidedProjectLedgerEffect,
+): GuidedProjectLedgerEffect["updates"] {
+  if (!Array.isArray(input.updates)) return current.updates;
+  return normalizeLegacyProjectLedgerUpdates(input.updates);
 }
 
 function publicProjectLedgerResult(result: {

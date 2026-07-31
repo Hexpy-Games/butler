@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { hasUnresolvedEffectBlockers } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
 export class GuidedWorkStatusWriter {
@@ -12,6 +13,11 @@ export class GuidedWorkStatusWriter {
     currentPlanRevisionId: string | null,
     now: string,
   ): void {
+    if (hasUnresolvedEffectBlockers(this.db, workId)) {
+      throw new Error(
+        "Durable Work cannot complete while a prior effect requires reconciliation",
+      );
+    }
     const review = this.reader.view(workId).latestPlanReview;
     if (
       !currentPlanRevisionId ||

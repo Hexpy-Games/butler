@@ -8,10 +8,10 @@ answers, sign evidence, manage reviewers, or certify a release.
 The independent Electron smoke currently runs without importing this module.
 This harness is used when a complete paired comparison is deliberately recorded.
 
-## What remains
+## Frozen formal corpus
 
-- eight fixed prompts: two each for Direct, Simple Tool, Work Ledger, and
-  Project Ledger;
+- twelve fixed prompts: three each for Direct, Simple Tool, Work Ledger, and
+  Project Ledger, repeated three times;
 - the exact same materialized prompt for R2 and R3;
 - isolated R2/R3 target identities and alternating AB/BA order;
 - one raw observation shape for real Electron, App, runtime, provider, reload,
@@ -75,7 +75,7 @@ bun run benchmark:btcc-revisions init --config config.json --output evidence.jso
 }
 ```
 
-The actual generated plan contains all eight materialized prompts and both
+The actual generated plan contains all 36 materialized prompts and both
 targets. The abbreviated example above is not benchmark evidence.
 
 ## Run the pairs
@@ -102,8 +102,71 @@ For every plan entry:
 9. Append one `raw_product_observation` for the completed revision. Preserve
    `null` when the product did not expose a measurement.
 
-The file is complete only with 16 observations: eight prompts times two
-revisions. Do not invent missing scores, model usage, timestamps, or results.
+The file is complete only with 72 observations: twelve prompts, three
+repetitions, and two revisions. Do not invent missing scores, model usage,
+timestamps, or results.
+
+## Run through Electron
+
+Create a runner config with one immutable fixture set and the requested
+artifact paths for every Work and Project case:
+
+`formalBenchmarkPlaceholders()` and `formalBenchmarkRunnerConfig()` in
+`tests/support/btcc-revision-benchmark/formal-fixtures.ts` provide the canonical
+three-CSV input set and dependency-free landing-page scaffold. Materialize
+those helpers to JSON rather than creating different fixtures for the two arms.
+
+```json
+{
+  "runRoot": "/absolute/benchmark-output/formal-01",
+  "sourceData": "/Users/example/.butler",
+  "fixtures": [
+    {
+      "path": "fixtures/inputs/january.csv",
+      "text": "month,total\n2026-01,100\n"
+    },
+    {
+      "path": "package.json",
+      "text": "{\"scripts\":{\"build\":\"vite build\"},\"dependencies\":{\"@vitejs/plugin-react\":\"latest\",\"vite\":\"latest\"},\"devDependencies\":{}}\n"
+    }
+  ],
+  "artifactPathsByPrompt": {
+    "work_market_research": ["artifacts/market.md"],
+    "work_sausage_research": ["artifacts/sausage.md"],
+    "work_fixture_analysis": ["artifacts/analysis.md"],
+    "project_butler_landing": ["index.html"],
+    "project_sandy_landing": ["index.html"],
+    "project_product_dashboard": ["index.html"]
+  }
+}
+```
+
+Then execute the frozen plan sequentially:
+
+```text
+bun run benchmark:btcc-revisions run \
+  --input evidence.json \
+  --config runner.json \
+  --output evidence.json
+```
+
+The runner starts a fresh Electron profile, Butler data root, session, and
+workspace for every arm. It follows each prompt's alternating R2/R3 order,
+writes the evidence file after every observation, and skips observations
+already present when resumed. Before the first sample it verifies that each
+worktree is clean and exactly at the commit declared by the plan. A Turn that
+reaches its tier deadline is kept as a `timed_out` product observation;
+launcher, binding, or renderer failures stay harness incidents and stop the run
+instead of being scored.
+
+Every observation includes the actual per-arm roots and the R2 or R3 durable
+Work evidence read from the product database. `ledger.observedRoute`,
+`workRecords`, `resultRecords`, `checkpointRecords`, `reviewRecords`,
+`mutationRecords`, `projectLedgerEffects`, and `closeoutObserved` make missing
+Work or Project Ledger use visible independently of whether an artifact
+happened to be created. Requested artifacts record existence, byte length,
+SHA-256, and whether their bytes differ from the starting fixture, so a
+pre-existing project scaffold cannot be mistaken for completed product work.
 
 ## Evaluate
 

@@ -1,30 +1,4 @@
-import type {
-  OperationExecutor,
-  PhaseConversationStore,
-  SelectedModel,
-} from "./core/index.ts";
-import type {
-  CanonicalMessageStore,
-  RetrospectiveScheduler,
-} from "./delivery/index.ts";
-import type {
-  TurnAdmissionRepository,
-  TurnStateRepository,
-} from "./turn/index.ts";
-import type { ArtifactWorkspaceRuntime } from "./artifact/index.ts";
-import type { ContinuationCandidate } from "./continuation/index.ts";
-import type { StopPersistenceOutcome } from "./turn/index.ts";
-import type {
-  CommittedSuccessorReadiness,
-  OperationalActivation,
-  OperationalRecoveryBoundary,
-} from "./recovery/index.ts";
-import type {
-  AvailableSpecRevision,
-  GoverningSpecRevision,
-} from "./planning/contracts.ts";
-import type { TurnLocalEffectCapability } from "./core/index.ts";
-import type { WorkProgressTask } from "./work-ledger/index.ts";
+import type { StopPersistenceOutcome } from "./turn/contracts.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -45,7 +19,6 @@ export type ButlerContextInput = {
   mandatoryHotCacheRefs: string[];
   optionalHotCacheRefs: string[];
   baselineObservationScopeRefs: string[];
-  continuationCandidates?: ContinuationCandidate[];
   executionPolicy?: ButlerExecutionPolicy;
   attachments?: ButlerAttachmentRef[];
 };
@@ -114,15 +87,19 @@ export interface BtccTurnRuntime {
   stopTurn(command: BtccStopCommand): Promise<BtccTurnOutcome>;
 }
 
+export type WorkProgressTask = {
+  taskId: string;
+  taskTitle: string;
+  taskOutcome: string;
+  taskOrder: number;
+  taskState: "planned" | "active" | "reviewing" | "completed" |
+    "correction_required" | "stopped";
+  workId: string;
+  workTitle: string;
+  workState: "planned" | "active" | "completed" | "cancelled";
+};
+
 export interface BtccTurnProgressObserver {
-  openingDecisionAccepted?(update: {
-    turnId: string;
-    turnRevision: number;
-    decisionId: string;
-    summary: string;
-    rationale: string;
-    nextStep: string;
-  }): void | Promise<void>;
   stateChanged(update: {
     turnId: string;
     semanticState: string;
@@ -143,11 +120,6 @@ export interface BtccTurnProgressObserver {
     rationale: string;
     nextStep: string;
   }): void | Promise<void>;
-  modelRoundWaiting?(update: {
-    turnId: string;
-    semanticState: string;
-    checkpointId: string;
-  }): void | Promise<void>;
   operationChanged?(update: {
     turnId: string;
     semanticState: string;
@@ -164,30 +136,6 @@ export interface BtccTurnProgressObserver {
     semanticState: string;
     status: "recovering" | "interrupted" | "cleared";
     code?: string;
-    activationKind?: OperationalActivation["kind"];
+    activationKind?: "automatic_storage_recovery" | "cancelled";
   }): void | Promise<void>;
 }
-
-export interface GoverningSpecAuthority {
-  listCatalog(projectRef: string): Promise<AvailableSpecRevision[]>;
-  resolveSelected(
-    projectRef: string,
-    logicalIds: readonly string[],
-  ): Promise<GoverningSpecRevision[]>;
-}
-
-export type BtccRuntimeDependencies = {
-  admission: TurnAdmissionRepository;
-  turns: TurnStateRepository;
-  phaseConversations: PhaseConversationStore;
-  model: SelectedModel;
-  operations: OperationExecutor;
-  artifacts: ArtifactWorkspaceRuntime;
-  messages: CanonicalMessageStore;
-  retrospective: RetrospectiveScheduler;
-  turnLocalEffectCapabilities?: TurnLocalEffectCapability[];
-  operationalRecovery?: OperationalRecoveryBoundary;
-  committedSuccessorReadiness?: CommittedSuccessorReadiness;
-  governingSpecs?: GoverningSpecAuthority;
-  progress?: BtccTurnProgressObserver;
-};
