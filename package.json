@@ -48,6 +48,7 @@
     "app:first-run:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/smoke/app-first-run-setup-smoke.ts",
     "app:client:managed-server:smoke": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run packages/butler-app/scripts/app-client-managed-server-smoke.ts",
     "app:client:model-management:e2e": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/app-model-management-e2e.ts",
+    "e2e:btcc-r3:electron": "npm --prefix packages/butler-app/client/ui run build && ${BUTLER_BUN:-bun} run tests/e2e/btcc-r3-electron-driver.ts",
     "app:client:performance:report": "${BUTLER_BUN:-bun} run tests/support/packaged-performance-report.ts",
     "benchmark:btcc-revisions": "${BUTLER_BUN:-bun} run tests/support/btcc-revision-benchmark/cli.ts",
     "e2e:gncc-cognition:live-llm": "BUTLER_GNCC_COGNITION_E2E_MODEL=openai/gpt-5.5 BUTLER_GNCC_COGNITION_E2E_REASONING=low ${BUTLER_BUN:-bun} run tests/e2e/gateway-neutral-cognition-sources-live-e2e.ts",

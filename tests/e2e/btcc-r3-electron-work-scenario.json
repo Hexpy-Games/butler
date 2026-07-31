@@ -1,0 +1,46 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "durable-work-artifact",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "low",
+  "accessMode": "full_access",
+  "session": {
+    "id": "durable-work-artifact",
+    "title": "BTCC R3 Durable Work artifact"
+  },
+  "fixtures": [
+    {
+      "path": "input/a.txt",
+      "text": "alpha orchard\nshared theme: durable evidence\n"
+    },
+    {
+      "path": "input/b.txt",
+      "text": "beta harbor\nshared theme: durable evidence\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "create-and-verify-report",
+      "prompt": "input/a.txt와 input/b.txt를 확인하고, 각 파일의 핵심 단어와 공통 주제를 정리한 report.md를 만들어 주세요. 작성 후 실제 report.md를 다시 확인해 alpha, beta, durable evidence가 모두 들어갔는지 검토하고 결과를 보고해 주세요.",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          {
+            "path": "report.md",
+            "contains": ["alpha", "beta", "durable evidence"]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept"
+        }
+      }
+    }
+  ]
+}

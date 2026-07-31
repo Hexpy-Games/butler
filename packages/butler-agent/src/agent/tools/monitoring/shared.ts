@@ -55,6 +55,7 @@ export function createMonitoringToolHandlers(input: {
   sessionId?: string;
   webSearchProvider?: WebSearchProvider;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  hiddenNativeToolNames?: readonly string[];
 }) {
   return {
     "get_context_monitor": async (call: ToolCall) => ({
@@ -134,6 +135,7 @@ export function createMonitoringToolHandlers(input: {
           category: category.category,
           includeDisabled: call.args.include_disabled !== false,
           currentToolNames,
+          hiddenNativeToolNames: new Set(input.hiddenNativeToolNames ?? []),
         }),
       };
     },
@@ -193,10 +195,12 @@ function listToolCapabilities(input: {
   category?: ToolCapabilityCategory;
   includeDisabled?: boolean;
   currentToolNames?: Set<string> | null;
+  hiddenNativeToolNames?: ReadonlySet<string>;
 }): ToolCapabilityView[] {
   const includeDisabled = input.includeDisabled !== false;
   const currentToolNames = input.currentToolNames ?? null;
   return BUTLER_TOOLS
+    .filter((tool) => !input.hiddenNativeToolNames?.has(tool.name))
     .map((tool) => {
       const metadata = TOOL_CAPABILITY_METADATA[tool.name] ?? DEFAULT_TOOL_CAPABILITY;
       const availability = capabilityAvailability(tool, input);

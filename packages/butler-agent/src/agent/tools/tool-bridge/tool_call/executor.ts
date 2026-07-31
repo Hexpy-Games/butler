@@ -48,6 +48,7 @@ export function createToolCallToolHandler(input: {
   pluginToolDescriber?: PluginToolDescriber;
   dispatchTool: ButlerToolHandler;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  hiddenNativeToolNames?: readonly string[];
   describedToolIds?: readonly string[] | (() => readonly string[]);
 }) {
   return async (call: ToolCall) => {
@@ -82,6 +83,7 @@ export async function resolveToolCallTarget(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    hiddenNativeToolNames?: readonly string[];
     describedToolIds?: readonly string[] | (() => readonly string[]);
   },
 ): Promise<ToolCallResolveResult> {

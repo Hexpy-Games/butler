@@ -11,6 +11,10 @@ import { selectInitialToolsFromSurfaceController } from
 import { WORK_TRACKING_TOOL_NAMES } from "../../tools/work-tracking/shared.ts";
 import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
+import {
+  DURABLE_WORK_TOOL_DEFINITIONS,
+  isDurableWorkTool,
+} from "./durable-work-tools.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",
@@ -37,10 +41,6 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "read_conversation_context",
   "recall_memory",
   "query_memory",
-  "update_todo_list",
-  "list_todo_list",
-  "list_work_streams",
-  "update_work_stream_state",
   "list_automations",
   "read_mcp_resource",
   "list_skills",
@@ -60,7 +60,7 @@ export function guidedPolicy(turn: TurnRecord): ButlerExecutionPolicy {
   return {
     role: "butler",
     accessMode: admittedAccessMode(turn),
-    trackingMode: turn.context.projectRef ? "ledger" : "none",
+    trackingMode: turn.context.projectRef ? "ledger" : "local",
     requiredNativeToolProfiles: [],
     requiredNativeTools: [],
     workspacePath: workspaceFromScopes(turn) ?? process.cwd(),
@@ -75,9 +75,6 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
     "public-web",
     ...(policy.accessMode === "full_access" ? ["workspace"] : []),
     ...(policy.projectId || turn.context.projectRef ? ["project"] : []),
-    ...(policy.trackingMode === "ledger" && policy.accessMode === "full_access"
-      ? ["project-lifecycle"]
-      : []),
   ]);
   const runtimePolicy = {
     accessMode: policy.accessMode,
@@ -104,8 +101,8 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
     "web_read",
     "read_file",
     "grep_files",
-    ...WORK_TRACKING_TOOL_NAMES,
   ]) names.add(name);
+  for (const name of WORK_TRACKING_TOOL_NAMES) names.delete(name);
   if (policy.accessMode === "full_access") {
     names.add("run_command");
     names.add("write_file");
@@ -114,12 +111,14 @@ export function authorizedToolDefinitions(turn: TurnRecord): FunctionToolDefinit
       if (!NON_FULL_ACCESS_TOOL_NAMES.has(name)) names.delete(name);
     }
   }
-  if (policy.trackingMode !== "ledger" || policy.accessMode !== "full_access") {
-    for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
-  } else {
-    for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.add(name);
-  }
-  return BUTLER_TOOLS.filter((tool) => names.has(tool.name));
+  // R3 publishes Project Ledger changes only through the reviewed effect gate.
+  // Until that boundary owns these capabilities, discovery must not expose a
+  // direct mutation path that can bypass it.
+  for (const name of PROJECT_LEDGER_MUTATION_TOOL_NAME_SET) names.delete(name);
+  return [
+    ...BUTLER_TOOLS.filter((tool) => names.has(tool.name)),
+    ...(policy.trackingMode === "none" ? [] : DURABLE_WORK_TOOL_DEFINITIONS),
+  ];
 }
 
 export function visibleToolDefinitions(
@@ -134,8 +133,7 @@ export function visibleToolDefinitions(
     "web_read",
     "read_file",
     "grep_files",
-    "update_todo_list",
-    "list_todo_list",
+    ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
     ...(accessMode === "full_access" ? ["run_command", "write_file"] : []),
   ]);
@@ -158,13 +156,17 @@ export function effectiveToolNameForCall(
   return parts.length >= 2 && parts[parts.length - 1] ? parts[parts.length - 1] : name;
 }
 
-export function routeForUsedTools(tools: readonly string[]): GuidedTurnResult["route"] {
+export function routeForUsedTools(
+  tools: readonly string[],
+  hasBoundWork = false,
+): GuidedTurnResult["route"] {
+  if (hasBoundWork) return "managed";
   if (tools.length === 0) return "direct";
-  if (tools.some(isDurableMutation)) return "managed";
   return "assisted";
 }
 
 export function isReplaySafeTool(name: string): boolean {
+  if (isDurableWorkTool(name)) return true;
   return [
     "tool_search",
     "tool_describe",
@@ -172,8 +174,6 @@ export function isReplaySafeTool(name: string): boolean {
     "web_read",
     "read_file",
     "grep_files",
-    "list_todo_list",
-    "list_work_streams",
     "project_ledger_status",
     "project_ledger_list",
     "project_ledger_show",
@@ -213,7 +213,7 @@ export function publicToolTitle(name: string): string {
   if (name === "read_file" || name === "grep_files") return "작업공간 확인";
   if (name === "run_command") return "작업 실행";
   if (name.startsWith("project_ledger")) return "프로젝트 기록 확인";
-  if ((WORK_TRACKING_TOOL_NAMES as readonly string[]).includes(name)) return "작업 진행 기록";
+  if (isDurableWorkTool(name)) return "작업 진행 기록";
   return "도구 사용";
 }
 
@@ -234,10 +234,4 @@ function narrowerAccessMode(
 function workspaceFromScopes(turn: TurnRecord): string | null {
   const scope = turn.context.baselineObservationScopeRefs.find((ref) => ref.startsWith("workspace:"));
   return scope ? scope.slice("workspace:".length) : null;
-}
-
-function isDurableMutation(name: string): boolean {
-  return name === "write_file" ||
-    PROJECT_LEDGER_MUTATION_TOOL_NAME_SET.has(name) ||
-    (WORK_TRACKING_TOOL_NAMES as readonly string[]).includes(name);
 }

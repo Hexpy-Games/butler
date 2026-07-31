@@ -2106,8 +2106,8 @@ test("app runtime policy strips stale workspace required tools outside full acce
     sessionKind: "chat",
   })).toMatchObject({
     accessMode: "read_only",
-    tracking_mode: "none",
-    closeout_strategy: "noop",
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
     requiredNativeTools: [],
     required_tools: [],
     requiredNativeToolProfiles: [],
@@ -2319,7 +2319,7 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
   expect(selection.toolNames).not.toContain("render_project_dashboard");
 });
 
-test("ordinary app chat turns derive none tracking before tool selection", () => {
+test("ordinary app chat turns derive session Work tracking before tool selection", () => {
   const runtimePolicy = appRuntimePolicy({
     existing: {},
     accessMode: "full_access",
@@ -2334,8 +2334,8 @@ test("ordinary app chat turns derive none tracking before tool selection", () =>
   });
 
   expect(runtimePolicy).toMatchObject({
-    tracking_mode: "none",
-    closeout_strategy: "noop",
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
   });
   expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
   expect(selection.toolNames).not.toContain("inspect_project_status");

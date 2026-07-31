@@ -1,6 +1,6 @@
 import type { FunctionToolPromptOptions, OpenAIResponse, PromptOptions } from "../runtime-contracts.ts";
 import type { HostedRuntimeConfig } from "./model-routing.ts";
-import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget } from "./runtime-support.ts";
+import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, unavailableFunctionToolPayload } from "./runtime-support.ts";
 import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChatMessage, hostedChatCompletionsUrl, type HostedChatMessage, hostedChatReasoningParams, hostedChatResponseFormat, hostedChatText, hostedChatTools, hostedProviderErrorLabel, promptTextForHosted } from "./hosted-chat-client.ts";
 import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
@@ -128,21 +128,27 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     for (const call of batch.executable) {
       const args = localToolArguments(call.function.arguments);
       log(`tool ${call.function.name}: ${args.raw}`);
-      let payload: Record<string, unknown>;
-      try {
-        payload = {
-          ok: true,
-          output: await options.executeTool({
-            name: call.function.name,
-            args: args.parsed,
-            rawArguments: args.raw,
-          }),
-        };
-      } catch (error) {
-        payload = {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+      let payload = unavailableFunctionToolPayload({
+        name: call.function.name,
+        args: args.parsed,
+        allowedNames,
+      });
+      if (!payload) {
+        try {
+          payload = {
+            ok: true,
+            output: await options.executeTool({
+              name: call.function.name,
+              args: args.parsed,
+              rawArguments: args.raw,
+            }),
+          };
+        } catch (error) {
+          payload = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({

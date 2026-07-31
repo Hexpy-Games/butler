@@ -1,5 +1,5 @@
 import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contracts.ts";
-import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
+import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, unavailableFunctionToolPayload, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
 import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
@@ -215,33 +215,46 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         args_preview: compactTraceValue(args.parsed),
         raw_args_chars: args.raw.length,
       });
-      let payload: Record<string, unknown>;
-      try {
-        const result = await options.executeTool({
-          name: call.function.name,
-          args: args.parsed,
-          rawArguments: args.raw,
-        });
-        payload = { ok: true, output: result };
-        writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
-          provider: "local",
-          name: call.function.name,
-          ok: true,
-          output_preview: compactTraceValue(result),
-        });
-        executedToolCalls += 1;
-      } catch (error) {
-        payload = {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+      let payload = unavailableFunctionToolPayload({
+        name: call.function.name,
+        args: args.parsed,
+        allowedNames,
+      });
+      if (!payload) {
+        try {
+          const result = await options.executeTool({
+            name: call.function.name,
+            args: args.parsed,
+            rawArguments: args.raw,
+          });
+          payload = { ok: true, output: result };
+          writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
+            provider: "local",
+            name: call.function.name,
+            ok: true,
+            output_preview: compactTraceValue(result),
+          });
+          executedToolCalls += 1;
+        } catch (error) {
+          payload = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+          writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
+            provider: "local",
+            name: call.function.name,
+            ok: false,
+            error: compactTraceValue(payload.error),
+          });
+          executedToolCalls += 1;
+        }
+      } else {
         writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
           provider: "local",
           name: call.function.name,
           ok: false,
           error: compactTraceValue(payload.error),
         });
-        executedToolCalls += 1;
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({

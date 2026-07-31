@@ -1,4 +1,4 @@
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, unavailableFunctionToolPayload, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
@@ -241,18 +241,24 @@ export async function runGeminiFunctionToolPromptText(
     toolBatchExecuted = true;
     for (const call of batch.executable) {
       log(`tool ${call.name}: ${call.raw}`);
-      let payload: Record<string, unknown>;
-      try {
-        payload = {
-          ok: true,
-          output: await options.executeTool({
-            name: call.name,
-            args: call.args,
-            rawArguments: call.raw,
-          }),
-        };
-      } catch (error) {
-        payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+      let payload = unavailableFunctionToolPayload({
+        name: call.name,
+        args: call.args,
+        allowedNames,
+      });
+      if (!payload) {
+        try {
+          payload = {
+            ok: true,
+            output: await options.executeTool({
+              name: call.name,
+              args: call.args,
+              rawArguments: call.raw,
+            }),
+          };
+        } catch (error) {
+          payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({

@@ -27,6 +27,7 @@ export function createToolDescribeToolHandler(input: {
   pluginCatalog?: PluginToolCatalog;
   pluginToolDescriber?: PluginToolDescriber;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  hiddenNativeToolNames?: readonly string[];
 }) {
   return async (call: ToolCall) => {
     const ids = parseIds(call.args.ids);
@@ -58,6 +59,7 @@ async function describeToolId(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    hiddenNativeToolNames?: readonly string[];
   },
 ) {
   const parsed = parseToolCatalogId(id);
@@ -79,8 +81,10 @@ function describeNativeTool(
     butlerData: string;
     webSearchProvider?: WebSearchProvider;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    hiddenNativeToolNames?: readonly string[];
   },
 ) {
+  if (input.hiddenNativeToolNames?.includes(name)) return null;
   const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
   if (!tool) return null;
   const metadata = TOOL_CAPABILITY_METADATA[tool.name];

@@ -13,6 +13,10 @@ export const PROJECT_LEDGER_MUTATION_TOOL_NAMES = [
   "project_ledger_create",
   "project_ledger_update",
   "project_ledger_render",
+  // Legacy aliases execute the same persistent Ledger operations and must
+  // share one capability boundary with the native mutation surface.
+  "render_project_dashboard",
+  "complete_project_work",
   ...PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
 ] as const;
 
