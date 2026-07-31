@@ -74,6 +74,7 @@ function comparePair(
   const r2 = r2Observation ? calculateObservationMetrics(r2Observation) : null;
   const r3 = r3Observation ? calculateObservationMetrics(r3Observation) : null;
   const qualityDelta = subtractNullable(r3?.qualityScore, r2?.qualityScore);
+  const promptTokenRatio = ratio(r3?.promptTokens, r2?.promptTokens);
   const totalTokenRatio = ratio(r3?.totalTokens, r2?.totalTokens);
   const contextPreparationRatio = ratio(r3?.contextPreparationMs, r2?.contextPreparationMs);
   const firstMeaningfulRatio = ratio(r3?.firstMeaningfulMs, r2?.firstMeaningfulMs);
@@ -81,13 +82,13 @@ function comparePair(
   let winner: BenchmarkPairComparison["winner"] = "tie";
   if (
     knownTerminalFailure(r3Observation) &&
-    knownDeliveredOutcome(r2Observation)
+    knownHealthyDeliveredOutcome(r2Observation, r2)
   ) {
     winner = "r2";
     reasons.push("r3_product_failure");
   } else if (
     knownTerminalFailure(r2Observation) &&
-    knownDeliveredOutcome(r3Observation)
+    knownHealthyDeliveredOutcome(r3Observation, r3)
   ) {
     winner = "r3";
     reasons.push("r2_product_failure");
@@ -107,12 +108,34 @@ function comparePair(
     winner = "r2";
     reasons.push("quality_regression");
   } else {
-    const ratios = [totalTokenRatio, contextPreparationRatio, firstMeaningfulRatio]
+    const loopRegression = compareKnownCount(
+      r3.noProgressTurns,
+      r2.noProgressTurns,
+    ) > 0 || compareKnownCount(
+      r3.validatorRejections,
+      r2.validatorRejections,
+    ) > 0;
+    const loopImprovement = !loopRegression && (
+      compareKnownCount(r3.noProgressTurns, r2.noProgressTurns) < 0 ||
+      compareKnownCount(r3.validatorRejections, r2.validatorRejections) < 0
+    );
+    const ratios = [
+      promptTokenRatio,
+      totalTokenRatio,
+      contextPreparationRatio,
+      firstMeaningfulRatio,
+    ]
       .filter((value): value is number => value !== null);
-    if (ratios.some((value) => value > RATIO_REGRESSION_LIMIT)) {
+    if (loopRegression) {
+      winner = "r2";
+      reasons.push("loop_regression");
+    } else if (ratios.some((value) => value > RATIO_REGRESSION_LIMIT)) {
       winner = "r2";
       reasons.push("efficiency_or_ux_regression");
-    } else if (ratios.filter((value) => value < RATIO_IMPROVEMENT_LIMIT).length >= 2) {
+    } else if (
+      ratios.filter((value) => value < RATIO_IMPROVEMENT_LIMIT).length +
+        (loopImprovement ? 1 : 0) >= 2
+    ) {
       winner = "r3";
       reasons.push("efficiency_and_ux_improvement");
     } else {
@@ -125,6 +148,7 @@ function comparePair(
     r2,
     r3,
     qualityDelta,
+    promptTokenRatio,
     totalTokenRatio,
     contextPreparationRatio,
     firstMeaningfulRatio,
@@ -166,6 +190,7 @@ function summarizeTier(
     r3Wins: selected.filter((pair) => pair.winner === "r3").length,
     ties: selected.filter((pair) => pair.winner === "tie").length,
     meanQualityDelta: averageComplete(selected.map((pair) => pair.qualityDelta)),
+    meanPromptTokenRatio: averageComplete(selected.map((pair) => pair.promptTokenRatio)),
     meanTotalTokenRatio: averageComplete(selected.map((pair) => pair.totalTokenRatio)),
     meanContextPreparationRatio: averageComplete(
       selected.map((pair) => pair.contextPreparationRatio),
@@ -201,12 +226,15 @@ function knownTerminalFailure(
   return Boolean(observation && observation.terminalState !== "delivered");
 }
 
-function knownDeliveredOutcome(
+function knownHealthyDeliveredOutcome(
   observation: RawBenchmarkObservation | undefined,
+  metrics: ObservationMetrics | null,
 ): boolean {
   return Boolean(
     observation &&
-    calculateObservationMetrics(observation).outcomeSuccess,
+    observation.terminalState === "delivered" &&
+    metrics?.measurementComplete &&
+    !hardFailure(metrics),
   );
 }
 
@@ -228,6 +256,11 @@ function subtractNullable(
   right: number | null | undefined,
 ): number | null {
   if (left === null || left === undefined || right === null || right === undefined) return null;
+  return left - right;
+}
+
+function compareKnownCount(left: number | null, right: number | null): number {
+  if (left === null || right === null) return 0;
   return left - right;
 }
 

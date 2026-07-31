@@ -1,0 +1,456 @@
+import { expect, test } from "bun:test";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
+import { type AddressInfo } from "node:net";
+import { failureEvidence } from "./evidence.ts";
+import {
+  startProviderObservationProxy,
+  type ProviderRequestObservation,
+} from "./provider-observation-proxy.ts";
+
+async function listen(
+  handler: (request: IncomingMessage, response: ServerResponse) => void,
+): Promise<{ baseUrl: string; close(): Promise<void> }> {
+  const server = createServer(handler);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: async () => await closeServer(server),
+  };
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+    server.closeIdleConnections?.();
+  });
+}
+
+async function bodyOf(request: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 2_000,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for provider proxy observation.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+test("provider observation proxy forwards bytes and streams the first SSE delta before completion", async () => {
+  const authorization = "Bearer secret-auth-token";
+  const requestBody = Buffer.from(JSON.stringify({
+    model: "gpt-test",
+    input: "한글 request body",
+    prompt_cache_key: "benchmark:main",
+  }));
+  let capturedBody: Buffer = Buffer.alloc(0);
+  let capturedAuthorization = "";
+  let capturedAcceptEncoding = "";
+  let upstreamCompleted = false;
+  let releaseUpstream: (() => void) | undefined;
+  const upstreamGate = new Promise<void>((resolve) => {
+    releaseUpstream = resolve;
+  });
+  const upstream = await listen((request, response) => {
+    void (async () => {
+      capturedBody = await bodyOf(request);
+      capturedAuthorization = String(request.headers.authorization ?? "");
+      capturedAcceptEncoding = String(request.headers["accept-encoding"] ?? "");
+      response.writeHead(202, {
+        "content-type": "application/octet-stream",
+        "x-upstream-header": "preserved",
+      });
+      response.write(
+        'data: {"type":"response.reasoning_summary_text.delta","delta":"r"}\n\n',
+      );
+      await upstreamGate;
+      response.write([
+        'data: {"type":"response.output_text.delta","delta":"hello"}',
+        "",
+        'data: {"type":"response.function_call_arguments.delta","delta":"{}"}',
+        "",
+        'data: {"type":"response.completed","response":{"status":"completed"}}',
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+      upstreamCompleted = true;
+      response.end();
+    })();
+  });
+  const clockValues = [100, 200, 300];
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+    now: () => clockValues.shift() ?? 999,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      headers: {
+        accept: "text/event-stream",
+        "accept-encoding": "gzip, br",
+        authorization,
+        "content-type": "application/json",
+        "x-forwarded-fixture": "yes",
+      },
+      body: requestBody,
+    });
+    expect(response.status).toBe(202);
+    expect(response.headers.get("x-upstream-header")).toBe("preserved");
+    const reader = response.body?.getReader();
+    expect(reader).toBeDefined();
+    const firstChunk = await reader!.read();
+    expect(new TextDecoder().decode(firstChunk.value)).toContain(
+      "response.reasoning_summary_text.delta",
+    );
+    expect(upstreamCompleted).toBe(false);
+
+    releaseUpstream?.();
+    while (!(await reader!.read()).done) {
+      // Reading to completion proves later bytes continue through the same stream.
+    }
+    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+
+    expect(capturedBody.equals(requestBody)).toBe(true);
+    expect(capturedAuthorization).toBe(authorization);
+    expect(capturedAcceptEncoding).toBe("identity");
+    expect(proxy.observations()).toEqual([{
+      ordinal: 1,
+      requestKind: "main",
+      requestStartedAtMs: 100,
+      serializedRequestBytes: requestBody.byteLength,
+      firstContentBearingDeltaAtMs: 200,
+      completedAtMs: 300,
+      status: 202,
+      hasTextContent: true,
+      hasToolArgumentContent: true,
+      hasReasoningContent: true,
+    }]);
+  } finally {
+    releaseUpstream?.();
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("provider observation proxy classifies title calls without retaining sensitive request or response data", async () => {
+  const upstreamPathSecret = "custom-upstream-secret";
+  const authorizationSecret = "secret-title-authorization";
+  const promptSecret = "secret user prompt";
+  const deltaSecret = "secret provider delta";
+  const cacheKeySecret =
+    "private-prefix:native-butler-title-provider";
+  let capturedPath = "";
+  const upstream = await listen((request, response) => {
+    void (async () => {
+      capturedPath = request.url ?? "";
+      await bodyOf(request);
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+      });
+      response.end([
+        `data: ${JSON.stringify({
+          type: "response.output_text.delta",
+          delta: deltaSecret,
+        })}`,
+        "",
+        `data: ${JSON.stringify({
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            content: [{ type: "output_text", text: deltaSecret }],
+          },
+        })}`,
+        "",
+        "data: [DONE]",
+        "",
+      ].join("\n"));
+    })();
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: `${upstream.baseUrl}/${upstreamPathSecret}`,
+  });
+  const body = JSON.stringify({
+    input: promptSecret,
+    prompt_cache_key: cacheKeySecret,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${authorizationSecret}`,
+        "content-type": "application/json",
+      },
+      body,
+    });
+    await response.text();
+    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+
+    expect(capturedPath).toBe(
+      `/${upstreamPathSecret}/codex/responses`,
+    );
+    const observations = proxy.observations();
+    expect(observations[0]).toMatchObject({
+      ordinal: 1,
+      requestKind: "title",
+      serializedRequestBytes: Buffer.byteLength(body),
+      status: 200,
+      hasTextContent: true,
+      hasToolArgumentContent: false,
+      hasReasoningContent: false,
+    });
+    const serialized = JSON.stringify(observations);
+    for (const secret of [
+      authorizationSecret,
+      promptSecret,
+      deltaSecret,
+      cacheKeySecret,
+      upstreamPathSecret,
+      upstream.baseUrl,
+      proxy.endpoint,
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+  } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("non-streaming responses keep first-delta timing null and failure evidence embeds only safe observations", async () => {
+  const upstream = await listen((_request, response) => {
+    response.writeHead(429, {
+      "content-type": "application/json",
+      "retry-after": "1",
+    });
+    response.end(JSON.stringify({
+      error: {
+        message: "private upstream failure detail",
+      },
+    }));
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: `${upstream.baseUrl}/codex`,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("1");
+    await response.text();
+    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+    const providerRequests = proxy.observations();
+    expect(providerRequests[0]).toMatchObject({
+      requestKind: "main",
+      firstContentBearingDeltaAtMs: null,
+      status: 429,
+      hasTextContent: false,
+      hasToolArgumentContent: false,
+      hasReasoningContent: false,
+    });
+
+    const failure = failureEvidence({
+      error: new Error("scenario failed"),
+      observations: [],
+      options: {},
+      providerRequests,
+      run: {
+        dataRoot: "/isolated/data",
+        debugPort: 41001,
+        electronProfile: "/isolated/electron",
+        evidencePath: "/isolated/evidence.json",
+        runId: "run-id",
+        runRoot: "/isolated",
+        serverPort: 41002,
+        workspaceRoot: "/isolated/workspace",
+      } as Parameters<typeof failureEvidence>[0]["run"],
+    });
+    expect(failure.providerRequests).toEqual(providerRequests);
+    expect(JSON.stringify(failure)).not.toContain(
+      "private upstream failure detail",
+    );
+  } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("completed SSE content sets safe shape flags without inventing a first-delta time", async () => {
+  const upstream = await listen(async (request, response) => {
+    await bodyOf(request);
+    response.writeHead(200, {
+      "content-type": "text/event-stream",
+    });
+    response.end([
+      'data: {"type":"response.output_item.done","item":{"type":"reasoning","encrypted_content":"private"}}',
+      "",
+      'data: {"type":"response.output_item.done","item":{"type":"function_call","name":"lookup","arguments":"{}"}}',
+      "",
+      'data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}]}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"));
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: "{}",
+    });
+    await response.text();
+    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+    expect(proxy.observations()[0]).toMatchObject({
+      firstContentBearingDeltaAtMs: null,
+      hasTextContent: true,
+      hasToolArgumentContent: true,
+      hasReasoningContent: true,
+    });
+  } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("upstream SSE abort terminates the downstream response and remains incomplete evidence", async () => {
+  let abortUpstream: (() => void) | undefined;
+  const abortGate = new Promise<void>((resolve) => {
+    abortUpstream = resolve;
+  });
+  const upstream = await listen((request, response) => {
+    void (async () => {
+      await bodyOf(request);
+      response.writeHead(200, {
+        "content-type": "text/event-stream",
+      });
+      response.write(
+        'data: {"type":"response.output_text.delta","delta":"partial"}\n\n',
+      );
+      await abortGate;
+      response.destroy(new Error("fixture upstream aborted"));
+    })();
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: "{}",
+    });
+    abortUpstream?.();
+    const outcome = await Promise.race([
+      response.text().then(
+        () => "resolved",
+        () => "rejected",
+      ),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 500),
+      ),
+    ]);
+    expect(outcome).not.toBe("timeout");
+    await waitFor(() =>
+      proxy.observations()[0]?.firstContentBearingDeltaAtMs !== null,
+    );
+    expect(proxy.observations()[0]).toMatchObject({
+      status: 200,
+      completedAtMs: null,
+      hasTextContent: true,
+    });
+  } finally {
+    abortUpstream?.();
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("closing the proxy cancels active provider work without waiting for the upstream timeout", async () => {
+  let upstreamAccepted: (() => void) | undefined;
+  const accepted = new Promise<void>((resolve) => {
+    upstreamAccepted = resolve;
+  });
+  const upstream = await listen((request, _response) => {
+    void (async () => {
+      await bodyOf(request);
+      upstreamAccepted?.();
+    })();
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+  const pendingFetch = fetch(proxy.endpoint, {
+    method: "POST",
+    body: "{}",
+  }).catch(() => null);
+
+  try {
+    await accepted;
+    const closeOutcome = await Promise.race([
+      proxy.close().then(() => "closed" as const),
+      new Promise<"timeout">((resolve) =>
+        setTimeout(() => resolve("timeout"), 500),
+      ),
+    ]);
+    expect(closeOutcome).toBe("closed");
+    expect(proxy.observations()[0]?.completedAtMs).toBeNull();
+    await pendingFetch;
+  } finally {
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("provider observation snapshots cannot mutate retained evidence", async () => {
+  const upstream = await listen(async (request, response) => {
+    await bodyOf(request);
+    response.writeHead(204);
+    response.end();
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+
+  try {
+    await fetch(proxy.endpoint, {
+      method: "POST",
+      body: "{}",
+    });
+    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+    const first = proxy.observations();
+    (first[0] as ProviderRequestObservation).status = 999;
+    expect(proxy.observations()[0]?.status).toBe(204);
+  } finally {
+    await proxy.close();
+    await proxy.close();
+    await upstream.close();
+  }
+});

@@ -9,6 +9,7 @@ import type { BenchmarkTarget } from "./contracts.ts";
 export interface TurnEvent {
   atMs: number;
   kind: string;
+  payload: Record<string, unknown>;
   toolCallId: string | null;
 }
 
@@ -64,6 +65,7 @@ export function readTurnEvents(dataRoot: string, turnId: string): TurnEvent[] {
       events.push({
         atMs,
         kind,
+        payload: record(event.payload),
         toolCallId: stringValue(record(event.payload).toolCallId),
       });
     }
@@ -102,6 +104,17 @@ export function eventTime(events: TurnEvent[], kind: string): number | null {
   return events.find((event) => event.kind === kind)?.atMs ?? null;
 }
 
+export function firstMeaningfulEventTime(events: TurnEvent[]): number | null {
+  const concrete = events.find((event) => {
+    if (CONCRETE_PROGRESS_EVENT_KINDS.has(event.kind)) return true;
+    if (event.kind !== "assistant.public_note") return false;
+    return stringValue(event.payload.decisionSource) === "model-authored" ||
+      stringValue(event.payload.decisionTitle) !== null ||
+      stringValue(event.payload.decisionSummary) !== null;
+  });
+  return concrete?.atMs ?? eventTime(events, "message.final.started");
+}
+
 export function maxSilentGap(
   events: TurnEvent[],
   submittedAtMs: number | null,
@@ -125,6 +138,21 @@ export function countProtocolJargon(messages: string[]): number {
     /\b(?:BTCC|GoalContract|carrier|checkpoint hash|manifest revision|semantic state)\b|목표 계약 해시|체크포인트 해시/iu;
   return messages.filter((message) => pattern.test(message)).length;
 }
+
+const CONCRETE_PROGRESS_EVENT_KINDS = new Set([
+  "assistant.decision",
+  "assistant.decision.completed",
+  "model.stream.text_delta",
+  "work.block.started",
+  "work.block.updated",
+  "work.block.completed",
+  "tool.started",
+  "tool.progress",
+  "tool.completed",
+  "tool.failed",
+  "message.final.delta",
+  "message.final.completed",
+]);
 
 function emptyUsage(): UsageSummary {
   return {

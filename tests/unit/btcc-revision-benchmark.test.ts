@@ -11,6 +11,7 @@ import {
   formalBenchmarkRunnerConfig,
   type BenchmarkAssessmentFile,
   type BenchmarkEvidenceFile,
+  type BenchmarkProductAssessment,
   type BenchmarkTarget,
   type BtccRevision,
   type RawBenchmarkObservation,
@@ -165,6 +166,37 @@ describe("formal BTCC revision paired benchmark", () => {
       observations: [deliveredWithoutArtifact, timedOut],
     });
     expect(artifactFailureReport.pairs[0]?.winner).toBe("undecided");
+
+    const healthyDelivered: RawBenchmarkObservation = {
+      ...observation(plan.targets.r2),
+      runId: plan.runId,
+      promptId: prompt.id,
+      prompt: prompt.prompt,
+    };
+    const healthyAgainstTimeout = evaluateBenchmarkEvidence({
+      schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+      kind: "paired_e2e_evidence",
+      plan: singlePromptPlan,
+      observations: [healthyDelivered, timedOut],
+    });
+    expect(healthyAgainstTimeout.pairs[0]).toMatchObject({
+      winner: "r2",
+      reasons: ["r3_product_failure"],
+    });
+
+    const unsafeAgainstTimeout = evaluateBenchmarkEvidence({
+      schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+      kind: "paired_e2e_evidence",
+      plan: singlePromptPlan,
+      observations: [{
+        ...healthyDelivered,
+        safety: { ...healthyDelivered.safety, unauthorizedEffects: 1 },
+      }, timedOut],
+    });
+    expect(unsafeAgainstTimeout.pairs[0]).toMatchObject({
+      winner: "undecided",
+      reasons: ["measurement_incomplete"],
+    });
   });
 
   test("ships one stable fixture set for both Electron arms", () => {
@@ -187,7 +219,67 @@ describe("formal BTCC revision paired benchmark", () => {
     ]);
   });
 
-  test("accepts a small external product assessment and does not require unavailable telemetry", () => {
+  test("uses provider input tokens as an explicit context-overhead comparison", () => {
+    const fullPlan = createBenchmarkPlan({
+      runId: "prompt-token-ratio",
+      createdAt: "2026-07-31T00:00:00.000Z",
+      targets: targets(),
+      fixtures: formalBenchmarkPlaceholders("2026-07-31"),
+    });
+    const prompt = fullPlan.prompts[0]!;
+    const plan = { ...fullPlan, prompts: [prompt] };
+    const observations = (["r2", "r3"] as const).map((revision) => ({
+      ...observation(plan.targets[revision]),
+      runId: plan.runId,
+      promptId: prompt.id,
+      revision,
+      prompt: prompt.prompt,
+      turnId: `turn-${revision}`,
+      quality: {
+        intentScore: 4,
+        resultScore: 4,
+        requiredOutcomes: { natural_greeting: true },
+        assessmentNote: "Equivalent delivered greeting.",
+      },
+      usage: {
+        ...observation(plan.targets[revision]).usage,
+        promptTokens: revision === "r3" ? 130 : 100,
+        totalTokens: 200,
+      },
+    }));
+    const report = evaluateBenchmarkEvidence({
+      schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+      kind: "paired_e2e_evidence",
+      plan,
+      observations,
+    });
+    expect(report.pairs[0]).toMatchObject({
+      promptTokenRatio: 1.3,
+      totalTokenRatio: 1,
+      winner: "r2",
+      reasons: ["efficiency_or_ux_regression"],
+    });
+
+    const loopRegression = evaluateBenchmarkEvidence({
+      schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+      kind: "paired_e2e_evidence",
+      plan,
+      observations: observations.map((item) => ({
+        ...item,
+        usage: { ...item.usage, promptTokens: 100, totalTokens: 200 },
+        loop: {
+          noProgressTurns: item.revision === "r3" ? 1 : 0,
+          validatorRejections: 0,
+        },
+      })),
+    });
+    expect(loopRegression.pairs[0]).toMatchObject({
+      winner: "r2",
+      reasons: ["loop_regression"],
+    });
+  });
+
+  test("requires the product measurements named by the comparison contract", () => {
     const fullPlan = createBenchmarkPlan({
       runId: "assessed-run",
       createdAt: "2026-07-31T00:00:00.000Z",
@@ -273,8 +365,35 @@ describe("formal BTCC revision paired benchmark", () => {
     const assessed = applyProductAssessments(evidence, assessmentFile);
     expect(assessed.observations.every((item) =>
       calculateObservationMetrics(item).measurementComplete,
-    )).toBe(true);
+    )).toBe(false);
     expect(evaluateBenchmarkEvidence(assessed)).toMatchObject({
+      verdict: "insufficient_evidence",
+      reasons: ["observations_incomplete"],
+    });
+    const measured: BenchmarkEvidenceFile = {
+      ...assessed,
+      observations: assessed.observations.map((item) => ({
+        ...item,
+        usage: {
+          ...item.usage,
+          cachedPromptTokens: 0,
+          serializedContextBytes: 2_000,
+        },
+        timing: {
+          ...item.timing,
+          acknowledgedAtMs: 10,
+          admittedAtMs: 20,
+          modelRequestStartedAtMs: 40,
+          firstProviderTokenAtMs: 90,
+          finalVisibleAtMs: 180,
+        },
+        loop: { noProgressTurns: 0, validatorRejections: 0 },
+      })),
+    };
+    expect(measured.observations.every((item) =>
+      calculateObservationMetrics(item).measurementComplete,
+    )).toBe(true);
+    expect(evaluateBenchmarkEvidence(measured)).toMatchObject({
       verdict: "no_clear_winner",
       reasons: [],
       expectedObservations: 2,
@@ -290,6 +409,13 @@ describe("formal BTCC revision paired benchmark", () => {
         },
       }],
     })).toThrow("outcomes do not match");
+    expect(() => applyProductAssessments(evidence, {
+      ...assessmentFile,
+      assessments: [{
+        ...assessmentFile.assessments[0]!,
+        safety: {} as BenchmarkProductAssessment["safety"],
+      }],
+    })).toThrow("safety counts must be non-negative");
   });
 });
 

@@ -40,6 +40,7 @@ export interface ProductLaunch {
   interruptedExecutorReplaced: boolean;
   output: string[];
   page: CdpPage;
+  providerEndpoint: string;
   startedAtMs: number;
 }
 
@@ -155,19 +156,23 @@ function uiIndex(repoRoot: string): string {
   );
 }
 
-export async function launchProduct(run: PreparedRun): Promise<ProductLaunch> {
+export async function launchProduct(
+  run: PreparedRun,
+  providerEndpoint: string,
+): Promise<ProductLaunch> {
   const binary = electronBinary(run.repoRoot);
   assert(existsSync(binary), `Electron binary is missing: ${binary}`);
   assert(existsSync(uiIndex(run.repoRoot)), "UI dist is missing; build the App UI first.");
   assert(listenerPids(run.serverPort).length === 0, `App server port is in use: ${run.serverPort}`);
   assert(listenerPids(run.debugPort).length === 0, `Electron debug port is in use: ${run.debugPort}`);
-  const executor = await startNativeExecutor(run);
+  const executor = await startNativeExecutor(run, providerEndpoint);
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     BUTLER_APP_ELECTRON_USER_DATA_DIR: run.electronProfile,
     BUTLER_APP_GATEWAY_PID_FILE: "off",
     BUTLER_APP_SERVER_PORT: String(run.serverPort),
     BUTLER_BUN: process.execPath,
+    BUTLER_CODEX_BASE_URL: providerEndpoint,
     BUTLER_DATA: run.dataRoot,
     BUTLER_HOME: run.repoRoot,
     BUTLER_PROJECT_WORKSPACE: run.projectWorkspaceRoot,
@@ -204,6 +209,7 @@ export async function launchProduct(run: PreparedRun): Promise<ProductLaunch> {
       executorOutput: executor.output,
       interruptedExecutorReplaced: false,
       output,
+      providerEndpoint,
       startedAtMs: Date.now(),
     };
   } catch (error) {
@@ -223,7 +229,11 @@ export async function replaceInterruptedExecutorOnce(
     "A second native executor process-replacement recovery was requested.",
   );
   await stopNativeExecutor(run, launch.executor);
-  const replacement = await startNativeExecutor(run, launch.executorOutput);
+  const replacement = await startNativeExecutor(
+    run,
+    launch.providerEndpoint,
+    launch.executorOutput,
+  );
   launch.executor = replacement.child;
   launch.interruptedExecutorReplaced = true;
   run.interruptedExecutorReplacementUsed = true;

@@ -25,6 +25,10 @@ import {
   type ProductLaunch,
 } from "./product-launch.ts";
 import {
+  startProviderObservationProxy,
+  type ProviderObservationProxy,
+} from "./provider-observation-proxy.ts";
+import {
   assert,
   safeSegment,
   validateElectronScenario,
@@ -64,6 +68,7 @@ export async function runBtccR3ElectronHarness(
   if (options.dryRun) return preflight;
 
   let launch: ProductLaunch | null = null;
+  let providerProxy: ProviderObservationProxy | null = null;
   const launches: LaunchObservation[] = [];
   const observations: StepObservation[] = [];
   const prior = new Map<string, StepObservation>();
@@ -77,7 +82,10 @@ export async function runBtccR3ElectronHarness(
     launch = null;
   };
   try {
-    launch = await launchProduct(run);
+    providerProxy = await startProviderObservationProxy({
+      upstreamBaseUrl: process.env.BUTLER_CODEX_BASE_URL,
+    });
+    launch = await launchProduct(run, providerProxy.endpoint);
     launches.push({
       electronPid: launch.child.pid ?? null,
       executorPid: launch.executor.pid ?? null,
@@ -100,7 +108,7 @@ export async function runBtccR3ElectronHarness(
       await launch.page.reload();
       await openSession(run, launch.page);
       await stopCurrent();
-      launch = await launchProduct(run);
+      launch = await launchProduct(run, providerProxy.endpoint);
       launches.push({
         electronPid: launch.child.pid ?? null,
         executorPid: launch.executor.pid ?? null,
@@ -125,7 +133,7 @@ export async function runBtccR3ElectronHarness(
         prior.set(step.id, observation);
         if (step.restartAfter === true) {
           await stopCurrent();
-          launch = await launchProduct(run);
+          launch = await launchProduct(run, providerProxy.endpoint);
           launches.push({
             electronPid: launch.child.pid ?? null,
             executorPid: launch.executor.pid ?? null,
@@ -153,17 +161,28 @@ export async function runBtccR3ElectronHarness(
       }
     }
     await stopCurrent();
-    const evidence = successEvidence({ launches, observations, options, run });
-    writeEvidence(run.evidencePath, evidence);
-    return { ...evidence, evidencePath: run.evidencePath };
-  } catch (error) {
-    const failure = failureEvidence({
-      electronOutput: launch?.output,
-      error,
-      executorOutput: launch?.executorOutput,
+    const evidence = successEvidence({
       launches,
       observations,
       options,
+      providerRequests: providerProxy.observations(),
+      run,
+    });
+    writeEvidence(run.evidencePath, evidence);
+    return { ...evidence, evidencePath: run.evidencePath };
+  } catch (error) {
+    const electronOutput = launch?.output;
+    const executorOutput = launch?.executorOutput;
+    await stopCurrent().catch(() => undefined);
+    await providerProxy?.close().catch(() => undefined);
+    const failure = failureEvidence({
+      electronOutput,
+      error,
+      executorOutput,
+      launches,
+      observations,
+      options,
+      providerRequests: providerProxy?.observations() ?? [],
       run,
     });
     writeEvidence(run.evidencePath, failure);
@@ -173,5 +192,6 @@ export async function runBtccR3ElectronHarness(
     );
   } finally {
     await stopCurrent().catch(() => undefined);
+    await providerProxy?.close().catch(() => undefined);
   }
 }
