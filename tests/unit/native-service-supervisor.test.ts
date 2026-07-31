@@ -153,6 +153,8 @@ test("App-managed native service manifest resolves from active runtime pointer",
       appVersion: "2.3.4",
       gatewayPort: 19123,
       createProjectFolderTokenSecret: false,
+      embedSocket: "/tmp/butler-embed-app-test.sock",
+      embedHealthPort: "0",
     });
     const serviceBun = join(
       runtimeHome,
@@ -176,6 +178,9 @@ test("App-managed native service manifest resolves from active runtime pointer",
     expect(specs.every((spec) => spec.env?.BUTLER_HOME === runtimeHome)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_DATA === butlerData)).toBe(true);
     expect(specs.every((spec) => spec.env?.BUTLER_BUN === serviceBun)).toBe(true);
+    expect(specs.every((spec) => spec.env?.EMBED_SOCKET === "/tmp/butler-embed-app-test.sock"))
+      .toBe(true);
+    expect(specs.every((spec) => spec.env?.EMBED_HEALTH_PORT === "0")).toBe(true);
     expect(specs.find((spec) => spec.id === "embed-server")?.command).toBe("bash");
     expect(specs.find((spec) => spec.id === "embed-server")?.args[0]?.endsWith("start-embed-server.sh"))
       .toBeTrue();

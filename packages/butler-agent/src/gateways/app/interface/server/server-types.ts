@@ -49,6 +49,8 @@ export interface AppRouteRequest {
   request: Request;
   store: AppServerStore;
   uiRoot: string;
+  serverShutdownSignal: AbortSignal;
+  setRequestIdleTimeout(seconds: number): void;
   /** @internal Explicit test-support composition only. */
   responder?: AppMessageResponder;
   /** @internal Explicit test-support composition only. */

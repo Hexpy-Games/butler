@@ -1,5 +1,7 @@
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   writeFileSync,
@@ -7,6 +9,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, normalize } from "node:path";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createServer } from "node:net";
 import { appManagedAgentPointerPath } from "./app-managed-runtime.mjs";
 import { prepareAppLocalAuth } from "./app-agent-supervisor.mjs";
@@ -187,6 +190,7 @@ function createRegistrationPlan({
   try {
     const runtime = resolveAppManagedServiceRuntime({
       butlerData,
+      platform,
       getPort,
       getAppVersion,
       prepareLocalAuth,
@@ -212,7 +216,7 @@ function createRegistrationPlan({
   }
 }
 
-function resolveAppManagedServiceRuntime({ butlerData, getPort, getAppVersion, prepareLocalAuth }) {
+function resolveAppManagedServiceRuntime({ butlerData, platform, getPort, getAppVersion, prepareLocalAuth }) {
   const pointerPath = appManagedAgentPointerPath(butlerData);
   const pointer = readJson(pointerPath);
   if (
@@ -258,8 +262,7 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, getAppVersion, p
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
     throw new Error("invalid App-managed gateway port");
   }
-  const embedSocketDir = join(butlerData, "app", "runtime", "embed");
-  mkdirSync(embedSocketDir, { recursive: true, mode: 0o700 });
+  const embedSocket = prepareAppManagedEmbedSocket({ butlerData, platform });
   const appVersion = safeString(getAppVersion());
   return {
     butlerData,
@@ -279,10 +282,42 @@ function resolveAppManagedServiceRuntime({ butlerData, getPort, getAppVersion, p
       BUTLER_APP_GATEWAY_PID_FILE: "off",
       BUTLER_APP_SERVER_PORT: String(port),
       ...(appVersion ? { BUTLER_APP_VERSION: appVersion } : {}),
-      EMBED_SOCKET: join(embedSocketDir, "embed.sock"),
+      EMBED_SOCKET: embedSocket,
       EMBED_HEALTH_PORT: "0",
     },
   };
+}
+
+export function prepareAppManagedEmbedSocket({
+  butlerData,
+  platform = process.platform,
+  socketRoot = "/tmp",
+  uid = typeof process.getuid === "function" ? process.getuid() : null,
+}) {
+  if (platform === "win32") {
+    return join(butlerData, "app", "runtime", "embed", "embed.sock");
+  }
+  if (!Number.isInteger(uid) || uid < 0) {
+    throw new Error("unable to resolve local user for App-managed embed socket");
+  }
+
+  const ownerDir = join(socketRoot, `butler-${uid}`);
+  try {
+    mkdirSync(ownerDir, { mode: 0o700 });
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  }
+  const ownerStat = lstatSync(ownerDir);
+  if (!ownerStat.isDirectory() || ownerStat.uid !== uid) {
+    throw new Error("unsafe App-managed embed socket directory");
+  }
+  chmodSync(ownerDir, 0o700);
+
+  const socketId = createHash("sha256")
+    .update(butlerData)
+    .digest("hex")
+    .slice(0, 20);
+  return join(ownerDir, `embed-${socketId}.sock`);
 }
 
 function safeString(value) {
