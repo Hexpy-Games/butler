@@ -29,10 +29,16 @@ export interface WebSearchOutput {
   usage: {
     search_requests: number;
   };
+  search_warnings?: string[];
+  failed_queries?: Array<{
+    query: string;
+    error: string;
+  }>;
 }
 
 export interface WebSearchProvider {
   readonly id: string;
+  readonly plannedSearchConcurrency?: number;
   search(input: Required<Pick<WebSearchInput, "query">> & WebSearchInput): Promise<WebSearchOutput>;
 }
 
@@ -282,8 +288,15 @@ function compactText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function isDuckDuckGoChallengePage(html: string): boolean {
+  return /id=["']challenge-form["']/iu.test(html) ||
+    /class=["'][^"']*\banomaly-modal\b/iu.test(html) ||
+    /\/anomaly\.js(?:[?"'])/iu.test(html);
+}
+
 export class DuckDuckGoHtmlSearchProvider implements WebSearchProvider {
   readonly id = "duckduckgo-html";
+  readonly plannedSearchConcurrency = 2;
 
   constructor(private readonly options: {
     apiBase?: string;
@@ -308,6 +321,11 @@ export class DuckDuckGoHtmlSearchProvider implements WebSearchProvider {
     const html = await response.text();
     if (!response.ok) {
       throw new Error(`DuckDuckGo HTML search failed: HTTP ${response.status}`);
+    }
+    if (isDuckDuckGoChallengePage(html)) {
+      throw new Error(
+        "DuckDuckGo HTML search was blocked by an anti-bot challenge; retry later or use another search provider.",
+      );
     }
     const dom = new JSDOM(html, { url: url.toString() });
     const document = dom.window.document;
@@ -731,12 +749,17 @@ function isValidationError(error: unknown): boolean {
 
 export class FallbackWebSearchProvider implements WebSearchProvider {
   readonly id: string;
+  readonly plannedSearchConcurrency: number;
 
   constructor(
     private readonly primary: WebSearchProvider,
     private readonly fallback: WebSearchProvider = new DuckDuckGoHtmlSearchProvider(),
   ) {
     this.id = `${primary.id}-with-${fallback.id}-fallback`;
+    this.plannedSearchConcurrency = Math.min(
+      primary.plannedSearchConcurrency ?? Number.POSITIVE_INFINITY,
+      fallback.plannedSearchConcurrency ?? Number.POSITIVE_INFINITY,
+    );
   }
 
   async search(input: Required<Pick<WebSearchInput, "query">> & WebSearchInput): Promise<WebSearchOutput> {
@@ -772,6 +795,7 @@ export class ConfiguredCodexSubscriptionWebSearchProvider implements WebSearchPr
 
 export class AutoWebSearchProvider implements WebSearchProvider {
   readonly id = "auto-web-search";
+  readonly plannedSearchConcurrency = 2;
 
   constructor(private readonly options: {
     model?: string;

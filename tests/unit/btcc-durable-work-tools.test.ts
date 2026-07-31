@@ -19,6 +19,12 @@ test("R3 Work exposes only three compact optional control tools", () => {
   ]);
   expect(DURABLE_WORK_TOOL_DEFINITIONS[0]?.description)
     .toContain("multi-source or multi-step research");
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+    .toContain("Judge against the original user request");
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+    .toContain("disclosed non-critical limits may still be accepted");
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
+    .toContain("a material requested outcome remains unfinished");
   const encoded = JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS);
   expect(encoded).not.toContain("revision_id");
   expect(encoded).not.toContain("result_id");

@@ -173,6 +173,12 @@ happened to be created. Requested artifacts record existence, byte length,
 SHA-256, and whether their bytes differ from the starting fixture, so a
 pre-existing project scaffold cannot be mistaken for completed product work.
 
+An R3 reporting checkpoint is useful resume context but remains optional. The
+benchmark therefore does not require one merely to satisfy the benchmark.
+R3 closeout evidence requires a completed Work with a recorded result and the
+plan/result review lifecycle; Project cases additionally require an observed
+Project Ledger effect.
+
 ## Assess delivered product results
 
 After all raw observations are collected, inspect each delivered final answer,

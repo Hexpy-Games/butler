@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const webReadToolDefinition = {
   type: "function",
   name: "web_read",
-  description: "Read a public URL through Butler's configured page-reader stack and return bounded page evidence. Use after web_search when snippets are insufficient for exact quotes, current news, or source-backed claims.",
+  description: "Read a public URL through Butler's configured page-reader stack and return bounded page evidence. Use after web_search when snippets are insufficient for exact quotes, current news, or source-backed claims. If a page is unavailable, search for an accessible source covering the same requested fact.",
   parameters: {
     type: "object",
     additionalProperties: false,

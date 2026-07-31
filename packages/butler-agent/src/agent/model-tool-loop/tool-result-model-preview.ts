@@ -44,8 +44,11 @@ export function structuredToolResultModelPreview(input: {
 }
 
 function publicWebEvidencePreview(toolName: string, output: Record<string, unknown>): Record<string, unknown> {
-  const items = Array.isArray(output.public_web_evidence_items)
-    ? output.public_web_evidence_items.slice(0, 12).flatMap((value) => {
+  const rawItems = Array.isArray(output.public_web_evidence_items)
+    ? output.public_web_evidence_items
+    : [];
+  const items = rawItems
+    .slice(0, 12).flatMap((value) => {
       const item = record(value);
       if (!item || typeof item.evidence_item_id !== "string" || typeof item.source_url !== "string") return [];
       return [compactUndefined({
@@ -59,14 +62,97 @@ function publicWebEvidencePreview(toolName: string, output: Record<string, unkno
           ? item.limitations.slice(0, 6).map((entry) => boundedText(entry, 320)).filter(Boolean)
           : [],
       })];
-    })
+    });
+  const rawFailedQueries = Array.isArray(output.failed_queries)
+    ? output.failed_queries
     : [];
-  return {
+  const failedQueries = rawFailedQueries
+    .slice(0, 4).flatMap((value) => {
+      const failure = record(value);
+      if (!failure) return [];
+      const query = boundedText(failure.query, 320);
+      const error = boundedText(failure.error, 320);
+      return query || error ? [compactUndefined({ query, error })] : [];
+    });
+  const coverage = record(output.coverage_budget);
+  const error = record(output.error);
+  return compactUndefined({
     tool_name: toolName,
     ok: output.ok !== false,
+    query: boundedText(output.query, 500),
+    provider: boundedText(output.provider, 120),
+    requested_url: boundedText(output.requested_url, 500),
+    source_url: boundedText(output.source_url, 500),
+    title: boundedText(output.title, 320),
+    status: finiteNumber(output.status) ?? undefined,
+    truncated: typeof output.truncated === "boolean"
+      ? output.truncated
+      : undefined,
+    evidence_quality: boundedText(output.evidence_quality, 80),
+    page_excerpt: toolName === "web_read"
+      ? boundedHeadTailText(output.markdown, 2_000)
+      : undefined,
+    render_recommended: typeof output.render_recommended === "boolean"
+      ? output.render_recommended
+      : undefined,
+    cache_hit: typeof output.cache_hit === "boolean"
+      ? output.cache_hit
+      : undefined,
+    error: boundedText(output.error, 320) ?? (error
+      ? compactUndefined({
+        code: boundedText(error.code, 120),
+        message: boundedText(error.message, 320),
+      })
+      : undefined),
+    observation_kind: boundedText(output.observation_kind, 120),
+    summary: boundedText(output.summary, 480),
+    model_visible_content: boundedHeadTailText(
+      output.model_visible_content,
+      1_200,
+    ),
+    warnings: boundedStringArray(output.warnings, 6, 320),
+    search_warnings: boundedStringArray(output.search_warnings, 4, 320),
+    failed_query_count: rawFailedQueries.length > 0
+      ? rawFailedQueries.length
+      : undefined,
+    failed_queries: failedQueries.length > 0 ? failedQueries : undefined,
     evidence_items: items,
     evidence_item_count: items.length,
-  };
+    evidence_item_total: rawItems.length !== items.length
+      ? rawItems.length
+      : undefined,
+    coverage_budget: coverage
+      ? compactUndefined({
+        result_count: finiteNumber(coverage.result_count) ?? undefined,
+        stop_reason: boundedText(coverage.stop_reason, 120),
+        next_search_guidance: boundedText(
+          coverage.next_search_guidance,
+          320,
+        ),
+      })
+      : undefined,
+    read_required: typeof output.read_required === "boolean"
+      ? output.read_required
+      : undefined,
+    read_reason: boundedText(output.read_reason, 320),
+    recommended_read_urls: boundedStringArray(
+      output.recommended_read_urls,
+      4,
+      500,
+    ),
+  });
+}
+
+function boundedStringArray(
+  value: unknown,
+  limit: number,
+  maxChars: number,
+): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.slice(0, limit)
+    .map((entry) => boundedText(entry, maxChars))
+    .filter((entry): entry is string => Boolean(entry));
+  return items.length > 0 ? items : undefined;
 }
 
 function runCommandPreview(output: Record<string, unknown>): Record<string, unknown> {

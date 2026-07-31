@@ -76,6 +76,71 @@ test("agent loop executes model-selected tool call and continues with tool resul
   expect(modelInputs[1]).toContain("hello");
 });
 
+test("agent loop sends bounded web evidence while retaining the full tool event", async () => {
+  let providerToolContent = "";
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "research the market" }],
+    tools: [{
+      name: "web_search",
+      description: "Search the web",
+      inputSchema: {
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string" } },
+        additionalProperties: false,
+      },
+    }],
+    callModel: async (input) => {
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-web",
+            name: "web_search",
+            arguments: { query: "current market" },
+          }],
+        };
+      }
+      providerToolContent = input.messages.find((message) =>
+        message.role === "tool",
+      )?.content ?? "";
+      return { text: "research complete" };
+    },
+    executeTool: async () => ({
+      ok: true,
+      query: "current market",
+      results: [{ raw_duplicate: "RAW_WEB_RESULT_SHOULD_STAY_DURABLE" }],
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-market-1",
+        source_url: "https://example.com/market",
+        source_identity: "example.com",
+        published_at: "2026-07-31",
+        content_kind: "search_snippet",
+        bounded_content: "Market evidence from the source.",
+        limitations: ["Search excerpt."],
+      }],
+      search_warnings: ["One planned search failed."],
+      failed_queries: [{ query: "blocked query", error: "challenge" }],
+      read_required: true,
+      recommended_read_urls: ["https://example.com/market"],
+    }),
+  });
+
+  const providerPayload = JSON.parse(providerToolContent) as Record<string, any>;
+  expect(providerPayload.output).toMatchObject({
+    tool_name: "web_search",
+    evidence_item_count: 1,
+    search_warnings: ["One planned search failed."],
+    failed_queries: [{ query: "blocked query", error: "challenge" }],
+    read_required: true,
+    recommended_read_urls: ["https://example.com/market"],
+  });
+  expect(providerToolContent).toContain("Market evidence from the source.");
+  expect(providerToolContent).not.toContain("RAW_WEB_RESULT_SHOULD_STAY_DURABLE");
+  const durableEvent = result.events.find((event) => event.type === "tool_result");
+  expect(JSON.stringify(durableEvent?.toolResult?.output))
+    .toContain("RAW_WEB_RESULT_SHOULD_STAY_DURABLE");
+});
+
 test("agent loop serializes schema validation failures as structured observations", async () => {
   const modelInputs: string[] = [];
   let executed = 0;
@@ -119,6 +184,40 @@ test("agent loop serializes schema validation failures as structured observation
   expect(context).toContain("Tool echo requires argument: message");
   expect(context).toContain("Tool echo received unsupported argument(s): extra");
   expect(context).toContain("\"model_visible_content\"");
+});
+
+test("agent loop keeps web tool validation feedback after provider compaction", async () => {
+  let providerToolContent = "";
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "research the market" }],
+    tools: [{
+      name: "web_search",
+      description: "Search the web",
+      inputSchema: {
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string" } },
+        additionalProperties: false,
+      },
+    }],
+    callModel: async (input) => {
+      if (input.iteration === 0) return {
+        toolCalls: [{ id: "call-invalid-web", name: "web_search", arguments: {} }],
+      };
+      providerToolContent = input.messages.find((message) =>
+        message.role === "tool",
+      )?.content ?? "";
+      return { text: "I can correct the search call." };
+    },
+    executeTool: async () => {
+      throw new Error("invalid calls should not execute");
+    },
+  });
+
+  expect(result.finalText).toBe("I can correct the search call.");
+  expect(providerToolContent).toContain("Tool web_search requires argument: query");
+  expect(providerToolContent).toContain("tool_invalid_arguments");
+  expect(providerToolContent).toContain("Use this observation to retry");
 });
 
 test("agent loop preserves the exact structured successful result", async () => {

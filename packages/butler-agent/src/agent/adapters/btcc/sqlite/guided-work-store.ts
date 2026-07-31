@@ -63,18 +63,18 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       if (!this.legacyProjectWork) return null;
       const programIds = this.legacyProjectImporter.locateProgramIds(scope);
       if (programIds.length === 0) return null;
-      const replay = this.db.transaction(() =>
-        this.legacyProjectImporter.replay(scope, programIds))();
+      const replay = this.writeTransaction(() =>
+        this.legacyProjectImporter.replay(scope, programIds));
       if (replay) return replay;
       const snapshot = await this.legacyProjectWork.loadOpenWork({
         projectRef: scope.projectRef,
         programIds,
       });
       if (!snapshot) return null;
-      return this.db.transaction(() =>
-        this.legacyProjectImporter.import(scope, snapshot))();
+      return this.writeTransaction(() =>
+        this.legacyProjectImporter.import(scope, snapshot));
     }
-    return this.db.transaction(() => this.legacyImporter.import(scope))();
+    return this.writeTransaction(() => this.legacyImporter.import(scope));
   }
 
   async boundWorkForTurn(turnId: string): Promise<DurableWorkView | null> {
@@ -85,15 +85,15 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     scope: WorkTurnScope,
     expectedWorkId?: string,
   ): Promise<DurableWorkView | null> {
-    return this.db.transaction(() => {
+    return this.writeTransaction(() => {
       const work = this.sessions.bindOpenHead(scope, expectedWorkId);
       return work ? this.reader.view(work.work_id) : null;
-    })();
+    });
   }
 
   async replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView> {
     const requestSha256 = guidedWorkMutationFingerprint("replace_plan", input);
-    return this.db.transaction(() => {
+    return this.writeTransaction(() => {
       const replay = this.replay(input.mutationCallId, "replace_plan", requestSha256);
       if (replay) return replay;
       const work = this.sessions.selectForPlan(input);
@@ -132,14 +132,14 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         recordId: planRevisionId,
       });
       return this.reader.view(work.work_id);
-    })();
+    });
   }
 
   async recordCheckpoint(
     input: RecordWorkCheckpointInput,
   ): Promise<DurableWorkView> {
     const requestSha256 = guidedWorkMutationFingerprint("record_checkpoint", input);
-    return this.db.transaction(() => {
+    return this.writeTransaction(() => {
       const replay = this.replay(
         input.mutationCallId,
         "record_checkpoint",
@@ -179,13 +179,13 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         recordId: checkpointId,
       });
       return this.reader.view(work.work_id);
-    })();
+    });
   }
 
   async recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView> {
     const { completeWork, ...request } = input;
     const requestSha256 = guidedWorkMutationFingerprint("record_review", request);
-    return this.db.transaction(() => {
+    return this.writeTransaction(() => {
       const replay = this.replay(input.mutationCallId, "record_review", requestSha256);
       if (replay) return replay;
       const work = this.sessions.requireBoundHead(input);
@@ -236,12 +236,12 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         recordId: reviewId,
       });
       return this.reader.view(work.work_id);
-    })();
+    });
   }
 
   async attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView> {
     const requestSha256 = guidedWorkMutationFingerprint("attach_tool_result", input);
-    return this.db.transaction(() => {
+    return this.writeTransaction(() => {
       const replay = this.replay(
         input.mutationCallId,
         "attach_tool_result",
@@ -264,7 +264,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         recordId: resultRef,
       });
       return this.reader.view(work.work_id);
-    })();
+    });
   }
 
   private replay(
@@ -303,6 +303,10 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private touch(workId: string, now: string): void {
     this.db.query("UPDATE btcc_guided_works SET updated_at = ? WHERE work_id = ?")
       .run(now, workId);
+  }
+
+  private writeTransaction<T>(operation: () => T): T {
+    return this.db.transaction(operation).immediate();
   }
 
 }

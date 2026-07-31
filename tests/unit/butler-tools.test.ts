@@ -1392,6 +1392,10 @@ test("explicit required tools add exact tool names while removed tool names are 
 
 test("web_search schema exposes query and domain filters", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "web_search");
+  const properties = tool?.parameters.properties as Record<
+    string,
+    { description?: string }
+  > | undefined;
 
   expect(tool?.parameters.required).toEqual(["query"]);
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
@@ -1401,6 +1405,12 @@ test("web_search schema exposes query and domain filters", () => {
     "recency_days",
     "max_results",
   ]);
+  expect(properties?.allowed_domains?.description)
+    .toContain("Strict result filter for every planned search");
+  expect(properties?.allowed_domains?.description)
+    .toContain("Omit it for broad or multi-source research");
+  expect(tool?.description)
+    .toContain("broaden the query or use another accessible authoritative");
 });
 
 test("web_read schema exposes bounded page evidence controls", () => {
@@ -1413,6 +1423,8 @@ test("web_read schema exposes bounded page evidence controls", () => {
     "max_chunks",
     "backend",
   ]);
+  expect(tool?.description)
+    .toContain("search for an accessible source covering the same requested fact");
 });
 
 test("transform_public_data_table writes bounded public CSV artifacts", async () => {
