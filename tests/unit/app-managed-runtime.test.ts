@@ -3,6 +3,7 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -12,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { expect, test } from "bun:test";
 import { createAppDependencyClosureManifest } from "../../packages/butler-app/scripts/release/manifest.ts";
@@ -1313,7 +1314,18 @@ test("App-managed foreground command uses the platform owner with a parent lease
     expect(command.env).toMatchObject({
       BUTLER_APP_MANAGED_RUNTIME_HOME: command.cwd,
       BUTLER_DATA: butlerData,
+      EMBED_HEALTH_PORT: "0",
     });
+    if (process.platform === "win32") {
+      expect(command.env.EMBED_SOCKET).toContain("app\\runtime\\embed\\embed.sock");
+    } else {
+      const uid = process.getuid?.();
+      expect(uid).toBeNumber();
+      expect(command.env.EMBED_SOCKET).toMatch(
+        new RegExp(`^/tmp/butler-${uid}/embed-[a-f0-9]{20}\\.sock$`),
+      );
+      expect(lstatSync(dirname(command.env.EMBED_SOCKET)).mode & 0o777).toBe(0o700);
+    }
     if (process.platform === "win32") {
       expect(command.env.BUTLER_APP_FOREGROUND_LEASE).toBeUndefined();
     } else {
