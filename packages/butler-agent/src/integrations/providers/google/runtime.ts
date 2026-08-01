@@ -3,6 +3,7 @@ import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import {
   createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
   toolBatchCompletedHandoffText,
   toolResultPayloadForProvider,
 } from "../../../agent/model-tool-loop/index.ts";
@@ -188,6 +189,7 @@ export async function runGeminiFunctionToolPromptText(
   const modelPreviewContext = createToolResultModelPreviewContext();
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
+  let emptyResponseRecoveryUsed = false;
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
@@ -225,6 +227,15 @@ export async function runGeminiFunctionToolPromptText(
         if (disposition.kind === "final") return disposition.text;
         contents.push({ role: "model", parts: responseParts });
         contents.push({ role: "user", parts: [{ text: disposition.observation }] });
+        continue;
+      }
+      const observation = emptyResponseRecoveryObservation({
+        recoveryUsed: emptyResponseRecoveryUsed,
+        hasNextModelRound: round + 1 < maxRounds,
+      });
+      if (observation) {
+        emptyResponseRecoveryUsed = true;
+        contents.push({ role: "user", parts: [{ text: observation }] });
         continue;
       }
       throw providerEmptyResponseError({

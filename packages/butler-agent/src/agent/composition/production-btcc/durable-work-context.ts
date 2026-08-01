@@ -48,9 +48,7 @@ export function renderDurableWorkContext(
     pushCorrections(rows, "Plan corrections", work.latestPlanReview.corrections);
   }
   if (work.latestResultReview) {
-    const bound = new Set(work.latestResultReview.boundResultRefs);
-    const current = bound.size === work.resultRefs.length &&
-      work.resultRefs.every((result) => bound.has(result.resultRef));
+    const current = isDurableWorkResultReviewCurrent(work);
     rows.push(
       `Latest result review${current ? "" : " (outdated)"}: ` +
         `${work.latestResultReview.verdict} — ` +
@@ -72,6 +70,15 @@ export function renderDurableWorkContext(
     );
   }
   return rows.join("\n").slice(0, 8_000);
+}
+
+export function isDurableWorkResultReviewCurrent(
+  work: Pick<DurableWorkContext["work"], "latestResultReview" | "resultRefs">,
+): boolean {
+  if (!work.latestResultReview) return false;
+  const bound = new Set(work.latestResultReview.boundResultRefs);
+  return bound.size === work.resultRefs.length &&
+    work.resultRefs.every((result) => bound.has(result.resultRef));
 }
 
 function pushCorrections(rows: string[], label: string, corrections: string[]): void {

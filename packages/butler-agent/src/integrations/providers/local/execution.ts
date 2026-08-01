@@ -4,6 +4,7 @@ import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOv
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
 import {
   createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
   serializeToolResultPayloadForProvider,
   toolBatchCompletedHandoffText,
 } from "../../../agent/model-tool-loop/index.ts";
@@ -79,6 +80,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
   let executedToolCalls = 0;
   let toolContractRepairAttempted = false;
   let requiredToolRepairNames: Set<string> | null = null;
+  let emptyResponseRecoveryUsed = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
@@ -147,6 +149,17 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       continue;
     }
     if (toolCalls.length === 0) {
+      if (!text && executedToolCalls === 0) {
+        const observation = emptyResponseRecoveryObservation({
+          recoveryUsed: emptyResponseRecoveryUsed,
+          hasNextModelRound: round + 1 < maxRounds,
+        });
+        if (observation) {
+          emptyResponseRecoveryUsed = true;
+          messages.push({ role: "user", content: observation });
+          continue;
+        }
+      }
       if (executedToolCalls > 0) {
         const finalText = extractLocalFinalEnvelopeText(assistant);
         if (finalText) {

@@ -3,6 +3,7 @@ import { abortError, activeFunctionTools, createProviderRequestAttributor, final
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import {
   createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
   serializeToolResultPayloadForProvider,
   toolBatchCompletedHandoffText,
 } from "../../../agent/model-tool-loop/index.ts";
@@ -176,6 +177,7 @@ export async function runAnthropicFunctionToolPromptText(
   const modelPreviewContext = createToolResultModelPreviewContext();
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
+  let emptyResponseRecoveryUsed = false;
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
@@ -202,6 +204,15 @@ export async function runAnthropicFunctionToolPromptText(
         if (disposition.kind === "final") return disposition.text;
         messages.push({ role: "assistant", content });
         messages.push({ role: "user", content: disposition.observation });
+        continue;
+      }
+      const observation = emptyResponseRecoveryObservation({
+        recoveryUsed: emptyResponseRecoveryUsed,
+        hasNextModelRound: round + 1 < maxRounds,
+      });
+      if (observation) {
+        emptyResponseRecoveryUsed = true;
+        messages.push({ role: "user", content: observation });
         continue;
       }
       throw providerEmptyResponseError({

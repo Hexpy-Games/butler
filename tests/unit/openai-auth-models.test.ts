@@ -3363,6 +3363,59 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
 });
 
+test("Codex stateless replay forwards one contentless-response recovery observation", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  const seenBodies: Array<Record<string, any>> = [];
+  globalThis.fetch = (async (
+    _input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    return seenBodies.length === 1
+      ? codexSseResponse({
+          id: "resp_contentless",
+          item: { type: "message", content: [] },
+          inputTokens: 10,
+          totalTokens: 10,
+        })
+      : codexSseResponse({
+          id: "resp_recovered",
+          item: {
+            type: "message",
+            content: [{ type: "output_text", text: "recovered" }],
+          },
+          inputTokens: 20,
+          totalTokens: 22,
+        });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "Recover once.",
+    maxToolRounds: 3,
+    tools: [],
+    executeTool: async () => ({ unreachable: true }),
+  });
+
+  expect(result).toBe("recovered");
+  expect(seenBodies).toHaveLength(2);
+  expect(JSON.stringify(seenBodies[1]!.input))
+    .toContain("The previous response contained no text or tool call");
+});
+
 test("Codex stateless replay keeps prior web results provider-compact", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {

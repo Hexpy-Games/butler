@@ -121,6 +121,8 @@ function publicWebEvidencePreview(
   );
   return compactUndefined({
     tool_name: toolName,
+    turn_time_remaining_seconds:
+      finiteNumber(output.turn_time_remaining_seconds) ?? undefined,
     ok: output.ok !== false,
     query: boundedText(output.query, 500),
     provider: boundedText(output.provider, 120),

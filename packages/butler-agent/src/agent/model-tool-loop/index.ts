@@ -1,4 +1,6 @@
 export { runAgentLoop } from "./run-agent-loop.ts";
+export { emptyResponseRecoveryObservation } from
+  "./empty-response-recovery.ts";
 export type {
   AgentLoopInput,
   AgentLoopMessage,

@@ -236,6 +236,36 @@ test("every provider family continues a rejected final candidate in the same nat
   }
 });
 
+test("every provider family retries one contentless response with a visible continuation observation", async () => {
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return Response.json(
+        responseRound === 1
+          ? contentlessResponse(harness.family)
+          : harness.response(3),
+      );
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Recover from one contentless provider response.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 3,
+      butlerData: makeTempDir(`${harness.family}-contentless-recovery`),
+      tools: [],
+      executeTool: async () => ({ unreachable: true }),
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(responseRound, harness.family).toBe(2);
+    expect(JSON.stringify(bodies[1]), harness.family)
+      .toContain("The previous response contained no text or tool call");
+  }
+});
+
 test("every provider family returns unknown structured tools as correctable feedback", async () => {
   for (const harness of providerHarnesses()) {
     const bodies: Array<Record<string, unknown>> = [];
@@ -718,6 +748,36 @@ function prematureFinalResponse(family: ProviderFamily): Record<string, unknown>
   return {
     choices: [{ message: { role: "assistant", content } }],
     usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+  };
+}
+
+function contentlessResponse(family: ProviderFamily): Record<string, unknown> {
+  if (family === "openai") {
+    return {
+      id: "response-contentless",
+      output: [],
+      usage: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [],
+      usage: { input_tokens: 10, output_tokens: 0 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{ content: { role: "model", parts: [] } }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 0,
+        totalTokenCount: 10,
+      },
+    };
+  }
+  return {
+    choices: [{ message: { role: "assistant", content: "" } }],
+    usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
   };
 }
 
