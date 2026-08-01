@@ -248,7 +248,12 @@ export function createBundledAgentSupervisor({
       clearShutdownTimer();
       child = null;
       if (phase !== "stopping") phase = "stopped";
-      if (wasRunning) queueMicrotask(() => onUnexpectedExit(earlyExit));
+      if (wasRunning) {
+        invalidateGatewayRuntimeReceipt(gateway);
+        if (readyGateway === gateway) readyGateway = null;
+        if (activeGateway === gateway) activeGateway = null;
+        queueMicrotask(() => onUnexpectedExit(earlyExit));
+      }
     });
 
     let observedHealthy = false;
@@ -323,6 +328,7 @@ export function createBundledAgentSupervisor({
 
   async function repair() {
     await stop({ wait: true });
+    invalidateGatewayRuntimeReceipt(readyGateway ?? activeGateway);
     readyGateway = null;
     activeGateway = null;
     lastErrorCode = null;
@@ -497,6 +503,14 @@ export function createBundledAgentSupervisor({
       gateway.rollbackActivation?.(error);
     } catch {
       // Keep the supervisor failure focused on the startup error.
+    }
+  }
+
+  function invalidateGatewayRuntimeReceipt(gateway) {
+    try {
+      gateway?.invalidateRuntimeReceipt?.();
+    } catch {
+      // Recovery still needs to replace the stopped gateway.
     }
   }
 
