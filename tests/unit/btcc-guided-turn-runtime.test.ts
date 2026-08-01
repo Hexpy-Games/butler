@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BtccRunCommand } from
   "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { TurnStateRepository } from
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import {
   createGuidedTurnRuntime,
   type GuidedTurnAgent,
@@ -63,6 +65,106 @@ test("Guided Turn answers directly through only durable admission and delivery s
     } finally {
       db.close();
     }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn retries only the same final commit after SQLite contention", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-final-contention-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "guided-final-contention",
+    storageProfile: "ephemeral",
+  });
+  let modelCalls = 0;
+  let finalCommitAttempts = 0;
+  let readinessWaits = 0;
+  let firstFinalCommit:
+    Parameters<TurnStateRepository["commitTransition"]>[0] | undefined;
+  const turns = overrideTransitionCommit(stores.turns, async (input) => {
+    if (input.transition.kind === "accept_guided_final") {
+      finalCommitAttempts += 1;
+      if (finalCommitAttempts === 1) {
+        firstFinalCommit = input;
+        const error = new Error("database is locked");
+        error.name = "SQLiteError";
+        throw error;
+      }
+      if (!firstFinalCommit) throw new Error("missing first final commit attempt");
+      expect(input.claim === firstFinalCommit.claim).toBe(true);
+      expect(input.transition === firstFinalCommit.transition).toBe(true);
+    }
+    await stores.turns.commitTransition(input);
+  });
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns,
+    messages: stores.messages,
+    committedSuccessorReadiness: {
+      async waitForStorageReadiness() {
+        readinessWaits += 1;
+      },
+    },
+    agent: {
+      async run() {
+        modelCalls += 1;
+        return { route: "direct", content: "same in-memory answer" };
+      },
+    },
+  });
+  try {
+    expect(await runtime.runTurn(runCommand("guided-final-contention-turn")))
+      .toMatchObject({ kind: "delivered", content: "same in-memory answer" });
+    expect(modelCalls).toBe(1);
+    expect(finalCommitAttempts).toBe(2);
+    expect(readinessWaits).toBe(1);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn does not retry a non-contention final commit failure", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-final-invalid-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "guided-final-invalid",
+    storageProfile: "ephemeral",
+  });
+  let modelCalls = 0;
+  let finalCommitAttempts = 0;
+  let readinessWaits = 0;
+  const turns = overrideTransitionCommit(stores.turns, async (input) => {
+    if (input.transition.kind === "accept_guided_final") {
+      finalCommitAttempts += 1;
+      throw new Error("final transition invariant failed");
+    }
+    await stores.turns.commitTransition(input);
+  });
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns,
+    messages: stores.messages,
+    committedSuccessorReadiness: {
+      async waitForStorageReadiness() {
+        readinessWaits += 1;
+      },
+    },
+    agent: {
+      async run() {
+        modelCalls += 1;
+        return { route: "direct", content: "must not be recalled" };
+      },
+    },
+  });
+  try {
+    await expect(runtime.runTurn(runCommand("guided-final-invalid-turn")))
+      .rejects.toThrow("final transition invariant failed");
+    expect(modelCalls).toBe(1);
+    expect(finalCommitAttempts).toBe(1);
+    expect(readinessWaits).toBe(0);
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });
@@ -354,5 +456,18 @@ function runCommand(turnId: string): Extract<BtccRunCommand, { kind: "run" }> {
       optionalHotCacheRefs: [],
       baselineObservationScopeRefs: ["workspace:/tmp"],
     },
+  };
+}
+
+function overrideTransitionCommit(
+  turns: TurnStateRepository,
+  commitTransition: TurnStateRepository["commitTransition"],
+): TurnStateRepository {
+  return {
+    findTurn: (turnId) => turns.findTurn(turnId),
+    activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
+    acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
+    commitTransition,
+    stopTurn: (turnId) => turns.stopTurn(turnId),
   };
 }

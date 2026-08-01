@@ -140,6 +140,34 @@ test("completed assistant messages retain their own phase activity history", () 
   ]);
 });
 
+test("terminal freeze retains R3 activity when optional detail is omitted", () => {
+  const message: MessageRecord = {
+    id: "assistant-turn-r3",
+    turn_id: "turn-r3",
+    role: "assistant",
+    text: "요청한 결과를 전달했습니다.",
+    status: "delivered",
+  };
+  const frozen = freezeMessageWorkBlocksForRecord(message, {
+    turn_id: "turn-r3",
+    state: "delivered",
+    safe_progress_rows: [{
+      id: "reporting-r3",
+      kind: "message",
+      state: "delivered",
+      safe_label: "요청한 결과를 전달했습니다.",
+      semantic_block_id: "guided-activity:turn-r3:reporting",
+      activity_stage: "reporting",
+      work_decision_summary: "요청한 결과를 전달했습니다.",
+      work_decision_source: "model-authored",
+    }],
+  });
+
+  expect(frozen.turn_activity_rows?.map((row) => row.id)).toEqual([
+    "reporting-r3",
+  ]);
+});
+
 test("draft first send immediately opens an optimistic session shell", async () => {
   let releaseSession: () => void = () => undefined;
   let sendMessageBody: Record<string, unknown> | null = null;

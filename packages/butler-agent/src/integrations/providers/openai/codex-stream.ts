@@ -205,26 +205,43 @@ export async function readCodexSseResponse(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    if (!done && (!value || value.byteLength === 0)) {
-      await yieldToEventLoop();
-      continue;
-    }
-    buffer += decoder.decode(value, { stream: !done });
+  let assembled = false;
+  try {
     while (true) {
-      const boundary = nextSseFrameBoundary(buffer);
-      if (!boundary) break;
-      const frame = buffer.slice(0, boundary.index);
-      buffer = buffer.slice(boundary.index + boundary.length);
-      await consumeCodexSseFrame(accumulator, frame, onValidEvent);
+      const { value, done } = await reader.read();
+      if (!done && (!value || value.byteLength === 0)) {
+        await yieldToEventLoop();
+        continue;
+      }
+      buffer += decoder.decode(value, { stream: !done });
+      while (true) {
+        const boundary = nextSseFrameBoundary(buffer);
+        if (!boundary) break;
+        const frame = buffer.slice(0, boundary.index);
+        buffer = buffer.slice(boundary.index + boundary.length);
+        await consumeCodexSseFrame(accumulator, frame, onValidEvent);
+      }
+      if (done) break;
     }
-    if (done) break;
+    if (buffer.trim()) {
+      await consumeCodexSseFrame(accumulator, buffer, onValidEvent);
+    }
+    const result = codexSseResponseFromAccumulator(accumulator);
+    assembled = true;
+    return result;
+  } finally {
+    if (!assembled) await cancelReader(reader);
   }
-  if (buffer.trim()) {
-    await consumeCodexSseFrame(accumulator, buffer, onValidEvent);
+}
+
+async function cancelReader(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<void> {
+  try {
+    await reader.cancel();
+  } catch {
+    // Preserve the provider failure that made the stream incomplete.
   }
-  return codexSseResponseFromAccumulator(accumulator);
 }
 
 

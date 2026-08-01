@@ -78,6 +78,23 @@ function comparePair(
   const totalTokenRatio = ratio(r3?.totalTokens, r2?.totalTokens);
   const contextPreparationRatio = ratio(r3?.contextPreparationMs, r2?.contextPreparationMs);
   const firstMeaningfulRatio = ratio(r3?.firstMeaningfulMs, r2?.firstMeaningfulMs);
+  const qualityWinner = qualityDelta !== null && qualityDelta >= QUALITY_DIFFERENCE
+    ? "r3" as const
+    : qualityDelta !== null && qualityDelta <= -QUALITY_DIFFERENCE
+      ? "r2" as const
+      : null;
+  const qualityReason = qualityWinner === "r3"
+    ? "quality_improvement"
+    : qualityWinner === "r2" ? "quality_regression" : null;
+  const latencyWinner = r3?.latencyTargetPass === false &&
+      r2?.latencyTargetPass === true
+    ? "r2" as const
+    : r2?.latencyTargetPass === false && r3?.latencyTargetPass === true
+      ? "r3" as const
+      : null;
+  const latencyReason = latencyWinner === "r3"
+    ? "r2_latency_target_miss"
+    : latencyWinner === "r2" ? "r3_latency_target_miss" : null;
   const reasons: string[] = [];
   let winner: BenchmarkPairComparison["winner"] = "tie";
   if (
@@ -101,12 +118,16 @@ function comparePair(
   } else if (hardFailure(r2) && !hardFailure(r3)) {
     winner = "r3";
     reasons.push("r2_product_failure");
-  } else if (qualityDelta !== null && qualityDelta >= QUALITY_DIFFERENCE) {
-    winner = "r3";
-    reasons.push("quality_improvement");
-  } else if (qualityDelta !== null && qualityDelta <= -QUALITY_DIFFERENCE) {
-    winner = "r2";
-    reasons.push("quality_regression");
+  } else if (
+    qualityWinner && latencyWinner && qualityWinner !== latencyWinner &&
+    qualityReason && latencyReason
+  ) {
+    winner = "tie";
+    reasons.push(qualityReason, latencyReason);
+  } else if (qualityWinner || latencyWinner) {
+    winner = qualityWinner ?? latencyWinner ?? "tie";
+    if (qualityReason) reasons.push(qualityReason);
+    if (latencyReason) reasons.push(latencyReason);
   } else {
     const loopRegression = compareKnownCount(
       r3.noProgressTurns,

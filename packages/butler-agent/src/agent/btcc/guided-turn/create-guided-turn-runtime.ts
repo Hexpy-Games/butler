@@ -19,6 +19,7 @@ import {
   type TurnStateRepository,
 } from "../turn/index.ts";
 import { acquireStateExecution } from "../turn/acquire-state-execution.ts";
+import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 import type { GuidedTurnAgent, GuidedTurnResult } from "./contracts.ts";
 
 export type GuidedTurnRuntimeDependencies = {
@@ -94,7 +95,22 @@ class DefaultGuidedTurnRuntime implements BtccTurnRuntime {
       }
       permit.assertActive();
       const transition = guidedFinalTransition(turn, result);
-      await this.dependencies.turns.commitTransition({ turn, claim, transition });
+      while (true) {
+        try {
+          await this.dependencies.turns.commitTransition({ turn, claim, transition });
+          break;
+        } catch (error) {
+          if (
+            !isSqliteContention(error) ||
+            !this.dependencies.committedSuccessorReadiness
+          ) {
+            throw error;
+          }
+          await this.dependencies.committedSuccessorReadiness
+            .waitForStorageReadiness(permit.signal);
+          permit.assertActive();
+        }
+      }
       const committed = await this.dependencies.turns.activateCommittedSuccessor(turn.turnId);
       await this.publishDeliveryState(committed);
       return committed;

@@ -39,6 +39,8 @@ import { authorizedToolDefinitions, isReplaySafeTool } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
 import { upsertMcpServer } from
   "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
+import { ModelProviderRequestError } from
+  "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
 test("Guided agent leaves web query planning to the selected model", async () => {
   const fixture = createFixture("guided-model-owned-search");
@@ -1470,7 +1472,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
         rawArguments: JSON.stringify({ path: "settings.json" }),
         signal: options.signal,
       });
-      throw new Error("provider disconnected after usable text");
+      throw knownProviderFailure("provider disconnected after usable text");
     });
     expect(await fallbackAgent.run({
       turn: turnRecord(fixture.root),
@@ -1635,7 +1637,8 @@ test("Guided operational fallback is captured before the final report model call
         toolCall.status = "completed";
         toolCall.result = { marker: "mutated-during-report-model" };
       }
-      throw new Error(`provider failure ${calls}`);
+      if (calls === 1) throw knownProviderFailure("main provider failure");
+      throw new Error("final report provider failure");
     },
     options: {
       prompt: "현재까지 확인한 내용을 알려 주세요.",
@@ -1659,6 +1662,65 @@ test("Guided operational fallback is captured before the final report model call
   expect(answer).not.toContain("Tool read_file: completed");
   expect(answer).not.toContain("captured-before-report-model");
   expect(answer).not.toContain("mutated-during-report-model");
+});
+
+test("Guided empty main response still receives one fact-based report request", async () => {
+  let calls = 0;
+  let factLoads = 0;
+
+  const answer = await runGuidedPromptWithOperationalReport({
+    promptRunner: async () => {
+      calls += 1;
+      return calls === 1 ? "   " : "확인된 작업은 없으며 다시 요청할 수 있습니다.";
+    },
+    options: {
+      prompt: "빈 응답을 보고 가능한 실패로 처리해 주세요.",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "빈 응답을 보고 가능한 실패로 처리해 주세요.",
+    leaseMs: 1_000,
+    finalReportMs: 500,
+    loadFacts: async () => {
+      factLoads += 1;
+      return { work: null, toolCalls: [], effects: [] };
+    },
+  });
+
+  expect(answer).toBe("확인된 작업은 없으며 다시 요청할 수 있습니다.");
+  expect(calls).toBe(2);
+  expect(factLoads).toBe(1);
+});
+
+test("Guided unexpected local failure does not start an operational report request", async () => {
+  let calls = 0;
+  let factLoads = 0;
+
+  await expect(runGuidedPromptWithOperationalReport({
+    promptRunner: async () => {
+      calls += 1;
+      throw new Error("local prompt assembly invariant failed");
+    },
+    options: {
+      prompt: "로컬 오류는 위로 전달해 주세요.",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "로컬 오류는 위로 전달해 주세요.",
+    leaseMs: 1_000,
+    finalReportMs: 500,
+    loadFacts: async () => {
+      factLoads += 1;
+      return { work: null, toolCalls: [], effects: [] };
+    },
+  })).rejects.toThrow("local prompt assembly invariant failed");
+
+  expect(calls).toBe(1);
+  expect(factLoads).toBe(0);
 });
 
 test("Guided parent cancellation does not deliver an operational fallback", async () => {
@@ -1790,7 +1852,7 @@ test("Guided fallback does not wait past the lease for a late fact snapshot", as
   const answer = await runGuidedPromptWithOperationalReport({
     promptRunner: async () => {
       calls += 1;
-      throw new Error("provider unavailable");
+      throw knownProviderFailure("provider unavailable");
     },
     options: {
       prompt: "늦은 사실 조회를 기다리지 마세요.",
@@ -2008,6 +2070,16 @@ function turnRecord(
     revision: 0,
     executionFence: 0,
   };
+}
+
+function knownProviderFailure(message: string): ModelProviderRequestError {
+  return new ModelProviderRequestError({
+    code: "provider_api_error",
+    message,
+    provider: "test-provider",
+    api: "test-api",
+    retryable: true,
+  });
 }
 
 function localRunCommand(

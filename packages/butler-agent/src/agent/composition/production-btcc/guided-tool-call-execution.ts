@@ -6,7 +6,6 @@ import type {
 } from "../../btcc/durable-work/index.ts";
 import type { TurnRecord } from "../../btcc/turn/index.ts";
 import type {
-  GuidedToolJournalRecord,
   SqliteGuidedToolJournal,
 } from "../../adapters/index.ts";
 import type {
@@ -38,11 +37,18 @@ import {
   toolResultSucceeded,
   unauthorizedToolResult,
 } from "./guided-tool-progress.ts";
+import {
+  createGuidedActivityProjection,
+  type GuidedActivityBinding,
+  type GuidedActivityProjection,
+} from "./guided-activity-projection.ts";
+import { createGuidedToolResumePool } from "./guided-tool-resume-pool.ts";
 
 type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
   signal: AbortSignal;
   progress?: BtccTurnProgressObserver;
+  activity?: GuidedActivityProjection;
   workScope: WorkTurnScope;
   presentedWorkId?: string;
   authorizedNames: ReadonlySet<string>;
@@ -61,6 +67,10 @@ export function createGuidedToolCallExecutor(
 } {
   let callIndex = 0;
   const usedTools: string[] = [];
+  const activityProjection = input.activity ?? createGuidedActivityProjection({
+    turnId: input.turn.turnId,
+    progress: input.progress,
+  });
   const resumePool = createGuidedToolResumePool(
     input.toolJournal.list(input.turn.turnId),
   );
@@ -86,12 +96,17 @@ export function createGuidedToolCallExecutor(
       ) ?? computedCallId;
     }
     usedTools.push(effectiveToolName);
+    const activity = await activityProjection.observeTool({
+      name: call.name,
+      effectiveToolName,
+      args: call.args,
+    });
 
     if (
       !input.visibleNames.has(call.name) ||
       !input.authorizedNames.has(call.name)
     ) {
-      return denyUnauthorizedTool(input, callId, effectiveToolName, call);
+      return denyUnauthorizedTool(input, callId, effectiveToolName, call, activity);
     }
 
     const recorded = input.toolJournal.find(callId);
@@ -106,12 +121,25 @@ export function createGuidedToolCallExecutor(
       );
       await publishOperation(input.progress, {
         turnId: input.turn.turnId,
+        activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
         status: "started",
       });
+      if (
+        call.name === "record_work_checkpoint" &&
+        toolResultSucceeded(recorded.result)
+      ) {
+        await publishWorkCheckpoint(
+          input.progress,
+          input.turn.turnId,
+          input.durableWork,
+          activity.activityId,
+        );
+      }
       await publishOperation(input.progress, {
         turnId: input.turn.turnId,
+        activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
         status: toolResultSucceeded(recorded.result) ? "completed" : "failed",
@@ -122,6 +150,7 @@ export function createGuidedToolCallExecutor(
     if (recorded?.status === "failed" || recorded?.status === "cancelled") {
       await publishOperation(input.progress, {
         turnId: input.turn.turnId,
+        activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
         status: recorded.status === "cancelled" ? "cancelled" : "failed",
@@ -131,6 +160,7 @@ export function createGuidedToolCallExecutor(
     if (recorded?.status === "started" && !isReplaySafeTool(effectiveToolName)) {
       await publishOperation(input.progress, {
         turnId: input.turn.turnId,
+        activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
         status: "failed",
@@ -145,19 +175,23 @@ export function createGuidedToolCallExecutor(
       rawArguments: call.rawArguments,
       arguments: call.args,
     });
-    await publishOperation(input.progress, {
-      turnId: input.turn.turnId,
-      requestId: callId,
-      toolName: effectiveToolName,
-      status: "started",
-    });
-    if (!isDurableWorkTool(call.name) && input.presentedWorkId) {
+    if (
+      !isDurableWorkTool(call.name) && input.presentedWorkId &&
       await bindPresentedWorkForToolDispatch(
         input,
         input.workScope,
         input.presentedWorkId,
-      );
+      )
+    ) {
+      await activityProjection.markManaged(activity);
     }
+    await publishOperation(input.progress, {
+      turnId: input.turn.turnId,
+      activityId: activity.activityId,
+      requestId: callId,
+      toolName: effectiveToolName,
+      status: "started",
+    });
 
     try {
       const result = await executeFreshTool(input, call, callId, toolSignal);
@@ -176,10 +210,12 @@ export function createGuidedToolCallExecutor(
           input.progress,
           input.turn.turnId,
           input.durableWork,
+          activity.activityId,
         );
       }
       await publishOperation(input.progress, {
         turnId: input.turn.turnId,
+        activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
         status: toolResultSucceeded(result) ? "completed" : "failed",
@@ -194,54 +230,11 @@ export function createGuidedToolCallExecutor(
         effectiveToolName,
         toolSignal,
         error,
+        activity,
       );
     }
   };
   return { executeTool, usedTools };
-}
-
-type GuidedToolResumePool = {
-  claim(toolName: string, args: Record<string, unknown>): string | undefined;
-  discard(callId: string): void;
-};
-
-function createGuidedToolResumePool(
-  records: readonly GuidedToolJournalRecord[],
-): GuidedToolResumePool {
-  const availableCallIds = new Set(records.map((record) => record.callId));
-  const callsBySignature = new Map<string, string[]>();
-  for (const record of records) {
-    const signature = guidedToolResumeSignature(
-      record.toolName,
-      record.arguments,
-    );
-    const calls = callsBySignature.get(signature) ?? [];
-    calls.push(record.callId);
-    callsBySignature.set(signature, calls);
-  }
-  return {
-    claim(toolName, args) {
-      const calls = callsBySignature.get(
-        guidedToolResumeSignature(toolName, args),
-      );
-      while (calls?.length) {
-        const callId = calls.shift()!;
-        if (!availableCallIds.delete(callId)) continue;
-        return callId;
-      }
-      return undefined;
-    },
-    discard(callId) {
-      availableCallIds.delete(callId);
-    },
-  };
-}
-
-function guidedToolResumeSignature(
-  toolName: string,
-  args: Record<string, unknown>,
-): string {
-  return stableJson([toolName, args]);
 }
 
 async function denyUnauthorizedTool(
@@ -249,6 +242,7 @@ async function denyUnauthorizedTool(
   callId: string,
   effectiveToolName: string,
   call: Parameters<ButlerToolExecutor>[0],
+  activity: GuidedActivityBinding,
 ): Promise<unknown> {
   const denied = unauthorizedToolResult(effectiveToolName);
   const recorded = input.toolJournal.find(callId);
@@ -265,6 +259,7 @@ async function denyUnauthorizedTool(
   const result = recorded?.result ?? denied;
   await publishOperation(input.progress, {
     turnId: input.turn.turnId,
+    activityId: activity.activityId,
     requestId: callId,
     toolName: effectiveToolName,
     status: "failed",
@@ -305,6 +300,7 @@ async function finishFailedTool(
   effectiveToolName: string,
   toolSignal: AbortSignal,
   error: unknown,
+  activity: GuidedActivityBinding,
 ): Promise<unknown> {
   const cancelled = input.signal.aborted || toolSignal.aborted;
   if (!cancelled) {
@@ -315,6 +311,7 @@ async function finishFailedTool(
     }
     await publishOperation(input.progress, {
       turnId: input.turn.turnId,
+      activityId: activity.activityId,
       requestId: callId,
       toolName: effectiveToolName,
       status: "failed",
@@ -329,6 +326,7 @@ async function finishFailedTool(
   });
   await publishOperation(input.progress, {
     turnId: input.turn.turnId,
+    activityId: activity.activityId,
     requestId: callId,
     toolName: effectiveToolName,
     status: "cancelled",

@@ -313,10 +313,17 @@ test("a presented open Work binds only at the first real tool and exposes its re
     ));
 
     let directPrompt = "";
+    const directActivities: Array<{ displayStage?: string }> = [];
     const directRuntime = createRuntime({
       root,
       dbPath,
       stores: firstStores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          directActivities.push(update);
+        },
+      },
       promptRunner: async (options) => {
         directPrompt = options.prompt;
         return "별개의 간단한 질문에는 바로 답합니다.";
@@ -329,11 +336,19 @@ test("a presented open Work binds only at the first real tool and exposes its re
     ))).toMatchObject({ kind: "delivered" });
     expect(directPrompt).toContain("## Current Work");
     expect(await firstStores.durableWork.boundWorkForTurn(directTurnId)).toBeNull();
+    expect(directActivities).toEqual([]);
 
+    const toolActivities: Array<{ displayStage?: string }> = [];
     const interruptedRuntime = createRuntime({
       root,
       dbPath,
       stores: firstStores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          toolActivities.push(update);
+        },
+      },
       promptRunner: async (options) => {
         expect(await call(options, "read_file", { path: "source.txt" }))
           .toMatchObject({ content: "durable observed fact\n" });
@@ -353,6 +368,8 @@ test("a presented open Work binds only at the first real tool and exposes its re
         originTurnId: toolTurnId,
       }],
     });
+    expect(toolActivities.map(({ displayStage }) => displayStage))
+      .toEqual(["execution"]);
   } finally {
     firstStores.close();
   }
@@ -365,10 +382,17 @@ test("a presented open Work binds only at the first real tool and exposes its re
   try {
     const nextTurnId = "late-bind-next";
     let nextPrompt = "";
+    const nextActivities: Array<{ displayStage?: string }> = [];
     const resumedRuntime = createRuntime({
       root,
       dbPath,
       stores: resumedStores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          nextActivities.push(update);
+        },
+      },
       promptRunner: async (options) => {
         nextPrompt = options.prompt;
         return "이전 도구 결과를 확인했습니다.";
@@ -382,6 +406,7 @@ test("a presented open Work binds only at the first real tool and exposes its re
     expect(nextPrompt).toContain("Result (read_file, completed)");
     expect(nextPrompt).toContain("durable observed fact");
     expect(await resumedStores.durableWork.boundWorkForTurn(nextTurnId)).toBeNull();
+    expect(nextActivities).toEqual([]);
     expect((await resumedStores.durableWork.loadContext({
       turnId: nextTurnId,
       sessionId: "durable-work-session",
@@ -512,6 +537,244 @@ test("the production R3 agent imports and continues open R2 Session Work", async
   }
 });
 
+test("R3 projects the existing Plan, tool, Review, and final events without another model call", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-activity-projection-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "activity-projection",
+    storageProfile: "ephemeral",
+  });
+  const activities: Array<{
+    activityId: string;
+    displayStage?: string;
+    summary: string;
+  }> = [];
+  const operations: Array<{ activityId: string; status: string }> = [];
+  let modelCalls = 0;
+  writeFileSync(join(root, "source.txt"), "observed result\n");
+  try {
+    const runtime = createRuntime({
+      root,
+      dbPath,
+      stores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          activities.push(update);
+        },
+        operationChanged(update) {
+          operations.push(update);
+        },
+      },
+      promptRunner: async (options) => {
+        modelCalls += 1;
+        const planArgs = {
+          objective: "Read and report the requested source",
+          actions: [{
+            action_key: "read_source",
+            description: "Read source.txt",
+            dependency_keys: [],
+          }],
+          checks: ["The final answer uses the observed file content"],
+        };
+        options.onAssistantTextBeforeTools?.({
+          text: "먼저 요청에 맞는 작업 계획을 세웁니다.",
+          toolCalls: [{ name: "replace_work_plan", args: planArgs }],
+        });
+        expect(await call(options, "replace_work_plan", planArgs)).toMatchObject({
+          ok: true,
+        });
+
+        const planReviewArgs = {
+          subject: "plan",
+          verdict: "accept",
+          summary: "The plan directly reads the requested source before reporting.",
+          corrections: [],
+        };
+        options.onAssistantTextBeforeTools?.({
+          text: "계획이 요청을 직접 충족하는지 확인합니다.",
+          toolCalls: [{ name: "record_work_review", args: planReviewArgs }],
+        });
+        expect(await call(options, "record_work_review", planReviewArgs)).toMatchObject({
+          ok: true,
+        });
+
+        options.onAssistantTextBeforeTools?.({
+          text: "계획에 따라 실제 파일 내용을 확인합니다.",
+          toolCalls: [{ name: "read_file", args: { path: "source.txt" } }],
+        });
+        expect(await call(options, "read_file", { path: "source.txt" }))
+          .toMatchObject({ content: "observed result\n" });
+
+        const reviewArgs = {
+          subject: "result",
+          verdict: "accept",
+          summary: "The requested source was read and is ready to report.",
+          corrections: [],
+        };
+        options.onAssistantTextBeforeTools?.({
+          text: "실제 결과를 원래 요청과 대조해 검토합니다.",
+          toolCalls: [{ name: "record_work_review", args: reviewArgs }],
+        });
+        expect(await call(options, "record_work_review", reviewArgs)).toMatchObject({
+          ok: true,
+        });
+        return "source.txt의 실제 내용은 observed result입니다.";
+      },
+    });
+
+    expect(await runtime.runTurn(command(
+      root,
+      "activity-projection-turn",
+      "source.txt를 읽고 결과를 알려 주세요.",
+    ))).toMatchObject({
+      kind: "delivered",
+      content: "source.txt의 실제 내용은 observed result입니다.",
+    });
+    expect(modelCalls).toBe(1);
+    expect(activities.map(({ displayStage }) => displayStage)).toEqual([
+      "planning",
+      "review",
+      "execution",
+      "review",
+      "reporting",
+    ]);
+    const operationActivityIds = new Set(operations.map(({ activityId }) => activityId));
+    expect([...operationActivityIds]).toEqual(
+      activities.slice(0, 4).map(({ activityId }) => activityId),
+    );
+    expect(operations.map(({ status }) => status)).toEqual([
+      "started", "completed",
+      "started", "completed",
+      "started", "completed",
+      "started", "completed",
+    ]);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("R3 activity projection failure cannot veto its tool result or final delivery", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-activity-nonauthority-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "activity-nonauthority",
+    storageProfile: "ephemeral",
+  });
+  let modelCalls = 0;
+  try {
+    const runtime = createRuntime({
+      root,
+      dbPath,
+      stores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged() {
+          throw new Error("simulated activity projection failure");
+        },
+      },
+      promptRunner: async (options) => {
+        modelCalls += 1;
+        const planArgs = {
+          objective: "Preserve the requested result despite a UI projection failure",
+          actions: [{
+            action_key: "report_result",
+            description: "Return the requested result",
+            dependency_keys: [],
+          }],
+          checks: ["The final answer is delivered unchanged"],
+        };
+        options.onAssistantTextBeforeTools?.({
+          text: "요청을 처리할 계획을 세웁니다.",
+          toolCalls: [{ name: "replace_work_plan", args: planArgs }],
+        });
+        expect(await call(options, "replace_work_plan", planArgs)).toMatchObject({
+          ok: true,
+          work: { status: "open" },
+        });
+        return "활동 표시 실패와 무관하게 최종 답변을 전달합니다.";
+      },
+    });
+
+    expect(await runtime.runTurn(command(
+      root,
+      "activity-nonauthority-turn",
+      "작업 계획을 세우고 결과를 알려 주세요.",
+      "activity-nonauthority-session",
+    ))).toMatchObject({
+      kind: "delivered",
+      content: "활동 표시 실패와 무관하게 최종 답변을 전달합니다.",
+    });
+    expect(modelCalls).toBe(1);
+    expect(await stores.durableWork.boundWorkForTurn("activity-nonauthority-turn"))
+      .toMatchObject({ status: "open" });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("R3 keeps Direct and single read-only Turns free of staged Work activity", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-uncluttered-activity-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "uncluttered-activity",
+    storageProfile: "ephemeral",
+  });
+  const activities: string[] = [];
+  let modelCalls = 0;
+  writeFileSync(join(root, "weather.txt"), "sunny\n");
+  try {
+    const runtime = createRuntime({
+      root,
+      dbPath,
+      stores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          activities.push(update.summary);
+        },
+      },
+      promptRunner: async (options) => {
+        modelCalls += 1;
+        if (options.prompt.includes("인사해 주세요")) return "안녕하세요!";
+        options.onAssistantTextBeforeTools?.({
+          text: "저장된 날씨 한 줄을 확인합니다.",
+          toolCalls: [{ name: "read_file", args: { path: "weather.txt" } }],
+        });
+        expect(await call(options, "read_file", { path: "weather.txt" }))
+          .toMatchObject({ content: "sunny\n" });
+        return "저장된 날씨는 sunny입니다.";
+      },
+    });
+
+    expect(await runtime.runTurn(command(
+      root,
+      "uncluttered-direct-turn",
+      "인사해 주세요.",
+      "uncluttered-direct-session",
+    ))).toMatchObject({ kind: "delivered", content: "안녕하세요!" });
+    expect(await runtime.runTurn(command(
+      root,
+      "uncluttered-simple-turn",
+      "weather.txt의 한 줄을 알려 주세요.",
+      "uncluttered-simple-session",
+    ))).toMatchObject({
+      kind: "delivered",
+      content: "저장된 날씨는 sunny입니다.",
+    });
+    expect(modelCalls).toBe(2);
+    expect(activities).toEqual([]);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 function createRuntime(input: {
   root: string;
   dbPath: string;
@@ -594,7 +857,9 @@ function checkpointProgress(summaries: string[]): BtccTurnProgressObserver {
   return {
     stateChanged() {},
     phaseActivityChanged(update) {
-      summaries.push(update.summary);
+      if (update.displayStage === "review" && update.title === update.summary) {
+        summaries.push(update.summary);
+      }
     },
   };
 }

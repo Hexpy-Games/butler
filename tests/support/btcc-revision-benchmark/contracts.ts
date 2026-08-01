@@ -11,7 +11,10 @@ export interface BenchmarkPromptCase {
   promptTemplate: string;
   requiredOutcomes: string[];
   expectedLedgerRoute: BenchmarkLedgerRoute;
-  timeoutMs: number;
+  latencyTargetMs: number;
+  hardStopMs: number;
+  /** Read-only compatibility for plans captured before latency and hard stop split. */
+  timeoutMs?: number;
 }
 
 export interface MaterializedBenchmarkPrompt extends Omit<BenchmarkPromptCase, "promptTemplate"> {
@@ -61,6 +64,10 @@ export interface RawBenchmarkObservation {
   turnId: string;
   terminalState: BenchmarkTerminalState;
   finalText: string;
+  text?: {
+    finalCharacters: number;
+    streamedCharacters: number | null;
+  };
   providerReportedModel: string | null;
   quality: {
     intentScore: number | null;
@@ -75,6 +82,8 @@ export interface RawBenchmarkObservation {
     outputTokens: number | null;
     totalTokens: number | null;
     serializedContextBytes: number | null;
+    toolProviderRequests?: number | null;
+    toolProviderElapsedMs?: number | null;
   };
   timing: {
     submittedAtMs: number | null;
@@ -86,6 +95,9 @@ export interface RawBenchmarkObservation {
     finalVisibleAtMs: number | null;
     terminalAtMs: number | null;
     maxSilentGapMs: number | null;
+    latencyTargetMs?: number | null;
+    hardStopMs?: number | null;
+    latencyTargetMet?: boolean | null;
   };
   ux: {
     progressMessages: string[];
@@ -101,6 +113,14 @@ export interface RawBenchmarkObservation {
     failedCalls: number | null;
     recoveredErrors: number | null;
     recoveryTimeMs: number | null;
+    observations?: Array<{
+      callId: string;
+      toolName: string | null;
+      status: "started" | "completed" | "failed";
+      startedAtMs: number | null;
+      endedAtMs: number | null;
+      elapsedMs: number | null;
+    }>;
   };
   durability: {
     finalMessagesBeforeReload: number | null;
@@ -227,6 +247,7 @@ export interface ObservationMetrics {
   firstMeaningfulMs: number | null;
   finalVisibleMs: number | null;
   productWallMs: number | null;
+  latencyTargetPass: boolean | null;
   maxSilentGapMs: number | null;
   unrecoveredToolErrors: number | null;
   durabilityPass: boolean | null;

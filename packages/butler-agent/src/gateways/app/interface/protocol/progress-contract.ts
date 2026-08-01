@@ -48,6 +48,7 @@ export interface ProgressSummaryRow {
   work_contract_id?: string;
   work_stream_id?: string;
   semantic_block_id?: string;
+  activity_stage?: string;
   work_block_id?: string;
   work_block_label?: string;
   work_block_phase?: "started" | "updated" | "completed";

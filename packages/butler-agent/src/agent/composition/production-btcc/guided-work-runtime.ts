@@ -77,13 +77,14 @@ export async function bindPresentedWorkForToolDispatch(
   input: GuidedWorkRuntimeInput,
   scope: WorkTurnScope,
   presentedWorkId: string,
-): Promise<void> {
+): Promise<boolean> {
   const current = await safeBoundWork(input.durableWork, scope.turnId);
-  if (current && current.workId !== presentedWorkId) return;
+  if (current && current.workId !== presentedWorkId) return false;
   const bound = current ??
     await safeBindOpenWork(input.durableWork, scope, presentedWorkId);
-  if (bound?.workId !== presentedWorkId) return;
+  if (bound?.workId !== presentedWorkId) return false;
   await backfillTurnToolResults(input, scope);
+  return true;
 }
 
 export async function safeAttachToolResult(
@@ -117,6 +118,7 @@ export async function publishWorkCheckpoint(
   progress: BtccTurnProgressObserver | undefined,
   turnId: string,
   service: DurableWorkService,
+  activityId?: string,
 ): Promise<void> {
   const work = await safeBoundWork(service, turnId);
   const checkpoint = work?.latestCheckpoint;
@@ -125,10 +127,10 @@ export async function publishWorkCheckpoint(
     await progress.phaseActivityChanged({
       turnId,
       semanticState: "admitted",
-      activityId: `durable-work:${work.workId}`,
+      activityId: activityId ?? `durable-work:${work.workId}`,
+      displayStage: checkpoint.stage,
       title: checkpoint.publicSummary,
       summary: checkpoint.publicSummary,
-      rationale: "",
       nextStep: checkpoint.nextStep,
     });
   } catch {

@@ -137,7 +137,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     expect(capturedAcceptEncoding).toBe("identity");
     expect(proxy.observations()).toEqual([{
       ordinal: 1,
-      requestKind: "main",
+      requestKind: "agent",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
       firstContentBearingDeltaAtMs: 200,
@@ -148,9 +148,52 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       hasTextContent: true,
       hasToolArgumentContent: true,
       hasReasoningContent: true,
+      streamedTextChars: 5,
+      finalTextChars: 0,
     }]);
   } finally {
     releaseUpstream?.();
+    await proxy.close();
+    await upstream.close();
+  }
+});
+
+test("provider observation proxy separates provider-hosted tool calls from agent rounds", async () => {
+  const upstream = await listen(async (request, response) => {
+    await bodyOf(request);
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end([
+      'data: {"type":"response.output_text.delta","delta":"검색"}',
+      "",
+      'data: {"type":"response.output_text.done","text":"검색 결과"}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n"));
+  });
+  const proxy = await startProviderObservationProxy({
+    upstreamBaseUrl: upstream.baseUrl,
+  });
+
+  try {
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-test",
+        input: "private query",
+        tools: [{ type: "web_search" }],
+      }),
+    });
+    await response.text();
+    await waitFor(() => proxy.observations()[0]?.completedAtMs !== null);
+    expect(proxy.observations()[0]).toMatchObject({
+      requestKind: "tool_provider",
+      streamedTextChars: 2,
+      finalTextChars: 5,
+      hasTextContent: true,
+    });
+  } finally {
     await proxy.close();
     await upstream.close();
   }
@@ -269,7 +312,7 @@ test("non-streaming provider failures keep safe failed terminal evidence", async
     await waitFor(() => proxy.observations()[0]?.termination !== null);
     const providerRequests = proxy.observations();
     expect(providerRequests[0]).toMatchObject({
-      requestKind: "main",
+      requestKind: "agent",
       firstContentBearingDeltaAtMs: null,
       completedAtMs: null,
       termination: "failed",

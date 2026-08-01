@@ -13,6 +13,15 @@ export interface TurnEvent {
   toolCallId: string | null;
 }
 
+export interface ToolObservation {
+  callId: string;
+  toolName: string | null;
+  status: "started" | "completed" | "failed";
+  startedAtMs: number | null;
+  endedAtMs: number | null;
+  elapsedMs: number | null;
+}
+
 export interface UsageSummary {
   cachedPromptTokens: number | null;
   model: string | null;
@@ -25,11 +34,13 @@ export interface UsageSummary {
 export function readProductUsage(
   dataRoot: string,
   target: BenchmarkTarget,
+  terminalAtMs: number | null = null,
 ): UsageSummary {
   const path = join(dataRoot, "metrics", "prompt-cache-usage.jsonl");
   if (!existsSync(path)) return emptyUsage();
   const entries = readJsonLines(path).filter((entry) =>
-    !String(entry.scope ?? "").includes("title-provider"),
+    !String(entry.scope ?? "").includes("title-provider") &&
+    metricRecordedByTerminal(entry, terminalAtMs),
   );
   if (entries.length === 0) return emptyUsage();
   const promptTokens = sumNullable(entries, "promptTokens");
@@ -46,6 +57,21 @@ export function readProductUsage(
       : Math.max(0, totalTokens - promptTokens),
     totalTokens,
   };
+}
+
+function metricRecordedByTerminal(
+  entry: Record<string, unknown>,
+  terminalAtMs: number | null,
+): boolean {
+  if (terminalAtMs === null) return true;
+  const numeric = entry.ts;
+  if (typeof numeric === "number" && Number.isFinite(numeric)) {
+    return numeric <= terminalAtMs;
+  }
+  const timestamp = typeof entry.timestamp === "string"
+    ? Date.parse(entry.timestamp)
+    : Number.NaN;
+  return Number.isFinite(timestamp) && timestamp <= terminalAtMs;
 }
 
 export function readTurnEvents(dataRoot: string, turnId: string): TurnEvent[] {
@@ -82,6 +108,7 @@ export function summarizeTools(
   failedCalls: number;
   recoveredErrors: number;
   recoveryTimeMs: number;
+  observations: ToolObservation[];
 } {
   const started = new Set(
     events.filter((event) => event.kind === "tool.started")
@@ -97,7 +124,67 @@ export function summarizeTools(
     recoveryTimeMs: firstFailure === undefined || !delivered
       ? 0
       : Math.max(0, terminalAtMs - firstFailure),
+    observations: toolObservations(events),
   };
+}
+
+function toolObservations(events: TurnEvent[]): ToolObservation[] {
+  const observations: ToolObservation[] = [];
+  const openByCallId = new Map<string, number>();
+  for (const event of events) {
+    if (
+      event.kind !== "tool.started" && event.kind !== "tool.completed" &&
+      event.kind !== "tool.failed"
+    ) continue;
+    const callId = safeToolField(event.toolCallId);
+    if (!callId) continue;
+    const toolName = safeToolField(event.payload.toolName) ??
+      safeToolField(event.payload.safeToolName);
+    if (event.kind === "tool.started") {
+      const index = observations.push({
+        callId,
+        toolName,
+        status: "started",
+        startedAtMs: event.atMs,
+        endedAtMs: null,
+        elapsedMs: null,
+      }) - 1;
+      openByCallId.set(callId, index);
+      continue;
+    }
+    const index = openByCallId.get(callId);
+    openByCallId.delete(callId);
+    if (index === undefined) {
+      observations.push({
+        callId,
+        toolName,
+        status: event.kind === "tool.completed" ? "completed" : "failed",
+        startedAtMs: null,
+        endedAtMs: event.atMs,
+        elapsedMs: null,
+      });
+      continue;
+    }
+    const observation = observations[index]!;
+    observation.toolName ??= toolName;
+    observation.status = event.kind === "tool.completed" ? "completed" : "failed";
+    observation.endedAtMs = event.atMs;
+    observation.elapsedMs = Math.max(0, event.atMs - observation.startedAtMs!);
+  }
+  return observations;
+}
+
+function safeToolField(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const compact = [...value].map((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127 ? " " : character;
+  }).join("")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return compact && /^[\p{L}\p{N}_.:/-]+$/u.test(compact)
+    ? [...compact].slice(0, 160).join("")
+    : null;
 }
 
 export function eventTime(events: TurnEvent[], kind: string): number | null {

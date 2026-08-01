@@ -73,3 +73,43 @@ test("initial and reloaded terminal messages retain canonical Work progress", ()
   expect(turnProgress["turn-1"]?.safe_progress_rows).toEqual(progressRows);
   db.close();
 });
+
+test("reloaded terminal messages retain R3 activity with optional detail omitted", () => {
+  const activity = {
+    id: "reporting-activity",
+    kind: "message",
+    state: "delivered",
+    safe_label: "요청한 결과를 전달했습니다.",
+    semantic_block_id: "guided-activity:turn-r3:reporting",
+    activity_stage: "reporting",
+    work_decision_summary: "요청한 결과를 전달했습니다.",
+    work_decision_source: "model-authored",
+    created_at: "2026-08-02T00:00:01.000Z",
+  };
+  const message = {
+    id: "assistant-r3",
+    chat_id: "chat-r3",
+    turn_id: "turn-r3",
+    role: "assistant",
+    text: "요청한 결과를 전달했습니다.",
+    status: "delivered",
+    retryable: false,
+    cursor: 2,
+    created_at: "2026-08-02T00:00:00.000Z",
+    updated_at: "2026-08-02T00:00:01.000Z",
+  };
+  const store = new AppSessionMessageProjectionStore({
+    listMessages: () => [message] as never,
+    getTurnRow: () => ({ state: "delivered" }) as never,
+    listProgressRowsForTurn: () => [activity] as never,
+    explicitDeliveryMetadataForTurn: () => null,
+  });
+
+  const completed = store.messageWithTerminalWorkBlocks(message as never, "turn-r3");
+  const first = store.sessionViewMessages("chat-r3");
+  const reloaded = store.sessionViewMessages("chat-r3");
+
+  expect(completed.turn_activity_rows).toEqual([activity]);
+  expect(first[0]?.turn_activity_rows).toEqual([activity]);
+  expect(reloaded).toEqual(first);
+});

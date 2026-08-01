@@ -58,17 +58,38 @@ export function collectRawProductObservation(
   const appDb = openBenchmarkAppDatabase(dataRoot);
   const turnId = stringValue(step.turnId) ?? latestTurnId(appDb);
   const finalText = stringValue(step.finalText) ?? finalTextForTurn(appDb, turnId);
+  const timing = record(step.timing);
+  const submittedAtMs = numberValue(timing.submittedAtMs) ?? turnCreatedAt(appDb, turnId);
+  const events = readTurnEvents(dataRoot, turnId);
+  const terminalAtMs = numberValue(timing.terminalAtMs) ??
+    eventTime(events, "turn.completed") ??
+    eventTime(events, "turn.failed") ??
+    eventTime(events, "turn.cancelled") ??
+    Date.now();
+  const latencyTargetMs = benchmarkLatencyTargetMs(input.prompt);
+  const hardStopMs = benchmarkHardStopMs(input.prompt);
   const terminalState = input.timedOut
     ? "timed_out"
     : normalizeTerminalState(stringValue(step.terminalState));
-  const timing = record(step.timing);
-  const submittedAtMs = numberValue(timing.submittedAtMs) ?? turnCreatedAt(appDb, turnId);
-  const terminalAtMs = numberValue(timing.terminalAtMs) ?? Date.now();
-  const events = readTurnEvents(dataRoot, turnId);
-  const usage = readProductUsage(dataRoot, input.target);
-  const providerRequests = readProviderRequests(input.evidence.providerRequests)
-    .filter((request) => request.requestKind === "main");
-  const firstProviderRequest = providerRequests[0] ?? null;
+  const usage = readProductUsage(dataRoot, input.target, terminalAtMs);
+  const allProviderRequests = readProviderRequests(input.evidence.providerRequests)
+    .filter((request) => request.requestStartedAtMs <= terminalAtMs);
+  const providerRequests = allProviderRequests.filter((request) =>
+    request.requestKind === "agent",
+  );
+  const toolProviderRequests = allProviderRequests.filter((request) =>
+    request.requestKind === "tool_provider",
+  );
+  const legacyProviderRequests = allProviderRequests.filter((request) =>
+    request.requestKind === "legacy_main",
+  );
+  const hasLegacyProviderRequests = legacyProviderRequests.length > 0;
+  const hasTypedProviderEvidence = allProviderRequests.some((request) =>
+    request.requestKind !== "legacy_main",
+  );
+  const firstProviderRequest = [...providerRequests, ...legacyProviderRequests]
+    .sort((left, right) => left.requestStartedAtMs - right.requestStartedAtMs)[0] ??
+    null;
   const firstProviderDeltaAtMs = providerRequests
     .map((request) => request.firstContentBearingDeltaAtMs)
     .find((value): value is number => value !== null) ?? null;
@@ -112,6 +133,8 @@ export function collectRawProductObservation(
     .filter((artifact) => artifact.exists)
     .map((artifact) => artifact.path);
   const delivered = terminalState === "delivered";
+  const productWallMs = durationMs(submittedAtMs, terminalAtMs);
+  const providerEvidencePresent = allProviderRequests.length > 0;
   return {
     schema: BTCC_REVISION_BENCHMARK_SCHEMA,
     kind: "raw_product_observation",
@@ -123,27 +146,54 @@ export function collectRawProductObservation(
     turnId,
     terminalState,
     finalText,
+    text: {
+      finalCharacters: characterCount(finalText),
+      streamedCharacters: hasLegacyProviderRequests
+        ? null
+        : providerRequests.at(-1)?.streamedTextChars ?? null,
+    },
     providerReportedModel: usage.model,
     quality: {
       intentScore: null,
-      resultScore: input.timedOut ? 1 : null,
+      resultScore: null,
       requiredOutcomes: Object.fromEntries(input.prompt.requiredOutcomes.map((outcome) => [
         outcome,
-        input.timedOut ? false : null,
+        null,
       ])),
-      assessmentNote: input.timedOut ? "Product exceeded the tier deadline." : null,
+      assessmentNote: null,
     },
     usage: {
-      modelRequests: providerRequests.length > 0
-        ? providerRequests.length
-        : usage.modelRequests,
+      modelRequests: hasLegacyProviderRequests
+        ? usage.modelRequests
+        : providerRequests.length > 0 || hasTypedProviderEvidence
+          ? providerRequests.length
+          : usage.modelRequests,
       promptTokens: usage.promptTokens,
       cachedPromptTokens: usage.cachedPromptTokens,
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
-      serializedContextBytes: providerRequests.length > 0
+      serializedContextBytes: hasLegacyProviderRequests
+        ? null
+        : providerRequests.length > 0
         ? providerRequests.reduce(
           (total, request) => total + request.serializedRequestBytes,
+          0,
+        )
+        : null,
+      toolProviderRequests: hasLegacyProviderRequests
+        ? null
+        : providerEvidencePresent
+        ? toolProviderRequests.length
+        : null,
+      toolProviderElapsedMs: hasLegacyProviderRequests
+        ? null
+        : providerEvidencePresent
+        ? toolProviderRequests.reduce(
+          (total, request) => total +
+            (durationMs(
+              request.requestStartedAtMs,
+              request.terminatedAtMs ?? request.completedAtMs,
+            ) ?? 0),
           0,
         )
         : null,
@@ -160,6 +210,11 @@ export function collectRawProductObservation(
       finalVisibleAtMs: delivered ? terminalAtMs : null,
       terminalAtMs,
       maxSilentGapMs: maxSilentGap(events, submittedAtMs, terminalAtMs),
+      latencyTargetMs,
+      hardStopMs,
+      latencyTargetMet: productWallMs === null
+        ? null
+        : delivered && productWallMs <= latencyTargetMs,
     },
     ux: {
       progressMessages,
@@ -178,6 +233,7 @@ export function collectRawProductObservation(
       failedCalls: tools.failedCalls,
       recoveredErrors: tools.recoveredErrors,
       recoveryTimeMs: tools.recoveryTimeMs,
+      observations: tools.observations,
     },
     durability: {
       finalMessagesBeforeReload: beforeReload,
@@ -299,6 +355,23 @@ function normalizeTerminalState(
     : "failed";
 }
 
+function benchmarkLatencyTargetMs(prompt: MaterializedBenchmarkPrompt): number {
+  const legacyTimeoutMs = prompt.timeoutMs;
+  return prompt.latencyTargetMs ?? legacyTimeoutMs ?? prompt.hardStopMs;
+}
+
+function benchmarkHardStopMs(prompt: MaterializedBenchmarkPrompt): number {
+  return prompt.hardStopMs ?? prompt.timeoutMs ?? prompt.latencyTargetMs;
+}
+
+function durationMs(start: number | null, end: number | null): number | null {
+  return start !== null && end !== null && end >= start ? end - start : null;
+}
+
+function characterCount(value: string): number {
+  return [...value].length;
+}
+
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -328,25 +401,31 @@ function stringArray(value: unknown): string[] {
 }
 
 interface ProviderRequestObservation {
-  requestKind: "main" | "title";
+  requestKind: "agent" | "legacy_main" | "tool_provider" | "title";
   requestStartedAtMs: number;
   serializedRequestBytes: number;
   firstContentBearingDeltaAtMs: number | null;
   completedAtMs: number | null;
+  terminatedAtMs: number | null;
   status: number | null;
   hasTextContent: boolean;
   hasToolArgumentContent: boolean;
+  streamedTextChars: number | null;
+  finalTextChars: number | null;
 }
 
 function readProviderRequests(value: unknown): ProviderRequestObservation[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     const item = record(candidate);
-    const requestKind = item.requestKind;
+    const rawRequestKind = item.requestKind;
+    const requestKind = rawRequestKind === "main" ? "legacy_main" : rawRequestKind;
     const requestStartedAtMs = numberValue(item.requestStartedAtMs);
     const serializedRequestBytes = numberValue(item.serializedRequestBytes);
     if (
-      (requestKind !== "main" && requestKind !== "title") ||
+      (requestKind !== "agent" && requestKind !== "legacy_main" &&
+        requestKind !== "tool_provider" &&
+        requestKind !== "title") ||
       requestStartedAtMs === null || serializedRequestBytes === null ||
       serializedRequestBytes < 0
     ) return [];
@@ -356,9 +435,12 @@ function readProviderRequests(value: unknown): ProviderRequestObservation[] {
       serializedRequestBytes,
       firstContentBearingDeltaAtMs: nullableNumber(item.firstContentBearingDeltaAtMs),
       completedAtMs: nullableNumber(item.completedAtMs),
+      terminatedAtMs: nullableNumber(item.terminatedAtMs),
       status: nullableNumber(item.status),
       hasTextContent: item.hasTextContent === true,
       hasToolArgumentContent: item.hasToolArgumentContent === true,
+      streamedTextChars: nullableNumber(item.streamedTextChars),
+      finalTextChars: nullableNumber(item.finalTextChars),
     }];
   });
 }

@@ -64,6 +64,8 @@ function applyBasicProgressFields(
   if (workStreamId) row.work_stream_id = workStreamId;
   const semanticBlockId = safeOptionalShortToken(input.semantic_block_id);
   if (semanticBlockId) row.semantic_block_id = semanticBlockId;
+  const activityStage = safeOptionalShortToken(input.activity_stage);
+  if (activityStage) row.activity_stage = activityStage;
   const workBlockId = safeOptionalShortToken(input.work_block_id);
   if (workBlockId) row.work_block_id = workBlockId;
   const workBlockLabel = safeOptionalShortText(input.work_block_label);

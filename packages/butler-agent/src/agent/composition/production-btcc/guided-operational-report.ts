@@ -1,5 +1,7 @@
 import type { FunctionToolPromptOptions } from
   "../../../integrations/providers/runtime-contracts.ts";
+import { ModelProviderRequestError } from
+  "../../../integrations/providers/provider-errors.ts";
 import {
   guidedOperationalFallback,
   guidedOperationalReportPrompt,
@@ -59,10 +61,10 @@ export async function runGuidedPromptWithOperationalReport(input: {
       quiescenceGraceMs,
       run: runMain,
     });
-    if (!text.trim()) throw new Error("Guided model returned no final text");
-    return text;
-  } catch {
+    if (text.trim()) return text;
+  } catch (error) {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
+    if (!allowsOperationalReport(error)) throw error;
   }
 
   const emptyFacts: OperationalFacts = {
@@ -120,6 +122,11 @@ export class GuidedOperationalWindowExpired extends Error {
     super("Guided Turn operational window expired");
     this.name = "GuidedOperationalWindowExpired";
   }
+}
+
+function allowsOperationalReport(error: unknown): boolean {
+  return error instanceof GuidedOperationalWindowExpired ||
+    error instanceof ModelProviderRequestError;
 }
 
 export async function runInGuidedOperationalWindow<T>(input: {

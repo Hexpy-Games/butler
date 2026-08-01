@@ -5,6 +5,7 @@ import {
   codexSseResponseFromAccumulator,
   createCodexSseAccumulator,
   handleCodexSseEvent,
+  readCodexSseResponse,
 } from "../../packages/butler-agent/src/integrations/providers/openai/codex-stream.ts";
 import { extractResponseText } from
   "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
@@ -40,6 +41,34 @@ test("Codex SSE invalid request remains a non-retryable provider action failure"
     statusCode: 400,
     retryable: false,
   });
+});
+
+test("Codex SSE cancels an unfinished reader after a provider stream failure", async () => {
+  let cancelled = false;
+  const event = {
+    type: "response.failed",
+    response: {
+      error: {
+        type: "service_unavailable_error",
+        code: "server_is_overloaded",
+        message: "Our servers are currently overloaded.",
+      },
+    },
+  };
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(
+        `data: ${JSON.stringify(event)}\n\n`,
+      ));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await expect(readCodexSseResponse(new Response(stream)))
+    .rejects.toBeInstanceOf(ModelProviderRequestError);
+  expect(cancelled).toBe(true);
 });
 
 test("Codex SSE uses the completed text instead of a partial delta projection", () => {

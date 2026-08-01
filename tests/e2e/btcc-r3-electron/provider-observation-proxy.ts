@@ -26,7 +26,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
-export type ProviderRequestKind = "main" | "title";
+export type ProviderRequestKind = "agent" | "tool_provider" | "title";
 export type ProviderRequestTermination =
   | "cancelled"
   | "completed"
@@ -45,6 +45,8 @@ export interface ProviderRequestObservation {
   hasTextContent: boolean;
   hasToolArgumentContent: boolean;
   hasReasoningContent: boolean;
+  streamedTextChars: number;
+  finalTextChars: number;
 }
 
 interface MutableProviderRequestObservation extends ProviderRequestObservation {}
@@ -63,6 +65,8 @@ export interface ProviderObservationProxyOptions {
 interface ContentObservation {
   firstDelta: boolean;
   reasoning: boolean;
+  streamedTextChars: number;
+  finalTextChars: number;
   text: boolean;
   toolArguments: boolean;
 }
@@ -74,16 +78,23 @@ function codexResponsesUrl(baseUrl: string | undefined): URL {
   return new URL(`${base}${CODEX_RESPONSES_PATH}`);
 }
 
-function isTitleRequest(body: Buffer): boolean {
+function providerRequestKind(body: Buffer): ProviderRequestKind {
   try {
     const parsed = JSON.parse(body.toString("utf8")) as {
       prompt_cache_key?: unknown;
+      tools?: unknown;
     };
-    return typeof parsed.prompt_cache_key === "string" &&
+    if (typeof parsed.prompt_cache_key === "string" &&
       parsed.prompt_cache_key.split(":").at(-1) ===
-        "native-butler-title-provider";
+        "native-butler-title-provider") return "title";
+    if (Array.isArray(parsed.tools) && parsed.tools.some((candidate) => {
+      if (!candidate || typeof candidate !== "object") return false;
+      const type = (candidate as Record<string, unknown>).type;
+      return type === "web_search" || type === "web_search_preview";
+    })) return "tool_provider";
+    return "agent";
   } catch {
-    return false;
+    return "agent";
   }
 }
 
@@ -104,6 +115,8 @@ function safeObservation(
     hasTextContent: observation.hasTextContent,
     hasToolArgumentContent: observation.hasToolArgumentContent,
     hasReasoningContent: observation.hasReasoningContent,
+    streamedTextChars: observation.streamedTextChars,
+    finalTextChars: observation.finalTextChars,
   };
 }
 
@@ -176,6 +189,8 @@ function outputItemContent(event: Record<string, unknown>): ContentObservation {
   const empty: ContentObservation = {
     firstDelta: false,
     reasoning: false,
+    streamedTextChars: 0,
+    finalTextChars: 0,
     text: false,
     toolArguments: false,
   };
@@ -206,21 +221,22 @@ function outputItemContent(event: Record<string, unknown>): ContentObservation {
     return {
       ...empty,
       text: true,
+      finalTextChars: characterCount(item.text),
     };
   }
   if (item.type !== "message" || !Array.isArray(item.content)) return empty;
-  const hasText = item.content.some((part) =>
-    part &&
-    typeof part === "object" &&
-    (
-      (part as Record<string, unknown>).type === "output_text" ||
-      (part as Record<string, unknown>).type === "text"
-    ) &&
-    nonEmptyString((part as Record<string, unknown>).text),
-  );
+  const finalTextChars = item.content.reduce((total, part) => {
+    if (!part || typeof part !== "object") return total;
+    const value = part as Record<string, unknown>;
+    return (value.type === "output_text" || value.type === "text") &&
+        nonEmptyString(value.text)
+      ? total + characterCount(value.text)
+      : total;
+  }, 0);
   return {
     ...empty,
-    text: hasText,
+    text: finalTextChars > 0,
+    finalTextChars,
   };
 }
 
@@ -230,6 +246,8 @@ function completedResponseContent(
   const empty: ContentObservation = {
     firstDelta: false,
     reasoning: false,
+    streamedTextChars: 0,
+    finalTextChars: 0,
     text: false,
     toolArguments: false,
   };
@@ -250,6 +268,8 @@ function completedResponseContent(
     return {
       firstDelta: false,
       reasoning: combined.reasoning || observed.reasoning,
+      streamedTextChars: 0,
+      finalTextChars: combined.finalTextChars + observed.finalTextChars,
       text: combined.text || observed.text,
       toolArguments: combined.toolArguments || observed.toolArguments,
     };
@@ -260,11 +280,14 @@ function contentObservation(
   event: Record<string, unknown>,
 ): ContentObservation {
   const type = typeof event.type === "string" ? event.type : "";
-  const hasDelta = nonEmptyString(event.delta);
+  const delta = typeof event.delta === "string" ? event.delta : "";
+  const hasDelta = delta.length > 0;
   if (type === "response.output_text.delta" && hasDelta) {
     return {
       firstDelta: true,
       reasoning: false,
+      streamedTextChars: characterCount(delta),
+      finalTextChars: 0,
       text: true,
       toolArguments: false,
     };
@@ -276,6 +299,8 @@ function contentObservation(
     return {
       firstDelta: true,
       reasoning: true,
+      streamedTextChars: 0,
+      finalTextChars: 0,
       text: false,
       toolArguments: false,
     };
@@ -284,6 +309,8 @@ function contentObservation(
     return {
       firstDelta: true,
       reasoning: false,
+      streamedTextChars: 0,
+      finalTextChars: 0,
       text: false,
       toolArguments: true,
     };
@@ -292,6 +319,8 @@ function contentObservation(
     return {
       firstDelta: false,
       reasoning: false,
+      streamedTextChars: 0,
+      finalTextChars: characterCount(event.text),
       text: true,
       toolArguments: false,
     };
@@ -305,6 +334,10 @@ function contentObservation(
     return outputItem;
   }
   return completedResponseContent(event);
+}
+
+function characterCount(value: string): number {
+  return [...value].length;
 }
 
 class SseObservationTransform extends Transform {
@@ -365,6 +398,11 @@ class SseObservationTransform extends Transform {
     this.observation.hasTextContent ||= content.text;
     this.observation.hasToolArgumentContent ||= content.toolArguments;
     this.observation.hasReasoningContent ||= content.reasoning;
+    this.observation.streamedTextChars += content.streamedTextChars;
+    this.observation.finalTextChars = Math.max(
+      this.observation.finalTextChars,
+      content.finalTextChars,
+    );
     if (
       content.firstDelta &&
       this.observation.firstContentBearingDeltaAtMs === null
@@ -428,7 +466,7 @@ async function forwardRequest(input: {
   } = input;
   const body = await readRequestBody(request);
   observation.serializedRequestBytes = body.byteLength;
-  observation.requestKind = isTitleRequest(body) ? "title" : "main";
+  observation.requestKind = providerRequestKind(body);
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
@@ -581,7 +619,7 @@ export async function startProviderObservationProxy(
     }
     const observation: MutableProviderRequestObservation = {
       ordinal: nextOrdinal,
-      requestKind: "main",
+      requestKind: "agent",
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
       firstContentBearingDeltaAtMs: null,
@@ -592,6 +630,8 @@ export async function startProviderObservationProxy(
       hasTextContent: false,
       hasToolArgumentContent: false,
       hasReasoningContent: false,
+      streamedTextChars: 0,
+      finalTextChars: 0,
     };
     nextOrdinal += 1;
     observed.push(observation);
