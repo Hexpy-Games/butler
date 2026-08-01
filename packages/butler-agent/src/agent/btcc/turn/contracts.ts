@@ -3,7 +3,7 @@ import type {
   ButlerContextInput,
   FreshBtccTurnCommand,
 } from "../contracts.ts";
-import type { ContentRef } from "../identity.ts";
+import type { ContentRef } from "../identity/index.ts";
 
 export type TurnSemanticState =
   | "admitted"

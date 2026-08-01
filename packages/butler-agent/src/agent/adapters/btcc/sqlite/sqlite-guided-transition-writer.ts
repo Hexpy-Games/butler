@@ -4,7 +4,7 @@ import type {
   TurnCheckpoint,
   TurnRecord,
   TurnStateRepository,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/turn/index.ts";
 import {
   assertGuidedTurnSemanticState,
   assertGuidedTurnTransition,

@@ -1,5 +1,5 @@
 import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contracts.ts";
-import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, unavailableFunctionToolPayload, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
+import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, prepareFunctionToolCall, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
 import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
@@ -199,15 +199,20 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       tool_names: toolCalls.map((call) => call.function.name),
       executed_tool_calls: executedToolCalls,
     });
+    const preparedCalls = toolCalls.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.function.name,
+        rawArguments: call.function.arguments,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: toolCalls.map((call) => {
-        const args = localToolArguments(call.function.arguments);
-        return {
-          name: call.function.name,
-          args: args.parsed,
-        };
-      }),
+      toolCalls: preparedCalls.map(({ call, prepared }) => ({
+        name: call.function.name,
+        args: prepared.args,
+      })),
     });
 
     messages.push({
@@ -216,26 +221,21 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       tool_calls: toolCalls,
     });
 
-    for (const call of toolCalls) {
-      const args = localToolArguments(call.function.arguments);
-      log(`tool ${call.function.name}: ${args.raw}`);
+    for (const { call, prepared } of preparedCalls) {
+      log(`tool ${call.function.name}: ${prepared.rawArguments}`);
       writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.start", {
         provider: "local",
         name: call.function.name,
-        args_preview: compactTraceValue(args.parsed),
-        raw_args_chars: args.raw.length,
+        args_preview: compactTraceValue(prepared.args),
+        raw_args_chars: prepared.rawArguments.length,
       });
-      let payload = unavailableFunctionToolPayload({
-        name: call.function.name,
-        args: args.parsed,
-        allowedNames,
-      });
+      let payload = prepared.errorPayload;
       if (!payload) {
         try {
           const result = await options.executeTool({
             name: call.function.name,
-            args: args.parsed,
-            rawArguments: args.raw,
+            args: prepared.args,
+            rawArguments: prepared.rawArguments,
             signal: options.signal,
           });
           payload = { ok: true, output: result };
@@ -270,7 +270,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.function.name,
-            args: args.parsed,
+            args: prepared.args,
             output: payload.output,
           })
         : null;

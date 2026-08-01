@@ -2,9 +2,11 @@ import {
   contentRef,
   digest,
   stableJson,
-  type LegacyProjectWorkSnapshot,
-  type LegacyProjectWorkSource,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/identity/index.ts";
+import type {
+  LegacyProjectWorkSnapshot,
+  LegacyProjectWorkSource,
+} from "../../../btcc/durable-work/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { decodeProjectLedgerBinding } from "./project-binding.ts";

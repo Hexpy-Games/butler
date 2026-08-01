@@ -1,6 +1,6 @@
 import type { FunctionToolPromptOptions, OpenAIResponse, PromptOptions } from "../runtime-contracts.ts";
 import type { HostedRuntimeConfig } from "./model-routing.ts";
-import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, unavailableFunctionToolPayload } from "./runtime-support.ts";
+import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, modelIterationLimitWithinUsageBudget, prepareFunctionToolCall } from "./runtime-support.ts";
 import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChatMessage, hostedChatCompletionsUrl, type HostedChatMessage, hostedChatReasoningParams, hostedChatResponseFormat, hostedChatText, hostedChatTools, hostedProviderErrorLabel, promptTextForHosted } from "./hosted-chat-client.ts";
 import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
@@ -103,15 +103,20 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       messages.push({ role: "user", content: disposition.observation });
       continue;
     }
+    const preparedCalls = toolCalls.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.function.name,
+        rawArguments: call.function.arguments,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: toolCalls.map((call) => {
-        const args = localToolArguments(call.function.arguments);
-        return {
-          name: call.function.name,
-          args: args.parsed,
-        };
-      }),
+      toolCalls: preparedCalls.map(({ call, prepared }) => ({
+        name: call.function.name,
+        args: prepared.args,
+      })),
     });
     messages.push({
       role: "assistant",
@@ -119,22 +124,17 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       tool_calls: toolCalls,
     });
     toolBatchExecuted = true;
-    for (const call of toolCalls) {
-      const args = localToolArguments(call.function.arguments);
-      log(`tool ${call.function.name}: ${args.raw}`);
-      let payload = unavailableFunctionToolPayload({
-        name: call.function.name,
-        args: args.parsed,
-        allowedNames,
-      });
+    for (const { call, prepared } of preparedCalls) {
+      log(`tool ${call.function.name}: ${prepared.rawArguments}`);
+      let payload = prepared.errorPayload;
       if (!payload) {
         try {
           payload = {
             ok: true,
             output: await options.executeTool({
               name: call.function.name,
-              args: args.parsed,
-              rawArguments: args.raw,
+              args: prepared.args,
+              rawArguments: prepared.rawArguments,
               signal: options.signal,
             }),
           };
@@ -148,7 +148,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.function.name,
-            args: args.parsed,
+            args: prepared.args,
             output: payload.output,
           })
         : null;

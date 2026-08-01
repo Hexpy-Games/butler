@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { createButlerToolExecutor } from "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { bridgeToolAuditEvent } from "../../packages/butler-agent/src/agent/tools/tool-bridge/audit.ts";
-import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/tools/tool-bridge/schema-validation.ts";
+import { validateJsonObjectSchema } from "../../packages/butler-agent/src/agent/model-tool-loop/index.ts";
 import { DisabledWebSearchProvider } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import type { PageReadResult } from "../../packages/butler-agent/src/integrations/search/page-reader.ts";
 import { upsertMcpServer } from "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";

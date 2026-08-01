@@ -1,5 +1,5 @@
 import type { FunctionToolPromptOptions, OpenAIAuthOverride } from "../runtime-contracts.ts";
-import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, extractResponseText, finalNoToolInstructions, functionToolToAgentTool, modelIterationLimitWithinUsageBudget, newToolMessages, openAIInputWithAttachments, responseToAgentModelResponse } from "../shared/runtime-support.ts";
+import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, extractResponseText, finalNoToolInstructions, functionToolToAgentTool, modelFacingFunctionTools, modelIterationLimitWithinUsageBudget, newToolMessages, openAIInputWithAttachments, responseToAgentModelResponse } from "../shared/runtime-support.ts";
 import { buildReasoningConfig, getButlerRuntime, resolveOpenAIModel, resolveOpenAIPromptCacheConfig } from "./config.ts";
 import { createOpenAIResponse, functionCallContinuationItems, toCodexStatelessInput } from "./responses.ts";
 import { logPromptCacheStats, recordPromptCacheMetric } from "./usage.ts";
@@ -71,7 +71,7 @@ export async function runOpenAIFunctionToolPromptText(
         store: true,
         ...promptCache,
         instructions: options.instructions,
-        tools: activeTools,
+        tools: modelFacingFunctionTools(activeTools),
         tool_choice: options.toolChoice ?? "auto",
         reasoning,
         ...(previousResponseId
@@ -126,7 +126,9 @@ export async function runOpenAIFunctionToolPromptText(
       return await options.executeTool({
         name: call.name,
         args: call.arguments,
-        rawArguments: JSON.stringify(call.arguments),
+        rawArguments: typeof call.rawArguments === "string"
+          ? call.rawArguments
+          : JSON.stringify(call.arguments),
         signal: options.signal,
       });
     },

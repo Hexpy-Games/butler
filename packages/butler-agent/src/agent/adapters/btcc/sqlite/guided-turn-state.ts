@@ -1,7 +1,7 @@
 import type {
   AcceptedTurnTransition,
   TurnSemanticState,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/turn/index.ts";
 
 export const GUIDED_TURN_STATES = [
   "admitted",

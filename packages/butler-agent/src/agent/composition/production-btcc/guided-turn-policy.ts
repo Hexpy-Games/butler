@@ -1,7 +1,5 @@
-import type {
-  ButlerExecutionPolicy,
-  GuidedTurnResult,
-} from "../../btcc/index.ts";
+import type { ButlerExecutionPolicy } from "../../btcc/index.ts";
+import type { GuidedTurnResult } from "../../btcc/guided-turn/index.ts";
 import type { TurnRecord } from "../../btcc/turn/index.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";

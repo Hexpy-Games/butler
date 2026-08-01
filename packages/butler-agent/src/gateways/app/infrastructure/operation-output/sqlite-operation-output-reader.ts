@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { digest } from
-  "../../../../agent/btcc/identity.ts";
+  "../../../../agent/btcc/identity/index.ts";
 import type { OperationOutputView } from
   "../../interface/protocol/app-protocol.ts";
 

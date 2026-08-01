@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { contentRef, digest, stableJson } from
-  "../../../packages/butler-agent/src/agent/btcc/identity.ts";
+  "../../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 
 type ProjectCore = {
   createRecord(project: string, options: Record<string, unknown>): unknown;

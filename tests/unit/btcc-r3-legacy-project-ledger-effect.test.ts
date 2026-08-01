@@ -13,11 +13,12 @@ import {
   openBtccSqliteStores,
   readCanonicalProjectLedger,
 } from "../../packages/butler-agent/src/agent/adapters/index.ts";
-import {
-  createGuidedEffectService,
-  type BtccRunCommand,
-  type DurableWorkView,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { BtccRunCommand } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { DurableWorkView } from
+  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+import { createGuidedEffectService } from
+  "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import type { GuidedEffectFaultHook } from
   "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import {

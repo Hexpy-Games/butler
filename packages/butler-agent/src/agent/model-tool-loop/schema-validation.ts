@@ -21,6 +21,64 @@ export type SchemaViolationReason =
   | "minimum_length"
   | "maximum_length";
 
+export interface ToolCallArgumentsValidation {
+  arguments: Record<string, unknown>;
+  rawArguments: string;
+  error: string | null;
+}
+
+export function validateToolCallArguments(input: {
+  toolName: string;
+  rawArguments: unknown;
+  schema?: unknown;
+}): ToolCallArgumentsValidation {
+  const rawArguments = toolArgumentsText(input.rawArguments);
+  let parsed: unknown = input.rawArguments;
+  if (typeof input.rawArguments === "string") {
+    try {
+      parsed = JSON.parse(input.rawArguments);
+    } catch {
+      return {
+        arguments: {},
+        rawArguments,
+        error: `Tool ${input.toolName} received malformed JSON arguments`,
+      };
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {
+      arguments: {},
+      rawArguments,
+      error: `Tool ${input.toolName} arguments must be a JSON object`,
+    };
+  }
+
+  const args = parsed as Record<string, unknown>;
+  const validation = validateJsonObjectSchema(args, input.schema);
+  if (validation.ok) return { arguments: args, rawArguments, error: null };
+  const argumentPath = validation.path.replace(/^\$\.?/u, "");
+  if (validation.reason === "missing_required") {
+    return {
+      arguments: args,
+      rawArguments,
+      error: `Tool ${input.toolName} requires argument: ${argumentPath}`,
+    };
+  }
+  if (validation.reason === "unexpected_property") {
+    const unexpected = validation.message.replace(/^Unexpected arguments?:\s*/u, "");
+    return {
+      arguments: args,
+      rawArguments,
+      error: `Tool ${input.toolName} received unsupported argument(s): ${unexpected}`,
+    };
+  }
+  return {
+    arguments: args,
+    rawArguments,
+    error: `Tool ${input.toolName} received invalid arguments: ${validation.message}`,
+  };
+}
+
 export function validateJsonObjectSchema(
   value: Record<string, unknown>,
   schema: unknown,
@@ -56,15 +114,18 @@ function validateObject(
   }
   const additional = schema.additionalProperties;
   if (additional === false) {
-    for (const key of Object.keys(value)) {
-      if (!properties || !(key in properties)) {
-        return {
-          ok: false,
-          message: `Unexpected argument: ${key}`,
-          path: `${path}.${key}`,
-          reason: "unexpected_property",
-        };
-      }
+    const unexpected = Object.keys(value).filter((key) =>
+      !properties || !(key in properties),
+    );
+    if (unexpected.length > 0) {
+      return {
+        ok: false,
+        message: unexpected.length === 1
+          ? `Unexpected argument: ${unexpected[0]}`
+          : `Unexpected arguments: ${unexpected.join(", ")}`,
+        path: unexpected.length === 1 ? `${path}.${unexpected[0]}` : path,
+        reason: "unexpected_property",
+      };
     }
   } else if (objectRecord(additional)) {
     for (const [key, nestedValue] of Object.entries(value)) {
@@ -74,6 +135,16 @@ function validateObject(
     }
   }
   return { ok: true };
+}
+
+function toolArgumentsText(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    const serialized = JSON.stringify(value);
+    return serialized === undefined ? String(value) : serialized;
+  } catch {
+    return String(value);
+  }
 }
 
 function validateJsonValue(value: unknown, schema: unknown, path: string): SchemaValidationResult {

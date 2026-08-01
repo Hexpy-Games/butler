@@ -1,7 +1,5 @@
-import {
-  digest,
-  type BtccTurnProgressObserver,
-} from "../../btcc/index.ts";
+import type { BtccTurnProgressObserver } from "../../btcc/index.ts";
+import { digest } from "../../btcc/identity/index.ts";
 import { publicToolTitle } from "./guided-turn-policy.ts";
 
 export function rememberDescribedTools(

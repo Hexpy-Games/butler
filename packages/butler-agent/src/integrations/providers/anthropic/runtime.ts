@@ -1,5 +1,5 @@
 import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, unavailableFunctionToolPayload, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
@@ -190,7 +190,7 @@ export async function runAnthropicFunctionToolPromptText(
     const toolUses = content.flatMap((part: any) => {
       const name = normalizeLocalTextToolName(typeof part?.name === "string" ? part.name : "", allowedNames);
       if (part?.type !== "tool_use" || typeof part.id !== "string" || !name) return [];
-      return [{ id: part.id as string, name, input: localToolArguments(part.input).parsed }];
+      return [{ id: part.id as string, name, rawInput: part.input }];
     });
     if (toolUses.length === 0) {
       if (text) {
@@ -207,28 +207,34 @@ export async function runAnthropicFunctionToolPromptText(
         model: config.modelId,
       });
     }
+    const preparedToolUses = toolUses.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.name,
+        rawArguments: call.rawInput,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: toolUses.map((call) => ({ name: call.name, args: call.input })),
+      toolCalls: preparedToolUses.map(({ call, prepared }) => ({
+        name: call.name,
+        args: prepared.args,
+      })),
     });
     messages.push({ role: "assistant", content });
     toolBatchExecuted = true;
-    for (const call of toolUses) {
-      const rawArguments = JSON.stringify(call.input);
-      log(`tool ${call.name}: ${rawArguments}`);
-      let payload = unavailableFunctionToolPayload({
-        name: call.name,
-        args: call.input,
-        allowedNames,
-      });
+    for (const { call, prepared } of preparedToolUses) {
+      log(`tool ${call.name}: ${prepared.rawArguments}`);
+      let payload = prepared.errorPayload;
       if (!payload) {
         try {
           payload = {
             ok: true,
             output: await options.executeTool({
               name: call.name,
-              args: call.input,
-              rawArguments,
+              args: prepared.args,
+              rawArguments: prepared.rawArguments,
               signal: options.signal,
             }),
           };
@@ -239,7 +245,7 @@ export async function runAnthropicFunctionToolPromptText(
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.name,
-            args: call.input,
+            args: prepared.args,
             output: payload.output,
           })
         : null;

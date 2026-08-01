@@ -7,7 +7,7 @@ import type {
 } from "../contracts.ts";
 import type { CanonicalMessageStore } from "../delivery/index.ts";
 import { insertCanonicalMessage } from "../delivery/index.ts";
-import { contentRef, digest } from "../identity.ts";
+import { contentRef, digest } from "../identity/index.ts";
 import { createTurnExecutionSupervisor } from "../recovery/index.ts";
 import type { CommittedSuccessorReadiness } from "../recovery/index.ts";
 import {

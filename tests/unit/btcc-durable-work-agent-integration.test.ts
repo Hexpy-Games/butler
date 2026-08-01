@@ -3,11 +3,12 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  createGuidedTurnRuntime,
-  type BtccRunCommand,
-  type BtccTurnProgressObserver,
+import type {
+  BtccRunCommand,
+  BtccTurnProgressObserver,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import { createGuidedTurnRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
