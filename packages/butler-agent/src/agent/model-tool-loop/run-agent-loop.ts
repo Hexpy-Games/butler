@@ -20,6 +20,8 @@ import {
   extractAgentLoopImageAttachments,
   withoutAgentLoopImageAttachments,
 } from "./tool-result-media.ts";
+import { emptyResponseRecoveryObservation } from
+  "./empty-response-recovery.ts";
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
@@ -90,6 +92,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
   const toolResults: AgentLoopToolResult[] = [];
   const modelPreviewContext = createToolResultModelPreviewContext();
+  let emptyResponseRecoveryUsed = false;
 
   const recordToolResult = async (inputRecord: {
     call: AgentLoopToolCall;
@@ -171,6 +174,20 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     const calls = response.toolCalls ?? [];
     if (calls.length === 0) {
       const finalText = response.text?.trim();
+      const recoveryObservation = finalText
+        ? null
+        : emptyResponseRecoveryObservation({
+            recoveryUsed: emptyResponseRecoveryUsed,
+            hasNextModelRound: iteration + 1 < maxIterations,
+          });
+      if (recoveryObservation) {
+        emptyResponseRecoveryUsed = true;
+        messages.push({
+          role: "user",
+          content: recoveryObservation,
+        });
+        continue;
+      }
       if (finalText && input.reviewFinalCandidate) {
         const review = await input.reviewFinalCandidate({ text: finalText, iteration });
         if (review.status === "continue") {

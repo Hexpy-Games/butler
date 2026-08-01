@@ -13,6 +13,8 @@ import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { BtccRunCommand } from
   "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { DurableWorkView } from
+  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
 import { createGuidedTurnRuntime } from
   "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
 import {
@@ -26,6 +28,8 @@ import { createProductionGuidedTurnAgent } from
 import {
   DEFAULT_GUIDED_FINAL_REPORT_MS,
   DEFAULT_GUIDED_TURN_LEASE_MS,
+  guidedOperationalFallback,
+  guidedOperationalReportPrompt,
   runGuidedPromptWithOperationalReport,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-operational-report.ts";
@@ -1453,8 +1457,8 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       if (calls === 2) {
         expect(options.tools).toEqual([]);
         expect(options.prompt).toContain("Tool read_file: completed");
-        expect(options.prompt).not.toContain("enabled");
-        return "read_file 도구 호출은 완료됐지만 결과 본문은 안전한 보고 입력에 포함되지 않았습니다.";
+        expect(options.prompt).toContain('enabled\\":true');
+        return "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.";
       }
       await options.onAssistantTextBeforeTools?.({
         text: "설정 파일을 확인하겠습니다.",
@@ -1473,7 +1477,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       signal: new AbortController().signal,
     })).toEqual({
       route: "assisted",
-      content: "read_file 도구 호출은 완료됐지만 결과 본문은 안전한 보고 입력에 포함되지 않았습니다.",
+      content: "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.",
     });
     expect(calls).toBe(2);
 
@@ -1520,11 +1524,97 @@ test("Guided agent gives a normally progressing Turn one operational lease", asy
   }
 });
 
+test("Guided model sees remaining time without persisting it in the tool result", async () => {
+  const fixture = createFixture("guided-turn-time-context");
+  try {
+    writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
+    let modelResult: Record<string, unknown> | undefined;
+    const turn = turnRecord(fixture.root, { turnId: "guided-turn-time-context" });
+    const agent = fixture.agent(async (options) => {
+      modelResult = await options.executeTool({
+        name: "read_file",
+        args: { path: "settings.json" },
+        rawArguments: JSON.stringify({ path: "settings.json" }),
+      }) as Record<string, unknown>;
+      return "확인했습니다.";
+    });
+
+    await agent.run({ turn, signal: new AbortController().signal });
+
+    expect(modelResult?.turn_time_remaining_seconds).toBeNumber();
+    expect(modelResult?.turn_time_remaining_seconds).toBeGreaterThan(0);
+    const persisted = fixture.stores.guidedToolJournal.list(turn.turnId)[0]?.result;
+    expect(persisted).toBeDefined();
+    expect(persisted as Record<string, unknown>)
+      .not.toHaveProperty("turn_time_remaining_seconds");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided operational defaults reserve delivery time before the observer deadline", () => {
-  expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBe(270_000);
-  expect(DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(30_000);
-  expect(DEFAULT_GUIDED_TURN_LEASE_MS - DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(240_000);
-  expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBeLessThan(300_000);
+  expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBe(280_000);
+  expect(DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(15_000);
+  expect(DEFAULT_GUIDED_TURN_LEASE_MS - DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(265_000);
+});
+
+test("Guided operational reporting preserves current and outdated saved result reviews", () => {
+  const work: DurableWorkView = {
+    workId: "work-completed",
+    sessionId: "session-completed",
+    scope: { kind: "session", sessionId: "session-completed" },
+    origin: { turnId: "turn-completed", messageId: "message-completed" },
+    objective: "Build and verify the requested page",
+    status: "completed",
+    latestResultReview: {
+      reviewRevisionId: "review-completed",
+      revision: 1,
+      subject: "result",
+      verdict: "accept",
+      summary: "The requested page was built and desktop and mobile rendering passed.",
+      corrections: [],
+      boundResultRefs: [],
+      originTurnId: "turn-completed",
+      createdAt: "2026-08-01T00:00:00.000Z",
+    },
+    resultRefs: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-08-01T00:00:00.000Z",
+  };
+  const facts = {
+    originalRequest: "페이지를 만들어 주세요.",
+    work,
+    toolCalls: [],
+    effects: [],
+  };
+
+  expect(guidedOperationalReportPrompt(facts)).toContain(
+    "The requested page was built and desktop and mobile rendering passed.",
+  );
+  const fallback = guidedOperationalFallback(facts);
+  expect(fallback).toContain("저장된 Work는 완료 상태");
+  expect(fallback).toContain("Saved model result review: accept");
+  expect(fallback).toContain("desktop and mobile rendering passed");
+
+  const outdated = {
+    ...facts,
+    work: {
+      ...work,
+      status: "open" as const,
+      resultRefs: [{
+        resultRef: "result-after-review",
+        toolCallId: "call-after-review",
+        toolName: "read_file",
+        status: "completed" as const,
+        originTurnId: "turn-completed",
+        attachedAt: "2026-08-01T00:01:00.000Z",
+      }],
+    },
+  };
+  expect(guidedOperationalReportPrompt(outdated))
+    .toContain("Saved model result review (outdated): accept");
+  expect(guidedOperationalFallback(outdated))
+    .toContain("Saved model result review (outdated): accept");
 });
 
 test("Guided operational fallback is captured before the final report model call", async () => {

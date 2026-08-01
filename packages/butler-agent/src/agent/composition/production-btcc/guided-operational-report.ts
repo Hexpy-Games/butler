@@ -1,19 +1,21 @@
-import type { GuidedEffectJournalRecord } from "../../btcc/effects/index.ts";
-import type {
-  DurableWorkContext,
-  DurableWorkView,
-} from "../../btcc/durable-work/index.ts";
-import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
 import type { FunctionToolPromptOptions } from
   "../../../integrations/providers/runtime-contracts.ts";
+import {
+  guidedOperationalFallback,
+  guidedOperationalReportPrompt,
+  type OperationalFacts,
+} from "./guided-operational-facts.ts";
 
-export const DEFAULT_GUIDED_TURN_LEASE_MS = 270_000;
-export const DEFAULT_GUIDED_FINAL_REPORT_MS = 30_000;
+export {
+  guidedOperationalFallback,
+  guidedOperationalReportPrompt,
+  type OperationalFacts,
+} from "./guided-operational-facts.ts";
+
+export const DEFAULT_GUIDED_TURN_LEASE_MS = 280_000;
+export const DEFAULT_GUIDED_FINAL_REPORT_MS = 15_000;
 
 const DEFAULT_GUIDED_QUIESCENCE_GRACE_MS = 5_000;
-const FACT_LIMIT = 12;
-const FACT_VALUE_LIMIT = 480;
-
 type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
 
 export async function runGuidedPromptWithOperationalReport(input: {
@@ -43,10 +45,13 @@ export async function runGuidedPromptWithOperationalReport(input: {
     const runMain = (signal: AbortSignal) => input.promptRunner({
       ...input.options,
       signal,
-      executeTool: (call) => input.options.executeTool({
-        ...call,
-        signal: call.signal ?? signal,
-      }),
+      executeTool: async (call) => withTurnTimeRemaining(
+        await input.options.executeTool({
+          ...call,
+          signal: call.signal ?? signal,
+        }),
+        mainDeadline,
+      ),
     });
     const text = await runInGuidedOperationalWindow({
       parentSignal: input.parentSignal,
@@ -160,53 +165,6 @@ export async function runInGuidedOperationalWindow<T>(input: {
   }
 }
 
-export function guidedOperationalReportPrompt(input: OperationalFacts): string {
-  return [
-    "The normal execution window ended before a final answer was available.",
-    "Give the user one concise, truthful answer using only the facts below.",
-    "Clearly separate what completed, what remains, and any limitation.",
-    "Do not claim that an unlisted action or effect happened. Do not call tools.",
-    "",
-    `Original request: ${input.originalRequest}`,
-    ...factLines(input),
-  ].join("\n");
-}
-
-export function guidedOperationalFallback(input: OperationalFacts): string {
-  const korean = /[가-힣]/.test(input.originalRequest);
-  const facts = durableFactLines(input);
-  const hasWork = Boolean(input.work);
-  if (korean) {
-    return [
-      "요청을 끝까지 정리하는 과정에서 모델 연결 또는 실행 시간이 종료되었습니다.",
-      facts.length > 0
-        ? "현재까지 확인된 영속 기록:"
-        : "실행 완료를 뒷받침하는 영속 기록은 없습니다.",
-      ...facts,
-      hasWork
-        ? "완료되지 않은 부분은 완료로 처리하지 않았으며, 저장된 Work에서 이어갈 수 있습니다."
-        : "완료되지 않은 부분은 완료로 처리하지 않았습니다.",
-    ].join("\n");
-  }
-  return [
-    "The model connection or execution window ended before I could finish the answer.",
-    facts.length > 0
-      ? "Confirmed durable records:"
-      : "No durable record confirms completed execution.",
-    ...facts,
-    hasWork
-      ? "I did not mark the unfinished part complete; the saved Work can be continued."
-      : "I did not mark the unfinished part complete.",
-  ].join("\n");
-}
-
-export type OperationalFacts = {
-  originalRequest: string;
-  work: DurableWorkContext | DurableWorkView | null;
-  toolCalls: GuidedToolJournalRecord[];
-  effects: GuidedEffectJournalRecord[];
-};
-
 async function rejectOperationalToolCall(): Promise<never> {
   throw new Error("Operational final report cannot call tools");
 }
@@ -216,44 +174,21 @@ function positiveMs(value: number | undefined, fallback: number): number {
   return Math.max(1, Math.trunc(value));
 }
 
-function factLines(input: OperationalFacts): string[] {
-  const facts = durableFactLines(input);
-  return [
-    "Known durable facts:",
-    ...(facts.length > 0
-      ? facts
-      : ["- No tool status, Work checkpoint, or persistent effect was confirmed."]),
-  ];
-}
-
-function durableFactLines(input: OperationalFacts): string[] {
-  const lines: string[] = [];
-  const work = input.work && "work" in input.work ? input.work.work : input.work;
-  if (work) {
-    lines.push(`- Work status: ${work.status}`);
-    if (work.latestCheckpoint) {
-      lines.push(
-        `- Latest progress (${work.latestCheckpoint.stage}): ${compact(work.latestCheckpoint.publicSummary)}`,
-      );
-      lines.push(`- Next recorded step: ${compact(work.latestCheckpoint.nextStep)}`);
-    }
+function withTurnTimeRemaining(result: unknown, deadline: number): unknown {
+  const turnTimeRemainingSeconds = Math.max(
+    0,
+    Math.ceil((deadline - Date.now()) / 1_000),
+  );
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    return {
+      ...result as Record<string, unknown>,
+      turn_time_remaining_seconds: turnTimeRemainingSeconds,
+    };
   }
-  for (const call of input.toolCalls.slice(-FACT_LIMIT)) {
-    lines.push(`- Tool ${call.toolName}: ${call.status}`);
-  }
-  for (const effect of input.effects.slice(0, FACT_LIMIT)) {
-    lines.push(
-      `- Effect ${effect.capability} on ${compact(effect.sanitizedTarget)}: ${effect.status}`,
-    );
-  }
-  return lines;
-}
-
-function compact(value: string): string {
-  const oneLine = value.replace(/\s+/gu, " ").trim();
-  return oneLine.length <= FACT_VALUE_LIMIT
-    ? oneLine
-    : `${oneLine.slice(0, FACT_VALUE_LIMIT - 1)}…`;
+  return {
+    output: result,
+    turn_time_remaining_seconds: turnTimeRemainingSeconds,
+  };
 }
 
 async function waitForOperationalSettlement<T>(input: {

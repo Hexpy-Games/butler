@@ -124,30 +124,84 @@ export function newToolMessages(
 } {
   const toolMessages = messages.filter((message) => message.role === "tool");
   const next = toolMessages.slice(alreadySent);
-  const statelessItems = next.map((message) => ({
+  const continuationItems = next.map((message) =>
+    openAIToolMessageItems(message, butlerData),
+  );
+  return {
+    sentCount: toolMessages.length,
+    items: continuationItems.map(([item]) => item),
+    statelessItems: continuationItems.map(([, statelessItem]) => statelessItem),
+  };
+}
+
+export function newAgentLoopContinuationMessages(
+  messages: AgentLoopMessage[],
+  alreadySent: {
+    toolMessages: number;
+    userMessages: number;
+  },
+  butlerData?: string,
+): {
+  items: Array<Record<string, unknown>>;
+  statelessItems: Array<Record<string, unknown>>;
+  sent: {
+    toolMessages: number;
+    userMessages: number;
+  };
+} {
+  const items: Array<Record<string, unknown>> = [];
+  const statelessItems: Array<Record<string, unknown>> = [];
+  let toolMessages = 0;
+  let userMessages = 0;
+
+  for (const message of messages) {
+    if (message.role === "tool") {
+      toolMessages += 1;
+      if (toolMessages <= alreadySent.toolMessages) continue;
+      const [item, statelessItem] = openAIToolMessageItems(message, butlerData);
+      items.push(item);
+      statelessItems.push(statelessItem);
+      continue;
+    }
+    if (message.role !== "user") continue;
+    userMessages += 1;
+    if (userMessages <= alreadySent.userMessages) continue;
+    const item = {
+      role: "user",
+      content: [{ type: "input_text", text: message.content }],
+    };
+    items.push(item);
+    statelessItems.push(item);
+  }
+
+  return {
+    items,
+    statelessItems,
+    sent: { toolMessages, userMessages },
+  };
+}
+
+function openAIToolMessageItems(
+  message: AgentLoopMessage,
+  butlerData?: string,
+): [Record<string, unknown>, Record<string, unknown>] {
+  const statelessItem = {
     type: "function_call_output",
     call_id: message.toolCallId,
     output: message.content,
-  }));
-  return {
-    sentCount: toolMessages.length,
-    statelessItems,
-    items: next.map((message) => {
-      const images = (message.imageAttachments ?? []).flatMap((attachment) => {
-        const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
-        return imageUrl
-          ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
-          : [];
-      });
-      return {
-        type: "function_call_output",
-        call_id: message.toolCallId,
-        output: images.length > 0
-          ? [{ type: "input_text", text: message.content }, ...images]
-          : message.content,
-      };
-    }),
   };
+  const images = (message.imageAttachments ?? []).flatMap((attachment) => {
+    const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
+    return imageUrl
+      ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
+      : [];
+  });
+  return [{
+    ...statelessItem,
+    output: images.length > 0
+      ? [{ type: "input_text", text: message.content }, ...images]
+      : message.content,
+  }, statelessItem];
 }
 
 

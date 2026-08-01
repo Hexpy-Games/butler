@@ -39,6 +39,50 @@ test("agent loop returns text-only model response", async () => {
   ]);
 });
 
+test("agent loop gives one empty provider response an ordinary chance to continue", async () => {
+  const modelInputs: string[] = [];
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "hello" }],
+    tools,
+    maxIterations: 4,
+    callModel: async (input) => {
+      modelInputs.push(
+        input.messages.map((message) => `${message.role}:${message.content}`).join("\n"),
+      );
+      return input.iteration === 0 ? {} : { text: "recovered answer" };
+    },
+    executeTool: async () => {
+      throw new Error("should not execute");
+    },
+  });
+
+  expect(result.finalText).toBe("recovered answer");
+  expect(modelInputs).toHaveLength(2);
+  expect(modelInputs[1]).toContain(
+    "The previous response contained no text or tool call.",
+  );
+});
+
+test("agent loop does not create an empty-response retry loop", async () => {
+  let calls = 0;
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "hello" }],
+    tools,
+    maxIterations: 8,
+    callModel: async () => {
+      calls += 1;
+      return {};
+    },
+    executeTool: async () => {
+      throw new Error("should not execute");
+    },
+  });
+
+  expect(calls).toBe(2);
+  expect(result.finalText).toBe("");
+  expect(result.stoppedByLimit).toBe(false);
+});
+
 test("agent loop executes model-selected tool call and continues with tool result", async () => {
   const modelInputs: string[] = [];
   const result = await runAgentLoop({
@@ -107,6 +151,7 @@ test("agent loop sends bounded web evidence while retaining the full tool event"
     },
     executeTool: async () => ({
       ok: true,
+      turn_time_remaining_seconds: 42,
       query: "current market",
       results: [{ raw_duplicate: "RAW_WEB_RESULT_SHOULD_STAY_DURABLE" }],
       public_web_evidence_items: [{
@@ -133,6 +178,7 @@ test("agent loop sends bounded web evidence while retaining the full tool event"
     failed_queries: [{ query: "blocked query", error: "challenge" }],
     read_required: true,
     recommended_read_urls: ["https://example.com/market"],
+    turn_time_remaining_seconds: 42,
   });
   expect(providerToolContent).toContain("Market evidence from the source.");
   expect(providerToolContent).not.toContain("RAW_WEB_RESULT_SHOULD_STAY_DURABLE");

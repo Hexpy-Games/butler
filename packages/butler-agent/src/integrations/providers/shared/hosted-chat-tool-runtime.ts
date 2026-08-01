@@ -7,6 +7,7 @@ import { providerEmptyResponseError, safeEndpointLabel } from "../provider-error
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
 import {
   createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
   toolBatchCompletedHandoffText,
 } from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "./final-candidate-review.ts";
@@ -72,6 +73,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
   let toolBatchExecuted = false;
+  let emptyResponseRecoveryUsed = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
@@ -94,6 +96,15 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     const toolCalls = extractHostedChatToolCalls(assistant, allowedNames);
     if (toolCalls.length === 0) {
       if (!text) {
+        const observation = emptyResponseRecoveryObservation({
+          recoveryUsed: emptyResponseRecoveryUsed,
+          hasNextModelRound: round + 1 < maxRounds,
+        });
+        if (observation) {
+          emptyResponseRecoveryUsed = true;
+          messages.push({ role: "user", content: observation });
+          continue;
+        }
         throw providerEmptyResponseError({
           provider: hostedProviderErrorLabel(config),
           api: "chat_completions",

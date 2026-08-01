@@ -1,5 +1,5 @@
 import type { FunctionToolPromptOptions, OpenAIAuthOverride } from "../runtime-contracts.ts";
-import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, extractResponseText, finalNoToolInstructions, functionToolToAgentTool, modelFacingFunctionTools, modelIterationLimitWithinUsageBudget, newToolMessages, openAIInputWithAttachments, responseToAgentModelResponse } from "../shared/runtime-support.ts";
+import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, extractResponseText, finalNoToolInstructions, functionToolToAgentTool, modelFacingFunctionTools, modelIterationLimitWithinUsageBudget, newAgentLoopContinuationMessages, openAIInputWithAttachments, responseToAgentModelResponse } from "../shared/runtime-support.ts";
 import { buildReasoningConfig, getButlerRuntime, resolveOpenAIModel, resolveOpenAIPromptCacheConfig } from "./config.ts";
 import { createOpenAIResponse, functionCallContinuationItems, toCodexStatelessInput } from "./responses.ts";
 import { logPromptCacheStats, recordPromptCacheMetric } from "./usage.ts";
@@ -29,12 +29,11 @@ export async function runOpenAIFunctionToolPromptText(
     options.usageAttribution,
   );
   let previousResponseId: string | null = null;
-  let sentToolMessages = 0;
+  let sentContinuation = { toolMessages: 0, userMessages: 1 };
   const initialPromptInput = openAIInputWithAttachments(options.prompt, options.attachments);
   const promptForAgentLoop = promptWithAttachmentContext(options.prompt, options.attachments);
   const codexStatelessInput = toCodexStatelessInput(initialPromptInput);
   let modelCallRound = 0;
-  let pendingFinalCandidateObservation: string | null = null;
   const agentLoopTools = activeFunctionTools(options).map(functionToolToAgentTool);
 
   const result = await runAgentLoop({
@@ -44,22 +43,16 @@ export async function runOpenAIFunctionToolPromptText(
     callModel: async ({ messages }) => {
       const activeTools = activeFunctionTools(options);
       agentLoopTools.splice(0, agentLoopTools.length, ...activeTools.map(functionToolToAgentTool));
-      const toolInput = previousResponseId
-        ? newToolMessages(messages, sentToolMessages, options.butlerData)
+      const continuation = previousResponseId
+        ? newAgentLoopContinuationMessages(
+            messages,
+            sentContinuation,
+            options.butlerData,
+          )
         : null;
-      const requestItems = toolInput?.items ?? initialPromptInput;
-      let finalCandidateObservationIncluded = false;
-      if (toolInput && pendingFinalCandidateObservation) {
-        const observationItem = {
-          role: "user",
-          content: [{ type: "input_text", text: pendingFinalCandidateObservation }],
-        };
-        toolInput.items.push(observationItem);
-        toolInput.statelessItems.push(observationItem);
-        finalCandidateObservationIncluded = true;
-      }
-      const statelessRequestInput = toolInput
-        ? [...codexStatelessInput, ...toolInput.items]
+      const requestItems = continuation?.items ?? initialPromptInput;
+      const statelessRequestInput = continuation
+        ? [...codexStatelessInput, ...continuation.items]
         : codexStatelessInput;
 
       beforeAttributedModelRequest({
@@ -94,12 +87,9 @@ export async function runOpenAIFunctionToolPromptText(
         response,
         roundIndex: modelCallRound,
       });
-      if (toolInput) {
-        sentToolMessages = toolInput.sentCount;
-        codexStatelessInput.push(...toolInput.statelessItems);
-      }
-      if (finalCandidateObservationIncluded) {
-        pendingFinalCandidateObservation = null;
+      if (continuation) {
+        sentContinuation = continuation.sent;
+        codexStatelessInput.push(...continuation.statelessItems);
       }
       previousResponseId = response.id;
       const functionCallItems = functionCallContinuationItems(response);
@@ -147,7 +137,6 @@ export async function runOpenAIFunctionToolPromptText(
       if (disposition.kind === "final") {
         return { status: "accepted", text: disposition.text };
       }
-      pendingFinalCandidateObservation = disposition.observation;
       return { status: "continue", observation: disposition.observation };
     },
     onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
@@ -164,9 +153,9 @@ export async function runOpenAIFunctionToolPromptText(
         return toolBatchCompletedHandoffText();
       }
       if (!previousResponseId) return "";
-      const pending = newToolMessages(
+      const pending = newAgentLoopContinuationMessages(
         messages,
-        sentToolMessages,
+        sentContinuation,
         options.butlerData,
       );
       if (pending.items.length === 0) return "";
@@ -195,7 +184,7 @@ export async function runOpenAIFunctionToolPromptText(
           response,
           roundIndex: modelCallRound,
         });
-        sentToolMessages = pending.sentCount;
+        sentContinuation = pending.sent;
         codexStatelessInput.push(...pending.statelessItems);
         previousResponseId = response.id;
         recordPromptCacheMetric(response, {
