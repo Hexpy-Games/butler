@@ -35,6 +35,7 @@ export function createBundledAgentSupervisor(input: {
     appManaged?: boolean;
     bundledAgentVersion?: string;
     commitActivation?: () => void;
+    invalidateRuntimeReceipt?: () => void;
     rollbackActivation?: (error: Error) => void;
     containmentKind?: string;
     containmentVerified?: boolean;
