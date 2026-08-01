@@ -33,6 +33,7 @@ export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
 export const APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA =
   "butler.app-managed-agent-runtime-update-transaction.v1";
 const sha256ReadBufferBytes = 1024 * 1024;
+const archiveWorkerTimeoutMs = 60_000;
 
 export function appManagedAgentPointerPath(butlerData) {
   return join(butlerData, "app", "runtime", "agent", "current.json");
@@ -374,6 +375,8 @@ export function prepareAppManagedAgentRuntime({
   let artifact = null;
   let artifactPath;
   let digest = null;
+  let declaredDigest = null;
+  let declaredClosure;
   let version = "unknown";
   let runtimeHomeLabel = join("app", "runtime", "agent", "versions", version);
   let payloadLabel = join(runtimeHomeLabel, "payloads", "unknown");
@@ -387,11 +390,15 @@ export function prepareAppManagedAgentRuntime({
     if (!existsSync(artifactPath)) {
       throw new Error("bundled Agent artifact is missing");
     }
-    digest = sha256File(artifactPath);
-    if (artifact.sha256 && artifact.sha256 !== digest) {
-      throw new Error("bundled Agent artifact digest mismatch");
-    }
-    notifyProgress(onProgress, "runtime_manifest_verified");
+    declaredDigest = requireSha256(
+      artifact.sha256,
+      "bundled Agent artifact digest mismatch",
+    );
+    declaredClosure = readDependencyClosureDeclarations(
+      root,
+      artifact,
+      declaredDigest,
+    );
   } catch (error) {
     writeAppManagedRuntimeFailure({
       butlerData,
@@ -400,8 +407,62 @@ export function prepareAppManagedAgentRuntime({
       runtimeHomeLabel,
       payloadLabel,
       sourceRoot: root,
-      payloadDigest: digest,
+      payloadDigest: declaredDigest,
       managedRuntimeDigest: null,
+      preparedAt,
+      error,
+    });
+    throw error;
+  }
+
+  const runtimeHome = join(butlerData, runtimeHomeLabel);
+  const currentPointerPath = appManagedAgentPointerPath(butlerData);
+  const previousPointer = readJsonIfPresent(currentPointerPath);
+  const previousSelectablePointer =
+    previousPointer?.runtime_home === runtimeHomeLabel
+      ? (previousPointer.previous ?? null)
+      : previousPointer;
+  const existingPointer = validPointerForVersion(
+    previousPointer,
+    artifact.version,
+  );
+  if (
+    existingPointer &&
+    activatedRuntimeReceiptReady({
+      artifact,
+      artifactDigest: declaredDigest,
+      managedRuntimeDigest: declaredClosure.managedRuntimeDigest,
+      payloadLabel,
+      platform,
+      pointer: existingPointer,
+      runtimeHome,
+      runtimeHomeLabel,
+    })
+  ) {
+    notifyProgress(onProgress, "runtime_existing_ready");
+    return existingRuntimeActivation(existingPointer, currentPointerPath, butlerData, {
+      rollbackActivation() {
+        rmSync(join(runtimeHome, "runtime.json"), { force: true });
+      },
+    });
+  }
+
+  try {
+    digest = sha256File(artifactPath);
+    if (digest !== declaredDigest) {
+      throw new Error("bundled Agent artifact digest mismatch");
+    }
+    notifyProgress(onProgress, "runtime_manifest_verified");
+  } catch (error) {
+    writeAppManagedRuntimeFailure({
+      butlerData,
+      version,
+      artifactVersion: artifact.version,
+      runtimeHomeLabel,
+      payloadLabel,
+      sourceRoot: root,
+      payloadDigest: digest ?? declaredDigest,
+      managedRuntimeDigest: declaredClosure.managedRuntimeDigest,
       preparedAt,
       error,
     });
@@ -409,7 +470,12 @@ export function prepareAppManagedAgentRuntime({
   }
   let verifiedClosure;
   try {
-    verifiedClosure = verifyDependencyClosure(root, artifact, digest);
+    verifiedClosure = verifyDependencyClosure(
+      root,
+      artifact,
+      digest,
+      declaredClosure,
+    );
     notifyProgress(onProgress, "runtime_dependency_closure_verified");
   } catch (error) {
     writeAppManagedRuntimeFailure({
@@ -433,18 +499,6 @@ export function prepareAppManagedAgentRuntime({
     managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
     resourceRoot: root,
   };
-
-  const runtimeHome = join(butlerData, runtimeHomeLabel);
-  const currentPointerPath = appManagedAgentPointerPath(butlerData);
-  const previousPointer = readJsonIfPresent(currentPointerPath);
-  const previousSelectablePointer =
-    previousPointer?.runtime_home === runtimeHomeLabel
-      ? (previousPointer.previous ?? null)
-      : previousPointer;
-  const existingPointer = validPointerForVersion(
-    previousPointer,
-    artifact.version,
-  );
   if (
     existingPointer &&
     runtimeHomeReady(
@@ -454,17 +508,38 @@ export function prepareAppManagedAgentRuntime({
     )
   ) {
     notifyProgress(onProgress, "runtime_existing_ready");
-    return {
-      runtimeHome: join(butlerData, existingPointer.runtime_home),
-      runtimeHomeLabel: existingPointer.runtime_home,
-      version: existingPointer.version,
-      pointerPath: currentPointerPath,
-      activated: false,
-      previousRuntimePath: existingPointer.previous?.runtime_home ?? null,
-      publishLaunchPointer() {},
-      commitActivation() {},
-      rollbackActivation() {},
-    };
+    return existingRuntimeActivation(existingPointer, currentPointerPath, butlerData, {
+      commitActivation() {
+        const selectedAt = now().toISOString();
+        writeActivatedRuntimeReceipt({
+          artifact,
+          artifactDigest: digest,
+          managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
+          payloadLabel,
+          preparedAt,
+          resourceRoot: root,
+          runtimeHome,
+          runtimeHomeLabel,
+          selectedAt,
+        });
+        atomicWriteJson(currentPointerPath, {
+          schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
+          product: "butler-app",
+          bundled_agent_product: "butler-agent",
+          bundled_agent_version: artifact.version,
+          gateway_profile: "electron",
+          version: artifact.version,
+          runtime_home: runtimeHomeLabel,
+          payload_path: payloadLabel,
+          selected_at: selectedAt,
+          previous: existingPointer.previous ?? null,
+          raw_text_included: false,
+        });
+      },
+      rollbackActivation() {
+        rmSync(join(runtimeHome, "runtime.json"), { force: true });
+      },
+    });
   }
 
   const stagingHome = `${runtimeHome}.staging-${process.pid}-${Date.now()}`;
@@ -573,24 +648,16 @@ export function prepareAppManagedAgentRuntime({
       commitActivation() {
         if (rolledBack) return;
         const selectedAt = now().toISOString();
-        atomicWriteJson(join(runtimeHome, "runtime.json"), {
-          schema: APP_MANAGED_RUNTIME_SCHEMA,
-          product: "butler-app",
-          bundled_agent_product: "butler-agent",
-          bundled_agent_version: artifact.version,
-          gateway_profile: "electron",
-          runtime_home: runtimeHomeLabel,
-          payload_path: payloadLabel,
-          source_resource_path: root,
-          payload_format: "agent-archive",
-          payload_sha256: digest,
-          managed_runtime_sha256: verifiedClosure.managedRuntimeDigest,
-          activation_policy: "versioned-app-managed-runtime",
-          rollback_policy: "preserve-previous-app-managed-runtime",
-          prepared_at: preparedAt,
-          selected_at: selectedAt,
-          activation_status: "activated",
-          raw_text_included: false,
+        writeActivatedRuntimeReceipt({
+          artifact,
+          artifactDigest: digest,
+          managedRuntimeDigest: verifiedClosure.managedRuntimeDigest,
+          payloadLabel,
+          preparedAt,
+          resourceRoot: root,
+          runtimeHome,
+          runtimeHomeLabel,
+          selectedAt,
         });
         atomicWriteJson(currentPointerPath, {
           schema: APP_MANAGED_RUNTIME_POINTER_SCHEMA,
@@ -666,6 +733,9 @@ export function prepareAppManagedAgentRuntime({
           throw restoreError;
         }
       },
+      invalidateRuntimeReceipt() {
+        rmSync(join(runtimeHome, "runtime.json"), { force: true });
+      },
     };
     return activation;
   } catch (error) {
@@ -734,6 +804,7 @@ export function resolveAppManagedGatewayCommand({
       BUTLER_APP_MANAGED_RUNTIME_HOME: activation.runtimeHome,
     },
     commitActivation: activation.commitActivation,
+    invalidateRuntimeReceipt: activation.invalidateRuntimeReceipt,
     publishLaunchPointer: activation.publishLaunchPointer,
     rollbackActivation: activation.rollbackActivation,
   };
@@ -813,6 +884,7 @@ export function resolveAppManagedForegroundCommand({
         EMBED_HEALTH_PORT: "0",
       },
       commitActivation: activation.commitActivation,
+      invalidateRuntimeReceipt: activation.invalidateRuntimeReceipt,
       publishLaunchPointer: activation.publishLaunchPointer,
       rollbackActivation: activation.rollbackActivation,
     };
@@ -848,6 +920,7 @@ export function resolveAppManagedForegroundCommand({
       EMBED_HEALTH_PORT: "0",
     },
     commitActivation: activation.commitActivation,
+    invalidateRuntimeReceipt: activation.invalidateRuntimeReceipt,
     publishLaunchPointer: activation.publishLaunchPointer,
     rollbackActivation: activation.rollbackActivation,
   };
@@ -903,7 +976,11 @@ function resolveBundledAgentArtifact(manifest) {
   };
 }
 
-function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
+function readDependencyClosureDeclarations(
+  resourceRoot,
+  artifact,
+  artifactDigest,
+) {
   const closurePath = join(resourceRoot, "dependency-closure.json");
   if (!existsSync(closurePath)) {
     throw new Error("dependency closure manifest is missing");
@@ -941,6 +1018,39 @@ function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
   ) {
     throw new Error("dependency closure bundled Agent payload digest mismatch");
   }
+
+  const managedRuntime = Array.isArray(closure.appOwnedDependencies)
+    ? closure.appOwnedDependencies.find(
+        (item) => item?.id === "managed-runtime-payload",
+      )
+    : null;
+  assertUnsignedIntegrity(
+    "dependency closure managed-runtime-payload",
+    managedRuntime?.integrity,
+  );
+  if (managedRuntime?.integrity?.digestAlgorithm !== "sha256") {
+    throw new Error("dependency closure managed runtime digest is invalid");
+  }
+  return {
+    closure,
+    managedRuntimeDigest: requireSha256(
+      managedRuntime.integrity.digest,
+      "dependency closure managed-runtime-payload digest mismatch",
+    ),
+  };
+}
+
+function verifyDependencyClosure(
+  resourceRoot,
+  artifact,
+  artifactDigest,
+  declarations = readDependencyClosureDeclarations(
+    resourceRoot,
+    artifact,
+    artifactDigest,
+  ),
+) {
+  const { closure } = declarations;
 
   const runtimeDigest = sha256Directory(join(resourceRoot, "runtime"));
   const releaseManifestDigest = sha256File(
@@ -1026,6 +1136,14 @@ function verifyDependencyClosure(resourceRoot, artifact, artifactDigest) {
   };
 }
 
+function requireSha256(value, label) {
+  const digest = safeString(value);
+  if (!/^[a-f0-9]{64}$/u.test(digest)) {
+    throw new Error(label);
+  }
+  return digest;
+}
+
 function assertManifestArtifactsUnsigned(label, manifest) {
   const artifacts = Array.isArray(manifest?.artifacts)
     ? manifest.artifacts
@@ -1084,6 +1202,117 @@ function validPointerForVersion(pointer, version) {
     return null;
   }
   return pointer;
+}
+
+function activatedRuntimeReceiptReady({
+  artifact,
+  artifactDigest,
+  managedRuntimeDigest,
+  payloadLabel,
+  platform,
+  pointer,
+  runtimeHome,
+  runtimeHomeLabel,
+}) {
+  if (
+    pointer.runtime_home !== runtimeHomeLabel ||
+    pointer.payload_path !== payloadLabel ||
+    pointer.bundled_agent_version !== artifact.version ||
+    typeof pointer.selected_at !== "string" ||
+    !pointer.selected_at
+  ) {
+    return false;
+  }
+  const receipt = readJsonIfPresent(join(runtimeHome, "runtime.json"));
+  if (
+    receipt?.schema !== APP_MANAGED_RUNTIME_SCHEMA ||
+    receipt.product !== "butler-app" ||
+    receipt.bundled_agent_product !== "butler-agent" ||
+    receipt.bundled_agent_version !== artifact.version ||
+    receipt.gateway_profile !== "electron" ||
+    receipt.runtime_home !== runtimeHomeLabel ||
+    receipt.payload_path !== payloadLabel ||
+    receipt.payload_sha256 !== artifactDigest ||
+    receipt.managed_runtime_sha256 !== managedRuntimeDigest ||
+    receipt.activation_status !== "activated" ||
+    receipt.selected_at !== pointer.selected_at ||
+    receipt.raw_text_included !== false
+  ) {
+    return false;
+  }
+  if (!isFile(join(runtimeHome, "payloads", artifact.artifactName))) {
+    return false;
+  }
+  if (
+    !isFile(
+      join(
+        runtimeHome,
+        "packages",
+        "butler-agent",
+        "scripts",
+        "native-service-daemon.ts",
+      ),
+    )
+  ) {
+    return false;
+  }
+  return runtimeHomeReadinessIssue(runtimeHome, null, platform) === null;
+}
+
+function existingRuntimeActivation(
+  pointer,
+  pointerPath,
+  butlerData,
+  callbacks = {},
+) {
+  return {
+    runtimeHome: join(butlerData, pointer.runtime_home),
+    runtimeHomeLabel: pointer.runtime_home,
+    version: pointer.version,
+    pointerPath,
+    activated: false,
+    previousRuntimePath: pointer.previous?.runtime_home ?? null,
+    publishLaunchPointer() {},
+    commitActivation: callbacks.commitActivation ?? (() => {}),
+    rollbackActivation: callbacks.rollbackActivation ?? (() => {}),
+    invalidateRuntimeReceipt() {
+      rmSync(join(butlerData, pointer.runtime_home, "runtime.json"), {
+        force: true,
+      });
+    },
+  };
+}
+
+function writeActivatedRuntimeReceipt({
+  artifact,
+  artifactDigest,
+  managedRuntimeDigest,
+  payloadLabel,
+  preparedAt,
+  resourceRoot,
+  runtimeHome,
+  runtimeHomeLabel,
+  selectedAt,
+}) {
+  atomicWriteJson(join(runtimeHome, "runtime.json"), {
+    schema: APP_MANAGED_RUNTIME_SCHEMA,
+    product: "butler-app",
+    bundled_agent_product: "butler-agent",
+    bundled_agent_version: artifact.version,
+    gateway_profile: "electron",
+    runtime_home: runtimeHomeLabel,
+    payload_path: payloadLabel,
+    source_resource_path: resourceRoot,
+    payload_format: "agent-archive",
+    payload_sha256: artifactDigest,
+    managed_runtime_sha256: managedRuntimeDigest,
+    activation_policy: "versioned-app-managed-runtime",
+    rollback_policy: "preserve-previous-app-managed-runtime",
+    prepared_at: preparedAt,
+    selected_at: selectedAt,
+    activation_status: "activated",
+    raw_text_included: false,
+  });
 }
 
 function validAppManagedPointer(pointer) {
@@ -1411,10 +1640,13 @@ function extractPosixAgentArchive(
     [worker, artifactPath, runtimeHome, inventoryPath],
     {
       encoding: "utf8",
+      killSignal: "SIGKILL",
       shell: false,
       maxBuffer: 1024 * 1024,
+      timeout: archiveWorkerTimeoutMs,
     },
   );
+  throwIfArchiveWorkerTimedOut(result, "extraction");
   if (result.status !== 0) {
     throw new Error(
       `bundled Agent artifact extraction failed: ${String(result.stderr || result.stdout).trim().slice(-4000)}`,
@@ -1456,11 +1688,14 @@ function extractWindowsAgentArchive(artifactPath, runtimeHome, resourceRoot) {
     [worker, artifactPath, runtimeHome, inventoryPath],
     {
       encoding: "utf8",
+      killSignal: "SIGKILL",
       windowsHide: true,
       shell: false,
       maxBuffer: 1024 * 1024,
+      timeout: archiveWorkerTimeoutMs,
     },
   );
+  throwIfArchiveWorkerTimedOut(result, "extraction");
   if (result.status !== 0) {
     throw new Error(
       `bundled Agent artifact extraction failed: ${String(result.stderr || result.stdout).trim().slice(-4000)}`,
@@ -1539,16 +1774,25 @@ function posixArchiveFilesInstalled(
     ],
     {
       encoding: "utf8",
+      killSignal: "SIGKILL",
       shell: false,
       maxBuffer: 1024 * 1024,
+      timeout: archiveWorkerTimeoutMs,
     },
   );
+  throwIfArchiveWorkerTimedOut(result, "verification");
   if (result.status !== 0) return false;
   try {
     const verification = JSON.parse(result.stdout.trim());
     return verification?.ok === true && verification?.verified === true;
   } catch {
     return false;
+  }
+}
+
+function throwIfArchiveWorkerTimedOut(result, operation) {
+  if (result.error?.code === "ETIMEDOUT") {
+    throw new Error(`bundled Agent archive ${operation} timed out`);
   }
 }
 
