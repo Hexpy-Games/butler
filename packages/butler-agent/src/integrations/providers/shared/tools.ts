@@ -54,6 +54,7 @@ export function functionToolToAgentTool(tool: FunctionToolDefinition): AgentLoop
     name: tool.name,
     description: tool.description,
     inputSchema: tool.parameters as AgentLoopToolDefinition["inputSchema"],
+    concurrencySafe: tool.concurrencySafe,
   };
 }
 

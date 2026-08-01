@@ -1,4 +1,6 @@
 import type { ProjectLedgerRecordUpdate } from "../../adapters/index.ts";
+import { normalizeProjectLedgerAcceptanceInput } from
+  "../../tools/project-ledger/acceptance-input.ts";
 
 export const GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES = [
   "project_ledger_create",
@@ -32,7 +34,10 @@ export function guidedProjectLedgerEffect(
   if (!isGuidedProjectLedgerEffectTool(name)) {
     throw new Error(`Project Ledger effect adapter is unavailable: ${name}`);
   }
-  const update = recordUpdate(name, args);
+  const update = recordUpdate(
+    name,
+    normalizeProjectLedgerAcceptanceInput(args),
+  );
   const kind = update.kind ?? "record";
   return {
     target: `project-ledger:${kind}:${update.id}`,

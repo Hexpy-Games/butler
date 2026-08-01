@@ -216,7 +216,7 @@ describe("R3 guided Project Ledger effect", () => {
     }));
   });
 
-  test("completes concise guided Work without requiring a separate spec record", async () => {
+  test("preserves acceptance arrays while creating and completing concise guided Work", async () => {
     const fixture = await projectLedgerFixture();
     await dispatchProjectLedgerEffect(
       fixture,
@@ -227,7 +227,10 @@ describe("R3 guided Project Ledger effect", () => {
         id: "W-R3-CONCISE",
         title: "Concise guided work",
         status: "in_progress",
-        acceptance: "The requested result is delivered and validated",
+        acceptance: [
+          "The requested result is delivered",
+          "The requested result is validated",
+        ],
       },
     );
 
@@ -237,6 +240,9 @@ describe("R3 guided Project Ledger effect", () => {
     });
     expect(created.record.status).toBe("in_progress");
     expect(created.record.specExemption).toBe(true);
+    expect(fixture.core.readRecordData(created.filePath)?.acceptance).toBe(
+      "The requested result is delivered\nThe requested result is validated",
+    );
 
     await dispatchProjectLedgerEffect(
       fixture,

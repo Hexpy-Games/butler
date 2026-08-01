@@ -15,6 +15,7 @@ import { runProjectLedgerPlannedLifecycleMutation } from "./lifecycle-planner.ts
 import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
+import { normalizeProjectLedgerAcceptanceInput } from "./acceptance-input.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -54,6 +55,12 @@ const LEDGER_TASK_STATES = [
 ] as const;
 const LEDGER_ATTEMPT_STATES = ["started", "succeeded", "failed", "interrupted"] as const;
 
+const acceptanceInputField = {
+  type: ["string", "array"],
+  minItems: 1,
+  items: { type: "string" },
+} as const;
+
 const recordFields = {
   project_ref: {
     type: "string",
@@ -72,7 +79,7 @@ const recordFields = {
   ledger_commits: { type: "string" },
   requires_commit_evidence: { type: "boolean" },
   spec: { type: "string" },
-  acceptance: { type: "string" },
+  acceptance: acceptanceInputField,
   implementation: { type: "string" },
   mitigation: { type: "string" },
   priority: { type: "number" },
@@ -102,6 +109,11 @@ const lifecycleCompleteFields = {
   code_commit: recordFields.code_commit,
 };
 
+const workLifecycleCompleteFields = {
+  ...lifecycleCompleteFields,
+  acceptance: recordFields.acceptance,
+};
+
 const toolSpecs = [
   { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project.", properties: { project_ref: recordFields.project_ref }, mutates: true },
   { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
@@ -110,7 +122,7 @@ const toolSpecs = [
   { name: "project_ledger_create", description: "Create one new Ledger record and refresh index/views/check. Do not use this tool to search; use project_ledger_list for existing records. task requires work_id; attempt requires task_id; work/task should include acceptance. Guided Work without a separate spec is recorded as spec-exempt. Batch independent records.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
   { name: "project_ledger_update", description: "Update one exact modeled Project Ledger source record through CLI/core behavior. Provide both kind and id.", required: ["kind", "id"], properties: recordFields, mutates: true },
   { name: "project_ledger_work_update", description: "Update or transition Project Ledger work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
-  { name: "project_ledger_work_complete", description: "Complete Project Ledger work with explicit validation, review, and report evidence. Link a separate spec when one exists; concise guided Work without one is recorded as spec-exempt during completion.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_work_complete", description: "Complete Project Ledger work with explicit validation, review, and report evidence. Link a separate spec when one exists; concise guided Work without one is recorded as spec-exempt during completion.", required: ["id", "validation", "review", "report"], properties: workLifecycleCompleteFields, mutates: true },
   { name: "project_ledger_task_update", description: "Update or transition a Project Ledger task.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
   { name: "project_ledger_task_complete", description: "Complete a Project Ledger task with explicit validation, review, and report evidence.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
   { name: "project_ledger_attempt_start", description: "Create a started Project Ledger attempt under a task.", required: ["task_id"], properties: recordFields, mutates: true },
@@ -226,9 +238,10 @@ function runProjectLedgerNativeTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
+  const normalizedArgs = normalizeProjectLedgerAcceptanceInput(args);
   let projectPath: string;
   try {
-    projectPath = projectLedgerProjectPath(input, args);
+    projectPath = projectLedgerProjectPath(input, normalizedArgs);
   } catch (error) {
     if (error instanceof ProjectLedgerProjectScopeError) {
       return {
@@ -241,11 +254,15 @@ function runProjectLedgerNativeTool(
     }
     throw error;
   }
-  const cliArgs = commandForProjectLedgerNativeTool(toolName, args, projectPath);
+  const cliArgs = commandForProjectLedgerNativeTool(
+    toolName,
+    normalizedArgs,
+    projectPath,
+  );
   const plannedResult = runProjectLedgerPlannedLifecycleMutation({
     executor: input,
     toolName,
-    args,
+    args: normalizedArgs,
     projectPath,
     finalCliArgs: cliArgs,
   });
@@ -266,12 +283,14 @@ function runProjectLedgerNativeTool(
       ...projectLedgerRenderedViewEvidence({
         projectPath,
         result,
-        view: stringArg(args, "view"),
-        write: args.write === true,
+        view: stringArg(normalizedArgs, "view"),
+        write: normalizedArgs.write === true,
       }),
     };
   }
-  if (toolName === "project_ledger_list") return applyListBounds(result, args);
+  if (toolName === "project_ledger_list") {
+    return applyListBounds(result, normalizedArgs);
+  }
   if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(result);
   return result;
 }
