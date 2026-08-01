@@ -1,4 +1,5 @@
 import type { DurableWorkContext } from "../../btcc/durable-work/index.ts";
+import { structuredToolResultModelPreview } from "../../model-tool-loop/index.ts";
 
 export function renderDurableWorkContext(
   context: DurableWorkContext | null,
@@ -85,10 +86,22 @@ function singleLine(value: string, limit: number): string {
 }
 
 function resultFactText(fact: {
+  toolName: string;
   resultJson?: unknown;
   errorCode?: string;
 }): string {
   if (fact.resultJson !== undefined) {
+    const preview = structuredToolResultModelPreview({
+      toolName: fact.toolName,
+      output: fact.resultJson,
+    });
+    if (preview) {
+      try {
+        return JSON.stringify(preview) ?? "No result body recorded.";
+      } catch {
+        return "Result body is unavailable.";
+      }
+    }
     if (typeof fact.resultJson === "string") return fact.resultJson;
     try {
       return JSON.stringify(fact.resultJson) ?? "No result body recorded.";

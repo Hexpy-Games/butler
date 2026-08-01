@@ -11,7 +11,15 @@ import {
   safeReadJson,
   safeWriteJson,
 } from "./fs.js";
-import { check, doctor, loadIndex, projectStatus, queryIndex, writeIndex } from "./indexer.js";
+import {
+  assertSupportedQueryKind,
+  check,
+  doctor,
+  loadIndex,
+  projectStatus,
+  queryIndex,
+  writeIndex,
+} from "./indexer.js";
 import { handleNestedCommand } from "./lifecycle-commands.js";
 import { render } from "./renderer.js";
 import { installSkill } from "./distribution.js";
@@ -116,6 +124,7 @@ export function handle(command, positionals, options) {
   if (command === "status") return projectStatus(project);
   if (command === "query") {
     const kind = requiredOption(options, "kind");
+    assertSupportedQueryKind(kind);
     return { kind, results: queryIndex(loadIndex(project), kind, options) };
   }
   if (command === "render") {

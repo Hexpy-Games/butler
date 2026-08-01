@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
@@ -6,7 +6,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   ProjectLedgerProjectScopeError,
   projectLedgerProjectPath,
+  runProjectLedgerTool,
 } from "../../packages/butler-agent/src/integrations/project-ledger/client.ts";
+import { createProjectLedgerToolHandlers } from
+  "../../packages/butler-agent/src/agent/tools/project-ledger/shared.ts";
 
 const tempDirs: string[] = [];
 
@@ -249,5 +252,70 @@ describe("projectLedgerProjectPath", () => {
     writeLedgerRoot(ledgerRoot, "butler");
 
     expect(projectLedgerProjectPath({ butlerHome, butlerData }, { project_path: ledgerRoot })).toBe(ledgerRoot);
+  });
+
+  test("treats fresh status and query as normal empty reads", async () => {
+    const butlerHome = process.cwd();
+    const butlerData = makeTempDir();
+    const projectPath = join(makeTempDir(), "fresh-project");
+    const clientInput = { butlerHome, butlerData };
+
+    expect(runProjectLedgerTool(clientInput, [
+      "status",
+      "--project",
+      projectPath,
+    ])).toMatchObject({
+      ok: true,
+      data: { initialized: false },
+      error: null,
+    });
+    expect(runProjectLedgerTool(clientInput, [
+      "query",
+      "--project",
+      projectPath,
+      "--kind",
+      "work",
+    ])).toMatchObject({
+      ok: true,
+      data: {
+        initialized: false,
+        kind: "work",
+        results: [],
+      },
+      error: null,
+    });
+    expect(runProjectLedgerTool(clientInput, [
+      "query",
+      "--project",
+      projectPath,
+      "--kind",
+      "works",
+    ])).toMatchObject({
+      ok: false,
+      error: { code: "invalid_query_kind" },
+    });
+    expect(existsSync(projectPath)).toBe(false);
+
+    expect(runProjectLedgerTool(clientInput, [
+      "record",
+      "show",
+      "--project",
+      projectPath,
+      "--id",
+      "W-MISSING",
+    ])).toMatchObject({
+      ok: false,
+      error: { code: "record_not_found" },
+    });
+
+    const publicStatus = await createProjectLedgerToolHandlers({
+      butlerHome,
+      butlerData: "",
+    }).inspect_project_status({ args: { project_path: projectPath } });
+    expect(publicStatus).toMatchObject({
+      ok: true,
+      data: { initialized: false },
+    });
+    expect(publicStatus).not.toHaveProperty("evidence_capability_receipts");
   });
 });

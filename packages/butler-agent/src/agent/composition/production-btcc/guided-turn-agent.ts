@@ -31,6 +31,7 @@ import {
 import {
   authorizedToolDefinitions,
   GUIDED_NATIVE_TOOL_AVAILABILITY_OVERRIDES,
+  guidedNativeToolDefinitions,
   guidedPolicy,
   hiddenNativeToolNamesForGuidedTurn,
   routeForUsedTools,
@@ -123,6 +124,7 @@ export function createProductionGuidedTurnAgent(input: {
         workerModel: selectedModelRef(turn),
         searchPlannerModel: selectedModelRef(turn),
         currentToolNames: () => [...authorizedNames],
+        nativeToolDefinitions: guidedNativeToolDefinitions(),
         hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
           policy.accessMode === "full_access" &&
             policy.trackingMode === "ledger" &&
@@ -183,7 +185,7 @@ export function createProductionGuidedTurnAgent(input: {
                 }),
               });
               const normalizedInput = adapter.normalizeInput(
-                withoutRuntimeOwnedHash(call.args),
+                call.args,
               );
               return {
                 target: workspaceFileEffectTarget(normalizedInput.path),
@@ -311,11 +313,4 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
-}
-
-function withoutRuntimeOwnedHash(value: unknown): unknown {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  const { expected_sha256: _runtimeOwned, ...modelInput } =
-    value as Record<string, unknown>;
-  return modelInput;
 }

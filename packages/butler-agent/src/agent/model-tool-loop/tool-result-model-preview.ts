@@ -44,6 +44,10 @@ export function structuredToolResultModelPreview(input: {
 }
 
 function publicWebEvidencePreview(toolName: string, output: Record<string, unknown>): Record<string, unknown> {
+  const pageExcerpt = toolName === "web_read"
+    ? boundedHeadTailText(output.markdown, 2_000)
+    : undefined;
+  let remainingWebReadEvidenceChars = pageExcerpt ? 2_400 : Number.POSITIVE_INFINITY;
   const rawItems = Array.isArray(output.public_web_evidence_items)
     ? output.public_web_evidence_items
     : [];
@@ -51,13 +55,18 @@ function publicWebEvidencePreview(toolName: string, output: Record<string, unkno
     .slice(0, 12).flatMap((value) => {
       const item = record(value);
       if (!item || typeof item.evidence_item_id !== "string" || typeof item.source_url !== "string") return [];
+      const boundedContent = boundedText(item.bounded_content, 1_200);
+      const projectedContent = !pageExcerpt || !boundedContent || pageExcerpt.includes(boundedContent)
+        ? pageExcerpt ? undefined : boundedContent
+        : boundedContent.slice(0, remainingWebReadEvidenceChars);
+      remainingWebReadEvidenceChars -= projectedContent?.length ?? 0;
       return [compactUndefined({
         evidence_item_id: boundedText(item.evidence_item_id, 120),
         source_url: boundedText(item.source_url, 500),
         source_identity: boundedText(item.source_identity, 160),
         published_at: boundedText(item.published_at, 80),
         content_kind: boundedText(item.content_kind, 80),
-        bounded_content: boundedText(item.bounded_content, 1_200),
+        bounded_content: projectedContent || undefined,
         limitations: Array.isArray(item.limitations)
           ? item.limitations.slice(0, 6).map((entry) => boundedText(entry, 320)).filter(Boolean)
           : [],
@@ -89,9 +98,7 @@ function publicWebEvidencePreview(toolName: string, output: Record<string, unkno
       ? output.truncated
       : undefined,
     evidence_quality: boundedText(output.evidence_quality, 80),
-    page_excerpt: toolName === "web_read"
-      ? boundedHeadTailText(output.markdown, 2_000)
-      : undefined,
+    page_excerpt: pageExcerpt,
     render_recommended: typeof output.render_recommended === "boolean"
       ? output.render_recommended
       : undefined,

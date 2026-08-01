@@ -72,7 +72,10 @@ export function runProjectLedgerTool(
   });
   if (result.stdout.trim()) {
     try {
-      return JSON.parse(result.stdout) as Record<string, unknown>;
+      return normalizeProjectLedgerReadResult(
+        args,
+        JSON.parse(result.stdout) as Record<string, unknown>,
+      );
     } catch {
       return {
         ok: false,
@@ -90,6 +93,38 @@ export function runProjectLedgerTool(
       message: result.error?.message ?? (result.stderr.trim() || `Project Ledger exited with ${result.status ?? 1}`),
     },
   };
+}
+
+function normalizeProjectLedgerReadResult(
+  args: string[],
+  result: Record<string, unknown>,
+): Record<string, unknown> {
+  const command = args[0];
+  if (command !== "status" && command !== "query") return result;
+  if (result.ok !== false) return result;
+  const error = result.error && typeof result.error === "object" &&
+      !Array.isArray(result.error)
+    ? result.error as Record<string, unknown>
+    : null;
+  if (error?.code !== "not_initialized") return result;
+  return {
+    ...result,
+    ok: true,
+    data: command === "query"
+      ? {
+          initialized: false,
+          kind: flagValue(args, "--kind"),
+          results: [],
+        }
+      : { initialized: false },
+    error: null,
+  };
+}
+
+function flagValue(args: string[], flag: string): string | null {
+  const index = args.indexOf(flag);
+  const value = index >= 0 ? args[index + 1]?.trim() : "";
+  return value || null;
 }
 
 export function projectLedgerRenderedViewEvidence(input: {

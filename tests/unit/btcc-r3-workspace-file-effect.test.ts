@@ -66,24 +66,25 @@ test("workspace file adapter keeps target syntax simple and preserves file guard
     expect(adapter.normalizeInput({
       path: join(root, "report.md"),
       content: "private",
-      overwrite: false,
     })).toMatchObject({ path: "report.md" });
     expect(() => adapter.normalizeInput({
       path: join(tmpdir(), "outside-report.md"),
       content: "private",
-      overwrite: false,
     })).toThrow("inside the workspace");
     expect(() => adapter.normalizeInput({
       path: "reports/summary.md",
       content: "safe",
       overwrite: false,
-      expected_sha256: "",
-    })).toThrow("expected_sha256 must be a SHA-256 hex value");
+    })).toThrow("rejects unknown input: overwrite");
+    expect(() => adapter.normalizeInput({
+      path: "reports/summary.md",
+      content: "safe",
+      expected_sha256: "0".repeat(64),
+    })).toThrow("rejects unknown input: expected_sha256");
 
     const protectedInput = adapter.normalizeInput({
       path: "butler-data/project-ledger/projects/demo/specs/feature.md",
       content: "must not write",
-      overwrite: false,
       create_parents: false,
     });
     const protectedResult = await adapter.dispatch({
@@ -129,13 +130,11 @@ test("one accepted high-level Plan authorizes distinct contained file targets", 
   const firstInput: GuidedWorkspaceFileInput = {
     path: "index.html",
     content: "<main>Butler</main>\n",
-    overwrite: false,
     create_parents: false,
   };
   const secondInput: GuidedWorkspaceFileInput = {
     path: "src/app.js",
     content: "export const ready = true;\n",
-    overwrite: false,
     create_parents: true,
   };
   const service = createGuidedEffectService(new SqliteGuidedEffectJournal(db));
@@ -284,18 +283,13 @@ test("one accepted high-level Plan authorizes successive corrections to the same
   const initial: GuidedWorkspaceFileInput = {
     path: "styles.css",
     content: "main { overflow-x: auto; }\n",
-    overwrite: true,
     create_parents: false,
   };
   const correction: GuidedWorkspaceFileInput = {
     ...initial,
     content: "main { overflow-x: hidden; }\n",
-    overwrite: true,
   };
-  const revert: GuidedWorkspaceFileInput = {
-    ...initial,
-    overwrite: true,
-  };
+  const revert: GuidedWorkspaceFileInput = { ...initial };
   await writeFile(
     join(workspacePath, initial.path),
     "main { overflow-x: scroll; }\n",
@@ -375,7 +369,7 @@ test("one accepted high-level Plan authorizes successive corrections to the same
   }
 });
 
-test("workspace file adapter enforces its runtime-provided overwrite hash", async () => {
+test("workspace file adapter derives replacement mode and enforces its observed preimage hash", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-file-runtime-hash-"));
   const original = "before\n";
   await writeFile(join(root, "existing.md"), original, "utf8");
@@ -397,21 +391,109 @@ test("workspace file adapter enforces its runtime-provided overwrite hash", asyn
     const normalized = adapter.normalizeInput({
       path: "existing.md",
       content: "after\n",
-      overwrite: true,
-      expected_sha256: "0".repeat(64),
     });
-    expect(normalized).toHaveProperty("expected_sha256", "0".repeat(64));
     expect(await adapter.dispatch({
       normalizedTarget: workspaceFileEffectTarget(normalized.path),
       normalizedInput: normalized,
       idempotencyKey: "runtime-hash",
       signal: new AbortController().signal,
+    })).toMatchObject({ status: "applied" });
+    expect(registeredInput as unknown).toEqual({
+      path: "existing.md",
+      content: "after\n",
+      overwrite: true,
+      create_parents: false,
+      expected_sha256: sha256(original),
+    });
+    expect(await readFile(join(root, "existing.md"), "utf8")).toBe("after\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("workspace file adapter derives create mode for a missing target", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-file-create-mode-"));
+  const writeFileHandler = createFileToolHandlers({ workspacePath: root }).write_file;
+  if (!writeFileHandler) throw new Error("registered write_file handler is missing");
+  let registeredInput: Record<string, unknown> | null = null;
+  const adapter = createGuidedWorkspaceFileEffectAdapter({
+    workspacePath: root,
+    async executeWriteFile(args) {
+      registeredInput = args;
+      return await writeFileHandler({
+        name: "write_file",
+        args,
+        rawArguments: JSON.stringify(args),
+      });
+    },
+  });
+  try {
+    const normalized = adapter.normalizeInput({
+      path: "nested/new.md",
+      content: "created\n",
+      create_parents: true,
+    });
+    expect(await adapter.dispatch({
+      normalizedTarget: workspaceFileEffectTarget(normalized.path),
+      normalizedInput: normalized,
+      idempotencyKey: "runtime-create-mode",
+      signal: new AbortController().signal,
+    })).toMatchObject({ status: "applied" });
+    expect(registeredInput as unknown).toEqual({
+      path: "nested/new.md",
+      content: "created\n",
+      overwrite: false,
+      create_parents: true,
+    });
+    expect(await readFile(join(root, "nested/new.md"), "utf8")).toBe("created\n");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("workspace file adapter refuses a replacement when the observed preimage races", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-file-replace-race-"));
+  const path = join(root, "existing.md");
+  const original = "before\n";
+  const concurrent = "concurrent\n";
+  await writeFile(path, original, "utf8");
+  const writeFileHandler = createFileToolHandlers({ workspacePath: root }).write_file;
+  if (!writeFileHandler) throw new Error("registered write_file handler is missing");
+  let registeredInput: Record<string, unknown> | null = null;
+  const adapter = createGuidedWorkspaceFileEffectAdapter({
+    workspacePath: root,
+    async executeWriteFile(args) {
+      registeredInput = args;
+      await writeFile(path, concurrent, "utf8");
+      return await writeFileHandler({
+        name: "write_file",
+        args,
+        rawArguments: JSON.stringify(args),
+      });
+    },
+  });
+  try {
+    const normalized = adapter.normalizeInput({
+      path: "existing.md",
+      content: "after\n",
+    });
+    expect(await adapter.dispatch({
+      normalizedTarget: workspaceFileEffectTarget(normalized.path),
+      normalizedInput: normalized,
+      idempotencyKey: "runtime-replace-race",
+      signal: new AbortController().signal,
     })).toMatchObject({
       status: "not_applied",
       error: { code: "expected_sha256_mismatch" },
     });
-    expect(registeredInput).toBeNull();
-    expect(await readFile(join(root, "existing.md"), "utf8")).toBe(original);
+    expect(registeredInput as unknown).toEqual({
+      path: "existing.md",
+      content: "after\n",
+      overwrite: true,
+      create_parents: false,
+      expected_sha256: sha256(original),
+    });
+    expect(await readFile(path, "utf8")).toBe(concurrent);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -660,7 +742,7 @@ test("guided edit reconciles an atomic replacement after restart", async () => {
   }
 });
 
-test("workspace file reconciliation distinguishes observed, safe retry, and uncertain bytes", async () => {
+test("workspace file reconciliation distinguishes observed, undispatched, and uncertain bytes", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-file-observe-"));
   const adapter = createGuidedWorkspaceFileEffectAdapter({
     workspacePath: root,
@@ -673,7 +755,6 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
     const createInput = adapter.normalizeInput({
       path: "new.md",
       content: "desired",
-      overwrite: false,
     });
     expect(await adapter.reconcile({
       normalizedTarget: workspaceFileEffectTarget(createInput.path),
@@ -685,28 +766,22 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
 
     const original = "original";
     await writeFile(join(root, "existing.md"), original, "utf8");
-    const guardedOverwrite = adapter.normalizeInput({
+    const replaceInput = adapter.normalizeInput({
       path: "existing.md",
       content: "desired",
-      overwrite: true,
     });
     expect(await adapter.reconcile({
-      normalizedTarget: workspaceFileEffectTarget(guardedOverwrite.path),
-      normalizedInput: guardedOverwrite,
-      idempotencyKey: "guarded-overwrite",
+      normalizedTarget: workspaceFileEffectTarget(replaceInput.path),
+      normalizedInput: replaceInput,
+      idempotencyKey: "undispatched-replace",
       signal,
       dispatchAttempts: 0,
     })).toEqual({ status: "not_applied" });
 
-    const unguardedOverwrite = adapter.normalizeInput({
-      path: "existing.md",
-      content: "desired",
-      overwrite: true,
-    });
     expect(await adapter.reconcile({
-      normalizedTarget: workspaceFileEffectTarget(unguardedOverwrite.path),
-      normalizedInput: unguardedOverwrite,
-      idempotencyKey: "unguarded-overwrite",
+      normalizedTarget: workspaceFileEffectTarget(replaceInput.path),
+      normalizedInput: replaceInput,
+      idempotencyKey: "dispatched-replace",
       signal,
       dispatchAttempts: 1,
     })).toMatchObject({
@@ -716,8 +791,8 @@ test("workspace file reconciliation distinguishes observed, safe retry, and unce
 
     await writeFile(join(root, "existing.md"), "desired", "utf8");
     expect(await adapter.reconcile({
-      normalizedTarget: workspaceFileEffectTarget(unguardedOverwrite.path),
-      normalizedInput: unguardedOverwrite,
+      normalizedTarget: workspaceFileEffectTarget(replaceInput.path),
+      normalizedInput: replaceInput,
       idempotencyKey: "observed",
       signal,
       dispatchAttempts: 1,
@@ -753,7 +828,6 @@ test("first execution adopts already-present desired bytes without dispatch", as
   const effectInput: GuidedWorkspaceFileInput = {
     path: "result.md",
     content,
-    overwrite: true,
     create_parents: false,
   };
   const target = workspaceFileEffectTarget(effectInput.path);
@@ -808,7 +882,6 @@ test("rename then crash is reconciled after restart without a duplicate register
   const effectInput: GuidedWorkspaceFileInput = {
     path: "reports/summary.md",
     content: "# Summary\n\nCafe\u0301 durable result.\n",
-    overwrite: false,
     create_parents: true,
   };
   const target = workspaceFileEffectTarget(effectInput.path);
@@ -927,6 +1000,7 @@ function registeredWriteFile(input: {
   const writeFile = handlers.write_file;
   if (!writeFile) throw new Error("registered write_file handler is missing");
   return async (args: GuidedWorkspaceFileInput & {
+    overwrite: boolean;
     expected_sha256?: string;
   }): Promise<unknown> => {
     const result = await writeFile({

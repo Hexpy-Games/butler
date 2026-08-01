@@ -82,7 +82,6 @@ export type ButlerToolExecutionBoundary = (input: {
 const BUTLER_TOOL_DEFINITIONS_BY_NAME = new Map(
   BUTLER_TOOLS.map((definition) => [definition.name, definition] as const),
 );
-
 export function createButlerToolExecutorRegistry<T extends ButlerToolExecutorRegistry>(handlers: T): T {
   return handlers;
 }
@@ -158,6 +157,7 @@ export function createButlerToolExecutor(input: {
   searchPlanner?: (input: SmartSearchPlanningInput) => Promise<SmartSearchPlanningResult>;
   pageReader?: typeof readPageConfigured;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
   hiddenNativeToolNames?: readonly string[];
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   describedToolIds?: readonly string[] | (() => readonly string[]);
@@ -225,6 +225,7 @@ export function createButlerToolExecutor(input: {
       pluginCatalog: input.pluginToolCatalog,
       pluginToolDescriber: input.pluginToolDescriber,
       currentToolNames: input.currentToolNames,
+      nativeToolDefinitions: input.nativeToolDefinitions,
       hiddenNativeToolNames: input.hiddenNativeToolNames,
       nativeToolAvailabilityOverrides,
       describedToolIds: input.describedToolIds,

@@ -23,7 +23,7 @@ import {
 import { queryIndex } from "./queries.js";
 import { withProjectLedgerMutation } from "./mutation-lock.js";
 
-export { queryIndex, sortRecords } from "./queries.js";
+export { assertSupportedQueryKind, queryIndex, sortRecords } from "./queries.js";
 
 export function countRecords(records) {
   const counts = Object.fromEntries(COUNTED_KINDS.map((kind) => [kind, 0]));

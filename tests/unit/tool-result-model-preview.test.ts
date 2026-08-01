@@ -354,4 +354,73 @@ test("web read previews retain the default bounded page body", () => {
 
   expect(preview?.page_excerpt).toContain("LATE_PAGE_FACT");
   expect(String(preview?.page_excerpt).length).toBeLessThanOrEqual(2_000);
+  expect(preview?.evidence_items).toEqual([{
+    evidence_item_id: "public-web-short-chunk",
+    source_url: "https://example.com/report",
+    source_identity: "example.com",
+    content_kind: "page_chunk",
+    limitations: [],
+  }]);
+  expect(JSON.stringify(preview).match(/LATE_PAGE_FACT/g)?.length).toBe(1);
+});
+
+test("web read previews keep bounded evidence content when no page body is available", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      source_url: "https://example.com/report",
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-fallback-chunk",
+        source_url: "https://example.com/report",
+        source_identity: "example.com",
+        content_kind: "page_chunk",
+        bounded_content: "Fallback source fact.",
+        limitations: [],
+      }],
+    },
+  });
+
+  expect(preview).not.toHaveProperty("page_excerpt");
+  expect(preview?.evidence_items).toEqual([{
+    evidence_item_id: "public-web-fallback-chunk",
+    source_url: "https://example.com/report",
+    source_identity: "example.com",
+    content_kind: "page_chunk",
+    bounded_content: "Fallback source fact.",
+    limitations: [],
+  }]);
+});
+
+test("web read previews keep evidence chunks that are outside the page excerpt", () => {
+  const middleFact = "MIDDLE_ONLY_FACT: operating margin improved by 4.2 percentage points.";
+  const pageBody = `${"opening context ".repeat(180)}${middleFact}${
+    " closing context".repeat(180)
+  }`;
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      source_url: "https://example.com/long-report",
+      markdown: pageBody,
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-middle-chunk",
+        source_url: "https://example.com/long-report",
+        source_identity: "example.com",
+        content_kind: "page_chunk",
+        bounded_content: middleFact,
+        limitations: [],
+      }],
+    },
+  });
+
+  expect(String(preview?.page_excerpt)).not.toContain(middleFact);
+  expect(preview?.evidence_items).toEqual([{
+    evidence_item_id: "public-web-middle-chunk",
+    source_url: "https://example.com/long-report",
+    source_identity: "example.com",
+    content_kind: "page_chunk",
+    bounded_content: middleFact,
+    limitations: [],
+  }]);
 });

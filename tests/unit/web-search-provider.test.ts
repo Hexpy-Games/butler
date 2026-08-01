@@ -62,6 +62,10 @@ function fakeJwt(payload: Record<string, unknown>): string {
   return `${encode({ alg: "none", typ: "JWT" })}.${encode(payload)}.sig`;
 }
 
+function sseEvent(event: Record<string, unknown>): string {
+  return `data: ${JSON.stringify(event)}`;
+}
+
 function duckDuckGoFixture(): string {
   return `
     <html>
@@ -208,6 +212,10 @@ test("OpenAI web search provider sends Responses API web_search requests and ext
             text: "Use cited sources.",
             annotations: [{
               type: "url_citation",
+              title: "Citation must not replace the structured source",
+              url: "https://platform.openai.com/docs/guides/tools-web-search",
+            }, {
+              type: "url_citation",
               title: "Responses",
               url: "https://platform.openai.com/docs/api-reference/responses",
             }],
@@ -259,6 +267,18 @@ test("OpenAI web search provider sends Responses API web_search requests and ext
     "https://blocked.example.com/result",
     "https://platform.openai.com/docs/api-reference/responses",
   ]);
+  expect(output.results[0]).toEqual({
+    title: "OpenAI Web Search",
+    url: "https://platform.openai.com/docs/guides/tools-web-search",
+    snippet: "Official web search guide.",
+    source: "platform.openai.com",
+  });
+  expect(output.results[2]).toEqual({
+    title: "Responses",
+    url: "https://platform.openai.com/docs/api-reference/responses",
+    snippet: "",
+    source: "platform.openai.com",
+  });
 });
 
 test("OpenAI web search provider reports API errors", async () => {
@@ -434,7 +454,7 @@ test("DuckDuckGo HTML provider times out stalled requests", async () => {
   await expect(provider.search({ query: "stalled search" })).rejects.toThrow("web search request timed out");
 });
 
-test("Codex subscription web search provider uses Codex backend and extracts source URLs", async () => {
+test("Codex subscription web search provider returns source-specific structured results", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {
       chatgpt_account_id: "chatgpt-account",
@@ -444,9 +464,71 @@ test("Codex subscription web search provider uses Codex backend and extracts sou
   globalThis.fetch = stubFetch(async (url, init) => {
     requests.push({ url: String(url), init: init ?? {} });
     return new Response([
-      'data: {"type":"response.output_item.done","item":{"type":"web_search_call","status":"completed","action":{"type":"search","query":"weather"}}}',
+      sseEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "web_search_call",
+          status: "completed",
+          action: {
+            type: "search",
+            query: "weather",
+            sources: [{
+              title: "Seoul Weather Observation",
+              url: "https://weather.example.com/seoul",
+              snippet: "서울은 현재 11도입니다.",
+            }],
+          },
+        },
+      }),
       "",
-      'data: {"type":"response.output_text.delta","delta":"현재 기온 11도. 출처: https://weather.example.com/seoul"}',
+      sseEvent({
+        type: "response.output_item.done",
+        item: {
+          type: "message",
+          content: [{
+            type: "output_text",
+            text: "AGGREGATE_ANSWER 서울 날씨를 종합했습니다.",
+            annotations: [{
+              type: "url_citation",
+              title: "Citation must not replace the source",
+              url: "https://weather.example.com/seoul",
+            }, {
+              type: "url_citation",
+              title: "Weather Advisory",
+              url: "https://advisory.example.com/seoul",
+            }],
+          }],
+        },
+      }),
+      "",
+      sseEvent({
+        type: "response.output_text.delta",
+        delta: "AGGREGATE_ANSWER https://weather.example.com/seoul " +
+          "https://forecast.example.com/seoul https://advisory.example.com/seoul",
+      }),
+      "",
+      sseEvent({
+        type: "response.completed",
+        response: {
+          output: [{
+            type: "web_search_call",
+            status: "completed",
+            action: {
+              type: "search",
+              query: "weather",
+              sources: [{
+                title: "Seoul Weather Observation",
+                url: "https://weather.example.com/seoul",
+                snippet: "서울은 현재 11도입니다.",
+              }, {
+                title: "Regional Forecast",
+                url: "https://forecast.example.com/seoul",
+                snippet: "서울은 오후에 비가 예상됩니다.",
+              }],
+            },
+          }],
+        },
+      }),
       "",
       "data: [DONE]",
       "",
@@ -472,9 +554,26 @@ test("Codex subscription web search provider uses Codex backend and extracts sou
     stream: true,
     store: false,
     tools: [{ type: "web_search" }],
+    include: ["web_search_call.action.sources"],
   });
   expect(output.provider).toBe("codex-subscription-web-search");
-  expect(output.results.map((result) => result.url)).toEqual(["https://weather.example.com/seoul"]);
+  expect(output.results).toEqual([{
+    title: "Seoul Weather Observation",
+    url: "https://weather.example.com/seoul",
+    snippet: "서울은 현재 11도입니다.",
+    source: "weather.example.com",
+  }, {
+    title: "Regional Forecast",
+    url: "https://forecast.example.com/seoul",
+    snippet: "서울은 오후에 비가 예상됩니다.",
+    source: "forecast.example.com",
+  }, {
+    title: "Weather Advisory",
+    url: "https://advisory.example.com/seoul",
+    snippet: "",
+    source: "advisory.example.com",
+  }]);
+  expect(JSON.stringify(output.results)).not.toContain("AGGREGATE_ANSWER");
 });
 
 test("auto web search uses Codex subscription auth profile when API key is absent", async () => {
@@ -509,4 +608,5 @@ test("auto web search uses Codex subscription auth profile when API key is absen
 
   expect(output.provider).toBe("codex-subscription-web-search");
   expect(output.results[0]?.url).toBe("https://example.com/result");
+  expect(output.results[0]?.snippet).toBe("");
 });

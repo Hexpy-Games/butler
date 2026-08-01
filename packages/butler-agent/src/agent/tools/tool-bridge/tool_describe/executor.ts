@@ -7,7 +7,10 @@ import {
 } from "../../progressive-catalog.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../../registry.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
-import type { NativeToolAvailabilityOverrides } from "../../types.ts";
+import type {
+  ButlerToolDefinition,
+  NativeToolAvailabilityOverrides,
+} from "../../types.ts";
 import { disabledExternalToolDescription } from "../external-description.ts";
 import { mcpBridgeAvailability, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
 
@@ -28,6 +31,7 @@ export function createToolDescribeToolHandler(input: {
   pluginCatalog?: PluginToolCatalog;
   pluginToolDescriber?: PluginToolDescriber;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
   hiddenNativeToolNames?: readonly string[];
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }) {
@@ -61,6 +65,7 @@ async function describeToolId(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolDefinitions?: readonly ButlerToolDefinition[];
     hiddenNativeToolNames?: readonly string[];
     nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
@@ -84,12 +89,14 @@ function describeNativeTool(
     butlerData: string;
     webSearchProvider?: WebSearchProvider;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolDefinitions?: readonly ButlerToolDefinition[];
     hiddenNativeToolNames?: readonly string[];
     nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
 ) {
   if (input.hiddenNativeToolNames?.includes(name)) return null;
-  const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
+  const tool = (input.nativeToolDefinitions ?? BUTLER_TOOLS)
+    .find((candidate) => candidate.name === name);
   if (!tool) return null;
   const metadata = TOOL_CAPABILITY_METADATA[tool.name];
   if (!metadata) return null;

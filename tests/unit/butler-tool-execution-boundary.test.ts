@@ -110,12 +110,10 @@ describe("Butler actual tool execution boundary", () => {
       args: {
         path: "report.txt",
         content: "desired\n",
-        overwrite: true,
       },
       rawArguments: JSON.stringify({
         path: "report.txt",
         content: "desired\n",
-        overwrite: true,
       }),
     });
 
