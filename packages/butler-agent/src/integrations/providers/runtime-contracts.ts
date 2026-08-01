@@ -235,6 +235,7 @@ export interface FunctionToolDefinition {
   name: string;
   description: string;
   parameters: Record<string, unknown>;
+  concurrencySafe?: boolean;
 }
 
 
