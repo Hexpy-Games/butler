@@ -85,6 +85,119 @@ test("BTCC gateway commits each Turn and gives the next Turn recent conversation
   }
 });
 
+test("BTCC gateway delivery survives optional session title failure", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "btcc-gateway-title-failure-"));
+  roots.push(butlerData);
+  const bindingStore = new SessionBindingStore(
+    join(butlerData, "runtime", "session-store.sqlite"),
+  );
+  const binding = bindingStore.upsert({
+    sessionId: "butler/app-chat-title-failure",
+    role: "butler",
+    workspacePath: process.cwd(),
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.6-sol",
+    transportBindings: [],
+  });
+  const conversationStore = new AgentConversationStore({ butlerData });
+  const runtime = new ScriptedBtccGatewayRuntime(() =>
+    "요청을 처리하는 중 일시적인 문제가 발생했습니다.",
+  );
+  const actor = new BtccGatewaySessionActor({
+    binding,
+    store: bindingStore,
+    conversationStore,
+    butlerData,
+    runtime: runtime.runtime,
+    contextDocuments: runtime.contextDocuments,
+    observeTurn: runtime.observeTurn.bind(runtime),
+    promptAssembler: new PromptAssembler({
+      butlerHome: process.cwd(),
+      butlerData,
+    }),
+    async generateSessionTitle() {
+      throw new Error("provider rate limited optional title generation");
+    },
+  });
+
+  try {
+    const result = await actor.handleInbound(
+      envelope("turn-title-failure", "message-title-failure", "페이지를 만들어 주세요."),
+    );
+
+    expect(result.text).toBe("요청을 처리하는 중 일시적인 문제가 발생했습니다.");
+    expect(result.generatedSessionTitle).toBeNull();
+    const session = conversationStore.getSessionByGatewayBinding(
+      "app",
+      binding.sessionId,
+    );
+    expect(session).not.toBeNull();
+    expect(conversationStore.readTurn("turn-title-failure")?.status).toBe("complete");
+    expect(conversationStore.readMessages({ sessionId: session!.id })).toHaveLength(2);
+  } finally {
+    conversationStore.close();
+    bindingStore.close();
+  }
+});
+
+test("BTCC gateway replay does not call the model for an optional title", async () => {
+  const butlerData = mkdtempSync(join(tmpdir(), "btcc-gateway-title-replay-"));
+  roots.push(butlerData);
+  const bindingStore = new SessionBindingStore(
+    join(butlerData, "runtime", "session-store.sqlite"),
+  );
+  const binding = bindingStore.upsert({
+    sessionId: "butler/app-chat-title-replay",
+    role: "butler",
+    workspacePath: process.cwd(),
+    runtimeAdapterId: "btcc-turn-runtime",
+    modelProviderId: "openai",
+    modelRef: "openai/gpt-5.6-sol",
+    transportBindings: [],
+  });
+  const conversationStore = new AgentConversationStore({ butlerData });
+  const runtime = new ScriptedBtccGatewayRuntime(() => "저장된 최종 답변");
+  let titleCalls = 0;
+  const actor = new BtccGatewaySessionActor({
+    binding,
+    store: bindingStore,
+    conversationStore,
+    butlerData,
+    runtime: runtime.runtime,
+    contextDocuments: runtime.contextDocuments,
+    observeTurn: runtime.observeTurn.bind(runtime),
+    promptAssembler: new PromptAssembler({
+      butlerHome: process.cwd(),
+      butlerData,
+    }),
+    async generateSessionTitle() {
+      titleCalls += 1;
+      return "호출되면 안 됨";
+    },
+  });
+
+  try {
+    const inbound = envelope(
+      "turn-title-replay",
+      "message-title-replay",
+      "이전 답변을 복구해 주세요.",
+    );
+    const result = await actor.handleInbound({
+      ...inbound,
+      raw: { btccResume: true },
+    });
+
+    expect(runtime.commands[0]?.kind).toBe("resume");
+    expect(result.text).toBe("저장된 최종 답변");
+    expect(result.generatedSessionTitle).toBeNull();
+    expect(titleCalls).toBe(0);
+  } finally {
+    conversationStore.close();
+    bindingStore.close();
+  }
+});
+
 function envelope(turnId: string, messageId: string, text: string): InboundEnvelope {
   return {
     eventId: `event-${messageId}`,

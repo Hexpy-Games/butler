@@ -149,6 +149,23 @@ test("native bootstrap provider forwards low reasoning and cancellation to promp
   expect("maxOutputTokens" in (promptCalls[0] as unknown as Record<string, unknown>)).toBe(false);
 });
 
+test("optional session title generation does not retry provider failures", async () => {
+  const promptCalls: Array<Parameters<typeof runPromptText>[0]> = [];
+  const provider = createNativeButlerDefaultProvider({}, async (input) => {
+    promptCalls.push(input);
+    return "새 대화 제목";
+  });
+
+  await provider.invoke({
+    model: "openai/gpt-5.6-sol",
+    messages: [{ role: "user", content: "제목을 만들어 주세요." }],
+    metadata: { purpose: "app_session_title" },
+  });
+
+  expect(promptCalls).toHaveLength(1);
+  expect(promptCalls[0]?.providerRetryAttempts).toBe(1);
+});
+
 test("native bootstrap provider resolves capabilities from the effective turn model", () => {
   const openAiDefault = createNativeButlerDefaultProvider({
     system: { defaultModel: "openai/gpt-5.5-codex" },

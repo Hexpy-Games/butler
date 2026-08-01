@@ -1,0 +1,305 @@
+import { afterEach, expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
+import type { RuntimeTurnEventInput } from
+  "../../packages/butler-agent/src/agent/events/turn-events.ts";
+import type { MessageRow, TurnRow } from
+  "../../packages/butler-agent/src/gateways/app/infrastructure/core/records.ts";
+import type { TranscriptEvent } from
+  "../../packages/butler-agent/src/test-support/harness/transcripts.ts";
+import {
+  appendTranscript,
+  cleanupTranscriptProjectionHarnesses,
+  createTranscriptProjectionHarness as createHarness,
+  writeTranscript,
+} from "./support/transcript-projection-harness.ts";
+
+afterEach(() => cleanupTranscriptProjectionHarnesses());
+
+test("delivered turn event directly projects the canonical BTCC answer", () => {
+  const harness = createHarness();
+  seedBtccTerminalSchema(harness.db);
+  seedAppTurn(harness.db, harness.chatId, "live-delivered-turn");
+  seedCanonicalDelivery(
+    harness.db,
+    "live-delivered-turn",
+    "live-outbox",
+    "live-message",
+    "Canonical answer",
+  );
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  writeTranscript(harness, terminalTurnEvents({
+    actionId: "live-completed-event",
+    turnId: "live-delivered-turn",
+    kind: "turn.completed",
+  }));
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(turnState(harness.db, "live-delivered-turn")).toBe("delivered");
+  expect(state.assistant?.text).toBe("Canonical answer");
+  expect(state.assistantWrites).toBe(1);
+  expect(state.turnEvents).toContain("turn.completed");
+  expect(harness.projected()).toEqual([]);
+  expect(projectedReceipt(harness.db, "live-completed-event")).toBe(true);
+  expect(projectedReceipt(
+    harness.db,
+    "btcc-canonical-final:live-outbox",
+  )).toBe(true);
+
+  appendTranscript(harness, finalResultEvent({
+    actionId: "late-identical-final",
+    turnId: "live-delivered-turn",
+    text: "Canonical answer",
+    generatedSessionTitle: "Useful title",
+  }));
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(state.generatedTitles).toEqual(["Useful title"]);
+  expect(state.assistantWrites).toBe(1);
+
+  appendTranscript(harness, finalResultEvent({
+    actionId: "late-conflicting-final",
+    turnId: "live-delivered-turn",
+    text: "Conflicting answer",
+    generatedSessionTitle: "Rejected title",
+  }));
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(state.generatedTitles).toEqual(["Useful title"]);
+  expect(state.assistant?.text).toBe("Canonical answer");
+  expect(state.assistantWrites).toBe(1);
+  harness.close();
+});
+
+test("cancelled turn event directly closes a non-terminal App turn", () => {
+  const harness = createHarness();
+  seedBtccTerminalSchema(harness.db);
+  seedAppTurn(harness.db, harness.chatId, "live-cancelled-turn");
+  harness.db.query(`
+    INSERT INTO btcc_turns (
+      turn_id, semantic_state, final_disposition, delivery_outbox_id,
+      canonical_assistant_message_id
+    ) VALUES (?, 'cancelled', NULL, NULL, NULL)
+  `).run("live-cancelled-turn");
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  writeTranscript(harness, terminalTurnEvents({
+    actionId: "live-cancelled-event",
+    turnId: "live-cancelled-turn",
+    kind: "turn.cancelled",
+  }));
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(turnState(harness.db, "live-cancelled-turn")).toBe("cancelled");
+  expect(state.cancelledTurns).toEqual(["live-cancelled-turn"]);
+  expect(state.assistantWrites).toBe(0);
+  harness.close();
+});
+
+function projectionState(db: Database) {
+  let assistant: MessageRow | null = null;
+  let assistantWrites = 0;
+  const turnEvents = new Set<string>();
+  const generatedTitles: string[] = [];
+  const cancelledTurns: string[] = [];
+  return {
+    get assistant() {
+      return assistant;
+    },
+    get assistantWrites() {
+      return assistantWrites;
+    },
+    turnEvents,
+    generatedTitles,
+    cancelledTurns,
+    options: {
+      messageFiles: {
+        createResponderFiles: () => [],
+        refsForMessage: () => [],
+      } as never,
+      getTurnRow: (turnId: string) => appTurnRow(db, turnId),
+      getTurn: (turnId: string) => ({
+        id: turnId,
+        state: turnState(db, turnId),
+      }) as never,
+      getMessageRow: (messageId: string) =>
+        messageId === "user-message"
+          ? ({ id: messageId, text: "Original prompt" }) as MessageRow
+          : null,
+      getLatestAssistantMessageForTurn: () => assistant,
+      insertOrReplaceAssistantReplies: (
+        chatId: string,
+        turnId: string,
+        texts: string[],
+      ) => {
+        assistantWrites += 1;
+        assistant = {
+          rowid: assistantWrites,
+          id: "assistant-message",
+          chat_id: chatId,
+          turn_id: turnId,
+          conversation_session_id: null,
+          conversation_turn_id: null,
+          conversation_message_id: null,
+          role: "assistant",
+          text: texts.at(-1) ?? "",
+          status: "delivered",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          safe_error_code: null,
+          retryable: 0,
+        };
+        return [];
+      },
+      updateTurnState: (turnId: string, state: string) => {
+        db.query("UPDATE turns SET state = ? WHERE id = ?").run(state, turnId);
+        return { id: turnId, state } as never;
+      },
+      appendTurnEvent: (
+        _chatId: string,
+        _turnId: string,
+        event: RuntimeTurnEventInput,
+      ) => {
+        turnEvents.add(event.kind);
+      },
+      hasTurnEventKind: (_turnId: string, kind: string) =>
+        turnEvents.has(kind),
+      finalizeCancelledTurn: (_chatId: string, turnId: string) => {
+        cancelledTurns.push(turnId);
+        db.query("UPDATE turns SET state = 'cancelled' WHERE id = ?").run(turnId);
+        turnEvents.add("turn.cancelled");
+        return { id: turnId, state: "cancelled" } as never;
+      },
+      generatedSessionTitleHandler: () => (title: string) => {
+        generatedTitles.push(title);
+      },
+    },
+  };
+}
+
+function seedBtccTerminalSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE btcc_turns (
+      turn_id TEXT PRIMARY KEY,
+      semantic_state TEXT NOT NULL,
+      final_disposition TEXT,
+      delivery_outbox_id TEXT,
+      canonical_assistant_message_id TEXT
+    );
+    CREATE TABLE btcc_delivery_outbox (
+      outbox_id TEXT PRIMARY KEY,
+      status TEXT NOT NULL
+    );
+    CREATE TABLE btcc_messages (
+      message_id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `);
+}
+
+function seedAppTurn(db: Database, chatId: string, turnId: string): void {
+  const now = new Date().toISOString();
+  db.query(`
+    INSERT INTO turns (
+      id, chat_id, user_message_id, state, safe_status_label, retryable,
+      cancellable, attempt, created_at, updated_at
+    ) VALUES (?, ?, 'user-message', 'running', 'Working', 0, 1, 1, ?, ?)
+  `).run(turnId, chatId, now, now);
+}
+
+function seedCanonicalDelivery(
+  db: Database,
+  turnId: string,
+  outboxId: string,
+  messageId: string,
+  content: string,
+): void {
+  const now = new Date().toISOString();
+  db.query(`
+    INSERT INTO btcc_turns (
+      turn_id, semantic_state, final_disposition, delivery_outbox_id,
+      canonical_assistant_message_id
+    ) VALUES (?, 'delivered', 'completed', ?, ?)
+  `).run(turnId, outboxId, messageId);
+  db.query(`
+    INSERT INTO btcc_delivery_outbox (outbox_id, status)
+    VALUES (?, 'observed')
+  `).run(outboxId);
+  db.query(`
+    INSERT INTO btcc_messages (message_id, content, created_at)
+    VALUES (?, ?, ?)
+  `).run(messageId, content, now);
+}
+
+function terminalTurnEvents(input: {
+  actionId: string;
+  turnId: string;
+  kind: "turn.completed" | "turn.cancelled";
+}): TranscriptEvent[] {
+  const outbound: TranscriptEvent = {
+    eventId: `event-${input.actionId}`,
+    sessionId: "runtime-session",
+    kind: "outbound",
+    timestamp: new Date().toISOString(),
+    transport: "app",
+    payload: {
+      actionId: input.actionId,
+      message: { text: "" },
+      metadata: {
+        kind: "turn_event",
+        turnId: input.turnId,
+        event: { kind: input.kind, payload: { safeLabel: "Terminal" } },
+      },
+    },
+  };
+  return [outbound, {
+    eventId: `delivery-${input.actionId}`,
+    sessionId: "runtime-session",
+    kind: "delivery",
+    timestamp: new Date().toISOString(),
+    transport: "app",
+    payload: { actionId: input.actionId, ok: true },
+  }];
+}
+
+function finalResultEvent(input: {
+  actionId: string;
+  turnId: string;
+  text: string;
+  generatedSessionTitle: string;
+}): TranscriptEvent {
+  return {
+    eventId: `event-${input.actionId}`,
+    sessionId: "runtime-session",
+    kind: "outbound",
+    timestamp: new Date().toISOString(),
+    transport: "app",
+    payload: {
+      actionId: input.actionId,
+      message: { text: input.text },
+      metadata: {
+        kind: "final_result",
+        turnId: input.turnId,
+        generatedSessionTitle: input.generatedSessionTitle,
+      },
+    },
+  };
+}
+
+function appTurnRow(db: Database, turnId: string): TurnRow | null {
+  return db.query<TurnRow, [string]>(
+    "SELECT rowid, * FROM turns WHERE id = ?",
+  ).get(turnId);
+}
+
+function turnState(db: Database, turnId: string): string | null {
+  return db.query<{ state: string }, [string]>(
+    "SELECT state FROM turns WHERE id = ?",
+  ).get(turnId)?.state ?? null;
+}
+
+function projectedReceipt(db: Database, actionId: string): boolean {
+  return Boolean(db.query<{ action_id: string }, [string]>(`
+    SELECT action_id FROM app_transport_projection_receipts
+    WHERE action_id = ?
+  `).get(actionId));
+}

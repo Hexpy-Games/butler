@@ -25,7 +25,12 @@ import {
   queuedFinalProjectionDisposition,
   recoverableLimitedFinalForFailedQueueDisposition,
 } from "./inbound-queue-terminal-records.ts";
-import { projectAppFinalResult } from "./final-result-projection.ts";
+import {
+  isSameDeliveredFinalProjection,
+  projectAppFinalResult,
+} from "./final-result-projection.ts";
+import { reconcileBtccTerminalTurn } from
+  "./btcc-terminal-projection.ts";
 import { projectAppTurnFailure } from "./projected-turn-failure.ts";
 import { projectAppWorkerResult } from "./worker-result-projection.ts";
 import type {
@@ -164,23 +169,44 @@ export class AppTransportProjectionStore {
         this.options.appendTurnEvent(chatId, turnId, turnEvent);
       this.markProjectedTransportEvent(actionId, event.eventId, chatId);
       if (!alreadyProjectedReceipt) this.options.touchChat(chatId);
-      return !alreadyProjectedReceipt;
+      const terminalProjected =
+        turnEvent.kind === "turn.completed" ||
+          turnEvent.kind === "turn.cancelled"
+          ? reconcileBtccTerminalTurn({
+            options: this.options,
+            hasProjectedAction: (id) => this.hasProjectedTransportEvent(id),
+            markProjectedAction: (id, eventId, targetChatId) =>
+              this.markProjectedTransportEvent(id, eventId, targetChatId),
+            turnId,
+          }) > 0
+          : false;
+      return !alreadyProjectedReceipt || terminalProjected;
     }
 
     let terminalRecoverableCorrection = false;
     if (isTerminalTurnStateForProjection(turn.state)) {
+      const sameDeliveredFinal = metadata.kind === "final_result" &&
+        turn.state === "delivered" &&
+        isSameDeliveredFinalProjection({
+          options: this.options,
+          turnId,
+          turnState: turn.state,
+          message,
+        });
       if (
-        !shouldProjectRecoverableLimitedFinalOverTerminalTurn(turn, metadata) ||
-        recoverableLimitedFinalForFailedQueueDisposition({
-          butlerData: this.options.butlerData,
-          metadata,
-        }) !==
-          "accept"
+        !sameDeliveredFinal &&
+        (
+          !shouldProjectRecoverableLimitedFinalOverTerminalTurn(turn, metadata) ||
+          recoverableLimitedFinalForFailedQueueDisposition({
+            butlerData: this.options.butlerData,
+            metadata,
+          }) !== "accept"
+        )
       ) {
         this.markProjectedTransportEvent(actionId, event.eventId, chatId);
         return false;
       }
-      terminalRecoverableCorrection = true;
+      terminalRecoverableCorrection = !sameDeliveredFinal;
     }
 
     const progressRow = progressRowFromAppOutbound(

@@ -83,6 +83,11 @@ export function projectAppFinalResult(input: {
     artifacts,
     existingMessageId: existing?.id,
   });
+  applyGeneratedSessionTitleFromProjection(options, {
+    chatId,
+    turnId,
+    title: metadata.generatedSessionTitle,
+  });
   if (
     isSameDeliveredFinal(existing, text, options.getTurn(turnId).state) &&
     artifactFiles.length === 0
@@ -101,11 +106,6 @@ export function projectAppFinalResult(input: {
       payload: { safeLabel: "Preparing final answer" },
     });
   }
-  applyGeneratedSessionTitleFromProjection(options, {
-    chatId,
-    turnId,
-    title: metadata.generatedSessionTitle,
-  });
   options.insertOrReplaceAssistantReplies(
     chatId,
     turnId,
@@ -152,6 +152,19 @@ export function projectAppFinalResult(input: {
   options.touchChat(chatId);
   void options.drainQueuedSessionMessages(chatId).catch(() => undefined);
   return true;
+}
+
+export function isSameDeliveredFinalProjection(input: {
+  options: AppTransportProjectionStoreOptions;
+  turnId: string;
+  turnState: string;
+  message: Record<string, unknown>;
+}): boolean {
+  return isSameDeliveredFinal(
+    input.options.getLatestAssistantMessageForTurn(input.turnId),
+    sanitizeAppTransportFinalText(input.message.text),
+    input.turnState,
+  );
 }
 
 function applyGeneratedSessionTitleFromProjection(
