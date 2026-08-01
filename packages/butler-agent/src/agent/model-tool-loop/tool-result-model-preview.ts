@@ -4,13 +4,20 @@ const MAX_MATCH_TEXT_CHARS = 240;
 const MAX_FILE_CONTENT_CHARS = 4_800;
 const WORK_BLOCK_TOOL_NAME = "run_work_block";
 
+export interface ToolResultModelPreviewContext {
+  seenPublicWebEvidenceItemIds: Set<string>;
+  seenProviderOverviews: Set<string>;
+}
+
 export function structuredToolResultModelPreview(input: {
   toolName: string;
   output: unknown;
+  seenPublicWebEvidenceItemIds?: Set<string>;
+  context?: ToolResultModelPreviewContext;
 }): Record<string, unknown> | null {
   if (input.toolName === WORK_BLOCK_TOOL_NAME) {
     const output = toolPayload(input.output, ["results"]);
-    return output ? workBlockPreview(output) : null;
+    return output ? workBlockPreview(output, input.context) : null;
   }
   if (input.toolName === "grep_files") {
     const output = toolPayload(input.output, ["matches", "pattern"]);
@@ -38,40 +45,63 @@ export function structuredToolResultModelPreview(input: {
   }
   if (input.toolName === "web_search" || input.toolName === "web_read") {
     const output = toolPayload(input.output, ["public_web_evidence_items"]);
-    return output ? publicWebEvidencePreview(input.toolName, output) : null;
+    return output
+      ? publicWebEvidencePreview(
+        input.toolName,
+        output,
+        input.context?.seenPublicWebEvidenceItemIds ??
+          input.seenPublicWebEvidenceItemIds,
+        input.context?.seenProviderOverviews,
+      )
+      : null;
   }
   return genericToolPreview(input.toolName, input.output);
 }
 
-function publicWebEvidencePreview(toolName: string, output: Record<string, unknown>): Record<string, unknown> {
+function publicWebEvidencePreview(
+  toolName: string,
+  output: Record<string, unknown>,
+  seenEvidenceItemIds?: Set<string>,
+  seenProviderOverviews?: Set<string>,
+): Record<string, unknown> {
+  const pageExcerptLimit = Math.max(1_500, Math.min(
+    8_000,
+    Math.trunc(finiteNumber(output.effective_max_chars) ?? 2_000),
+  ));
   const pageExcerpt = toolName === "web_read"
-    ? boundedHeadTailText(output.markdown, 2_000)
+    ? boundedHeadTailText(output.markdown, pageExcerptLimit)
     : undefined;
   let remainingWebReadEvidenceChars = pageExcerpt ? 2_400 : Number.POSITIVE_INFINITY;
   const rawItems = Array.isArray(output.public_web_evidence_items)
     ? output.public_web_evidence_items
     : [];
-  const items = rawItems
-    .slice(0, 12).flatMap((value) => {
-      const item = record(value);
-      if (!item || typeof item.evidence_item_id !== "string" || typeof item.source_url !== "string") return [];
-      const boundedContent = boundedText(item.bounded_content, 1_200);
-      const projectedContent = !pageExcerpt || !boundedContent || pageExcerpt.includes(boundedContent)
-        ? pageExcerpt ? undefined : boundedContent
-        : boundedContent.slice(0, remainingWebReadEvidenceChars);
-      remainingWebReadEvidenceChars -= projectedContent?.length ?? 0;
-      return [compactUndefined({
-        evidence_item_id: boundedText(item.evidence_item_id, 120),
-        source_url: boundedText(item.source_url, 500),
-        source_identity: boundedText(item.source_identity, 160),
-        published_at: boundedText(item.published_at, 80),
-        content_kind: boundedText(item.content_kind, 80),
-        bounded_content: projectedContent || undefined,
-        limitations: Array.isArray(item.limitations)
-          ? item.limitations.slice(0, 6).map((entry) => boundedText(entry, 320)).filter(Boolean)
-          : [],
-      })];
-    });
+  const items: Record<string, unknown>[] = [];
+  for (const value of rawItems) {
+    if (items.length >= 12) break;
+    const item = record(value);
+    if (!item || typeof item.evidence_item_id !== "string" ||
+      typeof item.source_url !== "string") continue;
+    if (seenEvidenceItemIds?.has(item.evidence_item_id)) continue;
+    seenEvidenceItemIds?.add(item.evidence_item_id);
+    const boundedContent = boundedText(item.bounded_content, 1_200);
+    const projectedContent = !pageExcerpt || !boundedContent ||
+        pageExcerpt.includes(boundedContent)
+      ? pageExcerpt ? undefined : boundedContent
+      : boundedContent.slice(0, remainingWebReadEvidenceChars);
+    remainingWebReadEvidenceChars -= projectedContent?.length ?? 0;
+    items.push(compactUndefined({
+      evidence_item_id: boundedText(item.evidence_item_id, 120),
+      source_url: boundedText(item.source_url, 500),
+      source_identity: boundedText(item.source_identity, 160),
+      published_at: boundedText(item.published_at, 80),
+      content_kind: boundedText(item.content_kind, 80),
+      bounded_content: projectedContent || undefined,
+      limitations: Array.isArray(item.limitations)
+        ? item.limitations.slice(0, 6)
+          .map((entry) => boundedText(entry, 320)).filter(Boolean)
+        : [],
+    }));
+  }
   const rawFailedQueries = Array.isArray(output.failed_queries)
     ? output.failed_queries
     : [];
@@ -85,17 +115,39 @@ function publicWebEvidencePreview(toolName: string, output: Record<string, unkno
     });
   const coverage = record(output.coverage_budget);
   const error = record(output.error);
+  const providerOverview = unseenProviderOverview(
+    output.provider_overview,
+    seenProviderOverviews,
+  );
   return compactUndefined({
     tool_name: toolName,
     ok: output.ok !== false,
     query: boundedText(output.query, 500),
     provider: boundedText(output.provider, 120),
+    provider_overview: boundedHeadTailText(providerOverview, 1_600),
     requested_url: boundedText(output.requested_url, 500),
     source_url: boundedText(output.source_url, 500),
     title: boundedText(output.title, 320),
     status: finiteNumber(output.status) ?? undefined,
     truncated: typeof output.truncated === "boolean"
       ? output.truncated
+      : undefined,
+    start_chunk: finiteNumber(output.start_chunk) ?? undefined,
+    returned_chunks: finiteNumber(output.returned_chunks) ?? undefined,
+    total_chunks: finiteNumber(output.total_chunks) ?? undefined,
+    next_start_chunk: output.next_start_chunk === null
+      ? null
+      : finiteNumber(output.next_start_chunk) ?? undefined,
+    effective_max_chars: finiteNumber(output.effective_max_chars) ?? undefined,
+    effective_max_chunks: finiteNumber(output.effective_max_chunks) ?? undefined,
+    content_has_more: typeof output.content_has_more === "boolean"
+      ? output.content_has_more
+      : undefined,
+    markdown_truncated: typeof output.markdown_truncated === "boolean"
+      ? output.markdown_truncated
+      : undefined,
+    duplicate_observation: typeof output.duplicate_observation === "boolean"
+      ? output.duplicate_observation
       : undefined,
     evidence_quality: boundedText(output.evidence_quality, 80),
     page_excerpt: pageExcerpt,
@@ -132,10 +184,6 @@ function publicWebEvidencePreview(toolName: string, output: Record<string, unkno
       ? compactUndefined({
         result_count: finiteNumber(coverage.result_count) ?? undefined,
         stop_reason: boundedText(coverage.stop_reason, 120),
-        next_search_guidance: boundedText(
-          coverage.next_search_guidance,
-          320,
-        ),
       })
       : undefined,
     read_required: typeof output.read_required === "boolean"
@@ -175,7 +223,10 @@ function runCommandPreview(output: Record<string, unknown>): Record<string, unkn
   });
 }
 
-function workBlockPreview(output: Record<string, unknown>): Record<string, unknown> {
+function workBlockPreview(
+  output: Record<string, unknown>,
+  context?: ToolResultModelPreviewContext,
+): Record<string, unknown> {
   const results = Array.isArray(output.results) ? output.results : [];
   return {
     tool_name: WORK_BLOCK_TOOL_NAME,
@@ -188,11 +239,25 @@ function workBlockPreview(output: Record<string, unknown>): Record<string, unkno
       return [{
         name,
         ok: result?.ok !== false,
-        preview: structuredToolResultModelPreview({ toolName: name, output: nested }),
+        preview: structuredToolResultModelPreview({
+          toolName: name,
+          output: nested,
+          context,
+        }),
         ...(typeof result?.error === "string" ? { error: boundedText(result.error, 320) } : {}),
       }];
     }),
   };
+}
+
+function unseenProviderOverview(
+  value: unknown,
+  seenProviderOverviews?: Set<string>,
+): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  if (seenProviderOverviews?.has(value)) return undefined;
+  seenProviderOverviews?.add(value);
+  return value;
 }
 
 function genericToolPreview(toolName: string, value: unknown): Record<string, unknown> | null {

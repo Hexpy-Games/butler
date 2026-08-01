@@ -5,6 +5,7 @@ import type { SqliteGuidedToolJournal } from
   "../../packages/butler-agent/src/agent/adapters/index.ts";
 import {
   authorizedToolDefinitions,
+  guidedNativeToolDefinitions,
   guidedPolicy,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
@@ -19,6 +20,15 @@ import { workScopeForTurn } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
+
+test("R3 guided web_read keeps reader backend runtime-owned", () => {
+  const webRead = guidedNativeToolDefinitions().find((tool) => tool.name === "web_read");
+
+  expect(webRead?.parameters.properties).toHaveProperty("start_chunk");
+  expect(webRead?.parameters.properties).not.toHaveProperty("backend");
+  expect(webRead?.description).toContain("content_has_more");
+  expect(webRead?.description).toContain("next_start_chunk");
+});
 
 test("R3 app policy enables session Work by default and preserves explicit opt-out", () => {
   expect(appRuntimePolicy({

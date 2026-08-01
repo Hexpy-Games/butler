@@ -5,7 +5,10 @@ import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChat
 import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  toolBatchCompletedHandoffText,
+} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "./final-candidate-review.ts";
 
 
@@ -63,6 +66,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     options.usageAttribution,
   );
   const messages: HostedChatMessage[] = [];
+  const modelPreviewContext = createToolResultModelPreviewContext();
   if (options.instructions?.trim()) {
     messages.push({ role: "system", content: options.instructions.trim() });
   }
@@ -161,6 +165,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           payload,
           toolName: call.function.name,
           toolCallId: call.id,
+          modelPreviewContext,
           log,
         }),
       });

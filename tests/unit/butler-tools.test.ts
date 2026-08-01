@@ -1483,14 +1483,23 @@ test("web_search schema exposes query and domain filters", () => {
 
 test("web_read schema exposes bounded page evidence controls", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "web_read");
+  const properties = tool?.parameters.properties as Record<string, Record<string, unknown>>;
 
   expect(tool?.parameters.required).toEqual(["url"]);
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
     "url",
     "max_chars",
     "max_chunks",
+    "start_chunk",
     "backend",
   ]);
+  expect(properties.max_chars).toMatchObject({ minimum: 1_500, maximum: 8_000, default: 2_000 });
+  expect(properties.max_chunks).toMatchObject({ minimum: 1, maximum: 8, default: 1 });
+  expect(properties.start_chunk).toMatchObject({ minimum: 0, default: 0 });
+  expect(properties.max_chars.description).toContain("Use start_chunk");
+  expect(properties.start_chunk.description).toContain("next_start_chunk");
+  expect(tool?.description).toContain("content_has_more");
+  expect(tool?.description).toContain("next_start_chunk");
   expect(tool?.description)
     .toContain("search for an accessible source covering the same requested fact");
 });
@@ -3761,8 +3770,15 @@ test("web_read returns bounded page evidence without full document dumps", async
         index: 0,
         title: "Evidence Story",
         url: "https://example.com/story",
-        text: "First chunk evidence",
-        charCount: 20,
+        text: "First chunk evidence ".repeat(60),
+        charCount: "First chunk evidence ".repeat(60).length,
+      }, {
+        id: "ev_test_next",
+        index: 1,
+        title: "Evidence Story",
+        url: "https://example.com/story",
+        text: "Second chunk evidence ".repeat(60),
+        charCount: "Second chunk evidence ".repeat(60).length,
       }],
       method: "readability",
       durationMs: 12,
@@ -3787,6 +3803,14 @@ test("web_read returns bounded page evidence without full document dumps", async
     title: "Evidence Story",
     evidence_quality: "good",
     truncated: true,
+    start_chunk: 0,
+    returned_chunks: 1,
+    total_chunks: 2,
+    next_start_chunk: 1,
+    effective_max_chars: 1_500,
+    effective_max_chunks: 1,
+    content_has_more: true,
+    markdown_truncated: false,
   });
   expect(result.evidence_receipts).toEqual([
     expect.objectContaining({
@@ -3798,7 +3822,7 @@ test("web_read returns bounded page evidence without full document dumps", async
       references: [{ kind: "url", ref: "https://example.com/story" }],
     }),
   ]);
-  expect(result.markdown.length).toBeLessThanOrEqual(520);
+  expect(result.markdown.length).toBeLessThanOrEqual(1_500);
   expect(result.chunks).toHaveLength(1);
   expect(JSON.stringify(result)).not.toContain("FULL DOCUMENT SHOULD NOT BE RETURNED");
 });
@@ -3831,23 +3855,174 @@ test("web_read reuses same-turn page evidence for duplicate URL reads", async ()
 
   const first = await execute({
     name: "web_read",
-    args: { url: "https://example.com/story", max_chars: 600 },
+    args: { url: "https://example.com/story", max_chars: 1_500 },
     rawArguments: "{}",
   }) as Record<string, any>;
   const second = await execute({
     name: "web_read",
-    args: { url: "https://example.com/story", max_chars: 600 },
+    args: { url: "https://example.com/story", max_chars: 1_500 },
     rawArguments: "{}",
   }) as Record<string, any>;
 
   expect(readCount).toBe(1);
   expect(first.cache_hit).toBe(false);
+  expect(first.duplicate_observation).toBe(false);
   expect(second.cache_hit).toBe(true);
+  expect(second.duplicate_observation).toBe(true);
   expect(second.title).toBe("Evidence Story");
+  expect(second.evidence_quality).toBe(first.evidence_quality);
+  expect(second.evidence_receipts).toEqual(first.evidence_receipts);
+  expect(second.public_web_evidence_items).toEqual([]);
+  expect(second).not.toHaveProperty("markdown");
+  expect(second).not.toHaveProperty("chunks");
+});
+
+test("web_read continues through cached page chunks with start_chunk", async () => {
+  let readCount = 0;
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    pageReader: async () => {
+      readCount += 1;
+      return {
+        reader: "butler-lightweight",
+        requestedUrl: "https://example.com/paged",
+        finalUrl: "https://example.com/paged",
+        ok: true,
+        status: 200,
+        title: "Paged Evidence",
+        text: "FIRST CHUNK\nSECOND CHUNK\nTHIRD CHUNK",
+        markdown: "FIRST CHUNK\nSECOND CHUNK\nTHIRD CHUNK",
+        document: "document",
+        chunks: ["FIRST CHUNK", "SECOND CHUNK", "THIRD CHUNK"].map((text, index) => ({
+          id: `ev_paged_${index}`,
+          index,
+          title: "Paged Evidence",
+          url: "https://example.com/paged",
+          text,
+          charCount: text.length,
+        })),
+        method: "readability",
+        durationMs: 12,
+        warnings: [],
+        renderRecommended: false,
+      };
+    },
+  });
+
+  const first = await execute({
+    name: "web_read",
+    args: { url: "https://example.com/paged", max_chunks: 1 },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  const next = await execute({
+    name: "web_read",
+    args: { url: "https://example.com/paged", start_chunk: first.next_start_chunk, max_chunks: 1 },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(readCount).toBe(1);
+  expect(first).toMatchObject({
+    markdown: "FIRST CHUNK",
+    start_chunk: 0,
+    returned_chunks: 1,
+    total_chunks: 3,
+    next_start_chunk: 1,
+    content_has_more: true,
+    cache_hit: false,
+    duplicate_observation: false,
+  });
+  expect(next).toMatchObject({
+    markdown: "SECOND CHUNK",
+    start_chunk: 1,
+    returned_chunks: 1,
+    total_chunks: 3,
+    next_start_chunk: 2,
+    content_has_more: true,
+    cache_hit: true,
+    duplicate_observation: false,
+  });
+  expect(next.markdown).not.toContain("FIRST CHUNK");
+});
+
+test("web_read advances only past complete chunks that fit max_chars", async () => {
+  const chunks = ["A", "B", "C"].map((marker, index) => ({
+    id: `ev_complete_${index}`,
+    index,
+    title: "Complete Window",
+    url: "https://example.com/complete-window",
+    text: marker.repeat(1_500),
+    charCount: 1_500,
+  }));
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    pageReader: async () => ({
+      reader: "butler-lightweight",
+      requestedUrl: "https://example.com/complete-window",
+      finalUrl: "https://example.com/complete-window",
+      ok: true,
+      status: 200,
+      title: "Complete Window",
+      text: chunks.map((chunk) => chunk.text).join("\n\n"),
+      markdown: chunks.map((chunk) => chunk.text).join("\n\n"),
+      document: "document",
+      chunks,
+      method: "readability",
+      durationMs: 12,
+      warnings: [],
+      renderRecommended: false,
+    }),
+  });
+
+  const first = await execute({
+    name: "web_read",
+    args: {
+      url: "https://example.com/complete-window",
+      max_chars: 2_000,
+      max_chunks: 3,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  const outOfRange = await execute({
+    name: "web_read",
+    args: {
+      url: "https://example.com/complete-window",
+      start_chunk: 3,
+      max_chars: 2_000,
+      max_chunks: 3,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(first).toMatchObject({
+    start_chunk: 0,
+    returned_chunks: 1,
+    total_chunks: 3,
+    next_start_chunk: 1,
+    content_has_more: true,
+    markdown_truncated: false,
+  });
+  expect(first.markdown).toBe("A".repeat(1_500));
+  expect(first.chunks).toHaveLength(1);
+  expect(outOfRange).toMatchObject({
+    ok: true,
+    start_chunk: 3,
+    returned_chunks: 0,
+    total_chunks: 3,
+    next_start_chunk: null,
+    content_has_more: false,
+    evidence_quality: "unavailable",
+    markdown: "",
+  });
+  expect(outOfRange.public_web_evidence_items).toEqual([]);
+  expect(outOfRange.evidence_receipts).toEqual([
+    expect.objectContaining({ verified: false }),
+  ]);
 });
 
 test("web_read defaults to compact chunk previews instead of duplicate long chunks", async () => {
-  const longChunk = "chunk evidence detail ".repeat(220);
+  const longChunk = "chunk evidence detail ".repeat(68);
   const execute = createButlerToolExecutor({
     butlerHome: tempDir,
     butlerData: tempDir,
@@ -3887,7 +4062,7 @@ test("web_read defaults to compact chunk previews instead of duplicate long chun
   expect(result.markdown.length).toBeLessThanOrEqual(2_020);
   expect(result.chunks).toHaveLength(1);
   expect(result.chunks[0].text.length).toBeLessThanOrEqual(360);
-  expect(JSON.stringify(result).length).toBeLessThan(longChunk.length + result.markdown.length + 1_000);
+  expect(JSON.stringify(result).length).toBeLessThan(longChunk.length + result.markdown.length + 3_000);
 });
 
 test("web_search rejects invalid input and records provider failures", async () => {

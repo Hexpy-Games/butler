@@ -245,6 +245,8 @@ test("OpenAI web search provider sends Responses API web_search requests and ext
   });
   expect(JSON.parse(String(requests[0]?.init.body))).toMatchObject({
     model: "gpt-5",
+    instructions:
+      "Use web search. Return one short source-backed overview with citations and the supporting sources.",
     tools: [{
       type: "web_search",
       filters: {
@@ -258,6 +260,7 @@ test("OpenAI web search provider sends Responses API web_search requests and ext
   expect(output).toMatchObject({
     query: "OpenAI web search docs",
     provider: "openai-web-search",
+    provider_overview: "Use cited sources.",
     usage: {
       search_requests: 1,
     },
@@ -551,12 +554,18 @@ test("Codex subscription web search provider returns source-specific structured 
   expect(headers.get("originator")).toBe("butler");
   expect(JSON.parse(String(requests[0]?.init.body))).toMatchObject({
     model: "gpt-5.5",
+    instructions:
+      "Use web search. Return one short source-backed overview with citations and the supporting sources.",
     stream: true,
     store: false,
     tools: [{ type: "web_search" }],
     include: ["web_search_call.action.sources"],
   });
   expect(output.provider).toBe("codex-subscription-web-search");
+  expect(output.provider_overview).toBe(
+    "AGGREGATE_ANSWER https://weather.example.com/seoul " +
+      "https://forecast.example.com/seoul https://advisory.example.com/seoul",
+  );
   expect(output.results).toEqual([{
     title: "Seoul Weather Observation",
     url: "https://weather.example.com/seoul",
@@ -574,6 +583,7 @@ test("Codex subscription web search provider returns source-specific structured 
     source: "advisory.example.com",
   }]);
   expect(JSON.stringify(output.results)).not.toContain("AGGREGATE_ANSWER");
+  expect(JSON.stringify(output).match(/AGGREGATE_ANSWER/g)).toHaveLength(1);
 });
 
 test("auto web search uses Codex subscription auth profile when API key is absent", async () => {

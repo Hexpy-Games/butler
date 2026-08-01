@@ -14,7 +14,9 @@ export {
   toolBatchCompletedHandoffText,
 } from "./tool-batch-handoff.ts";
 export { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
+export type { ToolResultModelPreviewContext } from "./tool-result-model-preview.ts";
 export {
+  createToolResultModelPreviewContext,
   serializeToolResultPayloadForProvider,
   toolResultPayloadForProvider,
 } from "./tool-result-serialization.ts";

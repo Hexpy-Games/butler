@@ -19,8 +19,6 @@ import { ensureActiveProjectLedger } from
   "../../../integrations/project-ledger/ensure-active-project-ledger.ts";
 import { runFunctionToolPromptText } from
   "../../../integrations/providers/runtime.ts";
-import { MAX_TOOL_ROUNDS } from
-  "../../../integrations/providers/shared/runtime-support.ts";
 import type { FunctionToolPromptOptions } from
   "../../../integrations/providers/runtime-contracts.ts";
 import {
@@ -120,9 +118,12 @@ export function createProductionGuidedTurnAgent(input: {
         projectId: policy.projectId ?? turn.context.projectRef,
         turnId: turn.turnId,
         turnContext: turn.originalMessage,
-        searchPlannerOriginalRequest: turn.originalMessage,
-        workerModel: selectedModelRef(turn),
-        searchPlannerModel: selectedModelRef(turn),
+        searchPlanner: async () => ({
+          plan: null,
+          usedPlanner: false,
+          attempts: 0,
+          fallbackReason: "guided model owns search planning",
+        }),
         currentToolNames: () => [...authorizedNames],
         nativeToolDefinitions: guidedNativeToolDefinitions(),
         hiddenNativeToolNames: hiddenNativeToolNamesForGuidedTurn(
@@ -279,7 +280,7 @@ export function createProductionGuidedTurnAgent(input: {
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
         tools: visibleTools,
-        maxToolRounds: MAX_TOOL_ROUNDS,
+        maxToolRounds: Number.POSITIVE_INFINITY,
         executeTool: toolCalls.executeTool,
       };
       const text = await runGuidedPromptWithOperationalReport({
@@ -287,6 +288,7 @@ export function createProductionGuidedTurnAgent(input: {
         options: promptOptions,
         parentSignal: signal,
         leaseStartedAt,
+        originalRequest: turn.originalMessage,
         leaseMs: input.turnLeaseMs,
         finalReportMs: input.finalReportMs,
         async loadFacts() {
@@ -296,7 +298,6 @@ export function createProductionGuidedTurnAgent(input: {
             ? currentWork.work.workId
             : currentWork?.workId;
           return {
-            originalRequest: turn.originalMessage,
             work: currentWork,
             toolCalls: input.toolJournal.list(turn.turnId),
             effects: workId ? input.effectJournal.listForWork(workId) : [],

@@ -23,12 +23,55 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+import {
+  DEFAULT_GUIDED_FINAL_REPORT_MS,
+  DEFAULT_GUIDED_TURN_LEASE_MS,
+  runGuidedPromptWithOperationalReport,
+} from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-operational-report.ts";
 import { createGuidedToolCallExecutor } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-call-execution.ts";
 import { authorizedToolDefinitions, isReplaySafeTool } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
 import { upsertMcpServer } from
   "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
+
+test("Guided agent leaves web query planning to the selected model", async () => {
+  const fixture = createFixture("guided-model-owned-search");
+  try {
+    writeFileSync(join(fixture.root, "butler.config.json"), JSON.stringify({
+      webSearch: { provider: "mock" },
+    }));
+    let searchResult: Record<string, any> | undefined;
+    const agent = fixture.agent(async (options) => {
+      searchResult = await options.executeTool({
+        name: "web_search",
+        args: { query: "Butler guided search ownership" },
+        rawArguments: JSON.stringify({
+          query: "Butler guided search ownership",
+        }),
+      }) as Record<string, any>;
+      return "검색했습니다.";
+    });
+
+    await agent.run({
+      turn: turnRecord(fixture.root, { turnId: "guided-model-owned-search" }),
+      signal: new AbortController().signal,
+    });
+
+    expect(searchResult?.search_plan).toMatchObject({
+      mode: "direct",
+      planner_used: false,
+      planner_attempts: 0,
+      original_query: "Butler guided search ownership",
+    });
+    expect(searchResult?.search_plan?.fallback_reason).toBe(
+      "guided model owns search planning",
+    );
+  } finally {
+    fixture.close();
+  }
+});
 
 test("Guided agent exposes only typed Project Ledger effects in a writable project turn", async () => {
   const fixture = createFixture("guided-policy");
@@ -132,7 +175,7 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(instructions).not.toContain(
       "Do not attempt to mutate the Project Ledger",
     );
-    expect(maxToolRounds).toBe(60);
+    expect(maxToolRounds).toBe(Number.POSITIVE_INFINITY);
 
     let localVisibleNames: string[] = [];
     let localSearch: unknown;
@@ -1410,8 +1453,8 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       if (calls === 2) {
         expect(options.tools).toEqual([]);
         expect(options.prompt).toContain("Tool read_file: completed");
-        expect(options.prompt).toContain('enabled\\":true');
-        return "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.";
+        expect(options.prompt).not.toContain("enabled");
+        return "read_file 도구 호출은 완료됐지만 결과 본문은 안전한 보고 입력에 포함되지 않았습니다.";
       }
       await options.onAssistantTextBeforeTools?.({
         text: "설정 파일을 확인하겠습니다.",
@@ -1430,7 +1473,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       signal: new AbortController().signal,
     })).toEqual({
       route: "assisted",
-      content: "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.",
+      content: "read_file 도구 호출은 완료됐지만 결과 본문은 안전한 보고 입력에 포함되지 않았습니다.",
     });
     expect(calls).toBe(2);
 
@@ -1477,6 +1520,207 @@ test("Guided agent gives a normally progressing Turn one operational lease", asy
   }
 });
 
+test("Guided operational defaults reserve delivery time before the observer deadline", () => {
+  expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBe(270_000);
+  expect(DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(30_000);
+  expect(DEFAULT_GUIDED_TURN_LEASE_MS - DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(240_000);
+  expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBeLessThan(300_000);
+});
+
+test("Guided operational fallback is captured before the final report model call", async () => {
+  const toolCall = {
+    callId: "guided-fallback-precomputed-call",
+    toolName: "read_file",
+    rawArguments: "{}",
+    arguments: {},
+    status: "started" as "started" | "completed",
+    result: { marker: "captured-before-report-model" },
+  };
+  let calls = 0;
+
+  const answer = await runGuidedPromptWithOperationalReport({
+    promptRunner: async () => {
+      calls += 1;
+      if (calls === 2) {
+        toolCall.status = "completed";
+        toolCall.result = { marker: "mutated-during-report-model" };
+      }
+      throw new Error(`provider failure ${calls}`);
+    },
+    options: {
+      prompt: "현재까지 확인한 내용을 알려 주세요.",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "현재까지 확인한 내용을 알려 주세요.",
+    leaseMs: 1_000,
+    finalReportMs: 500,
+    loadFacts: async () => ({
+      work: null,
+      toolCalls: [toolCall],
+      effects: [],
+    }),
+  });
+
+  expect(calls).toBe(2);
+  expect(answer).toContain("Tool read_file: started");
+  expect(answer).not.toContain("Tool read_file: completed");
+  expect(answer).not.toContain("captured-before-report-model");
+  expect(answer).not.toContain("mutated-during-report-model");
+});
+
+test("Guided parent cancellation does not deliver an operational fallback", async () => {
+  const controller = new AbortController();
+  const stopped = new Error("user stopped the Turn");
+  let factLoads = 0;
+  const running = runGuidedPromptWithOperationalReport({
+    promptRunner: async (options) => await new Promise<string>((_resolve, reject) => {
+      options.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+        once: true,
+      });
+    }),
+    options: {
+      prompt: "중지할 작업",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: controller.signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "중지할 작업",
+    leaseMs: 1_000,
+    finalReportMs: 500,
+    loadFacts: async () => {
+      factLoads += 1;
+      return {
+        work: null,
+        toolCalls: [],
+        effects: [],
+      };
+    },
+  });
+
+  controller.abort(stopped);
+
+  await expect(running).rejects.toThrow("user stopped the Turn");
+  expect(factLoads).toBe(0);
+});
+
+test("Guided parent cancellation during quiescence preserves the Stop reason", async () => {
+  const controller = new AbortController();
+  const stopped = new Error("user stopped during settlement");
+  let announceWindowExpiry!: () => void;
+  const windowExpired = new Promise<void>((resolve) => {
+    announceWindowExpiry = resolve;
+  });
+  let factLoads = 0;
+  const running = runGuidedPromptWithOperationalReport({
+    promptRunner: async (options) => await new Promise<string>(() => {
+      options.signal?.addEventListener("abort", () => announceWindowExpiry(), {
+        once: true,
+      });
+    }),
+    options: {
+      prompt: "정리 중인 작업을 중지합니다.",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: controller.signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "정리 중인 작업을 중지합니다.",
+    leaseMs: 80,
+    finalReportMs: 40,
+    loadFacts: async () => {
+      factLoads += 1;
+      return { work: null, toolCalls: [], effects: [] };
+    },
+  });
+
+  await windowExpired;
+  controller.abort(stopped);
+
+  await expect(running).rejects.toThrow("user stopped during settlement");
+  expect(factLoads).toBe(0);
+});
+
+test("Guided timeout gives the child a bounded settlement grace before loading facts", async () => {
+  const toolCall = {
+    callId: "guided-quiescence-call",
+    toolName: "read_file",
+    rawArguments: "{}",
+    arguments: {},
+    status: "started" as "started" | "cancelled",
+  };
+  let calls = 0;
+  let childSettled = false;
+  let factLoadSawSettlement = false;
+
+  const answer = await runGuidedPromptWithOperationalReport({
+    promptRunner: async (options) => {
+      calls += 1;
+      if (calls === 2) throw new Error("final report provider failure");
+      return await new Promise<string>((_resolve, reject) => {
+        options.signal?.addEventListener("abort", () => {
+          setTimeout(() => {
+            toolCall.status = "cancelled";
+            childSettled = true;
+            reject(options.signal?.reason);
+          }, 1);
+        }, { once: true });
+      });
+    },
+    options: {
+      prompt: "파일 확인 상태를 알려 주세요.",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "파일 확인 상태를 알려 주세요.",
+    leaseMs: 80,
+    finalReportMs: 40,
+    loadFacts: async () => {
+      factLoadSawSettlement = childSettled;
+      return {
+        work: null,
+        toolCalls: [toolCall],
+        effects: [],
+      };
+    },
+  });
+
+  expect(factLoadSawSettlement).toBe(true);
+  expect(answer).toContain("Tool read_file: cancelled");
+});
+
+test("Guided fallback does not wait past the lease for a late fact snapshot", async () => {
+  let calls = 0;
+  const startedAt = Date.now();
+  const answer = await runGuidedPromptWithOperationalReport({
+    promptRunner: async () => {
+      calls += 1;
+      throw new Error("provider unavailable");
+    },
+    options: {
+      prompt: "늦은 사실 조회를 기다리지 마세요.",
+      tools: [],
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    leaseStartedAt: Date.now(),
+    originalRequest: "늦은 사실 조회를 기다리지 마세요.",
+    leaseMs: 60,
+    finalReportMs: 30,
+    loadFacts: async () => await new Promise<never>(() => {}),
+  });
+
+  expect(Date.now() - startedAt).toBeLessThan(1_000);
+  expect(calls).toBe(1);
+  expect(answer).toContain("영속 기록은 없습니다");
+  expect(answer).not.toContain("저장된 Work에서 이어갈 수 있습니다");
+});
+
 test("Guided agent bounds the main loop and falls back after one failed final report", async () => {
   const fixture = createFixture("guided-lease-fallback");
   try {
@@ -1506,8 +1750,9 @@ test("Guided agent bounds the main loop and falls back after one failed final re
     expect(calls).toBe(2);
     expect(outcome.route).toBe("direct");
     expect(outcome.content).toContain("모델 연결 또는 실행 시간이 종료");
-    expect(outcome.content).toContain(preservedDraft);
-    expect(outcome.content).toContain("완료되었다고 처리하지 않았");
+    expect(outcome.content).not.toContain(preservedDraft);
+    expect(outcome.content).toContain("완료로 처리하지 않았");
+    expect(outcome.content).not.toContain("저장된 Work에서 이어갈 수 있습니다");
   } finally {
     fixture.close();
   }
