@@ -68,6 +68,7 @@ test("every provider family preserves decisions results and usage across native 
           properties: { step: { type: "number" } },
           required: ["step"],
         },
+        concurrencySafe: true,
       }],
       usageAttribution: {
         turnId: `turn-conformance-${harness.family}`,
@@ -115,6 +116,7 @@ test("every provider family preserves decisions results and usage across native 
     expect(JSON.stringify(bodies[2]), harness.family).not.toContain("completed-tool-evidence");
     expect(JSON.stringify(bodies[1]), harness.family).not.toContain("evidence_packet");
     expect(JSON.stringify(bodies[2]), harness.family).not.toContain("evidence_packet");
+    expect(JSON.stringify(bodies), harness.family).not.toContain("concurrencySafe");
   }
 });
 
@@ -326,6 +328,82 @@ test("every provider family receives bounded conversation context inline on the 
   }
 });
 
+test("every provider family returns malformed and schema-invalid arguments for model correction", async () => {
+  const invalidArguments: unknown[] = [
+    "{malformed",
+    ["not-an-object"],
+    { mode: "unsupported", items: ["one", "two"] },
+    { mode: "brief", items: ["one"] },
+    { mode: "brief", items: ["one", "two"], extra_one: true, extra_two: true },
+  ];
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    let executorCalls = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      if (responseRound <= invalidArguments.length) {
+        return Response.json(providerArgumentResponse(
+          harness.family,
+          responseRound,
+          invalidArguments[responseRound - 1],
+        ));
+      }
+      if (responseRound === invalidArguments.length + 1) {
+        return Response.json(providerArgumentResponse(
+          harness.family,
+          responseRound,
+          { mode: "brief", items: ["one", "two"] },
+        ));
+      }
+      return Response.json(harness.response(3));
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Correct invalid tool arguments, collect once, and report.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 8,
+      butlerData: makeTempDir(`${harness.family}-invalid-tool-arguments`),
+      tools: [{
+        type: "function",
+        name: "collect",
+        description: "Collect typed values.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["mode", "items"],
+          properties: {
+            mode: { type: "string", enum: ["brief", "full"] },
+            items: {
+              type: "array",
+              minItems: 2,
+              items: { type: "string" },
+            },
+          },
+        },
+      }],
+      executeTool: async () => {
+        executorCalls += 1;
+        return { collected: true };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(executorCalls, harness.family).toBe(1);
+    expect(responseRound, harness.family).toBe(7);
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("malformed JSON arguments");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("{malformed");
+    expect(JSON.stringify(bodies[2]), harness.family).toContain("JSON object");
+    expect(JSON.stringify(bodies[3]), harness.family).toContain("Invalid enum value at $.mode");
+    expect(JSON.stringify(bodies[4]), harness.family).toContain("Expected at least 2 items at $.items");
+    expect(JSON.stringify(bodies[5]), harness.family).toContain("extra_one, extra_two");
+    expect(JSON.stringify(bodies[5]).match(/tool_invalid_arguments/gu)?.length ?? 0, harness.family)
+      .toBeGreaterThan(0);
+    expect(JSON.stringify(bodies[6]), harness.family).toContain("collected");
+  }
+});
+
 function providerHarnesses(): ProviderHarness[] {
   return [
     {
@@ -446,6 +524,78 @@ function providerBatchResponse(
           type: "function",
           function: { name: "probe", arguments: JSON.stringify({ step }) },
         })),
+      },
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  };
+}
+
+function providerArgumentResponse(
+  family: ProviderFamily,
+  round: number,
+  rawArguments: unknown,
+): Record<string, unknown> {
+  const text = `Correct tool arguments round ${round}.`;
+  const stringArguments = typeof rawArguments === "string"
+    ? rawArguments
+    : JSON.stringify(rawArguments);
+  if (family === "openai") {
+    return {
+      id: `response-arguments-${round}`,
+      output: [
+        { type: "message", content: [{ type: "output_text", text }] },
+        {
+          type: "function_call",
+          call_id: `call-arguments-${round}`,
+          name: "collect",
+          arguments: stringArguments,
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [
+        { type: "text", text },
+        {
+          type: "tool_use",
+          id: `call-arguments-${round}`,
+          name: "collect",
+          input: rawArguments,
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 2 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{
+        content: {
+          role: "model",
+          parts: [
+            { text },
+            { functionCall: { name: "collect", args: rawArguments } },
+          ],
+        },
+      }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 2,
+        totalTokenCount: 12,
+      },
+    };
+  }
+  return {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: text,
+        tool_calls: [{
+          id: `call-arguments-${round}`,
+          type: "function",
+          function: { name: "collect", arguments: stringArguments },
+        }],
       },
     }],
     usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },

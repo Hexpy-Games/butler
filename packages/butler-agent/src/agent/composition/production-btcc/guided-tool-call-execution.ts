@@ -1,11 +1,10 @@
-import {
-  digest,
-  stableJson,
-  type BtccTurnProgressObserver,
-  type DurableWorkService,
-  type TurnRecord,
-  type WorkTurnScope,
-} from "../../btcc/index.ts";
+import type { BtccTurnProgressObserver } from "../../btcc/index.ts";
+import { digest, stableJson } from "../../btcc/identity/index.ts";
+import type {
+  DurableWorkService,
+  WorkTurnScope,
+} from "../../btcc/durable-work/index.ts";
+import type { TurnRecord } from "../../btcc/turn/index.ts";
 import type {
   GuidedToolJournalRecord,
   SqliteGuidedToolJournal,

@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { StopPersistenceOutcome } from
-  "../../../btcc/index.ts";
+  "../../../btcc/turn/index.ts";
 import { assertGuidedTurnSemanticState } from "./guided-turn-state.ts";
 import { digest } from "./identity.ts";
 

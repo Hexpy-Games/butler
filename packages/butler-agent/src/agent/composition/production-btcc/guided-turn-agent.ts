@@ -1,10 +1,12 @@
+import type { DurableWorkService } from "../../btcc/durable-work/index.ts";
 import {
+  acceptedPlanEffectId,
   createGuidedEffectService,
-  type DurableWorkService,
-  type GuidedTurnAgent,
-  type GuidedTurnResult,
-} from "../../btcc/index.ts";
-import { acceptedPlanEffectId } from "../../btcc/effects/index.ts";
+} from "../../btcc/effects/index.ts";
+import type {
+  GuidedTurnAgent,
+  GuidedTurnResult,
+} from "../../btcc/guided-turn/index.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import type {
   SqliteGuidedEffectJournal,

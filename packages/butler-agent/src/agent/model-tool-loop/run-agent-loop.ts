@@ -193,13 +193,12 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       };
     }
 
+    const preparedCalls = calls.map((call) => prepareToolCall(input, call));
     await input.onAssistantTextBeforeTools?.({
       text: response.text?.trim() ?? "",
-      toolCalls: calls,
+      toolCalls: preparedCalls.map((prepared) => prepared.call),
       iteration,
     });
-
-    const preparedCalls = calls.map((call) => prepareToolCall(input, call));
     const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null &&
       prepared.tool?.concurrencySafe === true,

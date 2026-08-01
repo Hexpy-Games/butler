@@ -186,6 +186,77 @@ test("agent loop serializes schema validation failures as structured observation
   expect(context).toContain("\"model_visible_content\"");
 });
 
+test("agent loop rejects JSON Schema type, enum, and array violations as ordinary tool observations", async () => {
+  const modelInputs: string[] = [];
+  let executed = 0;
+  const constrainedTools: AgentLoopToolDefinition[] = [{
+    name: "collect",
+    description: "Collect typed values.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["mode", "items"],
+      properties: {
+        mode: { type: "string", enum: ["brief", "full"] },
+        items: {
+          type: "array",
+          minItems: 2,
+          items: { type: "string" },
+        },
+      },
+    },
+  }];
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "collect values" }],
+    tools: constrainedTools,
+    maxIterations: 4,
+    callModel: async (input) => {
+      modelInputs.push(input.messages.map((message) => `${message.role}:${message.content}`).join("\n"));
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-wrong-enum",
+            name: "collect",
+            arguments: { mode: "other", items: ["one", "two"] },
+          }],
+        };
+      }
+      if (input.iteration === 1) {
+        return {
+          toolCalls: [{
+            id: "call-short-array",
+            name: "collect",
+            arguments: { mode: "brief", items: ["one"] },
+          }],
+        };
+      }
+      if (input.iteration === 2) {
+        return {
+          toolCalls: [{
+            id: "call-wrong-item-type",
+            name: "collect",
+            arguments: { mode: "brief", items: ["one", 2] },
+          }],
+        };
+      }
+      return { text: "I corrected the typed arguments." };
+    },
+    executeTool: async () => {
+      executed += 1;
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("I corrected the typed arguments.");
+  expect(executed).toBe(0);
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
+  const context = modelInputs.slice(1).join("\n");
+  expect(context).toContain("Invalid enum value at $.mode");
+  expect(context).toContain("Expected at least 2 items at $.items");
+  expect(context).toContain("Expected string at $.items[1]");
+  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+});
+
 test("agent loop keeps web tool validation feedback after provider compaction", async () => {
   let providerToolContent = "";
   const result = await runAgentLoop({

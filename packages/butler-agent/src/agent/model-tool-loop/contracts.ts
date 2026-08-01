@@ -26,6 +26,7 @@ export interface AgentLoopToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  rawArguments?: unknown;
 }
 
 export interface AgentLoopToolResult {

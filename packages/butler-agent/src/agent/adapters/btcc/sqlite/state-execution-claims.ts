@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { TurnStateRepository } from
-  "../../../btcc/index.ts";
+  "../../../btcc/turn/index.ts";
 import { digest } from "./identity.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
 

@@ -35,6 +35,7 @@ test("OpenAI unknown function calls remain visible to the loop as a correctable 
     id: "call-unknown",
     name: "hallucinated_tool",
     arguments: { query: "hello" },
+    rawArguments: "{\"query\":\"hello\"}",
   }]);
 
   let modelCalls = 0;

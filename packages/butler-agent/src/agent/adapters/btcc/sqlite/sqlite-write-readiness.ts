@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import type {
   CommittedSuccessorReadiness,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/recovery/index.ts";
 import { isSqliteContention } from "../../../../foundation/sqlite-contention.ts";
 
 const WRITE_PROBE_BUSY_WINDOW_MS = 250;

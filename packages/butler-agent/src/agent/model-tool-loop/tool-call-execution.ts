@@ -4,6 +4,7 @@ import type {
   AgentLoopToolDefinition,
   AgentLoopToolResult,
 } from "./contracts.ts";
+import { validateToolCallArguments } from "./schema-validation.ts";
 
 const GENERIC_AGENT_LOOP_TURN_ID = "generic-agent-loop";
 
@@ -18,7 +19,25 @@ export function prepareToolCall(
   call: AgentLoopToolCall,
 ): PreparedToolCall {
   const tool = input.tools.find((candidate) => candidate.name === call.name);
-  return { call, tool, validationError: validateToolInput(tool, call) };
+  const validation = validateToolCallArguments({
+    toolName: call.name,
+    rawArguments: Object.hasOwn(call, "rawArguments")
+      ? call.rawArguments
+      : call.arguments,
+    schema: tool?.inputSchema,
+  });
+  const normalizedCall = {
+    ...call,
+    arguments: validation.arguments,
+    rawArguments: validation.rawArguments,
+  };
+  return {
+    call: normalizedCall,
+    tool,
+    validationError: tool
+      ? validation.error
+      : `No such tool available: ${call.name}`,
+  };
 }
 
 export async function executePreparedToolCall(
@@ -61,26 +80,6 @@ export async function executePreparedToolCall(
   );
 }
 
-function validateToolInput(
-  tool: AgentLoopToolDefinition | undefined,
-  call: AgentLoopToolCall,
-): string | null {
-  if (!tool) return `No such tool available: ${call.name}`;
-  const schema = tool.inputSchema;
-  if (!schema) return null;
-  for (const key of schema.required ?? []) {
-    if (!(key in call.arguments)) return `Tool ${call.name} requires argument: ${key}`;
-  }
-  if (schema.additionalProperties === false && schema.properties) {
-    const allowed = new Set(Object.keys(schema.properties));
-    const extra = Object.keys(call.arguments).filter((key) => !allowed.has(key));
-    if (extra.length > 0) {
-      return `Tool ${call.name} received unsupported argument(s): ${extra.join(", ")}`;
-    }
-  }
-  return null;
-}
-
 function invalidArgumentsObservation(input: {
   call: AgentLoopToolCall;
   message: string;
@@ -97,7 +96,9 @@ function invalidArgumentsObservation(input: {
     modelVisibleContent: [
       `Tool: ${input.call.name}`,
       `Observation: ${input.message}`,
-      `Arguments: ${JSON.stringify(input.call.arguments)}`,
+      `Arguments: ${typeof input.call.rawArguments === "string"
+        ? input.call.rawArguments
+        : JSON.stringify(input.call.arguments)}`,
       "Use this observation to retry with the tool schema: include required fields, remove unsupported fields, or select an available tool.",
     ].join("\n"),
     causedByToolCallId: input.call.id,

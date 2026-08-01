@@ -18,3 +18,12 @@ export {
   serializeToolResultPayloadForProvider,
   toolResultPayloadForProvider,
 } from "./tool-result-serialization.ts";
+export {
+  validateJsonObjectSchema,
+  validateToolCallArguments,
+} from "./schema-validation.ts";
+export type {
+  SchemaValidationResult,
+  SchemaViolationReason,
+  ToolCallArgumentsValidation,
+} from "./schema-validation.ts";

@@ -11,14 +11,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
-import {
-  createGuidedTurnRuntime,
-  type BtccRunCommand,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { BtccRunCommand } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
+import { createGuidedTurnRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
 import {
   digest,
   stableJson,
-} from "../../packages/butler-agent/src/agent/btcc/identity.ts";
+} from "../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from

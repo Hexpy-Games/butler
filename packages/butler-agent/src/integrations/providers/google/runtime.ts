@@ -1,4 +1,4 @@
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, unavailableFunctionToolPayload, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
@@ -209,8 +209,11 @@ export async function runGeminiFunctionToolPromptText(
         allowedNames,
       );
       if (!name) return [];
-      const args = localToolArguments(functionCall.args ?? {});
-      return [{ id: `gemini_call_${round}_${name}`, name, args: args.parsed, raw: args.raw }];
+      return [{
+        id: `gemini_call_${round}_${name}`,
+        name,
+        rawArguments: functionCall.args,
+      }];
     });
     if (calls.length === 0) {
       if (text) {
@@ -227,27 +230,34 @@ export async function runGeminiFunctionToolPromptText(
         model: config.modelId,
       });
     }
+    const preparedCalls = calls.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.name,
+        rawArguments: call.rawArguments,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: calls.map((call) => ({ name: call.name, args: call.args })),
+      toolCalls: preparedCalls.map(({ call, prepared }) => ({
+        name: call.name,
+        args: prepared.args,
+      })),
     });
     contents.push({ role: "model", parts: responseParts });
     toolBatchExecuted = true;
-    for (const call of calls) {
-      log(`tool ${call.name}: ${call.raw}`);
-      let payload = unavailableFunctionToolPayload({
-        name: call.name,
-        args: call.args,
-        allowedNames,
-      });
+    for (const { call, prepared } of preparedCalls) {
+      log(`tool ${call.name}: ${prepared.rawArguments}`);
+      let payload = prepared.errorPayload;
       if (!payload) {
         try {
           payload = {
             ok: true,
             output: await options.executeTool({
               name: call.name,
-              args: call.args,
-              rawArguments: call.raw,
+              args: prepared.args,
+              rawArguments: prepared.rawArguments,
               signal: options.signal,
             }),
           };
@@ -258,7 +268,7 @@ export async function runGeminiFunctionToolPromptText(
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.name,
-            args: call.args,
+            args: prepared.args,
             output: payload.output,
           })
         : null;

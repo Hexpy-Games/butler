@@ -2,11 +2,10 @@ import type { Database } from "bun:sqlite";
 import type {
   AdmissionConstructionClaim,
   AdmissionInbox,
-  FreshBtccTurnCommand,
   TurnAdmissionRepository,
   TurnRecord,
   TurnStateRepository,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/turn/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
 import { SqliteAdmissionConstructionClaims } from "./admission-construction-claims.ts";
@@ -19,6 +18,9 @@ type InboxRow = {
   status: "recorded" | "constructed";
   command_json: string;
 };
+
+type RecordInboundInput = Parameters<TurnAdmissionRepository["recordInbound"]>[0];
+type FreshTurnCommand = RecordInboundInput["command"];
 
 export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   private readonly records: SqliteImmutableRecordStore;
@@ -33,10 +35,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     this.constructionClaims = new SqliteAdmissionConstructionClaims(db, owner);
   }
 
-  async recordInbound(input: {
-    command: FreshBtccTurnCommand;
-    admissionInputHash: string;
-  }): Promise<AdmissionInbox> {
+  async recordInbound(input: RecordInboundInput): Promise<AdmissionInbox> {
     const transaction = this.db.transaction(() => {
       const existing = this.findInbox(input.command.sessionId, input.command.triggerKey);
       if (existing) {
@@ -118,7 +117,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     inboxId: string,
     commandJson: string,
   ): void {
-    const command = JSON.parse(commandJson) as FreshBtccTurnCommand;
+    const command = JSON.parse(commandJson) as FreshTurnCommand;
     const source = command.kind === "run"
       ? command.message
       : { messageId: command.trigger.triggerId, content: command.trigger.content };
@@ -176,7 +175,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     `).run(checkpointId, command.turnId);
   }
 
-  private insertCanonicalTrigger(command: FreshBtccTurnCommand): void {
+  private insertCanonicalTrigger(command: FreshTurnCommand): void {
     if (command.kind === "wake") {
       const existing = this.db.query<{ content: string }, [string]>(`
         SELECT content FROM btcc_continuation_triggers WHERE trigger_id = ?

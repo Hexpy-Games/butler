@@ -3,13 +3,13 @@ import {
   openBtccSqliteStores,
 } from "../adapters/index.ts";
 import {
-  createGuidedTurnRuntime,
   type BtccRunCommand,
   type BtccStopCommand,
   type BtccTurnOutcome,
   type BtccTurnProgressObserver,
   type BtccTurnRuntime,
 } from "../btcc/index.ts";
+import { createGuidedTurnRuntime } from "../btcc/guided-turn/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
 import type { FunctionToolPromptOptions } from
