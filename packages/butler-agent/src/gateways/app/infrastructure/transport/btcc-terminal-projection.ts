@@ -14,6 +14,17 @@ type CanonicalDeliveryRow = {
   created_at: string;
 };
 
+type CancelledTurnRow = {
+  turn_id: string;
+  chat_id: string;
+};
+
+type TerminalProjectionInput = {
+  options: AppTransportProjectionStoreOptions;
+  hasProjectedAction(actionId: string): boolean;
+  markProjectedAction(actionId: string, eventId: string, chatId: string): void;
+};
+
 export type TerminalDeliveryBatch = {
   applied: number;
   nextCursor: number;
@@ -32,6 +43,20 @@ export function reconcileBtccTerminalDeliveries(input: {
     ...input,
     afterRowId: 0,
   }).applied;
+}
+
+export function reconcileBtccTerminalTurn(
+  input: TerminalProjectionInput & { turnId: string },
+): number {
+  const cancelled = cancelledTurns(input.options.db, [input.turnId]);
+  if (cancelled.length > 0) {
+    projectCancelledTurns(input, cancelled);
+    return cancelled.length;
+  }
+  return projectCanonicalDeliveries(
+    input,
+    terminalDeliveries(input.options.db, [input.turnId]),
+  );
 }
 
 export function reconcileBtccTerminalDeliveryBatch(input: {
@@ -54,9 +79,25 @@ export function reconcileBtccTerminalDeliveryBatch(input: {
       (!input.chatId || row.chatId === input.chatId),
     )
     .map((row) => row.turnId);
-  const batch = terminalDeliveries(input.options.db, candidateTurnIds);
+  const projected = projectCanonicalDeliveries(
+    input,
+    terminalDeliveries(input.options.db, candidateTurnIds),
+  );
+  const cancelled = cancelledTurns(input.options.db, candidateTurnIds);
+  projectCancelledTurns(input, cancelled);
+  return {
+    applied: projected + cancelled.length,
+    nextCursor: page.nextCursor,
+    pending: page.pending,
+  };
+}
+
+function projectCanonicalDeliveries(
+  input: TerminalProjectionInput,
+  rows: CanonicalDeliveryRow[],
+): number {
   let projected = 0;
-  for (const row of batch) {
+  for (const row of rows) {
     const actionId = `btcc-canonical-final:${row.outbox_id}`;
     if (input.hasProjectedAction(actionId)) continue;
     const event = terminalDeliveryEvent(row, actionId);
@@ -73,11 +114,16 @@ export function reconcileBtccTerminalDeliveryBatch(input: {
       queuedFinalProjection: "accept",
     })) projected += 1;
   }
-  return {
-    applied: projected,
-    nextCursor: page.nextCursor,
-    pending: page.pending,
-  };
+  return projected;
+}
+
+function projectCancelledTurns(
+  input: Pick<TerminalProjectionInput, "options">,
+  rows: CancelledTurnRow[],
+): void {
+  for (const row of rows) {
+    input.options.finalizeCancelledTurn(row.chat_id, row.turn_id);
+  }
 }
 
 function terminalDeliveries(
@@ -107,6 +153,23 @@ function terminalDeliveries(
     `).all(...turnIds);
 }
 
+function cancelledTurns(
+  db: Database,
+  turnIds: string[],
+): CancelledTurnRow[] {
+  if (turnIds.length === 0 || !tableExists(db, "btcc_turns")) return [];
+  const placeholders = turnIds.map(() => "?").join(", ");
+  return db.query<CancelledTurnRow, string[]>(`
+    SELECT btcc_turns.turn_id, turns.chat_id
+    FROM btcc_turns
+    JOIN turns ON turns.id = btcc_turns.turn_id
+    WHERE turns.id IN (${placeholders})
+      AND btcc_turns.semantic_state = 'cancelled'
+      AND turns.state NOT IN ('delivered', 'cancelled')
+    ORDER BY turns.rowid
+  `).all(...turnIds);
+}
+
 function terminalProjectionSchemaExists(db: Database): boolean {
   const required = ["btcc_turns", "btcc_delivery_outbox", "btcc_messages"];
   const rows = db.query<{ name: string }, [string, string, string]>(`
@@ -114,6 +177,12 @@ function terminalProjectionSchemaExists(db: Database): boolean {
     WHERE type = 'table' AND name IN (?, ?, ?)
   `).all(required[0]!, required[1]!, required[2]!);
   return rows.length === required.length;
+}
+
+function tableExists(db: Database, name: string): boolean {
+  return Boolean(db.query<{ name: string }, [string]>(`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?
+  `).get(name));
 }
 
 function terminalDeliveryEvent(

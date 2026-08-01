@@ -68,6 +68,9 @@ export function createNativeButlerDefaultProvider(
       reasoningEffort: input.reasoning?.effort,
       signal: input.signal,
       cacheScope: "native-butler-title-provider",
+      ...(input.metadata?.purpose === "app_session_title"
+        ? { providerRetryAttempts: 1 }
+        : {}),
     });
     return { text };
   };

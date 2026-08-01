@@ -74,11 +74,11 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
     );
     const outcome = await this.handleCommand(command, stopObserving);
     const result = projectTurnOutcome(outcome);
-    const generatedSessionTitle = result.text
-      ? await this.options.generateSessionTitle?.({ binding, envelope, route }) ?? null
-      : null;
     if (result.text) conversation.complete(result.text);
     else conversation.cancel();
+    const generatedSessionTitle = result.text && command.kind !== "resume"
+      ? await this.generateSessionTitle({ binding, envelope, route })
+      : null;
 
     return {
       text: result.text,
@@ -88,6 +88,18 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
   }
 
   async close(): Promise<void> {}
+
+  private async generateSessionTitle(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+  }): Promise<string | null> {
+    try {
+      return await this.options.generateSessionTitle?.(input) ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   private async handleCommand(
     command: Parameters<BtccGatewayActorOptions["runtime"]["runTurn"]>[0],
