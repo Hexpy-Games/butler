@@ -135,6 +135,88 @@ test("App-managed runtime activation writes an app-owned pointer only", () => {
   }
 });
 
+test.skipIf(process.platform === "win32")(
+  "activated App-managed runtime receipt skips deep verification on restart",
+  () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-restart-"));
+    try {
+      const butlerData = join(tempDir, "data");
+      const resourceRoot = createBundledAgentResource(tempDir, {
+        version: "9.9.10",
+      });
+      const installed = activateAppManagedAgentRuntime({
+        butlerData,
+        resourceRoot,
+        now: fixedNow,
+      });
+      const pointerBefore = readFileSync(
+        appManagedAgentPointerPath(butlerData),
+        "utf8",
+      );
+      const receiptPath = join(installed.runtimeHome, "runtime.json");
+      const receiptBefore = readFileSync(receiptPath, "utf8");
+      rmSync(join(resourceRoot, "runtime", "posix-archive-worker.mjs"));
+
+      for (let restart = 0; restart < 5; restart += 1) {
+        const reused = activateAppManagedAgentRuntime({
+          butlerData,
+          resourceRoot,
+          now: fixedNow,
+        });
+        expect(reused).toMatchObject({
+          activated: false,
+          runtimeHome: installed.runtimeHome,
+          version: "9.9.10",
+        });
+      }
+      expect(readFileSync(appManagedAgentPointerPath(butlerData), "utf8"))
+        .toBe(pointerBefore);
+      expect(readFileSync(receiptPath, "utf8")).toBe(receiptBefore);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  },
+);
+
+test("reused runtime health failure invalidates and revalidates its receipt", () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-revalidate-"));
+  try {
+    const butlerData = join(tempDir, "data");
+    const resourceRoot = createBundledAgentResource(tempDir, {
+      version: "9.9.11",
+    });
+    const installed = activateAppManagedAgentRuntime({
+      butlerData,
+      resourceRoot,
+      now: fixedNow,
+    });
+    const receiptPath = join(installed.runtimeHome, "runtime.json");
+    const reused = prepareAppManagedAgentRuntime({
+      butlerData,
+      resourceRoot,
+      now: fixedNow,
+    });
+
+    reused.rollbackActivation(new Error("health check failed"));
+    expect(existsSync(receiptPath)).toBe(false);
+
+    const revalidated = prepareAppManagedAgentRuntime({
+      butlerData,
+      resourceRoot,
+      now: fixedNow,
+    });
+    expect(existsSync(receiptPath)).toBe(false);
+    revalidated.commitActivation();
+    expect(readJson(receiptPath)).toMatchObject({
+      activation_status: "activated",
+      bundled_agent_version: "9.9.11",
+      raw_text_included: false,
+    });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("App-managed runtime activation preserves previous pointer on failed activation", () => {
   const tempDir = mkdtempSync(join(tmpdir(), "butler-app-runtime-rollback-"));
   try {
@@ -566,7 +648,7 @@ test("App-managed runtime repairs damaged selected runtime from App-owned payloa
 });
 
 test.skipIf(process.platform === "win32")(
-  "App-managed POSIX readiness ignores a forged extraction inventory",
+  "App-managed POSIX slow-path readiness ignores a forged extraction inventory",
   () => {
     for (const strategy of ["delete-entry", "replace-hash"] as const) {
       const tempDir = mkdtempSync(
@@ -603,6 +685,10 @@ test.skipIf(process.platform === "win32")(
           entry.sha256 = sha256File(ownedFile);
         }
         writeFileSync(inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
+        const receiptPath = join(installed.runtimeHome, "runtime.json");
+        const receipt = readJson(receiptPath);
+        receipt.activation_status = "prepared";
+        writeFileSync(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`);
 
         const repaired = activateAppManagedAgentRuntime({
           butlerData,
@@ -756,9 +842,11 @@ test("App-managed runtime activation does not shell out to host tar", () => {
   expect(source).not.toContain("npm install");
   expect(source).not.toContain("brew install");
   expect(source).not.toContain("apt install");
-  expect(posixWorker).toContain('gunzipStream.on("data"');
+  expect(posixWorker).toContain('new DecompressionStream("gzip")');
+  expect(posixWorker).toContain("archiveInputBufferBytes = 64 * 1024");
+  expect(posixWorker).toContain("await writer.write(chunk)");
   expect(posixWorker).not.toContain("for await (const chunk of gunzip");
-  expect(posixWorker).not.toContain("DecompressionStream");
+  expect(posixWorker).not.toContain('from "node:zlib"');
 });
 
 test.skipIf(process.platform === "win32")(

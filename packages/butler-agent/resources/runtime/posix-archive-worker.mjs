@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import {
   closeSync,
-  createReadStream,
   lstatSync,
   mkdirSync,
   openSync,
@@ -13,11 +12,11 @@ import {
   writeSync,
 } from "node:fs";
 import { dirname, posix } from "node:path";
-import { createGunzip } from "node:zlib";
 
 const maxArchiveBytes = 2 * 1024 * 1024 * 1024;
 const maxMetadataBytes = 1024 * 1024;
 const maxEntries = 500_000;
+const archiveInputBufferBytes = 64 * 1024;
 const fileHashBufferBytes = 1024 * 1024;
 
 if (process.platform === "win32") {
@@ -50,9 +49,6 @@ if (mode === "extract") {
   throw new Error("bundled Agent runtime verification root is invalid");
 }
 const artifactHash = createHash("sha256");
-const source = createReadStream(artifactPath);
-source.on("data", (chunk) => artifactHash.update(chunk));
-const gunzip = source.pipe(createGunzip());
 const files = [];
 const seenPaths = new Set();
 let pending = Buffer.alloc(0);
@@ -68,7 +64,7 @@ let hasLauncher = false;
 let verifiedFiles = 0;
 
 try {
-  await consumeArchiveStream(source, gunzip);
+  await consumeArchiveStream(artifactPath);
   const artifactSha256 = artifactHash.digest("hex");
   if (mode === "extract") {
     writeFileSync(
@@ -87,14 +83,14 @@ try {
       )}\n`,
       { encoding: "utf8", mode: 0o600, flag: "wx" },
     );
-    process.stdout.write(
+    await writeStdout(
       `${JSON.stringify({ ok: true, hasLauncher, files: files.length })}\n`,
     );
   } else {
     if (!hasLauncher) {
       throw new Error("bundled Agent artifact is missing bin/butler.js");
     }
-    process.stdout.write(
+    await writeStdout(
       `${JSON.stringify({
         ok: true,
         verified: true,
@@ -108,48 +104,79 @@ try {
   throw error;
 }
 
-function consumeArchiveStream(sourceStream, gunzipStream) {
+async function consumeArchiveStream(path) {
+  const decompressor = new DecompressionStream("gzip");
+  const writer = decompressor.writable.getWriter();
+  const reader = decompressor.readable.getReader();
+  const inputPromise = pumpArchiveInput(path, writer, reader);
+  // The reader is the primary consumer. Mark an early input failure handled until
+  // it is observed below so Bun cannot terminate on a transient rejection.
+  void inputPromise.catch(() => {});
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      archiveBytes += chunk.length;
+      if (archiveBytes > maxArchiveBytes) {
+        throw new Error("bundled Agent artifact exceeds the extraction limit");
+      }
+      if (sawEnd) continue;
+      pending =
+        pending.length === 0
+          ? chunk
+          : Buffer.concat([pending, chunk], pending.length + chunk.length);
+      consumePending();
+    }
+    await inputPromise;
+    consumePending();
+    if (!sawEnd || state !== "header" || current) {
+      throw new Error("bundled Agent artifact is truncated");
+    }
+  } catch (error) {
+    await Promise.allSettled([reader.cancel(error), writer.abort(error)]);
+    await inputPromise.catch(() => {});
+    throw error;
+  } finally {
+    reader.releaseLock();
+    writer.releaseLock();
+  }
+}
+
+async function pumpArchiveInput(path, writer, reader) {
+  let descriptor = null;
+  try {
+    descriptor = openSync(path, "r");
+    const input = Buffer.allocUnsafe(archiveInputBufferBytes);
+    while (true) {
+      const bytesRead = readSync(descriptor, input, 0, input.length, null);
+      if (bytesRead === 0) break;
+      const chunk = Buffer.from(input.subarray(0, bytesRead));
+      artifactHash.update(chunk);
+      await writer.write(chunk);
+    }
+    await writer.close();
+  } catch (error) {
+    await Promise.allSettled([reader.cancel(error), writer.abort(error)]);
+    throw error;
+  } finally {
+    if (descriptor !== null) closeSync(descriptor);
+  }
+}
+
+function writeStdout(value) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const fail = (error) => {
+    const finish = (error) => {
       if (settled) return;
       settled = true;
-      sourceStream.destroy();
-      gunzipStream.destroy();
-      reject(error);
+      process.stdout.off("error", finish);
+      if (error) reject(error);
+      else resolve();
     };
-    sourceStream.once("error", fail);
-    gunzipStream.once("error", fail);
-    gunzipStream.on("data", (chunk) => {
-      if (settled) return;
-      try {
-        archiveBytes += chunk.length;
-        if (archiveBytes > maxArchiveBytes) {
-          throw new Error("bundled Agent artifact exceeds the extraction limit");
-        }
-        if (sawEnd) return;
-        pending =
-          pending.length === 0
-            ? chunk
-            : Buffer.concat([pending, chunk], pending.length + chunk.length);
-        consumePending();
-      } catch (error) {
-        fail(error);
-      }
-    });
-    gunzipStream.once("end", () => {
-      if (settled) return;
-      try {
-        consumePending();
-        if (!sawEnd || state !== "header" || current) {
-          throw new Error("bundled Agent artifact is truncated");
-        }
-        settled = true;
-        resolve();
-      } catch (error) {
-        fail(error);
-      }
-    });
+    process.stdout.once("error", finish);
+    process.stdout.write(value, finish);
   });
 }
 

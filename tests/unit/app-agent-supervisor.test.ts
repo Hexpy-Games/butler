@@ -245,13 +245,20 @@ test("bundled Agent supervisor does not overclaim unverified tree containment", 
   const root = mkdtempSync(join(tmpdir(), "butler-supervisor-unverified-"));
   try {
     const child = new FakeChildProcess(9001, []);
+    let invalidated = 0;
+    let resolved = 0;
     const supervisor = createBundledAgentSupervisor({
       butlerData: root,
-      resolveGateway: () => ({
-        command: "bun",
-        args: ["gateway"],
-        env: {},
-      }),
+      resolveGateway: () => {
+        resolved += 1;
+        return {
+          command: "bun",
+          args: ["gateway"],
+          env: {},
+          commitActivation: () => {},
+          invalidateRuntimeReceipt: () => { invalidated += 1; },
+        };
+      },
       spawnProcess: () => child,
       healthCheck: async () => true,
       isPortAvailable: async () => true,
@@ -264,6 +271,9 @@ test("bundled Agent supervisor does not overclaim unverified tree containment", 
 
     await supervisor.ensureReady();
     child.emit("exit", 1, null);
+    expect(invalidated).toBe(1);
+    await supervisor.ensureReady();
+    expect(resolved).toBe(2);
     await expect(supervisor.stop({ wait: true })).resolves.toEqual({
       stopped: true,
       containment_released: false,
@@ -278,6 +288,7 @@ test("supervisor repair discards the cached gateway and resolves a fresh runtime
   const root = mkdtempSync(join(tmpdir(), "butler-supervisor-repair-"));
   try {
     let resolved = 0;
+    let invalidated = 0;
     const children: FakeChildProcess[] = [];
     const supervisor = createBundledAgentSupervisor({
       butlerData: root,
@@ -288,6 +299,7 @@ test("supervisor repair discards the cached gateway and resolves a fresh runtime
           args: ["gateway"],
           env: {},
           commitActivation: () => {},
+          invalidateRuntimeReceipt: () => { invalidated += 1; },
           containmentVerified: true,
         };
       },
@@ -311,6 +323,7 @@ test("supervisor repair discards the cached gateway and resolves a fresh runtime
     await supervisor.repair();
 
     expect(resolved).toBe(2);
+    expect(invalidated).toBe(1);
     expect(children).toHaveLength(2);
     expect(supervisor.diagnostics()).toMatchObject({
       phase: "running",
