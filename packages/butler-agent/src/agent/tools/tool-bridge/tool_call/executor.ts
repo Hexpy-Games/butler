@@ -1,5 +1,6 @@
 import type { WebSearchProvider } from "../../../../integrations/search/provider.ts";
 import type {
+  ButlerToolDefinition,
   ButlerToolCall,
   ButlerToolHandler,
   ButlerToolRuntimeContext,
@@ -53,6 +54,7 @@ export function createToolCallToolHandler(input: {
   pluginToolDescriber?: PluginToolDescriber;
   dispatchTool: ButlerToolHandler;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
   hiddenNativeToolNames?: readonly string[];
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   describedToolIds?: readonly string[] | (() => readonly string[]);
@@ -92,6 +94,7 @@ export async function resolveToolCallTarget(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolDefinitions?: readonly ButlerToolDefinition[];
     hiddenNativeToolNames?: readonly string[];
     nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
     describedToolIds?: readonly string[] | (() => readonly string[]);

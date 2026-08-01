@@ -115,6 +115,8 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(visibleNames).toContain("write_file");
     expect(visibleNames).toContain("edit_file");
     expect(writeFileSchema).not.toContain("expected_sha256");
+    expect(writeFileSchema).not.toContain("overwrite");
+    expect(writeFileSchema).toContain("create_parents");
     expect(editFileSchema).not.toContain("expected_sha256");
     expect(visibleNames).toContain("project_ledger_status");
     expect(visibleNames).toContain("project_ledger_list");
@@ -876,11 +878,10 @@ test("direct and tool_call file mutations use the same reviewed effect gate", as
     const agent = fixture.agent(async (options) => {
       direct = await options.executeTool({
         name: "write_file",
-        args: { path: "direct.txt", content: "blocked", overwrite: false },
+        args: { path: "direct.txt", content: "blocked" },
         rawArguments: JSON.stringify({
           path: "direct.txt",
           content: "blocked",
-          overwrite: false,
         }),
       });
       bridged = await options.executeTool({
@@ -890,7 +891,6 @@ test("direct and tool_call file mutations use the same reviewed effect gate", as
           arguments: {
             path: "bridged.txt",
             content: "blocked",
-            overwrite: false,
           },
         },
         rawArguments: JSON.stringify({
@@ -898,7 +898,6 @@ test("direct and tool_call file mutations use the same reviewed effect gate", as
           arguments: {
             path: "bridged.txt",
             content: "blocked",
-            overwrite: false,
           },
         }),
       });
@@ -921,6 +920,94 @@ test("direct and tool_call file mutations use the same reviewed effect gate", as
     });
     expect(existsSync(join(fixture.root, "direct.txt"))).toBe(false);
     expect(existsSync(join(fixture.root, "bridged.txt"))).toBe(false);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided catalog and tool_call execute the same simple write_file contract", async () => {
+  const fixture = createFixture("guided-write-file-bridge");
+  try {
+    let description: unknown;
+    let writeResult: unknown;
+    const agent = fixture.agent(async (options) => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        await options.executeTool({
+          name,
+          args,
+          rawArguments: JSON.stringify(args),
+        });
+      await call("replace_work_plan", {
+        objective: "Create bridged.txt",
+        actions: [{
+          action_key: "write-bridged-file",
+          description: "Write the requested file",
+          effect: {
+            capability: "write_file",
+            target: "workspace:bridged.txt",
+          },
+        }],
+        checks: ["bridged.txt contains the requested content"],
+      });
+      await call("record_work_review", {
+        subject: "plan",
+        verdict: "accept",
+        summary: "The plan directly creates the requested file.",
+      });
+      description = await call("tool_describe", {
+        ids: ["native:write_file"],
+      });
+      writeResult = await call("tool_call", {
+        id: "native:write_file",
+        arguments: {
+          path: "bridged.txt",
+          content: "bridge contract works\n",
+        },
+      });
+      await call("record_work_review", {
+        subject: "result",
+        verdict: "accept",
+        summary: "The requested file was written with the exact content.",
+      });
+      return "브리지 경로로 파일을 작성했습니다.";
+    });
+
+    const turnId = "turn-guided-write-file-bridge";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    expect(await runtime.runTurn(localRunCommand(fixture.root, turnId)))
+      .toMatchObject({
+        kind: "delivered",
+        content: "브리지 경로로 파일을 작성했습니다.",
+      });
+
+    const encodedDescription = JSON.stringify(description);
+    expect(encodedDescription).not.toContain("expected_sha256");
+    expect(encodedDescription).not.toContain("overwrite");
+    expect(description).toMatchObject({
+      ok: true,
+      descriptions: [{
+        id: "native:write_file",
+        enabled: true,
+        schema: { required: ["path", "content"] },
+      }],
+    });
+    expect(writeResult).toMatchObject({
+      ok: true,
+      effect_receipt: {
+        capability: "write_file",
+        target: "workspace:bridged.txt",
+      },
+      bridge_invocation: { id: "native:write_file" },
+    });
+    expect(readFileSync(join(fixture.root, "bridged.txt"), "utf8"))
+      .toBe("bridge contract works\n");
+    expect((await fixture.stores.turns.findTurn(turnId))?.route).toBe("managed");
   } finally {
     fixture.close();
   }

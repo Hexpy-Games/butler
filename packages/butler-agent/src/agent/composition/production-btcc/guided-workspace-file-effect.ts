@@ -8,7 +8,6 @@ import type {
 import {
   expectedWorkspaceFileSha256,
   guardWorkspaceFileTarget,
-  normalizeExpectedSha256,
   normalizeWorkspaceContainedPath,
   normalizeWorkspaceFileTarget,
   observeWorkspaceFileTarget,
@@ -23,12 +22,13 @@ export const GUIDED_WORKSPACE_FILE_CAPABILITY = "write_file";
 export type GuidedWorkspaceFileInput = {
   path: string;
   content: string;
-  overwrite: boolean;
   create_parents: boolean;
-  expected_sha256?: string;
 };
 
-type RegisteredWriteFileInput = GuidedWorkspaceFileInput;
+type RegisteredWriteFileInput = GuidedWorkspaceFileInput & {
+  overwrite: boolean;
+  expected_sha256?: string;
+};
 
 export type GuidedWorkspaceFileResult = {
   ok: true;
@@ -36,7 +36,6 @@ export type GuidedWorkspaceFileResult = {
   path: string;
   bytes: number;
   after_sha256: string;
-  overwrite: boolean;
   create_parents: boolean;
   target_observed: true;
 };
@@ -55,8 +54,6 @@ type WorkspaceFileAdapterOptions = {
 const INPUT_FIELDS = new Set([
   "path",
   "content",
-  "overwrite",
-  "expected_sha256",
   "create_parents",
 ]);
 export function createGuidedWorkspaceFileEffectAdapter(
@@ -153,9 +150,6 @@ function normalizeWorkspaceFileInput(
   if (typeof record.content !== "string") {
     throw new Error("write_file effect content must be a string");
   }
-  if (typeof record.overwrite !== "boolean") {
-    throw new Error("write_file effect overwrite must be a boolean");
-  }
   if (
     record.create_parents !== undefined &&
     typeof record.create_parents !== "boolean"
@@ -168,11 +162,7 @@ function normalizeWorkspaceFileInput(
       requiredString(record.path, "path"),
     ),
     content: record.content,
-    overwrite: record.overwrite,
     create_parents: record.create_parents ?? false,
-    ...(record.expected_sha256 === undefined
-      ? {}
-      : { expected_sha256: normalizeExpectedSha256(record.expected_sha256) }),
   };
 }
 
@@ -187,17 +177,7 @@ function reconcileObservation(
   ) {
     return applied(input, observation);
   }
-  if (observation.status === "missing" && !input.overwrite) {
-    return { status: "not_applied" };
-  }
-  if (observation.status === "file" && !input.overwrite) {
-    return { status: "not_applied" };
-  }
-  if (
-    observation.status === "file" &&
-    input.overwrite &&
-    dispatchAttempts === 0
-  ) {
+  if (dispatchAttempts === 0) {
     return { status: "not_applied" };
   }
   return { status: "uncertain", error: observationError(observation) };
@@ -212,51 +192,13 @@ function prepareRegisteredWrite(
   if (observation.status === "unavailable") {
     return { ok: false, outcome: uncertain(observation.error) };
   }
-  if (input.expected_sha256 && observation.status === "missing") {
-    return {
-      ok: false,
-      outcome: notApplied({
-        code: "expected_sha256_on_missing_file",
-        message: "The expected workspace file no longer exists.",
-      }),
-    };
-  }
-  if (
-    input.expected_sha256 && observation.status === "file" &&
-    observation.sha256 !== input.expected_sha256
-  ) {
-    return {
-      ok: false,
-      outcome: notApplied({
-        code: "expected_sha256_mismatch",
-        message: "The workspace file changed before the reviewed edit was applied.",
-      }),
-    };
-  }
-  if (observation.status === "file" && !input.overwrite) {
-    return {
-      ok: false,
-      outcome: notApplied({
-        code: "file_exists",
-        message: "write_file refused to replace an existing file without overwrite.",
-      }),
-    };
-  }
-  if (observation.status === "missing" && input.overwrite) {
-    return {
-      ok: false,
-      outcome: notApplied({
-        code: "overwrite_target_missing",
-        message: "write_file overwrite requires an existing target; retry as a new file.",
-      }),
-    };
-  }
   return {
     ok: true,
     input: {
       ...input,
+      overwrite: observation.status === "file",
       ...(observation.status === "file"
-        ? { expected_sha256: input.expected_sha256 ?? observation.sha256 }
+        ? { expected_sha256: observation.sha256 }
         : {}),
     },
   };
@@ -288,7 +230,6 @@ function applied(
       path: input.path,
       bytes: observation.bytes,
       after_sha256: observation.sha256,
-      overwrite: input.overwrite,
       create_parents: input.create_parents,
       target_observed: true,
     },

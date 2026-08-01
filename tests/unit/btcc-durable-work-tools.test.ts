@@ -157,6 +157,44 @@ test("R3 continuation context stays concise and semantic", () => {
   expect(rendered.length).toBeLessThanOrEqual(8_000);
 });
 
+test("R3 continuation context reuses the bounded web model projection", () => {
+  const repeatedBody = `${"source opening ".repeat(80)}LATE_SOURCE_FACT${
+    " source ending".repeat(80)
+  }`;
+  const context: DurableWorkContext = {
+    work: workView(),
+    originalRequest: {
+      turnId: "turn-origin",
+      messageId: "message-origin",
+      content: "Research the source and continue later",
+    },
+    resultFacts: [{
+      toolName: "web_read",
+      status: "completed",
+      resultJson: {
+        ok: true,
+        source_url: "https://example.com/report",
+        markdown: repeatedBody,
+        chunks: [{ content: "RAW_CHUNK_MUST_NOT_REPLAY" }],
+        public_web_evidence_items: [{
+          evidence_item_id: "evidence-1",
+          source_url: "https://example.com/report",
+          source_identity: "example.com",
+          content_kind: "page_chunk",
+          bounded_content: repeatedBody.slice(0, 400),
+          limitations: [],
+        }],
+      },
+    }],
+  };
+
+  const rendered = renderDurableWorkContext(context) ?? "";
+  expect(rendered).toContain("LATE_SOURCE_FACT");
+  expect(rendered).not.toContain("RAW_CHUNK_MUST_NOT_REPLAY");
+  expect(rendered.match(/LATE_SOURCE_FACT/g)?.length).toBe(1);
+  expect(rendered.length).toBeLessThanOrEqual(8_000);
+});
+
 function fakeService(
   overrides: Partial<DurableWorkService>,
 ): DurableWorkService {

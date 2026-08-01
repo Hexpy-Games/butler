@@ -58,7 +58,6 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
         expect(await call(options, "write_file", {
           path: "report.md",
           content: "# Verified report\n\nThe durable artifact is ready.\n",
-          overwrite: false,
         })).toMatchObject({
           ok: true,
           effect: "workspace_file_write",
@@ -419,7 +418,6 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
         expect(await call(options, "write_file", {
           path: "answer.txt",
           content: "actual result\n",
-          overwrite: false,
         })).toMatchObject({
           ok: false,
           error: { code: "effect_work_required" },
@@ -446,7 +444,6 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
         expect(await call(options, "write_file", {
           path: "answer.txt",
           content: "actual result\n",
-          overwrite: false,
         })).toMatchObject({ ok: true, effect: "workspace_file_write" });
         return "요청하신 파일을 실제로 작성했습니다.";
       },

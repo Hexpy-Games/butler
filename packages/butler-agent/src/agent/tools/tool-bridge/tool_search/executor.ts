@@ -5,6 +5,7 @@ import { buildMcpToolCatalog } from "../../progressive-mcp-catalog.ts";
 import { searchToolCatalog } from "../../progressive-search.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
 import type {
+  ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
   ToolCapabilityCategory,
   ToolCatalogEntry,
@@ -25,6 +26,7 @@ export function createToolSearchToolHandler(input: {
   mcpTimeoutMs?: number;
   pluginCatalog?: readonly ExternalToolCatalogInput[] | (() => Promise<readonly ExternalToolCatalogInput[]>);
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
   hiddenNativeToolNames?: readonly string[];
   nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }) {
@@ -49,7 +51,7 @@ export function createToolSearchToolHandler(input: {
 
     const catalog = [
       ...buildNativeToolCatalog({
-        tools: BUTLER_TOOLS.filter((tool) =>
+        tools: (input.nativeToolDefinitions ?? BUTLER_TOOLS).filter((tool) =>
           !input.hiddenNativeToolNames?.includes(tool.name)),
         metadata: TOOL_CAPABILITY_METADATA,
         resolveAvailability: (tool) => {

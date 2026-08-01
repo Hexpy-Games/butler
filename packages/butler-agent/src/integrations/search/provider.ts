@@ -389,22 +389,27 @@ function sourceResultsFromOpenAIResponse(payload: OpenAIWebSearchResponse): WebS
   const byUrl = new Map<string, WebSearchResult>();
   for (const item of payload.output ?? []) {
     for (const source of item.action?.sources ?? []) {
-      if (!source.url) continue;
-      byUrl.set(source.url, {
-        title: source.title || source.url,
-        url: source.url,
-        snippet: source.snippet || "",
-        source: compactDomain(source.url),
+      const url = source.url?.trim();
+      if (!url) continue;
+      const current = byUrl.get(url);
+      byUrl.set(url, {
+        title: compactText(source.title) || current?.title || url,
+        url,
+        snippet: compactText(source.snippet) || current?.snippet || "",
+        source: compactDomain(url),
       });
     }
+  }
+  for (const item of payload.output ?? []) {
     for (const content of item.content ?? []) {
       for (const annotation of content.annotations ?? []) {
-        if (annotation.type !== "url_citation" || !annotation.url) continue;
-        byUrl.set(annotation.url, {
-          title: annotation.title || annotation.url,
-          url: annotation.url,
-          snippet: content.text?.slice(0, 500) || "",
-          source: compactDomain(annotation.url),
+        const url = annotation.url?.trim();
+        if (annotation.type !== "url_citation" || !url || byUrl.has(url)) continue;
+        byUrl.set(url, {
+          title: compactText(annotation.title) || url,
+          url,
+          snippet: "",
+          source: compactDomain(url),
         });
       }
     }
@@ -613,8 +618,21 @@ function parseSseEvents(text: string): Record<string, any>[] {
   return events;
 }
 
-function textFromCodexSse(text: string): string {
-  let output = "";
+function codexWebSearchResponseFromSse(text: string): {
+  response: OpenAIWebSearchResponse;
+  answer: string;
+} {
+  const outputItems: NonNullable<OpenAIWebSearchResponse["output"]> = [];
+  let completedOutput: NonNullable<OpenAIWebSearchResponse["output"]> = [];
+  const streamedAnnotations: Array<{
+    type?: string;
+    title?: string;
+    url?: string;
+  }> = [];
+  let streamedText = "";
+  let doneText = "";
+  let outputItemText = "";
+  let completedText = "";
   for (const event of parseSseEvents(text)) {
     if (event.type === "error") {
       throw new Error(`Codex web search error: ${event.message || event.code || JSON.stringify(event)}`);
@@ -624,18 +642,36 @@ function textFromCodexSse(text: string): string {
       throw new Error(`Codex web search error: ${error?.message || error?.code || JSON.stringify(event.response)}`);
     }
     if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
-      output += event.delta;
+      streamedText += event.delta;
     }
-    if (!output && event.type === "response.output_text.done" && typeof event.text === "string") {
-      output = event.text;
+    if (event.type === "response.output_text.done" && typeof event.text === "string") {
+      doneText = event.text;
     }
-    if (!output && event.type === "response.output_item.done") {
+    if (event.type === "response.output_text.annotation.added" && event.annotation) {
+      streamedAnnotations.push(event.annotation);
+    }
+    if (event.type === "response.output_item.done" && event.item && typeof event.item === "object") {
+      outputItems.push(event.item);
       for (const content of event.item?.content ?? []) {
-        if (typeof content?.text === "string") output += content.text;
+        if (typeof content?.text === "string") outputItemText += content.text;
       }
     }
+    if (event.type === "response.completed" && event.response && typeof event.response === "object") {
+      if (Array.isArray(event.response.output)) completedOutput = event.response.output;
+      if (typeof event.response.output_text === "string") completedText = event.response.output_text;
+    }
   }
-  return output.trim();
+  const output = [...outputItems, ...completedOutput];
+  if (streamedAnnotations.length > 0) {
+    output.push({
+      type: "message",
+      content: [{ annotations: streamedAnnotations }],
+    });
+  }
+  return {
+    response: { output },
+    answer: (streamedText || doneText || outputItemText || completedText).trim(),
+  };
 }
 
 function extractUrls(text: string): string[] {
@@ -715,6 +751,7 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
         }],
         tools: [tool],
         tool_choice: "auto",
+        include: ["web_search_call.action.sources"],
         stream: true,
         store: false,
       }),
@@ -723,14 +760,18 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
     if (!response.ok) {
       throw new Error(`Codex web search error (${response.status}): ${raw.slice(0, 500)}`);
     }
-    const answer = textFromCodexSse(raw);
+    const parsed = codexWebSearchResponseFromSse(raw);
+    const structuredResults = sourceResultsFromOpenAIResponse(parsed.response);
     const max = Math.max(1, Math.min(10, input.max_results ?? 5));
-    const results = filterBlockedDomains(extractUrls(answer).map((url) => ({
-      title: compactDomain(url),
-      url,
-      snippet: answer.slice(0, 500),
-      source: compactDomain(url),
-    })), input.blocked_domains).slice(0, max);
+    const candidates = structuredResults.length > 0
+      ? structuredResults
+      : extractUrls(parsed.answer).map((url) => ({
+        title: compactDomain(url),
+        url,
+        snippet: "",
+        source: compactDomain(url),
+      }));
+    const results = filterBlockedDomains(candidates, input.blocked_domains).slice(0, max);
     return {
       query: input.query,
       results,

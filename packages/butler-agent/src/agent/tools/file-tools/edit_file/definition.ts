@@ -47,7 +47,7 @@ export const editFileToolMetadata: ToolCapabilityMetadata = {
   tags: ["file", "edit", "native"],
   safetyNotes: [
     "Edits one exact text range in an existing regular UTF-8 file inside the workspace after realpath and sensitive-path checks.",
-    "Rejects an expected_sha256 that differs when observed, symbolic-link leaves, and Project Ledger paths; writes through an atomic same-directory replacement.",
+    "Supports stale-byte protection for guarded callers, rejects symbolic-link leaves and Project Ledger paths, and writes through an atomic same-directory replacement.",
     "One Butler agent process serializes its write_file and edit_file mutations. External editors and other processes are not locked.",
   ],
   satisfiesCompletionObligations: ["durable_artifact"],

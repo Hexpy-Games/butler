@@ -4,6 +4,8 @@ import type { TurnRecord } from "../../btcc/turn/index.ts";
 import type { SqliteGuidedToolJournal } from
   "../../adapters/index.ts";
 import { guidedPolicy } from "./guided-turn-policy.ts";
+import { projectGuidedToolContext } from
+  "./guided-tool-context-projection.ts";
 
 export function renderGuidedPrompt(
   turn: TurnRecord,
@@ -52,10 +54,12 @@ export function guidedInstructions(
     "Multi-source or multi-step research that must produce a meaningful synthesized result is substantial Work even when every source tool is read-only.",
     "When the request asks you to inspect multiple sources and compare or synthesize them, start Work before the first source tool.",
     "When Work is useful, call replace_work_plan before the dependent work and use record_work_review to review the plan and the actual result.",
+    "Review the Plan as soon as its actions and checks are adequate. Plan review judges the Plan itself; do not wait for research or execution to finish before accepting an adequate Plan.",
     "Before persistent changes, make a concise Plan, mark the relevant action with a plain-language effect capability and outcome, and accept the current Plan review. The accepted Plan as a whole covers contained workspace writes and typed Project Ledger changes in the active project, so do not enumerate files or invent internal target strings.",
     "The runtime creates effect ids, hashes, revisions, and receipts. Never invent or copy them into a Plan.",
-    "record_work_checkpoint is optional and should mark only meaningful stage changes.",
-    "Before reporting substantial Work, review against the original user request. Accept a usable requested outcome despite disclosed non-critical limits. Use partial or revise only for a material unfinished outcome with a concrete continuation or blocker; do not keep Work open for optional improvements.",
+    "For a requested artifact, once the current evidence supports a useful and truthful draft, create that draft before optional extra research or a checkpoint. Validate it, then revise only material gaps.",
+    "record_work_checkpoint is optional. Use it only when a new result or effect is worth preserving for a later continuation, not before any new fact or merely to announce the next immediate tool call.",
+    "Before reporting substantial Work, finish any Project Ledger publication or closeout effect, then review against the original user request using the actual result as the final Work action. Accept a usable requested outcome despite disclosed non-critical limits. Use partial or revise only for a material unfinished outcome with a concrete continuation or blocker; do not keep Work open for optional improvements.",
     "If Work bookkeeping fails, continue and deliver any truthful artifact or final answer you can support.",
     ...(policy.trackingMode === "ledger"
       ? [
@@ -66,7 +70,7 @@ export function guidedInstructions(
       : []),
     "Use tool_search, then tool_describe, then tool_call for capabilities not already visible.",
     "A wrong tool or invalid arguments are ordinary feedback: correct the call and continue.",
-    "Use edit_file for a small exact change to an existing file. Use write_file for a new file or an intentional complete replacement.",
+    "Use edit_file for a small exact change to an existing file. Use write_file to make a path contain the complete desired file, whether creating it or replacing it.",
     "When a local page's actual appearance matters, use inspect_workspace_page after build or structural validation to inspect desktop and mobile screenshots before the result review. Screenshots are evidence for material defects, not a demand for endless polish: when the requested content is present and the page is responsive, readable, and usable, proceed to result review; correct and re-inspect only when a visible defect materially harms the requested result. If the App preview host is unavailable, treat that as an ordinary disclosed limitation rather than a completion gate.",
     "run_command is read-only and has no network access by default. Under admitted full access, a command with state_effect validation and a stable validation_suite runs in a disposable no-network workspace copy; persist screenshots and similar evidence under $BUTLER_ARTIFACTS_DIR. Use typed tools for intended source or Project Ledger changes.",
     "Never claim a mutation or completed result without tool evidence. Respect the admitted access.",
@@ -116,13 +120,14 @@ function renderContextDocuments(
 function renderPriorToolFacts(
   records: ReturnType<SqliteGuidedToolJournal["list"]>,
 ): string {
-  const recent = records.slice(-12);
+  const recent = projectGuidedToolContext(records);
   if (recent.length === 0) return "";
   return [
     "## Previously recorded tool calls for this turn",
+    "Records are newest first.",
     "Use these results as facts. Do not repeat a successful mutation unless the user request requires it.",
     "A call still marked started has unknown completion. Retry reads if useful, but inspect the target before any further mutation.",
-    safeJson(recent).slice(0, 20_000),
+    safeJson(recent),
   ].join("\n\n");
 }
 
