@@ -193,7 +193,7 @@ function benchmarkScenario(
     steps: [{
       id: prompt.id,
       prompt: prompt.prompt,
-      timeoutMs: prompt.timeoutMs,
+      timeoutMs: benchmarkHardStopMs(prompt),
       reloadAfter: true,
       expect: {
         terminalState: "delivered",
@@ -201,6 +201,13 @@ function benchmarkScenario(
       },
     }],
   };
+}
+
+function benchmarkHardStopMs(prompt: MaterializedBenchmarkPrompt): number {
+  const legacyTimeoutMs = (prompt as MaterializedBenchmarkPrompt & {
+    timeoutMs?: number;
+  }).timeoutMs;
+  return prompt.hardStopMs ?? legacyTimeoutMs ?? prompt.latencyTargetMs;
 }
 
 function validateRunInput(

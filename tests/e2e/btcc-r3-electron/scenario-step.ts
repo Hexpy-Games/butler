@@ -91,7 +91,9 @@ async function waitForTurn(
       for (const label of progressLabels(view)) progress.add(label);
       if (firstRenderedActivityAtMs === null) {
         const visibleActivity = await launch.page.innerText(
-          '[data-test-class="turn-current-status-content"], [data-test-class="turn-result-section"]',
+          '[data-test-class~="turn-current-phase-activity"], ' +
+            '[data-test-class~="turn-current-status-content"], ' +
+            '[data-test-class~="turn-activity-panel"]',
           { last: true },
         ).catch(() => "");
         if (visibleActivity.trim()) firstRenderedActivityAtMs = Date.now();

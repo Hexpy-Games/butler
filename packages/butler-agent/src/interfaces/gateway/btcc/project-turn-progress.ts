@@ -71,6 +71,7 @@ export function projectTurnProgress(
           decisionNextStep: update.nextStep,
           decisionSource: "model-authored",
           semanticBlockId: update.activityId,
+          activityStage: update.displayStage,
         },
       });
     },

@@ -82,6 +82,8 @@ export function calculateObservationMetrics(
       observation.timing.submittedAtMs,
       observation.timing.terminalAtMs,
     ),
+    latencyTargetPass: observation.timing.latencyTargetMet ??
+      (observation.terminalState === "delivered" ? true : null),
     maxSilentGapMs: nonNegativeOrNull(observation.timing.maxSilentGapMs),
     unrecoveredToolErrors,
     durabilityPass,

@@ -115,10 +115,11 @@ export interface BtccTurnProgressObserver {
     turnId: string;
     semanticState: string;
     activityId: string;
+    displayStage?: "conception" | "planning" | "execution" | "review" | "reporting";
     title: string;
     summary: string;
-    rationale: string;
-    nextStep: string;
+    rationale?: string;
+    nextStep?: string;
   }): void | Promise<void>;
   operationChanged?(update: {
     turnId: string;

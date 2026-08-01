@@ -30,6 +30,7 @@ describe("BTCC revision Electron benchmark runner", () => {
       harnessWorkExpectation: boolean;
       promptId: string;
       revision: string;
+      timeoutMs: number | undefined;
     }> = [];
     let persisted = 0;
     let projectValidations = 0;
@@ -52,10 +53,11 @@ describe("BTCC revision Electron benchmark runner", () => {
               scenario.steps[0]?.expect?.work !== undefined,
             promptId,
             revision,
+            timeoutMs: scenario.steps[0]?.timeoutMs,
           });
           if (promptId === "work_market_research__run_1" && revision === "r2") {
             throw new Error(
-              "Timed out waiting for Electron Turn after 300000 ms.\nEvidence: fixture",
+              "Timed out waiting for Electron Turn after 360000 ms.\nEvidence: fixture",
             );
           }
           return { run: {}, observations: [{}] };
@@ -90,6 +92,10 @@ describe("BTCC revision Electron benchmark runner", () => {
       call.promptId === "work_market_research__run_1",
     )?.harnessWorkExpectation).toBe(false);
     expect(calls.every((call) => !call.harnessWorkExpectation)).toBe(true);
+    expect(calls.find((call) => call.promptId === "direct_greeting__run_1")?.timeoutMs)
+      .toBe(300_000);
+    expect(calls.find((call) => call.promptId === "work_market_research__run_1")?.timeoutMs)
+      .toBe(360_000);
     expect(calls.filter((call) => call.revision === "r3").every((call) =>
       call.bundledAgentResourceDir === "/tmp/btcc-formal-run/shared-r3-agent",
     )).toBe(true);

@@ -65,6 +65,8 @@ import { createGuidedToolCallExecutor } from
   "./guided-tool-call-execution.ts";
 import { runGuidedPromptWithOperationalReport } from
   "./guided-operational-report.ts";
+import { createGuidedActivityProjection } from
+  "./guided-activity-projection.ts";
 
 type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
 
@@ -94,9 +96,11 @@ export function createProductionGuidedTurnAgent(input: {
         await safeImportOpenLegacyWork(input.durableWork, workScope);
         initialWork = await safeLoadWorkContext(input.durableWork, workScope);
       }
+      let initialWorkBound = false;
       if (initialWork) {
         const boundWork = await safeBoundWork(input.durableWork, turn.turnId);
-        if (boundWork?.workId === initialWork.work.workId) {
+        initialWorkBound = boundWork?.workId === initialWork.work.workId;
+        if (initialWorkBound) {
           await backfillTurnToolResults(input, workScope);
           initialWork = await safeLoadWorkContext(input.durableWork, workScope);
         }
@@ -249,10 +253,16 @@ export function createProductionGuidedTurnAgent(input: {
           },
         }),
       });
+      const activity = createGuidedActivityProjection({
+        turnId: turn.turnId,
+        progress,
+        managedInitially: initialWorkBound,
+      });
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
         progress,
+        activity,
         workScope,
         presentedWorkId,
         authorizedNames,
@@ -281,6 +291,7 @@ export function createProductionGuidedTurnAgent(input: {
         attachments: providerImageAttachments(turn),
         tools: visibleTools,
         maxToolRounds: Number.POSITIVE_INFINITY,
+        onAssistantTextBeforeTools: activity.observeToolBatch,
         executeTool: toolCalls.executeTool,
       };
       const text = await runGuidedPromptWithOperationalReport({
@@ -304,11 +315,15 @@ export function createProductionGuidedTurnAgent(input: {
           };
         },
       });
+      const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
+      await activity.publishFinal(text, {
+        managed: Boolean(finalWork),
+      });
       return {
         content: text,
         route: routeForUsedTools(
           toolCalls.usedTools,
-          Boolean(await safeBoundWork(input.durableWork, turn.turnId)) ||
+          Boolean(finalWork) ||
             toolCalls.usedTools.some(isDurableWorkTool),
         ),
       };

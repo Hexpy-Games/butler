@@ -131,7 +131,13 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "Plan review judges the Plan itself",
   );
   expect(instructions).toContain(
-    "create that draft before optional extra research",
+    "smallest evidence set that supports a useful and truthful result",
+  );
+  expect(instructions).toContain(
+    "only when its result could materially change the conclusion",
+  );
+  expect(instructions).toContain(
+    "request them in the same round so safe tools can run together",
   );
   expect(instructions).toContain(
     "not before any new fact or merely to announce",
@@ -145,7 +151,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain(
     "make a path contain the complete desired file",
   );
-  expect(instructions.indexOf("create that draft before optional extra research"))
+  expect(instructions.indexOf("answer or create the result before optional investigation"))
     .toBeLessThan(instructions.indexOf("record_work_checkpoint is optional"));
   expect(instructions).toContain("not a demand for endless polish");
   expect(instructions).toContain(

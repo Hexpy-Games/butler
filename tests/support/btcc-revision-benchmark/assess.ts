@@ -56,9 +56,6 @@ function validateAssessmentFile(
     seen.add(key);
     const observation = observations.get(key);
     if (!observation) throw new Error(`Product observation not found: ${key}`);
-    if (observation.terminalState !== "delivered") {
-      throw new Error(`Only delivered observations may be assessed: ${key}`);
-    }
     validateAssessment(assessment, observation);
   }
 }

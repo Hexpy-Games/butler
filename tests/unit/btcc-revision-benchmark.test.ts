@@ -40,6 +40,18 @@ describe("formal BTCC revision paired benchmark", () => {
       expect(plan.prompts.filter((prompt) => prompt.tier === tier)).toHaveLength(9);
     }
     expect(plan.prompts).toHaveLength(36);
+    expect(plan.prompts.find((prompt) => prompt.tier === "direct")).toMatchObject({
+      latencyTargetMs: 60_000,
+      hardStopMs: 300_000,
+    });
+    expect(plan.prompts.find((prompt) => prompt.tier === "simple_tool")).toMatchObject({
+      latencyTargetMs: 120_000,
+      hardStopMs: 300_000,
+    });
+    expect(plan.prompts.find((prompt) => prompt.tier === "work_ledger")).toMatchObject({
+      latencyTargetMs: 300_000,
+      hardStopMs: 360_000,
+    });
     expect(plan.prompts.every((prompt) => !prompt.prompt.includes("{{"))).toBe(true);
     expect(plan.prompts.slice(0, 4).map((prompt) => prompt.order)).toEqual([
       ["r2", "r3"], ["r3", "r2"], ["r2", "r3"], ["r3", "r2"],
@@ -100,9 +112,27 @@ describe("formal BTCC revision paired benchmark", () => {
       providerFirstTokenMs: 50,
       firstMeaningfulMs: 80,
       productWallMs: 200,
+      latencyTargetPass: true,
       unrecoveredToolErrors: 0,
       durabilityPass: true,
       safetyPass: true,
+    });
+
+    const lateMetrics = calculateObservationMetrics({
+      ...observation(plan.targets.r3),
+      timing: {
+        ...observation(plan.targets.r3).timing,
+        latencyTargetMs: 60_000,
+        hardStopMs: 300_000,
+        latencyTargetMet: false,
+      },
+    });
+    expect(lateMetrics).toMatchObject({
+      measurementComplete: true,
+      outcomeSuccess: true,
+      qualityScore: 4,
+      durabilityPass: true,
+      latencyTargetPass: false,
     });
 
     const missingArtifact = calculateObservationMetrics({
@@ -425,6 +455,64 @@ describe("formal BTCC revision paired benchmark", () => {
     });
   });
 
+  test("reports opposing quality and latency advantages as an explicit tradeoff", () => {
+    const fullPlan = createBenchmarkPlan({
+      runId: "quality-latency-tradeoff",
+      createdAt: "2026-08-02T00:00:00.000Z",
+      targets: targets(),
+      fixtures: formalBenchmarkPlaceholders("2026-08-02"),
+    });
+    const prompt = fullPlan.prompts[0]!;
+    const plan = { ...fullPlan, prompts: [prompt] };
+    const arm = (
+      revision: BtccRevision,
+      qualityScore: number,
+      latencyTargetMet: boolean,
+    ): RawBenchmarkObservation => ({
+      ...observation(plan.targets[revision]),
+      runId: plan.runId,
+      promptId: prompt.id,
+      revision,
+      prompt: prompt.prompt,
+      turnId: `turn-${revision}`,
+      quality: {
+        intentScore: qualityScore,
+        resultScore: qualityScore,
+        requiredOutcomes: { natural_greeting: true },
+        assessmentNote: "Quality and latency tradeoff fixture.",
+      },
+      timing: {
+        ...observation(plan.targets[revision]).timing,
+        latencyTargetMs: 60_000,
+        hardStopMs: 300_000,
+        latencyTargetMet,
+      },
+    });
+    const compare = (observations: RawBenchmarkObservation[]) =>
+      evaluateBenchmarkEvidence({
+        schema: BTCC_REVISION_BENCHMARK_SCHEMA,
+        kind: "paired_e2e_evidence",
+        plan,
+        observations,
+      }).pairs[0];
+
+    expect(compare([arm("r2", 4, true), arm("r3", 5, false)]))
+      .toMatchObject({
+        winner: "tie",
+        reasons: ["quality_improvement", "r3_latency_target_miss"],
+      });
+    expect(compare([arm("r2", 5, false), arm("r3", 4, true)]))
+      .toMatchObject({
+        winner: "tie",
+        reasons: ["quality_regression", "r2_latency_target_miss"],
+      });
+    expect(compare([arm("r2", 4, false), arm("r3", 5, true)]))
+      .toMatchObject({
+        winner: "r3",
+        reasons: ["quality_improvement", "r2_latency_target_miss"],
+      });
+  });
+
   test("requires the product measurements named by the comparison contract", () => {
     const fullPlan = createBenchmarkPlan({
       runId: "assessed-run",
@@ -516,6 +604,14 @@ describe("formal BTCC revision paired benchmark", () => {
       verdict: "insufficient_evidence",
       reasons: ["observations_incomplete"],
     });
+    const hardStoppedEvidence: BenchmarkEvidenceFile = {
+      ...evidence,
+      observations: evidence.observations.map((item, index) => index === 0
+        ? { ...item, terminalState: "timed_out" as const }
+        : item),
+    };
+    expect(() => applyProductAssessments(hardStoppedEvidence, assessmentFile))
+      .not.toThrow();
     const measured: BenchmarkEvidenceFile = {
       ...assessed,
       observations: assessed.observations.map((item) => ({

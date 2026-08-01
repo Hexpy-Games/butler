@@ -21,6 +21,7 @@ export async function publishOperation(
   progress: BtccTurnProgressObserver | undefined,
   input: {
     turnId: string;
+    activityId: string;
     requestId: string;
     toolName: string;
     status: "started" | "completed" | "failed" | "cancelled";
@@ -32,7 +33,7 @@ export async function publishOperation(
     await progress.operationChanged({
       turnId: input.turnId,
       semanticState: "admitted",
-      activityId: `guided-tools:${input.turnId}`,
+      activityId: input.activityId,
       requestId: input.requestId,
       publicTitle: publicToolTitle(input.toolName),
       capabilityRef: input.toolName,
