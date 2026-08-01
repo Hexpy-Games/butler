@@ -1,5 +1,9 @@
-import { serializeToolResultPayloadForProvider } from "./tool-result-serialization.ts";
-import { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
+import {
+  createToolResultModelPreviewContext,
+  serializeToolResultPayloadForProvider,
+} from "./tool-result-serialization.ts";
+import type { ToolResultModelPreviewContext } from
+  "./tool-result-model-preview.ts";
 import type {
   AgentLoopEvent,
   AgentLoopInput,
@@ -30,13 +34,14 @@ function emit(
 
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
+  modelPreviewContext: ToolResultModelPreviewContext;
 }): AgentLoopMessage {
   const imageAttachments = extractAgentLoopImageAttachments(
     input.result.output,
     input.result.name,
   );
   const providerOutput = withoutAgentLoopImageAttachments(
-    modelFacingToolOutput(input.result),
+    input.result.output,
   );
   const payload = input.result.ok ? { ok: true, output: providerOutput } : {
     ok: false,
@@ -49,20 +54,12 @@ function toolResultToMessage(input: {
     role: "tool",
     toolCallId: input.result.toolCallId,
     name: input.result.name,
-    content: serializeToolResultPayloadForProvider(payload),
+    content: serializeToolResultPayloadForProvider(payload, {
+      toolName: input.result.name,
+      context: input.modelPreviewContext,
+    }),
     ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
   };
-}
-
-function modelFacingToolOutput(result: AgentLoopToolResult): unknown {
-  if (
-    result.output === undefined ||
-    (result.name !== "web_search" && result.name !== "web_read")
-  ) return result.output;
-  return structuredToolResultModelPreview({
-    toolName: result.name,
-    output: result.output,
-  }) ?? result.output;
 }
 
 function renderPartialLimitResponse(results: AgentLoopToolResult[]): string {
@@ -92,6 +89,7 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   const events: AgentLoopEvent[] = [];
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
   const toolResults: AgentLoopToolResult[] = [];
+  const modelPreviewContext = createToolResultModelPreviewContext();
 
   const recordToolResult = async (inputRecord: {
     call: AgentLoopToolCall;
@@ -101,7 +99,10 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   }): Promise<ToolStopCandidate | null> => {
     const { call, evaluateStop = true, result, iteration } = inputRecord;
     toolResults.push(result);
-    const toolMessage = toolResultToMessage({ result });
+    const toolMessage = toolResultToMessage({
+      result,
+      modelPreviewContext,
+    });
     messages.push(toolMessage);
     emit(events, input.onEvent, {
       type: "tool_result",

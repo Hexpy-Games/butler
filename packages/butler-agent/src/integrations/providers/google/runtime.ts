@@ -1,12 +1,15 @@
 import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  toolBatchCompletedHandoffText,
+  toolResultPayloadForProvider,
+} from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { toolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
 import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
@@ -182,6 +185,7 @@ export async function runGeminiFunctionToolPromptText(
   const contents: Array<Record<string, unknown>> = [
     { role: "user", parts: [{ text: promptTextForHosted(options) }] },
   ];
+  const modelPreviewContext = createToolResultModelPreviewContext();
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
@@ -278,7 +282,10 @@ export async function runGeminiFunctionToolPromptText(
         parts: [{
           functionResponse: {
             name: call.name,
-            response: toolResultPayloadForProvider(payload),
+            response: toolResultPayloadForProvider(payload, {
+              toolName: call.name,
+              context: modelPreviewContext,
+            }),
           },
         }],
       });

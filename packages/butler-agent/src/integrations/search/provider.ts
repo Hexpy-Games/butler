@@ -24,6 +24,7 @@ export interface WebSearchResult {
 export interface WebSearchOutput {
   query: string;
   results: WebSearchResult[];
+  provider_overview?: string;
   duration_ms: number;
   provider: string;
   usage: {
@@ -288,6 +289,16 @@ function compactText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
+const MAX_PROVIDER_OVERVIEW_CHARS = 1_600;
+
+function boundedProviderOverview(value: string | null | undefined): string | undefined {
+  const compact = compactText(value);
+  if (!compact) return undefined;
+  return compact.length <= MAX_PROVIDER_OVERVIEW_CHARS
+    ? compact
+    : `${compact.slice(0, MAX_PROVIDER_OVERVIEW_CHARS - 1).trimEnd()}…`;
+}
+
 function isDuckDuckGoChallengePage(html: string): boolean {
   return /id=["']challenge-form["']/iu.test(html) ||
     /class=["'][^"']*\banomaly-modal\b/iu.test(html) ||
@@ -385,6 +396,20 @@ interface OpenAIWebSearchResponse {
   }>;
 }
 
+function providerOverviewFromOpenAIResponse(
+  payload: OpenAIWebSearchResponse,
+): string | undefined {
+  const outputText = boundedProviderOverview(payload.output_text);
+  if (outputText) return outputText;
+  for (const item of payload.output ?? []) {
+    for (const content of item.content ?? []) {
+      const text = boundedProviderOverview(content.text);
+      if (text) return text;
+    }
+  }
+  return undefined;
+}
+
 function sourceResultsFromOpenAIResponse(payload: OpenAIWebSearchResponse): WebSearchResult[] {
   const byUrl = new Map<string, WebSearchResult>();
   for (const item of payload.output ?? []) {
@@ -451,6 +476,8 @@ export class OpenAIWebSearchProvider implements WebSearchProvider {
       },
       body: JSON.stringify({
         model: this.options.model || "gpt-5",
+        instructions:
+          "Use web search. Return one short source-backed overview with citations and the supporting sources.",
         tools: [tool],
         tool_choice: "auto",
         include: ["web_search_call.action.sources"],
@@ -468,6 +495,9 @@ export class OpenAIWebSearchProvider implements WebSearchProvider {
     return {
       query: input.query,
       results,
+      provider_overview: input.blocked_domains?.length
+        ? undefined
+        : providerOverviewFromOpenAIResponse(payload),
       duration_ms: Math.max(0, Date.now() - start),
       provider: this.id,
       usage: {
@@ -741,7 +771,8 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
       },
       body: JSON.stringify({
         model: codexSubscriptionModel(this.options.model),
-        instructions: "Use web search and return concise source URLs.",
+        instructions:
+          "Use web search. Return one short source-backed overview with citations and the supporting sources.",
         input: [{
           role: "user",
           content: [{
@@ -775,6 +806,9 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
     return {
       query: input.query,
       results,
+      provider_overview: input.blocked_domains?.length
+        ? undefined
+        : boundedProviderOverview(parsed.answer),
       duration_ms: Math.max(0, Date.now() - start),
       provider: this.id,
       usage: {

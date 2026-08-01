@@ -7,9 +7,10 @@ import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
 import type { FunctionToolPromptOptions } from
   "../../../integrations/providers/runtime-contracts.ts";
 
-export const DEFAULT_GUIDED_TURN_LEASE_MS = 600_000;
+export const DEFAULT_GUIDED_TURN_LEASE_MS = 270_000;
 export const DEFAULT_GUIDED_FINAL_REPORT_MS = 30_000;
 
+const DEFAULT_GUIDED_QUIESCENCE_GRACE_MS = 5_000;
 const FACT_LIMIT = 12;
 const FACT_VALUE_LIMIT = 480;
 
@@ -20,18 +21,25 @@ export async function runGuidedPromptWithOperationalReport(input: {
   options: FunctionToolPromptOptions;
   parentSignal: AbortSignal;
   leaseStartedAt: number;
+  originalRequest: string;
   leaseMs?: number;
   finalReportMs?: number;
-  loadFacts: () => Promise<Omit<OperationalFacts, "assistantDraft">>;
+  loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
 }): Promise<string> {
   const leaseMs = positiveMs(input.leaseMs, DEFAULT_GUIDED_TURN_LEASE_MS);
+  const leaseDeadline = input.leaseStartedAt + leaseMs;
   const finalReportMs = Math.min(
     positiveMs(input.finalReportMs, DEFAULT_GUIDED_FINAL_REPORT_MS),
     Math.max(1, leaseMs - 1),
   );
-  const mainDeadline = input.leaseStartedAt + leaseMs - finalReportMs;
-  let assistantDraft = "";
+  const mainDeadline = leaseDeadline - finalReportMs;
+  const quiescenceGraceMs = Math.min(
+    DEFAULT_GUIDED_QUIESCENCE_GRACE_MS,
+    Math.max(1, Math.floor(finalReportMs / 4)),
+  );
   try {
+    const mainRemainingMs = mainDeadline - Date.now();
+    if (mainRemainingMs <= 0) throw new GuidedOperationalWindowExpired();
     const runMain = (signal: AbortSignal) => input.promptRunner({
       ...input.options,
       signal,
@@ -39,24 +47,43 @@ export async function runGuidedPromptWithOperationalReport(input: {
         ...call,
         signal: call.signal ?? signal,
       }),
-      async onAssistantTextBeforeTools(candidate) {
-        if (candidate.text.trim()) assistantDraft = candidate.text.trim();
-        await input.options.onAssistantTextBeforeTools?.(candidate);
-      },
     });
     const text = await runInGuidedOperationalWindow({
       parentSignal: input.parentSignal,
-      timeoutMs: Math.max(1, mainDeadline - Date.now()),
+      timeoutMs: mainRemainingMs,
+      quiescenceGraceMs,
       run: runMain,
     });
     if (!text.trim()) throw new Error("Guided model returned no final text");
     return text;
-  } catch (error) {
-    if (input.parentSignal.aborted) throw error;
+  } catch {
+    if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
   }
 
-  const facts = { ...await input.loadFacts(), assistantDraft };
-  const remainingMs = input.leaseStartedAt + leaseMs - Date.now();
+  const emptyFacts: OperationalFacts = {
+    originalRequest: input.originalRequest,
+    work: null,
+    toolCalls: [],
+    effects: [],
+  };
+  let facts = emptyFacts;
+  const factLoadRemainingMs = leaseDeadline - Date.now();
+  if (factLoadRemainingMs > 0) {
+    try {
+      facts = {
+        originalRequest: input.originalRequest,
+        ...await runInGuidedOperationalWindow({
+          parentSignal: input.parentSignal,
+          timeoutMs: factLoadRemainingMs,
+          run: async () => await input.loadFacts(),
+        }),
+      };
+    } catch {
+      if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
+    }
+  }
+  const fallback = guidedOperationalFallback(facts);
+  const remainingMs = leaseDeadline - Date.now();
   if (remainingMs > 0) {
     try {
       const text = await runInGuidedOperationalWindow({
@@ -76,11 +103,11 @@ export async function runGuidedPromptWithOperationalReport(input: {
         }),
       });
       if (text.trim()) return text;
-    } catch (error) {
-      if (input.parentSignal.aborted) throw error;
+    } catch {
+      if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
     }
   }
-  return guidedOperationalFallback(facts);
+  return fallback;
 }
 
 export class GuidedOperationalWindowExpired extends Error {
@@ -93,6 +120,7 @@ export class GuidedOperationalWindowExpired extends Error {
 export async function runInGuidedOperationalWindow<T>(input: {
   parentSignal: AbortSignal;
   timeoutMs: number;
+  quiescenceGraceMs?: number;
   run: (signal: AbortSignal) => Promise<T>;
 }): Promise<T> {
   throwIfAborted(input.parentSignal);
@@ -111,9 +139,21 @@ export async function runInGuidedOperationalWindow<T>(input: {
       : new Error("Guided Turn was aborted"));
   };
   controller.signal.addEventListener("abort", rejectOnAbort, { once: true });
+  const running = Promise.resolve().then(() => input.run(controller.signal));
   try {
-    return await Promise.race([input.run(controller.signal), interrupted]);
+    return await Promise.race([running, interrupted]);
   } finally {
+    if (
+      controller.signal.reason instanceof GuidedOperationalWindowExpired &&
+      !input.parentSignal.aborted &&
+      (input.quiescenceGraceMs ?? 0) > 0
+    ) {
+      await waitForOperationalSettlement({
+        running,
+        parentSignal: input.parentSignal,
+        timeoutMs: input.quiescenceGraceMs ?? 0,
+      });
+    }
     clearTimeout(timer);
     input.parentSignal.removeEventListener("abort", cancel);
     controller.signal.removeEventListener("abort", rejectOnAbort);
@@ -129,34 +169,39 @@ export function guidedOperationalReportPrompt(input: OperationalFacts): string {
     "",
     `Original request: ${input.originalRequest}`,
     ...factLines(input),
-    ...preservedDraftLines(input),
   ].join("\n");
 }
 
 export function guidedOperationalFallback(input: OperationalFacts): string {
   const korean = /[가-힣]/.test(input.originalRequest);
-  const facts = factLines(input).filter((line) => line.startsWith("- "));
+  const facts = durableFactLines(input);
+  const hasWork = Boolean(input.work);
   if (korean) {
     return [
       "요청을 끝까지 정리하는 과정에서 모델 연결 또는 실행 시간이 종료되었습니다.",
-      ...preservedDraftFallback(input, true),
-      facts.length > 0 ? "현재까지 확인되어 저장된 내용:" : "실행이 확인된 도구나 변경은 없습니다.",
+      facts.length > 0
+        ? "현재까지 확인된 영속 기록:"
+        : "실행 완료를 뒷받침하는 영속 기록은 없습니다.",
       ...facts,
-      "완료되지 않은 부분은 완료되었다고 처리하지 않았으며, 저장된 작업 기록에서 이어갈 수 있습니다.",
+      hasWork
+        ? "완료되지 않은 부분은 완료로 처리하지 않았으며, 저장된 Work에서 이어갈 수 있습니다."
+        : "완료되지 않은 부분은 완료로 처리하지 않았습니다.",
     ].join("\n");
   }
   return [
     "The model connection or execution window ended before I could finish the answer.",
-    ...preservedDraftFallback(input, false),
-    facts.length > 0 ? "Confirmed and saved so far:" : "No tool action or change was confirmed.",
+    facts.length > 0
+      ? "Confirmed durable records:"
+      : "No durable record confirms completed execution.",
     ...facts,
-    "I did not mark the unfinished part complete; the saved Work can be continued.",
+    hasWork
+      ? "I did not mark the unfinished part complete; the saved Work can be continued."
+      : "I did not mark the unfinished part complete.",
   ].join("\n");
 }
 
 export type OperationalFacts = {
   originalRequest: string;
-  assistantDraft?: string;
   work: DurableWorkContext | DurableWorkView | null;
   toolCalls: GuidedToolJournalRecord[];
   effects: GuidedEffectJournalRecord[];
@@ -172,10 +217,20 @@ function positiveMs(value: number | undefined, fallback: number): number {
 }
 
 function factLines(input: OperationalFacts): string[] {
-  const lines: string[] = ["Known durable facts:"];
+  const facts = durableFactLines(input);
+  return [
+    "Known durable facts:",
+    ...(facts.length > 0
+      ? facts
+      : ["- No tool status, Work checkpoint, or persistent effect was confirmed."]),
+  ];
+}
+
+function durableFactLines(input: OperationalFacts): string[] {
+  const lines: string[] = [];
   const work = input.work && "work" in input.work ? input.work.work : input.work;
   if (work) {
-    lines.push(`- Work is ${work.status}: ${compact(work.objective)}`);
+    lines.push(`- Work status: ${work.status}`);
     if (work.latestCheckpoint) {
       lines.push(
         `- Latest progress (${work.latestCheckpoint.stage}): ${compact(work.latestCheckpoint.publicSummary)}`,
@@ -184,53 +239,45 @@ function factLines(input: OperationalFacts): string[] {
     }
   }
   for (const call of input.toolCalls.slice(-FACT_LIMIT)) {
-    const result = call.result === undefined ? "" : ` — ${compact(call.result)}`;
-    lines.push(`- Tool ${call.toolName}: ${call.status}${result}`);
+    lines.push(`- Tool ${call.toolName}: ${call.status}`);
   }
   for (const effect of input.effects.slice(0, FACT_LIMIT)) {
     lines.push(
       `- Effect ${effect.capability} on ${compact(effect.sanitizedTarget)}: ${effect.status}`,
     );
   }
-  if (lines.length === 1) lines.push("- No tool result or persistent effect was confirmed.");
   return lines;
 }
 
-function preservedDraftLines(input: OperationalFacts): string[] {
-  const draft = input.assistantDraft?.trim();
-  if (!draft) return [];
-  return [
-    "",
-    "Preserved assistant text candidate:",
-    "Use this text only where it remains consistent with the durable facts above; do not turn unsupported claims into facts.",
-    draft,
-  ];
-}
-
-function preservedDraftFallback(
-  input: OperationalFacts,
-  korean: boolean,
-): string[] {
-  const draft = input.assistantDraft?.trim();
-  if (!draft) return [];
-  return korean
-    ? ["모델이 남긴 미완료 초안(검증되지 않은 내용이 포함될 수 있습니다):", draft]
-    : ["Preserved unfinished draft (it may contain unverified content):", draft];
-}
-
-function compact(value: unknown): string {
-  const encoded = typeof value === "string" ? value : safeJson(value);
-  const oneLine = encoded.replace(/\s+/gu, " ").trim();
+function compact(value: string): string {
+  const oneLine = value.replace(/\s+/gu, " ").trim();
   return oneLine.length <= FACT_VALUE_LIMIT
     ? oneLine
     : `${oneLine.slice(0, FACT_VALUE_LIMIT - 1)}…`;
 }
 
-function safeJson(value: unknown): string {
+async function waitForOperationalSettlement<T>(input: {
+  running: Promise<T>;
+  parentSignal: AbortSignal;
+  timeoutMs: number;
+}): Promise<void> {
+  if (input.parentSignal.aborted) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let removeParentAbort = () => {};
+  const settled = input.running.then(() => undefined, () => undefined);
+  const graceExpired = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, Math.max(1, Math.trunc(input.timeoutMs)));
+  });
+  const parentAborted = new Promise<void>((resolve) => {
+    const stop = () => resolve();
+    input.parentSignal.addEventListener("abort", stop, { once: true });
+    removeParentAbort = () => input.parentSignal.removeEventListener("abort", stop);
+  });
   try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return "[unavailable result]";
+    await Promise.race([settled, graceExpired, parentAborted]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    removeParentAbort();
   }
 }
 

@@ -2,11 +2,14 @@ import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contra
 import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, prepareFunctionToolCall, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
-import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  serializeToolResultPayloadForProvider,
+  toolBatchCompletedHandoffText,
+} from "../../../agent/model-tool-loop/index.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import type { LocalModelConfig } from "./models.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
@@ -72,6 +75,7 @@ export async function runLocalFunctionToolPromptTextWithConfig(
   );
   const messages: LocalChatMessage[] = [{ role: "system", content: localFunctionToolInstructions(options.instructions) }];
   messages.push({ role: "user", content: localUserContentWithAttachments(options.prompt, options.attachments) });
+  const modelPreviewContext = createToolResultModelPreviewContext();
   let executedToolCalls = 0;
   let toolContractRepairAttempted = false;
   let requiredToolRepairNames: Set<string> | null = null;
@@ -279,7 +283,10 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: serializeToolResultPayloadForProvider(payload),
+        content: serializeToolResultPayloadForProvider(payload, {
+          toolName: call.function.name,
+          context: modelPreviewContext,
+        }),
       });
     }
   }

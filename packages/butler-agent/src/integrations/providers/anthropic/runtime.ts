@@ -1,12 +1,15 @@
 import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  serializeToolResultPayloadForProvider,
+  toolBatchCompletedHandoffText,
+} from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
 import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
@@ -170,6 +173,7 @@ export async function runAnthropicFunctionToolPromptText(
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: promptTextForHosted(options) },
   ];
+  const modelPreviewContext = createToolResultModelPreviewContext();
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
   for (let round = 0; round < maxRounds; round += 1) {
@@ -255,7 +259,10 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: serializeToolResultPayloadForProvider(payload),
+          content: serializeToolResultPayloadForProvider(payload, {
+            toolName: call.name,
+            context: modelPreviewContext,
+          }),
         }],
       });
     }

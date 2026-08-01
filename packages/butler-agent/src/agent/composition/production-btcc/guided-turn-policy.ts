@@ -20,6 +20,7 @@ import {
 } from "./durable-work-tools.ts";
 import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
   "./guided-project-ledger-effect.ts";
+import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { workspacePagePreviewAvailabilityOverride } from
   "../../tools/workspace-page-preview/index.ts";
 
@@ -222,40 +223,6 @@ export function visibleToolDefinitions(
 
 export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {
   return BUTLER_TOOLS.map(guidedToolDefinition);
-}
-
-function guidedToolDefinition<T extends FunctionToolDefinition>(tool: T): T {
-  if (tool.name !== "write_file" && tool.name !== "edit_file") return tool;
-  const properties = tool.parameters.properties;
-  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return tool;
-  const { expected_sha256: _runtimeOwnedHash, ...withoutRuntimeHash } =
-    properties as Record<string, unknown>;
-  const modelProperties = { ...withoutRuntimeHash };
-  if (tool.name === "write_file") delete modelProperties.overwrite;
-  const required = Array.isArray(tool.parameters.required)
-      ? tool.parameters.required.filter((field): field is string =>
-        typeof field === "string" && field !== "expected_sha256" &&
-        (tool.name !== "write_file" || field !== "overwrite"),
-      )
-    : undefined;
-  return {
-    ...tool,
-    ...(tool.name === "write_file"
-      ? {
-          description: [
-            "Set one UTF-8 workspace file to its complete desired content.",
-            "The runtime safely creates a missing file or replaces an existing file after observing its current bytes.",
-            "content is never a patch, fragment, or append; use edit_file for a small exact change to an existing file.",
-            "Use Project Ledger tools for Ledger files.",
-          ].join(" "),
-        }
-      : {}),
-    parameters: {
-      ...tool.parameters,
-      properties: modelProperties,
-      ...(required ? { required } : {}),
-    },
-  } as T;
 }
 
 export function selectedModelRef(turn: TurnRecord): string {

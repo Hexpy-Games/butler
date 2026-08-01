@@ -2,6 +2,8 @@ import type { ChildProcess } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { assert } from "./scenario-preflight.ts";
 
+const ELECTRON_RENDERER_STARTUP_TIMEOUT_MS = 195_000;
+
 export interface CdpClient {
   close(): void;
   send<T = Record<string, unknown>>(
@@ -287,7 +289,7 @@ export async function connectElectronPage(
 ): Promise<{ client: CdpClient; page: CdpPage }> {
   const startedAt = Date.now();
   let lastError = "CDP endpoint is not ready.";
-  while (Date.now() - startedAt < 120_000) {
+  while (Date.now() - startedAt < ELECTRON_RENDERER_STARTUP_TIMEOUT_MS) {
     if (child.exitCode !== null) {
       throw new Error(`Electron exited before its renderer was ready: ${child.exitCode}`);
     }

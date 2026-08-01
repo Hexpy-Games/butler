@@ -159,7 +159,9 @@ export function modelIterationLimitWithinUsageBudget(
   requestedRounds: number,
   attribution?: PromptUsageAttribution,
 ): number {
-  const requested = Math.max(1, Math.min(requestedRounds, MAX_TOOL_ROUNDS));
+  const requested = requestedRounds === Number.POSITIVE_INFINITY
+    ? Number.POSITIVE_INFINITY
+    : Math.max(1, Math.min(requestedRounds, MAX_TOOL_ROUNDS));
   const budget = attribution?.getBudgetState?.() ?? attribution?.budgetState;
   if (!budget || !Number.isFinite(budget.requestCount) || !Number.isFinite(budget.maxRequests)) {
     return requested;

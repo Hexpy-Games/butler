@@ -33,7 +33,7 @@ export const APP_MANAGED_RUNTIME_POINTER_SCHEMA =
 export const APP_MANAGED_RUNTIME_UPDATE_TRANSACTION_SCHEMA =
   "butler.app-managed-agent-runtime-update-transaction.v1";
 const sha256ReadBufferBytes = 1024 * 1024;
-const archiveWorkerTimeoutMs = 60_000;
+const archiveWorkerTimeoutMs = 180_000;
 
 export function appManagedAgentPointerPath(butlerData) {
   return join(butlerData, "app", "runtime", "agent", "current.json");
