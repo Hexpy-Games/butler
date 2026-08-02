@@ -3,16 +3,13 @@ import type {
   BtccAgentLoopInput,
 } from "./contracts.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
-import { acceptedPlanEffectId, createGuidedEffectService } from
-  "../effects/index.ts";
+import { createGuidedEffectService } from "../effects/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
 import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from
   "../../adapters/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
-import { ensureActiveProjectLedger } from
-  "../../../integrations/project-ledger/ensure-active-project-ledger.ts";
 import { createProviderModelRoundPort } from
   "../../../integrations/providers/runtime.ts";
 import {
@@ -32,19 +29,8 @@ import {
 } from "./guided-turn-policy.ts";
 import { createGuidedToolExecutionBoundary } from
   "./guided-tool-execution-boundary.ts";
-import {
-  createGuidedProjectLedgerEffectAdapter,
-  isGuidedProjectLedgerEffectTool,
-} from "./guided-project-ledger-effect.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
-import { prepareGuidedCommandEffect } from "./guided-command-effect.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
-import {
-  createGuidedWorkspaceFileEffectAdapter,
-  workspaceFileEffectTarget,
-} from "./guided-workspace-file-effect.ts";
-import { prepareGuidedWorkspaceFileEdit } from
-  "./guided-workspace-file-edit-effect.ts";
 import { renderDurableWorkContext } from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
@@ -63,6 +49,8 @@ import { createGuidedActivityProjection } from
   "../projection/index.ts";
 import { isDurableWorkCompletionValidationCurrent } from
   "./durable-work-context.ts";
+import { createGuidedPersistentEffectResolver } from
+  "./guided-persistent-effect-resolution.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -154,113 +142,17 @@ export function createProductionGuidedTurnAgent(input: {
             originalRequest: turn.originalMessage,
             signal,
           }),
-          async resolvePersistentEffect(
-            call,
-            executeRegistered,
-            effectContext,
-          ) {
-            if (call.name === "run_command") {
-              return await prepareGuidedCommandEffect({
-                args: call.args,
-                butlerData: input.butlerData,
-                workspacePath: policy.workspacePath,
-                originalRequest: turn.originalMessage,
-              });
-            }
-            if (call.name === "edit_file") {
-              const planRevisionId =
-                effectContext.work.currentPlan?.planRevisionId;
-              const prior = planRevisionId && effectContext.occurrenceId
-                ? input.effectJournal.find(acceptedPlanEffectId({
-                    workId: effectContext.work.workId,
-                    planRevisionId,
-                    capability: "edit_file",
-                    occurrenceId: effectContext.occurrenceId,
-                  }))
-                : null;
-              const prepared = await prepareGuidedWorkspaceFileEdit({
-                args: call.args,
-                workspacePath: policy.workspacePath,
-                butlerData: input.butlerData,
-                ...(prior ? { priorInputSha256: prior.inputSha256 } : {}),
-                executeEditFile: async (preparedInput) => executeRegistered({
-                  args: preparedInput,
-                  rawArguments: JSON.stringify(preparedInput),
-                }),
-              });
-              return prepared.ok ? prepared.effect : { error: prepared.error };
-            }
-            if (call.name === "write_file") {
-              const adapter = createGuidedWorkspaceFileEffectAdapter({
-                workspacePath: policy.workspacePath,
-                butlerData: input.butlerData,
-                executeWriteFile: async (preparedInput) => executeRegistered({
-                  args: preparedInput,
-                  rawArguments: JSON.stringify(preparedInput),
-                }),
-              });
-              const normalizedInput = adapter.normalizeInput(
-                call.args,
-              );
-              return {
-                target: workspaceFileEffectTarget(normalizedInput.path),
-                input: normalizedInput,
-                adapter,
-              };
-            }
-            if (
-              !isGuidedProjectLedgerEffectTool(call.name) ||
-              policy.trackingMode !== "ledger" ||
-              !policy.projectId
-            ) {
-              return null;
-            }
-            const ledgerLookup = {
-              appMessageDbPath: input.appMessageDbPath,
-              appProjectId: policy.projectId,
-              workspacePath: policy.workspacePath,
-            };
-            const resolveActiveProjectReference = () => {
-              projectLedgerResolver.clear();
-              return projectLedgerResolver.resolve({
-                butlerData: input.butlerData,
-                ...ledgerLookup,
-              });
-            };
-            const projectReference = resolveActiveProjectReference();
-            const projectRoot = projectReference.ledger_root;
-            const effect = createGuidedProjectLedgerEffectAdapter({
-              name: call.name,
-              args: call.args,
-              butlerData: input.butlerData,
-              projectRoot,
-              projectRef: policy.projectId,
-              resolveActiveProjectReference,
-              ...(call.name === "project_ledger_create"
-                ? {
-                    initializeForCreate() {
-                      const initialized = ensureActiveProjectLedger({
-                        resolver: projectLedgerResolver,
-                        butlerHome: input.butlerHome,
-                        butlerData: input.butlerData,
-                        lookup: ledgerLookup,
-                        reference: projectReference,
-                      });
-                      if (initialized.ledger_root !== projectRoot) {
-                        throw new Error(
-                          "Project Ledger identity changed before the reviewed effect was applied",
-                        );
-                      }
-                    },
-                  }
-                : {}),
-            });
-            return {
-              target: effect.target,
-              input: effect.normalizedInput,
-              adapter: effect.adapter,
-            };
-          },
+          resolvePersistentEffect: createGuidedPersistentEffectResolver({
+            butlerHome: input.butlerHome,
+            butlerData: input.butlerData,
+            appMessageDbPath: input.appMessageDbPath,
+            workspacePath: policy.workspacePath,
+            projectId: policy.projectId,
+            trackingMode: policy.trackingMode,
+            projectLedgerResolver,
+            effectJournal: input.effectJournal,
+            originalRequest: turn.originalMessage,
+          }),
         }),
       });
       const activity = createGuidedActivityProjection({

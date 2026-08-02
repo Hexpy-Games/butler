@@ -1,6 +1,14 @@
 import type { FunctionToolDefinition } from "../../integrations/providers/provider.ts";
 import type { PublicWorkObligationKind } from "../tool-support/index.ts";
 
+export interface ButlerToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  rawArguments: string;
+  providerCallId?: string;
+  signal?: AbortSignal;
+}
+
 export type ButlerToolEffectBoundary =
   | "none"
   | "turn_local"
