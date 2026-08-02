@@ -181,7 +181,7 @@ interface ButlerStore {
   clearPendingProjectDocumentAttachment: () => void;
   openProjectDashboard: (projectId: string) => void;
   refreshNavigation: () => Promise<void>;
-  refreshSessionView: (chatId?: string) => Promise<void>;
+  refreshSessionView: (chatId?: string) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
@@ -951,16 +951,18 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   refreshSessionView: async (chatId = get().activeChatId) => {
-    if (!isServerBackedSessionId(chatId)) return;
+    if (!isServerBackedSessionId(chatId)) return false;
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
       );
-      if (get().activeChatId !== chatId) return;
+      if (get().activeChatId !== chatId) return false;
       set((state) => applySessionView(state, data));
       void writeCachedMessageList(chatId, messageListViewFromSessionView(data));
+      return true;
     } catch {
       // Keep the last canonical snapshot visible on transient failures.
+      return false;
     }
   },
 
@@ -1399,24 +1401,67 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   },
 
   cancelActiveTurn: async () => {
-    const { activeChatId, sessionView } = get();
-    const activeTurn =
-      sessionView?.session_id === activeChatId ? sessionView.active_turn : null;
-    const turnId = activeTurn?.id;
+    const activeChatId = get().activeChatId;
+    const settleStoppingStatus = () => {
+      set((state) =>
+        state.status.label === "stopping"
+          ? { status: { label: "ready", tone: "ok" } }
+          : state,
+      );
+    };
+    const readCanonicalActiveTurn = () => {
+      const sessionView = get().sessionView;
+      return sessionView?.session_id === activeChatId
+        ? sessionView.active_turn
+        : null;
+    };
+    let activeTurn = readCanonicalActiveTurn();
+    const requiresRefresh =
+      !activeTurn ||
+      !activeTurn.id ||
+      !activeTurn.cancellable ||
+      !ACTIVE_TURN_STATES.has(activeTurn.state);
+    if (requiresRefresh) {
+      set({ status: { label: "stopping", tone: "muted" } });
+      const refreshed = await get().refreshSessionView(activeChatId);
+      if (get().activeChatId !== activeChatId) {
+        settleStoppingStatus();
+        return;
+      }
+      if (!refreshed) {
+        notifyError(new Error("Session view refresh failed."), "Stop failed", {
+          id: "turn-stop",
+        });
+        set({ status: { label: "ready", tone: "ok" } });
+        return;
+      }
+      activeTurn = readCanonicalActiveTurn();
+    }
     if (
-      !turnId ||
+      !activeTurn ||
+      !activeTurn.id ||
       !activeTurn.cancellable ||
       !ACTIVE_TURN_STATES.has(activeTurn.state)
     ) {
+      if (requiresRefresh) set({ status: { label: "ready", tone: "ok" } });
       return;
     }
-    set({ status: { label: "stopping", tone: "muted" } });
+    const turnId = activeTurn.id;
+    if (!requiresRefresh) set({ status: { label: "stopping", tone: "muted" } });
     try {
       await api(`/turns/${encodeURIComponent(turnId)}/cancel`, {
         method: "POST",
         body: JSON.stringify({}),
       });
+      if (get().activeChatId !== activeChatId) {
+        settleStoppingStatus();
+        return;
+      }
       await get().reloadMessages(activeChatId);
+      if (get().activeChatId !== activeChatId) {
+        settleStoppingStatus();
+        return;
+      }
       set((state) => {
         const cancelled = finishVisibleCancellation(
           state,
@@ -1437,8 +1482,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
         };
       });
     } catch (error) {
-      notifyError(error, "Stop failed", { id: "turn-stop" });
-      set({ status: { label: "ready", tone: "ok" } });
+      if (get().activeChatId === activeChatId) {
+        notifyError(error, "Stop failed", { id: "turn-stop" });
+        set({ status: { label: "ready", tone: "ok" } });
+      } else {
+        settleStoppingStatus();
+      }
     }
   },
 

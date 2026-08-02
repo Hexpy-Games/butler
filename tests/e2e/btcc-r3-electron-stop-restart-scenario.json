@@ -1,0 +1,38 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "luna-stop-restart-reload",
+  "model": "openai/gpt-5.6-luna",
+  "reasoningEffort": "max",
+  "accessMode": "full_access",
+  "session": {
+    "id": "luna-stop-restart-reload",
+    "title": "BTCC R3 Luna Stop restart reload"
+  },
+  "fixtures": [
+    {
+      "path": "stop-input/section-a.txt",
+      "text": "alpha: orchard\nshared signal: durable review\npriority: high\n"
+    },
+    {
+      "path": "stop-input/section-b.txt",
+      "text": "beta: harbor\nshared signal: durable review\npriority: medium\n"
+    },
+    {
+      "path": "stop-input/section-c.txt",
+      "text": "gamma: meadow\nshared signal: durable review\npriority: low\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "stop-active-turn",
+      "prompt": "격리된 작업공간의 stop-input/section-a.txt, stop-input/section-b.txt, stop-input/section-c.txt를 모두 읽고 모든 항목을 서로 대조한 장문의 비교 보고서를 준비해 주세요. 각 파일을 순서대로 확인하고 여러 단계의 읽기와 검토를 계속하는 장기 실행 검증으로 진행하세요. 지금은 서둘러 최종 답변을 제출하지 말고 작업을 유지하세요.",
+      "timeoutMs": 600000,
+      "stopAfterAcknowledgement": true,
+      "reloadAfter": true,
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "cancelled"
+      }
+    }
+  ]
+}

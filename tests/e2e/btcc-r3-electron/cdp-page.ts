@@ -127,6 +127,25 @@ export class CdpPage {
     assert(clicked, `Renderer button click failed: ${name}`);
   }
 
+  async clickVisibleSelector(selector: string): Promise<void> {
+    const lookup = `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(
+      (element) => element instanceof HTMLElement &&
+        !element.closest('[aria-hidden="true"]') &&
+        element.getClientRects().length > 0 &&
+        getComputedStyle(element).display !== 'none' &&
+        getComputedStyle(element).visibility !== 'hidden' &&
+        !element.hasAttribute('disabled')
+    )`;
+    await this.waitFor(`Boolean(${lookup})`, `visible selector ${selector}`);
+    const clicked = await this.evaluate<boolean>(`(() => {
+      const element = ${lookup};
+      if (!(element instanceof HTMLElement)) return false;
+      element.click();
+      return true;
+    })()`);
+    assert(clicked, `Visible renderer click failed: ${selector}`);
+  }
+
   async hasNamedElement(selector: string, name: string): Promise<boolean> {
     return await this.evaluate<boolean>(`Array.from(
       document.querySelectorAll(${JSON.stringify(selector)})
