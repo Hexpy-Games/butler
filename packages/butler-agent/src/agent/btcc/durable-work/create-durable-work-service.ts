@@ -1,6 +1,8 @@
 import type {
+  DurableWorkReview,
   DurableWorkService,
   DurableWorkStore,
+  DurableWorkView,
   RecordWorkCheckpointInput,
   RecordWorkReviewInput,
   ReplaceWorkPlanInput,
@@ -37,7 +39,12 @@ export function createDurableWorkService(
       validateReplacePlan(input);
       const startNew = input.startNew ?? false;
       const context = startNew ? null : await store.loadContext(input);
-      assertWorkStageTransition(context?.work.currentStage, "planning");
+      if (context) {
+        assertWorkStageTransition(context.work.currentStage, "planning");
+      } else {
+        assertWorkStageTransition(undefined, "conception");
+        assertWorkStageTransition("conception", "planning");
+      }
       return store.replacePlan({
         ...input,
         startNew,
@@ -106,25 +113,32 @@ export function createDurableWorkService(
       if (!plan || !currentStage) {
         throw new Error("Durable Work Review requires a current Plan and stage");
       }
-      assertWorkStageTransition(currentStage, "review");
-      const nextStage = input.nextStage ?? "review";
-      assertWorkStageTransition("review", nextStage);
+      const entryStage = input.subject === "completion" ? "validation" : "review";
+      assertWorkStageTransition(currentStage, entryStage);
+      const nextStage = input.nextStage ?? entryStage;
+      assertWorkStageTransition(entryStage, nextStage);
       const actionProgress = applyWorkActionUpdates(
         context.work,
         input.actionUpdates ?? [],
       );
-      const completeWork = input.subject === "result" &&
+      const acceptedResultReview = currentAcceptedResultReview(context.work);
+      const completeWork = input.subject === "completion" &&
         input.verdict === "accept" &&
         unresolvedWorkActionKeys(actionProgress).length === 0 &&
-        context.work.latestPlanReview?.verdict === "accept" &&
-        context.work.latestPlanReview.boundPlanRevisionId ===
-          context.work.currentPlan?.planRevisionId &&
+        hasCurrentAcceptedPlanReview(context.work) &&
+        acceptedResultReview !== undefined &&
         (context.work.effectBlockers?.length ?? 0) === 0;
       return store.recordReview({
         ...input,
         expectedPlanRevisionId: plan.planRevisionId,
         expectedProgressRevision: context.work.latestCheckpoint?.revision ?? 0,
         expectedResultSequence: context.work.resultRefs.length,
+        ...(input.subject === "completion" && acceptedResultReview
+          ? {
+              expectedResultReviewRevisionId:
+                acceptedResultReview.reviewRevisionId,
+            }
+          : {}),
         requestSha256: workRequestFingerprint("record_review", {
           turnId: input.turnId,
           sessionId: input.sessionId,
@@ -138,6 +152,7 @@ export function createDurableWorkService(
           nextStage: input.nextStage ?? null,
         }),
         currentStage,
+        entryStage,
         actionProgress,
         progressChanged: (input.actionUpdates?.length ?? 0) > 0,
         completeWork,
@@ -257,4 +272,22 @@ async function requireWorkContext(
 
 function workRequestFingerprint(operation: string, input: unknown): string {
   return digest(stableJson({ operation, input }));
+}
+
+function hasCurrentAcceptedPlanReview(work: DurableWorkView): boolean {
+  return work.latestPlanReview?.verdict === "accept" &&
+    work.latestPlanReview.boundPlanRevisionId === work.currentPlan?.planRevisionId;
+}
+
+function currentAcceptedResultReview(
+  work: DurableWorkView,
+): DurableWorkReview | undefined {
+  const review = work.latestResultReview;
+  if (review?.verdict !== "accept") return undefined;
+  const resultRefs = work.resultRefs.map(({ resultRef }) => resultRef);
+  if (review.boundResultRefs.length !== resultRefs.length) return undefined;
+  return review.boundResultRefs.every((resultRef, index) =>
+      resultRef === resultRefs[index])
+    ? review
+    : undefined;
 }

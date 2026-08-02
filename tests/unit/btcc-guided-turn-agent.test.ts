@@ -359,6 +359,12 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
         verdict: "accept",
         summary: "The Project Ledger Work was created and completed.",
       });
+      await call("record_work_review", {
+        subject: "completion",
+        verdict: "accept",
+        next_stage: "reporting",
+        summary: "The whole Work satisfies the original project request and checks.",
+      });
       return "프로젝트 작업과 기록을 완료했습니다.";
     }, { butlerHome: process.cwd() });
     const turnId = "turn-guided-project-ledger-lifecycle";
@@ -384,6 +390,7 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
     expect(work).toMatchObject({
       status: "completed",
       latestResultReview: { verdict: "accept" },
+      latestCompletionValidation: { verdict: "accept" },
     });
     expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
       .toHaveLength(2);
@@ -1129,6 +1136,12 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
         verdict: "accept",
         summary: "The requested stylesheet correction is present.",
       });
+      await call("record_work_review", {
+        subject: "completion",
+        verdict: "accept",
+        next_stage: "reporting",
+        summary: "The whole Work satisfies the requested stylesheet correction.",
+      });
       return "가로 넘침 수정을 완료했습니다.";
     });
     const turnId = "turn-guided-edit-file";
@@ -1156,6 +1169,7 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
       .toBe("body {\n  overflow-x: hidden;\n}\n");
     const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
     expect(work?.status).toBe("completed");
+    expect(work?.latestCompletionValidation?.verdict).toBe("accept");
     expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
       .toEqual([
         expect.objectContaining({

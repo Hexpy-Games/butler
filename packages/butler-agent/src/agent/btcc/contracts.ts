@@ -115,7 +115,8 @@ export interface BtccTurnProgressObserver {
     turnId: string;
     semanticState: string;
     activityId: string;
-    displayStage?: "conception" | "planning" | "execution" | "review" | "reporting";
+    displayStage?: "conception" | "planning" | "execution" | "review" |
+      "validation" | "reporting";
     title: string;
     summary: string;
     rationale?: string;

@@ -27,6 +27,15 @@
       "restartAfter": true,
       "expect": {
         "terminalState": "delivered",
+        "rendererActivityStagesInclude": [
+          "conception",
+          "planning",
+          "review",
+          "execution",
+          "review",
+          "validation",
+          "reporting"
+        ],
         "files": [
           {
             "path": "report.md",
@@ -37,8 +46,19 @@
           "exists": true,
           "status": "completed",
           "planRevisionAtLeast": 1,
+          "checkpointStage": "reporting",
+          "checkpointStagesInclude": [
+            "conception",
+            "planning",
+            "review",
+            "execution",
+            "review",
+            "validation",
+            "reporting"
+          ],
           "planReviewVerdict": "accept",
-          "resultReviewVerdict": "accept"
+          "resultReviewVerdict": "accept",
+          "completionValidationVerdict": "accept"
         }
       }
     }

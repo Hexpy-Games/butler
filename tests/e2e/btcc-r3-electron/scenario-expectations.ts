@@ -7,6 +7,7 @@ import type {
   ElectronScenarioStep,
   GuidedWorkObservation,
   PreparedRun,
+  RendererVisibleActivity,
   StepObservation,
 } from "./contracts.ts";
 import { resolveFixturePath } from "./scenario-preflight.ts";
@@ -41,6 +42,14 @@ function checkWorkExpectation(
     );
   }
   if (
+    expected.checkpointStagesInclude &&
+    !containsOrderedStages(work.checkpointStages, expected.checkpointStagesInclude)
+  ) {
+    failures.push(
+      `work_checkpoint_sequence:${work.checkpointStages.join(",")}:expected_subsequence:${expected.checkpointStagesInclude.join(",")}`,
+    );
+  }
+  if (
     expected.planReviewVerdict &&
     work.planReviewVerdict !== expected.planReviewVerdict
   ) {
@@ -54,6 +63,14 @@ function checkWorkExpectation(
   ) {
     failures.push(
       `work_result_review:${work.resultReviewVerdict ?? "none"}:expected:${expected.resultReviewVerdict}`,
+    );
+  }
+  if (
+    expected.completionValidationVerdict &&
+    work.completionValidationVerdict !== expected.completionValidationVerdict
+  ) {
+    failures.push(
+      `work_completion_validation:${work.completionValidationVerdict ?? "none"}:expected:${expected.completionValidationVerdict}`,
     );
   }
   for (const toolName of expected.resultToolNamesInclude ?? []) {
@@ -82,6 +99,15 @@ function checkWorkExpectation(
   return failures;
 }
 
+function containsOrderedStages(actual: string[], expected: string[]): boolean {
+  let index = 0;
+  for (const stage of actual) {
+    if (stage === expected[index]) index += 1;
+    if (index === expected.length) return true;
+  }
+  return expected.length === 0;
+}
+
 export function checkScenarioExpectations(
   run: PreparedRun,
   step: ElectronScenarioStep,
@@ -89,6 +115,7 @@ export function checkScenarioExpectations(
   finalText: string,
   work: GuidedWorkObservation | null,
   prior: ReadonlyMap<string, StepObservation>,
+  rendererActivities: readonly RendererVisibleActivity[] = [],
 ): { passed: boolean; failures: string[] } {
   const failures: string[] = [];
   const expectedTerminal = step.expect?.terminalState ?? "delivered";
@@ -97,6 +124,18 @@ export function checkScenarioExpectations(
   }
   for (const expected of step.expect?.finalIncludes ?? []) {
     if (!finalText.includes(expected)) failures.push(`final_missing:${expected}`);
+  }
+  const expectedRendererStages = step.expect?.rendererActivityStagesInclude;
+  if (expectedRendererStages) {
+    const actualRendererStages = rendererActivities.map(({ stage }) => stage);
+    if (!containsOrderedStages(actualRendererStages, expectedRendererStages)) {
+      failures.push(
+        `renderer_activity_sequence:${actualRendererStages.join(",")}:expected_subsequence:${expectedRendererStages.join(",")}`,
+      );
+    }
+    if (rendererActivities.some(({ text }) => text.trim().length === 0)) {
+      failures.push("renderer_activity_text_missing");
+    }
   }
   for (const expected of step.expect?.files ?? []) {
     const filePath = resolveFixturePath(run.workspaceRoot, expected.path);

@@ -159,6 +159,7 @@ export class GuidedWorkViewReader {
       : hydratedCheckpoint?.stage;
     const planReview = this.latestReview(work.work_id, "plan");
     const resultReview = this.latestReview(work.work_id, "result");
+    const completionValidation = this.latestReview(work.work_id, "completion");
     const effectBlockers = unresolvedEffectBlockersForWork(this.db, work.work_id);
     return {
       workId: work.work_id,
@@ -181,6 +182,14 @@ export class GuidedWorkViewReader {
         : {}),
       ...(resultReview
         ? { latestResultReview: this.hydrateReview(work.work_id, resultReview) }
+        : {}),
+      ...(completionValidation
+        ? {
+            latestCompletionValidation: this.hydrateReview(
+              work.work_id,
+              completionValidation,
+            ),
+          }
         : {}),
       ...(effectBlockers.length > 0 ? { effectBlockers } : {}),
       resultRefs: results.map(hydrateResultRef),
@@ -256,6 +265,20 @@ export class GuidedWorkViewReader {
       corrections: parseJson<string[]>(review.corrections_json),
       ...(review.bound_plan_revision_id
         ? { boundPlanRevisionId: review.bound_plan_revision_id }
+        : {}),
+      ...(review.bound_result_review_revision_id
+        ? {
+            boundResultReviewRevisionId:
+              review.bound_result_review_revision_id,
+          }
+        : {}),
+      ...(review.bound_action_states_json
+        ? {
+            boundActionProgress: hydrateActionProgress(
+              review.bound_action_states_json,
+              [],
+            ),
+          }
         : {}),
       boundResultRefs,
       originTurnId: review.origin_turn_id,

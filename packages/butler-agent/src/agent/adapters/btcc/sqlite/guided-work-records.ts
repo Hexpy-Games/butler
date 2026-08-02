@@ -59,6 +59,8 @@ export type GuidedWorkReviewRow = {
   corrections_json: string;
   bound_plan_revision_id: string | null;
   bound_result_sequence: number | null;
+  bound_result_review_revision_id: string | null;
+  bound_action_states_json: string | null;
   origin_turn_id: string;
   created_at: string;
 };

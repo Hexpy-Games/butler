@@ -112,7 +112,7 @@ function decodeReview(input: WorkToolInput) {
   const subject = stringValue(input.args.subject, "subject");
   const verdict = stringValue(input.args.verdict, "verdict");
   const nextStage = decodeWorkStage(input.args.next_stage);
-  if (subject !== "plan" && subject !== "result") {
+  if (subject !== "plan" && subject !== "result" && subject !== "completion") {
     throw new Error(`Unsupported Work review subject: ${subject}`);
   }
   if (verdict !== "accept" && verdict !== "revise" && verdict !== "partial") {
@@ -121,7 +121,7 @@ function decodeReview(input: WorkToolInput) {
   return {
     ...input.scope,
     mutationCallId: input.mutationCallId,
-    subject: subject as "plan" | "result",
+    subject: subject as "plan" | "result" | "completion",
     verdict: verdict as "accept" | "revise" | "partial",
     ...(nextStage ? { nextStage } : {}),
     actionUpdates: decodeActionUpdates(input.args.action_updates),
@@ -142,11 +142,23 @@ function decodeEffect(
 
 function workToolView(work: DurableWorkView): Record<string, unknown> {
   const unresolved = unresolvedWorkActionKeys(work.actionProgress);
+  const currentPlanAccepted = work.latestPlanReview?.verdict === "accept" &&
+    work.latestPlanReview.boundPlanRevisionId === work.currentPlan?.planRevisionId;
+  const currentResultReview = currentAcceptedResultReview(work);
+  const completionAccepted = work.latestCompletionValidation?.verdict === "accept" &&
+    work.latestCompletionValidation.boundPlanRevisionId ===
+      work.currentPlan?.planRevisionId &&
+    work.latestCompletionValidation.boundResultReviewRevisionId ===
+      currentResultReview?.reviewRevisionId &&
+    sameActionProgress(
+      work.latestCompletionValidation.boundActionProgress,
+      work.actionProgress,
+    ) &&
+    sameResultRefs(work.latestCompletionValidation.boundResultRefs, work);
   const completionBlockers = [
-    ...(work.latestPlanReview?.verdict === "accept" &&
-        work.latestPlanReview.boundPlanRevisionId === work.currentPlan?.planRevisionId
-      ? []
-      : ["current_plan_review_required"]),
+    ...(currentPlanAccepted ? [] : ["current_plan_review_required"]),
+    ...(currentResultReview ? [] : ["current_result_review_required"]),
+    ...(completionAccepted ? [] : ["completion_validation_required"]),
     ...(unresolved.length > 0 ? ["unresolved_actions"] : []),
     ...((work.effectBlockers?.length ?? 0) > 0
       ? ["effect_reconciliation_required"]
@@ -169,7 +181,36 @@ function workToolView(work: DurableWorkView): Record<string, unknown> {
     completion_blockers: completionBlockers,
     latest_plan_review: work.latestPlanReview?.verdict ?? null,
     latest_result_review: work.latestResultReview?.verdict ?? null,
+    latest_completion_validation: work.latestCompletionValidation?.verdict ?? null,
   };
+}
+
+function currentAcceptedResultReview(work: DurableWorkView) {
+  const review = work.latestResultReview;
+  return review?.verdict === "accept" && sameResultRefs(review.boundResultRefs, work)
+    ? review
+    : undefined;
+}
+
+function sameResultRefs(
+  boundResultRefs: string[],
+  work: Pick<DurableWorkView, "resultRefs">,
+): boolean {
+  return boundResultRefs.length === work.resultRefs.length &&
+    boundResultRefs.every((resultRef, index) =>
+      resultRef === work.resultRefs[index]?.resultRef,
+    );
+}
+
+function sameActionProgress(
+  bound: DurableWorkView["actionProgress"] | undefined,
+  current: DurableWorkView["actionProgress"],
+): boolean {
+  return bound?.length === current.length && bound.every((action, index) => {
+    const candidate = current[index];
+    return candidate?.actionKey === action.actionKey &&
+      candidate.status === action.status && candidate.note === action.note;
+  });
 }
 
 function decodeActionUpdates(value: unknown): DurableWorkActionUpdate[] {
@@ -236,6 +277,7 @@ const WORK_STAGE_SET = new Set<string>([
   "planning",
   "execution",
   "review",
+  "validation",
   "reporting",
 ]);
 

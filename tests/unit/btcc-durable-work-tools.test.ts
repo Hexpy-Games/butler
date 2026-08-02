@@ -36,20 +36,20 @@ test("R3 Work exposes only three compact optional control tools", () => {
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]))
     .toContain("action_updates");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]))
-    .toContain('"enum":["planning","execution","reporting"]');
+    .toContain('"enum":["planning","execution","review","validation","reporting"]');
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
-    .toContain("The call enters review");
+    .toContain("Plan and result subjects enter review");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
-    .toContain("does not judge the Review's meaning");
+    .toContain("does not judge the Review or Validation meaning");
   expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[2]?.parameters))
-    .toContain("The legal stage to enter after the Review");
+    .toContain("The legal stage to enter after Review or Validation");
   for (const tool of DURABLE_WORK_TOOL_DEFINITIONS) {
     expect(tool.concurrencySafe).not.toBe(true);
   }
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
-    .toContain("Judge against the original user request");
+    .toContain("completion enters validation against the original request");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
-    .toContain("disclosed non-critical limits may still be accepted");
+    .toContain("Disclosed non-critical limits may still be accepted");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
     .toContain("a material requested outcome remains unfinished");
   const encoded = JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS);
@@ -111,10 +111,13 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
       unresolved_action_keys: ["research"],
       completion_blockers: [
         "current_plan_review_required",
+        "current_result_review_required",
+        "completion_validation_required",
         "unresolved_actions",
       ],
       latest_plan_review: null,
       latest_result_review: null,
+      latest_completion_validation: null,
     },
   });
   expect(received).toMatchObject({
@@ -255,10 +258,13 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
       unresolved_action_keys: ["research"],
       completion_blockers: [
         "current_plan_review_required",
+        "current_result_review_required",
+        "completion_validation_required",
         "unresolved_actions",
       ],
       latest_plan_review: null,
       latest_result_review: null,
+      latest_completion_validation: null,
     },
   });
   const encoded = JSON.stringify(result);

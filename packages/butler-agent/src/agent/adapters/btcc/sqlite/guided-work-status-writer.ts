@@ -1,5 +1,8 @@
 import type { Database } from "bun:sqlite";
-import { unresolvedWorkActionKeys } from "../../../btcc/durable-work/index.ts";
+import {
+  type DurableWorkView,
+  unresolvedWorkActionKeys,
+} from "../../../btcc/durable-work/index.ts";
 import { hasUnresolvedEffectBlockers } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
@@ -18,11 +21,26 @@ export class GuidedWorkStatusWriter {
       return false;
     }
     const view = this.reader.view(workId);
-    const review = view.latestPlanReview;
+    const planReview = view.latestPlanReview;
+    const resultReview = view.latestResultReview;
+    const completionValidation = view.latestCompletionValidation;
     if (
       !currentPlanRevisionId ||
-      review?.verdict !== "accept" ||
-      review.boundPlanRevisionId !== currentPlanRevisionId
+      planReview?.verdict !== "accept" ||
+      planReview.boundPlanRevisionId !== currentPlanRevisionId ||
+      resultReview?.verdict !== "accept" ||
+      completionValidation?.verdict !== "accept" ||
+      completionValidation.boundPlanRevisionId !== currentPlanRevisionId ||
+      completionValidation.boundResultReviewRevisionId !==
+        resultReview.reviewRevisionId ||
+      !sameActionProgress(
+        completionValidation.boundActionProgress,
+        view.actionProgress,
+      ) ||
+      !sameRefs(
+        completionValidation.boundResultRefs,
+        view.resultRefs.map((result) => result.resultRef),
+      )
     ) {
       return false;
     }
@@ -45,4 +63,20 @@ export class GuidedWorkStatusWriter {
       throw new Error(`Durable Work could not be reopened: ${workId}`);
     }
   }
+}
+
+function sameRefs(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length &&
+    left.every((value, index) => value === right[index]);
+}
+
+function sameActionProgress(
+  bound: DurableWorkView["actionProgress"] | undefined,
+  current: DurableWorkView["actionProgress"],
+): boolean {
+  return bound?.length === current.length && bound.every((action, index) => {
+    const candidate = current[index];
+    return candidate?.actionKey === action.actionKey &&
+      candidate.status === action.status && candidate.note === action.note;
+  });
 }

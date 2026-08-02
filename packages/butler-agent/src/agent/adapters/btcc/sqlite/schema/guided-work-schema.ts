@@ -1,3 +1,57 @@
+export const BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS btcc_guided_work_checkpoint_revisions (
+  checkpoint_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  plan_revision_id TEXT NOT NULL,
+  stage TEXT NOT NULL CHECK (
+    stage IN ('conception', 'planning', 'execution', 'review', 'validation', 'reporting')
+  ),
+  public_summary TEXT NOT NULL,
+  next_step TEXT NOT NULL,
+  action_states_json TEXT NOT NULL,
+  result_sequence INTEGER NOT NULL,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision)
+);
+`;
+
+export const BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS btcc_guided_work_review_revisions (
+  review_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  subject TEXT NOT NULL CHECK (subject IN ('plan', 'result', 'completion')),
+  verdict TEXT NOT NULL CHECK (verdict IN ('accept', 'revise', 'partial')),
+  summary TEXT NOT NULL,
+  corrections_json TEXT NOT NULL,
+  bound_plan_revision_id TEXT,
+  bound_result_sequence INTEGER,
+  bound_result_review_revision_id TEXT,
+  bound_action_states_json TEXT,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision),
+  CHECK (
+    (subject = 'plan' AND bound_plan_revision_id IS NOT NULL
+      AND bound_result_sequence IS NULL
+      AND bound_result_review_revision_id IS NULL
+      AND bound_action_states_json IS NULL)
+    OR
+    (subject = 'result' AND bound_plan_revision_id IS NULL
+      AND bound_result_sequence IS NOT NULL
+      AND bound_result_review_revision_id IS NULL
+      AND bound_action_states_json IS NULL)
+    OR
+    (subject = 'completion' AND bound_plan_revision_id IS NOT NULL
+      AND bound_result_sequence IS NOT NULL
+      AND bound_result_review_revision_id IS NOT NULL
+      AND bound_action_states_json IS NOT NULL)
+  )
+);
+`;
+
 export const BTCC_GUIDED_WORK_SCHEMA = `
 CREATE TABLE IF NOT EXISTS btcc_guided_works (
   work_id TEXT PRIMARY KEY,
@@ -62,44 +116,8 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_results (
   UNIQUE(work_id, sequence)
 );
 
-CREATE TABLE IF NOT EXISTS btcc_guided_work_checkpoint_revisions (
-  checkpoint_revision_id TEXT PRIMARY KEY,
-  work_id TEXT NOT NULL,
-  revision INTEGER NOT NULL,
-  plan_revision_id TEXT NOT NULL,
-  stage TEXT NOT NULL CHECK (
-    stage IN ('conception', 'planning', 'execution', 'review', 'reporting')
-  ),
-  public_summary TEXT NOT NULL,
-  next_step TEXT NOT NULL,
-  action_states_json TEXT NOT NULL,
-  result_sequence INTEGER NOT NULL,
-  origin_turn_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(work_id, revision)
-);
-
-CREATE TABLE IF NOT EXISTS btcc_guided_work_review_revisions (
-  review_revision_id TEXT PRIMARY KEY,
-  work_id TEXT NOT NULL,
-  revision INTEGER NOT NULL,
-  subject TEXT NOT NULL CHECK (subject IN ('plan', 'result')),
-  verdict TEXT NOT NULL CHECK (verdict IN ('accept', 'revise', 'partial')),
-  summary TEXT NOT NULL,
-  corrections_json TEXT NOT NULL,
-  bound_plan_revision_id TEXT,
-  bound_result_sequence INTEGER,
-  origin_turn_id TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(work_id, revision),
-  CHECK (
-    (subject = 'plan' AND bound_plan_revision_id IS NOT NULL
-      AND bound_result_sequence IS NULL)
-    OR
-    (subject = 'result' AND bound_plan_revision_id IS NULL
-      AND bound_result_sequence IS NOT NULL)
-  )
-);
+${BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA}
+${BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_guided_work_mutations (
   mutation_call_id TEXT PRIMARY KEY,

@@ -131,11 +131,13 @@ expected file paths must be relative and may not escape the fixture workspace.
 `projectDisplayName` to create an isolated scratch project through the App.
 Every run root must be a new, previously nonexistent path; this avoids deleting
 or overwriting user data. The final `evidence.json` records the actual model,
-Turn IDs, renderer-visible final text, timings, reload/restart parity, expected
-artifacts, screenshots, and the effective runtime workspace binding. For every
+Turn IDs, renderer-visible final text and ordered activity blocks, timings,
+reload/restart parity, expected artifacts, screenshots, and the effective
+runtime workspace binding. For every
 Turn it also records the App database's Work id, status, current plan revision,
-latest checkpoint stage, plan/result review verdicts, and attached result tool
-names. It deliberately does not read or store raw tool result JSON.
+ordered checkpoint stages, latest checkpoint stage, plan/result Review verdicts,
+completion Validation verdict, and attached result tool names. It deliberately
+does not read or store raw tool result JSON.
 
 If the production queue parks a Turn with its explicit process-replacement
 marker, the harness may replace its own isolated native executor once. The
@@ -145,3 +147,9 @@ replacement request fails the run instead of becoming a test-side supervisor.
 `expect.work` is optional. When present, Work existence is required unless
 `exists` is `false`. `sameWorkAsStep` can assert that an unfinished Work record
 continued into a later Turn; it must name an earlier step in the same scenario.
+`checkpointStagesInclude` checks an ordered subsequence, so a Managed Work
+scenario can prove distinct Review, Validation, and Reporting facts without
+assuming an exact number of intermediate corrections.
+`rendererActivityStagesInclude` applies the same ordered-subsequence check to
+the activity blocks expanded and read from the real Electron renderer; each
+captured block must also contain visible text.

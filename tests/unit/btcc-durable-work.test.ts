@@ -481,15 +481,15 @@ test("one Plan Review call enters Review and advances to Execution idempotently"
         verdict: "accept",
         boundPlanRevisionId: opened.currentPlan?.planRevisionId,
       },
-      latestCheckpoint: { revision: 3, stage: "execution" },
+      latestCheckpoint: { revision: 4, stage: "execution" },
     });
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(3);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(4);
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(1);
 
     const replay = await fixture.service.recordReview(input);
     expect(replay.latestCheckpoint?.checkpointRevisionId)
       .toBe(reviewed.latestCheckpoint?.checkpointRevisionId);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(3);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(4);
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(1);
     await expect(fixture.service.recordReview({
       ...input,
@@ -500,7 +500,7 @@ test("one Plan Review call enters Review and advances to Execution idempotently"
   }
 });
 
-test("one Result Review call applies accumulated actions, reports, and completes Work", async () => {
+test("result Review stays open until completion Validation reports and completes Work", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn(
@@ -540,47 +540,68 @@ test("one Result Review call applies accumulated actions, reports, and completes
         status: "done" as const,
         note: "보고서 작성과 확인을 마쳤습니다.",
       }],
-      nextStage: "reporting" as const,
     };
-    const completed = await fixture.service.recordReview(resultReviewInput);
+    const reviewedResult = await fixture.service.recordReview(resultReviewInput);
 
-    expect(completed).toMatchObject({
-      status: "completed",
-      currentStage: "reporting",
+    expect(reviewedResult).toMatchObject({
+      status: "open",
+      currentStage: "review",
       actionProgress: [{
         actionKey: "write-report",
         status: "done",
         note: "보고서 작성과 확인을 마쳤습니다.",
       }],
-      latestCheckpoint: { revision: 5, stage: "reporting" },
+      latestCheckpoint: { revision: 5, stage: "review" },
       latestResultReview: {
         verdict: "accept",
         boundResultRefs: [expect.any(String)],
       },
     });
-    expect(fixture.count("btcc_guided_work_review_revisions")).toBe(2);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(5);
+    const completionInput = {
+      ...scope,
+      mutationCallId: "fused-completion-validation",
+      subject: "completion" as const,
+      verdict: "accept" as const,
+      summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
+      corrections: [],
+      nextStage: "reporting" as const,
+    };
+    const completed = await fixture.service.recordReview(completionInput);
+    expect(completed).toMatchObject({
+      status: "completed",
+      currentStage: "reporting",
+      latestCheckpoint: { revision: 7, stage: "reporting" },
+      latestCompletionValidation: {
+        verdict: "accept",
+        boundResultReviewRevisionId:
+          reviewedResult.latestResultReview?.reviewRevisionId,
+      },
+    });
+    expect(fixture.count("btcc_guided_work_review_revisions")).toBe(3);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(7);
     const persistedStages = fixture.db.query<{ stage: string }, [string]>(`
       SELECT stage FROM btcc_guided_work_checkpoint_revisions
       WHERE work_id = ? ORDER BY revision ASC
     `).all(completed.workId).map((row) => row.stage);
     expect(persistedStages).toEqual([
+      "conception",
       "planning",
       "review",
       "execution",
       "review",
+      "validation",
       "reporting",
     ]);
-    expect((await fixture.service.recordReview(resultReviewInput)).status)
+    expect((await fixture.service.recordReview(completionInput)).status)
       .toBe("completed");
-    expect(fixture.count("btcc_guided_work_review_revisions")).toBe(2);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(5);
+    expect(fixture.count("btcc_guided_work_review_revisions")).toBe(3);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(7);
   } finally {
     fixture.close();
   }
 });
 
-test("an invalid fused Review transition leaves Review and action progress untouched", async () => {
+test("an invalid Review transition leaves Review and action progress untouched", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn(
@@ -601,17 +622,17 @@ test("an invalid fused Review transition leaves Review and action progress untou
       corrections: [],
       actionUpdates: [{ actionKey: "write-report", status: "done" }],
       nextStage: "conception",
-    })).rejects.toThrow("allowed next stages: planning, execution, reporting");
+    })).rejects.toThrow("allowed next stages: planning, execution, validation");
 
     expect(await fixture.service.boundWorkForTurn(scope.turnId)).toEqual(opened);
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(1);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(2);
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(0);
   } finally {
     fixture.close();
   }
 });
 
-test("a fused Review transaction rolls back its progress when Review persistence fails", async () => {
+test("a Review transaction rolls back its progress when Review persistence fails", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn(
@@ -640,7 +661,7 @@ test("a fused Review transaction rolls back its progress when Review persistence
 
     await expect(fixture.service.recordReview(input))
       .rejects.toThrow("simulated review persistence failure");
-    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(1);
+    expect(fixture.count("btcc_guided_work_checkpoint_revisions")).toBe(2);
     expect(fixture.count("btcc_guided_work_review_revisions")).toBe(0);
     expect((await fixture.service.boundWorkForTurn(scope.turnId))?.actionProgress)
       .toEqual([{ actionKey: "write-report", status: "pending" }]);
@@ -657,7 +678,7 @@ test("a fused Review transaction rolls back its progress when Review persistence
   }
 });
 
-test("Reviews bind runtime revisions, correction stays open, and accepted results complete Work", async () => {
+test("Reviews bind runtime revisions and completion Validation completes Work", async () => {
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn("turn-review", "session-review", "산출물을 작성해 주세요.");
@@ -775,7 +796,7 @@ test("Reviews bind runtime revisions, correction stays open, and accepted result
     expect(correction.latestResultReview?.boundResultRefs)
       .toEqual(correction.resultRefs.map((result) => result.resultRef));
 
-    const completed = await fixture.service.recordReview({
+    const acceptedResult = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "result-review-accept",
       subject: "result",
@@ -783,7 +804,23 @@ test("Reviews bind runtime revisions, correction stays open, and accepted result
       summary: "요청한 결과를 확인했습니다.",
       corrections: [],
     });
+    expect(acceptedResult.status).toBe("open");
+    const completed = await fixture.service.recordReview({
+      ...scope,
+      mutationCallId: "completion-validation-accept",
+      subject: "completion",
+      verdict: "accept",
+      summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
+      corrections: [],
+      nextStage: "reporting",
+    });
     expect(completed.status).toBe("completed");
+    expect(completed.latestCompletionValidation).toMatchObject({
+      subject: "completion",
+      verdict: "accept",
+      boundResultReviewRevisionId:
+        acceptedResult.latestResultReview?.reviewRevisionId,
+    });
     const later = fixture.turn("turn-after-complete", "session-review", "다음 요청");
     expect(await fixture.service.loadContext(later)).toBeNull();
 
@@ -855,10 +892,23 @@ test("a late effect blocker keeps the accepted result Review and leaves Work blo
         status: "done",
         note: "결과 자체는 준비되었습니다.",
       }],
+    });
+    expect(reviewed).toMatchObject({
+      status: "blocked",
+      currentStage: "review",
+      latestResultReview: { verdict: "accept" },
+    });
+    const validated = await fixture.service.recordReview({
+      ...scope,
+      mutationCallId: "blocked-completion-validation",
+      subject: "completion",
+      verdict: "accept",
+      summary: "The result is ready, but the effect blocker remains.",
+      corrections: ["Reconcile the outstanding effect before claiming completion."],
       nextStage: "reporting",
     });
 
-    expect(reviewed).toMatchObject({
+    expect(validated).toMatchObject({
       status: "blocked",
       currentStage: "reporting",
       actionProgress: [{
@@ -870,6 +920,10 @@ test("a late effect blocker keeps the accepted result Review and leaves Work blo
       latestResultReview: {
         verdict: "accept",
         summary: "The result itself is ready.",
+      },
+      latestCompletionValidation: {
+        verdict: "accept",
+        summary: "The result is ready, but the effect blocker remains.",
       },
       effectBlockers: [{ blockerId: "blocker-review" }],
     });
@@ -905,6 +959,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       expectedResultSequence: 0,
       requestSha256: "stale-plan-review-request",
       currentStage: first.currentStage!,
+      entryStage: "review",
       actionProgress: first.actionProgress,
       progressChanged: false,
       completeWork: false,
@@ -927,6 +982,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       expectedResultSequence: 0,
       requestSha256: "stale-progress-review-request",
       currentStage: second.currentStage!,
+      entryStage: "review",
       actionProgress: second.actionProgress,
       progressChanged: false,
       completeWork: false,
@@ -958,6 +1014,7 @@ test("Reviews reject stale Plan, progress, and result snapshots", async () => {
       expectedResultSequence: reviewed.resultRefs.length,
       requestSha256: "stale-result-review-request",
       currentStage: reviewed.currentStage!,
+      entryStage: "review",
       actionProgress: reviewed.actionProgress,
       progressChanged: false,
       completeWork: false,
@@ -1031,6 +1088,15 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
       nextStage: "review",
       actionUpdates: [{ actionKey: "write-report", status: "done" }],
     });
+    const acceptedResult = await service.recordReview({
+      ...scope,
+      mutationCallId: "contention-result-review",
+      subject: "result",
+      verdict: "accept",
+      summary: "요청한 결과를 확인했습니다.",
+      corrections: [],
+    });
+    expect(acceptedResult.status).toBe("open");
     const child = spawn(process.execPath, ["-e", `
       import { Database } from "bun:sqlite";
       const db = new Database(process.env.TEST_DB_PATH);
@@ -1049,11 +1115,12 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
 
     const completed = await service.recordReview({
       ...scope,
-      mutationCallId: "contention-result-review",
-      subject: "result",
+      mutationCallId: "contention-completion-validation",
+      subject: "completion",
       verdict: "accept",
-      summary: "요청한 결과를 확인했습니다.",
+      summary: "전체 Work가 원래 요청과 현재 Plan을 충족합니다.",
       corrections: [],
+      nextStage: "reporting",
     });
 
     expect(completed.status).toBe("completed");

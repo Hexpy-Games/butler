@@ -12,6 +12,7 @@ import {
   openSession,
   replaceInterruptedExecutorOnce,
   rendererFinalText,
+  rendererVisibleActivities,
   type ProductLaunch,
 } from "./product-launch.ts";
 import {
@@ -163,6 +164,10 @@ export async function runScenarioStep(
   const renderedFinal = assistant
     ? await rendererFinalText(launch.page)
     : "";
+  const rendererActivities = await rendererVisibleActivities(
+    launch.page,
+    terminal.turnId,
+  );
   const work = readGuidedWorkObservation(run, terminal.turnId);
   const screenshotDir = join(run.runRoot, "screenshots");
   mkdirSync(screenshotDir, { recursive: true });
@@ -179,6 +184,7 @@ export async function runScenarioStep(
     terminalState,
     finalText,
     rendererFinalText: renderedFinal,
+    rendererActivities,
     providerReportedModel:
       terminal.view.latest_turn?.execution_model?.model_ref ??
       terminal.view.latest_turn?.execution_controls?.model_ref ??
@@ -199,6 +205,7 @@ export async function runScenarioStep(
       finalText,
       work,
       prior,
+      rendererActivities,
     ),
     reload: { tested: false, finalMatched: null },
     restart: { tested: false, finalMatched: null },
