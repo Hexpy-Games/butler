@@ -123,7 +123,20 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
           verdict: "accept",
           summary: "The requested file exists and contains the verified report.",
           corrections: [],
-        })).toMatchObject({ ok: true, work: { status: "completed" } });
+        })).toMatchObject({
+          ok: true,
+          work: { status: "open", current_stage: "review" },
+        });
+        expect(await call(options, "record_work_review", {
+          subject: "completion",
+          verdict: "accept",
+          summary: "The whole Work satisfies the original request and current Plan.",
+          corrections: [],
+          next_stage: "reporting",
+        })).toMatchObject({
+          ok: true,
+          work: { status: "completed", current_stage: "reporting" },
+        });
         return "이전 작업을 이어 최종 검토까지 마쳤습니다.";
       },
     });
@@ -143,9 +156,14 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
     const completed = await secondStores.durableWork.boundWorkForTurn(secondTurnId);
     expect(completed).toMatchObject({
       status: "completed",
+      currentStage: "reporting",
       currentPlan: { revision: 1 },
       latestPlanReview: { subject: "plan", verdict: "accept" },
       latestResultReview: { subject: "result", verdict: "accept" },
+      latestCompletionValidation: {
+        subject: "completion",
+        verdict: "accept",
+      },
     });
     expect(completed?.resultRefs.map((result) => result.toolName))
       .toEqual(["write_file", "read_file"]);
@@ -569,6 +587,7 @@ test("a rejected stage transition is not projected as accepted progress", async 
       content: "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.",
     });
     expect(activities.map((activity) => activity.displayStage)).toEqual([
+      "conception",
       "planning",
       "reporting",
     ]);
@@ -732,6 +751,7 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
     });
     expect(modelCalls).toBe(1);
     expect(activities.map(({ displayStage }) => displayStage)).toEqual([
+      "conception",
       "planning",
       "review",
       "execution",
@@ -740,7 +760,7 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
     ]);
     const operationActivityIds = new Set(operations.map(({ activityId }) => activityId));
     expect([...operationActivityIds]).toEqual(
-      activities.slice(0, 4).map(({ activityId }) => activityId),
+      activities.slice(1, 5).map(({ activityId }) => activityId),
     );
     expect(operations.map(({ status }) => status)).toEqual([
       "started", "completed",

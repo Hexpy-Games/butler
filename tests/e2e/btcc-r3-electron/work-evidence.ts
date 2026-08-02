@@ -55,7 +55,7 @@ function latestValue(
   table: "btcc_guided_work_checkpoint_revisions" | "btcc_guided_work_review_revisions",
   column: "stage" | "verdict",
   workId: string,
-  subject?: "plan" | "result",
+  subject?: "completion" | "plan" | "result",
 ): string | null {
   const row = subject
     ? db.query<ValueRow, [string, string]>(`
@@ -99,6 +99,10 @@ export function readGuidedWorkObservation(
       WHERE result.work_id = ?
       ORDER BY result.sequence
     `).all(work.work_id).map((row) => row.tool_name);
+    const checkpointStages = db.query<{ stage: string }, [string]>(`
+      SELECT stage FROM btcc_guided_work_checkpoint_revisions
+      WHERE work_id = ? ORDER BY revision
+    `).all(work.work_id).map((row) => row.stage);
     const projectLedgerWorks = run.projectId
       ? readCanonicalProjectLedgerWorks(run.dataRoot, run.projectId)
       : [];
@@ -121,6 +125,7 @@ export function readGuidedWorkObservation(
         "stage",
         work.work_id,
       ),
+      checkpointStages,
       planReviewVerdict: latestValue(
         db,
         "btcc_guided_work_review_revisions",
@@ -134,6 +139,13 @@ export function readGuidedWorkObservation(
         "verdict",
         work.work_id,
         "result",
+      ),
+      completionValidationVerdict: latestValue(
+        db,
+        "btcc_guided_work_review_revisions",
+        "verdict",
+        work.work_id,
+        "completion",
       ),
       resultToolNames,
       projectLedgerWorkRecords: projectLedgerWorks.length,

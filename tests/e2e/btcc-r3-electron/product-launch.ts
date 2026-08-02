@@ -5,6 +5,7 @@ import type {
   AppSessionView,
   ElectronFixtureFile,
   PreparedRun,
+  RendererVisibleActivity,
 } from "./contracts.ts";
 import {
   CdpPage,
@@ -413,6 +414,36 @@ export async function rendererFinalText(page: CdpPage): Promise<string> {
     );
   }
   return await page.innerText('[data-test-class="turn-result-section"]', { last: true });
+}
+
+export async function rendererVisibleActivities(
+  page: CdpPage,
+  turnId: string,
+): Promise<RendererVisibleActivity[]> {
+  return await page.evaluate(`(async () => {
+    const timeline = Array.from(document.querySelectorAll(
+      '[data-test-class~="turn-current-phase-activity"][data-turn-id]'
+    )).find((candidate) =>
+      candidate.getAttribute("data-turn-id") === ${JSON.stringify(turnId)}
+    );
+    if (!timeline) return [];
+    const toggle = timeline.querySelector(
+      '[data-test-class~="toggle-turn-activity-history"]'
+    );
+    if (toggle?.getAttribute("aria-expanded") !== "true" &&
+        toggle instanceof HTMLElement) {
+      toggle.click();
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    return Array.from(timeline.querySelectorAll(
+      '[data-test-class~="turn-work-block"][data-work-stage]'
+    )).filter((block) =>
+      !block.closest('[aria-hidden="true"]') && block.getClientRects().length > 0
+    ).map((block) => ({
+      stage: block.getAttribute("data-work-stage") ?? "",
+      text: block.innerText.trim(),
+    }));
+  })()`);
 }
 
 export async function stopProduct(

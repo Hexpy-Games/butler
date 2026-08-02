@@ -72,6 +72,7 @@ export function successEvidence(input: {
         "native_btcc_runtime",
         "real_provider",
         "renderer_visible_final",
+        "renderer_visible_ordered_stage_activities",
         "app_database_work_lifecycle",
       ],
     run: {

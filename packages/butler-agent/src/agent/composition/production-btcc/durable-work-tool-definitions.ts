@@ -112,7 +112,14 @@ const RECORD_WORK_CHECKPOINT: FunctionToolDefinition = {
     properties: {
       next_stage: {
         type: "string",
-        enum: ["conception", "planning", "execution", "review", "reporting"],
+        enum: [
+          "conception",
+          "planning",
+          "execution",
+          "review",
+          "validation",
+          "reporting",
+        ],
         description: "The stage to enter. Omit when only updating action progress.",
       },
       action_updates: {
@@ -150,23 +157,27 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   type: "function",
   name: "record_work_review",
   description: [
-    "Record a concise review of the current Work plan or actual result, together with the stage and action progress known at that Review.",
-    "The call enters review; include action_updates known at that point and next_stage only when work should continue to planning, execution, or reporting after the Review.",
-    "The runtime validates only the existing transitions into and out of review plus known action keys; it does not judge the Review's meaning.",
-    "Accepting a result completes Work only after every current action is done or skipped; otherwise the Review is kept and Work remains open.",
-    "Judge against the original user request: disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
+    "Record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress.",
+    "Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review.",
+    "Include action_updates known at that point and next_stage only when taking one legal next step after the entered stage.",
+    "The runtime validates only fixed stage transitions, known action keys, and durable bindings; it does not judge the Review or Validation meaning.",
+    "Accepting a result never completes Work. A completion acceptance can complete Work only after the current Plan and result Reviews are accepted, every action is done or skipped, and no effect blocker remains.",
+    "Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
     "A review records judgment but never replaces real tool evidence.",
   ].join(" "),
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      subject: { type: "string", enum: ["plan", "result"] },
+      subject: { type: "string", enum: ["plan", "result", "completion"] },
       verdict: { type: "string", enum: ["accept", "revise", "partial"] },
       next_stage: {
         type: "string",
-        enum: ["planning", "execution", "reporting"],
-        description: "The legal stage to enter after the Review. Omit to remain in review.",
+        enum: ["planning", "execution", "review", "validation", "reporting"],
+        description: [
+          "The legal stage to enter after Review or Validation.",
+          "Omit to remain in the stage entered by this call.",
+        ].join(" "),
       },
       action_updates: {
         type: "array",

@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   ElectronScenario,
+  ElectronScenarioStep,
   GuidedWorkObservation,
 } from "../e2e/btcc-r3-electron/contracts.ts";
 import { prepareElectronRun } from
@@ -131,8 +132,10 @@ test("project effect scenario requires typed-effect Work evidence and persisted 
     status: "completed",
     planRevision: 1,
     checkpointStage: "review",
+    checkpointStages: ["review"],
     planReviewVerdict: "accept",
     resultReviewVerdict: "accept",
+    completionValidationVerdict: null,
     resultToolNames: ["project_ledger_create", "project_ledger_show"],
     projectLedgerWorkRecords: 0,
     projectLedgerCompletedWorkRecords: 0,
@@ -204,6 +207,61 @@ test("project effect scenario requires typed-effect Work evidence and persisted 
   );
   expect(missingPersistedMarker.failures).toContain(
     "final_missing:BTCC_R3_PROJECT_LEDGER_EFFECT_MARKER_20260731",
+  );
+});
+
+test("Electron Work expectations assert ordered renderer-visible stage activities", () => {
+  const step: ElectronScenarioStep = {
+    id: "renderer-stages",
+    prompt: "작업을 진행해 주세요.",
+    expect: {
+      rendererActivityStagesInclude: [
+        "conception",
+        "planning",
+        "review",
+        "execution",
+        "review",
+        "validation",
+        "reporting",
+      ],
+    },
+  };
+  const expectedStages = step.expect!.rendererActivityStagesInclude!;
+  const run = {
+    workspaceRoot: "/isolated/workspace",
+  } as Parameters<typeof checkScenarioExpectations>[0];
+  const rendererActivities = expectedStages.map((stage) => ({
+    stage,
+    text: `${stage} activity is visible`,
+  }));
+
+  expect(checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    rendererActivities,
+  )).toEqual({ passed: true, failures: [] });
+
+  const outOfOrder = [
+    rendererActivities[0]!,
+    rendererActivities[1]!,
+    rendererActivities[3]!,
+    rendererActivities[2]!,
+    ...rendererActivities.slice(4),
+  ];
+  expect(checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    outOfOrder,
+  ).failures).toContain(
+    "renderer_activity_sequence:conception,planning,execution,review,review,validation,reporting:expected_subsequence:conception,planning,review,execution,review,validation,reporting",
   );
 });
 

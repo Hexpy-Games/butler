@@ -10,8 +10,9 @@ const NEXT_STAGES: Readonly<Record<WorkStage, readonly WorkStage[]>> = {
   conception: ["planning"],
   planning: ["review"],
   execution: ["review"],
-  review: ["planning", "execution", "reporting"],
-  reporting: ["review"],
+  review: ["planning", "execution", "validation"],
+  validation: ["planning", "execution", "review", "reporting"],
+  reporting: ["validation"],
 };
 
 export class WorkStageTransitionError extends Error {
@@ -30,7 +31,7 @@ export class WorkStageTransitionError extends Error {
 }
 
 export function allowedNextWorkStages(stage?: WorkStage): WorkStage[] {
-  return stage ? [...NEXT_STAGES[stage]] : ["planning"];
+  return stage ? [...NEXT_STAGES[stage]] : ["conception"];
 }
 
 export function assertWorkStageTransition(
@@ -41,7 +42,7 @@ export function assertWorkStageTransition(
   const allowed = allowedNextWorkStages(currentStage);
   if (allowed.includes(attemptedStage)) return;
   if (!currentStage) {
-    throw new Error(`Work must start in planning, not ${attemptedStage}`);
+    throw new Error(`Work must start in conception, not ${attemptedStage}`);
   }
   throw new WorkStageTransitionError(currentStage, attemptedStage, allowed);
 }

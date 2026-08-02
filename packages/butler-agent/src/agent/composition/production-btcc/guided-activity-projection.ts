@@ -20,6 +20,7 @@ type ActivityGroup = GuidedActivityBinding & {
   summary: string;
   rationale?: string;
   nextStep?: string;
+  precedingGroups?: ActivityGroup[];
   published: boolean;
 };
 
@@ -135,6 +136,19 @@ export function createGuidedActivityProjection(input: {
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
       published: false,
     };
+    if (first?.name === "replace_work_plan") {
+      const conception: ActivityGroup = {
+        activityId: activityId(input.turnId),
+        displayStage: "conception",
+        deferredUntilAccepted: group.deferredUntilAccepted,
+        title: "작업 구상",
+        summary: content.summary,
+        nextStep: "요청에 맞는 작업 순서와 검증 기준을 정합니다.",
+        published: false,
+      };
+      group.precedingGroups = [conception];
+      groupsById.set(conception.activityId, conception);
+    }
     groupsById.set(group.activityId, group);
     return group;
   }
@@ -145,6 +159,9 @@ async function publishGroup(
   group: ActivityGroup,
 ): Promise<void> {
   if (group.published) return;
+  for (const preceding of group.precedingGroups ?? []) {
+    await publishGroup(input, preceding);
+  }
   group.published = true;
   if (!input.progress?.phaseActivityChanged) return;
   try {
@@ -195,8 +212,9 @@ function activityContent(
   if (first?.name === "record_work_review") {
     const summary = publicText(first.args.summary) || publicText(assistantText) ||
       publicToolTitle(first.name);
+    const completionValidation = first.args.subject === "completion";
     return {
-      displayStage: "review",
+      displayStage: completionValidation ? "validation" : "review",
       title: reviewTitle(first.args.subject),
       summary,
       nextStep: firstCorrection(first.args),
@@ -244,7 +262,9 @@ function firstCorrection(args: Record<string, unknown>): string | undefined {
 }
 
 function reviewTitle(subject: unknown): string {
-  return subject === "plan" ? "계획 검토" : "결과 검토";
+  if (subject === "plan") return "계획 검토";
+  if (subject === "completion") return "완료 검토";
+  return "결과 검토";
 }
 
 function activityKind(name: string): "ordinary" | "plan" | "review" | "checkpoint" {
@@ -256,7 +276,7 @@ function activityKind(name: string): "ordinary" | "plan" | "review" | "checkpoin
 
 function workStage(value: unknown): WorkStage | undefined {
   return value === "conception" || value === "planning" || value === "execution" ||
-      value === "review" || value === "reporting"
+      value === "review" || value === "validation" || value === "reporting"
     ? value
     : undefined;
 }

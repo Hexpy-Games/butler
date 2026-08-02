@@ -135,6 +135,21 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         input.turnId,
         now,
       );
+      const resultSequence = this.latestResultSequence(work.work_id);
+      if (!input.expectedWorkId) {
+        this.progress.insert({
+          workId: work.work_id,
+          planRevisionId,
+          stage: "conception",
+          actionProgress: input.actionProgress,
+          publicSummary: input.objective,
+          nextStep: input.actions[0]?.description ?? "",
+          resultSequence,
+          originTurnId: input.turnId,
+          identity: `${input.mutationCallId}\0conception`,
+          now,
+        });
+      }
       this.progress.insert({
         workId: work.work_id,
         planRevisionId,
@@ -142,7 +157,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         actionProgress: input.actionProgress,
         publicSummary: input.objective,
         nextStep: input.actions[0]?.description ?? "",
-        resultSequence: this.latestResultSequence(work.work_id),
+        resultSequence,
         originTurnId: input.turnId,
         identity: `${input.mutationCallId}\0plan`,
         now,

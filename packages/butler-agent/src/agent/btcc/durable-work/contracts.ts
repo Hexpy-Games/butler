@@ -3,6 +3,7 @@ export type WorkStage =
   | "planning"
   | "execution"
   | "review"
+  | "validation"
   | "reporting";
 
 export type WorkTurnScope = {
@@ -78,11 +79,13 @@ export type DurableWorkCheckpoint = {
 export type DurableWorkReview = {
   reviewRevisionId: string;
   revision: number;
-  subject: "plan" | "result";
+  subject: "plan" | "result" | "completion";
   verdict: "accept" | "revise" | "partial";
   summary: string;
   corrections: string[];
   boundPlanRevisionId?: string;
+  boundResultReviewRevisionId?: string;
+  boundActionProgress?: DurableWorkActionProgress[];
   boundResultRefs: string[];
   originTurnId: string;
   createdAt: string;
@@ -114,6 +117,7 @@ export type DurableWorkView = {
   latestCheckpoint?: DurableWorkCheckpoint;
   latestPlanReview?: DurableWorkReview;
   latestResultReview?: DurableWorkReview;
+  latestCompletionValidation?: DurableWorkReview;
   effectBlockers?: DurableWorkEffectBlocker[];
   resultRefs: DurableWorkToolResultRef[];
   createdAt: string;
@@ -154,7 +158,7 @@ export type RecordWorkCheckpointInput = WorkTurnScope & {
 
 export type RecordWorkReviewInput = WorkTurnScope & {
   mutationCallId: string;
-  subject: "plan" | "result";
+  subject: "plan" | "result" | "completion";
   verdict: "accept" | "revise" | "partial";
   summary: string;
   corrections: string[];
@@ -202,8 +206,10 @@ export type RecordWorkReviewCommand = RecordWorkReviewInput & {
   expectedPlanRevisionId: string;
   expectedProgressRevision: number;
   expectedResultSequence: number;
+  expectedResultReviewRevisionId?: string;
   requestSha256: string;
   currentStage: WorkStage;
+  entryStage: "review" | "validation";
   actionProgress: DurableWorkActionProgress[];
   progressChanged: boolean;
   completeWork: boolean;

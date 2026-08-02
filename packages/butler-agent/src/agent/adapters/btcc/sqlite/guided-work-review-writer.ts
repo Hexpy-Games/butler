@@ -35,6 +35,9 @@ export class GuidedWorkReviewWriter {
       if (input.subject === "plan" && !work.current_plan_revision_id) {
         throw new Error("Durable Work Plan Review requires a current Plan");
       }
+      if (input.completeWork && input.subject !== "completion") {
+        throw new Error("Durable Work completion requires completion Validation");
+      }
       if (work.current_plan_revision_id !== input.expectedPlanRevisionId) {
         throw new Error("Durable Work Plan changed before its Review");
       }
@@ -42,36 +45,48 @@ export class GuidedWorkReviewWriter {
       if (this.latestResultSequence(work.work_id) !== input.expectedResultSequence) {
         throw new Error("Durable Work results changed before its Review");
       }
+      this.assertCompletionResultReview(work.work_id, input);
 
       const now = new Date().toISOString();
-      if (input.currentStage !== "review" || input.progressChanged) {
+      if (
+        input.subject === "completion" ||
+        input.currentStage !== input.entryStage ||
+        input.progressChanged
+      ) {
         this.progress.insert({
           workId: work.work_id,
           planRevisionId: input.expectedPlanRevisionId,
-          stage: "review",
+          stage: input.entryStage,
           actionProgress: input.actionProgress,
           publicSummary: input.summary,
           nextStep: input.corrections[0] ?? "",
           resultSequence: input.expectedResultSequence,
           originTurnId: input.turnId,
-          identity: `${input.mutationCallId}\0review-entry`,
+          identity: `${input.mutationCallId}\0${input.entryStage}-entry`,
           now,
         });
       }
 
       const reviewId = guidedWorkRecordId("review", input.mutationCallId);
-      const resultSequence = input.subject === "result"
+      const resultSequence = input.subject !== "plan"
         ? input.expectedResultSequence
         : null;
-      const planRevisionId = input.subject === "plan"
+      const planRevisionId = input.subject !== "result"
         ? input.expectedPlanRevisionId
+        : null;
+      const resultReviewRevisionId = input.subject === "completion"
+        ? input.expectedResultReviewRevisionId ?? null
+        : null;
+      const actionStates = input.subject === "completion"
+        ? stableJson(input.actionProgress)
         : null;
       this.db.query(`
         INSERT INTO btcc_guided_work_review_revisions (
           review_revision_id, work_id, revision, subject, verdict, summary,
           corrections_json, bound_plan_revision_id, bound_result_sequence,
+          bound_result_review_revision_id, bound_action_states_json,
           origin_turn_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         reviewId,
         work.work_id,
@@ -82,11 +97,13 @@ export class GuidedWorkReviewWriter {
         stableJson(input.corrections),
         planRevisionId,
         resultSequence,
+        resultReviewRevisionId,
+        actionStates,
         input.turnId,
         now,
       );
 
-      if (input.nextStage && input.nextStage !== "review") {
+      if (input.nextStage && input.nextStage !== input.entryStage) {
         this.progress.insert({
           workId: work.work_id,
           planRevisionId: input.expectedPlanRevisionId,
@@ -96,7 +113,7 @@ export class GuidedWorkReviewWriter {
           nextStep: input.corrections[0] ?? "",
           resultSequence: input.expectedResultSequence,
           originTurnId: input.turnId,
-          identity: `${input.mutationCallId}\0review-exit`,
+          identity: `${input.mutationCallId}\0${input.entryStage}-exit`,
           now,
         });
       }
@@ -105,7 +122,7 @@ export class GuidedWorkReviewWriter {
         UPDATE btcc_guided_works SET status = ?, updated_at = ? WHERE work_id = ?
       `).run(progressWorkStatus(input), now, work.work_id);
       preserveBlockedStatus(this.db, work.work_id);
-      if (input.completeWork) {
+      if (input.completeWork && input.subject === "completion") {
         if (
           !this.statuses.tryComplete(
             work.work_id,
@@ -142,6 +159,33 @@ export class GuidedWorkReviewWriter {
       SELECT COALESCE(MAX(sequence), 0) AS sequence
       FROM btcc_guided_work_results WHERE work_id = ?
     `).get(workId)?.sequence ?? 0;
+  }
+
+  private assertCompletionResultReview(
+    workId: string,
+    input: RecordWorkReviewCommand,
+  ): void {
+    if (input.subject !== "completion") return;
+    if (!input.expectedResultReviewRevisionId) {
+      throw new Error("Durable Work completion requires an accepted result Review");
+    }
+    const review = this.db.query<{
+      review_revision_id: string;
+      verdict: string;
+      bound_result_sequence: number | null;
+    }, [string]>(`
+      SELECT review_revision_id, verdict, bound_result_sequence
+      FROM btcc_guided_work_review_revisions
+      WHERE work_id = ? AND subject = 'result'
+      ORDER BY revision DESC LIMIT 1
+    `).get(workId);
+    if (
+      review?.review_revision_id !== input.expectedResultReviewRevisionId ||
+      review.verdict !== "accept" ||
+      review.bound_result_sequence !== input.expectedResultSequence
+    ) {
+      throw new Error("Durable Work result Review changed before completion Validation");
+    }
   }
 
   private touch(workId: string, now: string): void {

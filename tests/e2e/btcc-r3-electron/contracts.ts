@@ -7,6 +7,13 @@ export type AccessMode = "ask_first" | "full_access" | "read_only";
 export type AgentOwnership = "electron" | "harness";
 export type ReasoningEffort = "high" | "low" | "max" | "medium" | "none" | "xhigh";
 export type ElectronSessionKind = "chat" | "project";
+export type ElectronWorkStage =
+  | "conception"
+  | "execution"
+  | "planning"
+  | "reporting"
+  | "review"
+  | "validation";
 export type TerminalState = "cancelled" | "delivered" | "failed";
 
 export interface ElectronFixtureFile {
@@ -23,9 +30,11 @@ export interface ElectronWorkExpectation {
   exists?: boolean;
   status?: "abandoned" | "blocked" | "completed" | "open";
   planRevisionAtLeast?: number;
-  checkpointStage?: "conception" | "execution" | "planning" | "reporting" | "review";
+  checkpointStage?: ElectronWorkStage;
+  checkpointStagesInclude?: ElectronWorkStage[];
   planReviewVerdict?: "accept" | "partial" | "revise";
   resultReviewVerdict?: "accept" | "partial" | "revise";
+  completionValidationVerdict?: "accept" | "partial" | "revise";
   resultToolNamesInclude?: string[];
   projectLedgerCloseout?: boolean;
   sameWorkAsStep?: string;
@@ -39,6 +48,7 @@ export interface ElectronScenarioStep {
   restartAfter?: boolean;
   expect?: {
     finalIncludes?: string[];
+    rendererActivityStagesInclude?: ElectronWorkStage[];
     files?: ElectronExpectedFile[];
     terminalState?: TerminalState;
     work?: ElectronWorkExpectation;
@@ -59,6 +69,11 @@ export interface ElectronScenario {
   };
   fixtures?: ElectronFixtureFile[];
   steps: ElectronScenarioStep[];
+}
+
+export interface RendererVisibleActivity {
+  stage: string;
+  text: string;
 }
 
 export interface ElectronHarnessOptions {
@@ -145,8 +160,10 @@ export interface GuidedWorkObservation {
   status: string;
   planRevision: number | null;
   checkpointStage: string | null;
+  checkpointStages: string[];
   planReviewVerdict: string | null;
   resultReviewVerdict: string | null;
+  completionValidationVerdict: string | null;
   resultToolNames: string[];
   projectLedgerWorkRecords: number;
   projectLedgerCompletedWorkRecords: number;
@@ -160,6 +177,7 @@ export interface StepObservation {
   terminalState: string;
   finalText: string;
   rendererFinalText: string;
+  rendererActivities: RendererVisibleActivity[];
   providerReportedModel: string | null;
   progressMessages: string[];
   work: GuidedWorkObservation | null;

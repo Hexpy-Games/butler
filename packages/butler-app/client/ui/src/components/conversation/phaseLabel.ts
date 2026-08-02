@@ -6,6 +6,7 @@ export function phaseLabel(phase?: string): string {
   if (phase === "planning_review") return "계획 검토";
   if (phase === "task_execution" || phase === "execution") return "실행";
   if (phase === "task_review" || phase === "review") return "작업 리뷰";
+  if (phase === "validation") return "완료 검토";
   if (phase.startsWith("feedback_")) return "피드백 반영";
   if (phase === "consolidation") return "통합 점검";
   if (phase === "reporting") return "보고";

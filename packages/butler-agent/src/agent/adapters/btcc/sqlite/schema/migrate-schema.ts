@@ -1,11 +1,87 @@
 import type { Database } from "bun:sqlite";
+import {
+  BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA,
+  BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
+} from "./guided-work-schema.ts";
 
 type ColumnRow = { name: string };
 
 export function migrateBtccSchema(db: Database): void {
-  ensureLegacyWorkImportProvenance(db);
-  ensureGuidedWorkProgressColumns(db);
-  restoreStableWorkObjectives(db);
+  db.transaction(() => {
+    ensureLegacyWorkImportProvenance(db);
+    ensureGuidedWorkProgressColumns(db);
+    migrateGuidedWorkSixStageConstraints(db);
+    restoreStableWorkObjectives(db);
+  }).immediate();
+}
+
+function migrateGuidedWorkSixStageConstraints(db: Database): void {
+  migrateGuidedWorkCheckpointConstraints(db);
+  migrateGuidedWorkReviewConstraints(db);
+  // R3-11 completed Work remains historical truth. Do not synthesize a
+  // completion Validation or reopen it while widening the durable schema.
+}
+
+function migrateGuidedWorkCheckpointConstraints(db: Database): void {
+  const definition = tableDefinition(db, "btcc_guided_work_checkpoint_revisions");
+  if (!definition || definition.includes("'validation'")) return;
+  const legacyTable = "btcc_guided_work_checkpoint_revisions_r3_11";
+  db.exec(`
+    ALTER TABLE btcc_guided_work_checkpoint_revisions RENAME TO ${legacyTable}
+  `);
+  db.exec(BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA.replace(
+    "  plan_revision_id TEXT NOT NULL,",
+    "  plan_revision_id TEXT,",
+  ));
+  db.exec(`
+    INSERT INTO btcc_guided_work_checkpoint_revisions (
+      checkpoint_revision_id, work_id, revision, plan_revision_id, stage,
+      public_summary, next_step, action_states_json, result_sequence,
+      origin_turn_id, created_at
+    )
+    SELECT checkpoint_revision_id, work_id, revision, plan_revision_id, stage,
+      public_summary, next_step, action_states_json, result_sequence,
+      origin_turn_id, created_at
+    FROM ${legacyTable}
+    ORDER BY work_id, revision
+  `);
+  db.exec(`DROP TABLE ${legacyTable}`);
+}
+
+function migrateGuidedWorkReviewConstraints(db: Database): void {
+  const table = "btcc_guided_work_review_revisions";
+  const definition = tableDefinition(db, table);
+  if (
+    !definition ||
+    (definition.includes("'completion'") &&
+      columnExists(db, table, "bound_result_review_revision_id") &&
+      columnExists(db, table, "bound_action_states_json"))
+  ) return;
+  const hasResultReviewBinding = columnExists(
+    db,
+    table,
+    "bound_result_review_revision_id",
+  );
+  const hasActionSnapshot = columnExists(db, table, "bound_action_states_json");
+  const legacyTable = "btcc_guided_work_review_revisions_r3_11";
+  db.exec(`ALTER TABLE ${table} RENAME TO ${legacyTable}`);
+  db.exec(BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA);
+  db.exec(`
+    INSERT INTO btcc_guided_work_review_revisions (
+      review_revision_id, work_id, revision, subject, verdict, summary,
+      corrections_json, bound_plan_revision_id, bound_result_sequence,
+      bound_result_review_revision_id, bound_action_states_json,
+      origin_turn_id, created_at
+    )
+    SELECT review_revision_id, work_id, revision, subject, verdict, summary,
+      corrections_json, bound_plan_revision_id, bound_result_sequence,
+      ${hasResultReviewBinding ? "bound_result_review_revision_id" : "NULL"},
+      ${hasActionSnapshot ? "bound_action_states_json" : "NULL"},
+      origin_turn_id, created_at
+    FROM ${legacyTable}
+    ORDER BY work_id, revision
+  `);
+  db.exec(`DROP TABLE ${legacyTable}`);
 }
 
 function ensureLegacyWorkImportProvenance(db: Database): void {
@@ -78,6 +154,17 @@ function ensureColumn(
   const columns = db.query<ColumnRow, []>(`PRAGMA table_info(${table})`).all();
   if (columns.some((candidate) => candidate.name === column)) return;
   db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+}
+
+function columnExists(db: Database, table: string, column: string): boolean {
+  return db.query<ColumnRow, []>(`PRAGMA table_info(${table})`).all()
+    .some((candidate) => candidate.name === column);
+}
+
+function tableDefinition(db: Database, name: string): string | null {
+  return db.query<{ sql: string | null }, [string]>(`
+    SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?
+  `).get(name)?.sql ?? null;
 }
 
 function tableExists(db: Database, name: string): boolean {

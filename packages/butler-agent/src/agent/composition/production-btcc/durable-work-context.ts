@@ -17,6 +17,17 @@ export function renderDurableWorkContext(
       `Current stage: ${work.currentStage}`,
       `Allowed next stages: ${work.allowedNextStages.join(", ") || "none"}`,
     );
+    if (work.currentStage === "review") {
+      rows.push(
+        "Stage focus: review the current Plan or actual execution result and record " +
+          "material corrections before moving on.",
+      );
+    } else if (work.currentStage === "validation") {
+      rows.push(
+        "Stage focus: validate the whole Work against the original request, current " +
+          "Plan and checks, terminal actions, actual results, and effect receipts before reporting.",
+      );
+    }
   }
   if (plan) {
     if (plan.objective !== work.objective) {
@@ -58,9 +69,23 @@ export function renderDurableWorkContext(
     );
     pushCorrections(rows, "Result corrections", work.latestResultReview.corrections);
   }
+  if (work.latestCompletionValidation) {
+    const current = isDurableWorkCompletionValidationCurrent(work);
+    rows.push(
+      `Latest completion validation${current ? "" : " (outdated)"}: ` +
+        `${work.latestCompletionValidation.verdict} — ` +
+        singleLine(work.latestCompletionValidation.summary, 260),
+    );
+    pushCorrections(
+      rows,
+      "Completion validation corrections",
+      work.latestCompletionValidation.corrections,
+    );
+  }
   rows.push(
     "Guardrail: choose the next useful unresolved action, stay within the original " +
-      "request and governing checks, and review the actual result before reporting.",
+      "request and governing checks, review the actual result, then validate the " +
+      "whole Work before reporting.",
   );
   if (plan) {
     rows.push("Current plan details:");
@@ -113,9 +138,53 @@ export function isDurableWorkResultReviewCurrent(
   work: Pick<DurableWorkContext["work"], "latestResultReview" | "resultRefs">,
 ): boolean {
   if (!work.latestResultReview) return false;
-  const bound = new Set(work.latestResultReview.boundResultRefs);
-  return bound.size === work.resultRefs.length &&
-    work.resultRefs.every((result) => bound.has(result.resultRef));
+  return sameResultRefs(work.latestResultReview.boundResultRefs, work.resultRefs);
+}
+
+export function isDurableWorkCompletionValidationCurrent(
+  work: Pick<
+    DurableWorkContext["work"],
+    | "currentPlan"
+    | "latestCompletionValidation"
+    | "latestResultReview"
+    | "actionProgress"
+    | "resultRefs"
+  >,
+): boolean {
+  const validation = work.latestCompletionValidation;
+  const resultReview = work.latestResultReview;
+  if (validation?.subject !== "completion" || !resultReview) return false;
+  if (validation.boundPlanRevisionId !== work.currentPlan?.planRevisionId) {
+    return false;
+  }
+  if (validation.boundResultReviewRevisionId !== resultReview.reviewRevisionId) {
+    return false;
+  }
+  if (!sameActionProgress(validation.boundActionProgress, work.actionProgress)) {
+    return false;
+  }
+  return sameResultRefs(validation.boundResultRefs, work.resultRefs) &&
+    isDurableWorkResultReviewCurrent(work);
+}
+
+function sameActionProgress(
+  bound: DurableWorkContext["work"]["actionProgress"] | undefined,
+  current: DurableWorkContext["work"]["actionProgress"],
+): boolean {
+  return bound?.length === current.length && bound.every((action, index) => {
+    const candidate = current[index];
+    return candidate?.actionKey === action.actionKey &&
+      candidate.status === action.status && candidate.note === action.note;
+  });
+}
+
+function sameResultRefs(
+  boundResultRefs: string[],
+  resultRefs: DurableWorkContext["work"]["resultRefs"],
+): boolean {
+  const bound = new Set(boundResultRefs);
+  return bound.size === resultRefs.length &&
+    resultRefs.every((result) => bound.has(result.resultRef));
 }
 
 function pushCorrections(rows: string[], label: string, corrections: string[]): void {

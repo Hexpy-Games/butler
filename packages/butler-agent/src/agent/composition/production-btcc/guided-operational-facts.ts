@@ -4,7 +4,10 @@ import type {
   DurableWorkView,
 } from "../../btcc/durable-work/index.ts";
 import type { GuidedEffectJournalRecord } from "../../btcc/effects/index.ts";
-import { isDurableWorkResultReviewCurrent } from "./durable-work-context.ts";
+import {
+  isDurableWorkCompletionValidationCurrent,
+  isDurableWorkResultReviewCurrent,
+} from "./durable-work-context.ts";
 import { projectGuidedToolContext } from "./guided-tool-context-projection.ts";
 
 const FACT_LIMIT = 12;
@@ -98,6 +101,17 @@ function fallbackFactLines(input: OperationalFacts): string[] {
     );
     for (const correction of work.latestResultReview.corrections.slice(0, 6)) {
       lines.push(`- Saved result correction: ${compact(correction)}`);
+    }
+  }
+  if (work?.latestCompletionValidation) {
+    const current = isDurableWorkCompletionValidationCurrent(work);
+    lines.push(
+      `- Saved completion validation${current ? "" : " (outdated)"}: ` +
+        `${work.latestCompletionValidation.verdict} — ` +
+        compact(work.latestCompletionValidation.summary),
+    );
+    for (const correction of work.latestCompletionValidation.corrections.slice(0, 6)) {
+      lines.push(`- Saved completion correction: ${compact(correction)}`);
     }
   }
   return lines;
