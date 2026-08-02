@@ -108,6 +108,12 @@ export function validateElectronScenario(value: unknown): ElectronScenario {
         `Scenario step ${step.id} timeoutMs must be a positive integer.`,
       );
     }
+    if (step.stopAfterAcknowledgement !== undefined) {
+      assert(
+        typeof step.stopAfterAcknowledgement === "boolean",
+        `Scenario step ${step.id} stopAfterAcknowledgement must be a boolean.`,
+      );
+    }
     for (const file of step.expect?.files ?? []) {
       assert(
         typeof file.path === "string",

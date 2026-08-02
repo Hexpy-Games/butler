@@ -25,14 +25,20 @@ import { readGuidedWorkObservation } from "./work-evidence.ts";
 
 const DEFAULT_STEP_TIMEOUT_MS = 10 * 60_000;
 const TERMINAL_STATES = new Set(["cancelled", "delivered", "failed"]);
+const STOP_BUTTON_SELECTOR =
+  '[data-test-class="composer-send-button"][type="button"]';
 
-interface TerminalObservation {
+export interface TerminalObservation {
   acknowledgedAtMs: number;
   firstRenderedActivityAtMs: number | null;
   progressMessages: string[];
   terminalAtMs: number;
   turnId: string;
   view: AppSessionView;
+}
+
+export interface WaitForTurnOptions {
+  stopAfterAcknowledgement?: boolean;
 }
 
 export function isTransientSessionReadError(error: unknown): boolean {
@@ -61,17 +67,19 @@ function assistantForTurn(
     ) ?? null;
 }
 
-async function waitForTurn(
+export async function waitForTurn(
   run: PreparedRun,
   launch: ProductLaunch,
   previousTurnId: string | null,
   timeoutMs: number,
   submittedAtMs: number,
+  options: WaitForTurnOptions = {},
 ): Promise<TerminalObservation> {
   const startedAt = Date.now();
   let acknowledgedAtMs: number | null = null;
   let firstRenderedActivityAtMs: number | null = null;
   let turnId: string | null = null;
+  let stopClicked = false;
   const progress = new Set<string>();
   while (Date.now() - startedAt < timeoutMs) {
     await replaceInterruptedExecutorOnce(run, launch);
@@ -99,10 +107,16 @@ async function waitForTurn(
         ).catch(() => "");
         if (visibleActivity.trim()) firstRenderedActivityAtMs = Date.now();
       }
-      if (
+      const terminal = Boolean(
         view.status && TERMINAL_STATES.has(view.status) &&
-        view.latest_turn?.id === turnId
-      ) {
+          view.latest_turn?.id === turnId,
+      );
+      if (terminal && options.stopAfterAcknowledgement && !stopClicked) {
+        throw new Error(
+          `Electron Turn ${turnId} reached ${view.status} before the visible Stop button was clicked.`,
+        );
+      }
+      if (terminal) {
         return {
           acknowledgedAtMs,
           firstRenderedActivityAtMs,
@@ -111,6 +125,10 @@ async function waitForTurn(
           turnId,
           view,
         };
+      }
+      if (options.stopAfterAcknowledgement && !stopClicked) {
+        await launch.page.clickVisibleSelector(STOP_BUTTON_SELECTOR);
+        stopClicked = true;
       }
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 250));
@@ -138,6 +156,18 @@ export async function verifyDurableFinal(
   return rendered.trim().length > 0;
 }
 
+export async function verifyDurableCancelled(
+  run: PreparedRun,
+  launch: ProductLaunch,
+  turnId: string,
+): Promise<boolean> {
+  await openSession(run, launch.page);
+  const view = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
+    sessionId: run.sessionId,
+  });
+  return view.latest_turn?.id === turnId && view.status === "cancelled";
+}
+
 export async function runScenarioStep(
   run: PreparedRun,
   launch: ProductLaunch,
@@ -158,8 +188,12 @@ export async function runScenarioStep(
     previousTurnId,
     step.timeoutMs ?? DEFAULT_STEP_TIMEOUT_MS,
     submittedAtMs,
+    { stopAfterAcknowledgement: step.stopAfterAcknowledgement === true },
   );
-  const assistant = assistantForTurn(terminal.view, terminal.turnId);
+  const terminalState = terminal.view.status ?? "unknown";
+  const assistant = terminalState === "cancelled"
+    ? null
+    : assistantForTurn(terminal.view, terminal.turnId);
   const finalText = assistant?.text ?? "";
   const renderedFinal = assistant
     ? await rendererFinalText(launch.page)
@@ -176,7 +210,6 @@ export async function runScenarioStep(
     `${safeSegment(step.id, "step")}-final.png`,
   );
   await launch.page.screenshot(finalScreenshot);
-  const terminalState = terminal.view.status ?? "unknown";
   const observation: StepObservation = {
     stepId: step.id,
     promptSha256: hashText(prompt),
@@ -215,12 +248,9 @@ export async function runScenarioStep(
     await launch.page.reload();
     observation.reload = {
       tested: true,
-      finalMatched: await verifyDurableFinal(
-        run,
-        launch,
-        terminal.turnId,
-        finalText,
-      ),
+      finalMatched: terminalState === "cancelled"
+        ? await verifyDurableCancelled(run, launch, terminal.turnId)
+        : await verifyDurableFinal(run, launch, terminal.turnId, finalText),
     };
     const screenshot = join(
       screenshotDir,

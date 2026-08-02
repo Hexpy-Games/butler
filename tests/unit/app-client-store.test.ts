@@ -2863,13 +2863,26 @@ test("cancelActiveTurn does not infer a Stop target from a background worker", a
     if (path.startsWith("/session-summary")) {
       return jsonResponse<SessionSummaryView>({
         session_id: "session-a",
-        turn_state: "delivered",
+        turn_state: "thinking",
         latest_progress: {
-          state: "delivered",
+          turn_id: "turn-stale-summary",
+          state: "thinking",
           safe_progress_rows: [],
         },
         worker_activity: [],
       });
+    }
+    if (path.startsWith("/session-view")) {
+      return jsonResponse(
+        sessionView("session-a", {
+          turnState: "delivered",
+          latestProgress: {
+            turn_id: "turn-stale-summary",
+            state: "delivered",
+            safe_progress_rows: [],
+          },
+        }),
+      );
     }
     return jsonResponse({});
   }) as unknown as typeof fetch;
@@ -2878,9 +2891,10 @@ test("cancelActiveTurn does not infer a Stop target from a background worker", a
     activeChatId: "session-a",
     summary: {
       session_id: "session-a",
-      turn_state: "delivered",
+      turn_state: "thinking",
       latest_progress: {
-        state: "delivered",
+        turn_id: "turn-stale-summary",
+        state: "thinking",
         safe_progress_rows: [],
       },
       worker_activity: [
@@ -2901,8 +2915,138 @@ test("cancelActiveTurn does not infer a Stop target from a background worker", a
 
   await useButlerStore.getState().cancelActiveTurn();
 
-  expect(calls).toEqual([]);
+  expect(calls.filter((call) => call.path.startsWith("/session-view"))).toHaveLength(1);
   expect(calls.some((call) => call.path.startsWith("/turns/"))).toBe(false);
+  expect(calls.some((call) => call.path.startsWith("/worker-activity/"))).toBe(false);
+  expect(calls.some((call) => call.path.startsWith("/session-summary"))).toBe(false);
+  expect(useButlerStore.getState().sessionView).toMatchObject({
+    session_id: "session-a",
+    active_turn: null,
+  });
+});
+
+test("cancelActiveTurn refreshes a stale SessionView before selecting its canonical active turn", async () => {
+  const calls: Array<{ path: string; body?: unknown }> = [];
+  const refreshedViews = [
+    sessionView("session-a", {
+      latestProgress: {
+        turn_id: "turn-refreshed",
+        state: "streaming",
+        safe_progress_rows: [],
+      },
+    }),
+    sessionView("session-a", {
+      latestProgress: {
+        turn_id: "turn-refreshed",
+        state: "cancelled",
+        safe_progress_rows: [],
+      },
+    }),
+  ];
+  globalThis.fetch = (async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    const path = String(input);
+    calls.push({
+      path,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    if (path.startsWith("/session-view")) {
+      const view = refreshedViews.shift();
+      if (!view) throw new Error("Unexpected extra SessionView refresh.");
+      return jsonResponse(view);
+    }
+    if (path === "/turns/turn-refreshed/cancel") {
+      return jsonResponse({ turn: { id: "turn-refreshed", state: "cancelling" } });
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    sessionView: sessionView("session-stale", {
+      latestProgress: {
+        turn_id: "turn-stale-view",
+        state: "streaming",
+        safe_progress_rows: [],
+      },
+    }),
+    summary: {
+      session_id: "session-a",
+      turn_state: "thinking",
+      latest_progress: {
+        turn_id: "turn-stale-summary",
+        state: "thinking",
+        safe_progress_rows: [],
+      },
+      worker_activity: [],
+    },
+  });
+
+  await useButlerStore.getState().cancelActiveTurn();
+
+  expect(calls.slice(0, 2)).toEqual([
+    { path: "/session-view?session_id=session-a" },
+    { path: "/turns/turn-refreshed/cancel", body: {} },
+  ]);
+  expect(calls.filter((call) => call.path.startsWith("/session-view"))).toHaveLength(2);
+  expect(calls.filter((call) => call.path.includes("/cancel"))).toEqual([
+    { path: "/turns/turn-refreshed/cancel", body: {} },
+  ]);
+  expect(useButlerStore.getState().sessionView).toMatchObject({
+    session_id: "session-a",
+    status: "cancelled",
+    active_turn: null,
+    latest_turn: {
+      id: "turn-refreshed",
+      state: "cancelled",
+      cancellable: false,
+    },
+  });
+});
+
+test("cancelActiveTurn does not cancel a refreshed turn after the active chat changes", async () => {
+  const calls: string[] = [];
+  let releaseRefresh: (() => void) | undefined;
+  let markRefreshStarted: (() => void) | undefined;
+  const refreshStarted = new Promise<void>((resolve) => {
+    markRefreshStarted = resolve;
+  });
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const path = String(input);
+    calls.push(path);
+    if (path.startsWith("/session-view")) {
+      await new Promise<void>((resolve) => {
+        releaseRefresh = resolve;
+        markRefreshStarted?.();
+      });
+      return jsonResponse(
+        sessionView("session-a", {
+          latestProgress: {
+            turn_id: "turn-session-a",
+            state: "streaming",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: "session-a",
+    sessionView: null,
+  });
+  const pendingCancel = useButlerStore.getState().cancelActiveTurn();
+
+  await refreshStarted;
+  useButlerStore.setState({ activeChatId: "session-b" });
+  releaseRefresh?.();
+  await pendingCancel;
+
+  expect(calls).toEqual(["/session-view?session_id=session-a"]);
+  expect(useButlerStore.getState().sessionView).toBeNull();
 });
 
 test("cancelActiveTurn targets only the canonical SessionView active turn", async () => {
@@ -2987,6 +3131,11 @@ test("cancelActiveTurn targets only the canonical SessionView active turn", asyn
 
   await useButlerStore.getState().cancelActiveTurn();
 
+  expect(calls[0]).toEqual({
+    path: "/turns/turn-canonical/cancel",
+    body: {},
+  });
+  expect(calls.filter((call) => call.path.startsWith("/session-view"))).toHaveLength(1);
   expect(calls.filter((call) => call.path.includes("/cancel"))).toEqual([
     { path: "/turns/turn-canonical/cancel", body: {} },
   ]);
@@ -3009,6 +3158,167 @@ test("cancelActiveTurn targets only the canonical SessionView active turn", asyn
       state: "cancelled",
     },
   });
+});
+
+test("cancelActiveTurn does not apply cancellation to a new chat during post-cancel reload", async () => {
+  const calls: string[] = [];
+  let releaseReload: (() => void) | undefined;
+  let markReloadStarted: (() => void) | undefined;
+  const reloadStarted = new Promise<void>((resolve) => {
+    markReloadStarted = resolve;
+  });
+  const sessionA = "session-cancel-race-a";
+  const sessionB = "session-cancel-race-b";
+  const turnA = "turn-cancel-race-a";
+  const turnB = "turn-cancel-race-b";
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const path = String(input);
+    calls.push(path);
+    if (path === `/turns/${turnA}/cancel`) {
+      return jsonResponse({ turn: { id: turnA, state: "cancelling" } });
+    }
+    if (path.startsWith("/session-view")) {
+      await new Promise<void>((resolve) => {
+        releaseReload = resolve;
+        markReloadStarted?.();
+      });
+      return jsonResponse(
+        sessionView(sessionA, {
+          turnState: "cancelled",
+          latestProgress: {
+            turn_id: turnA,
+            state: "cancelled",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    return jsonResponse({});
+  }) as unknown as typeof fetch;
+
+  const bMessage = messageRecord(
+    "message-cancel-race-b",
+    sessionB,
+    "assistant",
+    "B remains visible",
+    1,
+    turnB,
+  );
+  const bProgress: Record<string, TurnProgressSnapshot> = {
+    [turnB]: {
+      turn_id: turnB,
+      state: "thinking",
+      safe_progress_rows: [],
+    },
+  };
+  const bMessages = [bMessage];
+  const bSessionView = sessionView(sessionB, {
+    messages: bMessages,
+    latestProgress: bProgress[turnB],
+  });
+  const bSummary: SessionSummaryView = {
+    session_id: sessionB,
+    turn_state: "thinking",
+    latest_progress: bProgress[turnB],
+    worker_activity: [],
+  };
+  const bSessionMessageViews: Record<string, MessageListView> = {
+    [sessionB]: {
+      chat_id: sessionB,
+      messages: bMessages,
+      turn_progress: bProgress,
+      next_cursor: 1,
+    },
+  };
+  useButlerStore.setState({
+    activeChatId: sessionA,
+    sessionView: sessionView(sessionA, {
+      latestProgress: {
+        turn_id: turnA,
+        state: "streaming",
+        safe_progress_rows: [],
+      },
+    }),
+    status: { label: "ready", tone: "ok" },
+  });
+
+  const pendingCancel = useButlerStore.getState().cancelActiveTurn();
+  await reloadStarted;
+  useButlerStore.setState({
+    activeChatId: sessionB,
+    messages: bMessages,
+    turnProgress: bProgress,
+    sessionView: bSessionView,
+    summary: bSummary,
+    sessionMessageViews: bSessionMessageViews,
+    status: { label: "sending", tone: "muted" },
+  });
+  releaseReload?.();
+  await pendingCancel;
+
+  expect(calls).toEqual([
+    `/turns/${turnA}/cancel`,
+    `/session-view?session_id=${sessionA}`,
+  ]);
+  const state = useButlerStore.getState();
+  expect(state.messages).toBe(bMessages);
+  expect(state.turnProgress).toBe(bProgress);
+  expect(state.sessionView).toBe(bSessionView);
+  expect(state.summary).toBe(bSummary);
+  expect(state.sessionMessageViews).toBe(bSessionMessageViews);
+  expect(state.sessionMessageViews[sessionA]).toBeUndefined();
+  expect(state.status).toEqual({ label: "sending", tone: "muted" });
+});
+
+test("cancelActiveTurn reports a failed canonical refresh without inferring a target", async () => {
+  const calls: string[] = [];
+  let statusAtRefresh: { label: string; tone: string } | undefined;
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    calls.push(String(input));
+    statusAtRefresh = useButlerStore.getState().status;
+    throw new Error("session view unavailable");
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: "session-refresh-failure",
+    sessionView: null,
+    summary: {
+      session_id: "session-refresh-failure",
+      turn_state: "thinking",
+      latest_progress: {
+        turn_id: "turn-summary-only",
+        state: "thinking",
+        safe_progress_rows: [],
+      },
+      worker_activity: [
+        {
+          worker_id: "worker-summary-only",
+          activity_kind: "worker",
+          worker_label: "Worker",
+          objective: "background work",
+          phase: "executing",
+          status_line: "Executing",
+          terminal: false,
+          updated_at: "2026-05-16T00:00:00.000Z",
+          supported_controls: ["cancel"],
+        },
+      ],
+    },
+  });
+
+  await useButlerStore.getState().cancelActiveTurn();
+
+  expect(statusAtRefresh).toEqual({ label: "stopping", tone: "muted" });
+  expect(calls).toEqual([
+    "/session-view?session_id=session-refresh-failure",
+  ]);
+  expect(useButlerStore.getState().status).toEqual({
+    label: "ready",
+    tone: "ok",
+  });
+  expect(useButlerStore.getState().summary?.latest_progress?.turn_id).toBe(
+    "turn-summary-only",
+  );
 });
 
 test("sendMessage keeps concurrent session sends scoped until each operation finishes", async () => {

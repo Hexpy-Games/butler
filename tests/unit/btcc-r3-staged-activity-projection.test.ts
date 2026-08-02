@@ -34,6 +34,7 @@ test("gateway projection keeps display stage separate and groups its completed t
     title: "결과 검토",
     summary: "실제 결과를 요청과 대조했습니다.",
   });
+  expectNoUndefinedValues(events[0]?.payload);
   await progress.operationChanged?.({
     turnId: "turn-activity",
     semanticState: "admitted",
@@ -373,4 +374,17 @@ async function acceptedActivity(
   const update = updates[0];
   if (!update) throw new Error("Expected an accepted activity update.");
   return update;
+}
+
+function expectNoUndefinedValues(value: unknown): void {
+  expect(value).not.toBeUndefined();
+  if (Array.isArray(value)) {
+    for (const item of value) expectNoUndefinedValues(item);
+    return;
+  }
+  if (value !== null && typeof value === "object") {
+    for (const nested of Object.values(value)) {
+      expectNoUndefinedValues(nested);
+    }
+  }
 }

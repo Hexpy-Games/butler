@@ -82,11 +82,17 @@ export function projectTurnProgressToEvents(
           btccState: update.semanticState,
           decisionTitle: update.title,
           decisionSummary: update.summary,
-          decisionRationale: update.rationale,
-          decisionNextStep: update.nextStep,
+          ...(update.rationale !== undefined
+            ? { decisionRationale: update.rationale }
+            : {}),
+          ...(update.nextStep !== undefined
+            ? { decisionNextStep: update.nextStep }
+            : {}),
           decisionSource: "model-authored",
           semanticBlockId: update.activityId,
-          activityStage: update.displayStage,
+          ...(update.displayStage !== undefined
+            ? { activityStage: update.displayStage }
+            : {}),
         },
       });
     },

@@ -47,6 +47,7 @@ export interface ElectronScenarioStep {
   timeoutMs?: number;
   reloadAfter?: boolean;
   restartAfter?: boolean;
+  stopAfterAcknowledgement?: boolean;
   expect?: {
     finalIncludes?: string[];
     rendererActivityStagesInclude?: ElectronWorkStage[];

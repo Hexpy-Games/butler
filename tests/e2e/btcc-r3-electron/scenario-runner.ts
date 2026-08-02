@@ -36,6 +36,7 @@ import {
 } from "./scenario-preflight.ts";
 import {
   runScenarioStep,
+  verifyDurableCancelled,
   verifyDurableFinal,
 } from "./scenario-step.ts";
 
@@ -149,12 +150,14 @@ export async function runBtccR3ElectronHarness(
           });
           observation.restart = {
             tested: true,
-            finalMatched: await verifyDurableFinal(
-              run,
-              launch,
-              observation.turnId,
-              observation.finalText,
-            ),
+            finalMatched: observation.terminalState === "cancelled"
+              ? await verifyDurableCancelled(run, launch, observation.turnId)
+              : await verifyDurableFinal(
+                run,
+                launch,
+                observation.turnId,
+                observation.finalText,
+              ),
           };
           const screenshot = join(
             run.runRoot,
