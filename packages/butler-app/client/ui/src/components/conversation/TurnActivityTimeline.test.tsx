@@ -165,6 +165,30 @@ test("review and completion validation render as distinct user-visible phases", 
   await act(async () => root.unmount());
 });
 
+test("legacy activity does not repeat a title as its content", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", {
+    url: "http://localhost",
+  });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root")!;
+  const root = createRoot(container);
+
+  await act(async () => root.render(
+    <TurnActivityTimeline activities={[activity("planning", "계획을 확정했습니다.")]} />,
+  ));
+
+  expect(container.textContent).toContain("계획을 확정했습니다.");
+  expect(container.textContent).not.toContain("내용: 계획을 확정했습니다.");
+  await act(async () => root.unmount());
+});
+
 function activity(id: string, summary: string) {
   return {
     id,

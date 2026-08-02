@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
@@ -26,10 +27,13 @@ import { openBtccSqliteStores } from
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
 import {
+  DEFAULT_GUIDED_ABSOLUTE_TURN_LEASE_MS,
   DEFAULT_GUIDED_FINAL_REPORT_MS,
   DEFAULT_GUIDED_TURN_LEASE_MS,
+  GuidedOperationalLease,
   guidedOperationalFallback,
   guidedOperationalReportPrompt,
+  runInGuidedOperationalWindow,
   runGuidedPromptWithOperationalReport,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-operational-report.ts";
@@ -1184,6 +1188,119 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
   }
 });
 
+test("reviewed run_command mutation records a receipt and pushes without force", async () => {
+  const fixture = createFixture("guided-command-effect");
+  try {
+    const workspace = join(fixture.root, "workspace");
+    const remote = join(fixture.root, "remote.git");
+    mkdirSync(workspace, { recursive: true });
+    runGit(["init", "-b", "main"], workspace);
+    runGit(["init", "--bare", remote], fixture.root);
+    runGit(["remote", "add", "origin", remote], workspace);
+    writeFileSync(join(workspace, "deliverable.txt"), "reviewed command effect\n");
+
+    let beforeWork: unknown;
+    let beforeReview: unknown;
+    let pushed: unknown;
+    let nonzero: unknown;
+    const agent = fixture.agent(async (options) => {
+      const call = async (name: string, args: Record<string, unknown>) =>
+        await options.executeTool({
+          name,
+          args,
+          rawArguments: JSON.stringify(args),
+        });
+      beforeWork = await call("run_command", {
+        command: "printf blocked > before-work.txt",
+        state_effect: "mutation",
+      });
+      await call("replace_work_plan", {
+        objective: "Commit and publish the requested contained workspace result",
+        actions: [{
+          action_key: "publish-result",
+          description: "Commit the requested result and publish it to the configured remote",
+          effect: {
+            capability: "workspace mutation",
+            target: "workspace:reviewed-command-result",
+          },
+        }],
+        checks: ["The commit exists on the configured non-force remote branch"],
+      });
+      beforeReview = await call("run_command", {
+        command: "printf blocked > before-review.txt",
+        state_effect: "mutation",
+      });
+      await call("record_work_review", {
+        subject: "plan",
+        verdict: "accept",
+        summary: "The contained Git command directly produces the requested result.",
+        next_stage: "execution",
+      });
+      pushed = await call("run_command", {
+        command: [
+          "git add deliverable.txt",
+          "git -c user.name=Butler -c user.email=butler@example.invalid commit -m reviewed-command-effect",
+          "git push origin HEAD:main",
+        ].join(" && "),
+        state_effect: "mutation",
+      });
+      nonzero = await call("run_command", {
+        command: "printf partial > command-failed.txt; exit 7",
+        state_effect: "mutation",
+      });
+      return "검토된 명령 실행 결과를 보고합니다.";
+    });
+    const turnId = "turn-guided-command-effect";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+
+    expect(await runtime.runTurn(localRunCommand(workspace, turnId)))
+      .toMatchObject({ kind: "delivered" });
+    expect(beforeWork).toMatchObject({
+      ok: false,
+      error: { code: "effect_work_required", recoverable: true },
+    });
+    expect(beforeReview).toMatchObject({
+      ok: false,
+      error: { code: "effect_plan_review_required", recoverable: true },
+    });
+    expect(existsSync(join(workspace, "before-work.txt"))).toBe(false);
+    expect(existsSync(join(workspace, "before-review.txt"))).toBe(false);
+    expect(pushed).toMatchObject({
+      ok: true,
+      exit_code: 0,
+      sandbox: "full_access_contained",
+      effect_receipt: {
+        capability: "run_command",
+        target: "workspace-command:.",
+      },
+    });
+    expect(nonzero).toMatchObject({
+      ok: false,
+      exit_code: 7,
+      command_outcome_observed: true,
+      effect_receipt: { capability: "run_command" },
+    });
+    expect(readFileSync(join(workspace, "command-failed.txt"), "utf8"))
+      .toBe("partial");
+    expect(runGit(["rev-parse", "refs/heads/main"], remote, true))
+      .toMatch(/^[a-f0-9]{40}$/u);
+    const work = await fixture.stores.durableWork.boundWorkForTurn(turnId);
+    expect(fixture.stores.guidedEffectJournal.listForWork(work!.workId))
+      .toEqual([
+        expect.objectContaining({ capability: "run_command", status: "applied" }),
+        expect.objectContaining({ capability: "run_command", status: "applied" }),
+      ]);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent renders CSV text once and passes image attachments to the provider", async () => {
   const fixture = createFixture("guided-attachments");
   try {
@@ -1482,6 +1599,69 @@ test("Guided tool restart reuses a prestarted occurrence after call order change
   }
 });
 
+test("provider call identity replays one occurrence but admits an identical new command", async () => {
+  const fixture = createFixture("guided-provider-occurrence");
+  try {
+    const occurrences: string[] = [];
+    const mutationArgs = {
+      command: "printf reviewed >> result.txt",
+      state_effect: "mutation",
+    };
+    const firstTurn = turnRecord(fixture.root, {
+      turnId: "guided-provider-occurrence-turn-1",
+    });
+    const secondTurn = turnRecord(fixture.root, {
+      turnId: "guided-provider-occurrence-turn-2",
+    });
+    const createExecutor = (turn: TurnRecord) => createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["run_command"]),
+      visibleNames: new Set(["run_command"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async (_call, context) => {
+        if (!context?.effectOccurrenceId) {
+          throw new Error("Expected a runtime-owned effect occurrence");
+        }
+        occurrences.push(context.effectOccurrenceId);
+        return { ok: true, dispatched: true };
+      },
+    });
+    const execute = (
+      executor: ReturnType<typeof createGuidedToolCallExecutor>,
+      providerCallId: string,
+    ) => executor.executeTool({
+      name: "run_command",
+      args: mutationArgs,
+      rawArguments: JSON.stringify(mutationArgs),
+      providerCallId,
+    });
+
+    await execute(createExecutor(firstTurn), "provider-call-original");
+    expect(occurrences).toHaveLength(1);
+    const originalOccurrence = occurrences[0];
+
+    const replayed = await execute(
+      createExecutor(firstTurn),
+      "provider-call-original",
+    );
+    expect(replayed).toMatchObject({ ok: true, dispatched: true });
+    expect(occurrences).toEqual([originalOccurrence!]);
+
+    await execute(createExecutor(firstTurn), "provider-call-new");
+    await execute(createExecutor(secondTurn), "provider-call-original");
+    expect(occurrences).toHaveLength(3);
+    expect(new Set(occurrences).size).toBe(3);
+    expect(fixture.stores.guidedToolJournal.list(firstTurn.turnId)).toHaveLength(2);
+    expect(fixture.stores.guidedToolJournal.list(secondTurn.turnId)).toHaveLength(1);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent turns provider failure into one fact-based final report", async () => {
   const fixture = createFixture("guided-fallback");
   try {
@@ -1491,7 +1671,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       calls += 1;
       if (calls === 2) {
         expect(options.tools).toEqual([]);
-        expect(options.prompt).toContain("Tool read_file: completed");
+        expect(options.prompt).toContain("Tool read_file: succeeded (journal completed)");
         expect(options.prompt).toContain('enabled\\":true');
         return "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.";
       }
@@ -1590,7 +1770,130 @@ test("Guided model sees remaining time without persisting it in the tool result"
 test("Guided operational defaults reserve delivery time before the observer deadline", () => {
   expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBe(280_000);
   expect(DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(15_000);
+  expect(DEFAULT_GUIDED_ABSOLUTE_TURN_LEASE_MS).toBe(840_000);
   expect(DEFAULT_GUIDED_TURN_LEASE_MS - DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(265_000);
+});
+
+test("Managed durable progress rearms the no-progress timer only to the absolute ceiling", async () => {
+  let now = 0;
+  let scheduled:
+    | { callback: () => void; delayMs: number }
+    | undefined;
+  const lease = new GuidedOperationalLease({
+    startedAt: 0,
+    leaseMs: 100,
+    finalReportMs: 10,
+    absoluteLeaseMs: 250,
+    managedInitially: true,
+    now: () => now,
+  });
+  const running = runInGuidedOperationalWindow({
+    parentSignal: new AbortController().signal,
+    timeoutMs: 90,
+    deadline: lease.mainWindow(),
+    timer: {
+      set(callback, delayMs) {
+        scheduled = { callback, delayMs };
+        return 1 as unknown as ReturnType<typeof setTimeout>;
+      },
+      clear() {
+        scheduled = undefined;
+      },
+    },
+    run: async (signal) => await new Promise<never>((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }),
+  });
+
+  expect(scheduled?.delayMs).toBe(90);
+  now = 50;
+  lease.recordDurableProgress();
+  expect(scheduled?.delayMs).toBe(90);
+  expect(lease.mainDeadline()).toBe(140);
+  now = 130;
+  lease.recordDurableProgress();
+  expect(lease.mainDeadline()).toBe(220);
+  expect(scheduled?.delayMs).toBe(90);
+  now = 220;
+  lease.recordDurableProgress();
+  expect(lease.mainDeadline()).toBe(240);
+  expect(scheduled?.delayMs).toBe(20);
+
+  now = 240;
+  scheduled?.callback();
+  await expect(running).rejects.toThrow("operational window expired");
+  expect(lease.leaseDeadline()).toBe(250);
+});
+
+test("only fresh durable Work extends through the tool-result path", async () => {
+  const fixture = createFixture("guided-progress-signals");
+  try {
+    let durableProgress = 0;
+    const command = localRunCommand(
+      fixture.root,
+      "guided-progress-signals-turn",
+    );
+    const inbox = await fixture.stores.admission.recordInbound({
+      command,
+      admissionInputHash: "guided-progress-signals-admission",
+    });
+    const claim = await fixture.stores.admission
+      .acquireAdmissionConstructionClaim(inbox);
+    const turn = await fixture.stores.admission.constructTurn(inbox, claim);
+    const names = new Set([
+      "read_file",
+      "tool_search",
+      "replace_work_plan",
+      "record_work_review",
+      "write_file",
+    ]);
+    const calls = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: {
+        turnId: turn.turnId,
+        sessionId: turn.sessionId,
+      },
+      authorizedNames: names,
+      visibleNames: names,
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      onDurableProgress: () => durableProgress += 1,
+      executeButlerTool: async () => ({
+        ok: true,
+        effect_receipt: { receipt_id: "forged-shape", replayed: false },
+      }),
+    });
+    const call = (name: string, args: Record<string, unknown>) =>
+      calls.executeTool({ name, args, rawArguments: JSON.stringify(args) });
+
+    await call("read_file", { path: "fact.txt" });
+    await call("tool_search", { query: "files" });
+    expect(durableProgress).toBe(0);
+    const planResult = await call("replace_work_plan", {
+      objective: "Create the reviewed output",
+      actions: [{
+        action_key: "write-output",
+        description: "Write the output",
+        effect: { capability: "workspace mutation", target: "workspace:output" },
+      }],
+      checks: ["The output exists"],
+    });
+    expect(planResult).toMatchObject({ ok: true });
+    expect(durableProgress).toBe(1);
+    await call("record_work_review", {
+      subject: "plan",
+      verdict: "accept",
+      summary: "The Plan matches the request.",
+      next_stage: "execution",
+    });
+    expect(durableProgress).toBe(2);
+    await call("write_file", { path: "output.txt", content: "done" });
+    expect(durableProgress).toBe(2);
+  } finally {
+    fixture.close();
+  }
 });
 
 test("Guided operational reporting preserves current and outdated saved result reviews", () => {
@@ -1653,6 +1956,33 @@ test("Guided operational reporting preserves current and outdated saved result r
     .toContain("Saved model result review (outdated): accept");
   expect(guidedOperationalFallback(outdated))
     .toContain("Saved model result review (outdated): accept");
+});
+
+test("Guided operational fallback does not count returned tool failures as success", () => {
+  const fallback = guidedOperationalFallback({
+    originalRequest: "실패한 도구 결과를 사실대로 알려 주세요.",
+    work: null,
+    toolCalls: Array.from({ length: 5 }, (_, index) => ({
+      callId: `failed-call-${index}`,
+      toolName: "run_command",
+      rawArguments: "{}",
+      arguments: {},
+      status: "completed" as const,
+      result: {
+        ok: false,
+        error: { code: "effect_plan_review_required" },
+      },
+    })),
+    effects: [],
+  });
+
+  expect(fallback).toContain(
+    "journal: completed=5; outcomes: rejected_or_failed=5",
+  );
+  expect(fallback).toContain(
+    "Tool run_command: rejected_or_failed (journal completed)",
+  );
+  expect(fallback).not.toContain("succeeded=5");
 });
 
 test("Guided operational fallback is captured before the final report model call", async () => {
@@ -1983,6 +2313,20 @@ function createFixture(label: string) {
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+function runGit(args: string[], cwd: string, gitDir = false): string {
+  const command = gitDir ? ["git", `--git-dir=${cwd}`, ...args] : ["git", ...args];
+  const result = Bun.spawnSync({
+    cmd: command,
+    ...(gitDir ? {} : { cwd }),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(new TextDecoder().decode(result.stderr));
+  }
+  return new TextDecoder().decode(result.stdout).trim();
 }
 
 function prepareAppProjectsTable(dbPath: string): void {

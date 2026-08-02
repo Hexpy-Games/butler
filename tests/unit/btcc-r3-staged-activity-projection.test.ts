@@ -157,11 +157,12 @@ test("the first Plan projects distinct conception and planning activities from o
   expect(updates).toEqual([
     expect.objectContaining({
       displayStage: "conception",
-      title: "작업 구상",
-      summary: "두 입력을 비교해 검증된 보고서를 만듭니다.",
+      title: "요청 의도 확인",
+      summary: "요청의 목표와 범위를 확인했습니다: 두 입력을 비교해 검증된 보고서를 만듭니다.",
     }),
     expect.objectContaining({
       displayStage: "planning",
+      title: "실행 계획 수립",
       summary: "두 입력을 비교해 검증된 보고서를 만듭니다.",
       nextStep: "두 입력을 확인하고 공통점을 비교합니다.",
     }),
@@ -169,6 +170,157 @@ test("the first Plan projects distinct conception and planning activities from o
   expect(updates[0]?.activityId).toBeDefined();
   expect(updates[1]?.activityId).toBeDefined();
   expect(updates[0]?.activityId).not.toBe(updates[1]?.activityId);
+});
+
+test("ordinary empty tool batches group repeated public labels once", async () => {
+  const updates: Array<{ title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-grouped-tools",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const calls = [
+    { name: "run_command", args: { command: "pwd" } },
+    { name: "run_command", args: { command: "git status" } },
+    { name: "run_command", args: { command: "git diff" } },
+  ];
+  projection.observeToolBatch({ text: "", toolCalls: calls });
+  for (const call of calls) {
+    await projection.observeTool({ ...call, effectiveToolName: call.name });
+  }
+
+  expect(updates).toEqual([expect.objectContaining({
+    title: "명령 실행",
+    summary: "작업 공간에서 필요한 명령을 실행하고 있습니다.",
+  })]);
+  expect(updates[0]!.title).not.toBe(updates[0]!.summary);
+});
+
+test("consecutive empty batches with the same ordinary purpose reuse one activity", async () => {
+  const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-reused-command-activity",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const bindings = [];
+  for (const command of ["pwd", "git status", "git diff"]) {
+    const call = { name: "run_command", args: { command } };
+    projection.observeToolBatch({ text: "", toolCalls: [call] });
+    bindings.push(await projection.observeTool({
+      ...call,
+      effectiveToolName: call.name,
+    }));
+  }
+
+  expect(updates).toHaveLength(1);
+  expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
+  expect(updates[0]).toMatchObject({
+    title: "명령 실행",
+    summary: "작업 공간에서 필요한 명령을 실행하고 있습니다.",
+  });
+});
+
+test("long Plan objectives remain in detail while every title stays within 32 characters", async () => {
+  const objective = "사용자의 긴 목표와 검증 기준을 빠짐없이 보존하면서 실제 제품 경로를 끝까지 검증합니다.";
+  const updates: Array<{ title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-long-plan",
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const args = {
+    objective,
+    actions: [{ action_key: "verify", description: "제품 경로를 검증합니다." }],
+    checks: ["실제 결과를 확인합니다."],
+  };
+  projection.observeToolBatch({
+    text: "목표를 확인했습니다.",
+    toolCalls: [{ name: "replace_work_plan", args }],
+  });
+  const binding = await projection.observeTool({
+    name: "replace_work_plan",
+    effectiveToolName: "replace_work_plan",
+    args,
+  });
+  await projection.publishAccepted(binding);
+
+  expect(updates[1]?.summary).toBe(objective);
+  expect(updates.every((update) => [...update.title].length <= 32)).toBe(true);
+  expect(updates.every((update) => update.title !== update.summary)).toBe(true);
+});
+
+test("an open Work final message stays partial while validated completion reports", async () => {
+  const updates: Array<{
+    displayStage?: string;
+    title: string;
+    summary: string;
+  }> = [];
+  const progress = {
+    stateChanged() {},
+    phaseActivityChanged(update: (typeof updates)[number]) {
+      updates.push(update);
+    },
+  };
+  await createGuidedActivityProjection({
+    turnId: "turn-open-final",
+    managedInitially: true,
+    progress,
+  }).publishFinal("시간 안에 확인한 사실만 안내합니다.", {
+    managed: true,
+    completed: false,
+    completionValidated: false,
+    currentStage: "execution",
+  });
+  await createGuidedActivityProjection({
+    turnId: "turn-open-reporting-final",
+    managedInitially: true,
+    progress,
+  }).publishFinal("보고 단계지만 완료 검증은 아직 없습니다.", {
+    managed: true,
+    completed: false,
+    completionValidated: false,
+    currentStage: "reporting",
+  });
+  await createGuidedActivityProjection({
+    turnId: "turn-completed-final",
+    managedInitially: true,
+    progress,
+  }).publishFinal("모든 완료 조건을 확인했습니다.", {
+    managed: true,
+    completed: true,
+    completionValidated: true,
+    currentStage: "reporting",
+  });
+
+  expect(updates).toEqual([
+    expect.objectContaining({
+      displayStage: "execution",
+      title: "부분 결과 안내",
+    }),
+    expect.objectContaining({
+      displayStage: "reporting",
+      title: "부분 결과 안내",
+    }),
+    expect.objectContaining({
+      displayStage: "reporting",
+      title: "결과 보고",
+    }),
+  ]);
 });
 
 test("Plan and result subjects stay in Review while a checkpoint can display Validation", async () => {

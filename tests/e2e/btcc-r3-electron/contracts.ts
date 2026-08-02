@@ -27,6 +27,7 @@ export interface ElectronExpectedFile {
 }
 
 export interface ElectronWorkExpectation {
+  appliedEffectCapabilitiesInclude?: string[];
   exists?: boolean;
   status?: "abandoned" | "blocked" | "completed" | "open";
   planRevisionAtLeast?: number;
@@ -72,8 +73,10 @@ export interface ElectronScenario {
 }
 
 export interface RendererVisibleActivity {
+  content: string | null;
   stage: string;
   text: string;
+  title: string;
 }
 
 export interface ElectronHarnessOptions {
@@ -156,6 +159,7 @@ export interface AppSettingsView {
 }
 
 export interface GuidedWorkObservation {
+  appliedEffectCapabilities: string[];
   workId: string;
   status: string;
   planRevision: number | null;

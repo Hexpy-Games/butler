@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import {
   existsSync,
   lstatSync,
@@ -7,6 +8,8 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,6 +18,21 @@ import { executeGuidedReadOnlyCommand } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-read-only-command.ts";
 import { executeGuidedCommandCall } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-command-execution.ts";
+import { prepareGuidedCommandEffect } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-command-effect.ts";
+import { createGuidedToolExecutionBoundary } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-execution-boundary.ts";
+import { createGuidedEffectService } from
+  "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
+import type { DurableWorkService } from
+  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+import { SqliteGuidedEffectJournal } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { BTCC_SUCCESSOR_SCHEMA } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { runCommandToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import { reviewedWork } from "./support/guided-effect-test-fixture.ts";
 
 const roots: string[] = [];
 
@@ -339,6 +357,187 @@ describe("R3 read-only command boundary", () => {
     expect(existsSync(target)).toBe(false);
   });
 
+  test("mutation treats a blank validation suite as omitted at the effect boundary", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-blank-suite-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const work = reviewedWork();
+    const preparedInputs: Array<Record<string, unknown>> = [];
+    const boundary = createGuidedToolExecutionBoundary({
+      durableWork: {
+        boundWorkForTurn: async () => work,
+        bindOpenWork: async () => work,
+      } as unknown as DurableWorkService,
+      workScope: { turnId: "turn", sessionId: "session" },
+      effectService: createGuidedEffectService(
+        new SqliteGuidedEffectJournal(db),
+      ),
+      accessMode: "full_access",
+      signal: new AbortController().signal,
+      executeCommand: async () => {
+        throw new Error("Mutation escaped the persistent-effect boundary");
+      },
+      async resolvePersistentEffect(call) {
+        const prepared = await prepareGuidedCommandEffect({
+          args: call.args,
+          butlerData: join(root, "data"),
+          workspacePath: workspace,
+          originalRequest: "create a reviewed marker",
+        });
+        preparedInputs.push(prepared.input as Record<string, unknown>);
+        return prepared;
+      },
+    });
+    const execute = async (
+      validationSuite: string,
+      output: string,
+      occurrenceId: string,
+    ) => await boundary({
+      call: {
+        name: "run_command",
+        args: {
+          command: `printf marker > ${output}`,
+          output_paths: [output],
+          state_effect: "mutation",
+          validation_suite: validationSuite,
+        },
+        rawArguments: "{}",
+      },
+      context: { effectOccurrenceId: occurrenceId },
+      definition: runCommandToolDefinition,
+      execute: async () => {
+        throw new Error("Mutation dispatched through the registered tool");
+      },
+    });
+
+    try {
+      expect(await execute("", "empty.txt", "empty-suite")).toMatchObject({
+        ok: true,
+        effect_receipt: { capability: "run_command" },
+      });
+      expect(await execute("  \t ", "whitespace.txt", "whitespace-suite"))
+        .toMatchObject({
+          ok: true,
+          effect_receipt: { capability: "run_command" },
+        });
+      expect(readFileSync(join(workspace, "empty.txt"), "utf8")).toBe("marker");
+      expect(readFileSync(join(workspace, "whitespace.txt"), "utf8"))
+        .toBe("marker");
+      expect(preparedInputs).toHaveLength(2);
+      for (const input of preparedInputs) {
+        expect(input).not.toHaveProperty("validation_suite");
+      }
+      await expect(execute("unit-tests", "rejected.txt", "named-suite"))
+        .rejects.toThrow("A mutation command cannot also be a validation suite");
+      expect(existsSync(join(workspace, "rejected.txt"))).toBe(false);
+    } finally {
+      db.close(false);
+    }
+  });
+
+  test("mutation canonicalizes a symlinked workspace before deriving its target", async () => {
+    if (process.platform === "win32") return;
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-symlink-root-"));
+    roots.push(root);
+    const realWorkspace = join(root, "real-workspace");
+    const linkedWorkspace = join(root, "linked-workspace");
+    mkdirSync(realWorkspace, { recursive: true });
+    symlinkSync(realWorkspace, linkedWorkspace, "dir");
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: "printf canonical > command-result.txt",
+        cwd: ".",
+        output_paths: ["command-result.txt"],
+        state_effect: "mutation",
+      },
+      butlerData: join(root, "data"),
+      workspacePath: linkedWorkspace,
+      originalRequest: "create a reviewed command result",
+    });
+    expect(prepared.target).toBe("workspace-command:.");
+    expect(prepared.input.cwd).toBe(".");
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    try {
+      const outcome = await createGuidedEffectService(
+        new SqliteGuidedEffectJournal(db),
+      ).execute({
+        work: reviewedWork(),
+        accessMode: "full_access",
+        occurrenceId: "symlinked-workspace-command",
+        signal: new AbortController().signal,
+        ...prepared,
+      });
+      expect(outcome).toMatchObject({
+        ok: true,
+        status: "applied",
+        receipt: {
+          capability: "run_command",
+          sanitizedTarget: "workspace-command:.",
+        },
+      });
+      expect(readFileSync(join(realWorkspace, "command-result.txt"), "utf8"))
+        .toBe("canonical");
+    } finally {
+      db.close(false);
+    }
+  });
+
+  test("mutation rejects a workspace symlink retargeted after approval", async () => {
+    if (process.platform === "win32") return;
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-retarget-"));
+    roots.push(root);
+    const approvedWorkspace = join(root, "approved-workspace");
+    const replacementWorkspace = join(root, "replacement-workspace");
+    const linkedWorkspace = join(root, "linked-workspace");
+    mkdirSync(approvedWorkspace, { recursive: true });
+    mkdirSync(replacementWorkspace, { recursive: true });
+    symlinkSync(approvedWorkspace, linkedWorkspace, "dir");
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: "printf escaped > command-result.txt",
+        cwd: ".",
+        output_paths: ["command-result.txt"],
+        state_effect: "mutation",
+      },
+      butlerData: join(root, "data"),
+      workspacePath: linkedWorkspace,
+      originalRequest: "create a reviewed command result",
+    });
+    expect(prepared.target).toBe("workspace-command:.");
+    unlinkSync(linkedWorkspace);
+    symlinkSync(replacementWorkspace, linkedWorkspace, "dir");
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    try {
+      const outcome = await createGuidedEffectService(
+        new SqliteGuidedEffectJournal(db),
+      ).execute({
+        work: reviewedWork(),
+        accessMode: "full_access",
+        occurrenceId: "retargeted-workspace-command",
+        signal: new AbortController().signal,
+        ...prepared,
+      });
+      expect(outcome).toMatchObject({
+        ok: false,
+        status: "failed",
+        error: {
+          code: "effect_dispatch_failed",
+          message: expect.stringContaining("command_workspace_identity_changed"),
+        },
+      });
+      expect(existsSync(join(approvedWorkspace, "command-result.txt"))).toBe(false);
+      expect(existsSync(join(replacementWorkspace, "command-result.txt")))
+        .toBe(false);
+    } finally {
+      db.close(false);
+    }
+  });
+
   test("a Project Ledger CLI-shaped command cannot bypass the read-only host", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-ledger-"));
     roots.push(root);
@@ -361,5 +560,71 @@ describe("R3 read-only command boundary", () => {
 
     expect(result.ok).toBe(false);
     expect(existsSync(target)).toBe(false);
+  });
+
+  test("the same uncertain command occurrence never dispatches twice", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-uncertain-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: "printf 'once\\n' >> repeated.txt",
+        state_effect: "mutation",
+      },
+      butlerData: join(root, "data"),
+      workspacePath: workspace,
+      originalRequest: "append one line",
+    });
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    const journal = new SqliteGuidedEffectJournal(db);
+    let crashAfterDispatch = true;
+    const service = createGuidedEffectService(journal, {
+      faultHook(point) {
+        if (crashAfterDispatch && point === "after_dispatch") {
+          crashAfterDispatch = false;
+          throw new Error("crash after command dispatch");
+        }
+      },
+    });
+    const work = reviewedWork({
+      actions: [{
+        actionKey: "run-reviewed-command",
+        description: "Run the reviewed contained command",
+        dependencyKeys: [],
+        effect: { capability: "workspace mutation", target: "workspace:result" },
+      }],
+    });
+    const execute = (occurrenceId: string) => service.execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId,
+      signal: new AbortController().signal,
+      ...prepared,
+    });
+
+    try {
+      await expect(execute("runtime-call-1"))
+        .rejects.toThrow("crash after command dispatch");
+      expect(readFileSync(join(workspace, "repeated.txt"), "utf8"))
+        .toBe("once\n");
+      expect(await execute("runtime-call-1")).toMatchObject({
+        ok: false,
+        status: "uncertain",
+        error: { code: "effect_reconciliation_required" },
+      });
+      expect(readFileSync(join(workspace, "repeated.txt"), "utf8"))
+        .toBe("once\n");
+
+      expect(await execute("runtime-call-2")).toMatchObject({
+        ok: true,
+        status: "applied",
+      });
+      expect(readFileSync(join(workspace, "repeated.txt"), "utf8"))
+        .toBe("once\nonce\n");
+    } finally {
+      db.close(false);
+    }
   });
 });

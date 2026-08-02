@@ -20,7 +20,7 @@ export async function executeGuidedCommand(
   context: GuidedCommandContext,
 ): Promise<SpooledCommandOutput> {
   const command = requireString(args.command, "command");
-  const cwd = await resolveCommandDirectory(context.workspacePath, args.cwd);
+  const cwd = await resolveGuidedCommandDirectory(context.workspacePath, args.cwd);
   const timeoutMs = number(args.timeout_ms, 120_000);
   const invocation = commandHost.invocation(command, context);
   const environment = butlerToolProcessEnvironment({ butlerData: context.butlerData });
@@ -80,7 +80,10 @@ export async function executeGuidedCommand(
   });
 }
 
-async function resolveCommandDirectory(workspaceRoot: string, value: unknown): Promise<string> {
+export async function resolveGuidedCommandDirectory(
+  workspaceRoot: string,
+  value: unknown,
+): Promise<string> {
   if (value === undefined || value === "") return workspaceRoot;
   const requested = requireString(value, "cwd");
   if (isAbsolute(requested) && resolve(requested) === resolve(workspaceRoot)) {

@@ -15,8 +15,18 @@ import {
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-workspace-file-effect.ts";
 import { createButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { createGuidedToolExecutionBoundary } from
+  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-execution-boundary.ts";
+import { writeFileToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/file-tools/write_file/definition.ts";
+import type {
+  DurableWorkService,
+} from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+import type { GuidedEffectService } from
+  "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import { sha256Hex } from
   "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
+import { reviewedWork } from "./support/guided-effect-test-fixture.ts";
 
 const roots: string[] = [];
 
@@ -25,6 +35,78 @@ afterEach(() => {
 });
 
 describe("Butler actual tool execution boundary", () => {
+  test("only a fresh applied journal outcome emits durable progress", async () => {
+    const work = reviewedWork();
+    let replayed = false;
+    let progressSignals = 0;
+    const effectService = {
+      async execute() {
+        return {
+          ok: true,
+          status: "applied",
+          replayed,
+          result: { ok: true },
+          receipt: {
+            effectId: "effect",
+            receiptId: "receipt",
+            idempotencyKey: "key",
+            identitySha256: "identity",
+            requestSha256: "request",
+            inputSha256: "input",
+            targetSha256: "target",
+            workId: work.workId,
+            planRevisionId: work.currentPlan!.planRevisionId,
+            actionKey: "write-report",
+            capability: "workspace.file",
+            sanitizedTarget: "workspace:result.txt",
+            result: { ok: true },
+            appliedAt: "2026-08-02T00:00:00.000Z",
+          },
+        };
+      },
+    } as GuidedEffectService;
+    const boundary = createGuidedToolExecutionBoundary({
+      durableWork: {
+        boundWorkForTurn: async () => work,
+        bindOpenWork: async () => work,
+      } as unknown as DurableWorkService,
+      workScope: { turnId: "turn", sessionId: "session" },
+      effectService,
+      accessMode: "full_access",
+      signal: new AbortController().signal,
+      onAppliedEffect: () => progressSignals += 1,
+      executeCommand: async () => ({ ok: true }),
+      resolvePersistentEffect: async () => ({
+        target: "/private/report.md",
+        input: { content: "result" },
+        adapter: {
+          capability: "workspace.file",
+          normalizeTarget: (target) => target,
+          sanitizeTarget: (target) => target,
+          normalizeInput: (input) => input,
+          dispatch: async () => ({ status: "applied", result: { ok: true } }),
+          reconcile: async () => ({ status: "not_applied" }),
+        },
+      }),
+    });
+    const execute = () => boundary({
+      call: {
+        name: "write_file",
+        args: { path: "result.txt", content: "result" },
+        rawArguments: "{}",
+      },
+      context: { effectOccurrenceId: "occurrence" },
+      definition: writeFileToolDefinition,
+      execute: async () => ({ ok: true }),
+    });
+
+    await execute();
+    expect(progressSignals).toBe(1);
+    replayed = true;
+    await execute();
+    expect(progressSignals).toBe(1);
+  });
+
   test("direct and tool_call inner native calls cross the same boundary", async () => {
     const root = mkdtempSync(join(tmpdir(), "butler-tool-boundary-"));
     roots.push(root);

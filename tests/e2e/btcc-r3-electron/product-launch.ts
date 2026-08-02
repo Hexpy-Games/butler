@@ -439,10 +439,21 @@ export async function rendererVisibleActivities(
       '[data-test-class~="turn-work-block"][data-work-stage]'
     )).filter((block) =>
       !block.closest('[aria-hidden="true"]') && block.getClientRects().length > 0
-    ).map((block) => ({
-      stage: block.getAttribute("data-work-stage") ?? "",
-      text: block.innerText.trim(),
-    }));
+    ).map((block) => {
+      const title = block.querySelector(
+        '[data-test-class~="turn-work-block-header"]'
+      )?.textContent?.trim() ?? "";
+      const contentLine = Array.from(block.querySelectorAll(
+        '[data-slot="work-activity-description"] span'
+      )).map((node) => node.textContent?.trim() ?? "")
+        .find((text) => text.startsWith("내용:"));
+      return {
+        content: contentLine ? contentLine.slice("내용:".length).trim() : null,
+        stage: block.getAttribute("data-work-stage") ?? "",
+        text: block.innerText.trim(),
+        title,
+      };
+    });
   })()`);
 }
 

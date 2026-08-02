@@ -38,7 +38,7 @@ export const runCommandToolDefinition = {
       state_effect: {
         type: "string",
         enum: ["read_only", "mutation", "validation"],
-        description: "Optional declaration of the command's intended state effect. When the runtime has focused a workspace action after excessive inspection, this must be 'mutation'; the runtime then requires verified post-execution workspace or durable-artifact evidence rather than trusting command text.",
+        description: "Optional declaration of the command's intended state effect. 'mutation' requires admitted full access plus a current accepted Plan Review and records the exact contained command outcome in the durable effect journal. Use 'validation' with validation_suite for disposable verification.",
       },
       output_mode: {
         type: "string",

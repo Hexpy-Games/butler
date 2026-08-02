@@ -208,7 +208,7 @@ export async function runGeminiFunctionToolPromptText(
     const parts = response.candidates?.[0]?.content?.parts;
     const responseParts = Array.isArray(parts) ? parts : [];
     const text = geminiText(response);
-    const calls = responseParts.flatMap((part: any) => {
+    const calls = responseParts.flatMap((part: any, partIndex) => {
       const functionCall = part?.functionCall;
       const name = normalizeLocalTextToolName(
         typeof functionCall?.name === "string" ? functionCall.name : "",
@@ -216,7 +216,7 @@ export async function runGeminiFunctionToolPromptText(
       );
       if (!name) return [];
       return [{
-        id: `gemini_call_${round}_${name}`,
+        id: `gemini_call_${round}_${partIndex}_${name}`,
         name,
         rawArguments: functionCall.args,
       }];
@@ -272,6 +272,7 @@ export async function runGeminiFunctionToolPromptText(
             output: await options.executeTool({
               name: call.name,
               args: prepared.args,
+              providerCallId: call.id,
               rawArguments: prepared.rawArguments,
               signal: options.signal,
             }),

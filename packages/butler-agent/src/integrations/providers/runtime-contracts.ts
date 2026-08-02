@@ -284,6 +284,8 @@ export interface FunctionToolPromptOptions {
     name: string;
     args: Record<string, unknown>;
     rawArguments: string;
+    /** Provider-owned call identity used only for durable runtime occurrence correlation. */
+    providerCallId?: string;
     signal?: AbortSignal;
   }) => Promise<unknown>;
   finalTextFromToolResult?: (input: {

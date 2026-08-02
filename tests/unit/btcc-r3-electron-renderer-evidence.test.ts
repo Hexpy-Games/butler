@@ -78,6 +78,10 @@ test("renderer activity evidence cannot use a prior turn to satisfy the current 
   expect(priorToggleClicks).toBe(0);
   expect(currentToggleClicks).toBe(1);
   expect(activities.map(({ stage }) => stage)).toEqual(currentTurnStages);
+  expect(activities[0]).toMatchObject({
+    content: "current-turn reporting 상세 내용",
+    title: "current-turn reporting",
+  });
   const step: ElectronScenarioStep = {
     id: "current-turn",
     prompt: "현재 턴",
@@ -98,6 +102,64 @@ test("renderer activity evidence cannot use a prior turn to satisfy the current 
   );
 });
 
+test("renderer activity contract rejects the repeated legacy label and accepts a concise title", () => {
+  const step: ElectronScenarioStep = {
+    id: "activity-copy-contract",
+    prompt: "명령을 실행해 주세요.",
+    expect: { rendererActivityStagesInclude: ["execution"] },
+  };
+  const run = { workspaceRoot: "/isolated/workspace" } as Parameters<
+    typeof checkScenarioExpectations
+  >[0];
+  const legacy = checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    [{
+      content: "작업 실행, 작업 실행...",
+      stage: "execution",
+      text: "작업 실행, 작업 실행... 내용: 작업 실행, 작업 실행...",
+      title: "작업 실행, 작업 실행...",
+    }],
+  );
+
+  expect(legacy.failures).toContain(
+    "renderer_activity_title_content_duplicate:0",
+  );
+  expect(legacy.failures).toContain("renderer_activity_generic_label_repeated:0");
+  expect(checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    [{
+      content: "command-result.txt에 고유 표식을 기록했습니다.",
+      stage: "execution",
+      text: "명령 실행 내용: command-result.txt에 고유 표식을 기록했습니다.",
+      title: "명령 실행",
+    }],
+  )).toEqual({ passed: true, failures: [] });
+  expect(checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    [{
+      content: null,
+      stage: "execution",
+      text: "가".repeat(33),
+      title: "가".repeat(33),
+    }],
+  ).failures).toContain("renderer_activity_title_too_long:0:33");
+});
+
 function timelineBlocks(stages: readonly string[], turnId: string): string {
   return `
     <button
@@ -110,7 +172,13 @@ function timelineBlocks(stages: readonly string[], turnId: string): string {
       <div
         data-test-class="turn-work-block"
         data-work-stage="${stage}"
-      >${turnId} ${stage}</div>
+      >
+        <span data-test-class="turn-work-block-header">${turnId} ${stage}</span>
+        <div data-slot="work-activity-description">
+          <span>${stage} · 현재</span>
+          <span>내용: ${turnId} ${stage} 상세 내용</span>
+        </div>
+      </div>
     `).join("")}
   `;
 }

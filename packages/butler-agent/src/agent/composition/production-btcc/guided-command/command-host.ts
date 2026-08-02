@@ -16,6 +16,9 @@ export function selectCommandHostAdapter(platform: NodeJS.Platform): CommandHost
 const darwinCommandHost: CommandHostAdapter = {
   detached: true,
   invocation(command, context) {
+    if (context.filesystemBoundary.kind === "full_access_contained") {
+      return shellInvocation(command);
+    }
     return sandboxInvocation(
       command,
       context.filesystemBoundary.kind === "isolated_validation"

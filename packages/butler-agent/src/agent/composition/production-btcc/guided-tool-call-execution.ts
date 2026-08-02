@@ -1,5 +1,4 @@
 import type { BtccTurnProgressObserver } from "../../btcc/index.ts";
-import { digest, stableJson } from "../../btcc/identity/index.ts";
 import type {
   DurableWorkService,
   WorkTurnScope,
@@ -43,6 +42,7 @@ import {
   type GuidedActivityProjection,
 } from "./guided-activity-projection.ts";
 import { createGuidedToolResumePool } from "./guided-tool-resume-pool.ts";
+import { guidedToolOccurrence } from "./guided-tool-occurrence.ts";
 
 type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
@@ -57,6 +57,7 @@ type GuidedToolCallExecutionInput = {
   durableWork: DurableWorkService;
   toolJournal: SqliteGuidedToolJournal;
   executeButlerTool: ContextualButlerToolExecutor;
+  onDurableProgress?: () => void;
 };
 
 export function createGuidedToolCallExecutor(
@@ -78,18 +79,20 @@ export function createGuidedToolCallExecutor(
     const toolSignal = call.signal ?? input.signal;
     throwIfToolAborted(toolSignal);
     const effectiveToolName = effectiveToolNameForCall(call.name, call.args);
-    const computedCallId = digest([
-      "btcc-guided-tool-call.v1",
-      input.turn.turnId,
-      String(callIndex++),
-      call.name,
-      stableJson(call.args),
-    ].join("\0"));
+    const currentCallIndex = callIndex++;
+    const occurrence = guidedToolOccurrence({
+      turnId: input.turn.turnId,
+      callIndex: currentCallIndex,
+      providerCallId: call.providerCallId,
+      name: call.name,
+      args: call.args,
+    });
+    const { callId: computedCallId, providerCallId } = occurrence;
     const exactRecord = input.toolJournal.find(computedCallId);
     let callId = computedCallId;
     if (exactRecord) {
       resumePool.discard(computedCallId);
-    } else {
+    } else if (!providerCallId) {
       callId = resumePool.claim(
         effectiveToolName,
         call.args,
@@ -201,6 +204,7 @@ export function createGuidedToolCallExecutor(
         await safeAttachToolResult(input, input.workScope, callId);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
+        input.onDurableProgress?.();
         await activityProjection.publishAccepted(activity);
         await publishWorkProgress(
           input.progress,

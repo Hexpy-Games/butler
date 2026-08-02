@@ -1,17 +1,10 @@
 import type { DurableWorkService } from "../../btcc/durable-work/index.ts";
-import {
-  acceptedPlanEffectId,
-  createGuidedEffectService,
-} from "../../btcc/effects/index.ts";
-import type {
-  GuidedTurnAgent,
-  GuidedTurnResult,
-} from "../../btcc/guided-turn/index.ts";
+import { acceptedPlanEffectId, createGuidedEffectService } from
+  "../../btcc/effects/index.ts";
+import type { GuidedTurnAgent, GuidedTurnResult } from
+  "../../btcc/guided-turn/index.ts";
 import { createButlerToolExecutor } from "../../tools/butler-tools.ts";
-import type {
-  SqliteGuidedEffectJournal,
-  SqliteGuidedToolJournal,
-} from
+import type { SqliteGuidedEffectJournal, SqliteGuidedToolJournal } from
   "../../adapters/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
@@ -43,6 +36,7 @@ import {
   isGuidedProjectLedgerEffectTool,
 } from "./guided-project-ledger-effect.ts";
 import { executeGuidedCommandCall } from "./guided-command-execution.ts";
+import { prepareGuidedCommandEffect } from "./guided-command-effect.ts";
 import { renderGuidedEffectContext } from "./guided-effect-context.ts";
 import {
   createGuidedWorkspaceFileEffectAdapter,
@@ -50,10 +44,8 @@ import {
 } from "./guided-workspace-file-effect.ts";
 import { prepareGuidedWorkspaceFileEdit } from
   "./guided-workspace-file-edit-effect.ts";
-import {
-  isDurableWorkTool,
-  renderDurableWorkContext,
-} from "./durable-work-tools.ts";
+import { isDurableWorkTool, renderDurableWorkContext } from
+  "./durable-work-tools.ts";
 import {
   backfillTurnToolResults,
   safeImportOpenLegacyWork,
@@ -65,11 +57,13 @@ import { createGuidedToolCallExecutor } from
   "./guided-tool-call-execution.ts";
 import { runGuidedPromptWithOperationalReport } from
   "./guided-operational-report.ts";
+import { GuidedOperationalLease } from "./guided-operational-lease.ts";
 import { createGuidedActivityProjection } from
   "./guided-activity-projection.ts";
+import { isDurableWorkCompletionValidationCurrent } from
+  "./durable-work-context.ts";
 
 type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
-
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -80,6 +74,7 @@ export function createProductionGuidedTurnAgent(input: {
   durableWork: DurableWorkService;
   promptRunner?: PromptRunner;
   turnLeaseMs?: number;
+  absoluteTurnLeaseMs?: number;
   finalReportMs?: number;
 }): GuidedTurnAgent {
   const promptRunner = input.promptRunner ?? runFunctionToolPromptText;
@@ -105,6 +100,13 @@ export function createProductionGuidedTurnAgent(input: {
           initialWork = await safeLoadWorkContext(input.durableWork, workScope);
         }
       }
+      const operationalLease = new GuidedOperationalLease({
+        startedAt: leaseStartedAt,
+        leaseMs: input.turnLeaseMs,
+        absoluteLeaseMs: input.absoluteTurnLeaseMs,
+        finalReportMs: input.finalReportMs,
+        managedInitially: initialWorkBound,
+      });
       const presentedWorkId = initialWork?.work.workId;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
@@ -144,6 +146,7 @@ export function createProductionGuidedTurnAgent(input: {
           effectService,
           accessMode: policy.accessMode,
           signal,
+          onAppliedEffect: () => operationalLease.recordDurableProgress(),
           executeCommand: (call) => executeGuidedCommandCall({
             call,
             accessMode: policy.accessMode,
@@ -157,6 +160,14 @@ export function createProductionGuidedTurnAgent(input: {
             executeRegistered,
             effectContext,
           ) {
+            if (call.name === "run_command") {
+              return await prepareGuidedCommandEffect({
+                args: call.args,
+                butlerData: input.butlerData,
+                workspacePath: policy.workspacePath,
+                originalRequest: turn.originalMessage,
+              });
+            }
             if (call.name === "edit_file") {
               const planRevisionId =
                 effectContext.work.currentPlan?.planRevisionId;
@@ -271,6 +282,7 @@ export function createProductionGuidedTurnAgent(input: {
         durableWork: input.durableWork,
         toolJournal: input.toolJournal,
         executeButlerTool: execute,
+        onDurableProgress: () => operationalLease.recordDurableProgress(),
       });
       const promptOptions: FunctionToolPromptOptions = {
         prompt: renderGuidedPrompt(turn, {
@@ -302,6 +314,7 @@ export function createProductionGuidedTurnAgent(input: {
         originalRequest: turn.originalMessage,
         leaseMs: input.turnLeaseMs,
         finalReportMs: input.finalReportMs,
+        operationalLease,
         async loadFacts() {
           const currentWork = await safeLoadWorkContext(input.durableWork, workScope) ??
             await safeBoundWork(input.durableWork, turn.turnId) ?? initialWork;
@@ -318,6 +331,11 @@ export function createProductionGuidedTurnAgent(input: {
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       await activity.publishFinal(text, {
         managed: Boolean(finalWork),
+        completed: finalWork?.status === "completed",
+        completionValidated: finalWork
+          ? isDurableWorkCompletionValidationCurrent(finalWork)
+          : false,
+        currentStage: finalWork?.currentStage,
       });
       return {
         content: text,

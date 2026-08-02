@@ -104,7 +104,9 @@ function ActivityBlock({
       description={
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
-          <Typo.Caption as="span">내용: {activity.summary}</Typo.Caption>
+          {sameActivityText(activity.title, activity.summary) ? null : (
+            <Typo.Caption as="span">내용: {activity.summary}</Typo.Caption>
+          )}
           {activity.rationale ? (
             <Typo.Caption as="span">의도: {activity.rationale}</Typo.Caption>
           ) : null}
@@ -116,6 +118,11 @@ function ActivityBlock({
       tools={workActivityToolsFromRows(activity.operations, turnId)}
     />
   );
+}
+
+function sameActivityText(left: string, right: string): boolean {
+  const normalize = (value: string) => value.trim().replace(/\s+/gu, " ");
+  return normalize(left) === normalize(right);
 }
 
 function formatActivityTime(value: string): string {

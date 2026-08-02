@@ -116,6 +116,7 @@ export async function runOpenAIFunctionToolPromptText(
       return await options.executeTool({
         name: call.name,
         args: call.arguments,
+        providerCallId: call.id,
         rawArguments: typeof call.rawArguments === "string"
           ? call.rawArguments
           : JSON.stringify(call.arguments),
