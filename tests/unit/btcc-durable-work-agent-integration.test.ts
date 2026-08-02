@@ -7,6 +7,13 @@ import type {
   BtccRunCommand,
   BtccTurnProgressObserver,
 } from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type {
+  ModelRoundMessage,
+  ModelRoundPort,
+  ModelRoundRequest,
+  ModelRoundResult,
+} from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import { createGuidedTurnRuntime } from
   "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
 import { openBtccSqliteStores } from
@@ -32,52 +39,69 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
       dbPath,
       stores: firstStores,
       progress: checkpointProgress(stages),
-      promptRunner: async (options) => {
-        expect(options.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
-          "replace_work_plan",
-          "record_work_checkpoint",
-          "record_work_review",
-          "write_file",
-        ]));
-        expect(await call(options, "replace_work_plan", {
-          objective: "Create and verify report.md",
-          actions: [{
-            action_key: "write_report",
-            description: "Write the requested report",
-            dependency_keys: [],
-            effect: { capability: "write_file", target: "workspace:report.md" },
-          }],
-          checks: ["report.md contains the requested result"],
-        })).toMatchObject({ ok: true, work: { status: "open" } });
-        expect(await call(options, "record_work_review", {
-          subject: "plan",
-          verdict: "accept",
-          summary: "The plan directly produces and checks the requested artifact.",
-          corrections: [],
-        })).toMatchObject({ ok: true });
-        expect(await call(options, "write_file", {
-          path: "report.md",
-          content: "# Verified report\n\nThe durable artifact is ready.\n",
-        })).toMatchObject({
-          ok: true,
-          effect: "workspace_file_write",
-          effect_receipt: {
-            capability: "write_file",
-            target: "workspace:report.md",
-          },
-        });
-        expect(await call(options, "record_work_checkpoint", {
-          next_stage: "review",
-          action_updates: [{
-            action_key: "write_report",
-            status: "done",
-            note: "The requested report was written and verified.",
-          }],
-          public_summary: "보고서를 작성하고 실제 파일을 확인했습니다.",
-          next_step: "사용자 요청에 맞는지 최종 검토합니다.",
-        })).toMatchObject({ ok: true });
-        return "보고서를 작성하고 확인했습니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          expect(request.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
+            "replace_work_plan",
+            "record_work_checkpoint",
+            "record_work_review",
+            "write_file",
+          ]));
+          return toolResponse([toolCall("work-plan-1", "replace_work_plan", {
+            objective: "Create and verify report.md",
+            actions: [{
+              action_key: "write_report",
+              description: "Write the requested report",
+              dependency_keys: [],
+              effect: { capability: "write_file", target: "workspace:report.md" },
+            }],
+            checks: ["report.md contains the requested result"],
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "replace_work_plan")).toMatchObject({
+            ok: true,
+            work: { status: "open" },
+          });
+          return toolResponse([toolCall("work-plan-review-1", "record_work_review", {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The plan directly produces and checks the requested artifact.",
+            corrections: [],
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_review")).toMatchObject({ ok: true });
+          return toolResponse([toolCall("write-report-1", "write_file", {
+            path: "report.md",
+            content: "# Verified report\n\nThe durable artifact is ready.\n",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "write_file")).toMatchObject({
+            ok: true,
+            effect: "workspace_file_write",
+            effect_receipt: {
+              capability: "write_file",
+              target: "workspace:report.md",
+            },
+          });
+          return toolResponse([toolCall("work-checkpoint-1", "record_work_checkpoint", {
+            next_stage: "review",
+            action_updates: [{
+              action_key: "write_report",
+              status: "done",
+              note: "The requested report was written and verified.",
+            }],
+            public_summary: "보고서를 작성하고 실제 파일을 확인했습니다.",
+            next_step: "사용자 요청에 맞는지 최종 검토합니다.",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_checkpoint")).toMatchObject({ ok: true });
+          return { text: "보고서를 작성하고 확인했습니다.", toolCalls: [] };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(root, firstTurnId,
@@ -113,32 +137,48 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
       root,
       dbPath,
       stores: secondStores,
-      promptRunner: async (options) => {
-        continuationPrompt = options.prompt;
-        expect(await call(options, "read_file", {
-          path: "report.md",
-        })).toMatchObject({ content: expect.stringContaining("Verified report") });
-        expect(await call(options, "record_work_review", {
-          subject: "result",
-          verdict: "accept",
-          summary: "The requested file exists and contains the verified report.",
-          corrections: [],
-        })).toMatchObject({
-          ok: true,
-          work: { status: "open", current_stage: "review" },
-        });
-        expect(await call(options, "record_work_review", {
-          subject: "completion",
-          verdict: "accept",
-          summary: "The whole Work satisfies the original request and current Plan.",
-          corrections: [],
-          next_stage: "reporting",
-        })).toMatchObject({
-          ok: true,
-          work: { status: "completed", current_stage: "reporting" },
-        });
-        return "이전 작업을 이어 최종 검토까지 마쳤습니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          continuationPrompt = request.messages[0]?.content ?? "";
+          return toolResponse([toolCall("read-report-1", "read_file", {
+            path: "report.md",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "read_file")).toMatchObject({
+            content: expect.stringContaining("Verified report"),
+          });
+          return toolResponse([toolCall("result-review-1", "record_work_review", {
+            subject: "result",
+            verdict: "accept",
+            summary: "The requested file exists and contains the verified report.",
+            corrections: [],
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_review")).toMatchObject({
+            ok: true,
+            work: { status: "open", current_stage: "review" },
+          });
+          return toolResponse([toolCall("completion-review-1", "record_work_review", {
+            subject: "completion",
+            verdict: "accept",
+            summary: "The whole Work satisfies the original request and current Plan.",
+            corrections: [],
+            next_stage: "reporting",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_review")).toMatchObject({
+            ok: true,
+            work: { status: "completed", current_stage: "reporting" },
+          });
+          return {
+            text: "이전 작업을 이어 최종 검토까지 마쳤습니다.",
+            toolCalls: [],
+          };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(root, secondTurnId, "이어서 마무리해 주세요.")))
@@ -195,8 +235,8 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
       root,
       dbPath,
       stores: firstStores,
-      promptRunner: async (options) => {
-        const plan = await call(options, "replace_work_plan", {
+      modelRound: scriptedModelRound([
+        (request) => toolResponse([toolCall("stop-plan-1", "replace_work_plan", {
           objective: "Prepare a resumable report",
           actions: [{
             action_key: "prepare",
@@ -204,38 +244,39 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
             dependency_keys: [],
           }],
           checks: ["The report is verified"],
-        }) as { work?: { work_id?: string } };
-        originalWorkId = plan.work?.work_id ?? "";
-        await call(options, "record_work_checkpoint", {
-          next_stage: "review",
-          public_summary: "계획을 실행할 준비가 됐습니다.",
-        });
-        await call(options, "record_work_checkpoint", {
-          next_stage: "execution",
-          action_updates: [{ action_key: "prepare", status: "active" }],
-          public_summary: "보고서를 준비하고 있습니다.",
-          next_step: "남은 내용을 작성하고 검증합니다.",
-        });
-        releaseStarted();
-        return await new Promise<string>((_resolve, reject) => {
-          options.signal?.addEventListener("abort", async () => {
-            try {
-              await call(options, "record_work_review", {
-                subject: "result",
-                verdict: "accept",
-                summary: "This late review must not be recorded after Stop.",
-                corrections: [],
-              });
-              postStopReview = "recorded";
-            } catch {
+        })]),
+        (request) => {
+          const plan = lastToolOutput(request, "replace_work_plan") as {
+            work?: { work_id?: string };
+          };
+          originalWorkId = plan.work?.work_id ?? "";
+          return toolResponse([toolCall("stop-review-checkpoint-1", "record_work_checkpoint", {
+            next_stage: "review",
+            public_summary: "계획을 실행할 준비가 됐습니다.",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_checkpoint")).toMatchObject({ ok: true });
+          return toolResponse([toolCall("stop-execution-checkpoint-1", "record_work_checkpoint", {
+            next_stage: "execution",
+            action_updates: [{ action_key: "prepare", status: "active" }],
+            public_summary: "보고서를 준비하고 있습니다.",
+            next_step: "남은 내용을 작성하고 검증합니다.",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_checkpoint")).toMatchObject({ ok: true });
+          releaseStarted();
+          return new Promise<never>((_resolve, reject) => {
+            request.signal?.addEventListener("abort", () => {
               postStopReview = "fenced";
-            }
-            reject(new Error("aborted"));
-          }, {
-            once: true,
+              reject(new Error("aborted"));
+            }, {
+              once: true,
+            });
           });
-        });
-      },
+        },
+      ]),
     });
     const running = runtime.runTurn(command(
       root,
@@ -270,14 +311,22 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
       root,
       dbPath,
       stores: resumedStores,
-      promptRunner: async (options) => {
-        prompt = options.prompt;
-        await call(options, "record_work_checkpoint", {
-          action_updates: [{ action_key: "prepare", status: "active" }],
-          public_summary: "중지된 실행 상태와 남은 작업을 복구했습니다.",
-        });
-        return "중지된 작업 기록을 확인했고 이어서 진행할 수 있습니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          prompt = request.messages[0]?.content ?? "";
+          return toolResponse([toolCall("resume-checkpoint-1", "record_work_checkpoint", {
+            action_updates: [{ action_key: "prepare", status: "active" }],
+            public_summary: "중지된 실행 상태와 남은 작업을 복구했습니다.",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_checkpoint")).toMatchObject({ ok: true });
+          return {
+            text: "중지된 작업 기록을 확인했고 이어서 진행할 수 있습니다.",
+            toolCalls: [],
+          };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(
@@ -316,8 +365,8 @@ test("a presented open Work binds only at the first real tool and exposes its re
       root,
       dbPath,
       stores: firstStores,
-      promptRunner: async (options) => {
-        const opened = await call(options, "replace_work_plan", {
+      modelRound: scriptedModelRound([
+        () => toolResponse([toolCall("late-bind-plan-1", "replace_work_plan", {
           objective: "Read source.txt and report the observed fact",
           actions: [{
             action_key: "read_source",
@@ -325,10 +374,15 @@ test("a presented open Work binds only at the first real tool and exposes its re
             dependency_keys: [],
           }],
           checks: ["The reported fact matches source.txt"],
-        }) as { work?: { work_id?: string } };
-        workId = opened.work?.work_id ?? "";
-        return "작업 기록을 준비했습니다.";
-      },
+        })]),
+        (request) => {
+          const opened = lastToolOutput(request, "replace_work_plan") as {
+            work?: { work_id?: string };
+          };
+          workId = opened.work?.work_id ?? "";
+          return { text: "작업 기록을 준비했습니다.", toolCalls: [] };
+        },
+      ]),
     });
     await originRuntime.runTurn(command(
       root,
@@ -348,10 +402,12 @@ test("a presented open Work binds only at the first real tool and exposes its re
           directActivities.push(update);
         },
       },
-      promptRunner: async (options) => {
-        directPrompt = options.prompt;
-        return "별개의 간단한 질문에는 바로 답합니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          directPrompt = request.messages[0]?.content ?? "";
+          return { text: "별개의 간단한 질문에는 바로 답합니다.", toolCalls: [] };
+        },
+      ]),
     });
     expect(await directRuntime.runTurn(command(
       root,
@@ -373,11 +429,17 @@ test("a presented open Work binds only at the first real tool and exposes its re
           toolActivities.push(update);
         },
       },
-      promptRunner: async (options) => {
-        expect(await call(options, "read_file", { path: "source.txt" }))
-          .toMatchObject({ content: "durable observed fact\n" });
-        throw new Error("provider disconnected after the committed tool result");
-      },
+      modelRound: scriptedModelRound([
+        () => toolResponse([toolCall("late-bind-read-1", "read_file", {
+          path: "source.txt",
+        })]),
+        (request) => {
+          expect(lastToolOutput(request, "read_file")).toMatchObject({
+            content: "durable observed fact\n",
+          });
+          throw new Error("provider disconnected after the committed tool result");
+        },
+      ]),
     });
     await interruptedRuntime.runTurn(command(
       root,
@@ -417,10 +479,12 @@ test("a presented open Work binds only at the first real tool and exposes its re
           nextActivities.push(update);
         },
       },
-      promptRunner: async (options) => {
-        nextPrompt = options.prompt;
-        return "이전 도구 결과를 확인했습니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          nextPrompt = request.messages[0]?.content ?? "";
+          return { text: "이전 도구 결과를 확인했습니다.", toolCalls: [] };
+        },
+      ]),
     });
     await resumedRuntime.runTurn(command(
       root,
@@ -455,47 +519,65 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
       root,
       dbPath,
       stores,
-      promptRunner: async (options) => {
-        expect(await call(options, "record_work_checkpoint", {
+      modelRound: scriptedModelRound([
+        () => toolResponse([toolCall("nonblocking-checkpoint-1", "record_work_checkpoint", {
           next_stage: "execution",
           public_summary: "파일을 작성합니다.",
           next_step: "결과를 확인합니다.",
-        })).toMatchObject({
-          ok: false,
-          error: { code: "work_update_rejected" },
-        });
-        expect(await call(options, "write_file", {
-          path: "answer.txt",
-          content: "actual result\n",
-        })).toMatchObject({
-          ok: false,
-          error: { code: "effect_work_required" },
-        });
-        expect(await call(options, "replace_work_plan", {
-          objective: "Create answer.txt",
-          actions: [{
-            action_key: "write_answer",
-            description: "Write the requested answer file",
-            dependency_keys: [],
-            effect: {
-              capability: "write_file",
-              target: "workspace:answer.txt",
-            },
-          }],
-          checks: ["answer.txt contains the requested result"],
-        })).toMatchObject({ ok: true });
-        expect(await call(options, "record_work_review", {
-          subject: "plan",
-          verdict: "accept",
-          summary: "The exact file target matches the request.",
-          corrections: [],
-        })).toMatchObject({ ok: true });
-        expect(await call(options, "write_file", {
-          path: "answer.txt",
-          content: "actual result\n",
-        })).toMatchObject({ ok: true, effect: "workspace_file_write" });
-        return "요청하신 파일을 실제로 작성했습니다.";
-      },
+        })]),
+        (request) => {
+          expect(lastToolOutput(request, "record_work_checkpoint")).toMatchObject({
+            ok: false,
+            error: { code: "work_update_rejected" },
+          });
+          return toolResponse([toolCall("nonblocking-write-1", "write_file", {
+            path: "answer.txt",
+            content: "actual result\n",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "write_file")).toMatchObject({
+            ok: false,
+            error: { code: "effect_work_required" },
+          });
+          return toolResponse([toolCall("nonblocking-plan-1", "replace_work_plan", {
+            objective: "Create answer.txt",
+            actions: [{
+              action_key: "write_answer",
+              description: "Write the requested answer file",
+              dependency_keys: [],
+              effect: {
+                capability: "write_file",
+                target: "workspace:answer.txt",
+              },
+            }],
+            checks: ["answer.txt contains the requested result"],
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "replace_work_plan")).toMatchObject({ ok: true });
+          return toolResponse([toolCall("nonblocking-plan-review-1", "record_work_review", {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The exact file target matches the request.",
+            corrections: [],
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_review")).toMatchObject({ ok: true });
+          return toolResponse([toolCall("nonblocking-write-2", "write_file", {
+            path: "answer.txt",
+            content: "actual result\n",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "write_file")).toMatchObject({
+            ok: true,
+            effect: "workspace_file_write",
+          });
+          return { text: "요청하신 파일을 실제로 작성했습니다.", toolCalls: [] };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(root, turnId, "answer.txt를 만들어 주세요.")))
@@ -543,42 +625,49 @@ test("a rejected stage transition is not projected as accepted progress", async 
           checklists.push(update.tasks.map((task) => task.taskState));
         },
       },
-      promptRunner: async (options) => {
-        const planArgs = {
-          objective: "Prepare the requested answer",
-          actions: [{
-            action_key: "prepare-answer",
-            description: "Prepare the answer",
-            dependency_keys: [],
-          }],
-          checks: ["The answer addresses the request"],
-        };
-        options.onAssistantTextBeforeTools?.({
-          text: "요청에 맞는 계획을 세웁니다.",
-          toolCalls: [{ name: "replace_work_plan", args: planArgs }],
-        });
-        expect(await call(options, "replace_work_plan", planArgs))
-          .toMatchObject({ ok: true });
-        const invalidArgs = {
-          next_stage: "execution",
-          public_summary: "REJECTED STAGE MUST NOT APPEAR",
-        };
-        options.onAssistantTextBeforeTools?.({
-          text: "잘못된 전이를 시도합니다.",
-          toolCalls: [{ name: "record_work_checkpoint", args: invalidArgs }],
-        });
-        expect(await call(options, "record_work_checkpoint", invalidArgs))
-          .toMatchObject({
-            ok: false,
-            error: {
-              code: "invalid_work_stage_transition",
-              current_stage: "planning",
-              attempted_stage: "execution",
-              allowed_next_stages: ["review"],
-            },
-          });
-        return "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.";
-      },
+      modelRound: scriptedModelRound([
+        () => {
+          const planArgs = {
+            objective: "Prepare the requested answer",
+            actions: [{
+              action_key: "prepare-answer",
+              description: "Prepare the answer",
+              dependency_keys: [],
+            }],
+            checks: ["The answer addresses the request"],
+          };
+          return toolResponse([
+            toolCall("rejected-plan-1", "replace_work_plan", planArgs),
+          ], "요청에 맞는 계획을 세웁니다.");
+        },
+        (request) => {
+          expect(lastToolOutput(request, "replace_work_plan"))
+            .toMatchObject({ ok: true });
+          const invalidArgs = {
+            next_stage: "execution",
+            public_summary: "REJECTED STAGE MUST NOT APPEAR",
+          };
+          return toolResponse([
+            toolCall("rejected-checkpoint-1", "record_work_checkpoint", invalidArgs),
+          ], "잘못된 전이를 시도합니다.");
+        },
+        (request) => {
+          expect(lastToolOutput(request, "record_work_checkpoint"))
+            .toMatchObject({
+              ok: false,
+              error: {
+                code: "invalid_work_stage_transition",
+                current_stage: "planning",
+                attempted_stage: "execution",
+                allowed_next_stages: ["review"],
+              },
+            });
+          return {
+            text: "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.",
+            toolCalls: [],
+          };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(
@@ -633,12 +722,23 @@ test("the production R3 agent imports and continues open R2 Session Work", async
       root,
       dbPath,
       stores,
-      promptRunner: async (options) => {
-        prompt = options.prompt;
-        expect(await call(options, "read_file", { path: "legacy-source.txt" }))
-          .toMatchObject({ content: "fact carried from the R2 task\n" });
-        return "R2에서 열려 있던 작업과 현재 파일을 확인해 이어서 처리했습니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          prompt = request.messages[0]?.content ?? "";
+          return toolResponse([toolCall("legacy-read-1", "read_file", {
+            path: "legacy-source.txt",
+          })]);
+        },
+        (request) => {
+          expect(lastToolOutput(request, "read_file")).toMatchObject({
+            content: "fact carried from the R2 task\n",
+          });
+          return {
+            text: "R2에서 열려 있던 작업과 현재 파일을 확인해 이어서 처리했습니다.",
+            toolCalls: [],
+          };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(
@@ -693,61 +793,68 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
           operations.push(update);
         },
       },
-      promptRunner: async (options) => {
-        modelCalls += 1;
-        const planArgs = {
-          objective: "Read and report the requested source",
-          actions: [{
-            action_key: "read_source",
-            description: "Read source.txt",
-            dependency_keys: [],
-          }],
-          checks: ["The final answer uses the observed file content"],
-        };
-        options.onAssistantTextBeforeTools?.({
-          text: "먼저 요청에 맞는 작업 계획을 세웁니다.",
-          toolCalls: [{ name: "replace_work_plan", args: planArgs }],
-        });
-        expect(await call(options, "replace_work_plan", planArgs)).toMatchObject({
-          ok: true,
-        });
-
-        const planReviewArgs = {
-          subject: "plan",
-          verdict: "accept",
-          summary: "The plan directly reads the requested source before reporting.",
-          corrections: [],
-        };
-        options.onAssistantTextBeforeTools?.({
-          text: "계획이 요청을 직접 충족하는지 확인합니다.",
-          toolCalls: [{ name: "record_work_review", args: planReviewArgs }],
-        });
-        expect(await call(options, "record_work_review", planReviewArgs)).toMatchObject({
-          ok: true,
-        });
-
-        options.onAssistantTextBeforeTools?.({
-          text: "계획에 따라 실제 파일 내용을 확인합니다.",
-          toolCalls: [{ name: "read_file", args: { path: "source.txt" } }],
-        });
-        expect(await call(options, "read_file", { path: "source.txt" }))
-          .toMatchObject({ content: "observed result\n" });
-
-        const reviewArgs = {
-          subject: "result",
-          verdict: "accept",
-          summary: "The requested source was read and is ready to report.",
-          corrections: [],
-        };
-        options.onAssistantTextBeforeTools?.({
-          text: "실제 결과를 원래 요청과 대조해 검토합니다.",
-          toolCalls: [{ name: "record_work_review", args: reviewArgs }],
-        });
-        expect(await call(options, "record_work_review", reviewArgs)).toMatchObject({
-          ok: true,
-        });
-        return "source.txt의 실제 내용은 observed result입니다.";
-      },
+      modelRound: scriptedModelRound([
+        () => {
+          modelCalls += 1;
+          const planArgs = {
+            objective: "Read and report the requested source",
+            actions: [{
+              action_key: "read_source",
+              description: "Read source.txt",
+              dependency_keys: [],
+            }],
+            checks: ["The final answer uses the observed file content"],
+          };
+          return toolResponse([
+            toolCall("activity-plan-1", "replace_work_plan", planArgs),
+          ], "먼저 요청에 맞는 작업 계획을 세웁니다.");
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(lastToolOutput(request, "replace_work_plan")).toMatchObject({
+            ok: true,
+          });
+          const planReviewArgs = {
+            subject: "plan",
+            verdict: "accept",
+            summary: "The plan directly reads the requested source before reporting.",
+            corrections: [],
+          };
+          return toolResponse([
+            toolCall("activity-plan-review-1", "record_work_review", planReviewArgs),
+          ], "계획이 요청을 직접 충족하는지 확인합니다.");
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(lastToolOutput(request, "record_work_review")).toMatchObject({
+            ok: true,
+          });
+          return toolResponse([
+            toolCall("activity-read-1", "read_file", { path: "source.txt" }),
+          ], "계획에 따라 실제 파일 내용을 확인합니다.");
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(lastToolOutput(request, "read_file"))
+            .toMatchObject({ content: "observed result\n" });
+          const reviewArgs = {
+            subject: "result",
+            verdict: "accept",
+            summary: "The requested source was read and is ready to report.",
+            corrections: [],
+          };
+          return toolResponse([
+            toolCall("activity-result-review-1", "record_work_review", reviewArgs),
+          ], "실제 결과를 원래 요청과 대조해 검토합니다.");
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(lastToolOutput(request, "record_work_review")).toMatchObject({
+            ok: true,
+          });
+          return { text: "source.txt의 실제 내용은 observed result입니다.", toolCalls: [] };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(
@@ -758,7 +865,7 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
       kind: "delivered",
       content: "source.txt의 실제 내용은 observed result입니다.",
     });
-    expect(modelCalls).toBe(1);
+    expect(modelCalls).toBe(5);
     expect(activities.map(({ displayStage }) => displayStage)).toEqual([
       "conception",
       "planning",
@@ -807,27 +914,34 @@ test("R3 activity projection failure cannot veto its tool result or final delive
           throw new Error("simulated activity projection failure");
         },
       },
-      promptRunner: async (options) => {
-        modelCalls += 1;
-        const planArgs = {
-          objective: "Preserve the requested result despite a UI projection failure",
-          actions: [{
-            action_key: "report_result",
-            description: "Return the requested result",
-            dependency_keys: [],
-          }],
-          checks: ["The final answer is delivered unchanged"],
-        };
-        options.onAssistantTextBeforeTools?.({
-          text: "요청을 처리할 계획을 세웁니다.",
-          toolCalls: [{ name: "replace_work_plan", args: planArgs }],
-        });
-        expect(await call(options, "replace_work_plan", planArgs)).toMatchObject({
-          ok: true,
-          work: { status: "open" },
-        });
-        return "활동 표시 실패와 무관하게 최종 답변을 전달합니다.";
-      },
+      modelRound: scriptedModelRound([
+        () => {
+          modelCalls += 1;
+          const planArgs = {
+            objective: "Preserve the requested result despite a UI projection failure",
+            actions: [{
+              action_key: "report_result",
+              description: "Return the requested result",
+              dependency_keys: [],
+            }],
+            checks: ["The final answer is delivered unchanged"],
+          };
+          return toolResponse([
+            toolCall("nonauthority-plan-1", "replace_work_plan", planArgs),
+          ], "요청을 처리할 계획을 세웁니다.");
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(lastToolOutput(request, "replace_work_plan")).toMatchObject({
+            ok: true,
+            work: { status: "open" },
+          });
+          return {
+            text: "활동 표시 실패와 무관하게 최종 답변을 전달합니다.",
+            toolCalls: [],
+          };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(
@@ -839,7 +953,7 @@ test("R3 activity projection failure cannot veto its tool result or final delive
       kind: "delivered",
       content: "활동 표시 실패와 무관하게 최종 답변을 전달합니다.",
     });
-    expect(modelCalls).toBe(1);
+    expect(modelCalls).toBe(2);
     expect(await stores.durableWork.boundWorkForTurn("activity-nonauthority-turn"))
       .toMatchObject({ status: "open" });
   } finally {
@@ -870,17 +984,26 @@ test("R3 keeps Direct and single read-only Turns free of staged Work activity", 
           activities.push(update.summary);
         },
       },
-      promptRunner: async (options) => {
-        modelCalls += 1;
-        if (options.prompt.includes("인사해 주세요")) return "안녕하세요!";
-        options.onAssistantTextBeforeTools?.({
-          text: "저장된 날씨 한 줄을 확인합니다.",
-          toolCalls: [{ name: "read_file", args: { path: "weather.txt" } }],
-        });
-        expect(await call(options, "read_file", { path: "weather.txt" }))
-          .toMatchObject({ content: "sunny\n" });
-        return "저장된 날씨는 sunny입니다.";
-      },
+      modelRound: scriptedModelRound([
+        (request) => {
+          modelCalls += 1;
+          expect(request.messages[0]?.content).toContain("인사해 주세요");
+          return { text: "안녕하세요!", toolCalls: [] };
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(request.messages[0]?.content).toContain("weather.txt");
+          return toolResponse([
+            toolCall("uncluttered-read-1", "read_file", { path: "weather.txt" }),
+          ], "저장된 날씨 한 줄을 확인합니다.");
+        },
+        (request) => {
+          modelCalls += 1;
+          expect(lastToolOutput(request, "read_file"))
+            .toMatchObject({ content: "sunny\n" });
+          return { text: "저장된 날씨는 sunny입니다.", toolCalls: [] };
+        },
+      ]),
     });
 
     expect(await runtime.runTurn(command(
@@ -898,7 +1021,7 @@ test("R3 keeps Direct and single read-only Turns free of staged Work activity", 
       kind: "delivered",
       content: "저장된 날씨는 sunny입니다.",
     });
-    expect(modelCalls).toBe(2);
+    expect(modelCalls).toBe(3);
     expect(activities).toEqual([]);
   } finally {
     stores.close();
@@ -910,7 +1033,7 @@ function createRuntime(input: {
   root: string;
   dbPath: string;
   stores: ReturnType<typeof openBtccSqliteStores>;
-  promptRunner: NonNullable<Parameters<typeof createProductionGuidedTurnAgent>[0]["promptRunner"]>;
+  modelRound: ModelRoundPort;
   progress?: BtccTurnProgressObserver;
 }) {
   return createGuidedTurnRuntime({
@@ -927,7 +1050,7 @@ function createRuntime(input: {
       toolJournal: input.stores.guidedToolJournal,
       effectJournal: input.stores.guidedEffectJournal,
       durableWork: input.stores.durableWork,
-      promptRunner: input.promptRunner,
+      modelRound: input.modelRound,
     }),
   });
 }
@@ -970,18 +1093,70 @@ function command(
   };
 }
 
-async function call(
-  options: Parameters<NonNullable<Parameters<
-    typeof createProductionGuidedTurnAgent
-  >[0]["promptRunner"]>>[0],
+type ScriptedModelRoundStep =
+  | ModelRoundResult
+  | ((request: ModelRoundRequest, index: number) =>
+    ModelRoundResult | Promise<ModelRoundResult>);
+
+function scriptedModelRound(
+  steps: readonly ScriptedModelRoundStep[],
+): ModelRoundPort {
+  let index = 0;
+  return {
+    async runRound(request) {
+      const step = steps[index];
+      const currentIndex = index;
+      index += 1;
+      if (!step) throw new Error("scripted_model_round_exhausted");
+      return typeof step === "function"
+        ? await step(request, currentIndex)
+        : step;
+    },
+  };
+}
+
+function toolCall(
+  id: string,
   name: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  return options.executeTool({
+  arguments_: Record<string, unknown>,
+): NonNullable<ModelRoundResult["toolCalls"]>[number] {
+  return {
+    id,
     name,
-    args,
-    rawArguments: JSON.stringify(args),
-  });
+    arguments: arguments_,
+    rawArguments: JSON.stringify(arguments_),
+  };
+}
+
+function toolResponse(
+  calls: Array<NonNullable<ModelRoundResult["toolCalls"]>[number]>,
+  text?: string,
+): ModelRoundResult {
+  return { ...(text ? { text } : {}), toolCalls: calls };
+}
+
+function messagesWithToolResults(
+  request: ModelRoundRequest,
+): ModelRoundMessage[] {
+  return request.messages.filter((message) => message.role === "tool");
+}
+
+function lastToolResult(
+  request: ModelRoundRequest,
+  name: string,
+): Record<string, unknown> {
+  const message = messagesWithToolResults(request)
+    .filter((candidate) => candidate.name === name)
+    .at(-1);
+  expect(message).toBeDefined();
+  return JSON.parse(message!.content) as Record<string, unknown>;
+}
+
+function lastToolOutput(
+  request: ModelRoundRequest,
+  name: string,
+): unknown {
+  return lastToolResult(request, name).output;
 }
 
 function checkpointProgress(summaries: string[]): BtccTurnProgressObserver {

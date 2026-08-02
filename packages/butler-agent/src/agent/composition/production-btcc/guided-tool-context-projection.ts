@@ -1,7 +1,7 @@
 import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
 import { digest } from "../../btcc/identity/index.ts";
 import { structuredToolResultModelPreview } from
-  "../../model-tool-loop/index.ts";
+  "../../btcc/agent-loop/index.ts";
 
 const DEFAULT_MAX_RECORDS = 12;
 const DEFAULT_MAX_RECORD_BYTES = 6_000;

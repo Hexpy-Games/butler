@@ -1,18 +1,34 @@
-import type { FunctionToolPromptOptions, OpenAIResponse, PromptOptions } from "../runtime-contracts.ts";
+import type {
+  ModelRoundRequest,
+  ModelRoundResult,
+} from "../../../agent/btcc/ports/model-round.ts";
+import type {
+  FunctionToolDefinition,
+  OpenAIResponse,
+  PromptOptions,
+} from "../runtime-contracts.ts";
 import type { HostedRuntimeConfig } from "./model-routing.ts";
-import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, modelIterationLimitWithinUsageBudget, prepareFunctionToolCall } from "./runtime-support.ts";
-import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChatMessage, hostedChatCompletionsUrl, type HostedChatMessage, hostedChatReasoningParams, hostedChatResponseFormat, hostedChatText, hostedChatTools, hostedProviderErrorLabel, promptTextForHosted } from "./hosted-chat-client.ts";
-import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
+import {
+  afterAttributedModelResponse,
+  beforeAttributedModelRequest,
+  openAICompatibleUsageSample,
+  parseToolArguments,
+} from "./runtime-support.ts";
+import {
+  createHostedChatCompletion,
+  extractHostedChatToolCalls,
+  firstHostedChatMessage,
+  hostedChatCompletionsUrl,
+  type HostedChatMessage,
+  hostedChatReasoningParams,
+  hostedChatResponseFormat,
+  hostedChatText,
+  hostedChatTools,
+  hostedProviderErrorLabel,
+  promptTextForHosted,
+} from "./hosted-chat-client.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
-import {
-  createToolResultModelPreviewContext,
-  emptyResponseRecoveryObservation,
-  toolBatchCompletedHandoffText,
-} from "../../../agent/model-tool-loop/index.ts";
-import { reviewProviderFinalCandidate } from "./final-candidate-review.ts";
-
-
 
 export async function runHostedOpenAICompatiblePromptText(
   config: HostedRuntimeConfig,
@@ -24,9 +40,10 @@ export async function runHostedOpenAICompatiblePromptText(
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
   const responseFormat = hostedChatResponseFormat(options.responseFormat);
+  const roundIndex = options.usageAttribution?.roundIndex ?? 0;
   beforeAttributedModelRequest({
     attribution: options.usageAttribution,
-    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+    roundIndex,
   });
   const response = await createHostedChatCompletion(config, {
     messages,
@@ -35,14 +52,9 @@ export async function runHostedOpenAICompatiblePromptText(
     ...(responseFormat ? { response_format: responseFormat } : {}),
   }, options.signal, {
     attribution: options.usageAttribution,
-    roundIndex: options.usageAttribution?.roundIndex ?? 0,
+    roundIndex,
   }, options.providerRetryAttempts);
-  recordHostedOpenAICompatibleUsage({
-    config,
-    options,
-    response,
-    roundIndex: options.usageAttribution?.roundIndex ?? 0,
-  });
+  recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex });
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
     throw providerEmptyResponseError({
@@ -55,184 +67,136 @@ export async function runHostedOpenAICompatiblePromptText(
   return text;
 }
 
-
-
-export async function runHostedOpenAICompatibleFunctionToolPromptText(
+/** One provider request. BTCC owns continuation, tool execution, and review. */
+export async function runHostedOpenAICompatibleModelRound(
   config: HostedRuntimeConfig,
-  options: FunctionToolPromptOptions,
-): Promise<string> {
-  const log = options.log ?? (() => {});
-  const maxRounds = modelIterationLimitWithinUsageBudget(
-    options.maxToolRounds ?? 8,
-    options.usageAttribution,
-  );
-  const messages: HostedChatMessage[] = [];
-  const modelPreviewContext = createToolResultModelPreviewContext();
-  if (options.instructions?.trim()) {
-    messages.push({ role: "system", content: options.instructions.trim() });
-  }
-  messages.push({ role: "user", content: promptTextForHosted(options) });
-  let toolBatchExecuted = false;
-  let emptyResponseRecoveryUsed = false;
-
-  for (let round = 0; round < maxRounds; round += 1) {
-    const activeTools = activeFunctionTools(options);
-    const allowedNames = new Set(activeTools.map((tool) => tool.name));
-    beforeAttributedModelRequest({
-      attribution: options.usageAttribution,
-      roundIndex: round,
-    });
-    const response = await createHostedChatCompletion(config, {
-      messages,
-      tools: hostedChatTools(activeTools),
-      tool_choice: options.toolChoice ?? "auto",
-      stream: true,
-      ...hostedChatReasoningParams(config, options.reasoningEffort),
-    }, options.signal, { attribution: options.usageAttribution, roundIndex: round }, options.providerRetryAttempts);
-    observeProviderIdentity(config, options, response);
-    recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: round });
-    const assistant = firstHostedChatMessage(response);
-    const text = hostedChatText(assistant);
-    const toolCalls = extractHostedChatToolCalls(assistant, allowedNames);
-    if (toolCalls.length === 0) {
-      if (!text) {
-        const observation = emptyResponseRecoveryObservation({
-          recoveryUsed: emptyResponseRecoveryUsed,
-          hasNextModelRound: round + 1 < maxRounds,
-        });
-        if (observation) {
-          emptyResponseRecoveryUsed = true;
-          messages.push({ role: "user", content: observation });
-          continue;
-        }
-        throw providerEmptyResponseError({
-          provider: hostedProviderErrorLabel(config),
-          api: "chat_completions",
-          endpoint: safeEndpointLabel(hostedChatCompletionsUrl(config)),
-          model: config.modelId,
-        });
-      }
-      const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
-      if (disposition.kind === "final") return disposition.text;
-      messages.push({ role: "assistant", content: text });
-      messages.push({ role: "user", content: disposition.observation });
-      continue;
-    }
-    const preparedCalls = toolCalls.map((call) => ({
-      call,
-      prepared: prepareFunctionToolCall({
-        name: call.function.name,
-        rawArguments: call.function.arguments,
-        tools: activeTools,
-      }),
-    }));
-    await options.onAssistantTextBeforeTools?.({
-      text,
-      toolCalls: preparedCalls.map(({ call, prepared }) => ({
-        name: call.function.name,
-        args: prepared.args,
-      })),
-    });
-    messages.push({
-      role: "assistant",
-      content: text || null,
-      tool_calls: toolCalls,
-    });
-    toolBatchExecuted = true;
-    for (const { call, prepared } of preparedCalls) {
-      log(`tool ${call.function.name}: ${prepared.rawArguments}`);
-      let payload = prepared.errorPayload;
-      if (!payload) {
-        try {
-          payload = {
-            ok: true,
-            output: await options.executeTool({
-              name: call.function.name,
-              args: prepared.args,
-              providerCallId: call.id,
-              rawArguments: prepared.rawArguments,
-              signal: options.signal,
-            }),
-          };
-        } catch (error) {
-          payload = {
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          };
-        }
-      }
-      const finalText = payload.ok
-        ? await options.finalTextFromToolResult?.({
-            name: call.function.name,
-            args: prepared.args,
-            output: payload.output,
-          })
-        : null;
-      if (finalText?.trim()) return finalText.trim();
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content: hostedToolResultContent({
-          payload,
-          toolName: call.function.name,
-          toolCallId: call.id,
-          modelPreviewContext,
-          log,
-        }),
-      });
-    }
-  }
-
-  if (options.handoffAfterToolBatch && toolBatchExecuted) {
-    return toolBatchCompletedHandoffText();
-  }
-  messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
+  request: ModelRoundRequest,
+): Promise<ModelRoundResult> {
+  const roundIndex = request.usageAttribution?.roundIndex ?? 0;
   beforeAttributedModelRequest({
-    attribution: options.usageAttribution,
-    roundIndex: maxRounds,
+    attribution: request.usageAttribution,
+    roundIndex,
   });
   const response = await createHostedChatCompletion(config, {
-    messages,
+    messages: hostedModelRoundMessages(request),
+    ...(request.tools.length > 0
+      ? { tools: hostedChatTools(request.tools.map(modelRoundTool)) }
+      : {}),
+    tool_choice: request.toolChoice ?? "auto",
     stream: true,
-    ...hostedChatReasoningParams(config, options.reasoningEffort),
-  }, options.signal, { attribution: options.usageAttribution, roundIndex: maxRounds }, options.providerRetryAttempts);
-  observeProviderIdentity(config, options, response);
-  recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex: maxRounds });
-  const text = hostedChatText(firstHostedChatMessage(response));
-  if (!text) {
-    throw providerEmptyResponseError({
-      provider: hostedProviderErrorLabel(config),
-      api: "chat_completions",
-      endpoint: safeEndpointLabel(hostedChatCompletionsUrl(config)),
-      model: config.modelId,
-    });
-  }
-  return text;
-}
-
-function observeProviderIdentity(
-  config: HostedRuntimeConfig,
-  options: FunctionToolPromptOptions,
-  response: Record<string, any>,
-): void {
-  if (!options.onProviderResponseIdentity) return;
-  const reportedModel = typeof response.model === "string" ? response.model.trim() : "";
-  if (!reportedModel) {
-    throw new Error(`provider_response_model_missing:${config.modelRef}`);
-  }
-  options.onProviderResponseIdentity({
-    provider: config.providerId,
-    configuredModel: config.modelRef,
-    reportedModel,
+    ...hostedChatReasoningParams(config, request.reasoningEffort),
+  }, request.signal, {
+    attribution: request.usageAttribution,
+    roundIndex,
+  }, request.providerRetryAttempts);
+  recordHostedOpenAICompatibleUsage({
+    config,
+    options: request,
+    response,
+    roundIndex,
   });
+  const assistant = firstHostedChatMessage(response);
+  const text = hostedChatText(assistant);
+  const toolCalls = extractHostedChatToolCalls(assistant).map((call) => {
+    const rawArguments = typeof call.function.arguments === "string"
+      ? call.function.arguments
+      : JSON.stringify(call.function.arguments ?? {});
+    return {
+      id: call.id,
+      name: call.function.name,
+      arguments: parseToolArguments(rawArguments),
+      rawArguments,
+    };
+  });
+  const reportedModel = typeof response.model === "string" ? response.model.trim() : "";
+  const providerIdentity = reportedModel
+    ? {
+        provider: config.providerId,
+        configuredModel: config.modelRef,
+        reportedModel,
+      }
+    : undefined;
+  if (providerIdentity) request.onProviderResponseIdentity?.(providerIdentity);
+  const sample = openAICompatibleUsageSample(response);
+  return {
+    ...(text ? { text } : {}),
+    toolCalls,
+    assistantMessage: {
+      role: "assistant",
+      content: text,
+      toolCalls,
+      providerData: assistant,
+    },
+    usage: sample
+      ? {
+          model: config.modelRef,
+          promptTokens: sample.promptTokens,
+          cachedTokens: sample.cachedTokens,
+          totalTokens: sample.totalTokens,
+          outputTokens: sample.outputTokens,
+        }
+      : null,
+    ...(providerIdentity ? { providerIdentity } : {}),
+    raw: response,
+  };
 }
 
+function modelRoundTool(tool: ModelRoundRequest["tools"][number]): FunctionToolDefinition {
+  return {
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters,
+    ...(tool.concurrencySafe === undefined ? {} : { concurrencySafe: tool.concurrencySafe }),
+  };
+}
 
+function hostedModelRoundMessages(request: ModelRoundRequest): HostedChatMessage[] {
+  const firstUser = request.messages.findIndex((message) => message.role === "user");
+  const messages = request.messages.map((message, index): HostedChatMessage => {
+    if (message.role === "assistant") {
+      return {
+        role: "assistant",
+        content: message.content || null,
+        ...(message.toolCalls && message.toolCalls.length > 0
+          ? {
+              tool_calls: message.toolCalls.map((call) => ({
+                id: call.id,
+                type: "function" as const,
+                function: {
+                  name: call.name,
+                  arguments: call.rawArguments,
+                },
+              })),
+            }
+          : {}),
+      };
+    }
+    if (message.role === "tool") {
+      return {
+        role: "tool",
+        content: message.content,
+        tool_call_id: message.toolCallId,
+        ...(message.name ? { name: message.name } : {}),
+      };
+    }
+    if (message.role === "system") {
+      return { role: "system", content: message.content };
+    }
+    const content = index === firstUser
+      ? promptTextForHosted({ prompt: message.content, attachments: [...(request.attachments ?? [])] })
+      : message.content;
+    return { role: "user", content };
+  });
+  if (request.instructions?.trim()) {
+    return [{ role: "system", content: request.instructions.trim() }, ...messages];
+  }
+  return messages;
+}
 
 export function recordHostedOpenAICompatibleUsage(input: {
   config: HostedRuntimeConfig;
-  options: PromptOptions;
+  options: Pick<PromptOptions, "usageAttribution" | "cacheScope" | "butlerData" | "reasoningEffort">;
   response: Record<string, any>;
   roundIndex: number;
 }): void {

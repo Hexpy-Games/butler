@@ -55,7 +55,7 @@ export function localTextToolArguments(raw: string): {
 
 export function parseLocalTextToolCallBody(
   body: string,
-  allowedNames: Set<string>,
+  allowedNames: Set<string> | undefined,
   index: number,
 ): LocalChatToolCall | null {
   const trimmed = body.trim();
@@ -63,13 +63,14 @@ export function parseLocalTextToolCallBody(
 
   const callMatch = trimmed.match(/^call\s*:\s*([A-Za-z_][A-Za-z0-9_.-]*(?::[A-Za-z_][A-Za-z0-9_.-]*)*)\s*([\s\S]*)$/iu);
   if (callMatch) {
-    const name = normalizeLocalTextToolName(callMatch[1] ?? "", allowedNames);
-    if (!name) return null;
+    const name = normalizeLocalTextToolName(callMatch[1] ?? "", allowedNames ?? new Set<string>());
+    if (!name || (allowedNames && allowedNames.size > 0 && !allowedNames.has(name))) return null;
     const args = localTextToolArguments(callMatch[2] ?? "");
     if (!args) return null;
     return {
       id: `local_text_call_${index}`,
       type: "function",
+      origin: "text",
       function: {
         name,
         arguments: args.raw,
@@ -90,14 +91,15 @@ export function parseLocalTextToolCallBody(
     functionRecord?.name,
   ].find((value): value is string => typeof value === "string");
   if (!rawName) return null;
-  const name = normalizeLocalTextToolName(rawName, allowedNames);
-  if (!name) return null;
+  const name = normalizeLocalTextToolName(rawName, allowedNames ?? new Set<string>());
+  if (!name || (allowedNames && allowedNames.size > 0 && !allowedNames.has(name))) return null;
   const rawArguments = parsed.arguments ?? parsed.args ?? parsed.parameters ??
     functionRecord?.arguments ?? functionRecord?.args ?? functionRecord?.parameters ?? {};
   const args = localToolArguments(rawArguments);
   return {
     id: `local_text_call_${index}`,
     type: "function",
+    origin: "text",
     function: {
       name,
       arguments: args.raw,
@@ -146,7 +148,7 @@ export function extractLocalTextToolCallBodies(text: string): string[] {
 
 
 
-export function extractLocalTextToolCalls(text: string, allowedNames: Set<string>): LocalChatToolCall[] {
+export function extractLocalTextToolCalls(text: string, allowedNames?: Set<string>): LocalChatToolCall[] {
   const calls: LocalChatToolCall[] = [];
   for (const body of extractLocalTextToolCallBodies(text)) {
     const call = parseLocalTextToolCallBody(body, allowedNames, calls.length + 1);
@@ -158,12 +160,12 @@ export function extractLocalTextToolCalls(text: string, allowedNames: Set<string
 
 
 
-export function extractLocalToolCalls(message: any, allowedNames: Set<string>): LocalChatToolCall[] {
+export function extractLocalToolCalls(message: any, allowedNames?: Set<string>): LocalChatToolCall[] {
   const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
   const structuredCalls = calls.flatMap((call: any): LocalChatToolCall[] => {
     const name = normalizeLocalTextToolName(
       typeof call?.function?.name === "string" ? call.function.name : "",
-      allowedNames,
+      allowedNames ?? new Set<string>(),
     );
     if (
       !call ||
@@ -177,6 +179,7 @@ export function extractLocalToolCalls(message: any, allowedNames: Set<string>): 
     }
     return [{
       ...call,
+      origin: "native",
       function: {
         ...call.function,
         name,

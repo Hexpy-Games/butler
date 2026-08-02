@@ -1,10 +1,10 @@
+import type { PromptOptions, PromptTextResult } from "../runtime-contracts.ts";
 import type {
-  FunctionToolPromptOptions,
-  PromptOptions,
-  PromptTextResult,
-} from "../runtime-contracts.ts";
+  ModelRoundRequest,
+  ModelRoundResult,
+} from "../../../agent/btcc/ports/model-round.ts";
 import {
-  runHostedOpenAICompatibleFunctionToolPromptText,
+  runHostedOpenAICompatibleModelRound,
   runHostedOpenAICompatiblePromptText,
 } from "../shared/hosted-openai-compatible.ts";
 import { requireHostedRuntimeConfig } from "../shared/model-routing.ts";
@@ -17,11 +17,10 @@ export async function runZaiPrompt(options: PromptOptions): Promise<PromptTextRe
     usage: null,
   };
 }
-export async function runZaiFunctionToolPrompt(
-  options: FunctionToolPromptOptions,
-): Promise<string> {
-  return await runHostedOpenAICompatibleFunctionToolPromptText(
-    requireHostedRuntimeConfig(options.model, "zai"),
-    options,
+
+export async function runZaiModelRound(request: ModelRoundRequest): Promise<ModelRoundResult> {
+  return await runHostedOpenAICompatibleModelRound(
+    requireHostedRuntimeConfig(request.model, "zai"),
+    request,
   );
 }

@@ -5,4 +5,4 @@ export { getButlerRuntime, resolveOpenAIModel, resolveOpenAIPromptCacheConfig, r
 export { isTransientModelApiError, extractResponseText, extractPromptCacheStats } from "./shared/runtime-support.ts";
 export { summarizeWorkerShellActivity, summarizeWorkerShellWorkBlock, workerActivityUpdateForShellCommand, workerEvidenceStatusLineForCommand, withWorkerActivityHeartbeat, runShellTask, runWorkerTask } from "./worker/runtime.ts";
 export { sanitizeLocalAssistantText } from "./local/runtime.ts";
-export { runPromptTextWithUsage, runPromptText, runFunctionToolPromptText } from "./runtime.ts";
+export { runPromptTextWithUsage, runPromptText, runFunctionToolPromptText, runModelRound, createProviderModelRoundPort } from "./runtime.ts";

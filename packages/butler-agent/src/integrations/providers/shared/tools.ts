@@ -16,7 +16,8 @@ export function normalizeFunctionToolCallName(rawName: unknown, allowedNames?: S
   if (typeof rawName !== "string") return null;
   const name = rawName.trim();
   if (!name) return null;
-  if (allowedNames && !allowedNames.has(name)) return null;
+  // Provider adapters must preserve unknown model-requested names. BTCC turns
+  // them into ordinary unavailable-tool results at its tool boundary.
   return name;
 }
 

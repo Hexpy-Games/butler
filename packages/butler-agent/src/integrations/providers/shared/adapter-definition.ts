@@ -1,7 +1,7 @@
 import type { ProviderCapabilities } from "../contracts.ts";
 import { parseModelRef } from "../model-ref.ts";
+import type { ModelRoundRequest, ModelRoundResult } from "../../../agent/btcc/ports/model-round.ts";
 import type {
-  FunctionToolPromptOptions,
   PromptOptions,
   PromptTextResult,
 } from "../runtime-contracts.ts";
@@ -17,7 +17,7 @@ export interface ProviderAdapterDefinition {
   readonly structuredDecisionTransport: StructuredDecisionTransport | null;
   capabilitiesFor(modelRef: string): ProviderCapabilities;
   runPrompt(options: PromptOptions): Promise<PromptTextResult>;
-  runFunctionToolPrompt(options: FunctionToolPromptOptions): Promise<string>;
+  runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
 }
 
 export function defineProviderAdapter(input: {
@@ -25,7 +25,7 @@ export function defineProviderAdapter(input: {
   catalog: readonly ProviderModelMetadata[];
   structuredDecisionTransport: StructuredDecisionTransport | null;
   runPrompt(options: PromptOptions): Promise<PromptTextResult>;
-  runFunctionToolPrompt(options: FunctionToolPromptOptions): Promise<string>;
+  runRound(request: ModelRoundRequest): Promise<ModelRoundResult>;
 }): ProviderAdapterDefinition {
   return {
     ...input,

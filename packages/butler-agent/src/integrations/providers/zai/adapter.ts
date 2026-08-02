@@ -8,7 +8,7 @@ export const ZAI_PROVIDER_ADAPTER = defineProviderAdapter({
   async runPrompt(options) {
     return await (await import("./runtime.ts")).runZaiPrompt(options);
   },
-  async runFunctionToolPrompt(options) {
-    return await (await import("./runtime.ts")).runZaiFunctionToolPrompt(options);
+  async runRound(request) {
+    return await (await import("./runtime.ts")).runZaiModelRound(request);
   },
 });

@@ -28,6 +28,10 @@ const PROVIDER_ADAPTERS: ReadonlyMap<ModelProviderId, ProviderAdapterDefinition>
   ["local", LOCAL_PROVIDER_ADAPTER],
 ]);
 
+export function getRegisteredProviderAdapterDefinitions(): readonly ProviderAdapterDefinition[] {
+  return [...PROVIDER_ADAPTERS.values()];
+}
+
 export function resolveProviderAdapterDefinition(modelRef: string): ProviderAdapterDefinition {
   const parsed = parseModelRef(modelRef.trim() || DEFAULT_MODEL_REF);
   const adapter = PROVIDER_ADAPTERS.get(parsed.providerId as ModelProviderId);

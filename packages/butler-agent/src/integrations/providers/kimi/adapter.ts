@@ -8,7 +8,7 @@ export const KIMI_PROVIDER_ADAPTER = defineProviderAdapter({
   async runPrompt(options) {
     return await (await import("./runtime.ts")).runKimiPrompt(options);
   },
-  async runFunctionToolPrompt(options) {
-    return await (await import("./runtime.ts")).runKimiFunctionToolPrompt(options);
+  async runRound(request) {
+    return await (await import("./runtime.ts")).runKimiModelRound(request);
   },
 });

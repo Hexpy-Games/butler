@@ -9,6 +9,7 @@ import { localFinalAnswerEnvelope } from "../shared/runtime-support.ts";
 export interface LocalChatToolCall {
   id: string;
   type?: "function";
+  origin?: "native" | "text";
   function: {
     name: string;
     arguments: unknown;

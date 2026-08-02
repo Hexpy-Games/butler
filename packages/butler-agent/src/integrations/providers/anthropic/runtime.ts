@@ -1,18 +1,30 @@
-import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
-import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import {
-  createToolResultModelPreviewContext,
-  emptyResponseRecoveryObservation,
-  serializeToolResultPayloadForProvider,
-  toolBatchCompletedHandoffText,
-} from "../../../agent/model-tool-loop/index.ts";
-import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
-import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
-import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
+  anthropicMessagesUrl,
+  hostedProviderErrorLabel,
+  promptTextForHosted,
+} from "../shared/hosted-openai-compatible.ts";
+import {
+  abortError,
+  createProviderRequestAttributor,
+  numberOrNull,
+  sanitizeResponseFinalAnswerText,
+  withModelApiRetry,
+  type ProviderUsageSample,
+} from "../shared/runtime-support.ts";
+import {
+  providerEmptyResponseError,
+  providerHttpError,
+  providerNetworkError,
+  providerRoundTimeoutError,
+  safeEndpointLabel,
+} from "../provider-errors.ts";
+import type { FunctionToolDefinition, PromptOptions } from "../runtime-contracts.ts";
+import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
-
+import {
+  runGuardedProviderRound,
+  type ProviderRoundPolicy,
+} from "../shared/provider-round-guard.ts";
 
 export async function createAnthropicMessage(
   config: HostedRuntimeConfig,
@@ -37,7 +49,6 @@ export async function createAnthropicMessage(
     externalAbortError: abortError,
   });
 }
-
 
 async function createAnthropicMessageOnce(
   config: HostedRuntimeConfig,
@@ -101,7 +112,6 @@ async function createAnthropicMessageOnce(
   return parsed;
 }
 
-
 export function anthropicText(response: Record<string, any>): string {
   return sanitizeResponseFinalAnswerText(
     (Array.isArray(response.content) ? response.content : [])
@@ -126,7 +136,6 @@ export function anthropicUsageSample(
   return { promptTokens, cachedTokens, outputTokens, totalTokens };
 }
 
-
 export function anthropicTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {
   return tools.map((tool) => ({
     name: tool.name,
@@ -134,7 +143,6 @@ export function anthropicTools(tools: FunctionToolDefinition[]): Array<Record<st
     input_schema: tool.parameters,
   }));
 }
-
 
 export async function runAnthropicPromptText(
   config: HostedRuntimeConfig,
@@ -146,148 +154,6 @@ export async function runAnthropicPromptText(
     run: async (context) => await createAnthropicMessage(config, {
       ...(options.instructions?.trim() ? { system: options.instructions.trim() } : {}),
       messages: [{ role: "user", content: promptTextForHosted(options) }],
-    }, options.signal, context),
-    usage: anthropicUsageSample,
-  });
-  const text = anthropicText(response);
-  if (!text) {
-    throw providerEmptyResponseError({
-      provider: hostedProviderErrorLabel(config),
-      api: "messages",
-      endpoint: safeEndpointLabel(anthropicMessagesUrl(config)),
-      model: config.modelId,
-    });
-  }
-  return text;
-}
-
-
-export async function runAnthropicFunctionToolPromptText(
-  config: HostedRuntimeConfig,
-  options: FunctionToolPromptOptions,
-): Promise<string> {
-  const log = options.log ?? (() => {});
-  const maxRounds = modelIterationLimitWithinUsageBudget(
-    options.maxToolRounds ?? 8,
-    options.usageAttribution,
-  );
-  const messages: Array<Record<string, unknown>> = [
-    { role: "user", content: promptTextForHosted(options) },
-  ];
-  const modelPreviewContext = createToolResultModelPreviewContext();
-  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
-  let toolBatchExecuted = false;
-  let emptyResponseRecoveryUsed = false;
-  for (let round = 0; round < maxRounds; round += 1) {
-    const activeTools = activeFunctionTools(options);
-    const allowedNames = new Set(activeTools.map((tool) => tool.name));
-    const response = await requests.request({
-      model: config.modelRef,
-      run: async (context) => await createAnthropicMessage(config, {
-        system: localFunctionToolInstructions(options.instructions),
-        messages,
-        tools: anthropicTools(activeTools),
-        ...(options.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
-      }, options.signal, context),
-      usage: anthropicUsageSample,
-    });
-    const content = Array.isArray(response.content) ? response.content : [];
-    const text = anthropicText(response);
-    const toolUses = content.flatMap((part: any) => {
-      const name = normalizeLocalTextToolName(typeof part?.name === "string" ? part.name : "", allowedNames);
-      if (part?.type !== "tool_use" || typeof part.id !== "string" || !name) return [];
-      return [{ id: part.id as string, name, rawInput: part.input }];
-    });
-    if (toolUses.length === 0) {
-      if (text) {
-        const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
-        if (disposition.kind === "final") return disposition.text;
-        messages.push({ role: "assistant", content });
-        messages.push({ role: "user", content: disposition.observation });
-        continue;
-      }
-      const observation = emptyResponseRecoveryObservation({
-        recoveryUsed: emptyResponseRecoveryUsed,
-        hasNextModelRound: round + 1 < maxRounds,
-      });
-      if (observation) {
-        emptyResponseRecoveryUsed = true;
-        messages.push({ role: "user", content: observation });
-        continue;
-      }
-      throw providerEmptyResponseError({
-        provider: hostedProviderErrorLabel(config),
-        api: "messages",
-        endpoint: safeEndpointLabel(anthropicMessagesUrl(config)),
-        model: config.modelId,
-      });
-    }
-    const preparedToolUses = toolUses.map((call) => ({
-      call,
-      prepared: prepareFunctionToolCall({
-        name: call.name,
-        rawArguments: call.rawInput,
-        tools: activeTools,
-      }),
-    }));
-    await options.onAssistantTextBeforeTools?.({
-      text,
-      toolCalls: preparedToolUses.map(({ call, prepared }) => ({
-        name: call.name,
-        args: prepared.args,
-      })),
-    });
-    messages.push({ role: "assistant", content });
-    toolBatchExecuted = true;
-    for (const { call, prepared } of preparedToolUses) {
-      log(`tool ${call.name}: ${prepared.rawArguments}`);
-      let payload = prepared.errorPayload;
-      if (!payload) {
-        try {
-          payload = {
-            ok: true,
-            output: await options.executeTool({
-              name: call.name,
-              args: prepared.args,
-              providerCallId: call.id,
-              rawArguments: prepared.rawArguments,
-              signal: options.signal,
-            }),
-          };
-        } catch (error) {
-          payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
-        }
-      }
-      const finalText = payload.ok
-        ? await options.finalTextFromToolResult?.({
-            name: call.name,
-            args: prepared.args,
-            output: payload.output,
-          })
-        : null;
-      if (finalText?.trim()) return finalText.trim();
-      messages.push({
-        role: "user",
-        content: [{
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: serializeToolResultPayloadForProvider(payload, {
-            toolName: call.name,
-            context: modelPreviewContext,
-          }),
-        }],
-      });
-    }
-  }
-  if (options.handoffAfterToolBatch && toolBatchExecuted) {
-    return toolBatchCompletedHandoffText();
-  }
-  messages.push({ role: "user", content: finalNoToolInstructions(options.instructions) });
-  const response = await requests.request({
-    model: config.modelRef,
-    run: async (context) => await createAnthropicMessage(config, {
-      system: finalNoToolInstructions(options.instructions),
-      messages,
     }, options.signal, context),
     usage: anthropicUsageSample,
   });

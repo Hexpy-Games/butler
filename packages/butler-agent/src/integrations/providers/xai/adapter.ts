@@ -8,7 +8,7 @@ export const XAI_PROVIDER_ADAPTER = defineProviderAdapter({
   async runPrompt(options) {
     return await (await import("./runtime.ts")).runXaiPrompt(options);
   },
-  async runFunctionToolPrompt(options) {
-    return await (await import("./runtime.ts")).runXaiFunctionToolPrompt(options);
+  async runRound(request) {
+    return await (await import("./runtime.ts")).runXaiModelRound(request);
   },
 });

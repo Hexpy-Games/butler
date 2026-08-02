@@ -10,10 +10,9 @@ import {
   type BtccTurnRuntime,
 } from "../btcc/index.ts";
 import { createGuidedTurnRuntime } from "../btcc/guided-turn/index.ts";
+import type { ModelRoundPort } from "../btcc/ports/model-round.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
-import type { FunctionToolPromptOptions } from
-  "../../integrations/providers/runtime-contracts.ts";
 import {
   BtccTurnProgressHub,
   createProductionGuidedTurnAgent,
@@ -27,7 +26,8 @@ export function createProductionBtccComposition(input: {
   butlerData: string;
   appMessageDbPath: string;
   ownerId: string;
-  promptRunner?: (options: FunctionToolPromptOptions) => Promise<string>;
+  /** Test-only one-round provider seam; production callers omit it. */
+  modelRound?: ModelRoundPort;
 }) {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   const legacyProjectWorkSource = createProjectLedgerLegacyWorkSource({
@@ -55,7 +55,7 @@ export function createProductionBtccComposition(input: {
       toolJournal: stores.guidedToolJournal,
       effectJournal: stores.guidedEffectJournal,
       durableWork: stores.durableWork,
-      ...(input.promptRunner ? { promptRunner: input.promptRunner } : {}),
+      modelRound: input.modelRound,
     }),
   });
   const owned = ownBtccComposition(runtime, stores);
