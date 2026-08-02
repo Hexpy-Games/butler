@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { budgetToolOutput } from "../../context/tool-output-budgeter.ts";
 import { executeGuidedCommand } from "./guided-command/execute-command.ts";
 
-type SpooledCommandResult = {
+export type GuidedSpooledCommandResult = {
   summary: {
     command: string;
     cwd: string;
@@ -34,33 +34,13 @@ export async function executeGuidedReadOnlyCommand(input: {
       accessMode: "read_only",
       filesystemBoundary: { kind: "read_only_observation" },
       signal: input.signal,
-    }) as SpooledCommandResult;
-    const streams = readSpooledStreams(spooled.payloadSource.path);
-    const budgeted = budgetToolOutput({
-      result: {
-        stdout: streams.stdout,
-        stderr: streams.stderr,
-        exit_code: spooled.summary.exitCode,
-        timed_out: spooled.summary.timedOut,
-      },
+    }) as GuidedSpooledCommandResult;
+    return guidedCommandPublicResult({
+      spooled,
       butlerData: input.butlerData,
-      command: spooled.summary.command,
-      cwd: spooled.summary.cwd,
-      maxModelTokens: boundedInteger(input.args.max_output_tokens, 1_200, 200, 8_000),
-    });
-    return {
-      ok: budgeted.exit_code === 0 && !budgeted.timed_out,
-      command: spooled.summary.command,
-      cwd: spooled.summary.cwd,
-      exit_code: budgeted.exit_code,
-      timed_out: budgeted.timed_out,
-      stdout: budgeted.stdout,
-      stderr: budgeted.stderr,
+      args: input.args,
       sandbox: "read_only_no_network",
-      ...(budgeted.butler_tool_artifact
-        ? { butler_tool_artifact: budgeted.butler_tool_artifact }
-        : {}),
-    };
+    });
   } catch (error) {
     const code = errorCode(error);
     return commandBoundaryError(
@@ -70,6 +50,40 @@ export async function executeGuidedReadOnlyCommand(input: {
         : error instanceof Error ? error.message : "The read-only command failed.",
     );
   }
+}
+
+export function guidedCommandPublicResult(input: {
+  spooled: GuidedSpooledCommandResult;
+  butlerData: string;
+  args: Record<string, unknown>;
+  sandbox: "read_only_no_network" | "full_access_contained";
+}): Record<string, unknown> {
+  const streams = readSpooledStreams(input.spooled.payloadSource.path);
+  const budgeted = budgetToolOutput({
+    result: {
+      stdout: streams.stdout,
+      stderr: streams.stderr,
+      exit_code: input.spooled.summary.exitCode,
+      timed_out: input.spooled.summary.timedOut,
+    },
+    butlerData: input.butlerData,
+    command: input.spooled.summary.command,
+    cwd: input.spooled.summary.cwd,
+    maxModelTokens: boundedInteger(input.args.max_output_tokens, 1_200, 200, 8_000),
+  });
+  return {
+    ok: budgeted.exit_code === 0 && !budgeted.timed_out,
+    command: input.spooled.summary.command,
+    cwd: input.spooled.summary.cwd,
+    exit_code: budgeted.exit_code,
+    timed_out: budgeted.timed_out,
+    stdout: budgeted.stdout,
+    stderr: budgeted.stderr,
+    sandbox: input.sandbox,
+    ...(budgeted.butler_tool_artifact
+      ? { butler_tool_artifact: budgeted.butler_tool_artifact }
+      : {}),
+  };
 }
 
 function readSpooledStreams(path: string): { stdout: string; stderr: string } {

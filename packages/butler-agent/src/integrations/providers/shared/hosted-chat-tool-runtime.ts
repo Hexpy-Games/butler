@@ -149,6 +149,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
             output: await options.executeTool({
               name: call.function.name,
               args: prepared.args,
+              providerCallId: call.id,
               rawArguments: prepared.rawArguments,
               signal: options.signal,
             }),

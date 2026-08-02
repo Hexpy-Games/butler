@@ -523,7 +523,11 @@ test("a rejected stage transition is not projected as accepted progress", async 
     ownerId: "rejected-stage-projection",
     storageProfile: "ephemeral",
   });
-  const activities: Array<{ displayStage?: string; summary: string }> = [];
+  const activities: Array<{
+    displayStage?: string;
+    title: string;
+    summary: string;
+  }> = [];
   const checklists: string[][] = [];
   try {
     const runtime = createRuntime({
@@ -589,8 +593,12 @@ test("a rejected stage transition is not projected as accepted progress", async 
     expect(activities.map((activity) => activity.displayStage)).toEqual([
       "conception",
       "planning",
-      "reporting",
+      "planning",
     ]);
+    expect(activities.at(-1)).toMatchObject({
+      title: "부분 결과 안내",
+      summary: "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.",
+    });
     expect(activities.some((activity) =>
       activity.summary.includes("REJECTED STAGE"))).toBe(false);
     expect(checklists).toEqual([["planned"]]);
@@ -665,6 +673,7 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
   const activities: Array<{
     activityId: string;
     displayStage?: string;
+    title: string;
     summary: string;
   }> = [];
   const operations: Array<{ activityId: string; status: string }> = [];
@@ -756,8 +765,12 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
       "review",
       "execution",
       "review",
-      "reporting",
+      "review",
     ]);
+    expect(activities.at(-1)).toMatchObject({
+      title: "부분 결과 안내",
+      summary: "source.txt의 실제 내용은 observed result입니다.",
+    });
     const operationActivityIds = new Set(operations.map(({ activityId }) => activityId));
     expect([...operationActivityIds]).toEqual(
       activities.slice(1, 5).map(({ activityId }) => activityId),
@@ -975,7 +988,10 @@ function checkpointProgress(summaries: string[]): BtccTurnProgressObserver {
   return {
     stateChanged() {},
     phaseActivityChanged(update) {
-      if (update.displayStage === "review" && update.title === update.summary) {
+      if (
+        update.displayStage === "review" &&
+        update.title === "리뷰 준비 확인"
+      ) {
         summaries.push(update.summary);
       }
     },

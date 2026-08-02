@@ -131,16 +131,29 @@ function durableFactLines(input: OperationalFacts): string[] {
   }
   if (input.toolCalls.length > 0) {
     const counts = new Map<GuidedToolJournalRecord["status"], number>();
+    const outcomes = new Map<string, number>();
     for (const call of input.toolCalls) {
       counts.set(call.status, (counts.get(call.status) ?? 0) + 1);
+      const outcome = operationalToolOutcome(call);
+      outcomes.set(outcome, (outcomes.get(outcome) ?? 0) + 1);
     }
     const breakdown = [...counts.entries()]
       .map(([status, count]) => `${status}=${count}`)
       .join(", ");
-    lines.push(`- Tool calls recorded: ${input.toolCalls.length} total (${breakdown})`);
+    const outcomeBreakdown = [...outcomes.entries()]
+      .map(([status, count]) => `${status}=${count}`)
+      .join(", ");
+    lines.push(
+      `- Tool calls recorded: ${input.toolCalls.length} total ` +
+        `(journal: ${breakdown}; outcomes: ${outcomeBreakdown})`,
+    );
   }
   for (const call of input.toolCalls.slice(-FACT_LIMIT)) {
-    lines.push(`- Tool ${call.toolName}: ${call.status}`);
+    const outcome = operationalToolOutcome(call);
+    lines.push(
+      `- Tool ${call.toolName}: ${outcome}` +
+        (call.status === "completed" ? " (journal completed)" : ""),
+    );
   }
   for (const effect of input.effects.slice(0, FACT_LIMIT)) {
     lines.push(
@@ -148,6 +161,16 @@ function durableFactLines(input: OperationalFacts): string[] {
     );
   }
   return lines;
+}
+
+function operationalToolOutcome(call: GuidedToolJournalRecord): string {
+  if (call.status !== "completed") return call.status;
+  if (call.result && typeof call.result === "object" && !Array.isArray(call.result)) {
+    const ok = (call.result as Record<string, unknown>).ok;
+    if (ok === true) return "succeeded";
+    if (ok === false) return "rejected_or_failed";
+  }
+  return "returned";
 }
 
 function workView(input: OperationalFacts["work"]): DurableWorkView | null {

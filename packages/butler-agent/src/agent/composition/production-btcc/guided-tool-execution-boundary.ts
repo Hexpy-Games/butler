@@ -35,6 +35,7 @@ export function createGuidedToolExecutionBoundary(input: {
   effectService: GuidedEffectService;
   accessMode: GuidedEffectAccessMode;
   signal: AbortSignal;
+  onAppliedEffect?: () => void;
   executeCommand(call: ButlerToolCall): Promise<unknown>;
   resolvePersistentEffect(
     call: ButlerToolCall,
@@ -48,16 +49,14 @@ export function createGuidedToolExecutionBoundary(input: {
     | null
     | Promise<GuidedPersistentEffectResolution | null>;
 }): ButlerToolExecutionBoundary {
-  return async ({ call, context, definition, execute }) => {
-    if (definition.effectBoundary === "none" ||
-        definition.effectBoundary === "turn_local") {
-      return execute();
-    }
-    if (definition.effectBoundary === "dynamic") {
-      if (call.name === "tool_call") return execute();
-      if (call.name === "run_command") return input.executeCommand(call);
-      return unavailableEffect(call.name);
-    }
+  const executePersistentEffect = async (
+    call: ButlerToolCall,
+    execute: (prepared?: {
+      args: ButlerToolCall["args"];
+      rawArguments?: ButlerToolCall["rawArguments"];
+    }) => Promise<unknown>,
+    occurrenceId?: string,
+  ): Promise<unknown> => {
     const work = await loadEffectWork(input.durableWork, input.workScope);
     if (!work) {
       return ordinaryEffectError(
@@ -67,9 +66,7 @@ export function createGuidedToolExecutionBoundary(input: {
     }
     const resolution = await input.resolvePersistentEffect(call, execute, {
       work,
-      ...(context.effectOccurrenceId
-        ? { occurrenceId: context.effectOccurrenceId }
-        : {}),
+      ...(occurrenceId ? { occurrenceId } : {}),
     });
     if (!resolution) return unavailableEffect(call.name);
     if ("error" in resolution) {
@@ -78,21 +75,21 @@ export function createGuidedToolExecutionBoundary(input: {
         resolution.error.message,
       );
     }
-    const request = resolution;
     const outcome = await input.effectService.execute({
       work,
       accessMode: input.accessMode,
-      occurrenceId: context.effectOccurrenceId,
+      occurrenceId,
       signal: call.signal ?? input.signal,
-      target: request.target,
-      input: request.input,
-      adapter: request.adapter,
+      target: resolution.target,
+      input: resolution.input,
+      adapter: resolution.adapter,
     });
     if (!outcome.ok) {
       return ordinaryEffectError(outcome.error.code, outcome.error.message, {
         effect_status: outcome.status,
       });
     }
+    if (!outcome.replayed) input.onAppliedEffect?.();
     return withReceipt(outcome.result, {
       receipt_id: outcome.receipt.receiptId,
       capability: outcome.receipt.capability,
@@ -100,6 +97,23 @@ export function createGuidedToolExecutionBoundary(input: {
       applied_at: outcome.receipt.appliedAt,
       replayed: outcome.replayed,
     });
+  };
+
+  return async ({ call, context, definition, execute }) => {
+    if (definition.effectBoundary === "none" ||
+        definition.effectBoundary === "turn_local") {
+      return execute();
+    }
+    if (definition.effectBoundary === "dynamic") {
+      if (call.name === "tool_call") return execute();
+      if (call.name === "run_command") {
+        return call.args.state_effect === "mutation"
+          ? executePersistentEffect(call, execute, context.effectOccurrenceId)
+          : input.executeCommand(call);
+      }
+      return unavailableEffect(call.name);
+    }
+    return executePersistentEffect(call, execute, context.effectOccurrenceId);
   };
 }
 

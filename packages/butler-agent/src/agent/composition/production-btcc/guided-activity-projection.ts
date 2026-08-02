@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 import type { BtccTurnProgressObserver } from "../../btcc/index.ts";
 import type { WorkStage } from "../../btcc/durable-work/index.ts";
-import { sanitizePublicText } from "../../events/turn-events.ts";
-import { publicToolTitle } from "./guided-turn-policy.ts";
-
-type ToolCall = {
-  name: string;
-  args: Record<string, unknown>;
-};
+import {
+  activityContent,
+  activityKind,
+  boundedTitle,
+  conceptionSummary,
+  distinctSummary,
+  type GuidedActivityToolCall as ToolCall,
+  ordinaryGroupSignature,
+  publicText,
+} from "./guided-activity-content.ts";
 
 export type GuidedActivityBinding = {
   activityId: string;
@@ -35,7 +38,12 @@ export interface GuidedActivityProjection {
   observeTool(input: ToolCall & { effectiveToolName: string }): Promise<GuidedActivityBinding>;
   markManaged(binding?: GuidedActivityBinding): Promise<void>;
   publishAccepted(binding: GuidedActivityBinding): Promise<void>;
-  publishFinal(text: string, options: { managed: boolean }): Promise<void>;
+  publishFinal(text: string, options: {
+    managed: boolean;
+    completed?: boolean;
+    completionValidated?: boolean;
+    currentStage?: WorkStage;
+  }): Promise<void>;
 }
 
 /**
@@ -51,6 +59,9 @@ export function createGuidedActivityProjection(input: {
   let pendingTools: PendingTool[] = [];
   let managed = input.managedInitially === true;
   const groupsById = new Map<string, ActivityGroup>();
+  let lastEmptyOrdinaryGroup:
+    | { signature: string; group: ActivityGroup }
+    | undefined;
 
   return {
     observeToolBatch(batch) {
@@ -85,13 +96,17 @@ export function createGuidedActivityProjection(input: {
 
     async publishFinal(text, options) {
       if (!options.managed && !managed) return;
-      const summary = compactTitle(publicText(text));
+      const summary = publicText(text);
       if (!summary) return;
+      const completed = options.completed === true &&
+        options.completionValidated === true;
       await publishGroup(input, {
         activityId: activityId(input.turnId),
-        displayStage: "reporting",
+        displayStage: completed
+          ? "reporting"
+          : openFinalStage(options.currentStage),
         deferredUntilAccepted: false,
-        title: "결과 보고",
+        title: completed ? "결과 보고" : "부분 결과 안내",
         summary,
         published: false,
       });
@@ -103,18 +118,26 @@ export function createGuidedActivityProjection(input: {
     toolCalls: ToolCall[];
   }): PendingTool[] {
     const tools: PendingTool[] = [];
-    let ordinaryGroup: ActivityGroup | undefined;
+    const ordinaryCalls = batch.toolCalls.filter(
+      (candidate) => activityKind(candidate.name) === "ordinary",
+    );
+    const emptyOrdinaryBatch = !publicText(batch.text) &&
+      ordinaryCalls.length === batch.toolCalls.length;
+    const signature = ordinaryGroupSignature(ordinaryCalls);
+    const ordinaryGroup = emptyOrdinaryBatch &&
+        lastEmptyOrdinaryGroup?.signature === signature
+      ? lastEmptyOrdinaryGroup.group
+      : ordinaryCalls.length > 0
+      ? activityGroup({ text: batch.text, calls: ordinaryCalls })
+      : undefined;
+    lastEmptyOrdinaryGroup = emptyOrdinaryBatch && ordinaryGroup
+      ? { signature, group: ordinaryGroup }
+      : undefined;
     for (const call of batch.toolCalls) {
       const kind = activityKind(call.name);
       const group = kind === "ordinary"
-        ? ordinaryGroup ?? activityGroup({
-            text: batch.text,
-            calls: batch.toolCalls.filter(
-              (candidate) => activityKind(candidate.name) === "ordinary",
-            ),
-          })
+        ? ordinaryGroup ?? activityGroup({ text: batch.text, calls: [call] })
         : activityGroup({ text: batch.text, calls: [call] });
-      if (kind === "ordinary") ordinaryGroup = group;
       tools.push({ name: call.name, claimed: false, group });
     }
     return tools;
@@ -130,8 +153,8 @@ export function createGuidedActivityProjection(input: {
       activityId: activityId(input.turnId),
       displayStage: content.displayStage,
       deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
-      title: content.title,
-      summary: content.summary,
+      title: boundedTitle(content.title),
+      summary: distinctSummary(content.title, content.summary),
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
       published: false,
@@ -141,8 +164,8 @@ export function createGuidedActivityProjection(input: {
         activityId: activityId(input.turnId),
         displayStage: "conception",
         deferredUntilAccepted: group.deferredUntilAccepted,
-        title: "작업 구상",
-        summary: content.summary,
+        title: "요청 의도 확인",
+        summary: conceptionSummary(content.summary),
         nextStep: "요청에 맞는 작업 순서와 검증 기준을 정합니다.",
         published: false,
       };
@@ -152,6 +175,10 @@ export function createGuidedActivityProjection(input: {
     groupsById.set(group.activityId, group);
     return group;
   }
+}
+
+function openFinalStage(stage: WorkStage | undefined): WorkStage {
+  return stage ?? "execution";
 }
 
 async function publishGroup(
@@ -186,108 +213,6 @@ function bindingFromGroup(group: ActivityGroup): GuidedActivityBinding {
     displayStage: group.displayStage,
     deferredUntilAccepted: group.deferredUntilAccepted,
   };
-}
-
-function activityContent(
-  first: ToolCall | undefined,
-  calls: ToolCall[],
-  assistantText: string,
-): {
-  displayStage: WorkStage;
-  title: string;
-  summary: string;
-  rationale?: string;
-  nextStep?: string;
-} {
-  if (first?.name === "replace_work_plan") {
-    const summary = publicText(first.args.objective) || publicText(assistantText) ||
-      publicToolTitle(first.name);
-    return {
-      displayStage: "planning",
-      title: compactTitle(summary),
-      summary,
-      nextStep: firstPlanAction(first.args),
-    };
-  }
-  if (first?.name === "record_work_review") {
-    const summary = publicText(first.args.summary) || publicText(assistantText) ||
-      publicToolTitle(first.name);
-    const completionValidation = first.args.subject === "completion";
-    return {
-      displayStage: completionValidation ? "validation" : "review",
-      title: reviewTitle(first.args.subject),
-      summary,
-      nextStep: firstCorrection(first.args),
-    };
-  }
-  if (first?.name === "record_work_checkpoint") {
-    const summary = publicText(first.args.public_summary) || publicText(assistantText) ||
-      publicToolTitle(first.name);
-    return {
-      displayStage: workStage(first.args.next_stage) ?? "execution",
-      title: compactTitle(summary),
-      summary,
-      nextStep: publicText(first.args.next_step),
-    };
-  }
-
-  const titles = calls.map((call) => publicToolTitle(call.name));
-  const summary = publicText(assistantText) || publicText(titles.join(", ")) ||
-    "도구 작업을 진행하고 있습니다";
-  return {
-    displayStage: "execution",
-    title: compactTitle(summary),
-    summary,
-  };
-}
-
-function firstPlanAction(args: Record<string, unknown>): string | undefined {
-  if (!Array.isArray(args.actions)) return undefined;
-  for (const value of args.actions) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const action = value as Record<string, unknown>;
-    const text = publicText(action.description) || publicText(action.action_key);
-    if (text) return text;
-  }
-  return undefined;
-}
-
-function firstCorrection(args: Record<string, unknown>): string | undefined {
-  if (!Array.isArray(args.corrections)) return undefined;
-  for (const value of args.corrections) {
-    const text = publicText(value);
-    if (text) return text;
-  }
-  return undefined;
-}
-
-function reviewTitle(subject: unknown): string {
-  if (subject === "plan") return "계획 검토";
-  if (subject === "completion") return "완료 검토";
-  return "결과 검토";
-}
-
-function activityKind(name: string): "ordinary" | "plan" | "review" | "checkpoint" {
-  if (name === "replace_work_plan") return "plan";
-  if (name === "record_work_review") return "review";
-  if (name === "record_work_checkpoint") return "checkpoint";
-  return "ordinary";
-}
-
-function workStage(value: unknown): WorkStage | undefined {
-  return value === "conception" || value === "planning" || value === "execution" ||
-      value === "review" || value === "validation" || value === "reporting"
-    ? value
-    : undefined;
-}
-
-function publicText(value: unknown): string {
-  return sanitizePublicText(value, "").trim();
-}
-
-function compactTitle(text: string): string {
-  const firstSentence = text.split(/(?<=[.!?。！？])\s+/u)[0]?.trim() || text;
-  return firstSentence.slice(0, 100);
 }
 
 function activityId(turnId: string): string {

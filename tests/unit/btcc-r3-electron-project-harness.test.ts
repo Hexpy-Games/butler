@@ -128,6 +128,7 @@ test("project effect scenario requires typed-effect Work evidence and persisted 
   expect(createStep).toBeDefined();
   expect(readStep).toBeDefined();
   const work: GuidedWorkObservation = {
+    appliedEffectCapabilities: ["project_ledger_create"],
     workId: "work-runtime-owned",
     status: "completed",
     planRevision: 1,
@@ -231,8 +232,10 @@ test("Electron Work expectations assert ordered renderer-visible stage activitie
     workspaceRoot: "/isolated/workspace",
   } as Parameters<typeof checkScenarioExpectations>[0];
   const rendererActivities = expectedStages.map((stage) => ({
+    content: `${stage} detail is visible`,
     stage,
     text: `${stage} activity is visible`,
+    title: `${stage} activity`,
   }));
 
   expect(checkScenarioExpectations(
@@ -265,7 +268,7 @@ test("Electron Work expectations assert ordered renderer-visible stage activitie
   );
 });
 
-test("Electron Work evidence preserves the effective project_ledger_create tool name", () => {
+test("Electron Work evidence keeps tool calls separate from applied effects", () => {
   const root = mkdtempSync(join(tmpdir(), "butler-r3-electron-work-evidence-"));
   const appDbDir = join(root, "app-server");
   const appDbPath = join(appDbDir, "butler-client.sqlite");
@@ -340,6 +343,10 @@ test("Electron Work evidence preserves the effective project_ledger_create tool 
         'receipt-2', 'work-1', 'project_ledger_work_complete',
         'project-ledger:work:W-FIXTURE', 'applied'
       );
+      INSERT INTO btcc_guided_effects VALUES (
+        'receipt-command', 'work-1', 'run_command',
+        'workspace-command:.', 'uncertain'
+      );
       INSERT INTO btcc_guided_work_results
         VALUES ('work-1', 'call-1', 1);
       INSERT INTO btcc_guided_work_results
@@ -374,6 +381,7 @@ test("Electron Work evidence preserves the effective project_ledger_create tool 
       "turn-1",
     );
     expect(observed).toMatchObject({
+      appliedEffectCapabilities: ["project_ledger_work_complete"],
       status: "completed",
       planRevision: 1,
       planReviewVerdict: "accept",
@@ -383,6 +391,51 @@ test("Electron Work evidence preserves the effective project_ledger_create tool 
       projectLedgerCompletedWorkRecords: 0,
       projectLedgerCloseoutObserved: false,
     });
+    const requiresAppliedCommand: ElectronScenarioStep = {
+      id: "requires-applied-command",
+      prompt: "명령 효과를 적용해 주세요.",
+      expect: {
+        work: { appliedEffectCapabilitiesInclude: ["run_command"] },
+      },
+    };
+    const run = { workspaceRoot: root } as Parameters<
+      typeof checkScenarioExpectations
+    >[0];
+    expect(checkScenarioExpectations(
+      run,
+      requiresAppliedCommand,
+      "delivered",
+      "완료",
+      observed,
+      new Map(),
+    ).failures).toContain("work_applied_effect_missing:run_command");
+    const updateDb = new Database(appDbPath);
+    try {
+      updateDb.query(`
+        UPDATE btcc_guided_effects SET status = 'applied'
+        WHERE receipt_id = 'receipt-command'
+      `).run();
+    } finally {
+      updateDb.close();
+    }
+    const applied = readGuidedWorkObservation(
+      { dataRoot: root, projectId: "fixture" } as Parameters<
+        typeof readGuidedWorkObservation
+      >[0],
+      "turn-1",
+    );
+    expect(applied?.appliedEffectCapabilities).toEqual([
+      "project_ledger_work_complete",
+      "run_command",
+    ]);
+    expect(checkScenarioExpectations(
+      run,
+      requiresAppliedCommand,
+      "delivered",
+      "완료",
+      applied,
+      new Map(),
+    )).toEqual({ passed: true, failures: [] });
     const unrelatedProjectWorkDir = join(
       root,
       "project-ledger",

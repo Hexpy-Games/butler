@@ -116,7 +116,10 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("Skip Work for simple conversation");
   expect(instructions).toContain("single-step read-only lookup");
   expect(instructions).toContain("state_effect validation");
-  expect(instructions).toContain("Use typed tools for intended source");
+  expect(instructions).toContain(
+    "A state_effect mutation command runs only inside the admitted workspace",
+  );
+  expect(instructions).toContain("after the current concise Plan has an accepted Plan Review");
   expect(instructions).toContain("Multi-source or multi-step research");
   expect(instructions).toContain("call replace_work_plan before the dependent work");
   expect(instructions).toContain(

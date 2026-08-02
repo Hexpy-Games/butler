@@ -7,6 +7,10 @@ import {
   guidedOperationalReportPrompt,
   type OperationalFacts,
 } from "./guided-operational-facts.ts";
+import {
+  GuidedOperationalLease,
+  type GuidedOperationalDeadline,
+} from "./guided-operational-lease.ts";
 
 export {
   guidedOperationalFallback,
@@ -14,8 +18,12 @@ export {
   type OperationalFacts,
 } from "./guided-operational-facts.ts";
 
-export const DEFAULT_GUIDED_TURN_LEASE_MS = 280_000;
-export const DEFAULT_GUIDED_FINAL_REPORT_MS = 15_000;
+export {
+  DEFAULT_GUIDED_ABSOLUTE_TURN_LEASE_MS,
+  DEFAULT_GUIDED_FINAL_REPORT_MS,
+  DEFAULT_GUIDED_TURN_LEASE_MS,
+  GuidedOperationalLease,
+} from "./guided-operational-lease.ts";
 
 const DEFAULT_GUIDED_QUIESCENCE_GRACE_MS = 5_000;
 type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
@@ -28,21 +36,21 @@ export async function runGuidedPromptWithOperationalReport(input: {
   originalRequest: string;
   leaseMs?: number;
   finalReportMs?: number;
+  operationalLease?: GuidedOperationalLease;
   loadFacts: () => Promise<Omit<OperationalFacts, "originalRequest">>;
 }): Promise<string> {
-  const leaseMs = positiveMs(input.leaseMs, DEFAULT_GUIDED_TURN_LEASE_MS);
-  const leaseDeadline = input.leaseStartedAt + leaseMs;
-  const finalReportMs = Math.min(
-    positiveMs(input.finalReportMs, DEFAULT_GUIDED_FINAL_REPORT_MS),
-    Math.max(1, leaseMs - 1),
-  );
-  const mainDeadline = leaseDeadline - finalReportMs;
+  const lease = input.operationalLease ?? new GuidedOperationalLease({
+    startedAt: input.leaseStartedAt,
+    leaseMs: input.leaseMs,
+    finalReportMs: input.finalReportMs,
+  });
+  const finalReportMs = lease.finalReportMs;
   const quiescenceGraceMs = Math.min(
     DEFAULT_GUIDED_QUIESCENCE_GRACE_MS,
     Math.max(1, Math.floor(finalReportMs / 4)),
   );
   try {
-    const mainRemainingMs = mainDeadline - Date.now();
+    const mainRemainingMs = lease.mainDeadline() - Date.now();
     if (mainRemainingMs <= 0) throw new GuidedOperationalWindowExpired();
     const runMain = (signal: AbortSignal) => input.promptRunner({
       ...input.options,
@@ -52,12 +60,13 @@ export async function runGuidedPromptWithOperationalReport(input: {
           ...call,
           signal: call.signal ?? signal,
         }),
-        mainDeadline,
+        lease.mainDeadline(),
       ),
     });
     const text = await runInGuidedOperationalWindow({
       parentSignal: input.parentSignal,
       timeoutMs: mainRemainingMs,
+      deadline: lease.mainWindow(),
       quiescenceGraceMs,
       run: runMain,
     });
@@ -74,7 +83,7 @@ export async function runGuidedPromptWithOperationalReport(input: {
     effects: [],
   };
   let facts = emptyFacts;
-  const factLoadRemainingMs = leaseDeadline - Date.now();
+  const factLoadRemainingMs = lease.leaseDeadline() - Date.now();
   if (factLoadRemainingMs > 0) {
     try {
       facts = {
@@ -90,7 +99,7 @@ export async function runGuidedPromptWithOperationalReport(input: {
     }
   }
   const fallback = guidedOperationalFallback(facts);
-  const remainingMs = leaseDeadline - Date.now();
+  const remainingMs = lease.leaseDeadline() - Date.now();
   if (remainingMs > 0) {
     try {
       const text = await runInGuidedOperationalWindow({
@@ -132,7 +141,12 @@ function allowsOperationalReport(error: unknown): boolean {
 export async function runInGuidedOperationalWindow<T>(input: {
   parentSignal: AbortSignal;
   timeoutMs: number;
+  deadline?: GuidedOperationalDeadline;
   quiescenceGraceMs?: number;
+  timer?: {
+    set(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>;
+    clear(timer: ReturnType<typeof setTimeout>): void;
+  };
   run: (signal: AbortSignal) => Promise<T>;
 }): Promise<T> {
   throwIfAborted(input.parentSignal);
@@ -140,7 +154,21 @@ export async function runInGuidedOperationalWindow<T>(input: {
   const expire = () => controller.abort(new GuidedOperationalWindowExpired());
   const cancel = () => controller.abort(input.parentSignal.reason);
   input.parentSignal.addEventListener("abort", cancel, { once: true });
-  const timer = setTimeout(expire, Math.max(1, Math.trunc(input.timeoutMs)));
+  const timerApi = input.timer ?? {
+    set: (callback: () => void, delayMs: number) => setTimeout(callback, delayMs),
+    clear: (timer: ReturnType<typeof setTimeout>) => clearTimeout(timer),
+  };
+  const fixedDeadline = Date.now() + input.timeoutMs;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const armDeadline = () => {
+    if (timer) timerApi.clear(timer);
+    const remainingMs = input.deadline
+      ? input.deadline.deadline() - input.deadline.now()
+      : fixedDeadline - Date.now();
+    timer = timerApi.set(expire, Math.max(1, Math.trunc(remainingMs)));
+  };
+  const unsubscribeDeadline = input.deadline?.subscribe(armDeadline) ?? (() => {});
+  armDeadline();
   let rejectWindow!: (error: Error) => void;
   const interrupted = new Promise<never>((_resolve, reject) => {
     rejectWindow = reject;
@@ -166,7 +194,8 @@ export async function runInGuidedOperationalWindow<T>(input: {
         timeoutMs: input.quiescenceGraceMs ?? 0,
       });
     }
-    clearTimeout(timer);
+    if (timer) timerApi.clear(timer);
+    unsubscribeDeadline();
     input.parentSignal.removeEventListener("abort", cancel);
     controller.signal.removeEventListener("abort", rejectOnAbort);
   }
@@ -174,11 +203,6 @@ export async function runInGuidedOperationalWindow<T>(input: {
 
 async function rejectOperationalToolCall(): Promise<never> {
   throw new Error("Operational final report cannot call tools");
-}
-
-function positiveMs(value: number | undefined, fallback: number): number {
-  if (value === undefined || !Number.isFinite(value)) return fallback;
-  return Math.max(1, Math.trunc(value));
 }
 
 function withTurnTimeRemaining(result: unknown, deadline: number): unknown {

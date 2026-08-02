@@ -1,0 +1,66 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "reviewed-command-mutation",
+  "model": "openai/gpt-5.6-luna",
+  "reasoningEffort": "max",
+  "accessMode": "full_access",
+  "session": {
+    "id": "reviewed-command-mutation",
+    "kind": "chat",
+    "title": "BTCC R3 reviewed command mutation"
+  },
+  "steps": [
+    {
+      "id": "create-and-verify-command-marker",
+      "prompt": "격리된 작업공간의 command-result.txt에 정확한 고유 표식 `BTCC_R3_COMMAND_MUTATION_MARKER_20260802` 한 줄을 만드세요. 먼저 요청 의도와 완료 조건을 구상하고, 간결한 Work Plan에 명령 실행과 파일 재확인 작업을 포함한 뒤 Plan Review를 accept로 완료하세요. 실행 단계에서는 반드시 `run_command`를 `state_effect=mutation`, `cwd=.` 및 `output_paths=[\"command-result.txt\"]`로 호출해서 파일을 만드세요. 그 뒤 실제 command-result.txt를 다시 읽어 표식이 정확한지 확인하고, Result Review accept, Completion Validation accept, Reporting까지 BTCC 순서로 완료하세요. 최종 답변에도 표식을 그대로 포함하세요.",
+      "timeoutMs": 900000,
+      "expect": {
+        "terminalState": "delivered",
+        "finalIncludes": [
+          "BTCC_R3_COMMAND_MUTATION_MARKER_20260802"
+        ],
+        "rendererActivityStagesInclude": [
+          "conception",
+          "planning",
+          "review",
+          "execution",
+          "review",
+          "validation",
+          "reporting"
+        ],
+        "files": [
+          {
+            "path": "command-result.txt",
+            "contains": [
+              "BTCC_R3_COMMAND_MUTATION_MARKER_20260802"
+            ]
+          }
+        ],
+        "work": {
+          "appliedEffectCapabilitiesInclude": [
+            "run_command"
+          ],
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "checkpointStage": "reporting",
+          "checkpointStagesInclude": [
+            "conception",
+            "planning",
+            "review",
+            "execution",
+            "review",
+            "validation",
+            "reporting"
+          ],
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept",
+          "completionValidationVerdict": "accept",
+          "resultToolNamesInclude": [
+            "run_command"
+          ]
+        }
+      }
+    }
+  ]
+}

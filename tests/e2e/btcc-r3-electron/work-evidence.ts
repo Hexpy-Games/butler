@@ -99,6 +99,13 @@ export function readGuidedWorkObservation(
       WHERE result.work_id = ?
       ORDER BY result.sequence
     `).all(work.work_id).map((row) => row.tool_name);
+    const appliedEffectCapabilities = tableExists(db, "btcc_guided_effects")
+      ? db.query<{ capability: string }, [string]>(`
+          SELECT DISTINCT capability FROM btcc_guided_effects
+          WHERE work_id = ? AND status = 'applied'
+          ORDER BY capability
+        `).all(work.work_id).map((row) => row.capability)
+      : [];
     const checkpointStages = db.query<{ stage: string }, [string]>(`
       SELECT stage FROM btcc_guided_work_checkpoint_revisions
       WHERE work_id = ? ORDER BY revision
@@ -116,6 +123,7 @@ export function readGuidedWorkObservation(
         completedProjectLedgerWorkIds.has(record.id) && record.status === "done",
     ).length;
     return {
+      appliedEffectCapabilities,
       workId: work.work_id,
       status: work.status,
       planRevision: work.plan_revision,

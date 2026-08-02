@@ -249,6 +249,7 @@ export async function runAnthropicFunctionToolPromptText(
             output: await options.executeTool({
               name: call.name,
               args: prepared.args,
+              providerCallId: call.id,
               rawArguments: prepared.rawArguments,
               signal: options.signal,
             }),

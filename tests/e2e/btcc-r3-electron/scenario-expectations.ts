@@ -10,7 +10,10 @@ import type {
   RendererVisibleActivity,
   StepObservation,
 } from "./contracts.ts";
-import { resolveFixturePath } from "./scenario-preflight.ts";
+import { normalizeText, resolveFixturePath } from "./scenario-preflight.ts";
+
+const REPEATED_GENERIC_ACTIVITY_LABEL =
+  /(작업 실행|도구 사용|작업공간 확인)\s*[,·]\s*\1/u;
 
 function checkWorkExpectation(
   step: ElectronScenarioStep,
@@ -78,6 +81,11 @@ function checkWorkExpectation(
       failures.push(`work_result_tool_missing:${toolName}`);
     }
   }
+  for (const capability of expected.appliedEffectCapabilitiesInclude ?? []) {
+    if (!work.appliedEffectCapabilities.includes(capability)) {
+      failures.push(`work_applied_effect_missing:${capability}`);
+    }
+  }
   if (
     expected.projectLedgerCloseout !== undefined &&
     work.projectLedgerCloseoutObserved !== expected.projectLedgerCloseout
@@ -136,6 +144,24 @@ export function checkScenarioExpectations(
     if (rendererActivities.some(({ text }) => text.trim().length === 0)) {
       failures.push("renderer_activity_text_missing");
     }
+    rendererActivities.forEach((activity, index) => {
+      const title = normalizeText(activity.title);
+      const content = activity.content === null
+        ? null
+        : normalizeText(activity.content);
+      const titleLength = Array.from(title).length;
+      if (titleLength > 32) {
+        failures.push(`renderer_activity_title_too_long:${index}:${titleLength}`);
+      }
+      if (content !== null && title === content) {
+        failures.push(`renderer_activity_title_content_duplicate:${index}`);
+      }
+      if ([title, content ?? ""].some((text) =>
+        REPEATED_GENERIC_ACTIVITY_LABEL.test(text),
+      )) {
+        failures.push(`renderer_activity_generic_label_repeated:${index}`);
+      }
+    });
   }
   for (const expected of step.expect?.files ?? []) {
     const filePath = resolveFixturePath(run.workspaceRoot, expected.path);
