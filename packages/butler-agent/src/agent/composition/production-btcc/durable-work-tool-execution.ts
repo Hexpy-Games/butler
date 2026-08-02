@@ -50,6 +50,7 @@ export async function executeDurableWorkTool(
         code: "work_update_rejected",
         message: error instanceof Error ? error.message : "Work update was rejected.",
       },
+      ...(current ? { work: workToolView(current.work) } : {}),
     };
   }
 }
@@ -84,14 +85,11 @@ function decodePlan(input: WorkToolInput) {
 }
 
 function decodeCheckpoint(input: WorkToolInput) {
-  const nextStage = optionalStringValue(input.args.next_stage);
-  if (nextStage && !WORK_STAGE_SET.has(nextStage)) {
-    throw new Error(`Unsupported Work stage: ${nextStage}`);
-  }
+  const nextStage = decodeWorkStage(input.args.next_stage);
   return {
     ...input.scope,
     mutationCallId: input.mutationCallId,
-    ...(nextStage ? { nextStage: nextStage as WorkStage } : {}),
+    ...(nextStage ? { nextStage } : {}),
     actionUpdates: decodeActionUpdates(input.args.action_updates),
     ...(optionalStringValue(input.args.public_summary)
       ? { publicSummary: optionalStringValue(input.args.public_summary)! }
@@ -102,9 +100,18 @@ function decodeCheckpoint(input: WorkToolInput) {
   };
 }
 
+function decodeWorkStage(value: unknown): WorkStage | undefined {
+  const nextStage = optionalStringValue(value);
+  if (nextStage && !WORK_STAGE_SET.has(nextStage)) {
+    throw new Error(`Unsupported Work stage: ${nextStage}`);
+  }
+  return nextStage as WorkStage | undefined;
+}
+
 function decodeReview(input: WorkToolInput) {
   const subject = stringValue(input.args.subject, "subject");
   const verdict = stringValue(input.args.verdict, "verdict");
+  const nextStage = decodeWorkStage(input.args.next_stage);
   if (subject !== "plan" && subject !== "result") {
     throw new Error(`Unsupported Work review subject: ${subject}`);
   }
@@ -116,6 +123,8 @@ function decodeReview(input: WorkToolInput) {
     mutationCallId: input.mutationCallId,
     subject: subject as "plan" | "result",
     verdict: verdict as "accept" | "revise" | "partial",
+    ...(nextStage ? { nextStage } : {}),
+    actionUpdates: decodeActionUpdates(input.args.action_updates),
     summary: stringValue(input.args.summary, "summary"),
     corrections: optionalStringArray(input.args.corrections, "corrections"),
   };
@@ -146,31 +155,20 @@ function workToolView(work: DurableWorkView): Record<string, unknown> {
   return {
     work_id: work.workId,
     status: work.status,
-    objective: work.objective,
     current_stage: work.currentStage ?? null,
     allowed_next_stages: work.allowedNextStages,
-    plan_objective: work.currentPlan?.objective ?? null,
-    governing_refs: work.currentPlan?.governingRefs ?? [],
-    checks: work.currentPlan?.checks ?? [],
     actions: work.currentPlan?.actions.map((action) => {
       const progress = work.actionProgress.find((item) =>
         item.actionKey === action.actionKey);
       return {
         action_key: action.actionKey,
-        description: action.description,
-        dependency_keys: action.dependencyKeys,
-        ...(action.effect ? { effect: action.effect } : {}),
         status: progress?.status ?? "pending",
-        ...(progress?.note ? { note: progress.note } : {}),
       };
     }) ?? [],
     unresolved_action_keys: unresolved,
     completion_blockers: completionBlockers,
-    plan_revision: work.currentPlan?.revision ?? null,
-    checkpoint_revision: work.latestCheckpoint?.revision ?? null,
     latest_plan_review: work.latestPlanReview?.verdict ?? null,
     latest_result_review: work.latestResultReview?.verdict ?? null,
-    result_count: work.resultRefs.length,
   };
 }
 

@@ -26,6 +26,14 @@ export class GuidedWorkSessionWriter {
       throw new Error("Durable Work scope changed; startNew is required");
     }
     if (input.startNew) {
+      if (
+        bound &&
+        this.turnCommittedToWork(input.turnId, bound.work_id)
+      ) {
+        throw new Error(
+          "Durable Work continuation is already committed for this Turn; continue the current Work or start new Work in a fresh Turn",
+        );
+      }
       if (current?.status === "open" || current?.status === "blocked") {
         this.abandon(current.work_id);
       }
@@ -36,6 +44,26 @@ export class GuidedWorkSessionWriter {
       return current;
     }
     return this.createAndBind(input, turn);
+  }
+
+  private turnCommittedToWork(turnId: string, workId: string): boolean {
+    return Boolean(this.db.query<{ committed: number }, [string, string]>(`
+      SELECT 1 AS committed FROM (
+        SELECT work_id, origin_turn_id
+        FROM btcc_guided_work_plan_revisions
+        UNION ALL
+        SELECT work_id, origin_turn_id
+        FROM btcc_guided_work_checkpoint_revisions
+        UNION ALL
+        SELECT work_id, origin_turn_id
+        FROM btcc_guided_work_review_revisions
+        UNION ALL
+        SELECT work_id, origin_turn_id
+        FROM btcc_guided_work_results
+      ) progress
+      WHERE progress.work_id = ? AND progress.origin_turn_id = ?
+      LIMIT 1
+    `).get(workId, turnId));
   }
 
   bindOpenHead(
