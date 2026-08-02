@@ -10,9 +10,9 @@ import {
   recordSystemEvent,
 } from "../../test-support/harness/durable-session-transcript.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
+import type { Btcc, BtccHost } from "../../agent/btcc/index.ts";
 import { GatewayRouter } from "../../gateways/core/router.ts";
 import { createGatewayServer } from "../../gateways/core/server.ts";
-import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { generateSessionTitleWithProvider } from "../../agent/output/session-title.ts";
 import { diagnosticDetails, safeRuntimeFailure } from "../../integrations/providers/provider-errors.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
@@ -22,20 +22,16 @@ import {
   resolveTelegramGatewayRuntimeConfig,
 } from "../../operations/gateway/registry.ts";
 import { createProductionBtccComposition } from "../../agent/composition/index.ts";
-import { AgentConversationStore } from "../../agent/conversation/store.ts";
+import { AppBtccStopConsumer } from "../../gateways/app/application/btcc-stop-consumer.ts";
 import {
   BtccInboundDispatcher,
-  BtccGatewayLifecycleService,
-  BtccStopRequestReconciler,
-  bindBtccGatewayRuntime,
-  createBtccQueueEntryDecider,
   createBtccGatewayHandlers,
-  type BtccGatewayRuntime,
 } from "./btcc/index.ts";
 import {
   appTurnEventAction,
   appTurnStateDbPath,
   bindButlerSession,
+  createNativeButlerProgressPublisher,
   createNativeButlerDefaultProvider,
   persistButlerSessionPointer,
   readButlerConfig,
@@ -58,7 +54,7 @@ import {
 export interface NativeButlerMainOptions {
   butlerHome?: string;
   butlerData?: string;
-  btcc?: BtccGatewayRuntime;
+  btcc?: Btcc;
   provider?: ModelProviderAdapter;
   sendTelegram?: (input: {
     chatId: string;
@@ -91,23 +87,17 @@ export async function runNativeButlerMain(
     compatibilityConfig: config as Record<string, any>,
   });
   const appMessageDbPath = appTurnStateDbPath(butlerData);
-  const btcc = input.btcc ?? createProductionBtccComposition({
-    butlerHome,
-    butlerData,
-    appMessageDbPath,
-    ownerId: `native-butler:${process.pid}`,
-  });
-  if ("ready" in btcc && btcc.ready) await btcc.ready;
   const provider = input.provider ?? createNativeButlerDefaultProvider(config);
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
-  const conversationStore = new AgentConversationStore({ butlerData });
+  let btcc: (Btcc & { ready?: Promise<void> }) | undefined = input.btcc;
+  let btccHost: BtccHost | undefined;
   const shutdownFlagPath = join(butlerData, "locks", "butler-shutdown");
   const pollMs = input.shutdownPollMs ?? 500;
 
   let sessionId: string | null = null;
   let stopTelegramPolling = false;
   let telegramPolling: Promise<void> | undefined;
-  let stopReconciler: BtccStopRequestReconciler | undefined;
+  let stopConsumer: AppBtccStopConsumer | undefined;
   const inboundDispatcher = new BtccInboundDispatcher();
   const inboundQueue = new NativeInboundQueue(butlerData);
   const serviceShouldStop = () =>
@@ -128,6 +118,18 @@ export async function runNativeButlerMain(
       provider,
     });
     persistButlerSessionPointer(butlerData, binding.sessionId);
+    btcc = input.btcc ?? createProductionBtccComposition({
+      butlerHome,
+      butlerData,
+      appMessageDbPath,
+      ownerId: `native-butler:${process.pid}`,
+      sessionBindings: store,
+    });
+    if (!btcc) throw new Error("BTCC facade was not created");
+    btccHost = "host" in btcc
+      ? (btcc as Btcc & { host: BtccHost }).host
+      : undefined;
+    if (btcc.ready) await btcc.ready;
 
     const router = new GatewayRouter({ store });
     const telegramAdapter = telegramGateway.enabled
@@ -155,45 +157,15 @@ export async function runNativeButlerMain(
       }
       return await deliveryGuard.deliver(activeSessionId, action, metadata);
     };
-    const lifecycle = new BtccGatewayLifecycleService({
-      store,
-      conversationStore,
-      butlerData,
-      ...bindBtccGatewayRuntime(btcc),
-      promptAssembler: new PromptAssembler({
-        butlerHome,
-        butlerData,
-      }),
-      generateSessionTitle: ({ binding: activeBinding, envelope }) =>
-        generateSessionTitleWithProvider(provider, {
-          text: envelope.message.text ?? "",
-          model: requireModelRef(activeBinding.modelRef),
-          signal: envelope.signal,
-        }),
-      deliverTurnEvent: async ({ binding: activeBinding, envelope, event }) => {
-        const action = appTurnEventAction({
-          sessionId: activeBinding.sessionId,
-          envelope,
-          event,
-        });
-        if (!action) return;
-        const delivery = await deliverThroughEnabledGate(activeBinding.sessionId, action, {
-          source: "gateway/native-butler-bootstrap.ts#turn-event",
-          kind: "turn_event",
-          turnId: envelope.routingHints?.turnId,
-        });
-        if (!delivery.ok) {
-          throw new Error(delivery.error || "App turn event delivery failed");
-        }
-      },
+    const progressPublisher = createNativeButlerProgressPublisher({
+      deliver: deliverThroughEnabledGate,
     });
-    stopReconciler = new BtccStopRequestReconciler(appMessageDbPath, btcc.runtime);
-    await stopReconciler.reconcile();
-    await lifecycle.getOrCreate(binding.sessionId, "butler");
-    const decideInboundEntry = createBtccQueueEntryDecider(appMessageDbPath);
-    const recovered = inboundQueue.recoverRuntimeInterruptions(
-      (item) => decideInboundEntry(item) !== undefined,
-    );
+    if (btccHost) {
+      stopConsumer = new AppBtccStopConsumer(appMessageDbPath, btcc, btccHost.progress);
+      await stopConsumer.reconcile();
+      await btccHost.progress.reconcile(progressPublisher);
+    }
+    const recovered = inboundQueue.recoverRuntimeInterruptions(() => true);
     if (recovered.requeued > 0) {
       process.stdout.write(
         `[inbound-queue] recovered-runtime-interruptions=${recovered.requeued}\n`,
@@ -201,7 +173,18 @@ export async function runNativeButlerMain(
     }
     const server = createGatewayServer({
       router,
-      handlers: createBtccGatewayHandlers(lifecycle),
+      handlers: createBtccGatewayHandlers({
+        btcc,
+        generateSessionTitle: ({ route, envelope }) => {
+          const activeBinding = store.getBySessionId(route.sessionId);
+          if (!activeBinding) return Promise.resolve(null);
+          return generateSessionTitleWithProvider(provider, {
+            text: envelope.message.text ?? "",
+            model: requireModelRef(activeBinding.modelRef),
+            signal: envelope.signal,
+          });
+        },
+      }),
       butlerData,
     });
     if (telegramAdapter) {
@@ -250,14 +233,14 @@ export async function runNativeButlerMain(
         signal: input.shutdownSignal,
         pollMs,
         onPoll: async () => {
-          await stopReconciler?.reconcile();
+          await stopConsumer?.reconcile();
+          await btccHost?.progress.reconcile(progressPublisher);
           const summary = inboundDispatcher.poll({
             queue: inboundQueue,
             server,
             store,
             deliveryGuard,
             deliverAction: deliverThroughEnabledGate,
-            decideEntry: decideInboundEntry,
             limit: 5,
             maxConcurrentSessions: 5,
             onOutcome: (outcome) => {
@@ -280,7 +263,6 @@ export async function runNativeButlerMain(
         telegramPolling,
         new Promise((resolve) => setTimeout(resolve, 12_000)),
       ]);
-      await lifecycle.closeSession(binding.sessionId, shutdownReason === "flag" ? "controlled-stop" : "native-signal");
     }
 
     return {
@@ -324,9 +306,8 @@ export async function runNativeButlerMain(
   } finally {
     clearAppForegroundExecutorReadiness(butlerData);
     stopTelegramPolling = true;
-    stopReconciler?.close();
-    await btcc.close();
-    conversationStore.close();
+    stopConsumer?.close();
+    await btccHost?.close();
     store.close();
   }
 }

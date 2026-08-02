@@ -142,6 +142,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       snapshotRef,
       stableJson(command.modelSelection),
       contextJson,
+      command.progressDestination ? stableJson(command.progressDestination) : null,
       stoppedBeforeAdmission ? "cancelled" : "admitted",
       stoppedBeforeAdmission ? null : checkpointId,
       stoppedBeforeAdmission ? 1 : 0,
@@ -152,18 +153,20 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
         INSERT INTO btcc_turns (
           turn_id, session_id, inbox_id, trigger_key, original_message_id,
           original_message, admission_snapshot_ref, model_selection_json,
-          context_json, semantic_state, active_checkpoint_id, execution_fence,
+          context_json, progress_destination_json, semantic_state,
+          active_checkpoint_id, execution_fence,
           final_disposition, continuation_snapshot_json, revision
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 0)
       `).run(...commonValues);
     } else {
       this.db.query(`
         INSERT INTO btcc_turns (
           turn_id, session_id, inbox_id, trigger_key, original_message_id,
           original_message, admission_snapshot_ref, model_selection_json,
-          context_json, semantic_state, active_checkpoint_id, execution_fence,
+          context_json, progress_destination_json, semantic_state,
+          active_checkpoint_id, execution_fence,
           final_disposition, revision
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
       `).run(...commonValues);
     }
     if (stoppedBeforeAdmission) return;
@@ -200,6 +203,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
           new Date().toISOString(),
         );
       }
+      this.insertWakeRequestFact(command);
       return;
     }
     const existing = this.db.query<{ content: string }, [string]>(`
@@ -229,6 +233,58 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       SELECT inbox_id, turn_id, admission_input_hash, status, command_json
       FROM btcc_inbound_inbox WHERE session_id = ? AND trigger_key = ?
     `).get(sessionId, triggerKey) ?? null;
+  }
+
+  private insertWakeRequestFact(
+    command: Extract<FreshTurnCommand, { kind: "wake" }>,
+  ): void {
+    const resultScopeRef = command.trigger.resultScopeRef ?? "";
+    const existing = this.db.query<{
+      turn_id: string;
+      trigger_id: string;
+      source_turn_id: string;
+      authorization_ref: string;
+      result_scope_ref: string;
+      content: string;
+    }, [string]>(`
+      SELECT turn_id, trigger_id, source_turn_id, authorization_ref,
+        result_scope_ref, content
+      FROM btcc_wake_request_facts WHERE turn_id = ?
+    `).get(command.turnId);
+    if (existing) {
+      if (
+        existing.trigger_id !== command.trigger.triggerId ||
+        existing.source_turn_id !== command.trigger.sourceTurnId ||
+        existing.authorization_ref !== command.trigger.authorizationRef ||
+        existing.result_scope_ref !== resultScopeRef ||
+        existing.content !== command.trigger.content
+      ) {
+        throw new Error("BTCC wake request identity conflict");
+      }
+      return;
+    }
+    const triggerOwner = this.db.query<{ turn_id: string }, [string]>(`
+      SELECT turn_id FROM btcc_wake_request_facts WHERE trigger_id = ?
+    `).get(command.trigger.triggerId);
+    if (triggerOwner && triggerOwner.turn_id !== command.turnId) {
+      throw new Error("BTCC wake trigger identity conflict");
+    }
+    this.db.query(`
+      INSERT INTO btcc_wake_request_facts (
+        turn_id, session_id, trigger_key, trigger_id, source_turn_id,
+        authorization_ref, result_scope_ref, content, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      command.turnId,
+      command.sessionId,
+      command.triggerKey,
+      command.trigger.triggerId,
+      command.trigger.sourceTurnId,
+      command.trigger.authorizationRef,
+      resultScopeRef,
+      command.trigger.content,
+      new Date().toISOString(),
+    );
   }
 
   private hasTurnColumn(name: string): boolean {

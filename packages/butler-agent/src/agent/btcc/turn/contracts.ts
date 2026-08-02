@@ -1,6 +1,7 @@
 import type {
   AdmittedModelSelection,
   ButlerContextInput,
+  BtccProgressDestination,
   FreshBtccTurnCommand,
 } from "../contracts.ts";
 import type { ContentRef } from "../identity/index.ts";
@@ -33,8 +34,15 @@ export type TurnRecord = {
   triggerKey: string;
   originalMessageId: string;
   originalMessage: string;
+  wakeIdentity?: {
+    triggerId: string;
+    sourceTurnId: string;
+    authorizationRef: string;
+    resultScopeRef?: string;
+  };
   modelSelection: AdmittedModelSelection;
   context: ButlerContextInput;
+  progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
   checkpoint?: TurnCheckpoint;
   route?: "direct" | "assisted" | "managed";
@@ -99,6 +107,16 @@ export interface TurnAdmissionRepository {
     inbox: AdmissionInbox,
     claim: AdmissionConstructionClaim,
   ): Promise<TurnRecord>;
+}
+
+export type BtccWakeAuthorization = {
+  sourceTurnId: string;
+  authorizationRef: string;
+  resultScopeRef?: string;
+};
+
+export interface BtccWakeAuthorizationReader {
+  validateWake(input: BtccWakeAuthorization): boolean | Promise<boolean>;
 }
 
 export interface TurnStateRepository {

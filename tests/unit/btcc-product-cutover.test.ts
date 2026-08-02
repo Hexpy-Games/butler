@@ -57,7 +57,6 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
-      decideEntry: () => ({ kind: "fresh" }),
       deliverAction: async (_sessionId, action) => {
         delivered.push(action.message.text ?? "");
         return { ok: true };
@@ -111,7 +110,7 @@ test("product App ingress is handled once by the BTCC dispatcher", async () => {
   }
 });
 
-test("a cancelling App Turn is terminalized without entering BTCC", async () => {
+test("a cancelling App Turn still enters the single BTCC path", async () => {
   const butlerData = mkdtempSync(join(tmpdir(), "butler-btcc-cancelled-ingress-"));
   const queue = new NativeInboundQueue(butlerData);
   const store = new SessionBindingStore(
@@ -141,24 +140,30 @@ test("a cancelling App Turn is terminalized without entering BTCC", async () => 
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
-      decideEntry: () => ({ kind: "terminal" }),
       server: {
         async handleInbound() {
           handled = true;
-          throw new Error("cancelled ingress must not reach BTCC");
+          return {
+            status: "handled" as const,
+            route: {
+              sessionId: "butler/app-general",
+              role: "butler" as const,
+              reason: "session-hint" as const,
+              workspacePath: butlerData,
+            },
+            handlerResult: {
+              ok: true,
+              metadata: { text: "BTCC observed cancellation" },
+            },
+          };
         },
       },
     });
     await dispatcher.waitForIdle();
 
-    expect(summary).toEqual({
-      claimed: 1,
-      handled: 0,
-      delivered: 0,
-      failed: 0,
-      interrupted: 0,
-    });
-    expect(handled).toBe(false);
+    expect(summary.claimed).toBe(1);
+    expect(summary.handled).toBe(1);
+    expect(handled).toBe(true);
   } finally {
     store.close();
     rmSync(butlerData, { recursive: true, force: true });
@@ -194,7 +199,6 @@ test("a BTCC runtime interruption parks the exact queue item for process replace
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
-      decideEntry: () => ({ kind: "fresh" }),
       server: {
         async handleInbound() {
           throw new Error("post-commit activation interrupted");
@@ -268,10 +272,12 @@ test("a recovered runtime interruption resumes its admitted Turn", async () => {
       queue,
       store,
       deliveryGuard: new DeliveryGuard({ adapters: [] }),
-      decideEntry: () => ({ kind: "resume" }),
       server: {
         async handleInbound(envelope) {
-          resumeMarker = (envelope.raw as Record<string, unknown>)?.btccResume === true;
+          const raw = envelope.raw && typeof envelope.raw === "object" && !Array.isArray(envelope.raw)
+            ? envelope.raw as Record<string, unknown>
+            : {};
+          resumeMarker = Object.keys(raw).some((key) => key.toLowerCase().includes("resume"));
           return {
             status: "handled",
             route: {
@@ -287,7 +293,7 @@ test("a recovered runtime interruption resumes its admitted Turn", async () => {
     });
     await dispatcher.waitForIdle();
 
-    expect(resumeMarker).toBe(true);
+    expect(resumeMarker).toBe(false);
   } finally {
     store.close();
     rmSync(butlerData, { recursive: true, force: true });

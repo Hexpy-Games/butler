@@ -8,18 +8,16 @@ import type {
   SessionLifecycleState,
   StoredSessionBinding,
 } from "../../test-support/harness/contracts.ts";
+import type { Btcc, BtccHost } from "../../agent/btcc/index.ts";
 import { getStewardSessionPointer, registerRuntimeSession } from "../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
-import { PromptAssembler } from "../../agent/prompt/prompt-assembler.ts";
 import { createProductionBtccComposition } from "../../agent/composition/index.ts";
-import { AgentConversationStore } from "../../agent/conversation/store.ts";
 import {
-  BtccGatewayLifecycleService,
-  bindBtccGatewayRuntime,
-  type BtccGatewayRuntime,
+  createBtccGatewayHandlers,
 } from "./btcc/index.ts";
 import { DeliveryGuard } from "../transport/delivery-guard.ts";
 import { createTelegramTransportAdapter } from "../transport/telegram/adapter.ts";
+import { createNativeButlerProgressPublisher } from "./native-butler/index.ts";
 import { resolveAppGatewayRuntimeConfig } from "../../operations/gateway/registry.ts";
 
 export interface NativeStewardTelegramTurnInput {
@@ -33,7 +31,7 @@ export interface NativeStewardTelegramTurnInput {
   senderDisplayName?: string;
   butlerHome?: string;
   butlerData?: string;
-  btcc?: BtccGatewayRuntime;
+  btcc?: Btcc;
   provider?: ModelProviderAdapter;
   sendTelegram?: (input: {
     chatId: string;
@@ -188,15 +186,20 @@ export async function handleNativeStewardTelegramTurn(
     "app-server",
     "butler-client.sqlite",
   );
-  const btcc = input.btcc ?? createProductionBtccComposition({
-    butlerHome,
-    butlerData,
-    appMessageDbPath,
-    ownerId: `native-steward:${process.pid}`,
-  });
-  if ("ready" in btcc && btcc.ready) await btcc.ready;
   const store = new SessionBindingStore(join(butlerData, "runtime", "session-store.sqlite"));
-  const conversationStore = new AgentConversationStore({ butlerData });
+  let btcc: (Btcc & { ready?: Promise<void> }) | undefined = input.btcc;
+  let btccHost: BtccHost | undefined;
+  const deliveryGuard = new DeliveryGuard({
+    adapters: [
+      createTelegramTransportAdapter({
+        butlerHome,
+        sendTelegram: input.sendTelegram,
+      }),
+    ],
+  });
+  const progressPublisher = createNativeButlerProgressPublisher({
+    deliver: (sessionId, action, metadata) => deliveryGuard.deliver(sessionId, action, metadata),
+  });
 
   try {
     const sessionId = resolveSessionId(store, butlerData, input.projectName);
@@ -211,25 +214,33 @@ export async function handleNativeStewardTelegramTurn(
       butlerData,
     });
 
-    const lifecycle = new BtccGatewayLifecycleService({
-      store,
-      conversationStore,
+    btcc = input.btcc ?? createProductionBtccComposition({
+      butlerHome,
       butlerData,
-      ...bindBtccGatewayRuntime(btcc),
-      promptAssembler: new PromptAssembler({
-        butlerHome,
-        butlerData,
-      }),
+      appMessageDbPath,
+      ownerId: `native-steward:${process.pid}`,
+      sessionBindings: store,
     });
+    if (!btcc) throw new Error("BTCC facade was not created");
+    btccHost = "host" in btcc
+      ? (btcc as Btcc & { host: BtccHost }).host
+      : undefined;
+    if (btcc.ready) await btcc.ready;
 
-    const actor = await lifecycle.getOrCreate(sessionId, "steward");
-    const result = await actor.handleInbound(buildEnvelope(input), {
+    const envelope = buildEnvelope(input);
+    const route = {
       sessionId,
       role: "steward",
       reason: "transport-binding",
       projectId: input.projectName,
       workspacePath: input.workspacePath,
-    });
+    } as const;
+    const handler = createBtccGatewayHandlers({ btcc }).steward;
+    if (!handler) throw new Error("BTCC steward handler is unavailable");
+    const result = await handler({ envelope, route });
+    const text = typeof result.metadata?.text === "string"
+      ? result.metadata.text
+      : "";
 
     const action: OutboundAction = {
       actionId: `telegram-out:${sessionId}:${input.chatId}:${input.threadId ?? "main"}:${input.messageId ?? Date.now()}`,
@@ -246,21 +257,13 @@ export async function handleNativeStewardTelegramTurn(
             id: input.chatId,
           },
       message: {
-        text: result.text,
+        text,
       },
       metadata: {
         source: "gateway/native-steward-bootstrap.ts",
       },
     };
-    const guard = new DeliveryGuard({
-      adapters: [
-        createTelegramTransportAdapter({
-          butlerHome,
-          sendTelegram: input.sendTelegram,
-        }),
-      ],
-    });
-    const [deliveryResult] = await guard.deliverAll(sessionId, [action], {
+    const [deliveryResult] = await deliveryGuard.deliverAll(sessionId, [action], {
       source: "gateway/native-steward-bootstrap.ts",
     });
     const delivery: DeliveryResult = {
@@ -272,12 +275,15 @@ export async function handleNativeStewardTelegramTurn(
 
     return {
       sessionId,
-      text: result.text,
+      text,
       delivery,
     };
   } finally {
-    await btcc.close();
-    conversationStore.close();
+    try {
+      await btccHost?.progress.reconcile(progressPublisher);
+    } finally {
+      await btccHost?.close();
+    }
     store.close();
   }
 }

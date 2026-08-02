@@ -14,10 +14,6 @@ import type {
 } from "../../../test-support/harness/contracts.ts";
 import type { SessionBindingStore } from "../../../test-support/harness/session-store.ts";
 import type { DeliveryGuard } from "../../transport/delivery-guard.ts";
-import type {
-  BtccQueueEntryDecider,
-  BtccQueueEntryDecision,
-} from "./btcc-queue-entry-decision.ts";
 
 type BtccInboundServer = {
   handleInbound(
@@ -43,7 +39,6 @@ export type BtccInboundDispatchOptions = {
     action: OutboundAction,
     metadata: Record<string, unknown>,
   ) => Promise<DeliveryResult>;
-  decideEntry: BtccQueueEntryDecider;
   limit?: number;
   maxConcurrentSessions?: number;
   processingLeaseMs?: number;
@@ -64,22 +59,11 @@ export class BtccInboundDispatcher {
 
   poll(options: BtccInboundDispatchOptions): BtccInboundDispatchSummary {
     const summary = emptySummary();
-    const decisions = new Map<string, BtccQueueEntryDecision | null>();
-    const claimDecisions = new Map<string, BtccQueueEntryDecision>();
-    const decideEntry = (
-      item: QueuedInboundEvent,
-    ): BtccQueueEntryDecision | null => {
-      if (decisions.has(item.queueId)) return decisions.get(item.queueId)!;
-      const decision = options.decideEntry(item) ?? null;
-      decisions.set(item.queueId, decision);
-      return decision;
-    };
     options.queue.recoverStaleProcessing({
       staleAfterMs: options.processingLeaseMs ?? DEFAULT_LEASE_MS,
       now: options.now?.(),
       shouldRecover: (record) =>
-        !this.activeQueueIds.has(record.queueId) &&
-        decideEntry(record) !== null,
+        !this.activeQueueIds.has(record.queueId),
     });
 
     const capacity = Math.max(
@@ -90,15 +74,7 @@ export class BtccInboundDispatcher {
     const items = options.queue.claimEligible(
       Math.min(options.limit ?? DEFAULT_CONCURRENCY, capacity),
       (event) => {
-        const decision = decideEntry(event);
-        if (
-          !decision ||
-          !claimableSession(event, this.activeSessions, batchSessions)
-        ) {
-          return false;
-        }
-        claimDecisions.set(event.queueId, decision);
-        return true;
+        return claimableSession(event, this.activeSessions, batchSessions);
       },
       options.now?.(),
       options.processingLeaseMs ?? DEFAULT_LEASE_MS,
@@ -106,7 +82,7 @@ export class BtccInboundDispatcher {
     summary.claimed = items.length;
 
     for (const item of items) {
-      this.start(item, claimDecisions.get(item.queueId)!, options, summary);
+      this.start(item, options, summary);
     }
     return summary;
   }
@@ -119,14 +95,13 @@ export class BtccInboundDispatcher {
 
   private start(
     item: ClaimedInboundEvent,
-    decision: BtccQueueEntryDecision,
     options: BtccInboundDispatchOptions,
     aggregate: BtccInboundDispatchSummary,
   ): void {
     const sessionKey = sessionKeyFor(item);
     this.activeSessions.add(sessionKey);
     this.activeQueueIds.add(item.queueId);
-    const task = dispatchItem(item, decision, options)
+    const task = dispatchItem(item, options)
       .then(async (result) => {
         addSummary(aggregate, result);
         await options.onOutcome?.({ ...result, queueId: item.queueId, sessionKey });
@@ -145,24 +120,12 @@ export class BtccInboundDispatcher {
 
 async function dispatchItem(
   item: ClaimedInboundEvent,
-  decision: BtccQueueEntryDecision,
   options: BtccInboundDispatchOptions,
 ): Promise<BtccInboundDispatchSummary> {
   const summary = { ...emptySummary(), claimed: 1 };
-  if (decision.kind === "terminal") {
-    options.queue.complete(item, {
-      source: "gateway/btcc/btcc-inbound-dispatcher.ts",
-      dispatchStatus: "skipped-terminal-turn",
-      handled: false,
-    }, options.now?.());
-    return summary;
-  }
-
   reactivateSession(item, options.store, options.now?.());
   try {
-    const result = await options.server.handleInbound(
-      dispatchEnvelope(item, decision),
-    );
+    const result = await options.server.handleInbound(item.envelope);
     if (result.status !== "handled") {
       options.queue.fail(item, `BTCC gateway ${result.status}`, {
         source: "gateway/btcc/btcc-inbound-dispatcher.ts",
@@ -198,23 +161,6 @@ async function dispatchItem(
     summary.interrupted = 1;
     return summary;
   }
-}
-
-function dispatchEnvelope(
-  item: ClaimedInboundEvent,
-  decision: BtccQueueEntryDecision,
-): ClaimedInboundEvent["envelope"] {
-  if (decision.kind !== "resume") {
-    return item.envelope;
-  }
-  const raw = item.envelope.raw && typeof item.envelope.raw === "object" &&
-      !Array.isArray(item.envelope.raw)
-    ? item.envelope.raw as Record<string, unknown>
-    : {};
-  return {
-    ...item.envelope,
-    raw: { ...raw, btccResume: true },
-  };
 }
 
 async function deliverResult(
@@ -256,6 +202,9 @@ function finalActions(
     text,
     artifacts,
     generatedSessionTitle,
+    canonicalMessageId: optionalText(result.handlerResult.metadata?.canonicalMessageId),
+    turnId: optionalText(result.handlerResult.metadata?.turnId) ??
+      item.envelope.routingHints?.turnId,
   }));
 }
 
@@ -265,10 +214,12 @@ function finalAction(input: {
   text: string;
   artifacts: ArtifactRef[];
   generatedSessionTitle?: string;
+  canonicalMessageId?: string;
+  turnId?: string;
 }): OutboundAction {
   const { item, target } = input;
   return {
-    actionId: `btcc-final:${item.queueId}:${target.transport}:${target.peerId}:${target.threadId ?? "main"}`,
+    actionId: `btcc-final:${input.canonicalMessageId ?? item.queueId}:${target.transport}:${target.peerId}:${target.threadId ?? "main"}`,
     transport: target.transport,
     accountId: target.accountId,
     peer: {
@@ -286,7 +237,8 @@ function finalAction(input: {
       kind: "final_result",
       queueId: item.queueId,
       dispatchClaimId: item.processing.claimId,
-      turnId: item.envelope.routingHints?.turnId,
+      turnId: input.turnId,
+      canonicalMessageId: input.canonicalMessageId,
       generatedSessionTitle: input.generatedSessionTitle,
     },
   };

@@ -1,4 +1,5 @@
 import type { StopPersistenceOutcome } from "./turn/contracts.ts";
+import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -43,6 +44,21 @@ export type ButlerAttachmentRef = {
   localPath?: string;
 };
 
+export type BtccTurnExecutionControls = {
+  schema_version: string;
+  turn_id: string;
+  session_id: string;
+  model_ref: `${string}/${string}`;
+  reasoning_effort: ReasoningEffort;
+  access_mode: "full_access" | "ask_first" | "read_only";
+  plan_mode: boolean;
+  source: string;
+  session_control_revision: number;
+  catalog_generation: string;
+  resolved_at: string;
+  integrity_hash: string;
+};
+
 export type BtccTurnCommand =
   | {
       kind: "run";
@@ -52,6 +68,7 @@ export type BtccTurnCommand =
       message: { messageId: string; content: string };
       modelSelection: AdmittedModelSelection;
       context: ButlerContextInput;
+      progressDestination?: BtccProgressDestination;
     }
   | { kind: "resume"; turnId: string }
   | {
@@ -63,10 +80,12 @@ export type BtccTurnCommand =
         triggerId: string;
         sourceTurnId: string;
         authorizationRef: string;
+        resultScopeRef?: string;
         content: string;
       };
       modelSelection: AdmittedModelSelection;
       context: ButlerContextInput;
+      progressDestination?: BtccProgressDestination;
     }
   | { kind: "stop"; turnId: string };
 
@@ -74,16 +93,180 @@ export type FreshBtccTurnCommand = Extract<BtccTurnCommand, { kind: "run" | "wak
 export type BtccRunCommand = Exclude<BtccTurnCommand, { kind: "stop" }>;
 export type BtccStopCommand = Extract<BtccTurnCommand, { kind: "stop" }>;
 
-export type BtccTurnOutcome =
+export type BtccTurnOutcome = (
   | { kind: "delivered"; turnId: string; messageId: string; content: string }
   | { kind: "cancelled"; turnId: string }
   | { kind: "already_cancelled"; turnId: string }
   | { kind: "already_finalizing"; turnId: string }
   | { kind: "fenced_pending_persistence"; turnId: string }
-  | Extract<StopPersistenceOutcome, { kind: "already_delivered" }>;
+  | Extract<StopPersistenceOutcome, { kind: "already_delivered" }>
+) & {
+  /** Non-semantic admission telemetry for transport-side optional UI work. */
+  admission?: "fresh" | "replay";
+};
+
+export type BtccProgressDestination = {
+  transport: string;
+  accountId: string;
+  peer: {
+    kind: "dm" | "group" | "thread" | "channel";
+    id: string;
+    parentId?: string;
+  };
+  replyToMessageId: string;
+};
+
+export type BtccCommittedProgressEvent = {
+  eventId: string;
+  actionId: string;
+  sessionId: string;
+  turnId: string;
+  sessionSequence: number;
+  turnSequence: number;
+  event: RuntimeTurnEventInput;
+  destination: BtccProgressDestination;
+  status: "pending" | "published";
+};
+
+export interface BtccProgressEventRepository {
+  append(input: {
+    sessionId: string;
+    turnId: string;
+    destination: BtccProgressDestination;
+    event: RuntimeTurnEventInput;
+  }): BtccCommittedProgressEvent;
+  pending(turnId?: string): BtccCommittedProgressEvent[];
+  forTurn(turnId: string): BtccCommittedProgressEvent[];
+  markPublished(eventId: string): void;
+}
+
+export interface BtccTurnProgressPublisher {
+  publish(event: BtccCommittedProgressEvent): Promise<void> | void;
+}
+
+/**
+ * Transport-neutral facts admitted by the BTCC public facade.
+ *
+ * A replay is represented by the same logical request.  The durable Turn
+ * decides whether that request is fresh, a continuation, or already terminal;
+ * callers never send a transport-specific lifecycle marker.
+ */
+export type BtccTurnRequest = {
+  turnId: string;
+  sessionId: string;
+  eventId: string;
+  transport: string;
+  accountId: string;
+  peer: {
+    kind: "dm" | "group" | "thread" | "channel";
+    id: string;
+    parentId?: string;
+  };
+  sender: {
+    id: string;
+    displayName?: string;
+  };
+  message: {
+    id: string;
+    content: string;
+    timestamp: string;
+    attachments?: ButlerAttachmentRef[];
+  };
+  trigger:
+    | {
+        kind: "user_message";
+      }
+    | {
+        kind: "authorized_wake";
+        triggerId: string;
+        sourceTurnId: string;
+        authorizationRef: string;
+        resultScopeRef?: string;
+      };
+  route: {
+    role: "butler" | "steward";
+    workspacePath: string;
+    projectId?: string;
+    reason?:
+      | "session-hint"
+      | "steward-hint"
+      | "project-hint"
+      | "transport-binding"
+      | "app-worker-result"
+      | "app-planned-worker-review"
+      | "butler-fallback";
+  };
+  progressDestination?: BtccProgressDestination;
+  executionControls?: BtccTurnExecutionControls;
+  signal?: AbortSignal;
+};
+
+export type BtccStopRequest = { turnId: string };
+
+export interface BtccPreparedTurn {
+  readonly command: BtccRunCommand;
+  readonly isFresh: boolean;
+  recordEvent(event: RuntimeTurnEventInput): void;
+  complete(outcome: Extract<BtccTurnOutcome, { kind: "delivered" | "already_delivered" }>):
+    Promise<void> | void;
+  cancel(outcome: Extract<BtccTurnOutcome, {
+    kind: "cancelled" | "already_cancelled" | "fenced_pending_persistence" | "already_finalizing";
+  }>): Promise<void> | void;
+}
+
+export interface BtccTurnPreparation {
+  prepare(request: BtccTurnRequest): Promise<BtccPreparedTurn>;
+}
+
+export interface Btcc {
+  runTurn(request: BtccTurnRequest): Promise<BtccTurnOutcome>;
+  stopTurn(request: BtccStopRequest): Promise<BtccTurnOutcome>;
+}
+
+export type BtccWakeCompletionCandidate = {
+  taskId: string;
+  originSessionId: string;
+  sourceTurnId: string;
+  authorizationRef: string;
+  resultScopeRef?: string;
+  resultText: string;
+};
+
+export type BtccWakeProjectionSummary = {
+  candidates: number;
+  authorized: number;
+  rejected: number;
+  dispatched: number;
+  pending: number;
+};
+
+export interface BtccWakeProjectionHost {
+  reconcile(
+    candidates: readonly BtccWakeCompletionCandidate[],
+  ): Promise<BtccWakeProjectionSummary>;
+}
+
+export interface BtccProgressProjectionHost {
+  hasCommittedEvent(turnId: string, kind: string): boolean;
+  reconcile(publisher: BtccTurnProgressPublisher): Promise<{
+    attempted: number;
+    published: number;
+    pending: number;
+  }>;
+}
+
+export interface BtccHost {
+  progress: BtccProgressProjectionHost;
+  wake?: BtccWakeProjectionHost;
+  close(): Promise<void> | void;
+}
 
 export interface BtccTurnRuntime {
-  runTurn(command: BtccRunCommand): Promise<BtccTurnOutcome>;
+  runTurn(
+    command: BtccRunCommand,
+    progress?: BtccTurnProgressObserver,
+    onAdmitted?: (isFresh: boolean) => void | Promise<void>,
+  ): Promise<BtccTurnOutcome>;
   stopTurn(command: BtccStopCommand): Promise<BtccTurnOutcome>;
 }
 

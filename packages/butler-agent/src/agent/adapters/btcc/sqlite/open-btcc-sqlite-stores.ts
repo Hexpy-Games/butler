@@ -31,6 +31,10 @@ import {
 import {
   cutoverLegacyBtccTurns,
 } from "./legacy-turn-cutover/index.ts";
+import { SqliteBtccProgressEventRepository } from
+  "./sqlite-btcc-progress-event-repository.ts";
+import { SqliteBtccWakeAuthorizationRepository } from
+  "./sqlite-btcc-wake-authorization-repository.ts";
 
 export function openBtccSqliteStores(input: {
   dbPath: string;
@@ -67,6 +71,8 @@ export function openBtccSqliteStores(input: {
       owner,
     ),
     turns,
+    progressEvents: new SqliteBtccProgressEventRepository(db),
+    wakeAuthorizations: new SqliteBtccWakeAuthorizationRepository(db),
     messages: new SqliteCanonicalMessageStore(db),
     contextDocuments: new SqliteContextDocumentStore(db),
     guidedToolJournal: new SqliteGuidedToolJournal(db),

@@ -116,6 +116,9 @@ export type RuntimeTurnEventInput = Omit<
   AgentTurnEventInput,
   "id" | "sessionId" | "turnId" | "sessionSequence" | "turnSequence" | "createdAt"
 > & {
+  id?: string;
+  sessionSequence?: number;
+  turnSequence?: number;
   createdAt?: string;
 };
 

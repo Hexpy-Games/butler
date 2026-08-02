@@ -2,42 +2,73 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   DeliveryResult,
-  InboundEnvelope,
   OutboundAction,
-  RuntimeTurnEventInput,
 } from "../../../test-support/harness/contracts.ts";
+import type {
+  BtccCommittedProgressEvent,
+  BtccTurnProgressPublisher,
+} from "../../../agent/btcc/index.ts";
 import { createAgentTurnEvent } from "../../../agent/events/turn-events.ts";
 import { DeliveryGuard } from "../../transport/delivery-guard.ts";
 import {
   APP_TRANSPORT,
 } from "../../transport/app/adapter.ts";
 
+const TELEGRAM_TRANSPORT = "telegram";
+
 export function appTurnEventAction(input: {
-  sessionId: string;
-  envelope: InboundEnvelope;
-  event: RuntimeTurnEventInput;
+  event: BtccCommittedProgressEvent;
 }): OutboundAction | null {
-  if (input.envelope.transport !== APP_TRANSPORT) return null;
-  const turnId = input.envelope.routingHints?.turnId?.trim();
-  if (!turnId) return null;
+  if (input.event.destination.transport !== APP_TRANSPORT) return null;
   return {
-    actionId: `app-turn-event:${turnId}:${input.event.kind}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
+    actionId: input.event.actionId,
     transport: APP_TRANSPORT,
-    accountId: input.envelope.accountId,
-    peer: eventPeer(input.envelope),
+    accountId: input.event.destination.accountId,
+    peer: eventPeer(input.event.destination.peer),
     message: {
       text: "",
-      replyToMessageId: input.envelope.message.id,
+      replyToMessageId: input.event.destination.replyToMessageId,
     },
     metadata: {
       kind: "turn_event",
-      turnId,
+      turnId: input.event.turnId,
       event: publicTurnEvent({
-        sessionId: input.sessionId,
-        turnId,
-        event: input.event,
+        sessionId: input.event.sessionId,
+        turnId: input.event.turnId,
+        committed: input.event,
       }),
       source: "gateway/native-butler/projection-and-lifecycle.ts#turn-event",
+    },
+  };
+}
+
+export function createNativeButlerProgressPublisher(input: {
+  deliver: (
+    sessionId: string,
+    action: OutboundAction,
+    metadata: Record<string, unknown>,
+  ) => Promise<DeliveryResult>;
+}): BtccTurnProgressPublisher {
+  return {
+    async publish(event): Promise<void> {
+      if (event.destination.transport === TELEGRAM_TRANSPORT) return;
+
+      const action = appTurnEventAction({ event });
+      if (!action) {
+        throw new Error(`No enabled progress publisher for ${event.destination.transport}`);
+      }
+      const delivery = await input.deliver(event.sessionId, action, {
+        source: "gateway/native-butler/projection-and-lifecycle.ts#progress",
+        kind: "turn_event",
+        turnId: event.turnId,
+        eventId: event.eventId,
+        actionId: event.actionId,
+        sessionSequence: event.sessionSequence,
+        turnSequence: event.turnSequence,
+      });
+      if (!delivery.ok) {
+        throw new Error(delivery.error || "BTCC progress delivery failed");
+      }
     },
   };
 }
@@ -125,33 +156,40 @@ export async function waitForShutdown(input: {
 function publicTurnEvent(input: {
   sessionId: string;
   turnId: string;
-  event: RuntimeTurnEventInput;
-}): RuntimeTurnEventInput {
+  committed: BtccCommittedProgressEvent;
+}): Record<string, unknown> {
+  const event = input.committed.event;
   const normalized = createAgentTurnEvent({
+    id: input.committed.eventId,
     sessionId: input.sessionId,
     turnId: input.turnId,
-    sessionSequence: 1,
-    turnSequence: 1,
-    kind: input.event.kind,
-    visibility: input.event.visibility ?? "public",
-    payload: input.event.payload ?? {},
-    createdAt: input.event.createdAt,
+    sessionSequence: input.committed.sessionSequence,
+    turnSequence: input.committed.turnSequence,
+    kind: event.kind,
+    visibility: event.visibility ?? "public",
+    payload: event.payload ?? {},
+    createdAt: event.createdAt,
   });
   return {
+    id: normalized.id,
     kind: normalized.kind,
     visibility: normalized.visibility,
+    sessionSequence: normalized.sessionSequence,
+    turnSequence: normalized.turnSequence,
     createdAt: normalized.createdAt,
     payload: normalized.payload,
   };
 }
 
-function eventPeer(envelope: InboundEnvelope): OutboundAction["peer"] {
-  if (envelope.peer.kind === "thread") {
+function eventPeer(
+  peer: BtccCommittedProgressEvent["destination"]["peer"],
+): OutboundAction["peer"] {
+  if (peer.kind === "thread") {
     return {
       kind: "thread",
-      id: envelope.peer.parentId ?? envelope.peer.id,
-      threadId: envelope.peer.id,
+      id: peer.parentId ?? peer.id,
+      threadId: peer.id,
     };
   }
-  return { kind: envelope.peer.kind, id: envelope.peer.id };
+  return { kind: peer.kind, id: peer.id };
 }

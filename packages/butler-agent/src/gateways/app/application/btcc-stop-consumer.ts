@@ -1,18 +1,23 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import type { BtccTurnRuntime } from "../../../agent/btcc/index.ts";
+import type {
+  Btcc,
+  BtccProgressProjectionHost,
+} from "../../../agent/btcc/index.ts";
 
 type PendingStopRow = {
   turn_id: string;
   state: string;
 };
 
-export class BtccStopRequestReconciler {
+/** App cancellation Outbox consumer; it projects BTCC's Stop receipt only. */
+export class AppBtccStopConsumer {
   private running: Promise<void> | null = null;
 
   constructor(
     private readonly dbPath: string,
-    private readonly runtime: BtccTurnRuntime,
+    private readonly btcc: Pick<Btcc, "stopTurn">,
+    private readonly progress: Pick<BtccProgressProjectionHost, "hasCommittedEvent">,
   ) {}
 
   reconcile(): Promise<void> {
@@ -39,38 +44,29 @@ export class BtccStopRequestReconciler {
         ORDER BY app_turn_cancel_outbox.created_at
       `).all();
       for (const row of rows) {
-        const outcome = await this.runtime.stopTurn({ kind: "stop", turnId: row.turn_id });
+        const outcome = await this.btcc.stopTurn({ turnId: row.turn_id });
         if (outcome.kind === "fenced_pending_persistence") continue;
-        this.commitProjection(db, row.turn_id, outcome.kind);
+        if (!this.hasCanonicalCancellation(row.turn_id)) continue;
+        this.acknowledgeCanonicalCancellation(db, row.turn_id);
       }
     } finally {
       db.close();
     }
   }
 
-  private commitProjection(db: Database, turnId: string, outcome: string): void {
+  private hasCanonicalCancellation(turnId: string): boolean {
+    return this.progress.hasCommittedEvent(turnId, "turn.cancelled");
+  }
+
+  private acknowledgeCanonicalCancellation(db: Database, turnId: string): void {
     const transaction = db.transaction(() => {
       const now = new Date().toISOString();
       db.query(`
         UPDATE app_turn_cancel_outbox
         SET state = 'completed', accepted_at = COALESCE(accepted_at, ?),
           completed_at = ?, safe_error_code = NULL
-        WHERE turn_id = ? AND state IN ('pending', 'accepted')
+          WHERE turn_id = ? AND state IN ('pending', 'accepted')
       `).run(now, now, turnId);
-      if (outcome === "cancelled" || outcome === "already_cancelled") {
-        db.query(`
-          UPDATE turns
-          SET state = 'cancelled', safe_status_label = 'Cancelled',
-            safe_error_code = NULL, retryable = 0, cancellable = 0, updated_at = ?
-          WHERE id = ? AND state = 'cancelling'
-        `).run(now, turnId);
-        db.query(`
-          UPDATE messages
-          SET status = 'cancelled', updated_at = ?
-          WHERE turn_id = ? AND role = 'assistant'
-            AND status IN ('pending', 'streaming')
-        `).run(now, turnId);
-      }
     });
     transaction();
   }

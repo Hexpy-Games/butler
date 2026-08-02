@@ -56,11 +56,14 @@ export class AppTurnProgressEventStore {
       turnId,
       input.kind,
     );
+    const nextSessionSequence = this.input.nextSessionTurnEventSequence(sessionId);
+    const nextTurnSequence = this.input.nextTurnEventSequence(turnId);
     const event = createAgentTurnEvent({
+      id: input.id,
       sessionId,
       turnId,
-      sessionSequence: this.input.nextSessionTurnEventSequence(sessionId),
-      turnSequence: this.input.nextTurnEventSequence(turnId),
+      sessionSequence: sequenceAtOrAfter(input.sessionSequence, nextSessionSequence),
+      turnSequence: sequenceAtOrAfter(input.turnSequence, nextTurnSequence),
       kind: input.kind,
       visibility: input.visibility,
       payload: input.payload,
@@ -272,4 +275,12 @@ export class AppTurnProgressEventStore {
       VALUES (?, ?)
     `).run(turnId, JSON.stringify(row));
   }
+}
+
+function sequenceAtOrAfter(requested: number | undefined, next: number): number {
+  return requested !== undefined &&
+      Number.isSafeInteger(requested) &&
+      requested >= next
+    ? requested
+    : next;
 }

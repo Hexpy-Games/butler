@@ -4,18 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   snapshotContextDocuments,
-  type ContextDocumentWriter,
-} from "../../packages/butler-agent/src/interfaces/gateway/btcc/context-documents.ts";
+  type BtccContextDocumentWriter,
+} from "../../packages/butler-agent/src/agent/btcc/turn/context-documents.ts";
 import {
   PromptAssembler,
   type ContextAssembly,
 } from "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
-import { snapshotGatewayContext } from "../../packages/butler-agent/src/interfaces/gateway/btcc/snapshot-gateway-context.ts";
+import { snapshotTurnContext } from
+  "../../packages/butler-agent/src/agent/btcc/turn/prepare-turn.ts";
 import type { StoredSessionBinding } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 
-type PersistedDocument = Parameters<ContextDocumentWriter["persist"]>[0];
+type PersistedDocument = Parameters<BtccContextDocumentWriter["persist"]>[0];
 
-class RecordingContextDocuments implements ContextDocumentWriter {
+class RecordingContextDocuments implements BtccContextDocumentWriter {
   readonly records: PersistedDocument[] = [];
 
   persist(input: PersistedDocument): string {
@@ -67,7 +68,7 @@ test("BTCC rejects project-scoped context when no project binding exists", () =>
   expect(documents.records).toEqual([]);
 });
 
-test("Gateway context does not grant write access when the binding has no access policy", () => {
+test("BTCC context does not grant write access when the binding has no access policy", () => {
   const documents = new RecordingContextDocuments();
   const assembly: ContextAssembly = {
     staticContext: [],
@@ -79,7 +80,7 @@ test("Gateway context does not grant write access when the binding has no access
     references: [],
     liveConfigHash: "empty",
   };
-  const snapshot = snapshotGatewayContext({
+  const snapshot = snapshotTurnContext({
     binding: sessionBinding("/workspace"),
     assembly,
     documents,
@@ -88,7 +89,7 @@ test("Gateway context does not grant write access when the binding has no access
   expect(snapshot.executionPolicy?.accessMode).toBe("read_only");
 });
 
-test("Gateway context snapshots the queued Turn access instead of a later wider session setting", () => {
+test("BTCC context snapshots the queued Turn access instead of a later wider session setting", () => {
   const binding = sessionBinding("/workspace");
   binding.metadata = {
     runtimePolicy: { accessMode: "full_access", trackingMode: "none" },
@@ -103,7 +104,7 @@ test("Gateway context snapshots the queued Turn access instead of a later wider 
     references: [],
     liveConfigHash: "empty",
   };
-  const snapshot = snapshotGatewayContext({
+  const snapshot = snapshotTurnContext({
     binding,
     assembly,
     documents: new RecordingContextDocuments(),
@@ -113,7 +114,7 @@ test("Gateway context snapshots the queued Turn access instead of a later wider 
   expect(snapshot.executionPolicy?.accessMode).toBe("read_only");
 });
 
-test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path", () => {
+test("PromptAssembler metadata survives the real BTCC Turn snapshot path", () => {
   const root = join(tmpdir(), `btcc-context-projection-${Date.now()}`);
   const butlerHome = join(root, "home");
   const butlerData = join(root, "data");
@@ -159,7 +160,7 @@ test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path",
     });
 
     const documents = new RecordingContextDocuments();
-    const snapshot = snapshotGatewayContext({
+    const snapshot = snapshotTurnContext({
       binding,
       assembly,
       documents,
@@ -173,7 +174,7 @@ test("PromptAssembler metadata survives the real Gateway to BTCC snapshot path",
         metadata: { transient: "not-admitted" },
       }],
     });
-    const persistedRules = documents.records.find((record) => record.sourceId === "rules");
+    const persistedRules = documents.records.find((record: PersistedDocument) => record.sourceId === "rules");
     expect(persistedRules).toMatchObject({
       projectionClass: "mandatory_hot_cache",
       scopeKind: "user",
