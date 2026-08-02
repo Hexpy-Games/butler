@@ -183,12 +183,12 @@ export function hostedChatText(message: any): string {
 
 
 
-export function extractHostedChatToolCalls(message: any, allowedNames: Set<string>): HostedChatToolCall[] {
+export function extractHostedChatToolCalls(message: any, allowedNames?: Set<string>): HostedChatToolCall[] {
   const calls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
   return calls.flatMap((call: any): HostedChatToolCall[] => {
     const name = normalizeLocalTextToolName(
       typeof call?.function?.name === "string" ? call.function.name : "",
-      allowedNames,
+      allowedNames ?? new Set<string>(),
     );
     if (
       !call ||

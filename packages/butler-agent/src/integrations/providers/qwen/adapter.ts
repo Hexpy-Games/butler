@@ -8,7 +8,7 @@ export const QWEN_PROVIDER_ADAPTER = defineProviderAdapter({
   async runPrompt(options) {
     return await (await import("./runtime.ts")).runQwenPrompt(options);
   },
-  async runFunctionToolPrompt(options) {
-    return await (await import("./runtime.ts")).runQwenFunctionToolPrompt(options);
+  async runRound(request) {
+    return await (await import("./runtime.ts")).runQwenModelRound(request);
   },
 });

@@ -110,7 +110,7 @@ test("Windows App BTCC harness enters through the R3 production composition", ()
   expect(source).toContain("createProductionBtccComposition");
   expect(source).toContain("bindBtccGatewayRuntime");
   expect(source).toContain("createBtccQueueEntryDecider");
-  expect(source).toContain("promptRunner");
+  expect(source).toContain("modelRound");
   expect(source).not.toContain("createBtccTurnRuntime");
   expect(source).not.toContain("openBtccSqliteStores");
   expect(source).not.toContain("DirectHarnessModel");

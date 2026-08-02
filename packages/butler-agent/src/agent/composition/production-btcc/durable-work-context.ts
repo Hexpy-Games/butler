@@ -1,5 +1,5 @@
 import type { DurableWorkContext } from "../../btcc/durable-work/index.ts";
-import { structuredToolResultModelPreview } from "../../model-tool-loop/index.ts";
+import { structuredToolResultModelPreview } from "../../btcc/agent-loop/index.ts";
 
 export function renderDurableWorkContext(
   context: DurableWorkContext | null,

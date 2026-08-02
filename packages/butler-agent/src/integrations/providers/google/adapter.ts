@@ -17,12 +17,12 @@ export const GOOGLE_PROVIDER_ADAPTER = defineProviderAdapter({
       usage: null,
     };
   },
-  async runFunctionToolPrompt(options) {
-    const [{ requireHostedRuntimeConfig }, { runGeminiFunctionToolPromptText }] =
-      await Promise.all([import("../shared/model-routing.ts"), import("./runtime.ts")]);
-    return await runGeminiFunctionToolPromptText(
-      requireHostedRuntimeConfig(options.model, "google"),
-      options,
+  async runRound(request) {
+    const [{ requireHostedRuntimeConfig }, { runGeminiModelRound }] =
+      await Promise.all([import("../shared/model-routing.ts"), import("./model-round.ts")]);
+    return await runGeminiModelRound(
+      requireHostedRuntimeConfig(request.model, "google"),
+      request,
     );
   },
 });

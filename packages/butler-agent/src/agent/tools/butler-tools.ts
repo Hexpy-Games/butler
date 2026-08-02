@@ -12,8 +12,7 @@ import {
   type RetrievalPlanningResult,
 } from "../cognition/memory/retrieval-planning.ts";
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
-import type { AgentLoopToolDefinition } from "../model-tool-loop/index.ts";
-import type { FunctionToolPromptOptions } from "../../integrations/providers/provider.ts";
+import type { BtccAgentLoopToolDefinition } from "../btcc/agent-loop/index.ts";
 import type { PublicWorkObligationKind } from "../tool-support/index.ts";
 import {
   completionObligationEvidenceReceiptsFromResult,
@@ -55,8 +54,14 @@ export type {
   ToolCapabilityMetadata,
 } from "./types.ts";
 
-export type ButlerToolExecutor = FunctionToolPromptOptions["executeTool"];
-export type ButlerToolCall = Parameters<ButlerToolExecutor>[0];
+export type ButlerToolCall = {
+  name: string;
+  args: Record<string, unknown>;
+  rawArguments: string;
+  providerCallId?: string;
+  signal?: AbortSignal;
+};
+export type ButlerToolExecutor = (call: ButlerToolCall) => Promise<unknown>;
 export type ButlerToolRuntimeContext = {
   effectOccurrenceId?: string;
 };
@@ -96,11 +101,11 @@ async function executeRegisteredButlerTool(
   return await execute(call, context);
 }
 
-export function butlerToolsForAgentLoop(): AgentLoopToolDefinition[] {
+export function butlerToolsForAgentLoop(): BtccAgentLoopToolDefinition[] {
   return BUTLER_TOOLS.map((tool) => ({
     name: tool.name,
     description: tool.description,
-    inputSchema: tool.parameters as AgentLoopToolDefinition["inputSchema"],
+    parameters: tool.parameters,
     concurrencySafe: tool.concurrencySafe,
   }));
 }

@@ -8,7 +8,7 @@ export const OPENCODE_GO_PROVIDER_ADAPTER = defineProviderAdapter({
   async runPrompt(options) {
     return await (await import("./runtime.ts")).runOpenCodeGoPrompt(options);
   },
-  async runFunctionToolPrompt(options) {
-    return await (await import("./runtime.ts")).runOpenCodeGoFunctionToolPrompt(options);
+  async runRound(request) {
+    return await (await import("./runtime.ts")).runOpenCodeGoModelRound(request);
   },
 });

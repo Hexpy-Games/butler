@@ -1,5 +1,7 @@
-import type { FunctionToolPromptOptions } from
-  "../../../integrations/providers/runtime-contracts.ts";
+import {
+  runBtccAgentLoop,
+  type BtccAgentLoopInput,
+} from "../../../agent/btcc/agent-loop/index.ts";
 import { ModelProviderRequestError } from
   "../../../integrations/providers/provider-errors.ts";
 import {
@@ -26,11 +28,10 @@ export {
 } from "./guided-operational-lease.ts";
 
 const DEFAULT_GUIDED_QUIESCENCE_GRACE_MS = 5_000;
-type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
 
-export async function runGuidedPromptWithOperationalReport(input: {
-  promptRunner: PromptRunner;
-  options: FunctionToolPromptOptions;
+/** Operational deadline handling around the BTCC-owned semantic loop. */
+export async function runGuidedAgentLoopWithOperationalReport(input: {
+  options: BtccAgentLoopInput;
   parentSignal: AbortSignal;
   leaseStartedAt: number;
   originalRequest: string;
@@ -44,31 +45,26 @@ export async function runGuidedPromptWithOperationalReport(input: {
     leaseMs: input.leaseMs,
     finalReportMs: input.finalReportMs,
   });
-  const finalReportMs = lease.finalReportMs;
   const quiescenceGraceMs = Math.min(
     DEFAULT_GUIDED_QUIESCENCE_GRACE_MS,
-    Math.max(1, Math.floor(finalReportMs / 4)),
+    Math.max(1, Math.floor(lease.finalReportMs / 4)),
   );
   try {
     const mainRemainingMs = lease.mainDeadline() - Date.now();
     if (mainRemainingMs <= 0) throw new GuidedOperationalWindowExpired();
-    const runMain = (signal: AbortSignal) => input.promptRunner({
-      ...input.options,
-      signal,
-      executeTool: async (call) => withTurnTimeRemaining(
-        await input.options.executeTool({
-          ...call,
-          signal: call.signal ?? signal,
-        }),
-        lease.mainDeadline(),
-      ),
-    });
     const text = await runInGuidedOperationalWindow({
       parentSignal: input.parentSignal,
       timeoutMs: mainRemainingMs,
       deadline: lease.mainWindow(),
       quiescenceGraceMs,
-      run: runMain,
+      run: (signal) => runBtccAgentLoop({
+        ...input.options,
+        signal,
+        executeTool: async (call) => withTurnTimeRemaining(
+          await input.options.executeTool({ ...call, signal }),
+          lease.mainDeadline(),
+        ),
+      }).then((result) => result.finalText),
     });
     if (text.trim()) return text;
   } catch (error) {
@@ -76,13 +72,12 @@ export async function runGuidedPromptWithOperationalReport(input: {
     if (!allowsOperationalReport(error)) throw error;
   }
 
-  const emptyFacts: OperationalFacts = {
+  let facts: OperationalFacts = {
     originalRequest: input.originalRequest,
     work: null,
     toolCalls: [],
     effects: [],
   };
-  let facts = emptyFacts;
   const factLoadRemainingMs = lease.leaseDeadline() - Date.now();
   if (factLoadRemainingMs > 0) {
     try {
@@ -104,19 +99,19 @@ export async function runGuidedPromptWithOperationalReport(input: {
     try {
       const text = await runInGuidedOperationalWindow({
         parentSignal: input.parentSignal,
-        timeoutMs: Math.min(finalReportMs, remainingMs),
-        run: (signal) => input.promptRunner({
+        timeoutMs: Math.min(lease.finalReportMs, remainingMs),
+        run: (signal) => runBtccAgentLoop({
           ...input.options,
           prompt: guidedOperationalReportPrompt(facts),
           instructions: "Report only the supplied current facts. Do not call tools.",
           signal,
           attachments: [],
           tools: [],
-          maxToolRounds: 1,
+          maxIterations: 1,
           providerRetryAttempts: 0,
           executeTool: rejectOperationalToolCall,
           onAssistantTextBeforeTools: undefined,
-        }),
+        }).then((result) => result.finalText),
       });
       if (text.trim()) return text;
     } catch {

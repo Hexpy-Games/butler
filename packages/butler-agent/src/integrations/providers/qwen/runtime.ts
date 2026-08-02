@@ -1,10 +1,10 @@
+import type { PromptOptions, PromptTextResult } from "../runtime-contracts.ts";
 import type {
-  FunctionToolPromptOptions,
-  PromptOptions,
-  PromptTextResult,
-} from "../runtime-contracts.ts";
+  ModelRoundRequest,
+  ModelRoundResult,
+} from "../../../agent/btcc/ports/model-round.ts";
 import {
-  runHostedOpenAICompatibleFunctionToolPromptText,
+  runHostedOpenAICompatibleModelRound,
   runHostedOpenAICompatiblePromptText,
 } from "../shared/hosted-openai-compatible.ts";
 import { requireHostedRuntimeConfig } from "../shared/model-routing.ts";
@@ -17,11 +17,10 @@ export async function runQwenPrompt(options: PromptOptions): Promise<PromptTextR
     usage: null,
   };
 }
-export async function runQwenFunctionToolPrompt(
-  options: FunctionToolPromptOptions,
-): Promise<string> {
-  return await runHostedOpenAICompatibleFunctionToolPromptText(
-    requireHostedRuntimeConfig(options.model, "qwen"),
-    options,
+
+export async function runQwenModelRound(request: ModelRoundRequest): Promise<ModelRoundResult> {
+  return await runHostedOpenAICompatibleModelRound(
+    requireHostedRuntimeConfig(request.model, "qwen"),
+    request,
   );
 }

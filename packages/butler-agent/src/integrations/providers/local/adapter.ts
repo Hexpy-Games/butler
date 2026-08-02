@@ -16,12 +16,12 @@ export const LOCAL_PROVIDER_ADAPTER = defineProviderAdapter({
       usage: null,
     };
   },
-  async runFunctionToolPrompt(options) {
-    const [{ resolveEffectiveModelRef }, { runLocalFunctionToolPromptText }] = await Promise.all([
+  async runRound(request) {
+    const [{ resolveEffectiveModelRef, resolveLocalModelConfig }, { runLocalModelRound }] = await Promise.all([
       import("../shared/model-routing.ts"),
-      import("./runtime.ts"),
+      import("./model-round.ts"),
     ]);
-    const model = resolveEffectiveModelRef(options.model);
-    return await runLocalFunctionToolPromptText({ ...options, model });
+    const model = resolveEffectiveModelRef(request.model);
+    return await runLocalModelRound(resolveLocalModelConfig(model), { ...request, model });
   },
 });

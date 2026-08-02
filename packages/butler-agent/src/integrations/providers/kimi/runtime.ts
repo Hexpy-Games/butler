@@ -1,10 +1,10 @@
+import type { PromptOptions, PromptTextResult } from "../runtime-contracts.ts";
 import type {
-  FunctionToolPromptOptions,
-  PromptOptions,
-  PromptTextResult,
-} from "../runtime-contracts.ts";
+  ModelRoundRequest,
+  ModelRoundResult,
+} from "../../../agent/btcc/ports/model-round.ts";
 import {
-  runHostedOpenAICompatibleFunctionToolPromptText,
+  runHostedOpenAICompatibleModelRound,
   runHostedOpenAICompatiblePromptText,
 } from "../shared/hosted-openai-compatible.ts";
 import { requireHostedRuntimeConfig } from "../shared/model-routing.ts";
@@ -17,11 +17,10 @@ export async function runKimiPrompt(options: PromptOptions): Promise<PromptTextR
     usage: null,
   };
 }
-export async function runKimiFunctionToolPrompt(
-  options: FunctionToolPromptOptions,
-): Promise<string> {
-  return await runHostedOpenAICompatibleFunctionToolPromptText(
-    requireHostedRuntimeConfig(options.model, "kimi"),
-    options,
+
+export async function runKimiModelRound(request: ModelRoundRequest): Promise<ModelRoundResult> {
+  return await runHostedOpenAICompatibleModelRound(
+    requireHostedRuntimeConfig(request.model, "kimi"),
+    request,
   );
 }

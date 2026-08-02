@@ -26,6 +26,13 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+import type {
+  ModelRoundMessage,
+  ModelRoundPort,
+  ModelRoundRequest,
+  ModelRoundResult,
+} from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import {
   DEFAULT_GUIDED_ABSOLUTE_TURN_LEASE_MS,
   DEFAULT_GUIDED_FINAL_REPORT_MS,
@@ -34,7 +41,7 @@ import {
   guidedOperationalFallback,
   guidedOperationalReportPrompt,
   runInGuidedOperationalWindow,
-  runGuidedPromptWithOperationalReport,
+  runGuidedAgentLoopWithOperationalReport,
 } from
   "../../packages/butler-agent/src/agent/composition/production-btcc/guided-operational-report.ts";
 import { createGuidedToolCallExecutor } from
@@ -46,6 +53,96 @@ import { upsertMcpServer } from
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 
+type ScriptedModelRoundStep =
+  | ModelRoundResult
+  | ((request: ModelRoundRequest, index: number) =>
+    ModelRoundResult | Promise<ModelRoundResult>);
+
+function scriptedModelRound(
+  steps: readonly ScriptedModelRoundStep[],
+): ModelRoundPort {
+  let index = 0;
+  return {
+    async runRound(request) {
+      const step = steps[index];
+      const currentIndex = index;
+      index += 1;
+      if (!step) throw new Error("scripted_model_round_exhausted");
+      return typeof step === "function"
+        ? await step(request, currentIndex)
+        : step;
+    },
+  };
+}
+
+function toolCall(
+  id: string,
+  name: string,
+  arguments_: Record<string, unknown>,
+): NonNullable<ModelRoundResult["toolCalls"]>[number] {
+  return {
+    id,
+    name,
+    arguments: arguments_,
+    rawArguments: JSON.stringify(arguments_),
+  };
+}
+
+function toolResponse(
+  calls: Array<NonNullable<ModelRoundResult["toolCalls"]>[number]>,
+  text?: string,
+): ModelRoundResult {
+  return { ...(text ? { text } : {}), toolCalls: calls };
+}
+
+function messagesWithToolResults(
+  request: ModelRoundRequest,
+): ModelRoundMessage[] {
+  return request.messages.filter((message) => message.role === "tool");
+}
+
+function toolMessageOutput(message: ModelRoundMessage | undefined): unknown {
+  if (!message) return undefined;
+  return (JSON.parse(message.content) as { output?: unknown }).output;
+}
+
+test("real Guided Turn enters the BTCC agent-loop through the one-round port", async () => {
+  const fixture = createFixture("guided-btcc-loop-entry");
+  try {
+    const requests: Array<{ messages: readonly { role: string; content: string }[] }> = [];
+    const modelRound: ModelRoundPort = {
+      async runRound(request) {
+        requests.push({ messages: request.messages });
+        return { text: "BTCC final answer", toolCalls: [] };
+      },
+    };
+    const agent = createProductionGuidedTurnAgent({
+      butlerHome: fixture.root,
+      butlerData: fixture.root,
+      appMessageDbPath: fixture.dbPath,
+      contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal,
+      effectJournal: fixture.stores.guidedEffectJournal,
+      durableWork: fixture.stores.durableWork,
+      modelRound,
+    });
+
+    const result = await agent.run({
+      turn: turnRecord(fixture.root, { turnId: "guided-btcc-loop-entry" }),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.content).toBe("BTCC final answer");
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.messages[0]).toMatchObject({
+      role: "user",
+      content: expect.stringContaining("요청을 처리해 주세요"),
+    });
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent leaves web query planning to the selected model", async () => {
   const fixture = createFixture("guided-model-owned-search");
   try {
@@ -53,21 +150,20 @@ test("Guided agent leaves web query planning to the selected model", async () =>
       webSearch: { provider: "mock" },
     }));
     let searchResult: Record<string, any> | undefined;
-    const agent = fixture.agent(async (options) => {
-      searchResult = await options.executeTool({
-        name: "web_search",
-        args: { query: "Butler guided search ownership" },
-        rawArguments: JSON.stringify({
-          query: "Butler guided search ownership",
-        }),
-      }) as Record<string, any>;
-      return "검색했습니다.";
-    });
+    const turnId = "guided-model-owned-search";
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse([toolCall("search-1", "web_search", {
+        query: "Butler guided search ownership",
+      })]),
+      { text: "검색했습니다.", toolCalls: [] },
+    ]));
 
     await agent.run({
-      turn: turnRecord(fixture.root, { turnId: "guided-model-owned-search" }),
+      turn: turnRecord(fixture.root, { turnId }),
       signal: new AbortController().signal,
     });
+    searchResult = fixture.stores.guidedToolJournal.list(turnId)[0]?.result as
+      Record<string, any> | undefined;
 
     expect(searchResult?.search_plan).toMatchObject({
       mode: "direct",
@@ -88,28 +184,27 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
   try {
     const availability = async (turn: TurnRecord, query = "project_ledger_create") => {
       let result: unknown;
-      const agent = fixture.agent(async (options) => {
-        result = await options.executeTool({
-          name: "tool_search",
-          args: { query, include_disabled: true },
-          rawArguments: JSON.stringify({ query, include_disabled: true }),
-        });
-        return "확인했습니다.";
-      });
+      const agent = fixture.agent(scriptedModelRound([
+        toolResponse([toolCall("search-1", "tool_search", {
+          query,
+          include_disabled: true,
+        })]),
+        { text: "확인했습니다.", toolCalls: [] },
+      ]));
       await agent.run({ turn, signal: new AbortController().signal });
+      result = fixture.stores.guidedToolJournal.list(turn.turnId)[0]?.result;
       const results = (result as { results?: Array<{ id: string; enabled: boolean }> }).results ?? [];
       return results.find((entry) => entry.id === `native:${query}`)?.enabled;
     };
 
     let updateDescription: unknown;
-    const descriptionAgent = fixture.agent(async (options) => {
-      updateDescription = await options.executeTool({
-        name: "tool_describe",
-        args: { ids: ["native:project_ledger_update"] },
-        rawArguments: JSON.stringify({ ids: ["native:project_ledger_update"] }),
-      });
-      return "확인했습니다.";
-    });
+    const descriptionTurnId = "turn-project-description";
+    const descriptionAgent = fixture.agent(scriptedModelRound([
+      toolResponse([toolCall("describe-1", "tool_describe", {
+        ids: ["native:project_ledger_update"],
+      })]),
+      { text: "확인했습니다.", toolCalls: [] },
+    ]));
 
     const fullAccessProjectTurn = turnRecord(fixture.root, {
       accessMode: "full_access",
@@ -120,13 +215,14 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     await descriptionAgent.run({
       turn: {
         ...fullAccessProjectTurn,
-        turnId: "turn-project-description",
+        turnId: descriptionTurnId,
         inboxId: "inbox:turn-project-description",
         triggerKey: "trigger:turn-project-description",
         originalMessageId: "message:turn-project-description",
       },
       signal: new AbortController().signal,
     });
+    updateDescription = fixture.stores.guidedToolJournal.list(descriptionTurnId)[0]?.result;
     expect(JSON.stringify(updateDescription)).toContain('"required":["kind","id"]');
     expect(await availability(fullAccessProjectTurn, "render_project_dashboard"))
       .toBeUndefined();
@@ -143,18 +239,18 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     let writeFileSchema = "";
     let editFileSchema = "";
     let instructions = "";
-    let maxToolRounds = 0;
-    const projectAgent = fixture.agent(async (options) => {
-      visibleNames = options.tools.map((tool) => tool.name);
-      writeFileSchema = JSON.stringify(
-        options.tools.find((tool) => tool.name === "write_file")?.parameters,
-      );
-      editFileSchema = JSON.stringify(
-        options.tools.find((tool) => tool.name === "edit_file")?.parameters,
-      );
-      instructions = options.instructions ?? "";
-      maxToolRounds = options.maxToolRounds ?? 0;
-      return "준비했습니다.";
+    const projectAgent = fixture.agent({
+      async runRound(request) {
+        visibleNames = request.tools.map((tool) => tool.name);
+        writeFileSchema = JSON.stringify(
+          request.tools.find((tool) => tool.name === "write_file")?.parameters,
+        );
+        editFileSchema = JSON.stringify(
+          request.tools.find((tool) => tool.name === "edit_file")?.parameters,
+        );
+        instructions = request.instructions ?? "";
+        return { text: "준비했습니다.", toolCalls: [] };
+      },
     });
     await projectAgent.run({
       turn: turnRecord(fixture.root, {
@@ -185,40 +281,23 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(instructions).not.toContain(
       "Do not attempt to mutate the Project Ledger",
     );
-    expect(maxToolRounds).toBe(Number.POSITIVE_INFINITY);
 
     let localVisibleNames: string[] = [];
     let localSearch: unknown;
     let localDescription: unknown;
     let localCatalogCall: unknown;
     let localDirectCall: unknown;
-    const localAgent = fixture.agent(async (options) => {
-      localVisibleNames = options.tools.map((tool) => tool.name);
-      localSearch = await options.executeTool({
-        name: "tool_search",
-        args: { query: "project_ledger_create", include_disabled: true },
-        rawArguments: JSON.stringify({
+    const localTurnId = "turn-project-local-work";
+    const localAgent = fixture.agent(scriptedModelRound([
+      toolResponse([
+        toolCall("search-1", "tool_search", {
           query: "project_ledger_create",
           include_disabled: true,
         }),
-      });
-      localDescription = await options.executeTool({
-        name: "tool_describe",
-        args: { ids: ["native:project_ledger_create"] },
-        rawArguments: JSON.stringify({ ids: ["native:project_ledger_create"] }),
-      });
-      localCatalogCall = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:project_ledger_create",
-          arguments: {
-            kind: "work",
-            id: "W-MUST-NOT-EXIST",
-            title: "Must not exist",
-            acceptance: "Must remain unavailable",
-          },
-        },
-        rawArguments: JSON.stringify({
+        toolCall("describe-1", "tool_describe", {
+          ids: ["native:project_ledger_create"],
+        }),
+        toolCall("catalog-1", "tool_call", {
           id: "native:project_ledger_create",
           arguments: {
             kind: "work",
@@ -227,30 +306,38 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
             acceptance: "Must remain unavailable",
           },
         }),
-      });
-      localDirectCall = await options.executeTool({
-        name: "project_ledger_create",
-        args: {
-          kind: "work",
-          id: "W-MUST-NOT-EXIST",
-          title: "Must not exist",
-          acceptance: "Must remain unavailable",
-        },
-        rawArguments: JSON.stringify({
+        toolCall("direct-1", "project_ledger_create", {
           kind: "work",
           id: "W-MUST-NOT-EXIST",
           title: "Must not exist",
           acceptance: "Must remain unavailable",
         }),
-      });
-      return "세션 작업으로 처리했습니다.";
-    });
+      ]),
+      (request) => {
+        localVisibleNames = request.tools.map((tool) => tool.name);
+        const messages = messagesWithToolResults(request);
+        expect(messages).toHaveLength(4);
+        localSearch = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "search-1"),
+        );
+        localDescription = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "describe-1"),
+        );
+        localCatalogCall = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "catalog-1"),
+        );
+        localDirectCall = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "direct-1"),
+        );
+        return { text: "세션 작업으로 처리했습니다.", toolCalls: [] };
+      },
+    ]));
     await localAgent.run({
       turn: turnRecord(fixture.root, {
         accessMode: "full_access",
         trackingMode: "local",
         projectId: "project-local",
-        turnId: "turn-project-local-work",
+        turnId: localTurnId,
       }),
       signal: new AbortController().signal,
     });
@@ -271,7 +358,7 @@ test("Guided agent exposes only typed Project Ledger effects in a writable proje
     expect(localCatalogCall).toMatchObject({ ok: false });
     expect(localDirectCall).toMatchObject({
       ok: false,
-      error: { code: "tool_not_authorized" },
+      observation_kind: "tool_unavailable",
     });
   } finally {
     fixture.close();
@@ -297,17 +384,9 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
   });
   try {
     const results: unknown[] = [];
-    const agent = fixture.agent(async (options) => {
-      const call = async (name: string, args: Record<string, unknown>) => {
-        const result = await options.executeTool({
-          name,
-          args,
-          rawArguments: JSON.stringify(args),
-        });
-        results.push(result);
-        return result;
-      };
-      await call("replace_work_plan", {
+    const turnId = "turn-guided-project-ledger-lifecycle";
+    const calls = [
+      toolCall("plan-1", "replace_work_plan", {
         objective: "Complete one tracked project change",
         actions: [{
           action_key: "create-ledger-work",
@@ -326,52 +405,56 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
           },
         }],
         checks: ["The canonical Project Ledger Work is done"],
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("plan-review-1", "record_work_review", {
         subject: "plan",
         verdict: "accept",
         summary: "The plan is concise and matches the project request.",
-      });
-      expect(existsSync(ledgerRoot)).toBe(false);
-      await call("project_ledger_create", {
+      }),
+      toolCall("create-1", "project_ledger_create", {
         kind: "work",
         id: "W-GUIDED-LIFECYCLE",
         title: "Guided project lifecycle",
         status: "proposed",
         spec: "SPEC-GUIDED-LIFECYCLE",
         acceptance: "The tracked project result is validated and reported",
-      });
-      await call("project_ledger_work_complete", {
+      }),
+      toolCall("complete-1", "project_ledger_work_complete", {
         id: "W-GUIDED-LIFECYCLE",
         validation: "Lifecycle integration test passed",
         review: "The requested tracked outcome is complete",
         report: "The Guided result contains the completed outcome",
-      });
-      await call("record_work_checkpoint", {
-        action_updates: [{
-          action_key: "create-ledger-work",
-          status: "done",
-        }, {
+      }),
+      toolCall("checkpoint-1", "record_work_checkpoint", {
+        action_updates: [{ action_key: "create-ledger-work", status: "done" }, {
           action_key: "complete-ledger-work",
           status: "done",
         }],
         public_summary: "The Project Ledger Work was created and completed.",
         next_step: "Review the completed project result.",
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("result-review-1", "record_work_review", {
         subject: "result",
         verdict: "accept",
         summary: "The Project Ledger Work was created and completed.",
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("completion-1", "record_work_review", {
         subject: "completion",
         verdict: "accept",
         next_stage: "reporting",
         summary: "The whole Work satisfies the original project request and checks.",
-      });
-      return "프로젝트 작업과 기록을 완료했습니다.";
-    }, { butlerHome: process.cwd() });
-    const turnId = "turn-guided-project-ledger-lifecycle";
+      }),
+    ];
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse(calls),
+      (request) => {
+        results.push(...fixture.stores.guidedToolJournal.list(turnId)
+          .map((entry) => entry.result));
+        expect(existsSync(ledgerRoot)).toBe(true);
+        expect(request.messages.some((message) => message.role === "tool")).toBe(true);
+        return { text: "프로젝트 작업과 기록을 완료했습니다.", toolCalls: [] };
+      },
+    ]), { butlerHome: process.cwd() });
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
       turns: fixture.stores.turns,
@@ -427,10 +510,12 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
     }
     try {
       let mutationResult: unknown;
-      const agent = fixture.agent(async (options) => {
-        await options.executeTool({
-          name: "replace_work_plan",
-          args: {
+      const turnId = archived
+        ? "turn-archived-project-binding"
+        : "turn-missing-project-binding";
+      const agent = fixture.agent(scriptedModelRound([
+        toolResponse([
+          toolCall("plan-1", "replace_work_plan", {
             objective: "Verify the persistent mutation boundary",
             actions: [{
               action_key: "create-ledger-work",
@@ -441,30 +526,25 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
               },
             }],
             checks: ["No mutation occurs without the exact App project row"],
-          },
-          rawArguments: "{}",
-        });
-        await options.executeTool({
-          name: "record_work_review",
-          args: {
+          }),
+          toolCall("review-1", "record_work_review", {
             subject: "plan",
             verdict: "accept",
             summary: "The boundary check is safe and scoped.",
-          },
-          rawArguments: "{}",
-        });
-        mutationResult = await options.executeTool({
-          name: "project_ledger_create",
-          args: {
+          }),
+          toolCall("mutation-1", "project_ledger_create", {
             kind: "work",
             id: "W-BINDING-FAIL-CLOSED",
             title: "Must not be created",
             acceptance: "The exact App row is required",
-          },
-          rawArguments: "{}",
-        });
-        return "바인딩이 없어 변경하지 않았습니다.";
-      }, { butlerHome: process.cwd() });
+          }),
+        ]),
+        () => {
+          mutationResult = fixture.stores.guidedToolJournal.list(turnId)
+            .at(-1)?.result;
+          return { text: "바인딩이 없어 변경하지 않았습니다.", toolCalls: [] };
+        },
+      ]), { butlerHome: process.cwd() });
       const runtime = createGuidedTurnRuntime({
         admission: fixture.stores.admission,
         turns: fixture.stores.turns,
@@ -472,9 +552,6 @@ test("Guided Project Ledger mutation fails closed for missing or archived App ro
         committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
         agent,
       });
-      const turnId = archived
-        ? "turn-archived-project-binding"
-        : "turn-missing-project-binding";
       await runtime.runTurn(projectRunCommand(fixture.root, turnId));
 
       expect(mutationResult).toMatchObject({
@@ -504,10 +581,12 @@ test("Guided agent legacy fallback never grants full access without an admitted 
     turn.modelSelection.controls = {};
     let names: string[] = [];
     let prompt = "";
-    const agent = fixture.agent(async (options) => {
-      names = options.tools.map((tool) => tool.name);
-      prompt = options.prompt;
-      return "읽기 전용으로 확인했습니다.";
+    const agent = fixture.agent({
+      async runRound(request) {
+        names = request.tools.map((tool) => tool.name);
+        prompt = request.messages[0]?.content ?? "";
+        return { text: "읽기 전용으로 확인했습니다.", toolCalls: [] };
+      },
     });
     await agent.run({ turn, signal: new AbortController().signal });
     expect(names).not.toContain("run_command");
@@ -540,40 +619,59 @@ test("Guided agent treats admitted Turn access as the upper permission bound", a
     let names: string[] = [];
     const unsafeAvailability: boolean[] = [];
     let deniedMutation: unknown;
-    const agent = fixture.agent(async (options) => {
-      names = options.tools.map((tool) => tool.name);
-      for (const name of [
-        "create_automation",
-        "update_explicit_memory",
-        "call_mcp_tool",
-      ]) {
-        const result = await options.executeTool({
-          name: "tool_search",
-          args: { query: name, include_disabled: true },
-          rawArguments: JSON.stringify({ query: name, include_disabled: true }),
-        }) as { results?: Array<{ name: string; enabled: boolean }> };
-        unsafeAvailability.push(
-          result.results?.find((entry) => entry.name === name)?.enabled ?? false,
-        );
-      }
-      deniedMutation = await options.executeTool({
-        name: "write_file",
-        args: { path: "forbidden.txt", content: "no", overwrite: false },
-        rawArguments: JSON.stringify({
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse([
+        toolCall("search-automation", "tool_search", {
+          query: "create_automation",
+          include_disabled: true,
+        }),
+        toolCall("search-memory", "tool_search", {
+          query: "update_explicit_memory",
+          include_disabled: true,
+        }),
+        toolCall("search-mcp", "tool_search", {
+          query: "call_mcp_tool",
+          include_disabled: true,
+        }),
+        toolCall("write-forbidden", "write_file", {
           path: "forbidden.txt",
           content: "no",
           overwrite: false,
         }),
-      });
-      return "읽기 권한 범위에서 확인했습니다.";
-    });
+      ]),
+      (request) => {
+        names = request.tools.map((tool) => tool.name);
+        const messages = messagesWithToolResults(request);
+        expect(messages).toHaveLength(4);
+        const results = [
+          "search-automation",
+          "search-memory",
+          "search-mcp",
+        ].map((id) => toolMessageOutput(
+          messages.find((message) => message.toolCallId === id),
+        )) as Array<{ results?: Array<{ name: string; enabled: boolean }> }>;
+        for (const [index, name] of [
+          "create_automation",
+          "update_explicit_memory",
+          "call_mcp_tool",
+        ].entries()) {
+          unsafeAvailability.push(
+            results[index]?.results?.find((entry) => entry.name === name)?.enabled ?? false,
+          );
+        }
+        deniedMutation = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "write-forbidden"),
+        );
+        return { text: "읽기 권한 범위에서 확인했습니다.", toolCalls: [] };
+      },
+    ]));
     await agent.run({ turn, signal: new AbortController().signal });
     expect(names).not.toContain("run_command");
     expect(names).not.toContain("write_file");
     expect(unsafeAvailability).toEqual([false, false, false]);
     expect(deniedMutation).toMatchObject({
       ok: false,
-      error: { code: "tool_not_authorized" },
+      observation_kind: "tool_unavailable",
     });
     expect(existsSync(join(fixture.root, "forbidden.txt"))).toBe(false);
   } finally {
@@ -620,52 +718,20 @@ test("Guided discovery exposes registry read tools without enabling unsupported 
     let memoryQuery: unknown;
     let usageMonitor: unknown;
     let mcpCall: unknown;
-    const agent = fixture.agent(async (options) => {
-      initialNames = options.tools.map((tool) => tool.name);
-      automationSearch = await options.executeTool({
-        name: "tool_search",
-        args: {
-          provider: "native",
-          category: "automation",
-          include_disabled: true,
-        },
-        rawArguments: JSON.stringify({
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse([
+        toolCall("automation-search", "tool_search", {
           provider: "native",
           category: "automation",
           include_disabled: true,
         }),
-      });
-      mcpSearch = await options.executeTool({
-        name: "tool_search",
-        args: {
-          provider: "mcp",
-          category: "mcp",
-          capability: "issue",
-          include_disabled: true,
-        },
-        rawArguments: JSON.stringify({
+        toolCall("mcp-search", "tool_search", {
           provider: "mcp",
           category: "mcp",
           capability: "issue",
           include_disabled: true,
         }),
-      });
-      descriptions = await options.executeTool({
-        name: "tool_describe",
-        args: {
-          ids: [
-            "native:create_automation",
-            "native:list_automations",
-            "native:list_tool_capabilities",
-            "native:call_mcp_tool",
-            "native:list_mcp_capabilities",
-            "native:read_mcp_resource",
-            "native:query_memory",
-            "native:get_usage_monitor",
-            "mcp:fixture:find_issue",
-          ],
-        },
-        rawArguments: JSON.stringify({
+        toolCall("describe", "tool_describe", {
           ids: [
             "native:create_automation",
             "native:list_automations",
@@ -678,92 +744,44 @@ test("Guided discovery exposes registry read tools without enabling unsupported 
             "mcp:fixture:find_issue",
           ],
         }),
-      });
-      automationList = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:list_automations",
-          arguments: {},
-        },
-        rawArguments: JSON.stringify({
+        toolCall("automation-list", "tool_call", {
           id: "native:list_automations",
           arguments: {},
         }),
-      });
-      capabilityList = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:list_tool_capabilities",
-          arguments: { include_disabled: true },
-        },
-        rawArguments: JSON.stringify({
+        toolCall("capability-list", "tool_call", {
           id: "native:list_tool_capabilities",
           arguments: { include_disabled: true },
         }),
-      });
-      mcpCapabilities = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:list_mcp_capabilities",
-          arguments: {},
-        },
-        rawArguments: JSON.stringify({
+        toolCall("mcp-capabilities", "tool_call", {
           id: "native:list_mcp_capabilities",
           arguments: {},
         }),
-      });
-      mcpResource = await options.executeTool({
-        name: "tool_call",
-        args: {
+        toolCall("mcp-resource", "tool_call", {
           id: "native:read_mcp_resource",
-          arguments: {
-            server_id: "fixture",
-            uri: "butler://fixture",
-          },
-        },
-        rawArguments: JSON.stringify({
-          id: "native:read_mcp_resource",
-          arguments: {
-            server_id: "fixture",
-            uri: "butler://fixture",
-          },
+          arguments: { server_id: "fixture", uri: "butler://fixture" },
         }),
-      });
-      memoryQuery = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:query_memory",
-          arguments: { scope: "session" },
-        },
-        rawArguments: JSON.stringify({
+        toolCall("memory", "tool_call", {
           id: "native:query_memory",
           arguments: { scope: "session" },
         }),
-      });
-      usageMonitor = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:get_usage_monitor",
-          arguments: {},
-        },
-        rawArguments: JSON.stringify({
+        toolCall("usage", "tool_call", {
           id: "native:get_usage_monitor",
           arguments: {},
         }),
-      });
-      mcpCall = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "mcp:fixture:find_issue",
-          arguments: { query: "BTCC" },
-        },
-        rawArguments: JSON.stringify({
+        toolCall("mcp-call", "tool_call", {
           id: "mcp:fixture:find_issue",
           arguments: { query: "BTCC" },
         }),
-      });
-      return "현재 R3에서 실행 가능한 도구 범위를 확인했습니다.";
-    });
+      ]),
+      (request) => {
+        initialNames = request.tools.map((tool) => tool.name);
+        const results = fixture.stores.guidedToolJournal.list(turn.turnId)
+          .map((entry) => entry.result);
+        [automationSearch, mcpSearch, descriptions, automationList, capabilityList,
+          mcpCapabilities, mcpResource, memoryQuery, usageMonitor, mcpCall] = results;
+        return { text: "현재 R3에서 실행 가능한 도구 범위를 확인했습니다.", toolCalls: [] };
+      },
+    ]));
 
     await agent.run({
       turn,
@@ -946,37 +964,35 @@ test("direct and tool_call file mutations use the same reviewed effect gate", as
   try {
     let direct: unknown;
     let bridged: unknown;
-    const agent = fixture.agent(async (options) => {
-      direct = await options.executeTool({
-        name: "write_file",
-        args: { path: "direct.txt", content: "blocked" },
-        rawArguments: JSON.stringify({
+    const turnId = "turn-effect-bridge";
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse([
+        toolCall("direct-1", "write_file", {
           path: "direct.txt",
           content: "blocked",
         }),
-      });
-      bridged = await options.executeTool({
-        name: "tool_call",
-        args: {
-          id: "native:write_file",
-          arguments: {
-            path: "bridged.txt",
-            content: "blocked",
-          },
-        },
-        rawArguments: JSON.stringify({
+        toolCall("bridged-1", "tool_call", {
           id: "native:write_file",
           arguments: {
             path: "bridged.txt",
             content: "blocked",
           },
         }),
-      });
-      return "검토된 Plan이 없어 파일을 변경하지 않았습니다.";
-    });
+      ]),
+      (request) => {
+        const results = fixture.stores.guidedToolJournal.list(turnId)
+          .map((entry) => entry.result);
+        [direct, bridged] = results;
+        expect(messagesWithToolResults(request)).toHaveLength(2);
+        return {
+          text: "검토된 Plan이 없어 파일을 변경하지 않았습니다.",
+          toolCalls: [],
+        };
+      },
+    ]));
 
     await agent.run({
-      turn: turnRecord(fixture.root, { turnId: "turn-effect-bridge" }),
+      turn: turnRecord(fixture.root, { turnId }),
       signal: new AbortController().signal,
     });
 
@@ -1001,14 +1017,9 @@ test("Guided catalog and tool_call execute the same simple write_file contract",
   try {
     let description: unknown;
     let writeResult: unknown;
-    const agent = fixture.agent(async (options) => {
-      const call = async (name: string, args: Record<string, unknown>) =>
-        await options.executeTool({
-          name,
-          args,
-          rawArguments: JSON.stringify(args),
-        });
-      await call("replace_work_plan", {
+    const turnId = "turn-guided-write-file-bridge";
+    const calls = [
+      toolCall("plan-1", "replace_work_plan", {
         objective: "Create bridged.txt",
         actions: [{
           action_key: "write-bridged-file",
@@ -1019,31 +1030,39 @@ test("Guided catalog and tool_call execute the same simple write_file contract",
           },
         }],
         checks: ["bridged.txt contains the requested content"],
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("plan-review-1", "record_work_review", {
         subject: "plan",
         verdict: "accept",
         summary: "The plan directly creates the requested file.",
-      });
-      description = await call("tool_describe", {
+      }),
+      toolCall("describe-1", "tool_describe", {
         ids: ["native:write_file"],
-      });
-      writeResult = await call("tool_call", {
+      }),
+      toolCall("write-1", "tool_call", {
         id: "native:write_file",
         arguments: {
           path: "bridged.txt",
           content: "bridge contract works\n",
         },
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("result-review-1", "record_work_review", {
         subject: "result",
         verdict: "accept",
         summary: "The requested file was written with the exact content.",
-      });
-      return "브리지 경로로 파일을 작성했습니다.";
-    });
-
-    const turnId = "turn-guided-write-file-bridge";
+      }),
+    ];
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse(calls),
+      (request) => {
+        const results = fixture.stores.guidedToolJournal.list(turnId)
+          .map((entry) => entry.result);
+        description = results[2];
+        writeResult = results[3];
+        expect(messagesWithToolResults(request)).toHaveLength(calls.length);
+        return { text: "브리지 경로로 파일을 작성했습니다.", toolCalls: [] };
+      },
+    ]));
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
       turns: fixture.stores.turns,
@@ -1093,17 +1112,9 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
     );
     const results: unknown[] = [];
     let editResult: unknown;
-    const agent = fixture.agent(async (options) => {
-      const call = async (name: string, args: Record<string, unknown>) => {
-        const result = await options.executeTool({
-          name,
-          args,
-          rawArguments: JSON.stringify(args),
-        });
-        results.push(result);
-        return result;
-      };
-      await call("replace_work_plan", {
+    const turnId = "turn-guided-edit-file";
+    const calls = [
+      toolCall("plan-1", "replace_work_plan", {
         objective: "Correct the visible horizontal overflow",
         actions: [{
           action_key: "correct-style",
@@ -1114,41 +1125,51 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
           },
         }],
         checks: ["The resulting stylesheet contains the requested correction"],
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("plan-review-1", "record_work_review", {
         subject: "plan",
         verdict: "accept",
         summary: "The small contained correction matches the request.",
-      });
-      editResult = await call("edit_file", {
+      }),
+      toolCall("edit-1", "edit_file", {
         path: "styles.css",
         start_line: 2,
         old_text: "  overflow-x: auto;\n",
         new_text: "  overflow-x: hidden;\n",
-        expected_sha256: "0".repeat(64),
-      });
-      await call("record_work_checkpoint", {
+      }),
+      toolCall("checkpoint-1", "record_work_checkpoint", {
         action_updates: [{
           action_key: "correct-style",
           status: "done",
         }],
         public_summary: "The requested stylesheet correction is present.",
         next_step: "Review the corrected stylesheet.",
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("result-review-1", "record_work_review", {
         subject: "result",
         verdict: "accept",
         summary: "The requested stylesheet correction is present.",
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("completion-1", "record_work_review", {
         subject: "completion",
         verdict: "accept",
         next_stage: "reporting",
         summary: "The whole Work satisfies the requested stylesheet correction.",
-      });
-      return "가로 넘침 수정을 완료했습니다.";
-    });
-    const turnId = "turn-guided-edit-file";
+      }),
+    ];
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse(calls),
+      (request) => {
+        results.push(...fixture.stores.guidedToolJournal.list(turnId)
+          .map((entry) => entry.result));
+        const messages = messagesWithToolResults(request);
+        editResult = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "edit-1"),
+        );
+        expect(messages).toHaveLength(calls.length);
+        return { text: "가로 넘침 수정을 완료했습니다.", toolCalls: [] };
+      },
+    ]));
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
       turns: fixture.stores.turns,
@@ -1203,18 +1224,13 @@ test("reviewed run_command mutation records a receipt and pushes without force",
     let beforeReview: unknown;
     let pushed: unknown;
     let nonzero: unknown;
-    const agent = fixture.agent(async (options) => {
-      const call = async (name: string, args: Record<string, unknown>) =>
-        await options.executeTool({
-          name,
-          args,
-          rawArguments: JSON.stringify(args),
-        });
-      beforeWork = await call("run_command", {
+    const turnId = "turn-guided-command-effect";
+    const calls = [
+      toolCall("before-work-1", "run_command", {
         command: "printf blocked > before-work.txt",
         state_effect: "mutation",
-      });
-      await call("replace_work_plan", {
+      }),
+      toolCall("plan-1", "replace_work_plan", {
         objective: "Commit and publish the requested contained workspace result",
         actions: [{
           action_key: "publish-result",
@@ -1225,32 +1241,40 @@ test("reviewed run_command mutation records a receipt and pushes without force",
           },
         }],
         checks: ["The commit exists on the configured non-force remote branch"],
-      });
-      beforeReview = await call("run_command", {
+      }),
+      toolCall("before-review-1", "run_command", {
         command: "printf blocked > before-review.txt",
         state_effect: "mutation",
-      });
-      await call("record_work_review", {
+      }),
+      toolCall("plan-review-1", "record_work_review", {
         subject: "plan",
         verdict: "accept",
         summary: "The contained Git command directly produces the requested result.",
         next_stage: "execution",
-      });
-      pushed = await call("run_command", {
+      }),
+      toolCall("push-1", "run_command", {
         command: [
           "git add deliverable.txt",
           "git -c user.name=Butler -c user.email=butler@example.invalid commit -m reviewed-command-effect",
           "git push origin HEAD:main",
         ].join(" && "),
         state_effect: "mutation",
-      });
-      nonzero = await call("run_command", {
+      }),
+      toolCall("nonzero-1", "run_command", {
         command: "printf partial > command-failed.txt; exit 7",
         state_effect: "mutation",
-      });
-      return "검토된 명령 실행 결과를 보고합니다.";
-    });
-    const turnId = "turn-guided-command-effect";
+      }),
+    ];
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse(calls),
+      (request) => {
+        const results = fixture.stores.guidedToolJournal.list(turnId)
+          .map((entry) => entry.result);
+        [beforeWork, , beforeReview, , pushed, nonzero] = results;
+        expect(messagesWithToolResults(request)).toHaveLength(calls.length);
+        return { text: "검토된 명령 실행 결과를 보고합니다.", toolCalls: [] };
+      },
+    ]));
     const runtime = createGuidedTurnRuntime({
       admission: fixture.stores.admission,
       turns: fixture.stores.turns,
@@ -1310,11 +1334,13 @@ test("Guided agent renders CSV text once and passes image attachments to the pro
     writeFileSync(imagePath, "not-a-real-image");
     let prompt = "";
     let attachments: unknown[] = [];
-    const agent = fixture.agent(async (options) => {
-      prompt = options.prompt;
-      attachments = options.attachments ?? [];
-      return "분석했습니다.";
-    });
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        prompt = request.messages[0]?.content ?? "";
+        attachments = [...(request.attachments ?? [])];
+        return { text: "분석했습니다.", toolCalls: [] };
+      },
+    ]));
     const turn = turnRecord(fixture.root, {
       attachments: [{
         id: "csv-1",
@@ -1353,10 +1379,12 @@ test("Guided agent offers only the three optional R3 Work tools and keeps direct
       turnId: "turn-direct-with-work-available",
       trackingMode: "local",
     });
-    const agent = fixture.agent(async (options) => {
-      visibleNames = options.tools.map((tool) => tool.name);
-      return "안녕하세요.";
-    });
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        visibleNames = request.tools.map((tool) => tool.name);
+        return { text: "안녕하세요.", toolCalls: [] };
+      },
+    ]));
 
     const outcome = await agent.run({
       turn,
@@ -1382,25 +1410,30 @@ test("Guided tool discovery hides the retired R2 Work catalog", async () => {
   try {
     let searchResult: unknown;
     let describeResult: unknown;
-    const agent = fixture.agent(async (options) => {
-      searchResult = await options.executeTool({
-        name: "tool_search",
-        args: { query: "work", include_disabled: true },
-        rawArguments: JSON.stringify({ query: "work", include_disabled: true }),
-      });
-      describeResult = await options.executeTool({
-        name: "tool_describe",
-        args: { ids: ["native:list_work_streams", "native:control_work"] },
-        rawArguments: JSON.stringify({
-          ids: ["native:list_work_streams", "native:control_work"],
-        }),
-      });
-      return "현재 작업 도구를 확인했습니다.";
-    });
+    const turnId = "turn-work-catalog";
+    const calls = [
+      toolCall("search-1", "tool_search", {
+        query: "work",
+        include_disabled: true,
+      }),
+      toolCall("describe-1", "tool_describe", {
+        ids: ["native:list_work_streams", "native:control_work"],
+      }),
+    ];
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse(calls),
+      (request) => {
+        [searchResult, describeResult] = fixture.stores.guidedToolJournal
+          .list(turnId)
+          .map((entry) => entry.result);
+        expect(messagesWithToolResults(request)).toHaveLength(calls.length);
+        return { text: "현재 작업 도구를 확인했습니다.", toolCalls: [] };
+      },
+    ]));
 
     await agent.run({
       turn: turnRecord(fixture.root, {
-        turnId: "turn-work-catalog",
+        turnId,
         trackingMode: "local",
       }),
       signal: new AbortController().signal,
@@ -1433,16 +1466,15 @@ test("Guided agent replays completed tool results and fences uncertain mutations
     writeFileSync(factPath, "first value");
     const turn = turnRecord(fixture.root, { turnId: "turn-read-replay" });
     const outputs: unknown[] = [];
-    const rawRead = JSON.stringify({ path: "fact.txt" });
     const runRead = async () => {
-      const agent = fixture.agent(async (options) => {
-        outputs.push(await options.executeTool({
-          name: "read_file",
-          args: { path: "fact.txt" },
-          rawArguments: rawRead,
-        }));
-        return "읽었습니다.";
-      });
+      const agent = fixture.agent(scriptedModelRound([
+        toolResponse([toolCall("read-1", "read_file", { path: "fact.txt" })]),
+        (request) => {
+          outputs.push(fixture.stores.guidedToolJournal.list(turn.turnId)[0]?.result);
+          expect(messagesWithToolResults(request)).toHaveLength(1);
+          return { text: "읽었습니다.", toolCalls: [] };
+        },
+      ]));
       return agent.run({ turn, signal: new AbortController().signal });
     };
     await runRead();
@@ -1456,13 +1488,12 @@ test("Guided agent replays completed tool results and fences uncertain mutations
     const mutationArgs = {
       path: "out.txt",
       content: "durable output",
-      overwrite: false,
     };
     const rawMutation = JSON.stringify(mutationArgs);
     const callId = digest([
-      "btcc-guided-tool-call.v1",
+      "btcc-guided-provider-tool-call.v1",
       mutationTurn.turnId,
-      "0",
+      "mutation-1",
       "write_file",
       stableJson(mutationArgs),
     ].join("\0"));
@@ -1474,14 +1505,17 @@ test("Guided agent replays completed tool results and fences uncertain mutations
       arguments: mutationArgs,
     });
     let uncertain: unknown;
-    const mutationAgent = fixture.agent(async (options) => {
-      uncertain = await options.executeTool({
-        name: "write_file",
-        args: mutationArgs,
-        rawArguments: rawMutation,
-      });
-      return "상태를 먼저 확인해야 합니다.";
-    });
+    const mutationAgent = fixture.agent(scriptedModelRound([
+      toolResponse([toolCall("mutation-1", "write_file", mutationArgs)]),
+      (request) => {
+        const messages = messagesWithToolResults(request);
+        uncertain = toolMessageOutput(
+          messages.find((message) => message.toolCallId === "mutation-1"),
+        );
+        expect(messages).toHaveLength(1);
+        return { text: "상태를 먼저 확인해야 합니다.", toolCalls: [] };
+      },
+    ]));
     const outcome = await mutationAgent.run({
       turn: mutationTurn,
       signal: new AbortController().signal,
@@ -1667,26 +1701,28 @@ test("Guided agent turns provider failure into one fact-based final report", asy
   try {
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
     let calls = 0;
-    const fallbackAgent = fixture.agent(async (options) => {
-      calls += 1;
-      if (calls === 2) {
-        expect(options.tools).toEqual([]);
-        expect(options.prompt).toContain("Tool read_file: succeeded (journal completed)");
-        expect(options.prompt).toContain('enabled\\":true');
-        return "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.";
-      }
-      await options.onAssistantTextBeforeTools?.({
-        text: "설정 파일을 확인하겠습니다.",
-        toolCalls: [{ name: "read_file", args: { path: "settings.json" } }],
-      });
-      await options.executeTool({
-        name: "read_file",
-        args: { path: "settings.json" },
-        rawArguments: JSON.stringify({ path: "settings.json" }),
-        signal: options.signal,
-      });
-      throw knownProviderFailure("provider disconnected after usable text");
-    });
+    const fallbackAgent = fixture.agent(scriptedModelRound([
+      toolResponse([
+        toolCall("read-1", "read_file", { path: "settings.json" }),
+      ], "설정 파일을 확인하겠습니다."),
+      () => {
+        calls += 1;
+        throw knownProviderFailure("provider disconnected after usable text");
+      },
+      (request) => {
+        calls += 1;
+        expect(request.tools).toEqual([]);
+        expect(request.messages[0]?.content).toContain(
+          "Tool read_file: succeeded (journal completed)",
+        );
+        expect(request.messages[0]?.content).toContain('enabled\\":true');
+        expect(messagesWithToolResults(request)).toHaveLength(0);
+        return {
+          text: "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.",
+          toolCalls: [],
+        };
+      },
+    ]));
     expect(await fallbackAgent.run({
       turn: turnRecord(fixture.root),
       signal: new AbortController().signal,
@@ -1696,14 +1732,13 @@ test("Guided agent turns provider failure into one fact-based final report", asy
     });
     expect(calls).toBe(2);
 
-    const commandAgent = fixture.agent(async (options) => {
-      await options.executeTool({
-        name: "run_command",
-        args: { command: "pwd", state_effect: "read_only" },
-        rawArguments: JSON.stringify({ command: "pwd", state_effect: "read_only" }),
-      });
-      return "폴더를 확인했습니다.";
-    });
+    const commandAgent = fixture.agent(scriptedModelRound([
+      toolResponse([toolCall("pwd-1", "run_command", {
+        command: "pwd",
+        state_effect: "read_only",
+      })]),
+      { text: "폴더를 확인했습니다.", toolCalls: [] },
+    ]));
     expect((await commandAgent.run({
       turn: turnRecord(fixture.root, { turnId: "turn-command" }),
       signal: new AbortController().signal,
@@ -1718,10 +1753,12 @@ test("Guided agent gives a normally progressing Turn one operational lease", asy
   try {
     const controller = new AbortController();
     let observedSignal: AbortSignal | undefined;
-    const agent = fixture.agent(async (options) => {
-      observedSignal = options.signal;
-      return "요청을 정상적으로 마쳤습니다.";
-    });
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        observedSignal = request.signal;
+        return { text: "요청을 정상적으로 마쳤습니다.", toolCalls: [] };
+      },
+    ]));
 
     const outcome = await agent.run({
       turn: turnRecord(fixture.root, { turnId: "guided-caller-boundary-turn" }),
@@ -1745,14 +1782,17 @@ test("Guided model sees remaining time without persisting it in the tool result"
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
     let modelResult: Record<string, unknown> | undefined;
     const turn = turnRecord(fixture.root, { turnId: "guided-turn-time-context" });
-    const agent = fixture.agent(async (options) => {
-      modelResult = await options.executeTool({
-        name: "read_file",
-        args: { path: "settings.json" },
-        rawArguments: JSON.stringify({ path: "settings.json" }),
-      }) as Record<string, unknown>;
-      return "확인했습니다.";
-    });
+    const agent = fixture.agent(scriptedModelRound([
+      toolResponse([toolCall("read-1", "read_file", { path: "settings.json" })]),
+      (request) => {
+        const toolMessage = messagesWithToolResults(request)[0];
+        const payload = JSON.parse(toolMessage?.content ?? "{}") as {
+          output?: Record<string, unknown>;
+        };
+        modelResult = payload.output;
+        return { text: "확인했습니다.", toolCalls: [] };
+      },
+    ]));
 
     await agent.run({ turn, signal: new AbortController().signal });
 
@@ -1996,19 +2036,25 @@ test("Guided operational fallback is captured before the final report model call
   };
   let calls = 0;
 
-  const answer = await runGuidedPromptWithOperationalReport({
-    promptRunner: async () => {
+  const modelRound = scriptedModelRound([
+    () => {
       calls += 1;
-      if (calls === 2) {
-        toolCall.status = "completed";
-        toolCall.result = { marker: "mutated-during-report-model" };
-      }
-      if (calls === 1) throw knownProviderFailure("main provider failure");
+      throw knownProviderFailure("main provider failure");
+    },
+    () => {
+      calls += 1;
+      toolCall.status = "completed";
+      toolCall.result = { marker: "mutated-during-report-model" };
       throw new Error("final report provider failure");
     },
+  ]);
+
+  const answer = await runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "현재까지 확인한 내용을 알려 주세요.",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -2034,14 +2080,23 @@ test("Guided empty main response still receives one fact-based report request", 
   let calls = 0;
   let factLoads = 0;
 
-  const answer = await runGuidedPromptWithOperationalReport({
-    promptRunner: async () => {
+  const modelRound = scriptedModelRound([
+    () => {
       calls += 1;
-      return calls === 1 ? "   " : "확인된 작업은 없으며 다시 요청할 수 있습니다.";
+      return { text: "   ", toolCalls: [] };
     },
+    () => {
+      calls += 1;
+      return { text: "확인된 작업은 없으며 다시 요청할 수 있습니다.", toolCalls: [] };
+    },
+  ]);
+
+  const answer = await runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "빈 응답을 보고 가능한 실패로 처리해 주세요.",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -2064,14 +2119,19 @@ test("Guided unexpected local failure does not start an operational report reque
   let calls = 0;
   let factLoads = 0;
 
-  await expect(runGuidedPromptWithOperationalReport({
-    promptRunner: async () => {
+  const modelRound = scriptedModelRound([
+    () => {
       calls += 1;
       throw new Error("local prompt assembly invariant failed");
     },
+  ]);
+
+  await expect(runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "로컬 오류는 위로 전달해 주세요.",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -2093,15 +2153,19 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
   const controller = new AbortController();
   const stopped = new Error("user stopped the Turn");
   let factLoads = 0;
-  const running = runGuidedPromptWithOperationalReport({
-    promptRunner: async (options) => await new Promise<string>((_resolve, reject) => {
-      options.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
-        once: true,
-      });
+  const modelRound = scriptedModelRound([
+    (request) => new Promise<never>((_resolve, reject) => {
+      const rejectOnAbort = () => reject(request.signal?.reason);
+      if (request.signal?.aborted) rejectOnAbort();
+      else request.signal?.addEventListener("abort", rejectOnAbort, { once: true });
     }),
+  ]);
+  const running = runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "중지할 작업",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: controller.signal,
@@ -2133,15 +2197,19 @@ test("Guided parent cancellation during quiescence preserves the Stop reason", a
     announceWindowExpiry = resolve;
   });
   let factLoads = 0;
-  const running = runGuidedPromptWithOperationalReport({
-    promptRunner: async (options) => await new Promise<string>(() => {
-      options.signal?.addEventListener("abort", () => announceWindowExpiry(), {
+  const modelRound = scriptedModelRound([
+    (request) => new Promise<never>(() => {
+      request.signal?.addEventListener("abort", () => announceWindowExpiry(), {
         once: true,
       });
     }),
+  ]);
+  const running = runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "정리 중인 작업을 중지합니다.",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: controller.signal,
@@ -2174,23 +2242,31 @@ test("Guided timeout gives the child a bounded settlement grace before loading f
   let childSettled = false;
   let factLoadSawSettlement = false;
 
-  const answer = await runGuidedPromptWithOperationalReport({
-    promptRunner: async (options) => {
+  const modelRound = scriptedModelRound([
+    (request) => {
       calls += 1;
-      if (calls === 2) throw new Error("final report provider failure");
-      return await new Promise<string>((_resolve, reject) => {
-        options.signal?.addEventListener("abort", () => {
+      return new Promise<never>((_resolve, reject) => {
+        request.signal?.addEventListener("abort", () => {
           setTimeout(() => {
             toolCall.status = "cancelled";
             childSettled = true;
-            reject(options.signal?.reason);
+            reject(request.signal?.reason);
           }, 1);
         }, { once: true });
       });
     },
+    () => {
+      calls += 1;
+      throw new Error("final report provider failure");
+    },
+  ]);
+
+  const answer = await runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "파일 확인 상태를 알려 주세요.",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -2215,14 +2291,18 @@ test("Guided timeout gives the child a bounded settlement grace before loading f
 test("Guided fallback does not wait past the lease for a late fact snapshot", async () => {
   let calls = 0;
   const startedAt = Date.now();
-  const answer = await runGuidedPromptWithOperationalReport({
-    promptRunner: async () => {
+  const modelRound = scriptedModelRound([
+    () => {
       calls += 1;
       throw knownProviderFailure("provider unavailable");
     },
+  ]);
+  const answer = await runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "늦은 사실 조회를 기다리지 마세요.",
       tools: [],
+      modelRound,
+      maxIterations: 1,
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
@@ -2244,20 +2324,26 @@ test("Guided agent bounds the main loop and falls back after one failed final re
   try {
     let calls = 0;
     const preservedDraft = `확인 중인 초안 ${"가".repeat(600)} 초안 끝`;
-    const agent = fixture.agent(async (options) => {
-      calls += 1;
-      if (calls === 2) throw new Error("final report provider failure");
-      await options.onAssistantTextBeforeTools?.({
-        text: preservedDraft,
-        toolCalls: [],
-      });
-      return await new Promise<string>((_resolve, reject) => {
-        options.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
-          once: true,
+    const agent = fixture.agent(scriptedModelRound([
+      (_request) => {
+        calls += 1;
+        return toolResponse([
+          toolCall("lease-pending-1", "tool_that_does_not_exist", {}),
+        ], preservedDraft);
+      },
+      (request) => {
+        calls += 1;
+        return new Promise<never>((_resolve, reject) => {
+          const rejectOnAbort = () => reject(request.signal?.reason);
+          if (request.signal?.aborted) rejectOnAbort();
+          else request.signal?.addEventListener("abort", rejectOnAbort, { once: true });
         });
-      });
-    }, { turnLeaseMs: 80, finalReportMs: 40 });
-
+      },
+      () => {
+        calls += 1;
+        throw new Error("final report provider failure");
+      },
+    ]), { turnLeaseMs: 80, finalReportMs: 40 });
     const startedAt = Date.now();
     const outcome = await agent.run({
       turn: turnRecord(fixture.root, { turnId: "guided-lease-turn" }),
@@ -2265,7 +2351,7 @@ test("Guided agent bounds the main loop and falls back after one failed final re
     });
 
     expect(Date.now() - startedAt).toBeLessThan(1_000);
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     expect(outcome.route).toBe("direct");
     expect(outcome.content).toContain("모델 연결 또는 실행 시간이 종료");
     expect(outcome.content).not.toContain(preservedDraft);
@@ -2289,7 +2375,7 @@ function createFixture(label: string) {
     dbPath,
     stores,
     agent(
-      promptRunner: Parameters<typeof createProductionGuidedTurnAgent>[0]["promptRunner"],
+      modelRound: ModelRoundPort,
       operational: Pick<
         Parameters<typeof createProductionGuidedTurnAgent>[0],
         "turnLeaseMs" | "finalReportMs"
@@ -2304,7 +2390,7 @@ function createFixture(label: string) {
         toolJournal: stores.guidedToolJournal,
         effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
-        promptRunner,
+        modelRound,
         ...timing,
       });
     },

@@ -16,15 +16,13 @@ export const OPENAI_PROVIDER_ADAPTER = defineProviderAdapter({
       hostedConfig?.modelId,
     );
   },
-  async runFunctionToolPrompt(options) {
-    const [
-      { openAIAuthOverrideForHosted, resolveHostedRuntimeConfig },
-      { runOpenAIFunctionToolPromptText },
-    ] = await Promise.all([import("../shared/model-routing.ts"), import("./runtime.ts")]);
-    const config = resolveHostedRuntimeConfig(options.model);
+  async runRound(request) {
+    const [{ openAIAuthOverrideForHosted, resolveHostedRuntimeConfig }, { runOpenAIModelRound }] =
+      await Promise.all([import("../shared/model-routing.ts"), import("./model-round.ts")]);
+    const config = resolveHostedRuntimeConfig(request.model);
     const hostedConfig = config?.providerId === "openai" ? config : null;
-    return await runOpenAIFunctionToolPromptText(
-      options,
+    return await runOpenAIModelRound(
+      request,
       hostedConfig ? await openAIAuthOverrideForHosted(hostedConfig) : undefined,
       hostedConfig?.modelId,
     );

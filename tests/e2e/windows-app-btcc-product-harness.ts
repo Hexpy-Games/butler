@@ -8,6 +8,8 @@ import { PromptAssembler } from
   "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { createProductionBtccComposition } from
   "../../packages/butler-agent/src/agent/composition/index.ts";
+import type { ModelRoundPort } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import {
   BtccGatewayLifecycleService,
   BtccInboundDispatcher,
@@ -56,15 +58,21 @@ export async function runWindowsAppBtccProductHarness(
     sessionBindingStore: bindings,
   });
   let modelCalls = 0;
+  const modelRound: ModelRoundPort = {
+    async runRound() {
+      modelCalls += 1;
+      return {
+        text: "안녕하세요. 반갑습니다.",
+        toolCalls: [],
+      };
+    },
+  };
   const btcc = createProductionBtccComposition({
     butlerHome: process.cwd(),
     butlerData: root,
     appMessageDbPath: dbPath,
     ownerId: `windows-product-harness:${process.pid}`,
-    promptRunner: async () => {
-      modelCalls += 1;
-      return "안녕하세요. 반갑습니다.";
-    },
+    modelRound,
   });
   const conversations = new AgentConversationStore({ butlerData: root });
   const lifecycle = new BtccGatewayLifecycleService({

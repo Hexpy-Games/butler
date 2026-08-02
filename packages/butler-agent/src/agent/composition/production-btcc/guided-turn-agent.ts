@@ -1,4 +1,8 @@
 import type { DurableWorkService } from "../../btcc/durable-work/index.ts";
+import type {
+  BtccAgentLoopInput,
+} from "../../btcc/agent-loop/index.ts";
+import type { ModelRoundPort } from "../../btcc/ports/model-round.ts";
 import { acceptedPlanEffectId, createGuidedEffectService } from
   "../../btcc/effects/index.ts";
 import type { GuidedTurnAgent, GuidedTurnResult } from
@@ -10,10 +14,8 @@ import { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { ensureActiveProjectLedger } from
   "../../../integrations/project-ledger/ensure-active-project-ledger.ts";
-import { runFunctionToolPromptText } from
+import { createProviderModelRoundPort } from
   "../../../integrations/providers/runtime.ts";
-import type { FunctionToolPromptOptions } from
-  "../../../integrations/providers/runtime-contracts.ts";
 import {
   guidedInstructions,
   providerImageAttachments,
@@ -55,7 +57,7 @@ import {
 } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from
   "./guided-tool-call-execution.ts";
-import { runGuidedPromptWithOperationalReport } from
+import { runGuidedAgentLoopWithOperationalReport } from
   "./guided-operational-report.ts";
 import { GuidedOperationalLease } from "./guided-operational-lease.ts";
 import { createGuidedActivityProjection } from
@@ -63,7 +65,6 @@ import { createGuidedActivityProjection } from
 import { isDurableWorkCompletionValidationCurrent } from
   "./durable-work-context.ts";
 
-type PromptRunner = (options: FunctionToolPromptOptions) => Promise<string>;
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
   butlerData: string;
@@ -72,12 +73,11 @@ export function createProductionGuidedTurnAgent(input: {
   toolJournal: SqliteGuidedToolJournal;
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
-  promptRunner?: PromptRunner;
+  modelRound?: ModelRoundPort;
   turnLeaseMs?: number;
   absoluteTurnLeaseMs?: number;
   finalReportMs?: number;
 }): GuidedTurnAgent {
-  const promptRunner = input.promptRunner ?? runFunctionToolPromptText;
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
     async run({ turn, signal, progress }): Promise<GuidedTurnResult> {
@@ -284,7 +284,8 @@ export function createProductionGuidedTurnAgent(input: {
         executeButlerTool: execute,
         onDurableProgress: () => operationalLease.recordDurableProgress(),
       });
-      const promptOptions: FunctionToolPromptOptions = {
+      const modelRound = input.modelRound ?? createProviderModelRoundPort();
+      const loopOptions: BtccAgentLoopInput = {
         prompt: renderGuidedPrompt(turn, {
           ...input,
           workContext: renderDurableWorkContext(initialWork),
@@ -302,13 +303,25 @@ export function createProductionGuidedTurnAgent(input: {
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
         tools: visibleTools,
-        maxToolRounds: Number.POSITIVE_INFINITY,
-        onAssistantTextBeforeTools: activity.observeToolBatch,
-        executeTool: toolCalls.executeTool,
+        maxIterations: Number.POSITIVE_INFINITY,
+        modelRound,
+        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
+          text,
+          toolCalls: calls.map((call) => ({
+            name: call.name,
+            args: call.arguments,
+          })),
+        }),
+        executeTool: async (call) => await toolCalls.executeTool({
+          name: call.name,
+          args: call.arguments,
+          rawArguments: call.rawArguments,
+          providerCallId: call.id,
+          signal: call.signal,
+        }),
       };
-      const text = await runGuidedPromptWithOperationalReport({
-        promptRunner,
-        options: promptOptions,
+      const text = await runGuidedAgentLoopWithOperationalReport({
+        options: loopOptions,
         parentSignal: signal,
         leaseStartedAt,
         originalRequest: turn.originalMessage,

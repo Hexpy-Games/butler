@@ -1,18 +1,26 @@
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
-import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
 import {
-  createToolResultModelPreviewContext,
-  emptyResponseRecoveryObservation,
-  toolBatchCompletedHandoffText,
-  toolResultPayloadForProvider,
-} from "../../../agent/model-tool-loop/index.ts";
-import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
-import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
-import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
+  abortError,
+  createProviderRequestAttributor,
+  numberOrNull,
+  sanitizeResponseFinalAnswerText,
+  withModelApiRetry,
+  type ProviderUsageSample,
+} from "../shared/runtime-support.ts";
+import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
+import {
+  providerEmptyResponseError,
+  providerHttpError,
+  providerNetworkError,
+  providerRoundTimeoutError,
+  safeEndpointLabel,
+} from "../provider-errors.ts";
+import type { FunctionToolDefinition, PromptOptions } from "../runtime-contracts.ts";
+import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
-
+import {
+  runGuardedProviderRound,
+  type ProviderRoundPolicy,
+} from "../shared/provider-round-guard.ts";
 
 export async function createGeminiContent(
   config: HostedRuntimeConfig,
@@ -37,7 +45,6 @@ export async function createGeminiContent(
     externalAbortError: abortError,
   });
 }
-
 
 async function createGeminiContentOnce(
   config: HostedRuntimeConfig,
@@ -111,7 +118,6 @@ async function createGeminiContentOnce(
   return parsed;
 }
 
-
 export function geminiText(response: Record<string, any>): string {
   const parts = response.candidates?.[0]?.content?.parts;
   return sanitizeResponseFinalAnswerText(
@@ -134,7 +140,6 @@ export function geminiUsageSample(
   return { promptTokens, cachedTokens, outputTokens, totalTokens };
 }
 
-
 export function geminiTools(tools: FunctionToolDefinition[]): Array<Record<string, unknown>> {
   return [{
     functionDeclarations: tools.map((tool) => ({
@@ -144,7 +149,6 @@ export function geminiTools(tools: FunctionToolDefinition[]): Array<Record<strin
     })),
   }];
 }
-
 
 export async function runGeminiPromptText(
   config: HostedRuntimeConfig,
@@ -158,160 +162,6 @@ export async function runGeminiPromptText(
         ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
         : {}),
       contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
-    }, options.signal, context),
-    usage: geminiUsageSample,
-  });
-  const text = geminiText(response);
-  if (!text) {
-    throw providerEmptyResponseError({
-      provider: "google",
-      api: "generate_content",
-      endpoint: safeEndpointLabel(geminiGenerateContentUrl(config)),
-      model: config.modelId,
-    });
-  }
-  return text;
-}
-
-
-export async function runGeminiFunctionToolPromptText(
-  config: HostedRuntimeConfig,
-  options: FunctionToolPromptOptions,
-): Promise<string> {
-  const log = options.log ?? (() => {});
-  const maxRounds = modelIterationLimitWithinUsageBudget(
-    options.maxToolRounds ?? 8,
-    options.usageAttribution,
-  );
-  const contents: Array<Record<string, unknown>> = [
-    { role: "user", parts: [{ text: promptTextForHosted(options) }] },
-  ];
-  const modelPreviewContext = createToolResultModelPreviewContext();
-  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
-  let toolBatchExecuted = false;
-  let emptyResponseRecoveryUsed = false;
-  for (let round = 0; round < maxRounds; round += 1) {
-    const activeTools = activeFunctionTools(options);
-    const allowedNames = new Set(activeTools.map((tool) => tool.name));
-    const response = await requests.request({
-      model: config.modelRef,
-      run: async (context) => await createGeminiContent(config, {
-        systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
-        contents,
-        tools: geminiTools(activeTools),
-        ...(options.toolChoice === "required"
-          ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
-          : {}),
-      }, options.signal, context),
-      usage: geminiUsageSample,
-    });
-    const parts = response.candidates?.[0]?.content?.parts;
-    const responseParts = Array.isArray(parts) ? parts : [];
-    const text = geminiText(response);
-    const calls = responseParts.flatMap((part: any, partIndex) => {
-      const functionCall = part?.functionCall;
-      const name = normalizeLocalTextToolName(
-        typeof functionCall?.name === "string" ? functionCall.name : "",
-        allowedNames,
-      );
-      if (!name) return [];
-      return [{
-        id: `gemini_call_${round}_${partIndex}_${name}`,
-        name,
-        rawArguments: functionCall.args,
-      }];
-    });
-    if (calls.length === 0) {
-      if (text) {
-        const disposition = await reviewProviderFinalCandidate({ options, text, roundIndex: round });
-        if (disposition.kind === "final") return disposition.text;
-        contents.push({ role: "model", parts: responseParts });
-        contents.push({ role: "user", parts: [{ text: disposition.observation }] });
-        continue;
-      }
-      const observation = emptyResponseRecoveryObservation({
-        recoveryUsed: emptyResponseRecoveryUsed,
-        hasNextModelRound: round + 1 < maxRounds,
-      });
-      if (observation) {
-        emptyResponseRecoveryUsed = true;
-        contents.push({ role: "user", parts: [{ text: observation }] });
-        continue;
-      }
-      throw providerEmptyResponseError({
-        provider: "google",
-        api: "generate_content",
-        endpoint: safeEndpointLabel(geminiGenerateContentUrl(config)),
-        model: config.modelId,
-      });
-    }
-    const preparedCalls = calls.map((call) => ({
-      call,
-      prepared: prepareFunctionToolCall({
-        name: call.name,
-        rawArguments: call.rawArguments,
-        tools: activeTools,
-      }),
-    }));
-    await options.onAssistantTextBeforeTools?.({
-      text,
-      toolCalls: preparedCalls.map(({ call, prepared }) => ({
-        name: call.name,
-        args: prepared.args,
-      })),
-    });
-    contents.push({ role: "model", parts: responseParts });
-    toolBatchExecuted = true;
-    for (const { call, prepared } of preparedCalls) {
-      log(`tool ${call.name}: ${prepared.rawArguments}`);
-      let payload = prepared.errorPayload;
-      if (!payload) {
-        try {
-          payload = {
-            ok: true,
-            output: await options.executeTool({
-              name: call.name,
-              args: prepared.args,
-              providerCallId: call.id,
-              rawArguments: prepared.rawArguments,
-              signal: options.signal,
-            }),
-          };
-        } catch (error) {
-          payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
-        }
-      }
-      const finalText = payload.ok
-        ? await options.finalTextFromToolResult?.({
-            name: call.name,
-            args: prepared.args,
-            output: payload.output,
-          })
-        : null;
-      if (finalText?.trim()) return finalText.trim();
-      contents.push({
-        role: "user",
-        parts: [{
-          functionResponse: {
-            name: call.name,
-            response: toolResultPayloadForProvider(payload, {
-              toolName: call.name,
-              context: modelPreviewContext,
-            }),
-          },
-        }],
-      });
-    }
-  }
-  if (options.handoffAfterToolBatch && toolBatchExecuted) {
-    return toolBatchCompletedHandoffText();
-  }
-  contents.push({ role: "user", parts: [{ text: finalNoToolInstructions(options.instructions) }] });
-  const response = await requests.request({
-    model: config.modelRef,
-    run: async (context) => await createGeminiContent(config, {
-      systemInstruction: { parts: [{ text: localFunctionToolInstructions(options.instructions) }] },
-      contents,
     }, options.signal, context),
     usage: geminiUsageSample,
   });

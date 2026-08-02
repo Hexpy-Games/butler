@@ -17,12 +17,12 @@ export const ANTHROPIC_PROVIDER_ADAPTER = defineProviderAdapter({
       usage: null,
     };
   },
-  async runFunctionToolPrompt(options) {
-    const [{ requireHostedRuntimeConfig }, { runAnthropicFunctionToolPromptText }] =
-      await Promise.all([import("../shared/model-routing.ts"), import("./runtime.ts")]);
-    return await runAnthropicFunctionToolPromptText(
-      requireHostedRuntimeConfig(options.model, "anthropic"),
-      options,
+  async runRound(request) {
+    const [{ requireHostedRuntimeConfig }, { runAnthropicModelRound }] =
+      await Promise.all([import("../shared/model-routing.ts"), import("./model-round.ts")]);
+    return await runAnthropicModelRound(
+      requireHostedRuntimeConfig(request.model, "anthropic"),
+      request,
     );
   },
 });
