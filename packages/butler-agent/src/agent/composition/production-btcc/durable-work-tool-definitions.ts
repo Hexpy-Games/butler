@@ -15,6 +15,8 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
   description: [
     "Open durable Work for a substantial request, or replace the current Work plan.",
     "Use start_new only when the new request supersedes the current open Work.",
+    "Choose start_new before updating or executing the current Work; once this Turn continues it, keep the same Work.",
+    "Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints.",
     "Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup.",
     "Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
   ].join(" "),
@@ -99,7 +101,8 @@ const RECORD_WORK_CHECKPOINT: FunctionToolDefinition = {
   type: "function",
   name: "record_work_checkpoint",
   description: [
-    "Update the current Managed Work stage or action checklist.",
+    "Update the current Managed Work stage or action checklist when no Review is being recorded.",
+    "Use it at a meaningful boundary, not to narrate every tool call.",
     "The runtime checks only the small legal stage transition and known action keys.",
     "If a transition is rejected, use the returned allowed next stages; useful work and final delivery remain valid.",
   ].join(" "),
@@ -147,7 +150,9 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   type: "function",
   name: "record_work_review",
   description: [
-    "Record a concise review of the current Work plan or actual result.",
+    "Record a concise review of the current Work plan or actual result, together with the stage and action progress known at that Review.",
+    "The call enters review; include action_updates known at that point and next_stage only when work should continue to planning, execution, or reporting after the Review.",
+    "The runtime validates only the existing transitions into and out of review plus known action keys; it does not judge the Review's meaning.",
     "Accepting a result completes Work only after every current action is done or skipped; otherwise the Review is kept and Work remains open.",
     "Judge against the original user request: disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
     "A review records judgment but never replaces real tool evidence.",
@@ -158,6 +163,28 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
     properties: {
       subject: { type: "string", enum: ["plan", "result"] },
       verdict: { type: "string", enum: ["accept", "revise", "partial"] },
+      next_stage: {
+        type: "string",
+        enum: ["planning", "execution", "reporting"],
+        description: "The legal stage to enter after the Review. Omit to remain in review.",
+      },
+      action_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            action_key: { type: "string", minLength: 1 },
+            status: {
+              type: "string",
+              enum: ["pending", "active", "done", "blocked", "skipped"],
+            },
+            note: { type: "string", minLength: 1 },
+          },
+          required: ["action_key", "status"],
+        },
+        default: [],
+      },
       summary: { type: "string", minLength: 1 },
       corrections: {
         type: "array",

@@ -23,6 +23,7 @@ import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
 import { GuidedWorkLegacyProjectImporter } from
   "./guided-work-legacy-project-importer.ts";
+import { GuidedWorkReviewWriter } from "./guided-work-review-writer.ts";
 import { GuidedWorkSessionWriter } from "./guided-work-session-writer.ts";
 import { GuidedWorkStatusWriter } from "./guided-work-status-writer.ts";
 import { GuidedWorkToolResultWriter } from "./guided-work-tool-result-writer.ts";
@@ -34,6 +35,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private readonly statuses: GuidedWorkStatusWriter;
   private readonly mutations: GuidedWorkMutationJournal;
   private readonly progress: GuidedWorkProgressWriter;
+  private readonly reviews: GuidedWorkReviewWriter;
   private readonly toolResults: GuidedWorkToolResultWriter;
   private readonly legacyImporter: GuidedWorkLegacyImporter;
   private readonly legacyProjectImporter: GuidedWorkLegacyProjectImporter;
@@ -47,6 +49,14 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     this.statuses = new GuidedWorkStatusWriter(db, this.reader);
     this.mutations = new GuidedWorkMutationJournal(db);
     this.progress = new GuidedWorkProgressWriter(db);
+    this.reviews = new GuidedWorkReviewWriter(
+      db,
+      this.reader,
+      this.sessions,
+      this.statuses,
+      this.mutations,
+      this.progress,
+    );
     this.toolResults = new GuidedWorkToolResultWriter(db);
     this.legacyImporter = new GuidedWorkLegacyImporter(db, this.reader);
     this.legacyProjectImporter = new GuidedWorkLegacyProjectImporter(
@@ -106,10 +116,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       if (input.expectedProgressRevision !== undefined) {
         this.progress.assertRevision(work.work_id, input.expectedProgressRevision);
       }
-      const revision = this.nextRevision(
-        "btcc_guided_work_plan_revisions",
-        work.work_id,
-      );
+      const revision = this.nextPlanRevision(work.work_id);
       const planRevisionId = guidedWorkRecordId("plan", input.mutationCallId);
       const now = new Date().toISOString();
       this.db.query(`
@@ -207,68 +214,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   }
 
   async recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView> {
-    const requestSha256 = input.requestSha256;
-    return this.writeTransaction(() => {
-      const replay = this.replay(input.mutationCallId, "record_review", requestSha256);
-      if (replay) return replay;
-      const work = this.sessions.requireBoundHead(input);
-      if (input.subject === "plan" && !work.current_plan_revision_id) {
-        throw new Error("Durable Work Plan Review requires a current Plan");
-      }
-      if (work.current_plan_revision_id !== input.expectedPlanRevisionId) {
-        throw new Error("Durable Work Plan changed before its Review");
-      }
-      this.progress.assertRevision(work.work_id, input.expectedProgressRevision);
-      if (this.latestResultSequence(work.work_id) !== input.expectedResultSequence) {
-        throw new Error("Durable Work results changed before its Review");
-      }
-      const revision = this.nextRevision(
-        "btcc_guided_work_review_revisions",
-        work.work_id,
-      );
-      const reviewId = guidedWorkRecordId("review", input.mutationCallId);
-      const resultSequence = input.subject === "result"
-        ? input.expectedResultSequence
-        : null;
-      const planRevisionId = input.subject === "plan"
-        ? input.expectedPlanRevisionId
-        : null;
-      const now = new Date().toISOString();
-      this.db.query(`
-        INSERT INTO btcc_guided_work_review_revisions (
-          review_revision_id, work_id, revision, subject, verdict, summary,
-          corrections_json, bound_plan_revision_id, bound_result_sequence,
-          origin_turn_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        reviewId,
-        work.work_id,
-        revision,
-        input.subject,
-        input.verdict,
-        input.summary,
-        stableJson(input.corrections),
-        planRevisionId,
-        resultSequence,
-        input.turnId,
-        now,
-      );
-      if (input.completeWork) {
-        if (!this.statuses.tryComplete(work.work_id, input.expectedPlanRevisionId, now)) {
-          this.touch(work.work_id, now);
-        }
-      } else {
-        this.touch(work.work_id, now);
-      }
-      this.mutations.record({
-        mutationCallId: input.mutationCallId,
-        operation: "record_review",
-        requestSha256,
-        workId: work.work_id,
-        recordId: reviewId,
-      });
-      return this.reader.view(work.work_id);
-    });
+    return this.reviews.record(input);
   }
 
   async attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView> {
@@ -312,16 +258,10 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return workId ? this.reader.view(workId) : null;
   }
 
-  private nextRevision(
-    table:
-      | "btcc_guided_work_plan_revisions"
-      | "btcc_guided_work_checkpoint_revisions"
-      | "btcc_guided_work_review_revisions",
-    workId: string,
-  ): number {
+  private nextPlanRevision(workId: string): number {
     return this.db.query<{ revision: number }, [string]>(`
       SELECT COALESCE(MAX(revision), 0) + 1 AS revision
-      FROM ${table} WHERE work_id = ?
+      FROM btcc_guided_work_plan_revisions WHERE work_id = ?
     `).get(workId)?.revision ?? 1;
   }
 
@@ -340,7 +280,6 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private writeTransaction<T>(operation: () => T): T {
     return this.db.transaction(operation).immediate();
   }
-
 }
 
 function progressWorkStatus(

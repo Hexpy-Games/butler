@@ -102,10 +102,20 @@ export function createDurableWorkService(
       validateReview(input);
       const context = await requireWorkContext(store, input);
       const plan = context.work.currentPlan;
-      if (!plan) throw new Error("Durable Work Review requires a current Plan");
+      const currentStage = context.work.currentStage;
+      if (!plan || !currentStage) {
+        throw new Error("Durable Work Review requires a current Plan and stage");
+      }
+      assertWorkStageTransition(currentStage, "review");
+      const nextStage = input.nextStage ?? "review";
+      assertWorkStageTransition("review", nextStage);
+      const actionProgress = applyWorkActionUpdates(
+        context.work,
+        input.actionUpdates ?? [],
+      );
       const completeWork = input.subject === "result" &&
         input.verdict === "accept" &&
-        unresolvedWorkActionKeys(context.work.actionProgress).length === 0 &&
+        unresolvedWorkActionKeys(actionProgress).length === 0 &&
         context.work.latestPlanReview?.verdict === "accept" &&
         context.work.latestPlanReview.boundPlanRevisionId ===
           context.work.currentPlan?.planRevisionId &&
@@ -124,7 +134,12 @@ export function createDurableWorkService(
           verdict: input.verdict,
           summary: input.summary,
           corrections: input.corrections,
+          actionUpdates: input.actionUpdates ?? [],
+          nextStage: input.nextStage ?? null,
         }),
+        currentStage,
+        actionProgress,
+        progressChanged: (input.actionUpdates?.length ?? 0) > 0,
         completeWork,
       });
     },
@@ -189,15 +204,7 @@ function validateCheckpoint(input: RecordWorkCheckpointInput): void {
   ) {
     throw new Error("Durable Work progress requires a stage, action update, or summary");
   }
-  const actionKeys = new Set<string>();
-  for (const [index, update] of updates.entries()) {
-    requiredText(update.actionKey, `actionUpdates[${index}].actionKey`);
-    if (actionKeys.has(update.actionKey)) {
-      throw new Error(`Durable Work action update is duplicated: ${update.actionKey}`);
-    }
-    actionKeys.add(update.actionKey);
-    if (update.note !== undefined) requiredText(update.note, `actionUpdates[${index}].note`);
-  }
+  validateActionUpdates(updates);
 }
 
 function validateReview(input: RecordWorkReviewInput): void {
@@ -205,6 +212,21 @@ function validateReview(input: RecordWorkReviewInput): void {
   requiredText(input.summary, "summary");
   input.corrections.forEach((correction, index) =>
     requiredText(correction, `corrections[${index}]`));
+  validateActionUpdates(input.actionUpdates ?? []);
+}
+
+function validateActionUpdates(updates: RecordWorkCheckpointInput["actionUpdates"]): void {
+  const actionKeys = new Set<string>();
+  for (const [index, update] of (updates ?? []).entries()) {
+    requiredText(update.actionKey, `actionUpdates[${index}].actionKey`);
+    if (actionKeys.has(update.actionKey)) {
+      throw new Error(`Durable Work action update is duplicated: ${update.actionKey}`);
+    }
+    actionKeys.add(update.actionKey);
+    if (update.note !== undefined) {
+      requiredText(update.note, `actionUpdates[${index}].note`);
+    }
+  }
 }
 
 function validateMutation(input: WorkTurnScope & { mutationCallId: string }): void {

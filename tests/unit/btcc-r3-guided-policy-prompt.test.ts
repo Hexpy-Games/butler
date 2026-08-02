@@ -120,6 +120,12 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain("Multi-source or multi-step research");
   expect(instructions).toContain("call replace_work_plan before the dependent work");
   expect(instructions).toContain(
+    "decide whether the current open Work continues or is superseded",
+  );
+  expect(instructions).toContain(
+    "Keep the Work objective as the overall user outcome across Turns",
+  );
+  expect(instructions).toContain(
     "accepted Plan as a whole covers contained workspace writes",
   );
   expect(instructions).toContain("do not enumerate files");
@@ -141,7 +147,19 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain(
     "request them in the same round so safe tools can run together",
   );
-  expect(instructions).toContain("do not call it merely to narrate");
+  expect(instructions).toContain(
+    "use record_work_checkpoint only for meaningful stage or action progress",
+  );
+  expect(instructions).toContain(
+    "include any known action_updates and the legal stage to enter after the Review as next_stage",
+  );
+  expect(instructions).toContain(
+    "Make every current Plan action explicitly done, skipped, or blocked",
+  );
+  expect(instructions).toContain("use next_stage reporting when the result is ready to report");
+  expect(instructions).not.toContain("all its tool calls in order");
+  expect(instructions).not.toContain("put them in one response in an allowed order");
+  expect(instructions).not.toContain("separate concurrent batch");
   expect(instructions).toContain(
     "finish any Project Ledger publication or closeout effect",
   );
@@ -152,7 +170,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "make a path contain the complete desired file",
   );
   expect(instructions.indexOf("answer or create the result before optional investigation"))
-    .toBeLessThan(instructions.indexOf("combine meaningful stage and action updates"));
+    .toBeLessThan(instructions.indexOf("use record_work_checkpoint only for meaningful"));
   expect(instructions).toContain("not a demand for endless polish");
   expect(instructions).toContain(
     "correct and re-inspect only when a visible defect materially harms",

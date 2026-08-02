@@ -158,6 +158,8 @@ export type RecordWorkReviewInput = WorkTurnScope & {
   verdict: "accept" | "revise" | "partial";
   summary: string;
   corrections: string[];
+  actionUpdates?: DurableWorkActionUpdate[];
+  nextStage?: WorkStage;
 };
 
 export type AttachToolResultInput = WorkTurnScope & {
@@ -201,6 +203,9 @@ export type RecordWorkReviewCommand = RecordWorkReviewInput & {
   expectedProgressRevision: number;
   expectedResultSequence: number;
   requestSha256: string;
+  currentStage: WorkStage;
+  actionProgress: DurableWorkActionProgress[];
+  progressChanged: boolean;
   completeWork: boolean;
 };
 
