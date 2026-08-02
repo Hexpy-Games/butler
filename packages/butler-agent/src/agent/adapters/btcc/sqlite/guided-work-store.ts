@@ -6,7 +6,7 @@ import type {
   DurableWorkView,
   LegacyOpenWorkImportResult,
   LegacyProjectWorkSource,
-  RecordWorkCheckpointInput,
+  RecordWorkCheckpointCommand,
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
   WorkTurnScope,
@@ -18,6 +18,7 @@ import {
   type GuidedWorkMutationOperation,
 } from "./guided-work-mutation-journal.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
+import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkLegacyImporter } from "./guided-work-legacy-importer.ts";
 import { GuidedWorkLegacyProjectImporter } from
@@ -32,6 +33,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   private readonly sessions: GuidedWorkSessionWriter;
   private readonly statuses: GuidedWorkStatusWriter;
   private readonly mutations: GuidedWorkMutationJournal;
+  private readonly progress: GuidedWorkProgressWriter;
   private readonly toolResults: GuidedWorkToolResultWriter;
   private readonly legacyImporter: GuidedWorkLegacyImporter;
   private readonly legacyProjectImporter: GuidedWorkLegacyProjectImporter;
@@ -44,6 +46,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     this.sessions = new GuidedWorkSessionWriter(db, this.reader);
     this.statuses = new GuidedWorkStatusWriter(db, this.reader);
     this.mutations = new GuidedWorkMutationJournal(db);
+    this.progress = new GuidedWorkProgressWriter(db);
     this.toolResults = new GuidedWorkToolResultWriter(db);
     this.legacyImporter = new GuidedWorkLegacyImporter(db, this.reader);
     this.legacyProjectImporter = new GuidedWorkLegacyProjectImporter(
@@ -92,11 +95,17 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   }
 
   async replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView> {
-    const requestSha256 = guidedWorkMutationFingerprint("replace_plan", input);
+    const requestSha256 = input.requestSha256;
     return this.writeTransaction(() => {
       const replay = this.replay(input.mutationCallId, "replace_plan", requestSha256);
       if (replay) return replay;
       const work = this.sessions.selectForPlan(input);
+      if (input.expectedWorkId && work.work_id !== input.expectedWorkId) {
+        throw new Error("Durable Work changed before its Plan update");
+      }
+      if (input.expectedProgressRevision !== undefined) {
+        this.progress.assertRevision(work.work_id, input.expectedProgressRevision);
+      }
       const revision = this.nextRevision(
         "btcc_guided_work_plan_revisions",
         work.work_id,
@@ -105,23 +114,41 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       const now = new Date().toISOString();
       this.db.query(`
         INSERT INTO btcc_guided_work_plan_revisions (
-          plan_revision_id, work_id, revision, objective, actions_json,
-          checks_json, origin_turn_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          plan_revision_id, work_id, revision, objective, governing_refs_json,
+          actions_json, checks_json, origin_turn_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         planRevisionId,
         work.work_id,
         revision,
         input.objective,
+        stableJson(input.governingRefs),
         stableJson(input.actions),
         stableJson(input.checks),
         input.turnId,
         now,
       );
+      this.progress.insert({
+        workId: work.work_id,
+        planRevisionId,
+        stage: "planning",
+        actionProgress: input.actionProgress,
+        publicSummary: input.objective,
+        nextStep: input.actions[0]?.description ?? "",
+        resultSequence: this.latestResultSequence(work.work_id),
+        originTurnId: input.turnId,
+        identity: `${input.mutationCallId}\0plan`,
+        now,
+      });
       const updated = this.db.query(`
-        UPDATE btcc_guided_works SET objective = ?, current_plan_revision_id = ?,
-          status = 'open', updated_at = ? WHERE work_id = ?
-      `).run(input.objective, planRevisionId, now, work.work_id);
+        UPDATE btcc_guided_works SET current_plan_revision_id = ?,
+          status = ?, updated_at = ? WHERE work_id = ?
+      `).run(
+        planRevisionId,
+        progressWorkStatus(input.actionProgress),
+        now,
+        work.work_id,
+      );
       if (updated.changes !== 1) throw new Error("Durable Work Plan lost its Work");
       preserveBlockedStatus(this.db, work.work_id);
       this.mutations.record({
@@ -136,9 +163,9 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   }
 
   async recordCheckpoint(
-    input: RecordWorkCheckpointInput,
+    input: RecordWorkCheckpointCommand,
   ): Promise<DurableWorkView> {
-    const requestSha256 = guidedWorkMutationFingerprint("record_checkpoint", input);
+    const requestSha256 = input.requestSha256;
     return this.writeTransaction(() => {
       const replay = this.replay(
         input.mutationCallId,
@@ -147,30 +174,27 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       );
       if (replay) return replay;
       const work = this.sessions.requireBoundHead(input);
-      const revision = this.nextRevision(
-        "btcc_guided_work_checkpoint_revisions",
-        work.work_id,
-      );
-      const checkpointId = guidedWorkRecordId("checkpoint", input.mutationCallId);
-      const resultSequence = this.latestResultSequence(work.work_id);
+      if (work.current_plan_revision_id !== input.expectedPlanRevisionId) {
+        throw new Error("Durable Work Plan changed before its progress update");
+      }
+      this.progress.assertRevision(work.work_id, input.expectedProgressRevision);
       const now = new Date().toISOString();
-      this.db.query(`
-        INSERT INTO btcc_guided_work_checkpoint_revisions (
-          checkpoint_revision_id, work_id, revision, stage, public_summary,
-          next_step, result_sequence, origin_turn_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        checkpointId,
-        work.work_id,
-        revision,
-        input.stage,
-        input.publicSummary,
-        input.nextStep,
-        resultSequence,
-        input.turnId,
+      const checkpointId = this.progress.insert({
+        workId: work.work_id,
+        planRevisionId: input.expectedPlanRevisionId,
+        stage: input.stage,
+        actionProgress: input.actionProgress,
+        publicSummary: input.publicSummary,
+        nextStep: input.nextStep,
+        resultSequence: this.latestResultSequence(work.work_id),
+        originTurnId: input.turnId,
+        identity: input.mutationCallId,
         now,
-      );
-      this.touch(work.work_id, now);
+      });
+      this.db.query(`
+        UPDATE btcc_guided_works SET status = ?, updated_at = ? WHERE work_id = ?
+      `).run(progressWorkStatus(input.actionProgress), now, work.work_id);
+      preserveBlockedStatus(this.db, work.work_id);
       this.mutations.record({
         mutationCallId: input.mutationCallId,
         operation: "record_checkpoint",
@@ -183,8 +207,7 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
   }
 
   async recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView> {
-    const { completeWork, ...request } = input;
-    const requestSha256 = guidedWorkMutationFingerprint("record_review", request);
+    const requestSha256 = input.requestSha256;
     return this.writeTransaction(() => {
       const replay = this.replay(input.mutationCallId, "record_review", requestSha256);
       if (replay) return replay;
@@ -192,16 +215,23 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
       if (input.subject === "plan" && !work.current_plan_revision_id) {
         throw new Error("Durable Work Plan Review requires a current Plan");
       }
+      if (work.current_plan_revision_id !== input.expectedPlanRevisionId) {
+        throw new Error("Durable Work Plan changed before its Review");
+      }
+      this.progress.assertRevision(work.work_id, input.expectedProgressRevision);
+      if (this.latestResultSequence(work.work_id) !== input.expectedResultSequence) {
+        throw new Error("Durable Work results changed before its Review");
+      }
       const revision = this.nextRevision(
         "btcc_guided_work_review_revisions",
         work.work_id,
       );
       const reviewId = guidedWorkRecordId("review", input.mutationCallId);
       const resultSequence = input.subject === "result"
-        ? this.latestResultSequence(work.work_id)
+        ? input.expectedResultSequence
         : null;
       const planRevisionId = input.subject === "plan"
-        ? work.current_plan_revision_id
+        ? input.expectedPlanRevisionId
         : null;
       const now = new Date().toISOString();
       this.db.query(`
@@ -223,8 +253,10 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
         input.turnId,
         now,
       );
-      if (completeWork) {
-        this.statuses.complete(work.work_id, work.current_plan_revision_id, now);
+      if (input.completeWork) {
+        if (!this.statuses.tryComplete(work.work_id, input.expectedPlanRevisionId, now)) {
+          this.touch(work.work_id, now);
+        }
       } else {
         this.touch(work.work_id, now);
       }
@@ -309,4 +341,10 @@ export class SqliteGuidedWorkStore implements DurableWorkStore {
     return this.db.transaction(operation).immediate();
   }
 
+}
+
+function progressWorkStatus(
+  progress: ReplaceWorkPlanCommand["actionProgress"],
+): "open" | "blocked" {
+  return progress.some((action) => action.status === "blocked") ? "blocked" : "open";
 }

@@ -1,12 +1,15 @@
 import type { Database } from "bun:sqlite";
-import type {
-  DurableWorkCheckpoint,
-  DurableWorkContext,
-  DurableWorkPlan,
-  DurableWorkReview,
-  DurableWorkToolResultRef,
-  DurableWorkView,
-  WorkTurnScope,
+import {
+  allowedNextWorkStages,
+  progressForReplacementPlan,
+  type DurableWorkActionProgress,
+  type DurableWorkCheckpoint,
+  type DurableWorkContext,
+  type DurableWorkPlan,
+  type DurableWorkReview,
+  type DurableWorkToolResultRef,
+  type DurableWorkView,
+  type WorkTurnScope,
 } from "../../../btcc/durable-work/index.ts";
 import type {
   GuidedWorkCheckpointRow,
@@ -126,7 +129,34 @@ export class GuidedWorkViewReader {
           WHERE plan_revision_id = ?
         `).get(work.current_plan_revision_id)
       : null;
+    const hydratedPlan = plan ? hydratePlan(plan) : undefined;
     const checkpoint = this.latestCheckpoint(work.work_id);
+    const inferredCheckpointPlanId = checkpoint?.plan_revision_id ??
+      (checkpoint && hydratedPlan && checkpoint.created_at >= hydratedPlan.createdAt
+        ? hydratedPlan.planRevisionId
+        : undefined);
+    const defaultProgress = hydratedPlan
+      ? progressForReplacementPlan(hydratedPlan.actions, []).map((action) =>
+          work.status === "completed" ? { ...action, status: "done" as const } : action)
+      : [];
+    const hydratedCheckpoint = checkpoint
+      ? this.hydrateCheckpoint(
+          work.work_id,
+          checkpoint,
+          inferredCheckpointPlanId,
+          defaultProgress,
+        )
+      : undefined;
+    const checkpointMatchesPlan = Boolean(
+      hydratedPlan && hydratedCheckpoint &&
+        hydratedCheckpoint.planRevisionId === hydratedPlan.planRevisionId,
+    );
+    const actionProgress = checkpointMatchesPlan
+      ? hydratedCheckpoint!.actionProgress
+      : defaultProgress;
+    const currentStage = hydratedPlan
+      ? (checkpointMatchesPlan ? hydratedCheckpoint!.stage : "planning")
+      : hydratedCheckpoint?.stage;
     const planReview = this.latestReview(work.work_id, "plan");
     const resultReview = this.latestReview(work.work_id, "result");
     const effectBlockers = unresolvedEffectBlockersForWork(this.db, work.work_id);
@@ -139,9 +169,12 @@ export class GuidedWorkViewReader {
       origin: { turnId: work.origin_turn_id, messageId: work.origin_message_id },
       objective: work.objective,
       status: work.status,
-      ...(plan ? { currentPlan: hydratePlan(plan) } : {}),
-      ...(checkpoint
-        ? { latestCheckpoint: this.hydrateCheckpoint(work.work_id, checkpoint) }
+      ...(currentStage ? { currentStage } : {}),
+      allowedNextStages: allowedNextWorkStages(currentStage),
+      actionProgress,
+      ...(hydratedPlan ? { currentPlan: hydratedPlan } : {}),
+      ...(hydratedCheckpoint
+        ? { latestCheckpoint: hydratedCheckpoint }
         : {}),
       ...(planReview
         ? { latestPlanReview: this.hydrateReview(work.work_id, planReview) }
@@ -176,6 +209,8 @@ export class GuidedWorkViewReader {
   private hydrateCheckpoint(
     workId: string,
     checkpoint: GuidedWorkCheckpointRow,
+    inferredPlanRevisionId: string | undefined,
+    defaultProgress: DurableWorkActionProgress[],
   ): DurableWorkCheckpoint {
     const prior = this.db.query<{ result_sequence: number }, [string, number]>(`
       SELECT result_sequence FROM btcc_guided_work_checkpoint_revisions
@@ -188,7 +223,12 @@ export class GuidedWorkViewReader {
     return {
       checkpointRevisionId: checkpoint.checkpoint_revision_id,
       revision: checkpoint.revision,
+      planRevisionId: inferredPlanRevisionId ?? "legacy",
       stage: checkpoint.stage,
+      actionProgress: hydrateActionProgress(
+        checkpoint.action_states_json,
+        defaultProgress,
+      ),
       publicSummary: checkpoint.public_summary,
       nextStep: checkpoint.next_step,
       referencedResultRefs: refs,
@@ -250,11 +290,20 @@ function hydratePlan(row: GuidedWorkPlanRow): DurableWorkPlan {
     planRevisionId: row.plan_revision_id,
     revision: row.revision,
     objective: row.objective,
+    governingRefs: parseJson(row.governing_refs_json),
     actions: parseJson(row.actions_json),
     checks: parseJson(row.checks_json),
     originTurnId: row.origin_turn_id,
     createdAt: row.created_at,
   };
+}
+
+function hydrateActionProgress(
+  value: string,
+  fallback: DurableWorkActionProgress[],
+): DurableWorkActionProgress[] {
+  const parsed = parseJson<DurableWorkActionProgress[]>(value);
+  return parsed.length > 0 ? parsed : fallback;
 }
 
 function hydrateResultRef(row: GuidedWorkResultRow): DurableWorkToolResultRef {

@@ -343,6 +343,17 @@ test("Guided project Work initializes and closes Project Ledger through reviewed
         review: "The requested tracked outcome is complete",
         report: "The Guided result contains the completed outcome",
       });
+      await call("record_work_checkpoint", {
+        action_updates: [{
+          action_key: "create-ledger-work",
+          status: "done",
+        }, {
+          action_key: "complete-ledger-work",
+          status: "done",
+        }],
+        public_summary: "The Project Ledger Work was created and completed.",
+        next_step: "Review the completed project result.",
+      });
       await call("record_work_review", {
         subject: "result",
         verdict: "accept",
@@ -1105,6 +1116,14 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
         new_text: "  overflow-x: hidden;\n",
         expected_sha256: "0".repeat(64),
       });
+      await call("record_work_checkpoint", {
+        action_updates: [{
+          action_key: "correct-style",
+          status: "done",
+        }],
+        public_summary: "The requested stylesheet correction is present.",
+        next_step: "Review the corrected stylesheet.",
+      });
       await call("record_work_review", {
         subject: "result",
         verdict: "accept",
@@ -1568,6 +1587,9 @@ test("Guided operational reporting preserves current and outdated saved result r
     origin: { turnId: "turn-completed", messageId: "message-completed" },
     objective: "Build and verify the requested page",
     status: "completed",
+    currentStage: "reporting",
+    allowedNextStages: ["review"],
+    actionProgress: [],
     latestResultReview: {
       reviewRevisionId: "review-completed",
       revision: 1,

@@ -19,6 +19,8 @@ interface ConversationWorkCopy {
   todoItemCompletedLabel: string;
   todoItemReviewingLabel: string;
   todoItemCorrectionLabel: string;
+  todoItemBlockedLabel: string;
+  todoItemSkippedLabel: string;
   todoItemStoppedLabel: string;
   collapsedSummary: (primaryLabel: string, count: number) => string;
   expandHistoryLabel: (primaryLabel: string, count: number) => string;
@@ -663,6 +665,8 @@ const koKrCopy: AppCopy = {
       todoItemCompletedLabel: "완료",
       todoItemReviewingLabel: "검토 중",
       todoItemCorrectionLabel: "수정 필요",
+      todoItemBlockedLabel: "막힘",
+      todoItemSkippedLabel: "건너뜀",
       todoItemStoppedLabel: "중지됨",
       collapsedSummary: (primaryLabel, count) =>
         count <= 1
@@ -1403,6 +1407,8 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       todoItemCompletedLabel: "Done",
       todoItemReviewingLabel: "Reviewing",
       todoItemCorrectionLabel: "Correction required",
+      todoItemBlockedLabel: "Blocked",
+      todoItemSkippedLabel: "Skipped",
       todoItemStoppedLabel: "Stopped",
       toolchainRegionLabel: (label) => `${label} tool run history`,
       detailsRegionLabel: (label) => `${label} details`,

@@ -25,7 +25,7 @@ import {
 import {
   backfillTurnToolResults,
   bindPresentedWorkForToolDispatch,
-  publishWorkCheckpoint,
+  publishWorkProgress,
   safeAttachToolResult,
   safeBindOpenWork,
 } from "./guided-work-runtime.ts";
@@ -126,15 +126,13 @@ export function createGuidedToolCallExecutor(
         toolName: effectiveToolName,
         status: "started",
       });
-      if (
-        call.name === "record_work_checkpoint" &&
-        toolResultSucceeded(recorded.result)
-      ) {
-        await publishWorkCheckpoint(
+      if (isDurableWorkTool(call.name) && toolResultSucceeded(recorded.result)) {
+        await activityProjection.publishAccepted(activity);
+        await publishWorkProgress(
           input.progress,
           input.turn.turnId,
+          input.turn.revision,
           input.durableWork,
-          activity.activityId,
         );
       }
       await publishOperation(input.progress, {
@@ -202,15 +200,13 @@ export function createGuidedToolCallExecutor(
       } else if (!isDurableWorkTool(call.name)) {
         await safeAttachToolResult(input, input.workScope, callId);
       }
-      if (
-        call.name === "record_work_checkpoint" &&
-        toolResultSucceeded(result)
-      ) {
-        await publishWorkCheckpoint(
+      if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
+        await activityProjection.publishAccepted(activity);
+        await publishWorkProgress(
           input.progress,
           input.turn.turnId,
+          input.turn.revision,
           input.durableWork,
-          activity.activityId,
         );
       }
       await publishOperation(input.progress, {

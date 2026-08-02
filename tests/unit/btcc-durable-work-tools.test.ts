@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
-import type {
-  DurableWorkContext,
-  DurableWorkService,
-  DurableWorkView,
-  ReplaceWorkPlanInput,
+import {
+  WorkStageTransitionError,
+  type DurableWorkContext,
+  type DurableWorkService,
+  type DurableWorkView,
+  type RecordWorkCheckpointInput,
+  type ReplaceWorkPlanInput,
 } from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
 import {
   DURABLE_WORK_TOOL_DEFINITIONS,
@@ -19,6 +21,10 @@ test("R3 Work exposes only three compact optional control tools", () => {
   ]);
   expect(DURABLE_WORK_TOOL_DEFINITIONS[0]?.description)
     .toContain("multi-source or multi-step research");
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[1]))
+    .toContain("next_stage");
+  expect(JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS[1]))
+    .toContain("action_updates");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
     .toContain("Judge against the original user request");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
@@ -34,9 +40,14 @@ test("R3 Work exposes only three compact optional control tools", () => {
 
 test("R3 Work tool maps semantic model input and returns validation as ordinary feedback", async () => {
   let received: ReplaceWorkPlanInput | null = null;
+  let progressReceived: RecordWorkCheckpointInput | null = null;
   const service = fakeService({
     replacePlan(input) {
       received = input;
+      return Promise.resolve(workView());
+    },
+    recordCheckpoint(input) {
+      progressReceived = input;
       return Promise.resolve(workView());
     },
   });
@@ -75,6 +86,30 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     actions: [{ actionKey: "research" }, { actionKey: "write" }],
   });
 
+  const progress = await executeDurableWorkTool({
+    service,
+    scope,
+    mutationCallId: "call-progress",
+    name: "record_work_checkpoint",
+    args: {
+      next_stage: "review",
+      action_updates: [{
+        action_key: "research",
+        status: "done",
+        note: "Current evidence was collected.",
+      }],
+    },
+  });
+  expect(progress).toMatchObject({ ok: true });
+  expect(progressReceived).toMatchObject({
+    nextStage: "review",
+    actionUpdates: [{
+      actionKey: "research",
+      status: "done",
+      note: "Current evidence was collected.",
+    }],
+  });
+
   const acceptedWithoutDuplicatedDescription = await executeDurableWorkTool({
     service,
     scope,
@@ -104,6 +139,53 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     ok: false,
     error: { code: "work_update_rejected" },
   });
+});
+
+test("R3 Work transition rejection returns the allowed next stage as ordinary feedback", async () => {
+  const current = workView();
+  const service = fakeService({
+    loadContext: async () => ({
+      work: current,
+      originalRequest: {
+        turnId: "turn-origin",
+        messageId: "message-origin",
+        content: "Create the requested report",
+      },
+      resultFacts: [],
+    }),
+    recordCheckpoint: async () => {
+      throw new WorkStageTransitionError("planning", "reporting", ["review"]);
+    },
+  });
+
+  const result = await executeDurableWorkTool({
+    service,
+    scope: { turnId: "turn-1", sessionId: "session-1" },
+    mutationCallId: "invalid-transition",
+    name: "record_work_checkpoint",
+    args: { next_stage: "reporting" },
+  });
+
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      code: "invalid_work_stage_transition",
+      current_stage: "planning",
+      attempted_stage: "reporting",
+      allowed_next_stages: ["review"],
+    },
+    work: {
+      status: "open",
+      current_stage: "planning",
+      allowed_next_stages: ["review"],
+      unresolved_action_keys: ["research"],
+    },
+  });
+  expect(current.currentStage).toBe("planning");
+  expect(current.actionProgress).toEqual([{
+    actionKey: "research",
+    status: "pending",
+  }]);
 });
 
 test("R3 continuation context stays concise and semantic", () => {
@@ -147,8 +229,12 @@ test("R3 continuation context stays concise and semantic", () => {
   };
 
   const rendered = renderDurableWorkContext(context) ?? "";
-  expect(rendered).toContain("Original request: Research the market");
-  expect(rendered).toContain("Current plan:");
+  expect(rendered).toContain("Original request (highest priority): Research the market");
+  expect(rendered).toContain("Current stage: planning");
+  expect(rendered).toContain("Allowed next stages: review");
+  expect(rendered).toContain("Governing references: SPEC-REPORT");
+  expect(rendered).toContain("- [pending] research: Collect evidence");
+  expect(rendered).toContain("Current plan details:");
   expect(rendered).toContain("Result (write_file, completed)");
   expect(rendered).toContain("Plan corrections: Add a second independent source.");
   expect(rendered).toContain("Result corrections: Read report.md back before reporting.");
@@ -195,6 +281,56 @@ test("R3 continuation context reuses the bounded web model projection", () => {
   expect(rendered.length).toBeLessThanOrEqual(8_000);
 });
 
+test("R3 context keeps every normal-sized unresolved action ahead of verbose details", () => {
+  const base = workView();
+  const actions = Array.from({ length: 20 }, (_, index) => ({
+    actionKey: `action-${index + 1}`,
+    description: `Action ${index + 1} ${"verbose detail ".repeat(30)}`,
+    dependencyKeys: index === 0 ? [] : [`action-${index}`],
+  }));
+  const context: DurableWorkContext = {
+    work: {
+      ...base,
+      actionProgress: actions.map((action, index) => ({
+        actionKey: action.actionKey,
+        status: index < 5 ? "done" : "pending",
+      })),
+      currentPlan: {
+        ...base.currentPlan!,
+        actions,
+        checks: Array.from({ length: 10 }, (_, index) =>
+          `Check ${index + 1} ${"detailed criterion ".repeat(20)}`),
+      },
+      effectBlockers: [{
+        blockerId: "blocker-context",
+        sourceTurnId: "turn-origin",
+        capability: "publish",
+        target: "remote:report",
+        detail: "A prior publication must be reconciled before another attempt.",
+        createdAt: "2026-08-02T00:00:00.000Z",
+      }],
+    },
+    originalRequest: {
+      turnId: "turn-origin",
+      messageId: "message-origin",
+      content: `Create the requested report ${"with original detail ".repeat(80)}`,
+    },
+    resultFacts: Array.from({ length: 8 }, (_, index) => ({
+      toolName: "read_file",
+      status: "completed" as const,
+      resultJson: { index, content: "result detail ".repeat(100) },
+    })),
+  };
+
+  const rendered = renderDurableWorkContext(context) ?? "";
+  for (let index = 6; index <= 20; index += 1) {
+    expect(rendered).toContain(`action-${index}=pending`);
+  }
+  expect(rendered).toContain("Unresolved prior effect (publish -> remote:report)");
+  expect(rendered).toContain("Guardrail: choose the next useful unresolved action");
+  expect(rendered.length).toBeLessThanOrEqual(8_000);
+});
+
 function fakeService(
   overrides: Partial<DurableWorkService>,
 ): DurableWorkService {
@@ -219,10 +355,14 @@ function workView(): DurableWorkView {
     origin: { turnId: "turn-origin", messageId: "message-origin" },
     objective: "Create the requested report",
     status: "open",
+    currentStage: "planning",
+    allowedNextStages: ["review"],
+    actionProgress: [{ actionKey: "research", status: "pending" }],
     currentPlan: {
       planRevisionId: "plan-revision-1",
       revision: 1,
       objective: "Create the requested report",
+      governingRefs: ["SPEC-REPORT"],
       actions: [{
         actionKey: "research",
         description: "Collect evidence",

@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_plan_revisions (
   work_id TEXT NOT NULL,
   revision INTEGER NOT NULL,
   objective TEXT NOT NULL,
+  governing_refs_json TEXT NOT NULL,
   actions_json TEXT NOT NULL,
   checks_json TEXT NOT NULL,
   origin_turn_id TEXT NOT NULL,
@@ -65,11 +66,13 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_checkpoint_revisions (
   checkpoint_revision_id TEXT PRIMARY KEY,
   work_id TEXT NOT NULL,
   revision INTEGER NOT NULL,
+  plan_revision_id TEXT NOT NULL,
   stage TEXT NOT NULL CHECK (
     stage IN ('conception', 'planning', 'execution', 'review', 'reporting')
   ),
   public_summary TEXT NOT NULL,
   next_step TEXT NOT NULL,
+  action_states_json TEXT NOT NULL,
   result_sequence INTEGER NOT NULL,
   origin_turn_id TEXT NOT NULL,
   created_at TEXT NOT NULL,

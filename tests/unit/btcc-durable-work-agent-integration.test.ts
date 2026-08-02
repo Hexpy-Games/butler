@@ -67,7 +67,12 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
           },
         });
         expect(await call(options, "record_work_checkpoint", {
-          stage: "review",
+          next_stage: "review",
+          action_updates: [{
+            action_key: "write_report",
+            status: "done",
+            note: "The requested report was written and verified.",
+          }],
           public_summary: "보고서를 작성하고 실제 파일을 확인했습니다.",
           next_step: "사용자 요청에 맞는지 최종 검토합니다.",
         })).toMatchObject({ ok: true });
@@ -130,7 +135,7 @@ test("R3 managed Work survives a store restart and continues in a fresh Turn", a
       });
     expect(continuationPrompt).toContain("## Current Work");
     expect(continuationPrompt).toContain(
-      "Original request: 조사 결과를 report.md로 만들고 확인해 주세요.",
+      "Original request (highest priority): 조사 결과를 report.md로 만들고 확인해 주세요.",
     );
     expect(continuationPrompt).toContain("Result (write_file, completed)");
     expect(continuationPrompt).not.toContain("guided-work-");
@@ -184,7 +189,12 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
         }) as { work?: { work_id?: string } };
         originalWorkId = plan.work?.work_id ?? "";
         await call(options, "record_work_checkpoint", {
-          stage: "execution",
+          next_stage: "review",
+          public_summary: "계획을 실행할 준비가 됐습니다.",
+        });
+        await call(options, "record_work_checkpoint", {
+          next_stage: "execution",
+          action_updates: [{ action_key: "prepare", status: "active" }],
           public_summary: "보고서를 준비하고 있습니다.",
           next_step: "남은 내용을 작성하고 검증합니다.",
         });
@@ -244,15 +254,9 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
       stores: resumedStores,
       promptRunner: async (options) => {
         prompt = options.prompt;
-        await call(options, "replace_work_plan", {
-          start_new: false,
-          objective: "Prepare a resumable report",
-          actions: [{
-            action_key: "prepare",
-            description: "Prepare and verify the report",
-            dependency_keys: [],
-          }],
-          checks: ["The report is verified"],
+        await call(options, "record_work_checkpoint", {
+          action_updates: [{ action_key: "prepare", status: "active" }],
+          public_summary: "중지된 실행 상태와 남은 작업을 복구했습니다.",
         });
         return "중지된 작업 기록을 확인했고 이어서 진행할 수 있습니다.";
       },
@@ -263,7 +267,9 @@ test("R3 Stop cancels only the Turn and leaves Work resumable after restart", as
       resumedTurnId,
       "아까 중지한 작업을 이어가 주세요.",
     ))).toMatchObject({ kind: "delivered" });
-    expect(prompt).toContain("Original request: 긴 보고서를 작성해 주세요.");
+    expect(prompt).toContain(
+      "Original request (highest priority): 긴 보고서를 작성해 주세요.",
+    );
     expect(prompt).toContain("Latest progress (execution)");
     expect(await resumedStores.durableWork.boundWorkForTurn(resumedTurnId))
       .toMatchObject({ workId: originalWorkId, status: "open" });
@@ -433,7 +439,7 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
       stores,
       promptRunner: async (options) => {
         expect(await call(options, "record_work_checkpoint", {
-          stage: "execution",
+          next_stage: "execution",
           public_summary: "파일을 작성합니다.",
           next_step: "결과를 확인합니다.",
         })).toMatchObject({
@@ -491,6 +497,96 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
   }
 });
 
+test("a rejected stage transition is not projected as accepted progress", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-r3-rejected-stage-projection-"));
+  const dbPath = join(root, "butler.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "rejected-stage-projection",
+    storageProfile: "ephemeral",
+  });
+  const activities: Array<{ displayStage?: string; summary: string }> = [];
+  const checklists: string[][] = [];
+  try {
+    const runtime = createRuntime({
+      root,
+      dbPath,
+      stores,
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          activities.push(update);
+        },
+        workProgressChanged(update) {
+          checklists.push(update.tasks.map((task) => task.taskState));
+        },
+      },
+      promptRunner: async (options) => {
+        const planArgs = {
+          objective: "Prepare the requested answer",
+          actions: [{
+            action_key: "prepare-answer",
+            description: "Prepare the answer",
+            dependency_keys: [],
+          }],
+          checks: ["The answer addresses the request"],
+        };
+        options.onAssistantTextBeforeTools?.({
+          text: "요청에 맞는 계획을 세웁니다.",
+          toolCalls: [{ name: "replace_work_plan", args: planArgs }],
+        });
+        expect(await call(options, "replace_work_plan", planArgs))
+          .toMatchObject({ ok: true });
+        const invalidArgs = {
+          next_stage: "execution",
+          public_summary: "REJECTED STAGE MUST NOT APPEAR",
+        };
+        options.onAssistantTextBeforeTools?.({
+          text: "잘못된 전이를 시도합니다.",
+          toolCalls: [{ name: "record_work_checkpoint", args: invalidArgs }],
+        });
+        expect(await call(options, "record_work_checkpoint", invalidArgs))
+          .toMatchObject({
+            ok: false,
+            error: {
+              code: "invalid_work_stage_transition",
+              current_stage: "planning",
+              attempted_stage: "execution",
+              allowed_next_stages: ["review"],
+            },
+          });
+        return "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.";
+      },
+    });
+
+    expect(await runtime.runTurn(command(
+      root,
+      "rejected-stage-projection-turn",
+      "확인 가능한 답변을 주세요.",
+      "rejected-stage-projection-session",
+    ))).toMatchObject({
+      kind: "delivered",
+      content: "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.",
+    });
+    expect(activities.map((activity) => activity.displayStage)).toEqual([
+      "planning",
+      "reporting",
+    ]);
+    expect(activities.some((activity) =>
+      activity.summary.includes("REJECTED STAGE"))).toBe(false);
+    expect(checklists).toEqual([["planned"]]);
+    expect(await stores.durableWork.boundWorkForTurn(
+      "rejected-stage-projection-turn",
+    )).toMatchObject({
+      currentStage: "planning",
+      actionProgress: [{ actionKey: "prepare-answer", status: "pending" }],
+    });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("the production R3 agent imports and continues open R2 Session Work", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-product-legacy-work-"));
   const dbPath = join(root, "butler.sqlite");
@@ -525,7 +621,9 @@ test("the production R3 agent imports and continues open R2 Session Work", async
       "session-fixture",
     ))).toMatchObject({ kind: "delivered" });
     expect(prompt).toContain("## Current Work");
-    expect(prompt).toContain("Original request: Start the four-task Program");
+    expect(prompt).toContain(
+      "Original request (highest priority): Start the four-task Program",
+    );
     expect(prompt).toContain("Imported prior progress: 2 of 4 planned actions");
     expect(await stores.durableWork.boundWorkForTurn(turnId)).toMatchObject({
       status: "open",

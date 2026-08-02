@@ -32,6 +32,15 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
         minLength: 1,
         description: "The concise user-visible outcome this Work must produce.",
       },
+      governing_refs: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        default: [],
+        description: [
+          "A small list of existing governing specification or document references.",
+          "Use workspace-relative paths or stable document ids; do not invent references.",
+        ].join(" "),
+      },
       actions: {
         type: "array",
         minItems: 1,
@@ -90,29 +99,47 @@ const RECORD_WORK_CHECKPOINT: FunctionToolDefinition = {
   type: "function",
   name: "record_work_checkpoint",
   description: [
-    "Record a meaningful stage change for current durable Work.",
-    "This updates progress and continuation context; it does not authorize tools or block delivery.",
+    "Update the current Managed Work stage or action checklist.",
+    "The runtime checks only the small legal stage transition and known action keys.",
+    "If a transition is rejected, use the returned allowed next stages; useful work and final delivery remain valid.",
   ].join(" "),
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
-      stage: {
+      next_stage: {
         type: "string",
         enum: ["conception", "planning", "execution", "review", "reporting"],
+        description: "The stage to enter. Omit when only updating action progress.",
+      },
+      action_updates: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            action_key: { type: "string", minLength: 1 },
+            status: {
+              type: "string",
+              enum: ["pending", "active", "done", "blocked", "skipped"],
+            },
+            note: { type: "string", minLength: 1 },
+          },
+          required: ["action_key", "status"],
+        },
+        default: [],
       },
       public_summary: {
         type: "string",
         minLength: 1,
-        description: "A short user-visible progress fact without secrets or private paths.",
+        description: "Optional short user-visible progress fact without secrets or private paths.",
       },
       next_step: {
         type: "string",
         minLength: 1,
-        description: "The next useful action in user-facing language.",
+        description: "Optional next useful action in user-facing language.",
       },
     },
-    required: ["stage", "public_summary", "next_step"],
   },
 };
 
@@ -121,7 +148,7 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
   name: "record_work_review",
   description: [
     "Record a concise review of the current Work plan or actual result.",
-    "Accepting a result completes Work; revise or partial keeps it open.",
+    "Accepting a result completes Work only after every current action is done or skipped; otherwise the Review is kept and Work remains open.",
     "Judge against the original user request: disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
     "A review records judgment but never replaces real tool evidence.",
   ].join(" "),

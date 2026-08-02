@@ -1,4 +1,7 @@
-import type { BtccTurnProgressObserver } from "../../btcc/index.ts";
+import type {
+  BtccTurnProgressObserver,
+  WorkProgressTask,
+} from "../../btcc/index.ts";
 import { digest } from "../../btcc/identity/index.ts";
 import type {
   DurableWorkContext,
@@ -8,6 +11,7 @@ import type {
 } from "../../btcc/durable-work/index.ts";
 import type { TurnRecord } from "../../btcc/turn/index.ts";
 import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
+import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "./durable-work-tools.ts";
 
 type GuidedWorkRuntimeInput = {
@@ -114,26 +118,57 @@ export async function backfillTurnToolResults(
   }
 }
 
-export async function publishWorkCheckpoint(
+export async function publishWorkProgress(
   progress: BtccTurnProgressObserver | undefined,
   turnId: string,
+  turnRevision: number,
   service: DurableWorkService,
-  activityId?: string,
 ): Promise<void> {
+  if (!progress?.workProgressChanged) return;
   const work = await safeBoundWork(service, turnId);
-  const checkpoint = work?.latestCheckpoint;
-  if (!checkpoint || !progress?.phaseActivityChanged) return;
+  const plan = work?.currentPlan;
+  if (!work || !plan) return;
+  const progressByKey = new Map(
+    work.actionProgress.map((action) => [action.actionKey, action]),
+  );
+  const tasks: WorkProgressTask[] = plan.actions.map((action, index) => {
+    const actionProgress = progressByKey.get(action.actionKey);
+    return {
+      taskId: `${work.workId}:${action.actionKey}`,
+      taskTitle: publicText(action.description, action.actionKey),
+      taskOutcome: publicText(actionProgress?.note, action.description),
+      taskOrder: index,
+      taskState: projectActionState(actionProgress?.status ?? "pending"),
+      workId: work.workId,
+      workTitle: publicText(work.objective, "Managed Work"),
+      workState: work.status === "completed"
+        ? "completed"
+        : work.status === "abandoned"
+          ? "cancelled"
+          : "active",
+    };
+  });
   try {
-    await progress.phaseActivityChanged({
+    await progress.workProgressChanged({
       turnId,
-      semanticState: "admitted",
-      activityId: activityId ?? `durable-work:${work.workId}`,
-      displayStage: checkpoint.stage,
-      title: checkpoint.publicSummary,
-      summary: checkpoint.publicSummary,
-      nextStep: checkpoint.nextStep,
+      turnRevision,
+      programId: work.workId,
+      tasks,
     });
   } catch {
-    // Public progress cannot veto Work or delivery.
+    // Checklist projection cannot veto Work or delivery.
   }
+}
+
+function projectActionState(
+  status: "pending" | "active" | "done" | "blocked" | "skipped",
+): WorkProgressTask["taskState"] {
+  if (status === "done") return "completed";
+  if (status === "blocked") return "blocked";
+  if (status === "skipped") return "skipped";
+  return status === "active" ? "active" : "planned";
+}
+
+function publicText(value: string | undefined, fallback: string): string {
+  return sanitizePublicText(value, fallback).trim() || fallback;
 }

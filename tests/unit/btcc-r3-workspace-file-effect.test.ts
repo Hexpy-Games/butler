@@ -1065,6 +1065,12 @@ function reviewedFileWork(target: string): DurableWorkView {
     origin: { turnId: "turn-file-1", messageId: "message-file-1" },
     objective: "Write the summary file",
     status: "open",
+    currentStage: "execution",
+    allowedNextStages: ["review"],
+    actionProgress: [{
+      actionKey: "write-summary",
+      status: "active",
+    }],
     currentPlan: {
       planRevisionId,
       revision: 1,

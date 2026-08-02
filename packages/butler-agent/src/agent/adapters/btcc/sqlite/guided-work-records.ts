@@ -30,6 +30,7 @@ export type GuidedWorkPlanRow = {
   plan_revision_id: string;
   revision: number;
   objective: string;
+  governing_refs_json: string;
   actions_json: string;
   checks_json: string;
   origin_turn_id: string;
@@ -39,9 +40,11 @@ export type GuidedWorkPlanRow = {
 export type GuidedWorkCheckpointRow = {
   checkpoint_revision_id: string;
   revision: number;
+  plan_revision_id: string | null;
   stage: DurableWorkCheckpoint["stage"];
   public_summary: string;
   next_step: string;
+  action_states_json: string;
   result_sequence: number;
   origin_turn_id: string;
   created_at: string;
