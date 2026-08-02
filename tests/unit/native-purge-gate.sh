@@ -194,7 +194,7 @@ if rg -n '\$BUTLER_HOME/logs|\$\{BUTLER_HOME\}/logs|join\([^)]*BUTLER_HOME[^)]*"
   fail "private logs must be written under \$BUTLER_DATA/logs, not \$BUTLER_HOME/logs"
 fi
 
-rg -q 'runTelegramPolling|Telegram polling started|getUpdates' packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts packages/butler-agent/src/interfaces/transport/telegram/polling-runner.ts \
+rg -q 'runTelegramPolling|Telegram polling started|getUpdates' packages/butler-agent/src/application/native-butler.ts packages/butler-agent/src/interfaces/transport/telegram/polling-runner.ts \
   || fail "native butler-main must own the Telegram polling loop"
 
 generic_bearer_word="bearer"

@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import {
   type DurableWorkView,
   unresolvedWorkActionKeys,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import { hasUnresolvedEffectBlockers } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 

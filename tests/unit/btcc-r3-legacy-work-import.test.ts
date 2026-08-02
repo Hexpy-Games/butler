@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createDurableWorkService } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import { SqliteGuidedWorkStore } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from

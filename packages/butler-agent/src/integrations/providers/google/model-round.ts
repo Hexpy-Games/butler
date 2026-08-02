@@ -4,7 +4,7 @@ import type {
 } from "../../../agent/btcc/ports/model-round.ts";
 import { parseToolArguments } from "../shared/runtime-support.ts";
 import { promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { toolResultPayloadForProvider } from "../../../agent/btcc/agent-loop/index.ts";
+import { toolResultPayloadForProvider } from "../../../agent/model-tool-loop/tool-result-serialization.ts";
 import type { FunctionToolDefinition } from "../runtime-contracts.ts";
 import {
   createProviderRequestAttributor,

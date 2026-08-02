@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { runNativeButlerMain } from "../src/interfaces/gateway/native-butler-bootstrap.ts";
+import { runNativeButlerMain } from "../src/application/native-butler.ts";
 
 try {
   const result = await runNativeButlerMain();

@@ -12,7 +12,7 @@ import { SqliteGuidedWorkStore } from
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { createDurableWorkService } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   clearProjectFixtures,
   projectFixture,

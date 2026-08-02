@@ -3,7 +3,7 @@ import type {
   DurableWorkReview,
   DurableWorkToolResultRef,
   DurableWorkView,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 
 export type GuidedWorkRow = {
   work_id: string;

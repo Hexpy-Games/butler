@@ -1,13 +1,14 @@
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import type {
-  Btcc,
-  BtccProgressProjectionHost,
-} from "../../../agent/btcc/index.ts";
+import type { Btcc } from "../../../agent/btcc/index.ts";
 
 type PendingStopRow = {
   turn_id: string;
   state: string;
+};
+
+type BtccProgressProjection = {
+  hasCommittedEvent(turnId: string, kind: string): boolean;
 };
 
 /** App cancellation Outbox consumer; it projects BTCC's Stop receipt only. */
@@ -17,7 +18,7 @@ export class AppBtccStopConsumer {
   constructor(
     private readonly dbPath: string,
     private readonly btcc: Pick<Btcc, "stopTurn">,
-    private readonly progress: Pick<BtccProgressProjectionHost, "hasCommittedEvent">,
+    private readonly progress: BtccProgressProjection,
   ) {}
 
   reconcile(): Promise<void> {

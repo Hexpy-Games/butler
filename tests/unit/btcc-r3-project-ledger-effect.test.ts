@@ -22,7 +22,7 @@ import {
   createGuidedProjectLedgerEffectAdapter,
   guidedProjectLedgerEffect,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-project-ledger-effect.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-project-ledger-effect.ts";
 import {
   ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
   type ActiveProjectLedgerReference,

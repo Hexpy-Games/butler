@@ -10,9 +10,11 @@ import type {
   BtccTurnRuntime,
   BtccWakeProjectionHost,
 } from "./contracts.ts";
-import { createBtccProgressProjectionHost } from "./projection/btcc-progress-outbox-consumer.ts";
-import { projectTurnProgressToEvents } from "./turn/turn-progress.ts";
-import type { TurnStateRepository } from "./turn/contracts.ts";
+import {
+  createBtccProgressProjectionHost,
+  projectTurnProgressToEvents,
+} from "./projection/index.ts";
+import type { TurnStateRepository } from "./turn/index.ts";
 
 export type BtccDependencies = {
   runtime: BtccTurnRuntime;
@@ -21,6 +23,11 @@ export type BtccDependencies = {
   turns: Pick<TurnStateRepository, "findTurn">;
   wake?: BtccWakeProjectionHost;
   close?: () => Promise<void> | void;
+};
+
+export type BtccAssembly = {
+  btcc: Btcc;
+  host: BtccHost;
 };
 
 /**
@@ -32,7 +39,7 @@ export type BtccDependencies = {
  */
 export function createBtcc(
   dependencies: BtccDependencies,
-): Btcc & { host: BtccHost } {
+): BtccAssembly {
   const activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
   const sessionTails = new Map<string, Promise<void>>();
   let closePromise: Promise<void> | null = null;
@@ -153,7 +160,10 @@ export function createBtcc(
     },
   };
 
-  return { runTurn, stopTurn, host };
+  return {
+    btcc: { runTurn, stopTurn },
+    host,
+  };
 }
 
 function destinationForRequest(request: BtccTurnRequest): BtccProgressDestination {

@@ -1,4 +1,4 @@
-export { createGuidedEffectService } from "./create-guided-effect-service.ts";
+export { createGuidedEffectService } from "./effects.ts";
 export {
   acceptedPlanEffectId,
   ACCEPTED_PLAN_EFFECT_ACTION_KEY,

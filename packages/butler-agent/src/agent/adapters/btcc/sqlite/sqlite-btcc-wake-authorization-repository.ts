@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   BtccWakeAuthorization,
   BtccWakeAuthorizationReader,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/turn/index.ts";
 
 export interface BtccWakeAuthorizationRepository extends BtccWakeAuthorizationReader {
   recordAuthorization(input: BtccWakeAuthorization): void;

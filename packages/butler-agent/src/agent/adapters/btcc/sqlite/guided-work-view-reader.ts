@@ -10,7 +10,7 @@ import {
   type DurableWorkToolResultRef,
   type DurableWorkView,
   type WorkTurnScope,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import type {
   GuidedWorkCheckpointRow,
   GuidedWorkPlanRow,

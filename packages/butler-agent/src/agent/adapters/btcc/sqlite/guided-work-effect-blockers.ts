@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { DurableWorkEffectBlocker } from
-  "../../../btcc/durable-work/index.ts";
+  "../../../btcc/work/index.ts";
 
 export function bindLegacyEffectBlockersToWork(
   db: Database,

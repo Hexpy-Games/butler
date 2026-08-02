@@ -20,13 +20,13 @@ import type {
 } from "./contracts.ts";
 import { stopTurn } from "./stop-turn.ts";
 import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
-import type { GuidedTurnAgent, GuidedTurnResult } from "../guided-turn/contracts.ts";
+import type { BtccAgentLoop, BtccAgentLoopResult } from "../agent-loop/index.ts";
 
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
   turns: TurnStateRepository;
   messages: CanonicalMessageStore;
-  agent: GuidedTurnAgent;
+  agent: BtccAgentLoop;
   progress?: BtccTurnProgressObserver;
   committedSuccessorReadiness?: CommittedSuccessorReadiness;
 };
@@ -105,7 +105,7 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         { ...this.dependencies, progress },
         permit,
       );
-      let result: GuidedTurnResult;
+      let result: BtccAgentLoopResult;
       try {
         result = await this.dependencies.agent.run({
           turn,
@@ -221,7 +221,7 @@ export function createTurnRuntime(dependencies: TurnRuntimeDependencies): BtccTu
   return new DefaultTurnRuntime(dependencies);
 }
 
-function guidedFinalTransition(turn: TurnRecord, result: GuidedTurnResult) {
+function guidedFinalTransition(turn: TurnRecord, result: BtccAgentLoopResult) {
   const content = result.content.trim() || operationalFailureMessage(turn.originalMessage);
   const finalPayloadBody = {
     turnId: turn.turnId,

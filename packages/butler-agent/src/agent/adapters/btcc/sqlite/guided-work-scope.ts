@@ -1,4 +1,4 @@
-import type { WorkTurnScope } from "../../../btcc/durable-work/index.ts";
+import type { WorkTurnScope } from "../../../btcc/work/index.ts";
 import type { GuidedWorkRow } from "./guided-work-records.ts";
 
 export function guidedWorkMatchesScope(

@@ -2,6 +2,9 @@
 
 `packages/butler-agent/src/interfaces/gateway/` contains the native Butler and
 Steward adapters that admit every principal message to the replacement BTCC.
+The product process entrypoints live under
+`packages/butler-agent/src/application/` and inject the completed BTCC assembly
+into these adapters.
 Transport
 contracts, routing, inbound queueing, and gateway server dispatch live in
 `packages/butler-agent/src/gateways/core/`.
@@ -11,8 +14,7 @@ contracts, routing, inbound queueing, and gateway server dispatch live in
 - `btcc/btcc-session-actor.ts`: the single principal-Turn gateway actor.
 - `packages/butler-agent/src/agent/prompt/prompt-assembler.ts`: system, persona, memory, context, and
   tool prompt assembly used by the gateway.
-- `native-butler-bootstrap.ts` and `native-steward-bootstrap.ts`: live native
-  bootstraps.
+- `btcc/index.ts`: transport-neutral BTCC request adapters and dispatch.
 - `btcc/btcc-lifecycle-service.ts`: session identity and actor ownership.
 
 ## Boundaries

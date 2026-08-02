@@ -1,2 +1,2 @@
-export { insertCanonicalMessage } from "./insert-canonical-message.ts";
-export type { CanonicalMessageStore } from "./insert-canonical-message.ts";
+export { insertCanonicalMessage } from "./delivery.ts";
+export type { CanonicalMessageStore } from "./delivery.ts";

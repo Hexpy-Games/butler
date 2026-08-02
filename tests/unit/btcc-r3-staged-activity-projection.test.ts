@@ -3,10 +3,10 @@ import type { SharedTurnEvent } from
   "../../packages/butler-progress-projection/src/index.ts";
 import { progressRowFromSharedTurnEvent } from
   "../../packages/butler-progress-projection/src/index.ts";
-import { projectTurnProgress } from
-  "../../packages/butler-agent/src/interfaces/gateway/btcc/project-turn-progress.ts";
+import { projectTurnProgressToEvents as projectTurnProgress } from
+  "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { createGuidedActivityProjection } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-activity-projection.ts";
+  "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { normalizeProgressSummaryRow } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-normalizer.ts";
 import { dedupeProgressRows } from

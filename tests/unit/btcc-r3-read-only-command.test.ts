@@ -15,17 +15,17 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { executeGuidedReadOnlyCommand } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-read-only-command.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-read-only-command.ts";
 import { executeGuidedCommandCall } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-command-execution.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-command-execution.ts";
 import { prepareGuidedCommandEffect } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-command-effect.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-command-effect.ts";
 import { createGuidedToolExecutionBoundary } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-execution-boundary.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
 import { createGuidedEffectService } from
   "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import type { DurableWorkService } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import { SqliteGuidedEffectJournal } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from

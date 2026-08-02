@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { AttachToolResultInput } from "../../../btcc/durable-work/index.ts";
+import type { AttachToolResultInput } from "../../../btcc/work/index.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 
 type ToolResultRow = {

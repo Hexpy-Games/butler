@@ -3,6 +3,12 @@ export { loadOrAdmitTurn, type ContinuingTurnCommand } from
 export { projectTerminalOutcome } from "./project-terminal-outcome.ts";
 export { stopTurn } from "./stop-turn.ts";
 export { createTurnRuntime, type TurnRuntimeDependencies } from "./turn.ts";
+export {
+  DefaultBtccTurnPreparation,
+} from "./prepare-turn.ts";
+export type {
+  BtccTurnPreparationDependencies,
+} from "./prepare-turn.ts";
 export type {
   AcceptedTurnTransition,
   AdmissionConstructionClaim,
@@ -15,4 +21,18 @@ export type {
   TurnRecord,
   TurnSemanticState,
   TurnStateRepository,
+} from "./contracts.ts";
+export type {
+  BtccPreparedTurn,
+  BtccRunCommand,
+  BtccStopCommand,
+  BtccTurnPreparation,
+  BtccTurnProgressObserver,
+  BtccTurnRuntime,
+  FreshBtccTurnCommand,
+  WorkProgressTask,
+} from "../contracts.ts";
+export type {
+  BtccWakeAuthorization,
+  BtccWakeAuthorizationReader,
 } from "./contracts.ts";

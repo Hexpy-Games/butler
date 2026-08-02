@@ -3,7 +3,7 @@ import type {
   BtccCommittedProgressEvent,
   BtccProgressDestination,
   BtccProgressEventRepository,
-} from "../../../btcc/index.ts";
+} from "../../../btcc/projection/index.ts";
 import type { RuntimeTurnEventInput } from "../../../events/turn-events.ts";
 import { digest, stableJson } from "./identity.ts";
 

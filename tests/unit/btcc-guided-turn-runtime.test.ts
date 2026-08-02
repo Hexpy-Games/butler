@@ -4,13 +4,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BtccRunCommand } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { TurnStateRepository } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import {
-  createGuidedTurnRuntime,
-  type GuidedTurnAgent,
-} from "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
+  createTurnRuntime as createGuidedTurnRuntime,
+} from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import type { BtccAgentLoop as GuidedTurnAgent } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 

@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   DurableWorkView,
   RecordWorkReviewCommand,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import { preserveBlockedStatus } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkMutationJournal } from "./guided-work-mutation-journal.ts";
 import { GuidedWorkProgressWriter } from "./guided-work-progress-writer.ts";

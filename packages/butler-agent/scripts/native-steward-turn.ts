@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { handleNativeStewardTelegramTurn } from "../src/interfaces/gateway/native-steward-bootstrap.ts";
+import { handleNativeStewardTelegramTurn } from "../src/application/native-steward.ts";
 
 const [, , projectName, workspacePath, message, threadId = "", chatId = ""] = process.argv;
 

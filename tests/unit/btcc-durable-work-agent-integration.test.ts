@@ -6,7 +6,7 @@ import { join } from "node:path";
 import type {
   BtccRunCommand,
   BtccTurnProgressObserver,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type {
   ModelRoundMessage,
   ModelRoundPort,
@@ -14,12 +14,12 @@ import type {
   ModelRoundResult,
 } from
   "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
-import { createGuidedTurnRuntime } from
-  "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
+import { createTurnRuntime as createGuidedTurnRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { seedLegacySessionWork } from
   "./support/btcc-r3-legacy-session-work-fixture.ts";
 

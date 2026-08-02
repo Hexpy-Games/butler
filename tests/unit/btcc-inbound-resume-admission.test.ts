@@ -12,8 +12,10 @@ import { PromptAssembler } from
   "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import type { GatewayRoute, InboundEnvelope } from
   "../../packages/butler-agent/src/gateways/core/contracts.ts";
-import type { BtccRunCommand, BtccTurnRequest } from
+import type { BtccTurnRequest } from
   "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { BtccRunCommand } from
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
 import { createBtccGatewayHandlers } from
@@ -44,7 +46,7 @@ test("fresh and replay ingress use the same BTCC public request and durable resu
     expect(harness.runtime.commands.map((command) => command.kind)).toEqual(["run", "resume"]);
     expect(input.raw).toBeUndefined();
   } finally {
-    await harness.btcc.host.close();
+    await harness.host.close();
     harness.conversations.close();
     harness.bindings.close();
   }
@@ -63,7 +65,7 @@ test("raw btccWake payloads cannot bypass the trusted wake producer", async () =
     })).rejects.toThrow("Raw btccWake is not an authorized BTCC ingress");
     expect(harness.runtime.commands).toHaveLength(0);
   } finally {
-    await harness.btcc.host.close();
+    await harness.host.close();
     harness.conversations.close();
     harness.bindings.close();
   }
@@ -93,7 +95,7 @@ test("typed wake admission fails closed when the durable authorization or scope 
     })).rejects.toThrow("BTCC authorized wake denied");
     expect(harness.runtime.commands).toHaveLength(0);
   } finally {
-    await harness.btcc.host.close();
+    await harness.host.close();
     harness.conversations.close();
     harness.bindings.close();
   }
@@ -122,7 +124,7 @@ test("an admitted typed authorized wake replay does not require re-authorization
     await harness.btcc.runTurn(input);
     expect(harness.runtime.commands.map((command) => command.kind)).toEqual(["wake", "resume"]);
   } finally {
-    await harness.btcc.host.close();
+    await harness.host.close();
     harness.conversations.close();
     harness.bindings.close();
   }
@@ -146,7 +148,7 @@ function createHarness(sessionId: string) {
   const conversations = new AgentConversationStore({ butlerData });
   const runtime = new ScriptedBtccGatewayRuntime("wake result");
   const admittedTurn: { current: TurnRecord | null } = { current: null };
-  const btcc = createBtcc({
+  const assembly = createBtcc({
     runtime: runtime.runtime,
     preparation: new DefaultBtccTurnPreparation({
       bindingStore: bindings,
@@ -166,7 +168,15 @@ function createHarness(sessionId: string) {
     reason: "session-hint",
     workspacePath: binding.workspacePath,
   };
-  return { btcc, runtime, bindings, conversations, route, admittedTurn };
+  return {
+    btcc: assembly.btcc,
+    host: assembly.host,
+    runtime,
+    bindings,
+    conversations,
+    route,
+    admittedTurn,
+  };
 }
 
 function turnFromWakeCommand(

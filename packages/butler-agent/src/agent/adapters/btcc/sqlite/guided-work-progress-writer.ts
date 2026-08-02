@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   DurableWorkActionProgress,
   WorkStage,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import { stableJson } from "./identity.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 

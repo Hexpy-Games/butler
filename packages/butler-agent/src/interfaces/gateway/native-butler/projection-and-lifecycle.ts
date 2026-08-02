@@ -5,16 +5,34 @@ import type {
   OutboundAction,
 } from "../../../test-support/harness/contracts.ts";
 import type {
-  BtccCommittedProgressEvent,
-  BtccTurnProgressPublisher,
+  BtccTurnRequest,
 } from "../../../agent/btcc/index.ts";
 import { createAgentTurnEvent } from "../../../agent/events/turn-events.ts";
+import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import { DeliveryGuard } from "../../transport/delivery-guard.ts";
 import {
   APP_TRANSPORT,
 } from "../../transport/app/adapter.ts";
 
 const TELEGRAM_TRANSPORT = "telegram";
+
+type BtccProgressDestination = NonNullable<BtccTurnRequest["progressDestination"]>;
+
+type BtccCommittedProgressEvent = {
+  eventId: string;
+  actionId: string;
+  sessionId: string;
+  turnId: string;
+  sessionSequence: number;
+  turnSequence: number;
+  event: RuntimeTurnEventInput;
+  destination: BtccProgressDestination;
+  status: "pending" | "published";
+};
+
+type BtccTurnProgressPublisher = {
+  publish(event: BtccCommittedProgressEvent): Promise<void> | void;
+};
 
 export function appTurnEventAction(input: {
   event: BtccCommittedProgressEvent;

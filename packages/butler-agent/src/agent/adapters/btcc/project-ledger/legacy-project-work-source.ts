@@ -6,7 +6,7 @@ import {
 import type {
   LegacyProjectWorkSnapshot,
   LegacyProjectWorkSource,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { decodeProjectLedgerBinding } from "./project-binding.ts";
