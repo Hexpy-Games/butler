@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { unresolvedWorkActionKeys } from "../../../btcc/durable-work/index.ts";
 import { hasUnresolvedEffectBlockers } from "./guided-work-effect-blockers.ts";
 import { GuidedWorkViewReader } from "./guided-work-view-reader.ts";
 
@@ -8,33 +9,31 @@ export class GuidedWorkStatusWriter {
     private readonly reader: GuidedWorkViewReader,
   ) {}
 
-  complete(
+  tryComplete(
     workId: string,
     currentPlanRevisionId: string | null,
     now: string,
-  ): void {
+  ): boolean {
     if (hasUnresolvedEffectBlockers(this.db, workId)) {
-      throw new Error(
-        "Durable Work cannot complete while a prior effect requires reconciliation",
-      );
+      return false;
     }
-    const review = this.reader.view(workId).latestPlanReview;
+    const view = this.reader.view(workId);
+    const review = view.latestPlanReview;
     if (
       !currentPlanRevisionId ||
       review?.verdict !== "accept" ||
       review.boundPlanRevisionId !== currentPlanRevisionId
     ) {
-      throw new Error(
-        "Durable Work completion requires an accepted Review of the current Plan",
-      );
+      return false;
+    }
+    if (unresolvedWorkActionKeys(view.actionProgress).length > 0) {
+      return false;
     }
     const updated = this.db.query(`
       UPDATE btcc_guided_works SET status = 'completed', updated_at = ?
       WHERE work_id = ? AND status IN ('open', 'blocked')
     `).run(now, workId);
-    if (updated.changes !== 1) {
-      throw new Error(`Durable Work could not be completed: ${workId}`);
-    }
+    return updated.changes === 1;
   }
 
   reopen(workId: string, now: string): void {

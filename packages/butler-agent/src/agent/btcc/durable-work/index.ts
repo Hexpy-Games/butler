@@ -6,6 +6,9 @@ export type {
 } from "./legacy-work-source.ts";
 export type {
   AttachToolResultInput,
+  DurableWorkActionProgress,
+  DurableWorkActionStatus,
+  DurableWorkActionUpdate,
   DurableWorkCheckpoint,
   DurableWorkContext,
   DurableWorkEffectBlocker,
@@ -19,6 +22,7 @@ export type {
   DurableWorkView,
   LegacyOpenWorkImportResult,
   RecordWorkCheckpointInput,
+  RecordWorkCheckpointCommand,
   RecordWorkReviewCommand,
   RecordWorkReviewInput,
   ReplaceWorkPlanCommand,
@@ -26,3 +30,11 @@ export type {
   WorkStage,
   WorkTurnScope,
 } from "./contracts.ts";
+export {
+  allowedNextWorkStages,
+  applyWorkActionUpdates,
+  assertWorkStageTransition,
+  progressForReplacementPlan,
+  unresolvedWorkActionKeys,
+  WorkStageTransitionError,
+} from "./work-progress-policy.ts";

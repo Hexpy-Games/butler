@@ -1,4 +1,5 @@
 import type {
+  DurableWorkActionProgress,
   DurableWorkPlanAction,
   LegacyWorkRecordSnapshot,
   WorkStage,
@@ -16,6 +17,7 @@ export type LegacyWorkProjection = {
   };
   checkpoint?: {
     stage: WorkStage;
+    actionProgress: DurableWorkActionProgress[];
     publicSummary: string;
     nextStep: string;
   };
@@ -145,6 +147,10 @@ function progressCheckpoint(
     : "Review the imported work against the current request.";
   return {
     stage: "execution",
+    actionProgress: actions.map((action, index) => ({
+      actionKey: action.actionKey,
+      status: tasks[index]?.status === "accepted" ? "done" : "pending",
+    })),
     publicSummary:
       `Imported prior progress: ${accepted} of ${tasks.length} planned actions ` +
       "have recorded accepted results.",

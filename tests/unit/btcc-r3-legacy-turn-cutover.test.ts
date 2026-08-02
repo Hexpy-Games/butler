@@ -372,6 +372,14 @@ test("an imported Work reconciles its exact R2 effect target before any R3 dispa
         sourceTurnId: "turn-effect-uncertain",
       }],
     });
+    if (imported?.work.currentStage === "execution") {
+      await stores.durableWork.bindOpenWork(scope, imported.work.workId);
+      await stores.durableWork.recordCheckpoint({
+        ...scope,
+        mutationCallId: "review-imported-effect-plan",
+        nextStage: "review",
+      });
+    }
     const planned = await stores.durableWork.replacePlan({
       ...scope,
       mutationCallId: "continued-effect-plan",

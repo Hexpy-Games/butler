@@ -71,6 +71,12 @@ test("open R2 Session Work imports once as concise R3 Work across restart", asyn
             "Imported prior progress: 2 of 4 planned actions have recorded accepted results.",
           nextStep: "Task C: Complete task C.",
         },
+        actionProgress: [
+          { actionKey: "task-a", status: "done" },
+          { actionKey: "task-b", status: "done" },
+          { actionKey: "task-c", status: "pending" },
+          { actionKey: "task-d", status: "pending" },
+        ],
         resultRefs: [],
       },
     });

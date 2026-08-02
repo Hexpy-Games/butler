@@ -8,6 +8,7 @@ import { join } from "node:path";
 import {
   createDurableWorkService,
   type DurableWorkService,
+  type DurableWorkStore,
   type ReplaceWorkPlanInput,
   type WorkTurnScope,
 } from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
@@ -35,6 +36,9 @@ test("first Plan opens scoped Work without making Direct or Assisted Turns pay f
       scope: { kind: "session", sessionId: "session-1" },
       status: "open",
       objective: "요청한 보고서를 작성한다",
+      currentStage: "planning",
+      allowedNextStages: ["review"],
+      actionProgress: [{ actionKey: "write-report", status: "pending" }],
       origin: { turnId: "turn-direct", messageId: "message-turn-direct" },
       currentPlan: { revision: 1 },
     });
@@ -50,6 +54,37 @@ test("first Plan opens scoped Work without making Direct or Assisted Turns pay f
       ...planInput(direct, "plan-call-1"),
       objective: "같은 mutation identity로 다른 계획",
     })).rejects.toThrow("mutation identity conflict");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("invalid stage transitions leave the current stage and action progress unchanged", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn(
+      "turn-invalid-transition",
+      "session-invalid-transition",
+      "보고서를 작성해 주세요.",
+    );
+    const opened = await fixture.service.replacePlan(
+      planInput(scope, "invalid-transition-plan"),
+    );
+
+    await expect(fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "invalid-transition-call",
+      nextStage: "reporting",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
+    })).rejects.toThrow("allowed next stages: review");
+
+    const unchanged = await fixture.service.loadContext(scope);
+    expect(unchanged?.work).toMatchObject({
+      currentStage: "planning",
+      allowedNextStages: ["review"],
+      actionProgress: [{ actionKey: "write-report", status: "pending" }],
+      latestCheckpoint: { revision: opened.latestCheckpoint?.revision },
+    });
   } finally {
     fixture.close();
   }
@@ -118,6 +153,24 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
   try {
     const scope = fixture.turn("turn-results", "session-results", "두 파일을 비교해 주세요.");
     await fixture.service.replacePlan(planInput(scope, "results-plan"));
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "results-plan-review-stage",
+      nextStage: "review",
+    });
+    await fixture.service.recordReview({
+      ...scope,
+      mutationCallId: "results-plan-review",
+      subject: "plan",
+      verdict: "accept",
+      summary: "현재 계획으로 진행합니다.",
+      corrections: [],
+    });
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "results-execution-stage-1",
+      nextStage: "execution",
+    });
     fixture.tool(scope.turnId, "read-call-1", "read_file", { content: "alpha" });
     const attached = await fixture.service.attachToolResult({
       ...scope,
@@ -132,13 +185,18 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
     const firstCheckpoint = await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "checkpoint-call-1",
-      stage: "execution",
+      nextStage: "review",
       publicSummary: "첫 파일을 읽었습니다.",
       nextStep: "두 번째 파일을 읽습니다.",
     });
     expect(firstCheckpoint.latestCheckpoint?.referencedResultRefs)
       .toEqual([attached.resultRefs[0]!.resultRef]);
 
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "results-execution-stage-2",
+      nextStage: "execution",
+    });
     fixture.tool(scope.turnId, "read-call-2", "read_file", { content: "beta" });
     await fixture.service.attachToolResult({
       ...scope,
@@ -148,7 +206,7 @@ test("tool results stay in the journal, bind to checkpoints, and exclude Work co
     const secondCheckpoint = await fixture.service.recordCheckpoint({
       ...scope,
       mutationCallId: "checkpoint-call-2",
-      stage: "review",
+      nextStage: "review",
       publicSummary: "두 결과를 비교했습니다.",
       nextStep: "차이를 보고합니다.",
     });
@@ -303,7 +361,24 @@ test("Reviews bind runtime revisions, correction stays open, and accepted result
   const fixture = durableWorkFixture();
   try {
     const scope = fixture.turn("turn-review", "session-review", "산출물을 작성해 주세요.");
-    const firstPlan = await fixture.service.replacePlan(planInput(scope, "review-plan-1"));
+    const reviewPlan = (mutationCallId: string) => ({
+      ...planInput(scope, mutationCallId),
+      actions: [{
+        actionKey: "write-report",
+        description: "보고서를 작성한다",
+        dependencyKeys: [],
+      }, {
+        actionKey: "optional-polish",
+        description: "선택적인 표현 개선을 검토한다",
+        dependencyKeys: ["write-report"],
+      }],
+    });
+    const firstPlan = await fixture.service.replacePlan(reviewPlan("review-plan-1"));
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "review-plan-stage-1",
+      nextStage: "review",
+    });
     const acceptedPlan = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "plan-review-1",
@@ -316,22 +391,32 @@ test("Reviews bind runtime revisions, correction stays open, and accepted result
       .toBe(firstPlan.currentPlan?.planRevisionId);
 
     const revisedPlan = await fixture.service.replacePlan({
-      ...planInput(scope, "review-plan-2"),
+      ...reviewPlan("review-plan-2"),
       objective: "산출물을 작성하고 실제 결과를 확인한다",
     });
     expect(revisedPlan.latestPlanReview?.verdict).toBe("accept");
     expect(revisedPlan.latestPlanReview?.boundPlanRevisionId)
       .not.toBe(revisedPlan.currentPlan?.planRevisionId);
 
-    await expect(fixture.service.recordReview({
+    const unresolvedResultReview = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "result-review-before-current-plan-review",
       subject: "result",
       verdict: "accept",
       summary: "현재 Plan을 검토하지 않은 채 완료하려고 합니다.",
       corrections: [],
-    })).rejects.toThrow("accepted Review of the current Plan");
+    });
+    expect(unresolvedResultReview.status).toBe("open");
+    expect(unresolvedResultReview.latestResultReview?.verdict).toBe("accept");
+    expect(unresolvedResultReview.actionProgress.every((action) =>
+      action.status === "pending",
+    )).toBe(true);
 
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "review-plan-stage-2",
+      nextStage: "review",
+    });
     const acceptedRevisedPlan = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "plan-review-2",
@@ -343,12 +428,41 @@ test("Reviews bind runtime revisions, correction stays open, and accepted result
     expect(acceptedRevisedPlan.latestPlanReview?.boundPlanRevisionId)
       .toBe(revisedPlan.currentPlan?.planRevisionId);
 
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "review-execution-stage",
+      nextStage: "execution",
+      actionUpdates: [{ actionKey: "write-report", status: "active" }],
+    });
     fixture.tool(scope.turnId, "write-call", "write_file", { path: "report.md" });
     await fixture.service.attachToolResult({
       ...scope,
       mutationCallId: "attach-write",
       toolCallId: "write-call",
     });
+    const resultProgress = await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "review-result-stage",
+      nextStage: "review",
+      actionUpdates: [{
+        actionKey: "write-report",
+        status: "done",
+        note: "보고서를 작성하고 결과를 확인했습니다.",
+      }, {
+        actionKey: "optional-polish",
+        status: "skipped",
+        note: "요청 결과에 필요하지 않은 선택 개선입니다.",
+      }],
+    });
+    expect(resultProgress.actionProgress).toEqual([{
+      actionKey: "write-report",
+      status: "done",
+      note: "보고서를 작성하고 결과를 확인했습니다.",
+    }, {
+      actionKey: "optional-polish",
+      status: "skipped",
+      note: "요청 결과에 필요하지 않은 선택 개선입니다.",
+    }]);
     const correction = await fixture.service.recordReview({
       ...scope,
       mutationCallId: "result-review-revise",
@@ -383,6 +497,164 @@ test("Reviews bind runtime revisions, correction stays open, and accepted result
     expect(reopened.resultRefs).toHaveLength(2);
     expect(reopened.latestResultReview?.boundResultRefs).toHaveLength(1);
     expect((await fixture.service.loadContext(later))?.work.status).toBe("open");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("a late effect blocker keeps the accepted result Review and leaves Work blocked", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn(
+      "turn-blocked-review",
+      "session-blocked-review",
+      "외부 변경 결과를 검토해 주세요.",
+    );
+    await fixture.service.replacePlan(planInput(scope, "blocked-review-plan"));
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "blocked-plan-review-stage",
+      nextStage: "review",
+    });
+    await fixture.service.recordReview({
+      ...scope,
+      mutationCallId: "blocked-plan-review",
+      subject: "plan",
+      verdict: "accept",
+      summary: "현재 계획으로 진행합니다.",
+      corrections: [],
+    });
+    const ready = await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "blocked-result-ready",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
+    });
+    fixture.db.query(`
+      INSERT INTO btcc_guided_work_effect_blockers (
+        blocker_id, source_turn_id, source_occurrence_id, session_id, work_id,
+        capability, target, input_json, input_sha256, idempotency_key, detail,
+        status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, ?, 'unresolved', ?)
+    `).run(
+      "blocker-review",
+      scope.turnId,
+      "occurrence-review",
+      scope.sessionId,
+      ready.workId,
+      "publish",
+      "remote:report",
+      "input-sha",
+      "idempotency-review",
+      "The prior effect must be reconciled.",
+      "2026-08-02T00:00:00.000Z",
+    );
+    fixture.db.query(`
+      UPDATE btcc_guided_works SET status = 'blocked' WHERE work_id = ?
+    `).run(ready.workId);
+
+    const reviewed = await fixture.store.recordReview({
+      ...scope,
+      mutationCallId: "blocked-result-review",
+      subject: "result",
+      verdict: "accept",
+      summary: "The result itself is ready.",
+      corrections: [],
+      expectedPlanRevisionId: ready.currentPlan!.planRevisionId,
+      expectedProgressRevision: ready.latestCheckpoint!.revision,
+      expectedResultSequence: ready.resultRefs.length,
+      requestSha256: "blocked-result-review-request",
+      completeWork: true,
+    });
+
+    expect(reviewed).toMatchObject({
+      status: "blocked",
+      latestResultReview: {
+        verdict: "accept",
+        summary: "The result itself is ready.",
+      },
+      effectBlockers: [{ blockerId: "blocker-review" }],
+    });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Reviews reject stale Plan, progress, and result snapshots", async () => {
+  const fixture = durableWorkFixture();
+  try {
+    const scope = fixture.turn(
+      "turn-stale-review",
+      "session-stale-review",
+      "현재 결과만 검토해 주세요.",
+    );
+    const first = await fixture.service.replacePlan(
+      planInput(scope, "stale-review-plan-1"),
+    );
+    const second = await fixture.service.replacePlan({
+      ...planInput(scope, "stale-review-plan-2"),
+      objective: "같은 요청을 더 간결한 계획으로 수행한다",
+    });
+    await expect(fixture.store.recordReview({
+      ...scope,
+      mutationCallId: "stale-plan-review",
+      subject: "plan",
+      verdict: "accept",
+      summary: "This Review observed the first Plan.",
+      corrections: [],
+      expectedPlanRevisionId: first.currentPlan!.planRevisionId,
+      expectedProgressRevision: first.latestCheckpoint!.revision,
+      expectedResultSequence: 0,
+      requestSha256: "stale-plan-review-request",
+      completeWork: false,
+    })).rejects.toThrow("Plan changed before its Review");
+
+    await fixture.service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "stale-progress-update",
+      nextStage: "review",
+    });
+    await expect(fixture.store.recordReview({
+      ...scope,
+      mutationCallId: "stale-progress-review",
+      subject: "plan",
+      verdict: "accept",
+      summary: "This Review observed older action progress.",
+      corrections: [],
+      expectedPlanRevisionId: second.currentPlan!.planRevisionId,
+      expectedProgressRevision: second.latestCheckpoint!.revision,
+      expectedResultSequence: 0,
+      requestSha256: "stale-progress-review-request",
+      completeWork: false,
+    })).rejects.toThrow("progress changed");
+
+    const reviewed = await fixture.service.recordReview({
+      ...scope,
+      mutationCallId: "current-plan-review",
+      subject: "plan",
+      verdict: "accept",
+      summary: "The current Plan is ready.",
+      corrections: [],
+    });
+    fixture.tool(scope.turnId, "late-read", "read_file", { content: "new fact" });
+    await fixture.service.attachToolResult({
+      ...scope,
+      mutationCallId: "late-read-attach",
+      toolCallId: "late-read",
+    });
+    await expect(fixture.store.recordReview({
+      ...scope,
+      mutationCallId: "stale-result-review",
+      subject: "result",
+      verdict: "accept",
+      summary: "This Review did not observe the late result.",
+      corrections: [],
+      expectedPlanRevisionId: reviewed.currentPlan!.planRevisionId,
+      expectedProgressRevision: reviewed.latestCheckpoint!.revision,
+      expectedResultSequence: reviewed.resultRefs.length,
+      requestSha256: "stale-result-review-request",
+      completeWork: false,
+    })).rejects.toThrow("results changed");
+    expect(fixture.count("btcc_guided_work_review_revisions")).toBe(1);
   } finally {
     fixture.close();
   }
@@ -427,6 +699,11 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
   );
   try {
     await service.replacePlan(planInput(scope, "contention-plan"));
+    await service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "contention-review-stage",
+      nextStage: "review",
+    });
     await service.recordReview({
       ...scope,
       mutationCallId: "contention-plan-review",
@@ -434,6 +711,17 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
       verdict: "accept",
       summary: "현재 계획으로 진행합니다.",
       corrections: [],
+    });
+    await service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "contention-execution-stage",
+      nextStage: "execution",
+    });
+    await service.recordCheckpoint({
+      ...scope,
+      mutationCallId: "contention-result-stage",
+      nextStage: "review",
+      actionUpdates: [{ actionKey: "write-report", status: "done" }],
     });
     const child = spawn(process.execPath, ["-e", `
       import { Database } from "bun:sqlite";
@@ -471,6 +759,7 @@ test("Work review waits for a concurrent shared SQLite writer", async () => {
 function durableWorkFixture(): {
   db: Database;
   service: DurableWorkService;
+  store: DurableWorkStore;
   turn(turnId: string, sessionId: string, message: string): WorkTurnScope;
   tool(turnId: string, callId: string, name: string, result: unknown): void;
   count(table: string): number;
@@ -479,11 +768,13 @@ function durableWorkFixture(): {
 } {
   const db = new Database(":memory:");
   db.exec(BTCC_SUCCESSOR_SCHEMA);
-  const service = createDurableWorkService(new SqliteGuidedWorkStore(db));
+  const store = new SqliteGuidedWorkStore(db);
+  const service = createDurableWorkService(store);
   const journal = new SqliteGuidedToolJournal(db);
   return {
     db,
     service,
+    store,
     turn(turnId, sessionId, message) {
       return insertGuidedTurn(db, turnId, sessionId, message);
     },

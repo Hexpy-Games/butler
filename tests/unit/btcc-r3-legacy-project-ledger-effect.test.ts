@@ -575,7 +575,15 @@ async function createHarness(input: HarnessInput) {
   const claim = await stores.admission.acquireAdmissionConstructionClaim(inbox);
   await stores.admission.constructTurn(inbox, claim);
   const scope = { turnId: command.turnId, sessionId: SESSION_ID };
-  await stores.durableWork.importOpenLegacyWork(scope);
+  const imported = await stores.durableWork.importOpenLegacyWork(scope);
+  if (imported?.work.currentStage === "execution") {
+    await stores.durableWork.bindOpenWork(scope, imported.work.workId);
+    await stores.durableWork.recordCheckpoint({
+      ...scope,
+      mutationCallId: `review-imported-plan-${input.recordId}-${input.currentKind}`,
+      nextStage: "review",
+    });
+  }
   const effectCalls = [{
     name: input.currentToolName ?? "project_ledger_update",
     args: input.currentArgs,

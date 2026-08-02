@@ -126,7 +126,9 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain(
     "typed Project Ledger changes in the active project",
   );
-  expect(instructions).toContain("record_work_checkpoint is optional");
+  expect(instructions).toContain(
+    "Use record_work_checkpoint to enter an allowed next stage",
+  );
   expect(instructions).toContain(
     "Plan review judges the Plan itself",
   );
@@ -139,9 +141,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain(
     "request them in the same round so safe tools can run together",
   );
-  expect(instructions).toContain(
-    "not before any new fact or merely to announce",
-  );
+  expect(instructions).toContain("do not call it merely to narrate");
   expect(instructions).toContain(
     "finish any Project Ledger publication or closeout effect",
   );
@@ -152,7 +152,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "make a path contain the complete desired file",
   );
   expect(instructions.indexOf("answer or create the result before optional investigation"))
-    .toBeLessThan(instructions.indexOf("record_work_checkpoint is optional"));
+    .toBeLessThan(instructions.indexOf("combine meaningful stage and action updates"));
   expect(instructions).toContain("not a demand for endless polish");
   expect(instructions).toContain(
     "correct and re-inspect only when a visible defect materially harms",

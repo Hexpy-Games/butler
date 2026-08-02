@@ -167,6 +167,16 @@ export function reviewedWork(input: {
     origin: { turnId: "turn-1", messageId: "message-1" },
     objective: "Create the report",
     status: "open",
+    ...(input.includePlan === false
+      ? {}
+      : { currentStage: "execution" as const }),
+    allowedNextStages: input.includePlan === false ? ["planning"] : ["review"],
+    actionProgress: input.includePlan === false
+      ? []
+      : plan.actions.map((action) => ({
+        actionKey: action.actionKey,
+        status: "active" as const,
+      })),
     ...(input.includePlan === false ? {} : { currentPlan: plan }),
     ...(input.includeReview === false ? {} : { latestPlanReview: review }),
     resultRefs: [],

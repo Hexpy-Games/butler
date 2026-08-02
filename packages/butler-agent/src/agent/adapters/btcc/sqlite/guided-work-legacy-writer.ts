@@ -78,9 +78,9 @@ export class GuidedWorkLegacyWriter {
     if (candidate.projection.plan && planId) {
       this.db.query(`
         INSERT INTO btcc_guided_work_plan_revisions (
-          plan_revision_id, work_id, revision, objective, actions_json,
-          checks_json, origin_turn_id, created_at
-        ) VALUES (?, ?, 1, ?, ?, ?, ?, ?)
+          plan_revision_id, work_id, revision, objective, governing_refs_json,
+          actions_json, checks_json, origin_turn_id, created_at
+        ) VALUES (?, ?, 1, ?, '[]', ?, ?, ?, ?)
       `).run(
         planId,
         workId,
@@ -91,18 +91,21 @@ export class GuidedWorkLegacyWriter {
         now,
       );
     }
-    if (candidate.projection.checkpoint && checkpointId) {
+    if (candidate.projection.checkpoint && checkpointId && planId && candidate.projection.plan) {
       this.db.query(`
         INSERT INTO btcc_guided_work_checkpoint_revisions (
-          checkpoint_revision_id, work_id, revision, stage, public_summary,
-          next_step, result_sequence, origin_turn_id, created_at
-        ) VALUES (?, ?, 1, ?, ?, ?, 0, ?, ?)
+          checkpoint_revision_id, work_id, revision, plan_revision_id, stage,
+          public_summary, next_step, action_states_json, result_sequence,
+          origin_turn_id, created_at
+        ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?)
       `).run(
         checkpointId,
         workId,
+        planId,
         candidate.projection.checkpoint.stage,
         candidate.projection.checkpoint.publicSummary,
         candidate.projection.checkpoint.nextStep,
+        stableJson(candidate.projection.checkpoint.actionProgress),
         candidate.origin.turn_id,
         now,
       );

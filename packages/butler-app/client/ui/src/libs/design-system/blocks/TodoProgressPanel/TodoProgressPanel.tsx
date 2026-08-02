@@ -11,6 +11,8 @@ export type TodoProgressPanelItemState =
   | "reviewing"
   | "completed"
   | "correction-required"
+  | "blocked"
+  | "skipped"
   | "stopped";
 
 export interface TodoProgressPanelItem {
@@ -41,7 +43,8 @@ export function TodoProgressPanel({
   const currentItem = items.find((item) =>
     item.state === "running" ||
     item.state === "reviewing" ||
-    item.state === "correction-required",
+    item.state === "correction-required" ||
+    item.state === "blocked",
   );
   const collapsedSummary = currentItem
     ? `${currentItem.statusLabel}: ${currentItem.title}`

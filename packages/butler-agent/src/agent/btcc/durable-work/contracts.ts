@@ -25,10 +25,26 @@ export type DurableWorkPlanAction = {
   };
 };
 
+export type DurableWorkActionStatus =
+  | "pending"
+  | "active"
+  | "done"
+  | "blocked"
+  | "skipped";
+
+export type DurableWorkActionProgress = {
+  actionKey: string;
+  status: DurableWorkActionStatus;
+  note?: string;
+};
+
+export type DurableWorkActionUpdate = DurableWorkActionProgress;
+
 export type DurableWorkPlan = {
   planRevisionId: string;
   revision: number;
   objective: string;
+  governingRefs?: string[];
   actions: DurableWorkPlanAction[];
   checks: string[];
   originTurnId: string;
@@ -49,7 +65,9 @@ export type DurableWorkToolResultRef = {
 export type DurableWorkCheckpoint = {
   checkpointRevisionId: string;
   revision: number;
+  planRevisionId: string;
   stage: WorkStage;
+  actionProgress: DurableWorkActionProgress[];
   publicSummary: string;
   nextStep: string;
   referencedResultRefs: string[];
@@ -89,6 +107,9 @@ export type DurableWorkView = {
   };
   objective: string;
   status: "open" | "blocked" | "completed" | "abandoned";
+  currentStage?: WorkStage;
+  allowedNextStages: WorkStage[];
+  actionProgress: DurableWorkActionProgress[];
   currentPlan?: DurableWorkPlan;
   latestCheckpoint?: DurableWorkCheckpoint;
   latestPlanReview?: DurableWorkReview;
@@ -118,15 +139,17 @@ export type ReplaceWorkPlanInput = WorkTurnScope & {
   mutationCallId: string;
   startNew?: boolean;
   objective: string;
+  governingRefs?: string[];
   actions: DurableWorkPlanAction[];
   checks: string[];
 };
 
 export type RecordWorkCheckpointInput = WorkTurnScope & {
   mutationCallId: string;
-  stage: WorkStage;
-  publicSummary: string;
-  nextStep: string;
+  nextStage?: WorkStage;
+  actionUpdates?: DurableWorkActionUpdate[];
+  publicSummary?: string;
+  nextStep?: string;
 };
 
 export type RecordWorkReviewInput = WorkTurnScope & {
@@ -148,11 +171,36 @@ export type LegacyOpenWorkImportResult = {
   work: DurableWorkView;
 };
 
-export type ReplaceWorkPlanCommand = Omit<ReplaceWorkPlanInput, "startNew"> & {
+export type ReplaceWorkPlanCommand = Omit<
+  ReplaceWorkPlanInput,
+  "startNew" | "governingRefs"
+> & {
   startNew: boolean;
+  requestSha256: string;
+  governingRefs: string[];
+  expectedWorkId?: string;
+  expectedProgressRevision?: number;
+  actionProgress: DurableWorkActionProgress[];
+};
+
+export type RecordWorkCheckpointCommand = Omit<
+  RecordWorkCheckpointInput,
+  "nextStage" | "actionUpdates" | "publicSummary" | "nextStep"
+> & {
+  expectedPlanRevisionId: string;
+  expectedProgressRevision: number;
+  requestSha256: string;
+  stage: WorkStage;
+  actionProgress: DurableWorkActionProgress[];
+  publicSummary: string;
+  nextStep: string;
 };
 
 export type RecordWorkReviewCommand = RecordWorkReviewInput & {
+  expectedPlanRevisionId: string;
+  expectedProgressRevision: number;
+  expectedResultSequence: number;
+  requestSha256: string;
   completeWork: boolean;
 };
 
@@ -182,7 +230,7 @@ export interface DurableWorkStore {
     expectedWorkId?: string,
   ): Promise<DurableWorkView | null>;
   replacePlan(input: ReplaceWorkPlanCommand): Promise<DurableWorkView>;
-  recordCheckpoint(input: RecordWorkCheckpointInput): Promise<DurableWorkView>;
+  recordCheckpoint(input: RecordWorkCheckpointCommand): Promise<DurableWorkView>;
   recordReview(input: RecordWorkReviewCommand): Promise<DurableWorkView>;
   attachToolResult(input: AttachToolResultInput): Promise<DurableWorkView>;
   boundWorkForTurn(turnId: string): Promise<DurableWorkView | null>;

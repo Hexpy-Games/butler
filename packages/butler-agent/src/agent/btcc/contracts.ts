@@ -93,7 +93,7 @@ export type WorkProgressTask = {
   taskOutcome: string;
   taskOrder: number;
   taskState: "planned" | "active" | "reviewing" | "completed" |
-    "correction_required" | "stopped";
+    "correction_required" | "stopped" | "blocked" | "skipped";
   workId: string;
   workTitle: string;
   workState: "planned" | "active" | "completed" | "cancelled";

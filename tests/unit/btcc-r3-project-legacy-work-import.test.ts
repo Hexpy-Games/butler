@@ -84,6 +84,7 @@ test("imports only the stable canonical Project Program into one concise R3 Work
           publicSummary:
             "Imported prior progress: 0 of 1 planned actions have recorded accepted results.",
         },
+        actionProgress: [{ actionKey: "produce-result", status: "pending" }],
       },
     });
     expect(imported?.work.currentPlan?.actions.every((action) => !action.effect))

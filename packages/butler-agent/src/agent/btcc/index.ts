@@ -7,4 +7,5 @@ export type {
   BtccTurnRuntime,
   ButlerContextInput,
   ButlerExecutionPolicy,
+  WorkProgressTask,
 } from "./contracts.ts";

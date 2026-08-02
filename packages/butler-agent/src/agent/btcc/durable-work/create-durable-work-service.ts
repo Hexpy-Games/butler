@@ -6,6 +6,13 @@ import type {
   ReplaceWorkPlanInput,
   WorkTurnScope,
 } from "./contracts.ts";
+import {
+  applyWorkActionUpdates,
+  assertWorkStageTransition,
+  progressForReplacementPlan,
+  unresolvedWorkActionKeys,
+} from "./work-progress-policy.ts";
+import { digest, stableJson } from "../identity/index.ts";
 
 export function createDurableWorkService(
   store: DurableWorkStore,
@@ -26,19 +33,99 @@ export function createDurableWorkService(
       }
       return store.bindOpenWork(scope, expectedWorkId);
     },
-    replacePlan(input) {
+    async replacePlan(input) {
       validateReplacePlan(input);
-      return store.replacePlan({ ...input, startNew: input.startNew ?? false });
+      const startNew = input.startNew ?? false;
+      const context = startNew ? null : await store.loadContext(input);
+      assertWorkStageTransition(context?.work.currentStage, "planning");
+      return store.replacePlan({
+        ...input,
+        startNew,
+        governingRefs: input.governingRefs ?? [],
+        requestSha256: workRequestFingerprint("replace_plan", {
+          turnId: input.turnId,
+          sessionId: input.sessionId,
+          projectRef: input.projectRef ?? null,
+          mutationCallId: input.mutationCallId,
+          startNew,
+          objective: input.objective,
+          governingRefs: input.governingRefs ?? [],
+          actions: input.actions,
+          checks: input.checks,
+        }),
+        ...(context?.work.workId ? { expectedWorkId: context.work.workId } : {}),
+        ...(context
+          ? {
+              expectedProgressRevision:
+                context.work.latestCheckpoint?.revision ?? 0,
+            }
+          : {}),
+        actionProgress: progressForReplacementPlan(
+          input.actions,
+          context?.work.actionProgress ?? [],
+        ),
+      });
     },
-    recordCheckpoint(input) {
+    async recordCheckpoint(input) {
       validateCheckpoint(input);
-      return store.recordCheckpoint(input);
+      const context = await requireWorkContext(store, input);
+      const plan = context.work.currentPlan;
+      if (!plan || !context.work.currentStage) {
+        throw new Error("Durable Work progress requires a current Plan and stage");
+      }
+      const nextStage = input.nextStage ?? context.work.currentStage;
+      assertWorkStageTransition(context.work.currentStage, nextStage);
+      return store.recordCheckpoint({
+        ...input,
+        expectedPlanRevisionId: plan.planRevisionId,
+        expectedProgressRevision: context.work.latestCheckpoint?.revision ?? 0,
+        requestSha256: workRequestFingerprint("record_checkpoint", {
+          turnId: input.turnId,
+          sessionId: input.sessionId,
+          projectRef: input.projectRef ?? null,
+          mutationCallId: input.mutationCallId,
+          nextStage: input.nextStage ?? null,
+          actionUpdates: input.actionUpdates ?? [],
+          publicSummary: input.publicSummary ?? null,
+          nextStep: input.nextStep ?? null,
+        }),
+        stage: nextStage,
+        actionProgress: applyWorkActionUpdates(
+          context.work,
+          input.actionUpdates ?? [],
+        ),
+        publicSummary: input.publicSummary?.trim() ?? "",
+        nextStep: input.nextStep?.trim() ?? "",
+      });
     },
-    recordReview(input) {
+    async recordReview(input) {
       validateReview(input);
+      const context = await requireWorkContext(store, input);
+      const plan = context.work.currentPlan;
+      if (!plan) throw new Error("Durable Work Review requires a current Plan");
+      const completeWork = input.subject === "result" &&
+        input.verdict === "accept" &&
+        unresolvedWorkActionKeys(context.work.actionProgress).length === 0 &&
+        context.work.latestPlanReview?.verdict === "accept" &&
+        context.work.latestPlanReview.boundPlanRevisionId ===
+          context.work.currentPlan?.planRevisionId &&
+        (context.work.effectBlockers?.length ?? 0) === 0;
       return store.recordReview({
         ...input,
-        completeWork: input.subject === "result" && input.verdict === "accept",
+        expectedPlanRevisionId: plan.planRevisionId,
+        expectedProgressRevision: context.work.latestCheckpoint?.revision ?? 0,
+        expectedResultSequence: context.work.resultRefs.length,
+        requestSha256: workRequestFingerprint("record_review", {
+          turnId: input.turnId,
+          sessionId: input.sessionId,
+          projectRef: input.projectRef ?? null,
+          mutationCallId: input.mutationCallId,
+          subject: input.subject,
+          verdict: input.verdict,
+          summary: input.summary,
+          corrections: input.corrections,
+        }),
+        completeWork,
       });
     },
     attachToolResult(input) {
@@ -60,6 +147,8 @@ function validateReplacePlan(input: ReplaceWorkPlanInput): void {
     throw new Error("Durable Work plan requires at least one action");
   }
   input.checks.forEach((check, index) => requiredText(check, `checks[${index}]`));
+  input.governingRefs?.forEach((reference, index) =>
+    requiredText(reference, `governingRefs[${index}]`));
   const keys = new Set<string>();
   for (const [index, action] of input.actions.entries()) {
     requiredText(action.actionKey, `actions[${index}].actionKey`);
@@ -91,8 +180,24 @@ function validateReplacePlan(input: ReplaceWorkPlanInput): void {
 
 function validateCheckpoint(input: RecordWorkCheckpointInput): void {
   validateMutation(input);
-  requiredText(input.publicSummary, "publicSummary");
-  requiredText(input.nextStep, "nextStep");
+  const updates = input.actionUpdates ?? [];
+  if (
+    input.nextStage === undefined &&
+    updates.length === 0 &&
+    !input.publicSummary?.trim() &&
+    !input.nextStep?.trim()
+  ) {
+    throw new Error("Durable Work progress requires a stage, action update, or summary");
+  }
+  const actionKeys = new Set<string>();
+  for (const [index, update] of updates.entries()) {
+    requiredText(update.actionKey, `actionUpdates[${index}].actionKey`);
+    if (actionKeys.has(update.actionKey)) {
+      throw new Error(`Durable Work action update is duplicated: ${update.actionKey}`);
+    }
+    actionKeys.add(update.actionKey);
+    if (update.note !== undefined) requiredText(update.note, `actionUpdates[${index}].note`);
+  }
 }
 
 function validateReview(input: RecordWorkReviewInput): void {
@@ -117,4 +222,17 @@ function requiredText(value: string, field: string): void {
   if (value.trim().length === 0) {
     throw new Error(`Durable Work requires ${field}`);
   }
+}
+
+async function requireWorkContext(
+  store: DurableWorkStore,
+  scope: WorkTurnScope,
+) {
+  const context = await store.loadContext(scope);
+  if (!context) throw new Error("Durable Work progress requires open Work");
+  return context;
+}
+
+function workRequestFingerprint(operation: string, input: unknown): string {
+  return digest(stableJson({ operation, input }));
 }

@@ -12,7 +12,7 @@ type ToolCall = {
 export type GuidedActivityBinding = {
   activityId: string;
   displayStage: WorkStage;
-  checkpointDeferred: boolean;
+  deferredUntilAccepted: boolean;
 };
 
 type ActivityGroup = GuidedActivityBinding & {
@@ -33,6 +33,7 @@ export interface GuidedActivityProjection {
   observeToolBatch(input: { text: string; toolCalls: ToolCall[] }): void;
   observeTool(input: ToolCall & { effectiveToolName: string }): Promise<GuidedActivityBinding>;
   markManaged(binding?: GuidedActivityBinding): Promise<void>;
+  publishAccepted(binding: GuidedActivityBinding): Promise<void>;
   publishFinal(text: string, options: { managed: boolean }): Promise<void>;
 }
 
@@ -65,14 +66,20 @@ export function createGuidedActivityProjection(input: {
       });
       if (pending) pending.claimed = true;
       if (activityKind(call.name) !== "ordinary") managed = true;
-      if (managed && !group.checkpointDeferred) await publishGroup(input, group);
+      if (managed && !group.deferredUntilAccepted) await publishGroup(input, group);
       return bindingFromGroup(group);
     },
 
     async markManaged(binding) {
       managed = true;
       const group = binding && groupsById.get(binding.activityId);
-      if (group && !group.checkpointDeferred) await publishGroup(input, group);
+      if (group && !group.deferredUntilAccepted) await publishGroup(input, group);
+    },
+
+    async publishAccepted(binding) {
+      managed = true;
+      const group = groupsById.get(binding.activityId);
+      if (group) await publishGroup(input, group);
     },
 
     async publishFinal(text, options) {
@@ -82,7 +89,7 @@ export function createGuidedActivityProjection(input: {
       await publishGroup(input, {
         activityId: activityId(input.turnId),
         displayStage: "reporting",
-        checkpointDeferred: false,
+        deferredUntilAccepted: false,
         title: "결과 보고",
         summary,
         published: false,
@@ -121,7 +128,7 @@ export function createGuidedActivityProjection(input: {
     const group: ActivityGroup = {
       activityId: activityId(input.turnId),
       displayStage: content.displayStage,
-      checkpointDeferred: first?.name === "record_work_checkpoint",
+      deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
       title: content.title,
       summary: content.summary,
       ...(content.rationale ? { rationale: content.rationale } : {}),
@@ -160,7 +167,7 @@ function bindingFromGroup(group: ActivityGroup): GuidedActivityBinding {
   return {
     activityId: group.activityId,
     displayStage: group.displayStage,
-    checkpointDeferred: group.checkpointDeferred,
+    deferredUntilAccepted: group.deferredUntilAccepted,
   };
 }
 
@@ -199,7 +206,7 @@ function activityContent(
     const summary = publicText(first.args.public_summary) || publicText(assistantText) ||
       publicToolTitle(first.name);
     return {
-      displayStage: workStage(first.args.stage) ?? "execution",
+      displayStage: workStage(first.args.next_stage) ?? "execution",
       title: compactTitle(summary),
       summary,
       nextStep: publicText(first.args.next_step),

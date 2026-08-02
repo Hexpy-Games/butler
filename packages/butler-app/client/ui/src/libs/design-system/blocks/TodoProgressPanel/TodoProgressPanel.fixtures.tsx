@@ -31,6 +31,18 @@ export function TodoProgressPanelFixture() {
               statusLabel: "Running",
             },
             {
+              id: "blocked",
+              title: "Wait for the required fixture",
+              state: "blocked",
+              statusLabel: "Blocked",
+            },
+            {
+              id: "skipped",
+              title: "Skip the superseded action",
+              state: "skipped",
+              statusLabel: "Skipped",
+            },
+            {
               id: "report",
               title: "Prepare final answer",
               state: "pending",
