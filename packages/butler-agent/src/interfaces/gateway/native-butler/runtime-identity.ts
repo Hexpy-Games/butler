@@ -1,4 +1,3 @@
-import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +11,6 @@ import { registerRuntimeSession } from
   "../../../test-support/harness/session-runtime.ts";
 import { SessionBindingStore } from
   "../../../test-support/harness/session-store.ts";
-import type { QueuedInboundEvent } from "../../../gateways/core/inbound-queue.ts";
 import { resolveAppGatewayRuntimeConfig } from "../../../operations/gateway/registry.ts";
 import { runPromptText } from "../../../integrations/providers/provider.ts";
 import {
@@ -70,6 +68,9 @@ export function createNativeButlerDefaultProvider(
       reasoningEffort: input.reasoning?.effort,
       signal: input.signal,
       cacheScope: "native-butler-title-provider",
+      ...(input.metadata?.purpose === "app_session_title"
+        ? { providerRetryAttempts: 1 }
+        : {}),
     });
     return { text };
   };
@@ -149,35 +150,6 @@ export function persistButlerSessionPointer(
 export function appTurnStateDbPath(butlerData: string): string {
   const config = resolveAppGatewayRuntimeConfig({ butlerData });
   return config.dbPath ?? join(butlerData, "app-server", "butler-client.sqlite");
-}
-
-export function shouldEnterBtcc(
-  butlerData: string,
-): (item: QueuedInboundEvent) => boolean {
-  const dbPath = appTurnStateDbPath(butlerData);
-  return (item) => {
-    const turnId = item.envelope.routingHints?.turnId?.trim();
-    if (!turnId || !existsSync(dbPath)) return true;
-    let db: Database | null = null;
-    try {
-      db = new Database(dbPath, { readonly: true });
-      const state = db.query<{ state: string }, [string]>(
-        "SELECT state FROM turns WHERE id = ?",
-      ).get(turnId)?.state;
-      if (state && ["cancelling", "cancelled", "delivered", "failed"].includes(state)) {
-        return false;
-      }
-      const btccState = db.query<{ semantic_state: string }, [string]>(
-        "SELECT semantic_state FROM btcc_turns WHERE turn_id = ?",
-      ).get(turnId)?.semantic_state;
-      if (btccState && ["cancelled", "delivered"].includes(btccState)) return false;
-      return Boolean(btccState) || item.metadata.recoveredFromRuntimeInterruption !== true;
-    } catch {
-      return true;
-    } finally {
-      db?.close();
-    }
-  };
 }
 
 function sessionPointerPath(butlerData: string): string {

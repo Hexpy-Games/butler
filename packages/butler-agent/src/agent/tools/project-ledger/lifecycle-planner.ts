@@ -215,6 +215,13 @@ function suppliedMetadataMatches(
   }
   if (
     toolName === "project_ledger_work_complete" &&
+    stringValue(args.acceptance) &&
+    stringValue(args.acceptance) !== stringValue(data.acceptance)
+  ) {
+    return false;
+  }
+  if (
+    toolName === "project_ledger_work_complete" &&
     data.requiresCommitEvidence === true &&
     (!stringValue(args.code_commits) || stringValue(args.code_commits) !== stringValue(data.codeCommits))
   ) {

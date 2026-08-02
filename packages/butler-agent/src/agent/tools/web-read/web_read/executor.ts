@@ -13,6 +13,7 @@ export function createWebReadHandler(input: {
   pageReader?: typeof readPageConfigured;
 }): (call: WebReadToolCall) => Promise<Record<string, unknown>> {
   const pageReadCache = new Map<string, PageReadResult>();
+  const modelObservationCache = new Map<string, Record<string, unknown>>();
   return async (call) => {
     const url = typeof call.args.url === "string" ? call.args.url.trim() : "";
     let parsed: URL;
@@ -24,16 +25,27 @@ export function createWebReadHandler(input: {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new Error("web_read only supports http(s) URLs");
     }
-    const requestedMaxChunks = call.args.max_chunks;
-    const maxChars = typeof call.args.max_chars === "number"
-      ? Math.max(500, Math.min(8_000, Math.trunc(call.args.max_chars)))
-      : 2_000;
-    const maxChunks = typeof requestedMaxChunks === "number"
-      ? Math.max(1, Math.min(8, Math.trunc(requestedMaxChunks)))
-      : 1;
+    const maxChars = boundedInteger(call.args.max_chars, 1_500, 8_000, 2_000);
+    const maxChunks = boundedInteger(call.args.max_chunks, 1, 8, 1);
+    const startChunk = boundedInteger(
+      call.args.start_chunk,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      0,
+    );
     const backend = pageReaderBackend(call.args.backend);
     const readPage = input.pageReader ?? readPageConfigured;
-    const cacheKey = backend + ":" + parsed.href;
+    const cacheKey = (backend ?? "configured") + ":" + parsed.href;
+    const observationCacheKey = JSON.stringify([
+      cacheKey,
+      startChunk,
+      maxChars,
+      maxChunks,
+    ]);
+    const duplicateObservation = modelObservationCache.get(observationCacheKey);
+    if (duplicateObservation) {
+      return compactDuplicateObservation(duplicateObservation);
+    }
     const cached = pageReadCache.get(cacheKey);
     const result = cached ?? await readPage({
       butlerData: input.butlerData,
@@ -45,6 +57,7 @@ export function createWebReadHandler(input: {
     const bounded = boundedPageReadToolResult(result, {
       maxChars,
       maxChunks,
+      startChunk,
       chunkTextChars: 320,
     });
     const sourceUrl = typeof bounded.source_url === "string" && bounded.source_url.trim()
@@ -59,7 +72,7 @@ export function createWebReadHandler(input: {
     const sourceVerified = bounded.ok !== false &&
       bounded.evidence_quality !== "unavailable" &&
       hasPageEvidence;
-    return {
+    const observation = {
       ...bounded,
       public_web_evidence_items: publicWebReadEvidenceItems({
         sourceUrl: capabilitySourceUrl,
@@ -109,7 +122,38 @@ export function createWebReadHandler(input: {
         }),
       ],
       cache_hit: Boolean(cached),
+      duplicate_observation: false,
     };
+    modelObservationCache.set(observationCacheKey, observation);
+    return observation;
+  };
+}
+
+function boundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(minimum, Math.min(maximum, Math.trunc(value)))
+    : fallback;
+}
+
+function compactDuplicateObservation(
+  observation: Record<string, unknown>,
+): Record<string, unknown> {
+  const {
+    markdown: _markdown,
+    chunks: _chunks,
+    public_web_evidence_items: _publicWebEvidenceItems,
+    ...metadata
+  } = observation;
+  return {
+    ...metadata,
+    public_web_evidence_items: [],
+    cache_hit: true,
+    duplicate_observation: true,
   };
 }
 
@@ -212,10 +256,39 @@ function boundedText(value: string, maxChars: number): {
 function boundedPageReadToolResult(result: PageReadResult, options: {
   maxChars: number;
   maxChunks: number;
+  startChunk: number;
   chunkTextChars: number;
 }): Record<string, unknown> {
-  const markdown = boundedText(result.markdown || result.text || "", options.maxChars);
+  const candidateChunks = result.chunks.slice(
+    options.startChunk,
+    options.startChunk + options.maxChunks,
+  );
+  const selectedChunks: PageReadResult["chunks"] = [];
+  let completeWindowText = "";
+  for (const chunk of candidateChunks) {
+    const nextWindowText = completeWindowText
+      ? `${completeWindowText}\n\n${chunk.text}`
+      : chunk.text;
+    if (nextWindowText.length > options.maxChars) break;
+    selectedChunks.push(chunk);
+    completeWindowText = nextWindowText;
+  }
+  const markdown = result.chunks.length === 0
+    ? boundedText(
+      options.startChunk === 0 ? result.markdown || result.text || "" : "",
+      options.maxChars,
+    )
+    : selectedChunks.length > 0
+      ? { text: completeWindowText, truncated: false }
+      : candidateChunks.length > 0
+        ? boundedText(candidateChunks[0]!.text, options.maxChars)
+        : { text: "", truncated: false };
   const chunkTextChars = Math.max(120, Math.min(1_500, Math.trunc(options.chunkTextChars)));
+  const nextStartChunk = options.startChunk + selectedChunks.length < result.chunks.length
+    ? options.startChunk + selectedChunks.length
+    : null;
+  const contentHasMore = nextStartChunk !== null;
+  const hasWindowEvidence = markdown.text.trim().length > 0 || selectedChunks.length > 0;
   return {
     ok: result.ok,
     reader: result.reader,
@@ -229,8 +302,16 @@ function boundedPageReadToolResult(result: PageReadResult, options: {
     render_recommended: result.renderRecommended,
     duration_ms: result.durationMs,
     markdown: markdown.text,
-    truncated: markdown.truncated || result.chunks.length > options.maxChunks,
-    chunks: result.chunks.slice(0, options.maxChunks).map((chunk) => ({
+    start_chunk: options.startChunk,
+    returned_chunks: selectedChunks.length,
+    total_chunks: result.chunks.length,
+    next_start_chunk: nextStartChunk,
+    effective_max_chars: options.maxChars,
+    effective_max_chunks: options.maxChunks,
+    content_has_more: contentHasMore,
+    markdown_truncated: markdown.truncated,
+    truncated: markdown.truncated || contentHasMore,
+    chunks: selectedChunks.map((chunk) => ({
       id: chunk.id,
       index: chunk.index,
       title: chunk.title,
@@ -238,7 +319,9 @@ function boundedPageReadToolResult(result: PageReadResult, options: {
       text: boundedText(chunk.text, Math.min(chunkTextChars, options.maxChars)).text,
       char_count: chunk.charCount,
     })),
-    evidence_quality: result.ok && result.text.length >= 500 && result.warnings.length === 0
+    evidence_quality: !hasWindowEvidence
+      ? "unavailable"
+      : result.ok && result.text.length >= 500 && result.warnings.length === 0
       ? "good"
       : result.ok && result.text.length > 0
         ? "limited"

@@ -101,8 +101,7 @@ function isRetainedActivityRow(row: ProgressRow): boolean {
   if (row.bridge_phase === "btcc_operation" && row.semantic_block_id) return true;
   return Boolean(
     row.kind === "message" && !row.work_block_id && row.semantic_block_id &&
-    row.work_decision_source === "model-authored" && row.work_decision_summary &&
-    row.work_decision_rationale && row.work_decision_next_step,
+    row.work_decision_source === "model-authored" && row.work_decision_summary,
   );
 }
 

@@ -28,10 +28,10 @@ test("Windows validation runs the full product once and platform lifecycle twice
   const productMode = entrypoint.match(/"ProductE2E"\s*\{([\s\S]*?)\n {2}\}/u)?.[1];
   expect(productMode).toContain("windows-product-loop-smoke.ts");
   expect(productMode).toContain("-InteractiveDesktop");
-  expect(source).toContain("btcc-project-work-ledger-session.test.ts");
-  expect(source).toContain("btcc-production-operations.test.ts");
+  expect(source).toContain("btcc-durable-work-agent-integration.test.ts");
+  expect(source).toContain("btcc-r3-workspace-file-effect.test.ts");
   expect(source).toContain("platform-command-executor.test.ts");
-  expect(source).toContain("btcc-command-sandbox.test.ts");
+  expect(source).toContain("btcc-r3-read-only-command.test.ts");
   expect(source).not.toContain("app-client-multiturn-e2e.ts");
   expect(source).not.toMatch(
     /(?:appIngress|deterministicConversation|conversationContinuity|restartDataReload): true/,
@@ -96,6 +96,27 @@ test("Windows App BTCC harness exercises HTTP ingress and durable projection", a
     browserProjection: null,
     rawTextIncluded: false,
   });
+});
+
+test("Windows App BTCC harness enters through the R3 production composition", () => {
+  const source = readFileSync(
+    resolve(
+      import.meta.dir,
+      "../e2e/windows-app-btcc-product-harness.ts",
+    ),
+    "utf8",
+  );
+
+  expect(source).toContain("createProductionBtccComposition");
+  expect(source).toContain("bindBtccGatewayRuntime");
+  expect(source).toContain("createBtccQueueEntryDecider");
+  expect(source).toContain("promptRunner");
+  expect(source).not.toContain("createBtccTurnRuntime");
+  expect(source).not.toContain("openBtccSqliteStores");
+  expect(source).not.toContain("DirectHarnessModel");
+  expect(source).not.toContain("HarnessOperationExecutor");
+  expect(source).not.toContain("HarnessArtifactWorkspace");
+  expect(source).not.toContain("btcc-successor.sqlite");
 });
 
 test("Windows validation references only current repository tests and harnesses", () => {

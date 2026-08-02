@@ -6,7 +6,12 @@ import { readToolEvidenceArtifactSlice } from "../../context/tool-evidence-reten
 import { readToolOutputArtifactSlice } from "../../context/tool-output-budgeter.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../registry.ts";
 import { nativeToolAvailability } from "../tool-availability.ts";
-import type { ButlerToolDefinition, ToolCapabilityCategory, ToolCapabilityMetadata } from "../types.ts";
+import type {
+  ButlerToolDefinition,
+  NativeToolAvailabilityOverrides,
+  ToolCapabilityCategory,
+  ToolCapabilityMetadata,
+} from "../types.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 
@@ -55,6 +60,8 @@ export function createMonitoringToolHandlers(input: {
   sessionId?: string;
   webSearchProvider?: WebSearchProvider;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  hiddenNativeToolNames?: readonly string[];
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }) {
   return {
     "get_context_monitor": async (call: ToolCall) => ({
@@ -134,6 +141,9 @@ export function createMonitoringToolHandlers(input: {
           category: category.category,
           includeDisabled: call.args.include_disabled !== false,
           currentToolNames,
+          hiddenNativeToolNames: new Set(input.hiddenNativeToolNames ?? []),
+          nativeToolAvailabilityOverrides:
+            input.nativeToolAvailabilityOverrides,
         }),
       };
     },
@@ -179,7 +189,16 @@ function resolveCurrentToolNames(value: readonly string[] | (() => readonly stri
 function capabilityAvailability(tool: ButlerToolDefinition, input: {
   butlerData: string;
   webSearchProvider?: WebSearchProvider;
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }): { enabled: boolean; disabled_reason: string | null } {
+  const availabilityOverride =
+    input.nativeToolAvailabilityOverrides?.[tool.name];
+  if (availabilityOverride) {
+    return {
+      enabled: false,
+      disabled_reason: availabilityOverride.disabledReason,
+    };
+  }
   const availability = nativeToolAvailability(tool, input);
   return {
     enabled: availability.enabled,
@@ -193,10 +212,13 @@ function listToolCapabilities(input: {
   category?: ToolCapabilityCategory;
   includeDisabled?: boolean;
   currentToolNames?: Set<string> | null;
+  hiddenNativeToolNames?: ReadonlySet<string>;
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }): ToolCapabilityView[] {
   const includeDisabled = input.includeDisabled !== false;
   const currentToolNames = input.currentToolNames ?? null;
   return BUTLER_TOOLS
+    .filter((tool) => !input.hiddenNativeToolNames?.has(tool.name))
     .map((tool) => {
       const metadata = TOOL_CAPABILITY_METADATA[tool.name] ?? DEFAULT_TOOL_CAPABILITY;
       const availability = capabilityAvailability(tool, input);

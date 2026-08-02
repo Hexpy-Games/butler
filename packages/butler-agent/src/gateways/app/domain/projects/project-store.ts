@@ -76,9 +76,10 @@ export class AppProjectStore {
         `
       INSERT INTO projects (
         id, display_name, status, workspace_path, workspace_label, safe_path_label,
+        ledger_project_id,
         pinned, archived, error_summary, created_at, updated_at
       )
-      VALUES (?, ?, 'active', ?, ?, ?, 0, 0, NULL, ?, ?)
+      VALUES (?, ?, 'active', ?, ?, ?, ?, 0, 0, NULL, ?, ?)
     `,
       )
       .run(
@@ -87,6 +88,7 @@ export class AppProjectStore {
         workspacePath,
         workspaceLabel,
         workspaceLabel,
+        projectId,
         now,
         now,
       );

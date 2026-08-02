@@ -147,6 +147,7 @@ export interface ProgressRowLike {
   work_contract_id?: string;
   work_stream_id?: string;
   semantic_block_id?: string;
+  activity_stage?: string;
   work_block_id?: string;
   work_block_label?: string;
   work_block_phase?: "started" | "updated" | "completed";
@@ -333,6 +334,7 @@ export function turnEventFromProgressRow(input: {
       contractId: row.work_contract_id,
       workstreamId: row.work_stream_id,
       semanticBlockId: row.semantic_block_id,
+      activityStage: row.activity_stage,
       blockSequence: row.work_block_sequence,
       decisionId: row.work_decision_id,
       decisionTitle: row.work_decision_title,

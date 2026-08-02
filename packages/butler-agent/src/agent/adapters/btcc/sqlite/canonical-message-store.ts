@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
-import type { BtccRuntimeDependencies } from "../../../btcc/gateway-api.ts";
+import type { CanonicalMessageStore } from
+  "../../../btcc/delivery/index.ts";
 
-type CanonicalMessageStore = BtccRuntimeDependencies["messages"];
 
 type OutboxRow = {
   payload_id: string;

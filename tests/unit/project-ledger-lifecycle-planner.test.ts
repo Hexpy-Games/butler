@@ -145,6 +145,40 @@ test("Project Ledger planner rejects completed records with changed closeout evi
   });
 });
 
+test("Project Ledger planner rejects a completed Work replay with changed acceptance", () => {
+  const result = runProjectLedgerPlannedLifecycleMutation({
+    executor,
+    toolName: "project_ledger_work_complete",
+    args: {
+      id: "W-DONE",
+      acceptance: "new acceptance",
+      validation: "tested",
+      review: "reviewed",
+      report: "reports/w.md",
+    },
+    projectPath,
+    finalCliArgs: ["work", "complete", "--project", projectPath, "--id", "W-DONE"],
+    runTool: () => ({
+      ok: true,
+      data: {
+        id: "W-DONE",
+        kind: "work",
+        status: "done",
+        acceptance: "original acceptance",
+        validation: "tested",
+        review: "reviewed",
+        report: "reports/w.md",
+      },
+    }),
+  });
+
+  expect(result).toMatchObject({
+    ok: false,
+    recoverable: true,
+    error: { code: "already_completed" },
+  });
+});
+
 test("Project Ledger planner rejects completed work without matching evidence", () => {
   const result = runProjectLedgerPlannedLifecycleMutation({
     executor,

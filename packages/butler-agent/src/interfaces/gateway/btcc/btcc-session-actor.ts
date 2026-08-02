@@ -1,6 +1,4 @@
 import type { BtccTurnOutcome } from "../../../agent/btcc/index.ts";
-import { isBtccOperationalInterruption } from
-  "../../../agent/btcc/recovery/index.ts";
 import type { RuntimeTurnEventInput } from "../../../agent/events/turn-events.ts";
 import type {
   GatewayActorTurnResult,
@@ -17,6 +15,8 @@ import { projectTurnOutcome } from "./project-turn-outcome.ts";
 import { projectTurnProgress } from "./project-turn-progress.ts";
 import { snapshotGatewayContext } from "./snapshot-gateway-context.ts";
 import { GatewayConversationTurn } from "./conversation/index.ts";
+import { verifyTurnExecutionControls } from
+  "../../../gateways/core/turn-execution-controls.ts";
 
 export class BtccGatewaySessionActor implements GatewaySessionActor {
   readonly sessionId: string;
@@ -51,6 +51,13 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       binding,
       assembly,
       documents: this.options.contextDocuments,
+      attachments: envelope.message.attachments,
+      ...(envelope.executionControls
+        ? {
+            turnAccessMode: verifyTurnExecutionControls(envelope.executionControls)
+              .access_mode,
+          }
+        : {}),
     });
     const command = admitGatewayCommand({ binding, envelope, turnId, context });
     const publish = async (event: RuntimeTurnEventInput) => {
@@ -65,22 +72,13 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       turnId,
       projectTurnProgress(publish),
     );
-    let outcome: BtccTurnOutcome;
-    try {
-      outcome = await this.handleCommand(command, stopObserving);
-    } catch (error) {
-      if (isBtccOperationalInterruption(error)) {
-        const notice = operationalNotice(error.activation.kind);
-        if (notice) await this.publish(envelope, route, notice);
-      }
-      throw error;
-    }
+    const outcome = await this.handleCommand(command, stopObserving);
     const result = projectTurnOutcome(outcome);
-    const generatedSessionTitle = result.text
-      ? await this.options.generateSessionTitle?.({ binding, envelope, route }) ?? null
-      : null;
     if (result.text) conversation.complete(result.text);
     else conversation.cancel();
+    const generatedSessionTitle = result.text && command.kind !== "resume"
+      ? await this.generateSessionTitle({ binding, envelope, route })
+      : null;
 
     return {
       text: result.text,
@@ -90,6 +88,18 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
   }
 
   async close(): Promise<void> {}
+
+  private async generateSessionTitle(input: {
+    binding: StoredSessionBinding;
+    envelope: InboundEnvelope;
+    route?: GatewayRoute;
+  }): Promise<string | null> {
+    try {
+      return await this.options.generateSessionTitle?.(input) ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   private async handleCommand(
     command: Parameters<BtccGatewayActorOptions["runtime"]["runTurn"]>[0],
@@ -120,17 +130,4 @@ export class BtccGatewaySessionActor implements GatewaySessionActor {
       event: { visibility: "public", ...event },
     });
   }
-}
-
-function operationalNotice(
-  activation: import("../../../agent/btcc/recovery/index.ts").OperationalActivation["kind"],
-): RuntimeTurnEventInput | null {
-  if (activation === "cancelled") return { kind: "turn.cancelled" };
-  if (activation === "runtime_remediation") return null;
-  const note = activation === "automatic_provider_recovery"
-    ? "모델 연결을 복구하고 있습니다"
-    : activation === "automatic_storage_recovery"
-      ? "저장소 쓰기 순서를 조정하고 있습니다"
-      : "선택한 모델 연결 설정을 확인해 주세요";
-  return { kind: "assistant.public_note", payload: { note, operational: true } };
 }

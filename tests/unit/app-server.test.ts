@@ -1985,9 +1985,10 @@ test("scratch project creation makes a collision-free folder backed project with
 test("existing folder project creation requires a signed selection token and reuses active projects", async () => {
   const folderSelectionSecret = "test-folder-selection-secret";
   const selectedFolder = join(tempDir, "selected-project");
+  const dbPath = join(tempDir, "app.sqlite");
   mkdirSync(selectedFolder, { recursive: true });
   const server = createAppServer({
-    dbPath: join(tempDir, "app.sqlite"),
+    dbPath,
     folderSelectionSecret,
     port: 0,
   });
@@ -2011,6 +2012,16 @@ test("existing folder project creation requires a signed selection token and reu
       workspace_label: "selected-project",
     });
     expect(second.data.project.id).toBe(first.data.project.id);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ ledger_project_id: string }, [string]>(`
+        SELECT ledger_project_id FROM projects WHERE id = ?
+      `).get(first.data.project.id)?.ledger_project_id).toBe(
+        first.data.project.id,
+      );
+    } finally {
+      db.close(false);
+    }
     expect(JSON.stringify(first)).not.toContain(tempDir);
     expect(JSON.stringify(second)).not.toContain(tempDir);
   } finally {
@@ -2106,8 +2117,8 @@ test("app runtime policy strips stale workspace required tools outside full acce
     sessionKind: "chat",
   })).toMatchObject({
     accessMode: "read_only",
-    tracking_mode: "none",
-    closeout_strategy: "noop",
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
     requiredNativeTools: [],
     required_tools: [],
     requiredNativeToolProfiles: [],
@@ -2319,7 +2330,7 @@ test("app tracking policy treats snake case tracking mode as authoritative", () 
   expect(selection.toolNames).not.toContain("render_project_dashboard");
 });
 
-test("ordinary app chat turns derive none tracking before tool selection", () => {
+test("ordinary app chat turns derive session Work tracking before tool selection", () => {
   const runtimePolicy = appRuntimePolicy({
     existing: {},
     accessMode: "full_access",
@@ -2334,8 +2345,8 @@ test("ordinary app chat turns derive none tracking before tool selection", () =>
   });
 
   expect(runtimePolicy).toMatchObject({
-    tracking_mode: "none",
-    closeout_strategy: "noop",
+    tracking_mode: "local",
+    closeout_strategy: "local_workstream",
   });
   expect(selection.toolNames.some((name) => name.startsWith("project_ledger_"))).toBe(false);
   expect(selection.toolNames).not.toContain("inspect_project_status");
@@ -2591,6 +2602,12 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
     butlerHome: process.cwd(),
     port: 0,
   });
+  const btccSchema = new Database(dbPath);
+  try {
+    btccSchema.exec(BTCC_SUCCESSOR_SCHEMA);
+  } finally {
+    btccSchema.close();
+  }
   const nativeMain = runNativeButlerMain({
     butlerHome: process.cwd(),
     butlerData: tempDir,
@@ -2628,10 +2645,9 @@ test("App Stop reaches the BTCC stop reconciler and preserves its public snapsho
         INSERT INTO btcc_turns (
           turn_id, session_id, inbox_id, trigger_key, original_message_id,
           original_message, admission_snapshot_ref, model_selection_json,
-          context_json, continuation_snapshot_json, semantic_state,
-          revision, execution_fence
-        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}', '[]',
-          'conception_opening', 1, 1)
+          context_json, semantic_state, revision, execution_fence
+        ) VALUES (?, 'general', ?, ?, ?, 'stop native execution', ?, '{}', '{}',
+          'admitted', 1, 1)
       `).run(
         turnId,
         `inbox:${turnId}`,
@@ -3895,7 +3911,8 @@ test("hosted model registration uses masked credentials without pre-release migr
     const zaiProvider = catalog.data.providers.find(
       (provider: { provider_id: string }) => provider.provider_id === "zai",
     );
-    expect(zaiProvider?.default_api_base_url).toBe("https://api.z.ai/api/paas/v4");
+    expect(zaiProvider?.default_api_base_url)
+      .toBe("https://api.z.ai/api/coding/paas/v4");
     const openCodeGoProvider = catalog.data.providers.find(
       (provider: { provider_id: string }) => provider.provider_id === "opencode-go",
     );

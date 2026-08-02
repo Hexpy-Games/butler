@@ -19,6 +19,7 @@ export const listTodoListToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

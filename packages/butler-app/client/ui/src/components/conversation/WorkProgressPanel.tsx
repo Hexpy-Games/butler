@@ -37,6 +37,8 @@ function workStatusLabel(state: ComposerTaskItem["state"]): string {
   if (state === "completed") return copy.todoItemCompletedLabel;
   if (state === "reviewing") return copy.todoItemReviewingLabel;
   if (state === "correction-required") return copy.todoItemCorrectionLabel;
+  if (state === "blocked") return copy.todoItemBlockedLabel;
+  if (state === "skipped") return copy.todoItemSkippedLabel;
   if (state === "stopped") return copy.todoItemStoppedLabel;
   if (state === "running") return copy.todoItemRunningLabel;
   return copy.todoItemPendingLabel;

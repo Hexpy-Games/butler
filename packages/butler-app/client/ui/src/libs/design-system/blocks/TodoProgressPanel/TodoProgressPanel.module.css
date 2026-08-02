@@ -36,7 +36,12 @@
   color: var(--ok);
 }
 
+.item[data-state="blocked"] .marker {
+  color: var(--danger);
+}
+
 .item[data-state="correction-required"],
+.item[data-state="skipped"],
 .item[data-state="stopped"] {
   color: var(--text-tertiary);
 }

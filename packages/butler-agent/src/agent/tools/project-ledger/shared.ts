@@ -95,11 +95,21 @@ function withProjectLedgerSourceEvidence(
   result: Record<string, unknown>,
   input: Parameters<typeof projectLedgerSourceCapabilityReceipts>[0],
 ): Record<string, unknown> {
-  if (!isProjectLedgerCliEnvelope(result)) return result;
+  if (!isProjectLedgerCliEnvelope(result) || isUninitializedProjectLedgerRead(result)) {
+    return result;
+  }
   return {
     ...result,
     evidence_capability_receipts: projectLedgerSourceCapabilityReceipts(input),
   };
+}
+
+function isUninitializedProjectLedgerRead(result: Record<string, unknown>): boolean {
+  const data = result.data && typeof result.data === "object" &&
+      !Array.isArray(result.data)
+    ? result.data as Record<string, unknown>
+    : null;
+  return data?.initialized === false;
 }
 
 function isProjectLedgerCliEnvelope(result: Record<string, unknown>): boolean {

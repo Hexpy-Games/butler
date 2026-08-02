@@ -267,6 +267,8 @@ function mergeProgressRow(
       base.work_stream_id ?? current.work_stream_id ?? incoming.work_stream_id,
     semantic_block_id:
       base.semantic_block_id ?? current.semantic_block_id ?? incoming.semantic_block_id,
+    activity_stage:
+      base.activity_stage ?? current.activity_stage ?? incoming.activity_stage,
     work_block_id:
       base.work_block_id ?? current.work_block_id ?? incoming.work_block_id,
     work_block_label:

@@ -82,12 +82,12 @@ export function initializeAppStoreKernel(
   );
   kernel.systemMonitor = new AppSystemMonitorStore(kernel.butlerData);
   kernel.developerLogs = new DeveloperLogStore({ butlerData: kernel.butlerData });
-  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.butlerData);
   kernel.dbConnection = openOwnedSqliteConnection(
     options.dbPath ?? ":memory:",
     { create: true },
   );
   kernel.db = kernel.dbConnection.database;
+  kernel.operationOutputs = new SqliteOperationOutputReader(kernel.db);
   coordinateSharedSqliteWriter(kernel.db);
   let wakeTerminalRetention = (
     _event: { turnId: string; eventId: number },
@@ -289,7 +289,7 @@ export function initializeAppStoreKernel(
       },
     },
   });
-  migrateAppStoreSchema(kernel.db);
+  migrateAppStoreSchema(kernel.db, { butlerData: kernel.butlerData });
   wakeTerminalRetention = initializeTerminalTurnRetention(kernel);
   kernel.conversationProjection = new AppConversationProjectionStore({
     db: kernel.db,

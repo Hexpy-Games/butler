@@ -34,6 +34,7 @@ export const readToolOutputArtifactToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

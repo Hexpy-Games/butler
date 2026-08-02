@@ -1,4 +1,6 @@
 export { runAgentLoop } from "./run-agent-loop.ts";
+export { emptyResponseRecoveryObservation } from
+  "./empty-response-recovery.ts";
 export type {
   AgentLoopInput,
   AgentLoopMessage,
@@ -10,17 +12,22 @@ export type {
   AgentLoopToolResult,
 } from "./contracts.ts";
 export {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-  SEMANTIC_WORK_BLOCK_TOOL_LIMIT,
-} from "./tool-batch-capacity.ts";
-export {
   isToolBatchCompletedHandoffText,
   toolBatchCompletedHandoffText,
 } from "./tool-batch-handoff.ts";
 export { structuredToolResultModelPreview } from "./tool-result-model-preview.ts";
+export type { ToolResultModelPreviewContext } from "./tool-result-model-preview.ts";
 export {
+  createToolResultModelPreviewContext,
   serializeToolResultPayloadForProvider,
   toolResultPayloadForProvider,
 } from "./tool-result-serialization.ts";
+export {
+  validateJsonObjectSchema,
+  validateToolCallArguments,
+} from "./schema-validation.ts";
+export type {
+  SchemaValidationResult,
+  SchemaViolationReason,
+  ToolCallArgumentsValidation,
+} from "./schema-validation.ts";

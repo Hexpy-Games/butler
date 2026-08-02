@@ -1,4 +1,7 @@
-import type { ToolCapabilityMetadata } from "../types.ts";
+import type {
+  NativeToolAvailabilityOverrides,
+  ToolCapabilityMetadata,
+} from "../types.ts";
 import {
   PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
   PROJECT_LEDGER_MUTATION_TOOL_NAME_SET,
@@ -26,7 +29,17 @@ export function nativeBridgeAvailability(input: {
   toolName: string;
   metadata: ToolCapabilityMetadata;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }): { enabled: boolean; disabledReason: string | null; recoveryHint: string | null } {
+  const availabilityOverride =
+    input.nativeToolAvailabilityOverrides?.[input.toolName];
+  if (availabilityOverride) {
+    return {
+      enabled: false,
+      disabledReason: availabilityOverride.disabledReason,
+      recoveryHint: availabilityOverride.recoveryHint,
+    };
+  }
   if (BRIDGE_TOOL_NAMES.has(input.toolName)) {
     return {
       enabled: false,
@@ -45,7 +58,7 @@ export function nativeBridgeAvailability(input: {
     return {
       enabled: false,
       disabledReason: "Project Ledger mutation tools require a Ledger-tracked project turn with mutation tools in the current native surface.",
-      recoveryHint: "Use or resume a project turn whose runtime policy has tracking_mode=ledger. Do not mutate Project Ledger records through run_command or write_file.",
+      recoveryHint: "Use or resume a project turn whose runtime policy has tracking_mode=ledger. Do not mutate Project Ledger records through run_command, write_file, or edit_file.",
     };
   }
   if (input.metadata.tags.includes("project-ledger") && currentToolNames.has("project_ledger_status")) {
@@ -68,11 +81,35 @@ export function nativeBridgeAvailability(input: {
   };
 }
 
-export function canBridgeMcpTool(input: {
+export function canDiscoverMcpTools(input: {
   currentToolNames?: readonly string[] | (() => readonly string[]);
 }): boolean {
   const currentToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
   return currentToolNames.has("call_mcp_tool") || currentToolNames.has("list_mcp_capabilities");
+}
+
+export function mcpBridgeAvailability(input: {
+  currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
+}): { enabled: boolean; disabledReason: string | null; recoveryHint: string | null } {
+  const availabilityOverride =
+    input.nativeToolAvailabilityOverrides?.call_mcp_tool;
+  if (availabilityOverride) {
+    return {
+      enabled: false,
+      disabledReason: availabilityOverride.disabledReason,
+      recoveryHint: availabilityOverride.recoveryHint,
+    };
+  }
+  const currentToolNames = new Set(currentToolNamesFromInput(input.currentToolNames));
+  if (currentToolNames.has("call_mcp_tool")) {
+    return { enabled: true, disabledReason: null, recoveryHint: null };
+  }
+  return {
+    enabled: false,
+    disabledReason: scopedOutDisabledReason("mcp"),
+    recoveryHint: "Use a session with the MCP tool profile or choose an enabled native tool from tool_search.",
+  };
 }
 
 export function scopedOutDisabledReason(provider: "native" | "mcp" | "plugin"): string {

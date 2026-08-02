@@ -36,6 +36,7 @@ export const completeProjectWorkToolDefinition = {
       "report",
     ],
   },
+  effectBoundary: "reviewed_persistent",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

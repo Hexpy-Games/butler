@@ -24,15 +24,22 @@ export interface WebSearchResult {
 export interface WebSearchOutput {
   query: string;
   results: WebSearchResult[];
+  provider_overview?: string;
   duration_ms: number;
   provider: string;
   usage: {
     search_requests: number;
   };
+  search_warnings?: string[];
+  failed_queries?: Array<{
+    query: string;
+    error: string;
+  }>;
 }
 
 export interface WebSearchProvider {
   readonly id: string;
+  readonly plannedSearchConcurrency?: number;
   search(input: Required<Pick<WebSearchInput, "query">> & WebSearchInput): Promise<WebSearchOutput>;
 }
 
@@ -282,8 +289,25 @@ function compactText(value: string | null | undefined): string {
   return (value ?? "").replace(/\s+/g, " ").trim();
 }
 
+const MAX_PROVIDER_OVERVIEW_CHARS = 1_600;
+
+function boundedProviderOverview(value: string | null | undefined): string | undefined {
+  const compact = compactText(value);
+  if (!compact) return undefined;
+  return compact.length <= MAX_PROVIDER_OVERVIEW_CHARS
+    ? compact
+    : `${compact.slice(0, MAX_PROVIDER_OVERVIEW_CHARS - 1).trimEnd()}…`;
+}
+
+function isDuckDuckGoChallengePage(html: string): boolean {
+  return /id=["']challenge-form["']/iu.test(html) ||
+    /class=["'][^"']*\banomaly-modal\b/iu.test(html) ||
+    /\/anomaly\.js(?:[?"'])/iu.test(html);
+}
+
 export class DuckDuckGoHtmlSearchProvider implements WebSearchProvider {
   readonly id = "duckduckgo-html";
+  readonly plannedSearchConcurrency = 2;
 
   constructor(private readonly options: {
     apiBase?: string;
@@ -308,6 +332,11 @@ export class DuckDuckGoHtmlSearchProvider implements WebSearchProvider {
     const html = await response.text();
     if (!response.ok) {
       throw new Error(`DuckDuckGo HTML search failed: HTTP ${response.status}`);
+    }
+    if (isDuckDuckGoChallengePage(html)) {
+      throw new Error(
+        "DuckDuckGo HTML search was blocked by an anti-bot challenge; retry later or use another search provider.",
+      );
     }
     const dom = new JSDOM(html, { url: url.toString() });
     const document = dom.window.document;
@@ -367,26 +396,45 @@ interface OpenAIWebSearchResponse {
   }>;
 }
 
+function providerOverviewFromOpenAIResponse(
+  payload: OpenAIWebSearchResponse,
+): string | undefined {
+  const outputText = boundedProviderOverview(payload.output_text);
+  if (outputText) return outputText;
+  for (const item of payload.output ?? []) {
+    for (const content of item.content ?? []) {
+      const text = boundedProviderOverview(content.text);
+      if (text) return text;
+    }
+  }
+  return undefined;
+}
+
 function sourceResultsFromOpenAIResponse(payload: OpenAIWebSearchResponse): WebSearchResult[] {
   const byUrl = new Map<string, WebSearchResult>();
   for (const item of payload.output ?? []) {
     for (const source of item.action?.sources ?? []) {
-      if (!source.url) continue;
-      byUrl.set(source.url, {
-        title: source.title || source.url,
-        url: source.url,
-        snippet: source.snippet || "",
-        source: compactDomain(source.url),
+      const url = source.url?.trim();
+      if (!url) continue;
+      const current = byUrl.get(url);
+      byUrl.set(url, {
+        title: compactText(source.title) || current?.title || url,
+        url,
+        snippet: compactText(source.snippet) || current?.snippet || "",
+        source: compactDomain(url),
       });
     }
+  }
+  for (const item of payload.output ?? []) {
     for (const content of item.content ?? []) {
       for (const annotation of content.annotations ?? []) {
-        if (annotation.type !== "url_citation" || !annotation.url) continue;
-        byUrl.set(annotation.url, {
-          title: annotation.title || annotation.url,
-          url: annotation.url,
-          snippet: content.text?.slice(0, 500) || "",
-          source: compactDomain(annotation.url),
+        const url = annotation.url?.trim();
+        if (annotation.type !== "url_citation" || !url || byUrl.has(url)) continue;
+        byUrl.set(url, {
+          title: compactText(annotation.title) || url,
+          url,
+          snippet: "",
+          source: compactDomain(url),
         });
       }
     }
@@ -428,6 +476,8 @@ export class OpenAIWebSearchProvider implements WebSearchProvider {
       },
       body: JSON.stringify({
         model: this.options.model || "gpt-5",
+        instructions:
+          "Use web search. Return one short source-backed overview with citations and the supporting sources.",
         tools: [tool],
         tool_choice: "auto",
         include: ["web_search_call.action.sources"],
@@ -445,6 +495,9 @@ export class OpenAIWebSearchProvider implements WebSearchProvider {
     return {
       query: input.query,
       results,
+      provider_overview: input.blocked_domains?.length
+        ? undefined
+        : providerOverviewFromOpenAIResponse(payload),
       duration_ms: Math.max(0, Date.now() - start),
       provider: this.id,
       usage: {
@@ -595,8 +648,21 @@ function parseSseEvents(text: string): Record<string, any>[] {
   return events;
 }
 
-function textFromCodexSse(text: string): string {
-  let output = "";
+function codexWebSearchResponseFromSse(text: string): {
+  response: OpenAIWebSearchResponse;
+  answer: string;
+} {
+  const outputItems: NonNullable<OpenAIWebSearchResponse["output"]> = [];
+  let completedOutput: NonNullable<OpenAIWebSearchResponse["output"]> = [];
+  const streamedAnnotations: Array<{
+    type?: string;
+    title?: string;
+    url?: string;
+  }> = [];
+  let streamedText = "";
+  let doneText = "";
+  let outputItemText = "";
+  let completedText = "";
   for (const event of parseSseEvents(text)) {
     if (event.type === "error") {
       throw new Error(`Codex web search error: ${event.message || event.code || JSON.stringify(event)}`);
@@ -606,18 +672,36 @@ function textFromCodexSse(text: string): string {
       throw new Error(`Codex web search error: ${error?.message || error?.code || JSON.stringify(event.response)}`);
     }
     if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
-      output += event.delta;
+      streamedText += event.delta;
     }
-    if (!output && event.type === "response.output_text.done" && typeof event.text === "string") {
-      output = event.text;
+    if (event.type === "response.output_text.done" && typeof event.text === "string") {
+      doneText = event.text;
     }
-    if (!output && event.type === "response.output_item.done") {
+    if (event.type === "response.output_text.annotation.added" && event.annotation) {
+      streamedAnnotations.push(event.annotation);
+    }
+    if (event.type === "response.output_item.done" && event.item && typeof event.item === "object") {
+      outputItems.push(event.item);
       for (const content of event.item?.content ?? []) {
-        if (typeof content?.text === "string") output += content.text;
+        if (typeof content?.text === "string") outputItemText += content.text;
       }
     }
+    if (event.type === "response.completed" && event.response && typeof event.response === "object") {
+      if (Array.isArray(event.response.output)) completedOutput = event.response.output;
+      if (typeof event.response.output_text === "string") completedText = event.response.output_text;
+    }
   }
-  return output.trim();
+  const output = [...outputItems, ...completedOutput];
+  if (streamedAnnotations.length > 0) {
+    output.push({
+      type: "message",
+      content: [{ annotations: streamedAnnotations }],
+    });
+  }
+  return {
+    response: { output },
+    answer: (streamedText || doneText || outputItemText || completedText).trim(),
+  };
 }
 
 function extractUrls(text: string): string[] {
@@ -687,7 +771,8 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
       },
       body: JSON.stringify({
         model: codexSubscriptionModel(this.options.model),
-        instructions: "Use web search and return concise source URLs.",
+        instructions:
+          "Use web search. Return one short source-backed overview with citations and the supporting sources.",
         input: [{
           role: "user",
           content: [{
@@ -697,6 +782,7 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
         }],
         tools: [tool],
         tool_choice: "auto",
+        include: ["web_search_call.action.sources"],
         stream: true,
         store: false,
       }),
@@ -705,17 +791,24 @@ export class CodexSubscriptionWebSearchProvider implements WebSearchProvider {
     if (!response.ok) {
       throw new Error(`Codex web search error (${response.status}): ${raw.slice(0, 500)}`);
     }
-    const answer = textFromCodexSse(raw);
+    const parsed = codexWebSearchResponseFromSse(raw);
+    const structuredResults = sourceResultsFromOpenAIResponse(parsed.response);
     const max = Math.max(1, Math.min(10, input.max_results ?? 5));
-    const results = filterBlockedDomains(extractUrls(answer).map((url) => ({
-      title: compactDomain(url),
-      url,
-      snippet: answer.slice(0, 500),
-      source: compactDomain(url),
-    })), input.blocked_domains).slice(0, max);
+    const candidates = structuredResults.length > 0
+      ? structuredResults
+      : extractUrls(parsed.answer).map((url) => ({
+        title: compactDomain(url),
+        url,
+        snippet: "",
+        source: compactDomain(url),
+      }));
+    const results = filterBlockedDomains(candidates, input.blocked_domains).slice(0, max);
     return {
       query: input.query,
       results,
+      provider_overview: input.blocked_domains?.length
+        ? undefined
+        : boundedProviderOverview(parsed.answer),
       duration_ms: Math.max(0, Date.now() - start),
       provider: this.id,
       usage: {
@@ -731,12 +824,17 @@ function isValidationError(error: unknown): boolean {
 
 export class FallbackWebSearchProvider implements WebSearchProvider {
   readonly id: string;
+  readonly plannedSearchConcurrency: number;
 
   constructor(
     private readonly primary: WebSearchProvider,
     private readonly fallback: WebSearchProvider = new DuckDuckGoHtmlSearchProvider(),
   ) {
     this.id = `${primary.id}-with-${fallback.id}-fallback`;
+    this.plannedSearchConcurrency = Math.min(
+      primary.plannedSearchConcurrency ?? Number.POSITIVE_INFINITY,
+      fallback.plannedSearchConcurrency ?? Number.POSITIVE_INFINITY,
+    );
   }
 
   async search(input: Required<Pick<WebSearchInput, "query">> & WebSearchInput): Promise<WebSearchOutput> {
@@ -772,6 +870,7 @@ export class ConfiguredCodexSubscriptionWebSearchProvider implements WebSearchPr
 
 export class AutoWebSearchProvider implements WebSearchProvider {
   readonly id = "auto-web-search";
+  readonly plannedSearchConcurrency = 2;
 
   constructor(private readonly options: {
     model?: string;

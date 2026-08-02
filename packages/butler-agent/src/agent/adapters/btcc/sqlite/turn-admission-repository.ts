@@ -1,23 +1,16 @@
 import type { Database } from "bun:sqlite";
 import type {
-  BtccRuntimeDependencies,
-  FreshBtccTurnCommand,
-} from "../../../btcc/gateway-api.ts";
+  AdmissionConstructionClaim,
+  AdmissionInbox,
+  TurnAdmissionRepository,
+  TurnRecord,
+  TurnStateRepository,
+} from "../../../btcc/turn/index.ts";
 import { digest, stableJson } from "./identity.ts";
 import { SqliteImmutableRecordStore } from "./immutable-record-store.ts";
-import type { ProjectWorkLedgerPublicationAdapter } from "../project-ledger/index.ts";
-import { discoverContinuationCandidates } from
-  "./continuation-candidate-discovery.ts";
 import { SqliteAdmissionConstructionClaims } from "./admission-construction-claims.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
 
-type TurnAdmissionRepository = BtccRuntimeDependencies["admission"];
-type TurnStateRepository = BtccRuntimeDependencies["turns"];
-type AdmissionInbox = Awaited<ReturnType<TurnAdmissionRepository["recordInbound"]>>;
-type AdmissionConstructionClaim = Awaited<
-  ReturnType<TurnAdmissionRepository["acquireAdmissionConstructionClaim"]>
->;
-type TurnRecord = NonNullable<Awaited<ReturnType<TurnStateRepository["findTurn"]>>>;
 type InboxRow = {
   inbox_id: string;
   turn_id: string;
@@ -25,6 +18,9 @@ type InboxRow = {
   status: "recorded" | "constructed";
   command_json: string;
 };
+
+type RecordInboundInput = Parameters<TurnAdmissionRepository["recordInbound"]>[0];
+type FreshTurnCommand = RecordInboundInput["command"];
 
 export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   private readonly records: SqliteImmutableRecordStore;
@@ -34,19 +30,12 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     private readonly db: Database,
     private readonly turns: TurnStateRepository,
     owner: RuntimeOwnerAuthority,
-    private readonly projectLedger?: {
-      publications: ProjectWorkLedgerPublicationAdapter;
-      resolveProjectRoot(projectRef: string): string;
-    },
   ) {
     this.records = new SqliteImmutableRecordStore(db);
     this.constructionClaims = new SqliteAdmissionConstructionClaims(db, owner);
   }
 
-  async recordInbound(input: {
-    command: FreshBtccTurnCommand;
-    admissionInputHash: string;
-  }): Promise<AdmissionInbox> {
+  async recordInbound(input: RecordInboundInput): Promise<AdmissionInbox> {
     const transaction = this.db.transaction(() => {
       const existing = this.findInbox(input.command.sessionId, input.command.triggerKey);
       if (existing) {
@@ -92,12 +81,6 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     inbox: AdmissionInbox,
     claim: AdmissionConstructionClaim,
   ): Promise<TurnRecord> {
-    const command = this.loadCommand(inbox.inboxId);
-    const continuationCandidates = await discoverContinuationCandidates(
-      this.db,
-      command,
-      this.projectLedger,
-    );
     const transaction = this.db.transaction(() => {
       const stored = this.db.query<InboxRow, [string]>(`
         SELECT inbox_id, turn_id, admission_input_hash, status, command_json
@@ -116,7 +99,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
         throw new Error("BTCC Turn id is already owned by another Admission Inbox");
       }
       if (!existing) {
-        this.insertInitialTurn(inbox.inboxId, stored.command_json, continuationCandidates);
+        this.insertInitialTurn(inbox.inboxId, stored.command_json);
       }
       this.db.query("UPDATE btcc_admission_claims SET status = 'consumed' WHERE claim_id = ?")
         .run(claim.claimId);
@@ -133,16 +116,14 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
   private insertInitialTurn(
     inboxId: string,
     commandJson: string,
-    continuationCandidates: TurnRecord["continuationCandidates"],
   ): void {
-    const command = JSON.parse(commandJson) as FreshBtccTurnCommand;
+    const command = JSON.parse(commandJson) as FreshTurnCommand;
     const source = command.kind === "run"
       ? command.message
       : { messageId: command.trigger.triggerId, content: command.trigger.content };
     const contextJson = stableJson(command.context);
     const snapshotJson = stableJson({
       context: command.context,
-      continuationCandidates,
     });
     const snapshotSha = digest(snapshotJson);
     const snapshotRef = digest(`btcc-admission-snapshot.v1\0${snapshotSha}`);
@@ -151,14 +132,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       SELECT status FROM btcc_stop_requests WHERE turn_id = ?
     `).get(command.turnId)?.status === "cancelled_before_admission";
     this.records.insert(snapshotRef, "admission_snapshot", snapshotSha, snapshotJson);
-    this.db.query(`
-      INSERT INTO btcc_turns (
-        turn_id, session_id, inbox_id, trigger_key, original_message_id,
-        original_message, admission_snapshot_ref, model_selection_json,
-        context_json, continuation_snapshot_json, semantic_state,
-        active_checkpoint_id, revision, execution_fence, final_disposition
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-    `).run(
+    const commonValues = [
       command.turnId,
       command.sessionId,
       inboxId,
@@ -168,12 +142,30 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       snapshotRef,
       stableJson(command.modelSelection),
       contextJson,
-      stableJson(continuationCandidates),
       stoppedBeforeAdmission ? "cancelled" : "admitted",
       stoppedBeforeAdmission ? null : checkpointId,
       stoppedBeforeAdmission ? 1 : 0,
       stoppedBeforeAdmission ? "cancelled" : null,
-    );
+    ] as const;
+    if (this.hasTurnColumn("continuation_snapshot_json")) {
+      this.db.query(`
+        INSERT INTO btcc_turns (
+          turn_id, session_id, inbox_id, trigger_key, original_message_id,
+          original_message, admission_snapshot_ref, model_selection_json,
+          context_json, semantic_state, active_checkpoint_id, execution_fence,
+          final_disposition, continuation_snapshot_json, revision
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 0)
+      `).run(...commonValues);
+    } else {
+      this.db.query(`
+        INSERT INTO btcc_turns (
+          turn_id, session_id, inbox_id, trigger_key, original_message_id,
+          original_message, admission_snapshot_ref, model_selection_json,
+          context_json, semantic_state, active_checkpoint_id, execution_fence,
+          final_disposition, revision
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+      `).run(...commonValues);
+    }
     if (stoppedBeforeAdmission) return;
     this.db.query(`
       INSERT INTO btcc_checkpoints (
@@ -183,15 +175,7 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
     `).run(checkpointId, command.turnId);
   }
 
-  private loadCommand(inboxId: string): FreshBtccTurnCommand {
-    const row = this.db.query<{ command_json: string }, [string]>(`
-      SELECT command_json FROM btcc_inbound_inbox WHERE inbox_id = ?
-    `).get(inboxId);
-    if (!row) throw new Error("BTCC Admission Inbox disappeared before construction");
-    return JSON.parse(row.command_json) as FreshBtccTurnCommand;
-  }
-
-  private insertCanonicalTrigger(command: FreshBtccTurnCommand): void {
+  private insertCanonicalTrigger(command: FreshTurnCommand): void {
     if (command.kind === "wake") {
       const existing = this.db.query<{ content: string }, [string]>(`
         SELECT content FROM btcc_continuation_triggers WHERE trigger_id = ?
@@ -245,6 +229,12 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       SELECT inbox_id, turn_id, admission_input_hash, status, command_json
       FROM btcc_inbound_inbox WHERE session_id = ? AND trigger_key = ?
     `).get(sessionId, triggerKey) ?? null;
+  }
+
+  private hasTurnColumn(name: string): boolean {
+    return this.db.query<{ name: string }, []>(
+      "PRAGMA table_info(btcc_turns)",
+    ).all().some((column) => column.name === name);
   }
 }
 

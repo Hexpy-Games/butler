@@ -11,6 +11,8 @@ export interface ComposerTaskItem {
     | "reviewing"
     | "completed"
     | "correction-required"
+    | "blocked"
+    | "skipped"
     | "stopped";
 }
 
@@ -61,6 +63,8 @@ function taskState(
   if (state === "reviewing") return "reviewing";
   if (state === "failed" || state === "correction_required")
     return "correction-required";
+  if (state === "blocked") return "blocked";
+  if (state === "skipped") return "skipped";
   if (state === "cancelled" || state === "stopped") return "stopped";
   if (["running", "streaming", "active"].includes(state ?? "")) return "running";
   return "pending";

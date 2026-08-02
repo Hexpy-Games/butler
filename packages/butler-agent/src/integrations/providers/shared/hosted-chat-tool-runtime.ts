@@ -1,15 +1,14 @@
 import type { FunctionToolPromptOptions, OpenAIResponse, PromptOptions } from "../runtime-contracts.ts";
 import type { HostedRuntimeConfig } from "./model-routing.ts";
-import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget } from "./runtime-support.ts";
+import { activeFunctionTools, afterAttributedModelResponse, beforeAttributedModelRequest, finalNoToolInstructions, modelIterationLimitWithinUsageBudget, prepareFunctionToolCall } from "./runtime-support.ts";
 import { createHostedChatCompletion, extractHostedChatToolCalls, firstHostedChatMessage, hostedChatCompletionsUrl, type HostedChatMessage, hostedChatReasoningParams, hostedChatResponseFormat, hostedChatText, hostedChatTools, hostedProviderErrorLabel, promptTextForHosted } from "./hosted-chat-client.ts";
 import { hostedToolResultContent } from "./hosted-tool-result-context.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
 import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
+  createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
+  toolBatchCompletedHandoffText,
 } from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "./final-candidate-review.ts";
 
@@ -68,11 +67,13 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     options.usageAttribution,
   );
   const messages: HostedChatMessage[] = [];
+  const modelPreviewContext = createToolResultModelPreviewContext();
   if (options.instructions?.trim()) {
     messages.push({ role: "system", content: options.instructions.trim() });
   }
   messages.push({ role: "user", content: promptTextForHosted(options) });
   let toolBatchExecuted = false;
+  let emptyResponseRecoveryUsed = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
@@ -95,6 +96,15 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
     const toolCalls = extractHostedChatToolCalls(assistant, allowedNames);
     if (toolCalls.length === 0) {
       if (!text) {
+        const observation = emptyResponseRecoveryObservation({
+          recoveryUsed: emptyResponseRecoveryUsed,
+          hasNextModelRound: round + 1 < maxRounds,
+        });
+        if (observation) {
+          emptyResponseRecoveryUsed = true;
+          messages.push({ role: "user", content: observation });
+          continue;
+        }
         throw providerEmptyResponseError({
           provider: hostedProviderErrorLabel(config),
           api: "chat_completions",
@@ -108,16 +118,20 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       messages.push({ role: "user", content: disposition.observation });
       continue;
     }
-    const batch = partitionSemanticToolBatch(toolCalls);
+    const preparedCalls = toolCalls.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.function.name,
+        rawArguments: call.function.arguments,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => {
-        const args = localToolArguments(call.function.arguments);
-        return {
-          name: call.function.name,
-          args: args.parsed,
-        };
-      }),
+      toolCalls: preparedCalls.map(({ call, prepared }) => ({
+        name: call.function.name,
+        args: prepared.args,
+      })),
     });
     messages.push({
       role: "assistant",
@@ -125,29 +139,31 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
       tool_calls: toolCalls,
     });
     toolBatchExecuted = true;
-    for (const call of batch.executable) {
-      const args = localToolArguments(call.function.arguments);
-      log(`tool ${call.function.name}: ${args.raw}`);
-      let payload: Record<string, unknown>;
-      try {
-        payload = {
-          ok: true,
-          output: await options.executeTool({
-            name: call.function.name,
-            args: args.parsed,
-            rawArguments: args.raw,
-          }),
-        };
-      } catch (error) {
-        payload = {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+    for (const { call, prepared } of preparedCalls) {
+      log(`tool ${call.function.name}: ${prepared.rawArguments}`);
+      let payload = prepared.errorPayload;
+      if (!payload) {
+        try {
+          payload = {
+            ok: true,
+            output: await options.executeTool({
+              name: call.function.name,
+              args: prepared.args,
+              rawArguments: prepared.rawArguments,
+              signal: options.signal,
+            }),
+          };
+        } catch (error) {
+          payload = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.function.name,
-            args: args.parsed,
+            args: prepared.args,
             output: payload.output,
           })
         : null;
@@ -160,25 +176,7 @@ export async function runHostedOpenAICompatibleFunctionToolPromptText(
           payload,
           toolName: call.function.name,
           toolCallId: call.id,
-          log,
-        }),
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.function.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content: hostedToolResultContent({
-          payload: { ok: false, output: blockCapacityToolOutput(observation) },
-          toolName: call.function.name,
-          toolCallId: call.id,
+          modelPreviewContext,
           log,
         }),
       });

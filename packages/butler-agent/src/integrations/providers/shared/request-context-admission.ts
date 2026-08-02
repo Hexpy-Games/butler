@@ -9,6 +9,9 @@ import {
 import type { PromptUsageAttribution } from "../runtime-contracts.ts";
 import { estimateTokensForModel } from "../model-catalog.ts";
 
+const MODEL_IMAGE_TOKEN_ALLOWANCE = 8_192;
+const IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp|gif);base64,/iu;
+
 export type RequestContextMeasurement = "model_token_estimate";
 export type RequestContextAdmission = "admitted" | "reduce" | "cannot_fit_required";
 
@@ -133,7 +136,11 @@ export function admitSerializedProviderRequest(
   );
   const serializedRequest = JSON.stringify(input.body);
   const serializedRequestHash = sha256(serializedRequest);
-  const estimatedInputTokens = estimateTokensForModel(serializedRequest, capacity.modelRef).tokens;
+  const tokenProjection = requestTokenProjection(input.body);
+  const estimatedInputTokens = estimateTokensForModel(
+    JSON.stringify(tokenProjection.value),
+    capacity.modelRef,
+  ).tokens + tokenProjection.imageCount * MODEL_IMAGE_TOKEN_ALLOWANCE;
   const compiledInputTokens = estimatedInputTokens + providerEnvelopeTokens;
   const plan: ModelRequestContextPlan = {
     request_id: `request-${serializedRequestHash.slice(0, 24)}`,
@@ -185,4 +192,33 @@ export function admitSerializedProviderRequest(
     plan,
     metric: modelRequestContextAdmissionMetric(plan),
   };
+}
+
+function requestTokenProjection(value: unknown): {
+  value: unknown;
+  imageCount: number;
+} {
+  if (typeof value === "string" && IMAGE_DATA_URL.test(value)) {
+    return {
+      value: `[image input bytes=${Buffer.byteLength(value, "utf8")}]`,
+      imageCount: 1,
+    };
+  }
+  if (Array.isArray(value)) {
+    const children = value.map(requestTokenProjection);
+    return {
+      value: children.map((child) => child.value),
+      imageCount: children.reduce((sum, child) => sum + child.imageCount, 0),
+    };
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).map(
+      ([key, child]) => [key, requestTokenProjection(child)] as const,
+    );
+    return {
+      value: Object.fromEntries(entries.map(([key, child]) => [key, child.value])),
+      imageCount: entries.reduce((sum, [, child]) => sum + child.imageCount, 0),
+    };
+  }
+  return { value, imageCount: 0 };
 }

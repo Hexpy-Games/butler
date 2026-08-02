@@ -31,13 +31,7 @@ export function workDecisionFields(
   const summary = optionalText(payload.decisionSummary ?? payload.summary);
   const rationale = optionalText(payload.decisionRationale ?? payload.rationale);
   const nextStep = optionalText(payload.decisionNextStep ?? payload.nextStep);
-  if (
-    !source ||
-    !PUBLIC_DECISION_SOURCES.has(source) ||
-    !summary ||
-    !rationale ||
-    !nextStep
-  ) {
+  if (!source || !PUBLIC_DECISION_SOURCES.has(source) || !summary) {
     return fields;
   }
   const decisionId = optionalText(payload.decisionId);
@@ -82,9 +76,11 @@ function contractFields(payload: Record<string, unknown>): Partial<SharedProgres
   const contractId = optionalText(payload.contractId);
   const workstreamId = optionalText(payload.workstreamId);
   const semanticBlockId = optionalText(payload.semanticBlockId);
+  const activityStage = optionalText(payload.activityStage);
   if (contractId) fields.work_contract_id = contractId;
   if (workstreamId) fields.work_stream_id = workstreamId;
   if (semanticBlockId) fields.semantic_block_id = semanticBlockId;
+  if (activityStage) fields.activity_stage = activityStage;
   return fields;
 }
 

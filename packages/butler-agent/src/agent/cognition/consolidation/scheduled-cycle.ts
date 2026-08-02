@@ -2,7 +2,6 @@ import { spawnSync } from "child_process";
 import { homedir } from "os";
 import { join } from "path";
 import { butlerAgentSourcePath } from "../../../runtime/paths.ts";
-import { resolveAppGatewayRuntimeConfig } from "../../../operations/gateway/registry.ts";
 import {
   runCognitionConsolidationCycle,
   type ConsolidationCycleResult,
@@ -34,7 +33,6 @@ export type RunScheduledCognitionConsolidationInput = {
   butlerHome?: string;
   butlerData?: string;
   runId?: string;
-  btccDbPath?: string;
   runLegacyMemoryCycle?: () => LegacyMemoryCycleResult;
 };
 
@@ -77,13 +75,9 @@ export async function runScheduledCognitionConsolidation(
 ): Promise<ScheduledCognitionConsolidationResult> {
   const home = butlerHome(input.butlerHome);
   const data = butlerData(input.butlerData);
-  const btccDbPath = input.btccDbPath ??
-    resolveAppGatewayRuntimeConfig({ butlerData: data }).dbPath ??
-    join(data, "app-server", "butler-client.sqlite");
   const generic = await runCognitionConsolidationCycle({
     butlerData: data,
     runId: input.runId ?? scheduledRunId(),
-    btccDbPath,
   });
   const legacy = input.runLegacyMemoryCycle
     ? input.runLegacyMemoryCycle()

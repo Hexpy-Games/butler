@@ -25,6 +25,7 @@ export const grepFilesToolDefinition: ButlerToolDefinition = {
     },
     required: ["pattern"],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

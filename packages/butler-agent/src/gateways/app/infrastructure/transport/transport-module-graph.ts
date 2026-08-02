@@ -92,6 +92,8 @@ export function createAppTransportModuleGraph(input: {
       host.hasEquivalentProgressSummaryRow(turnId, row),
     finalizeResponderLimitedDelivery: (chatId, turnId, delivery) =>
       host.finalizeResponderLimitedDelivery(chatId, turnId, delivery),
+    finalizeCancelledTurn: (chatId, turnId) =>
+      host.finalizeCancelledTurn(chatId, turnId),
     upsertAssistantTurnFailure: (chatId, turnId, safeError, options) =>
       host.upsertAssistantTurnFailure(chatId, turnId, safeError, options),
     runtimeFaultRecordForTurn: (turnId) =>

@@ -79,6 +79,43 @@ test("repeated execution activities own only their following tools", () => {
     .toEqual([["tool-a"], ["tool-b"]]);
 });
 
+test("activity grouping identity stays separate from its optional display stage and detail", () => {
+  const projected = projectTurnActivity([
+    {
+      id: "plan-activity",
+      kind: "message",
+      state: "running",
+      safe_label: "요청한 결과를 만들 계획입니다.",
+      semantic_block_id: "guided-activity:opaque-id",
+      activity_stage: "planning",
+      work_decision_source: "model-authored",
+      work_decision_summary: "요청한 결과를 만들 계획입니다.",
+    },
+    {
+      id: "plan-tool",
+      kind: "used_tool",
+      state: "delivered",
+      safe_label: "작업 계획",
+      safe_tool_name: "replace_work_plan",
+      tool_call_id: "plan-call",
+      semantic_block_id: "guided-activity:opaque-id",
+      bridge_phase: "btcc_operation",
+    },
+  ]);
+
+  expect(projected.phaseActivities).toEqual([
+    expect.objectContaining({
+      id: "plan-activity",
+      phase: "planning",
+      summary: "요청한 결과를 만들 계획입니다.",
+      rationale: undefined,
+      nextStep: undefined,
+      operations: [expect.objectContaining({ id: "plan-tool" })],
+    }),
+  ]);
+  expect(projected.semanticState).toBe("planning");
+});
+
 test("summary progress prefers the canonical current task list", () => {
   const rows: ProgressRow[] = [
     {

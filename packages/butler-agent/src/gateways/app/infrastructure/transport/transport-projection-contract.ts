@@ -84,6 +84,7 @@ export interface AppTransportProjectionStoreOptions {
     turnId: string,
     limitedDelivery: AppLimitedDelivery,
   ) => { reply?: MessageRecord; replies: MessageRecord[]; turn: TurnRecord };
+  finalizeCancelledTurn: (chatId: string, turnId: string) => TurnRecord;
   upsertAssistantTurnFailure: (
     chatId: string,
     turnId: string,

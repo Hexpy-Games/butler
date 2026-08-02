@@ -1,17 +1,16 @@
 import { anthropicMessagesUrl, hostedProviderErrorLabel, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
+  serializeToolResultPayloadForProvider,
+  toolBatchCompletedHandoffText,
+} from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
 import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
@@ -175,8 +174,10 @@ export async function runAnthropicFunctionToolPromptText(
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: promptTextForHosted(options) },
   ];
+  const modelPreviewContext = createToolResultModelPreviewContext();
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
+  let emptyResponseRecoveryUsed = false;
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
@@ -195,7 +196,7 @@ export async function runAnthropicFunctionToolPromptText(
     const toolUses = content.flatMap((part: any) => {
       const name = normalizeLocalTextToolName(typeof part?.name === "string" ? part.name : "", allowedNames);
       if (part?.type !== "tool_use" || typeof part.id !== "string" || !name) return [];
-      return [{ id: part.id as string, name, input: localToolArguments(part.input).parsed }];
+      return [{ id: part.id as string, name, rawInput: part.input }];
     });
     if (toolUses.length === 0) {
       if (text) {
@@ -205,6 +206,15 @@ export async function runAnthropicFunctionToolPromptText(
         messages.push({ role: "user", content: disposition.observation });
         continue;
       }
+      const observation = emptyResponseRecoveryObservation({
+        recoveryUsed: emptyResponseRecoveryUsed,
+        hasNextModelRound: round + 1 < maxRounds,
+      });
+      if (observation) {
+        emptyResponseRecoveryUsed = true;
+        messages.push({ role: "user", content: observation });
+        continue;
+      }
       throw providerEmptyResponseError({
         provider: hostedProviderErrorLabel(config),
         api: "messages",
@@ -212,33 +222,45 @@ export async function runAnthropicFunctionToolPromptText(
         model: config.modelId,
       });
     }
-    const batch = partitionSemanticToolBatch(toolUses);
+    const preparedToolUses = toolUses.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.name,
+        rawArguments: call.rawInput,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => ({ name: call.name, args: call.input })),
+      toolCalls: preparedToolUses.map(({ call, prepared }) => ({
+        name: call.name,
+        args: prepared.args,
+      })),
     });
     messages.push({ role: "assistant", content });
     toolBatchExecuted = true;
-    for (const call of batch.executable) {
-      const rawArguments = JSON.stringify(call.input);
-      log(`tool ${call.name}: ${rawArguments}`);
-      let payload: Record<string, unknown>;
-      try {
-        payload = {
-          ok: true,
-          output: await options.executeTool({
-            name: call.name,
-            args: call.input,
-            rawArguments,
-          }),
-        };
-      } catch (error) {
-        payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    for (const { call, prepared } of preparedToolUses) {
+      log(`tool ${call.name}: ${prepared.rawArguments}`);
+      let payload = prepared.errorPayload;
+      if (!payload) {
+        try {
+          payload = {
+            ok: true,
+            output: await options.executeTool({
+              name: call.name,
+              args: prepared.args,
+              rawArguments: prepared.rawArguments,
+              signal: options.signal,
+            }),
+          };
+        } catch (error) {
+          payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.name,
-            args: call.input,
+            args: prepared.args,
             output: payload.output,
           })
         : null;
@@ -248,25 +270,9 @@ export async function runAnthropicFunctionToolPromptText(
         content: [{
           type: "tool_result",
           tool_use_id: call.id,
-          content: serializeToolResultPayloadForProvider(payload),
-        }],
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      messages.push({
-        role: "user",
-        content: [{
-          type: "tool_result",
-          tool_use_id: call.id,
-          content: serializeToolResultPayloadForProvider({
-            ok: false,
-            output: blockCapacityToolOutput(observation),
+          content: serializeToolResultPayloadForProvider(payload, {
+            toolName: call.name,
+            context: modelPreviewContext,
           }),
         }],
       });

@@ -1,6 +1,6 @@
 # Native file tools
 
-Butler native file tools provide bounded, workspace-scoped file access without shelling out for ordinary read, write, and search operations.
+Butler native file tools provide bounded, workspace-scoped file access without shelling out for ordinary read, write, edit, and search operations.
 
 ## Shared safety contract
 
@@ -14,6 +14,7 @@ Each native file tool returns `evidence_receipts` using `butler.evidence-receipt
 
 - `read_file`: reports path, byte count, line range, truncation state, and SHA-256.
 - `write_file`: reports path, created/overwritten state, before/after SHA-256, byte count, and atomic-write status.
+- `edit_file`: replaces one exact range beginning at a one-based line, preserves the file mode, and reports the before/after SHA-256. Use it for a small change to an existing UTF-8 file.
 - `grep_files`: reports pattern mode, case sensitivity, searched/skipped file counts, match truncation, and bounded match data.
 
-`run_command` remains available for build, test, transform, and multi-step shell execution. It should not be the default path for simple workspace file read/write/search once these native tools are available.
+`run_command` remains available for build, test, transform, and multi-step shell execution. It should not be the default path for simple workspace file read/write/edit/search once these native tools are available.

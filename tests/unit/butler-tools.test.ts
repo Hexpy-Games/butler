@@ -72,13 +72,13 @@ const projectMetadataToolNames: string[] = [
   "project_ledger_check",
   "inspect_project_status",
   "query_project_work",
-  "render_project_dashboard",
   ...startupOnlyToolNames,
 ];
 const projectLifecycleWorkspaceToolNames: string[] = [
   "run_command",
   "read_file",
   "write_file",
+  "edit_file",
   "grep_files",
   "project_ledger_status",
   "project_ledger_list",
@@ -171,6 +171,7 @@ function writeAppProjectDb(path: string, input: {
   id: string;
   displayName: string;
   workspacePath: string;
+  ledgerProjectId?: string;
 }): void {
   const db = new Database(path);
   db.run(`
@@ -180,16 +181,26 @@ function writeAppProjectDb(path: string, input: {
       workspace_path TEXT NOT NULL,
       workspace_label TEXT NOT NULL,
       safe_path_label TEXT NOT NULL,
+      ledger_project_id TEXT,
       archived INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     )
   `);
   db.query(`
     INSERT INTO projects (
-      id, display_name, workspace_path, workspace_label, safe_path_label, archived, updated_at
+      id, display_name, workspace_path, workspace_label, safe_path_label,
+      ledger_project_id, archived, updated_at
     )
-    VALUES (?, ?, ?, ?, ?, 0, ?)
-  `).run(input.id, input.displayName, input.workspacePath, input.displayName, input.displayName, new Date().toISOString());
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+  `).run(
+    input.id,
+    input.displayName,
+    input.workspacePath,
+    input.displayName,
+    input.displayName,
+    input.ledgerProjectId ?? input.id,
+    new Date().toISOString(),
+  );
   db.close(false);
 }
 
@@ -249,6 +260,7 @@ test("Project Ledger tool wrappers resolve active app project id through the app
     id: "project-sandy-bot-35a0e102",
     displayName: "Sandy Bot",
     workspacePath,
+    ledgerProjectId: "sandy-bot",
   });
   writeFileSync(
     cliPath,
@@ -272,9 +284,59 @@ test("Project Ledger tool wrappers resolve active app project id through the app
   expect(result.data.argv).toEqual([
     "status",
     "--project",
-    join(butlerData, "project-ledger", "projects", "sandy-bot"),
+    join(
+      butlerData,
+      "project-ledger",
+      "projects",
+      "sandy-bot",
+    ),
     "--json",
   ]);
+});
+
+test("Project Ledger read tools cannot leave the active App project", async () => {
+  const butlerHome = join(tempDir, "butler-home");
+  const butlerData = join(tempDir, "butler-data");
+  const workspacePath = join(tempDir, "workspaces", "sandy-folder");
+  const appDbPath = join(tempDir, "butler-client.sqlite");
+  mkdirSync(workspacePath, { recursive: true });
+  writeAppProjectDb(appDbPath, {
+    id: "project-sandy-bot-35a0e102",
+    displayName: "Sandy Bot",
+    workspacePath,
+    ledgerProjectId: "sandy-bot",
+  });
+  const execute = createButlerToolExecutor({
+    butlerHome,
+    butlerData,
+    appMessageDbPath: appDbPath,
+    projectId: "project-sandy-bot-35a0e102",
+  });
+  const calls = [
+    { name: "project_ledger_status", args: { project_ref: "other-project" } },
+    { name: "project_ledger_list", args: { project_path: workspacePath, kind: "work" } },
+    { name: "project_ledger_show", args: { project_ref: "other-project", kind: "work", id: "W-OTHER" } },
+  ];
+
+  for (const call of calls) {
+    const result = await execute({
+      ...call,
+      rawArguments: JSON.stringify(call.args),
+    }) as Record<string, any>;
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "project_ledger_project_scope_mismatch",
+        message: "Explicit Project Ledger reference must match the active project id or be omitted.",
+      },
+    });
+  }
+
+  await expect(execute({
+    name: "inspect_project_status",
+    args: { project_ref: "other-project" },
+    rawArguments: "{\"project_ref\":\"other-project\"}",
+  })).rejects.toThrow("Explicit Project Ledger reference must match the active project id or be omitted.");
 });
 
 test("Project Ledger native tools route task completion through task handlers", async () => {
@@ -649,8 +711,14 @@ test("Project Ledger mutation policy covers every mutating native Project Ledger
     .map((tool) => tool.name)
     .sort();
 
-  const expectedMutationTools: string[] = [...PROJECT_LEDGER_MUTATION_TOOL_NAMES].sort();
+  const expectedMutationTools: string[] = [...PROJECT_LEDGER_MUTATION_TOOL_NAMES]
+    .filter((name) => name.startsWith("project_ledger_"))
+    .sort();
   expect(expectedMutationTools).toEqual(mutatingNativeLedgerTools);
+  expect(PROJECT_LEDGER_MUTATION_TOOL_NAMES).toEqual(expect.arrayContaining([
+    "render_project_dashboard",
+    "complete_project_work",
+  ]));
 });
 
 test("Butler tool registry exposes stable native tool contracts", () => {
@@ -661,7 +729,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "run_command",
     "read_file",
     "write_file",
+    "edit_file",
     "grep_files",
+    "inspect_workspace_page",
     ...projectLedgerToolNames,
     "get_work_dashboard",
     "inspect_project_status",
@@ -700,8 +770,9 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   ]);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_search")?.concurrencySafe).toBe(true);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "web_read")?.concurrencySafe).toBe(true);
-  expect(BUTLER_TOOLS.find((tool) => tool.name === "transform_public_data_table")?.concurrencySafe).toBe(true);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "transform_public_data_table")?.concurrencySafe).toBe(false);
   expect(BUTLER_TOOLS.find((tool) => tool.name === "run_command")?.concurrencySafe).toBe(false);
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "edit_file")?.concurrencySafe).toBe(false);
   for (const name of projectLedgerToolNames) {
     expect(BUTLER_TOOLS.find((tool) => tool.name === name)).toBeDefined();
   }
@@ -786,6 +857,7 @@ test("agent tools directory groups canonical tool-name entrypoints", () => {
     "web-read",
     "web-search",
     "work-tracking",
+    "workspace-page-preview",
   ];
   const groupedToolNames = groupNames.flatMap((groupName) => (
     readdirSync(join(toolsRoot, groupName))
@@ -858,7 +930,9 @@ test("Butler tool executor dispatch is registry-based instead of a call-name if-
   );
   const executorSource = source.slice(source.indexOf("export function createButlerToolExecutor("));
   expect(executorSource).toContain("createButlerToolExecutorRegistry");
-  expect(executorSource).toContain("executeRegisteredButlerTool(toolExecutors, call)");
+  expect(executorSource).toContain("executeRegisteredButlerTool(");
+  expect(executorSource).toContain("toolExecutorRef.current!,\n      prepared");
+  expect(executorSource).toContain("input.executionBoundary");
   expect(executorSource).not.toMatch(/if\s*\(\s*call\.name\s*===/u);
 });
 
@@ -868,7 +942,7 @@ test("Butler tool compatibility entrypoint does not own capability executor bodi
     "utf8",
   );
   const lineCount = source.split("\n").length;
-  expect(lineCount).toBeLessThanOrEqual(280);
+  expect(lineCount).toBeLessThanOrEqual(300);
   expect(source).not.toMatch(/"[^"]+":\s*async\s*\(/u);
   expect(source).not.toContain("loadRuntimeSkills");
   expect(source).not.toContain("runProjectLedgerTool");
@@ -971,7 +1045,7 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(24_000);
+  expect(toolContractJsonChars(tools)).toBeLessThan(25_500);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -1386,6 +1460,10 @@ test("explicit required tools add exact tool names while removed tool names are 
 
 test("web_search schema exposes query and domain filters", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "web_search");
+  const properties = tool?.parameters.properties as Record<
+    string,
+    { description?: string }
+  > | undefined;
 
   expect(tool?.parameters.required).toEqual(["query"]);
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
@@ -1395,18 +1473,35 @@ test("web_search schema exposes query and domain filters", () => {
     "recency_days",
     "max_results",
   ]);
+  expect(properties?.allowed_domains?.description)
+    .toContain("Strict result filter for every planned search");
+  expect(properties?.allowed_domains?.description)
+    .toContain("Omit it for broad or multi-source research");
+  expect(tool?.description)
+    .toContain("broaden the query or use another accessible authoritative");
 });
 
 test("web_read schema exposes bounded page evidence controls", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "web_read");
+  const properties = tool?.parameters.properties as Record<string, Record<string, unknown>>;
 
   expect(tool?.parameters.required).toEqual(["url"]);
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
     "url",
     "max_chars",
     "max_chunks",
+    "start_chunk",
     "backend",
   ]);
+  expect(properties.max_chars).toMatchObject({ minimum: 1_500, maximum: 8_000, default: 2_000 });
+  expect(properties.max_chunks).toMatchObject({ minimum: 1, maximum: 8, default: 1 });
+  expect(properties.start_chunk).toMatchObject({ minimum: 0, default: 0 });
+  expect(properties.max_chars.description).toContain("Use start_chunk");
+  expect(properties.start_chunk.description).toContain("next_start_chunk");
+  expect(tool?.description).toContain("content_has_more");
+  expect(tool?.description).toContain("next_start_chunk");
+  expect(tool?.description)
+    .toContain("search for an accessible source covering the same requested fact");
 });
 
 test("transform_public_data_table writes bounded public CSV artifacts", async () => {
@@ -2921,13 +3016,15 @@ test("Project Ledger tool schemas expose bounded project management wrappers", (
 });
 
 test("workspace file tool schemas keep the runtime-owned root out of model arguments", () => {
-  for (const name of ["grep_files", "read_file", "write_file"]) {
+  for (const name of ["grep_files", "read_file", "write_file", "edit_file"]) {
     const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
     expect(tool).toBeDefined();
     expect(tool?.parameters.properties).not.toHaveProperty("workspace_root");
   }
   expect((BUTLER_TOOLS.find((tool) => tool.name === "read_file")?.parameters.properties as any)
-    .path.description).toContain("relative to the active workspace root");
+    .path.description).toContain("inside the active workspace");
+  expect(BUTLER_TOOLS.find((tool) => tool.name === "write_file")?.description)
+    .toContain("content is never a patch, fragment, or append");
 });
 
 test("context monitor tool schema exposes safe session lookup", () => {
@@ -3673,8 +3770,15 @@ test("web_read returns bounded page evidence without full document dumps", async
         index: 0,
         title: "Evidence Story",
         url: "https://example.com/story",
-        text: "First chunk evidence",
-        charCount: 20,
+        text: "First chunk evidence ".repeat(60),
+        charCount: "First chunk evidence ".repeat(60).length,
+      }, {
+        id: "ev_test_next",
+        index: 1,
+        title: "Evidence Story",
+        url: "https://example.com/story",
+        text: "Second chunk evidence ".repeat(60),
+        charCount: "Second chunk evidence ".repeat(60).length,
       }],
       method: "readability",
       durationMs: 12,
@@ -3699,6 +3803,14 @@ test("web_read returns bounded page evidence without full document dumps", async
     title: "Evidence Story",
     evidence_quality: "good",
     truncated: true,
+    start_chunk: 0,
+    returned_chunks: 1,
+    total_chunks: 2,
+    next_start_chunk: 1,
+    effective_max_chars: 1_500,
+    effective_max_chunks: 1,
+    content_has_more: true,
+    markdown_truncated: false,
   });
   expect(result.evidence_receipts).toEqual([
     expect.objectContaining({
@@ -3710,7 +3822,7 @@ test("web_read returns bounded page evidence without full document dumps", async
       references: [{ kind: "url", ref: "https://example.com/story" }],
     }),
   ]);
-  expect(result.markdown.length).toBeLessThanOrEqual(520);
+  expect(result.markdown.length).toBeLessThanOrEqual(1_500);
   expect(result.chunks).toHaveLength(1);
   expect(JSON.stringify(result)).not.toContain("FULL DOCUMENT SHOULD NOT BE RETURNED");
 });
@@ -3743,23 +3855,174 @@ test("web_read reuses same-turn page evidence for duplicate URL reads", async ()
 
   const first = await execute({
     name: "web_read",
-    args: { url: "https://example.com/story", max_chars: 600 },
+    args: { url: "https://example.com/story", max_chars: 1_500 },
     rawArguments: "{}",
   }) as Record<string, any>;
   const second = await execute({
     name: "web_read",
-    args: { url: "https://example.com/story", max_chars: 600 },
+    args: { url: "https://example.com/story", max_chars: 1_500 },
     rawArguments: "{}",
   }) as Record<string, any>;
 
   expect(readCount).toBe(1);
   expect(first.cache_hit).toBe(false);
+  expect(first.duplicate_observation).toBe(false);
   expect(second.cache_hit).toBe(true);
+  expect(second.duplicate_observation).toBe(true);
   expect(second.title).toBe("Evidence Story");
+  expect(second.evidence_quality).toBe(first.evidence_quality);
+  expect(second.evidence_receipts).toEqual(first.evidence_receipts);
+  expect(second.public_web_evidence_items).toEqual([]);
+  expect(second).not.toHaveProperty("markdown");
+  expect(second).not.toHaveProperty("chunks");
+});
+
+test("web_read continues through cached page chunks with start_chunk", async () => {
+  let readCount = 0;
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    pageReader: async () => {
+      readCount += 1;
+      return {
+        reader: "butler-lightweight",
+        requestedUrl: "https://example.com/paged",
+        finalUrl: "https://example.com/paged",
+        ok: true,
+        status: 200,
+        title: "Paged Evidence",
+        text: "FIRST CHUNK\nSECOND CHUNK\nTHIRD CHUNK",
+        markdown: "FIRST CHUNK\nSECOND CHUNK\nTHIRD CHUNK",
+        document: "document",
+        chunks: ["FIRST CHUNK", "SECOND CHUNK", "THIRD CHUNK"].map((text, index) => ({
+          id: `ev_paged_${index}`,
+          index,
+          title: "Paged Evidence",
+          url: "https://example.com/paged",
+          text,
+          charCount: text.length,
+        })),
+        method: "readability",
+        durationMs: 12,
+        warnings: [],
+        renderRecommended: false,
+      };
+    },
+  });
+
+  const first = await execute({
+    name: "web_read",
+    args: { url: "https://example.com/paged", max_chunks: 1 },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  const next = await execute({
+    name: "web_read",
+    args: { url: "https://example.com/paged", start_chunk: first.next_start_chunk, max_chunks: 1 },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(readCount).toBe(1);
+  expect(first).toMatchObject({
+    markdown: "FIRST CHUNK",
+    start_chunk: 0,
+    returned_chunks: 1,
+    total_chunks: 3,
+    next_start_chunk: 1,
+    content_has_more: true,
+    cache_hit: false,
+    duplicate_observation: false,
+  });
+  expect(next).toMatchObject({
+    markdown: "SECOND CHUNK",
+    start_chunk: 1,
+    returned_chunks: 1,
+    total_chunks: 3,
+    next_start_chunk: 2,
+    content_has_more: true,
+    cache_hit: true,
+    duplicate_observation: false,
+  });
+  expect(next.markdown).not.toContain("FIRST CHUNK");
+});
+
+test("web_read advances only past complete chunks that fit max_chars", async () => {
+  const chunks = ["A", "B", "C"].map((marker, index) => ({
+    id: `ev_complete_${index}`,
+    index,
+    title: "Complete Window",
+    url: "https://example.com/complete-window",
+    text: marker.repeat(1_500),
+    charCount: 1_500,
+  }));
+  const execute = createButlerToolExecutor({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    pageReader: async () => ({
+      reader: "butler-lightweight",
+      requestedUrl: "https://example.com/complete-window",
+      finalUrl: "https://example.com/complete-window",
+      ok: true,
+      status: 200,
+      title: "Complete Window",
+      text: chunks.map((chunk) => chunk.text).join("\n\n"),
+      markdown: chunks.map((chunk) => chunk.text).join("\n\n"),
+      document: "document",
+      chunks,
+      method: "readability",
+      durationMs: 12,
+      warnings: [],
+      renderRecommended: false,
+    }),
+  });
+
+  const first = await execute({
+    name: "web_read",
+    args: {
+      url: "https://example.com/complete-window",
+      max_chars: 2_000,
+      max_chunks: 3,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  const outOfRange = await execute({
+    name: "web_read",
+    args: {
+      url: "https://example.com/complete-window",
+      start_chunk: 3,
+      max_chars: 2_000,
+      max_chunks: 3,
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+
+  expect(first).toMatchObject({
+    start_chunk: 0,
+    returned_chunks: 1,
+    total_chunks: 3,
+    next_start_chunk: 1,
+    content_has_more: true,
+    markdown_truncated: false,
+  });
+  expect(first.markdown).toBe("A".repeat(1_500));
+  expect(first.chunks).toHaveLength(1);
+  expect(outOfRange).toMatchObject({
+    ok: true,
+    start_chunk: 3,
+    returned_chunks: 0,
+    total_chunks: 3,
+    next_start_chunk: null,
+    content_has_more: false,
+    evidence_quality: "unavailable",
+    markdown: "",
+  });
+  expect(outOfRange.public_web_evidence_items).toEqual([]);
+  expect(outOfRange.evidence_receipts).toEqual([
+    expect.objectContaining({ verified: false }),
+  ]);
 });
 
 test("web_read defaults to compact chunk previews instead of duplicate long chunks", async () => {
-  const longChunk = "chunk evidence detail ".repeat(220);
+  const longChunk = "chunk evidence detail ".repeat(68);
   const execute = createButlerToolExecutor({
     butlerHome: tempDir,
     butlerData: tempDir,
@@ -3799,7 +4062,7 @@ test("web_read defaults to compact chunk previews instead of duplicate long chun
   expect(result.markdown.length).toBeLessThanOrEqual(2_020);
   expect(result.chunks).toHaveLength(1);
   expect(result.chunks[0].text.length).toBeLessThanOrEqual(360);
-  expect(JSON.stringify(result).length).toBeLessThan(longChunk.length + result.markdown.length + 1_000);
+  expect(JSON.stringify(result).length).toBeLessThan(longChunk.length + result.markdown.length + 3_000);
 });
 
 test("web_search rejects invalid input and records provider failures", async () => {

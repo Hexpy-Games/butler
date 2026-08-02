@@ -109,9 +109,11 @@ function runtimeTrackingMode(input: {
   );
   if (existingMode && existingSource === "explicit") return { mode: existingMode, source: existingSource };
   if (input.projectId?.trim()) return { mode: "ledger", source: "app_project_default" };
-  if (existingMode) return { mode: existingMode, source: existingSource ?? "legacy_metadata" };
+  if (existingMode && existingMode !== "none") {
+    return { mode: existingMode, source: existingSource ?? "legacy_metadata" };
+  }
   if (input.sessionKind === "project") return { mode: "local", source: "project_shell_default" };
-  return { mode: "none", source: "session_default" };
+  return { mode: "local", source: "session_default" };
 }
 
 function trackingModeValue(value: unknown): "ledger" | "local" | "none" | null {

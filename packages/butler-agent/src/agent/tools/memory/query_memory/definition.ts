@@ -86,6 +86,7 @@ export const queryMemoryToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

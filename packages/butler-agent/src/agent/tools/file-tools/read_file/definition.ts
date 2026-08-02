@@ -10,7 +10,7 @@ export const readFileToolDefinition: ButlerToolDefinition = {
     properties: {
       path: {
         type: "string",
-        description: "Path relative to the active workspace root. Never pass an absolute path or a workspace root.",
+        description: "File path inside the active workspace. Prefer a workspace-relative path; a contained absolute path shown by a tool is also accepted.",
       },
       start_line: { type: "integer", minimum: 1 },
       limit_lines: { type: "integer", minimum: 1, maximum: 10000 },
@@ -18,6 +18,7 @@ export const readFileToolDefinition: ButlerToolDefinition = {
     },
     required: ["path"],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

@@ -35,6 +35,7 @@ export function TurnActivityTimeline({
     <section
       aria-label={live ? "현재 작업" : "이 턴의 활동"}
       data-test-class="turn-current-phase-activity"
+      data-turn-id={turnId}
     >
       <Stack gap="xs" aria-live={live ? "polite" : undefined}>
         <Typo.Caption as="p" style={metaStyle}>
@@ -98,13 +99,18 @@ function ActivityBlock({
     <WorkActivityBlock
       density="compact"
       connected={connected}
+      data-work-stage={activity.phase}
       title={activity.title}
       description={
         <Stack as="span" gap="xs">
           <Typo.Caption as="span">{meta}</Typo.Caption>
           <Typo.Caption as="span">내용: {activity.summary}</Typo.Caption>
-          <Typo.Caption as="span">의도: {activity.rationale}</Typo.Caption>
-          <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
+          {activity.rationale ? (
+            <Typo.Caption as="span">의도: {activity.rationale}</Typo.Caption>
+          ) : null}
+          {activity.nextStep ? (
+            <Typo.Caption as="span">다음: {activity.nextStep}</Typo.Caption>
+          ) : null}
         </Stack>
       }
       tools={workActivityToolsFromRows(activity.operations, turnId)}
