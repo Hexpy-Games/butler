@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sha256Hex } from "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
@@ -21,10 +21,20 @@ describe("workspace path guard", () => {
   test("allows in-workspace files and blocks traversal, sensitive paths, and symlink escape", async () => {
     await writeFile(join(root, "ok.txt"), "ok");
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "ok.txt" })).ok).toBe(true);
+    expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: join(root, "ok.txt") })).ok).toBe(true);
+    expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: join(tmpdir(), "outside.txt") })).reason).toBe("path_escape");
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "../x" })).reason).toBe("parent_traversal_not_allowed");
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "config/models/chatgpt-oauth.json", allowMissingLeaf: true })).reason).toBe("sensitive_path_blocked");
     await symlink(tmpdir(), join(root, "escape"));
     expect((await resolveWorkspacePathGuard({ workspaceRoot: root, relativePath: "escape" })).reason).toBe("symlink_escape");
+    await mkdir(join(root, "real"));
+    await symlink("real", join(root, "alias"));
+    const missing = await resolveWorkspacePathGuard({
+      workspaceRoot: root,
+      relativePath: "alias/new.txt",
+      allowMissingLeaf: true,
+    });
+    expect(missing.realPath).toBe(join(await realpath(join(root, "real")), "new.txt"));
   });
 });
 
@@ -38,6 +48,7 @@ describe("read_file", () => {
     expect(lineRes.content).toBe("two\nthree"); expect(lineRes.start_line).toBe(2); expect(lineRes.end_line).toBe(3); expect(lineRes.truncated).toBe(true);
     await writeFile(join(root, "bin.dat"), Buffer.from([1, 0, 2]));
     expect(((await executeReadFileTool(call({ workspace_root: root, path: "bin.dat" }))) as any).error).toBe("binary_file_not_supported");
+    expect(((await executeReadFileTool(call({ workspace_root: root, path: join(root, "a.txt") }))) as any).content).toBe("abcdef");
   });
 
   test("rejects Project Ledger inspection through read_file", async () => {

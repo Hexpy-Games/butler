@@ -1,17 +1,16 @@
 import type { FunctionToolPromptOptions, PromptOptions } from "../runtime-contracts.ts";
-import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
+import { activeFunctionTools, compactTraceValue, createProviderRequestAttributor, finalEnvelopeRetryInstructions, finalNoToolInstructions, localFunctionToolInstructions, localUserContentWithAttachments, modelIterationLimitWithinUsageBudget, openAICompatibleUsageSample, prepareFunctionToolCall, throwIfAborted, withoutDynamicTools, writeWorkerTrace, type ProviderRequestAttributor } from "../shared/runtime-support.ts";
 import { createLocalChatCompletion, firstLocalAssistantMessage, isLocalContextOverflowError, localCompactEvidenceTools, localToolFallbackInstructions } from "./client.ts";
 import { extractLocalChatText, extractLocalFinalEnvelopeText, extractLocalToolCalls, type LocalChatMessage, localChatTools, localChatUrl, localFunctionToolContractRepairPrompt, localReasoningRequestParams, localToolsForRequiredRepair, standaloneLocalFunctionCallNames } from "./protocol.ts";
-import { serializeToolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
+  serializeToolResultPayloadForProvider,
+  toolBatchCompletedHandoffText,
+} from "../../../agent/model-tool-loop/index.ts";
 import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
 import { resolveLocalModelConfig } from "../shared/model-routing.ts";
 import type { LocalModelConfig } from "./models.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 
 
@@ -77,9 +76,11 @@ export async function runLocalFunctionToolPromptTextWithConfig(
   );
   const messages: LocalChatMessage[] = [{ role: "system", content: localFunctionToolInstructions(options.instructions) }];
   messages.push({ role: "user", content: localUserContentWithAttachments(options.prompt, options.attachments) });
+  const modelPreviewContext = createToolResultModelPreviewContext();
   let executedToolCalls = 0;
   let toolContractRepairAttempted = false;
   let requiredToolRepairNames: Set<string> | null = null;
+  let emptyResponseRecoveryUsed = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
@@ -131,7 +132,34 @@ export async function runLocalFunctionToolPromptTextWithConfig(
     const assistant = firstLocalAssistantMessage(response);
     const text = extractLocalChatText(assistant);
     const toolCalls = extractLocalToolCalls(assistant, allowedNames);
+    if (
+      text &&
+      (!Array.isArray(assistant?.tool_calls) || assistant.tool_calls.length === 0) &&
+      toolCalls.length > 0 &&
+      toolCalls.every((call) => !allowedNames.has(call.function.name))
+    ) {
+      const disposition = await reviewProviderFinalCandidate({
+        options,
+        text,
+        roundIndex: round,
+      });
+      if (disposition.kind === "final") return disposition.text;
+      messages.push({ role: "assistant", content: assistant.content ?? text });
+      messages.push({ role: "user", content: disposition.observation });
+      continue;
+    }
     if (toolCalls.length === 0) {
+      if (!text && executedToolCalls === 0) {
+        const observation = emptyResponseRecoveryObservation({
+          recoveryUsed: emptyResponseRecoveryUsed,
+          hasNextModelRound: round + 1 < maxRounds,
+        });
+        if (observation) {
+          emptyResponseRecoveryUsed = true;
+          messages.push({ role: "user", content: observation });
+          continue;
+        }
+      }
       if (executedToolCalls > 0) {
         const finalText = extractLocalFinalEnvelopeText(assistant);
         if (finalText) {
@@ -188,16 +216,20 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       tool_names: toolCalls.map((call) => call.function.name),
       executed_tool_calls: executedToolCalls,
     });
-    const batch = partitionSemanticToolBatch(toolCalls);
+    const preparedCalls = toolCalls.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.function.name,
+        rawArguments: call.function.arguments,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => {
-        const args = localToolArguments(call.function.arguments);
-        return {
-          name: call.function.name,
-          args: args.parsed,
-        };
-      }),
+      toolCalls: preparedCalls.map(({ call, prepared }) => ({
+        name: call.function.name,
+        args: prepared.args,
+      })),
     });
 
     messages.push({
@@ -206,47 +238,56 @@ export async function runLocalFunctionToolPromptTextWithConfig(
       tool_calls: toolCalls,
     });
 
-    for (const call of batch.executable) {
-      const args = localToolArguments(call.function.arguments);
-      log(`tool ${call.function.name}: ${args.raw}`);
+    for (const { call, prepared } of preparedCalls) {
+      log(`tool ${call.function.name}: ${prepared.rawArguments}`);
       writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.start", {
         provider: "local",
         name: call.function.name,
-        args_preview: compactTraceValue(args.parsed),
-        raw_args_chars: args.raw.length,
+        args_preview: compactTraceValue(prepared.args),
+        raw_args_chars: prepared.rawArguments.length,
       });
-      let payload: Record<string, unknown>;
-      try {
-        const result = await options.executeTool({
-          name: call.function.name,
-          args: args.parsed,
-          rawArguments: args.raw,
-        });
-        payload = { ok: true, output: result };
-        writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
-          provider: "local",
-          name: call.function.name,
-          ok: true,
-          output_preview: compactTraceValue(result),
-        });
-        executedToolCalls += 1;
-      } catch (error) {
-        payload = {
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+      let payload = prepared.errorPayload;
+      if (!payload) {
+        try {
+          const result = await options.executeTool({
+            name: call.function.name,
+            args: prepared.args,
+            rawArguments: prepared.rawArguments,
+            signal: options.signal,
+          });
+          payload = { ok: true, output: result };
+          writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
+            provider: "local",
+            name: call.function.name,
+            ok: true,
+            output_preview: compactTraceValue(result),
+          });
+          executedToolCalls += 1;
+        } catch (error) {
+          payload = {
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          };
+          writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
+            provider: "local",
+            name: call.function.name,
+            ok: false,
+            error: compactTraceValue(payload.error),
+          });
+          executedToolCalls += 1;
+        }
+      } else {
         writeWorkerTrace((options as { taskDir?: string }).taskDir, "provider.tool.finish", {
           provider: "local",
           name: call.function.name,
           ok: false,
           error: compactTraceValue(payload.error),
         });
-        executedToolCalls += 1;
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.function.name,
-            args: args.parsed,
+            args: prepared.args,
             output: payload.output,
           })
         : null;
@@ -255,23 +296,9 @@ export async function runLocalFunctionToolPromptTextWithConfig(
         role: "tool",
         tool_call_id: call.id,
         name: call.function.name,
-        content: serializeToolResultPayloadForProvider(payload),
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.function.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        name: call.function.name,
-        content: serializeToolResultPayloadForProvider({
-          ok: false,
-          output: blockCapacityToolOutput(observation),
+        content: serializeToolResultPayloadForProvider(payload, {
+          toolName: call.function.name,
+          context: modelPreviewContext,
         }),
       });
     }

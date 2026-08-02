@@ -1,9 +1,9 @@
-import { serializeToolResultPayloadForProvider } from "./tool-result-serialization.ts";
 import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "./tool-batch-capacity.ts";
+  createToolResultModelPreviewContext,
+  serializeToolResultPayloadForProvider,
+} from "./tool-result-serialization.ts";
+import type { ToolResultModelPreviewContext } from
+  "./tool-result-model-preview.ts";
 import type {
   AgentLoopEvent,
   AgentLoopInput,
@@ -16,6 +16,12 @@ import {
   executePreparedToolCall,
   prepareToolCall,
 } from "./tool-call-execution.ts";
+import {
+  extractAgentLoopImageAttachments,
+  withoutAgentLoopImageAttachments,
+} from "./tool-result-media.ts";
+import { emptyResponseRecoveryObservation } from
+  "./empty-response-recovery.ts";
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
@@ -30,18 +36,31 @@ function emit(
 
 function toolResultToMessage(input: {
   result: AgentLoopToolResult;
+  modelPreviewContext: ToolResultModelPreviewContext;
 }): AgentLoopMessage {
-  const payload = input.result.ok ? { ok: true, output: input.result.output } : {
+  const imageAttachments = extractAgentLoopImageAttachments(
+    input.result.output,
+    input.result.name,
+  );
+  const providerOutput = withoutAgentLoopImageAttachments(
+    input.result.output,
+  );
+  const payload = input.result.ok ? { ok: true, output: providerOutput } : {
     ok: false,
-    ...(input.result.output !== undefined
-      ? { output: input.result.output }
-      : { error: input.result.error ?? "unknown tool error" }),
+    error: input.result.error ?? "unknown tool error",
+    ...(providerOutput !== undefined
+      ? { output: providerOutput }
+      : {}),
   };
   return {
     role: "tool",
     toolCallId: input.result.toolCallId,
     name: input.result.name,
-    content: serializeToolResultPayloadForProvider(payload),
+    content: serializeToolResultPayloadForProvider(payload, {
+      toolName: input.result.name,
+      context: input.modelPreviewContext,
+    }),
+    ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
   };
 }
 
@@ -72,6 +91,8 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   const events: AgentLoopEvent[] = [];
   const maxIterations = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
   const toolResults: AgentLoopToolResult[] = [];
+  const modelPreviewContext = createToolResultModelPreviewContext();
+  let emptyResponseRecoveryUsed = false;
 
   const recordToolResult = async (inputRecord: {
     call: AgentLoopToolCall;
@@ -81,7 +102,10 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
   }): Promise<ToolStopCandidate | null> => {
     const { call, evaluateStop = true, result, iteration } = inputRecord;
     toolResults.push(result);
-    const toolMessage = toolResultToMessage({ result });
+    const toolMessage = toolResultToMessage({
+      result,
+      modelPreviewContext,
+    });
     messages.push(toolMessage);
     emit(events, input.onEvent, {
       type: "tool_result",
@@ -150,6 +174,20 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
     const calls = response.toolCalls ?? [];
     if (calls.length === 0) {
       const finalText = response.text?.trim();
+      const recoveryObservation = finalText
+        ? null
+        : emptyResponseRecoveryObservation({
+            recoveryUsed: emptyResponseRecoveryUsed,
+            hasNextModelRound: iteration + 1 < maxIterations,
+          });
+      if (recoveryObservation) {
+        emptyResponseRecoveryUsed = true;
+        messages.push({
+          role: "user",
+          content: recoveryObservation,
+        });
+        continue;
+      }
       if (finalText && input.reviewFinalCandidate) {
         const review = await input.reviewFinalCandidate({ text: finalText, iteration });
         if (review.status === "continue") {
@@ -173,35 +211,12 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       };
     }
 
-    const batch = partitionSemanticToolBatch(calls);
+    const preparedCalls = calls.map((call) => prepareToolCall(input, call));
     await input.onAssistantTextBeforeTools?.({
       text: response.text?.trim() ?? "",
-      toolCalls: batch.executable,
+      toolCalls: preparedCalls.map((prepared) => prepared.call),
       iteration,
     });
-
-    const preparedCalls = batch.executable.map((call) => prepareToolCall(input, call));
-    const recordDeferredCalls = async (): Promise<void> => {
-      for (const call of batch.deferred) {
-        const observation = blockCapacityObservation({
-          toolCallId: call.id,
-          toolName: call.name,
-          deferredCount: batch.deferred.length,
-        });
-        await recordToolResult({
-          call,
-          result: {
-            toolCallId: call.id,
-            name: call.name,
-            ok: false,
-            error: observation.summary,
-            output: blockCapacityToolOutput(observation),
-          },
-          iteration,
-          evaluateStop: false,
-        });
-      }
-    };
     const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null &&
       prepared.tool?.concurrencySafe === true,
@@ -228,7 +243,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
         });
         if (!stop && candidate) stop = candidate;
       }
-      await recordDeferredCalls();
       if (stop) return finishWithStopCandidate(stop);
       continue;
     }
@@ -247,7 +261,6 @@ export async function runAgentLoop(input: AgentLoopInput): Promise<AgentLoopOutp
       });
       if (stop) return finishWithStopCandidate(stop);
     }
-    await recordDeferredCalls();
   }
 
   emit(events, input.onEvent, {

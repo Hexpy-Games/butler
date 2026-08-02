@@ -257,3 +257,246 @@ test("public web previews retain bounded evidence IDs and source content for res
     }],
   });
 });
+
+test("public web previews retain factual search coverage without prescribing the next search", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output: {
+      ok: true,
+      query: "market research",
+      provider: "duckduckgo-html",
+      provider_overview: "Three sources report improving market breadth.",
+      public_web_evidence_items: [],
+      search_warnings: [
+        "1 of 4 planned web searches failed; successful results were preserved.",
+      ],
+      failed_queries: [{
+        query: "KOSPI latest flow",
+        error: "anti-bot challenge",
+      }],
+      coverage_budget: {
+        result_count: 3,
+        stop_reason: "provider_results_exhausted",
+        next_search_guidance: "Search only for a missing outcome.",
+      },
+      read_required: true,
+      read_reason: "Verify source-backed claims.",
+      recommended_read_urls: ["https://example.com/source"],
+    },
+  });
+
+  expect(preview).toMatchObject({
+    query: "market research",
+    provider: "duckduckgo-html",
+    provider_overview: "Three sources report improving market breadth.",
+    search_warnings: [
+      "1 of 4 planned web searches failed; successful results were preserved.",
+    ],
+    failed_query_count: 1,
+    failed_queries: [{
+      query: "KOSPI latest flow",
+      error: "anti-bot challenge",
+    }],
+    coverage_budget: {
+      result_count: 3,
+      stop_reason: "provider_results_exhausted",
+    },
+    read_required: true,
+    recommended_read_urls: ["https://example.com/source"],
+  });
+  expect(preview?.coverage_budget).not.toHaveProperty("next_search_guidance");
+});
+
+test("public web previews mechanically omit evidence already shown in the live turn", () => {
+  const seenPublicWebEvidenceItemIds = new Set<string>();
+  const output = {
+    ok: true,
+    public_web_evidence_items: [{
+      evidence_item_id: "same-content-id",
+      source_url: "https://example.com/fact",
+      source_identity: "example.com",
+      content_kind: "search_snippet",
+      bounded_content: "One factual observation.",
+      limitations: [],
+    }],
+  };
+
+  const first = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output,
+    seenPublicWebEvidenceItemIds,
+  });
+  const repeated = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output,
+    seenPublicWebEvidenceItemIds,
+  });
+
+  expect(first?.evidence_item_count).toBe(1);
+  expect(repeated?.evidence_item_count).toBe(0);
+  expect(repeated?.evidence_items).toEqual([]);
+});
+
+test("public web previews retain resolved ordinary tool errors", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_search",
+    output: {
+      ok: false,
+      error: {
+        code: "web_search_provider_error",
+        message: "Search provider was blocked by an anti-bot challenge.",
+        internal_detail: "must not enter the model context",
+      },
+      public_web_evidence_items: [],
+    },
+  });
+
+  expect(preview).toEqual({
+    tool_name: "web_search",
+    ok: false,
+    error: {
+      code: "web_search_provider_error",
+      message: "Search provider was blocked by an anti-bot challenge.",
+    },
+    evidence_items: [],
+    evidence_item_count: 0,
+  });
+});
+
+test("web read previews retain the default bounded page body", () => {
+  const pageBody = `${"first-section ".repeat(80)}LATE_PAGE_FACT${
+    " final-section".repeat(35)
+  }`;
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      requested_url: "https://example.com/report",
+      source_url: "https://example.com/report",
+      markdown: pageBody,
+      start_chunk: 1,
+      returned_chunks: 2,
+      total_chunks: 5,
+      next_start_chunk: 3,
+      effective_max_chars: 2_000,
+      effective_max_chunks: 2,
+      content_has_more: true,
+      markdown_truncated: false,
+      duplicate_observation: false,
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-short-chunk",
+        source_url: "https://example.com/report",
+        source_identity: "example.com",
+        content_kind: "page_chunk",
+        bounded_content: pageBody.slice(0, 320),
+        limitations: [],
+      }],
+    },
+  });
+
+  expect(preview?.page_excerpt).toContain("LATE_PAGE_FACT");
+  expect(preview).toMatchObject({
+    start_chunk: 1,
+    returned_chunks: 2,
+    total_chunks: 5,
+    next_start_chunk: 3,
+    effective_max_chars: 2_000,
+    effective_max_chunks: 2,
+    content_has_more: true,
+    markdown_truncated: false,
+    duplicate_observation: false,
+  });
+  expect(String(preview?.page_excerpt).length).toBeLessThanOrEqual(2_000);
+  expect(preview?.evidence_items).toEqual([{
+    evidence_item_id: "public-web-short-chunk",
+    source_url: "https://example.com/report",
+    source_identity: "example.com",
+    content_kind: "page_chunk",
+    limitations: [],
+  }]);
+  expect(JSON.stringify(preview).match(/LATE_PAGE_FACT/g)?.length).toBe(1);
+});
+
+test("web read previews expose the complete max_chars chunk window before advancing", () => {
+  const pageBody = `${"A".repeat(1_500)}${"B".repeat(1_500)}MIDDLE_WINDOW_FACT${
+    "C".repeat(1_500)
+  }`;
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      source_url: "https://example.com/complete-window",
+      markdown: pageBody,
+      effective_max_chars: 5_000,
+      returned_chunks: 3,
+      total_chunks: 4,
+      next_start_chunk: 3,
+      content_has_more: true,
+      public_web_evidence_items: [],
+    },
+  });
+
+  expect(preview?.page_excerpt).toBe(pageBody);
+  expect(preview?.page_excerpt).toContain("MIDDLE_WINDOW_FACT");
+});
+
+test("web read previews keep bounded evidence content when no page body is available", () => {
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      source_url: "https://example.com/report",
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-fallback-chunk",
+        source_url: "https://example.com/report",
+        source_identity: "example.com",
+        content_kind: "page_chunk",
+        bounded_content: "Fallback source fact.",
+        limitations: [],
+      }],
+    },
+  });
+
+  expect(preview).not.toHaveProperty("page_excerpt");
+  expect(preview?.evidence_items).toEqual([{
+    evidence_item_id: "public-web-fallback-chunk",
+    source_url: "https://example.com/report",
+    source_identity: "example.com",
+    content_kind: "page_chunk",
+    bounded_content: "Fallback source fact.",
+    limitations: [],
+  }]);
+});
+
+test("web read previews keep evidence chunks that are outside the page excerpt", () => {
+  const middleFact = "MIDDLE_ONLY_FACT: operating margin improved by 4.2 percentage points.";
+  const pageBody = `${"opening context ".repeat(180)}${middleFact}${
+    " closing context".repeat(180)
+  }`;
+  const preview = structuredToolResultModelPreview({
+    toolName: "web_read",
+    output: {
+      ok: true,
+      source_url: "https://example.com/long-report",
+      markdown: pageBody,
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-middle-chunk",
+        source_url: "https://example.com/long-report",
+        source_identity: "example.com",
+        content_kind: "page_chunk",
+        bounded_content: middleFact,
+        limitations: [],
+      }],
+    },
+  });
+
+  expect(String(preview?.page_excerpt)).not.toContain(middleFact);
+  expect(preview?.evidence_items).toEqual([{
+    evidence_item_id: "public-web-middle-chunk",
+    source_url: "https://example.com/long-report",
+    source_identity: "example.com",
+    content_kind: "page_chunk",
+    bounded_content: middleFact,
+    limitations: [],
+  }]);
+});

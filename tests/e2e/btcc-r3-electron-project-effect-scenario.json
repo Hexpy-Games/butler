@@ -1,0 +1,50 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "project-ledger-typed-effect",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "low",
+  "accessMode": "full_access",
+  "session": {
+    "id": "project-ledger-typed-effect",
+    "kind": "project",
+    "projectDisplayName": "BTCC R3 typed Project Ledger effect",
+    "title": "BTCC R3 Project Ledger effect"
+  },
+  "steps": [
+    {
+      "id": "create-reviewed-spec",
+      "prompt": "이 프로젝트의 Project Ledger에 정확한 ID `SPEC-BTCC-R3-E2E-PROJECT-EFFECT`인 `spec` 기록 하나를 만들어 주세요. 본문에는 정확한 표식 `BTCC_R3_PROJECT_LEDGER_EFFECT_MARKER_20260731`을 넣어 주세요. 이 요청은 지속 변경이므로 먼저 간결한 Work 계획을 만들고, `project_ledger_create` capability와 `project-ledger:spec:SPEC-BTCC-R3-E2E-PROJECT-EFFECT` target인 효과 action을 하나 포함한 뒤 현재 계획을 검토해 승인하세요. 그 다음 사용 가능한 native Project Ledger 도구를 찾아 typed `project_ledger_create` 효과로 기록을 만들고, native read로 실제 저장 내용을 확인한 뒤 결과를 검토하고 보고해 주세요.",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "finalIncludes": [
+          "SPEC-BTCC-R3-E2E-PROJECT-EFFECT",
+          "BTCC_R3_PROJECT_LEDGER_EFFECT_MARKER_20260731"
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept",
+          "resultToolNamesInclude": ["project_ledger_create"]
+        }
+      }
+    },
+    {
+      "id": "read-persisted-spec",
+      "prompt": "직전 답변의 기억을 근거로 삼지 말고 native Project Ledger read 도구로 `spec` 기록 `SPEC-BTCC-R3-E2E-PROJECT-EFFECT`의 실제 저장 본문을 다시 읽어 주세요. 저장된 표식을 그대로 확인해서 최종 답변에 `BTCC_R3_PROJECT_LEDGER_EFFECT_MARKER_20260731`을 포함하세요. 이 Turn에서는 어떤 변경도 하지 마세요.",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "finalIncludes": [
+          "SPEC-BTCC-R3-E2E-PROJECT-EFFECT",
+          "BTCC_R3_PROJECT_LEDGER_EFFECT_MARKER_20260731"
+        ]
+      }
+    }
+  ]
+}

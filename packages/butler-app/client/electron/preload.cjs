@@ -280,7 +280,9 @@ const butlerApp = Object.freeze({
     ipcRenderer.invoke("butler:agent-runtime-update-rollback", request ?? {}),
   exportAgentServiceDiagnostics: () =>
     ipcRenderer.invoke("butler:agent-service-diagnostics"),
-  quitApp: () => ipcRenderer.invoke("butler:quit-app"),
+  quitApp: (input = {}) => ipcRenderer.invoke("butler:quit-app", {
+    confirmed: input?.confirmed === true,
+  }),
   quitAndInstallUpdate: () =>
     ipcRenderer.invoke("butler:quit-and-install-update"),
   minimizeWindow: () => ipcRenderer.invoke("butler:window-minimize"),

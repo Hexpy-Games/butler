@@ -15,6 +15,7 @@ export const runDueAutomationsToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "reviewed_persistent",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

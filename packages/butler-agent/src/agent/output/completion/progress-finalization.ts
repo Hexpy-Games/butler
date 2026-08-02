@@ -87,6 +87,7 @@ function publicToolLabel(name: string, language: RuntimeMessageLanguage): string
   const labels: Record<string, { ko: string; en: string }> = {
     run_command: { ko: "명령 실행", en: "Command execution" },
     write_file: { ko: "파일 작성", en: "File writing" },
+    edit_file: { ko: "파일 수정", en: "File editing" },
     read_file: { ko: "파일 확인", en: "File inspection" },
     grep_files: { ko: "파일 검색", en: "File search" },
   };

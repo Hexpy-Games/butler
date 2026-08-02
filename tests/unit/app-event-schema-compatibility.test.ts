@@ -11,6 +11,78 @@ import { AppTurnProgressEventStore } from
 import { terminalTurnPage } from
   "../../packages/butler-agent/src/gateways/app/application/kernel/app-terminal-retention-initializer.ts";
 
+test("existing projects receive one stable collision-safe Ledger binding", () => {
+  const db = new Database(":memory:");
+  db.exec(`
+    CREATE TABLE projects (
+      id TEXT PRIMARY KEY,
+      display_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      workspace_path TEXT NOT NULL,
+      workspace_label TEXT NOT NULL,
+      safe_path_label TEXT NOT NULL,
+      pinned INTEGER NOT NULL DEFAULT 0,
+      archived INTEGER NOT NULL DEFAULT 0,
+      error_summary TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    INSERT INTO projects VALUES (
+      'project-sandy', 'Sandy', 'active', '/workspace/sandy', 'sandy-bot',
+      'sandy-bot', 0, 0, NULL, '2026-01-01', '2026-01-01'
+    );
+    INSERT INTO projects VALUES (
+      'project-a', 'Shared A', 'active', '/workspace/a', 'shared-web',
+      'shared-web', 0, 0, NULL, '2026-01-02', '2026-01-02'
+    );
+    INSERT INTO projects VALUES (
+      'project-b', 'Shared B', 'active', '/workspace/b', 'shared-web',
+      'shared-web', 0, 0, NULL, '2026-01-03', '2026-01-03'
+    );
+    INSERT INTO projects VALUES (
+      'project-unsafe', 'Unsafe', 'active', '/workspace/unsafe', 'Unsafe Name',
+      'Unsafe Name', 0, 0, NULL, '2026-01-04', '2026-01-04'
+    );
+    INSERT INTO projects VALUES (
+      'project-case-a', 'Case A', 'active', '/workspace/case-a', 'Foo',
+      'Foo', 0, 0, NULL, '2026-01-05', '2026-01-05'
+    );
+    INSERT INTO projects VALUES (
+      'project-case-b', 'Case B', 'active', '/workspace/case-b', 'foo',
+      'foo', 0, 0, NULL, '2026-01-06', '2026-01-06'
+    );
+    INSERT INTO projects VALUES (
+      'project-c', 'ID collision', 'active', '/workspace/c', 'project-d',
+      'project-d', 0, 0, NULL, '2026-01-07', '2026-01-07'
+    );
+    INSERT INTO projects VALUES (
+      'project-d', 'ID owner', 'active', '/workspace/d', 'project-d',
+      'project-d', 0, 0, NULL, '2026-01-08', '2026-01-08'
+    );
+  `);
+
+  migrateAppStoreSchema(db);
+
+  const bindings = db.query<{ id: string; ledger_project_id: string }, []>(`
+    SELECT id, ledger_project_id FROM projects ORDER BY id
+  `).all();
+  expect(bindings).toEqual([
+    { id: "project-a", ledger_project_id: "project-a" },
+    { id: "project-b", ledger_project_id: "project-b" },
+    { id: "project-c", ledger_project_id: "project-c" },
+    { id: "project-case-a", ledger_project_id: "project-case-a" },
+    { id: "project-case-b", ledger_project_id: "project-case-b" },
+    { id: "project-d", ledger_project_id: "project-d" },
+    { id: "project-sandy", ledger_project_id: "sandy-bot" },
+    { id: "project-unsafe", ledger_project_id: "project-unsafe" },
+  ]);
+  migrateAppStoreSchema(db);
+  expect(db.query<{ ledger_project_id: string }, [string]>(`
+    SELECT ledger_project_id FROM projects WHERE id = ?
+  `).get("project-sandy")?.ledger_project_id).toBe("sandy-bot");
+  db.close();
+});
+
 test("existing event stores retain JSON indexes without backfill or replacement", () => {
   const db = new Database(":memory:");
   db.exec(`

@@ -54,6 +54,7 @@ export const toolSearchToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

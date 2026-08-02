@@ -1,4 +1,12 @@
-import type { AgentLoopMessage, AgentLoopModelResponse, AgentLoopToolDefinition } from "../../../agent/model-tool-loop/index.ts";
+import {
+  type AgentLoopMessage,
+  type AgentLoopModelResponse,
+  type AgentLoopToolDefinition,
+  type ToolCallArgumentsValidation,
+  validateToolCallArguments,
+} from "../../../agent/model-tool-loop/index.ts";
+import { agentLoopImageDataUrl } from
+  "../../../agent/model-tool-loop/tool-result-media.ts";
 import type { FunctionToolCall, FunctionToolDefinition, FunctionToolPromptOptions, OpenAIResponse } from "../runtime-contracts.ts";
 import { extractResponseText } from "./usage.ts";
 
@@ -52,6 +60,7 @@ export function functionToolToAgentTool(tool: FunctionToolDefinition): AgentLoop
     name: tool.name,
     description: tool.description,
     inputSchema: tool.parameters as AgentLoopToolDefinition["inputSchema"],
+    concurrencySafe: tool.concurrencySafe,
   };
 }
 
@@ -72,7 +81,9 @@ export function stripNestedDescriptions(value: unknown): unknown {
 
 export function modelFacingFunctionTools(tools: readonly FunctionToolDefinition[]): FunctionToolDefinition[] {
   return tools.map((tool) => ({
-    ...tool,
+    type: "function",
+    name: tool.name,
+    description: tool.description,
     parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
   }));
 }
@@ -81,7 +92,16 @@ export function modelFacingFunctionTools(tools: readonly FunctionToolDefinition[
 
 export function activeFunctionTools(options: FunctionToolPromptOptions): FunctionToolDefinition[] {
   const dynamicTools = options.dynamicTools?.();
-  return modelFacingFunctionTools(dynamicTools && dynamicTools.length > 0 ? dynamicTools : options.tools);
+  const tools = dynamicTools && dynamicTools.length > 0 ? dynamicTools : options.tools;
+  return tools.map((tool) => ({
+    type: "function",
+    name: tool.name,
+    description: tool.description,
+    parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
+    ...(tool.concurrencySafe === undefined
+      ? {}
+      : { concurrencySafe: tool.concurrencySafe }),
+  }));
 }
 
 
@@ -96,35 +116,108 @@ export function withoutDynamicTools(options: FunctionToolPromptOptions): Functio
 export function newToolMessages(
   messages: AgentLoopMessage[],
   alreadySent: number,
+  butlerData?: string,
 ): {
   items: Array<Record<string, unknown>>;
+  statelessItems: Array<Record<string, unknown>>;
   sentCount: number;
 } {
   const toolMessages = messages.filter((message) => message.role === "tool");
   const next = toolMessages.slice(alreadySent);
+  const continuationItems = next.map((message) =>
+    openAIToolMessageItems(message, butlerData),
+  );
   return {
     sentCount: toolMessages.length,
-    items: next.map((message) => ({
-      type: "function_call_output",
-      call_id: message.toolCallId,
-      output: message.content,
-    })),
+    items: continuationItems.map(([item]) => item),
+    statelessItems: continuationItems.map(([, statelessItem]) => statelessItem),
   };
+}
+
+export function newAgentLoopContinuationMessages(
+  messages: AgentLoopMessage[],
+  alreadySent: {
+    toolMessages: number;
+    userMessages: number;
+  },
+  butlerData?: string,
+): {
+  items: Array<Record<string, unknown>>;
+  statelessItems: Array<Record<string, unknown>>;
+  sent: {
+    toolMessages: number;
+    userMessages: number;
+  };
+} {
+  const items: Array<Record<string, unknown>> = [];
+  const statelessItems: Array<Record<string, unknown>> = [];
+  let toolMessages = 0;
+  let userMessages = 0;
+
+  for (const message of messages) {
+    if (message.role === "tool") {
+      toolMessages += 1;
+      if (toolMessages <= alreadySent.toolMessages) continue;
+      const [item, statelessItem] = openAIToolMessageItems(message, butlerData);
+      items.push(item);
+      statelessItems.push(statelessItem);
+      continue;
+    }
+    if (message.role !== "user") continue;
+    userMessages += 1;
+    if (userMessages <= alreadySent.userMessages) continue;
+    const item = {
+      role: "user",
+      content: [{ type: "input_text", text: message.content }],
+    };
+    items.push(item);
+    statelessItems.push(item);
+  }
+
+  return {
+    items,
+    statelessItems,
+    sent: { toolMessages, userMessages },
+  };
+}
+
+function openAIToolMessageItems(
+  message: AgentLoopMessage,
+  butlerData?: string,
+): [Record<string, unknown>, Record<string, unknown>] {
+  const statelessItem = {
+    type: "function_call_output",
+    call_id: message.toolCallId,
+    output: message.content,
+  };
+  const images = (message.imageAttachments ?? []).flatMap((attachment) => {
+    const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
+    return imageUrl
+      ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
+      : [];
+  });
+  return [{
+    ...statelessItem,
+    output: images.length > 0
+      ? [{ type: "input_text", text: message.content }, ...images]
+      : message.content,
+  }, statelessItem];
 }
 
 
 
 export function responseToAgentModelResponse(
   response: OpenAIResponse,
-  allowedNames: Set<string>,
+  _allowedNames?: Set<string>,
 ): AgentLoopModelResponse {
   return {
     text: extractResponseText(response) || undefined,
     raw: response,
-    toolCalls: getFunctionCalls(response, allowedNames).map((call) => ({
+    toolCalls: getFunctionCalls(response).map((call) => ({
       id: call.call_id,
       name: call.name,
       arguments: parseToolArguments(call.arguments),
+      rawArguments: call.arguments,
     })),
   };
 }
@@ -161,22 +254,18 @@ export function finalEnvelopeRetryInstructions(): string {
 export function localToolArguments(raw: unknown): {
   parsed: Record<string, unknown>;
   raw: string;
+  valid: boolean;
+  error: string | null;
 } {
-  if (typeof raw === "string") {
-    return {
-      parsed: parseToolArguments(raw),
-      raw,
-    };
-  }
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    return {
-      parsed: raw as Record<string, unknown>,
-      raw: JSON.stringify(raw),
-    };
-  }
+  const validation = validateToolCallArguments({
+    toolName: "tool",
+    rawArguments: raw,
+  });
   return {
-    parsed: {},
-    raw: "{}",
+    parsed: validation.arguments,
+    raw: validation.rawArguments,
+    valid: validation.error === null,
+    error: validation.error,
   };
 }
 
@@ -212,7 +301,91 @@ export function normalizeLocalTextToolName(rawName: string, allowedNames: Set<st
     trimmed,
     segments.length > 0 ? segments[segments.length - 1] : "",
   ].filter(Boolean);
-  return candidates.find((candidate) => allowedNames.has(candidate)) ?? null;
+  // Prefer the exact advertised name (including a known namespaced alias), but
+  // preserve an explicit unknown structured call so the runtime can return
+  // ordinary, model-visible tool feedback instead of silently deleting it.
+  return candidates.find((candidate) => allowedNames.has(candidate))
+    ?? candidates[candidates.length - 1]
+    ?? null;
+}
+
+export function unavailableFunctionToolPayload(input: {
+  name: string;
+  args: Record<string, unknown>;
+  allowedNames: ReadonlySet<string>;
+}): Record<string, unknown> | null {
+  if (input.allowedNames.has(input.name)) return null;
+  const message = `No such tool available: ${input.name}`;
+  return {
+    ok: false,
+    error: message,
+    output: {
+      ok: false,
+      error: { code: "tool_unavailable", message },
+      observation_kind: "tool_unavailable",
+      model_visible_content: [
+        `Tool: ${input.name}`,
+        `Observation: ${message}`,
+        `Arguments: ${JSON.stringify(input.args)}`,
+        "Select one of the currently available tools or continue without it.",
+      ].join("\n"),
+    },
+  };
+}
+
+export interface PreparedFunctionToolCall {
+  args: Record<string, unknown>;
+  rawArguments: string;
+  errorPayload: Record<string, unknown> | null;
+}
+
+export function prepareFunctionToolCall(input: {
+  name: string;
+  rawArguments: unknown;
+  tools: readonly FunctionToolDefinition[];
+}): PreparedFunctionToolCall {
+  const tool = input.tools.find((candidate) => candidate.name === input.name);
+  const validation = validateToolCallArguments({
+    toolName: input.name,
+    rawArguments: input.rawArguments,
+    schema: tool?.parameters,
+  });
+  const unavailable = unavailableFunctionToolPayload({
+    name: input.name,
+    args: validation.arguments,
+    allowedNames: new Set(input.tools.map((candidate) => candidate.name)),
+  });
+  return {
+    args: validation.arguments,
+    rawArguments: validation.rawArguments,
+    errorPayload: unavailable ?? invalidFunctionToolArgumentsPayload({
+      name: input.name,
+      validation,
+    }),
+  };
+}
+
+function invalidFunctionToolArgumentsPayload(input: {
+  name: string;
+  validation: ToolCallArgumentsValidation;
+}): Record<string, unknown> | null {
+  const message = input.validation.error;
+  if (!message) return null;
+  return {
+    ok: false,
+    error: message,
+    output: {
+      ok: false,
+      error: { code: "tool_invalid_arguments", message },
+      observation_kind: "tool_invalid_arguments",
+      model_visible_content: [
+        `Tool: ${input.name}`,
+        `Observation: ${message}`,
+        `Arguments: ${input.validation.rawArguments}`,
+        "Use this observation to retry with arguments that match the tool schema, or continue without the tool.",
+      ].join("\n"),
+    },
+  };
 }
 
 

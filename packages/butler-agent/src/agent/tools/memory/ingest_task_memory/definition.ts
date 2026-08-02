@@ -17,6 +17,7 @@ export const ingestTaskMemoryToolDefinition = {
       "task_id",
     ],
   },
+  effectBoundary: "turn_local",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

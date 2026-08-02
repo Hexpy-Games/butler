@@ -3,29 +3,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { exchangeCompleteRoots } from "../../../../foundation/complete-root-commit/index.ts";
 import { writeJsonFileAtomic } from "../../../persistence/atomic-json-store.ts";
-import type { ProjectLedgerCorePublication, ProjectLedgerHead } from "./contracts.ts";
+import type {
+  ProjectLedgerCorePublication,
+  ProjectLedgerHead,
+} from "./runtime-types.ts";
 import { loadProjectLedgerCore } from "./project-ledger-core.ts";
 import { observeProjectLedgerHead } from "./observe-project-ledger.ts";
+import {
+  applyProjectLedgerRecordUpdate,
+  type ProjectLedgerRecordUpdate,
+} from "./external-effect-record-update.ts";
+export type { ProjectLedgerRecordUpdate } from "./external-effect-record-update.ts";
 
-export type ProjectLedgerRecordUpdate = {
-  id: string;
-  kind?: string;
-  title?: string;
-  status?: string;
-  body?: string;
-  spec?: string;
-  acceptance?: string;
-  validation?: string;
-  review?: string;
-  report?: string;
-  implementation?: string;
-  mitigation?: string;
-  reason?: string;
-  codeCommits?: string;
-  ledgerCommits?: string;
-};
-
-type ProjectLedgerEffectResult = {
+export type ProjectLedgerEffectResult = {
   schema: "butler.btcc-project-ledger-effect-result.v1";
   publicationId: string;
   effectKey: string;
@@ -35,6 +25,11 @@ type ProjectLedgerEffectResult = {
   promotion: unknown;
   observation: unknown;
 };
+
+export type ProjectLedgerEffectReconciliation =
+  | { status: "applied"; result: ProjectLedgerEffectResult }
+  | { status: "not_applied" }
+  | { status: "uncertain"; message: string };
 
 type EffectOccurrence = {
   schema: "butler.btcc-project-ledger-effect-occurrence.v1";
@@ -65,13 +60,7 @@ export async function applyProjectLedgerRecordUpdates(input: {
   }
   const core = await loadProjectLedgerCore();
   const updatesSha256 = digest(stableJson(input.updates));
-  const occurrenceId = digest(stableJson({
-    schema: "butler.btcc-project-ledger-effect.v1",
-    projectRoot: input.projectRoot,
-    effectKey: input.effectKey,
-  }));
-  const root = join(input.butlerData, "runtime", "btcc-project-ledger-effects");
-  const occurrencePath = join(root, "occurrences", `${occurrenceId}.json`);
+  const { root, occurrenceId, occurrencePath } = effectPaths(input);
   const occurrence = loadOccurrence(occurrencePath);
   if (occurrence && occurrence.updatesSha256 !== updatesSha256) {
     throw new ProjectLedgerEffectConflictError(input.effectKey);
@@ -99,17 +88,12 @@ export async function applyProjectLedgerRecordUpdates(input: {
         ...transaction,
         materialize(projectRoot: string) {
           for (const update of input.updates) {
-            applyRecordUpdate(core, projectRoot, update);
+            applyProjectLedgerRecordUpdate(core, projectRoot, update);
           }
           for (const view of ["dashboard", "handoff", "roadmap"]) {
             core.render(projectRoot, view, { write: true });
           }
-          const check = core.check(projectRoot);
-          if (!check.ok) {
-            throw new Error(
-              `Prepared Project Ledger effect failed validation: ${stableJson(check.issues ?? [])}`,
-            );
-          }
+          core.writeIndex(projectRoot);
         },
       }) as ProjectLedgerCorePublication;
   writeJsonFileAtomic(occurrencePath, {
@@ -142,41 +126,56 @@ export async function applyProjectLedgerRecordUpdates(input: {
   return result;
 }
 
-function applyRecordUpdate(
-  core: Awaited<ReturnType<typeof loadProjectLedgerCore>>,
-  projectRoot: string,
-  update: ProjectLedgerRecordUpdate,
-): void {
-  const current = core.resolveRecord(projectRoot, {
-    id: update.id,
-    ...(update.kind ? { kind: update.kind } : {}),
-  }).record;
-  if (!update.status || !["work", "task", "attempt"].includes(current.kind)) {
-    core.updateRecord(projectRoot, updateOptions(update));
-    return;
+export async function reconcileProjectLedgerRecordUpdates(input: {
+  butlerData: string;
+  projectRoot: string;
+  effectKey: string;
+  updates: ProjectLedgerRecordUpdate[];
+}): Promise<ProjectLedgerEffectReconciliation> {
+  const { occurrencePath } = effectPaths(input);
+  const occurrence = loadOccurrence(occurrencePath);
+  if (!occurrence) return { status: "not_applied" };
+  const updatesSha256 = digest(stableJson(input.updates));
+  if (occurrence.updatesSha256 !== updatesSha256) {
+    return {
+      status: "uncertain",
+      message: "The stored Project Ledger effect occurrence has different content.",
+    };
   }
-  const path = core.planTransitionPath(current.kind, current.status, update.status);
-  for (const status of path.slice(0, -1)) {
-    core.updateRecord(projectRoot, { id: current.id, kind: current.kind, status });
+  if (occurrence.status === "observed" && occurrence.result) {
+    return { status: "applied", result: occurrence.result };
   }
-  if (path.length > 0 || hasNonStatusUpdate(update)) {
-    core.updateRecord(projectRoot, {
-      ...updateOptions(update),
-      kind: current.kind,
-      status: update.status,
-    });
+  try {
+    return {
+      status: "applied",
+      result: await applyProjectLedgerRecordUpdates(input),
+    };
+  } catch (error) {
+    return {
+      status: "uncertain",
+      message: error instanceof Error
+        ? error.message
+        : "The Project Ledger effect could not be reconciled safely.",
+    };
   }
 }
 
-function hasNonStatusUpdate(update: ProjectLedgerRecordUpdate): boolean {
-  return Object.entries(update).some(([key, value]) =>
-    key !== "id" && key !== "kind" && key !== "status" && value !== undefined);
-}
-
-function updateOptions(update: ProjectLedgerRecordUpdate): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(update).filter(([, value]) => value !== undefined),
-  );
+function effectPaths(input: {
+  butlerData: string;
+  projectRoot: string;
+  effectKey: string;
+}): { root: string; occurrenceId: string; occurrencePath: string } {
+  const occurrenceId = digest(stableJson({
+    schema: "butler.btcc-project-ledger-effect.v1",
+    projectRoot: input.projectRoot,
+    effectKey: input.effectKey,
+  }));
+  const root = join(input.butlerData, "runtime", "btcc-project-ledger-effects");
+  return {
+    root,
+    occurrenceId,
+    occurrencePath: join(root, "occurrences", `${occurrenceId}.json`),
+  };
 }
 
 function loadJournal(path: string): (ProjectLedgerCorePublication & { status: string }) | null {

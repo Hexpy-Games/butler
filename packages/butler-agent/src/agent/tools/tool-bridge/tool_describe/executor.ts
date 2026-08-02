@@ -7,8 +7,12 @@ import {
 } from "../../progressive-catalog.ts";
 import { BUTLER_TOOLS, TOOL_CAPABILITY_METADATA } from "../../registry.ts";
 import { nativeToolAvailability } from "../../tool-availability.ts";
+import type {
+  ButlerToolDefinition,
+  NativeToolAvailabilityOverrides,
+} from "../../types.ts";
 import { disabledExternalToolDescription } from "../external-description.ts";
-import { canBridgeMcpTool, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
+import { mcpBridgeAvailability, nativeBridgeAvailability, scopedOutDisabledReason } from "../scope.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type PluginToolCatalog =
@@ -27,6 +31,9 @@ export function createToolDescribeToolHandler(input: {
   pluginCatalog?: PluginToolCatalog;
   pluginToolDescriber?: PluginToolDescriber;
   currentToolNames?: readonly string[] | (() => readonly string[]);
+  nativeToolDefinitions?: readonly ButlerToolDefinition[];
+  hiddenNativeToolNames?: readonly string[];
+  nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
 }) {
   return async (call: ToolCall) => {
     const ids = parseIds(call.args.ids);
@@ -58,6 +65,9 @@ async function describeToolId(
     pluginCatalog?: PluginToolCatalog;
     pluginToolDescriber?: PluginToolDescriber;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolDefinitions?: readonly ButlerToolDefinition[];
+    hiddenNativeToolNames?: readonly string[];
+    nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
 ) {
   const parsed = parseToolCatalogId(id);
@@ -79,9 +89,14 @@ function describeNativeTool(
     butlerData: string;
     webSearchProvider?: WebSearchProvider;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolDefinitions?: readonly ButlerToolDefinition[];
+    hiddenNativeToolNames?: readonly string[];
+    nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
 ) {
-  const tool = BUTLER_TOOLS.find((candidate) => candidate.name === name);
+  if (input.hiddenNativeToolNames?.includes(name)) return null;
+  const tool = (input.nativeToolDefinitions ?? BUTLER_TOOLS)
+    .find((candidate) => candidate.name === name);
   if (!tool) return null;
   const metadata = TOOL_CAPABILITY_METADATA[tool.name];
   if (!metadata) return null;
@@ -89,6 +104,7 @@ function describeNativeTool(
     toolName: tool.name,
     metadata,
     currentToolNames: input.currentToolNames,
+    nativeToolAvailabilityOverrides: input.nativeToolAvailabilityOverrides,
   });
   const availability: { enabled: boolean; disabledReason: string | null; recoveryHint?: string | null } =
     bridgeAvailability.enabled
@@ -121,23 +137,24 @@ async function describeMcpTool(
     butlerData: string;
     mcpTimeoutMs?: number;
     currentToolNames?: readonly string[] | (() => readonly string[]);
+    nativeToolAvailabilityOverrides?: NativeToolAvailabilityOverrides;
   },
 ) {
-  if (!canBridgeMcpTool(input)) {
-    return {
+  const bridgeAvailability = mcpBridgeAvailability(input);
+  if (!bridgeAvailability.enabled) {
+    const disabledReason = bridgeAvailability.disabledReason ??
+      scopedOutDisabledReason("mcp");
+    return disabledExternalToolDescription({
       id,
       name: toolName,
       namespace: serverId,
       provider: "mcp",
       category: "mcp",
-      enabled: false,
-      disabled_reason: scopedOutDisabledReason("mcp"),
-      recovery_hint: "Use a session with the MCP tool profile or choose an enabled native tool from tool_search.",
-      safety_notes: ["MCP tools require explicit current-session MCP capability."],
-      schema: {},
-      schema_digest: schemaDigest({}),
-      call_affordance: { type: "disabled", reason: scopedOutDisabledReason("mcp") },
-    };
+      disabledReason,
+      recoveryHint: bridgeAvailability.recoveryHint ??
+        "Choose an enabled native tool from tool_search.",
+      safetyNotes: ["MCP tools require explicit current-session MCP capability."],
+    });
   }
   const tool = await describeMcpToolSchema({
     butlerData: input.butlerData,

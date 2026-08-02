@@ -6,12 +6,18 @@ export type SessionTitleGenerator = (input: {
   signal?: AbortSignal;
 }) => Promise<string | null> | string | null;
 
+const SESSION_TITLE_DEADLINE_MS = 5_000;
+
 export async function generateSessionTitleWithProvider(
   provider: ModelProviderAdapter,
   input: { text: string; model: ModelRef; signal?: AbortSignal },
 ): Promise<string | null> {
   const boundedText = input.text.replace(/\s+/gu, " ").trim().slice(0, 1200);
   if (!boundedText || input.signal?.aborted) return null;
+  const deadlineSignal = AbortSignal.timeout(SESSION_TITLE_DEADLINE_MS);
+  const signal = input.signal
+    ? AbortSignal.any([input.signal, deadlineSignal])
+    : deadlineSignal;
   const result = await provider.invoke({
     model: input.model,
     systemPrompt: [
@@ -27,8 +33,9 @@ export async function generateSessionTitleWithProvider(
     metadata: {
       purpose: "app_session_title",
     },
+    signal,
   });
-  if (input.signal?.aborted) return null;
+  if (signal.aborted) return null;
   return safeGeneratedSessionTitle(result.text);
 }
 

@@ -1,3 +1,5 @@
+import type { AgentLoopImageAttachment } from "./tool-result-media.ts";
+
 export type AgentLoopRole = "system" | "user" | "assistant" | "tool";
 
 export interface AgentLoopMessage {
@@ -5,6 +7,7 @@ export interface AgentLoopMessage {
   content: string;
   toolCallId?: string;
   name?: string;
+  imageAttachments?: AgentLoopImageAttachment[];
 }
 
 export interface AgentLoopToolDefinition {
@@ -23,6 +26,7 @@ export interface AgentLoopToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+  rawArguments?: unknown;
 }
 
 export interface AgentLoopToolResult {

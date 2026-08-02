@@ -213,9 +213,32 @@ async function executePlannedWebSearch(input: {
     query: query.query,
     max_results: perQueryLimit,
   }));
-  const outputs = await Promise.all(
-    plannedInputs.map((plannedInput) => input.provider.search(plannedInput)),
-  );
+  const settled = await settlePlannedSearches({
+    provider: input.provider,
+    inputs: plannedInputs,
+  });
+  if (input.searchInput.signal?.aborted) {
+    throw input.searchInput.signal.reason ??
+      new DOMException("The planned web search was aborted.", "AbortError");
+  }
+  const outputs: WebSearchOutput[] = [];
+  const failedQueries: NonNullable<WebSearchOutput["failed_queries"]> = [];
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") {
+      outputs.push(result.value);
+      return;
+    }
+    failedQueries.push({
+      query: plannedInputs[index]?.query ?? "unknown planned query",
+      error: boundedErrorMessage(result.reason),
+    });
+  });
+  if (outputs.length === 0) {
+    const firstFailure = failedQueries[0]?.error ?? "unknown provider failure";
+    throw new Error(
+      `All ${plannedInputs.length} planned web searches failed via ${input.provider.id}: ${firstFailure}`,
+    );
+  }
 
   const results = interleaveSearchResults(outputs, finalLimit);
   const providers = Array.from(new Set(outputs.map((output) => output.provider)));
@@ -227,10 +250,50 @@ async function executePlannedWebSearch(input: {
     usage: {
       search_requests: outputs.reduce(
         (sum, output) => sum + (output.usage?.search_requests ?? 1),
-        0,
+        failedQueries.length,
       ),
     },
+    ...(failedQueries.length > 0
+      ? {
+        search_warnings: [
+          `${failedQueries.length} of ${plannedInputs.length} planned web searches failed; successful results were preserved.`,
+        ],
+        failed_queries: failedQueries,
+      }
+      : {}),
   };
+}
+
+async function settlePlannedSearches(input: {
+  provider: WebSearchProvider;
+  inputs: Array<Required<Pick<WebSearchInput, "query">> & WebSearchInput>;
+}): Promise<Array<PromiseSettledResult<WebSearchOutput>>> {
+  const configuredConcurrency = input.provider.plannedSearchConcurrency ??
+    (input.provider.id.includes("duckduckgo-html") ? 2 : undefined);
+  const batchSize = configuredConcurrency === undefined
+    ? input.inputs.length
+    : Math.max(1, Math.min(
+      Math.trunc(configuredConcurrency),
+      input.inputs.length,
+    ));
+  const settled: Array<PromiseSettledResult<WebSearchOutput>> = [];
+  for (let offset = 0; offset < input.inputs.length; offset += batchSize) {
+    const signal = input.inputs[offset]?.signal;
+    if (signal?.aborted) {
+      throw signal.reason ??
+        new DOMException("The planned web search was aborted.", "AbortError");
+    }
+    const batch = input.inputs.slice(offset, offset + batchSize);
+    settled.push(...await Promise.allSettled(
+      batch.map((searchInput) => input.provider.search(searchInput)),
+    ));
+  }
+  return settled;
+}
+
+function boundedErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.trim().slice(0, 500) || "unknown provider failure";
 }
 
 function interleaveSearchResults(

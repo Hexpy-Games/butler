@@ -58,6 +58,7 @@ const WORKSPACE_TOOL_NAMES = [
   "run_command",
   "read_file",
   "write_file",
+  "edit_file",
   "grep_files",
   "read_tool_evidence_artifact",
   "read_tool_output_artifact",
@@ -118,6 +119,7 @@ const WORKER_DEFAULT_TOOL_NAMES = [
   "run_command",
   "read_file",
   "write_file",
+  "edit_file",
   "grep_files",
   "read_tool_evidence_artifact",
   "read_tool_output_artifact",
@@ -394,11 +396,22 @@ export function selectButlerToolsForTurn(input: {
 }
 
 function fixedWorkspaceToolDefinition(tool: FunctionToolDefinition): FunctionToolDefinition {
-  if (tool.name !== "grep_files" && tool.name !== "read_file" && tool.name !== "write_file") return tool;
+  if (
+    tool.name !== "grep_files" &&
+    tool.name !== "read_file" &&
+    tool.name !== "write_file" &&
+    tool.name !== "edit_file"
+  ) return tool;
   const parameters = recordValue(tool.parameters);
   const properties = recordValue(parameters.properties);
-  if (!("workspace_root" in properties)) return tool;
-  const { workspace_root: _runtimeOwnedWorkspaceRoot, ...modelProperties } = properties;
+  const modelProperties = { ...properties };
+  delete modelProperties.workspace_root;
+  if (tool.name === "write_file" || tool.name === "edit_file") {
+    delete modelProperties.expected_sha256;
+  }
+  if (Object.keys(modelProperties).length === Object.keys(properties).length) {
+    return tool;
+  }
   return {
     ...tool,
     parameters: {

@@ -4,6 +4,8 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { recordWebSearchMetric } from "../../packages/butler-agent/src/integrations/search/provider.ts";
 import { appendPromptCacheMetric } from "../../packages/butler-agent/src/integrations/providers/prompt-cache-metrics.ts";
+import { modelIterationLimitWithinUsageBudget } from
+  "../../packages/butler-agent/src/integrations/providers/shared/usage.ts";
 import { readUsageMonitor } from "../../packages/butler-agent/src/operations/metrics/usage-monitor.ts";
 
 function tempRoot(): string {
@@ -11,6 +13,20 @@ function tempRoot(): string {
   mkdirSync(root, { recursive: true });
   return root;
 }
+
+test("unbounded guided rounds remain bounded by any finite provider usage budget", () => {
+  expect(modelIterationLimitWithinUsageBudget(Number.POSITIVE_INFINITY))
+    .toBe(Number.POSITIVE_INFINITY);
+  expect(modelIterationLimitWithinUsageBudget(4)).toBe(4);
+  expect(modelIterationLimitWithinUsageBudget(100)).toBe(60);
+  expect(modelIterationLimitWithinUsageBudget(Number.POSITIVE_INFINITY, {
+    budgetState: {
+      status: "ok",
+      requestCount: 2,
+      maxRequests: 8,
+    },
+  })).toBe(5);
+});
 
 test("usage monitor summarizes model cache and search usage without private queries", () => {
   const butlerData = tempRoot();

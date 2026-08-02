@@ -383,6 +383,12 @@ test("app release manifest exposes app package files only", () => {
     "packages/butler-app/client/electron/package.json",
   );
   expect(appReleasePaths).toContain(
+    "packages/butler-app/client/electron/local-page-preview-host.mjs",
+  );
+  expect(appReleasePaths).toContain(
+    "packages/butler-app/client/electron/local-page-preview-path-policy.mjs",
+  );
+  expect(appReleasePaths).toContain(
     "packages/butler-app/client/electron/scripts",
   );
   expect(appReleasePaths).toContain(
@@ -1503,6 +1509,20 @@ test("app package smoke uses real bundled Agent release resources", () => {
       "app-managed-runtime-home",
       "bundled-payload-repair-source",
     ]);
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "electron-shell",
+      )?.paths,
+    ).toContain(
+      "packages/butler-app/client/electron/local-page-preview-host.mjs",
+    );
+    expect(
+      dependencyClosure.appOwnedDependencies.find(
+        (item: any) => item.id === "electron-shell",
+      )?.paths,
+    ).toContain(
+      "packages/butler-app/client/electron/local-page-preview-path-policy.mjs",
+    );
     expect(
       dependencyClosure.appOwnedDependencies.find(
         (item: any) => item.id === "background-service-registration-metadata",

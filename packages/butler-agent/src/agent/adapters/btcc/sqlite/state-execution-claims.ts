@@ -1,9 +1,10 @@
 import type { Database } from "bun:sqlite";
-import type { BtccRuntimeDependencies } from "../../../btcc/gateway-api.ts";
+import type { TurnStateRepository } from
+  "../../../btcc/turn/index.ts";
 import { digest } from "./identity.ts";
 import type { RuntimeOwnerAuthority } from "./runtime-owner/index.ts";
 
-type TurnRepository = BtccRuntimeDependencies["turns"];
+type TurnRepository = TurnStateRepository;
 type Turn = NonNullable<Awaited<ReturnType<TurnRepository["findTurn"]>>>;
 type Claim = Awaited<ReturnType<TurnRepository["acquireStateExecutionClaim"]>>;
 type ClaimRow = {

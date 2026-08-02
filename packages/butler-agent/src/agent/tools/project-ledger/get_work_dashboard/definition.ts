@@ -19,6 +19,7 @@ export const getWorkDashboardToolDefinition = {
     },
     required: [],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

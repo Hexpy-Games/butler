@@ -32,7 +32,7 @@ export interface HostedChatToolCall {
   type?: "function";
   function: {
     name: string;
-    arguments: string | Record<string, unknown>;
+    arguments: unknown;
   };
 }
 
@@ -205,7 +205,7 @@ export function extractHostedChatToolCalls(message: any, allowedNames: Set<strin
       type: "function",
       function: {
         name,
-        arguments: call.function.arguments ?? "{}",
+        arguments: call.function.arguments,
       },
     }];
   });

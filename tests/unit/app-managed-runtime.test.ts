@@ -833,6 +833,8 @@ test("App-managed runtime activation does not shell out to host tar", () => {
     "utf8",
   );
   expect(source).toContain("managedRuntimeSourceExecutablePath");
+  expect(source).toContain("const archiveWorkerTimeoutMs = 60_000;");
+  expect(source.match(/timeout: archiveWorkerTimeoutMs/gu)).toHaveLength(3);
   expect(source).toContain("windows-archive-worker.mjs");
   expect(source).toContain("posix-archive-worker.mjs");
   expect(source).toContain("readSync(descriptor");

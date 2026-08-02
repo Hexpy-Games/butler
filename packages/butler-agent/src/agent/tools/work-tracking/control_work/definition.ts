@@ -31,6 +31,7 @@ export const controlWorkToolDefinition = {
       "action",
     ],
   },
+  effectBoundary: "turn_local",
   concurrencySafe: false,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

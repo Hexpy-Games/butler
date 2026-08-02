@@ -8,8 +8,8 @@ export type PhaseActivity = {
   phase?: string;
   title: string;
   summary: string;
-  rationale: string;
-  nextStep: string;
+  rationale?: string;
+  nextStep?: string;
   createdAt?: string;
   operations: ProgressRow[];
 };
@@ -143,7 +143,7 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
     if (isPhaseActivityRow(row)) {
       const activity: PhaseActivity = {
         id: row.id,
-        phase: row.semantic_block_id,
+        phase: row.activity_stage ?? row.semantic_block_id,
         title: row.work_decision_title ??
           compactLegacyDisplayTitle(row.work_decision_summary),
         summary: row.work_decision_summary,
@@ -165,17 +165,11 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
 function isPhaseActivityRow(row: ProgressRow): row is ProgressRow & {
   semantic_block_id: string;
   work_decision_summary: string;
-  work_decision_rationale: string;
-  work_decision_next_step: string;
 } {
   return row.kind === "message" && !row.work_block_id &&
     Boolean(row.semantic_block_id) &&
     row.work_decision_source === "model-authored" &&
-    Boolean(
-      row.work_decision_summary &&
-      row.work_decision_rationale &&
-      row.work_decision_next_step,
-    );
+    Boolean(row.work_decision_summary);
 }
 
 function currentOperationActivity(rows: ProgressRow[]): ProgressRow | undefined {
@@ -203,9 +197,19 @@ function latestPublicActivity(rows: ProgressRow[], hasModelActivity: boolean): P
   });
 }
 
-function currentSemanticState(rows: ProgressRow[], activities: PhaseActivity[]): string | undefined {
-  return findLatest(rows, (row) => Boolean(row.semantic_block_id))?.semantic_block_id
-    ?? activities.at(-1)?.phase;
+function currentSemanticState(
+  rows: ProgressRow[],
+  activities: PhaseActivity[],
+): string | undefined {
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (!row) continue;
+    if (row.activity_stage) return row.activity_stage;
+    if (row.semantic_block_id && row.bridge_phase !== "btcc_operation") {
+      return row.semantic_block_id;
+    }
+  }
+  return activities.at(-1)?.phase;
 }
 
 function findLatest(

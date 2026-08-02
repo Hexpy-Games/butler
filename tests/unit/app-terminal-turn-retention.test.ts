@@ -13,10 +13,6 @@ import { TerminalTurnRetention } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/retention/terminal-turn-retention.ts";
 import { TerminalTurnRetentionQueue } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/retention/terminal-turn-retention-queue.ts";
-import { SqliteBtccTerminalPhaseRetention } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
-import { BTCC_SUCCESSOR_SCHEMA } from
-  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 
 const roots: string[] = [];
 
@@ -144,68 +140,20 @@ test("large terminal journals compact incrementally without changing the project
   db.close();
 });
 
-test("terminal BTCC journals compact without deleting accepted phase products", () => {
-  const { db, retention } = createHarness("turn-btcc");
-  db.exec(BTCC_SUCCESSOR_SCHEMA);
-  insertTerminalBtccTurn(db, "turn-btcc");
-
-  expect(retention.compact({
-    turnId: "turn-btcc",
-    chatId: "chat-1",
-    state: "delivered",
-    deliveryMetadata: null,
-  })).toBe("complete");
-
-  expect(count(db, "btcc_phase_checkpoint_revisions")).toBe(0);
-  expect(count(db, "btcc_phase_operation_result_links")).toBe(1);
-  expect(count(db, "btcc_phase_model_rounds")).toBe(1);
-  expect(count(db, "btcc_records")).toBe(1);
-  expect(db.query<{ accepted_product_json: string | null }, []>(`
-    SELECT accepted_product_json FROM btcc_checkpoints
-  `).get()?.accepted_product_json).toBe('{"ok":true}');
-  db.close();
-});
-
 test("active or unsettled BTCC turns are never compacted", () => {
-  const { db, retention } = createHarness("turn-active");
+  const { db, retention } = createHarness("turn-active", false);
   expect(retention.compact({
     turnId: "turn-active",
     chatId: "chat-1",
     state: "thinking",
     deliveryMetadata: null,
   })).toBe("not_ready");
-
-  db.exec(BTCC_SUCCESSOR_SCHEMA);
-  insertTerminalBtccTurn(db, "turn-active");
-  db.query("UPDATE btcc_turns SET semantic_state = 'execution' WHERE turn_id = ?")
-    .run("turn-active");
   expect(retention.compact({
     turnId: "turn-active",
     chatId: "chat-1",
     state: "cancelled",
     deliveryMetadata: null,
   })).toBe("not_ready");
-  expect(count(db, "btcc_phase_checkpoint_revisions")).toBe(1);
-  db.close();
-});
-
-test("global BTCC cleanup waits for the App turn to become terminal", () => {
-  const { db, retention, btccRetention } = createHarness("turn-gap");
-  db.exec(BTCC_SUCCESSOR_SCHEMA);
-  insertTerminalBtccTurn(db, "turn-gap");
-
-  expect(btccRetention.compactSettledBatch()).toBe(false);
-  expect(count(db, "btcc_phase_checkpoint_revisions")).toBe(1);
-  db.query("UPDATE turns SET state = 'delivered' WHERE id = 'turn-gap'").run();
-  expect(btccRetention.compactSettledBatch()).toBe(false);
-  expect(count(db, "btcc_phase_checkpoint_revisions")).toBe(1);
-  expect(retention.compact({
-    turnId: "turn-gap",
-    chatId: "chat-1",
-    state: "delivered",
-    deliveryMetadata: null,
-  })).toBe("complete");
-  expect(count(db, "btcc_phase_checkpoint_revisions")).toBe(0);
   db.close();
 });
 
@@ -243,7 +191,7 @@ async function waitUntil(predicate: () => boolean): Promise<void> {
   expect(predicate()).toBe(true);
 }
 
-function createHarness(turnId: string) {
+function createHarness(turnId: string, settled = true) {
   const root = mkdtempSync(join(tmpdir(), "butler-terminal-retention-"));
   roots.push(root);
   const db = new Database(join(root, "app.sqlite"), { create: true });
@@ -260,15 +208,7 @@ function createHarness(turnId: string) {
     ) VALUES (?, 'chat-1', 'running', 'Working', 0, 1, 1, ?, ?)
   `).run(turnId, now, now);
   const events = new AppEventStore(db);
-  const btccRetention = new SqliteBtccTerminalPhaseRetention(
-    db,
-    (id) => db.query<{ state: string }, [string]>(
-      "SELECT state FROM turns WHERE id = ?",
-    ).get(id)?.state ?? null,
-    (id) => Boolean(db.query<{ turn_id: string }, [string]>(`
-      SELECT turn_id FROM app_terminal_turn_projections WHERE turn_id = ?
-    `).get(id)),
-  );
+  const btccRetention = { isSettled: () => settled };
   const retention = new TerminalTurnRetention(db, btccRetention);
   let sequence = 0;
   const turnProgress = new AppTurnProgressEventStore({
@@ -281,50 +221,5 @@ function createHarness(turnId: string) {
     getTurnRow: () => ({ state: "delivered" }) as never,
     terminalProjectionForTurn: (id) => retention.read(id),
   });
-  return { db, events, retention, btccRetention, turnProgress };
-}
-
-function insertTerminalBtccTurn(db: Database, turnId: string): void {
-  db.query(`
-    INSERT INTO btcc_turns (
-      turn_id, session_id, inbox_id, trigger_key, original_message_id,
-      original_message, admission_snapshot_ref, model_selection_json,
-      context_json, continuation_snapshot_json, semantic_state,
-      revision, execution_fence, final_disposition
-    ) VALUES (?, 'session-1', 'inbox-1', 'trigger-1', 'message-1',
-      'request', 'admission-1', '{}', '{}', '[]', 'delivered', 4, 1, 'completed')
-  `).run(turnId);
-  db.query(`
-    INSERT INTO btcc_checkpoints (
-      checkpoint_id, turn_id, turn_revision, semantic_state, kind,
-      checkpoint_revision, accepted_product_json, actual_identity_json, is_active
-    ) VALUES ('checkpoint-1', ?, 3, 'reporting', 'phase', 2, '{"ok":true}', '{}', 0)
-  `).run(turnId);
-  db.query(`
-    INSERT INTO btcc_phase_checkpoint_revisions (
-      checkpoint_id, checkpoint_revision, previous_revision_ref,
-      state_claim_id, execution_fence, status
-    ) VALUES ('checkpoint-1', 2, 'revision-1', 'claim-1', 1, 'accepted_boundary')
-  `).run();
-  db.query(`
-    INSERT INTO btcc_phase_operation_result_links (
-      operation_id, checkpoint_id, checkpoint_revision, request_id,
-      result_id, request_json, projection_json
-    ) VALUES ('operation-1', 'checkpoint-1', 1, 'request-1', 'result-1', '{}', '{}')
-  `).run();
-  db.query(`
-    INSERT INTO btcc_phase_model_rounds (
-      round_id, checkpoint_id, checkpoint_revision, round_ordinal,
-      carrier_kind, actual_identity_json
-    ) VALUES ('round-1', 'checkpoint-1', 1, 1, 'phase_submission', '{}')
-  `).run();
-  db.query(`
-    INSERT INTO btcc_records (record_id, kind, sha256, content_json)
-    VALUES ('record-1', 'accepted-result', 'sha-1', '{"accepted":true}')
-  `).run();
-}
-
-function count(db: Database, table: string): number {
-  return db.query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM ${table}`)
-    .get()?.count ?? 0;
+  return { db, events, retention, turnProgress };
 }

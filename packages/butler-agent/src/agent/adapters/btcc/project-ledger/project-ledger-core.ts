@@ -2,7 +2,14 @@ import { fileURLToPath } from "node:url";
 
 type ProjectLedgerRecord = {
   filePath: string;
-  record: { id: string; kind: string; status?: string; parentId?: string };
+  record: {
+    id: string;
+    kind: string;
+    status?: string;
+    parentId?: string;
+    spec?: string;
+    specExemption?: boolean;
+  };
 };
 
 export type ProjectLedgerCore = {
@@ -26,6 +33,7 @@ export type ProjectLedgerCore = {
       path: string;
     }>;
   };
+  writeIndex(project: string): unknown;
   check(project: string): { ok: boolean; issues?: unknown[] };
   render(project: string, view: string, options: Record<string, unknown>): unknown;
   projectPath(project: string, path: string): string;
@@ -88,6 +96,7 @@ async function loadCore(): Promise<ProjectLedgerCore> {
     updateTask: lifecycle.updateTask,
     updateWork: lifecycle.updateWork,
     buildIndex: indexer.buildIndex,
+    writeIndex: indexer.writeIndex,
     check: indexer.check,
     render: renderer.render,
     projectPath: filesystem.projectPath,

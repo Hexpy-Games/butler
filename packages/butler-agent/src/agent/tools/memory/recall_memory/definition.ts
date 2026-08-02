@@ -93,6 +93,7 @@ export const recallMemoryToolDefinition = {
       "cue",
     ],
   },
+  effectBoundary: "none",
   concurrencySafe: true,
   interruptBehavior: "continue",
   transcriptVisibility: "visible",

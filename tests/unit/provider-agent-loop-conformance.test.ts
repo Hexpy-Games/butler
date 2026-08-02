@@ -68,6 +68,7 @@ test("every provider family preserves decisions results and usage across native 
           properties: { step: { type: "number" } },
           required: ["step"],
         },
+        concurrencySafe: true,
       }],
       usageAttribution: {
         turnId: `turn-conformance-${harness.family}`,
@@ -115,6 +116,53 @@ test("every provider family preserves decisions results and usage across native 
     expect(JSON.stringify(bodies[2]), harness.family).not.toContain("completed-tool-evidence");
     expect(JSON.stringify(bodies[1]), harness.family).not.toContain("evidence_packet");
     expect(JSON.stringify(bodies[2]), harness.family).not.toContain("evidence_packet");
+    expect(JSON.stringify(bodies), harness.family).not.toContain("concurrencySafe");
+  }
+});
+
+test("every provider family executes all tool calls from one model response", async () => {
+  for (const harness of providerHarnesses()) {
+    const executedSteps: number[] = [];
+    const visibleSteps: number[][] = [];
+    let responseRound = 0;
+    globalThis.fetch = (async () => {
+      responseRound += 1;
+      return Response.json(
+        responseRound === 1
+          ? providerBatchResponse(harness.family, 7)
+          : harness.response(3),
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Inspect all seven requested targets and report.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 2,
+      butlerData: makeTempDir(`${harness.family}-full-tool-batch`),
+      tools: [{
+        type: "function",
+        name: "probe",
+        description: "Inspect one requested target.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: { step: { type: "number" } },
+          required: ["step"],
+        },
+      }],
+      onAssistantTextBeforeTools: ({ toolCalls }) => {
+        visibleSteps.push(toolCalls.map((call) => Number(call.args.step)));
+      },
+      executeTool: async (call) => {
+        executedSteps.push(Number(call.args.step));
+        return { observed: call.args.step };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(responseRound, harness.family).toBe(2);
+    expect(visibleSteps, harness.family).toEqual([[1, 2, 3, 4, 5, 6, 7]]);
+    expect(executedSteps, harness.family).toEqual([1, 2, 3, 4, 5, 6, 7]);
   }
 });
 
@@ -188,6 +236,76 @@ test("every provider family continues a rejected final candidate in the same nat
   }
 });
 
+test("every provider family retries one contentless response with a visible continuation observation", async () => {
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return Response.json(
+        responseRound === 1
+          ? contentlessResponse(harness.family)
+          : harness.response(3),
+      );
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Recover from one contentless provider response.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 3,
+      butlerData: makeTempDir(`${harness.family}-contentless-recovery`),
+      tools: [],
+      executeTool: async () => ({ unreachable: true }),
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(responseRound, harness.family).toBe(2);
+    expect(JSON.stringify(bodies[1]), harness.family)
+      .toContain("The previous response contained no text or tool call");
+  }
+});
+
+test("every provider family returns unknown structured tools as correctable feedback", async () => {
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    let executorCalls = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      return Response.json(
+        responseRound === 1
+          ? harness.response(1, "hallucinated_tool")
+          : harness.response(3),
+      );
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Recover from one unavailable tool and answer.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 3,
+      butlerData: makeTempDir(`${harness.family}-unknown-tool`),
+      tools: [{
+        type: "function",
+        name: "probe",
+        description: "The only available tool.",
+        parameters: { type: "object", properties: {} },
+      }],
+      executeTool: async () => {
+        executorCalls += 1;
+        return { unreachable: true };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(executorCalls, harness.family).toBe(0);
+    expect(responseRound, harness.family).toBe(2);
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("tool_unavailable");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("hallucinated_tool");
+  }
+});
+
 test("every provider family receives bounded conversation context inline on the next request", async () => {
   for (const harness of providerHarnesses()) {
     const bodies: Array<Record<string, unknown>> = [];
@@ -237,6 +355,82 @@ test("every provider family receives bounded conversation context inline on the 
     expect(result, harness.family).toBe("Provider loop complete.");
     expect(JSON.stringify(bodies[1]), harness.family).toContain(marker);
     expect(JSON.stringify(bodies[1]), harness.family).toContain("private-runtime-session");
+  }
+});
+
+test("every provider family returns malformed and schema-invalid arguments for model correction", async () => {
+  const invalidArguments: unknown[] = [
+    "{malformed",
+    ["not-an-object"],
+    { mode: "unsupported", items: ["one", "two"] },
+    { mode: "brief", items: ["one"] },
+    { mode: "brief", items: ["one", "two"], extra_one: true, extra_two: true },
+  ];
+  for (const harness of providerHarnesses()) {
+    const bodies: Array<Record<string, unknown>> = [];
+    let responseRound = 0;
+    let executorCalls = 0;
+    globalThis.fetch = (async (_url, init) => {
+      responseRound += 1;
+      bodies.push(JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>);
+      if (responseRound <= invalidArguments.length) {
+        return Response.json(providerArgumentResponse(
+          harness.family,
+          responseRound,
+          invalidArguments[responseRound - 1],
+        ));
+      }
+      if (responseRound === invalidArguments.length + 1) {
+        return Response.json(providerArgumentResponse(
+          harness.family,
+          responseRound,
+          { mode: "brief", items: ["one", "two"] },
+        ));
+      }
+      return Response.json(harness.response(3));
+    }) as typeof fetch;
+
+    const result = await harness.run({
+      prompt: "Correct invalid tool arguments, collect once, and report.",
+      model: modelForFamily(harness.family),
+      maxToolRounds: 8,
+      butlerData: makeTempDir(`${harness.family}-invalid-tool-arguments`),
+      tools: [{
+        type: "function",
+        name: "collect",
+        description: "Collect typed values.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          required: ["mode", "items"],
+          properties: {
+            mode: { type: "string", enum: ["brief", "full"] },
+            items: {
+              type: "array",
+              minItems: 2,
+              items: { type: "string" },
+            },
+          },
+        },
+      }],
+      executeTool: async () => {
+        executorCalls += 1;
+        return { collected: true };
+      },
+    });
+
+    expect(result, harness.family).toBe("Provider loop complete.");
+    expect(executorCalls, harness.family).toBe(1);
+    expect(responseRound, harness.family).toBe(7);
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("malformed JSON arguments");
+    expect(JSON.stringify(bodies[1]), harness.family).toContain("{malformed");
+    expect(JSON.stringify(bodies[2]), harness.family).toContain("JSON object");
+    expect(JSON.stringify(bodies[3]), harness.family).toContain("Invalid enum value at $.mode");
+    expect(JSON.stringify(bodies[4]), harness.family).toContain("Expected at least 2 items at $.items");
+    expect(JSON.stringify(bodies[5]), harness.family).toContain("extra_one, extra_two");
+    expect(JSON.stringify(bodies[5]).match(/tool_invalid_arguments/gu)?.length ?? 0, harness.family)
+      .toBeGreaterThan(0);
+    expect(JSON.stringify(bodies[6]), harness.family).toContain("collected");
   }
 });
 
@@ -293,6 +487,149 @@ function decisionText(step: number): string {
     "rationale: The next action depends on the exact observed result.",
     "next_step: Return this result before choosing the following step.",
   ].join("\n");
+}
+
+function providerBatchResponse(
+  family: ProviderFamily,
+  count: number,
+): Record<string, unknown> {
+  const steps = Array.from({ length: count }, (_, index) => index + 1);
+  const text = "Inspect all requested targets before reporting.";
+  if (family === "openai") {
+    return {
+      id: "response-batch",
+      output: [
+        { type: "message", content: [{ type: "output_text", text }] },
+        ...steps.map((step) => ({
+          type: "function_call",
+          call_id: `call-${step}`,
+          name: "probe",
+          arguments: JSON.stringify({ step }),
+        })),
+      ],
+      usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [
+        { type: "text", text },
+        ...steps.map((step) => ({
+          type: "tool_use",
+          id: `call-${step}`,
+          name: "probe",
+          input: { step },
+        })),
+      ],
+      usage: { input_tokens: 10, output_tokens: 2 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{
+        content: {
+          role: "model",
+          parts: [
+            { text },
+            ...steps.map((step) => ({
+              functionCall: { name: "probe", args: { step } },
+            })),
+          ],
+        },
+      }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 2,
+        totalTokenCount: 12,
+      },
+    };
+  }
+  return {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: text,
+        tool_calls: steps.map((step) => ({
+          id: `call-${step}`,
+          type: "function",
+          function: { name: "probe", arguments: JSON.stringify({ step }) },
+        })),
+      },
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  };
+}
+
+function providerArgumentResponse(
+  family: ProviderFamily,
+  round: number,
+  rawArguments: unknown,
+): Record<string, unknown> {
+  const text = `Correct tool arguments round ${round}.`;
+  const stringArguments = typeof rawArguments === "string"
+    ? rawArguments
+    : JSON.stringify(rawArguments);
+  if (family === "openai") {
+    return {
+      id: `response-arguments-${round}`,
+      output: [
+        { type: "message", content: [{ type: "output_text", text }] },
+        {
+          type: "function_call",
+          call_id: `call-arguments-${round}`,
+          name: "collect",
+          arguments: stringArguments,
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 2, total_tokens: 12 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [
+        { type: "text", text },
+        {
+          type: "tool_use",
+          id: `call-arguments-${round}`,
+          name: "collect",
+          input: rawArguments,
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 2 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{
+        content: {
+          role: "model",
+          parts: [
+            { text },
+            { functionCall: { name: "collect", args: rawArguments } },
+          ],
+        },
+      }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 2,
+        totalTokenCount: 12,
+      },
+    };
+  }
+  return {
+    choices: [{
+      message: {
+        role: "assistant",
+        content: text,
+        tool_calls: [{
+          id: `call-arguments-${round}`,
+          type: "function",
+          function: { name: "collect", arguments: stringArguments },
+        }],
+      },
+    }],
+    usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+  };
 }
 
 function openAIResponse(round: number, toolName = "probe"): Record<string, unknown> {
@@ -411,6 +748,36 @@ function prematureFinalResponse(family: ProviderFamily): Record<string, unknown>
   return {
     choices: [{ message: { role: "assistant", content } }],
     usage: { prompt_tokens: 12, completion_tokens: 2, total_tokens: 14 },
+  };
+}
+
+function contentlessResponse(family: ProviderFamily): Record<string, unknown> {
+  if (family === "openai") {
+    return {
+      id: "response-contentless",
+      output: [],
+      usage: { input_tokens: 10, output_tokens: 0, total_tokens: 10 },
+    };
+  }
+  if (family === "anthropic") {
+    return {
+      content: [],
+      usage: { input_tokens: 10, output_tokens: 0 },
+    };
+  }
+  if (family === "google") {
+    return {
+      candidates: [{ content: { role: "model", parts: [] } }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 0,
+        totalTokenCount: 10,
+      },
+    };
+  }
+  return {
+    choices: [{ message: { role: "assistant", content: "" } }],
+    usage: { prompt_tokens: 10, completion_tokens: 0, total_tokens: 10 },
   };
 }
 

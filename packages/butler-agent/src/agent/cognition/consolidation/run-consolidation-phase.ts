@@ -12,7 +12,6 @@ import { activeFeedbackEntries, resolveFeedbackEntry } from "../feedback/buffer.
 import { aggregateSourceQuality, listKnowHowEntries, rebuildKnowHowIndex, writeKnowHowEntry, type KnowHowEntry } from "../know-how/store.ts";
 import { checkMemoryMetadataIntegrity } from "../memory/metadata.ts";
 import { readMemoryHealth } from "../memory/quality.ts";
-import { runBtccRetrospective } from "../retrospective/index.ts";
 import type {
   ConsolidationPhase,
   RunCognitionConsolidationInput,
@@ -27,16 +26,6 @@ export async function runConsolidationPhase(
   if (phase === "preflight") return { ok: true };
   if (phase === "feedback_triage") {
     return { active_feedback_count: activeFeedbackEntries(butlerData).length };
-  }
-  if (phase === "btcc_retrospective") {
-    return await runBtccRetrospective({
-      butlerData,
-      dbPath: input.btccDbPath ?? join(butlerData, "app-server", "butler-client.sqlite"),
-      runId: input.runId,
-      ...(input.btccRetrospectiveModelRunner
-        ? { modelRunner: input.btccRetrospectiveModelRunner }
-        : {}),
-    });
   }
   if (phase === "profile_consolidation") return await consolidateProfile(butlerData, input);
   if (phase === "new_chat_briefing") {

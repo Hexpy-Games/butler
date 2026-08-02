@@ -48,6 +48,7 @@ interface AppProjectRow {
   workspace_path: string | null;
   workspace_label: string | null;
   safe_path_label: string | null;
+  ledger_project_id: string | null;
   updated_at: string;
 }
 
@@ -64,8 +65,13 @@ export class ActiveProjectLedgerResolver {
     now?: Date;
   }): ActiveProjectLedgerReference {
     const projectsRoot = resolve(input.butlerData, "project-ledger", "projects");
-    const lookupRef = input.explicitRef?.trim() || input.appProjectId?.trim() || "";
-    const appLookup = lookupAppProject(input.appMessageDbPath, lookupRef);
+    const explicitLookupRef = input.explicitRef?.trim() || "";
+    const lookupRef = explicitLookupRef || input.appProjectId?.trim() || "";
+    const appLookup = lookupAppProject(
+      input.appMessageDbPath,
+      lookupRef,
+      Boolean(explicitLookupRef),
+    );
     const cacheKey = this.cacheKey(input, appLookup.row, projectsRoot);
     const cached = this.cache.get(cacheKey);
     if (cached && cached.initialization_generation === ledgerInitializationGeneration(cached.ledger_root)) return cached;
@@ -98,7 +104,9 @@ export class ActiveProjectLedgerResolver {
     });
     const roots = candidateIds.map((id) => ({ id, root: join(projectsRoot, safeProjectId(id)) }));
     for (const candidate of roots) validateCanonicalContainment(projectsRoot, candidate.root);
-    const initialized = roots.filter((candidate) => ledgerInitialized(candidate.root));
+    const initialized = roots.filter((candidate) =>
+      projectLedgerRootInitialized(candidate.root),
+    );
     const selected = initialized[0] ?? roots[0];
     const referenceWorkspacePath = workspacePath ?? (
       input.explicitRef && !path.isAbsolute(input.explicitRef) ? selected?.root : undefined
@@ -184,15 +192,15 @@ function orderedCandidateIds(input: {
   allowAppProjectIdFallback: boolean;
 }): string[] {
   const workspaceIds = input.workspacePath ? workspaceProjectIds(input.workspacePath) : [];
-  const values = [
-    ...workspaceIds,
-    input.row?.safe_path_label,
-    input.row?.workspace_label,
-    input.row?.display_name,
-    input.row?.id,
-    input.explicitRef && !path.isAbsolute(input.explicitRef) ? input.explicitRef : null,
-    input.allowAppProjectIdFallback ? input.appProjectId : null,
-  ];
+  const values = input.row
+    ? [input.row.ledger_project_id, input.row.id]
+    : [
+        ...workspaceIds,
+        input.explicitRef && !path.isAbsolute(input.explicitRef)
+          ? input.explicitRef
+          : null,
+        input.allowAppProjectIdFallback ? input.appProjectId : null,
+      ];
   const seen = new Set<string>();
   return values.flatMap((value) => {
     const normalized = value?.trim();
@@ -214,18 +222,31 @@ function workspaceProjectIds(workspacePath: string): string[] {
 function lookupAppProject(
   dbPath: string | undefined,
   lookupRef: string,
+  allowAliasLookup: boolean,
 ): { row: AppProjectRow | null; degradation?: ActiveProjectLedgerReference["degradation_code"] } {
   if (!dbPath?.trim() || !existsSync(dbPath)) return { row: null, degradation: "app_project_db_missing" };
   if (!lookupRef) return { row: null, degradation: "app_project_row_missing" };
   let db: Database | null = null;
   try {
     db = new Database(dbPath, { readonly: true });
-    const row = db.query<AppProjectRow, [string, string, string, string, string]>(`
-      SELECT id, display_name, workspace_path, workspace_label, safe_path_label, updated_at
+    const exact = db.query<AppProjectRow, [string]>(`
+      SELECT id, display_name, workspace_path, workspace_label, safe_path_label,
+        ledger_project_id, updated_at
       FROM projects
-      WHERE archived = 0 AND (id = ? OR display_name = ? OR workspace_path = ? OR workspace_label = ? OR safe_path_label = ?)
+      WHERE archived = 0 AND id = ?
+      LIMIT 1
+    `).get(lookupRef);
+    if (exact) return { row: exact };
+    if (!allowAliasLookup) {
+      return { row: null, degradation: "app_project_row_missing" };
+    }
+    const row = db.query<AppProjectRow, [string, string, string, string]>(`
+      SELECT id, display_name, workspace_path, workspace_label, safe_path_label,
+        ledger_project_id, updated_at
+      FROM projects
+      WHERE archived = 0 AND (display_name = ? OR workspace_path = ? OR workspace_label = ? OR safe_path_label = ?)
       ORDER BY updated_at DESC, id ASC LIMIT 1
-    `).get(lookupRef, lookupRef, lookupRef, lookupRef, lookupRef);
+    `).get(lookupRef, lookupRef, lookupRef, lookupRef);
     return row ? { row } : { row: null, degradation: "app_project_row_missing" };
   } catch {
     return { row: null, degradation: "app_project_db_missing" };
@@ -256,14 +277,14 @@ function buildReference(input: {
     ledger_root: resolve(input.ledgerRoot),
     source: input.source,
     resolved_at: (input.now ?? new Date()).toISOString(),
-    initialized: ledgerInitialized(input.ledgerRoot),
+    initialized: projectLedgerRootInitialized(input.ledgerRoot),
     initialization_generation: ledgerInitializationGeneration(input.ledgerRoot),
     ...(input.degradationCode ? { degradation_code: input.degradationCode } : {}),
     ...(input.ambiguityCount ? { ambiguity_count: input.ambiguityCount } : {}),
   };
 }
 
-function ledgerInitialized(root: string): boolean {
+export function projectLedgerRootInitialized(root: string): boolean {
   return existsSync(join(root, "project.json")) && existsSync(join(root, "ledger.jsonl"));
 }
 

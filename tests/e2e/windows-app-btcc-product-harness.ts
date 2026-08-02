@@ -6,22 +6,15 @@ import { AgentConversationStore } from
   "../../packages/butler-agent/src/agent/conversation/store.ts";
 import { PromptAssembler } from
   "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
-import { createBtccTurnRuntime } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
-import { openBtccSqliteStores } from
-  "../../packages/butler-agent/src/agent/adapters/index.ts";
-import { BtccTurnProgressHub } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
-import { DirectHarnessModel } from
-  "../../packages/butler-agent/src/interfaces/btcc-harness/direct-harness-model.ts";
-import { HarnessArtifactWorkspace } from
-  "../../packages/butler-agent/src/interfaces/btcc-harness/harness-artifact-workspace.ts";
-import { HarnessOperationExecutor } from
-  "../../packages/butler-agent/src/interfaces/btcc-harness/harness-operation-executor.ts";
+import { createProductionBtccComposition } from
+  "../../packages/butler-agent/src/agent/composition/index.ts";
 import {
   BtccGatewayLifecycleService,
   BtccInboundDispatcher,
+  bindBtccGatewayRuntime,
+  createBtccQueueEntryDecider,
   createBtccGatewayHandlers,
+  type BtccQueueEntryDecider,
 } from "../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
 import { createAppTransportAdapter } from
   "../../packages/butler-agent/src/interfaces/transport/app/adapter.ts";
@@ -42,13 +35,13 @@ import { launchWindowsAppBrowser } from
 
 type ApiEnvelope = { data?: Record<string, unknown> };
 type PublicMessage = { id?: string; role?: string; text?: string; turn_id?: string };
+type PublicTurn = { state?: string };
 
 export async function runWindowsAppBtccProductHarness(
   options: { browser?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   const root = mkdtempSync(join(tmpdir(), "butler-windows-app-btcc-"));
   const dbPath = join(root, "app.sqlite");
-  const btccPath = join(root, "runtime", "btcc-successor.sqlite");
   markExecutorReady(root);
   const bindings = new SessionBindingStore(
     join(root, "runtime", "session-store.sqlite"),
@@ -62,34 +55,23 @@ export async function runWindowsAppBtccProductHarness(
     automationSchedulerIntervalMs: false,
     sessionBindingStore: bindings,
   });
-  const stores = openBtccSqliteStores({
-    dbPath: btccPath,
+  let modelCalls = 0;
+  const btcc = createProductionBtccComposition({
+    butlerHome: process.cwd(),
+    butlerData: root,
+    appMessageDbPath: dbPath,
     ownerId: `windows-product-harness:${process.pid}`,
-    storageProfile: "ephemeral",
-  });
-  const progress = new BtccTurnProgressHub();
-  const model = new DirectHarnessModel();
-  const runtime = createBtccTurnRuntime({
-    admission: stores.admission,
-    turns: stores.turns,
-    phaseConversations: stores.phaseConversations,
-    model,
-    operations: new HarnessOperationExecutor(root),
-    artifacts: new HarnessArtifactWorkspace(),
-    messages: stores.messages,
-    retrospective: stores.retrospective,
-    operationalRecovery: stores.operationalRecovery,
-    committedSuccessorReadiness: stores.committedSuccessorReadiness,
-    progress,
+    promptRunner: async () => {
+      modelCalls += 1;
+      return "안녕하세요. 반갑습니다.";
+    },
   });
   const conversations = new AgentConversationStore({ butlerData: root });
   const lifecycle = new BtccGatewayLifecycleService({
     store: bindings,
     conversationStore: conversations,
     butlerData: root,
-    runtime,
-    contextDocuments: stores.contextDocuments,
-    observeTurn: (turnId, observer) => progress.observe(turnId, observer),
+    ...bindBtccGatewayRuntime(btcc),
     promptAssembler: new PromptAssembler({ butlerHome: process.cwd(), butlerData: root }),
     generateSessionTitle: async () => null,
   });
@@ -100,6 +82,7 @@ export async function runWindowsAppBtccProductHarness(
   });
   const dispatcher = new BtccInboundDispatcher();
   const queue = new NativeInboundQueue(root);
+  const decideEntry = createBtccQueueEntryDecider(dbPath);
   const deliveryGuard = new DeliveryGuard({
     adapters: [createAppTransportAdapter()],
     butlerData: root,
@@ -107,6 +90,7 @@ export async function runWindowsAppBtccProductHarness(
   let browser: Awaited<ReturnType<typeof launchWindowsAppBrowser>> | null = null;
 
   try {
+    await btcc.ready;
     browser = options.browser
       ? await launchWindowsAppBrowser({
         repoRoot: process.cwd(),
@@ -117,20 +101,21 @@ export async function runWindowsAppBtccProductHarness(
     if (browser) await browser.send("첫 번째 Windows BTCC 메시지입니다.");
     else await postMessage(app.url, "첫 번째 Windows BTCC 메시지입니다.");
     const firstDispatch = await waitAndDispatchOne(dispatcher, {
-      queue, gateway, bindings, deliveryGuard,
+      queue, gateway, bindings, deliveryGuard, decideEntry,
     });
     if (browser) await browser.waitForFinalCount(1);
     const chatId = browser ? await latestChatId(app.url) : "general";
     if (browser) await browser.send("앞선 대화에 이어 두 번째로 답해주세요.");
     else await postMessage(app.url, "앞선 대화에 이어 두 번째로 답해주세요.");
     const secondDispatch = await waitAndDispatchOne(dispatcher, {
-      queue, gateway, bindings, deliveryGuard,
+      queue, gateway, bindings, deliveryGuard, decideEntry,
     });
     const browserFinalCount = browser ? await browser.waitForFinalCount(2) : null;
     const browserReload = browser ? await browser.reloadAndVerify(2) : null;
     await browser?.close();
     browser = null;
-    const before = await publicSnapshot(app.url, chatId);
+    const before = await waitForCanonicalSnapshot(app.url, chatId);
+    await btcc.close();
     app.stop();
     app = createAppServer({
       dbPath,
@@ -139,7 +124,7 @@ export async function runWindowsAppBtccProductHarness(
       port: 0,
       automationSchedulerIntervalMs: false,
     });
-    const after = await publicSnapshot(app.url, chatId);
+    const after = await waitForCanonicalSnapshot(app.url, chatId);
     const assistant = after.messages.filter((message) => message.role === "assistant");
     const user = after.messages.filter((message) => message.role === "user");
     const turnCount = new Set(
@@ -173,23 +158,31 @@ export async function runWindowsAppBtccProductHarness(
       canonicalProjection,
       restartDataReload,
       browserProjection,
-      modelCalls: model.callCount,
+      modelCalls,
       rawTextIncluded: false,
     };
     if (
       !result.ok || !result.deterministicConversation || !result.canonicalProjection ||
       (options.browser && result.browserProjection !== true)
     ) {
-      throw new Error(`App BTCC product harness failed: ${JSON.stringify(result)}`);
+      const restartDiagnostics = {
+        before: before.messages.map(messageIdentity),
+        after: after.messages.map(messageIdentity),
+      };
+      throw new Error(
+        `App BTCC product harness failed: ${JSON.stringify({
+          result,
+          restartDiagnostics,
+        })}`,
+      );
     }
     return result;
   } finally {
     await browser?.close();
+    await btcc.close();
     app.stop();
     conversations.close();
     bindings.close();
-    await stores.retrospective.flush();
-    stores.close();
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -201,6 +194,7 @@ async function waitAndDispatchOne(
     gateway: ReturnType<typeof createGatewayServer>;
     bindings: SessionBindingStore;
     deliveryGuard: DeliveryGuard;
+    decideEntry: BtccQueueEntryDecider;
   },
 ) {
   const deadline = Date.now() + 10_000;
@@ -210,6 +204,7 @@ async function waitAndDispatchOne(
       server: input.gateway,
       store: input.bindings,
       deliveryGuard: input.deliveryGuard,
+      decideEntry: input.decideEntry,
       limit: 1,
     });
     if (summary.claimed > 0) {
@@ -245,19 +240,40 @@ async function latestChatId(url: string): Promise<string> {
 }
 
 async function publicSnapshot(url: string, chatId: string) {
-  const [view, messages, summary] = await Promise.all([
+  const [view, messages, summary, turns] = await Promise.all([
     get(`${url}session-view?session_id=${encodeURIComponent(chatId)}`),
     get(`${url}messages?chat_id=${encodeURIComponent(chatId)}&cursor=0`),
     get(`${url}session-summary?session_id=${encodeURIComponent(chatId)}`),
+    get(`${url}turns?chat_id=${encodeURIComponent(chatId)}&cursor=0`),
   ]);
   const viewMessages = array((view.data?.messages)).map(publicMessage);
   const replayMessages = array((messages.data?.messages)).map(publicMessage);
+  const appTurns = array(turns.data?.turns).map(publicTurn);
   return {
     messages: replayMessages,
     viewMessageIds: viewMessages.map((message) => message.id ?? ""),
     messageIds: replayMessages.map((message) => message.id ?? ""),
     turnState: summary.data?.turn_state,
+    appTurnStates: appTurns.map((turn) => turn.state),
   };
+}
+
+async function waitForCanonicalSnapshot(url: string, chatId: string) {
+  const deadline = Date.now() + 5_000;
+  let snapshot = await publicSnapshot(url, chatId);
+  while (
+    Date.now() < deadline &&
+    (
+      snapshot.viewMessageIds.join("|") !== snapshot.messageIds.join("|") ||
+      snapshot.turnState !== "delivered" ||
+      snapshot.appTurnStates.length !== 2 ||
+      snapshot.appTurnStates.some((state) => state !== "delivered")
+    )
+  ) {
+    await Bun.sleep(25);
+    snapshot = await publicSnapshot(url, chatId);
+  }
+  return snapshot;
 }
 
 async function get(url: string): Promise<ApiEnvelope> {
@@ -272,12 +288,28 @@ function publicMessage(value: unknown): PublicMessage {
     : {};
 }
 
+function publicTurn(value: unknown): PublicTurn {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as PublicTurn
+    : {};
+}
+
 function array(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
 function sameMessages(left: PublicMessage[], right: PublicMessage[]): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function messageIdentity(message: PublicMessage): Record<string, unknown> {
+  const diagnostic = Object.fromEntries(
+    Object.entries(message).filter(([key]) => key !== "text"),
+  );
+  return {
+    ...diagnostic,
+    textLength: message.text?.length,
+  };
 }
 
 function markExecutorReady(root: string): void {

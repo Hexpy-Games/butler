@@ -7,4 +7,9 @@ export {
   type BtccInboundDispatchOptions,
   type BtccInboundDispatchSummary,
 } from "./btcc-inbound-dispatcher.ts";
+export {
+  createBtccQueueEntryDecider,
+  type BtccQueueEntryDecider,
+  type BtccQueueEntryDecision,
+} from "./btcc-queue-entry-decision.ts";
 export type { BtccGatewayBinding, BtccGatewayRuntime } from "./contracts.ts";

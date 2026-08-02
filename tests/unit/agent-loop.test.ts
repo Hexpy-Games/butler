@@ -39,6 +39,50 @@ test("agent loop returns text-only model response", async () => {
   ]);
 });
 
+test("agent loop gives one empty provider response an ordinary chance to continue", async () => {
+  const modelInputs: string[] = [];
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "hello" }],
+    tools,
+    maxIterations: 4,
+    callModel: async (input) => {
+      modelInputs.push(
+        input.messages.map((message) => `${message.role}:${message.content}`).join("\n"),
+      );
+      return input.iteration === 0 ? {} : { text: "recovered answer" };
+    },
+    executeTool: async () => {
+      throw new Error("should not execute");
+    },
+  });
+
+  expect(result.finalText).toBe("recovered answer");
+  expect(modelInputs).toHaveLength(2);
+  expect(modelInputs[1]).toContain(
+    "The previous response contained no text or tool call.",
+  );
+});
+
+test("agent loop does not create an empty-response retry loop", async () => {
+  let calls = 0;
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "hello" }],
+    tools,
+    maxIterations: 8,
+    callModel: async () => {
+      calls += 1;
+      return {};
+    },
+    executeTool: async () => {
+      throw new Error("should not execute");
+    },
+  });
+
+  expect(calls).toBe(2);
+  expect(result.finalText).toBe("");
+  expect(result.stoppedByLimit).toBe(false);
+});
+
 test("agent loop executes model-selected tool call and continues with tool result", async () => {
   const modelInputs: string[] = [];
   const result = await runAgentLoop({
@@ -74,6 +118,73 @@ test("agent loop executes model-selected tool call and continues with tool resul
   ]);
   expect(modelInputs[1]).toContain("tool:");
   expect(modelInputs[1]).toContain("hello");
+});
+
+test("agent loop sends bounded web evidence while retaining the full tool event", async () => {
+  let providerToolContent = "";
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "research the market" }],
+    tools: [{
+      name: "web_search",
+      description: "Search the web",
+      inputSchema: {
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string" } },
+        additionalProperties: false,
+      },
+    }],
+    callModel: async (input) => {
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-web",
+            name: "web_search",
+            arguments: { query: "current market" },
+          }],
+        };
+      }
+      providerToolContent = input.messages.find((message) =>
+        message.role === "tool",
+      )?.content ?? "";
+      return { text: "research complete" };
+    },
+    executeTool: async () => ({
+      ok: true,
+      turn_time_remaining_seconds: 42,
+      query: "current market",
+      results: [{ raw_duplicate: "RAW_WEB_RESULT_SHOULD_STAY_DURABLE" }],
+      public_web_evidence_items: [{
+        evidence_item_id: "public-web-market-1",
+        source_url: "https://example.com/market",
+        source_identity: "example.com",
+        published_at: "2026-07-31",
+        content_kind: "search_snippet",
+        bounded_content: "Market evidence from the source.",
+        limitations: ["Search excerpt."],
+      }],
+      search_warnings: ["One planned search failed."],
+      failed_queries: [{ query: "blocked query", error: "challenge" }],
+      read_required: true,
+      recommended_read_urls: ["https://example.com/market"],
+    }),
+  });
+
+  const providerPayload = JSON.parse(providerToolContent) as Record<string, any>;
+  expect(providerPayload.output).toMatchObject({
+    tool_name: "web_search",
+    evidence_item_count: 1,
+    search_warnings: ["One planned search failed."],
+    failed_queries: [{ query: "blocked query", error: "challenge" }],
+    read_required: true,
+    recommended_read_urls: ["https://example.com/market"],
+    turn_time_remaining_seconds: 42,
+  });
+  expect(providerToolContent).toContain("Market evidence from the source.");
+  expect(providerToolContent).not.toContain("RAW_WEB_RESULT_SHOULD_STAY_DURABLE");
+  const durableEvent = result.events.find((event) => event.type === "tool_result");
+  expect(JSON.stringify(durableEvent?.toolResult?.output))
+    .toContain("RAW_WEB_RESULT_SHOULD_STAY_DURABLE");
 });
 
 test("agent loop serializes schema validation failures as structured observations", async () => {
@@ -119,6 +230,111 @@ test("agent loop serializes schema validation failures as structured observation
   expect(context).toContain("Tool echo requires argument: message");
   expect(context).toContain("Tool echo received unsupported argument(s): extra");
   expect(context).toContain("\"model_visible_content\"");
+});
+
+test("agent loop rejects JSON Schema type, enum, and array violations as ordinary tool observations", async () => {
+  const modelInputs: string[] = [];
+  let executed = 0;
+  const constrainedTools: AgentLoopToolDefinition[] = [{
+    name: "collect",
+    description: "Collect typed values.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["mode", "items"],
+      properties: {
+        mode: { type: "string", enum: ["brief", "full"] },
+        items: {
+          type: "array",
+          minItems: 2,
+          items: { type: "string" },
+        },
+      },
+    },
+  }];
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "collect values" }],
+    tools: constrainedTools,
+    maxIterations: 4,
+    callModel: async (input) => {
+      modelInputs.push(input.messages.map((message) => `${message.role}:${message.content}`).join("\n"));
+      if (input.iteration === 0) {
+        return {
+          toolCalls: [{
+            id: "call-wrong-enum",
+            name: "collect",
+            arguments: { mode: "other", items: ["one", "two"] },
+          }],
+        };
+      }
+      if (input.iteration === 1) {
+        return {
+          toolCalls: [{
+            id: "call-short-array",
+            name: "collect",
+            arguments: { mode: "brief", items: ["one"] },
+          }],
+        };
+      }
+      if (input.iteration === 2) {
+        return {
+          toolCalls: [{
+            id: "call-wrong-item-type",
+            name: "collect",
+            arguments: { mode: "brief", items: ["one", 2] },
+          }],
+        };
+      }
+      return { text: "I corrected the typed arguments." };
+    },
+    executeTool: async () => {
+      executed += 1;
+      return { ok: true };
+    },
+  });
+
+  expect(result.finalText).toBe("I corrected the typed arguments.");
+  expect(executed).toBe(0);
+  expect(result.events.filter((event) => event.type === "tool_result")).toHaveLength(3);
+  const context = modelInputs.slice(1).join("\n");
+  expect(context).toContain("Invalid enum value at $.mode");
+  expect(context).toContain("Expected at least 2 items at $.items");
+  expect(context).toContain("Expected string at $.items[1]");
+  expect(context).toContain("\"observation_kind\":\"tool_invalid_arguments\"");
+});
+
+test("agent loop keeps web tool validation feedback after provider compaction", async () => {
+  let providerToolContent = "";
+  const result = await runAgentLoop({
+    messages: [{ role: "user", content: "research the market" }],
+    tools: [{
+      name: "web_search",
+      description: "Search the web",
+      inputSchema: {
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string" } },
+        additionalProperties: false,
+      },
+    }],
+    callModel: async (input) => {
+      if (input.iteration === 0) return {
+        toolCalls: [{ id: "call-invalid-web", name: "web_search", arguments: {} }],
+      };
+      providerToolContent = input.messages.find((message) =>
+        message.role === "tool",
+      )?.content ?? "";
+      return { text: "I can correct the search call." };
+    },
+    executeTool: async () => {
+      throw new Error("invalid calls should not execute");
+    },
+  });
+
+  expect(result.finalText).toBe("I can correct the search call.");
+  expect(providerToolContent).toContain("Tool web_search requires argument: query");
+  expect(providerToolContent).toContain("tool_invalid_arguments");
+  expect(providerToolContent).toContain("Use this observation to retry");
 });
 
 test("agent loop preserves the exact structured successful result", async () => {
@@ -179,36 +395,21 @@ test("agent loop exposes assistant text before executing selected tools", async 
   )).toBe(true);
 });
 
-test("agent loop defers a seventh tool until the model authors the next decision", async () => {
+test("agent loop executes every tool requested in one model response", async () => {
   const executed: string[] = [];
   const visibleBatches: string[][] = [];
-  let capacityResult = "";
   const result = await runAgentLoop({
-    messages: [{ role: "user", content: "inspect seven targets in small steps" }],
+    messages: [{ role: "user", content: "inspect seven targets" }],
     tools,
-    maxIterations: 3,
     callModel: async (input) => {
       if (input.iteration === 0) {
         return {
-          text: "title: 첫 여섯 항목 확인\nsummary: 우선 여섯 항목을 확인합니다.\nrationale: 결과를 본 뒤 남은 항목의 필요성을 판단합니다.\nnext_step: 확인 결과로 다음 작은 단계를 정합니다.",
+          text: "Inspect all seven requested targets.",
           toolCalls: Array.from({ length: 7 }, (_, index) => ({
             id: `call-${index + 1}`,
             name: "echo",
             arguments: { message: String(index + 1) },
           })),
-        };
-      }
-      if (input.iteration === 1) {
-        capacityResult = input.messages
-          .filter((message) => message.role === "tool")
-          .at(-1)?.content ?? "";
-        return {
-          text: "title: 남은 항목 확인\nsummary: 앞선 결과를 바탕으로 마지막 항목을 확인합니다.\nrationale: 누락된 항목을 별도 단계로 검증해야 합니다.\nnext_step: 마지막 결과를 포함해 결론을 작성합니다.",
-          toolCalls: [{
-            id: "call-7-retry",
-            name: "echo",
-            arguments: { message: "7" },
-          }],
         };
       }
       return { text: "all seven results observed" };
@@ -224,14 +425,11 @@ test("agent loop defers a seventh tool until the model authors the next decision
 
   expect(result.finalText).toBe("all seven results observed");
   expect(visibleBatches).toEqual([
-    ["call-1", "call-2", "call-3", "call-4", "call-5", "call-6"],
-    ["call-7-retry"],
+    ["call-1", "call-2", "call-3", "call-4", "call-5", "call-6", "call-7"],
   ]);
   expect(executed).toEqual([
-    "call-1", "call-2", "call-3", "call-4", "call-5", "call-6", "call-7-retry",
+    "call-1", "call-2", "call-3", "call-4", "call-5", "call-6", "call-7",
   ]);
-  expect(capacityResult).toContain('"observation_kind":"block_capacity"');
-  expect(capacityResult).toContain('"executed":false');
 });
 
 test("agent loop returns validation errors as tool results", async () => {

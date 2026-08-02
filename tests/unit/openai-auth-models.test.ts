@@ -3363,6 +3363,373 @@ test("Codex subscription tool continuation is sent as stateless input without pr
   expect(JSON.stringify(seenBodies[1]!.input)).not.toContain("encrypted_content");
 });
 
+test("Codex stateless replay forwards one contentless-response recovery observation", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  const seenBodies: Array<Record<string, any>> = [];
+  globalThis.fetch = (async (
+    _input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    return seenBodies.length === 1
+      ? codexSseResponse({
+          id: "resp_contentless",
+          item: { type: "message", content: [] },
+          inputTokens: 10,
+          totalTokens: 10,
+        })
+      : codexSseResponse({
+          id: "resp_recovered",
+          item: {
+            type: "message",
+            content: [{ type: "output_text", text: "recovered" }],
+          },
+          inputTokens: 20,
+          totalTokens: 22,
+        });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "Recover once.",
+    maxToolRounds: 3,
+    tools: [],
+    executeTool: async () => ({ unreachable: true }),
+  });
+
+  expect(result).toBe("recovered");
+  expect(seenBodies).toHaveLength(2);
+  expect(JSON.stringify(seenBodies[1]!.input))
+    .toContain("The previous response contained no text or tool call");
+});
+
+test("Codex stateless replay keeps prior web results provider-compact", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+
+  const seenBodies: Array<Record<string, any>> = [];
+  globalThis.fetch = (async (
+    _input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    if (seenBodies.length === 1) {
+      return codexSseResponse({
+        id: "resp_web_search",
+        item: {
+          type: "function_call",
+          call_id: "call_web_search",
+          name: "web_search",
+          arguments: JSON.stringify({ query: "current market" }),
+        },
+        inputTokens: 10,
+        totalTokens: 12,
+      });
+    }
+    if (seenBodies.length === 2) {
+      return codexSseResponse({
+        id: "resp_web_read",
+        item: {
+          type: "function_call",
+          call_id: "call_web_read",
+          name: "web_read",
+          arguments: JSON.stringify({ url: "https://example.com/market" }),
+        },
+        inputTokens: 20,
+        totalTokens: 22,
+      });
+    }
+    return codexSseResponse({
+      id: "resp_web_final",
+      item: {
+        type: "message",
+        content: [{ type: "output_text", text: "done" }],
+      },
+      inputTokens: 30,
+      totalTokens: 32,
+    });
+  }) as unknown as typeof fetch;
+
+  const rawSearchMarker = "RAW_SEARCH_DUPLICATE_RESULT";
+  const rawReadReceiptMarker = "RAW_READ_RECEIPT_DUPLICATE";
+  const rawReadChunkMarker = "RAW_PAGE_CHUNK_DUPLICATE";
+  const pageBodyMarker = "PAGE_BODY_FACT";
+  const pageMarkdown = `${pageBodyMarker}\n${"bounded source content ".repeat(180)}`;
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "Research the current market.",
+    maxToolRounds: 3,
+    tools: [{
+      type: "function",
+      name: "web_search",
+      description: "Search public sources.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { query: { type: "string" } },
+        required: ["query"],
+      },
+    }, {
+      type: "function",
+      name: "web_read",
+      description: "Read one public source.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { url: { type: "string" } },
+        required: ["url"],
+      },
+    }],
+    executeTool: async (call) => {
+      if (call.name === "web_search") {
+        return {
+          ok: true,
+          query: call.args.query,
+          results: [{ raw_duplicate: rawSearchMarker }],
+          public_web_evidence_items: [{
+            evidence_item_id: "public-web-search-1",
+            source_url: "https://example.com/market",
+            source_identity: "example.com",
+            published_at: "2026-07-31",
+            content_kind: "search_snippet",
+            bounded_content: "The market source reports a current move.",
+            limitations: ["Search excerpt."],
+          }],
+          search_warnings: ["One planned query failed."],
+          failed_queries: [{ query: "blocked query", error: "challenge" }],
+          read_required: true,
+          read_reason: "Verify the source before reporting.",
+          recommended_read_urls: ["https://example.com/market"],
+          evidence_receipts: [{ raw_duplicate: rawSearchMarker }],
+        };
+      }
+      return {
+        ok: true,
+        requested_url: call.args.url,
+        source_url: call.args.url,
+        title: "Current market source",
+        status: 200,
+        markdown: pageMarkdown,
+        chunks: [{ text: rawReadChunkMarker }],
+        truncated: true,
+        evidence_quality: "limited",
+        warnings: ["The page was truncated."],
+        public_web_evidence_items: [{
+          evidence_item_id: "public-web-read-1",
+          source_url: "https://example.com/market",
+          source_identity: "example.com",
+          published_at: null,
+          content_kind: "page_excerpt",
+          bounded_content: "A bounded page excerpt confirms the market move.",
+          limitations: ["The page evidence was truncated."],
+        }],
+        evidence_receipts: [{ raw_duplicate: rawReadReceiptMarker }],
+      };
+    },
+  });
+
+  expect(result).toBe("done");
+  expect(seenBodies).toHaveLength(3);
+  const secondOutputs = seenBodies[1]!.input.filter(
+    (item: Record<string, unknown>) => item.type === "function_call_output",
+  );
+  const thirdOutputs = seenBodies[2]!.input.filter(
+    (item: Record<string, unknown>) => item.type === "function_call_output",
+  );
+  expect(secondOutputs).toHaveLength(1);
+  expect(thirdOutputs).toHaveLength(2);
+  expect(thirdOutputs[0]!.output).toBe(secondOutputs[0]!.output);
+
+  const searchPayload = JSON.parse(String(thirdOutputs[0]!.output));
+  expect(searchPayload.output).toMatchObject({
+    tool_name: "web_search",
+    read_required: true,
+    search_warnings: ["One planned query failed."],
+    failed_queries: [{ query: "blocked query", error: "challenge" }],
+    recommended_read_urls: ["https://example.com/market"],
+  });
+  expect(searchPayload.output.evidence_items[0]).toMatchObject({
+    source_url: "https://example.com/market",
+    bounded_content: "The market source reports a current move.",
+  });
+  expect(searchPayload.output.results).toBeUndefined();
+  expect(searchPayload.output.evidence_receipts).toBeUndefined();
+
+  const readPayload = JSON.parse(String(thirdOutputs[1]!.output));
+  expect(readPayload.output).toMatchObject({
+    tool_name: "web_read",
+    source_url: "https://example.com/market",
+    title: "Current market source",
+    status: 200,
+    truncated: true,
+    evidence_quality: "limited",
+    warnings: ["The page was truncated."],
+  });
+  expect(readPayload.output.page_excerpt).toContain(pageBodyMarker);
+  expect(readPayload.output.page_excerpt.length).toBeLessThanOrEqual(2_000);
+  expect(readPayload.output.evidence_items[0]).toMatchObject({
+    source_url: "https://example.com/market",
+    bounded_content: "A bounded page excerpt confirms the market move.",
+  });
+  expect(readPayload.output.markdown).toBeUndefined();
+  expect(readPayload.output.chunks).toBeUndefined();
+  expect(readPayload.output.evidence_receipts).toBeUndefined();
+  expect(JSON.stringify(seenBodies[2]!.input)).not.toContain(rawSearchMarker);
+  expect(JSON.stringify(seenBodies[2]!.input)).not.toContain(rawReadReceiptMarker);
+  expect(JSON.stringify(seenBodies[2]!.input)).not.toContain(rawReadChunkMarker);
+});
+
+test("Codex stateless replay sends a preview image once and retains only text after success", async () => {
+  const token = fakeJwt({
+    "https://api.openai.com/auth": {
+      chatgpt_account_id: "chatgpt-account",
+    },
+  });
+  writeButlerOpenAIAuthProfile({
+    provider: "openai-codex",
+    type: "oauth",
+    accessToken: token,
+    provenance: "codex-subscription-oauth",
+    updatedAt: new Date(0).toISOString(),
+  });
+  process.env.BUTLER_CODEX_BASE_URL = "https://chatgpt.example/backend-api";
+  process.env.BUTLER_MODEL_API_RETRY_DELAY_MS = "0";
+
+  const previewPath = join(
+    tempDir,
+    "artifacts",
+    "generated",
+    "page-preview-11111111-1111-4111-8111-111111111111",
+    "desktop-top.jpg",
+  );
+  mkdirSync(join(previewPath, ".."), { recursive: true });
+  writeFileSync(previewPath, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+  const seenBodies: Array<Record<string, any>> = [];
+  globalThis.fetch = (async (
+    _input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ) => {
+    seenBodies.push(JSON.parse(String(init?.body || "{}")));
+    if (seenBodies.length === 1) {
+      return codexSseResponse({
+        id: "resp_preview",
+        item: {
+          type: "function_call",
+          call_id: "call_preview",
+          name: "inspect_workspace_page",
+          arguments: JSON.stringify({ entry_path: "index.html" }),
+        },
+        inputTokens: 10,
+        totalTokens: 12,
+      });
+    }
+    if (seenBodies.length === 2) {
+      return Response.json({ error: { message: "temporary provider failure" } }, {
+        status: 500,
+      });
+    }
+    if (seenBodies.length === 3) {
+      return codexSseResponse({
+        id: "resp_probe",
+        item: {
+          type: "function_call",
+          call_id: "call_probe",
+          name: "probe",
+          arguments: JSON.stringify({}),
+        },
+        inputTokens: 20,
+        totalTokens: 22,
+      });
+    }
+    return codexSseResponse({
+      id: "resp_final",
+      item: {
+        type: "message",
+        content: [{ type: "output_text", text: "done" }],
+      },
+      inputTokens: 30,
+      totalTokens: 32,
+    });
+  }) as unknown as typeof fetch;
+
+  const result = await runFunctionToolPromptText({
+    model: "gpt-5.5-codex",
+    prompt: "Inspect the page, then probe once.",
+    butlerData: tempDir,
+    maxToolRounds: 3,
+    providerRetryAttempts: 2,
+    tools: [{
+      type: "function",
+      name: "inspect_workspace_page",
+      description: "Inspect the rendered workspace page.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: { entry_path: { type: "string" } },
+        required: ["entry_path"],
+      },
+    }, {
+      type: "function",
+      name: "probe",
+      description: "Record a plain follow-up observation.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+      },
+    }],
+    executeTool: async (call) => call.name === "inspect_workspace_page"
+      ? {
+          ok: true,
+          summary: "Desktop preview captured.",
+          model_image_attachments: [{
+            path: "artifacts/generated/page-preview-11111111-1111-4111-8111-111111111111/desktop-top.jpg",
+            media_type: "image/jpeg",
+            name: "desktop preview",
+          }],
+        }
+      : { ok: true, observed: "plain follow-up" },
+  });
+
+  expect(result).toBe("done");
+  expect(seenBodies).toHaveLength(4);
+  expect(JSON.stringify(seenBodies[1]!.input)).toContain(
+    "data:image/jpeg;base64,/9j/2Q==",
+  );
+  expect(JSON.stringify(seenBodies[2]!.input)).toContain(
+    "data:image/jpeg;base64,/9j/2Q==",
+  );
+  expect(seenBodies[2]!.input).toEqual(seenBodies[1]!.input);
+  expect(JSON.stringify(seenBodies[3]!.input)).not.toContain("data:image");
+  expect(JSON.stringify(seenBodies[3]!.input)).toContain("Desktop preview captured.");
+  expect(JSON.stringify(seenBodies[3]!.input)).toContain("plain follow-up");
+});
+
 test("Codex typed tool batches hand off before a continuation response request", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {

@@ -16,6 +16,8 @@ import { AppProjectedTransportEventStore } from
   "../../../packages/butler-agent/src/gateways/app/infrastructure/transport/projected-transport-event-store.ts";
 import { AppTransportProjectionStore } from
   "../../../packages/butler-agent/src/gateways/app/infrastructure/transport/transport-projection-store.ts";
+import type { AppTransportProjectionStoreOptions } from
+  "../../../packages/butler-agent/src/gateways/app/infrastructure/transport/transport-projection-contract.ts";
 import { transcriptPathFromDataHome } from
   "../../../packages/butler-agent/src/gateways/app/domain/sessions/transcript-reader.ts";
 import { sessionHintForRow } from
@@ -75,7 +77,9 @@ export function createTranscriptProjectionHarness(
         }),
       });
     },
-    createProjectionStore() {
+    createProjectionStore(
+      overrides: Partial<AppTransportProjectionStoreOptions> = {},
+    ) {
       return new AppTransportProjectionStore({
         db,
         butlerData: root,
@@ -103,10 +107,12 @@ export function createTranscriptProjectionHarness(
         updateTurnState: () => ({}) as never,
         appendTerminalTurnStateChanged: () => undefined,
         finalizeResponderLimitedDelivery: () => ({}) as never,
+        finalizeCancelledTurn: () => ({}) as never,
         upsertAssistantTurnFailure: () => ({}) as never,
         runtimeFaultRecordForTurn: () => null,
         generatedSessionTitleHandler: () => undefined,
         drainQueuedSessionMessages: async () => undefined,
+        ...overrides,
       });
     },
     projected: () => db.query<{ action_id: string }, []>(

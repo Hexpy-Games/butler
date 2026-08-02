@@ -33,8 +33,6 @@ import type { TerminalTurnRetention } from
   "../../infrastructure/retention/terminal-turn-retention.ts";
 import type { TerminalTurnRetentionQueue } from
   "../../infrastructure/retention/terminal-turn-retention-queue.ts";
-import type { BtccTerminalPhaseRetentionQueue } from
-  "../../../../agent/adapters/btcc/sqlite/index.ts";
 import type { OwnedSqliteConnection } from
   "../../../../foundation/sqlite/owned-sqlite-connection.ts";
 
@@ -59,7 +57,6 @@ export interface AppStoreKernelState {
   operationOutputs: SqliteOperationOutputReader;
   terminalTurnRetention: TerminalTurnRetention;
   terminalTurnRetentionQueue: TerminalTurnRetentionQueue;
-  btccTerminalPhaseRetentionQueue: BtccTerminalPhaseRetentionQueue;
   settingsPersistence: AppSettingsPersistence;
   modelSettingsPolicy: AppModelSettingsPolicy;
   modelRegistry: AppModelRegistryStore;

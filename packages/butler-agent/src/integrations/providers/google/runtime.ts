@@ -1,17 +1,16 @@
-import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, localToolArguments, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
+import { abortError, activeFunctionTools, createProviderRequestAttributor, finalNoToolInstructions, localFunctionToolInstructions, modelIterationLimitWithinUsageBudget, normalizeLocalTextToolName, numberOrNull, prepareFunctionToolCall, sanitizeResponseFinalAnswerText, withModelApiRetry, type ProviderUsageSample } from "../shared/runtime-support.ts";
 import { geminiGenerateContentUrl, promptTextForHosted } from "../shared/hosted-openai-compatible.ts";
 import { providerEmptyResponseError, providerHttpError, providerNetworkError, providerRoundTimeoutError, safeEndpointLabel } from "../provider-errors.ts";
-import { toolBatchCompletedHandoffText } from "../../../agent/model-tool-loop/index.ts";
+import {
+  createToolResultModelPreviewContext,
+  emptyResponseRecoveryObservation,
+  toolBatchCompletedHandoffText,
+  toolResultPayloadForProvider,
+} from "../../../agent/model-tool-loop/index.ts";
 import { type FunctionToolDefinition, type FunctionToolPromptOptions, type PromptOptions } from "../runtime-contracts.ts";
 import { type HostedRuntimeConfig } from "../shared/model-routing.ts";
-import {
-  blockCapacityObservation,
-  blockCapacityToolOutput,
-  partitionSemanticToolBatch,
-} from "../../../agent/model-tool-loop/index.ts";
 import { reviewProviderFinalCandidate } from "../shared/final-candidate-review.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
-import { toolResultPayloadForProvider } from "../../../agent/model-tool-loop/index.ts";
 import { runGuardedProviderRound, type ProviderRoundPolicy } from "../shared/provider-round-guard.ts";
 
 
@@ -187,8 +186,10 @@ export async function runGeminiFunctionToolPromptText(
   const contents: Array<Record<string, unknown>> = [
     { role: "user", parts: [{ text: promptTextForHosted(options) }] },
   ];
+  const modelPreviewContext = createToolResultModelPreviewContext();
   const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
   let toolBatchExecuted = false;
+  let emptyResponseRecoveryUsed = false;
   for (let round = 0; round < maxRounds; round += 1) {
     const activeTools = activeFunctionTools(options);
     const allowedNames = new Set(activeTools.map((tool) => tool.name));
@@ -214,8 +215,11 @@ export async function runGeminiFunctionToolPromptText(
         allowedNames,
       );
       if (!name) return [];
-      const args = localToolArguments(functionCall.args ?? {});
-      return [{ id: `gemini_call_${round}_${name}`, name, args: args.parsed, raw: args.raw }];
+      return [{
+        id: `gemini_call_${round}_${name}`,
+        name,
+        rawArguments: functionCall.args,
+      }];
     });
     if (calls.length === 0) {
       if (text) {
@@ -225,6 +229,15 @@ export async function runGeminiFunctionToolPromptText(
         contents.push({ role: "user", parts: [{ text: disposition.observation }] });
         continue;
       }
+      const observation = emptyResponseRecoveryObservation({
+        recoveryUsed: emptyResponseRecoveryUsed,
+        hasNextModelRound: round + 1 < maxRounds,
+      });
+      if (observation) {
+        emptyResponseRecoveryUsed = true;
+        contents.push({ role: "user", parts: [{ text: observation }] });
+        continue;
+      }
       throw providerEmptyResponseError({
         provider: "google",
         api: "generate_content",
@@ -232,32 +245,45 @@ export async function runGeminiFunctionToolPromptText(
         model: config.modelId,
       });
     }
-    const batch = partitionSemanticToolBatch(calls);
+    const preparedCalls = calls.map((call) => ({
+      call,
+      prepared: prepareFunctionToolCall({
+        name: call.name,
+        rawArguments: call.rawArguments,
+        tools: activeTools,
+      }),
+    }));
     await options.onAssistantTextBeforeTools?.({
       text,
-      toolCalls: batch.executable.map((call) => ({ name: call.name, args: call.args })),
+      toolCalls: preparedCalls.map(({ call, prepared }) => ({
+        name: call.name,
+        args: prepared.args,
+      })),
     });
     contents.push({ role: "model", parts: responseParts });
     toolBatchExecuted = true;
-    for (const call of batch.executable) {
-      log(`tool ${call.name}: ${call.raw}`);
-      let payload: Record<string, unknown>;
-      try {
-        payload = {
-          ok: true,
-          output: await options.executeTool({
-            name: call.name,
-            args: call.args,
-            rawArguments: call.raw,
-          }),
-        };
-      } catch (error) {
-        payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    for (const { call, prepared } of preparedCalls) {
+      log(`tool ${call.name}: ${prepared.rawArguments}`);
+      let payload = prepared.errorPayload;
+      if (!payload) {
+        try {
+          payload = {
+            ok: true,
+            output: await options.executeTool({
+              name: call.name,
+              args: prepared.args,
+              rawArguments: prepared.rawArguments,
+              signal: options.signal,
+            }),
+          };
+        } catch (error) {
+          payload = { ok: false, error: error instanceof Error ? error.message : String(error) };
+        }
       }
       const finalText = payload.ok
         ? await options.finalTextFromToolResult?.({
             name: call.name,
-            args: call.args,
+            args: prepared.args,
             output: payload.output,
           })
         : null;
@@ -267,26 +293,9 @@ export async function runGeminiFunctionToolPromptText(
         parts: [{
           functionResponse: {
             name: call.name,
-            response: toolResultPayloadForProvider(payload),
-          },
-        }],
-      });
-    }
-    for (const call of batch.deferred) {
-      const observation = blockCapacityObservation({
-        toolCallId: call.id,
-        toolName: call.name,
-        deferredCount: batch.deferred.length,
-        turnId: options.usageAttribution?.turnId,
-      });
-      contents.push({
-        role: "user",
-        parts: [{
-          functionResponse: {
-            name: call.name,
-            response: toolResultPayloadForProvider({
-              ok: false,
-              output: blockCapacityToolOutput(observation),
+            response: toolResultPayloadForProvider(payload, {
+              toolName: call.name,
+              context: modelPreviewContext,
             }),
           },
         }],

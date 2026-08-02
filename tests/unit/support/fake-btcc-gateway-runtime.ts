@@ -1,9 +1,12 @@
 import type {
-  BtccTurnCommand,
+  BtccRunCommand,
+  BtccStopCommand,
   BtccTurnOutcome,
 } from "../../../packages/butler-agent/src/agent/btcc/index.ts";
 import type { BtccTurnProgressObserver } from "../../../packages/butler-agent/src/agent/btcc/index.ts";
 import type { BtccGatewayRuntime } from "../../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
+
+type BtccTurnCommand = BtccRunCommand | BtccStopCommand;
 
 export class ScriptedBtccGatewayRuntime implements BtccGatewayRuntime {
   readonly commands: BtccTurnCommand[] = [];
@@ -16,9 +19,9 @@ export class ScriptedBtccGatewayRuntime implements BtccGatewayRuntime {
     },
   };
   readonly runtime = {
-    runTurn: (command: Exclude<BtccTurnCommand, { kind: "stop" }>) =>
+    runTurn: (command: BtccRunCommand) =>
       this.handle(command),
-    stopTurn: (command: Extract<BtccTurnCommand, { kind: "stop" }>) =>
+    stopTurn: (command: BtccStopCommand) =>
       this.handle(command),
   };
   private readonly observers = new Map<string, Set<BtccTurnProgressObserver>>();

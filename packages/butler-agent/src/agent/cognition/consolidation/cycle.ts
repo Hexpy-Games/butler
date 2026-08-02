@@ -9,7 +9,6 @@ import {
   releaseConsolidationLock,
 } from "../memory/scripts/lib/lock.ts";
 import { cognitionConsolidationRoot } from "../paths.ts";
-import type { RetrospectiveModelRunner } from "../retrospective/index.ts";
 import {
   buildConsolidationUsageReport,
   finishResult,
@@ -23,7 +22,6 @@ import type { ConsolidationUsageReport } from "./usage.ts";
 export type ConsolidationPhase =
   | "preflight"
   | "feedback_triage"
-  | "btcc_retrospective"
   | "profile_consolidation"
   | "new_chat_briefing"
   | "box_index"
@@ -88,14 +86,11 @@ export type RunCognitionConsolidationInput = {
   profileExtractorModelRunner?: ProfileExtractorModelRunner;
   profileTranscriptSince?: string | Date | null;
   newChatBriefingModelRunner?: NewChatBriefingModelRunner;
-  btccDbPath?: string;
-  btccRetrospectiveModelRunner?: RetrospectiveModelRunner;
 };
 
 const PHASES: ConsolidationPhase[] = [
   "preflight",
   "feedback_triage",
-  "btcc_retrospective",
   "profile_consolidation",
   "new_chat_briefing",
   "box_index",

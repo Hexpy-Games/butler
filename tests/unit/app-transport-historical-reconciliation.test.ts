@@ -15,7 +15,13 @@ afterEach(() => cleanupTranscriptProjectionHarnesses());
 
 test("live wait ignores 3,200 turns while maintenance repairs late pages", async () => {
   const harness = createHarness();
-  const projection = harness.createProjectionStore();
+  const projection = harness.createProjectionStore({
+    finalizeCancelledTurn: (_chatId, turnId) => {
+      harness.db.query("UPDATE turns SET state = 'cancelled' WHERE id = ?")
+        .run(turnId);
+      return { id: turnId, state: "cancelled" } as never;
+    },
+  });
   seedHistoricalTurns(harness, 3_200);
   writeTranscript(harness, [progressOutbound("new-live-event")]);
 
@@ -54,6 +60,7 @@ test("live wait ignores 3,200 turns while maintenance repairs late pages", async
   expect(historicalPages).toBe(0);
   expect(turnState(harness, "late-authority-turn")).toBe("failed");
   expect(canonicalTerminalProjected(harness)).toBe(false);
+  expect(turnState(harness, "late-cancelled-turn")).toBe("running");
   appendTranscript(harness, progressOutbound("second-live-event"));
   await live.syncAndWait();
   expect(harness.projected()).toContain("second-live-event");
@@ -74,7 +81,8 @@ test("live wait ignores 3,200 turns while maintenance repairs late pages", async
   await waitUntil(
     () =>
       turnState(harness, "late-authority-turn") === "running" &&
-      canonicalTerminalProjected(harness),
+      canonicalTerminalProjected(harness) &&
+      turnState(harness, "late-cancelled-turn") === "cancelled",
     3_000,
   );
   expect(historicalPages).toBeGreaterThan(100);
@@ -138,6 +146,14 @@ function seedHistoricalTurns(
       now,
       now,
     );
+    insert.run(
+      "late-cancelled-turn",
+      harness.chatId,
+      "running",
+      "Working",
+      now,
+      now,
+    );
   })();
   harness.db.exec(`
     INSERT INTO btcc_turns (
@@ -146,7 +162,8 @@ function seedHistoricalTurns(
     ) VALUES
       ('late-authority-turn', 'planning', NULL, NULL, NULL),
       ('late-terminal-turn', 'delivered', 'completed', 'late-outbox',
-        'late-message');
+        'late-message'),
+      ('late-cancelled-turn', 'cancelled', NULL, NULL, NULL);
     INSERT INTO btcc_delivery_outbox (outbox_id, status)
     VALUES ('late-outbox', 'observed');
     INSERT INTO btcc_messages (message_id, content, created_at)

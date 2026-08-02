@@ -102,8 +102,6 @@ function isTurnActivityRow(row: ProgressSummaryRow): boolean {
     !row.work_block_id &&
     row.semantic_block_id &&
     row.work_decision_source === "model-authored" &&
-    row.work_decision_summary &&
-    row.work_decision_rationale &&
-    row.work_decision_next_step,
+    row.work_decision_summary,
   );
 }

@@ -1,5 +1,12 @@
 import { memo } from "react";
-import { CheckCircle2, Circle, CircleX, LoaderCircle } from "../../components/Icons";
+import {
+  CheckCircle2,
+  Circle,
+  CircleAlert,
+  CircleX,
+  LoaderCircle,
+  Minus,
+} from "../../components/Icons";
 import { Typo } from "../../components/Typo";
 import type {
   TodoProgressPanelItem,
@@ -42,6 +49,8 @@ export const TodoProgressItemRow = memo(function TodoProgressItemRow({
 
 function itemIcon(state: TodoProgressPanelItemState) {
   if (state === "completed") return <CheckCircle2 size={15} />;
+  if (state === "blocked") return <CircleAlert size={15} />;
+  if (state === "skipped") return <Minus size={15} />;
   if (state === "correction-required" || state === "stopped")
     return <CircleX size={15} />;
   if (state === "running" || state === "reviewing")
