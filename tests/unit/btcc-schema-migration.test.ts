@@ -7,6 +7,10 @@ import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/open-btcc-sqlite-stores.ts";
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
+import { admitTurn } from
+  "../../packages/butler-agent/src/agent/btcc/turn/admission/admit-turn.ts";
+import type { BtccRunCommand } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
 
 test("opening an existing R3 database migrates Work columns and anchors idempotently", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-schema-migration-"));
@@ -125,4 +129,153 @@ test("opening an existing R3 database migrates Work columns and anchors idempote
     .toMatchObject({ notnull: 1, dflt_value: "'[]'" });
   migrated.close();
   rmSync(root, { recursive: true, force: true });
+});
+
+test("BTCC progress and wake facts keep stable identities across SQLite reopen", () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-lifecycle-facts-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const destination = {
+    transport: "app",
+    accountId: "local",
+    peer: { kind: "dm" as const, id: "general" },
+    replyToMessageId: "message-facts",
+  };
+  let startedEventId = "";
+  let startedActionId = "";
+  const first = openBtccSqliteStores({
+    dbPath,
+    ownerId: "lifecycle-facts-1",
+    storageProfile: "ephemeral",
+  });
+  try {
+    const started = first.progressEvents.append({
+      sessionId: "session-facts",
+      turnId: "turn-facts",
+      destination,
+      event: { kind: "turn.started", createdAt: "2026-08-03T00:00:00.000Z" },
+    });
+    const replayedStarted = first.progressEvents.append({
+      sessionId: "session-facts",
+      turnId: "turn-facts",
+      destination,
+      event: { kind: "turn.started", createdAt: "2026-08-03T00:02:00.000Z" },
+    });
+    const note = first.progressEvents.append({
+      sessionId: "session-facts",
+      turnId: "turn-facts",
+      destination,
+      event: {
+        kind: "assistant.public_note",
+        payload: { note: "stable" },
+      },
+    });
+    startedEventId = started.eventId;
+    startedActionId = started.actionId;
+    expect(replayedStarted).toMatchObject({
+      eventId: started.eventId,
+      actionId: started.actionId,
+      turnSequence: started.turnSequence,
+    });
+    expect(note.turnSequence).toBe(started.turnSequence + 1);
+    expect(first.progressEvents.pending("turn-facts").map((event) => event.eventId))
+      .toEqual([started.eventId, note.eventId]);
+  } finally {
+    first.close();
+  }
+
+  const reopened = openBtccSqliteStores({
+    dbPath,
+    ownerId: "lifecycle-facts-2",
+    storageProfile: "ephemeral",
+  });
+  try {
+    const pending = reopened.progressEvents.pending("turn-facts");
+    expect(pending).toHaveLength(2);
+    expect(pending.map((event) => event.eventId)).toContain(startedEventId);
+    expect(pending.map((event) => event.actionId)).toContain(startedActionId);
+    reopened.wakeAuthorizations.recordAuthorization({
+      sourceTurnId: "source-facts",
+      authorizationRef: "authorization-facts",
+      resultScopeRef: "scope-facts",
+    });
+    expect(reopened.wakeAuthorizations.validateWake({
+      sourceTurnId: "source-facts",
+      authorizationRef: "authorization-facts",
+      resultScopeRef: "scope-facts",
+    })).toBe(true);
+    expect(reopened.wakeAuthorizations.validateWake({
+      sourceTurnId: "source-facts",
+      authorizationRef: "authorization-facts",
+      resultScopeRef: "scope-other",
+    })).toBe(false);
+    expect(reopened.wakeAuthorizations.validateWake({
+      sourceTurnId: "source-other",
+      authorizationRef: "authorization-facts",
+      resultScopeRef: "scope-facts",
+    })).toBe(false);
+  } finally {
+    reopened.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("SQLite admission persists the exact authorized wake identity for replay", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-wake-facts-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const command: Extract<BtccRunCommand, { kind: "wake" }> = {
+    kind: "wake",
+    turnId: "turn-wake-fact",
+    sessionId: "session-wake-fact",
+    triggerKey: "event-wake-fact",
+    trigger: {
+      triggerId: "trigger-wake-fact",
+      sourceTurnId: "source-wake-fact",
+      authorizationRef: "authorization-wake-fact",
+      resultScopeRef: "scope-wake-fact",
+      content: "use the authorized worker result",
+    },
+    modelSelection: {
+      provider: "fake",
+      model: "fake",
+      reasoningEffort: "none",
+      controls: {},
+      controlsHash: "wake-fact-controls",
+    },
+    context: {
+      userRef: "wake-fact-user",
+      profileRefs: [],
+      recentFeedbackRefs: [],
+      mandatoryHotCacheRefs: [],
+      optionalHotCacheRefs: [],
+      baselineObservationScopeRefs: ["scope-wake-fact"],
+    },
+  };
+  const first = openBtccSqliteStores({
+    dbPath,
+    ownerId: "wake-facts-1",
+    storageProfile: "ephemeral",
+  });
+  try {
+    await admitTurn(command, first.admission, first.turns);
+  } finally {
+    first.close();
+  }
+  const reopened = openBtccSqliteStores({
+    dbPath,
+    ownerId: "wake-facts-2",
+    storageProfile: "ephemeral",
+  });
+  try {
+    expect(await reopened.turns.findTurn(command.turnId)).toMatchObject({
+      wakeIdentity: {
+        triggerId: command.trigger.triggerId,
+        sourceTurnId: command.trigger.sourceTurnId,
+        authorizationRef: command.trigger.authorizationRef,
+        resultScopeRef: command.trigger.resultScopeRef,
+      },
+    });
+  } finally {
+    reopened.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

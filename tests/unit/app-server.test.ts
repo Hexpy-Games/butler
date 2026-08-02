@@ -2591,7 +2591,7 @@ test("native butler-main default provider generates app transport session titles
   }
 });
 
-test("App Stop reaches the BTCC stop reconciler and preserves its public snapshot", async () => {
+test("App Stop reaches the App BTCC Stop consumer and preserves its public snapshot", async () => {
   const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
   mkdirSync(join(tempDir, "app-server"), { recursive: true });
   const runtime = new StoppableBtccGatewayRuntime();

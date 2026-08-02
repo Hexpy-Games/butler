@@ -29,6 +29,13 @@ export function runtimeTurnEventFromAppOutboundMetadata(
   if (!kind) return null;
   return {
     kind: kind as RuntimeTurnEventInput["kind"],
+    ...(safeOptionalShortToken(event.id) ? { id: safeOptionalShortToken(event.id) } : {}),
+    ...(positiveInteger(event.sessionSequence)
+      ? { sessionSequence: positiveInteger(event.sessionSequence) }
+      : {}),
+    ...(positiveInteger(event.turnSequence)
+      ? { turnSequence: positiveInteger(event.turnSequence) }
+      : {}),
     ...(event.visibility === "internal" ? { visibility: "internal" as const } : {}),
     ...(isRecord(event.payload)
       ? { payload: normalizeReplayTurnEventPayload(kind, event.payload) }
@@ -37,6 +44,13 @@ export function runtimeTurnEventFromAppOutboundMetadata(
       ? { createdAt: safeOptionalShortText(event.createdAt) }
       : {}),
   };
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) {
+    return value;
+  }
+  return undefined;
 }
 
 function normalizeReplayTurnEventPayload(

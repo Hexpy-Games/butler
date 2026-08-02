@@ -27,6 +27,7 @@ type TurnRow = {
   original_message: string;
   model_selection_json: string;
   context_json: string;
+  progress_destination_json: string | null;
   semantic_state: string;
   active_checkpoint_id: string | null;
   route: string | null;
@@ -54,6 +55,13 @@ type OutboxRow = {
   status: string;
 };
 
+type WakeRequestFactRow = {
+  trigger_id: string;
+  source_turn_id: string;
+  authorization_ref: string;
+  result_scope_ref: string;
+};
+
 export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   private readonly transitions: SqliteGuidedTransitionWriter;
   private readonly stops: SqliteGuidedStopController;
@@ -71,7 +79,8 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
   async findTurn(turnId: string): Promise<TurnRecord | null> {
     const row = this.db.query<TurnRow, [string]>(`
       SELECT turn_id, session_id, inbox_id, trigger_key, original_message_id,
-        original_message, model_selection_json, context_json, semantic_state,
+        original_message, model_selection_json, context_json,
+        progress_destination_json, semantic_state,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
         final_disposition
@@ -85,6 +94,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const finalPayload = hydrateFinalPayload(row.final_payload_json);
     const route = hydrateRoute(row.route);
     const finalDisposition = hydrateFinalDisposition(row.final_disposition);
+    const wakeIdentity = this.loadWakeIdentity(row.turn_id);
     const turn: TurnRecord = {
       turnId: row.turn_id,
       sessionId: row.session_id,
@@ -92,8 +102,12 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
       triggerKey: row.trigger_key,
       originalMessageId: row.original_message_id,
       originalMessage: row.original_message,
+      ...(wakeIdentity ? { wakeIdentity } : {}),
       modelSelection: JSON.parse(row.model_selection_json),
       context: JSON.parse(row.context_json),
+      ...(row.progress_destination_json
+        ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }
+        : {}),
       semanticState: state,
       ...(checkpoint ? { checkpoint } : {}),
       ...(route ? { route } : {}),
@@ -193,6 +207,58 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
       status: row.status,
     };
   }
+
+  private loadWakeIdentity(
+    turnId: string,
+  ): NonNullable<TurnRecord["wakeIdentity"]> | undefined {
+    const row = this.db.query<WakeRequestFactRow, [string]>(`
+      SELECT trigger_id, source_turn_id, authorization_ref, result_scope_ref
+      FROM btcc_wake_request_facts WHERE turn_id = ?
+    `).get(turnId);
+    if (!row) return undefined;
+    return {
+      triggerId: row.trigger_id,
+      sourceTurnId: row.source_turn_id,
+      authorizationRef: row.authorization_ref,
+      ...(row.result_scope_ref ? { resultScopeRef: row.result_scope_ref } : {}),
+    };
+  }
+}
+
+function hydrateProgressDestination(
+  value: string,
+): NonNullable<TurnRecord["progressDestination"]> {
+  const destination = JSON.parse(value) as {
+    transport?: unknown;
+    accountId?: unknown;
+    peer?: { kind?: unknown; id?: unknown; parentId?: unknown };
+    replyToMessageId?: unknown;
+  };
+  if (
+    typeof destination.transport !== "string" ||
+    typeof destination.accountId !== "string" ||
+    !destination.peer ||
+    (destination.peer.kind !== "dm" &&
+      destination.peer.kind !== "group" &&
+      destination.peer.kind !== "thread" &&
+      destination.peer.kind !== "channel") ||
+    typeof destination.peer.id !== "string" ||
+    typeof destination.replyToMessageId !== "string"
+  ) {
+    throw new Error("BTCC progress destination is invalid");
+  }
+  return {
+    transport: destination.transport,
+    accountId: destination.accountId,
+    peer: {
+      kind: destination.peer.kind,
+      id: destination.peer.id,
+      ...(typeof destination.peer.parentId === "string"
+        ? { parentId: destination.peer.parentId }
+        : {}),
+    },
+    replyToMessageId: destination.replyToMessageId,
+  };
 }
 
 function hydrateFinalPayload(

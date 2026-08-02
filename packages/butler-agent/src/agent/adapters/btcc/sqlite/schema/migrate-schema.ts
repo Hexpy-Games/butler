@@ -10,9 +10,15 @@ export function migrateBtccSchema(db: Database): void {
   db.transaction(() => {
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedWorkProgressColumns(db);
+    ensureTurnProgressDestination(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureTurnProgressDestination(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "progress_destination_json", "TEXT");
 }
 
 function migrateGuidedWorkSixStageConstraints(db: Database): void {

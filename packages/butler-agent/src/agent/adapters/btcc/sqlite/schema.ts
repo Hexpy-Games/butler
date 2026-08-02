@@ -38,6 +38,50 @@ CREATE TABLE IF NOT EXISTS btcc_continuation_triggers (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS btcc_wake_authorizations (
+  source_turn_id TEXT NOT NULL,
+  authorization_ref TEXT NOT NULL,
+  result_scope_ref TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (source_turn_id, authorization_ref, result_scope_ref)
+);
+
+CREATE TABLE IF NOT EXISTS btcc_wake_request_facts (
+  turn_id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  trigger_key TEXT NOT NULL,
+  trigger_id TEXT NOT NULL UNIQUE,
+  source_turn_id TEXT NOT NULL,
+  authorization_ref TEXT NOT NULL,
+  result_scope_ref TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_wake_request_facts_source
+ON btcc_wake_request_facts(source_turn_id, authorization_ref, result_scope_ref);
+
+CREATE TABLE IF NOT EXISTS btcc_progress_events (
+  event_id TEXT PRIMARY KEY,
+  action_id TEXT NOT NULL UNIQUE,
+  session_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL,
+  session_sequence INTEGER NOT NULL,
+  turn_sequence INTEGER NOT NULL,
+  event_fingerprint TEXT NOT NULL,
+  event_json TEXT NOT NULL,
+  destination_json TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'published')),
+  created_at TEXT NOT NULL,
+  UNIQUE(turn_id, event_fingerprint)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_progress_events_turn
+ON btcc_progress_events(turn_id, turn_sequence);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_progress_events_session
+ON btcc_progress_events(session_id, session_sequence);
+
 CREATE TABLE IF NOT EXISTS btcc_admission_claims (
   claim_id TEXT PRIMARY KEY,
   inbox_id TEXT NOT NULL UNIQUE,
@@ -75,6 +119,7 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   admission_snapshot_ref TEXT NOT NULL,
   model_selection_json TEXT NOT NULL,
   context_json TEXT NOT NULL,
+  progress_destination_json TEXT,
   semantic_state TEXT NOT NULL CHECK (
     semantic_state IN ('admitted', 'delivery_committed', 'delivered', 'cancelled')
   ),

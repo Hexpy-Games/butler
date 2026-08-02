@@ -3,24 +3,27 @@ import {
   openBtccSqliteStores,
 } from "../adapters/index.ts";
 import {
-  type BtccRunCommand,
-  type BtccStopCommand,
-  type BtccTurnOutcome,
-  type BtccTurnProgressObserver,
-  type BtccTurnRuntime,
+  createBtcc,
+  createTurnRuntime,
+  DefaultBtccTurnPreparation,
+  type Btcc,
+  type BtccHost,
+  type BtccTurnPreparationDependencies,
 } from "../btcc/index.ts";
-import { createGuidedTurnRuntime } from "../btcc/guided-turn/index.ts";
 import type { ModelRoundPort } from "../btcc/ports/model-round.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
-import {
-  BtccTurnProgressHub,
-  createProductionGuidedTurnAgent,
-} from "./production-btcc/index.ts";
+import { AgentConversationStore } from "../conversation/store.ts";
+import { PromptAssembler } from "../prompt/prompt-assembler.ts";
+import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
+import { createProductionGuidedTurnAgent } from "./production-btcc/index.ts";
 
-type ClosableBtccTurnRuntime = BtccTurnRuntime & { close(): Promise<void> };
 type BtccStores = ReturnType<typeof openBtccSqliteStores>;
 
+/**
+ * Production wiring only.  Lifecycle policy lives in `agent/btcc/btcc.ts`
+ * and `agent/btcc/turn/turn.ts`; this function supplies stores and adapters.
+ */
 export function createProductionBtccComposition(input: {
   butlerHome: string;
   butlerData: string;
@@ -28,6 +31,8 @@ export function createProductionBtccComposition(input: {
   ownerId: string;
   /** Test-only one-round provider seam; production callers omit it. */
   modelRound?: ModelRoundPort;
+  sessionBindings?: SessionBindingStore;
+  conversationStore?: AgentConversationStore;
 }) {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   const legacyProjectWorkSource = createProjectLedgerLegacyWorkSource({
@@ -40,13 +45,21 @@ export function createProductionBtccComposition(input: {
     ownerId: input.ownerId,
     legacyProjectWorkSource,
   });
-  const progress = new BtccTurnProgressHub();
-  const runtime = createGuidedTurnRuntime({
+  const bindings = input.sessionBindings ?? new SessionBindingStore(
+    `${input.butlerData}/runtime/session-store.sqlite`,
+  );
+  const conversations = input.conversationStore ?? new AgentConversationStore({
+    butlerData: input.butlerData,
+  });
+  const promptAssembler = new PromptAssembler({
+    butlerHome: input.butlerHome,
+    butlerData: input.butlerData,
+  });
+  const runtime = createTurnRuntime({
     admission: stores.admission,
     turns: stores.turns,
     messages: stores.messages,
     committedSuccessorReadiness: stores.committedSuccessorReadiness,
-    progress,
     agent: createProductionGuidedTurnAgent({
       butlerHome: input.butlerHome,
       butlerData: input.butlerData,
@@ -58,47 +71,30 @@ export function createProductionBtccComposition(input: {
       modelRound: input.modelRound,
     }),
   });
-  const owned = ownBtccComposition(runtime, stores);
-  return {
-    runtime: owned,
+  const preparationDependencies: BtccTurnPreparationDependencies = {
+    bindingStore: bindings,
+    conversationStore: conversations,
+    butlerData: input.butlerData,
+    promptAssembler,
     contextDocuments: stores.contextDocuments,
-    observeTurn: (turnId: string, observer: BtccTurnProgressObserver) =>
-      progress.observe(turnId, observer),
-    close: owned.close,
+    turns: stores.turns,
+    wakeAuthorizations: stores.wakeAuthorizations,
+  };
+  const btcc = createBtcc({
+    runtime,
+    preparation: new DefaultBtccTurnPreparation(preparationDependencies),
+    progressEvents: stores.progressEvents,
+    turns: stores.turns,
+    close: async () => {
+      stores.close();
+      if (!input.conversationStore) conversations.close();
+      if (!input.sessionBindings) bindings.close();
+    },
+  });
+  return Object.assign(btcc, {
     ready: Promise.resolve(),
+  }) as Btcc & {
+    ready: Promise<void>;
+    host: BtccHost;
   };
-}
-
-function ownBtccComposition(
-  runtime: BtccTurnRuntime,
-  stores: BtccStores,
-): ClosableBtccTurnRuntime {
-  const active = new Set<Promise<BtccTurnOutcome>>();
-  let closePromise: Promise<void> | null = null;
-  const track = (start: () => Promise<BtccTurnOutcome>): Promise<BtccTurnOutcome> => {
-    if (closePromise) throw new Error("BTCC composition is closing");
-    const tracked = start().finally(() => active.delete(tracked));
-    active.add(tracked);
-    return tracked;
-  };
-  return {
-    runTurn(command: BtccRunCommand) {
-      return track(() => runtime.runTurn(command));
-    },
-    stopTurn(command: BtccStopCommand) {
-      return track(() => runtime.stopTurn(command));
-    },
-    close() {
-      closePromise ??= closeOwnedBtccComposition(stores, active);
-      return closePromise;
-    },
-  };
-}
-
-async function closeOwnedBtccComposition(
-  stores: BtccStores,
-  active: Set<Promise<BtccTurnOutcome>>,
-): Promise<void> {
-  await Promise.allSettled([...active]);
-  stores.close();
 }

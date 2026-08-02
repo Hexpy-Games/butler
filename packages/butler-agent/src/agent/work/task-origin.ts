@@ -29,6 +29,14 @@ export interface TaskCompletionRouting {
   delivery_policy: "public-report";
 }
 
+/** Explicit continuation intent carried by a trusted worker origin. */
+export interface TaskBtccContinuation {
+  requested: true;
+  source_turn_id: string;
+  authorization_ref: string;
+  result_scope_ref?: string;
+}
+
 export interface TaskOriginContext {
   version: 1;
   origin_session_id: string;
@@ -41,6 +49,7 @@ export interface TaskOriginContext {
   transcript_ref: TaskOriginTranscriptRef;
   memory_refs: TaskOriginMemoryRef[];
   completion?: TaskCompletionRouting;
+  btcc_continuation?: TaskBtccContinuation;
 }
 
 export interface BuildTaskOriginContextInput {
@@ -50,6 +59,7 @@ export interface BuildTaskOriginContextInput {
   inbound?: InboundEnvelope | null;
   topicSummary?: string | null;
   createdAt?: string;
+  btccContinuation?: TaskBtccContinuation;
 }
 
 export interface ResolvedTaskOriginContext {
@@ -104,6 +114,7 @@ export function buildTaskOriginContext(input: BuildTaskOriginContextInput): Task
       review_owner: "completion-router",
       delivery_policy: "public-report",
     },
+    ...(input.btccContinuation ? { btcc_continuation: input.btccContinuation } : {}),
   };
 }
 

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type {
   ModelProviderAdapter,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { handleNativeStewardTelegramTurn } from "../../packages/butler-agent/src/interfaces/gateway/native-steward-bootstrap.ts";
 import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/router.ts";
 import { createTelegramLiveGateway } from "../../packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts";
 import { createTelegramTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/telegram/adapter.ts";
@@ -16,6 +17,8 @@ import {
   writeGatewaySettings,
 } from "../../packages/butler-agent/src/operations/gateway/registry.ts";
 import { ScriptedBtccGatewayRuntime } from "./support/fake-btcc-gateway-runtime.ts";
+import { buildTaskOriginContext } from
+  "../../packages/butler-agent/src/agent/work/task-origin.ts";
 
 let tempDir = "";
 let originalFetch: typeof fetch;
@@ -206,6 +209,124 @@ test("native butler-main leaves Telegram idle when gateway is not enabled", asyn
 
   expect(result.shutdownReason).toBe("bootstrap-only");
   expect(deliveries).toEqual([]);
+});
+
+test("native Butler publishes Telegram progress without sending a progress message", async () => {
+  const btcc = new ScriptedBtccGatewayRuntime("unused");
+  btcc.progressEvents.append({
+    sessionId: "butler/progress-policy",
+    turnId: "turn-telegram-progress",
+    destination: {
+      transport: "telegram",
+      accountId: "default",
+      peer: { kind: "group", id: "123" },
+      replyToMessageId: "message-progress",
+    },
+    event: { kind: "turn.started" },
+  });
+  const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
+
+  await runNativeButlerMain({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    btcc,
+    provider: fakeProvider,
+    waitForShutdown: false,
+    sendTelegram: async (input) => {
+      deliveries.push(input);
+      return { ok: true, transportMessageId: String(deliveries.length) };
+    },
+  });
+
+  expect(btcc.progressEvents.pending()).toEqual([]);
+  expect(deliveries).toEqual([]);
+});
+
+test("native Butler does not poll legacy task completion into a wake", async () => {
+  const taskDir = join(tempDir, "tasks", "legacy-completion");
+  mkdirSync(taskDir, { recursive: true });
+  writeFileSync(join(taskDir, "status"), "DONE\n", "utf8");
+  writeFileSync(join(taskDir, "request.md"), "legacy worker\n", "utf8");
+  writeFileSync(join(taskDir, "result.md"), "legacy result\n", "utf8");
+  writeFileSync(join(taskDir, "worker_activity_events.jsonl"), `${JSON.stringify({
+    semantic_phase: "verifying",
+    action_kind: "verify_result",
+    status_line: "Legacy worker completed.",
+    evidence_refs: ["result.md"],
+  })}\n`, "utf8");
+  writeFileSync(join(taskDir, "origin.json"), `${JSON.stringify(buildTaskOriginContext({
+    sessionId: "session-source",
+    taskSummary: "legacy completion",
+    project: null,
+    btccContinuation: {
+      requested: true,
+      source_turn_id: "source-turn",
+      authorization_ref: "authorization-1",
+      result_scope_ref: "scope-1",
+    },
+  }), null, 2)}\n`, "utf8");
+
+  const btcc = new ScriptedBtccGatewayRuntime("unused");
+  let legacyWakePolls = 0;
+  btcc.host.wake = {
+    reconcile: async () => {
+      legacyWakePolls += 1;
+      return { candidates: 1, authorized: 1, rejected: 0, dispatched: 1, pending: 0 };
+    },
+  };
+
+  await runNativeButlerMain({
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    btcc,
+    provider: fakeProvider,
+    waitForShutdown: false,
+  });
+
+  expect(legacyWakePolls).toBe(0);
+  expect(btcc.commands).toEqual([]);
+});
+
+test("native Steward enters the same BTCC facade and preserves Telegram delivery", async () => {
+  const btcc = new ScriptedBtccGatewayRuntime("steward reply");
+  const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
+  btcc.progressEvents.append({
+    sessionId: "steward/demo",
+    turnId: "steward-telegram-progress",
+    destination: {
+      transport: "telegram",
+      accountId: "default",
+      peer: { kind: "group", id: "123" },
+      replyToMessageId: "steward-message-1",
+    },
+    event: { kind: "turn.started" },
+  });
+  const result = await handleNativeStewardTelegramTurn({
+    projectName: "demo",
+    workspacePath: tempDir,
+    message: "steward ingress",
+    chatId: "123",
+    messageId: "steward-message-1",
+    butlerHome: tempDir,
+    butlerData: tempDir,
+    btcc,
+    sendTelegram: async (input) => {
+      deliveries.push(input);
+      return { ok: true, transportMessageId: "telegram-1" };
+    },
+  });
+
+  expect(result.sessionId).toBe("steward/demo");
+  expect(result.text).toBe("steward reply");
+  expect(result.delivery.ok).toBe(true);
+  expect(btcc.commands[0]).toMatchObject({
+    kind: "run",
+    sessionId: "steward/demo",
+    message: { content: "steward ingress" },
+  });
+  expect(deliveries).toContainEqual(expect.objectContaining({ text: "steward reply" }));
+  expect(deliveries.map((delivery) => delivery.text)).toEqual(["steward reply"]);
+  expect(btcc.progressEvents.pending()).toEqual([]);
 });
 
 test("native Telegram /update command checks service updates without model routing", async () => {

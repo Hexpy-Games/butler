@@ -12,6 +12,7 @@ export {
 } from "./runtime-identity.ts";
 export {
   appTurnEventAction,
+  createNativeButlerProgressPublisher,
   sendStartupNotification,
   startupMessage,
   statusText,

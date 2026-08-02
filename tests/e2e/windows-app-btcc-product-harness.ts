@@ -2,21 +2,13 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentConversationStore } from
-  "../../packages/butler-agent/src/agent/conversation/store.ts";
-import { PromptAssembler } from
-  "../../packages/butler-agent/src/agent/prompt/prompt-assembler.ts";
 import { createProductionBtccComposition } from
   "../../packages/butler-agent/src/agent/composition/index.ts";
 import type { ModelRoundPort } from
   "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import {
-  BtccGatewayLifecycleService,
   BtccInboundDispatcher,
-  bindBtccGatewayRuntime,
-  createBtccQueueEntryDecider,
   createBtccGatewayHandlers,
-  type BtccQueueEntryDecider,
 } from "../../packages/butler-agent/src/interfaces/gateway/btcc/index.ts";
 import { createAppTransportAdapter } from
   "../../packages/butler-agent/src/interfaces/transport/app/adapter.ts";
@@ -73,24 +65,15 @@ export async function runWindowsAppBtccProductHarness(
     appMessageDbPath: dbPath,
     ownerId: `windows-product-harness:${process.pid}`,
     modelRound,
-  });
-  const conversations = new AgentConversationStore({ butlerData: root });
-  const lifecycle = new BtccGatewayLifecycleService({
-    store: bindings,
-    conversationStore: conversations,
-    butlerData: root,
-    ...bindBtccGatewayRuntime(btcc),
-    promptAssembler: new PromptAssembler({ butlerHome: process.cwd(), butlerData: root }),
-    generateSessionTitle: async () => null,
+    sessionBindings: bindings,
   });
   const gateway = createGatewayServer({
     router: new GatewayRouter({ store: bindings }),
-    handlers: createBtccGatewayHandlers(lifecycle),
+    handlers: createBtccGatewayHandlers({ btcc }),
     butlerData: root,
   });
   const dispatcher = new BtccInboundDispatcher();
   const queue = new NativeInboundQueue(root);
-  const decideEntry = createBtccQueueEntryDecider(dbPath);
   const deliveryGuard = new DeliveryGuard({
     adapters: [createAppTransportAdapter()],
     butlerData: root,
@@ -109,21 +92,21 @@ export async function runWindowsAppBtccProductHarness(
     if (browser) await browser.send("첫 번째 Windows BTCC 메시지입니다.");
     else await postMessage(app.url, "첫 번째 Windows BTCC 메시지입니다.");
     const firstDispatch = await waitAndDispatchOne(dispatcher, {
-      queue, gateway, bindings, deliveryGuard, decideEntry,
+      queue, gateway, bindings, deliveryGuard,
     });
     if (browser) await browser.waitForFinalCount(1);
     const chatId = browser ? await latestChatId(app.url) : "general";
     if (browser) await browser.send("앞선 대화에 이어 두 번째로 답해주세요.");
     else await postMessage(app.url, "앞선 대화에 이어 두 번째로 답해주세요.");
     const secondDispatch = await waitAndDispatchOne(dispatcher, {
-      queue, gateway, bindings, deliveryGuard, decideEntry,
+      queue, gateway, bindings, deliveryGuard,
     });
     const browserFinalCount = browser ? await browser.waitForFinalCount(2) : null;
     const browserReload = browser ? await browser.reloadAndVerify(2) : null;
     await browser?.close();
     browser = null;
     const before = await waitForCanonicalSnapshot(app.url, chatId);
-    await btcc.close();
+    await btcc.host.close();
     app.stop();
     app = createAppServer({
       dbPath,
@@ -187,9 +170,8 @@ export async function runWindowsAppBtccProductHarness(
     return result;
   } finally {
     await browser?.close();
-    await btcc.close();
+    await btcc.host.close();
     app.stop();
-    conversations.close();
     bindings.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -202,7 +184,6 @@ async function waitAndDispatchOne(
     gateway: ReturnType<typeof createGatewayServer>;
     bindings: SessionBindingStore;
     deliveryGuard: DeliveryGuard;
-    decideEntry: BtccQueueEntryDecider;
   },
 ) {
   const deadline = Date.now() + 10_000;
@@ -212,7 +193,6 @@ async function waitAndDispatchOne(
       server: input.gateway,
       store: input.bindings,
       deliveryGuard: input.deliveryGuard,
-      decideEntry: input.decideEntry,
       limit: 1,
     });
     if (summary.claimed > 0) {

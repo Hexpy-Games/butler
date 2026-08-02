@@ -1,10 +1,10 @@
-import type { ButlerContextInput } from "../../../agent/btcc/contracts.ts";
+import type { ButlerContextInput } from "../contracts.ts";
 import type {
   ContextProjectionClass,
   ContextScopeKind,
-} from "../../../agent/context/context-projection.ts";
+} from "../../context/context-projection.ts";
 
-export type GatewayContextSection = {
+export type BtccContextSection = {
   id: string;
   content: string;
   sourceRevision: string;
@@ -12,15 +12,15 @@ export type GatewayContextSection = {
   scopeKind: ContextScopeKind;
 };
 
-export type GatewayContextSnapshotCommand = {
+export type BtccContextSnapshotCommand = {
   userRef: string;
   sessionId: string;
   projectRef?: string;
   workspacePath: string;
-  sections: GatewayContextSection[];
+  sections: BtccContextSection[];
 };
 
-export interface ContextDocumentWriter {
+export interface BtccContextDocumentWriter {
   persist(input: {
     scopeKind: ContextScopeKind;
     scopeId: string;
@@ -32,8 +32,8 @@ export interface ContextDocumentWriter {
 }
 
 export function snapshotContextDocuments(
-  command: GatewayContextSnapshotCommand,
-  documents: ContextDocumentWriter,
+  command: BtccContextSnapshotCommand,
+  documents: BtccContextDocumentWriter,
 ): ButlerContextInput {
   const refs = {
     profileRefs: [] as string[],
@@ -74,7 +74,7 @@ function targetFor(projectionClass: ContextProjectionClass) {
 }
 
 function scopeFor(
-  command: GatewayContextSnapshotCommand,
+  command: BtccContextSnapshotCommand,
   requested: ContextScopeKind,
 ) {
   if (requested === "user") return { kind: "user" as const, id: command.userRef };
@@ -85,7 +85,7 @@ function scopeFor(
   return { kind: "project" as const, id: command.projectRef };
 }
 
-function observationScopes(command: GatewayContextSnapshotCommand): string[] {
+function observationScopes(command: BtccContextSnapshotCommand): string[] {
   return [
     `workspace:${command.workspacePath}`,
     "web:current",

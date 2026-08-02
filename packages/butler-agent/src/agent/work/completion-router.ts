@@ -5,6 +5,7 @@ import { TaskNotificationQueue } from "./task-notifications.ts";
 import { TaskStore, workSafetyForTask, type TaskRecord } from "./task-store.ts";
 import { buildTaskOriginContext, type TaskCompletionOwner, type TaskOriginContext } from "./task-origin.ts";
 import { WorkOrchestrationStore } from "./work-orchestration.ts";
+import type { BtccWakeCompletionCandidate } from "../btcc/contracts.ts";
 
 export type CompletionConsumer = TaskCompletionOwner;
 
@@ -76,6 +77,37 @@ export function enqueueCompletionNotifications(
   input: CompletionRouteInput,
 ): number {
   return enqueueOwnedNotifications(input);
+}
+
+/**
+ * Returns only explicitly requested BTCC continuations from completed work.
+ * Ordinary worker results remain notification-only and cannot become wakes.
+ */
+export function btccCompletionWakeCandidates(input: {
+  butlerData: string;
+  consumer: CompletionConsumer;
+}): BtccWakeCompletionCandidate[] {
+  const taskStore = new TaskStore(input.butlerData);
+  const tasks = readCompletionTaskSnapshot(taskStore).reportable;
+  const candidates: BtccWakeCompletionCandidate[] = [];
+  for (const task of tasks) {
+    if (completionOwnerForTask(task, input.butlerData) !== input.consumer) continue;
+    const origin = originForTask(task, input.butlerData);
+    if (!origin) continue;
+    const continuation = origin?.btcc_continuation;
+    if (!continuation?.requested) continue;
+    candidates.push({
+      taskId: task.taskId,
+      originSessionId: origin.origin_session_id,
+      sourceTurnId: continuation.source_turn_id,
+      authorizationRef: continuation.authorization_ref,
+      ...(continuation.result_scope_ref
+        ? { resultScopeRef: continuation.result_scope_ref }
+        : {}),
+      resultText: (task.observedResult ?? task.result ?? "").trim().slice(0, 12_000),
+    });
+  }
+  return candidates;
 }
 
 export function claimPlannedWorkerCompletions(input: {

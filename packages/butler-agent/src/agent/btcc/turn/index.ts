@@ -2,6 +2,7 @@ export { loadOrAdmitTurn, type ContinuingTurnCommand } from
   "./load-or-admit-turn.ts";
 export { projectTerminalOutcome } from "./project-terminal-outcome.ts";
 export { stopTurn } from "./stop-turn.ts";
+export { createTurnRuntime, type TurnRuntimeDependencies } from "./turn.ts";
 export type {
   AcceptedTurnTransition,
   AdmissionConstructionClaim,

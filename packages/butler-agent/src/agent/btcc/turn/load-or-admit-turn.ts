@@ -14,44 +14,90 @@ export async function loadOrAdmitTurn(
     admission: TurnAdmissionRepository;
     turns: TurnStateRepository;
   },
+  onAdmitted?: (turn: TurnRecord, isFresh: boolean) => void | Promise<void>,
 ): Promise<TurnRecord> {
   const existing = await dependencies.turns.findTurn(command.turnId);
   if (existing) {
-    if (command.kind !== "resume") assertExactFreshReplay(existing, command);
+    if (command.kind !== "resume") {
+      assertStableRequestIdentity(existing, requestIdentityForCommand(command));
+    }
+    await onAdmitted?.(existing, false);
     return existing;
   }
   if (command.kind === "resume") {
     throw new Error(`BTCC Turn is not admitted: ${command.turnId}`);
   }
-  return admitTurn(command, dependencies.admission, dependencies.turns);
+  const admitted = await admitTurn(command, dependencies.admission, dependencies.turns);
+  await onAdmitted?.(admitted, true);
+  return admitted;
 }
 
-function assertExactFreshReplay(
-  turn: TurnRecord,
+export type StableTurnRequestIdentity = {
+  sessionId: string;
+  triggerKey: string;
+  messageId: string;
+  content: string;
+  wake?: {
+    triggerId: string;
+    sourceTurnId: string;
+    authorizationRef: string;
+    resultScopeRef?: string;
+  };
+};
+
+export function requestIdentityForCommand(
   command: Extract<BtccTurnCommand, { kind: "run" | "wake" }>,
+): StableTurnRequestIdentity {
+  if (command.kind === "run") {
+    return {
+      sessionId: command.sessionId,
+      triggerKey: command.triggerKey,
+      messageId: command.message.messageId,
+      content: command.message.content,
+    };
+  }
+  return {
+    sessionId: command.sessionId,
+    triggerKey: command.triggerKey,
+    messageId: command.trigger.triggerId,
+    content: command.trigger.content,
+    wake: {
+      triggerId: command.trigger.triggerId,
+      sourceTurnId: command.trigger.sourceTurnId,
+      authorizationRef: command.trigger.authorizationRef,
+      ...(command.trigger.resultScopeRef
+        ? { resultScopeRef: command.trigger.resultScopeRef }
+        : {}),
+    },
+  };
+}
+
+export function assertStableRequestIdentity(
+  turn: TurnRecord,
+  identity: StableTurnRequestIdentity,
 ): void {
-  const source = command.kind === "run"
-    ? command.message
-    : { messageId: command.trigger.triggerId, content: command.trigger.content };
   if (
-    turn.sessionId !== command.sessionId ||
-    turn.triggerKey !== command.triggerKey ||
-    turn.originalMessageId !== source.messageId ||
-    turn.originalMessage !== source.content ||
-    canonicalJson(turn.modelSelection) !== canonicalJson(command.modelSelection) ||
-    canonicalJson(turn.context) !== canonicalJson(command.context)
+    turn.sessionId !== identity.sessionId ||
+    turn.triggerKey !== identity.triggerKey ||
+    turn.originalMessageId !== identity.messageId ||
+    turn.originalMessage !== identity.content
   ) {
     throw new Error(`BTCC run replay does not match admitted Turn: ${turn.turnId}`);
   }
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`);
-    return `{${entries.join(",")}}`;
+  if (!identity.wake) {
+    if (turn.wakeIdentity) {
+      throw new Error(`BTCC run replay does not match admitted Turn: ${turn.turnId}`);
+    }
+    return;
   }
-  return JSON.stringify(value) ?? "undefined";
+  const wake = turn.wakeIdentity;
+  if (
+    !wake ||
+    wake.triggerId !== identity.wake.triggerId ||
+    wake.sourceTurnId !== identity.wake.sourceTurnId ||
+    wake.authorizationRef !== identity.wake.authorizationRef ||
+    (wake.resultScopeRef ?? undefined) !== identity.wake.resultScopeRef
+  ) {
+    throw new Error(`BTCC run replay does not match admitted Turn: ${turn.turnId}`);
+  }
 }
