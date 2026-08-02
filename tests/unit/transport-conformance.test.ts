@@ -170,20 +170,22 @@ test("turn event projection follows transport capabilities", () => {
   ])).toBe("1 safe activity event, response checked");
 });
 
-test("session actors remain transport-agnostic", () => {
-  const actorFiles = [
-    join(
-      process.cwd(),
-      "packages",
-      "butler-agent",
-      "src",
-      "interfaces",
-      "gateway",
-      "btcc",
-      "btcc-session-actor.ts",
-    ),
-  ];
-  for (const file of actorFiles) {
+test("BTCC Gateway adapters remain transport-agnostic", () => {
+  const gatewayRoot = join(
+    process.cwd(),
+    "packages",
+    "butler-agent",
+    "src",
+    "interfaces",
+    "gateway",
+    "btcc",
+  );
+  const adapterFiles = [
+    "btcc-inbound-dispatcher.ts",
+    "create-btcc-gateway-handlers.ts",
+    "project-turn-outcome.ts",
+  ].map((file) => join(gatewayRoot, file));
+  for (const file of adapterFiles) {
     expect(readFileSync(file, "utf8")).not.toMatch(/telegram/i);
   }
 });

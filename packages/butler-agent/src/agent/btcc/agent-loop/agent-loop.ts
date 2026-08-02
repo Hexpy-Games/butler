@@ -23,6 +23,7 @@ import {
   executePreparedBtccToolCall,
   prepareBtccToolCall,
 } from "./tool-execution.ts";
+import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
@@ -137,6 +138,15 @@ export async function runBtccAgentLoop(
     return { text, calls };
   };
 
+  const synthesizeFinalResponseForLoop = () => synthesizeFinalResponse({
+    synthesis: input.finalSynthesis,
+    messages,
+    maxIterations,
+    runModelRound,
+    appendAssistantResponse,
+    emit: (event) => emit(events, input.onEvent, event),
+  });
+
   const recordToolResult = async (record: {
     call: BtccAgentLoopToolCall;
     result: BtccAgentLoopToolResult;
@@ -158,65 +168,6 @@ export async function runBtccAgentLoop(
       toolCall: record.call,
       toolResult: record.result,
     }))?.trim() || null;
-  };
-
-  const runFinalSynthesis = async (): Promise<string | null> => {
-    const synthesis = input.finalSynthesis;
-    if (!synthesis) return null;
-    const attempts = Math.max(1, Math.trunc(synthesis.maxAttempts ?? 1));
-    let lastText = "";
-    let lastResponse: ModelRoundResult | undefined;
-    for (let attempt = 0; attempt < attempts; attempt += 1) {
-      const instructions = attempt === 0
-        ? synthesis.instructions
-        : synthesis.retryInstructions ?? synthesis.instructions;
-      if (synthesis.includeInstructionsInMessages && attempt === 0) {
-        messages.push({ role: "user", content: instructions });
-      }
-      try {
-        emit(events, input.onEvent, {
-          type: "model_call",
-          iteration: maxIterations + attempt,
-        });
-        const response = await runModelRound({
-          tools: [],
-          instructions,
-          iteration: maxIterations + attempt,
-        });
-        lastResponse = response;
-        const { text } = appendAssistantResponse(response);
-        lastText = text;
-        emit(events, input.onEvent, {
-          type: "model_response",
-          iteration: maxIterations + attempt,
-          text: response.text,
-        });
-        const accepted = (await synthesis.acceptText?.({
-          text,
-          response,
-          attempt,
-        }))?.trim() || (synthesis.acceptText ? null : text);
-        if (accepted) {
-          if (!text || accepted !== text) messages.push({ role: "assistant", content: accepted });
-          return accepted;
-        }
-      } catch (error) {
-        try {
-          synthesis.onFailure?.(error);
-        } catch {
-          // Final synthesis logging is observational and cannot alter delivery.
-        }
-        if (synthesis.propagateFailure) throw error;
-        return null;
-      }
-      if (attempt + 1 < attempts && synthesis.retryInstructions) {
-        messages.push({ role: "user", content: synthesis.retryInstructions });
-      }
-    }
-    if (synthesis.onExhausted) {
-      return (await synthesis.onExhausted({ text: lastText, response: lastResponse }))?.trim() || null;
-    }
-    return null;
   };
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {
@@ -268,7 +219,7 @@ export async function runBtccAgentLoop(
         (!text && input.finalSynthesis.triggerAfterToolEmpty)
       );
       if (shouldSynthesize) {
-        const synthesized = await runFinalSynthesis();
+        const synthesized = await synthesizeFinalResponseForLoop();
         if (synthesized) {
           return { finalText: synthesized, messages, events, stoppedByLimit: false };
         }
@@ -369,7 +320,7 @@ export async function runBtccAgentLoop(
     return { finalText: synthesizedText, messages, events, stoppedByLimit: true };
   }
   const finalSynthesisText = toolResults.length > 0
-    ? await runFinalSynthesis()
+    ? await synthesizeFinalResponseForLoop()
     : null;
   if (finalSynthesisText) {
     return { finalText: finalSynthesisText, messages, events, stoppedByLimit: true };

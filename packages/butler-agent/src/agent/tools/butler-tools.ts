@@ -43,24 +43,19 @@ import {
 import { BUTLER_TOOLS } from "./registry.ts";
 import type { ExternalToolCatalogInput } from "./progressive-catalog.ts";
 import type {
+  ButlerToolCall,
   ButlerToolDefinition,
   NativeToolAvailabilityOverrides,
 } from "./types.ts";
 export { BUTLER_TOOLS, CORE_BUTLER_TOOLS } from "./registry.ts";
 export type {
+  ButlerToolCall,
   ButlerToolEffectBoundary,
   ButlerToolDefinition,
   ToolCapabilityCategory,
   ToolCapabilityMetadata,
 } from "./types.ts";
 
-export type ButlerToolCall = {
-  name: string;
-  args: Record<string, unknown>;
-  rawArguments: string;
-  providerCallId?: string;
-  signal?: AbortSignal;
-};
 export type ButlerToolExecutor = (call: ButlerToolCall) => Promise<unknown>;
 export type ButlerToolRuntimeContext = {
   effectOccurrenceId?: string;
