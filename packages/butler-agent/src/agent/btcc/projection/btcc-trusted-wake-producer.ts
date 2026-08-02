@@ -12,7 +12,7 @@ import type {
   BtccWakeAuthorization,
   TurnRecord,
   TurnStateRepository,
-} from "../turn/contracts.ts";
+} from "../turn/index.ts";
 
 type WakeAuthorizationStore = {
   validateWake(input: BtccWakeAuthorization): boolean | Promise<boolean>;

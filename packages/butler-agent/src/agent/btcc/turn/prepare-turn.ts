@@ -3,11 +3,11 @@ import {
   compilePromptMaterialContextPlan,
 } from "../../context/conversation-context.ts";
 import { defaultRecentConversationTokenBudget } from "../../context/budget.ts";
-import { ConversationAdmissionTurn } from "../../conversation/session-admission.ts";
-import type {
-  ConversationContextStoreReader,
-  ConversationWriter,
-} from "../../conversation/types.ts";
+import {
+  ConversationAdmissionTurn,
+  type ConversationContextStoreReader,
+  type ConversationWriter,
+} from "../../conversation/index.ts";
 import type { RuntimeTurnEventInput } from "../../events/turn-events.ts";
 import type {
   ContextAssembly,

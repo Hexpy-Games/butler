@@ -18,10 +18,10 @@ import { migrateBtccSchema } from
 import {
   createGuidedEffectService,
 } from "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
-import { createGuidedTurnRuntime } from
-  "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
+import { createTurnRuntime as createGuidedTurnRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { BtccRunCommand } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { EffectAdapter } from
   "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import { seedLegacySessionWork } from

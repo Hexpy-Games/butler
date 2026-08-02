@@ -6,9 +6,9 @@ import type { TurnRecord } from
 import { digest } from
   "../../packages/butler-agent/src/agent/btcc/identity/index.ts";
 import { projectGuidedToolContext } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-context-projection.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-context-projection.ts";
 import { renderGuidedPrompt } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-prompt.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
 import type { SqliteGuidedToolJournal } from
   "../../packages/butler-agent/src/agent/adapters/index.ts";
 

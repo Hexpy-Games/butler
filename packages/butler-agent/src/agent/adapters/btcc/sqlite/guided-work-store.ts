@@ -10,7 +10,7 @@ import type {
   RecordWorkReviewCommand,
   ReplaceWorkPlanCommand,
   WorkTurnScope,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import { stableJson } from "./identity.ts";
 import {
   GuidedWorkMutationJournal,

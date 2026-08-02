@@ -7,11 +7,11 @@ import {
   type DurableWorkStore,
   type DurableWorkView,
   type RecordWorkReviewCommand,
-} from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   DURABLE_WORK_TOOL_DEFINITIONS,
   executeDurableWorkTool,
-} from "../../packages/butler-agent/src/agent/composition/production-btcc/durable-work-tools.ts";
+} from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 
 test("Managed Work exposes the fixed six-stage transition guide", () => {
   expect(allowedNextWorkStages()).toEqual(["conception"]);

@@ -2,20 +2,25 @@ import { expect, test } from "bun:test";
 import { createBtcc } from
   "../../packages/butler-agent/src/agent/btcc/btcc.ts";
 import type {
+  BtccTurnRequest,
+} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type {
   BtccRunCommand,
   BtccStopCommand,
   BtccTurnPreparation,
-  BtccTurnRequest,
   BtccTurnRuntime,
   FreshBtccTurnCommand,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+  BtccTurnProgressObserver,
+} from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import type { BtccCommittedProgressEvent } from
+  "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { InMemoryBtccProgressEventRepository } from "./support/fake-btcc-gateway-runtime.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
 
 test("BTCC serializes different Turns in one session and deduplicates one in-flight Turn", async () => {
   const runtime = new DelayedRuntime();
-  const btcc = createBtcc({
+  const { btcc, host } = createBtcc({
     runtime,
     preparation: preparation(),
     progressEvents: new InMemoryBtccProgressEventRepository(),
@@ -24,6 +29,8 @@ test("BTCC serializes different Turns in one session and deduplicates one in-fli
   const first = request("session-1", "turn-1");
   const second = request("session-1", "turn-2");
   try {
+    expect(Object.keys(btcc).sort()).toEqual(["runTurn", "stopTurn"]);
+    expect("host" in btcc).toBe(false);
     const [firstResult, secondResult] = await Promise.all([
       btcc.runTurn(first),
       btcc.runTurn(second),
@@ -41,14 +48,14 @@ test("BTCC serializes different Turns in one session and deduplicates one in-fli
     expect(left).toEqual(right);
     expect(runtime.calls).toEqual(["turn-dedupe"]);
   } finally {
-    await btcc.host.close();
+    await host.close();
   }
 });
 
 test("BTCC Stop fences an active Turn through the same public facade", async () => {
   const runtime = new DelayedRuntime();
   const progressEvents = new InMemoryBtccProgressEventRepository();
-  const btcc = createBtcc({
+  const { btcc, host } = createBtcc({
     runtime,
     preparation: preparation(),
     progressEvents,
@@ -75,7 +82,7 @@ test("BTCC Stop fences an active Turn through the same public facade", async () 
       .filter((event) => event.event.kind === "turn.cancelled"))
       .toHaveLength(1);
   } finally {
-    await btcc.host.close();
+    await host.close();
   }
 });
 
@@ -126,7 +133,7 @@ test("BTCC host replays pending progress across Turns without rerunning a Turn",
   const attempts: Array<{ eventId: string; actionId: string; published: boolean }> = [];
   const publisher = {
     async publish(event: import(
-      "../../packages/butler-agent/src/agent/btcc/index.ts"
+      "../../packages/butler-agent/src/agent/btcc/projection/index.ts"
     ).BtccCommittedProgressEvent): Promise<void> {
       expect(recordedEvents).toContain(event.event.kind);
       attempts.push({
@@ -139,29 +146,29 @@ test("BTCC host replays pending progress across Turns without rerunning a Turn",
   };
 
   const firstRuntime = new ProgressOnlyRuntime();
-  const firstBtcc = createBtcc({
+  const firstAssembly = createBtcc({
     runtime: firstRuntime,
     preparation,
     progressEvents,
     turns: { findTurn: async () => null },
   });
-  const first = await firstBtcc.runTurn(request("session-progress", "turn-progress"));
+  const first = await firstAssembly.btcc.runTurn(request("session-progress", "turn-progress"));
   expect(first.kind).toBe("delivered");
   expect(progressEvents.pending("turn-progress")).not.toHaveLength(0);
-  await firstBtcc.host.progress.reconcile(publisher);
+  await firstAssembly.host.progress.reconcile(publisher);
   expect(progressEvents.pending()).not.toHaveLength(0);
-  await firstBtcc.host.close();
+  await firstAssembly.host.close();
 
   rejectPublisher = false;
   const secondRuntime = new ProgressOnlyRuntime();
-  const secondBtcc = createBtcc({
+  const secondAssembly = createBtcc({
     runtime: secondRuntime,
     preparation,
     progressEvents,
     turns: { findTurn: async () => null },
   });
-  await secondBtcc.host.progress.reconcile(publisher);
-  await secondBtcc.host.close();
+  await secondAssembly.host.progress.reconcile(publisher);
+  await secondAssembly.host.close();
 
   const committed = progressEvents.all();
   expect(secondRuntime.commands).toHaveLength(0);
@@ -269,7 +276,7 @@ class DelayedRuntime implements BtccTurnRuntime {
 
   async runTurn(
     command: BtccRunCommand,
-    _progress?: import("../../packages/butler-agent/src/agent/btcc/index.ts").BtccTurnProgressObserver,
+    _progress?: BtccTurnProgressObserver,
     onAdmitted?: (isFresh: boolean) => void | Promise<void>,
   ): Promise<BtccRuntimeOutcome> {
     this.calls.push(command.turnId);
@@ -307,7 +314,7 @@ class ProgressOnlyRuntime implements BtccTurnRuntime {
 
   async runTurn(
     command: BtccRunCommand,
-    progress?: import("../../packages/butler-agent/src/agent/btcc/index.ts").BtccTurnProgressObserver,
+    progress?: BtccTurnProgressObserver,
     onAdmitted?: (isFresh: boolean) => void | Promise<void>,
   ): Promise<BtccRuntimeOutcome | { kind: "already_delivered"; turnId: string; messageId: string; content: string }> {
     this.commands.push(command);

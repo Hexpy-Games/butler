@@ -19,7 +19,7 @@ import { SqliteGuidedEffectJournal } from
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import type { DurableWorkView } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   createGuidedEffectService,
   type GuidedEffectFaultHook,
@@ -29,9 +29,9 @@ import {
   type GuidedWorkspaceFileInput,
   workspaceFileEffectTarget,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-workspace-file-effect.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-effect.ts";
 import { prepareGuidedWorkspaceFileEdit } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-workspace-file-edit-effect.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-edit-effect.ts";
 import { createFileToolHandlers } from
   "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
 

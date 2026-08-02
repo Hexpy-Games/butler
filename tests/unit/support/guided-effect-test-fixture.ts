@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import type {
   DurableWorkView,
-} from "../../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+} from "../../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   createGuidedEffectService,
   type EffectAdapter,

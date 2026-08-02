@@ -5,6 +5,8 @@ import type {
   ModelRoundTool,
   ModelRoundToolCall,
 } from "../ports/model-round.ts";
+import type { BtccTurnProgressObserver } from "../contracts.ts";
+import type { TurnRecord } from "../turn/index.ts";
 import type {
   PromptUsageAttribution,
   ProviderStreamProjectionHandler,
@@ -15,6 +17,19 @@ import type { AttachmentRef } from "../../../gateways/core/contracts.ts";
 export type BtccAgentLoopMessage = ModelRoundMessage;
 export type BtccAgentLoopToolDefinition = ModelRoundTool;
 export type BtccAgentLoopToolCall = ModelRoundToolCall;
+
+export type BtccAgentLoopResult = {
+  content: string;
+  route: "direct" | "assisted" | "managed";
+};
+
+export interface BtccAgentLoop {
+  run(input: {
+    turn: TurnRecord;
+    signal: AbortSignal;
+    progress?: BtccTurnProgressObserver;
+  }): Promise<BtccAgentLoopResult>;
+}
 
 export interface BtccAgentLoopToolResult {
   toolCallId: string;

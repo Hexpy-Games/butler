@@ -27,7 +27,7 @@ import { SqliteGuidedWorkStore } from "./guided-work-store.ts";
 import {
   createDurableWorkService,
   type LegacyProjectWorkSource,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import {
   cutoverLegacyBtccTurns,
 } from "./legacy-turn-cutover/index.ts";

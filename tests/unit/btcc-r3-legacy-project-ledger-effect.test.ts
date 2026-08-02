@@ -14,9 +14,9 @@ import {
   readCanonicalProjectLedger,
 } from "../../packages/butler-agent/src/agent/adapters/index.ts";
 import type { BtccRunCommand } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { DurableWorkView } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import { createGuidedEffectService } from
   "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import type { GuidedEffectFaultHook } from
@@ -24,7 +24,7 @@ import type { GuidedEffectFaultHook } from
 import {
   createGuidedProjectLedgerEffectAdapter,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-project-ledger-effect.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-project-ledger-effect.ts";
 import {
   ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
   type ActiveProjectLedgerReference,

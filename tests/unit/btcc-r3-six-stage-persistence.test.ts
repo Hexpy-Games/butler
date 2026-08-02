@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import {
   createDurableWorkService,
   type WorkTurnScope,
-} from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   SqliteGuidedToolJournal,
   SqliteGuidedWorkStore,

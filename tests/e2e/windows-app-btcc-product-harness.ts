@@ -59,7 +59,7 @@ export async function runWindowsAppBtccProductHarness(
       };
     },
   };
-  const btcc = createProductionBtccComposition({
+  const composition = createProductionBtccComposition({
     butlerHome: process.cwd(),
     butlerData: root,
     appMessageDbPath: dbPath,
@@ -67,6 +67,7 @@ export async function runWindowsAppBtccProductHarness(
     modelRound,
     sessionBindings: bindings,
   });
+  const { btcc, host: btccHost } = composition;
   const gateway = createGatewayServer({
     router: new GatewayRouter({ store: bindings }),
     handlers: createBtccGatewayHandlers({ btcc }),
@@ -81,7 +82,7 @@ export async function runWindowsAppBtccProductHarness(
   let browser: Awaited<ReturnType<typeof launchWindowsAppBrowser>> | null = null;
 
   try {
-    await btcc.ready;
+    await composition.ready;
     browser = options.browser
       ? await launchWindowsAppBrowser({
         repoRoot: process.cwd(),
@@ -106,7 +107,7 @@ export async function runWindowsAppBtccProductHarness(
     await browser?.close();
     browser = null;
     const before = await waitForCanonicalSnapshot(app.url, chatId);
-    await btcc.host.close();
+    await btccHost.close();
     app.stop();
     app = createAppServer({
       dbPath,
@@ -170,7 +171,7 @@ export async function runWindowsAppBtccProductHarness(
     return result;
   } finally {
     await browser?.close();
-    await btcc.host.close();
+    await btccHost.close();
     app.stop();
     bindings.close();
     rmSync(root, { recursive: true, force: true });

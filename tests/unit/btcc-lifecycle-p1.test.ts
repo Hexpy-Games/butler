@@ -16,10 +16,10 @@ import { createBtccProgressProjectionHost } from
   "../../packages/butler-agent/src/agent/btcc/projection/btcc-progress-outbox-consumer.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/open-btcc-sqlite-stores.ts";
-import type {
-  BtccTurnRequest,
-  BtccWakeCompletionCandidate,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { BtccTurnRequest } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
+import type { BtccWakeCompletionCandidate } from
+  "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/contracts.ts";
 import { btccCompletionWakeCandidates } from

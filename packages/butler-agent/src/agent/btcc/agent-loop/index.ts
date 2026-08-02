@@ -1,5 +1,7 @@
 export { runBtccAgentLoop } from "./agent-loop.ts";
 export type {
+  BtccAgentLoop,
+  BtccAgentLoopResult,
   BtccAgentLoopEvent,
   BtccAgentLoopInput,
   BtccAgentLoopMessage,
@@ -10,12 +12,5 @@ export type {
   BtccAgentLoopToolDefinition,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
-export {
-  createToolResultModelPreviewContext,
-  serializeToolResultPayloadForProvider,
-  toolResultPayloadForProvider,
-} from "../../model-tool-loop/tool-result-serialization.ts";
-export { structuredToolResultModelPreview } from
-  "../../model-tool-loop/tool-result-model-preview.ts";
-export type { ToolResultModelPreviewContext } from
-  "../../model-tool-loop/tool-result-model-preview.ts";
+export { createProductionGuidedTurnAgent } from "./guided-turn-agent.ts";
+export type { ModelRoundPort } from "../ports/model-round.ts";

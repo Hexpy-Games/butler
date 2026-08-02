@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   ReplaceWorkPlanCommand,
   WorkTurnScope,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import type { GuidedWorkRow, GuidedWorkTurn } from "./guided-work-records.ts";
 import { guidedWorkRecordId } from "./guided-work-record-id.ts";
 import { guidedWorkMatchesScope } from "./guided-work-scope.ts";

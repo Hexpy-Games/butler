@@ -1,17 +1,40 @@
 import type {
   Btcc,
-  BtccCommittedProgressEvent,
-  BtccProgressEventRepository,
-  BtccHost,
-  BtccRunCommand,
-  BtccStopCommand,
   BtccTurnRequest,
   BtccTurnOutcome,
-  BtccWakeAuthorization,
 } from "../../../packages/butler-agent/src/agent/btcc/index.ts";
-import type { BtccTurnProgressObserver } from "../../../packages/butler-agent/src/agent/btcc/index.ts";
+import type {
+  BtccRunCommand,
+  BtccStopCommand,
+  BtccTurnProgressObserver,
+  BtccWakeAuthorization,
+} from "../../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import type {
+  BtccCommittedProgressEvent,
+  BtccProgressEventRepository,
+  BtccWakeCompletionCandidate,
+} from "../../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 
 type BtccTurnCommand = BtccRunCommand | BtccStopCommand;
+
+export type BtccTestHost = {
+  progress: {
+    hasCommittedEvent(turnId: string, kind: string): boolean;
+    reconcile(publisher: {
+      publish(event: BtccCommittedProgressEvent): Promise<void> | void;
+    }): Promise<{ attempted: number; published: number; pending: number }>;
+  };
+  wake?: {
+    reconcile(candidates: readonly BtccWakeCompletionCandidate[]): Promise<{
+      candidates: number;
+      authorized: number;
+      rejected: number;
+      dispatched: number;
+      pending: number;
+    }>;
+  };
+  close(): void;
+};
 
 export class ScriptedBtccGatewayRuntime implements Btcc {
   readonly commands: BtccTurnCommand[] = [];
@@ -25,31 +48,6 @@ export class ScriptedBtccGatewayRuntime implements Btcc {
   };
   readonly progressEvents = new InMemoryBtccProgressEventRepository();
   readonly wakeAuthorizations = new InMemoryBtccWakeAuthorizationRepository();
-  readonly host: BtccHost = {
-    progress: {
-      hasCommittedEvent: (turnId, kind) => this.progressEvents.forTurn(turnId)
-        .some((event) => event.event.kind === kind),
-      reconcile: async (publisher) => {
-        const pending = this.progressEvents.pending();
-        let published = 0;
-        for (const event of pending) {
-          try {
-            await publisher.publish(event);
-            this.progressEvents.markPublished(event.eventId);
-            published += 1;
-          } catch {
-            // test host keeps failed events pending
-          }
-        }
-        return {
-          attempted: pending.length,
-          published,
-          pending: this.progressEvents.pending().length,
-        };
-      },
-    },
-    close: () => {},
-  };
   readonly runtime = {
     runTurn: (
       command: BtccRunCommand,
@@ -113,6 +111,36 @@ export class ScriptedBtccGatewayRuntime implements Btcc {
     };
   }
 
+}
+
+export function createBtccTestHost(
+  runtime: Pick<ScriptedBtccGatewayRuntime, "progressEvents">,
+): BtccTestHost {
+  return {
+    progress: {
+      hasCommittedEvent: (turnId, kind) => runtime.progressEvents.forTurn(turnId)
+        .some((event) => event.event.kind === kind),
+      reconcile: async (publisher) => {
+        const pending = runtime.progressEvents.pending();
+        let published = 0;
+        for (const event of pending) {
+          try {
+            await publisher.publish(event);
+            runtime.progressEvents.markPublished(event.eventId);
+            published += 1;
+          } catch {
+            // test host keeps failed events pending
+          }
+        }
+        return {
+          attempted: pending.length,
+          published,
+          pending: runtime.progressEvents.pending().length,
+        };
+      },
+    },
+    close: () => {},
+  };
 }
 
 function commandFromRequest(request: BtccTurnRequest): BtccRunCommand {

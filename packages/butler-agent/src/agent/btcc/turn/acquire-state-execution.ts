@@ -1,10 +1,11 @@
 import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
-import type { ExecutionPermit } from "../recovery/index.ts";
+import type {
+  CommittedSuccessorReadiness,
+  ExecutionPermit,
+} from "../recovery/index.ts";
 import type { StateExecutionClaim, TurnRecord } from "./contracts.ts";
-import { publishOperationalNotice } from "./turn-progress.ts";
-
-import type { CommittedSuccessorReadiness } from "../recovery/contracts.ts";
+import { publishOperationalNotice } from "../projection/index.ts";
 import type { TurnStateRepository } from "./contracts.ts";
 
 type StateClaimDependencies = {

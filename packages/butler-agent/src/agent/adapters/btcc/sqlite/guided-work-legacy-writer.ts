@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import type {
   LegacyOpenWorkImportResult,
   WorkTurnScope,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import { stableJson } from "./identity.ts";
 import type { GuidedWorkTurn } from "./guided-work-records.ts";
 import type { LegacyWorkProjection } from "./guided-work-legacy-projection.ts";

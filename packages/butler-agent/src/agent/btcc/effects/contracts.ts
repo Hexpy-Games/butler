@@ -1,4 +1,4 @@
-import type { DurableWorkView } from "../durable-work/index.ts";
+import type { DurableWorkView } from "../work/index.ts";
 
 export type GuidedEffectAccessMode =
   | "full_access"

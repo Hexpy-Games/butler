@@ -15,7 +15,7 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestAppServer as createAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
-import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { runNativeButlerMain } from "../../packages/butler-agent/src/application/native-butler.ts";
 import { buildNewChatBriefing } from "../../packages/butler-agent/src/gateways/app/domain/new-chat-briefing/build-new-chat-briefing.ts";
 import {
   appRuntimePolicy,
@@ -59,6 +59,7 @@ import type {
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
 import { startRegisteredBackgroundCommand } from "../../packages/butler-agent/src/runtime/command/background-command-registry.ts";
 import {
+  createBtccTestHost,
   ScriptedBtccGatewayRuntime,
   StoppableBtccGatewayRuntime,
 } from "./support/fake-btcc-gateway-runtime.ts";
@@ -2595,6 +2596,7 @@ test("App Stop reaches the App BTCC Stop consumer and preserves its public snaps
   const dbPath = join(tempDir, "app-server", "butler-client.sqlite");
   mkdirSync(join(tempDir, "app-server"), { recursive: true });
   const runtime = new StoppableBtccGatewayRuntime();
+  const btccHost = createBtccTestHost(runtime);
   const shutdown = new AbortController();
   const server = createAppServer({
     dbPath,
@@ -2612,6 +2614,7 @@ test("App Stop reaches the App BTCC Stop consumer and preserves its public snaps
     butlerHome: process.cwd(),
     butlerData: tempDir,
     btcc: runtime,
+    btccHost,
     provider: fakeProvider,
     shutdownSignal: shutdown.signal,
     shutdownPollMs: 10,

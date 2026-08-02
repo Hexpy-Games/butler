@@ -1,4 +1,4 @@
-import type { TurnSemanticState } from "../turn/contracts.ts";
+import type { TurnSemanticState } from "../turn/index.ts";
 
 export type ExecutionPermit = {
   signal: AbortSignal;

@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import type { DurableWorkContext } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   isDurableWorkCompletionValidationCurrent,
   renderDurableWorkContext,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/durable-work-context.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-context.ts";
 import { guidedOperationalFallback } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-operational-facts.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-facts.ts";
 
 test("Managed continuation distinguishes result Review from current completion Validation", () => {
   const context = validationContext();

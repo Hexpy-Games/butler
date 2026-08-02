@@ -11,7 +11,7 @@ import {
   type DurableWorkStore,
   type ReplaceWorkPlanInput,
   type WorkTurnScope,
-} from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   SqliteGuidedToolJournal,
   SqliteGuidedWorkStore,
@@ -19,7 +19,7 @@ import {
 import { BTCC_SUCCESSOR_SCHEMA } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/schema.ts";
 import { backfillTurnToolResults } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-work-runtime.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { coordinateSharedSqliteWriter } from
   "../../packages/butler-agent/src/foundation/sqlite-writer-coordination.ts";
 

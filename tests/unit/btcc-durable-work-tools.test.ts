@@ -6,12 +6,12 @@ import {
   type DurableWorkView,
   type RecordWorkCheckpointInput,
   type ReplaceWorkPlanInput,
-} from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import {
   DURABLE_WORK_TOOL_DEFINITIONS,
   executeDurableWorkTool,
   renderDurableWorkContext,
-} from "../../packages/butler-agent/src/agent/composition/production-btcc/durable-work-tools.ts";
+} from "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tools.ts";
 
 test("R3 Work exposes only three compact optional control tools", () => {
   expect(DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name)).toEqual([

@@ -3,7 +3,7 @@ import type {
   LegacyOpenWorkImportResult,
   LegacyProjectWorkSnapshot,
   WorkTurnScope,
-} from "../../../btcc/durable-work/index.ts";
+} from "../../../btcc/work/index.ts";
 import type { GuidedWorkTurn } from "./guided-work-records.ts";
 import { projectLegacyOpenWork } from "./guided-work-legacy-projection.ts";
 import { GuidedWorkLegacyWriter } from "./guided-work-legacy-writer.ts";

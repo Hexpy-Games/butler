@@ -3,7 +3,7 @@ import {
   generateOpeningDecisionWithProvider,
   parseOpeningDecisionText,
 } from "../../packages/butler-agent/src/agent/output/opening-decision.ts";
-import { createNativeButlerDefaultProvider } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
+import { createNativeButlerDefaultProvider } from "../../packages/butler-agent/src/application/native-butler.ts";
 import type { runPromptText } from "../../packages/butler-agent/src/integrations/providers/provider.ts";
 import type {
   ModelInvocation,

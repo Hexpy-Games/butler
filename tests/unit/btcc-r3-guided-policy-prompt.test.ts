@@ -8,16 +8,16 @@ import {
   guidedNativeToolDefinitions,
   guidedPolicy,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 import {
   guidedInstructions,
   renderGuidedPrompt,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-prompt.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-prompt.ts";
 import { DURABLE_WORK_TOOL_DEFINITIONS } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/durable-work-tool-definitions.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/durable-work-tool-definitions.ts";
 import { workScopeForTurn } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-work-runtime.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { appRuntimePolicy } from
   "../../packages/butler-agent/src/gateways/app/domain/runtime/app-runtime-policy.ts";
 

@@ -13,11 +13,11 @@ import { join } from "node:path";
 import type { TurnRecord } from
   "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { BtccRunCommand } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { DurableWorkView } from
-  "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
-import { createGuidedTurnRuntime } from
-  "../../packages/butler-agent/src/agent/btcc/guided-turn/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/work/index.ts";
+import { createTurnRuntime as createGuidedTurnRuntime } from
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import {
   digest,
   stableJson,
@@ -25,7 +25,7 @@ import {
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { createProductionGuidedTurnAgent } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import type {
   ModelRoundMessage,
   ModelRoundPort,
@@ -43,11 +43,11 @@ import {
   runInGuidedOperationalWindow,
   runGuidedAgentLoopWithOperationalReport,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-operational-report.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-report.ts";
 import { createGuidedToolCallExecutor } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-call-execution.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
 import { authorizedToolDefinitions, isReplaySafeTool } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-turn-policy.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 import { upsertMcpServer } from
   "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
 import { ModelProviderRequestError } from

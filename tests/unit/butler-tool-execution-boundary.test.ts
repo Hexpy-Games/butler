@@ -12,16 +12,16 @@ import {
   createGuidedWorkspaceFileEffectAdapter,
   workspaceFileEffectTarget,
 } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-workspace-file-effect.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-effect.ts";
 import { createButlerToolExecutor } from
   "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
 import { createGuidedToolExecutionBoundary } from
-  "../../packages/butler-agent/src/agent/composition/production-btcc/guided-tool-execution-boundary.ts";
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
 import { writeFileToolDefinition } from
   "../../packages/butler-agent/src/agent/tools/file-tools/write_file/definition.ts";
 import type {
   DurableWorkService,
-} from "../../packages/butler-agent/src/agent/btcc/durable-work/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/work/index.ts";
 import type { GuidedEffectService } from
   "../../packages/butler-agent/src/agent/btcc/effects/index.ts";
 import { sha256Hex } from

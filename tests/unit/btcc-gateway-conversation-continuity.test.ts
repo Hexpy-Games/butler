@@ -7,8 +7,9 @@ import { createBtcc } from
 import type {
   BtccRunCommand,
   BtccTurnProgressObserver,
-  BtccTurnOutcome,
-} from "../../packages/butler-agent/src/agent/btcc/index.ts";
+} from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
+import type { BtccTurnOutcome } from
+  "../../packages/butler-agent/src/agent/btcc/index.ts";
 import { DefaultBtccTurnPreparation } from
   "../../packages/butler-agent/src/agent/btcc/turn/prepare-turn.ts";
 import { AgentConversationStore } from
@@ -56,7 +57,7 @@ test("BTCC facade commits each Turn and gives the next Turn recent conversation"
       ? "첫 번째 점검 결과"
       : "이어서 완료했습니다",
   );
-  const btcc = createBtcc({
+  const { btcc, host } = createBtcc({
     runtime: runtime.runtime,
     preparation: new DefaultBtccTurnPreparation({
       bindingStore,
@@ -106,7 +107,7 @@ test("BTCC facade commits each Turn and gives the next Turn recent conversation"
     expect(conversationStore.readTurn("turn-1")?.status).toBe("complete");
     expect(conversationStore.readTurn("turn-2")?.status).toBe("complete");
   } finally {
-    await btcc.host.close();
+    await host.close();
     conversationStore.close();
     bindingStore.close();
   }
@@ -129,7 +130,7 @@ test("BTCC facade keeps delivery when optional title generation fails", async ()
   });
   const conversationStore = new AgentConversationStore({ butlerData });
   const runtime = new ScriptedBtccGatewayRuntime("요청을 처리했습니다.");
-  const btcc = createBtcc({
+  const { btcc, host } = createBtcc({
     runtime: runtime.runtime,
     preparation: new DefaultBtccTurnPreparation({
       bindingStore,
@@ -164,7 +165,7 @@ test("BTCC facade keeps delivery when optional title generation fails", async ()
     expect(result.metadata?.generatedSessionTitle).toBeNull();
     expect(conversationStore.readTurn("turn-title-failure")?.status).toBe("complete");
   } finally {
-    await btcc.host.close();
+    await host.close();
     conversationStore.close();
     bindingStore.close();
   }
@@ -187,7 +188,7 @@ test("a replay uses the same typed user request and never injects a resume marke
   });
   const conversationStore = new AgentConversationStore({ butlerData });
   const runtime = new ScriptedBtccGatewayRuntime("저장된 최종 답변");
-  const btcc = createBtcc({
+  const { btcc, host } = createBtcc({
     runtime: runtime.runtime,
     preparation: new DefaultBtccTurnPreparation({
       bindingStore,
@@ -215,7 +216,7 @@ test("a replay uses the same typed user request and never injects a resume marke
     expect(runtime.commands.every((command) => command.kind === "run")).toBe(true);
     expect(input.raw).toBeUndefined();
   } finally {
-    await btcc.host.close();
+    await host.close();
     conversationStore.close();
     bindingStore.close();
   }
@@ -246,7 +247,7 @@ test("a durable replay resumes frozen facts despite current binding and conversa
       return `context:${input.scopeKind}:${input.scopeId}:${input.sourceId}`;
     },
   };
-  const btcc = createBtcc({
+  const { btcc, host } = createBtcc({
     runtime,
     preparation: new DefaultBtccTurnPreparation({
       bindingStore,
@@ -316,7 +317,7 @@ test("a durable replay resumes frozen facts despite current binding and conversa
     })).rejects.toThrow("does not match admitted Turn");
     expect(runtime.modelCalls).toBe(1);
   } finally {
-    await btcc.host.close();
+    await host.close();
     conversationStore.close();
     bindingStore.close();
   }

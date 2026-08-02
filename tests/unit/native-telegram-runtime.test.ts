@@ -5,8 +5,8 @@ import { join } from "path";
 import type {
   ModelProviderAdapter,
 } from "../../packages/butler-agent/src/test-support/harness/contracts.ts";
-import { runNativeButlerMain } from "../../packages/butler-agent/src/interfaces/gateway/native-butler-bootstrap.ts";
-import { handleNativeStewardTelegramTurn } from "../../packages/butler-agent/src/interfaces/gateway/native-steward-bootstrap.ts";
+import { runNativeButlerMain } from "../../packages/butler-agent/src/application/native-butler.ts";
+import { handleNativeStewardTelegramTurn } from "../../packages/butler-agent/src/application/native-steward.ts";
 import { GatewayRouter } from "../../packages/butler-agent/src/gateways/core/router.ts";
 import { createTelegramLiveGateway } from "../../packages/butler-agent/src/interfaces/transport/telegram/live-gateway.ts";
 import { createTelegramTransportAdapter } from "../../packages/butler-agent/src/interfaces/transport/telegram/adapter.ts";
@@ -16,7 +16,10 @@ import {
   resolveTelegramGatewayRuntimeConfig,
   writeGatewaySettings,
 } from "../../packages/butler-agent/src/operations/gateway/registry.ts";
-import { ScriptedBtccGatewayRuntime } from "./support/fake-btcc-gateway-runtime.ts";
+import {
+  createBtccTestHost,
+  ScriptedBtccGatewayRuntime,
+} from "./support/fake-btcc-gateway-runtime.ts";
 import { buildTaskOriginContext } from
   "../../packages/butler-agent/src/agent/work/task-origin.ts";
 
@@ -146,10 +149,12 @@ test("native butler-main polls Telegram from $BUTLER_DATA/.env and delivers runt
   }) as unknown as typeof fetch;
 
   const btcc = new ScriptedBtccGatewayRuntime("runtime reply");
+  const btccHost = createBtccTestHost(btcc);
   const result = await runNativeButlerMain({
     butlerHome: "fixtures/butler-project",
     butlerData,
     btcc,
+    btccHost,
     provider: fakeProvider,
     shutdownSignal: controller.signal,
     shutdownPollMs: 10,
@@ -213,6 +218,7 @@ test("native butler-main leaves Telegram idle when gateway is not enabled", asyn
 
 test("native Butler publishes Telegram progress without sending a progress message", async () => {
   const btcc = new ScriptedBtccGatewayRuntime("unused");
+  const btccHost = createBtccTestHost(btcc);
   btcc.progressEvents.append({
     sessionId: "butler/progress-policy",
     turnId: "turn-telegram-progress",
@@ -230,6 +236,7 @@ test("native Butler publishes Telegram progress without sending a progress messa
     butlerHome: tempDir,
     butlerData: tempDir,
     btcc,
+    btccHost,
     provider: fakeProvider,
     waitForShutdown: false,
     sendTelegram: async (input) => {
@@ -267,8 +274,9 @@ test("native Butler does not poll legacy task completion into a wake", async () 
   }), null, 2)}\n`, "utf8");
 
   const btcc = new ScriptedBtccGatewayRuntime("unused");
+  const btccHost = createBtccTestHost(btcc);
   let legacyWakePolls = 0;
-  btcc.host.wake = {
+  btccHost.wake = {
     reconcile: async () => {
       legacyWakePolls += 1;
       return { candidates: 1, authorized: 1, rejected: 0, dispatched: 1, pending: 0 };
@@ -279,6 +287,7 @@ test("native Butler does not poll legacy task completion into a wake", async () 
     butlerHome: tempDir,
     butlerData: tempDir,
     btcc,
+    btccHost,
     provider: fakeProvider,
     waitForShutdown: false,
   });
@@ -289,6 +298,7 @@ test("native Butler does not poll legacy task completion into a wake", async () 
 
 test("native Steward enters the same BTCC facade and preserves Telegram delivery", async () => {
   const btcc = new ScriptedBtccGatewayRuntime("steward reply");
+  const btccHost = createBtccTestHost(btcc);
   const deliveries: Array<{ chatId: string; text: string; threadId?: string }> = [];
   btcc.progressEvents.append({
     sessionId: "steward/demo",
@@ -310,6 +320,7 @@ test("native Steward enters the same BTCC facade and preserves Telegram delivery
     butlerHome: tempDir,
     butlerData: tempDir,
     btcc,
+    btccHost,
     sendTelegram: async (input) => {
       deliveries.push(input);
       return { ok: true, transportMessageId: "telegram-1" };

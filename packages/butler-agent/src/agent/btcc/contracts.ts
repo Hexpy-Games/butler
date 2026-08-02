@@ -1,4 +1,4 @@
-import type { StopPersistenceOutcome } from "./turn/contracts.ts";
+import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";

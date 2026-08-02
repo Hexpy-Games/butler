@@ -10,7 +10,7 @@ import { BTCC_SUCCESSOR_SCHEMA } from
 import { admitTurn } from
   "../../packages/butler-agent/src/agent/btcc/turn/admission/admit-turn.ts";
 import type { BtccRunCommand } from
-  "../../packages/butler-agent/src/agent/btcc/index.ts";
+  "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 
 test("opening an existing R3 database migrates Work columns and anchors idempotently", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-schema-migration-"));

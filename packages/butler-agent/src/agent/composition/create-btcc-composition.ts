@@ -2,21 +2,19 @@ import {
   createProjectLedgerLegacyWorkSource,
   openBtccSqliteStores,
 } from "../adapters/index.ts";
+import { createBtcc } from "../btcc/index.ts";
 import {
-  createBtcc,
   createTurnRuntime,
   DefaultBtccTurnPreparation,
-  type Btcc,
-  type BtccHost,
   type BtccTurnPreparationDependencies,
-} from "../btcc/index.ts";
-import type { ModelRoundPort } from "../btcc/ports/model-round.ts";
+} from "../btcc/turn/index.ts";
+import { createProductionGuidedTurnAgent } from "../btcc/agent-loop/index.ts";
+import type { ModelRoundPort } from "../btcc/agent-loop/index.ts";
 import { ActiveProjectLedgerResolver } from
   "../../integrations/project-ledger/active-project-ledger-reference.ts";
-import { AgentConversationStore } from "../conversation/store.ts";
+import { AgentConversationStore } from "../conversation/index.ts";
 import { PromptAssembler } from "../prompt/prompt-assembler.ts";
 import { SessionBindingStore } from "../../test-support/harness/session-store.ts";
-import { createProductionGuidedTurnAgent } from "./production-btcc/index.ts";
 
 type BtccStores = ReturnType<typeof openBtccSqliteStores>;
 
@@ -80,7 +78,7 @@ export function createProductionBtccComposition(input: {
     turns: stores.turns,
     wakeAuthorizations: stores.wakeAuthorizations,
   };
-  const btcc = createBtcc({
+  const assembly = createBtcc({
     runtime,
     preparation: new DefaultBtccTurnPreparation(preparationDependencies),
     progressEvents: stores.progressEvents,
@@ -91,10 +89,11 @@ export function createProductionBtccComposition(input: {
       if (!input.sessionBindings) bindings.close();
     },
   });
-  return Object.assign(btcc, {
+  return {
+    btcc: assembly.btcc,
+    host: assembly.host,
     ready: Promise.resolve(),
-  }) as Btcc & {
-    ready: Promise<void>;
-    host: BtccHost;
   };
 }
+
+export type BtccComposition = ReturnType<typeof createProductionBtccComposition>;
