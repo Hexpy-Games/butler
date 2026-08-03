@@ -4,6 +4,7 @@ import type {
   GuidedEffectIdentity,
   GuidedEffectJournal,
   GuidedEffectJournalRecord,
+  GuidedEffectRecoveryHint,
   GuidedEffectReceipt,
   PrepareGuidedEffectResult,
 } from "../../../btcc/effects/index.ts";
@@ -21,10 +22,16 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
     this.blockers = new SqliteGuidedEffectBlockerStore(db);
   }
 
-  prepare(identity: GuidedEffectIdentity): PrepareGuidedEffectResult {
+  prepare(
+    identity: GuidedEffectIdentity,
+    recoveryHint?: GuidedEffectRecoveryHint,
+  ): PrepareGuidedEffectResult {
     return this.db.transaction(() => {
       const existing = this.find(identity.effectId);
       if (existing) {
+        if (existing.recoveryHint === undefined && recoveryHint !== undefined) {
+          this.insertRecoveryHint(identity.effectId, recoveryHint);
+        }
         return sameIdentity(existing, identity)
           ? { ok: true as const, created: false, record: existing }
           : conflict(identity.effectId);
@@ -53,6 +60,9 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
         now,
         now,
       );
+      if (recoveryHint !== undefined) {
+        this.insertRecoveryHint(identity.effectId, recoveryHint);
+      }
       return {
         ok: true as const,
         created: true,
@@ -63,12 +73,24 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
 
   find(effectId: string): GuidedEffectJournalRecord | null {
     const row = this.db.query<GuidedEffectRow, [string]>(`
-      SELECT effect_id, receipt_id, idempotency_key, identity_sha256,
-        request_sha256, input_sha256, target_sha256, work_id,
-        plan_revision_id, action_key, capability, sanitized_target,
-        status, journal_revision, dispatch_attempts, result_json,
-        receipt_json, error_json, created_at, updated_at
-      FROM btcc_guided_effects WHERE effect_id = ?
+      SELECT btcc_guided_effects.effect_id, btcc_guided_effects.receipt_id,
+        btcc_guided_effects.idempotency_key, btcc_guided_effects.identity_sha256,
+        btcc_guided_effects.request_sha256, btcc_guided_effects.input_sha256,
+        btcc_guided_effects.target_sha256, btcc_guided_effects.work_id,
+        btcc_guided_effects.plan_revision_id, btcc_guided_effects.action_key,
+        btcc_guided_effects.capability, btcc_guided_effects.sanitized_target,
+        btcc_guided_effects.status, btcc_guided_effects.journal_revision,
+        btcc_guided_effects.dispatch_attempts, btcc_guided_effects.result_json,
+        btcc_guided_effects.receipt_json, btcc_guided_effects.error_json,
+        recovery.capability AS recovery_capability,
+        recovery.start_line AS recovery_start_line,
+        recovery.before_sha256 AS recovery_before_sha256,
+        recovery.after_sha256 AS recovery_after_sha256,
+        btcc_guided_effects.created_at, btcc_guided_effects.updated_at
+      FROM btcc_guided_effects
+      LEFT JOIN btcc_guided_effect_recovery_hints recovery
+        ON recovery.effect_id = btcc_guided_effects.effect_id
+      WHERE btcc_guided_effects.effect_id = ?
     `).get(effectId);
     return row ? hydrateGuidedEffect(row) : null;
   }
@@ -76,16 +98,44 @@ export class SqliteGuidedEffectJournal implements GuidedEffectJournal {
   listForWork(workId: string, limit = 12): GuidedEffectJournalRecord[] {
     const boundedLimit = Math.max(1, Math.min(50, Math.trunc(limit)));
     return this.db.query<GuidedEffectRow, [string, number]>(`
-      SELECT effect_id, receipt_id, idempotency_key, identity_sha256,
-        request_sha256, input_sha256, target_sha256, work_id,
-        plan_revision_id, action_key, capability, sanitized_target,
-        status, journal_revision, dispatch_attempts, result_json,
-        receipt_json, error_json, created_at, updated_at
+      SELECT btcc_guided_effects.effect_id, btcc_guided_effects.receipt_id,
+        btcc_guided_effects.idempotency_key, btcc_guided_effects.identity_sha256,
+        btcc_guided_effects.request_sha256, btcc_guided_effects.input_sha256,
+        btcc_guided_effects.target_sha256, btcc_guided_effects.work_id,
+        btcc_guided_effects.plan_revision_id, btcc_guided_effects.action_key,
+        btcc_guided_effects.capability, btcc_guided_effects.sanitized_target,
+        btcc_guided_effects.status, btcc_guided_effects.journal_revision,
+        btcc_guided_effects.dispatch_attempts, btcc_guided_effects.result_json,
+        btcc_guided_effects.receipt_json, btcc_guided_effects.error_json,
+        recovery.capability AS recovery_capability,
+        recovery.start_line AS recovery_start_line,
+        recovery.before_sha256 AS recovery_before_sha256,
+        recovery.after_sha256 AS recovery_after_sha256,
+        btcc_guided_effects.created_at, btcc_guided_effects.updated_at
       FROM btcc_guided_effects
-      WHERE work_id = ?
-      ORDER BY updated_at DESC, effect_id DESC
+      LEFT JOIN btcc_guided_effect_recovery_hints recovery
+        ON recovery.effect_id = btcc_guided_effects.effect_id
+      WHERE btcc_guided_effects.work_id = ?
+      ORDER BY btcc_guided_effects.updated_at DESC, btcc_guided_effects.effect_id DESC
       LIMIT ?
     `).all(workId, boundedLimit).map(hydrateGuidedEffect);
+  }
+
+  private insertRecoveryHint(
+    effectId: string,
+    hint: GuidedEffectRecoveryHint,
+  ): void {
+    this.db.query(`
+      INSERT OR IGNORE INTO btcc_guided_effect_recovery_hints (
+        effect_id, capability, start_line, before_sha256, after_sha256
+      ) VALUES (?, ?, ?, ?, ?)
+    `).run(
+      effectId,
+      hint.capability,
+      hint.startLine,
+      hint.beforeSha256,
+      hint.afterSha256,
+    );
   }
 
   listEffectBlockersForReconciliation(

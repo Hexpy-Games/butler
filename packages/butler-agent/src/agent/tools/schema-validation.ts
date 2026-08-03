@@ -20,7 +20,8 @@ export type SchemaViolationReason =
   | "minimum_value"
   | "maximum_value"
   | "minimum_length"
-  | "maximum_length";
+  | "maximum_length"
+  | "pattern_mismatch";
 
 export interface ToolCallArgumentsValidation {
   arguments: Record<string, unknown>;
@@ -320,6 +321,27 @@ function validateString(value: string, schema: Record<string, unknown>, path: st
       path,
       reason: "maximum_length",
     };
+  }
+  if (typeof schema.pattern === "string") {
+    let matcher: RegExp;
+    try {
+      matcher = new RegExp(schema.pattern);
+    } catch {
+      return {
+        ok: false,
+        message: `Invalid string pattern at ${path}`,
+        path,
+        reason: "pattern_mismatch",
+      };
+    }
+    if (!matcher.test(value)) {
+      return {
+        ok: false,
+        message: `Expected string to match ${schema.pattern} at ${path}`,
+        path,
+        reason: "pattern_mismatch",
+      };
+    }
   }
   return { ok: true };
 }

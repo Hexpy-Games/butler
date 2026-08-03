@@ -7,6 +7,7 @@ import {
   fileToolEvidenceReceipt,
   sha256Hex,
 } from "../shared/evidence.ts";
+import { locateExactText } from "./exact-text-locator.ts";
 import { resolveWorkspacePathGuard } from
   "../shared/workspace-path-guard.ts";
 import type { FileToolExecutionContext } from "../read_file/executor.ts";
@@ -57,17 +58,6 @@ function decodeUtf8(data: Buffer):
   }
 }
 
-function lineStartOffset(text: string, startLine: number): number | null {
-  if (startLine === 1) return text.startsWith("\uFEFF") ? 1 : 0;
-  let line = 1;
-  for (let index = 0; index < text.length; index += 1) {
-    if (text[index] !== "\n") continue;
-    line += 1;
-    if (line === startLine) return index + 1;
-  }
-  return null;
-}
-
 async function atomicReplace(
   filePath: string,
   data: Buffer,
@@ -98,14 +88,14 @@ export async function executeEditFileTool(
   const args = parsed.args;
   const workspaceRoot = getWorkspaceRoot(args, context.workspacePath);
   const path = typeof args.path === "string" ? args.path : "";
-  const startLine = Number(args.start_line);
+  const startLine = args.start_line === undefined ? undefined : Number(args.start_line);
   const oldText = args.old_text;
   const newText = args.new_text;
   const expectedSha256 = typeof args.expected_sha256 === "string"
     ? args.expected_sha256
     : undefined;
 
-  if (!Number.isInteger(startLine) || startLine < 1) {
+  if (startLine !== undefined && (!Number.isSafeInteger(startLine) || startLine < 1)) {
     return failure({ error: "invalid_start_line", path });
   }
   if (typeof oldText !== "string" || oldText.length === 0) {
@@ -158,24 +148,25 @@ export async function executeEditFileTool(
       });
     }
 
-    const offset = lineStartOffset(decoded.text, startLine);
-    if (offset === null) {
+    const location = locateExactText({
+      text: decoded.text,
+      oldText,
+      ...(startLine === undefined ? {} : { startLine }),
+    });
+    if (!location.ok) {
       return failure({
-        error: "start_line_out_of_range",
+        error: location.error,
         path,
-        details: { start_line: startLine, before_sha256: beforeSha256 },
-      });
-    }
-    if (!decoded.text.startsWith(oldText, offset)) {
-      return failure({
-        error: "old_text_mismatch",
-        path,
-        details: { start_line: startLine, before_sha256: beforeSha256 },
+        details: {
+          ...(startLine === undefined ? {} : { start_line: startLine }),
+          before_sha256: beforeSha256,
+          occurrences: location.occurrenceCount,
+        },
       });
     }
 
-    const afterText = `${decoded.text.slice(0, offset)}${newText}${
-      decoded.text.slice(offset + oldText.length)
+    const afterText = `${decoded.text.slice(0, location.value.offset)}${newText}${
+      decoded.text.slice(location.value.offset + oldText.length)
     }`;
     const afterData = Buffer.from(afterText, "utf8");
     await atomicReplace(filePath, afterData, target.mode);
@@ -185,7 +176,7 @@ export async function executeEditFileTool(
     return {
       ok: true,
       path,
-      start_line: startLine,
+      start_line: location.value.startLine,
       replacements: 1,
       bytes: persisted.length,
       before_sha256: beforeSha256,
@@ -196,7 +187,7 @@ export async function executeEditFileTool(
         summary: `Edited workspace file ${path}`,
         references: {
           path,
-          start_line: startLine,
+          start_line: location.value.startLine,
           replacements: 1,
           before_sha256: beforeSha256,
           after_sha256: afterSha256,

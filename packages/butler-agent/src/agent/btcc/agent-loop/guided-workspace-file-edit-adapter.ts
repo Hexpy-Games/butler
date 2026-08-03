@@ -4,6 +4,7 @@ import {
   type EffectAdapterError,
   type EffectDispatchOutcome,
   type EffectReconciliation,
+  type GuidedEffectRecoveryHint,
 } from "../effects/index.ts";
 import {
   normalizeExpectedSha256,
@@ -16,6 +17,7 @@ import {
   observeGuidedWorkspaceEditTarget,
   type GuidedWorkspaceEditGuardOptions,
 } from "./guided-workspace-file-edit-observation.ts";
+import type { ExactTextLocation } from "../../tools/file-tools/edit_file/index.ts";
 
 export const GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY = "edit_file";
 
@@ -32,6 +34,7 @@ export type GuidedWorkspaceFileEditResult = {
   ok: true;
   effect: "workspace_file_edit";
   path: string;
+  start_line: number;
   bytes: number;
   before_sha256: string;
   after_sha256: string;
@@ -69,6 +72,14 @@ export function createGuidedWorkspaceFileEditEffectAdapter(
     normalizeTarget: normalizeWorkspaceFileTarget,
     sanitizeTarget: (target) => target,
     normalizeInput: (input) => normalizeEditEffectInput(input, options.workspacePath),
+    recoveryHint(input): GuidedEffectRecoveryHint {
+      return {
+        capability: GUIDED_WORKSPACE_FILE_EDIT_CAPABILITY,
+        startLine: input.start_line,
+        beforeSha256: input.before_sha256,
+        afterSha256: input.after_sha256,
+      };
+    },
     async dispatch(input) {
       const mismatch = targetInputMismatch(
         input.normalizedTarget,
@@ -154,6 +165,21 @@ export function guidedWorkspaceEditInputSha256(
   );
 }
 
+export function normalizedGuidedWorkspaceEditCandidate(input: {
+  adapter: ReturnType<typeof createGuidedWorkspaceFileEditEffectAdapter>;
+  decoded: { path: string; oldText: string; newText: string };
+  location: ExactTextLocation;
+}, hashes: { beforeSha256: string; afterSha256: string }): GuidedWorkspaceFileEditInput {
+  return input.adapter.normalizeInput({
+    path: input.decoded.path,
+    start_line: input.location.startLine,
+    old_text: input.decoded.oldText,
+    new_text: input.decoded.newText,
+    before_sha256: hashes.beforeSha256,
+    after_sha256: hashes.afterSha256,
+  });
+}
+
 function normalizeEditEffectInput(
   input: unknown,
   workspacePath: string,
@@ -199,6 +225,7 @@ function applied(
       ok: true,
       effect: "workspace_file_edit",
       path: input.path,
+      start_line: input.start_line,
       bytes,
       before_sha256: input.before_sha256,
       after_sha256: input.after_sha256,

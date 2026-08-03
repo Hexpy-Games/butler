@@ -1,6 +1,7 @@
 import type {
   GuidedEffectError,
   GuidedEffectJournalRecord,
+  GuidedEffectRecoveryHint,
   GuidedEffectJournalStatus,
   GuidedEffectReceipt,
 } from "../../../btcc/effects/index.ts";
@@ -24,6 +25,10 @@ export type GuidedEffectRow = {
   result_json: string | null;
   receipt_json: string | null;
   error_json: string | null;
+  recovery_capability: "edit_file" | null;
+  recovery_start_line: number | null;
+  recovery_before_sha256: string | null;
+  recovery_after_sha256: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +60,19 @@ export function hydrateGuidedEffect(
       : {}),
     ...(row.error_json !== null
       ? { error: JSON.parse(row.error_json) as GuidedEffectError }
+      : {}),
+    ...(row.recovery_capability !== null &&
+      row.recovery_start_line !== null &&
+      row.recovery_before_sha256 !== null &&
+      row.recovery_after_sha256 !== null
+      ? {
+          recoveryHint: {
+            capability: row.recovery_capability,
+            startLine: row.recovery_start_line,
+            beforeSha256: row.recovery_before_sha256,
+            afterSha256: row.recovery_after_sha256,
+          } satisfies GuidedEffectRecoveryHint,
+        }
       : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,

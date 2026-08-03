@@ -84,6 +84,7 @@ export type EffectAdapter<TNormalizedInput = unknown, TResult = unknown> = {
   normalizeTarget(target: string): string;
   sanitizeTarget(normalizedTarget: string): string;
   normalizeInput(input: unknown): TNormalizedInput;
+  recoveryHint?(input: TNormalizedInput): GuidedEffectRecoveryHint | undefined;
   classifyEffectBlocker?(input: {
     blockerCapability: string;
     blockerTarget: string;
@@ -135,6 +136,13 @@ export type GuidedEffectIdentity = {
   sanitizedTarget: string;
 };
 
+export type GuidedEffectRecoveryHint = {
+  capability: "edit_file";
+  startLine: number;
+  beforeSha256: string;
+  afterSha256: string;
+};
+
 export type GuidedEffectJournalStatus =
   | "prepared"
   | "dispatching"
@@ -148,6 +156,7 @@ export type GuidedEffectJournalRecord = GuidedEffectIdentity & {
   dispatchAttempts: number;
   result?: unknown;
   receipt?: GuidedEffectReceipt;
+  recoveryHint?: GuidedEffectRecoveryHint;
   error?: GuidedEffectError;
   createdAt: string;
   updatedAt: string;
@@ -174,7 +183,10 @@ export type PrepareGuidedEffectResult =
   | { ok: false; message: string };
 
 export interface GuidedEffectJournal {
-  prepare(identity: GuidedEffectIdentity): MaybePromise<PrepareGuidedEffectResult>;
+  prepare(
+    identity: GuidedEffectIdentity,
+    recoveryHint?: GuidedEffectRecoveryHint,
+  ): MaybePromise<PrepareGuidedEffectResult>;
   find(effectId: string): MaybePromise<GuidedEffectJournalRecord | null>;
   listForWork(
     workId: string,

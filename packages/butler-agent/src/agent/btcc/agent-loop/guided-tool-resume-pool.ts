@@ -1,8 +1,15 @@
 import type { GuidedToolJournalRecord } from "../../adapters/index.ts";
-import { stableJson } from "../identity/index.ts";
+import {
+  guidedToolCatalogIdFromRawArguments,
+  guidedToolIdentitySignature,
+} from "./guided-tool-occurrence.ts";
 
 export type GuidedToolResumePool = {
-  claim(toolName: string, args: Record<string, unknown>): string | undefined;
+  claim(
+    toolName: string,
+    args: Record<string, unknown>,
+    catalogId?: string,
+  ): string | undefined;
   discard(callId: string): void;
 };
 
@@ -15,15 +22,16 @@ export function createGuidedToolResumePool(
     const signature = guidedToolResumeSignature(
       record.toolName,
       record.arguments,
+      guidedToolCatalogIdFromRawArguments(record.rawArguments),
     );
     const calls = callsBySignature.get(signature) ?? [];
     calls.push(record.callId);
     callsBySignature.set(signature, calls);
   }
   return {
-    claim(toolName, args) {
+    claim(toolName, args, catalogId) {
       const calls = callsBySignature.get(
-        guidedToolResumeSignature(toolName, args),
+        guidedToolResumeSignature(toolName, args, catalogId),
       );
       while (calls?.length) {
         const callId = calls.shift()!;
@@ -41,6 +49,7 @@ export function createGuidedToolResumePool(
 function guidedToolResumeSignature(
   toolName: string,
   args: Record<string, unknown>,
+  catalogId?: string,
 ): string {
-  return stableJson([toolName, args]);
+  return guidedToolIdentitySignature(toolName, args, catalogId);
 }

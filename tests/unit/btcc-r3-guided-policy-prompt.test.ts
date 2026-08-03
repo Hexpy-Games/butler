@@ -237,6 +237,18 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   );
 });
 
+test("R3 continuation guidance repairs legacy Work labels and refreshes downstream results", () => {
+  const instructions = guidedInstructions(guidedPolicy(turnRecord()));
+
+  expect(instructions).toContain("generic stage-token labels");
+  expect(instructions).toContain(
+    "revise the Plan once with concrete summaries before dependent work",
+  );
+  expect(instructions).toContain("reopening an earlier action after partial closeout");
+  expect(instructions).toContain("when their results must now be refreshed");
+  expect(instructions).toContain("dependent later actions and their statuses in the same update");
+});
+
 test("R3 guided prompt reports disabled Work without inventing a Work context", () => {
   const turn = turnRecord({
     executionPolicy: executionPolicy("none"),

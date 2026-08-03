@@ -1,6 +1,7 @@
 import type { ButlerExecutionPolicy } from "../contracts.ts";
 import type { BtccAgentLoopResult } from "./contracts.ts";
 import type { TurnRecord } from "../turn/index.ts";
+import { parseToolCatalogId } from "../../tools/progressive-catalog.ts";
 import { BUTLER_TOOLS } from "../../tools/butler-tools.ts";
 import { TOOL_CAPABILITY_METADATA } from "../../tools/registry.ts";
 import { PROJECT_LEDGER_MUTATION_TOOL_NAME_SET } from
@@ -23,6 +24,7 @@ import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { workspacePagePreviewAvailabilityOverride } from
   "../../tools/workspace-page-preview/index.ts";
+import { safeCommandPurposeSummary } from "../../output/progress/arguments.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",
@@ -237,8 +239,35 @@ export function effectiveToolNameForCall(
 ): string {
   if (name !== "tool_call") return name;
   const id = typeof args.id === "string" ? args.id : "";
-  const parts = id.split(":");
-  return parts.length >= 2 && parts[parts.length - 1] ? parts[parts.length - 1] : name;
+  return parseToolCatalogId(id)?.name || name;
+}
+
+export function invalidRunCommandSummary(input: {
+  callName: string;
+  callArgs: Record<string, unknown>;
+  effectiveToolName: string;
+  presentationArgs: Record<string, unknown>;
+}): Record<string, unknown> | null {
+  const directRunCommand = input.callName === "run_command" &&
+    input.effectiveToolName === "run_command";
+  const catalogId = typeof input.callArgs.id === "string"
+    ? parseToolCatalogId(input.callArgs.id)
+    : null;
+  const progressiveRunCommand = input.callName === "tool_call" &&
+    input.effectiveToolName === "run_command" &&
+    catalogId?.provider === "native" &&
+    catalogId.namespace === null &&
+    catalogId.name === "run_command";
+  if (!directRunCommand && !progressiveRunCommand) return null;
+  if (safeCommandPurposeSummary(input.presentationArgs)) return null;
+  return {
+    ok: false,
+    error: {
+      code: "invalid_tool_arguments",
+      message: "Tool run_command requires argument: summary",
+      path: "$.summary",
+    },
+  };
 }
 
 export function routeForUsedTools(

@@ -4,6 +4,7 @@ export {
   createGuidedActivityProjection,
 } from "./projection.ts";
 export { publicToolTitle } from "./guided-activity-content.ts";
+export { publicWorkActionDisplay } from "./work-action-display.ts";
 export type {
   GuidedActivityBinding,
   GuidedActivityProjection,

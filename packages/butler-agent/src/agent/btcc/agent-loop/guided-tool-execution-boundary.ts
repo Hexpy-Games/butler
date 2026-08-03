@@ -155,11 +155,20 @@ function withReceipt(
   result: unknown,
   receipt: Record<string, unknown>,
 ): Record<string, unknown> {
+  const resultRecord = result && typeof result === "object" && !Array.isArray(result)
+    ? result as Record<string, unknown>
+    : undefined;
+  const startLine = typeof resultRecord?.start_line === "number"
+    ? resultRecord.start_line
+    : undefined;
+  const publicReceipt = startLine === undefined
+    ? receipt
+    : { ...receipt, start_line: startLine };
   if (result && typeof result === "object" && !Array.isArray(result)) {
     return {
       ...result as Record<string, unknown>,
-      effect_receipt: receipt,
+      effect_receipt: publicReceipt,
     };
   }
-  return { ok: true, result, effect_receipt: receipt };
+  return { ok: true, result, effect_receipt: publicReceipt };
 }

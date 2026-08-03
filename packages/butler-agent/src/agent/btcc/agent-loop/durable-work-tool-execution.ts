@@ -7,7 +7,10 @@ import type {
   WorkStage,
   WorkTurnScope,
 } from "../work/index.ts";
-import { WorkStageTransitionError, unresolvedWorkActionKeys } from
+import {
+  WorkStageTransitionError,
+  unresolvedWorkActionKeys,
+} from
   "../work/index.ts";
 import type { DurableWorkToolName } from "../work/index.ts";
 

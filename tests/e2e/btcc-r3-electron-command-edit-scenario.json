@@ -1,0 +1,52 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "command-summary-line-shift-edit",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "low",
+  "accessMode": "full_access",
+  "session": {
+    "id": "command-summary-line-shift-edit",
+    "title": "BTCC R3 command summary and line-shift edit"
+  },
+  "fixtures": [
+    {
+      "path": "notes.txt",
+      "text": "header\ncontext\ntarget: old\nfooter\n"
+    }
+  ],
+  "steps": [
+    {
+      "id": "command-and-shifted-exact-edits",
+      "prompt": "이 요청 전체의 Work 계획을 먼저 만들고 계획 검토를 승인한 뒤 실행해 주세요. 실행 단계의 첫 도구로 run_command를 사용해 현재 작업공간 경로를 확인하고, 공개 summary에는 명령문 자체가 아니라 왜 확인하는지 짧고 구체적으로 적어 주세요. 이어서 notes.txt를 한 번 읽은 뒤, 다음 응답에서 edit_file을 두 번 순서대로 함께 호출해 주세요. 첫 호출은 파일 맨 앞의 정확한 old_text `header\\n`를 `inserted one\\ninserted two\\nheader\\n`로 바꾸고, 두 번째 호출은 처음 읽었을 때의 원래 start_line 3 힌트를 그대로 사용해 유일한 정확한 old_text `target: old`를 `target: stable`로 바꾸세요. 두 편집 사이에 파일을 다시 읽거나 실패 재시도를 하지 마세요. 마지막에는 notes.txt를 읽어 두 변경을 검증하고 결과를 보고해 주세요.",
+      "timeoutMs": 600000,
+      "reloadAfter": true,
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "files": [
+          {
+            "path": "notes.txt",
+            "contains": [
+              "inserted one",
+              "inserted two",
+              "target: stable"
+            ]
+          }
+        ],
+        "work": {
+          "exists": true,
+          "status": "completed",
+          "planRevisionAtLeast": 1,
+          "planReviewVerdict": "accept",
+          "resultReviewVerdict": "accept",
+          "completionValidationVerdict": "accept",
+          "resultToolNamesInclude": [
+            "run_command",
+            "read_file",
+            "edit_file"
+          ]
+        }
+      }
+    }
+  ]
+}

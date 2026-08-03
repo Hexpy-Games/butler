@@ -358,6 +358,22 @@ test("tool_call schema validation rejects unknown properties when no properties 
   });
 });
 
+test("schema validation returns a structured failure for an invalid regex pattern", () => {
+  expect(validateJsonObjectSchema(
+    { value: "anything" },
+    {
+      type: "object",
+      properties: { value: { type: "string", pattern: "[" } },
+      required: ["value"],
+    },
+  )).toEqual({
+    ok: false,
+    message: "Invalid string pattern at $.value",
+    path: "$.value",
+    reason: "pattern_mismatch",
+  });
+});
+
 test("schema validation enforces const and conditional oneOf requirements", () => {
   const schema = {
     type: "object",

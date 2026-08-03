@@ -1567,9 +1567,10 @@ test("transform_public_data_table writes bounded public CSV artifacts", async ()
 test("run_command schema exposes bounded platform-neutral command execution", () => {
   const tool = BUTLER_TOOLS.find((item) => item.name === "run_command");
 
-  expect(tool?.parameters.required).toEqual(["command"]);
+  expect(tool?.parameters.required).toEqual(["command", "summary"]);
   expect(Object.keys(tool?.parameters.properties ?? {})).toEqual([
     "command",
+    "summary",
     "cwd",
     "timeout_ms",
     "max_output_tokens",
@@ -1580,6 +1581,12 @@ test("run_command schema exposes bounded platform-neutral command execution", ()
   ]);
   expect(tool?.description).toContain("platform-neutral command executor");
   const properties = tool?.parameters.properties as Record<string, unknown> | undefined;
+  expect(properties?.summary).toMatchObject({
+    type: "string",
+    minLength: 1,
+  });
+  expect((properties?.summary as { description?: string }).description?.toLowerCase())
+    .toContain("presentation only");
   expect(properties?.output_paths).toMatchObject({
     type: "array",
   });

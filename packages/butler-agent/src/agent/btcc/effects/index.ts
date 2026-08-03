@@ -19,6 +19,7 @@ export type {
   GuidedEffectIdentity,
   GuidedEffectJournal,
   GuidedEffectJournalRecord,
+  GuidedEffectRecoveryHint,
   GuidedEffectJournalStatus,
   GuidedEffectOutcome,
   GuidedEffectReceipt,
