@@ -8,8 +8,6 @@ import {
   conceptionSummary,
   distinctSummary,
   type GuidedActivityToolCall as ToolCall,
-  ordinaryGroupKey,
-  ordinaryGroupSignature,
   publicText,
 } from "./guided-activity-content.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
@@ -23,7 +21,6 @@ export type GuidedActivityBinding = {
 type ActivityGroup = GuidedActivityBinding & {
   title: string;
   summary: string;
-  summaryAuthored: boolean;
   rationale?: string;
   nextStep?: string;
   precedingGroups?: ActivityGroup[];
@@ -62,7 +59,8 @@ export function createGuidedActivityProjection(input: {
   let pendingTools: PendingTool[] = [];
   let managed = input.managedInitially === true;
   const groupsById = new Map<string, ActivityGroup>();
-  let lastEmptyOrdinaryGroups = new Map<string, ActivityGroup>();
+  let currentActivity: ActivityGroup | undefined;
+  let fallbackOrdinaryActivity: ActivityGroup | undefined;
 
   return {
     observeToolBatch(batch) {
@@ -82,12 +80,24 @@ export function createGuidedActivityProjection(input: {
       const pending = pendingTools.find((candidate) =>
         !candidate.claimed && candidate.name === presentationCall.name,
       ) ?? pendingTools.find((candidate) => !candidate.claimed);
-      const group = pending?.group ?? activityGroup({
+      const kind = activityKind(presentationCall.name);
+      let group = pending?.group;
+      if (!group && kind === "ordinary") {
+        group = currentActivity ?? fallbackOrdinaryActivity;
+        if (!group) {
+          group = activityGroup({
+            text: "",
+            calls: [{ name: presentationCall.name, args: presentationCall.args }],
+          });
+          fallbackOrdinaryActivity = group;
+        }
+      }
+      group ??= activityGroup({
         text: "",
         calls: [{ name: presentationCall.name, args: presentationCall.args }],
       });
       if (pending) pending.claimed = true;
-      if (activityKind(presentationCall.name) !== "ordinary") managed = true;
+      if (kind !== "ordinary") managed = true;
       if (managed && !group.deferredUntilAccepted) await publishGroup(input, group);
       return bindingFromGroup(group);
     },
@@ -101,7 +111,13 @@ export function createGuidedActivityProjection(input: {
     async publishAccepted(binding) {
       managed = true;
       const group = groupsById.get(binding.activityId);
-      if (group) await publishGroup(input, group);
+      if (group) {
+        if (group.deferredUntilAccepted) {
+          currentActivity = group;
+          fallbackOrdinaryActivity = undefined;
+        }
+        await publishGroup(input, group);
+      }
     },
 
     async publishFinal(text, options) {
@@ -118,7 +134,6 @@ export function createGuidedActivityProjection(input: {
         deferredUntilAccepted: false,
         title: completed ? "결과 보고" : "부분 결과 안내",
         summary,
-        summaryAuthored: true,
         published: false,
       });
     },
@@ -139,60 +154,29 @@ export function createGuidedActivityProjection(input: {
     const ordinaryCalls = normalizedCalls.filter(
       (candidate) => activityKind(candidate.name) === "ordinary",
     );
-    const emptyOrdinaryBatch = !publicText(batch.text) &&
-      ordinaryCalls.length === normalizedCalls.length;
-    const ordinaryGroups = ordinaryGroupBuckets(ordinaryCalls);
-    const resolvedGroups = new Map<string, ActivityGroup>();
-    for (const [key, calls] of ordinaryGroups) {
-      const reusable = emptyOrdinaryBatch
-        ? lastEmptyOrdinaryGroups.get(key)
-        : undefined;
-      resolvedGroups.set(
-        key,
-        reusable ?? activityGroup({ text: batch.text, calls }),
-      );
+    const authoredText = publicText(batch.text);
+    let ordinaryGroup: ActivityGroup | undefined;
+    if (ordinaryCalls.length > 0) {
+      if (authoredText) {
+        ordinaryGroup = activityGroup({ text: batch.text, calls: ordinaryCalls });
+        currentActivity = ordinaryGroup;
+        fallbackOrdinaryActivity = undefined;
+      } else {
+        ordinaryGroup = currentActivity ?? fallbackOrdinaryActivity;
+        if (!ordinaryGroup) {
+          ordinaryGroup = activityGroup({ text: "", calls: ordinaryCalls });
+          fallbackOrdinaryActivity = ordinaryGroup;
+        }
+      }
     }
-    lastEmptyOrdinaryGroups = emptyOrdinaryBatch ? resolvedGroups : new Map();
     for (const call of normalizedCalls) {
       const kind = activityKind(call.name);
       const group = kind === "ordinary"
-        ? resolvedGroups.get(ordinaryCallGroupKey(call, ordinaryCalls)) ??
-          activityGroup({ text: batch.text, calls: [call] })
+        ? ordinaryGroup ?? activityGroup({ text: batch.text, calls: [call] })
         : activityGroup({ text: batch.text, calls: [call] });
       tools.push({ name: call.name, claimed: false, group });
     }
     return tools;
-  }
-
-  function ordinaryGroupBuckets(
-    calls: ToolCall[],
-  ): Map<string, ToolCall[]> {
-    const groups = new Map<string, ToolCall[]>();
-    const nonCommandCalls = calls.filter((call) => call.name !== "run_command");
-    if (nonCommandCalls.length > 0) {
-      groups.set(
-        `ordinary:${ordinaryGroupSignature(nonCommandCalls)}`,
-        nonCommandCalls,
-      );
-    }
-    for (const call of calls) {
-      if (call.name !== "run_command") continue;
-      const key = ordinaryGroupKey(call);
-      const grouped = groups.get(key) ?? [];
-      grouped.push(call);
-      groups.set(key, grouped);
-    }
-    return groups;
-  }
-
-  function ordinaryCallGroupKey(
-    call: ToolCall,
-    ordinaryCalls: ToolCall[],
-  ): string {
-    if (call.name === "run_command") return ordinaryGroupKey(call);
-    return `ordinary:${ordinaryGroupSignature(
-      ordinaryCalls.filter((candidate) => candidate.name !== "run_command"),
-    )}`;
   }
 
   function activityGroup(groupInput: {
@@ -211,7 +195,6 @@ export function createGuidedActivityProjection(input: {
       summary: commandActivity
         ? content.summary
         : distinctSummary(content.title, content.summary),
-      summaryAuthored: commandActivity || Boolean(publicText(groupInput.text)),
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
       published: false,
@@ -223,7 +206,6 @@ export function createGuidedActivityProjection(input: {
         deferredUntilAccepted: group.deferredUntilAccepted,
         title: "요청 의도 확인",
         summary: conceptionSummary(content.summary),
-        summaryAuthored: false,
         nextStep: "요청에 맞는 작업 순서와 검증 기준을 정합니다.",
         published: false,
       };

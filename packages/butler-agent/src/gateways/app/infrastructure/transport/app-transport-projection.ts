@@ -4,6 +4,7 @@ import type { ProgressSummaryInput } from "../../domain/progress-summary/progres
 import {
   isRecord,
   safeOptionalNumber,
+  safeOptionalPublicText,
   safeOptionalShortText,
   safeOptionalShortToken,
   safeShortText,
@@ -25,16 +26,16 @@ export function progressRowFromAppOutbound(
       state: safeOptionalShortToken(metadata.state) ?? "running",
       safe_label: safeShortText(metadata.safeLabel, "Working"),
       safe_tool_name: safeOptionalShortText(metadata.toolName),
-      safe_input_label: safeOptionalShortText(metadata.inputLabel),
+      safe_input_label: safeOptionalPublicText(metadata.inputLabel),
       tool_call_id: safeOptionalShortToken(metadata.toolCallId),
       work_block_id: safeOptionalShortToken(metadata.workBlockId),
       work_block_label: safeOptionalShortText(metadata.workBlockLabel),
       work_decision_title: safeOptionalShortText(metadata.decisionTitle),
-      work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
-      work_decision_rationale: safeOptionalShortText(
+      work_decision_summary: safeOptionalPublicText(metadata.decisionSummary),
+      work_decision_rationale: safeOptionalPublicText(
         metadata.decisionRationale,
       ),
-      work_decision_next_step: safeOptionalShortText(metadata.decisionNextStep),
+      work_decision_next_step: safeOptionalPublicText(metadata.decisionNextStep),
       work_decision_source: safeOptionalShortText(metadata.decisionSource),
       work_decision_evidence_refs: Array.isArray(metadata.decisionEvidenceRefs)
         ? metadata.decisionEvidenceRefs
@@ -71,11 +72,11 @@ export function progressRowFromAppOutbound(
         work_block_id: safeOptionalShortToken(metadata.workBlockId) ?? actionId,
         work_block_label: label,
         work_decision_title: safeOptionalShortText(metadata.decisionTitle),
-        work_decision_summary: safeOptionalShortText(metadata.decisionSummary),
-        work_decision_rationale: safeOptionalShortText(
+        work_decision_summary: safeOptionalPublicText(metadata.decisionSummary),
+        work_decision_rationale: safeOptionalPublicText(
           metadata.decisionRationale,
         ),
-        work_decision_next_step: safeOptionalShortText(metadata.decisionNextStep),
+        work_decision_next_step: safeOptionalPublicText(metadata.decisionNextStep),
         work_decision_source: safeOptionalShortText(metadata.decisionSource),
         work_decision_evidence_refs: Array.isArray(metadata.decisionEvidenceRefs)
           ? metadata.decisionEvidenceRefs

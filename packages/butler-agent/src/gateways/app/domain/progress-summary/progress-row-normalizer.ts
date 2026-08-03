@@ -5,6 +5,7 @@ import {
   isRecord,
   safeIsoDate,
   safeOptionalNonNegativeInteger,
+  safeOptionalPublicText,
   safeOptionalShortText,
   safeOptionalShortToken,
   safeShortText,
@@ -42,7 +43,7 @@ function applyBasicProgressFields(
 ): void {
   const toolName = safeOptionalShortText(input.safe_tool_name);
   if (toolName) row.safe_tool_name = toolName;
-  const inputLabel = safeOptionalShortText(input.safe_input_label);
+  const inputLabel = safeOptionalPublicText(input.safe_input_label);
   if (inputLabel) row.safe_input_label = inputLabel;
   const toolCallId = safeOptionalShortToken(input.tool_call_id);
   if (toolCallId) row.tool_call_id = toolCallId;
@@ -109,19 +110,19 @@ function applyPublicDecisionFields(
     input.public_decision_role,
   );
   if (publicDecisionRole) row.public_decision_role = publicDecisionRole;
-  const publicDecisionSummary = safeOptionalShortText(
+  const publicDecisionSummary = safeOptionalPublicText(
     input.public_decision_summary,
   );
   if (publicDecisionSummary) {
     row.public_decision_summary = publicDecisionSummary;
   }
-  const publicDecisionRationale = safeOptionalShortText(
+  const publicDecisionRationale = safeOptionalPublicText(
     input.public_decision_rationale,
   );
   if (publicDecisionRationale) {
     row.public_decision_rationale = publicDecisionRationale;
   }
-  const publicDecisionNextStep = safeOptionalShortText(
+  const publicDecisionNextStep = safeOptionalPublicText(
     input.public_decision_next_step,
   );
   if (publicDecisionNextStep) {
@@ -172,13 +173,13 @@ function applyWorkDecisionFields(
   const decisionSource = safeOptionalShortText(input.work_decision_source);
   if (!isPublicDecisionSource(decisionSource)) return;
   row.work_decision_source = decisionSource;
-  const decisionSummary = safeOptionalShortText(input.work_decision_summary);
+  const decisionSummary = safeOptionalPublicText(input.work_decision_summary);
   if (decisionSummary) row.work_decision_summary = decisionSummary;
-  const decisionRationale = safeOptionalShortText(
+  const decisionRationale = safeOptionalPublicText(
     input.work_decision_rationale,
   );
   if (decisionRationale) row.work_decision_rationale = decisionRationale;
-  const decisionNextStep = safeOptionalShortText(
+  const decisionNextStep = safeOptionalPublicText(
     input.work_decision_next_step,
   );
   if (decisionNextStep) row.work_decision_next_step = decisionNextStep;
@@ -207,7 +208,7 @@ function applyStructuredDetailFields(
       id: safeShortToken(detail.id, `${row.id}-detail-${index + 1}`),
       kind: safeOptionalShortToken(detail.kind),
       safe_label: safeShortText(detail.safe_label, "Detail"),
-      safe_value: safeOptionalShortText(detail.safe_value),
+      safe_value: safeOptionalPublicText(detail.safe_value),
       state: safeOptionalShortToken(detail.state),
     }))
     .slice(0, 20);
