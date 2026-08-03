@@ -127,6 +127,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
+        args: call.args,
         status: "started",
       });
       if (isDurableWorkTool(call.name) && toolResultSucceeded(recorded.result)) {
@@ -143,6 +144,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
+        args: call.args,
         status: toolResultSucceeded(recorded.result) ? "completed" : "failed",
         resultJson: safeJson(recorded.result),
       });
@@ -154,6 +156,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
+        args: call.args,
         status: recorded.status === "cancelled" ? "cancelled" : "failed",
       });
       return priorToolFailure(recorded.status, effectiveToolName);
@@ -164,6 +167,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
+        args: call.args,
         status: "failed",
       });
       return uncertainPriorMutation(effectiveToolName);
@@ -191,6 +195,7 @@ export function createGuidedToolCallExecutor(
       activityId: activity.activityId,
       requestId: callId,
       toolName: effectiveToolName,
+      args: call.args,
       status: "started",
     });
 
@@ -218,6 +223,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
+        args: call.args,
         status: toolResultSucceeded(result) ? "completed" : "failed",
         resultJson: safeJson(result),
       });
@@ -228,6 +234,7 @@ export function createGuidedToolCallExecutor(
         call.name,
         callId,
         effectiveToolName,
+        call.args,
         toolSignal,
         error,
         activity,
@@ -262,6 +269,7 @@ async function denyUnauthorizedTool(
     activityId: activity.activityId,
     requestId: callId,
     toolName: effectiveToolName,
+    args: call.args,
     status: "failed",
     resultJson: safeJson(result),
   });
@@ -298,6 +306,7 @@ async function finishFailedTool(
   toolName: string,
   callId: string,
   effectiveToolName: string,
+  args: Record<string, unknown>,
   toolSignal: AbortSignal,
   error: unknown,
   activity: GuidedActivityBinding,
@@ -314,6 +323,7 @@ async function finishFailedTool(
       activityId: activity.activityId,
       requestId: callId,
       toolName: effectiveToolName,
+      args,
       status: "failed",
       resultJson: safeJson(result),
     });
@@ -329,6 +339,7 @@ async function finishFailedTool(
     activityId: activity.activityId,
     requestId: callId,
     toolName: effectiveToolName,
+    args,
     status: "cancelled",
   });
   throw error;

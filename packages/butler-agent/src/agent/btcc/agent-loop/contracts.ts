@@ -69,6 +69,7 @@ export interface BtccFinalSynthesisOptions {
 
 export interface BtccAgentLoopInput {
   prompt: string;
+  turnId?: string;
   model?: string;
   instructions?: string;
   reasoningEffort?: ReasoningEffort;
@@ -84,6 +85,7 @@ export interface BtccAgentLoopInput {
     reportedModel: string;
   }) => void;
   providerRetryAttempts?: number;
+  progress?: BtccTurnProgressObserver;
   toolChoice?: "auto" | "required";
   tools: readonly BtccAgentLoopToolDefinition[];
   resolveTools?: () => readonly BtccAgentLoopToolDefinition[];

@@ -135,7 +135,11 @@ export async function publishWorkProgress(
     const actionProgress = progressByKey.get(action.actionKey);
     return {
       taskId: `${work.workId}:${action.actionKey}`,
-      taskTitle: publicText(action.description, action.actionKey),
+      taskTitle: compactPublicText(
+        action.actionKey,
+        `작업 ${index + 1}`,
+      ),
+      taskDescription: publicText(action.description, action.actionKey),
       taskOutcome: publicText(actionProgress?.note, action.description),
       taskOrder: index,
       taskState: projectActionState(actionProgress?.status ?? "pending"),
@@ -171,4 +175,9 @@ function projectActionState(
 
 function publicText(value: string | undefined, fallback: string): string {
   return sanitizePublicText(value, fallback).trim() || fallback;
+}
+
+function compactPublicText(value: string | undefined, fallback: string): string {
+  const text = publicText(value, fallback).replace(/\s+/gu, " ");
+  return [...text].slice(0, 32).join("");
 }

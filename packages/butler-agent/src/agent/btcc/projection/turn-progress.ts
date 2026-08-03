@@ -65,6 +65,12 @@ export function projectTurnProgressToEvents(
               safe_value: task.workTitle,
               state: task.workState,
             }, {
+              id: "task-description",
+              kind: "task_description",
+              safe_label: "Task",
+              safe_value: task.taskDescription,
+              state: task.taskState,
+            }, {
               id: "task-outcome",
               kind: "task_outcome",
               safe_label: "Task outcome",
@@ -107,10 +113,28 @@ export function projectTurnProgressToEvents(
           bridgePhase: "btcc_operation",
           semanticBlockId: update.activityId,
           operationStatus: update.status,
+          ...(update.inputLabel !== undefined
+            ? { inputLabel: update.inputLabel }
+            : {}),
+          ...(update.detailRows !== undefined
+            ? { detailRows: update.detailRows }
+            : {}),
           ...(update.resultRef ? { resultId: update.resultRef.id } : {}),
           ...(update.byteLength !== undefined
             ? { resultByteLength: update.byteLength }
             : {}),
+        },
+      });
+    },
+    async modelRoundWaitingChanged(update) {
+      await publish({
+        kind: modelRoundWaitingEventKind(update.status),
+        payload: {
+          safeLabel: "응답 생성 중",
+          toolName: "model_round",
+          toolCallId: update.requestId,
+          activityKind: "message",
+          bridgePhase: "model_round_waiting",
         },
       });
     },
@@ -141,6 +165,15 @@ export function projectTurnProgressToEvents(
       });
     },
   };
+}
+
+function modelRoundWaitingEventKind(
+  status: "started" | "completed" | "failed" | "cancelled",
+): "tool.started" | "tool.completed" | "tool.failed" | "tool.cancelled" {
+  if (status === "started") return "tool.started";
+  if (status === "completed") return "tool.completed";
+  if (status === "cancelled") return "tool.cancelled";
+  return "tool.failed";
 }
 
 function operationEventKind(
