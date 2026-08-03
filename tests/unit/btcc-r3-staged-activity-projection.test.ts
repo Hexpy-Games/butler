@@ -173,7 +173,56 @@ test("the first Plan projects distinct conception and planning activities from o
   expect(updates[0]?.activityId).not.toBe(updates[1]?.activityId);
 });
 
-test("ordinary empty tool batches group repeated public labels once", async () => {
+test("first Plan uses an opaque action target but preserves a human-readable action key", async () => {
+  const projectNextStep = async (args: Record<string, unknown>) => {
+    const updates: Array<{ nextStep?: string }> = [];
+    const projection = createGuidedActivityProjection({
+      turnId: "turn-plan-action-display",
+      progress: {
+        stateChanged() {},
+        phaseActivityChanged(update) {
+          updates.push(update);
+        },
+      },
+    });
+    projection.observeToolBatch({
+      text: "",
+      toolCalls: [{ name: "replace_work_plan", args }],
+    });
+    const binding = await projection.observeTool({
+      name: "replace_work_plan",
+      effectiveToolName: "replace_work_plan",
+      args,
+    });
+    await projection.publishAccepted(binding);
+    return updates[1]?.nextStep;
+  };
+  const target = "workspace:command-result-file-with-a-long-name.txt";
+  const opaqueKey = "write_marker_with_required_command";
+  const humanKey = "운영 환경 반영";
+  const boundedTarget = `${[...target].slice(0, 31).join("")}…`;
+
+  await expect(projectNextStep({
+    objective: "요청한 변경을 완료합니다.",
+    actions: [{
+      action_key: opaqueKey,
+      description: opaqueKey,
+      effect: { capability: "workspace.file", target },
+    }],
+    checks: [],
+  })).resolves.toBe(boundedTarget);
+  await expect(projectNextStep({
+    objective: "요청한 변경을 완료합니다.",
+    actions: [{
+      action_key: humanKey,
+      description: humanKey,
+      effect: { capability: "workspace.file", target: "workspace:release.md" },
+    }],
+    checks: [],
+  })).resolves.toBe(humanKey);
+});
+
+test("ordinary empty tool batches group repeated run_command purposes once", async () => {
   const updates: Array<{ title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-grouped-tools",
@@ -185,10 +234,11 @@ test("ordinary empty tool batches group repeated public labels once", async () =
       },
     },
   });
+  const summary = "작업공간의 현재 변경 상태를 확인합니다.";
   const calls = [
-    { name: "run_command", args: { command: "pwd" } },
-    { name: "run_command", args: { command: "git status" } },
-    { name: "run_command", args: { command: "git diff" } },
+    { name: "run_command", args: { command: "pwd", summary } },
+    { name: "run_command", args: { command: "git status", summary } },
+    { name: "run_command", args: { command: "git diff", summary } },
   ];
   projection.observeToolBatch({ text: "", toolCalls: calls });
   for (const call of calls) {
@@ -197,9 +247,93 @@ test("ordinary empty tool batches group repeated public labels once", async () =
 
   expect(updates).toEqual([expect.objectContaining({
     title: "명령 실행",
-    summary: "작업 공간에서 필요한 명령을 실행하고 있습니다.",
+    summary,
   })]);
-  expect(updates[0]!.title).not.toBe(updates[0]!.summary);
+  expect(updates[0]?.title).not.toBe(updates[0]?.summary);
+});
+
+test("different run_command purposes are not coalesced into one activity", async () => {
+  const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-distinct-command-purposes",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const calls = [
+    {
+      name: "run_command",
+      args: { command: "git status --short", summary: "작업공간 변경 상태를 확인합니다." },
+    },
+    {
+      name: "run_command",
+      args: { command: "git diff --check", summary: "변경 내용의 공백 오류를 검증합니다." },
+    },
+  ];
+  projection.observeToolBatch({ text: "", toolCalls: calls });
+  for (const call of calls) {
+    await projection.observeTool({ ...call, effectiveToolName: call.name });
+  }
+
+  expect(updates).toEqual([
+    expect.objectContaining({
+      title: "명령 실행",
+      summary: "작업공간 변경 상태를 확인합니다.",
+    }),
+    expect.objectContaining({
+      title: "명령 실행",
+      summary: "변경 내용의 공백 오류를 검증합니다.",
+    }),
+  ]);
+  expect(updates[0]?.activityId).not.toBe(updates[1]?.activityId);
+  expect(updates[0]?.title).not.toBe(updates[0]?.summary);
+  expect(updates[1]?.title).not.toBe(updates[1]?.summary);
+  expect(updates[0]?.summary).not.toBe(updates[1]?.summary);
+});
+
+test("progressive run_command projects its nested summary and keeps full-summary groups distinct", async () => {
+  const updates: Array<{ activityId: string; title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-progressive-command-summary",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const prefix = "x".repeat(140);
+  const first = {
+    name: "tool_call",
+    args: {
+      id: "native:run_command",
+      arguments: { command: "pwd", summary: `${prefix}A` },
+    },
+  };
+  const second = {
+    name: "tool_call",
+    args: {
+      id: "native:run_command",
+      arguments: { command: "pwd", summary: `${prefix}B` },
+    },
+  };
+  for (const call of [first, second]) {
+    projection.observeToolBatch({ text: "", toolCalls: [call] });
+    await projection.observeTool({
+      ...call,
+      effectiveToolName: "run_command",
+    });
+  }
+
+  expect(updates).toHaveLength(2);
+  expect(updates[0]?.summary).toBe(prefix);
+  expect(updates[1]?.summary).toBe(prefix);
+  expect(updates[0]?.activityId).not.toBe(updates[1]?.activityId);
 });
 
 test("progressive dispatch activity adopts the effective tool title and summary", async () => {
@@ -248,8 +382,9 @@ test("consecutive empty batches with the same ordinary purpose reuse one activit
     },
   });
   const bindings = [];
+  const summary = "작업공간의 현재 상태를 확인합니다.";
   for (const command of ["pwd", "git status", "git diff"]) {
-    const call = { name: "run_command", args: { command } };
+    const call = { name: "run_command", args: { command, summary } };
     projection.observeToolBatch({ text: "", toolCalls: [call] });
     bindings.push(await projection.observeTool({
       ...call,
@@ -261,8 +396,9 @@ test("consecutive empty batches with the same ordinary purpose reuse one activit
   expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
   expect(updates[0]).toMatchObject({
     title: "명령 실행",
-    summary: "작업 공간에서 필요한 명령을 실행하고 있습니다.",
+    summary,
   });
+  expect(updates[0]?.title).not.toBe(updates[0]?.summary);
 });
 
 test("long Plan objectives remain in detail while every title stays within 32 characters", async () => {

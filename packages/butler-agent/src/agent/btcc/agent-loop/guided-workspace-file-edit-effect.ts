@@ -1,11 +1,17 @@
-import type { EffectAdapterError } from "../effects/index.ts";
+import type {
+  EffectAdapterError,
+  GuidedEffectRecoveryHint,
+} from "../effects/index.ts";
+import {
+  locateExactText,
+} from "../../tools/file-tools/edit_file/index.ts";
 import {
   normalizeWorkspaceContainedPath,
   workspaceFileEffectTarget,
 } from "./guided-workspace-file-target.ts";
 import {
   createGuidedWorkspaceFileEditEffectAdapter,
-  guidedWorkspaceEditInputSha256,
+  normalizedGuidedWorkspaceEditCandidate,
   type GuidedWorkspaceFileEditAdapterOptions,
   type GuidedWorkspaceFileEditInput,
   type RegisteredEditFileInput,
@@ -15,6 +21,10 @@ import {
   guidedWorkspaceBytesSha256,
   observeGuidedWorkspaceEditTarget,
 } from "./guided-workspace-file-edit-observation.ts";
+import {
+  recoverDurableInput,
+  recoverLegacyInput,
+} from "./guided-workspace-file-edit-recovery.ts";
 
 export {
   createGuidedWorkspaceFileEditEffectAdapter,
@@ -36,6 +46,7 @@ export async function prepareGuidedWorkspaceFileEdit(input: {
   butlerData?: string;
   executeEditFile(prepared: RegisteredEditFileInput): Promise<unknown>;
   priorInputSha256?: string;
+  priorRecoveryHint?: GuidedEffectRecoveryHint;
   protectedProjectLedgerRoots?: string[];
   workspacePath: string;
 }): Promise<
@@ -57,39 +68,71 @@ export async function prepareGuidedWorkspaceFileEdit(input: {
   if (!observed.ok) return observed;
   const decodedText = decodeGuidedWorkspaceUtf8(observed.value.bytesValue);
   if (!decodedText.ok) return decodedText;
-  const offset = lineStartOffset(decodedText.text, decoded.value.startLine);
-  if (offset === null) {
-    return rejected(
-      "start_line_out_of_range",
-      "edit_file start_line is outside the current file.",
-    );
-  }
 
   const adapter = createGuidedWorkspaceFileEditEffectAdapter(options);
-  const candidates = effectCandidates({
-    adapter,
-    decoded: decoded.value,
-    observedText: decodedText.text,
-    observedSha256: observed.value.sha256,
-    offset,
-    includeAfterState: Boolean(input.priorInputSha256),
+  if (input.priorInputSha256) {
+    const recoveredInput = input.priorRecoveryHint
+      ? recoverDurableInput({
+          adapter,
+          decoded: decoded.value,
+          observedText: decodedText.text,
+          observedSha256: observed.value.sha256,
+          priorInputSha256: input.priorInputSha256,
+          priorRecoveryHint: input.priorRecoveryHint,
+        })
+      : recoverLegacyInput({
+          adapter,
+          decoded: decoded.value,
+          observedText: decodedText.text,
+          observedSha256: observed.value.sha256,
+          priorInputSha256: input.priorInputSha256,
+        });
+    if (!recoveredInput) {
+      return rejected(
+        "edit_file_reconciliation_mismatch",
+        "The file no longer matches the durable edit intent; inspect it before continuing.",
+      );
+    }
+    return {
+      ok: true,
+      effect: {
+        adapter,
+        input: recoveredInput,
+        target: workspaceFileEffectTarget(recoveredInput.path),
+      },
+    };
+  }
+  const location = locateExactText({
+    text: decodedText.text,
+    oldText: decoded.value.oldText,
+    ...(decoded.value.startLine === undefined
+      ? {}
+      : { startLine: decoded.value.startLine }),
   });
-  if (!candidates.ok) return candidates;
-  const selected = input.priorInputSha256
-    ? candidates.values.find((candidate) =>
-        guidedWorkspaceEditInputSha256(candidate) === input.priorInputSha256,
-      )
-    : candidates.values[0];
-  if (!selected) {
+  if (!location.ok) {
     return rejected(
-      input.priorInputSha256
-        ? "edit_file_reconciliation_mismatch"
-        : "old_text_mismatch",
-      input.priorInputSha256
-        ? "The file no longer matches the durable edit intent; inspect it before continuing."
-        : "The current file does not contain old_text at start_line; read it again and retry the small edit.",
+      location.error,
+      location.error === "old_text_ambiguous"
+        ? "The current file contains multiple unresolved old_text occurrences. Provide a more specific exact range."
+        : input.priorInputSha256
+          ? "The file no longer matches the durable edit intent; inspect it before continuing."
+          : "The current file does not contain old_text; read it again and retry the small edit.",
     );
   }
+  const afterText = decodedText.text.slice(0, location.value.offset) +
+    decoded.value.newText +
+    decodedText.text.slice(location.value.offset + decoded.value.oldText.length);
+  if (afterText === decodedText.text) {
+    return rejected("edit_file_no_change", "edit_file did not change the file.");
+  }
+  const selected = normalizedGuidedWorkspaceEditCandidate({
+    adapter,
+    decoded: decoded.value,
+    location: location.value,
+  }, {
+    beforeSha256: observed.value.sha256,
+    afterSha256: textSha256(afterText),
+  });
   return {
     ok: true,
     effect: {
@@ -100,64 +143,9 @@ export async function prepareGuidedWorkspaceFileEdit(input: {
   };
 }
 
-function effectCandidates(input: {
-  adapter: ReturnType<typeof createGuidedWorkspaceFileEditEffectAdapter>;
-  decoded: DecodedEditInput;
-  observedText: string;
-  observedSha256: string;
-  offset: number;
-  includeAfterState: boolean;
-}):
-  | { ok: true; values: GuidedWorkspaceFileEditInput[] }
-  | { ok: false; error: EffectAdapterError } {
-  const values: GuidedWorkspaceFileEditInput[] = [];
-  if (input.observedText.startsWith(input.decoded.oldText, input.offset)) {
-    const afterText = input.observedText.slice(0, input.offset) +
-      input.decoded.newText +
-      input.observedText.slice(input.offset + input.decoded.oldText.length);
-    if (afterText === input.observedText) {
-      return rejected("edit_file_no_change", "edit_file did not change the file.");
-    }
-    values.push(normalizedCandidate(input, {
-      beforeSha256: input.observedSha256,
-      afterSha256: textSha256(afterText),
-    }));
-  }
-  if (
-    input.includeAfterState &&
-    input.observedText.startsWith(input.decoded.newText, input.offset)
-  ) {
-    const reconstructedBefore = input.observedText.slice(0, input.offset) +
-      input.decoded.oldText +
-      input.observedText.slice(input.offset + input.decoded.newText.length);
-    values.push(normalizedCandidate(input, {
-      beforeSha256: textSha256(reconstructedBefore),
-      afterSha256: input.observedSha256,
-    }));
-  }
-  return { ok: true, values };
-}
-
-function normalizedCandidate(
-  input: {
-    adapter: ReturnType<typeof createGuidedWorkspaceFileEditEffectAdapter>;
-    decoded: DecodedEditInput;
-  },
-  hashes: { beforeSha256: string; afterSha256: string },
-): GuidedWorkspaceFileEditInput {
-  return input.adapter.normalizeInput({
-    path: input.decoded.path,
-    start_line: input.decoded.startLine,
-    old_text: input.decoded.oldText,
-    new_text: input.decoded.newText,
-    before_sha256: hashes.beforeSha256,
-    after_sha256: hashes.afterSha256,
-  });
-}
-
 type DecodedEditInput = {
   path: string;
-  startLine: number;
+  startLine?: number;
   oldText: string;
   newText: string;
 };
@@ -179,7 +167,10 @@ function decodeEditInput(
   if (typeof record.new_text !== "string") {
     return rejected("edit_file_invalid_new_text", "edit_file requires string new_text.");
   }
-  if (!Number.isSafeInteger(record.start_line) || Number(record.start_line) < 1) {
+  if (
+    record.start_line !== undefined &&
+    (!Number.isSafeInteger(record.start_line) || Number(record.start_line) < 1)
+  ) {
     return rejected(
       "edit_file_invalid_start_line",
       "edit_file start_line must be a positive integer.",
@@ -193,7 +184,9 @@ function decodeEditInput(
           workspacePath,
           requiredText(record.path, "path"),
         ),
-        startLine: Number(record.start_line),
+        ...(record.start_line === undefined
+          ? {}
+          : { startLine: Number(record.start_line) }),
         oldText: record.old_text,
         newText: record.new_text,
       },
@@ -204,17 +197,6 @@ function decodeEditInput(
       "edit_file path must identify one file inside the admitted workspace.",
     );
   }
-}
-
-function lineStartOffset(content: string, startLine: number): number | null {
-  if (startLine === 1) return content.startsWith("\uFEFF") ? 1 : 0;
-  let line = 1;
-  for (let index = 0; index < content.length; index += 1) {
-    if (content[index] !== "\n") continue;
-    line += 1;
-    if (line === startLine) return index + 1;
-  }
-  return null;
 }
 
 function textSha256(value: string): string {

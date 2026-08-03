@@ -1,5 +1,6 @@
 import { homedir } from "os";
 import { basename } from "path";
+import { sanitizePublicText } from "../../events/public-text.ts";
 import type { ToolProgressSummary } from "../../tools/tool-support.ts";
 
 export function safeToolInputLabel(
@@ -61,15 +62,15 @@ export function safePathishValue(value: unknown, fallback: string): string {
 }
 
 function safeCommandIntentLabel(args: Record<string, unknown>): string {
-  if (args.state_effect === "validation" || typeof args.validation_suite === "string") {
-    return "검증 명령";
-  }
-  if (args.state_effect === "mutation") return "변경 명령";
-  if (args.state_effect === "read_only") return "조회 명령";
-  if (Array.isArray(args.output_paths) && args.output_paths.length > 0) {
-    return "산출물 명령";
-  }
-  return "명령 실행";
+  return safeCommandPurposeSummary(args);
+}
+
+export function safeCommandPurposeSummary(args: Record<string, unknown>): string {
+  return safeCommandPurposeIdentity(args).slice(0, 140);
+}
+
+export function safeCommandPurposeIdentity(args: Record<string, unknown>): string {
+  return sanitizePublicText(args.summary, "").trim();
 }
 
 function safeCommandIntentDetails(
@@ -96,6 +97,10 @@ function safeCommandIntentDetails(
 }
 
 export function safeTextValue(value: unknown, fallback: string): string {
+  return safeTextValueUnbounded(value, fallback).slice(0, 140);
+}
+
+function safeTextValueUnbounded(value: unknown, fallback: string): string {
   const text = typeof value === "string"
     ? value
     : typeof value === "number" || typeof value === "boolean"
@@ -105,7 +110,7 @@ export function safeTextValue(value: unknown, fallback: string): string {
     .replace(/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+/giu, "[redacted]")
     .replace(/\s+/gu, " ")
     .trim();
-  return (normalized || fallback).slice(0, 140);
+  return normalized || fallback;
 }
 
 function stripControlCharacters(value: string): string {

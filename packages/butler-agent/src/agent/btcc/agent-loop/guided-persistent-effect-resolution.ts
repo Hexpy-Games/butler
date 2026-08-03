@@ -66,6 +66,9 @@ export function createGuidedPersistentEffectResolver(input: {
         workspacePath: input.workspacePath,
         butlerData: input.butlerData,
         ...(prior ? { priorInputSha256: prior.inputSha256 } : {}),
+        ...(prior?.recoveryHint
+          ? { priorRecoveryHint: prior.recoveryHint }
+          : {}),
         executeEditFile: async (preparedInput) => executeRegistered({
           args: preparedInput,
           rawArguments: JSON.stringify(preparedInput),

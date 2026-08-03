@@ -11,6 +11,8 @@ import { runBtccAgentLoop } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/agent-loop.ts";
 import { publishOperation } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-progress.ts";
+import { safeCommandPurposeSummary } from
+  "../../packages/butler-agent/src/agent/output/progress/arguments.ts";
 import { publishWorkProgress } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { activityContent } from
@@ -21,6 +23,10 @@ import { projectTurnProgressToEvents } from
   "../../packages/butler-agent/src/agent/btcc/projection/turn-progress.ts";
 import { projectTurnActivity } from
   "../../packages/butler-app/client/ui/src/app/conversation-progress/activity.ts";
+import { runCommandToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import { prepareBtccToolCall } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-execution.ts";
 
 test("a freshly admitted Turn publishes an honest visible progress block", async () => {
   const events: SharedTurnEvent[] = [];
@@ -118,7 +124,7 @@ test("model-round waiting is visible before every provider request and ends on r
   });
 });
 
-test("run_command operation projects structured intent without exposing raw command text", async () => {
+test("run_command operation projects its model-authored purpose without exposing raw command text", async () => {
   const events: SharedTurnEvent[] = [];
   const progress = projectTurnProgressToEvents(async (event) => {
     events.push({
@@ -137,6 +143,7 @@ test("run_command operation projects structured intent without exposing raw comm
     toolName: "run_command",
     args: {
       command: "curl -H 'Authorization: Bearer secret' -u user:password https://example.test",
+      summary: "공식 상태 엔드포인트의 응답을 검증합니다.",
       cwd: "/workspace/private-client/acquisition-secret",
       state_effect: "validation",
       validation_suite: "focused-check",
@@ -146,31 +153,141 @@ test("run_command operation projects structured intent without exposing raw comm
 
   const payload = events[0]?.payload ?? {};
   const row = progressRowFromSharedTurnEvent(events[0]!);
-  expect(payload.safeLabel).toBe("검증 명령");
+  expect(payload.safeLabel).toBe("명령 실행");
   expect(payload.safeLabel).not.toBe("작업 실행");
   expect([...String(payload.safeLabel)].length).toBeLessThanOrEqual(32);
-  expect(payload.inputLabel).toBe("검증 명령");
+  expect(payload.inputLabel).toBe("공식 상태 엔드포인트의 응답을 검증합니다.");
+  expect(payload.safeLabel).not.toBe(payload.inputLabel);
   expect(JSON.stringify(payload)).not.toContain("secret");
   expect(JSON.stringify(payload)).not.toContain("password");
   expect(JSON.stringify(payload)).not.toContain("Authorization");
   expect(JSON.stringify(payload)).not.toContain("private-client");
   expect(payload.detailRows).toEqual(expect.arrayContaining([
-    expect.objectContaining({ safe_label: "Command", safe_value: "검증 명령" }),
+    expect.objectContaining({
+      safe_label: "Command",
+      safe_value: "공식 상태 엔드포인트의 응답을 검증합니다.",
+    }),
   ]));
   expect(row).toMatchObject({
-    safe_label: "검증 명령",
-    safe_input_label: "검증 명령",
+    safe_label: "명령 실행",
+    safe_input_label: "공식 상태 엔드포인트의 응답을 검증합니다.",
     bridge_phase: "btcc_operation",
     safe_detail_rows: expect.arrayContaining([
-      expect.objectContaining({ safe_label: "Command", safe_value: "검증 명령" }),
+      expect.objectContaining({
+        safe_label: "Command",
+        safe_value: "공식 상태 엔드포인트의 응답을 검증합니다.",
+      }),
     ]),
   });
+  if (!row) throw new Error("run_command progress row was not projected");
+  expect(row.safe_label).not.toBe(row.safe_input_label);
+  const parameters = runCommandToolDefinition.parameters as {
+    properties: Record<string, { type?: string; minLength?: number; pattern?: string }>;
+    required: string[];
+  };
+  expect(parameters.required).toContain("summary");
+  expect(parameters.properties.summary).toMatchObject({
+    type: "string",
+    minLength: 1,
+    pattern: "\\S",
+  });
   const activity = activityContent(
-    { name: "run_command", args: { command: "git status --short" } },
-    [{ name: "run_command", args: { command: "git status --short" } }],
+    {
+      name: "run_command",
+      args: {
+        command: "git status --short",
+        summary: "작업공간 변경 상태를 확인합니다.",
+      },
+    },
+    [{
+      name: "run_command",
+      args: {
+        command: "git status --short",
+        summary: "작업공간 변경 상태를 확인합니다.",
+      },
+    }],
     "",
   );
+  expect(activity.title).toBe("명령 실행");
+  expect(activity.summary).toBe("작업공간 변경 상태를 확인합니다.");
   expect(activity.title).not.toBe(activity.summary);
+});
+
+test("run_command public summaries use canonical public-text sanitization", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+
+  await publishOperation(progress, {
+    turnId: "turn-command-summary-safety",
+    activityId: "activity-command-summary-safety",
+    requestId: "command-summary-safety",
+    toolName: "run_command",
+    args: {
+      command: "curl -H 'Authorization: Bearer private-token' /Users/alice/private/report.json",
+      summary: "Verify token=private-token and Authorization: Bearer private-token",
+    },
+    status: "started",
+  });
+
+  const row = progressRowFromSharedTurnEvent(events[0]!);
+  expect(row?.safe_input_label).toContain("Verify");
+  expect(row?.safe_input_label).not.toContain("private-token");
+  expect(row?.safe_input_label).not.toContain("Authorization");
+  expect(safeCommandPurposeSummary({
+    summary: "Inspect /Users/alice/private/report.json",
+  })).toBe("");
+});
+
+test("run_command summary is enforced by the native tool-call schema boundary", () => {
+  const missingSummary = prepareBtccToolCall(
+    { tools: [runCommandToolDefinition] },
+    {
+      id: "run-command-missing-summary",
+      name: "run_command",
+      arguments: { command: "pwd" },
+      rawArguments: JSON.stringify({ command: "pwd" }),
+    },
+  );
+  expect(missingSummary.validationError).toContain(
+    "requires argument: summary",
+  );
+
+  const valid = prepareBtccToolCall(
+    { tools: [runCommandToolDefinition] },
+    {
+      id: "run-command-with-summary",
+      name: "run_command",
+      arguments: {
+        command: "pwd",
+        summary: "현재 작업공간 위치를 확인합니다.",
+      },
+      rawArguments: JSON.stringify({
+        command: "pwd",
+        summary: "현재 작업공간 위치를 확인합니다.",
+      }),
+    },
+  );
+  expect(valid.validationError).toBeNull();
+
+  const whitespaceOnly = prepareBtccToolCall(
+    { tools: [runCommandToolDefinition] },
+    {
+      id: "run-command-whitespace-summary",
+      name: "run_command",
+      arguments: { command: "pwd", summary: " \n\t" },
+      rawArguments: JSON.stringify({ command: "pwd", summary: " \n\t" }),
+    },
+  );
+  expect(whitespaceOnly.validationError).toContain("summary");
+  expect(whitespaceOnly.validationError).toContain("invalid arguments");
 });
 
 test("progressive tool discovery and dispatch keep distinct product-facing titles", () => {
@@ -331,10 +448,30 @@ test("Plan action keys are immediate stable checklist summaries while notes rema
           revision: 1,
           objective: "요청한 변경을 완료한다.",
           actions: [
-            { actionKey: "현재 적용 경로 확인", description: "현재 사용자 프로필 적용 경로를 확인한다.", dependencyKeys: [] },
-            { actionKey: "원인 수정", description: "확인된 문제의 원인을 수정한다.", dependencyKeys: ["현재 적용 경로 확인"] },
-            { actionKey: "변경 결과 검증", description: "수정된 동작이 요청을 만족하는지 검증한다.", dependencyKeys: ["원인 수정"] },
-            { actionKey: "운영 환경 반영", description: "검증된 변경을 운영 환경에 반영한다.", dependencyKeys: ["변경 결과 검증"] },
+            {
+              actionKey: "현재 적용 경로 확인",
+              description: "현재 사용자 프로필 적용 경로를 확인한다.",
+              dependencyKeys: [],
+              effect: { capability: "workspace.file", target: "workspace:profile.md" },
+            },
+            {
+              actionKey: "원인 수정",
+              description: "확인된 문제의 원인을 수정한다.",
+              dependencyKeys: ["현재 적용 경로 확인"],
+              effect: { capability: "workspace.file", target: "workspace:fix.md" },
+            },
+            {
+              actionKey: "변경 결과 검증",
+              description: "수정된 동작이 요청을 만족하는지 검증한다.",
+              dependencyKeys: ["원인 수정"],
+              effect: { capability: "workspace.file", target: "workspace:verify.md" },
+            },
+            {
+              actionKey: "운영 환경 반영",
+              description: "검증된 변경을 운영 환경에 반영한다.",
+              dependencyKeys: ["변경 결과 검증"],
+              effect: { capability: "workspace.file", target: "workspace:release.md" },
+            },
           ],
           checks: [],
           originTurnId: "turn-opaque-keys",
@@ -381,4 +518,310 @@ test("Plan action keys are immediate stable checklist summaries while notes rema
       safe_value: "적용 경로가 확인되었습니다.",
     }),
   );
+});
+
+test("opaque Work action identifiers use their authored effect targets only in public progress", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  const opaqueKey = "write_marker_with_required_command";
+  const humanKey = "운영 환경 반영";
+  const target = "workspace:command-result-file-with-a-long-name.txt";
+  const boundWork = {
+    workId: "work-public-action-target",
+    objective: "요청한 변경을 완료합니다.",
+    status: "open",
+    currentPlan: {
+      planRevisionId: "plan-public-action-target",
+      revision: 1,
+      objective: "요청한 변경을 완료합니다.",
+      actions: [
+        {
+          actionKey: opaqueKey,
+          description: opaqueKey,
+          dependencyKeys: [],
+          effect: { capability: "workspace.file", target },
+        },
+        {
+          actionKey: humanKey,
+          description: humanKey,
+          dependencyKeys: [opaqueKey],
+          effect: { capability: "workspace.file", target: "workspace:release.md" },
+        },
+      ],
+      checks: [],
+      originTurnId: "turn-public-action-target",
+      createdAt: "2026-08-03T00:00:00.000Z",
+    },
+    actionProgress: [
+      { actionKey: opaqueKey, status: "active" as const },
+      { actionKey: humanKey, status: "pending" as const },
+    ],
+  };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
+    },
+  } as unknown as DurableWorkService;
+
+  await publishWorkProgress(progress, "turn-public-action-target", 1, service);
+  const rows = events
+    .map(progressRowFromSharedTurnEvent)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const boundedTarget = `${[...target].slice(0, 31).join("")}…`;
+
+  expect(rows.map((row) => row.safe_label)).toEqual([boundedTarget, humanKey]);
+  expect(rows[0]?.safe_label).not.toBe(opaqueKey);
+  expect([...rows[0]!.safe_label].length).toBe(32);
+  expect(boundWork.currentPlan.actions.map((action) => action.actionKey))
+    .toEqual([opaqueKey, humanKey]);
+});
+
+test("legacy generic Work action tokens use stored effect targets only for public titles", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  const actionKeys = ["inspect", "plan", "implement", "validate", "release", "closeout"];
+  const targets = [
+    "작업공간 상태를 확인합니다.",
+    "변경 계획을 정리합니다.",
+    "원인 수정 내용을 적용합니다.",
+    "변경 결과를 검증합니다.",
+    "검증된 변경을 반영합니다.",
+    "결과와 후속 조치를 마무리합니다.",
+  ];
+  const boundWork = {
+    workId: "work-legacy-action-tokens",
+    objective: "요청한 변경을 완료합니다.",
+    status: "open",
+    currentPlan: {
+      planRevisionId: "plan-legacy-action-tokens",
+      revision: 1,
+      objective: "요청한 변경을 완료합니다.",
+      actions: actionKeys.map((actionKey, index) => ({
+        actionKey,
+        description: actionKey,
+        dependencyKeys: index === 0 ? [] : [actionKeys[index - 1]!],
+        effect: {
+          capability: "workspace.file",
+          target: targets[index]!,
+        },
+      })),
+      checks: [],
+      originTurnId: "turn-legacy-action-tokens",
+      createdAt: "2026-08-03T00:00:00.000Z",
+    },
+    actionProgress: actionKeys.map((actionKey) => ({
+      actionKey,
+      status: actionKey === "release"
+        ? "active" as const
+        : actionKey === "closeout"
+          ? "pending" as const
+          : "done" as const,
+    })),
+  };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
+    },
+  } as unknown as DurableWorkService;
+
+  await publishWorkProgress(progress, "turn-legacy-action-tokens", 1, service);
+  const rows = events
+    .map(progressRowFromSharedTurnEvent)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  expect(rows.map((row) => row.safe_label)).toEqual(targets);
+  expect(rows.map((row) => row.safe_label)).not.toEqual(actionKeys);
+  expect(rows.find((row) => row.safe_label === targets[4])?.state).toBe("active");
+  expect(rows.find((row) => row.safe_label === targets[5])?.state).toBe("planned");
+  expect(boundWork.currentPlan.actions.map((action) => action.actionKey))
+    .toEqual(actionKeys);
+});
+
+test("legacy generic Work keys prefer meaningful descriptions through publishWorkProgress", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  const actions = [
+    {
+      actionKey: "inspect",
+      description: "validate",
+      dependencyKeys: [],
+      effect: { capability: "workspace.file", target: "workspace:secret.md" },
+    },
+    {
+      actionKey: "validate",
+      description: "Validate the focused result",
+      dependencyKeys: ["inspect"],
+      effect: { capability: "workspace.file", target: "workspace:result.md" },
+    },
+  ];
+  const boundWork = {
+    workId: "work-legacy-description-priority",
+    objective: "요청한 변경을 완료합니다.",
+    status: "open",
+    currentPlan: {
+      planRevisionId: "plan-legacy-description-priority",
+      revision: 1,
+      objective: "요청한 변경을 완료합니다.",
+      actions,
+      checks: [],
+      originTurnId: "turn-legacy-description-priority",
+      createdAt: "2026-08-03T00:00:00.000Z",
+    },
+    actionProgress: [
+      { actionKey: "inspect", status: "done" as const },
+      { actionKey: "validate", status: "active" as const },
+    ],
+  };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
+    },
+  } as unknown as DurableWorkService;
+
+  await publishWorkProgress(progress, "turn-legacy-description-priority", 1, service);
+  const rows = events
+    .map(progressRowFromSharedTurnEvent)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  expect(rows.map((row) => row.safe_label)).toEqual([
+    "workspace:secret.md",
+    "Validate the focused result",
+  ]);
+  expect(rows.map((row) => row.state)).toEqual(["completed", "active"]);
+  expect(rows.map((row) => row.safe_detail_rows?.find((detail) => detail.kind === "task_description")?.safe_value))
+    .toEqual([
+      "validate",
+      "Validate the focused result",
+    ]);
+});
+
+test("public progress preserves durable action status without runtime reinterpretation", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  const actionKeys = ["inspect", "plan", "implement", "validate", "release", "closeout"];
+  const boundWork = {
+    workId: "work-legacy-reopened-release",
+    objective: "요청한 변경을 완료합니다.",
+    status: "open",
+    currentPlan: {
+      planRevisionId: "plan-legacy-reopened-release",
+      revision: 1,
+      objective: "요청한 변경을 완료합니다.",
+      actions: actionKeys.map((actionKey, index) => ({
+        actionKey,
+        description: actionKey,
+        dependencyKeys: index === 0 ? [] : [actionKeys[index - 1]!],
+        effect: {
+          capability: "workspace.file",
+          target: `대상 ${index + 1}`,
+        },
+      })),
+      checks: [],
+      originTurnId: "turn-legacy-reopened-release",
+      createdAt: "2026-08-03T00:00:00.000Z",
+    },
+    actionProgress: actionKeys.map((actionKey) => ({
+      actionKey,
+      status: actionKey === "release"
+        ? "active" as const
+        : actionKey === "closeout"
+          ? "done" as const
+          : "done" as const,
+    })),
+  };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
+    },
+  } as unknown as DurableWorkService;
+
+  await publishWorkProgress(progress, "turn-legacy-reopened-release", 1, service);
+  const rows = events
+    .map(progressRowFromSharedTurnEvent)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  expect(rows.find((row) => row.safe_label === "대상 5")?.state).toBe("active");
+  expect(rows.find((row) => row.safe_label === "대상 6")?.state).toBe("completed");
+  expect(boundWork.actionProgress.find((action) => action.actionKey === "closeout")?.status)
+    .toBe("done");
+});
+
+test("legacy target compatibility does not treat arbitrary slugs as stage tokens", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  const boundWork = {
+    workId: "work-arbitrary-slug",
+    objective: "요청한 작업을 진행합니다.",
+    status: "open",
+    currentPlan: {
+      planRevisionId: "plan-arbitrary-slug",
+      revision: 1,
+      objective: "요청한 작업을 진행합니다.",
+      actions: [{
+        actionKey: "audit",
+        description: "audit",
+        dependencyKeys: [],
+        effect: {
+          capability: "workspace.file",
+          target: "임의 토큰에 대한 효과 대상",
+        },
+      }],
+      checks: [],
+      originTurnId: "turn-arbitrary-slug",
+      createdAt: "2026-08-03T00:00:00.000Z",
+    },
+    actionProgress: [{ actionKey: "audit", status: "pending" as const }],
+  };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
+    },
+  } as unknown as DurableWorkService;
+
+  await publishWorkProgress(progress, "turn-arbitrary-slug", 1, service);
+  const row = events
+    .map(progressRowFromSharedTurnEvent)
+    .find((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
+
+  expect(row?.safe_label).toBe("audit");
+  expect(row?.safe_label).not.toBe("임의 토큰에 대한 효과 대상");
 });

@@ -60,7 +60,10 @@ export function createGuidedEffectService(
       }
 
       await faultHook("before_intent", identity);
-      const prepared = await journal.prepare(identity);
+      const prepared = await journal.prepare(
+        identity,
+        input.adapter.recoveryHint?.(resolved.value.normalizedInput),
+      );
       if (!prepared.ok) {
         return rejected(effectError(
           "effect_identity_conflict",

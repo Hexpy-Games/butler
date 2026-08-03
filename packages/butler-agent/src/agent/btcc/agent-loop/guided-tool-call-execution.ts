@@ -11,38 +11,43 @@ import type {
   ButlerToolExecutor,
   ContextualButlerToolExecutor,
 } from "../../tools/butler-tools.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 import {
   effectiveToolNameForCall,
+  invalidRunCommandSummary,
   isReplaySafeTool,
   priorToolFailure,
   uncertainPriorMutation,
 } from "./guided-turn-policy.ts";
-import {
-  executeDurableWorkTool,
-} from "./durable-work-tools.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
   backfillTurnToolResults,
   bindPresentedWorkForToolDispatch,
   publishWorkProgress,
   safeAttachToolResult,
-  safeBindOpenWork,
 } from "./guided-work-runtime.ts";
 import {
   publishOperation,
   rememberDescribedTools,
   safeJson,
   toolResultSucceeded,
-  unauthorizedToolResult,
 } from "./guided-tool-progress.ts";
 import {
   createGuidedActivityProjection,
-  type GuidedActivityBinding,
   type GuidedActivityProjection,
 } from "../projection/index.ts";
 import { createGuidedToolResumePool } from "./guided-tool-resume-pool.ts";
-import { guidedToolOccurrence } from "./guided-tool-occurrence.ts";
+import {
+  guidedToolCatalogId,
+  guidedToolOccurrence,
+} from "./guided-tool-occurrence.ts";
 import { finishFailedTool } from "./guided-tool-failure.ts";
+import {
+  findLegacyToolRecord,
+  replaySummarylessLegacyCall,
+} from "./guided-legacy-tool-replay.ts";
+import { executeGuidedFreshTool } from "./guided-fresh-tool-execution.ts";
+import { denyUnauthorizedTool } from "./guided-unauthorized-tool.ts";
 
 export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
@@ -78,6 +83,11 @@ export function createGuidedToolCallExecutor(
     const toolSignal = call.signal ?? input.signal;
     throwIfToolAborted(toolSignal);
     const effectiveToolName = effectiveToolNameForCall(call.name, call.args);
+    const normalizedCall = normalizeGuidedToolCall({
+      toolName: effectiveToolName,
+      args: call.args,
+    });
+    const presentationArgs = normalizedCall.args;
     const currentCallIndex = callIndex++;
     const occurrence = guidedToolOccurrence({
       turnId: input.turn.turnId,
@@ -86,29 +96,82 @@ export function createGuidedToolCallExecutor(
       name: call.name,
       args: call.args,
     });
-    const { callId: computedCallId, providerCallId } = occurrence;
+    const {
+      callId: computedCallId,
+      legacyProviderCallIds,
+      providerCallId,
+    } = occurrence;
     const exactRecord = input.toolJournal.find(computedCallId);
-    let callId = computedCallId;
+    const legacyRecord = !exactRecord
+      ? findLegacyToolRecord(input.toolJournal, legacyProviderCallIds)
+      : undefined;
+    const existingRecord = exactRecord ?? legacyRecord;
+    let callId = existingRecord?.callId ?? computedCallId;
     if (exactRecord) {
       resumePool.discard(computedCallId);
+    } else if (legacyRecord) {
+      resumePool.discard(legacyRecord.callId);
     } else if (!providerCallId) {
       callId = resumePool.claim(
         effectiveToolName,
-        call.args,
+        presentationArgs,
+        guidedToolCatalogId(call.name, call.args),
       ) ?? computedCallId;
     }
     usedTools.push(effectiveToolName);
-    const activity = await activityProjection.observeTool({
-      name: call.name,
+    const invalidSummary = invalidRunCommandSummary({
+      callName: call.name,
+      callArgs: call.args,
       effectiveToolName,
-      args: call.args,
+      presentationArgs,
+    });
+    const legacyReplay = await replaySummarylessLegacyCall({
+      record: legacyRecord,
+      callName: call.name,
+      callArgs: call.args,
+      visible: input.visibleNames.has(call.name),
+      authorized: input.authorizedNames.has(call.name),
+      call,
+      callId,
+      effectiveToolName,
+      signal: toolSignal,
+      runtime: {
+        durableWork: input.durableWork,
+        toolJournal: input.toolJournal,
+      },
+      scope: input.workScope,
+      executeFresh: (executionCall) =>
+        executeFreshTool(input, executionCall, callId, toolSignal),
+    });
+    if (legacyReplay) {
+      rememberDescribedTools(call.name, legacyReplay.result, input.describedToolIds);
+      return legacyReplay.result;
+    }
+    if (
+      invalidSummary &&
+      input.visibleNames.has(call.name) &&
+      input.authorizedNames.has(call.name)
+    ) {
+      return invalidSummary;
+    }
+    const activity = await activityProjection.observeTool({
+      name: effectiveToolName,
+      effectiveToolName,
+      args: presentationArgs,
     });
 
     if (
       !input.visibleNames.has(call.name) ||
       !input.authorizedNames.has(call.name)
     ) {
-      return denyUnauthorizedTool(input, callId, effectiveToolName, call, activity);
+      return denyUnauthorizedTool(
+        input,
+        callId,
+        effectiveToolName,
+        call,
+        presentationArgs,
+        activity,
+      );
     }
 
     const recorded = input.toolJournal.find(callId);
@@ -126,7 +189,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
-        args: call.args,
+        args: presentationArgs,
         status: "started",
       });
       if (isDurableWorkTool(call.name) && toolResultSucceeded(recorded.result)) {
@@ -143,7 +206,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
-        args: call.args,
+        args: presentationArgs,
         status: toolResultSucceeded(recorded.result) ? "completed" : "failed",
         resultJson: safeJson(recorded.result),
       });
@@ -155,7 +218,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
-        args: call.args,
+        args: presentationArgs,
         status: recorded.status === "cancelled" ? "cancelled" : "failed",
       });
       return priorToolFailure(recorded.status, effectiveToolName);
@@ -166,19 +229,21 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
-        args: call.args,
+        args: presentationArgs,
         status: "failed",
       });
       return uncertainPriorMutation(effectiveToolName);
     }
 
-    input.toolJournal.start({
-      turnId: input.turn.turnId,
-      callId,
-      toolName: effectiveToolName,
-      rawArguments: call.rawArguments,
-      arguments: call.args,
-    });
+    if (!recorded) {
+      input.toolJournal.start({
+        turnId: input.turn.turnId,
+        callId,
+        toolName: effectiveToolName,
+        rawArguments: call.rawArguments,
+        arguments: presentationArgs,
+      });
+    }
     if (
       !isDurableWorkTool(call.name) && input.presentedWorkId &&
       await bindPresentedWorkForToolDispatch(
@@ -194,7 +259,7 @@ export function createGuidedToolCallExecutor(
       activityId: activity.activityId,
       requestId: callId,
       toolName: effectiveToolName,
-      args: call.args,
+      args: presentationArgs,
       status: "started",
     });
 
@@ -221,7 +286,7 @@ export function createGuidedToolCallExecutor(
         activityId: activity.activityId,
         requestId: callId,
         toolName: effectiveToolName,
-        args: call.args,
+        args: presentationArgs,
         status: toolResultSucceeded(result) ? "completed" : "failed",
         resultJson: safeJson(result),
       });
@@ -232,7 +297,7 @@ export function createGuidedToolCallExecutor(
         call.name,
         callId,
         effectiveToolName,
-        call.args,
+        presentationArgs,
         toolSignal,
         error,
         activity,
@@ -242,61 +307,21 @@ export function createGuidedToolCallExecutor(
   return { executeTool, usedTools };
 }
 
-async function denyUnauthorizedTool(
-  input: GuidedToolCallExecutionInput,
-  callId: string,
-  effectiveToolName: string,
-  call: Parameters<ButlerToolExecutor>[0],
-  activity: GuidedActivityBinding,
-): Promise<unknown> {
-  const denied = unauthorizedToolResult(effectiveToolName);
-  const recorded = input.toolJournal.find(callId);
-  if (!recorded) {
-    input.toolJournal.start({
-      turnId: input.turn.turnId,
-      callId,
-      toolName: effectiveToolName,
-      rawArguments: call.rawArguments,
-      arguments: call.args,
-    });
-    input.toolJournal.finish({ callId, status: "completed", result: denied });
-  }
-  const result = recorded?.result ?? denied;
-  await publishOperation(input.progress, {
-    turnId: input.turn.turnId,
-    activityId: activity.activityId,
-    requestId: callId,
-    toolName: effectiveToolName,
-    args: call.args,
-    status: "failed",
-    resultJson: safeJson(result),
-  });
-  return result;
-}
-
 async function executeFreshTool(
   input: GuidedToolCallExecutionInput,
   call: Parameters<ButlerToolExecutor>[0],
   callId: string,
   toolSignal: AbortSignal,
 ): Promise<unknown> {
-  if (isDurableWorkTool(call.name) && call.name !== "replace_work_plan") {
-    await safeBindOpenWork(input.durableWork, input.workScope);
-    await backfillTurnToolResults(input, input.workScope);
-  }
-  if (isDurableWorkTool(call.name)) {
-    return executeDurableWorkTool({
-      service: input.durableWork,
-      scope: input.workScope,
-      mutationCallId: callId,
-      name: call.name,
-      args: call.args,
-    });
-  }
-  return input.executeButlerTool({
-    ...call,
-    signal: toolSignal,
-  }, { effectOccurrenceId: callId });
+  return executeGuidedFreshTool({
+    durableWork: input.durableWork,
+    toolJournal: input.toolJournal,
+    workScope: input.workScope,
+    call,
+    callId,
+    toolSignal,
+    executeButlerTool: input.executeButlerTool,
+  });
 }
 
 function throwIfToolAborted(signal: AbortSignal): void {

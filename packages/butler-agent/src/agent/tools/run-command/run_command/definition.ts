@@ -3,18 +3,24 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const runCommandToolDefinition = {
   type: "function",
   name: "run_command",
-  description: "Run one non-interactive command in the active Butler or Steward workspace through Butler's platform-neutral command executor and return structured stdout, stderr, exit status, timeout state, and compacted artifact references when needed. For validation such as typecheck, lint, test, or project checks, set validation_suite to a stable suite name so the runtime records a structured validation receipt. Write generated artifacts under $BUTLER_ARTIFACTS_DIR unless they are intentional workspace files listed in output_paths. Prefer cross-platform executables with explicit arguments, focused output over broad dumps, and JSON-safe command text with no literal newlines.",
+  description: "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. Required summary is a concise model-authored public purpose for display only; it never authorizes execution. Set validation_suite for validation receipts. Generated artifacts go under $BUTLER_ARTIFACTS_DIR unless intentional workspace paths are listed in output_paths. Prefer cross-platform executables with explicit arguments and JSON-safe command text.",
   parameters: {
     type: "object",
     additionalProperties: false,
     properties: {
       command: {
         type: "string",
-        description: "The non-interactive command to execute. Prefer one cross-platform executable with explicit arguments and avoid shell-dialect-specific syntax.",
+        description: "Non-interactive command; prefer cross-platform executables, explicit arguments, and focused output.",
+      },
+      summary: {
+        type: "string",
+        minLength: 1,
+        pattern: "\\S",
+        description: "Required concise purpose for public display. Presentation only; it cannot authorize or alter the command or result.",
       },
       cwd: {
         type: "string",
-        description: "Optional working directory inside the active session workspace. Relative paths resolve from the workspace; a contained absolute path is also accepted.",
+        description: "Optional contained workspace directory; relative paths use its root.",
       },
       timeout_ms: {
         type: "integer",
@@ -22,23 +28,23 @@ export const runCommandToolDefinition = {
       },
       max_output_tokens: {
         type: "integer",
-        description: "Optional model-facing stdout/stderr token budget before artifact compaction.",
+        description: "Optional stdout/stderr token budget.",
       },
       output_paths: {
         type: "array",
-        description: "Intentional workspace paths or Butler data artifact labels this command is expected to create or verify. Required for workspace-root durable deliverables; use artifacts/generated/... for files written through $BUTLER_ARTIFACTS_DIR.",
+        description: "Intentional workspace paths or artifact labels; required for durable deliverables. Use artifacts/generated/... for $BUTLER_ARTIFACTS_DIR files.",
         items: {
           type: "string",
         },
       },
       validation_suite: {
         type: "string",
-        description: "Optional stable validation suite id for verification commands. When set, emits a structured validation receipt; failed receipts must be cleared by a later passing receipt for the same suite before completion.",
+        description: "Stable validation suite id; emits a validation receipt; failed suites need a later pass before completion.",
       },
       state_effect: {
         type: "string",
         enum: ["read_only", "mutation", "validation"],
-        description: "Optional declaration of the command's intended state effect. 'mutation' requires admitted full access plus a current accepted Plan Review and records the exact contained command outcome in the durable effect journal. Use 'validation' with validation_suite for disposable verification.",
+        description: "Effect: mutation requires admitted full access and accepted Plan Review; validation uses validation_suite.",
       },
       output_mode: {
         type: "string",
@@ -47,11 +53,12 @@ export const runCommandToolDefinition = {
           "silent_on_success",
           "full",
         ],
-        description: "Optional output behavior: 'auto' suppresses successful output only for commands with an explicit validation_suite and bounds failures (default), 'silent_on_success' suppresses all successful output, 'full' preserves all output.",
+        description: "Output mode: auto suppresses successes only with validation_suite and bounds failures; silent_on_success suppresses successes; full preserves output.",
       },
     },
     required: [
       "command",
+      "summary",
     ],
   },
   effectBoundary: "dynamic",

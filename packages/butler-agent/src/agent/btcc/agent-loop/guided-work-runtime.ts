@@ -13,6 +13,7 @@ import type { TurnRecord } from "../turn/index.ts";
 import type { SqliteGuidedToolJournal } from "../../adapters/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
+import { publicWorkActionDisplay } from "../projection/index.ts";
 
 type GuidedWorkRuntimeInput = {
   durableWork: DurableWorkService;
@@ -135,7 +136,10 @@ export async function publishWorkProgress(
     const actionProgress = progressByKey.get(action.actionKey);
     return {
       taskId: `${work.workId}:${action.actionKey}`,
-      taskTitle: publicWorkActionTitle(action, index),
+      taskTitle: publicWorkActionDisplay(
+        action,
+        compactPublicText(action.actionKey, `작업 ${index + 1}`),
+      ),
       taskDescription: publicText(action.description, action.actionKey),
       taskOutcome: publicText(actionProgress?.note, action.description),
       taskOrder: index,
@@ -182,12 +186,4 @@ function compactPublicText(value: string | undefined, fallback: string): string 
   const lastSpace = prefix.lastIndexOf(" ");
   const bounded = lastSpace >= 16 ? prefix.slice(0, lastSpace) : prefix;
   return `${bounded.trimEnd()}…`;
-}
-
-function publicWorkActionTitle(
-  action: { actionKey: string; description: string },
-  index: number,
-): string {
-  const fallback = `작업 ${index + 1}`;
-  return compactPublicText(action.actionKey, fallback);
 }

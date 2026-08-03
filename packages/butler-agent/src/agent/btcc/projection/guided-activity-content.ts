@@ -2,8 +2,11 @@ import type { WorkStage } from "../work/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
-  safeToolInputLabel,
+  safeCommandPurposeSummary,
+  safeCommandPurposeIdentity,
 } from "../../output/progress/arguments.ts";
+import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
+import { publicWorkActionDisplay } from "./work-action-display.ts";
 
 export type GuidedActivityToolCall = {
   name: string;
@@ -22,11 +25,13 @@ export function publicToolTitle(
   if (name === "tool_search") return "사용 가능한 도구 찾기";
   if (name === "tool_describe") return "도구 사용법 확인";
   if (name === "tool_call") {
-    const target = progressiveTargetToolName(args.id);
-    return target ? publicToolTitle(target, toolCallArguments(args)) : "도구 실행";
+    const normalized = normalizeGuidedToolCall({ toolName: name, args });
+    return normalized.name === name
+      ? "도구 실행"
+      : publicToolTitle(normalized.name, normalized.args);
   }
   if (name === "run_command") {
-    return boundedTitle(safeToolInputLabel(name, args, "ran_command"));
+    return "명령 실행";
   }
   if (name.startsWith("project_ledger")) {
     return isProjectLedgerMutation(name) ? "프로젝트 기록 변경" : "프로젝트 기록 확인";
@@ -78,15 +83,18 @@ export function activityContent(
     };
   }
 
-  const titles = calls.map((call) => publicToolTitle(call.name));
+  const titles = calls.map((call) => publicToolTitle(call.name, call.args));
   const toolSummary = ordinaryToolSummary(calls, titles);
   const title = ordinaryActivityTitle(calls, titles);
-  const summary = publicText(assistantText) || toolSummary ||
+  const commandSummary = commandPurposeSummary(calls);
+  const summary = commandSummary || publicText(assistantText) || toolSummary ||
     "도구 작업을 진행하고 있습니다";
   return {
     displayStage: "execution",
     title,
-    summary: distinctSummary(title, summary, toolSummary),
+    summary: commandSummary
+      ? summary
+      : distinctSummary(title, summary, toolSummary),
   };
 }
 
@@ -110,7 +118,13 @@ export function conceptionSummary(objective: string): string {
 }
 
 export function ordinaryGroupSignature(calls: GuidedActivityToolCall[]): string {
-  return [...new Set(calls.map((call) => call.name))].sort().join("\0");
+  return [...new Set(calls.map(ordinaryGroupKey))].sort().join("\0");
+}
+
+export function ordinaryGroupKey(call: GuidedActivityToolCall): string {
+  return call.name === "run_command"
+    ? `run_command:${safeCommandPurposeIdentity(call.args)}`
+    : call.name;
 }
 
 export function distinctSummary(
@@ -133,7 +147,18 @@ function firstPlanAction(args: Record<string, unknown>): string | undefined {
   for (const value of args.actions) {
     if (!value || typeof value !== "object" || Array.isArray(value)) continue;
     const action = value as Record<string, unknown>;
-    const text = publicText(action.description) || publicText(action.action_key);
+    const actionKey = publicText(action.action_key);
+    const description = publicText(action.description);
+    const effect = action.effect;
+    const target = effect && typeof effect === "object" && !Array.isArray(effect) &&
+        typeof (effect as Record<string, unknown>).target === "string"
+      ? (effect as Record<string, string>).target
+      : undefined;
+    const text = publicWorkActionDisplay({
+      actionKey,
+      description,
+      ...(target !== undefined ? { effect: { target } } : {}),
+    }, description || actionKey);
     if (text) return text;
   }
   return undefined;
@@ -170,20 +195,6 @@ function checkpointTitle(stage: unknown): string {
   return "작업 진행 확인";
 }
 
-function progressiveTargetToolName(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const separator = value.indexOf(":");
-  const name = separator >= 0 ? value.slice(separator + 1) : value;
-  return name && name !== "tool_call" ? name : undefined;
-}
-
-function toolCallArguments(args: Record<string, unknown>): Record<string, unknown> {
-  const value = args.arguments;
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 export function toolActivitySummary(name: string, title: string): string {
   if (name === "tool_search") return "작업에 필요한 도구를 찾고 있습니다.";
   if (name === "tool_describe") return "선택한 도구의 사용 방법을 확인하고 있습니다.";
@@ -210,7 +221,7 @@ function ordinaryActivityTitle(
   if (
     new Set(calls.map((call) => call.name)).size === 1 &&
     calls[0]?.name === "run_command"
-  ) return "명령 실행";
+  ) return titles[0] || "명령 실행";
   if (unique.length === 1) return unique[0] || "도구 작업";
   return "도구 작업";
 }
@@ -221,7 +232,7 @@ function ordinaryToolSummary(
 ): string {
   const names = new Set(calls.map((call) => call.name));
   if (names.size === 1 && calls[0]?.name === "run_command") {
-    return "작업 공간에서 필요한 명령을 실행하고 있습니다.";
+    return commandPurposeSummary(calls) ?? "작업 공간에서 필요한 명령을 실행하고 있습니다.";
   }
   if (names.size === 1 && calls[0]) {
     return toolActivitySummary(calls[0].name, titles[0] || "도구 작업");
@@ -230,6 +241,15 @@ function ordinaryToolSummary(
   return grouped
     ? `${grouped} 도구로 필요한 정보를 확인하고 있습니다.`
     : "필요한 도구로 작업을 진행하고 있습니다.";
+}
+
+function commandPurposeSummary(
+  calls: GuidedActivityToolCall[],
+): string | undefined {
+  if (calls.length === 0 || calls.some((call) => call.name !== "run_command")) {
+    return undefined;
+  }
+  return safeCommandPurposeSummary(calls[0]!.args);
 }
 
 function normalizeText(text: string): string {

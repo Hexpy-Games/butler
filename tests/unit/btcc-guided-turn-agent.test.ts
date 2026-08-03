@@ -41,6 +41,16 @@ import {
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-report.ts";
 import { createGuidedToolCallExecutor } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts";
+import { guidedToolOccurrence } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-occurrence.ts";
+import { createToolCallToolHandler } from
+  "../../packages/butler-agent/src/agent/tools/tool-bridge/tool_call/executor.ts";
+import { runCommandToolDefinition } from
+  "../../packages/butler-agent/src/agent/tools/run-command/run_command/definition.ts";
+import type { ContextualButlerToolExecutor } from
+  "../../packages/butler-agent/src/agent/tools/butler-tools.ts";
+import { createGuidedActivityProjection } from
+  "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { authorizedToolDefinitions, isReplaySafeTool } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 import { upsertMcpServer } from
@@ -1236,9 +1246,11 @@ test("Guided agent applies a small edit through the reviewed durable effect", as
     for (const result of results) expect(result).toMatchObject({ ok: true });
     expect(editResult).toMatchObject({
       ok: true,
+      start_line: 2,
       effect_receipt: {
         capability: "edit_file",
         target: "workspace:styles.css",
+        start_line: 2,
       },
     });
     expect(readFileSync(join(fixture.root, "styles.css"), "utf8"))
@@ -1279,6 +1291,7 @@ test("reviewed run_command mutation records a receipt and pushes without force",
     const calls = [
       toolCall("before-work-1", "run_command", {
         command: "printf blocked > before-work.txt",
+        summary: "Plan 검토 전 변경 차단을 확인합니다.",
         state_effect: "mutation",
       }),
       toolCall("plan-1", "replace_work_plan", {
@@ -1295,6 +1308,7 @@ test("reviewed run_command mutation records a receipt and pushes without force",
       }),
       toolCall("before-review-1", "run_command", {
         command: "printf blocked > before-review.txt",
+        summary: "Plan 검토 전 변경 차단을 확인합니다.",
         state_effect: "mutation",
       }),
       toolCall("plan-review-1", "record_work_review", {
@@ -1309,10 +1323,12 @@ test("reviewed run_command mutation records a receipt and pushes without force",
           "git -c user.name=Butler -c user.email=butler@example.invalid commit -m reviewed-command-effect",
           "git push origin HEAD:main",
         ].join(" && "),
+        summary: "검토된 결과를 원격 main 브랜치에 게시합니다.",
         state_effect: "mutation",
       }),
       toolCall("nonzero-1", "run_command", {
         command: "printf partial > command-failed.txt; exit 7",
+        summary: "실패한 명령의 부분 결과를 확인합니다.",
         state_effect: "mutation",
       }),
     ];
@@ -1474,9 +1490,9 @@ test("Guided tool discovery hides the retired R2 Work catalog", async () => {
     const agent = fixture.agent(scriptedModelRound([
       toolResponse(calls),
       (request) => {
-        [searchResult, describeResult] = fixture.stores.guidedToolJournal
-          .list(turnId)
-          .map((entry) => entry.result);
+        const records = fixture.stores.guidedToolJournal.list(turnId);
+        searchResult = records.find((entry) => entry.toolName === "tool_search")?.result;
+        describeResult = records.find((entry) => entry.toolName === "tool_describe")?.result;
         expect(messagesWithToolResults(request)).toHaveLength(calls.length);
         return { text: "현재 작업 도구를 확인했습니다.", toolCalls: [] };
       },
@@ -1690,6 +1706,7 @@ test("provider call identity replays one occurrence but admits an identical new 
     const occurrences: string[] = [];
     const mutationArgs = {
       command: "printf reviewed >> result.txt",
+      summary: "검토된 결과를 작업공간에 기록합니다.",
       state_effect: "mutation",
     };
     const firstTurn = turnRecord(fixture.root, {
@@ -1747,6 +1764,738 @@ test("provider call identity replays one occurrence but admits an identical new 
   }
 });
 
+test("provider v1 progressive mutation records remain authoritative across the identity migration", async () => {
+  const fixture = createFixture("guided-provider-v1-progressive-replay");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-provider-v1-progressive-replay-turn",
+    });
+    const summarylessMutationArgs = {
+      command: "printf reviewed >> result.txt",
+      state_effect: "mutation",
+    };
+    const mutationArgs = {
+      ...summarylessMutationArgs,
+      summary: "검토된 결과를 작업공간에 기록합니다.",
+    };
+    const calls = [
+      { providerCallId: "provider-v1-completed", result: { ok: true, completed: true } },
+      { providerCallId: "provider-v1-started" },
+    ] as const;
+    for (const call of calls) {
+      const rawArgs = {
+        id: "native:run_command",
+        arguments: summarylessMutationArgs,
+      };
+      const callId = digest([
+        "btcc-guided-provider-tool-call.v1",
+        turn.turnId,
+        call.providerCallId,
+        "tool_call",
+        stableJson(rawArgs),
+      ].join("\0"));
+      fixture.stores.guidedToolJournal.start({
+        turnId: turn.turnId,
+        callId,
+        toolName: "run_command",
+        rawArguments: JSON.stringify(rawArgs),
+        arguments: summarylessMutationArgs,
+      });
+      if ("result" in call) {
+        fixture.stores.guidedToolJournal.finish({
+          callId,
+          status: "completed",
+          result: call.result,
+        });
+      }
+    }
+
+    const effectOccurrences: string[] = [];
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["tool_call"]),
+      visibleNames: new Set(["tool_call"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async (_call, context) => {
+        effectOccurrences.push(context?.effectOccurrenceId ?? "");
+        return { ok: true, resumed: true };
+      },
+    });
+    const execute = (providerCallId: string) => executor.executeTool({
+      name: "tool_call",
+      args: {
+        id: "native:run_command",
+        arguments: mutationArgs,
+      },
+      rawArguments: JSON.stringify({
+        id: "native:run_command",
+        arguments: mutationArgs,
+      }),
+      providerCallId,
+    });
+
+    await expect(execute("provider-v1-completed")).resolves.toEqual({
+      ok: true,
+      completed: true,
+    });
+    await expect(execute("provider-v1-started")).resolves.toEqual({
+      ok: true,
+      resumed: true,
+    });
+    expect(effectOccurrences).toHaveLength(1);
+    expect(effectOccurrences[0]).toBe(
+      digest([
+        "btcc-guided-provider-tool-call.v1",
+        turn.turnId,
+        "provider-v1-started",
+        "tool_call",
+        stableJson({ id: "native:run_command", arguments: summarylessMutationArgs }),
+      ].join("\0")),
+    );
+  } finally {
+    fixture.close();
+  }
+});
+
+test("summaryless provider v1 responses replay without public activity or duplicate dispatch", async () => {
+  const fixture = createFixture("guided-provider-v1-summaryless-replay");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-provider-v1-summaryless-replay-turn",
+    });
+    const summarylessArgs = {
+      command: "printf reviewed >> result.txt",
+      state_effect: "mutation",
+    };
+    const calls = [
+      { providerCallId: "provider-summaryless-completed", result: { ok: true, completed: true } },
+      { providerCallId: "provider-summaryless-started" },
+    ] as const;
+    const oldCallIds = new Map<string, string>();
+    for (const call of calls) {
+      const rawArgs = {
+        id: "native:run_command",
+        arguments: summarylessArgs,
+      };
+      const callId = digest([
+        "btcc-guided-provider-tool-call.v1",
+        turn.turnId,
+        call.providerCallId,
+        "tool_call",
+        stableJson(rawArgs),
+      ].join("\0"));
+      oldCallIds.set(call.providerCallId, callId);
+      fixture.stores.guidedToolJournal.start({
+        turnId: turn.turnId,
+        callId,
+        toolName: "run_command",
+        rawArguments: JSON.stringify(rawArgs),
+        arguments: summarylessArgs,
+      });
+      if ("result" in call) {
+        fixture.stores.guidedToolJournal.finish({
+          callId,
+          status: "completed",
+          result: call.result,
+        });
+      }
+    }
+
+    const operations: string[] = [];
+    const effectOccurrences: string[] = [];
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push(update.status);
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["tool_call"]),
+      visibleNames: new Set(["tool_call"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async (_call, context) => {
+        effectOccurrences.push(context?.effectOccurrenceId ?? "");
+        return { ok: true, resumed: true };
+      },
+    });
+    const execute = (providerCallId: string) => executor.executeTool({
+      name: "tool_call",
+      args: {
+        id: "native:run_command",
+        arguments: summarylessArgs,
+      },
+      rawArguments: JSON.stringify({
+        id: "native:run_command",
+        arguments: summarylessArgs,
+      }),
+      providerCallId,
+    });
+
+    await expect(execute("provider-summaryless-completed")).resolves.toEqual({
+      ok: true,
+      completed: true,
+    });
+    await expect(execute("provider-summaryless-started")).resolves.toEqual({
+      ok: true,
+      resumed: true,
+    });
+    expect(operations).toEqual([]);
+    expect(effectOccurrences).toEqual([
+      oldCallIds.get("provider-summaryless-started")!,
+    ]);
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toHaveLength(2);
+    expect(fixture.stores.guidedToolJournal.find(
+      oldCallIds.get("provider-summaryless-started")!,
+    )?.status).toBe("completed");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("summaryless provider v1 started progressive replay crosses the real bridge schema", async () => {
+  const fixture = createFixture("guided-provider-v1-progressive-schema-replay");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-provider-v1-progressive-schema-replay-turn",
+    });
+    const providerCallId = "provider-progressive-schema-replay";
+    const summarylessArgs = {
+      command: "printf reviewed >> result.txt",
+      state_effect: "mutation",
+    };
+    const rawBridgeArgs = {
+      id: "native:run_command",
+      arguments: summarylessArgs,
+    };
+    const oldCallId = digest([
+      "btcc-guided-provider-tool-call.v1",
+      turn.turnId,
+      providerCallId,
+      "tool_call",
+      stableJson(rawBridgeArgs),
+    ].join("\0"));
+    fixture.stores.guidedToolJournal.start({
+      turnId: turn.turnId,
+      callId: oldCallId,
+      toolName: "run_command",
+      rawArguments: JSON.stringify(rawBridgeArgs),
+      arguments: summarylessArgs,
+    });
+
+    const operations: string[] = [];
+    const dispatched: Array<{
+      name: string;
+      args: Record<string, unknown>;
+      effectOccurrenceId?: string;
+    }> = [];
+    const bridge = createToolCallToolHandler({
+      butlerData: fixture.root,
+      currentToolNames: ["run_command"],
+      nativeToolDefinitions: [runCommandToolDefinition],
+      dispatchTool: async (call, context) => {
+        dispatched.push({
+          name: call.name,
+          args: call.args,
+          ...(context?.effectOccurrenceId
+            ? { effectOccurrenceId: context.effectOccurrenceId }
+            : {}),
+        });
+        return { ok: true, exit_code: 0 };
+      },
+    });
+    const executeButlerTool: ContextualButlerToolExecutor = (call, context) =>
+      bridge({ args: call.args, rawArguments: call.rawArguments }, context);
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push(update.status);
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["tool_call"]),
+      visibleNames: new Set(["tool_call"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool,
+    });
+
+    const result = await executor.executeTool({
+      name: "tool_call",
+      args: rawBridgeArgs,
+      rawArguments: JSON.stringify(rawBridgeArgs),
+      providerCallId,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      exit_code: 0,
+      bridge_invocation: {
+        id: "native:run_command",
+        provider: "native",
+        affordance: "native_tool",
+      },
+    });
+    expect(result).not.toHaveProperty("summary");
+    expect(JSON.stringify(result)).not.toContain("previously started");
+    expect(operations).toEqual([]);
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0]).toMatchObject({
+      name: "run_command",
+      effectOccurrenceId: oldCallId,
+      args: {
+        command: summarylessArgs.command,
+        state_effect: summarylessArgs.state_effect,
+        summary: expect.any(String),
+      },
+    });
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toHaveLength(1);
+    expect(fixture.stores.guidedToolJournal.find(oldCallId)?.status)
+      .toBe("completed");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("v2 exact records win when a provider v1 alias points at another replay", async () => {
+  const fixture = createFixture("guided-provider-v2-v1-conflict");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-provider-v2-v1-conflict-turn",
+    });
+    const providerCallId = "provider-v2-v1-conflict";
+    const args = {
+      id: "native:run_command",
+      arguments: {
+        command: "pwd",
+        summary: "현재 작업공간 위치를 확인합니다.",
+        state_effect: "read_only",
+      },
+    };
+    const exactCallId = guidedToolOccurrence({
+      turnId: turn.turnId,
+      callIndex: 0,
+      providerCallId,
+      name: "tool_call",
+      args,
+    }).callId;
+    const legacyCallId = digest([
+      "btcc-guided-provider-tool-call.v1",
+      turn.turnId,
+      providerCallId,
+      "tool_call",
+      stableJson(args),
+    ].join("\0"));
+    const legacyArgs = args.arguments;
+    fixture.stores.guidedToolJournal.start({
+      turnId: turn.turnId,
+      callId: legacyCallId,
+      toolName: "run_command",
+      rawArguments: JSON.stringify(args),
+      arguments: legacyArgs,
+    });
+    fixture.stores.guidedToolJournal.start({
+      turnId: turn.turnId,
+      callId: exactCallId,
+      toolName: "run_command",
+      rawArguments: JSON.stringify(args),
+      arguments: legacyArgs,
+    });
+    fixture.stores.guidedToolJournal.finish({
+      callId: exactCallId,
+      status: "completed",
+      result: { ok: true, source: "v2-exact" },
+    });
+
+    let dispatches = 0;
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["tool_call"]),
+      visibleNames: new Set(["tool_call"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async () => {
+        dispatches += 1;
+        return { ok: true, source: "dispatch" };
+      },
+    });
+
+    await expect(executor.executeTool({
+      name: "tool_call",
+      args,
+      rawArguments: JSON.stringify(args),
+      providerCallId,
+    })).resolves.toEqual({ ok: true, source: "v2-exact" });
+    expect(dispatches).toBe(0);
+    expect(fixture.stores.guidedToolJournal.find(exactCallId)?.status)
+      .toBe("completed");
+    expect(fixture.stores.guidedToolJournal.find(legacyCallId)?.status)
+      .toBe("started");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("summaryless provider v1 started direct replay injects only an execution summary", async () => {
+  const fixture = createFixture("guided-provider-v1-direct-summary-replay");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-provider-v1-direct-summary-replay-turn",
+    });
+    const providerCallId = "provider-direct-summary-replay";
+    const summarylessArgs = {
+      command: "pwd",
+      state_effect: "read_only",
+    };
+    const oldCallId = digest([
+      "btcc-guided-provider-tool-call.v1",
+      turn.turnId,
+      providerCallId,
+      "run_command",
+      stableJson(summarylessArgs),
+    ].join("\0"));
+    fixture.stores.guidedToolJournal.start({
+      turnId: turn.turnId,
+      callId: oldCallId,
+      toolName: "run_command",
+      rawArguments: JSON.stringify(summarylessArgs),
+      arguments: summarylessArgs,
+    });
+
+    const dispatched: Array<{
+      args: Record<string, unknown>;
+      effectOccurrenceId?: string;
+    }> = [];
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["run_command"]),
+      visibleNames: new Set(["run_command"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async (call, context) => {
+        dispatched.push({
+          args: call.args,
+          ...(context?.effectOccurrenceId
+            ? { effectOccurrenceId: context.effectOccurrenceId }
+            : {}),
+        });
+        return { ok: true, direct: true };
+      },
+    });
+
+    const result = await executor.executeTool({
+      name: "run_command",
+      args: summarylessArgs,
+      rawArguments: JSON.stringify(summarylessArgs),
+      providerCallId,
+    });
+
+    expect(result).toEqual({ ok: true, direct: true });
+    expect(result).not.toHaveProperty("summary");
+    expect(dispatched).toEqual([{
+      args: {
+        ...summarylessArgs,
+        summary: expect.any(String),
+      },
+      effectOccurrenceId: oldCallId,
+    }]);
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toHaveLength(1);
+    expect(fixture.stores.guidedToolJournal.find(oldCallId)?.status)
+      .toBe("completed");
+  } finally {
+    fixture.close();
+  }
+});
+
+test("summaryless provider v1 failed and cancelled records remain terminal", async () => {
+  const fixture = createFixture("guided-provider-v1-terminal-replay");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-provider-v1-terminal-replay-turn",
+    });
+    const summarylessArgs = {
+      command: "pwd",
+      state_effect: "read_only",
+    };
+    const calls = [
+      { providerCallId: "provider-v1-failed", status: "failed" as const },
+      { providerCallId: "provider-v1-cancelled", status: "cancelled" as const },
+    ];
+    const callIds = new Map<string, string>();
+    for (const call of calls) {
+      const callId = digest([
+        "btcc-guided-provider-tool-call.v1",
+        turn.turnId,
+        call.providerCallId,
+        "run_command",
+        stableJson(summarylessArgs),
+      ].join("\0"));
+      callIds.set(call.providerCallId, callId);
+      fixture.stores.guidedToolJournal.start({
+        turnId: turn.turnId,
+        callId,
+        toolName: "run_command",
+        rawArguments: JSON.stringify(summarylessArgs),
+        arguments: summarylessArgs,
+      });
+      fixture.stores.guidedToolJournal.finish({
+        callId,
+        status: call.status,
+        ...(call.status === "cancelled" ? { errorCode: "cancelled" } : {}),
+      });
+    }
+
+    const operations: string[] = [];
+    let dispatches = 0;
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push(update.status);
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["run_command"]),
+      visibleNames: new Set(["run_command"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async () => {
+        dispatches += 1;
+        return { ok: true };
+      },
+    });
+
+    for (const call of calls) {
+      const result = await executor.executeTool({
+        name: "run_command",
+        args: summarylessArgs,
+        rawArguments: JSON.stringify(summarylessArgs),
+        providerCallId: call.providerCallId,
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: call.status === "cancelled"
+            ? "prior_tool_call_cancelled"
+            : "prior_tool_call_failed",
+        },
+      });
+    }
+    expect(operations).toEqual([]);
+    expect(dispatches).toBe(0);
+    for (const call of calls) {
+      expect(fixture.stores.guidedToolJournal.find(
+        callIds.get(call.providerCallId)!,
+      )?.status).toBe(call.status);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
+test("fresh progressive tool execution publishes its nested command summary", async () => {
+  const fixture = createFixture("guided-progressive-command-publish");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-progressive-command-publish-turn",
+    });
+    const summary = "중첩 명령 요약을 공개 진행 상태에 사용합니다.";
+    const operations: Array<{ status: string; inputLabel?: string }> = [];
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push({
+            status: update.status,
+            ...(update.inputLabel !== undefined
+              ? { inputLabel: update.inputLabel }
+              : {}),
+          });
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["tool_call"]),
+      visibleNames: new Set(["tool_call"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async () => ({ ok: true, exit_code: 0 }),
+    });
+
+    await executor.executeTool({
+      name: "tool_call",
+      args: {
+        id: "native:run_command",
+        arguments: { command: "pwd", summary },
+      },
+      rawArguments: JSON.stringify({
+        id: "native:run_command",
+        arguments: { command: "pwd", summary },
+      }),
+    });
+
+    expect(operations).toEqual([
+      { status: "started", inputLabel: summary },
+      { status: "completed", inputLabel: summary },
+    ]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("progressive run_command without summary returns validation before public progress", async () => {
+  const fixture = createFixture("guided-progressive-command-missing-summary");
+  try {
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-progressive-command-missing-summary-turn",
+    });
+    const operations: Array<{ status: string }> = [];
+    const activities: Array<{ title: string; summary: string }> = [];
+    const activity = createGuidedActivityProjection({
+      turnId: turn.turnId,
+      managedInitially: true,
+      progress: {
+        stateChanged: async () => {},
+        phaseActivityChanged(update) {
+          activities.push({ title: update.title, summary: update.summary });
+        },
+      },
+    });
+    let dispatches = 0;
+    const executor = createGuidedToolCallExecutor({
+      turn,
+      signal: new AbortController().signal,
+      activity,
+      progress: {
+        stateChanged: async () => {},
+        operationChanged: async (update) => {
+          operations.push({ status: update.status });
+        },
+      },
+      workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+      authorizedNames: new Set(["tool_call"]),
+      visibleNames: new Set(["tool_call"]),
+      describedToolIds: new Set(),
+      durableWork: fixture.stores.durableWork,
+      toolJournal: fixture.stores.guidedToolJournal,
+      executeButlerTool: async () => {
+        dispatches += 1;
+        return { ok: true };
+      },
+    });
+
+    const result = await executor.executeTool({
+      name: "tool_call",
+      args: {
+        id: "native:run_command",
+        arguments: { command: "pwd", state_effect: "read_only" },
+      },
+      rawArguments: JSON.stringify({
+        id: "native:run_command",
+        arguments: { command: "pwd", state_effect: "read_only" },
+      }),
+      providerCallId: "provider-fresh-summaryless",
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_tool_arguments" },
+    });
+    expect(operations).toEqual([]);
+    expect(activities).toEqual([]);
+    expect(dispatches).toBe(0);
+    expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toEqual([]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("run_command rejects a sanitizer-empty public summary before journal or dispatch", async () => {
+  const fixture = createFixture("guided-command-unsafe-summary");
+  try {
+    const executeCases = [
+      {
+        turnId: "guided-command-unsafe-summary-direct",
+        name: "run_command",
+        args: {
+          command: "pwd",
+          summary: "Inspect /Users/alice/private/report.json",
+        },
+        visibleName: "run_command",
+      },
+      {
+        turnId: "guided-command-unsafe-summary-progressive",
+        name: "tool_call",
+        args: {
+          id: "native:run_command",
+          arguments: {
+            command: "pwd",
+            summary: "Inspect /Users/alice/private/report.json",
+          },
+        },
+        visibleName: "tool_call",
+      },
+    ] as const;
+    for (const input of executeCases) {
+      const turn = turnRecord(fixture.root, { turnId: input.turnId });
+      let dispatches = 0;
+      const executor = createGuidedToolCallExecutor({
+        turn,
+        signal: new AbortController().signal,
+        workScope: { turnId: turn.turnId, sessionId: turn.sessionId },
+        authorizedNames: new Set([input.visibleName]),
+        visibleNames: new Set([input.visibleName]),
+        describedToolIds: new Set(),
+        durableWork: fixture.stores.durableWork,
+        toolJournal: fixture.stores.guidedToolJournal,
+        executeButlerTool: async () => {
+          dispatches += 1;
+          return { ok: true };
+        },
+      });
+      const result = await executor.executeTool({
+        name: input.name,
+        args: input.args,
+        rawArguments: JSON.stringify(input.args),
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: "invalid_tool_arguments",
+          path: "$.summary",
+        },
+      });
+      expect(dispatches).toBe(0);
+      expect(fixture.stores.guidedToolJournal.list(turn.turnId)).toEqual([]);
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent turns provider failure into one fact-based final report", async () => {
   const fixture = createFixture("guided-fallback");
   try {
@@ -1787,6 +2536,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
     const commandAgent = fixture.agent(scriptedModelRound([
       toolResponse([toolCall("pwd-1", "run_command", {
         command: "pwd",
+        summary: "현재 작업공간 위치를 확인합니다.",
         state_effect: "read_only",
       })]),
       { text: "폴더를 확인했습니다.", toolCalls: [] },

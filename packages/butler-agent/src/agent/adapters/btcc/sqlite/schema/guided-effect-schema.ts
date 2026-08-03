@@ -38,6 +38,14 @@ ON btcc_guided_effects(work_id, plan_revision_id, action_key);
 CREATE INDEX IF NOT EXISTS idx_btcc_guided_effects_recovery
 ON btcc_guided_effects(status, updated_at);
 
+CREATE TABLE IF NOT EXISTS btcc_guided_effect_recovery_hints (
+  effect_id TEXT PRIMARY KEY,
+  capability TEXT NOT NULL CHECK (capability = 'edit_file'),
+  start_line INTEGER NOT NULL,
+  before_sha256 TEXT NOT NULL,
+  after_sha256 TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS btcc_guided_work_effect_blockers (
   blocker_id TEXT PRIMARY KEY,
   source_turn_id TEXT NOT NULL,

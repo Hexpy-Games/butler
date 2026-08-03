@@ -7,6 +7,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   stat,
   symlink,
@@ -30,10 +31,14 @@ import {
   workspaceFileEffectTarget,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-effect.ts";
+import { guidedWorkspaceEditInputSha256 } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-edit-adapter.ts";
 import { prepareGuidedWorkspaceFileEdit } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-workspace-file-edit-effect.ts";
 import { createFileToolHandlers } from
   "../../packages/butler-agent/src/agent/tools/file-tools/index.ts";
+import { locateExactText } from
+  "../../packages/butler-agent/src/agent/tools/file-tools/edit_file/exact-text-locator.ts";
 
 test("workspace file adapter keeps target syntax simple and preserves file guards", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-file-"));
@@ -551,6 +556,327 @@ test("guided edit prepares a small exact replacement with a runtime-owned stale-
   }
 });
 
+test("guided edit resolves a unique exact text after a stale line shift and accepts no hint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-stale-hint-"));
+  const original = "inserted\nalpha\nbeta\ngamma\n";
+  await writeFile(join(root, "notes.txt"), original, "utf8");
+  let registeredDispatches = 0;
+  try {
+    const prepared = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "beta\n",
+        new_text: "better\n",
+      },
+      workspacePath: root,
+      executeEditFile: registeredEditFile({
+        workspacePath: root,
+        butlerData: join(root, "butler-data"),
+        onDispatch() {
+          registeredDispatches += 1;
+        },
+      }),
+    });
+
+    expect(prepared.ok).toBe(true);
+    if (!prepared.ok) throw new Error(prepared.error.message);
+    expect(prepared.effect.input).toMatchObject({
+      start_line: 3,
+      old_text: "beta\n",
+      after_sha256: sha256("inserted\nalpha\nbetter\ngamma\n"),
+    });
+    expect(await prepared.effect.adapter.dispatch({
+      normalizedTarget: prepared.effect.target,
+      normalizedInput: prepared.effect.input,
+      idempotencyKey: "edit-stale-hint",
+      signal: new AbortController().signal,
+    })).toMatchObject({ status: "applied" });
+    expect(registeredDispatches).toBe(1);
+    expect(await readFile(join(root, "notes.txt"), "utf8"))
+      .toBe("inserted\nalpha\nbetter\ngamma\n");
+
+    const noHint = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        old_text: "better\n",
+        new_text: "best\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(noHint.ok).toBe(true);
+    if (!noHint.ok) throw new Error(noHint.error.message);
+    expect(noHint.effect.input.start_line).toBe(3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit rejects multiple unresolved exact-text occurrences", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-ambiguous-"));
+  await writeFile(join(root, "notes.txt"), "alpha\nbeta beta\ngamma\n", "utf8");
+  try {
+    expect(await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "beta",
+        new_text: "changed",
+      },
+      workspacePath: root,
+      executeEditFile: async () => {
+        throw new Error("ambiguous edits must not dispatch");
+      },
+    })).toMatchObject({
+      ok: false,
+      error: { code: "old_text_ambiguous" },
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("exact-text locator uses actual occurrence start lines and global uniqueness without a hint", () => {
+  expect(locateExactText({
+    text: "prefix old\nother old\n",
+    oldText: "old",
+    startLine: 1,
+  })).toEqual({
+    ok: true,
+    value: { offset: 7, startLine: 1 },
+  });
+  expect(locateExactText({
+    text: "prefix old and old\nother\n",
+    oldText: "old",
+    startLine: 1,
+  })).toMatchObject({
+    ok: false,
+    error: "old_text_ambiguous",
+    occurrenceCount: 2,
+  });
+  expect(locateExactText({
+    text: "prefix old\nother old\n",
+    oldText: "old",
+  })).toMatchObject({
+    ok: false,
+    error: "old_text_ambiguous",
+    occurrenceCount: 2,
+  });
+});
+
+test("legacy edit recovery requires one current before-state candidate and derives its hint", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-legacy-hint-"));
+  const original = "prefix\nold\nend\n";
+  await writeFile(join(root, "notes.txt"), original, "utf8");
+  try {
+    const first = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error.message);
+
+    const legacy = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      priorInputSha256: guidedWorkspaceEditInputSha256(first.effect.input),
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) throw new Error(legacy.error.message);
+    expect(legacy.effect.input).toEqual(first.effect.input);
+    expect(legacy.effect.adapter.recoveryHint?.(legacy.effect.input)).toMatchObject({
+      capability: "edit_file",
+      startLine: 2,
+      beforeSha256: sha256(original),
+      afterSha256: sha256("prefix\nnew\nend\n"),
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("legacy edit recovery uses durable input identity to select one duplicate before-state candidate", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-legacy-ambiguous-"));
+  await writeFile(join(root, "notes.txt"), "old\nmiddle\nold\n", "utf8");
+  try {
+    const first = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 3,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error.message);
+
+    const legacy = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 99,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      priorInputSha256: guidedWorkspaceEditInputSha256(first.effect.input),
+      executeEditFile: async () => ({ ok: true }),
+    });
+
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) throw new Error(legacy.error.message);
+    expect(legacy.effect.input).toEqual(first.effect.input);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("legacy edit recovery uses durable input identity to select one duplicate after-state candidate", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-legacy-after-duplicate-"));
+  const original = "new\nold\n";
+  const after = "new\nnew\n";
+  await writeFile(join(root, "notes.txt"), original, "utf8");
+  try {
+    const first = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error.message);
+    await writeFile(join(root, "notes.txt"), after, "utf8");
+
+    const legacy = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 99,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      priorInputSha256: guidedWorkspaceEditInputSha256(first.effect.input),
+      executeEditFile: async () => ({ ok: true }),
+    });
+
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) throw new Error(legacy.error.message);
+    expect(legacy.effect.input).toEqual(first.effect.input);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("legacy edit recovery fails closed when after-state candidates exceed its bound", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-legacy-bound-"));
+  const original = ["old", ...Array.from({ length: 16 }, () => "new")].join("\n") + "\n";
+  const after = "new\n".repeat(17);
+  await writeFile(join(root, "notes.txt"), original, "utf8");
+  try {
+    const first = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 1,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error.message);
+    await writeFile(join(root, "notes.txt"), after, "utf8");
+
+    const legacy = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 99,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      priorInputSha256: guidedWorkspaceEditInputSha256(first.effect.input),
+      executeEditFile: async () => ({ ok: true }),
+    });
+
+    expect(legacy).toMatchObject({
+      ok: false,
+      error: { code: "edit_file_reconciliation_mismatch" },
+    });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("legacy edit recovery accepts an exact whole-file after-state after rename", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-legacy-after-"));
+  const original = "prefix\nold\nend\n";
+  const after = "prefix\nnew\nend\n";
+  const path = join(root, "notes.txt");
+  await writeFile(path, original, "utf8");
+  try {
+    const first = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 2,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => ({ ok: true }),
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error.message);
+
+    const temporaryPath = join(root, "notes.txt.tmp");
+    await writeFile(temporaryPath, after, "utf8");
+    await rename(temporaryPath, path);
+
+    const legacy = await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        start_line: 99,
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      priorInputSha256: guidedWorkspaceEditInputSha256(first.effect.input),
+      executeEditFile: async () => ({ ok: true }),
+    });
+
+    expect(legacy.ok).toBe(true);
+    if (!legacy.ok) throw new Error(legacy.error.message);
+    expect(legacy.effect.input).toEqual(first.effect.input);
+    expect(legacy.effect.adapter.recoveryHint?.(legacy.effect.input))
+      .toMatchObject({
+        capability: "edit_file",
+        startLine: 2,
+        beforeSha256: sha256(original),
+        afterSha256: sha256(after),
+      });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("guided edit keeps native mode, deletion, and symlink semantics", async () => {
   const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-native-"));
   const butlerData = join(root, "butler-data");
@@ -697,10 +1023,17 @@ test("guided edit reconciles an atomic replacement after restart", async () => {
     })).rejects.toThrow("simulated stop after edit rename");
     expect(await readFile(join(workspacePath, args.path), "utf8")).toBe(expected);
     expect(registeredDispatches).toBe(1);
-    const priorInputSha256 = new SqliteGuidedEffectJournal(firstDb)
-      .listForWork(work.workId)[0]?.inputSha256;
+    const priorRecord = new SqliteGuidedEffectJournal(firstDb)
+      .listForWork(work.workId)[0];
+    const priorInputSha256 = priorRecord?.inputSha256;
+    const priorRecoveryHint = priorRecord?.recoveryHint;
     expect(priorInputSha256).toBeString();
+    expect(priorRecoveryHint).toMatchObject({
+      capability: "edit_file",
+      startLine: 2,
+    });
     if (!priorInputSha256) throw new Error("Missing durable edit input hash");
+    if (!priorRecoveryHint) throw new Error("Missing durable edit recovery hint");
     firstDb.close();
     firstDb = undefined;
 
@@ -710,6 +1043,7 @@ test("guided edit reconciles an atomic replacement after restart", async () => {
       butlerData,
       executeEditFile,
       priorInputSha256,
+      priorRecoveryHint,
     });
     expect(resumedPrepared.ok).toBe(true);
     if (!resumedPrepared.ok) throw new Error(resumedPrepared.error.message);
@@ -738,6 +1072,235 @@ test("guided edit reconciles an atomic replacement after restart", async () => {
   } finally {
     firstDb?.close();
     resumedDb?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit restart resolves repeated new_text by durable input identity", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-repeat-restart-"));
+  const workspacePath = join(root, "workspace");
+  const butlerData = join(root, "butler-data");
+  const dbPath = join(root, "effects.sqlite");
+  const original = "new\nold\n";
+  const expected = "new\nnew\n";
+  const args = {
+    path: "notes.txt",
+    start_line: 2,
+    old_text: "old\n",
+    new_text: "new\n",
+  };
+  await mkdir(workspacePath, { recursive: true });
+  await writeFile(join(workspacePath, args.path), original, "utf8");
+  let registeredDispatches = 0;
+  const executeEditFile = registeredEditFile({
+    workspacePath,
+    butlerData,
+    onDispatch() {
+      registeredDispatches += 1;
+    },
+  });
+  const work = reviewedFileWork(workspaceFileEffectTarget(args.path));
+  let firstDb: Database | undefined;
+  let resumedDb: Database | undefined;
+  try {
+    const firstPrepared = await prepareGuidedWorkspaceFileEdit({
+      args,
+      workspacePath,
+      butlerData,
+      executeEditFile,
+    });
+    expect(firstPrepared.ok).toBe(true);
+    if (!firstPrepared.ok) throw new Error(firstPrepared.error.message);
+    firstDb = openEffectDatabase(dbPath);
+    await expect(createGuidedEffectService(
+      new SqliteGuidedEffectJournal(firstDb),
+      { faultHook: (point) => {
+        if (point === "after_dispatch") throw new Error("simulated edit crash");
+      } },
+    ).execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-repeat-restart-1",
+      signal: new AbortController().signal,
+      target: firstPrepared.effect.target,
+      input: firstPrepared.effect.input,
+      adapter: firstPrepared.effect.adapter,
+    })).rejects.toThrow("simulated edit crash");
+    expect(await readFile(join(workspacePath, args.path), "utf8")).toBe(expected);
+    expect(registeredDispatches).toBe(1);
+    const priorRecord = new SqliteGuidedEffectJournal(firstDb)
+      .listForWork(work.workId)[0];
+    const priorInputSha256 = priorRecord?.inputSha256;
+    const priorRecoveryHint = priorRecord?.recoveryHint;
+    expect(priorInputSha256).toBeString();
+    expect(priorRecoveryHint).toMatchObject({
+      capability: "edit_file",
+      startLine: 2,
+    });
+    if (!priorInputSha256) throw new Error("Missing durable edit input hash");
+    if (!priorRecoveryHint) throw new Error("Missing durable edit recovery hint");
+    firstDb.close();
+    firstDb = undefined;
+
+    resumedDb = openEffectDatabase(dbPath);
+    const resumedPrepared = await prepareGuidedWorkspaceFileEdit({
+      args: { ...args, start_line: 1 },
+      workspacePath,
+      butlerData,
+      executeEditFile,
+      priorInputSha256,
+      priorRecoveryHint,
+    });
+    expect(resumedPrepared.ok).toBe(true);
+    if (!resumedPrepared.ok) throw new Error(resumedPrepared.error.message);
+    expect(resumedPrepared.effect.input.start_line).toBe(2);
+    const resumed = await createGuidedEffectService(
+      new SqliteGuidedEffectJournal(resumedDb),
+    ).execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-repeat-restart-1",
+      signal: new AbortController().signal,
+      target: resumedPrepared.effect.target,
+      input: resumedPrepared.effect.input,
+      adapter: resumedPrepared.effect.adapter,
+    });
+    expect(resumed).toMatchObject({
+      ok: true,
+      status: "applied",
+      result: { start_line: 2 },
+      receipt: { result: { start_line: 2 } },
+    });
+    expect(registeredDispatches).toBe(1);
+  } finally {
+    firstDb?.close();
+    resumedDb?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided deletion restart resolves an omitted start_line by durable input identity", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-delete-restart-"));
+  const workspacePath = join(root, "workspace");
+  const butlerData = join(root, "butler-data");
+  const dbPath = join(root, "effects.sqlite");
+  const original = "keep\nprefix remove suffix\nend\n";
+  const expected = "keep\nprefix suffix\nend\n";
+  const args = {
+    path: "notes.txt",
+    start_line: 2,
+    old_text: "remove ",
+    new_text: "",
+  };
+  await mkdir(workspacePath, { recursive: true });
+  await writeFile(join(workspacePath, args.path), original, "utf8");
+  let registeredDispatches = 0;
+  const executeEditFile = registeredEditFile({
+    workspacePath,
+    butlerData,
+    onDispatch() {
+      registeredDispatches += 1;
+    },
+  });
+  const work = reviewedFileWork(workspaceFileEffectTarget(args.path));
+  let firstDb: Database | undefined;
+  let resumedDb: Database | undefined;
+  try {
+    const firstPrepared = await prepareGuidedWorkspaceFileEdit({
+      args,
+      workspacePath,
+      butlerData,
+      executeEditFile,
+    });
+    expect(firstPrepared.ok).toBe(true);
+    if (!firstPrepared.ok) throw new Error(firstPrepared.error.message);
+    firstDb = openEffectDatabase(dbPath);
+    await expect(createGuidedEffectService(
+      new SqliteGuidedEffectJournal(firstDb),
+      { faultHook: (point) => {
+        if (point === "after_dispatch") throw new Error("simulated delete crash");
+      } },
+    ).execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-delete-restart-1",
+      signal: new AbortController().signal,
+      target: firstPrepared.effect.target,
+      input: firstPrepared.effect.input,
+      adapter: firstPrepared.effect.adapter,
+    })).rejects.toThrow("simulated delete crash");
+    expect(await readFile(join(workspacePath, args.path), "utf8")).toBe(expected);
+    expect(registeredDispatches).toBe(1);
+    const priorRecord = new SqliteGuidedEffectJournal(firstDb)
+      .listForWork(work.workId)[0];
+    const priorInputSha256 = priorRecord?.inputSha256;
+    const priorRecoveryHint = priorRecord?.recoveryHint;
+    expect(priorInputSha256).toBeString();
+    expect(priorRecoveryHint).toMatchObject({
+      capability: "edit_file",
+      startLine: 2,
+    });
+    if (!priorInputSha256) throw new Error("Missing durable delete input hash");
+    if (!priorRecoveryHint) throw new Error("Missing durable delete recovery hint");
+    firstDb.close();
+    firstDb = undefined;
+
+    resumedDb = openEffectDatabase(dbPath);
+    const resumedPrepared = await prepareGuidedWorkspaceFileEdit({
+      args: { path: args.path, old_text: args.old_text, new_text: args.new_text },
+      workspacePath,
+      butlerData,
+      executeEditFile,
+      priorInputSha256,
+      priorRecoveryHint,
+    });
+    expect(resumedPrepared.ok).toBe(true);
+    if (!resumedPrepared.ok) throw new Error(resumedPrepared.error.message);
+    expect(resumedPrepared.effect.input.start_line).toBe(2);
+    const resumed = await createGuidedEffectService(
+      new SqliteGuidedEffectJournal(resumedDb),
+    ).execute({
+      work,
+      accessMode: "full_access",
+      occurrenceId: "tool-call-delete-restart-1",
+      signal: new AbortController().signal,
+      target: resumedPrepared.effect.target,
+      input: resumedPrepared.effect.input,
+      adapter: resumedPrepared.effect.adapter,
+    });
+    expect(resumed).toMatchObject({
+      ok: true,
+      status: "applied",
+      result: { start_line: 2 },
+      receipt: { result: { start_line: 2 } },
+    });
+    expect(registeredDispatches).toBe(1);
+  } finally {
+    firstDb?.close();
+    resumedDb?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("guided edit never guesses an after-state without prior input identity", async () => {
+  const root = await mkdtemp(join(tmpdir(), "butler-guided-edit-no-prior-"));
+  await writeFile(join(root, "notes.txt"), "new\n", "utf8");
+  try {
+    expect(await prepareGuidedWorkspaceFileEdit({
+      args: {
+        path: "notes.txt",
+        old_text: "old\n",
+        new_text: "new\n",
+      },
+      workspacePath: root,
+      executeEditFile: async () => {
+        throw new Error("fresh after-state must not dispatch");
+      },
+    })).toMatchObject({
+      ok: false,
+      error: { code: "old_text_mismatch" },
+    });
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });

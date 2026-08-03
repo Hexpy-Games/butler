@@ -26,3 +26,7 @@ export type {
   SchemaViolationReason,
   ToolCallArgumentsValidation,
 } from "./schema-validation.ts";
+export {
+  normalizeGuidedToolCall,
+  type NormalizedGuidedToolCall,
+} from "./tool-call-normalization.ts";

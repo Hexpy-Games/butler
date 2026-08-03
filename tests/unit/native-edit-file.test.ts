@@ -14,6 +14,7 @@ import { join } from "node:path";
 import {
   editFileToolDefinition,
   executeEditFileTool,
+  locateExactText,
 } from "../../packages/butler-agent/src/agent/tools/file-tools/edit_file/index.ts";
 import { sha256Hex } from
   "../../packages/butler-agent/src/agent/tools/file-tools/shared/evidence.ts";
@@ -52,20 +53,35 @@ describe("edit_file definition", () => {
     };
     expect(parameters.required).toEqual([
       "path",
-      "start_line",
       "old_text",
       "new_text",
     ]);
+    expect(parameters.properties.start_line).toMatchObject({
+      type: "integer",
+      minimum: 1,
+    });
     expect(parameters.properties.old_text.minLength).toBe(1);
     expect(parameters.properties.new_text.minLength).toBeUndefined();
     expect(parameters.properties).toHaveProperty("expected_sha256");
     expect(editFileToolDefinition.description).toContain("small, exact change");
+    expect(editFileToolDefinition.description).toContain("location hint");
     expect(writeFileToolDefinition.description).toContain("complete desired content");
     expect(writeFileToolDefinition.description).toContain("use edit_file");
   });
 });
 
 describe("edit_file execution", () => {
+  test("locates large repeated text with bounded occurrence state", () => {
+    const text = "needle\n".repeat(100_000);
+    expect(locateExactText({ text, oldText: "needle" })).toEqual({
+      ok: false,
+      error: "old_text_ambiguous",
+      occurrenceCount: 2,
+    });
+    expect(locateExactText({ text, oldText: "needle", startLine: 50_000 }))
+      .toEqual({ ok: true, value: { offset: (50_000 - 1) * 7, startLine: 50_000 } });
+  });
+
   test("replaces one exact multiline range at start_line atomically", async () => {
     const path = join(workspace, "src.ts");
     const before = "const a = 1;\nfunction value() {\n  return a;\n}\nconst a = 2;\n";
@@ -287,7 +303,7 @@ describe("edit_file execution", () => {
     }
   });
 
-  test("rejects stale hashes, wrong lines, and non-exact text without mutation", async () => {
+  test("rejects stale hashes and missing exact text while recovering from stale hints", async () => {
     const path = join(workspace, "stable.txt");
     const before = "alpha\nbeta\ngamma\n";
     await writeFile(path, before, "utf8");
@@ -307,16 +323,56 @@ describe("edit_file execution", () => {
       old_text: "beta",
       new_text: "changed",
     }), { workspacePath: workspace }) as any;
-    expect(wrongLine.error).toBe("old_text_mismatch");
+    expect(wrongLine).toMatchObject({
+      ok: true,
+      start_line: 2,
+    });
+    expect(await readFile(path, "utf8")).toBe("alpha\nchanged\ngamma\n");
 
-    const outOfRange = await executeEditFileTool(call({
+    await writeFile(path, before, "utf8");
+    const noHint = await executeEditFileTool(call({
       path: "stable.txt",
-      start_line: 9,
       old_text: "beta",
       new_text: "changed",
     }), { workspacePath: workspace }) as any;
-    expect(outOfRange.error).toBe("start_line_out_of_range");
+    expect(noHint).toMatchObject({
+      ok: true,
+      start_line: 2,
+    });
+
+    await writeFile(path, before, "utf8");
+    const outOfRange = await executeEditFileTool(call({
+      path: "stable.txt",
+      start_line: 9,
+      old_text: "delta",
+      new_text: "changed",
+    }), { workspacePath: workspace }) as any;
+    expect(outOfRange.error).toBe("old_text_mismatch");
     expect(await readFile(path, "utf8")).toBe(before);
+  });
+
+  test("uses an exact hinted occurrence before rejecting duplicate text", async () => {
+    const path = join(workspace, "duplicate.txt");
+    const before = "alpha\nbeta\nbeta\ngamma\n";
+    await writeFile(path, before, "utf8");
+
+    const ambiguous = await executeEditFileTool(call({
+      path: "duplicate.txt",
+      start_line: 1,
+      old_text: "beta",
+      new_text: "changed",
+    }), { workspacePath: workspace }) as any;
+    expect(ambiguous.error).toBe("old_text_ambiguous");
+    expect(await readFile(path, "utf8")).toBe(before);
+
+    const hinted = await executeEditFileTool(call({
+      path: "duplicate.txt",
+      start_line: 2,
+      old_text: "beta",
+      new_text: "changed",
+    }), { workspacePath: workspace }) as any;
+    expect(hinted).toMatchObject({ ok: true, start_line: 2 });
+    expect(await readFile(path, "utf8")).toBe("alpha\nchanged\nbeta\ngamma\n");
   });
 
   test("edits contained absolute paths but trusts the runtime workspace", async () => {
