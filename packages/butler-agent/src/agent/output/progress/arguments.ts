@@ -66,7 +66,7 @@ function safeCommandIntentLabel(args: Record<string, unknown>): string {
 }
 
 export function safeCommandPurposeSummary(args: Record<string, unknown>): string {
-  return safeCommandPurposeIdentity(args).slice(0, 140);
+  return safeCommandPurposeIdentity(args);
 }
 
 export function safeCommandPurposeIdentity(args: Record<string, unknown>): string {

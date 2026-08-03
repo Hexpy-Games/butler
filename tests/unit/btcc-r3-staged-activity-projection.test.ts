@@ -9,6 +9,10 @@ import { createGuidedActivityProjection } from
   "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { normalizeProgressSummaryRow } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-normalizer.ts";
+import { progressRowFromAppOutbound } from
+  "../../packages/butler-agent/src/gateways/app/infrastructure/transport/app-transport-projection.ts";
+import { safeCommandPurposeSummary } from
+  "../../packages/butler-agent/src/agent/output/progress/arguments.ts";
 import { dedupeProgressRows } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-merge.ts";
 import { projectTurnActivity } from
@@ -252,7 +256,7 @@ test("ordinary empty tool batches group repeated run_command purposes once", asy
   expect(updates[0]?.title).not.toBe(updates[0]?.summary);
 });
 
-test("different run_command purposes are not coalesced into one activity", async () => {
+test("different run_command purposes remain operation details under one activity", async () => {
   const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-distinct-command-purposes",
@@ -275,27 +279,26 @@ test("different run_command purposes are not coalesced into one activity", async
     },
   ];
   projection.observeToolBatch({ text: "", toolCalls: calls });
+  const bindings = [];
   for (const call of calls) {
-    await projection.observeTool({ ...call, effectiveToolName: call.name });
+    bindings.push(await projection.observeTool({
+      ...call,
+      effectiveToolName: call.name,
+    }));
   }
 
-  expect(updates).toEqual([
-    expect.objectContaining({
-      title: "명령 실행",
-      summary: "작업공간 변경 상태를 확인합니다.",
-    }),
-    expect.objectContaining({
-      title: "명령 실행",
-      summary: "변경 내용의 공백 오류를 검증합니다.",
-    }),
-  ]);
-  expect(updates[0]?.activityId).not.toBe(updates[1]?.activityId);
+  expect(updates).toEqual([expect.objectContaining({
+    title: "명령 실행",
+    summary: "작업공간 변경 상태를 확인합니다.",
+  })]);
+  expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
   expect(updates[0]?.title).not.toBe(updates[0]?.summary);
-  expect(updates[1]?.title).not.toBe(updates[1]?.summary);
-  expect(updates[0]?.summary).not.toBe(updates[1]?.summary);
+  expect(safeCommandPurposeSummary(calls[1]!.args)).toBe(
+    "변경 내용의 공백 오류를 검증합니다.",
+  );
 });
 
-test("progressive run_command projects its nested summary and keeps full-summary groups distinct", async () => {
+test("progressive run_command keeps complete nested summaries under one activity", async () => {
   const updates: Array<{ activityId: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-progressive-command-summary",
@@ -322,18 +325,172 @@ test("progressive run_command projects its nested summary and keeps full-summary
       arguments: { command: "pwd", summary: `${prefix}B` },
     },
   };
+  const bindings = [];
   for (const call of [first, second]) {
     projection.observeToolBatch({ text: "", toolCalls: [call] });
-    await projection.observeTool({
+    bindings.push(await projection.observeTool({
       ...call,
       effectiveToolName: "run_command",
-    });
+    }));
   }
 
-  expect(updates).toHaveLength(2);
-  expect(updates[0]?.summary).toBe(prefix);
-  expect(updates[1]?.summary).toBe(prefix);
-  expect(updates[0]?.activityId).not.toBe(updates[1]?.activityId);
+  expect(updates).toHaveLength(1);
+  expect(updates[0]?.summary).toBe(`${prefix}A`);
+  expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
+  expect(safeCommandPurposeSummary(second.args.arguments)).toBe(`${prefix}B`);
+});
+
+test("ordinary tools across model rounds inherit the accepted checkpoint activity", async () => {
+  const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-semantic-activity-anchor",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const checkpointArgs = {
+    next_stage: "execution",
+    public_summary: "프로필 연결 정책과 표현 경로를 한 작업으로 수정합니다.",
+    next_step: "관련 구현을 확인하고 수정한 뒤 검증합니다.",
+  };
+  projection.observeToolBatch({
+    text: "",
+    toolCalls: [{ name: "record_work_checkpoint", args: checkpointArgs }],
+  });
+  const checkpoint = await projection.observeTool({
+    name: "record_work_checkpoint",
+    effectiveToolName: "record_work_checkpoint",
+    args: checkpointArgs,
+  });
+  await projection.publishAccepted(checkpoint);
+
+  const rounds = [
+    [
+      { name: "read_file", args: { path: "one.ts" } },
+      { name: "grep_files", args: { pattern: "profile" } },
+    ],
+    [{ name: "project_ledger_create", args: { kind: "spec", id: "SPEC-1" } }],
+    [{ name: "grep_files", args: { pattern: "decision" } }],
+    [{ name: "read_file", args: { path: "two.ts" } }],
+    [{ name: "edit_file", args: { path: "two.ts" } }],
+    [{
+      name: "run_command",
+      args: { command: "bun test", summary: "수정한 정책 경로를 검증합니다." },
+    }],
+  ];
+  const operationBindings = [];
+  for (const calls of rounds) {
+    projection.observeToolBatch({ text: "", toolCalls: calls });
+    for (const call of calls) {
+      operationBindings.push(await projection.observeTool({
+        ...call,
+        effectiveToolName: call.name,
+      }));
+    }
+  }
+
+  expect(updates).toEqual([expect.objectContaining({
+    activityId: checkpoint.activityId,
+    title: "작업 진행 확인",
+    summary: checkpointArgs.public_summary,
+  })]);
+  expect(operationBindings.every(
+    (binding) => binding.activityId === checkpoint.activityId,
+  )).toBe(true);
+});
+
+test("unanchored empty ordinary rounds reuse one fallback activity across tool mixtures", async () => {
+  const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-fallback-activity-anchor",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const bindings = [];
+  for (const call of [
+    { name: "read_file", args: { path: "one.ts" } },
+    { name: "grep_files", args: { pattern: "profile" } },
+    { name: "read_file", args: { path: "two.ts" } },
+  ]) {
+    projection.observeToolBatch({ text: "", toolCalls: [call] });
+    bindings.push(await projection.observeTool({
+      ...call,
+      effectiveToolName: call.name,
+    }));
+  }
+
+  expect(updates).toHaveLength(1);
+  expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
+});
+
+test("complete safe model activity text survives event, App, and UI projection", async () => {
+  const longSummary = `시작-${"모델이 작성한 공개 진행 내용을 모두 보존합니다. ".repeat(18)}-끝`;
+  const longRationale = `이유-${"사용자에게 작업 맥락을 빠짐없이 보여줍니다. ".repeat(16)}-끝`;
+  const longNextStep = `다음-${"같은 의미 활동 아래에서 후속 도구를 실행합니다. ".repeat(15)}-끝`;
+  expect(longSummary.length).toBeGreaterThan(240);
+
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgress(async (event) => {
+    events.push({
+      id: `event-long-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  await progress.phaseActivityChanged?.({
+    turnId: "turn-complete-public-text",
+    semanticState: "admitted",
+    activityId: "guided-activity:complete-public-text",
+    displayStage: "execution",
+    title: "전체 진행 내용 표시",
+    summary: longSummary,
+    rationale: longRationale,
+    nextStep: longNextStep,
+  });
+
+  const sharedRow = progressRowFromSharedTurnEvent(events[0]!);
+  if (!sharedRow) throw new Error("Expected a shared progress row.");
+  const normalized = normalizeProgressSummaryRow(sharedRow);
+  const projected = projectTurnActivity([normalized]);
+  expect(projected.phaseActivities[0]).toMatchObject({
+    summary: longSummary,
+    rationale: longRationale,
+    nextStep: longNextStep,
+  });
+
+  const transportRow = progressRowFromAppOutbound(
+    "app-long-public-text",
+    { text: "" },
+    {
+      kind: "tool_progress",
+      activityKind: "message",
+      state: "running",
+      safeLabel: "전체 진행 내용 표시",
+      decisionTitle: "전체 진행 내용 표시",
+      decisionSummary: longSummary,
+      decisionRationale: longRationale,
+      decisionNextStep: longNextStep,
+      decisionSource: "model-authored",
+    },
+    "2026-08-03T15:30:00.000Z",
+  );
+  if (!transportRow) throw new Error("Expected an App transport row.");
+  expect(normalizeProgressSummaryRow(transportRow)).toMatchObject({
+    work_decision_summary: longSummary,
+    work_decision_rationale: longRationale,
+    work_decision_next_step: longNextStep,
+  });
 });
 
 test("progressive dispatch activity adopts the effective tool title and summary", async () => {

@@ -46,6 +46,10 @@ export function safeShortText(value: unknown, fallback: string): string {
 }
 
 export function safeOptionalShortText(value: unknown): string | undefined {
+  return safeOptionalPublicText(value)?.slice(0, 180);
+}
+
+export function safeOptionalPublicText(value: unknown): string | undefined {
   const text =
     typeof value === "string" ? stripControlCharacters(value).trim() : "";
   if (!text) return undefined;
@@ -55,7 +59,7 @@ export function safeOptionalShortText(value: unknown): string | undefined {
       "[redacted]",
     )
     .replace(/\s+/gu, " ")
-    .slice(0, 180);
+    .trim();
 }
 
 export function safeLimitationText(value: unknown, fallback: string): string {
