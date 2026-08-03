@@ -1,4 +1,4 @@
-import type { PublicWorkObligationKind } from "../../tool-support/index.ts";
+import type { PublicWorkObligationKind } from "../../tools/tool-support.ts";
 import {
   createEvidenceCapabilityReceipt,
   parseEvidenceCapabilityReceipt,

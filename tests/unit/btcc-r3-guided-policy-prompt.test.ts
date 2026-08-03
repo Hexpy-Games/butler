@@ -114,6 +114,7 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(prompt).not.toContain("tracking:");
   expect(instructions).toContain("Use Work when the task needs continuation across turns");
   expect(instructions).toContain("Skip Work for simple conversation");
+  expect(instructions).not.toContain("turn_time_remaining_seconds");
   expect(instructions).toContain("single-step read-only lookup");
   expect(instructions).toContain("state_effect validation");
   expect(instructions).toContain(

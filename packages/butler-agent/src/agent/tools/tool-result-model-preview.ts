@@ -1,3 +1,4 @@
+/** Shared tool support owns bounded, model-safe result previews. */
 const MAX_CANDIDATE_PATHS = 24;
 const MAX_MATCH_PREVIEWS = 12;
 const MAX_MATCH_TEXT_CHARS = 240;
@@ -121,8 +122,6 @@ function publicWebEvidencePreview(
   );
   return compactUndefined({
     tool_name: toolName,
-    turn_time_remaining_seconds:
-      finiteNumber(output.turn_time_remaining_seconds) ?? undefined,
     ok: output.ok !== false,
     query: boundedText(output.query, 500),
     provider: boundedText(output.provider, 120),

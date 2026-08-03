@@ -3,7 +3,7 @@ import type {
   EvidenceReceipt,
   EvidenceReference,
   PublicWorkObligationKind,
-} from "../../tool-support/index.ts";
+} from "../../tools/tool-support.ts";
 import { parseEvidenceCapabilityReceipt } from "./parser.ts";
 import type { EvidenceCapabilityReceipt } from "./types.ts";
 

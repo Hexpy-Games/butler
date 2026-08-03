@@ -1,5 +1,5 @@
 import type { RuntimeMessageLanguage } from "../messages.ts";
-import type { ToolProgressSummary } from "../../tool-support/index.ts";
+import type { ToolProgressSummary } from "../../tools/tool-support.ts";
 
 type ToolProgressLabelKey =
   | "inspect_project_status"

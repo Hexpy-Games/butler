@@ -34,13 +34,8 @@ import type {
 } from
   "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import {
-  DEFAULT_GUIDED_ABSOLUTE_TURN_LEASE_MS,
-  DEFAULT_GUIDED_FINAL_REPORT_MS,
-  DEFAULT_GUIDED_TURN_LEASE_MS,
-  GuidedOperationalLease,
   guidedOperationalFallback,
   guidedOperationalReportPrompt,
-  runInGuidedOperationalWindow,
   runGuidedAgentLoopWithOperationalReport,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-operational-report.ts";
@@ -1748,7 +1743,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
   }
 });
 
-test("Guided agent gives a normally progressing Turn one operational lease", async () => {
+test("Guided agent preserves the caller signal without a whole-turn deadline", async () => {
   const fixture = createFixture("guided-caller-boundary");
   try {
     const controller = new AbortController();
@@ -1765,7 +1760,7 @@ test("Guided agent gives a normally progressing Turn one operational lease", asy
       signal: controller.signal,
     });
 
-    expect(observedSignal).not.toBe(controller.signal);
+    expect(observedSignal).toBe(controller.signal);
     expect(observedSignal?.aborted).toBe(false);
     expect(outcome).toEqual({
       route: "direct",
@@ -1776,15 +1771,17 @@ test("Guided agent gives a normally progressing Turn one operational lease", asy
   }
 });
 
-test("Guided model sees remaining time without persisting it in the tool result", async () => {
+test("Guided model never sees a whole-turn remaining-time field", async () => {
   const fixture = createFixture("guided-turn-time-context");
   try {
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
     let modelResult: Record<string, unknown> | undefined;
+    let modelInstructions = "";
     const turn = turnRecord(fixture.root, { turnId: "guided-turn-time-context" });
     const agent = fixture.agent(scriptedModelRound([
       toolResponse([toolCall("read-1", "read_file", { path: "settings.json" })]),
       (request) => {
+        modelInstructions = request.instructions ?? "";
         const toolMessage = messagesWithToolResults(request)[0];
         const payload = JSON.parse(toolMessage?.content ?? "{}") as {
           output?: Record<string, unknown>;
@@ -1796,8 +1793,9 @@ test("Guided model sees remaining time without persisting it in the tool result"
 
     await agent.run({ turn, signal: new AbortController().signal });
 
-    expect(modelResult?.turn_time_remaining_seconds).toBeNumber();
-    expect(modelResult?.turn_time_remaining_seconds).toBeGreaterThan(0);
+    expect(modelResult).toBeDefined();
+    expect(modelResult).not.toHaveProperty("turn_time_remaining_seconds");
+    expect(modelInstructions).not.toContain("turn_time_remaining_seconds");
     const persisted = fixture.stores.guidedToolJournal.list(turn.turnId)[0]?.result;
     expect(persisted).toBeDefined();
     expect(persisted as Record<string, unknown>)
@@ -1807,131 +1805,56 @@ test("Guided model sees remaining time without persisting it in the tool result"
   }
 });
 
-test("Guided operational defaults reserve delivery time before the observer deadline", () => {
-  expect(DEFAULT_GUIDED_TURN_LEASE_MS).toBe(280_000);
-  expect(DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(15_000);
-  expect(DEFAULT_GUIDED_ABSOLUTE_TURN_LEASE_MS).toBe(840_000);
-  expect(DEFAULT_GUIDED_TURN_LEASE_MS - DEFAULT_GUIDED_FINAL_REPORT_MS).toBe(265_000);
-});
-
-test("Managed durable progress rearms the no-progress timer only to the absolute ceiling", async () => {
-  let now = 0;
-  let scheduled:
-    | { callback: () => void; delayMs: number }
-    | undefined;
-  const lease = new GuidedOperationalLease({
-    startedAt: 0,
-    leaseMs: 100,
-    finalReportMs: 10,
-    absoluteLeaseMs: 250,
-    managedInitially: true,
-    now: () => now,
-  });
-  const running = runInGuidedOperationalWindow({
-    parentSignal: new AbortController().signal,
-    timeoutMs: 90,
-    deadline: lease.mainWindow(),
-    timer: {
-      set(callback, delayMs) {
-        scheduled = { callback, delayMs };
-        return 1 as unknown as ReturnType<typeof setTimeout>;
-      },
-      clear() {
-        scheduled = undefined;
-      },
-    },
-    run: async (signal) => await new Promise<never>((_resolve, reject) => {
-      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-    }),
-  });
-
-  expect(scheduled?.delayMs).toBe(90);
-  now = 50;
-  lease.recordDurableProgress();
-  expect(scheduled?.delayMs).toBe(90);
-  expect(lease.mainDeadline()).toBe(140);
-  now = 130;
-  lease.recordDurableProgress();
-  expect(lease.mainDeadline()).toBe(220);
-  expect(scheduled?.delayMs).toBe(90);
-  now = 220;
-  lease.recordDurableProgress();
-  expect(lease.mainDeadline()).toBe(240);
-  expect(scheduled?.delayMs).toBe(20);
-
-  now = 240;
-  scheduled?.callback();
-  await expect(running).rejects.toThrow("operational window expired");
-  expect(lease.leaseDeadline()).toBe(250);
-});
-
-test("only fresh durable Work extends through the tool-result path", async () => {
-  const fixture = createFixture("guided-progress-signals");
+test("Managed Work remains in the semantic loop while a model round is still running", async () => {
+  const fixture = createFixture("guided-long-managed-round");
+  let releaseRound = () => {};
   try {
-    let durableProgress = 0;
-    const command = localRunCommand(
-      fixture.root,
-      "guided-progress-signals-turn",
-    );
-    const inbox = await fixture.stores.admission.recordInbound({
-      command,
-      admissionInputHash: "guided-progress-signals-admission",
+    let roundStarted!: () => void;
+    let settled = false;
+    const roundRunning = new Promise<void>((resolve) => {
+      roundStarted = resolve;
     });
-    const claim = await fixture.stores.admission
-      .acquireAdmissionConstructionClaim(inbox);
-    const turn = await fixture.stores.admission.constructTurn(inbox, claim);
-    const names = new Set([
-      "read_file",
-      "tool_search",
-      "replace_work_plan",
-      "record_work_review",
-      "write_file",
-    ]);
-    const calls = createGuidedToolCallExecutor({
-      turn,
-      signal: new AbortController().signal,
-      workScope: {
-        turnId: turn.turnId,
-        sessionId: turn.sessionId,
+    const delayedResult = new Promise<ModelRoundResult>((resolve) => {
+      releaseRound = () => resolve({
+        text: "긴 Managed Work를 끝까지 완료했습니다.",
+        toolCalls: [],
+      });
+    });
+    const agent = fixture.agent(scriptedModelRound([
+      () => toolResponse([toolCall("long-plan-1", "replace_work_plan", {
+        objective: "Finish the long Managed Work",
+        actions: [{
+          action_key: "finish-work",
+          description: "Finish the requested Managed Work",
+        }],
+        checks: ["The requested Managed Work is complete"],
+      })]),
+      () => {
+        roundStarted();
+        return delayedResult;
       },
-      authorizedNames: names,
-      visibleNames: names,
-      describedToolIds: new Set(),
-      durableWork: fixture.stores.durableWork,
-      toolJournal: fixture.stores.guidedToolJournal,
-      onDurableProgress: () => durableProgress += 1,
-      executeButlerTool: async () => ({
-        ok: true,
-        effect_receipt: { receipt_id: "forged-shape", replayed: false },
+    ]));
+    const running = agent.run({
+      turn: turnRecord(fixture.root, {
+        turnId: "guided-long-managed-round-turn",
+        trackingMode: "local",
       }),
+      signal: new AbortController().signal,
+    }).then((outcome) => {
+      settled = true;
+      return outcome;
     });
-    const call = (name: string, args: Record<string, unknown>) =>
-      calls.executeTool({ name, args, rawArguments: JSON.stringify(args) });
 
-    await call("read_file", { path: "fact.txt" });
-    await call("tool_search", { query: "files" });
-    expect(durableProgress).toBe(0);
-    const planResult = await call("replace_work_plan", {
-      objective: "Create the reviewed output",
-      actions: [{
-        action_key: "write-output",
-        description: "Write the output",
-        effect: { capability: "workspace mutation", target: "workspace:output" },
-      }],
-      checks: ["The output exists"],
+    await roundRunning;
+    expect(settled).toBe(false);
+    releaseRound();
+
+    await expect(running).resolves.toEqual({
+      route: "managed",
+      content: "긴 Managed Work를 끝까지 완료했습니다.",
     });
-    expect(planResult).toMatchObject({ ok: true });
-    expect(durableProgress).toBe(1);
-    await call("record_work_review", {
-      subject: "plan",
-      verdict: "accept",
-      summary: "The Plan matches the request.",
-      next_stage: "execution",
-    });
-    expect(durableProgress).toBe(2);
-    await call("write_file", { path: "output.txt", content: "done" });
-    expect(durableProgress).toBe(2);
   } finally {
+    releaseRound?.();
     fixture.close();
   }
 });
@@ -2058,10 +1981,7 @@ test("Guided operational fallback is captured before the final report model call
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
-    leaseStartedAt: Date.now(),
     originalRequest: "현재까지 확인한 내용을 알려 주세요.",
-    leaseMs: 1_000,
-    finalReportMs: 500,
     loadFacts: async () => ({
       work: null,
       toolCalls: [toolCall],
@@ -2100,10 +2020,7 @@ test("Guided empty main response still receives one fact-based report request", 
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
-    leaseStartedAt: Date.now(),
     originalRequest: "빈 응답을 보고 가능한 실패로 처리해 주세요.",
-    leaseMs: 1_000,
-    finalReportMs: 500,
     loadFacts: async () => {
       factLoads += 1;
       return { work: null, toolCalls: [], effects: [] };
@@ -2135,10 +2052,7 @@ test("Guided unexpected local failure does not start an operational report reque
       executeTool: async () => undefined,
     },
     parentSignal: new AbortController().signal,
-    leaseStartedAt: Date.now(),
     originalRequest: "로컬 오류는 위로 전달해 주세요.",
-    leaseMs: 1_000,
-    finalReportMs: 500,
     loadFacts: async () => {
       factLoads += 1;
       return { work: null, toolCalls: [], effects: [] };
@@ -2169,10 +2083,7 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
       executeTool: async () => undefined,
     },
     parentSignal: controller.signal,
-    leaseStartedAt: Date.now(),
     originalRequest: "중지할 작업",
-    leaseMs: 1_000,
-    finalReportMs: 500,
     loadFacts: async () => {
       factLoads += 1;
       return {
@@ -2189,179 +2100,6 @@ test("Guided parent cancellation does not deliver an operational fallback", asyn
   expect(factLoads).toBe(0);
 });
 
-test("Guided parent cancellation during quiescence preserves the Stop reason", async () => {
-  const controller = new AbortController();
-  const stopped = new Error("user stopped during settlement");
-  let announceWindowExpiry!: () => void;
-  const windowExpired = new Promise<void>((resolve) => {
-    announceWindowExpiry = resolve;
-  });
-  let factLoads = 0;
-  const modelRound = scriptedModelRound([
-    (request) => new Promise<never>(() => {
-      request.signal?.addEventListener("abort", () => announceWindowExpiry(), {
-        once: true,
-      });
-    }),
-  ]);
-  const running = runGuidedAgentLoopWithOperationalReport({
-    options: {
-      prompt: "정리 중인 작업을 중지합니다.",
-      tools: [],
-      modelRound,
-      maxIterations: 1,
-      executeTool: async () => undefined,
-    },
-    parentSignal: controller.signal,
-    leaseStartedAt: Date.now(),
-    originalRequest: "정리 중인 작업을 중지합니다.",
-    leaseMs: 80,
-    finalReportMs: 40,
-    loadFacts: async () => {
-      factLoads += 1;
-      return { work: null, toolCalls: [], effects: [] };
-    },
-  });
-
-  await windowExpired;
-  controller.abort(stopped);
-
-  await expect(running).rejects.toThrow("user stopped during settlement");
-  expect(factLoads).toBe(0);
-});
-
-test("Guided timeout gives the child a bounded settlement grace before loading facts", async () => {
-  const toolCall = {
-    callId: "guided-quiescence-call",
-    toolName: "read_file",
-    rawArguments: "{}",
-    arguments: {},
-    status: "started" as "started" | "cancelled",
-  };
-  let calls = 0;
-  let childSettled = false;
-  let factLoadSawSettlement = false;
-
-  const modelRound = scriptedModelRound([
-    (request) => {
-      calls += 1;
-      return new Promise<never>((_resolve, reject) => {
-        request.signal?.addEventListener("abort", () => {
-          setTimeout(() => {
-            toolCall.status = "cancelled";
-            childSettled = true;
-            reject(request.signal?.reason);
-          }, 1);
-        }, { once: true });
-      });
-    },
-    () => {
-      calls += 1;
-      throw new Error("final report provider failure");
-    },
-  ]);
-
-  const answer = await runGuidedAgentLoopWithOperationalReport({
-    options: {
-      prompt: "파일 확인 상태를 알려 주세요.",
-      tools: [],
-      modelRound,
-      maxIterations: 1,
-      executeTool: async () => undefined,
-    },
-    parentSignal: new AbortController().signal,
-    leaseStartedAt: Date.now(),
-    originalRequest: "파일 확인 상태를 알려 주세요.",
-    leaseMs: 80,
-    finalReportMs: 40,
-    loadFacts: async () => {
-      factLoadSawSettlement = childSettled;
-      return {
-        work: null,
-        toolCalls: [toolCall],
-        effects: [],
-      };
-    },
-  });
-
-  expect(factLoadSawSettlement).toBe(true);
-  expect(answer).toContain("Tool read_file: cancelled");
-});
-
-test("Guided fallback does not wait past the lease for a late fact snapshot", async () => {
-  let calls = 0;
-  const startedAt = Date.now();
-  const modelRound = scriptedModelRound([
-    () => {
-      calls += 1;
-      throw knownProviderFailure("provider unavailable");
-    },
-  ]);
-  const answer = await runGuidedAgentLoopWithOperationalReport({
-    options: {
-      prompt: "늦은 사실 조회를 기다리지 마세요.",
-      tools: [],
-      modelRound,
-      maxIterations: 1,
-      executeTool: async () => undefined,
-    },
-    parentSignal: new AbortController().signal,
-    leaseStartedAt: Date.now(),
-    originalRequest: "늦은 사실 조회를 기다리지 마세요.",
-    leaseMs: 60,
-    finalReportMs: 30,
-    loadFacts: async () => await new Promise<never>(() => {}),
-  });
-
-  expect(Date.now() - startedAt).toBeLessThan(1_000);
-  expect(calls).toBe(1);
-  expect(answer).toContain("영속 기록은 없습니다");
-  expect(answer).not.toContain("저장된 Work에서 이어갈 수 있습니다");
-});
-
-test("Guided agent bounds the main loop and falls back after one failed final report", async () => {
-  const fixture = createFixture("guided-lease-fallback");
-  try {
-    let calls = 0;
-    const preservedDraft = `확인 중인 초안 ${"가".repeat(600)} 초안 끝`;
-    const agent = fixture.agent(scriptedModelRound([
-      (_request) => {
-        calls += 1;
-        return toolResponse([
-          toolCall("lease-pending-1", "tool_that_does_not_exist", {}),
-        ], preservedDraft);
-      },
-      (request) => {
-        calls += 1;
-        return new Promise<never>((_resolve, reject) => {
-          const rejectOnAbort = () => reject(request.signal?.reason);
-          if (request.signal?.aborted) rejectOnAbort();
-          else request.signal?.addEventListener("abort", rejectOnAbort, { once: true });
-        });
-      },
-      () => {
-        calls += 1;
-        throw new Error("final report provider failure");
-      },
-    ]), { turnLeaseMs: 80, finalReportMs: 40 });
-    const startedAt = Date.now();
-    const outcome = await agent.run({
-      turn: turnRecord(fixture.root, { turnId: "guided-lease-turn" }),
-      signal: new AbortController().signal,
-    });
-
-    expect(Date.now() - startedAt).toBeLessThan(1_000);
-    expect(calls).toBe(3);
-    expect(outcome.route).toBe("direct");
-    expect(outcome.content).toContain("모델 연결 또는 실행 시간이 종료");
-    expect(outcome.content).not.toContain(preservedDraft);
-    expect(outcome.content).toContain("완료로 처리하지 않았");
-    expect(outcome.content).not.toContain("저장된 Work에서 이어갈 수 있습니다");
-  } finally {
-    fixture.close();
-  }
-});
-
 function createFixture(label: string) {
   const root = mkdtempSync(join(tmpdir(), `${label}-`));
   const dbPath = join(root, "butler.sqlite");
@@ -2376,12 +2114,9 @@ function createFixture(label: string) {
     stores,
     agent(
       modelRound: ModelRoundPort,
-      operational: Pick<
-        Parameters<typeof createProductionGuidedTurnAgent>[0],
-        "turnLeaseMs" | "finalReportMs"
-      > & { butlerHome?: string } = {},
+      operational: { butlerHome?: string } = {},
     ) {
-      const { butlerHome = root, ...timing } = operational;
+      const { butlerHome = root } = operational;
       return createProductionGuidedTurnAgent({
         butlerHome,
         butlerData: root,
@@ -2391,7 +2126,6 @@ function createFixture(label: string) {
         effectJournal: stores.guidedEffectJournal,
         durableWork: stores.durableWork,
         modelRound,
-        ...timing,
       });
     },
     close() {

@@ -3,7 +3,7 @@ import { sanitizePublicText } from "../../events/turn-events.ts";
 import type {
   PublicWorkObligationKind,
   PublicWorkRepeatReason,
-} from "../../tool-support/index.ts";
+} from "../../tools/tool-support.ts";
 
 const DECISION_ID_SUFFIX_LENGTH = 8;
 const PUBLIC_DECISION_TEXT_MAX_CHARS = 420;

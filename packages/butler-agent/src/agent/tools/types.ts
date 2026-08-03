@@ -1,5 +1,5 @@
 import type { FunctionToolDefinition } from "../../integrations/providers/provider.ts";
-import type { PublicWorkObligationKind } from "../tool-support/index.ts";
+import type { PublicWorkObligationKind } from "./tool-support.ts";
 
 export interface ButlerToolCall {
   name: string;

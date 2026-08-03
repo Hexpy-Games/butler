@@ -12,7 +12,7 @@ import {
   finalEnvelopeRetryInstructions,
   finalNoToolInstructions,
 } from "../../../integrations/providers/shared/tools.ts";
-import { toolBatchCompletedHandoffText } from "../../model-tool-loop/tool-batch-handoff.ts";
+import { toolBatchCompletedHandoffText } from "../agent-loop/tool-batch-handoff.ts";
 import {
   extractLocalFinalEnvelopeText,
   localChatUrl,

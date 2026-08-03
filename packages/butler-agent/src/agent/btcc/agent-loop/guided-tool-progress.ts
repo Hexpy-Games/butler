@@ -1,6 +1,6 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import { digest } from "../identity/index.ts";
-import { publicToolTitle } from "../projection/guided-activity-content.ts";
+import { publicToolTitle } from "../projection/index.ts";
 import { summarizeToolProgress } from "../../output/progress/tool-progress.ts";
 
 export function rememberDescribedTools(

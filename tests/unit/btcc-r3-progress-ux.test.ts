@@ -106,7 +106,7 @@ test("run_command operation projects structured intent without exposing raw comm
     toolName: "run_command",
     args: {
       command: "curl -H 'Authorization: Bearer secret' -u user:password https://example.test",
-      cwd: "/Users/yeonwoo/private-client/acquisition-secret",
+      cwd: "/workspace/private-client/acquisition-secret",
       state_effect: "validation",
       validation_suite: "focused-check",
     },

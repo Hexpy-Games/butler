@@ -1,3 +1,4 @@
+/** Tool input validation belongs at the shared tool boundary. */
 export type SchemaValidationResult =
   | { ok: true }
   | {

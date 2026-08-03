@@ -1,7 +1,7 @@
 import {
   serializeToolResultPayloadForProvider,
   type ToolResultModelPreviewContext,
-} from "../../../agent/model-tool-loop/index.ts";
+} from "../../../agent/tools/tool-support.ts";
 
 export function hostedToolResultContent(input: {
   payload: Record<string, unknown>;

@@ -1,6 +1,6 @@
 import type { WebSearchOutput } from "../../../../integrations/search/provider.ts";
 import { createEvidenceCapabilityReceipt } from "../../../output/evidence/ledger.ts";
-import { urlReferences } from "../../../tool-support/executor-support.ts";
+import { urlReferences } from "../../tool-executor-support.ts";
 
 export function webSearchEvidenceCapabilityReceipts(output: WebSearchOutput) {
   return [

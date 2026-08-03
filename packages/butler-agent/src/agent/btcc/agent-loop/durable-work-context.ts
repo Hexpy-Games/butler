@@ -1,5 +1,5 @@
 import type { DurableWorkContext } from "../work/index.ts";
-import { structuredToolResultModelPreview } from "../../model-tool-loop/tool-result-model-preview.ts";
+import { structuredToolResultModelPreview } from "../../tools/tool-result-model-preview.ts";
 
 export function renderDurableWorkContext(
   context: DurableWorkContext | null,

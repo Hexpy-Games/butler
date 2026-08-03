@@ -3,7 +3,7 @@ import { isAbsolute, resolve } from "node:path";
 import { resolveWorkspacePathGuard } from
   "../../../tools/file-tools/shared/workspace-path-guard.ts";
 import { butlerToolProcessEnvironment } from
-  "../../../tool-support/executor-support.ts";
+  "../../../tools/tool-executor-support.ts";
 import { selectCommandHostAdapter } from "./command-host.ts";
 import { GuidedCommandRejectedError } from "./command-error.ts";
 import { CommandOutputSpool } from "./command-output-spool.ts";

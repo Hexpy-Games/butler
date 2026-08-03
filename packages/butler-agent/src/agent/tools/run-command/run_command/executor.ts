@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "fs";
 import { extname, isAbsolute, join, relative, resolve } from "path";
 import { budgetToolOutput, type ShellCommandResult } from "../../../context/tool-output-budgeter.ts";
-import { butlerToolProcessEnvironment } from "../../../tool-support/executor-support.ts";
+import { butlerToolProcessEnvironment } from "../../tool-executor-support.ts";
 import type { CommandExecutor } from "../../../../runtime/command/contracts.ts";
 import { executeLegacyCommandCompatibility } from "../../../../runtime/command/legacy-command-compat.ts";
 import { createPlatformCommandExecutor } from "../../../../runtime/command/platform-command-executor.ts";

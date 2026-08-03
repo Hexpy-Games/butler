@@ -1,3 +1,4 @@
+/** Shared tool support owns safe generated-image attachment projection. */
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 

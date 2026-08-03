@@ -1,14 +1,6 @@
-import {
-  type AgentLoopMessage,
-  type AgentLoopModelResponse,
-  type AgentLoopToolDefinition,
-  type ToolCallArgumentsValidation,
-  validateToolCallArguments,
-} from "../../../agent/model-tool-loop/index.ts";
-import { agentLoopImageDataUrl } from
-  "../../../agent/model-tool-loop/tool-result-media.ts";
-import type { FunctionToolCall, FunctionToolDefinition, FunctionToolPromptOptions, OpenAIResponse } from "../runtime-contracts.ts";
-import { extractResponseText } from "./usage.ts";
+import type { ModelRoundTool } from "../../../agent/btcc/ports/model-round.ts";
+import { validateToolCallArguments } from "../../../agent/tools/tool-support.ts";
+import type { FunctionToolCall, FunctionToolDefinition, OpenAIResponse } from "../runtime-contracts.ts";
 
 
 
@@ -56,17 +48,6 @@ export function parseToolArguments(raw: string): Record<string, unknown> {
 
 
 
-export function functionToolToAgentTool(tool: FunctionToolDefinition): AgentLoopToolDefinition {
-  return {
-    name: tool.name,
-    description: tool.description,
-    inputSchema: tool.parameters as AgentLoopToolDefinition["inputSchema"],
-    concurrencySafe: tool.concurrencySafe,
-  };
-}
-
-
-
 export function stripNestedDescriptions(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripNestedDescriptions);
   if (!value || typeof value !== "object") return value;
@@ -80,7 +61,7 @@ export function stripNestedDescriptions(value: unknown): unknown {
 
 
 
-export function modelFacingFunctionTools(tools: readonly FunctionToolDefinition[]): FunctionToolDefinition[] {
+export function modelFacingFunctionTools(tools: readonly ModelRoundTool[]): FunctionToolDefinition[] {
   return tools.map((tool) => ({
     type: "function",
     name: tool.name,
@@ -88,143 +69,6 @@ export function modelFacingFunctionTools(tools: readonly FunctionToolDefinition[
     parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
   }));
 }
-
-
-
-export function activeFunctionTools(options: FunctionToolPromptOptions): FunctionToolDefinition[] {
-  const dynamicTools = options.dynamicTools?.();
-  const tools = dynamicTools && dynamicTools.length > 0 ? dynamicTools : options.tools;
-  return tools.map((tool) => ({
-    type: "function",
-    name: tool.name,
-    description: tool.description,
-    parameters: stripNestedDescriptions(tool.parameters) as Record<string, unknown>,
-    ...(tool.concurrencySafe === undefined
-      ? {}
-      : { concurrencySafe: tool.concurrencySafe }),
-  }));
-}
-
-
-
-export function withoutDynamicTools(options: FunctionToolPromptOptions): FunctionToolPromptOptions {
-  const { dynamicTools: _dynamicTools, ...rest } = options;
-  return rest;
-}
-
-
-
-export function newToolMessages(
-  messages: AgentLoopMessage[],
-  alreadySent: number,
-  butlerData?: string,
-): {
-  items: Array<Record<string, unknown>>;
-  statelessItems: Array<Record<string, unknown>>;
-  sentCount: number;
-} {
-  const toolMessages = messages.filter((message) => message.role === "tool");
-  const next = toolMessages.slice(alreadySent);
-  const continuationItems = next.map((message) =>
-    openAIToolMessageItems(message, butlerData),
-  );
-  return {
-    sentCount: toolMessages.length,
-    items: continuationItems.map(([item]) => item),
-    statelessItems: continuationItems.map(([, statelessItem]) => statelessItem),
-  };
-}
-
-export function newAgentLoopContinuationMessages(
-  messages: AgentLoopMessage[],
-  alreadySent: {
-    toolMessages: number;
-    userMessages: number;
-  },
-  butlerData?: string,
-): {
-  items: Array<Record<string, unknown>>;
-  statelessItems: Array<Record<string, unknown>>;
-  sent: {
-    toolMessages: number;
-    userMessages: number;
-  };
-} {
-  const items: Array<Record<string, unknown>> = [];
-  const statelessItems: Array<Record<string, unknown>> = [];
-  let toolMessages = 0;
-  let userMessages = 0;
-
-  for (const message of messages) {
-    if (message.role === "tool") {
-      toolMessages += 1;
-      if (toolMessages <= alreadySent.toolMessages) continue;
-      const [item, statelessItem] = openAIToolMessageItems(message, butlerData);
-      items.push(item);
-      statelessItems.push(statelessItem);
-      continue;
-    }
-    if (message.role !== "user") continue;
-    userMessages += 1;
-    if (userMessages <= alreadySent.userMessages) continue;
-    const item = {
-      role: "user",
-      content: [{ type: "input_text", text: message.content }],
-    };
-    items.push(item);
-    statelessItems.push(item);
-  }
-
-  return {
-    items,
-    statelessItems,
-    sent: { toolMessages, userMessages },
-  };
-}
-
-function openAIToolMessageItems(
-  message: AgentLoopMessage,
-  butlerData?: string,
-): [Record<string, unknown>, Record<string, unknown>] {
-  const statelessItem = {
-    type: "function_call_output",
-    call_id: message.toolCallId,
-    output: message.content,
-  };
-  const images = (message.imageAttachments ?? []).flatMap((attachment) => {
-    const imageUrl = agentLoopImageDataUrl(attachment, butlerData);
-    return imageUrl
-      ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
-      : [];
-  });
-  return [{
-    ...statelessItem,
-    output: images.length > 0
-      ? [{ type: "input_text", text: message.content }, ...images]
-      : message.content,
-  }, statelessItem];
-}
-
-
-
-export function responseToAgentModelResponse(
-  response: OpenAIResponse,
-  _allowedNames?: Set<string>,
-): AgentLoopModelResponse {
-  return {
-    text: extractResponseText(response) || undefined,
-    raw: response,
-    toolCalls: getFunctionCalls(response).map((call) => ({
-      id: call.call_id,
-      name: call.name,
-      arguments: parseToolArguments(call.arguments),
-      rawArguments: call.arguments,
-    })),
-  };
-}
-
-
-
 export function finalNoToolInstructions(instructions?: string): string {
   const finalizer = [
     "## Final Answer Synthesis",
@@ -309,87 +153,6 @@ export function normalizeLocalTextToolName(rawName: string, allowedNames: Set<st
     ?? candidates[candidates.length - 1]
     ?? null;
 }
-
-export function unavailableFunctionToolPayload(input: {
-  name: string;
-  args: Record<string, unknown>;
-  allowedNames: ReadonlySet<string>;
-}): Record<string, unknown> | null {
-  if (input.allowedNames.has(input.name)) return null;
-  const message = `No such tool available: ${input.name}`;
-  return {
-    ok: false,
-    error: message,
-    output: {
-      ok: false,
-      error: { code: "tool_unavailable", message },
-      observation_kind: "tool_unavailable",
-      model_visible_content: [
-        `Tool: ${input.name}`,
-        `Observation: ${message}`,
-        `Arguments: ${JSON.stringify(input.args)}`,
-        "Select one of the currently available tools or continue without it.",
-      ].join("\n"),
-    },
-  };
-}
-
-export interface PreparedFunctionToolCall {
-  args: Record<string, unknown>;
-  rawArguments: string;
-  errorPayload: Record<string, unknown> | null;
-}
-
-export function prepareFunctionToolCall(input: {
-  name: string;
-  rawArguments: unknown;
-  tools: readonly FunctionToolDefinition[];
-}): PreparedFunctionToolCall {
-  const tool = input.tools.find((candidate) => candidate.name === input.name);
-  const validation = validateToolCallArguments({
-    toolName: input.name,
-    rawArguments: input.rawArguments,
-    schema: tool?.parameters,
-  });
-  const unavailable = unavailableFunctionToolPayload({
-    name: input.name,
-    args: validation.arguments,
-    allowedNames: new Set(input.tools.map((candidate) => candidate.name)),
-  });
-  return {
-    args: validation.arguments,
-    rawArguments: validation.rawArguments,
-    errorPayload: unavailable ?? invalidFunctionToolArgumentsPayload({
-      name: input.name,
-      validation,
-    }),
-  };
-}
-
-function invalidFunctionToolArgumentsPayload(input: {
-  name: string;
-  validation: ToolCallArgumentsValidation;
-}): Record<string, unknown> | null {
-  const message = input.validation.error;
-  if (!message) return null;
-  return {
-    ok: false,
-    error: message,
-    output: {
-      ok: false,
-      error: { code: "tool_invalid_arguments", message },
-      observation_kind: "tool_invalid_arguments",
-      model_visible_content: [
-        `Tool: ${input.name}`,
-        `Observation: ${message}`,
-        `Arguments: ${input.validation.rawArguments}`,
-        "Use this observation to retry with arguments that match the tool schema, or continue without the tool.",
-      ].join("\n"),
-    },
-  };
-}
-
-
 
 export function localFunctionToolInstructions(instructions?: string): string {
   return [

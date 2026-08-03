@@ -4,7 +4,7 @@ import type {
   BtccAgentLoopToolDefinition,
   BtccAgentLoopToolResult,
 } from "./contracts.ts";
-import { validateToolCallArguments } from "../../model-tool-loop/schema-validation.ts";
+import { validateToolCallArguments } from "../../tools/schema-validation.ts";
 
 export interface PreparedBtccToolCall {
   call: BtccAgentLoopToolCall;

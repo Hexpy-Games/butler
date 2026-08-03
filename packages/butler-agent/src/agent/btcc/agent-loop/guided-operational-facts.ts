@@ -22,7 +22,7 @@ export type OperationalFacts = {
 
 export function guidedOperationalReportPrompt(input: OperationalFacts): string {
   return [
-    "The normal execution window ended before a final answer was available.",
+    "The main execution did not produce a final answer.",
     "Give the user one concise, truthful answer using only the facts below.",
     "Clearly separate what completed, what remains, and any limitation.",
     "Do not claim that an unlisted action or effect happened. Do not call tools.",
@@ -38,7 +38,7 @@ export function guidedOperationalFallback(input: OperationalFacts): string {
   const work = workView(input.work);
   if (korean) {
     return [
-      "요청을 끝까지 정리하는 과정에서 모델 연결 또는 실행 시간이 종료되었습니다.",
+      "요청을 끝까지 정리하지 못했지만, 현재까지 확인된 영속 기록만 전달합니다.",
       facts.length > 0
         ? "현재까지 확인된 영속 기록:"
         : "실행 완료를 뒷받침하는 영속 기록은 없습니다.",
@@ -51,7 +51,7 @@ export function guidedOperationalFallback(input: OperationalFacts): string {
     ].join("\n");
   }
   return [
-    "The model connection or execution window ended before I could finish the answer.",
+    "I could not finish the answer, so I am reporting only the confirmed durable records.",
     facts.length > 0
       ? "Confirmed durable records:"
       : "No durable record confirms completed execution.",

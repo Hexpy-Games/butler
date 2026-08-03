@@ -1,5 +1,5 @@
 import type { RuntimeMessageLanguage } from "../messages.ts";
-import type { ToolProgressSummary } from "../../tool-support/index.ts";
+import type { ToolProgressSummary } from "../../tools/tool-support.ts";
 import { toolProgressLabelMessage } from "./label-messages.ts";
 
 const TOOL_PROGRESS_LABEL_KEYS_BY_NAME = {

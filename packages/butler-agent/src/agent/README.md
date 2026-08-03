@@ -16,7 +16,8 @@ policy, output contracts, and public event contracts.
 - `tools/`: native tool groups. Immediate subdirectories are group names, and
   each second-level directory is an exact snake_case provider-visible tool name
   with its own definition and executor entrypoint.
-- `tool-support/`: shared helpers for native tool execution that are not tools.
+- `tools/ shared support files: `: shared helpers for native tool execution and bounded
+  provider result projection that are not provider-visible tools.
 - `policy/`: runtime, routing, session-context, and tool-filtering policies.
 - `output/`: localized messages, final-output contracts, tool progress, and
   session-title helpers.

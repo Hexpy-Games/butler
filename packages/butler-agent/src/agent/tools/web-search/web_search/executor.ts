@@ -11,7 +11,7 @@ import {
   type SmartSearchPlanningInput,
   type SmartSearchPlanningResult,
 } from "../../../../integrations/search/planning.ts";
-import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
+import { evidenceReceipt, urlReferences } from "../../tool-executor-support.ts";
 import {
   coverageBudgetForSearchOutput,
   readRequirementForSearchOutput,
