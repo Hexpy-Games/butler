@@ -19,10 +19,18 @@ export function publicToolTitle(
   if (name === "read_file" || name === "grep_files") return "작업공간 확인";
   if (name === "write_file" || name === "edit_file") return "작업공간 변경";
   if (name === "inspect_workspace_page") return "작업 화면 확인";
+  if (name === "tool_search") return "사용 가능한 도구 찾기";
+  if (name === "tool_describe") return "도구 사용법 확인";
+  if (name === "tool_call") {
+    const target = progressiveTargetToolName(args.id);
+    return target ? publicToolTitle(target, toolCallArguments(args)) : "도구 실행";
+  }
   if (name === "run_command") {
     return boundedTitle(safeToolInputLabel(name, args, "ran_command"));
   }
-  if (name.startsWith("project_ledger")) return "프로젝트 기록 확인";
+  if (name.startsWith("project_ledger")) {
+    return isProjectLedgerMutation(name) ? "프로젝트 기록 변경" : "프로젝트 기록 확인";
+  }
   if (isDurableWorkTool(name)) return "작업 진행 기록";
   return "도구 사용";
 }
@@ -160,6 +168,24 @@ function checkpointTitle(stage: unknown): string {
   if (stage === "validation") return "검증 진행 확인";
   if (stage === "reporting") return "보고 준비 확인";
   return "작업 진행 확인";
+}
+
+function progressiveTargetToolName(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const separator = value.indexOf(":");
+  const name = separator >= 0 ? value.slice(separator + 1) : value;
+  return name && name !== "tool_call" ? name : undefined;
+}
+
+function toolCallArguments(args: Record<string, unknown>): Record<string, unknown> {
+  const value = args.arguments;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function isProjectLedgerMutation(name: string): boolean {
+  return /_(?:create|update|complete|archive|restore|delete|index|render)$/u.test(name);
 }
 
 function groupedToolLabels(titles: string[]): string {
