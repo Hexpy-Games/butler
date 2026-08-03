@@ -505,7 +505,7 @@ test("a presented open Work binds only at the first real tool and exposes its re
   }
 });
 
-test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can still deliver", async () => {
+test("an action-key summary without optional description cannot trap the model loop", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-r3-work-nonblocking-"));
   const dbPath = join(root, "butler.sqlite");
   const stores = openBtccSqliteStores({
@@ -520,62 +520,25 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
       dbPath,
       stores,
       modelRound: scriptedModelRound([
-        () => toolResponse([toolCall("nonblocking-checkpoint-1", "record_work_checkpoint", {
-          next_stage: "execution",
-          public_summary: "파일을 작성합니다.",
-          next_step: "결과를 확인합니다.",
+        () => toolResponse([toolCall("nonblocking-plan-summary", "replace_work_plan", {
+          objective: "Create answer.txt",
+          actions: [{
+            action_key: "요청한 답변 파일 작성",
+            dependency_keys: [],
+          }],
+          checks: ["answer.txt contains the requested result"],
         })]),
         (request) => {
-          expect(lastToolOutput(request, "record_work_checkpoint")).toMatchObject({
-            ok: false,
-            error: { code: "work_update_rejected" },
-          });
-          return toolResponse([toolCall("nonblocking-write-1", "write_file", {
-            path: "answer.txt",
-            content: "actual result\n",
-          })]);
-        },
-        (request) => {
-          expect(lastToolOutput(request, "write_file")).toMatchObject({
-            ok: false,
-            error: { code: "effect_work_required" },
-          });
-          return toolResponse([toolCall("nonblocking-plan-1", "replace_work_plan", {
-            objective: "Create answer.txt",
-            actions: [{
-              action_key: "write_answer",
-              description: "Write the requested answer file",
-              dependency_keys: [],
-              effect: {
-                capability: "write_file",
-                target: "workspace:answer.txt",
-              },
-            }],
-            checks: ["answer.txt contains the requested result"],
-          })]);
-        },
-        (request) => {
-          expect(lastToolOutput(request, "replace_work_plan")).toMatchObject({ ok: true });
-          return toolResponse([toolCall("nonblocking-plan-review-1", "record_work_review", {
-            subject: "plan",
-            verdict: "accept",
-            summary: "The exact file target matches the request.",
-            corrections: [],
-          })]);
-        },
-        (request) => {
-          expect(lastToolOutput(request, "record_work_review")).toMatchObject({ ok: true });
-          return toolResponse([toolCall("nonblocking-write-2", "write_file", {
-            path: "answer.txt",
-            content: "actual result\n",
-          })]);
-        },
-        (request) => {
-          expect(lastToolOutput(request, "write_file")).toMatchObject({
+          expect(lastToolOutput(request, "replace_work_plan")).toMatchObject({
             ok: true,
-            effect: "workspace_file_write",
+            work: {
+              actions: [{
+                action_key: "요청한 답변 파일 작성",
+                status: "pending",
+              }],
+            },
           });
-          return { text: "요청하신 파일을 실제로 작성했습니다.", toolCalls: [] };
+          return { text: "행동 요약이 유지된 계획으로 계속 진행할 수 있습니다.", toolCalls: [] };
         },
       ]),
     });
@@ -583,12 +546,16 @@ test("invalid Work bookkeeping is ordinary feedback and a corrected Plan can sti
     expect(await runtime.runTurn(command(root, turnId, "answer.txt를 만들어 주세요.")))
       .toMatchObject({
         kind: "delivered",
-        content: "요청하신 파일을 실제로 작성했습니다.",
+        content: "행동 요약이 유지된 계획으로 계속 진행할 수 있습니다.",
       });
-    expect(readFileSync(join(root, "answer.txt"), "utf8")).toBe("actual result\n");
     expect(await stores.durableWork.boundWorkForTurn(turnId)).toMatchObject({
       status: "open",
-      latestPlanReview: { verdict: "accept" },
+      currentPlan: {
+        actions: [{
+          actionKey: "요청한 답변 파일 작성",
+          description: "요청한 답변 파일 작성",
+        }],
+      },
     });
     expect((await stores.turns.findTurn(turnId))?.route).toBe("managed");
   } finally {

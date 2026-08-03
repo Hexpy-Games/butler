@@ -152,21 +152,21 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
     }],
   });
 
-  const acceptedWithoutDuplicatedDescription = await executeDurableWorkTool({
+  const acceptedWithActionKeySummaryOnly = await executeDurableWorkTool({
     service,
     scope,
     mutationCallId: "call-plan-with-semantic-key-only",
     name: "replace_work_plan",
     args: {
       objective: "Create the requested report",
-      actions: [{ action_key: "research_sources" }],
+      actions: [{ action_key: "Research the requested sources" }],
     },
   });
-  expect(acceptedWithoutDuplicatedDescription).toMatchObject({ ok: true });
+  expect(acceptedWithActionKeySummaryOnly).toMatchObject({ ok: true });
   expect(received).toMatchObject({
     actions: [{
-      actionKey: "research_sources",
-      description: "research_sources",
+      actionKey: "Research the requested sources",
+      description: "Research the requested sources",
     }],
   });
 
@@ -243,7 +243,10 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
     name: "replace_work_plan",
     args: {
       objective: "Create the requested report",
-      actions: [{ action_key: "research" }],
+      actions: [{
+        action_key: "research",
+        description: "Research the requested evidence",
+      }],
     },
   });
 
@@ -352,7 +355,10 @@ test("R3 generic Work rejection returns the current guardrail view", async () =>
     args: {
       start_new: true,
       objective: "Start unrelated Work",
-      actions: [{ action_key: "restart" }],
+      actions: [{
+        action_key: "restart",
+        description: "Start the unrelated Work",
+      }],
     },
   });
 

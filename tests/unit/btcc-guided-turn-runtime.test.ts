@@ -50,7 +50,12 @@ test("Guided Turn answers directly through only durable admission and delivery s
     });
     expect(replay).toEqual(first);
     expect(calls).toBe(1);
-    expect(states).toEqual(["delivery_committed", "delivered", "delivered"]);
+    expect(states).toEqual([
+      "admitted",
+      "delivery_committed",
+      "delivered",
+      "delivered",
+    ]);
 
     const db = new Database(dbPath, { readonly: true });
     try {

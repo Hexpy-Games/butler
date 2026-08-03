@@ -80,6 +80,9 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
       await this.publishTerminal(progress, turn);
       return projectTerminalOutcome(turn);
     }
+    if (turn.semanticState === "admitted") {
+      await publishState(progress, turn);
+    }
     if (turn.semanticState !== "delivery_committed") {
       turn = await this.runAgentAndCommit(turn, progress);
     }

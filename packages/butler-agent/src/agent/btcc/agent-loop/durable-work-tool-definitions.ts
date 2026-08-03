@@ -45,9 +45,13 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
             action_key: {
               type: "string",
               minLength: 1,
-              description: "A concise, stable, user-readable action label unique within this plan; keep it within 32 characters and put the full outcome in description.",
+              description: "The concise stable user-visible action summary used for future progress updates, dependencies, and model continuation. Name the concrete action or outcome in the user's language, not a generic stage word.",
             },
-            description: { type: "string", minLength: 1 },
+            description: {
+              type: "string",
+              minLength: 1,
+              description: "Optional fuller detail for the action. Omit it when action_key already states the complete intended action clearly.",
+            },
             dependency_keys: {
               type: "array",
               items: { type: "string", minLength: 1 },

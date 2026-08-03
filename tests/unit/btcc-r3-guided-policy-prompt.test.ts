@@ -130,6 +130,12 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "Keep the Work objective as the overall user outcome across Turns",
   );
   expect(instructions).toContain(
+    "action_key as a stable concise user-visible summary",
+  );
+  expect(instructions).toContain(
+    "Use optional description only for fuller detail",
+  );
+  expect(instructions).toContain(
     "accepted Plan as a whole covers contained workspace writes",
   );
   expect(instructions).toContain("do not enumerate files");
@@ -257,6 +263,12 @@ test("R3 Plan tool describes workspace writes as accepted-Plan work", () => {
   );
   expect(schema).toContain("do not enumerate files");
   expect(schema).not.toContain("workspace:<relative-path>");
+  expect(schema).toContain("stable user-visible action summary");
+  expect(schema).toContain("Optional fuller detail");
+  const actionSchema = (replacePlan?.parameters as {
+    properties: { actions: { items: { required?: string[] } } };
+  } | undefined)?.properties.actions.items;
+  expect(actionSchema?.required).toEqual(["action_key"]);
 });
 
 test("R3 Work scope follows explicit storage mode instead of project shell presence", () => {
