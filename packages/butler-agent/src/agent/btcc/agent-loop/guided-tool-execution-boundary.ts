@@ -35,7 +35,6 @@ export function createGuidedToolExecutionBoundary(input: {
   effectService: GuidedEffectService;
   accessMode: GuidedEffectAccessMode;
   signal: AbortSignal;
-  onAppliedEffect?: () => void;
   executeCommand(call: ButlerToolCall): Promise<unknown>;
   resolvePersistentEffect(
     call: ButlerToolCall,
@@ -89,7 +88,6 @@ export function createGuidedToolExecutionBoundary(input: {
         effect_status: outcome.status,
       });
     }
-    if (!outcome.replayed) input.onAppliedEffect?.();
     return withReceipt(outcome.result, {
       receipt_id: outcome.receipt.receiptId,
       capability: outcome.receipt.capability,

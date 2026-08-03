@@ -35,10 +35,9 @@ afterEach(() => {
 });
 
 describe("Butler actual tool execution boundary", () => {
-  test("only a fresh applied journal outcome emits durable progress", async () => {
+  test("effect receipts preserve fresh and replayed journal outcomes", async () => {
     const work = reviewedWork();
     let replayed = false;
-    let progressSignals = 0;
     const effectService = {
       async execute() {
         return {
@@ -74,7 +73,6 @@ describe("Butler actual tool execution boundary", () => {
       effectService,
       accessMode: "full_access",
       signal: new AbortController().signal,
-      onAppliedEffect: () => progressSignals += 1,
       executeCommand: async () => ({ ok: true }),
       resolvePersistentEffect: async () => ({
         target: "/private/report.md",
@@ -100,11 +98,13 @@ describe("Butler actual tool execution boundary", () => {
       execute: async () => ({ ok: true }),
     });
 
-    await execute();
-    expect(progressSignals).toBe(1);
+    expect(await execute()).toMatchObject({
+      effect_receipt: { replayed: false },
+    });
     replayed = true;
-    await execute();
-    expect(progressSignals).toBe(1);
+    expect(await execute()).toMatchObject({
+      effect_receipt: { replayed: true },
+    });
   });
 
   test("direct and tool_call inner native calls cross the same boundary", async () => {

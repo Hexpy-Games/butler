@@ -1,7 +1,7 @@
 import type {
   PublicWorkObligationKind,
   ToolAuditEntry,
-} from "../../tool-support/index.ts";
+} from "../../tools/tool-support.ts";
 import {
   buildEvidenceCapabilityLedger,
   missingCompletionObligationsFromLedger,

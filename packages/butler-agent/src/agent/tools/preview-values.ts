@@ -1,3 +1,4 @@
+/** Shared tool support value bounds used by provider result projections. */
 export function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>

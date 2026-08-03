@@ -13,7 +13,7 @@ import {
 } from "../cognition/memory/retrieval-planning.ts";
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
 import type { BtccAgentLoopToolDefinition } from "../btcc/agent-loop/index.ts";
-import type { PublicWorkObligationKind } from "../tool-support/index.ts";
+import type { PublicWorkObligationKind } from "./tool-support.ts";
 import {
   completionObligationEvidenceReceiptsFromResult,
   hasEvidenceCapabilityReceiptField,

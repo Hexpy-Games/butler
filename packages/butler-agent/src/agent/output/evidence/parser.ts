@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sanitizePublicText } from "../../events/turn-events.ts";
-import type { PublicWorkObligationKind } from "../../tool-support/index.ts";
+import type { PublicWorkObligationKind } from "../../tools/tool-support.ts";
 import { safeEvidenceReference, unsupportedSatisfiesIssues } from "./policy.ts";
 import {
   EVIDENCE_CAPABILITY_EVIDENCE_KINDS,

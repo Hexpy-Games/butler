@@ -7,7 +7,7 @@ import type {
 } from "../../butler-tools.ts";
 import type { ExternalToolCatalogInput } from "../../progressive-catalog.ts";
 import type { NativeToolAvailabilityOverrides } from "../../types.ts";
-import { validateJsonObjectSchema } from "../../../model-tool-loop/index.ts";
+import { validateJsonObjectSchema } from "../../../tools/tool-support.ts";
 import { disabledToolRecovery } from "../audit.ts";
 import { currentToolNamesFromInput } from "../scope.ts";
 import { createToolDescribeToolHandler } from "../tool_describe/executor.ts";

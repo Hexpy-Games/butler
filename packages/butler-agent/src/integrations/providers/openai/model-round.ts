@@ -3,7 +3,7 @@ import type {
   ModelRoundRequest,
   ModelRoundResult,
 } from "../../../agent/btcc/ports/model-round.ts";
-import { agentLoopImageDataUrl } from "../../../agent/model-tool-loop/tool-result-media.ts";
+import { agentLoopImageDataUrl } from "../../../agent/tools/tool-result-media.ts";
 import { afterAttributedModelResponse, beforeAttributedModelRequest, extractResponseText, getFunctionCalls, modelFacingFunctionTools, openAIInputWithAttachments, parseToolArguments } from "../shared/runtime-support.ts";
 import { buildReasoningConfig, resolveOpenAIModel, resolveOpenAIPromptCacheConfig } from "./config.ts";
 import { createOpenAIResponse, functionCallContinuationItems, toCodexStatelessInput } from "./responses.ts";
@@ -60,12 +60,7 @@ export async function runOpenAIModelRound(
     instructions: request.instructions,
     ...(request.tools.length > 0
       ? {
-          tools: modelFacingFunctionTools(request.tools.map((tool) => ({
-            type: "function" as const,
-            name: tool.name,
-            description: tool.description,
-            parameters: tool.parameters,
-          }))),
+          tools: modelFacingFunctionTools(request.tools),
         }
       : {}),
     tool_choice: request.toolChoice ?? "auto",

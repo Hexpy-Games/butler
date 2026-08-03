@@ -6,7 +6,7 @@ import type {
   EvidenceReceipt,
   EvidenceReference,
   PublicWorkObligationKind,
-} from "./contracts.ts";
+} from "./tool-support-contracts.ts";
 
 const TOOL_PROCESS_ENV_ALLOWLIST = [
   "PATH",

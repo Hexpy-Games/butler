@@ -1,4 +1,4 @@
-import type { BridgeToolAuditEvent } from "../tools/tool-bridge/audit.ts";
+import type { BridgeToolAuditEvent } from "./tool-bridge/audit.ts";
 import type { EvidenceCapabilityReceipt } from "../output/evidence/types.ts";
 
 export type PublicWorkObligationKind =

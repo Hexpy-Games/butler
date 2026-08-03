@@ -42,7 +42,7 @@ import {
   resolveRuntimeMessageLanguage,
   runtimeMessages,
 } from "../../packages/butler-agent/src/agent/output/messages.ts";
-import { isToolBatchCompletedHandoffText } from "../../packages/butler-agent/src/agent/model-tool-loop/index.ts";
+import { isToolBatchCompletedHandoffText } from "../../packages/butler-agent/src/agent/btcc/agent-loop/tool-batch-handoff.ts";
 import {
   isContainerRuntime,
   resolveOAuthListenHost,

@@ -1,5 +1,5 @@
 import type { RuntimeMessageLanguage } from "../messages.ts";
-import type { ToolProgressSummary } from "../../tool-support/index.ts";
+import type { ToolProgressSummary } from "../../tools/tool-support.ts";
 import { safeToolDetailRows, safeToolInputLabel } from "./arguments.ts";
 import { contextualToolProgressSummary } from "./contextual.ts";
 import { workBlockLabelForTool } from "./labels.ts";

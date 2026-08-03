@@ -5,7 +5,7 @@ import {
 import {
   createToolResultModelPreviewContext,
   toolResultPayloadForProvider,
-} from "../../packages/butler-agent/src/agent/model-tool-loop/index.ts";
+} from "../../packages/butler-agent/src/agent/tools/tool-support.ts";
 
 test("hosted successful results preserve their exact structured payload", () => {
   const logs: string[] = [];

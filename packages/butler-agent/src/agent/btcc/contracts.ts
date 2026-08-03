@@ -1,6 +1,6 @@
 import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
-import type { ToolProgressSummary } from "../tool-support/index.ts";
+import type { ToolProgressSummary } from "../tools/tool-support.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 

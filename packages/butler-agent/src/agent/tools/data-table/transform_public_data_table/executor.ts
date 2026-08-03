@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { sanitizePublicText } from "../../../events/turn-events.ts";
-import { evidenceReceipt } from "../../../tool-support/executor-support.ts";
+import { evidenceReceipt } from "../../tool-executor-support.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 

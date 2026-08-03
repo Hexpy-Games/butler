@@ -1,3 +1,4 @@
+/** BTCC agent-loop owns the single empty-round recovery observation. */
 const EMPTY_RESPONSE_RECOVERY_OBSERVATION =
   "The previous response contained no text or tool call. Continue with a useful answer or tool call.";
 

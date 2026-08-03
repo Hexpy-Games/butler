@@ -1,3 +1,4 @@
+/** Provider result serialization is a shared tool concern, not a loop. */
 import {
   structuredToolResultModelPreview,
   type ToolResultModelPreviewContext,

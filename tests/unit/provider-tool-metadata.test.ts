@@ -1,59 +1,51 @@
 import { expect, test } from "bun:test";
-import {
-  activeFunctionTools,
-  functionToolToAgentTool,
-  modelFacingFunctionTools,
-} from
+import type { ModelRoundTool } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
+import { modelFacingFunctionTools } from
   "../../packages/butler-agent/src/integrations/providers/shared/tools.ts";
 
-test("provider tool conversion preserves concurrency safety", () => {
-  expect(functionToolToAgentTool({
-    type: "function",
+test("provider model-round tool conversion preserves concurrency safety internally", () => {
+  const tool: ModelRoundTool = {
     name: "web_search",
     description: "Search the web",
     parameters: { type: "object", properties: {} },
     concurrencySafe: true,
-  })).toEqual({
+  };
+
+  expect(tool.concurrencySafe).toBe(true);
+  expect(modelFacingFunctionTools([tool])).toEqual([{
+    type: "function",
     name: "web_search",
     description: "Search the web",
-    inputSchema: { type: "object", properties: {} },
-    concurrencySafe: true,
-  });
+    parameters: { type: "object", properties: {} },
+  }]);
 });
 
-test("provider tool conversion keeps unspecified concurrency conservative", () => {
-  expect(functionToolToAgentTool({
-    type: "function",
+test("provider model-round tool conversion keeps unspecified concurrency conservative", () => {
+  const tool: ModelRoundTool = {
     name: "replace_work_plan",
     description: "Replace a durable plan",
     parameters: { type: "object", properties: {} },
-  }).concurrencySafe).toBeUndefined();
-});
-
-test("provider boundary retains concurrency internally but omits it from the model-visible schema", () => {
-  const options = {
-    prompt: "search",
-    tools: [{
-      type: "function" as const,
-      name: "web_search",
-      description: "Search the web",
-      parameters: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "Search query" },
-        },
-      },
-      concurrencySafe: true,
-    }],
-    executeTool: async () => ({ ok: true }),
   };
 
-  const active = activeFunctionTools(options);
-  expect(active[0]?.concurrencySafe).toBe(true);
-  expect(functionToolToAgentTool(active[0]!).concurrencySafe).toBe(true);
+  expect(tool.concurrencySafe).toBeUndefined();
+  expect(modelFacingFunctionTools([tool])[0]).not.toHaveProperty("concurrencySafe");
+});
 
-  const modelFacing = modelFacingFunctionTools(active);
-  expect(modelFacing).toEqual([{
+test("provider model-facing schemas omit nested descriptions and concurrency metadata", () => {
+  const tool: ModelRoundTool = {
+    name: "web_search",
+    description: "Search the web",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query" },
+      },
+    },
+    concurrencySafe: true,
+  };
+
+  expect(modelFacingFunctionTools([tool])).toEqual([{
     type: "function",
     name: "web_search",
     description: "Search the web",
@@ -64,5 +56,4 @@ test("provider boundary retains concurrency internally but omits it from the mod
       },
     },
   }]);
-  expect(modelFacing[0]).not.toHaveProperty("concurrencySafe");
 });

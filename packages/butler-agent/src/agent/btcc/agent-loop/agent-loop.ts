@@ -1,15 +1,9 @@
-import {
-  createToolResultModelPreviewContext,
-  serializeToolResultPayloadForProvider,
-} from "../../model-tool-loop/tool-result-serialization.ts";
+import { createToolResultModelPreviewContext } from
+  "../../tools/tool-result-serialization.ts";
 import type { ToolResultModelPreviewContext } from
-  "../../model-tool-loop/tool-result-model-preview.ts";
-import {
-  extractAgentLoopImageAttachments,
-  withoutAgentLoopImageAttachments,
-} from "../../model-tool-loop/tool-result-media.ts";
+  "../../tools/tool-result-model-preview.ts";
 import { emptyResponseRecoveryObservation } from
-  "../../model-tool-loop/empty-response-recovery.ts";
+  "./empty-response-recovery.ts";
 import type {
   BtccAgentLoopEvent,
   BtccAgentLoopInput,
@@ -25,6 +19,8 @@ import {
 } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
+import { renderPartialLimitResponse } from "./partial-limit-response.ts";
+import { toolResultToMessage } from "./tool-result-message.ts";
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
@@ -35,48 +31,6 @@ function emit(
 ): void {
   events.push(event);
   onEvent?.(event);
-}
-
-function toolResultToMessage(input: {
-  result: BtccAgentLoopToolResult;
-  modelPreviewContext: ToolResultModelPreviewContext;
-}): BtccAgentLoopMessage {
-  const imageAttachments = extractAgentLoopImageAttachments(
-    input.result.output,
-    input.result.name,
-  );
-  const providerOutput = withoutAgentLoopImageAttachments(input.result.output);
-  const payload = input.result.ok
-    ? { ok: true, output: providerOutput }
-    : {
-        ok: false,
-        error: input.result.error ?? "unknown tool error",
-        ...(providerOutput !== undefined ? { output: providerOutput } : {}),
-      };
-  return {
-    role: "tool",
-    toolCallId: input.result.toolCallId,
-    name: input.result.name,
-    content: serializeToolResultPayloadForProvider(payload, {
-      toolName: input.result.name,
-      context: input.modelPreviewContext,
-    }),
-    ...(imageAttachments.length > 0 ? { imageAttachments } : {}),
-  };
-}
-
-function renderPartialLimitResponse(results: BtccAgentLoopToolResult[]): string {
-  const lines = [
-    "I reached the available tool budget before a complete final answer was produced.",
-  ];
-  if (results.length > 0) {
-    lines.push("What I completed:");
-    for (const result of results) {
-      lines.push(`- ${result.name}: ${result.ok ? "ok" : `failed (${result.error ?? "unknown error"})`}`);
-    }
-  }
-  lines.push("What remains: a final synthesis may need another turn.");
-  return lines.join("\n");
 }
 
 export async function runBtccAgentLoop(

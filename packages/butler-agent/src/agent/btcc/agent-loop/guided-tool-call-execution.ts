@@ -29,7 +29,6 @@ import {
   safeBindOpenWork,
 } from "./guided-work-runtime.ts";
 import {
-  ordinaryToolError,
   publishOperation,
   rememberDescribedTools,
   safeJson,
@@ -43,8 +42,9 @@ import {
 } from "../projection/index.ts";
 import { createGuidedToolResumePool } from "./guided-tool-resume-pool.ts";
 import { guidedToolOccurrence } from "./guided-tool-occurrence.ts";
+import { finishFailedTool } from "./guided-tool-failure.ts";
 
-type GuidedToolCallExecutionInput = {
+export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
   signal: AbortSignal;
   progress?: BtccTurnProgressObserver;
@@ -57,7 +57,6 @@ type GuidedToolCallExecutionInput = {
   durableWork: DurableWorkService;
   toolJournal: SqliteGuidedToolJournal;
   executeButlerTool: ContextualButlerToolExecutor;
-  onDurableProgress?: () => void;
 };
 
 export function createGuidedToolCallExecutor(
@@ -209,7 +208,6 @@ export function createGuidedToolCallExecutor(
         await safeAttachToolResult(input, input.workScope, callId);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
-        input.onDurableProgress?.();
         await activityProjection.publishAccepted(activity);
         await publishWorkProgress(
           input.progress,
@@ -299,50 +297,6 @@ async function executeFreshTool(
     ...call,
     signal: toolSignal,
   }, { effectOccurrenceId: callId });
-}
-
-async function finishFailedTool(
-  input: GuidedToolCallExecutionInput,
-  toolName: string,
-  callId: string,
-  effectiveToolName: string,
-  args: Record<string, unknown>,
-  toolSignal: AbortSignal,
-  error: unknown,
-  activity: GuidedActivityBinding,
-): Promise<unknown> {
-  const cancelled = input.signal.aborted || toolSignal.aborted;
-  if (!cancelled) {
-    const result = ordinaryToolError(effectiveToolName, error);
-    input.toolJournal.finish({ callId, status: "completed", result });
-    if (!isDurableWorkTool(toolName)) {
-      await safeAttachToolResult(input, input.workScope, callId);
-    }
-    await publishOperation(input.progress, {
-      turnId: input.turn.turnId,
-      activityId: activity.activityId,
-      requestId: callId,
-      toolName: effectiveToolName,
-      args,
-      status: "failed",
-      resultJson: safeJson(result),
-    });
-    return result;
-  }
-  input.toolJournal.finish({
-    callId,
-    status: "cancelled",
-    errorCode: "cancelled",
-  });
-  await publishOperation(input.progress, {
-    turnId: input.turn.turnId,
-    activityId: activity.activityId,
-    requestId: callId,
-    toolName: effectiveToolName,
-    args,
-    status: "cancelled",
-  });
-  throw error;
 }
 
 function throwIfToolAborted(signal: AbortSignal): void {

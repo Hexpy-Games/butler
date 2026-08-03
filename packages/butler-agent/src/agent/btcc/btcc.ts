@@ -1,26 +1,21 @@
 import type {
   Btcc,
   BtccHost,
-  BtccProgressDestination,
-  BtccProgressEventRepository,
   BtccStopRequest,
   BtccTurnOutcome,
-  BtccTurnPreparation,
   BtccTurnRequest,
-  BtccTurnRuntime,
   BtccWakeProjectionHost,
 } from "./contracts.ts";
 import {
   createBtccProgressProjectionHost,
-  projectTurnProgressToEvents,
 } from "./projection/index.ts";
-import type { TurnStateRepository } from "./turn/index.ts";
+import {
+  createTurnFacade,
+  type TurnFacade,
+  type TurnFacadeDependencies,
+} from "./turn/index.ts";
 
-export type BtccDependencies = {
-  runtime: BtccTurnRuntime;
-  preparation: BtccTurnPreparation;
-  progressEvents: BtccProgressEventRepository;
-  turns: Pick<TurnStateRepository, "findTurn">;
+export type BtccDependencies = TurnFacadeDependencies & {
   wake?: BtccWakeProjectionHost;
   close?: () => Promise<void> | void;
 };
@@ -42,6 +37,7 @@ export function createBtcc(
 ): BtccAssembly {
   const activeTurns = new Map<string, Promise<BtccTurnOutcome>>();
   const sessionTails = new Map<string, Promise<void>>();
+  const turn: TurnFacade = createTurnFacade(dependencies);
   let closePromise: Promise<void> | null = null;
 
   const runTurn = (request: BtccTurnRequest): Promise<BtccTurnOutcome> => {
@@ -52,7 +48,7 @@ export function createBtcc(
     const previous = sessionTails.get(request.sessionId);
     const running = (async () => {
       if (previous) await previous;
-      return await runPreparedTurn(request);
+      return await turn.run(request);
     })();
     activeTurns.set(request.turnId, running);
     const tail = running.then(() => undefined, () => undefined);
@@ -74,78 +70,9 @@ export function createBtcc(
     return running;
   };
 
-  const runPreparedTurn = async (request: BtccTurnRequest): Promise<BtccTurnOutcome> => {
-    const prepared = await dependencies.preparation.prepare(request);
-    const admittedTurn = await dependencies.turns.findTurn(request.turnId);
-    const progressDestination = admittedTurn?.progressDestination ??
-      destinationForRequest(request);
-    const progress = projectTurnProgressToEvents(async (event) => {
-      prepared.recordEvent(event);
-      dependencies.progressEvents.append({
-        sessionId: request.sessionId,
-        turnId: request.turnId,
-        destination: progressDestination,
-        event,
-      });
-    });
-    const runtimeOutcome = await dependencies.runtime.runTurn(
-      prepared.command,
-      progress,
-      async (runtimeFresh) => {
-        if (!runtimeFresh || !prepared.isFresh) return;
-        const admitted = await dependencies.turns.findTurn(request.turnId).catch(() => null);
-        if (admitted?.semanticState === "cancelled") return;
-        prepared.recordEvent({ kind: "turn.started" });
-        dependencies.progressEvents.append({
-          sessionId: request.sessionId,
-          turnId: request.turnId,
-          destination: progressDestination,
-          event: { kind: "turn.started" },
-        });
-      },
-    );
-    const outcome: BtccTurnOutcome = {
-      ...runtimeOutcome,
-      admission: prepared.isFresh ? "fresh" : "replay",
-    };
-    if (outcome.kind === "delivered" || outcome.kind === "already_delivered") {
-      await prepared.complete(outcome);
-    } else if (outcome.kind === "cancelled" || outcome.kind === "already_cancelled") {
-      await prepared.cancel(outcome);
-    }
-    return outcome;
-  };
-
   const stopTurn = async (request: BtccStopRequest): Promise<BtccTurnOutcome> => {
     if (closePromise) throw new Error("BTCC is closing");
-    const outcome = await dependencies.runtime.stopTurn({
-      kind: "stop",
-      turnId: request.turnId,
-    });
-    if (outcome.kind !== "cancelled" && outcome.kind !== "already_cancelled") {
-      return outcome;
-    }
-
-    const turn = await dependencies.turns.findTurn(request.turnId).catch(() => null);
-    if (!turn || turn.semanticState !== "cancelled") {
-      // Stop-before-admission is retained by the durable Stop request.  The
-      // queued Turn will enter this same path and commit the canonical event.
-      return outcome.kind === "cancelled"
-        ? { kind: "fenced_pending_persistence", turnId: request.turnId }
-        : outcome;
-    }
-    const destination = turn.progressDestination ??
-      dependencies.progressEvents.forTurn(turn.turnId)[0]?.destination;
-    if (!destination) {
-      return { kind: "fenced_pending_persistence", turnId: request.turnId };
-    }
-    dependencies.progressEvents.append({
-      sessionId: turn.sessionId,
-      turnId: turn.turnId,
-      destination,
-      event: { kind: "turn.cancelled" },
-    });
-    return outcome;
+    return await turn.stop(request);
   };
 
   const host: BtccHost = {
@@ -163,14 +90,5 @@ export function createBtcc(
   return {
     btcc: { runTurn, stopTurn },
     host,
-  };
-}
-
-function destinationForRequest(request: BtccTurnRequest): BtccProgressDestination {
-  return request.progressDestination ?? {
-    transport: request.transport,
-    accountId: request.accountId,
-    peer: { ...request.peer },
-    replyToMessageId: request.message.id,
   };
 }

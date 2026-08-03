@@ -1,3 +1,4 @@
+/** Shared tool support owns bounded provider result projections. */
 import {
   boundedHeadTailText,
   boundedText,

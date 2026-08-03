@@ -1,3 +1,4 @@
+import type { ModelRoundTool } from "../../../agent/btcc/ports/model-round.ts";
 import type { ButlerRuntime, OpenAIPromptCacheConfig, PromptCachePolicySummary, PromptCacheRetention, ReasoningEffort, RuntimeControlPlaneSummary } from "../runtime-contracts.ts";
 import { DEFAULT_CODEX_MODEL } from "./models.ts";
 import { configuredDefaultModelRef } from "../shared/model-routing.ts";
@@ -52,8 +53,7 @@ export const LEGACY_MODEL_MAP: Array<{
 
 
 
-export const SHELL_TOOL = {
-  type: "function",
+export const SHELL_TOOL: ModelRoundTool = {
   name: "run_shell",
   description:
     "Run a single non-interactive command in the local project workspace through Butler's platform-neutral command executor. Prefer cross-platform executables with explicit arguments, rg for search, and structured extraction or case-insensitive matching for config, script, or log questions.",
@@ -76,7 +76,7 @@ export const SHELL_TOOL = {
     },
     required: ["command"],
   },
-} as const;
+};
 
 
 

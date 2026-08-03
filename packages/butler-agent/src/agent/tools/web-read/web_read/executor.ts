@@ -3,7 +3,7 @@ import {
   browserObservationCapabilityReceipt,
   createEvidenceCapabilityReceipt,
 } from "../../../output/evidence/ledger.ts";
-import { evidenceReceipt, urlReferences } from "../../../tool-support/executor-support.ts";
+import { evidenceReceipt, urlReferences } from "../../tool-executor-support.ts";
 import { publicWebReadEvidenceItems } from "../../../output/evidence/public-web-evidence.ts";
 
 type WebReadToolCall = { args: Record<string, unknown>; signal?: AbortSignal };

@@ -1,3 +1,4 @@
+/** Compatibility envelope interpreted by the BTCC-owned model/tool loop. */
 export const TOOL_BATCH_HANDOFF_SCHEMA = "butler.tool-batch-handoff.v1" as const;
 
 export function toolBatchCompletedHandoffText(): string {

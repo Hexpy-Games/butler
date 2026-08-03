@@ -44,7 +44,6 @@ import { createGuidedToolCallExecutor } from
   "./guided-tool-call-execution.ts";
 import { runGuidedAgentLoopWithOperationalReport } from
   "./guided-operational-report.ts";
-import { GuidedOperationalLease } from "./guided-operational-lease.ts";
 import { createGuidedActivityProjection } from
   "../projection/index.ts";
 import { isDurableWorkCompletionValidationCurrent } from
@@ -61,14 +60,10 @@ export function createProductionGuidedTurnAgent(input: {
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
-  turnLeaseMs?: number;
-  absoluteTurnLeaseMs?: number;
-  finalReportMs?: number;
 }): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
     async run({ turn, signal, progress }): Promise<BtccAgentLoopResult> {
-      const leaseStartedAt = Date.now();
       const policy = guidedPolicy(turn);
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
@@ -87,13 +82,6 @@ export function createProductionGuidedTurnAgent(input: {
           initialWork = await safeLoadWorkContext(input.durableWork, workScope);
         }
       }
-      const operationalLease = new GuidedOperationalLease({
-        startedAt: leaseStartedAt,
-        leaseMs: input.turnLeaseMs,
-        absoluteLeaseMs: input.absoluteTurnLeaseMs,
-        finalReportMs: input.finalReportMs,
-        managedInitially: initialWorkBound,
-      });
       const presentedWorkId = initialWork?.work.workId;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
@@ -133,7 +121,6 @@ export function createProductionGuidedTurnAgent(input: {
           effectService,
           accessMode: policy.accessMode,
           signal,
-          onAppliedEffect: () => operationalLease.recordDurableProgress(),
           executeCommand: (call) => executeGuidedCommandCall({
             call,
             accessMode: policy.accessMode,
@@ -173,7 +160,6 @@ export function createProductionGuidedTurnAgent(input: {
         durableWork: input.durableWork,
         toolJournal: input.toolJournal,
         executeButlerTool: execute,
-        onDurableProgress: () => operationalLease.recordDurableProgress(),
       });
       const modelRound = input.modelRound ?? createProviderModelRoundPort();
       const loopOptions: BtccAgentLoopInput = {
@@ -216,11 +202,7 @@ export function createProductionGuidedTurnAgent(input: {
       const text = await runGuidedAgentLoopWithOperationalReport({
         options: loopOptions,
         parentSignal: signal,
-        leaseStartedAt,
         originalRequest: turn.originalMessage,
-        leaseMs: input.turnLeaseMs,
-        finalReportMs: input.finalReportMs,
-        operationalLease,
         async loadFacts() {
           const currentWork = await safeLoadWorkContext(input.durableWork, workScope) ??
             await safeBoundWork(input.durableWork, turn.turnId) ?? initialWork;

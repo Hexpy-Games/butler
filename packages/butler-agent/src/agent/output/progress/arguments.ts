@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import { basename } from "path";
-import type { ToolProgressSummary } from "../../tool-support/index.ts";
+import type { ToolProgressSummary } from "../../tools/tool-support.ts";
 
 export function safeToolInputLabel(
   name: string,
