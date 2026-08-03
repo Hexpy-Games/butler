@@ -184,6 +184,16 @@ function toolCallArguments(args: Record<string, unknown>): Record<string, unknow
     : {};
 }
 
+export function toolActivitySummary(name: string, title: string): string {
+  if (name === "tool_search") return "작업에 필요한 도구를 찾고 있습니다.";
+  if (name === "tool_describe") return "선택한 도구의 사용 방법을 확인하고 있습니다.";
+  if (title === "프로젝트 기록 변경") return "프로젝트 기록을 변경하고 있습니다.";
+  if (title === "프로젝트 기록 확인") return "프로젝트 기록을 확인하고 있습니다.";
+  if (title === "작업공간 변경") return "작업공간의 파일을 변경하고 있습니다.";
+  if (title === "작업공간 확인") return "작업공간의 내용을 확인하고 있습니다.";
+  return `${title} 작업을 진행하고 있습니다.`;
+}
+
 function isProjectLedgerMutation(name: string): boolean {
   return /_(?:create|update|complete|archive|restore|delete|index|render)$/u.test(name);
 }
@@ -212,6 +222,9 @@ function ordinaryToolSummary(
   const names = new Set(calls.map((call) => call.name));
   if (names.size === 1 && calls[0]?.name === "run_command") {
     return "작업 공간에서 필요한 명령을 실행하고 있습니다.";
+  }
+  if (names.size === 1 && calls[0]) {
+    return toolActivitySummary(calls[0].name, titles[0] || "도구 작업");
   }
   const grouped = groupedToolLabels(titles);
   return grouped

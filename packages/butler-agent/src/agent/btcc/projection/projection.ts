@@ -10,6 +10,8 @@ import {
   type GuidedActivityToolCall as ToolCall,
   ordinaryGroupSignature,
   publicText,
+  publicToolTitle,
+  toolActivitySummary,
 } from "./guided-activity-content.ts";
 
 export type GuidedActivityBinding = {
@@ -21,6 +23,7 @@ export type GuidedActivityBinding = {
 type ActivityGroup = GuidedActivityBinding & {
   title: string;
   summary: string;
+  summaryAuthored: boolean;
   rationale?: string;
   nextStep?: string;
   precedingGroups?: ActivityGroup[];
@@ -77,6 +80,7 @@ export function createGuidedActivityProjection(input: {
         calls: [{ name: call.name, args: call.args }],
       });
       if (pending) pending.claimed = true;
+      refineProgressiveToolGroup(group, call);
       if (activityKind(call.name) !== "ordinary") managed = true;
       if (managed && !group.deferredUntilAccepted) await publishGroup(input, group);
       return bindingFromGroup(group);
@@ -108,6 +112,7 @@ export function createGuidedActivityProjection(input: {
         deferredUntilAccepted: false,
         title: completed ? "결과 보고" : "부분 결과 안내",
         summary,
+        summaryAuthored: true,
         published: false,
       });
     },
@@ -155,6 +160,7 @@ export function createGuidedActivityProjection(input: {
       deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
       title: boundedTitle(content.title),
       summary: distinctSummary(content.title, content.summary),
+      summaryAuthored: Boolean(publicText(groupInput.text)),
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
       published: false,
@@ -166,6 +172,7 @@ export function createGuidedActivityProjection(input: {
         deferredUntilAccepted: group.deferredUntilAccepted,
         title: "요청 의도 확인",
         summary: conceptionSummary(content.summary),
+        summaryAuthored: false,
         nextStep: "요청에 맞는 작업 순서와 검증 기준을 정합니다.",
         published: false,
       };
@@ -175,6 +182,26 @@ export function createGuidedActivityProjection(input: {
     groupsById.set(group.activityId, group);
     return group;
   }
+}
+
+function refineProgressiveToolGroup(
+  group: ActivityGroup,
+  call: ToolCall & { effectiveToolName: string },
+): void {
+  if (call.name !== "tool_call" || group.published) return;
+  const effectiveArgs = toolCallArguments(call.args);
+  const title = boundedTitle(publicToolTitle(call.effectiveToolName, effectiveArgs));
+  group.title = title;
+  if (!group.summaryAuthored) {
+    group.summary = toolActivitySummary(call.effectiveToolName, title);
+  }
+}
+
+function toolCallArguments(args: Record<string, unknown>): Record<string, unknown> {
+  const value = args.arguments;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function openFinalStage(stage: WorkStage | undefined): WorkStage {
