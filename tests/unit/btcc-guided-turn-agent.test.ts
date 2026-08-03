@@ -138,6 +138,62 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   }
 });
 
+test("Guided Turn promotes persona and profile context into every provider instruction", async () => {
+  const fixture = createFixture("guided-persona-instructions");
+  try {
+    const personaRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "user",
+      scopeId: "local-user",
+      projectionClass: "profile",
+      sourceId: "active-persona-reminder",
+      sourceRevision: "persona-v1",
+      content: "## Active Persona Reminder\n\n말끝에 반드시 냥을 붙인다.",
+    });
+    const profileRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "user",
+      scopeId: "local-user",
+      projectionClass: "profile",
+      sourceId: "personalization-profile",
+      sourceRevision: "profile-v1",
+      content: "## Personalization Profile\n\nPreferred address: 사용자님",
+    });
+    const runtimeRef = fixture.stores.contextDocuments.persist({
+      scopeKind: "session",
+      scopeId: "guided-persona-instructions",
+      projectionClass: "optional_hot_cache",
+      sourceId: "runtime-state",
+      sourceRevision: "runtime-v1",
+      content: "## Turn Environment\nAssistant Response Language: Korean",
+    });
+    const instructions: Array<string | undefined> = [];
+    const agent = fixture.agent(scriptedModelRound([
+      (request) => {
+        instructions.push(request.instructions);
+        return toolResponse([toolCall("read-1", "read_file", { path: "README.md" })]);
+      },
+      (request) => {
+        instructions.push(request.instructions);
+        return { text: "확인했냥.", toolCalls: [] };
+      },
+    ]));
+    const turn = turnRecord(fixture.root, { turnId: "guided-persona-instructions" });
+    turn.context.profileRefs = [personaRef, profileRef];
+    turn.context.optionalHotCacheRefs = [runtimeRef];
+
+    await agent.run({ turn, signal: new AbortController().signal });
+
+    expect(instructions).toHaveLength(2);
+    for (const value of instructions) {
+      expect(value).toContain("Active Persona Reminder");
+      expect(value).toContain("말끝에 반드시 냥을 붙인다.");
+      expect(value).toContain("Preferred address: 사용자님");
+      expect(value).toContain("Use Korean for every user-facing message");
+    }
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided agent leaves web query planning to the selected model", async () => {
   const fixture = createFixture("guided-model-owned-search");
   try {
@@ -1707,13 +1763,14 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       (request) => {
         calls += 1;
         expect(request.tools).toEqual([]);
+        expect(request.messages[0]?.content).not.toContain("Tool read_file");
+        expect(request.messages[0]?.content).not.toContain('enabled\\":true');
         expect(request.messages[0]?.content).toContain(
-          "Tool read_file: succeeded (journal completed)",
+          "No user-safe completion summary was recorded",
         );
-        expect(request.messages[0]?.content).toContain('enabled\\":true');
         expect(messagesWithToolResults(request)).toHaveLength(0);
         return {
-          text: "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.",
+          text: "설정 확인 도중 연결이 끊겼습니다. 완료되지 않은 내용은 완료로 처리하지 않았습니다.",
           toolCalls: [],
         };
       },
@@ -1723,7 +1780,7 @@ test("Guided agent turns provider failure into one fact-based final report", asy
       signal: new AbortController().signal,
     })).toEqual({
       route: "assisted",
-      content: "설정 파일이 존재하며 enabled 값은 true입니다. 추가 작업은 없습니다.",
+      content: "설정 확인 도중 연결이 끊겼습니다. 완료되지 않은 내용은 완료로 처리하지 않았습니다.",
     });
     expect(calls).toBe(2);
 
@@ -1896,9 +1953,9 @@ test("Guided operational reporting preserves current and outdated saved result r
     "The requested page was built and desktop and mobile rendering passed.",
   );
   const fallback = guidedOperationalFallback(facts);
-  expect(fallback).toContain("저장된 Work는 완료 상태");
-  expect(fallback).toContain("Saved model result review: accept");
+  expect(fallback).toContain("요청한 작업은 완료됐습니다");
   expect(fallback).toContain("desktop and mobile rendering passed");
+  expect(fallback).not.toContain("Saved model result review");
 
   const outdated = {
     ...facts,
@@ -1916,9 +1973,9 @@ test("Guided operational reporting preserves current and outdated saved result r
     },
   };
   expect(guidedOperationalReportPrompt(outdated))
-    .toContain("Saved model result review (outdated): accept");
+    .toContain("Outdated result summary");
   expect(guidedOperationalFallback(outdated))
-    .toContain("Saved model result review (outdated): accept");
+    .not.toContain("Saved model result review");
 });
 
 test("Guided operational fallback does not count returned tool failures as success", () => {
@@ -1939,13 +1996,23 @@ test("Guided operational fallback does not count returned tool failures as succe
     effects: [],
   });
 
-  expect(fallback).toContain(
-    "journal: completed=5; outcomes: rejected_or_failed=5",
-  );
-  expect(fallback).toContain(
-    "Tool run_command: rejected_or_failed (journal completed)",
-  );
-  expect(fallback).not.toContain("succeeded=5");
+  expect(fallback).toContain("답변 생성을 마치지 못했습니다");
+  expect(fallback).not.toContain("journal");
+  expect(fallback).not.toContain("Tool run_command");
+  expect(fallback).not.toContain("rejected_or_failed");
+});
+
+test("Guided operational fallback follows configured response language", () => {
+  const fallback = guidedOperationalFallback({
+    originalRequest: "이 요청은 한국어로 작성되었습니다.",
+    responseLanguage: "English",
+    work: null,
+    toolCalls: [],
+    effects: [],
+  });
+
+  expect(fallback).toContain("could not finish generating the answer");
+  expect(fallback).not.toContain("답변 생성을");
 });
 
 test("Guided operational fallback is captured before the final report model call", async () => {
@@ -1990,10 +2057,43 @@ test("Guided operational fallback is captured before the final report model call
   });
 
   expect(calls).toBe(2);
-  expect(answer).toContain("Tool read_file: started");
-  expect(answer).not.toContain("Tool read_file: completed");
+  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(answer).not.toContain("Tool read_file");
   expect(answer).not.toContain("captured-before-report-model");
   expect(answer).not.toContain("mutated-during-report-model");
+});
+
+test("Guided operational report keeps the normal persona instructions", async () => {
+  const seenInstructions: Array<string | undefined> = [];
+  const modelRound = scriptedModelRound([
+    (request) => {
+      seenInstructions.push(request.instructions);
+      throw knownProviderFailure("main provider failure");
+    },
+    (request) => {
+      seenInstructions.push(request.instructions);
+      return { text: "연결이 끊겼지만 진행 내용은 저장했냥.", toolCalls: [] };
+    },
+  ]);
+
+  const answer = await runGuidedAgentLoopWithOperationalReport({
+    options: {
+      prompt: "작업을 완료해 줘.",
+      instructions: "Active Persona Reminder: 모든 사용자 답변은 냥으로 끝낸다.",
+      tools: [],
+      modelRound,
+      maxIterations: 1,
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    originalRequest: "작업을 완료해 줘.",
+    loadFacts: async () => ({ work: null, toolCalls: [], effects: [] }),
+  });
+
+  expect(answer).toBe("연결이 끊겼지만 진행 내용은 저장했냥.");
+  expect(seenInstructions).toHaveLength(2);
+  expect(seenInstructions[1]).toContain("모든 사용자 답변은 냥으로 끝낸다.");
+  expect(seenInstructions[1]).toContain("Do not expose internal Work");
 });
 
 test("Guided empty main response still receives one fact-based report request", async () => {

@@ -123,6 +123,18 @@ function copyCredentialIfPresent(sourceData: string, dataRoot: string, name: str
   copyFileSync(source, destination);
 }
 
+function copyUserContextIfPresent(
+  sourceData: string,
+  dataRoot: string,
+  relativePath: string,
+): void {
+  const source = join(sourceData, relativePath);
+  if (!existsSync(source)) return;
+  const destination = join(dataRoot, relativePath);
+  mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
+  copyFileSync(source, destination);
+}
+
 function assertRelevantCredentialAvailable(
   sourceData: string,
   selectedModel: string,
@@ -350,6 +362,12 @@ export async function prepareElectronRun(
   prepareConfig(sourceConfig, run);
   copyCredentialIfPresent(sourceData, dataRoot, "model-provider-credentials.json");
   copyCredentialIfPresent(sourceData, dataRoot, "openai-codex.json");
+  copyUserContextIfPresent(sourceData, dataRoot, join("personas", "active.md"));
+  copyUserContextIfPresent(
+    sourceData,
+    dataRoot,
+    join("personalization", "profile.json"),
+  );
   if (agentOwnership === "electron") {
     if (providedBundledAgentResourceDir) {
       assert(

@@ -8,7 +8,8 @@ restart.
 
 It does not construct an in-process BTCC runtime or use a synthetic model. The
 source Butler data directory is read only: the driver copies only the selected
-configuration and provider credential files into the isolated run directory.
+configuration, provider credential files, active persona, and personalization
+profile into the isolated run directory.
 Credential values are never included in evidence or console output.
 
 ## Preflight and launch smoke

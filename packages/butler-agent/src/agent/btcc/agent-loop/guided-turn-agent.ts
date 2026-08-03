@@ -15,6 +15,8 @@ import { createProviderModelRoundPort } from
 import {
   guidedInstructions,
   providerImageAttachments,
+  renderGuidedPersonaInstructions,
+  renderGuidedResponseLanguage,
   renderGuidedPrompt,
 } from "./guided-turn-prompt.ts";
 import {
@@ -162,6 +164,10 @@ export function createProductionGuidedTurnAgent(input: {
         executeButlerTool: execute,
       });
       const modelRound = input.modelRound ?? createProviderModelRoundPort();
+      const responseLanguage = renderGuidedResponseLanguage(
+        turn,
+        input.contextDocuments,
+      );
       const loopOptions: BtccAgentLoopInput = {
         prompt: renderGuidedPrompt(turn, {
           ...input,
@@ -173,7 +179,11 @@ export function createProductionGuidedTurnAgent(input: {
             : "",
         }),
         turnId: turn.turnId,
-        instructions: guidedInstructions(policy),
+        instructions: guidedInstructions(
+          policy,
+          renderGuidedPersonaInstructions(turn, input.contextDocuments),
+          responseLanguage,
+        ),
         progress,
         model: selectedModelRef(turn),
         reasoningEffort: turn.modelSelection.reasoningEffort,
@@ -213,6 +223,7 @@ export function createProductionGuidedTurnAgent(input: {
             work: currentWork,
             toolCalls: input.toolJournal.list(turn.turnId),
             effects: workId ? input.effectJournal.listForWork(workId) : [],
+            responseLanguage,
           };
         },
       });

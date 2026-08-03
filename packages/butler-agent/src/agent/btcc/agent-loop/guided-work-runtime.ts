@@ -135,10 +135,7 @@ export async function publishWorkProgress(
     const actionProgress = progressByKey.get(action.actionKey);
     return {
       taskId: `${work.workId}:${action.actionKey}`,
-      taskTitle: compactPublicText(
-        action.actionKey,
-        `작업 ${index + 1}`,
-      ),
+      taskTitle: publicWorkActionTitle(action, index, actionProgress?.note),
       taskDescription: publicText(action.description, action.actionKey),
       taskOutcome: publicText(actionProgress?.note, action.description),
       taskOrder: index,
@@ -179,5 +176,33 @@ function publicText(value: string | undefined, fallback: string): string {
 
 function compactPublicText(value: string | undefined, fallback: string): string {
   const text = publicText(value, fallback).replace(/\s+/gu, " ");
-  return [...text].slice(0, 32).join("");
+  const characters = [...text];
+  if (characters.length <= 32) return text;
+  const prefix = characters.slice(0, 31).join("");
+  const lastSpace = prefix.lastIndexOf(" ");
+  const bounded = lastSpace >= 16 ? prefix.slice(0, lastSpace) : prefix;
+  return `${bounded.trimEnd()}…`;
+}
+
+function publicWorkActionTitle(
+  action: { actionKey: string; description: string },
+  index: number,
+  progressNote?: string,
+): string {
+  const fallback = `작업 ${index + 1}`;
+  const key = publicText(action.actionKey, fallback).replace(/\s+/gu, " ");
+  const note = publicText(progressNote, "").replace(/\s+/gu, " ");
+  if (note !== key && isUsefulPublicSummary(note)) {
+    return compactPublicText(note, fallback);
+  }
+  const description = publicText(action.description, "").replace(/\s+/gu, " ");
+  if (description !== key && isUsefulPublicSummary(description)) {
+    return compactPublicText(description, fallback);
+  }
+  return fallback;
+}
+
+function isUsefulPublicSummary(value: string): boolean {
+  if (!value.trim()) return false;
+  return !/^[A-Za-z0-9_.:/-]+$/u.test(value);
 }

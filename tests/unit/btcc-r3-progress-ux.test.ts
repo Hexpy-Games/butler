@@ -220,7 +220,8 @@ test("structured action updates preserve prior completion and compact work title
     expect.objectContaining({ state: "active" }),
   ]);
   expect(rows[0]?.safe_label).not.toBe(description);
-  expect(rows[0]?.safe_label).toBe("inspect");
+  expect(rows[0]?.safe_label).not.toBe("inspect");
+  expect(rows[0]?.safe_label).toContain("Read every relevant");
   expect(rows.every((row) => row.safe_label.length <= 32)).toBe(true);
 
   const stageRows = projectTurnActivity([
@@ -269,4 +270,59 @@ test("structured action updates preserve prior completion and compact work title
     },
   ]);
   expect(mixedRows.semanticState).toBe("execution");
+});
+
+test("opaque Work action keys never become checklist copy", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+  const service = {
+    async boundWorkForTurn() {
+      return {
+        workId: "work-opaque-keys",
+        objective: "요청한 변경을 완료한다.",
+        status: "open",
+        currentPlan: {
+          planRevisionId: "plan-opaque-keys",
+          revision: 1,
+          objective: "요청한 변경을 완료한다.",
+          actions: [
+            { actionKey: "inspect", description: "inspect", dependencyKeys: [] },
+            { actionKey: "STEP_1", description: "STEP_1", dependencyKeys: ["inspect"] },
+            { actionKey: "01HZX9R4Q8N7W6T5V4S3R2Q1P0", description: "01HZX9R4Q8N7W6T5V4S3R2Q1P0", dependencyKeys: ["STEP_1"] },
+            { actionKey: "inspect.v2", description: "사용자 프로필 적용 경로를 수정한다.", dependencyKeys: ["01HZX9R4Q8N7W6T5V4S3R2Q1P0"] },
+          ],
+          checks: [],
+          originTurnId: "turn-opaque-keys",
+          createdAt: "2026-08-03T00:00:00.000Z",
+        },
+        actionProgress: [
+          { actionKey: "inspect", status: "active", note: "입력 파일을 확인하고 있습니다." },
+          { actionKey: "STEP_1", status: "pending" },
+          { actionKey: "01HZX9R4Q8N7W6T5V4S3R2Q1P0", status: "pending" },
+          { actionKey: "inspect.v2", status: "pending" },
+        ],
+      };
+    },
+  } as unknown as DurableWorkService;
+
+  await publishWorkProgress(progress, "turn-opaque-keys", 1, service);
+  const labels = events
+    .map(progressRowFromSharedTurnEvent)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row))
+    .map((row) => row.safe_label);
+
+  expect(labels).toEqual([
+    "입력 파일을 확인하고 있습니다.",
+    "작업 2",
+    "작업 3",
+    "사용자 프로필 적용 경로를 수정한다.",
+  ]);
 });
