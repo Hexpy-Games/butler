@@ -135,7 +135,7 @@ export async function publishWorkProgress(
     const actionProgress = progressByKey.get(action.actionKey);
     return {
       taskId: `${work.workId}:${action.actionKey}`,
-      taskTitle: publicWorkActionTitle(action, index, actionProgress?.note),
+      taskTitle: publicWorkActionTitle(action, index),
       taskDescription: publicText(action.description, action.actionKey),
       taskOutcome: publicText(actionProgress?.note, action.description),
       taskOrder: index,
@@ -187,22 +187,7 @@ function compactPublicText(value: string | undefined, fallback: string): string 
 function publicWorkActionTitle(
   action: { actionKey: string; description: string },
   index: number,
-  progressNote?: string,
 ): string {
   const fallback = `작업 ${index + 1}`;
-  const key = publicText(action.actionKey, fallback).replace(/\s+/gu, " ");
-  const note = publicText(progressNote, "").replace(/\s+/gu, " ");
-  if (note !== key && isUsefulPublicSummary(note)) {
-    return compactPublicText(note, fallback);
-  }
-  const description = publicText(action.description, "").replace(/\s+/gu, " ");
-  if (description !== key && isUsefulPublicSummary(description)) {
-    return compactPublicText(description, fallback);
-  }
-  return fallback;
-}
-
-function isUsefulPublicSummary(value: string): boolean {
-  if (!value.trim()) return false;
-  return !/^[A-Za-z0-9_.:/-]+$/u.test(value);
+  return compactPublicText(action.actionKey, fallback);
 }

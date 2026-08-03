@@ -22,6 +22,35 @@ import { projectTurnProgressToEvents } from
 import { projectTurnActivity } from
   "../../packages/butler-app/client/ui/src/app/conversation-progress/activity.ts";
 
+test("a freshly admitted Turn publishes an honest visible progress block", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: "event-admitted",
+      turnSequence: 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+
+  await progress.stateChanged({
+    turnId: "turn-admitted",
+    semanticState: "admitted",
+    turnRevision: 1,
+  });
+
+  expect(events).toEqual([
+    expect.objectContaining({
+      kind: "assistant.public_note",
+      payload: expect.objectContaining({
+        note: "요청을 확인하고 있습니다",
+        btccState: "admitted",
+      }),
+    }),
+  ]);
+});
+
 test("model-round waiting is visible before every provider request and ends on return", async () => {
   const order: string[] = [];
   const updates: Array<{ turnId: string; requestId: string; status: string }> = [];
@@ -164,24 +193,24 @@ test("structured action updates preserve prior completion and compact work title
     revision: 1,
     objective: "Verify the requested runtime path.",
     actions: [
-      { actionKey: "inspect", description, dependencyKeys: [] },
-      { actionKey: "verify", description: "Run the focused verification and report the result.", dependencyKeys: ["inspect"] },
+      { actionKey: "Inspect relevant workspace files", description, dependencyKeys: [] },
+      { actionKey: "Verify the requested result", description: "Run the focused verification and report the result.", dependencyKeys: ["Inspect relevant workspace files"] },
     ],
     checks: [],
     originTurnId: "turn-work-progress",
     createdAt: "2026-08-03T00:00:00.000Z",
   };
   const prior = [
-    { actionKey: "inspect", status: "done" as const },
-    { actionKey: "verify", status: "pending" as const },
+    { actionKey: "Inspect relevant workspace files", status: "done" as const },
+    { actionKey: "Verify the requested result", status: "pending" as const },
   ];
   const updated = applyWorkActionUpdates(
     { currentPlan: plan, actionProgress: prior },
-    [{ actionKey: "verify", status: "active" }],
+    [{ actionKey: "Verify the requested result", status: "active" }],
   );
   expect(updated).toEqual([
-    { actionKey: "inspect", status: "done" },
-    { actionKey: "verify", status: "active" },
+    { actionKey: "Inspect relevant workspace files", status: "done" },
+    { actionKey: "Verify the requested result", status: "active" },
   ]);
 
   const events: SharedTurnEvent[] = [];
@@ -194,15 +223,16 @@ test("structured action updates preserve prior completion and compact work title
       payload: event.payload,
     });
   });
-  const service = {
-    async boundWorkForTurn() {
-      return {
+  const boundWork = {
         workId: "work-progress",
         objective: plan.objective,
         status: "open",
         currentPlan: plan,
         actionProgress: updated,
       };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
     },
   } as unknown as DurableWorkService;
   await publishWorkProgress(progress, "turn-work-progress", 1, service);
@@ -220,8 +250,7 @@ test("structured action updates preserve prior completion and compact work title
     expect.objectContaining({ state: "active" }),
   ]);
   expect(rows[0]?.safe_label).not.toBe(description);
-  expect(rows[0]?.safe_label).not.toBe("inspect");
-  expect(rows[0]?.safe_label).toContain("Read every relevant");
+  expect(rows[0]?.safe_label).toBe("Inspect relevant workspace files");
   expect(rows.every((row) => row.safe_label.length <= 32)).toBe(true);
 
   const stageRows = projectTurnActivity([
@@ -272,7 +301,7 @@ test("structured action updates preserve prior completion and compact work title
   expect(mixedRows.semanticState).toBe("execution");
 });
 
-test("opaque Work action keys never become checklist copy", async () => {
+test("Plan action keys are immediate stable checklist summaries while notes remain outcomes", async () => {
   const events: SharedTurnEvent[] = [];
   const progress = projectTurnProgressToEvents(async (event) => {
     events.push({
@@ -283,9 +312,17 @@ test("opaque Work action keys never become checklist copy", async () => {
       payload: event.payload,
     });
   });
-  const service = {
-    async boundWorkForTurn() {
-      return {
+  const actionProgress: Array<{
+    actionKey: string;
+    status: "pending" | "active" | "done" | "blocked" | "skipped";
+    note?: string;
+  }> = [
+    { actionKey: "현재 적용 경로 확인", status: "active" },
+    { actionKey: "원인 수정", status: "pending" },
+    { actionKey: "변경 결과 검증", status: "pending" },
+    { actionKey: "운영 환경 반영", status: "pending" },
+  ];
+  const boundWork = {
         workId: "work-opaque-keys",
         objective: "요청한 변경을 완료한다.",
         status: "open",
@@ -294,35 +331,54 @@ test("opaque Work action keys never become checklist copy", async () => {
           revision: 1,
           objective: "요청한 변경을 완료한다.",
           actions: [
-            { actionKey: "inspect", description: "inspect", dependencyKeys: [] },
-            { actionKey: "STEP_1", description: "STEP_1", dependencyKeys: ["inspect"] },
-            { actionKey: "01HZX9R4Q8N7W6T5V4S3R2Q1P0", description: "01HZX9R4Q8N7W6T5V4S3R2Q1P0", dependencyKeys: ["STEP_1"] },
-            { actionKey: "inspect.v2", description: "사용자 프로필 적용 경로를 수정한다.", dependencyKeys: ["01HZX9R4Q8N7W6T5V4S3R2Q1P0"] },
+            { actionKey: "현재 적용 경로 확인", description: "현재 사용자 프로필 적용 경로를 확인한다.", dependencyKeys: [] },
+            { actionKey: "원인 수정", description: "확인된 문제의 원인을 수정한다.", dependencyKeys: ["현재 적용 경로 확인"] },
+            { actionKey: "변경 결과 검증", description: "수정된 동작이 요청을 만족하는지 검증한다.", dependencyKeys: ["원인 수정"] },
+            { actionKey: "운영 환경 반영", description: "검증된 변경을 운영 환경에 반영한다.", dependencyKeys: ["변경 결과 검증"] },
           ],
           checks: [],
           originTurnId: "turn-opaque-keys",
           createdAt: "2026-08-03T00:00:00.000Z",
         },
-        actionProgress: [
-          { actionKey: "inspect", status: "active", note: "입력 파일을 확인하고 있습니다." },
-          { actionKey: "STEP_1", status: "pending" },
-          { actionKey: "01HZX9R4Q8N7W6T5V4S3R2Q1P0", status: "pending" },
-          { actionKey: "inspect.v2", status: "pending" },
-        ],
+        actionProgress,
       };
+  const service = {
+    async boundWorkForTurn() {
+      return boundWork;
     },
   } as unknown as DurableWorkService;
 
   await publishWorkProgress(progress, "turn-opaque-keys", 1, service);
-  const labels = events
+  const initialRows = events
     .map(progressRowFromSharedTurnEvent)
-    .filter((row): row is NonNullable<typeof row> => Boolean(row))
-    .map((row) => row.safe_label);
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
 
-  expect(labels).toEqual([
-    "입력 파일을 확인하고 있습니다.",
-    "작업 2",
-    "작업 3",
-    "사용자 프로필 적용 경로를 수정한다.",
+  expect(initialRows.map((row) => row.safe_label)).toEqual([
+    "현재 적용 경로 확인",
+    "원인 수정",
+    "변경 결과 검증",
+    "운영 환경 반영",
   ]);
+  expect(initialRows.map((row) => row.safe_label)).not.toContain("작업 1");
+
+  boundWork.actionProgress[0] = {
+    actionKey: "현재 적용 경로 확인",
+    status: "done",
+    note: "적용 경로가 확인되었습니다.",
+  };
+  await publishWorkProgress(progress, "turn-opaque-keys", 2, service);
+  const updatedRows = events
+    .slice(initialRows.length)
+    .map(progressRowFromSharedTurnEvent)
+    .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  expect(updatedRows.map((row) => row.safe_label)).toEqual(
+    initialRows.map((row) => row.safe_label),
+  );
+  expect(events[initialRows.length]?.payload?.detailRows).toContainEqual(
+    expect.objectContaining({
+      kind: "task_outcome",
+      safe_value: "적용 경로가 확인되었습니다.",
+    }),
+  );
 });
