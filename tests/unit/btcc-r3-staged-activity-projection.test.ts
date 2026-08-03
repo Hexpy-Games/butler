@@ -202,6 +202,39 @@ test("ordinary empty tool batches group repeated public labels once", async () =
   expect(updates[0]!.title).not.toBe(updates[0]!.summary);
 });
 
+test("progressive dispatch activity adopts the effective tool title and summary", async () => {
+  const updates: Array<{ title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-progressive-project-ledger",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const args = {
+    id: "native:project_ledger_create",
+    arguments: { kind: "spec", id: "SPEC-EXAMPLE" },
+  };
+
+  projection.observeToolBatch({
+    text: "",
+    toolCalls: [{ name: "tool_call", args }],
+  });
+  await projection.observeTool({
+    name: "tool_call",
+    effectiveToolName: "project_ledger_create",
+    args,
+  });
+
+  expect(updates).toEqual([expect.objectContaining({
+    title: "프로젝트 기록 변경",
+    summary: "프로젝트 기록을 변경하고 있습니다.",
+  })]);
+});
+
 test("consecutive empty batches with the same ordinary purpose reuse one activity", async () => {
   const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
