@@ -21,7 +21,7 @@ type LegacyReplayRuntime = Parameters<typeof safeAttachToolResult>[0];
 type LegacyReplayScope = Parameters<typeof safeAttachToolResult>[1];
 type GuidedToolCall = Parameters<ButlerToolExecutor>[0];
 const LEGACY_REPLAY_SUMMARY =
-  "Resume the previously started command with its original arguments.";
+  "재개: 기존 명령";
 
 type LegacyReplayExecutionInput = {
   record: GuidedToolJournalRecord;
