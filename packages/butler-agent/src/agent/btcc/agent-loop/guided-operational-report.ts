@@ -53,7 +53,13 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
     const result = await runBtccAgentLoop({
       ...input.options,
       prompt: guidedOperationalReportPrompt(facts),
-      instructions: "Report only the supplied current facts. Do not call tools.",
+      instructions: [
+        input.options.instructions,
+        "Write one concise, natural user-facing status answer using only the supplied facts.",
+        "Preserve the active persona, user language, and preferred form of address.",
+        "Do not expose internal Work records, stages, tools, journals, effects, ids, counts, schemas, or raw errors.",
+        "Clearly say what is known, what remains, and whether the saved work can continue. Do not call tools.",
+      ].filter(Boolean).join("\n\n"),
       signal: input.parentSignal,
       attachments: [],
       tools: [],

@@ -29,9 +29,9 @@ test("Managed continuation distinguishes result Review from current completion V
     toolCalls: [],
     effects: [],
   });
-  expect(fallback).toContain(
-    "Saved completion validation: accept — The whole Work satisfies the original request.",
-  );
+  expect(fallback).toContain("답변 생성을 마치지 못했습니다");
+  expect(fallback).toContain("The whole Work satisfies the original request.");
+  expect(fallback).not.toContain("Saved completion validation");
 });
 
 test("completion Validation is marked outdated when later results change its binding", () => {

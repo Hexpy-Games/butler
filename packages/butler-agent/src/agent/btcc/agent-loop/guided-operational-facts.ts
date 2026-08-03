@@ -8,13 +8,11 @@ import {
   isDurableWorkCompletionValidationCurrent,
   isDurableWorkResultReviewCurrent,
 } from "./durable-work-context.ts";
-import { projectGuidedToolContext } from "./guided-tool-context-projection.ts";
-
-const FACT_LIMIT = 12;
 const FACT_VALUE_LIMIT = 480;
 
 export type OperationalFacts = {
   originalRequest: string;
+  responseLanguage?: string;
   work: DurableWorkContext | DurableWorkView | null;
   toolCalls: GuidedToolJournalRecord[];
   effects: GuidedEffectJournalRecord[];
@@ -23,154 +21,111 @@ export type OperationalFacts = {
 export function guidedOperationalReportPrompt(input: OperationalFacts): string {
   return [
     "The main execution did not produce a final answer.",
-    "Give the user one concise, truthful answer using only the facts below.",
+    "Give the user one concise, natural, truthful answer using only the user-safe facts below.",
     "Clearly separate what completed, what remains, and any limitation.",
-    "Do not claim that an unlisted action or effect happened. Do not call tools.",
+    "Do not mention Work records, internal stages, tools, journals, effects, ids, counts, schemas, or raw errors.",
+    "Do not claim that an unlisted action happened. Do not call tools.",
     "",
     `Original request: ${input.originalRequest}`,
-    ...factLines(input),
+    ...operationalReportFactLines(input),
   ].join("\n");
 }
 
 export function guidedOperationalFallback(input: OperationalFacts): string {
-  const korean = /[가-힣]/.test(input.originalRequest);
-  const facts = fallbackFactLines(input);
+  const korean = prefersKorean(input.responseLanguage) ?? /[가-힣]/.test(input.originalRequest);
   const work = workView(input.work);
+  const summary = latestUserSafeSummary(work);
+  const nextStep = work?.latestCheckpoint?.nextStep?.trim();
   if (korean) {
     return [
-      "요청을 끝까지 정리하지 못했지만, 현재까지 확인된 영속 기록만 전달합니다.",
-      facts.length > 0
-        ? "현재까지 확인된 영속 기록:"
-        : "실행 완료를 뒷받침하는 영속 기록은 없습니다.",
-      ...facts,
       work?.status === "completed"
-        ? "저장된 Work는 완료 상태이지만, 사용자용 최종 설명 생성이 중단되어 확인된 영속 기록만 전달합니다."
-        : work
-        ? "완료되지 않은 부분은 완료로 처리하지 않았으며, 저장된 Work에서 이어갈 수 있습니다."
-        : "완료되지 않은 부분은 완료로 처리하지 않았습니다.",
+        ? "요청한 작업은 완료됐습니다. 다만 결과 설명 작성을 마치지 못했습니다."
+        : "작업을 진행했지만 답변 생성을 마치지 못했습니다.",
+      ...(summary ? [`현재까지 확인된 내용: ${compact(summary)}`] : []),
+      ...(nextStep ? [`다음 작업: ${compact(nextStep)}`] : []),
+      work
+        ? "진행 내용은 저장되어 있어 모델 연결이 복구되면 이어갈 수 있습니다."
+        : "완료되지 않은 작업을 완료로 처리하지 않았습니다.",
     ].join("\n");
   }
   return [
-    "I could not finish the answer, so I am reporting only the confirmed durable records.",
-    facts.length > 0
-      ? "Confirmed durable records:"
-      : "No durable record confirms completed execution.",
-    ...facts,
     work?.status === "completed"
-      ? "The saved Work is complete, but generation of the user-facing final explanation stopped, so I am reporting only confirmed durable records."
-      : work
-      ? "I did not mark the unfinished part complete; the saved Work can be continued."
-      : "I did not mark the unfinished part complete.",
+      ? "The requested work is complete, but I could not finish writing the result explanation."
+      : "I made progress on the request but could not finish generating the answer.",
+    ...(summary ? [`Confirmed so far: ${compact(summary)}`] : []),
+    ...(nextStep ? [`Next step: ${compact(nextStep)}`] : []),
+    work
+      ? "The progress is saved and can continue after the model connection recovers."
+      : "I did not mark unfinished work as complete.",
   ].join("\n");
 }
 
-function factLines(input: OperationalFacts): string[] {
-  const facts = reportFactLines(input);
+function prefersKorean(value: string | undefined): boolean | null {
+  const language = value?.trim().toLocaleLowerCase("en-US");
+  if (!language) return null;
+  if (/^(ko|kor|korean)$|한국|한국어/u.test(language)) return true;
+  if (/^(en|eng|english)$/u.test(language)) return false;
+  return null;
+}
+
+function operationalReportFactLines(input: OperationalFacts): string[] {
+  const work = workView(input.work);
+  const facts: string[] = [];
+  if (work) {
+    facts.push(
+      work.status === "completed"
+        ? "- The requested work is recorded as complete."
+        : "- The requested work is not recorded as complete.",
+    );
+    facts.push(`- User-visible objective: ${compact(work.objective)}`);
+    if (work.latestCheckpoint?.publicSummary) {
+      facts.push(`- Latest user-safe progress: ${compact(work.latestCheckpoint.publicSummary)}`);
+    }
+    if (work.latestCheckpoint?.nextStep) {
+      facts.push(`- Next useful step: ${compact(work.latestCheckpoint.nextStep)}`);
+    }
+    appendReviewSummary(facts, work);
+  }
   return [
-    "Known durable facts:",
+    "Known user-safe facts:",
     ...(facts.length > 0
       ? facts
-      : ["- No tool status, Work checkpoint, or persistent effect was confirmed."]),
+      : ["- No user-safe completion summary was recorded."]),
   ];
 }
 
-function reportFactLines(input: OperationalFacts): string[] {
-  const lines = fallbackFactLines(input);
-  const toolDetails = projectGuidedToolContext(input.toolCalls, {
-    maxRecords: FACT_LIMIT,
-    maxRecordBytes: 1_600,
-    maxTotalBytes: 9_000,
-  });
-  if (toolDetails.length > 0) {
-    lines.push(
-      "- Recent durable tool details (newest first): " + safeJson(toolDetails),
-    );
-  }
-  return lines;
-}
-
-function fallbackFactLines(input: OperationalFacts): string[] {
-  const lines = durableFactLines(input);
-  const work = workView(input.work);
+function appendReviewSummary(
+  lines: string[],
+  work: DurableWorkContext["work"] | DurableWorkView,
+): void {
   if (work?.latestResultReview) {
     const current = isDurableWorkResultReviewCurrent(work);
     lines.push(
-      `- Saved model result review${current ? "" : " (outdated)"}: ` +
-        `${work.latestResultReview.verdict} — ` +
+      `- ${current ? "Current" : "Outdated"} result summary: ` +
         compact(work.latestResultReview.summary),
     );
-    for (const correction of work.latestResultReview.corrections.slice(0, 6)) {
-      lines.push(`- Saved result correction: ${compact(correction)}`);
-    }
   }
   if (work?.latestCompletionValidation) {
     const current = isDurableWorkCompletionValidationCurrent(work);
     lines.push(
-      `- Saved completion validation${current ? "" : " (outdated)"}: ` +
-        `${work.latestCompletionValidation.verdict} — ` +
+      `- ${current ? "Current" : "Outdated"} completion summary: ` +
         compact(work.latestCompletionValidation.summary),
     );
-    for (const correction of work.latestCompletionValidation.corrections.slice(0, 6)) {
-      lines.push(`- Saved completion correction: ${compact(correction)}`);
-    }
   }
-  return lines;
 }
 
-function durableFactLines(input: OperationalFacts): string[] {
-  const lines: string[] = [];
-  const work = workView(input.work);
-  if (work) {
-    lines.push(`- Work status: ${work.status}`);
-    if (work.latestCheckpoint) {
-      lines.push(
-        `- Latest progress (${work.latestCheckpoint.stage}): ${compact(work.latestCheckpoint.publicSummary)}`,
-      );
-      lines.push(`- Next recorded step: ${compact(work.latestCheckpoint.nextStep)}`);
-    }
-  }
-  if (input.toolCalls.length > 0) {
-    const counts = new Map<GuidedToolJournalRecord["status"], number>();
-    const outcomes = new Map<string, number>();
-    for (const call of input.toolCalls) {
-      counts.set(call.status, (counts.get(call.status) ?? 0) + 1);
-      const outcome = operationalToolOutcome(call);
-      outcomes.set(outcome, (outcomes.get(outcome) ?? 0) + 1);
-    }
-    const breakdown = [...counts.entries()]
-      .map(([status, count]) => `${status}=${count}`)
-      .join(", ");
-    const outcomeBreakdown = [...outcomes.entries()]
-      .map(([status, count]) => `${status}=${count}`)
-      .join(", ");
-    lines.push(
-      `- Tool calls recorded: ${input.toolCalls.length} total ` +
-        `(journal: ${breakdown}; outcomes: ${outcomeBreakdown})`,
-    );
-  }
-  for (const call of input.toolCalls.slice(-FACT_LIMIT)) {
-    const outcome = operationalToolOutcome(call);
-    lines.push(
-      `- Tool ${call.toolName}: ${outcome}` +
-        (call.status === "completed" ? " (journal completed)" : ""),
-    );
-  }
-  for (const effect of input.effects.slice(0, FACT_LIMIT)) {
-    lines.push(
-      `- Effect ${effect.capability} on ${compact(effect.sanitizedTarget)}: ${effect.status}`,
-    );
-  }
-  return lines;
-}
-
-function operationalToolOutcome(call: GuidedToolJournalRecord): string {
-  if (call.status !== "completed") return call.status;
-  if (call.result && typeof call.result === "object" && !Array.isArray(call.result)) {
-    const ok = (call.result as Record<string, unknown>).ok;
-    if (ok === true) return "succeeded";
-    if (ok === false) return "rejected_or_failed";
-  }
-  return "returned";
+function latestUserSafeSummary(
+  work: DurableWorkContext["work"] | DurableWorkView | null,
+): string | null {
+  if (!work) return null;
+  return work.latestCheckpoint?.publicSummary?.trim() ||
+    (work.latestCompletionValidation && isDurableWorkCompletionValidationCurrent(work)
+      ? work.latestCompletionValidation.summary.trim()
+      : "") ||
+    (work.latestResultReview && isDurableWorkResultReviewCurrent(work)
+      ? work.latestResultReview.summary.trim()
+      : "") ||
+    null;
 }
 
 function workView(input: OperationalFacts["work"]): DurableWorkView | null {
@@ -182,12 +137,4 @@ function compact(value: string): string {
   return oneLine.length <= FACT_VALUE_LIMIT
     ? oneLine
     : `${oneLine.slice(0, FACT_VALUE_LIMIT - 1)}…`;
-}
-
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? "null";
-  } catch {
-    return JSON.stringify({ unavailable: true });
-  }
 }
