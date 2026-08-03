@@ -15,6 +15,8 @@ import { publishWorkProgress } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
 import { activityContent } from
   "../../packages/butler-agent/src/agent/btcc/projection/guided-activity-content.ts";
+import { publicToolTitle } from
+  "../../packages/butler-agent/src/agent/btcc/projection/guided-activity-content.ts";
 import { projectTurnProgressToEvents } from
   "../../packages/butler-agent/src/agent/btcc/projection/turn-progress.ts";
 import { projectTurnActivity } from
@@ -140,6 +142,19 @@ test("run_command operation projects structured intent without exposing raw comm
     "",
   );
   expect(activity.title).not.toBe(activity.summary);
+});
+
+test("progressive tool discovery and dispatch keep distinct product-facing titles", () => {
+  expect(publicToolTitle("tool_search")).toBe("사용 가능한 도구 찾기");
+  expect(publicToolTitle("tool_describe")).toBe("도구 사용법 확인");
+  expect(publicToolTitle("tool_call", {
+    id: "native:project_ledger_create",
+    arguments: {},
+  })).toBe("프로젝트 기록 변경");
+  expect(publicToolTitle("tool_call", {
+    id: "native:project_ledger_show",
+    arguments: {},
+  })).toBe("프로젝트 기록 확인");
 });
 
 test("structured action updates preserve prior completion and compact work titles with full detail", async () => {
