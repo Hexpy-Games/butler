@@ -11,7 +11,7 @@ import { normalizeProgressSummaryRow } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-normalizer.ts";
 import { progressRowFromAppOutbound } from
   "../../packages/butler-agent/src/gateways/app/infrastructure/transport/app-transport-projection.ts";
-import { safeCommandPurposeSummary } from
+import { safeCommandActionLabel } from
   "../../packages/butler-agent/src/agent/output/progress/arguments.ts";
 import { dedupeProgressRows } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-merge.ts";
@@ -226,7 +226,7 @@ test("first Plan uses an opaque action target but preserves a human-readable act
   })).resolves.toBe(humanKey);
 });
 
-test("ordinary empty tool batches group repeated run_command purposes once", async () => {
+test("ordinary empty tool batches group repeated model-authored command labels once", async () => {
   const updates: Array<{ title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-grouped-tools",
@@ -238,7 +238,7 @@ test("ordinary empty tool batches group repeated run_command purposes once", asy
       },
     },
   });
-  const summary = "작업공간의 현재 변경 상태를 확인합니다.";
+  const summary = "실행: 상태 확인";
   const calls = [
     { name: "run_command", args: { command: "pwd", summary } },
     { name: "run_command", args: { command: "git status", summary } },
@@ -250,13 +250,12 @@ test("ordinary empty tool batches group repeated run_command purposes once", asy
   }
 
   expect(updates).toEqual([expect.objectContaining({
-    title: "명령 실행",
+    title: summary,
     summary,
   })]);
-  expect(updates[0]?.title).not.toBe(updates[0]?.summary);
 });
 
-test("different run_command purposes remain operation details under one activity", async () => {
+test("different model-authored command labels remain under one activity", async () => {
   const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-distinct-command-purposes",
@@ -271,11 +270,11 @@ test("different run_command purposes remain operation details under one activity
   const calls = [
     {
       name: "run_command",
-      args: { command: "git status --short", summary: "작업공간 변경 상태를 확인합니다." },
+      args: { command: "git status --short", summary: "실행: git status" },
     },
     {
       name: "run_command",
-      args: { command: "git diff --check", summary: "변경 내용의 공백 오류를 검증합니다." },
+      args: { command: "git diff --check", summary: "검증: git diff" },
     },
   ];
   projection.observeToolBatch({ text: "", toolCalls: calls });
@@ -288,17 +287,16 @@ test("different run_command purposes remain operation details under one activity
   }
 
   expect(updates).toEqual([expect.objectContaining({
-    title: "명령 실행",
-    summary: "작업공간 변경 상태를 확인합니다.",
+    title: "실행: git status",
+    summary: "실행: git status",
   })]);
   expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
-  expect(updates[0]?.title).not.toBe(updates[0]?.summary);
-  expect(safeCommandPurposeSummary(calls[1]!.args)).toBe(
-    "변경 내용의 공백 오류를 검증합니다.",
+  expect(safeCommandActionLabel(calls[1]!.args)).toBe(
+    "검증: git diff",
   );
 });
 
-test("progressive run_command keeps complete nested summaries under one activity", async () => {
+test("progressive run_command keeps model-authored nested labels under one activity", async () => {
   const updates: Array<{ activityId: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-progressive-command-summary",
@@ -310,19 +308,20 @@ test("progressive run_command keeps complete nested summaries under one activity
       },
     },
   });
-  const prefix = "x".repeat(140);
+  const firstLabel = "실행: pwd";
+  const secondLabel = "실행: pwd 재확인";
   const first = {
     name: "tool_call",
     args: {
       id: "native:run_command",
-      arguments: { command: "pwd", summary: `${prefix}A` },
+      arguments: { command: "pwd", summary: firstLabel },
     },
   };
   const second = {
     name: "tool_call",
     args: {
       id: "native:run_command",
-      arguments: { command: "pwd", summary: `${prefix}B` },
+      arguments: { command: "pwd", summary: secondLabel },
     },
   };
   const bindings = [];
@@ -335,9 +334,9 @@ test("progressive run_command keeps complete nested summaries under one activity
   }
 
   expect(updates).toHaveLength(1);
-  expect(updates[0]?.summary).toBe(`${prefix}A`);
+  expect(updates[0]?.summary).toBe(firstLabel);
   expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
-  expect(safeCommandPurposeSummary(second.args.arguments)).toBe(`${prefix}B`);
+  expect(safeCommandActionLabel(second.args.arguments)).toBe(secondLabel);
 });
 
 test("ordinary tools across model rounds inherit the accepted checkpoint activity", async () => {
@@ -539,7 +538,7 @@ test("consecutive empty batches with the same ordinary purpose reuse one activit
     },
   });
   const bindings = [];
-  const summary = "작업공간의 현재 상태를 확인합니다.";
+  const summary = "실행: 상태 확인";
   for (const command of ["pwd", "git status", "git diff"]) {
     const call = { name: "run_command", args: { command, summary } };
     projection.observeToolBatch({ text: "", toolCalls: [call] });
@@ -552,10 +551,9 @@ test("consecutive empty batches with the same ordinary purpose reuse one activit
   expect(updates).toHaveLength(1);
   expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
   expect(updates[0]).toMatchObject({
-    title: "명령 실행",
+    title: summary,
     summary,
   });
-  expect(updates[0]?.title).not.toBe(updates[0]?.summary);
 });
 
 test("long Plan objectives remain in detail while every title stays within 32 characters", async () => {

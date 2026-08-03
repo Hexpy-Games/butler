@@ -89,7 +89,7 @@ test("completed work keeps its turn identity for lazy operation output", async (
             id: "operation-row",
             kind: "used_tool",
             state: "completed",
-            safe_label: "private command",
+            safe_label: "실행: git commit",
             safe_tool_name: "run_command",
             tool_call_id: "request-1",
             tool_result_id: "result-1",
@@ -101,8 +101,7 @@ test("completed work keeps its turn identity for lazy operation output", async (
     );
   });
 
-  expect(container.textContent).toContain("실행: 계획한 작업을 처리 중");
-  expect(container.textContent).not.toContain("private command");
+  expect(container.textContent).toContain("실행: git commit");
   const toolButton = container.querySelector(
     '[data-test-class~="turn-work-tool-row"] button',
   );

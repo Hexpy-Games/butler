@@ -11,7 +11,7 @@ import { runBtccAgentLoop } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/agent-loop.ts";
 import { publishOperation } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-progress.ts";
-import { safeCommandPurposeSummary } from
+import { safeCommandActionLabel } from
   "../../packages/butler-agent/src/agent/output/progress/arguments.ts";
 import { publishWorkProgress } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-work-runtime.ts";
@@ -124,7 +124,7 @@ test("model-round waiting is visible before every provider request and ends on r
   });
 });
 
-test("run_command operation projects its model-authored purpose without exposing raw command text", async () => {
+test("run_command operation projects the model-authored action label without parsing command text", async () => {
   const events: SharedTurnEvent[] = [];
   const progress = projectTurnProgressToEvents(async (event) => {
     events.push({
@@ -143,7 +143,7 @@ test("run_command operation projects its model-authored purpose without exposing
     toolName: "run_command",
     args: {
       command: "curl -H 'Authorization: Bearer secret' -u user:password https://example.test",
-      summary: "공식 상태 엔드포인트의 응답을 검증합니다.",
+      summary: "실행: curl 상태 확인",
       cwd: "/workspace/private-client/acquisition-secret",
       state_effect: "validation",
       validation_suite: "focused-check",
@@ -153,11 +153,10 @@ test("run_command operation projects its model-authored purpose without exposing
 
   const payload = events[0]?.payload ?? {};
   const row = progressRowFromSharedTurnEvent(events[0]!);
-  expect(payload.safeLabel).toBe("명령 실행");
+  expect(payload.safeLabel).toBe("실행: curl 상태 확인");
   expect(payload.safeLabel).not.toBe("작업 실행");
   expect([...String(payload.safeLabel)].length).toBeLessThanOrEqual(32);
-  expect(payload.inputLabel).toBe("공식 상태 엔드포인트의 응답을 검증합니다.");
-  expect(payload.safeLabel).not.toBe(payload.inputLabel);
+  expect(payload.inputLabel).toBe("실행: curl 상태 확인");
   expect(JSON.stringify(payload)).not.toContain("secret");
   expect(JSON.stringify(payload)).not.toContain("password");
   expect(JSON.stringify(payload)).not.toContain("Authorization");
@@ -165,52 +164,58 @@ test("run_command operation projects its model-authored purpose without exposing
   expect(payload.detailRows).toEqual(expect.arrayContaining([
     expect.objectContaining({
       safe_label: "Command",
-      safe_value: "공식 상태 엔드포인트의 응답을 검증합니다.",
+      safe_value: "실행: curl 상태 확인",
     }),
   ]));
   expect(row).toMatchObject({
-    safe_label: "명령 실행",
-    safe_input_label: "공식 상태 엔드포인트의 응답을 검증합니다.",
+    safe_label: "실행: curl 상태 확인",
+    safe_input_label: "실행: curl 상태 확인",
     bridge_phase: "btcc_operation",
     safe_detail_rows: expect.arrayContaining([
       expect.objectContaining({
         safe_label: "Command",
-        safe_value: "공식 상태 엔드포인트의 응답을 검증합니다.",
+        safe_value: "실행: curl 상태 확인",
       }),
     ]),
   });
   if (!row) throw new Error("run_command progress row was not projected");
-  expect(row.safe_label).not.toBe(row.safe_input_label);
   const parameters = runCommandToolDefinition.parameters as {
-    properties: Record<string, { type?: string; minLength?: number; pattern?: string }>;
+    properties: Record<string, {
+      type?: string;
+      minLength?: number;
+      maxLength?: number;
+      pattern?: string;
+      description?: string;
+    }>;
     required: string[];
   };
   expect(parameters.required).toContain("summary");
   expect(parameters.properties.summary).toMatchObject({
     type: "string",
     minLength: 1,
-    pattern: "\\S",
+    maxLength: 32,
   });
+  expect(parameters.properties.summary?.description).toContain("model-authored");
+  expect(parameters.properties.summary?.description).toContain("실행: git commit");
   const activity = activityContent(
     {
       name: "run_command",
       args: {
-        command: "git status --short",
-        summary: "작업공간 변경 상태를 확인합니다.",
+        command: "git commit -m 'release' && git push origin main",
+        summary: "커밋 후 푸시",
       },
     },
     [{
       name: "run_command",
       args: {
-        command: "git status --short",
-        summary: "작업공간 변경 상태를 확인합니다.",
+        command: "git commit -m 'release' && git push origin main",
+        summary: "커밋 후 푸시",
       },
     }],
     "",
   );
-  expect(activity.title).toBe("명령 실행");
-  expect(activity.summary).toBe("작업공간 변경 상태를 확인합니다.");
-  expect(activity.title).not.toBe(activity.summary);
+  expect(activity.title).toBe("커밋 후 푸시");
+  expect(activity.summary).toBe("커밋 후 푸시");
 });
 
 test("run_command public summaries use canonical public-text sanitization", async () => {
@@ -232,21 +237,21 @@ test("run_command public summaries use canonical public-text sanitization", asyn
     toolName: "run_command",
     args: {
       command: "curl -H 'Authorization: Bearer private-token' /Users/alice/private/report.json",
-      summary: "Verify token=private-token and Authorization: Bearer private-token",
+      summary: "실행: curl token=private-token",
     },
     status: "started",
   });
 
   const row = progressRowFromSharedTurnEvent(events[0]!);
-  expect(row?.safe_input_label).toContain("Verify");
+  expect(row?.safe_input_label).toContain("실행: curl");
   expect(row?.safe_input_label).not.toContain("private-token");
   expect(row?.safe_input_label).not.toContain("Authorization");
-  expect(safeCommandPurposeSummary({
+  expect(safeCommandActionLabel({
     summary: "Inspect /Users/alice/private/report.json",
   })).toBe("");
 });
 
-test("run_command summary is enforced by the native tool-call schema boundary", () => {
+test("run_command model-authored action label is enforced by the native tool-call schema boundary", () => {
   const missingSummary = prepareBtccToolCall(
     { tools: [runCommandToolDefinition] },
     {
@@ -267,11 +272,11 @@ test("run_command summary is enforced by the native tool-call schema boundary", 
       name: "run_command",
       arguments: {
         command: "pwd",
-        summary: "현재 작업공간 위치를 확인합니다.",
+        summary: "실행: pwd",
       },
       rawArguments: JSON.stringify({
         command: "pwd",
-        summary: "현재 작업공간 위치를 확인합니다.",
+        summary: "실행: pwd",
       }),
     },
   );
@@ -288,6 +293,34 @@ test("run_command summary is enforced by the native tool-call schema boundary", 
   );
   expect(whitespaceOnly.validationError).toContain("summary");
   expect(whitespaceOnly.validationError).toContain("invalid arguments");
+
+  const sentence = "실행할 Git 커밋 명령의 목적과 결과를 사용자에게 자세하게 설명합니다.";
+  const tooLong = prepareBtccToolCall(
+    { tools: [runCommandToolDefinition] },
+    {
+      id: "run-command-long-label",
+      name: "run_command",
+      arguments: { command: "git commit", summary: sentence },
+      rawArguments: JSON.stringify({ command: "git commit", summary: sentence }),
+    },
+  );
+  expect(tooLong.validationError).toContain("summary");
+  expect(tooLong.validationError).toContain("length <= 32");
+
+  const multiline = prepareBtccToolCall(
+    { tools: [runCommandToolDefinition] },
+    {
+      id: "run-command-multiline-label",
+      name: "run_command",
+      arguments: { command: "git push", summary: "실행: git push\norigin 반영" },
+      rawArguments: JSON.stringify({
+        command: "git push",
+        summary: "실행: git push\norigin 반영",
+      }),
+    },
+  );
+  expect(multiline.validationError).toContain("summary");
+  expect(multiline.validationError).toContain("invalid arguments");
 });
 
 test("progressive tool discovery and dispatch keep distinct product-facing titles", () => {
@@ -301,6 +334,17 @@ test("progressive tool discovery and dispatch keep distinct product-facing title
     id: "native:project_ledger_show",
     arguments: {},
   })).toBe("프로젝트 기록 확인");
+  expect(publicToolTitle("run_command", {
+    command: "opaque command text",
+    summary: "실행: git commit",
+  })).toBe("실행: git commit");
+  expect(publicToolTitle("tool_call", {
+    id: "native:run_command",
+    arguments: {
+      command: "opaque command text",
+      summary: "커밋 후 푸시",
+    },
+  })).toBe("커밋 후 푸시");
 });
 
 test("structured action updates preserve prior completion and compact work titles with full detail", async () => {

@@ -26,7 +26,7 @@ test("BTCC phase operations do not create duplicate legacy work blocks", () => {
 
 test("BTCC operation titles come from typed capability metadata", () => {
   expect(publicOperationTitle("run_command")).toBe(
-    "실행: 계획한 작업을 처리 중",
+    "명령 실행",
   );
   expect(publicOperationTitle("edit_file")).toBe(
     "수정: 계획한 파일 변경을 적용 중",

@@ -24,7 +24,7 @@ import { GUIDED_PROJECT_LEDGER_EFFECT_TOOL_NAMES } from
 import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { workspacePagePreviewAvailabilityOverride } from
   "../../tools/workspace-page-preview/index.ts";
-import { safeCommandPurposeSummary } from "../../output/progress/arguments.ts";
+import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",
@@ -259,12 +259,12 @@ export function invalidRunCommandSummary(input: {
     catalogId.namespace === null &&
     catalogId.name === "run_command";
   if (!directRunCommand && !progressiveRunCommand) return null;
-  if (safeCommandPurposeSummary(input.presentationArgs)) return null;
+  if (safeCommandActionLabel(input.presentationArgs)) return null;
   return {
     ok: false,
     error: {
       code: "invalid_tool_arguments",
-      message: "Tool run_command requires argument: summary",
+      message: "Tool run_command requires a one-line action label in summary (max 32 characters)",
       path: "$.summary",
     },
   };
