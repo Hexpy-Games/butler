@@ -1,19 +1,27 @@
 import type { WorkStage } from "../work/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
+import {
+  safeToolInputLabel,
+} from "../../output/progress/arguments.ts";
 
 export type GuidedActivityToolCall = {
   name: string;
   args: Record<string, unknown>;
 };
 
-export function publicToolTitle(name: string): string {
+export function publicToolTitle(
+  name: string,
+  args: Record<string, unknown> = {},
+): string {
   if (name === "web_search") return "웹 검색";
   if (name === "web_read") return "웹 문서 읽기";
   if (name === "read_file" || name === "grep_files") return "작업공간 확인";
   if (name === "write_file" || name === "edit_file") return "작업공간 변경";
   if (name === "inspect_workspace_page") return "작업 화면 확인";
-  if (name === "run_command") return "작업 실행";
+  if (name === "run_command") {
+    return boundedTitle(safeToolInputLabel(name, args, "ran_command"));
+  }
   if (name.startsWith("project_ledger")) return "프로젝트 기록 확인";
   if (isDurableWorkTool(name)) return "작업 진행 기록";
   return "도구 사용";

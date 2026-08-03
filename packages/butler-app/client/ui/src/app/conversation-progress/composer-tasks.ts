@@ -25,9 +25,12 @@ export function projectComposerTasks(
     const label = row.safe_label.trim();
     const id = row.safe_input_label?.trim() || row.id;
     if (!label || !id) return [];
-    const fullLabel = row.safe_detail_rows?.find((detail) =>
-      detail.kind === "task_outcome",
-    )?.safe_value?.trim();
+    const fullLabel = (
+      row.safe_detail_rows?.find((detail) => detail.kind === "task_description")
+        ?.safe_value ??
+      row.safe_detail_rows?.find((detail) => detail.kind === "task_outcome")
+        ?.safe_value
+    )?.trim();
     return [{
       id,
       label,

@@ -24,6 +24,7 @@ import {
   prepareBtccToolCall,
 } from "./tool-execution.ts";
 import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
+import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
 
 const DEFAULT_MAX_ITERATIONS = 8;
 
@@ -98,27 +99,45 @@ export async function runBtccAgentLoop(
   }): Promise<ModelRoundResult> => {
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
-    const response = await input.modelRound.runRound({
-      model: input.model ?? "",
-      messages: [...messages],
-      instructions: request.instructions,
-      tools: request.tools,
-      toolChoice: request.toolChoice,
-      reasoningEffort: input.reasoningEffort,
-      signal: input.signal,
-      attachments: input.attachments,
-      butlerData: input.butlerData,
-      usageAttribution: input.usageAttribution
-        ? { ...input.usageAttribution, roundIndex }
-        : undefined,
-      cacheScope: input.cacheScope,
-      providerRetryAttempts: input.providerRetryAttempts,
-      continuation,
-      onProviderStreamEvent: input.onProviderStreamEvent,
-      onProviderResponseIdentity: input.onProviderResponseIdentity,
-    });
-    continuation = response.continuation;
-    return response;
+    const requestId = `btcc-model-round-${roundIndex}`;
+    const publishWaiting = async (
+      status: "started" | "completed" | "failed" | "cancelled",
+    ): Promise<void> => {
+      if (!input.turnId) return;
+      await publishModelRoundWaiting(input.progress, {
+        turnId: input.turnId,
+        requestId,
+        status,
+      });
+    };
+    await publishWaiting("started");
+    try {
+      const response = await input.modelRound.runRound({
+        model: input.model ?? "",
+        messages: [...messages],
+        instructions: request.instructions,
+        tools: request.tools,
+        toolChoice: request.toolChoice,
+        reasoningEffort: input.reasoningEffort,
+        signal: input.signal,
+        attachments: input.attachments,
+        butlerData: input.butlerData,
+        usageAttribution: input.usageAttribution
+          ? { ...input.usageAttribution, roundIndex }
+          : undefined,
+        cacheScope: input.cacheScope,
+        providerRetryAttempts: input.providerRetryAttempts,
+        continuation,
+        onProviderStreamEvent: input.onProviderStreamEvent,
+        onProviderResponseIdentity: input.onProviderResponseIdentity,
+      });
+      continuation = response.continuation;
+      await publishWaiting("completed");
+      return response;
+    } catch (error) {
+      await publishWaiting(input.signal?.aborted ? "cancelled" : "failed");
+      throw error;
+    }
   };
 
   const appendAssistantResponse = (response: ModelRoundResult): {

@@ -1,25 +1,17 @@
 import { useEffect, useState } from "react";
 import type { ProgressRow } from "@/app/types.ts";
-import { Typo } from "@/butler-ds";
-
-const secondaryText = {
-  color: "var(--text-secondary)",
-  minWidth: 0,
-  overflowWrap: "anywhere",
-} as const;
+import { CurrentStatusText } from "./CurrentStatusText";
 
 export function CurrentModelRoundWaiting({ row }: { row: ProgressRow }) {
   const elapsed = useElapsedTime(row.created_at);
   return (
-    <section
-      data-test-class="turn-model-round-waiting"
-      aria-label="모델 응답 대기"
-    >
-      <Typo.Body as="p" style={secondaryText}>
-        응답 생성 중
-        {elapsed ? ` · ${elapsed}` : ""}
-      </Typo.Body>
-    </section>
+    <CurrentStatusText
+      row={row}
+      label="응답 생성 중"
+      suffix={elapsed}
+      testClass="turn-model-round-waiting"
+      ariaLabel="모델 응답 대기"
+    />
   );
 }
 

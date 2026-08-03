@@ -21,10 +21,17 @@ test("composer progress owns the canonical Work and Task list", () => {
           bridge_phase: "btcc_work_ledger",
           safe_detail_rows: [
             {
+              id: "task-description",
+              kind: "task_description",
+              safe_label: "Task",
+              safe_value: "전체 실행 경로에서 진행 상태가 실제 작업과 일치하도록 만든다.",
+              state: "active",
+            },
+            {
               id: "task-outcome",
               kind: "task_outcome",
               safe_label: "Task outcome",
-              safe_value: "실제 제품 경로 전체에서 진행 정보가 손실 없이 실시간으로 동기화된다.",
+              safe_value: "현재 투영 경로를 확인 중이다.",
               state: "active",
             },
             {
@@ -67,7 +74,8 @@ test("composer progress owns the canonical Work and Task list", () => {
   expect(html).toContain("work-progress-panel");
   expect(html).not.toContain("Synchronize canonical progress");
   expect(html).toContain("실시간 진행 동기화");
-  expect(html).toContain("실제 제품 경로 전체에서 진행 정보가 손실 없이 실시간으로 동기화된다.");
+  expect(html).toContain("전체 실행 경로에서 진행 상태가 실제 작업과 일치하도록 만든다.");
+  expect(html).not.toContain("현재 투영 경로를 확인 중이다.");
   expect(html).toContain('data-state="reviewing"');
   expect(html).toContain('data-state="correction-required"');
   expect(html).toContain('data-state="blocked"');

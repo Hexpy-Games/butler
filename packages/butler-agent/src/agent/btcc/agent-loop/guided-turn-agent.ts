@@ -183,10 +183,12 @@ export function createProductionGuidedTurnAgent(input: {
           effectContext: initialWork
             ? renderGuidedEffectContext(
                 input.effectJournal.listForWork(initialWork.work.workId),
-              )
+            )
             : "",
         }),
+        turnId: turn.turnId,
         instructions: guidedInstructions(policy),
+        progress,
         model: selectedModelRef(turn),
         reasoningEffort: turn.modelSelection.reasoningEffort,
         cacheScope: `btcc-guided:${turn.sessionId}`,

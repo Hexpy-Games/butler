@@ -142,6 +142,9 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "Plan review judges the Plan itself",
   );
   expect(instructions).toContain(
+    "mark the first action you will execute active in that same call's action_updates",
+  );
+  expect(instructions).toContain(
     "same record_work_review tool for Plan Review, result Review, and separate completion Validation",
   );
   expect(instructions).toContain(

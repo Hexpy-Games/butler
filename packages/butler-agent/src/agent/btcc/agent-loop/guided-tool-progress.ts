@@ -1,6 +1,7 @@
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import { digest } from "../identity/index.ts";
-import { publicToolTitle } from "../projection/index.ts";
+import { publicToolTitle } from "../projection/guided-activity-content.ts";
+import { summarizeToolProgress } from "../../output/progress/tool-progress.ts";
 
 export function rememberDescribedTools(
   toolName: string,
@@ -24,20 +25,27 @@ export async function publishOperation(
     activityId: string;
     requestId: string;
     toolName: string;
+    args?: Record<string, unknown>;
     status: "started" | "completed" | "failed" | "cancelled";
     resultJson?: string;
   },
 ): Promise<void> {
   if (!progress?.operationChanged) return;
   try {
+    const args = input.args ?? {};
+    const summary = summarizeToolProgress(input.toolName, args, "ko");
+    const inputLabel = summary.inputLabel;
+    const detailRows = summary.detailRows;
     await progress.operationChanged({
       turnId: input.turnId,
       semanticState: "admitted",
       activityId: input.activityId,
       requestId: input.requestId,
-      publicTitle: publicToolTitle(input.toolName),
+      publicTitle: publicToolTitle(input.toolName, args),
       capabilityRef: input.toolName,
       status: input.status,
+      ...(inputLabel && inputLabel !== input.toolName ? { inputLabel } : {}),
+      ...(detailRows.length > 0 ? { detailRows } : {}),
       ...(input.resultJson
         ? {
             resultRef: {
@@ -50,6 +58,22 @@ export async function publishOperation(
     });
   } catch {
     // Public progress cannot veto tool execution.
+  }
+}
+
+export async function publishModelRoundWaiting(
+  progress: BtccTurnProgressObserver | undefined,
+  input: {
+    turnId: string;
+    requestId: string;
+    status: "started" | "completed" | "failed" | "cancelled";
+  },
+): Promise<void> {
+  if (!progress?.modelRoundWaitingChanged) return;
+  try {
+    await progress.modelRoundWaitingChanged(input);
+  } catch {
+    // Presentation progress cannot veto the provider round.
   }
 }
 

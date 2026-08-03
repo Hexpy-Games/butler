@@ -1,5 +1,6 @@
 import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
+import type { ToolProgressSummary } from "../tool-support/index.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -273,6 +274,7 @@ export interface BtccTurnRuntime {
 export type WorkProgressTask = {
   taskId: string;
   taskTitle: string;
+  taskDescription: string;
   taskOutcome: string;
   taskOrder: number;
   taskState: "planned" | "active" | "reviewing" | "completed" |
@@ -313,8 +315,16 @@ export interface BtccTurnProgressObserver {
     publicTitle: string;
     capabilityRef: string;
     status: "started" | "completed" | "failed" | "cancelled";
+    inputLabel?: ToolProgressSummary["inputLabel"];
+    detailRows?: ToolProgressSummary["detailRows"];
     resultRef?: { id: string; sha256: string };
     byteLength?: number;
+  }): void | Promise<void>;
+  /** Presentation-only liveness for the provider request currently in flight. */
+  modelRoundWaitingChanged?(update: {
+    turnId: string;
+    requestId: string;
+    status: "started" | "completed" | "failed" | "cancelled";
   }): void | Promise<void>;
   operationalNoticeChanged?(update: {
     turnId: string;

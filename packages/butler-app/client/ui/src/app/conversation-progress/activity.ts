@@ -36,7 +36,7 @@ export interface TurnActivityProjection {
 }
 
 export function projectTurnActivity(rows: ProgressRow[]): TurnActivityProjection {
-  const visibleRows = visibleProgressRows(rows);
+  const visibleRows = orderedProgressRows(visibleProgressRows(rows));
   const readModels = projectActivityReadModels(visibleRows);
   const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const phaseActivities = phaseActivityRows(activityRows);
@@ -201,15 +201,34 @@ function currentSemanticState(
   rows: ProgressRow[],
   activities: PhaseActivity[],
 ): string | undefined {
-  for (let index = rows.length - 1; index >= 0; index -= 1) {
-    const row = rows[index];
-    if (!row) continue;
-    if (row.activity_stage) return row.activity_stage;
-    if (row.semantic_block_id && row.bridge_phase !== "btcc_operation") {
-      return row.semantic_block_id;
-    }
-  }
+  const latestModelActivity = findLatest(rows, (row) =>
+    (row.work_decision_source === "model-authored" ||
+      (row.kind === "message" &&
+        row.bridge_phase !== "btcc_operation" &&
+        row.bridge_phase !== "model_round_waiting" &&
+        Boolean(row.semantic_block_id))) &&
+    Boolean(row.activity_stage || row.semantic_block_id));
+  if (latestModelActivity?.activity_stage) return latestModelActivity.activity_stage;
+  if (latestModelActivity?.semantic_block_id) return latestModelActivity.semantic_block_id;
   return activities.at(-1)?.phase;
+}
+
+function orderedProgressRows(rows: ProgressRow[]): ProgressRow[] {
+  if (rows.some((row) => finiteSequence(row.turn_event_sequence) === undefined)) {
+    return [...rows];
+  }
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => {
+      const leftSequence = finiteSequence(left.row.turn_event_sequence);
+      const rightSequence = finiteSequence(right.row.turn_event_sequence);
+      return (leftSequence ?? 0) - (rightSequence ?? 0) || left.index - right.index;
+    })
+    .map(({ row }) => row);
+}
+
+function finiteSequence(value?: number): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function findLatest(

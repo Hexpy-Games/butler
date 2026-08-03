@@ -45,7 +45,7 @@ const REPLACE_WORK_PLAN: FunctionToolDefinition = {
             action_key: {
               type: "string",
               minLength: 1,
-              description: "A short semantic key unique within this plan.",
+              description: "A concise, stable, user-readable action label unique within this plan; keep it within 32 characters and put the full outcome in description.",
             },
             description: { type: "string", minLength: 1 },
             dependency_keys: {
@@ -95,6 +95,7 @@ const RECORD_WORK_CHECKPOINT: FunctionToolDefinition = {
   description: [
     "Update the current Managed Work stage or action checklist when no Review is being recorded.",
     "Use it at a meaningful boundary, not to narrate every tool call.",
+    "When execution starts or the current action changes, include action_updates that mark the current action active and any completed prior action done; the runtime records exactly the action keys you name.",
     "The runtime checks only the small legal stage transition and known action keys.",
     "If a transition is rejected, use the returned allowed next stages; useful work and final delivery remain valid.",
   ].join(" "),
@@ -152,6 +153,7 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
     "Record a concise Plan Review, result Review, or whole-Work completion Validation with the current action progress.",
     "Plan and result subjects enter review; completion enters validation against the original request, current Plan, and accepted result Review.",
     "Include action_updates known at that point and next_stage only when taking one legal next step after the entered stage.",
+    "When an accepted Plan enters execution, mark the first action to execute active in the same call's action_updates.",
     "The runtime validates only fixed stage transitions, known action keys, and durable bindings; it does not judge the Review or Validation meaning.",
     "Accepting a result never completes Work. A completion acceptance can complete Work only after the current Plan and result Reviews are accepted, every action is done or skipped, and no effect blocker remains.",
     "Disclosed non-critical limits may still be accepted; partial means a material requested outcome remains unfinished.",
