@@ -837,6 +837,10 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
       "execution",
       "review",
     ]);
+    expect(activities[3]).toMatchObject({
+      title: "읽기: source.txt",
+      summary: "계획에 따라 실제 파일 내용을 확인합니다.",
+    });
     expect(activities.at(-1)).toMatchObject({
       title: "결과 검토",
       summary: "The requested source was read and is ready to report.",

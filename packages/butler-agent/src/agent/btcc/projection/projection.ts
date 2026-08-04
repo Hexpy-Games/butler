@@ -26,6 +26,7 @@ type ActivityGroup = GuidedActivityBinding & {
   nextStep?: string;
   precedingGroups?: ActivityGroup[];
   followingGroups?: ActivityGroup[];
+  startsExecution?: boolean;
   nextExecutionTitle?: string;
   published: boolean;
 };
@@ -111,7 +112,7 @@ export function createGuidedActivityProjection(input: {
       const group = groupsById.get(binding.activityId);
       if (group) {
         if (group.deferredUntilAccepted) {
-          if (group.nextExecutionTitle) {
+          if (group.startsExecution) {
             pendingExecutionTitle = group.nextExecutionTitle;
             currentActivity = undefined;
           } else {
@@ -199,9 +200,14 @@ export function createGuidedActivityProjection(input: {
       ...(first?.name === "record_work_review" &&
           first.args.subject === "plan" &&
           first.args.verdict === "accept" &&
-          first.args.next_stage === "execution" &&
-          activeActionTitle
-        ? { nextExecutionTitle: activeActionTitle }
+          (first.args.next_stage === undefined ||
+            first.args.next_stage === "execution")
+        ? {
+            startsExecution: true,
+            ...(activeActionTitle
+              ? { nextExecutionTitle: activeActionTitle }
+              : {}),
+          }
         : {}),
       published: false,
     };
