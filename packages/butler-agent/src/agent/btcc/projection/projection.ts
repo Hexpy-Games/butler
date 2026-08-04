@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { WorkStage } from "../work/index.ts";
 import {
+  activeWorkActionTitle,
   activityContent,
   activityKind,
   boundedTitle,
@@ -25,7 +26,7 @@ type ActivityGroup = GuidedActivityBinding & {
   nextStep?: string;
   precedingGroups?: ActivityGroup[];
   followingGroups?: ActivityGroup[];
-  ownsOrdinaryExecution?: boolean;
+  nextExecutionTitle?: string;
   published: boolean;
 };
 
@@ -57,6 +58,7 @@ export function createGuidedActivityProjection(input: {
   const groupsById = new Map<string, ActivityGroup>();
   let currentActivity: ActivityGroup | undefined;
   let fallbackOrdinaryActivity: ActivityGroup | undefined;
+  let pendingExecutionTitle: string | undefined;
 
   return {
     observeToolBatch(batch) {
@@ -109,7 +111,12 @@ export function createGuidedActivityProjection(input: {
       const group = groupsById.get(binding.activityId);
       if (group) {
         if (group.deferredUntilAccepted) {
-          currentActivity = group.followingGroups?.at(-1) ?? group;
+          if (group.nextExecutionTitle) {
+            pendingExecutionTitle = group.nextExecutionTitle;
+            currentActivity = undefined;
+          } else {
+            currentActivity = group.followingGroups?.at(-1) ?? group;
+          }
           fallbackOrdinaryActivity = undefined;
         }
         await publishGroup(input, group);
@@ -132,11 +139,15 @@ export function createGuidedActivityProjection(input: {
     const ordinaryCalls = normalizedCalls.filter(
       (candidate) => activityKind(candidate.name) === "ordinary",
     );
-    const authoredText = publicText(batch.text);
     let ordinaryGroup: ActivityGroup | undefined;
     if (ordinaryCalls.length > 0) {
-      if (authoredText && currentActivity?.ownsOrdinaryExecution !== true) {
-        ordinaryGroup = activityGroup({ text: batch.text, calls: ordinaryCalls });
+      if (pendingExecutionTitle) {
+        ordinaryGroup = activityGroup({
+          text: batch.text,
+          calls: ordinaryCalls,
+          title: pendingExecutionTitle,
+        });
+        pendingExecutionTitle = undefined;
         currentActivity = ordinaryGroup;
         fallbackOrdinaryActivity = undefined;
       } else {
@@ -160,26 +171,37 @@ export function createGuidedActivityProjection(input: {
   function activityGroup(groupInput: {
     text: string;
     calls: ToolCall[];
+    title?: string;
   }): ActivityGroup {
     const first = groupInput.calls[0];
     const content = activityContent(first, groupInput.calls, groupInput.text);
-    const authoredOrdinaryTitle = first && activityKind(first.name) === "ordinary"
-      ? publicText(groupInput.text)
-      : "";
+    const activeActionTitle = first &&
+        (first.name === "record_work_review" ||
+          first.name === "record_work_checkpoint")
+      ? activeWorkActionTitle(first.args)
+      : undefined;
     const commandActivity = first?.name === "run_command" &&
       groupInput.calls.every((call) => call.name === "run_command");
     const group: ActivityGroup = {
       activityId: activityId(input.turnId),
       displayStage: content.displayStage,
       deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
-      title: boundedTitle(authoredOrdinaryTitle || content.title),
+      title: boundedTitle(
+        groupInput.title ||
+          (first?.name === "record_work_checkpoint" && activeActionTitle) ||
+          content.title,
+      ),
       summary: commandActivity
         ? content.summary
         : distinctSummary(content.title, content.summary),
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
-      ...(first && activityKind(first.name) === "ordinary"
-        ? { ownsOrdinaryExecution: true }
+      ...(first?.name === "record_work_review" &&
+          first.args.subject === "plan" &&
+          first.args.verdict === "accept" &&
+          first.args.next_stage === "execution" &&
+          activeActionTitle
+        ? { nextExecutionTitle: activeActionTitle }
         : {}),
       published: false,
     };
