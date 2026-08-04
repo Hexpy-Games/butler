@@ -8,8 +8,12 @@ import {
   LIVE_EVENT_STABLE_CONNECTION_MS,
   liveEventReconnectDelayMs,
 } from "./liveEventReconnect.ts";
+import {
+  createLiveSessionReconciliation,
+  eventSessionId,
+  isSessionViewRefreshEvent,
+} from "./liveSessionReconciliation.ts";
 
-const RECONCILE_SETTLE_MS = 100;
 const DESKTOP_NOTIFICATION_RECENT_WINDOW_MS = 60_000;
 const TERMINAL_TURN_STATES = new Set(["delivered", "failed", "cancelled"]);
 
@@ -45,9 +49,12 @@ export function useLiveSessionEvents(): void {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
     let stableConnectionTimer: ReturnType<typeof setTimeout> | undefined;
     let consecutiveFailures = 0;
+    const reconciliation = createLiveSessionReconciliation(
+      useButlerStore,
+      () => activeChatIdRef.current,
+    );
 
     const markStreamHealthy = () => {
       consecutiveFailures = 0;
@@ -55,47 +62,34 @@ export function useLiveSessionEvents(): void {
       stableConnectionTimer = undefined;
     };
 
-    const reconcileActiveSession = () => {
-      if (reconcileTimer) clearTimeout(reconcileTimer);
-      reconcileTimer = setTimeout(() => {
-        reconcileTimer = undefined;
-        if (cancelled) return;
-        void useButlerStore
-          .getState()
-          .refreshSessionView(activeChatIdRef.current);
-      }, RECONCILE_SETTLE_MS);
-    };
-
     const applyEvent = (event: TimelineEvent) => {
       if (cancelled) return;
       markStreamHealthy();
       if (event.type === "stream.reconcile_required") {
-        eventCursorRef.current = Math.max(
-          eventCursorRef.current,
-          Number(event.id ?? 0),
-        );
-        reconcileActiveSession();
+        advanceEventCursor(eventCursorRef, event.id);
+        reconciliation.requestRefresh();
         return;
       }
       const state = useButlerStore.getState();
       state.applyTimelineEvents([event]);
-      eventCursorRef.current = Math.max(
-        eventCursorRef.current,
-        Number(event.id ?? 0),
-      );
+      advanceEventCursor(eventCursorRef, event.id);
       notifyDesktopEvent(event, notifiedMessageIdsRef, notifiedTurnIdsRef);
-      if (isTerminalEventForSession(event, activeChatIdRef.current)) {
-        reconcileActiveSession();
+      if (
+        isSessionViewRefreshEvent(event) &&
+        eventSessionId(event) === activeChatIdRef.current
+      ) {
+        reconciliation.requestRefresh();
       }
     };
 
-    const connect = () => {
+    const connect = (reconnect = false) => {
       if (cancelled) return;
       if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
       stableConnectionTimer = setTimeout(() => {
         stableConnectionTimer = undefined;
         consecutiveFailures = 0;
       }, LIVE_EVENT_STABLE_CONNECTION_MS);
+      if (reconnect) reconciliation.requestRefresh();
       const nextUnsubscribe = subscribeLiveEvents(
         eventCursorRef.current,
         applyEvent,
@@ -109,7 +103,7 @@ export function useLiveSessionEvents(): void {
           consecutiveFailures += 1;
           reconnectTimer = setTimeout(() => {
             reconnectTimer = undefined;
-            connect();
+            connect(true);
           }, delayMs);
         },
       );
@@ -118,26 +112,25 @@ export function useLiveSessionEvents(): void {
     };
 
     connect();
+    if (useButlerStore.getState().sessionView?.active_turn) {
+      reconciliation.requestRefresh();
+    }
+    reconciliation.startActiveTurnPolling();
     return () => {
       cancelled = true;
       unsubscribe?.();
       if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (reconcileTimer) clearTimeout(reconcileTimer);
+      reconciliation.dispose();
       if (stableConnectionTimer) clearTimeout(stableConnectionTimer);
     };
-  }, [shouldFollow]);
+  }, [activeChatId, shouldFollow]);
 }
 
-function isTerminalEventForSession(
-  event: TimelineEvent,
-  sessionId: string,
-): boolean {
-  const turn = event.payload?.turn;
-  return Boolean(
-    event.type === "turn.state_changed" &&
-    turn?.chat_id === sessionId &&
-    TERMINAL_TURN_STATES.has(turn.state),
-  );
+function advanceEventCursor(cursorRef: { current: number }, id?: number): void {
+  const eventId = Number(id);
+  if (Number.isFinite(eventId)) {
+    cursorRef.current = Math.max(cursorRef.current, eventId);
+  }
 }
 
 function notifyDesktopEvent(

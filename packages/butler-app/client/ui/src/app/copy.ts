@@ -87,6 +87,7 @@ export interface AppCopy {
     projectDashboard: string;
     newProjectChat: string;
     projectMenu: string;
+    projectCreateTitle: string;
     projectRenameTitle: string;
     projectName: string;
     pin: string;
@@ -203,6 +204,7 @@ export interface AppCopy {
     more: string;
     refresh: string;
     save: string;
+    create: string;
     cancel: string;
     delete: string;
     copy: string;
@@ -738,6 +740,7 @@ const koKrCopy: AppCopy = {
     projectDashboard: "프로젝트 대시보드",
     newProjectChat: "새 프로젝트 대화",
     projectMenu: "프로젝트 메뉴",
+    projectCreateTitle: "새 프로젝트 만들기",
     projectRenameTitle: "프로젝트 이름 바꾸기",
     projectName: "프로젝트 이름",
     pin: "고정",
@@ -856,6 +859,7 @@ const koKrCopy: AppCopy = {
     more: "더보기",
     refresh: "새로고침",
     save: "저장",
+    create: "만들기",
     cancel: "취소",
     delete: "삭제",
     copy: "복사",
@@ -1466,6 +1470,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     projectDashboard: "Project dashboard",
     newProjectChat: "New project chat",
     projectMenu: "Project menu",
+    projectCreateTitle: "Create a project",
     projectRenameTitle: "Rename project",
     projectName: "Project name",
     pin: "Pin",
@@ -1584,6 +1589,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     more: "More",
     refresh: "Refresh",
     save: "Save",
+    create: "Create",
     cancel: "Cancel",
     delete: "Delete",
     copy: "Copy",

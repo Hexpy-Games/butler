@@ -98,6 +98,10 @@ import { finishVisibleCancellation } from "./cancellation/finish-visible-cancell
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
 type SessionAction = "rename" | "archive";
 
+interface SessionViewRefreshOptions {
+  isCurrent?: () => boolean;
+}
+
 interface ButlerStore {
   leftOpen: boolean;
   rightOpen: boolean;
@@ -134,6 +138,7 @@ interface ButlerStore {
   sendingOperations: Record<string, string>;
   retryingTurnId: string | null;
   creatingProject: boolean;
+  projectCreateDialogOpen: boolean;
   commandOpen: boolean;
   renameProject: ProjectSummary | null;
   renameSession: SessionSummary | null;
@@ -168,6 +173,7 @@ interface ButlerStore {
   setIsSending: (isSending: boolean) => void;
   setRetryingTurnId: (retryingTurnId: string | null) => void;
   setCreatingProject: (creatingProject: boolean) => void;
+  setProjectCreateDialogOpen: (open: boolean) => void;
   setCommandOpen: (commandOpen: boolean) => void;
   setRenameProject: (renameProject: ProjectSummary | null) => void;
   setRenameSession: (renameSession: SessionSummary | null) => void;
@@ -181,7 +187,10 @@ interface ButlerStore {
   clearPendingProjectDocumentAttachment: () => void;
   openProjectDashboard: (projectId: string) => void;
   refreshNavigation: () => Promise<void>;
-  refreshSessionView: (chatId?: string) => Promise<boolean>;
+  refreshSessionView: (
+    chatId?: string,
+    options?: SessionViewRefreshOptions,
+  ) => Promise<boolean>;
   reloadMessages: (chatId?: string) => Promise<void>;
   refreshSessionSummary: (chatId?: string) => Promise<void>;
   sendMessage: (text: string, controls?: ComposerControls) => Promise<void>;
@@ -194,7 +203,7 @@ interface ButlerStore {
   ) => Promise<void>;
   deleteQueuedMessage: (queuedMessageId: string) => Promise<void>;
   cancelActiveTurn: () => Promise<void>;
-  createScratchProject: () => Promise<void>;
+  createScratchProject: (displayName: string) => Promise<boolean>;
   createProjectFromExistingFolder: () => Promise<void>;
   runProjectAction: (
     project: ProjectSummary,
@@ -215,7 +224,6 @@ interface ButlerStore {
   retryTurn: (turnId: string) => Promise<void>;
   retryTurnWithCurrentControls: (turnId: string) => Promise<void>;
   controlWorker: (workerId: string, action: string) => Promise<void>;
-  exportTranscript: () => Promise<void>;
   navigateCommandResult: (result: CommandPaletteResult) => void;
 }
 
@@ -617,6 +625,25 @@ function applySessionView(
   };
 }
 
+let activeSessionGeneration = 0;
+let nextSessionViewRequestToken = 0;
+const latestSessionViewRequestByChat = new Map<string, number>();
+
+function beginSessionViewRequest(
+  chatId: string,
+  get: () => ButlerStore,
+  options?: SessionViewRefreshOptions,
+): () => boolean {
+  const requestToken = ++nextSessionViewRequestToken;
+  latestSessionViewRequestByChat.set(chatId, requestToken);
+  const requestGeneration = activeSessionGeneration;
+  return () =>
+    options?.isCurrent?.() !== false &&
+    get().activeChatId === chatId &&
+    activeSessionGeneration === requestGeneration &&
+    latestSessionViewRequestByChat.get(chatId) === requestToken;
+}
+
 const initialSettings = readCachedSettings();
 setAppCopyLanguage(initialSettings.language);
 
@@ -653,6 +680,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   sendingOperations: {},
   retryingTurnId: null,
   creatingProject: false,
+  projectCreateDialogOpen: false,
   commandOpen: false,
   renameProject: null,
   renameSession: null,
@@ -887,6 +915,8 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     })),
   setRetryingTurnId: (retryingTurnId) => set({ retryingTurnId }),
   setCreatingProject: (creatingProject) => set({ creatingProject }),
+  setProjectCreateDialogOpen: (projectCreateDialogOpen) =>
+    set({ projectCreateDialogOpen }),
   setCommandOpen: (commandOpen) => set({ commandOpen }),
   setRenameProject: (renameProject) => set({ renameProject }),
   setRenameSession: (renameSession) => set({ renameSession }),
@@ -950,13 +980,14 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
-  refreshSessionView: async (chatId = get().activeChatId) => {
+  refreshSessionView: async (chatId = get().activeChatId, options) => {
     if (!isServerBackedSessionId(chatId)) return false;
+    const isCurrentRequest = beginSessionViewRequest(chatId, get, options);
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
       );
-      if (get().activeChatId !== chatId) return false;
+      if (!isCurrentRequest()) return false;
       set((state) => applySessionView(state, data));
       void writeCachedMessageList(chatId, messageListViewFromSessionView(data));
       return true;
@@ -968,6 +999,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
 
   reloadMessages: async (chatId = get().activeChatId) => {
     if (!isServerBackedSessionId(chatId)) return;
+    const isCurrentRequest = beginSessionViewRequest(chatId, get);
     let cached: MessageListView | null = null;
     try {
       try {
@@ -975,7 +1007,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       } catch {
         // Cache reads are opportunistic; fall through to the server.
       }
-      if (get().activeChatId !== chatId) return;
+      if (!isCurrentRequest()) return;
       if (cached) {
         const cursor = messageListSyncCursor(cached);
         if (cursor > 0) {
@@ -985,7 +1017,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       const snapshot = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
       );
-      if (get().activeChatId !== chatId) return;
+      if (!isCurrentRequest()) return;
       set((state) => applySessionView(state, snapshot));
       void writeCachedMessageList(
         chatId,
@@ -998,11 +1030,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
 
   refreshSessionSummary: async (chatId = get().activeChatId) => {
     if (!isServerBackedSessionId(chatId)) return;
+    const isCurrentRequest = beginSessionViewRequest(chatId, get);
     try {
       const data = await api<SessionView>(
         `/session-view?session_id=${encodeURIComponent(chatId)}`,
       );
-      if (get().activeChatId !== chatId) return;
+      if (!isCurrentRequest()) return;
       set((state) => applySessionView(state, data));
       void writeCachedMessageList(chatId, messageListViewFromSessionView(data));
     } catch {
@@ -1491,7 +1524,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
-  createScratchProject: async () => {
+  createScratchProject: async (displayName) => {
     set({
       creatingProject: true,
       status: { label: "creating project", tone: "muted" },
@@ -1499,14 +1532,19 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     try {
       const result = await api<{ project: ProjectSummary }>("/projects", {
         method: "POST",
-        body: JSON.stringify({ source: "scratch" }),
+        body: JSON.stringify({
+          source: "scratch",
+          display_name: displayName.trim(),
+        }),
       });
       await get().refreshNavigation();
       get().openNewProjectChat(result.project.id);
       set({ messages: [], status: { label: "ready", tone: "ok" } });
+      return true;
     } catch (error) {
       notifyError(error, "Project creation failed", { id: "project-create" });
       set({ status: { label: "ready", tone: "ok" } });
+      return false;
     } finally {
       set({ creatingProject: false });
     }
@@ -1743,27 +1781,6 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     }
   },
 
-  exportTranscript: async () => {
-    try {
-      const exported = await api<{ content: string; filename: string }>(
-        `/transcript-export?session_id=${encodeURIComponent(get().activeChatId)}`,
-      );
-      const blob = new Blob([exported.content], {
-        type: "text/markdown;charset=utf-8",
-      });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = exported.filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      set({ status: { label: "transcript exported", tone: "ok" } });
-    } catch (error) {
-      notifyError(error, "Export failed", { id: "transcript-export" });
-      set({ status: { label: "ready", tone: "ok" } });
-    }
-  },
-
   navigateCommandResult: (result) => {
     if (result.route.startsWith("session:")) {
       get().openSession(result.route.slice("session:".length));
@@ -1782,6 +1799,12 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     set({ commandOpen: false });
   },
 }));
+
+useButlerStore.subscribe((state, previousState) => {
+  if (state.activeChatId !== previousState.activeChatId) {
+    activeSessionGeneration += 1;
+  }
+});
 
 export const selectActiveChat = (state: ButlerStore) =>
   activeChatFromNavigation(state.navigation, state.activeChatId);

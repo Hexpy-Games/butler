@@ -59,14 +59,20 @@ export function resolveGitWorkspaceSummary(
     "branch",
     "--show-current",
   ]);
-  const branchName = branch.status === 0
-    ? safeBranchName(branch.stdout)
-    : "";
+  if (branch.error || branch.status !== 0) {
+    return {
+      available: false,
+      workspace_mode: "unknown" as const,
+      safe_status: "Git workspace unavailable",
+      safe_error_code: "git_workspace_unavailable",
+    };
+  }
+  const branchName = safeBranchName(branch.stdout);
   return {
     available: true,
     workspace_mode: "git" as const,
     ...(branchName ? { branch_name: branchName } : {}),
-    safe_status: branchName ? `Git branch ${branchName}` : "Git workspace",
+    safe_status: branchName ? `Git branch ${branchName}` : "Detached HEAD",
   };
 }
 

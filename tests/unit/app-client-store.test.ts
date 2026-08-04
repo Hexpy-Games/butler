@@ -900,6 +900,69 @@ test("refreshSessionSummary ignores late responses for inactive sessions", async
   expect(useButlerStore.getState().summary).toBeNull();
 });
 
+test("refreshSessionSummary ignores a stale A response after A-to-B-to-A navigation", async () => {
+  const sessionA = "session-summary-aba-a";
+  const sessionB = "session-summary-aba-b";
+  let refreshCountForA = 0;
+  let releaseStaleRefresh: (() => void) | undefined;
+  let markStaleRefreshStarted: (() => void) | undefined;
+  const staleRefreshStarted = new Promise<void>((resolve) => {
+    markStaleRefreshStarted = resolve;
+  });
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(String(input), "http://butler.local");
+    const chatId = url.searchParams.get("session_id");
+    if (chatId === sessionA && refreshCountForA++ === 0) {
+      await new Promise<void>((resolve) => {
+        releaseStaleRefresh = resolve;
+        markStaleRefreshStarted?.();
+      });
+      return jsonResponse(
+        sessionView(sessionA, {
+          latestProgress: {
+            turn_id: "turn-summary-stale-a",
+            state: "thinking",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    if (chatId === sessionA) {
+      return jsonResponse(
+        sessionView(sessionA, {
+          latestProgress: {
+            turn_id: "turn-summary-fresh-a",
+            state: "delivered",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    return jsonResponse(sessionView(sessionB));
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: sessionA,
+    summary: null,
+  });
+  const staleRefresh = useButlerStore.getState().refreshSessionSummary(sessionA);
+  await staleRefreshStarted;
+
+  useButlerStore.getState().openSession(sessionB);
+  useButlerStore.getState().openSession(sessionA);
+  await useButlerStore.getState().refreshSessionSummary(sessionA);
+
+  expect(useButlerStore.getState().summary?.latest_progress?.turn_id).toBe(
+    "turn-summary-fresh-a",
+  );
+  releaseStaleRefresh?.();
+  await staleRefresh;
+
+  expect(useButlerStore.getState().summary?.latest_progress?.turn_id).toBe(
+    "turn-summary-fresh-a",
+  );
+});
+
 test("refreshSessionSummary preserves visible progress on transient failures", async () => {
   globalThis.fetch = (async () => {
     throw new Error("temporary session view failure");
@@ -1082,6 +1145,90 @@ test("reloadMessages ignores late responses for inactive sessions", async () => 
   await pending;
 
   expect(useButlerStore.getState().messages).toEqual([]);
+});
+
+test("reloadMessages ignores a stale A response after A-to-B-to-A navigation", async () => {
+  const sessionA = "session-reload-aba-a";
+  const sessionB = "session-reload-aba-b";
+  const staleMessage = messageRecord(
+    "message-reload-stale-a",
+    sessionA,
+    "assistant",
+    "stale A",
+    1,
+    "turn-reload-stale-a",
+  );
+  const freshMessage = messageRecord(
+    "message-reload-fresh-a",
+    sessionA,
+    "assistant",
+    "fresh A",
+    1,
+    "turn-reload-fresh-a",
+  );
+  let refreshCountForA = 0;
+  let releaseStaleRefresh: (() => void) | undefined;
+  let markStaleRefreshStarted: (() => void) | undefined;
+  const staleRefreshStarted = new Promise<void>((resolve) => {
+    markStaleRefreshStarted = resolve;
+  });
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(String(input), "http://butler.local");
+    const chatId = url.searchParams.get("session_id");
+    if (chatId === sessionA && refreshCountForA++ === 0) {
+      await new Promise<void>((resolve) => {
+        releaseStaleRefresh = resolve;
+        markStaleRefreshStarted?.();
+      });
+      return jsonResponse(
+        sessionView(sessionA, {
+          messages: [staleMessage],
+          latestProgress: {
+            turn_id: staleMessage.turn_id!,
+            state: "delivered",
+            safe_progress_rows: [],
+          },
+          turnState: "delivered",
+        }),
+      );
+    }
+    if (chatId === sessionA) {
+      return jsonResponse(
+        sessionView(sessionA, {
+          messages: [freshMessage],
+          latestProgress: {
+            turn_id: freshMessage.turn_id!,
+            state: "delivered",
+            safe_progress_rows: [],
+          },
+          turnState: "delivered",
+        }),
+      );
+    }
+    return jsonResponse(sessionView(sessionB));
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: sessionA,
+    messages: [],
+    sessionView: sessionView(sessionA),
+  });
+  const staleRefresh = useButlerStore.getState().reloadMessages(sessionA);
+  await staleRefreshStarted;
+
+  useButlerStore.getState().openSession(sessionB);
+  useButlerStore.getState().openSession(sessionA);
+  await useButlerStore.getState().reloadMessages(sessionA);
+
+  expect(useButlerStore.getState().messages.map((message) => message.id)).toEqual([
+    freshMessage.id,
+  ]);
+  releaseStaleRefresh?.();
+  await staleRefresh;
+
+  expect(useButlerStore.getState().messages.map((message) => message.id)).toEqual([
+    freshMessage.id,
+  ]);
 });
 
 test("reloadMessages hydrates turn progress for every loaded assistant turn", async () => {
@@ -3047,6 +3194,69 @@ test("cancelActiveTurn does not cancel a refreshed turn after the active chat ch
 
   expect(calls).toEqual(["/session-view?session_id=session-a"]);
   expect(useButlerStore.getState().sessionView).toBeNull();
+});
+
+test("refreshSessionView ignores a stale A response after A-to-B-to-A navigation", async () => {
+  const sessionA = "session-refresh-aba-a";
+  const sessionB = "session-refresh-aba-b";
+  let refreshCountForA = 0;
+  let releaseStaleRefresh: (() => void) | undefined;
+  let markStaleRefreshStarted: (() => void) | undefined;
+  const staleRefreshStarted = new Promise<void>((resolve) => {
+    markStaleRefreshStarted = resolve;
+  });
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    const url = new URL(String(input), "http://butler.local");
+    const chatId = url.searchParams.get("session_id");
+    if (chatId === sessionA && refreshCountForA++ === 0) {
+      await new Promise<void>((resolve) => {
+        releaseStaleRefresh = resolve;
+        markStaleRefreshStarted?.();
+      });
+      return jsonResponse(
+        sessionView(sessionA, {
+          latestProgress: {
+            turn_id: "turn-stale-a",
+            state: "thinking",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    if (chatId === sessionA) {
+      return jsonResponse(
+        sessionView(sessionA, {
+          latestProgress: {
+            turn_id: "turn-fresh-a",
+            state: "delivered",
+            safe_progress_rows: [],
+          },
+        }),
+      );
+    }
+    return jsonResponse(sessionView(sessionB));
+  }) as unknown as typeof fetch;
+
+  useButlerStore.setState({
+    activeChatId: sessionA,
+    sessionView: sessionView(sessionA),
+  });
+  const staleRefresh = useButlerStore.getState().refreshSessionView(sessionA);
+  await staleRefreshStarted;
+
+  useButlerStore.getState().openSession(sessionB);
+  useButlerStore.getState().openSession(sessionA);
+  await useButlerStore.getState().refreshSessionView(sessionA);
+
+  expect(useButlerStore.getState().sessionView?.latest_turn?.id).toBe(
+    "turn-fresh-a",
+  );
+  releaseStaleRefresh?.();
+  await staleRefresh;
+
+  expect(useButlerStore.getState().sessionView?.latest_turn?.id).toBe(
+    "turn-fresh-a",
+  );
 });
 
 test("cancelActiveTurn targets only the canonical SessionView active turn", async () => {
