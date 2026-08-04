@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { basename } from "node:path";
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../types.ts";
 import {
   ProjectLedgerProjectScopeError,
@@ -64,7 +66,7 @@ const acceptanceInputField = {
 const recordFields = {
   project_ref: {
     type: "string",
-    description: "Project ref; omit for active project.",
+    description: "Omit for active project.",
   },
   kind: { type: "string", description: "Canonical Ledger record kind." },
   id: { type: "string" },
@@ -75,7 +77,10 @@ const recordFields = {
   review: { type: "string" },
   report: { type: "string" },
   code_commits: { type: "string" },
-  code_commit: { type: "string" },
+  code_commit: {
+    type: "string",
+    enum: ["auto"],
+  },
   ledger_commits: { type: "string" },
   requires_commit_evidence: { type: "boolean" },
   spec: { type: "string" },
@@ -105,8 +110,14 @@ const lifecycleCompleteFields = {
   validation: recordFields.validation,
   review: recordFields.review,
   report: recordFields.report,
-  code_commits: recordFields.code_commits,
-  code_commit: recordFields.code_commit,
+  code_commits: {
+    ...recordFields.code_commits,
+    description: 'JSON array requiring string "repo", "hash", and "message".',
+  },
+  code_commit: {
+    ...recordFields.code_commit,
+    description: 'Use "auto" for active workspace HEAD; never pass a SHA.',
+  },
 };
 
 const workLifecycleCompleteFields = {
@@ -115,21 +126,21 @@ const workLifecycleCompleteFields = {
 };
 
 const toolSpecs = [
-  { name: "project_ledger_index", description: "Rebuild the Project Ledger compact index for the resolved project.", properties: { project_ref: recordFields.project_ref }, mutates: true },
-  { name: "project_ledger_status", description: "Return canonical Project Ledger project summary, stale state, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
-  { name: "project_ledger_list", description: "List bounded Project Ledger records by kind with optional status and text filtering.", required: ["kind"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
-  { name: "project_ledger_show", description: "Show one Project Ledger record summary, optionally including its Markdown body.", required: ["id"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
-  { name: "project_ledger_create", description: "Create one new Ledger record and refresh index/views/check. Do not use this tool to search; use project_ledger_list for existing records. task requires work_id; attempt requires task_id; work/task should include acceptance. Guided Work without a separate spec is recorded as spec-exempt. Batch independent records.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
-  { name: "project_ledger_update", description: "Update one exact modeled Project Ledger source record through CLI/core behavior. Provide both kind and id.", required: ["kind", "id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_work_update", description: "Update or transition Project Ledger work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
-  { name: "project_ledger_work_complete", description: "Complete Project Ledger work with explicit validation, review, and report evidence. Link a separate spec when one exists; concise guided Work without one is recorded as spec-exempt during completion.", required: ["id", "validation", "review", "report"], properties: workLifecycleCompleteFields, mutates: true },
-  { name: "project_ledger_task_update", description: "Update or transition a Project Ledger task.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
-  { name: "project_ledger_task_complete", description: "Complete a Project Ledger task with explicit validation, review, and report evidence.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
-  { name: "project_ledger_attempt_start", description: "Create a started Project Ledger attempt under a task.", required: ["task_id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_attempt_succeed", description: "Mark a Project Ledger attempt succeeded through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_attempt_fail", description: "Mark a Project Ledger attempt failed through CLI/core behavior.", required: ["id"], properties: recordFields, mutates: true },
-  { name: "project_ledger_render", description: "Render a Project Ledger generated view, writing only when write is true.", required: ["view"], properties: { project_ref: recordFields.project_ref, view: { type: "string", description: "Generated view name: dashboard, handoff, or roadmap." }, write: { type: "boolean", description: "Persist the generated view." } }, mutates: true },
-  { name: "project_ledger_check", description: "Run strict Project Ledger validation and return safe issue details.", properties: { project_ref: recordFields.project_ref, verbose: { type: "boolean", description: "Request verbose check behavior from the CLI where supported." } }, mutates: false },
+  { name: "project_ledger_index", description: "Rebuild the compact Ledger index.", properties: { project_ref: recordFields.project_ref }, mutates: true },
+  { name: "project_ledger_status", description: "Read Ledger summary, staleness, and next actions.", properties: { project_ref: recordFields.project_ref }, mutates: false },
+  { name: "project_ledger_list", description: "List bounded Ledger records by kind, status, or query.", required: ["kind"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, status: recordFields.status, query: recordFields.query, limit: recordFields.limit }, mutates: false },
+  { name: "project_ledger_show", description: "Read one Ledger record, optionally with its body.", required: ["id"], properties: { project_ref: recordFields.project_ref, kind: recordFields.kind, id: recordFields.id, include_body: recordFields.include_body }, mutates: false },
+  { name: "project_ledger_create", description: "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
+  { name: "project_ledger_update", description: "Update one exact Ledger record by kind and id.", required: ["kind", "id"], properties: recordFields, mutates: true },
+  { name: "project_ledger_work_update", description: "Update or transition one Work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
+  { name: "project_ledger_work_complete", description: "Complete Work with validation, review, and report evidence. Use code_commit:\"auto\" for required Git evidence; code_commits accepts only canonical JSON evidence.", required: ["id", "validation", "review", "report"], properties: workLifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_task_update", description: "Update or transition one Task.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
+  { name: "project_ledger_task_complete", description: "Complete a Task with validation, review, and report evidence.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_attempt_start", description: "Start an Attempt under a Task.", required: ["task_id"], properties: recordFields, mutates: true },
+  { name: "project_ledger_attempt_succeed", description: "Mark an Attempt succeeded.", required: ["id"], properties: recordFields, mutates: true },
+  { name: "project_ledger_attempt_fail", description: "Mark an Attempt failed.", required: ["id"], properties: recordFields, mutates: true },
+  { name: "project_ledger_render", description: "Render a Ledger view; persist only when write is true.", required: ["view"], properties: { project_ref: recordFields.project_ref, view: { type: "string", description: "dashboard, handoff, or roadmap" }, write: { type: "boolean", description: "Persist the view." } }, mutates: true },
+  { name: "project_ledger_check", description: "Validate Ledger records and return safe issues.", properties: { project_ref: recordFields.project_ref, verbose: { type: "boolean", description: "Include verbose checks." } }, mutates: false },
 ] satisfies ToolSpec[];
 
 export const projectLedgerNativeToolDefinitions = toolSpecs.map((spec) => ({
@@ -238,7 +249,30 @@ function runProjectLedgerNativeTool(
   toolName: string,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
-  const normalizedArgs = normalizeProjectLedgerAcceptanceInput(args);
+  let normalizedArgs: Record<string, unknown>;
+  try {
+    normalizedArgs = normalizeProjectLedgerCommitEvidence(
+      input,
+      toolName,
+      normalizeProjectLedgerAcceptanceInput(args),
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      recoverable: true,
+      error: {
+        code: "git_evidence_failed",
+        message: error instanceof Error
+          ? error.message
+          : "Unable to collect Git commit evidence from the active workspace.",
+        native_next: [{
+          tool: "project_ledger_work_complete",
+          args: { id: stringArg(args, "id"), code_commit: "auto" },
+          reason: "Restore a valid Git workspace and retry automatic commit evidence collection.",
+        }],
+      },
+    };
+  }
   let projectPath: string;
   try {
     projectPath = projectLedgerProjectPath(input, normalizedArgs);
@@ -293,6 +327,67 @@ function runProjectLedgerNativeTool(
   }
   if (toolName === "project_ledger_show") return withCanonicalRecordEvidence(result);
   return result;
+}
+
+function normalizeProjectLedgerCommitEvidence(
+  input: ProjectLedgerExecutorInput,
+  toolName: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  if (toolName !== "project_ledger_work_complete") return args;
+  const codeCommit = stringArg(args, "code_commit");
+  const codeCommits = stringArg(args, "code_commits");
+  if (!codeCommit && !codeCommits) return args;
+
+  if (codeCommit === "auto" || !hasCanonicalCommitEvidenceArray(codeCommits)) {
+    const workspacePath = input.workspacePath || stringArg(args, "project_path") ||
+      input.butlerHome;
+    const normalized: Record<string, unknown> = {
+      ...args,
+      code_commits: JSON.stringify([gitCommitEvidence(workspacePath)]),
+    };
+    delete normalized.code_commit;
+    return normalized;
+  }
+
+  const normalized: Record<string, unknown> = { ...args, code_commits: codeCommits };
+  delete normalized.code_commit;
+  return normalized;
+}
+
+function gitCommitEvidence(workspacePath: string): Record<string, string> {
+  const topLevel = gitText(workspacePath, ["rev-parse", "--show-toplevel"]);
+  return {
+    repo: basename(topLevel),
+    hash: gitText(topLevel, ["rev-parse", "--short=12", "HEAD"]),
+    message: gitText(topLevel, ["log", "-1", "--format=%s"]),
+    branch: gitText(topLevel, ["branch", "--show-current"]) || "detached",
+    committedAt: gitText(topLevel, ["log", "-1", "--format=%cI"]),
+  };
+}
+
+function gitText(cwd: string, args: string[]): string {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8", timeout: 5_000 });
+  if (result.status !== 0) {
+    throw new Error(
+      `Unable to collect Git commit evidence: ${result.stderr.trim() || result.error?.message || args.join(" ")}`,
+    );
+  }
+  return result.stdout.trim();
+}
+
+function hasCanonicalCommitEvidenceArray(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => {
+      const record = recordValue(item);
+      return hasRecordText(record.repo) && hasRecordText(record.hash) &&
+        hasRecordText(record.message);
+    });
+  } catch {
+    return false;
+  }
 }
 
 function withCanonicalRecordEvidence(result: Record<string, unknown>): Record<string, unknown> {
