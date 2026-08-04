@@ -1616,7 +1616,7 @@ test("run_command schema exposes bounded platform-neutral command execution", ()
   });
   expect(properties?.state_effect).toMatchObject({
     type: "string",
-    enum: ["read_only", "mutation", "validation"],
+    enum: ["read_only", "mutation", "validation", "remote_observation"],
   });
 });
 

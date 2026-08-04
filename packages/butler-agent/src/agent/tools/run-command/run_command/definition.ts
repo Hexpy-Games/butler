@@ -44,8 +44,8 @@ export const runCommandToolDefinition = {
       },
       state_effect: {
         type: "string",
-        enum: ["read_only", "mutation", "validation"],
-        description: "Effect: mutation requires admitted full access and accepted Plan Review; validation uses validation_suite.",
+        enum: ["read_only", "mutation", "validation", "remote_observation"],
+        description: "Effect: mutation and remote_observation require full access plus accepted Plan Review; remote_observation is an audited network effect for remote status/log reads. validation uses validation_suite.",
       },
       output_mode: {
         type: "string",

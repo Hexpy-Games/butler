@@ -357,6 +357,89 @@ describe("R3 read-only command boundary", () => {
     expect(existsSync(target)).toBe(false);
   });
 
+  test("routes remote observation through the reviewed full-access effect boundary", async () => {
+    const root = mkdtempSync(join(tmpdir(), "btcc-r3-remote-observation-"));
+    roots.push(root);
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace, { recursive: true });
+    const prepared = await prepareGuidedCommandEffect({
+      args: {
+        command: `${JSON.stringify(process.execPath)} -e 'process.stdout.write(process.env.HOME || "")'`,
+        summary: "조회: 원격 실행 환경",
+        state_effect: "remote_observation",
+      },
+      butlerData: join(root, "data"),
+      workspacePath: workspace,
+      originalRequest: "inspect a remote service over SSH",
+    });
+    expect(prepared.target).toBe("remote-observation-command:.");
+    expect(prepared.input.state_effect).toBe("remote_observation");
+
+    const db = new Database(":memory:");
+    db.exec(BTCC_SUCCESSOR_SCHEMA);
+    try {
+      const service = createGuidedEffectService(new SqliteGuidedEffectJournal(db));
+      const commandCall = {
+        name: "run_command",
+        args: prepared.input,
+        rawArguments: JSON.stringify(prepared.input),
+      };
+      const boundary = (accessMode: "full_access" | "read_only") =>
+        createGuidedToolExecutionBoundary({
+          durableWork: {
+            boundWorkForTurn: async () => reviewedWork(),
+            bindOpenWork: async () => reviewedWork(),
+          } as unknown as DurableWorkService,
+          workScope: { turnId: "turn", sessionId: "session" },
+          effectService: service,
+          accessMode,
+          signal: new AbortController().signal,
+          executeCommand: async () => {
+            throw new Error("Remote observation escaped the persistent-effect boundary");
+          },
+          resolvePersistentEffect: async () => prepared,
+        });
+      const applied = await boundary("full_access")({
+        call: commandCall,
+        context: { effectOccurrenceId: "remote-observation-full-access" },
+        definition: runCommandToolDefinition,
+        execute: async () => {
+          throw new Error("Remote observation dispatched through the registered tool");
+        },
+      });
+      expect(applied).toMatchObject({
+        ok: true,
+        effect: "remote_observation",
+        sandbox: "full_access_contained",
+        command_outcome_observed: true,
+        effect_receipt: {
+          capability: "run_command_remote_observation",
+          target: "remote-observation-command:.",
+        },
+      });
+      expect(String((applied as Record<string, unknown>).stdout))
+        .toBe(process.env.HOME ?? "");
+
+      const denied = await boundary("read_only")({
+        call: commandCall,
+        context: { effectOccurrenceId: "remote-observation-read-only" },
+        definition: runCommandToolDefinition,
+        execute: async () => {
+          throw new Error("Remote observation dispatched through the registered tool");
+        },
+      });
+      expect(denied).toMatchObject({
+        ok: false,
+        error: {
+          code: "effect_access_denied",
+          effect_status: "rejected",
+        },
+      });
+    } finally {
+      db.close(false);
+    }
+  });
+
   test("mutation treats a blank validation suite as omitted at the effect boundary", async () => {
     const root = mkdtempSync(join(tmpdir(), "btcc-r3-command-blank-suite-"));
     roots.push(root);
@@ -431,7 +514,7 @@ describe("R3 read-only command boundary", () => {
         expect(input).not.toHaveProperty("validation_suite");
       }
       await expect(execute("unit-tests", "rejected.txt", "named-suite"))
-        .rejects.toThrow("A mutation command cannot also be a validation suite");
+        .rejects.toThrow("A persistent command cannot also be a validation suite");
       expect(existsSync(join(workspace, "rejected.txt"))).toBe(false);
     } finally {
       db.close(false);
