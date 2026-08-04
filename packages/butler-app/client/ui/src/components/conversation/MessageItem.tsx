@@ -8,8 +8,6 @@ function MessageItemComponent({
   message,
   virtualRow,
   topOffset,
-  isLatestAssistant,
-  markTheme,
   copied,
   footerMeta,
   onCopyAssistantMessage,
@@ -21,8 +19,6 @@ function MessageItemComponent({
       message={message}
       virtualRow={virtualRow}
       topOffset={topOffset}
-      isLatestAssistant={isLatestAssistant}
-      markTheme={markTheme}
       rowVirtualizer={rowVirtualizer}
       onCopyContextMenuText={onCopyContextMenuText}
     >

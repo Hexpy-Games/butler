@@ -6,8 +6,6 @@ export function areMessageItemPropsEqual(
 ): boolean {
   return previous.message === next.message &&
     previous.topOffset === next.topOffset &&
-    previous.isLatestAssistant === next.isLatestAssistant &&
-    previous.markTheme === next.markTheme &&
     previous.copied === next.copied &&
     previous.footerMeta === next.footerMeta &&
     previous.onCopyAssistantMessage === next.onCopyAssistantMessage &&

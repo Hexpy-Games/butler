@@ -317,12 +317,15 @@ try {
   await page
     .locator(testClass("worker-composer-panel"))
     .waitFor({ state: "visible" });
+  // Composer expansion uses the 220ms adaptive-panel transition. Measure the
+  // settled layout rather than an intermediate animation frame.
+  await page.waitForTimeout(260);
   await page
-    .locator(testClass("assistant-mark-static"))
+    .locator(testClass("assistant-terminal-status-row"))
     .first()
     .waitFor({ state: "visible" });
   await page
-    .locator(`${testClass("assistant-mark-live")} canvas`)
+    .locator(`${testClass("assistant-status-mark-complete")} svg`)
     .first()
     .waitFor({ state: "visible" });
   screenshots.push(await screenshot(page, "desktop-components.png"));
@@ -359,37 +362,29 @@ try {
     userBubbleBox.width < composerCardBox.width * 0.7,
     `user bubble should size to content before max width, got ${userBubbleBox.width}`,
   );
-  const assistantFirstLineAlignment = await page
+  const assistantFullWidthLayout = await page
     .locator(testClasses("message", "assistant"))
     .first()
     .evaluate((article) => {
-      const avatar = article.querySelector<HTMLElement>(
-        "[data-role='assistant']",
-      );
       const body = article.querySelector<HTMLElement>(
         "[data-test-class~='message-body']",
       );
-      const firstText =
-        body?.querySelector<HTMLElement>(
-          "p, h1, h2, h3, li, [data-test-class~='turn-work-block-header']",
-        ) ?? body;
-      const avatarBox = avatar?.getBoundingClientRect();
-      const textBox = firstText?.getBoundingClientRect();
+      const articleBox = article.getBoundingClientRect();
+      const bodyBox = body?.getBoundingClientRect();
       return {
-        avatarCenterY: avatarBox
-          ? avatarBox.y + avatarBox.height / 2
-          : Number.NaN,
-        textCenterY: textBox
-          ? textBox.y + Math.min(textBox.height, 28) / 2
-          : Number.NaN,
+        articleLeft: articleBox.left,
+        bodyLeft: bodyBox?.left ?? Number.NaN,
+        hasAssistantAvatar: Boolean(
+          article.querySelector("[data-role='assistant']"),
+        ),
       };
     });
   assert(
-    Math.abs(
-      assistantFirstLineAlignment.avatarCenterY -
-        assistantFirstLineAlignment.textCenterY,
-    ) <= 8,
-    `assistant avatar should align with the first visible line: ${JSON.stringify(assistantFirstLineAlignment)}`,
+    !assistantFullWidthLayout.hasAssistantAvatar &&
+      Math.abs(
+        assistantFullWidthLayout.articleLeft - assistantFullWidthLayout.bodyLeft,
+      ) <= 0.5,
+    `assistant message should use the full row width without an avatar gutter: ${JSON.stringify(assistantFullWidthLayout)}`,
   );
   assert(
     workerBox.y >= composerCardBox.y &&
@@ -519,6 +514,19 @@ try {
     .locator(testClass("assistant-footer"))
     .last()
     .boundingBox();
+  const assistantStatusRow = page
+    .locator(testClass("assistant-terminal-status-row"))
+    .last();
+  const assistantStatusBox = await assistantStatusRow.boundingBox();
+  const assistantStatusText = await assistantStatusRow.innerText();
+  const assistantStatusIsLastElement = await assistantStatusRow.evaluate(
+    (element) => element.parentElement?.lastElementChild === element,
+  );
+  const assistantFooterContainsStatus = await page
+    .locator(testClass("assistant-footer"))
+    .last()
+    .locator(testClass("assistant-status-label"))
+    .count();
   const assistantMessageBox = await page
     .locator(
       `${testClasses("message", "assistant")}:not(${testClass("turn-activity-message")})`,
@@ -530,10 +538,11 @@ try {
     .last()
     .boundingBox();
   assert(assistantFooterBox, "assistant footer box is missing");
+  assert(assistantStatusBox, "assistant status row box is missing");
   assert(assistantMessageBox, "assistant message box is missing");
   assert(conversationEndBox, "conversation end box is missing");
   const conversationEndGap =
-    workerBox.y - (conversationEndBox.y + conversationEndBox.height);
+    composerCardBox.y - (conversationEndBox.y + conversationEndBox.height);
   assert(
     conversationEndGap >= 8 && conversationEndGap <= 44,
     `conversation end should sit near composer stack, got ${conversationEndGap}px`,
@@ -561,6 +570,13 @@ try {
     Boolean(assistantFooterTime) &&
       Number.isFinite(Date.parse(assistantFooterTime ?? "")),
     `assistant footer should expose semantic datetime: ${assistantFooterTime}`,
+  );
+  assert(
+    assistantFooterContainsStatus === 0 &&
+      assistantStatusText.includes("답변 완료") &&
+      assistantStatusBox.y >= assistantFooterBox.y + assistantFooterBox.height &&
+      assistantStatusIsLastElement,
+    `assistant status should be a separate bottom-most row after metadata: ${JSON.stringify({ assistantFooterContainsStatus, assistantFooterBox, assistantStatusBox, assistantStatusIsLastElement, assistantStatusText })}`,
   );
   await expectLocatorCount(
     page,
@@ -3710,8 +3726,29 @@ try {
     timeout: turnActivityTimeoutMs,
   });
   await page
-    .locator(testClass("assistant-mark-active"))
+    .locator(testClass("assistant-status-mark-active"))
     .waitFor({ state: "visible", timeout: turnActivityTimeoutMs });
+  const activeButlerMarkPainted = await page
+    .locator(`${testClass("assistant-status-mark-active")} canvas`)
+    .evaluate((canvas) => {
+      const target = canvas as HTMLCanvasElement;
+      const context = target.getContext("2d");
+      if (!context || target.width === 0 || target.height === 0) return false;
+      const pixels = context.getImageData(
+        0,
+        0,
+        target.width,
+        target.height,
+      ).data;
+      for (let index = 3; index < pixels.length; index += 4) {
+        if ((pixels[index] ?? 0) > 0) return true;
+      }
+      return false;
+    });
+  assert(
+    activeButlerMarkPainted,
+    "active assistant status should paint visible Butler mark pixels",
+  );
   const turnActivityText = await timelineActivity.innerText();
   const pendingLabels = appCopy.conversation.work.pendingStateLabels;
   assert(
@@ -3872,11 +3909,18 @@ try {
     .locator('[data-slot="context-menu-content"]')
     .waitFor({ state: "hidden", timeout: 1200 });
   const singleWorkContainer = page
-    .locator(testClass("turn-work-collapsed"), {
-      hasText: "로컬 테스트 명령을 실행합니다.",
+    .locator(testClass("turn-current-phase-activity"), {
+      hasText: "로컬 검증 실행",
     })
     .first();
-  const singleWorkButton = singleWorkContainer.getByRole("button").first();
+  await singleWorkContainer.waitFor({
+    state: "visible",
+    timeout: turnActivityTimeoutMs,
+  });
+  const singleWorkButton = singleWorkContainer
+    .locator(testClass("turn-work-tool-row"))
+    .getByRole("button")
+    .first();
   await singleWorkButton.waitFor({
     state: "visible",
     timeout: turnActivityTimeoutMs,
@@ -3885,8 +3929,8 @@ try {
     .replace(/\s+/g, " ")
     .trim();
   assert(
-    singleWorkTriggerText === "로컬 테스트 명령을 실행합니다.",
-    `single collapsed work button should use the public work summary: ${singleWorkTriggerText}`,
+    singleWorkTriggerText === "Bash: bun test",
+    `completed activity tool should use its model-authored operation label: ${singleWorkTriggerText}`,
   );
   if ((await singleWorkButton.getAttribute("aria-expanded")) !== "true") {
     await singleWorkButton.click();
@@ -3909,11 +3953,10 @@ try {
     .replace(/\s+/g, " ")
     .trim();
   assert(
-    singleExpandedHeaderText === "로컬 테스트 명령을 실행합니다.",
-    `single expanded work history should include the full work message: ${singleExpandedHeaderText}`,
+    singleExpandedHeaderText === "로컬 검증 실행",
+    `completed activity should keep the model-authored semantic title: ${singleExpandedHeaderText}`,
   );
   const workTimelineState = await singleWorkContainer.evaluate((element) => {
-    const disclosure = element.querySelector("[data-surface]");
     const block = element.querySelector("[data-test-class~='turn-work-block']");
     const header = element.querySelector(
       "[data-test-class~='turn-work-block-header']",
@@ -3928,7 +3971,7 @@ try {
     const tool = element.querySelector(
       "[data-test-class~='turn-work-tool-row']",
     );
-    const disclosureBox = disclosure?.getBoundingClientRect();
+    const disclosureBox = block?.getBoundingClientRect();
     const markerBox = marker?.getBoundingClientRect();
     const headerBox = header?.getBoundingClientRect();
     const descriptionBox = description?.getBoundingClientRect();
@@ -3941,13 +3984,12 @@ try {
     const descriptionColor = description
       ? getComputedStyle(description).color
       : "";
-    const triggerCursor = disclosure
-      ? getComputedStyle(
-          disclosure.querySelector("[role='button']") ?? disclosure,
-        ).cursor
+    const trigger = tool?.querySelector("button, [role='button']");
+    const triggerCursor = trigger
+      ? getComputedStyle(trigger).cursor
       : "";
-    const disclosureBackground = disclosure
-      ? getComputedStyle(disclosure).backgroundColor
+    const disclosureBackground = block
+      ? getComputedStyle(block).backgroundColor
       : "";
     const toolStyle = tool
       ? getComputedStyle(tool.firstElementChild ?? tool)
@@ -3965,7 +4007,6 @@ try {
     const mutedColor = readTokenColor("--work-activity-muted-text");
     return {
       disclosureBackground,
-      disclosureSurface: disclosure?.getAttribute("data-surface"),
       headerX: headerBox?.x ?? 0,
       hasHeaderIcon: Boolean(headerIcon),
       markerCenterX: markerBox ? markerBox.x + markerBox.width / 2 : Number.NaN,
@@ -3990,10 +4031,9 @@ try {
     };
   });
   assert(
-    workTimelineState.disclosureSurface === "plain" &&
-      /rgba?\(0,\s*0,\s*0,\s*0\)|transparent/u.test(
-        workTimelineState.disclosureBackground,
-      ),
+    /rgba?\(0,\s*0,\s*0,\s*0\)|transparent/u.test(
+      workTimelineState.disclosureBackground,
+    ),
     `completed work disclosure should stay visually plain: ${JSON.stringify(workTimelineState)}`,
   );
   assert(
@@ -4197,6 +4237,7 @@ try {
         "real-playwright-screenshots",
         "conversation-body-width-matches-composer",
         "user-bubble-content-sized",
+        "assistant-message-full-width",
         "conversation-end-near-composer",
         "composer-liquid-glass-surface",
         "composer-fixed-edge-gradient",
@@ -4205,6 +4246,7 @@ try {
         "worker-panel-identity-fixed",
         "assistant-footer-copy-duration-time",
         "assistant-footer-semantic-time",
+        "assistant-status-bottom-row",
         "composer-ready-status-absent",
         "context-hover-popover-visible",
         "context-popover-titlebar-safe",
@@ -4339,6 +4381,7 @@ try {
         "cmd-enter-blocks-during-composition",
         "cmd-enter-send-optimistic",
         "turn-activity-during-send",
+        "active-assistant-butler-mark-painted",
         "turn-activity-tool-details-expand",
         "turn-activity-tool-button-outline-centered",
         "single-work-message-visible",

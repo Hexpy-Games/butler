@@ -73,6 +73,7 @@ function MessageContentComponent({
         <AssistantResponseFooter
           copied={copied}
           meta={footerMeta}
+          status={message.status}
           onCopy={() => onCopyAssistantMessage(message)}
         />
       )}

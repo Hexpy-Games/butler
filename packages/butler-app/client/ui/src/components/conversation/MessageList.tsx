@@ -14,7 +14,6 @@ interface MessageListProps {
   turnProgress: Record<string, TurnProgressSnapshot>;
   bottomReserve: number;
   isSending: boolean;
-  markTheme: "dark" | "light";
 }
 
 function MessageListComponent({
@@ -22,7 +21,6 @@ function MessageListComponent({
   turnProgress,
   bottomReserve,
   isSending,
-  markTheme,
 }: MessageListProps) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const activeChatId = useButlerStore((state) => state.activeChatId);
@@ -30,7 +28,6 @@ function MessageListComponent({
 
   const {
     visibleMessages,
-    latestAssistantMessageId,
     progressRows,
     turnState,
     turnId,
@@ -78,7 +75,6 @@ function MessageListComponent({
                   progressRows={progressRows}
                   turnState={turnState}
                   turnId={turnId}
-                  markTheme={markTheme}
                   rowVirtualizer={rowVirtualizer}
                 />
               );
@@ -87,18 +83,12 @@ function MessageListComponent({
             const message = visibleMessages[virtualRow.index];
             if (!message) return null;
 
-            const isLatestAssistant =
-              message.role === "assistant" &&
-              message.id === latestAssistantMessageId;
-
             return (
               <MessageItem
                 key={message.id ?? `${message.role}-${message.text}`}
                 message={message}
                 virtualRow={virtualRow}
                 topOffset={topOffset}
-                isLatestAssistant={isLatestAssistant}
-                markTheme={markTheme}
                 copied={copiedMessageId === message.id}
                 footerMeta={assistantFooterMetaById.get(message.id) ?? null}
                 onCopyAssistantMessage={copyAssistantMessage}
@@ -127,7 +117,6 @@ export const MessageList = memo(
     previous.messages === next.messages &&
     previous.turnProgress === next.turnProgress &&
     previous.bottomReserve === next.bottomReserve &&
-    previous.isSending === next.isSending &&
-    previous.markTheme === next.markTheme,
+    previous.isSending === next.isSending,
 );
 MessageList.displayName = "MessageList";

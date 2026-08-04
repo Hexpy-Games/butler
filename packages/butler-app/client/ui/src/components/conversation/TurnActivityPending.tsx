@@ -1,6 +1,8 @@
 import { Skeleton, Stack, Typo } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import type { ActivityReadModel } from "@/app/conversation-progress";
+import { AssistantStatusLabel } from "./AssistantStatusLabel";
+import { useButlerMarkTheme } from "./hooks/useButlerMarkTheme";
 
 const SESSION_STARTING_STATE = "session_starting";
 const SKELETON_WIDTH = "min(420px, 100%)";
@@ -14,6 +16,7 @@ export function TurnActivityPending({
   readModels: ActivityReadModel[];
   state?: string;
 }) {
+  const markTheme = useButlerMarkTheme();
   const receipt = acknowledgedReceipt(readModels);
   const pendingLabel = receipt?.label.trim()
     ? receipt.label
@@ -27,18 +30,24 @@ export function TurnActivityPending({
         gap="2"
         style={{ width: SKELETON_WIDTH }}
       >
-        <Typo.Body
-          as="p"
-          data-test-class="turn-activity-pending"
-          data-turn-state={state}
-          style={{
-            margin: 0,
-            color: "var(--text-secondary)",
-            fontWeight: "var(--font-weight-regular)",
-          }}
+        <AssistantStatusLabel
+          label={pendingLabel}
+          markTheme={markTheme}
+          state="active"
         >
-          {pendingLabel}
-        </Typo.Body>
+          <Typo.Body
+            as="p"
+            data-test-class="turn-activity-pending"
+            data-turn-state={state}
+            style={{
+              margin: 0,
+              color: "var(--text-secondary)",
+              fontWeight: "var(--font-weight-regular)",
+            }}
+          >
+            {pendingLabel}
+          </Typo.Body>
+        </AssistantStatusLabel>
         {SKELETON_LINE_WIDTHS.map((width) => (
           <Skeleton
             key={width}
@@ -49,19 +58,25 @@ export function TurnActivityPending({
     );
   }
   return (
-    <Typo.Body
-      aria-live="polite"
-      as="p"
-      data-test-class="turn-activity-panel turn-activity-pending"
-      data-turn-state={state ?? "unknown"}
-      style={{
-        margin: 0,
-        color: "var(--text-secondary)",
-        fontWeight: "var(--font-weight-regular)",
-      }}
+    <AssistantStatusLabel
+      label={pendingLabel}
+      markTheme={markTheme}
+      state="active"
     >
-      {pendingLabel}
-    </Typo.Body>
+      <Typo.Body
+        aria-live="polite"
+        as="p"
+        data-test-class="turn-activity-panel turn-activity-pending"
+        data-turn-state={state ?? "unknown"}
+        style={{
+          margin: 0,
+          color: "var(--text-secondary)",
+          fontWeight: "var(--font-weight-regular)",
+        }}
+      >
+        {pendingLabel}
+      </Typo.Body>
+    </AssistantStatusLabel>
   );
 }
 

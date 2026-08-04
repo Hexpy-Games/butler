@@ -30,13 +30,6 @@ export function useMessageList(
     [messages],
   );
 
-  const latestAssistantMessageId = useMemo(
-    () =>
-      [...visibleMessages]
-        .reverse()
-        .find((message) => message.role === "assistant")?.id,
-    [visibleMessages],
-  );
   const assistantFooterMetaById = useMemo(
     () => buildAssistantFooterMetaById(visibleMessages),
     [visibleMessages],
@@ -110,7 +103,6 @@ export function useMessageList(
 
   return {
     visibleMessages,
-    latestAssistantMessageId,
     assistantFooterMetaById,
     workers,
     activeTurn,
