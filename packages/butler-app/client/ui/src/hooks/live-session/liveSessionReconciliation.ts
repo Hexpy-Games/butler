@@ -23,7 +23,6 @@ interface SessionViewState {
   activeChatId: string;
   sessionView?: {
     session_id?: string;
-    active_turn?: unknown | null;
   } | null;
   refreshSessionView: (
     sessionId: string,
@@ -37,7 +36,6 @@ interface ReconciliationStore {
 
 export interface LiveSessionReconciliation {
   requestRefresh(): void;
-  startActiveTurnPolling(): void;
   dispose(): void;
 }
 
@@ -47,11 +45,9 @@ export function createLiveSessionReconciliation(
 ): LiveSessionReconciliation {
   let disposed = false;
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-  let activeTurnTimer: ReturnType<typeof setTimeout> | undefined;
   let refreshInFlight = false;
   let refreshDirty = false;
-  let refreshPhase: "idle" | "leading" | "trailing" = "idle";
-  let lastRefreshStartedAt = 0;
+  let lastRefreshStartedAt = Number.NEGATIVE_INFINITY;
   let refreshRequestToken = 0;
 
   const isCurrentSession = () => {
@@ -66,7 +62,6 @@ export function createLiveSessionReconciliation(
     refreshTimer = undefined;
     if (!isCurrentSession()) {
       refreshDirty = false;
-      refreshPhase = "idle";
       return;
     }
     if (refreshInFlight) {
@@ -106,21 +101,10 @@ export function createLiveSessionReconciliation(
           !isCurrentSession()
         ) {
           refreshDirty = false;
-          refreshPhase = "idle";
           return;
         }
         if (refreshDirty) {
-          refreshPhase = "trailing";
           refreshWhenDue();
-          return;
-        }
-        // Every leading refresh gets one bounded follow-up so terminal events
-        // are reconciled even when no second event arrives on the stream.
-        if (refreshPhase === "leading") {
-          refreshPhase = "trailing";
-          refreshWhenDue();
-        } else {
-          refreshPhase = "idle";
         }
       });
   };
@@ -128,46 +112,18 @@ export function createLiveSessionReconciliation(
   const requestRefresh = () => {
     if (!isCurrentSession()) return;
     refreshDirty = true;
-    if (refreshPhase === "idle") refreshPhase = "leading";
     if (refreshInFlight || refreshTimer) return;
     refreshWhenDue();
   };
 
-  const pollActiveTurn = () => {
-    activeTurnTimer = undefined;
-    if (disposed) return;
-    const state = store.getState();
-    const currentSessionId = sessionId();
-    if (
-      state.activeChatId === currentSessionId &&
-      state.sessionView?.session_id === currentSessionId &&
-      state.sessionView.active_turn
-    ) {
-      requestRefresh();
-    }
-    activeTurnTimer = setTimeout(
-      pollActiveTurn,
-      SESSION_VIEW_REFRESH_INTERVAL_MS,
-    );
-  };
-
   return {
     requestRefresh,
-    startActiveTurnPolling() {
-      activeTurnTimer = setTimeout(
-        pollActiveTurn,
-        SESSION_VIEW_REFRESH_INTERVAL_MS,
-      );
-    },
     dispose() {
       disposed = true;
       refreshRequestToken += 1;
       refreshDirty = false;
-      refreshPhase = "idle";
       if (refreshTimer) clearTimeout(refreshTimer);
-      if (activeTurnTimer) clearTimeout(activeTurnTimer);
       refreshTimer = undefined;
-      activeTurnTimer = undefined;
     },
   };
 }
