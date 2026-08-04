@@ -65,6 +65,24 @@ export function safeCommandActionLabel(args: Record<string, unknown>): string {
   return safeCommandActionIdentity(args);
 }
 
+export function safeFileActionLabel(
+  name: "edit_file" | "write_file" | "read_file",
+  args: Record<string, unknown>,
+): string {
+  const path = safePathishValue(
+    args.path ?? args.file_path ?? args.file ?? args.target,
+    "",
+  );
+  const fileName = basename(path) || path;
+  if (!fileName) return "";
+  const action = name === "edit_file"
+    ? "수정"
+    : name === "write_file"
+      ? "작성"
+      : "읽기";
+  return `${action}: ${fileName}`;
+}
+
 export function safeCommandActionIdentity(args: Record<string, unknown>): string {
   const raw = typeof args.summary === "string" ? args.summary.trim() : "";
   if (!raw || /[\r\n]/u.test(raw) || [...raw].length > 32) return "";

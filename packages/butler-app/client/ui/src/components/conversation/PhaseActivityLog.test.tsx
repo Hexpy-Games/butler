@@ -38,5 +38,6 @@ test("current phase activity keeps the latest model-authored intent visible", ()
   expect(html).not.toContain("사용자 의도와 기존 설계가 어긋나지 않게 범위를 정합니다.");
   expect(html).toContain("수정할 모듈과 검증 경로를 구체화하고 있습니다.");
   expect(html).toContain("다음: 계획 후보를 독립적으로 검토합니다.");
-  expect(html).toContain("전체 보기 (2)");
+  expect(html).not.toContain("전체 보기");
+  expect(html).toContain('data-test-class="toggle-turn-activity-disclosure"');
 });

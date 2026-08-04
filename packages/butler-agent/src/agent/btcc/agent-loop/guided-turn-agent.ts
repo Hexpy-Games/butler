@@ -48,8 +48,6 @@ import { runGuidedAgentLoopWithOperationalReport } from
   "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from
   "../projection/index.ts";
-import { isDurableWorkCompletionValidationCurrent } from
-  "./durable-work-context.ts";
 import { createGuidedPersistentEffectResolver } from
   "./guided-persistent-effect-resolution.ts";
 
@@ -228,14 +226,6 @@ export function createProductionGuidedTurnAgent(input: {
         },
       });
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      await activity.publishFinal(text, {
-        managed: Boolean(finalWork),
-        completed: finalWork?.status === "completed",
-        completionValidated: finalWork
-          ? isDurableWorkCompletionValidationCurrent(finalWork)
-          : false,
-        currentStage: finalWork?.currentStage,
-      });
       return {
         content: text,
         route: routeForUsedTools(

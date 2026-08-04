@@ -21,6 +21,10 @@ import { Button } from "@/butler-ds";
 
 Prefer token-backed spacing and responsive composition. Validate the fixture in the design-system workbench before using it in a domain flow.
 
+Use `variant="inline"` for a text-aligned disclosure or compact inline action
+that must have no control padding or hover surface. It stays backgroundless and
+adds an underline only on hover. It is not a replacement for primary actions.
+
 ## Who can use this component
 Product engineers, design-system maintainers, and coding agents can use it when building Butler client UI. Design-system maintainers own changes to its API and visual contract.
 

@@ -3909,14 +3909,60 @@ try {
     .locator('[data-slot="context-menu-content"]')
     .waitFor({ state: "hidden", timeout: 1200 });
   const singleWorkContainer = page
-    .locator(testClass("turn-current-phase-activity"), {
-      hasText: "로컬 검증 실행",
-    })
+    .locator(testClass("turn-current-phase-activity"))
     .first();
   await singleWorkContainer.waitFor({
     state: "visible",
     timeout: turnActivityTimeoutMs,
   });
+  const activityDisclosure = singleWorkContainer.locator(
+    testClass("toggle-turn-activity-disclosure"),
+  );
+  await activityDisclosure.waitFor({ state: "visible" });
+  const inlineDisclosureStyle = await activityDisclosure.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      paddingLeft: style.paddingLeft,
+      paddingRight: style.paddingRight,
+    };
+  });
+  assert(
+    inlineDisclosureStyle.paddingLeft === "0px" &&
+      inlineDisclosureStyle.paddingRight === "0px",
+    `activity disclosure should have no inline padding: ${JSON.stringify(inlineDisclosureStyle)}`,
+  );
+  await activityDisclosure.hover();
+  const inlineDisclosureHover = await activityDisclosure.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      background: style.backgroundColor,
+      textDecoration: style.textDecorationLine,
+    };
+  });
+  assert(
+    inlineDisclosureHover.background === inlineDisclosureStyle.background &&
+      inlineDisclosureHover.textDecoration.includes("underline"),
+    `activity disclosure hover should underline without a surface: ${JSON.stringify(inlineDisclosureHover)}`,
+  );
+  assert(
+    await singleWorkContainer.locator(testClass("turn-work-block")).count() === 0,
+    "completed activity should start with only its disclosure header",
+  );
+  const collapsedDisclosureIcon = await activityDisclosure
+    .locator('[data-slot="button-icon"][data-position="end"] svg')
+    .innerHTML();
+  await activityDisclosure.click();
+  const expandedDisclosureIcon = await activityDisclosure
+    .locator('[data-slot="button-icon"][data-position="end"] svg')
+    .innerHTML();
+  assert(
+    collapsedDisclosureIcon !== expandedDisclosureIcon,
+    "activity disclosure should change from right to down chevron",
+  );
+  await singleWorkContainer.locator(
+    testClass("collapse-turn-activity-history"),
+  ).waitFor({ state: "visible" });
   const singleWorkButton = singleWorkContainer
     .locator(testClass("turn-work-tool-row"))
     .getByRole("button")
@@ -3942,25 +3988,19 @@ try {
   const singleExpandedHeaders = singleWorkContainer.locator(
     testClass("turn-work-block-header"),
   );
-  const singleExpandedHeaderCount = await singleExpandedHeaders.count();
+  const singleExpandedHeaderTexts = (await singleExpandedHeaders.allInnerTexts())
+    .map((text) => text.replace(/\s+/g, " ").trim());
   assert(
-    singleExpandedHeaderCount === 1,
-    `single expanded work history should show one full work message, got ${singleExpandedHeaderCount}`,
-  );
-  const singleExpandedHeaderText = (
-    await singleExpandedHeaders.first().innerText()
-  )
-    .replace(/\s+/g, " ")
-    .trim();
-  assert(
-    singleExpandedHeaderText === "로컬 검증 실행",
-    `completed activity should keep the model-authored semantic title: ${singleExpandedHeaderText}`,
+    singleExpandedHeaderTexts.includes("로컬 검증 실행"),
+    `expanded history should keep the model-authored semantic title: ${singleExpandedHeaderTexts.join(" | ")}`,
   );
   const workTimelineState = await singleWorkContainer.evaluate((element) => {
-    const block = element.querySelector("[data-test-class~='turn-work-block']");
-    const header = element.querySelector(
+    const block = Array.from(element.querySelectorAll(
+      "[data-test-class~='turn-work-block']",
+    )).find((candidate) => candidate.querySelector(
       "[data-test-class~='turn-work-block-header']",
-    );
+    )?.textContent?.includes("로컬 검증 실행")) ?? null;
+    const header = block?.querySelector("[data-test-class~='turn-work-block-header']");
     const marker = block?.querySelector("[data-slot='work-activity-marker']");
     const headerIcon = block?.querySelector(
       "[data-slot='work-activity-icon'] svg",
@@ -3972,6 +4012,9 @@ try {
       "[data-test-class~='turn-work-tool-row']",
     );
     const disclosureBox = block?.getBoundingClientRect();
+    const activityTriggerBox = element.querySelector(
+      "[data-test-class~='toggle-turn-activity-disclosure']",
+    )?.getBoundingClientRect();
     const markerBox = marker?.getBoundingClientRect();
     const headerBox = header?.getBoundingClientRect();
     const descriptionBox = description?.getBoundingClientRect();
@@ -4007,6 +4050,7 @@ try {
     const mutedColor = readTokenColor("--work-activity-muted-text");
     return {
       disclosureBackground,
+      activityTriggerX: activityTriggerBox?.x ?? 0,
       headerX: headerBox?.x ?? 0,
       hasHeaderIcon: Boolean(headerIcon),
       markerCenterX: markerBox ? markerBox.x + markerBox.width / 2 : Number.NaN,
@@ -4028,8 +4072,13 @@ try {
       toolBorderColor: toolStyle?.borderTopColor ?? "",
       toolMaxWidth: toolStyle?.maxWidth ?? "",
       disclosureWidth: disclosureBox?.width ?? 0,
+      resultX: resultBox?.x ?? 0,
     };
   });
+  assert(
+    Math.abs(workTimelineState.activityTriggerX - workTimelineState.resultX) <= 1,
+    `activity disclosure should align with the result body: ${JSON.stringify(workTimelineState)}`,
+  );
   assert(
     /rgba?\(0,\s*0,\s*0,\s*0\)|transparent/u.test(
       workTimelineState.disclosureBackground,

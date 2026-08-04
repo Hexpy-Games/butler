@@ -3889,11 +3889,25 @@ describe("app-client design system foundation", () => {
     );
     expect(disclosureRowStyles).toContain(".noIcon");
     expect(disclosureRowStyles).toContain(".open:not(.plain)");
-    expect(
-      read(
-        "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
-      ),
-    ).toContain("workCopy.viewAllLabel(blocks.length)");
+    const workBlocks = read(
+      "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
+    );
+    expect(workBlocks).toContain('data-test-class="toggle-turn-activity-disclosure"');
+    expect(workBlocks).toContain('data-test-class="collapse-turn-activity-history"');
+    expect(workBlocks).toContain("iconEnd={expanded ? <ChevronDown");
+    expect(workBlocks).toContain('variant="inline"');
+    expect(workBlocks).not.toContain("paddingInlineStart");
+    expect(workBlocks).not.toContain("workCopy.viewAllLabel(blocks.length)");
+    const turnActivityTimeline = read(
+      "packages/butler-app/client/ui/src/components/conversation/TurnActivityTimeline.tsx",
+    );
+    expect(turnActivityTimeline).toContain("iconEnd={expanded ? <ChevronDown");
+    expect(turnActivityTimeline).toContain('variant="inline"');
+    expect(turnActivityTimeline).not.toContain("paddingInlineStart");
+    expect(buttonStyles).toContain(".button.variantInline");
+    expect(buttonStyles).toContain(".button.variantInline:hover:not(:disabled)");
+    expect(buttonStyles).toContain('.button.variantInline[data-has-icon-text="true"]');
+    expect(buttonStyles).toContain("text-decoration: underline");
     const workActivityStyles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css",
     );

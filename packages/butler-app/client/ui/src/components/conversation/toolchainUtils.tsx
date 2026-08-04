@@ -1,20 +1,14 @@
 import type { ReactElement } from "react";
-import {
-  Search,
-  FileText,
-  Terminal,
-  Pencil,
-  Rocket,
-  Wrench,
-  ListChecks,
-  type WorkActivityToolItem,
-} from "@/butler-ds";
+import { type WorkActivityToolItem } from "@/butler-ds";
 import { appCopy } from "@/app/copy.ts";
 import { isVisibleToolActivity } from "@/app/conversation-progress";
 import type { ProgressRow, WorkBlockView } from "@/app/types.ts";
 import { OperationOutputDetails } from "./OperationOutputDetails";
 import { publicOperationTitle } from
   "../../../../../../butler-progress-projection/src/index.ts";
+import { activityIcon } from "./toolchainIcons";
+
+export { activityIcon } from "./toolchainIcons";
 
 export function toolchainRowsForBlock(block: WorkBlockView): ProgressRow[] {
   return block.rows.filter((row) => isVisibleToolchainRow(row, block.label));
@@ -46,6 +40,7 @@ function toolDetails(row: ProgressRow, turnId?: string): ReactElement | string |
       <OperationOutputDetails
         requestId={row.tool_call_id}
         resultId={row.tool_result_id}
+        toolName={row.safe_tool_name}
         turnId={turnId}
       />
     );
@@ -64,20 +59,6 @@ export function isVisibleToolchainRow(
 
 export function isTerminalActivityState(state: string): boolean {
   return ["delivered", "failed", "cancelled"].includes(state);
-}
-
-export function activityIcon(row: ProgressRow): ReactElement {
-  if (row.bridge_phase === "btcc_operation") return <Wrench size={15} />;
-  const label = row.safe_label.toLowerCase();
-  if (row.kind === "searched" || label.includes("search"))
-    return <Search size={15} />;
-  if (row.kind === "read" || label.includes("read"))
-    return <FileText size={15} />;
-  if (row.kind === "ran_command") return <Terminal size={15} />;
-  if (row.kind === "edited") return <Pencil size={15} />;
-  if (row.kind === "dispatch") return <Rocket size={15} />;
-  if (row.kind === "used_tool") return <Wrench size={15} />;
-  return <ListChecks size={15} />;
 }
 
 export function activityLabel(row: ProgressRow): string {
@@ -113,7 +94,16 @@ export function toolchainSummaryLabel(row: ProgressRow): string {
 }
 
 export function toolchainGroupLabel(row: ProgressRow): string {
-  if (row.bridge_phase === "btcc_operation") return "작업";
+  if (row.bridge_phase === "btcc_operation") {
+    if (row.safe_tool_name === "read_file" || row.safe_tool_name === "grep_files") {
+      return "조회";
+    }
+    if (row.safe_tool_name === "edit_file" || row.safe_tool_name === "write_file") {
+      return "편집";
+    }
+    if (row.safe_tool_name === "run_command") return "명령";
+    return "작업";
+  }
   const toolName = row.safe_tool_name?.trim();
   if (
     row.kind === "searched" ||

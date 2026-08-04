@@ -178,6 +178,18 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
   expect(instructions).toContain(
     "Use next_stage reporting only when completion Validation accepts",
   );
+  expect(instructions).toContain(
+    "describes the focus or structure of the upcoming report",
+  );
+  expect(instructions).toContain(
+    "not the report itself, a draft of the final answer, or copied final-answer wording",
+  );
+  expect(instructions).toContain(
+    "encompass the whole current Plan action or execution outcome",
+  );
+  expect(instructions).toContain(
+    "do not replace the activity with narrower labels",
+  );
   expect(instructions).not.toContain("all its tool calls in order");
   expect(instructions).not.toContain("put them in one response in an allowed order");
   expect(instructions).not.toContain("separate concurrent batch");

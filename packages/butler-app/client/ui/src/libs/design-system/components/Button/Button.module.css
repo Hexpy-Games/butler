@@ -135,8 +135,25 @@
   min-height: 34px;
 }
 
+.button.variantInline {
+  width: max-content;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.button.variantInline:hover:not(:disabled) {
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (width <= 640px), (pointer: coarse) {
-  .button:not(.variantLink) {
+  .button:not(.variantLink, .variantInline) {
     min-height: var(--control-hit-target);
   }
 
@@ -162,6 +179,10 @@
 
 .button[data-has-icon-text="true"][data-icon-layout="end"] {
   padding-left: 14px;
+}
+
+.button.variantInline[data-has-icon-text="true"] {
+  padding: 0;
 }
 
 .icon,
