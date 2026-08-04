@@ -40,10 +40,7 @@ export function SummaryPanel({
         }))}
       />
       <InspectorPanel title="Branch details">
-        <KeyValueRow
-          label="Gateway"
-          value={status.label}
-        />
+        <KeyValueRow label="Gateway" value={status.label} />
         <KeyValueRow
           label="Git branch"
           value={branchValue(summary?.branch_info)}
@@ -80,15 +77,21 @@ function branchValue(
 }
 
 function progressStateTone(state?: string): string {
-  if (state === "delivered" || state === "complete") return "complete";
+  if (state && ["delivered", "complete", "completed"].includes(state)) {
+    return "complete";
+  }
   if (state === "failed") return "failed";
-  if (state === "cancelled") return "cancelled";
+  if (state && ["cancelled", "stopped"].includes(state)) return "cancelled";
   if (
     state &&
     [
       "accepted",
+      "active",
       "thinking",
+      "running",
       "streaming",
+      "reviewing",
+      "correction_required",
       "waiting_for_tool",
       "retrying",
     ].includes(state)

@@ -1,6 +1,8 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { appendFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import type { PromptUsageAttribution } from "./runtime-contracts.ts";
+import { readIncrementalJsonlSnapshot } from "../../operations/metrics/incremental-jsonl-snapshot.ts";
 
 export type PromptCacheRetention = "in_memory" | "24h";
 
@@ -69,43 +71,104 @@ export function appendPromptCacheMetric(
   options: { butlerData?: string } = {},
 ): void {
   mkdirSync(metricsDir(options.butlerData), { recursive: true });
-  appendFileSync(promptCacheMetricsPath(options.butlerData), `${JSON.stringify(event)}\n`, "utf8");
+  appendFileSync(
+    promptCacheMetricsPath(options.butlerData),
+    `${JSON.stringify(event)}\n`,
+    "utf8",
+  );
 }
 
-export function readPromptCacheMetrics(options: ReadPromptCacheMetricsOptions = {}): PromptCacheMetricEvent[] {
-  const path = promptCacheMetricsPath(options.butlerData);
-  if (!existsSync(path)) return [];
-
-  const raw = readFileSync(path, "utf8");
-  if (!raw.trim()) return [];
-
-  const events: PromptCacheMetricEvent[] = [];
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const parsed = JSON.parse(trimmed) as PromptCacheMetricEvent;
-      if (
-        typeof parsed?.ts === "number" &&
-        typeof parsed?.model === "string" &&
-        typeof parsed?.scope === "string" &&
-        typeof parsed?.promptTokens === "number" &&
-        typeof parsed?.cachedTokens === "number"
-      ) {
-        if (options.sinceTs !== undefined && parsed.ts < options.sinceTs) {
-          continue;
-        }
-        events.push(parsed);
-      }
-    } catch {
-      continue;
-    }
+export function appendPromptUsageMetric(input: {
+  model: string;
+  scope: string;
+  promptTokens: number | null;
+  cachedTokens: number;
+  totalTokens: number | null;
+  cacheWriteTokens?: number | null;
+  promptCacheKey?: string;
+  promptCacheRetention?: PromptCacheRetention;
+  butlerData?: string;
+  usageAttribution?: PromptUsageAttribution;
+}): void {
+  if (
+    !Number.isFinite(input.promptTokens) ||
+    input.promptTokens === null ||
+    input.promptTokens < 0 ||
+    !Number.isFinite(input.cachedTokens) ||
+    (input.totalTokens !== null && !Number.isFinite(input.totalTokens))
+  ) {
+    return;
   }
 
-  return events;
+  appendPromptCacheMetric(
+    {
+      ts: Date.now(),
+      model: input.model,
+      scope: input.scope,
+      ...(input.usageAttribution?.turnId !== undefined
+        ? { turnId: input.usageAttribution.turnId }
+        : {}),
+      ...(input.usageAttribution?.phase !== undefined
+        ? { phase: input.usageAttribution.phase }
+        : {}),
+      ...(input.usageAttribution?.roundIndex !== undefined
+        ? { roundIndex: input.usageAttribution.roundIndex }
+        : {}),
+      ...(input.usageAttribution?.reasoningEffort !== undefined
+        ? { reasoningEffort: input.usageAttribution.reasoningEffort }
+        : {}),
+      promptTokens: Math.max(0, input.promptTokens),
+      cachedTokens: Math.max(0, input.cachedTokens),
+      ...(input.cacheWriteTokens !== undefined &&
+      input.cacheWriteTokens !== null
+        ? { cacheWriteTokens: Math.max(0, input.cacheWriteTokens) }
+        : {}),
+      totalTokens: input.totalTokens,
+      ...(input.promptCacheKey !== undefined
+        ? { promptCacheKey: input.promptCacheKey }
+        : {}),
+      ...(input.promptCacheRetention !== undefined
+        ? { promptCacheRetention: input.promptCacheRetention }
+        : {}),
+      budgetState:
+        input.usageAttribution?.getBudgetState?.() ??
+        input.usageAttribution?.budgetState,
+      promptSections: input.usageAttribution?.promptSections,
+    },
+    { butlerData: input.butlerData },
+  );
 }
 
-export function summarizePromptCacheMetrics(events: PromptCacheMetricEvent[]): PromptCacheMetricSummary {
+export function readPromptCacheMetrics(
+  options: ReadPromptCacheMetricsOptions = {},
+): PromptCacheMetricEvent[] {
+  const path = promptCacheMetricsPath(options.butlerData);
+  const cached = readIncrementalJsonlSnapshot(path, parsePromptMetricLine);
+  return options.sinceTs === undefined
+    ? cached.values
+    : cached.values.filter((event) => event.ts >= options.sinceTs!);
+}
+
+function parsePromptMetricLine(line: string): PromptCacheMetricEvent | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as PromptCacheMetricEvent;
+    return typeof parsed?.ts === "number" &&
+      typeof parsed?.model === "string" &&
+      typeof parsed?.scope === "string" &&
+      typeof parsed?.promptTokens === "number" &&
+      typeof parsed?.cachedTokens === "number"
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function summarizePromptCacheMetrics(
+  events: PromptCacheMetricEvent[],
+): PromptCacheMetricSummary {
   const summary: PromptCacheMetricSummary = {
     requestCount: 0,
     promptTokens: 0,
@@ -119,7 +182,8 @@ export function summarizePromptCacheMetrics(events: PromptCacheMetricEvent[]): P
     summary.requestCount += 1;
     summary.promptTokens += event.promptTokens;
     summary.cachedTokens += event.cachedTokens;
-    summary.totalTokens += typeof event.totalTokens === "number" ? event.totalTokens : 0;
+    summary.totalTokens +=
+      typeof event.totalTokens === "number" ? event.totalTokens : 0;
     summary.byScope[event.scope] = (summary.byScope[event.scope] || 0) + 1;
   }
 

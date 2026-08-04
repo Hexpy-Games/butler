@@ -44,34 +44,105 @@ test("summary distinguishes detached Git and non-Git folders", () => {
 });
 
 test("summary gives explicit values for no-project and unavailable workspaces", () => {
-  expect(renderSummary({
-    branch_info: { available: false, workspace_mode: "none", safe_status: "No project workspace" },
-  })).toContain("No project workspace");
-  expect(renderSummary({
-    branch_info: {
-      available: false,
-      workspace_mode: "unknown",
-      safe_error_code: "git_not_installed",
-      safe_status: "Git is not installed",
-    },
-  })).toContain("Git is not installed");
-  expect(renderSummary({
-    branch_info: {
-      available: false,
-      workspace_mode: "unknown",
-      safe_error_code: "git_workspace_unavailable",
-      safe_status: "Git workspace unavailable",
-    },
-  })).toContain("Unavailable");
+  expect(
+    renderSummary({
+      branch_info: {
+        available: false,
+        workspace_mode: "none",
+        safe_status: "No project workspace",
+      },
+    }),
+  ).toContain("No project workspace");
+  expect(
+    renderSummary({
+      branch_info: {
+        available: false,
+        workspace_mode: "unknown",
+        safe_error_code: "git_not_installed",
+        safe_status: "Git is not installed",
+      },
+    }),
+  ).toContain("Git is not installed");
+  expect(
+    renderSummary({
+      branch_info: {
+        available: false,
+        workspace_mode: "unknown",
+        safe_error_code: "git_workspace_unavailable",
+        safe_status: "Git workspace unavailable",
+      },
+    }),
+  ).toContain("Unavailable");
 });
 
-function renderSummary(branch: Pick<SessionSummaryView, "branch_info">): string {
+test("summary maps canonical progress state families to distinguishable DS tones", () => {
+  const familyMarkup = new Map<string, string>();
+  const families: Record<string, string[]> = {
+    complete: ["delivered", "complete", "completed"],
+    running: [
+      "accepted",
+      "active",
+      "thinking",
+      "running",
+      "streaming",
+      "reviewing",
+      "correction_required",
+      "waiting_for_tool",
+      "retrying",
+    ],
+    failed: ["failed"],
+    cancelled: ["cancelled", "stopped"],
+    idle: ["unknown"],
+  };
+  for (const [family, states] of Object.entries(families)) {
+    const [first, ...rest] = states;
+    const markup = renderSummaryWithProgress(first!);
+    familyMarkup.set(family, markup);
+    expect(markup).toContain("summary-progress-panel");
+    for (const state of rest) {
+      expect(renderSummaryWithProgress(state)).toBe(markup);
+    }
+  }
+  expect(familyMarkup.get("running")).not.toBe(familyMarkup.get("complete"));
+  expect(familyMarkup.get("idle")).not.toBe(familyMarkup.get("running"));
+});
+
+function renderSummary(
+  branch: Pick<SessionSummaryView, "branch_info">,
+): string {
   return renderToStaticMarkup(
     <SummaryPanel
       status={{ label: "Connected", tone: "ok" }}
       summary={{
         ...branch,
         latest_progress: { safe_progress_rows: [] },
+        skills_used: [],
+      }}
+    />,
+  );
+}
+
+function renderSummaryWithProgress(state: string): string {
+  return renderToStaticMarkup(
+    <SummaryPanel
+      status={{ label: "Connected", tone: "ok" }}
+      summary={{
+        branch_info: {
+          available: false,
+          workspace_mode: "none",
+          safe_status: "No project workspace",
+        },
+        latest_progress: {
+          safe_progress_rows: [
+            {
+              id: "task",
+              kind: "todo",
+              state,
+              safe_label: "Task",
+              bridge_phase: "btcc_work_ledger",
+            },
+          ],
+        },
         skills_used: [],
       }}
     />,

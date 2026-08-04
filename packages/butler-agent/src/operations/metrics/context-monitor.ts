@@ -8,6 +8,7 @@ import {
 } from "../../agent/context/budget.ts";
 import { AgentConversationStore, conversationStorePath } from "../../agent/conversation/store.ts";
 import { conversationSessionIdForDurableSession } from "../../agent/conversation/session-admission.ts";
+import { readIncrementalJsonlSnapshot } from "./incremental-jsonl-snapshot.ts";
 
 export type ContextPressureLevel = "low" | "medium" | "high";
 
@@ -179,30 +180,24 @@ function readContextMetricsWithDiagnostics(input: {
   sessionId?: string;
 }): { events: ContextMetricEvent[]; parseErrors: number } {
   const path = contextMetricsPath(input.butlerData);
-  if (!existsSync(path)) return { events: [], parseErrors: 0 };
-  const events: ContextMetricEvent[] = [];
-  let parseErrors = 0;
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    try {
-      const parsed = JSON.parse(trimmed) as ContextMetricEvent;
-      if (
-        typeof parsed?.kind === "string" &&
-        typeof parsed?.ts === "number" &&
-        typeof parsed?.sessionId === "string" &&
-        (!input.sessionId || parsed.sessionId === input.sessionId)
-      ) {
-        events.push(parsed);
-      }
-    } catch {
-      parseErrors += 1;
-    }
-  }
+  const cached = readIncrementalJsonlSnapshot(path, parseContextMetricLine);
+  const events = cached.values.filter(
+    (event) => !input.sessionId || event.sessionId === input.sessionId,
+  );
   return {
     events: events.sort((a, b) => a.ts - b.ts),
-    parseErrors,
+    parseErrors: cached.parseErrors,
   };
+}
+
+function parseContextMetricLine(line: string): ContextMetricEvent | null {
+  const parsed = JSON.parse(line) as ContextMetricEvent;
+  return (parsed?.kind === "prompt_assembly" ||
+    parsed?.kind === "runtime_turn") &&
+    typeof parsed?.ts === "number" &&
+    typeof parsed?.sessionId === "string"
+    ? parsed
+    : null;
 }
 
 function readTranscriptStats(butlerData: string, sessionId: string): ContextMonitorSummary["transcript"] {

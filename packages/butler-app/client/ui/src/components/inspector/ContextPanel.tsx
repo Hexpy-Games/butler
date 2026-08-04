@@ -19,8 +19,15 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
       )
     : [];
   const usedPercent = context
-    ? Math.round(Math.min(1, context.ratio) * 100)
+    ? Math.round(Math.max(0, Math.min(1, context.ratio)) * 100)
     : 0;
+  const chartColorByCategoryId = new Map(
+    contextChart?.segments.flatMap((segment) =>
+      segment.category_id
+        ? [[segment.category_id, segment.color] as const]
+        : [],
+    ),
+  );
   return (
     <Section
       title="Context details"
@@ -91,11 +98,11 @@ export function ContextPanel({ context }: { context?: ContextDetailsView }) {
             style={contextLegendFrame}
           >
             <Stack gap="sm" data-test-class="context-legend">
-              {sortedCategories.map((category, index) => (
+              {sortedCategories.map((category) => (
                 <ContextCategoryRow
                   category={category}
-                  colorIndex={index}
                   key={category.id}
+                  swatchColor={chartColorByCategoryId.get(category.id)}
                   totalTokens={context.budget_tokens}
                 />
               ))}
