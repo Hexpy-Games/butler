@@ -12,7 +12,7 @@ export function ContextUsagePopover({
   context?: SessionSummaryView["context_details"];
 }) {
   if (!context) return null;
-  const percent = Math.round(Math.min(1, context.ratio) * 100);
+  const percent = Math.round(Math.max(0, Math.min(1, context.ratio)) * 100);
 
   return (
     <Stack gap="sm">

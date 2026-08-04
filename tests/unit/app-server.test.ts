@@ -4743,12 +4743,26 @@ test("context details reflect latest provider prompt usage telemetry", async () 
     const before = await getJson(
       `${server.url}context-details?session_id=general`,
     );
+    const beforeOccupied = before.data.categories
+      .filter((category: { source_kind: string }) =>
+        !category.source_kind.endsWith("_reserve"),
+      )
+      .reduce(
+        (sum: number, category: { used_tokens: number }) =>
+          sum + category.used_tokens,
+        0,
+      );
+    expect(before.data.used_tokens).toBe(beforeOccupied);
+    expect(before.data.categories.some(
+      (category: { source_kind: string; used_tokens: number }) =>
+        category.source_kind.endsWith("_reserve") && category.used_tokens > 0,
+    )).toBe(true);
 
     appendPromptCacheMetric(
       {
         ts: Date.now(),
         model: "openai/gpt-5.4",
-        scope: "session-turn",
+        scope: "btcc-guided:butler/app-general",
         turnId,
         phase: "tool_loop",
         promptTokens: 64_000,
@@ -4766,8 +4780,19 @@ test("context details reflect latest provider prompt usage telemetry", async () 
     );
 
     expect(before.data.used_tokens).toBeLessThan(64_000);
-    expect(after.data.used_tokens).toBeGreaterThanOrEqual(64_000);
+    expect(after.data.used_tokens).toBe(64_000);
+    expect(after.data.ratio).toBe(64_000 / after.data.budget_tokens);
     expect(after.data.token_count_source).toBe("provider_prompt_usage");
+    const afterOccupied = after.data.categories
+      .filter((category: { source_kind: string }) =>
+        !category.source_kind.endsWith("_reserve"),
+      )
+      .reduce(
+        (sum: number, category: { used_tokens: number }) =>
+          sum + category.used_tokens,
+        0,
+      );
+    expect(afterOccupied).toBe(after.data.used_tokens);
     expect(working.used_tokens).toBeGreaterThan(before.data.used_tokens);
     expect(JSON.stringify(after)).not.toContain("small visible request");
   } finally {
@@ -4796,7 +4821,7 @@ test("context details fall back to latest context monitor runtime telemetry", as
     appendRuntimeTurnContextMetric({
       butlerData: tempDir,
       sessionId: "butler/app-general",
-      model: "openai/gpt-5.4",
+      model: "openai/gpt-5.5",
       totalPromptChars: 300_000,
       promptContextChars: 280_000,
       recentConversationChars: 20_000,
@@ -4812,6 +4837,53 @@ test("context details fall back to latest context monitor runtime telemetry", as
     expect(after.data.used_tokens).toBeGreaterThanOrEqual(60_000);
     expect(after.data.token_count_source).toBe("context_monitor");
     expect(JSON.stringify(after)).not.toContain("small visible request");
+  } finally {
+    server.stop();
+  }
+});
+
+test("session projections and context details select the latest Turn beyond the 200-row feed", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    let latestTurnId = "";
+    for (let index = 0; index < 201; index += 1) {
+      const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+      internalStore.updateTurnState(turn.id, "delivered", {
+        safeStatusLabel: "Delivered",
+        cancellable: false,
+      });
+      latestTurnId = turn.id;
+    }
+    appendPromptCacheMetric({
+      ts: Date.now(),
+      model: "openai/gpt-5.5",
+      scope: "btcc-guided:butler/app-general",
+      turnId: latestTurnId,
+      promptTokens: 64_000,
+      cachedTokens: 8_000,
+      totalTokens: 65_500,
+    }, { butlerData: tempDir });
+
+    const view = await getJson(`${server.url}session-view?session_id=general`);
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    const context = await getJson(`${server.url}context-details?session_id=general`);
+
+    expect(view.data.latest_turn.id).toBe(latestTurnId);
+    expect(summary.data.turn_state).toBe("delivered");
+    expect(context.data.used_tokens).toBe(64_000);
+    expect(context.data.token_count_source).toBe("provider_prompt_usage");
   } finally {
     server.stop();
   }

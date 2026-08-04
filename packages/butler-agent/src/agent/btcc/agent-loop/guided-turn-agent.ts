@@ -185,6 +185,11 @@ export function createProductionGuidedTurnAgent(input: {
         progress,
         model: selectedModelRef(turn),
         reasoningEffort: turn.modelSelection.reasoningEffort,
+        usageAttribution: {
+          turnId: turn.turnId,
+          phase: "guided",
+          reasoningEffort: turn.modelSelection.reasoningEffort,
+        },
         cacheScope: `btcc-guided:${turn.sessionId}`,
         signal,
         butlerData: input.butlerData,

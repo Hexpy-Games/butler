@@ -148,6 +148,35 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   }
 });
 
+test("Guided model rounds attribute provider usage before completion progress", async () => {
+  const fixture = createFixture("guided-usage-attribution");
+  try {
+    const events: string[] = [];
+    const turnId = "guided-usage-attribution";
+    const agent = fixture.agent({
+      async runRound(request) {
+        events.push(`metric:${request.usageAttribution?.turnId ?? "missing"}`);
+        return { text: "BTCC final answer", toolCalls: [] };
+      },
+    });
+
+    await agent.run({
+      turn: turnRecord(fixture.root, { turnId }),
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged() {},
+        modelRoundWaitingChanged(update) {
+          events.push(update.status);
+        },
+      },
+    });
+
+    expect(events).toEqual(["started", `metric:${turnId}`, "completed"]);
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided Turn promotes persona and profile context into every provider instruction", async () => {
   const fixture = createFixture("guided-persona-instructions");
   try {

@@ -85,14 +85,15 @@ export function createAppSessionInteractionModuleGraph(input: {
     () => host.getSettings(),
     () => host.getPersonalization(),
     (sessionId) => host.sessionViewMessages(sessionId),
-    (sessionId) => host.listTurns(sessionId),
+    (sessionId) => host.latestTurn(sessionId),
+    (sessionId) => host.countTurns(sessionId),
     (sessionId) => host.getProjectForSession(sessionId),
     (sessionId) => host.getChatRow(sessionId)?.kind ?? "chat",
     (sessionId) => host.listArtifacts(sessionId),
   );
   const sessionViews = new AppSessionViewStore(
     (sessionId) => host.getSession(sessionId),
-    (sessionId) => host.listTurns(sessionId),
+    (sessionId) => host.latestTurn(sessionId),
     (sessionId) => host.listMessages(sessionId),
     (sessionId) => host.sessionViewMessages(sessionId),
     (turn, options) => host.sessionViewTurn(turn, options),

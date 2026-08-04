@@ -22,7 +22,11 @@ export async function runGeminiModelRound(
   config: HostedRuntimeConfig,
   request: ModelRoundRequest,
 ): Promise<ModelRoundResult> {
-  const requests = createProviderRequestAttributor({ attribution: request.usageAttribution });
+  const requests = createProviderRequestAttributor({
+    attribution: request.usageAttribution,
+    butlerData: request.butlerData,
+    cacheScope: request.cacheScope,
+  });
   const response = await requests.request({
     model: config.modelRef,
     run: async (context) => await createGeminiContent(config, {

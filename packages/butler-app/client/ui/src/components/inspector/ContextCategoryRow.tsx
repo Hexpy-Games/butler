@@ -1,17 +1,20 @@
 import type { ContextUsageCategory } from "@/app/types.ts";
-import { contextChartColor, formatTokenCount } from "./contextPanelUtils.ts";
+import { formatTokenCount } from "./contextPanelUtils.ts";
 import { KeyValueRow } from "@/butler-ds";
 
 export function ContextCategoryRow({
   category,
-  colorIndex,
+  swatchColor,
   totalTokens,
 }: {
   category: ContextUsageCategory;
-  colorIndex: number;
+  swatchColor?: string;
   totalTokens: number;
 }) {
-  const ratio = totalTokens > 0 ? category.used_tokens / totalTokens : 0;
+  const ratio =
+    totalTokens > 0
+      ? Math.max(0, Math.min(1, category.used_tokens / totalTokens))
+      : 0;
   return (
     <KeyValueRow
       label={category.label}
@@ -19,7 +22,7 @@ export function ContextCategoryRow({
       value={formatTokenCount(category.used_tokens)}
       meta={`${Math.round(ratio * 100)}%`}
       detailAlign="start"
-      swatchColor={contextChartColor(colorIndex)}
+      {...(swatchColor ? { swatchColor } : {})}
       valueTextSize="caption"
     />
   );

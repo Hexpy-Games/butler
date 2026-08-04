@@ -1,8 +1,10 @@
-import type { OpenAIPromptCacheConfig, OpenAIResponse, PromptUsageAttribution } from "../runtime-contracts.ts";
-import { appendPromptCacheMetric } from "../prompt-cache-metrics.ts";
+import type {
+  OpenAIPromptCacheConfig,
+  OpenAIResponse,
+  PromptUsageAttribution,
+} from "../runtime-contracts.ts";
+import { appendPromptUsageMetric } from "../prompt-cache-metrics.ts";
 import { extractPromptCacheStats } from "../shared/runtime-support.ts";
-
-
 
 export function logPromptCacheStats(
   response: OpenAIResponse,
@@ -27,8 +29,6 @@ export function logPromptCacheStats(
   log(parts.join(" "));
 }
 
-
-
 export function recordPromptCacheMetric(
   response: OpenAIResponse,
   input: {
@@ -42,23 +42,16 @@ export function recordPromptCacheMetric(
   const stats = extractPromptCacheStats(response);
   if (!stats || stats.promptTokens === null) return;
 
-  appendPromptCacheMetric({
-    ts: Date.now(),
+  appendPromptUsageMetric({
     model: input.model,
     scope: input.scope,
-    turnId: input.usageAttribution?.turnId,
-    phase: input.usageAttribution?.phase,
-    roundIndex: input.usageAttribution?.roundIndex,
-    reasoningEffort: input.usageAttribution?.reasoningEffort,
     promptTokens: stats.promptTokens,
     cachedTokens: stats.cachedTokens,
-    ...(stats.cacheWriteTokens === null
-      ? {}
-      : { cacheWriteTokens: stats.cacheWriteTokens }),
     totalTokens: stats.totalTokens,
+    cacheWriteTokens: stats.cacheWriteTokens,
     promptCacheKey: input.promptCache.prompt_cache_key,
     promptCacheRetention: input.promptCache.prompt_cache_retention,
-    budgetState: input.usageAttribution?.getBudgetState?.() ?? input.usageAttribution?.budgetState,
-    promptSections: input.usageAttribution?.promptSections,
-  }, { butlerData: input.butlerData });
+    usageAttribution: input.usageAttribution,
+    butlerData: input.butlerData,
+  });
 }
