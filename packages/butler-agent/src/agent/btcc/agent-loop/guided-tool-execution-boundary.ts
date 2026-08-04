@@ -105,7 +105,8 @@ export function createGuidedToolExecutionBoundary(input: {
     if (definition.effectBoundary === "dynamic") {
       if (call.name === "tool_call") return execute();
       if (call.name === "run_command") {
-        return call.args.state_effect === "mutation"
+        return call.args.state_effect === "mutation" ||
+            call.args.state_effect === "remote_observation"
           ? executePersistentEffect(call, execute, context.effectOccurrenceId)
           : input.executeCommand(call);
       }
