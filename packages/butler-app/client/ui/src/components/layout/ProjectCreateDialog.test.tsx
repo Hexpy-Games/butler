@@ -40,6 +40,27 @@ mock.module("@/butler-ds", () => ({
   DialogContent: ({ children }: React.PropsWithChildren) => (
     <div>{children}</div>
   ),
+  DialogForm: ({
+    children,
+    footer,
+    onSubmit,
+    title,
+  }: React.PropsWithChildren<{
+    footer?: React.ReactNode;
+    onSubmit?: () => void;
+    title: React.ReactNode;
+  }>) => (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit?.();
+      }}
+    >
+      <h2>{title}</h2>
+      {children}
+      {footer}
+    </form>
+  ),
   DialogFooter: ({ children }: React.PropsWithChildren) => (
     <div>{children}</div>
   ),

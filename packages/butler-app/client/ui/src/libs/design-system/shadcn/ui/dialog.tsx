@@ -6,6 +6,10 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
 import { XIcon } from "../../components/Icons";
+import {
+  tintedGlassSurfaceClassName,
+  type TintedGlassRadius,
+} from "../../components/TintedGlass";
 import styles from "../../components/Dialog/Dialog.module.css";
 
 function Dialog({
@@ -51,9 +55,11 @@ function DialogOverlay({
 function DialogContent({
   className,
   children,
+  glassRadius = "panel",
   showCloseButton = true,
   ...props
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+  glassRadius?: TintedGlassRadius;
   showCloseButton?: boolean;
 }) {
   return (
@@ -62,7 +68,10 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         data-glass="popover"
+        data-radius={glassRadius}
+        data-surface="tinted-glass"
         className={cn(
+          tintedGlassSurfaceClassName,
           styles.content,
           className,
         )}

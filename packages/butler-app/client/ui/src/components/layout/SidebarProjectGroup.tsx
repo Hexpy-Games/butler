@@ -1,9 +1,9 @@
-import { Button, Folder, FolderOpen, CollapsibleNavGroup } from "@/butler-ds";
+import { Folder, FolderOpen, CollapsibleNavGroup } from "@/butler-ds";
 import { SidebarProjectActions } from "@/components/layout/SidebarProjectActions.tsx";
 import { SidebarProjectSessionItem } from "@/components/layout/SidebarProjectSessionItem.tsx";
+import { SidebarSessionLoadMore } from "@/components/layout/SidebarSessionLoadMore.tsx";
 import { useSidebarSessionPaging } from "@/components/layout/useSidebarSessionPaging.ts";
 import { useButlerStore } from "@/app/store.ts";
-import { appCopy } from "@/app/copy.ts";
 import type { ProjectSummary } from "@/app/types.ts";
 
 interface SidebarProjectGroupProps {
@@ -41,14 +41,9 @@ export function SidebarProjectGroup({
         />
       ))}
       {paging.remainingCount > 0 ? (
-        <Button
-          data-test-class="sidebar-load-more"
+        <SidebarSessionLoadMore
           onClick={paging.showMore}
-          size="sm"
-          stretch
-          text={`${appCopy.common.more} (${paging.remainingCount})`}
-          type="button"
-          variant="ghost"
+          remainingCount={paging.remainingCount}
         />
       ) : null}
     </CollapsibleNavGroup>

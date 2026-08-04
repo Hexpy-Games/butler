@@ -3740,6 +3740,10 @@ describe("app-client design system foundation", () => {
     expect(tintedGlassStyles).toContain(
       "backdrop-filter: var(--tinted-glass-filter)",
     );
+    expect(tokens).toContain("--adaptive-composer-radius: 30px;");
+    expect(tintedGlassStyles).toContain(
+      "--tinted-glass-radius: var(--adaptive-composer-radius)",
+    );
     expect(tintedGlassFixture).toContain("backgroundText");
     expect(tintedGlassFixture).toContain("pictureMarks");
     for (const floatingSurface of [
