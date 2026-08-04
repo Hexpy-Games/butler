@@ -32,6 +32,10 @@ Product containers provide draft state, submit handlers, attachment actions,
 and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
 `ComposerPlanToggle`, and `ComposerSendButton`.
 
+Use the optional `notice` slot for a non-blocking dependency or capability
+notice that must stay visible while the form itself is compact. The slot sits
+outside the collapsible form and participates in the floating composer height.
+
 ## Who can use this component
 
 Agents building Butler conversation or worker input surfaces.

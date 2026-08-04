@@ -976,18 +976,25 @@ test("Electron bridge live events subscribe through preload instead of renderer 
   ]);
 });
 
-test("default app session summaries do not execute host git for branch metadata", () => {
+test("App session summaries delegate bounded Git inspection outside React", () => {
   const sessionContextHost = readRepoFile(
     "packages/butler-agent/src/gateways/app/application/kernel-host/session-context-host.ts",
   );
-  const branchInfoStart = sessionContextHost.indexOf("branchInfoForSession(sessionId)");
-  const branchInfoEnd = sessionContextHost.indexOf("settingsForSession(sessionId)", branchInfoStart);
-  const branchInfo = sessionContextHost.slice(branchInfoStart, branchInfoEnd);
+  const resolver = readRepoFile(
+    "packages/butler-agent/src/gateways/app/domain/sessions/git-workspace-status.ts",
+  );
+  const notice = readRepoFile(
+    "packages/butler-app/client/ui/src/components/conversation/GitDependencyNotice.tsx",
+  );
 
-  expect(branchInfo).toContain('safe_status: "Project workspace"');
-  expect(branchInfo).not.toContain("spawnSync");
-  expect(branchInfo).not.toContain('"git"');
-  expect(branchInfo).not.toContain("branch --show-current");
+  expect(sessionContextHost).toContain(
+    "resolveGitWorkspaceSummary(project.workspace_path)",
+  );
+  expect(resolver).toContain("spawnSync");
+  expect(resolver).toContain("GIT_INSPECTION_TIMEOUT_MS");
+  expect(resolver).toContain("windowsHide: true");
+  expect(notice).toContain('safe_error_code === "git_not_installed"');
+  expect(notice).not.toContain("spawnSync");
 });
 
 test("first-run setup diagnostics are redacted coarse status only", () => {

@@ -111,6 +111,9 @@ export interface AppCopy {
     modelLoading: string;
     modelUnavailable: string;
     modelError: string;
+    gitMissingTitle: string;
+    gitMissingMessage: string;
+    gitInstallAction: string;
     reasoning: string;
     reasoningEffort: string;
     send: string;
@@ -760,6 +763,10 @@ const koKrCopy: AppCopy = {
     modelLoading: "모델 확인 중",
     modelUnavailable: "선택한 모델 사용 불가",
     modelError: "모델 상태 오류",
+    gitMissingTitle: "Git이 설치되어 있지 않습니다",
+    gitMissingMessage:
+      "Butler는 계속 사용할 수 있지만 브랜치, 커밋, Ledger 커밋 증거 기능은 사용할 수 없습니다.",
+    gitInstallAction: "Git 설치 안내",
     reasoning: "추론",
     reasoningEffort: "추론 강도",
     send: "전송",
@@ -1484,6 +1491,10 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     modelLoading: "Checking model",
     modelUnavailable: "Selected model unavailable",
     modelError: "Model state error",
+    gitMissingTitle: "Git is not installed",
+    gitMissingMessage:
+      "Butler remains usable, but branch, commit, and Ledger commit-evidence features are unavailable.",
+    gitInstallAction: "Install Git",
     reasoning: "Reasoning",
     reasoningEffort: "Reasoning effort",
     send: "Send",

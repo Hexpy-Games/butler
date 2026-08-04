@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ComposerAdjunctPanels } from "./ComposerAdjunctPanels";
+import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
 import { useComposerControls } from "./hooks/useComposerControls";
@@ -14,6 +14,8 @@ import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDo
 import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
+import { GitDependencyNotice } from "./GitDependencyNotice";
+
 interface ComposerProps {
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
@@ -116,10 +118,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     state,
     textAreaRef,
   });
-  const showAdjunct =
-    queue.sessionQueue.length > 0 ||
-    state.workers.length > 0 ||
-    state.taskRows.length > 0;
+  const showAdjunct = composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length);
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
@@ -131,6 +130,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
       large={large}
       expanded={presentation.expanded}
       floating
+      notice={<GitDependencyNotice />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels

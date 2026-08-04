@@ -1,0 +1,56 @@
+import { expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolveGitWorkspaceSummary } from
+  "../../packages/butler-agent/src/gateways/app/domain/sessions/index.ts";
+
+test("Git workspace status reports a missing executable without throwing", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-git-status-"));
+  try {
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace);
+
+    expect(resolveGitWorkspaceSummary(
+      workspace,
+      join(root, "missing-git-executable"),
+    )).toEqual({
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Git is not installed",
+      safe_error_code: "git_not_installed",
+    });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("Git workspace status does not warn for an installed non-Git folder", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-git-status-"));
+  try {
+    expect(resolveGitWorkspaceSummary(root, process.execPath)).toEqual({
+      available: false,
+      workspace_mode: "folder",
+      safe_status: "Project workspace",
+    });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("Git workspace status keeps a missing workspace distinct from missing Git", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-git-status-"));
+  try {
+    expect(resolveGitWorkspaceSummary(
+      join(root, "missing-workspace"),
+      join(root, "missing-git-executable"),
+    )).toEqual({
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Project workspace unavailable",
+      safe_error_code: "git_workspace_unavailable",
+    });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});

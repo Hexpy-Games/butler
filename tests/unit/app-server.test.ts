@@ -1799,6 +1799,60 @@ test("session summaries do not require host git for project workspace metadata",
   }
 });
 
+test("missing Git is a non-blocking session capability with a safe transport status", async () => {
+  const workspaceRoot = join(tempDir, "missing-git-workspace");
+  const originalPath = process.env.PATH;
+  const originalGitExecutable = process.env.BUTLER_GIT_EXECUTABLE;
+  process.env.PATH = "";
+  process.env.BUTLER_GIT_EXECUTABLE = join(tempDir, "missing-git-executable");
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Optional Git project",
+    });
+    const projectId = project.data.project.id as string;
+    const session = await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "Git optional",
+    });
+    const sessionId = session.data.session.id as string;
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=${encodeURIComponent(sessionId)}`,
+    );
+    expect(view.data.branch).toEqual({
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Git is not installed",
+      safe_error_code: "git_not_installed",
+    });
+
+    const delivered = await postJson(`${server.url}messages`, {
+      chat_id: sessionId,
+      text: "continue without git",
+    });
+    expect(delivered.data.turn.id).toBeTruthy();
+  } finally {
+    server.stop();
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalGitExecutable === undefined) {
+      delete process.env.BUTLER_GIT_EXECUTABLE;
+    } else {
+      process.env.BUTLER_GIT_EXECUTABLE = originalGitExecutable;
+    }
+  }
+});
+
 test("chat sessions can be renamed and archived through session routes", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
