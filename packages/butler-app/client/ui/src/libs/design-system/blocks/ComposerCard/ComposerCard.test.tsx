@@ -15,3 +15,13 @@ test("composer dependency notice stays outside the collapsible form", () => {
   expect(html.indexOf("dependency-notice")).toBeLessThan(html.indexOf("<form"));
   expect(html).toContain('data-test-class="composer-notice-slot"');
 });
+
+test("composer card exposes token-backed file drop feedback", () => {
+  const html = renderToStaticMarkup(
+    <ComposerCard dropActive>
+      <span>Composer content</span>
+    </ComposerCard>,
+  );
+
+  expect(html).toContain('data-drop-active="true"');
+});

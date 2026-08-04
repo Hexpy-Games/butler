@@ -1175,7 +1175,9 @@ test("navigation UI is backed by app-server data rather than sidebar fixtures", 
   expect(renderer).toContain("const projects = navigation.projects ?? []");
   expect(renderer).toContain("const chats = navigation.chats ?? []");
   expect(renderer).toContain("projects.map((project) =>");
-  expect(renderer).toContain("chats.map((chat) =>");
+  expect(renderer).toContain("paging.visibleSessions.map((chat) =>");
+  expect(renderer).toContain("useSidebarSessionPaging");
+  expect(renderer).toContain("SIDEBAR_SESSION_PAGE_SIZE = 5");
   expect(renderer).toContain("function SidebarProjectGroup");
   expect(renderer).toContain("project.sessions ?? []");
   expect(renderer).toContain("function selectProjectFolder");
@@ -2222,7 +2224,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   );
   expect(renderer).toContain("function Inspector");
   expect(renderer).toContain("/session-view?session_id=");
-  expect(renderer).toContain("transcript-export?session_id=");
+  expect(renderer).not.toContain("transcript-export?session_id=");
   expect(renderer).toContain("function WorkerComposerPanel");
   expect(renderer).toContain("function TurnActivityPanel");
   expect(renderer).toContain("function CollapsedTurnActivity");
