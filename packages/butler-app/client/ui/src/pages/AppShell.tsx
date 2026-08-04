@@ -20,6 +20,7 @@ import { AutomationsView } from "@/components/management/AutomationsView.tsx";
 import { SettingsView } from "@/components/settings/SettingsView.tsx";
 import { CommandPalette } from "@/components/command/CommandPalette.tsx";
 import { ProjectRenameDialog } from "@/components/layout/ProjectRenameDialog.tsx";
+import { ProjectCreateDialog } from "@/components/layout/ProjectCreateDialog.tsx";
 import { SessionRenameDialog } from "@/components/layout/SessionRenameDialog.tsx";
 import { AppToaster } from "@/components/common/AppToaster.tsx";
 import { chromeEnvironment } from "@/app/chromeEnvironment.ts";
@@ -89,6 +90,9 @@ function AppWorkspaceShell() {
   const commandOpen = useButlerStore((state) => state.commandOpen);
   const renameProject = useButlerStore((state) => state.renameProject);
   const renameSession = useButlerStore((state) => state.renameSession);
+  const projectCreateDialogOpen = useButlerStore(
+    (state) => state.projectCreateDialogOpen,
+  );
   const effectiveRightOpen = useButlerStore(selectEffectiveRightOpen);
   const rightAvailable = useButlerStore(selectRightAvailable);
   const isSettingsView = useButlerStore(selectIsSettingsView);
@@ -220,6 +224,7 @@ function AppWorkspaceShell() {
       )}
       {!isSettingsView && effectiveRightOpen && <RightPanelOverlayTitlebar />}
       {commandOpen && <CommandPalette />}
+      {projectCreateDialogOpen && <ProjectCreateDialog />}
       {renameProject && <ProjectRenameDialog />}
       {renameSession && <SessionRenameDialog />}
       <AppToaster />

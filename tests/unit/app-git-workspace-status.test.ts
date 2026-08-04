@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveGitWorkspaceSummary } from
@@ -54,3 +60,55 @@ test("Git workspace status keeps a missing workspace distinct from missing Git",
     rmSync(root, { force: true, recursive: true });
   }
 });
+
+test("Git workspace status reports a branch probe failure as unavailable", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-git-status-"));
+  try {
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace);
+    const git = writeGitProbeStub(root, "exit 23");
+
+    expect(resolveGitWorkspaceSummary(workspace, git)).toEqual({
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Git workspace unavailable",
+      safe_error_code: "git_workspace_unavailable",
+    });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test("Git workspace status reports a timed-out branch probe as unavailable", () => {
+  const root = mkdtempSync(join(tmpdir(), "butler-git-status-"));
+  try {
+    const workspace = join(root, "workspace");
+    mkdirSync(workspace);
+    const git = writeGitProbeStub(root, "sleep 2");
+
+    expect(resolveGitWorkspaceSummary(workspace, git)).toEqual({
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Git workspace unavailable",
+      safe_error_code: "git_workspace_unavailable",
+    });
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+function writeGitProbeStub(root: string, branchCommand: string): string {
+  const executable = join(root, "git-probe-stub");
+  writeFileSync(
+    executable,
+    `#!/bin/sh
+case "$1" in
+  --version) printf 'git version test\\n' ;;
+  rev-parse) printf 'true\\n' ;;
+  branch) ${branchCommand} ;;
+esac
+`,
+  );
+  chmodSync(executable, 0o755);
+  return executable;
+}
