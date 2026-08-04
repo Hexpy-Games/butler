@@ -32,6 +32,10 @@ Product containers provide draft state, submit handlers, attachment actions,
 and menu controls. Compose `ComposerCardTextarea`, `ComposerCardToolbar`,
 `ComposerPlanToggle`, and `ComposerSendButton`.
 
+Set `dropActive` while a file drag is over the card. Product containers own the
+drag event handling and upload action; the card only provides visual drop
+feedback.
+
 Use the optional `notice` slot for a non-blocking dependency or capability
 notice that must stay visible while the form itself is compact. The slot sits
 outside the collapsible form and participates in the floating composer height.
