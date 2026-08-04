@@ -40,10 +40,10 @@ test("renderer activity evidence cannot use a prior turn to satisfy the current 
     </section>
   `, { runScripts: "outside-only", pretendToBeVisual: true });
   const priorToggle = dom.window.document.querySelector(
-    '[data-turn-id="prior-turn"] [data-test-class~="toggle-turn-activity-history"]',
+    '[data-turn-id="prior-turn"] [data-test-class~="toggle-turn-activity-disclosure"]',
   );
   const currentToggle = dom.window.document.querySelector(
-    '[data-turn-id="current-turn"] [data-test-class~="toggle-turn-activity-history"]',
+    '[data-turn-id="current-turn"] [data-test-class~="toggle-turn-activity-disclosure"]',
   );
   if (!(priorToggle instanceof dom.window.HTMLElement) ||
       !(currentToggle instanceof dom.window.HTMLElement)) {
@@ -163,7 +163,7 @@ test("renderer activity contract rejects the repeated legacy label and accepts a
 function timelineBlocks(stages: readonly string[], turnId: string): string {
   return `
     <button
-      data-test-class="toggle-turn-activity-history"
+      data-test-class="toggle-turn-activity-disclosure"
       aria-expanded="true"
     >
       펼치기

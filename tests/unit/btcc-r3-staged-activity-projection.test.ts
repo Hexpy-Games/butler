@@ -5,7 +5,7 @@ import { progressRowFromSharedTurnEvent } from
   "../../packages/butler-progress-projection/src/index.ts";
 import { projectTurnProgressToEvents as projectTurnProgress } from
   "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
-import { createGuidedActivityProjection } from
+import { createGuidedActivityProjection, publicToolTitle } from
   "../../packages/butler-agent/src/agent/btcc/projection/index.ts";
 import { normalizeProgressSummaryRow } from
   "../../packages/butler-agent/src/gateways/app/domain/progress-summary/progress-row-normalizer.ts";
@@ -92,7 +92,7 @@ test("completion review projects a distinct validation activity without another 
   });
 
   projection.observeToolBatch({
-    text: "전체 완료 조건을 다시 확인했습니다.",
+    text: "",
     toolCalls: [{
       name: "record_work_review",
       args: {
@@ -121,6 +121,53 @@ test("completion review projects a distinct validation activity without another 
     title: "완료 검토",
     summary: "원 요청, 계획, 검사 결과와 실제 산출물이 모두 일치합니다.",
   })]);
+});
+
+test("accepted completion projects the model-authored reporting direction after validation", async () => {
+  const updates: Array<{
+    displayStage?: string;
+    title: string;
+    summary: string;
+  }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-report-direction",
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const args = {
+    subject: "completion",
+    verdict: "accept",
+    summary: "원 요청과 검증 결과가 모두 일치합니다.",
+    next_stage: "reporting",
+  };
+  projection.observeToolBatch({
+    text: "변경 내용, 검증 결과, 운영 반영 순서로 정리해 보고합니다.",
+    toolCalls: [{ name: "record_work_review", args }],
+  });
+  const binding = await projection.observeTool({
+    name: "record_work_review",
+    effectiveToolName: "record_work_review",
+    args,
+  });
+
+  await projection.publishAccepted(binding);
+
+  expect(updates).toEqual([
+    expect.objectContaining({
+      displayStage: "validation",
+      title: "완료 검토",
+      summary: "원 요청과 검증 결과가 모두 일치합니다.",
+    }),
+    expect.objectContaining({
+      displayStage: "reporting",
+      title: "결과 보고",
+      summary: "변경 내용, 검증 결과, 운영 반영 순서로 정리해 보고합니다.",
+    }),
+  ]);
 });
 
 test("the first Plan projects distinct conception and planning activities from one accepted call", async () => {
@@ -402,6 +449,52 @@ test("ordinary tools across model rounds inherit the accepted checkpoint activit
   )).toBe(true);
 });
 
+test("one model-authored execution activity owns narrower deterministic operation labels", async () => {
+  const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-overarching-execution-activity",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const first = {
+    name: "read_file",
+    args: { path: "src/games/word-chain/game-handler.ts" },
+  };
+  projection.observeToolBatch({
+    text: "검색 인덱스와 턴 판정 개선",
+    toolCalls: [first],
+  });
+  const firstBinding = await projection.observeTool({
+    ...first,
+    effectiveToolName: first.name,
+  });
+
+  const edit = {
+    name: "edit_file",
+    args: { path: "src/games/word-chain/game-handler.ts" },
+  };
+  projection.observeToolBatch({
+    text: "조사: XML 구조와 크기",
+    toolCalls: [edit],
+  });
+  const editBinding = await projection.observeTool({
+    ...edit,
+    effectiveToolName: edit.name,
+  });
+
+  expect(updates).toEqual([expect.objectContaining({
+    title: "검색 인덱스와 턴 판정 개선",
+    summary: "검색 인덱스와 턴 판정 개선",
+  })]);
+  expect(editBinding.activityId).toBe(firstBinding.activityId);
+  expect(publicToolTitle(edit.name, edit.args)).toBe("수정: game-handler.ts");
+});
+
 test("unanchored empty ordinary rounds reuse one fallback activity across tool mixtures", async () => {
   const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
@@ -589,63 +682,13 @@ test("long Plan objectives remain in detail while every title stays within 32 ch
   expect(updates.every((update) => update.title !== update.summary)).toBe(true);
 });
 
-test("an open Work final message stays partial while validated completion reports", async () => {
-  const updates: Array<{
-    displayStage?: string;
-    title: string;
-    summary: string;
-  }> = [];
-  const progress = {
-    stateChanged() {},
-    phaseActivityChanged(update: (typeof updates)[number]) {
-      updates.push(update);
-    },
-  };
-  await createGuidedActivityProjection({
-    turnId: "turn-open-final",
+test("final delivery has no activity API that can duplicate the answer body", () => {
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-final-delivery",
     managedInitially: true,
-    progress,
-  }).publishFinal("시간 안에 확인한 사실만 안내합니다.", {
-    managed: true,
-    completed: false,
-    completionValidated: false,
-    currentStage: "execution",
-  });
-  await createGuidedActivityProjection({
-    turnId: "turn-open-reporting-final",
-    managedInitially: true,
-    progress,
-  }).publishFinal("보고 단계지만 완료 검증은 아직 없습니다.", {
-    managed: true,
-    completed: false,
-    completionValidated: false,
-    currentStage: "reporting",
-  });
-  await createGuidedActivityProjection({
-    turnId: "turn-completed-final",
-    managedInitially: true,
-    progress,
-  }).publishFinal("모든 완료 조건을 확인했습니다.", {
-    managed: true,
-    completed: true,
-    completionValidated: true,
-    currentStage: "reporting",
   });
 
-  expect(updates).toEqual([
-    expect.objectContaining({
-      displayStage: "execution",
-      title: "부분 결과 안내",
-    }),
-    expect.objectContaining({
-      displayStage: "reporting",
-      title: "부분 결과 안내",
-    }),
-    expect.objectContaining({
-      displayStage: "reporting",
-      title: "결과 보고",
-    }),
-  ]);
+  expect(projection).not.toHaveProperty("publishFinal");
 });
 
 test("Plan and result subjects stay in Review while a checkpoint can display Validation", async () => {

@@ -4,6 +4,7 @@ import { isDurableWorkTool } from "../work/index.ts";
 import {
   safeCommandActionLabel,
   safeCommandActionIdentity,
+  safeFileActionLabel,
 } from "../../output/progress/arguments.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 import { publicWorkActionDisplay } from "./work-action-display.ts";
@@ -19,8 +20,11 @@ export function publicToolTitle(
 ): string {
   if (name === "web_search") return "웹 검색";
   if (name === "web_read") return "웹 문서 읽기";
-  if (name === "read_file" || name === "grep_files") return "작업공간 확인";
-  if (name === "write_file" || name === "edit_file") return "작업공간 변경";
+  if (name === "read_file") return safeFileActionLabel(name, args) || "파일 읽기";
+  if (name === "grep_files") return "작업공간 검색";
+  if (name === "write_file" || name === "edit_file") {
+    return safeFileActionLabel(name, args) || "파일 변경";
+  }
   if (name === "inspect_workspace_page") return "작업 화면 확인";
   if (name === "tool_search") return "사용 가능한 도구 찾기";
   if (name === "tool_describe") return "도구 사용법 확인";
@@ -87,12 +91,13 @@ export function activityContent(
   const toolSummary = ordinaryToolSummary(calls, titles);
   const title = ordinaryActivityTitle(calls, titles);
   const commandLabel = commandActionLabel(calls);
-  const summary = commandLabel || publicText(assistantText) || toolSummary ||
+  const authoredSummary = publicText(assistantText);
+  const summary = authoredSummary || commandLabel || toolSummary ||
     "도구 작업을 진행하고 있습니다";
   return {
     displayStage: "execution",
     title,
-    summary: commandLabel
+    summary: commandLabel && !authoredSummary
       ? summary
       : distinctSummary(title, summary, toolSummary),
   };
@@ -200,8 +205,6 @@ export function toolActivitySummary(name: string, title: string): string {
   if (name === "tool_describe") return "선택한 도구의 사용 방법을 확인하고 있습니다.";
   if (title === "프로젝트 기록 변경") return "프로젝트 기록을 변경하고 있습니다.";
   if (title === "프로젝트 기록 확인") return "프로젝트 기록을 확인하고 있습니다.";
-  if (title === "작업공간 변경") return "작업공간의 파일을 변경하고 있습니다.";
-  if (title === "작업공간 확인") return "작업공간의 내용을 확인하고 있습니다.";
   return `${title} 작업을 진행하고 있습니다.`;
 }
 

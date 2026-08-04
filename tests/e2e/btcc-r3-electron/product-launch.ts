@@ -428,7 +428,7 @@ export async function rendererVisibleActivities(
     );
     if (!timeline) return [];
     const toggle = timeline.querySelector(
-      '[data-test-class~="toggle-turn-activity-history"]'
+      '[data-test-class~="toggle-turn-activity-disclosure"]'
     );
     if (toggle?.getAttribute("aria-expanded") !== "true" &&
         toggle instanceof HTMLElement) {

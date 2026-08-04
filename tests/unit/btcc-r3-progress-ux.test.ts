@@ -251,6 +251,44 @@ test("run_command public summaries use canonical public-text sanitization", asyn
   })).toBe("");
 });
 
+test("basic file operations project deterministic basename labels", async () => {
+  const updates: Array<{ publicTitle: string; inputLabel?: string }> = [];
+  const progress = {
+    stateChanged() {},
+    operationChanged(update: (typeof updates)[number]) {
+      updates.push(update);
+    },
+  };
+
+  await publishOperation(progress, {
+    turnId: "turn-file-labels",
+    activityId: "activity-file-labels",
+    requestId: "edit-1",
+    toolName: "edit_file",
+    args: { path: "src/games/word-chain/game-handler.ts" },
+    status: "started",
+  });
+  await publishOperation(progress, {
+    turnId: "turn-file-labels",
+    activityId: "activity-file-labels",
+    requestId: "read-1",
+    toolName: "read_file",
+    args: { path: "/private/workspace/src/games/word-chain/game-handler.ts" },
+    status: "started",
+  });
+
+  expect(updates).toEqual([
+    expect.objectContaining({
+      publicTitle: "수정: game-handler.ts",
+      inputLabel: "game-handler.ts",
+    }),
+    expect.objectContaining({
+      publicTitle: "읽기: game-handler.ts",
+      inputLabel: "game-handler.ts",
+    }),
+  ]);
+});
+
 test("run_command model-authored action label is enforced by the native tool-call schema boundary", () => {
   const missingSummary = prepareBtccToolCall(
     { tools: [runCommandToolDefinition] },
@@ -338,6 +376,15 @@ test("progressive tool discovery and dispatch keep distinct product-facing title
     command: "opaque command text",
     summary: "실행: git commit",
   })).toBe("실행: git commit");
+  expect(publicToolTitle("read_file", {
+    path: "src/games/word-chain/game-handler.ts",
+  })).toBe("읽기: game-handler.ts");
+  expect(publicToolTitle("edit_file", {
+    path: "src/games/word-chain/game-handler.ts",
+  })).toBe("수정: game-handler.ts");
+  expect(publicToolTitle("write_file", {
+    path: "src/games/word-chain/index-cache.ts",
+  })).toBe("작성: index-cache.ts");
   expect(publicToolTitle("tool_call", {
     id: "native:run_command",
     arguments: {
