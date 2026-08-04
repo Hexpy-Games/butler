@@ -234,9 +234,32 @@ test("turn activity panel renders acknowledged receipt only as pending status", 
   const html = renderPanel([acknowledgedRow()], "accepted");
 
   expect(html).toContain("turn-activity-pending");
+  expect(html).toContain("assistant-status-label");
+  expect(html).toContain("assistant-status-mark-active");
   expect(html).toContain("Request received. Preparing the work.");
   expect(html).not.toContain("turn-decision-row");
   expect(html).not.toContain("turn-work-block");
+});
+
+test("decision-only activity keeps the Butler status as the bottom-most row", () => {
+  const html = renderPanel([{
+    id: "decision-only",
+    kind: "decision",
+    state: "running",
+    safe_label: "요청을 분석했습니다.",
+    public_decision_role: "opening",
+    public_decision_summary: "요청을 분석했습니다.",
+    public_decision_rationale: "정확한 답변을 준비합니다.",
+    public_decision_next_step: "응답을 생성합니다.",
+    public_decision_source: "model-authored",
+  }]);
+
+  expect(html).toContain("turn-decision-row");
+  expect(html).toContain("turn-current-status-slot");
+  expect(html).toContain("응답 생성 중");
+  expect(html.indexOf("turn-current-status-slot")).toBeGreaterThan(
+    html.indexOf("turn-decision-row"),
+  );
 });
 
 test("turn activity panel keeps decision text out of tool controls", () => {

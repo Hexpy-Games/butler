@@ -1,14 +1,12 @@
-import { ButlerThinkingMark } from "@/components/common/ButlerThinkingMark.tsx";
 import type { ProgressRow } from "@/app/types.ts";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { TurnActivityPanel } from "./TurnActivityPanel";
-import { MessageAvatarBlock, MessageRow } from "@/butler-ds";
+import { MessageRow } from "@/butler-ds";
 
 interface TurnActivityMessageProps {
   progressRows: ProgressRow[];
   turnState?: string;
   turnId?: string;
-  markTheme: "dark" | "light";
   virtualRow: VirtualItem;
   topOffset: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
@@ -18,7 +16,6 @@ export function TurnActivityMessage({
   progressRows,
   turnState,
   turnId,
-  markTheme,
   virtualRow,
   topOffset,
   rowVirtualizer,
@@ -34,16 +31,6 @@ export function TurnActivityMessage({
       style={{
         transform: `translateY(${virtualRow.start + topOffset}px)`,
       }}
-      avatar={
-        <MessageAvatarBlock
-          role="assistant"
-          active
-          data-test-class="assistant-mark-active"
-          aria-hidden="true"
-        >
-          <ButlerThinkingMark state="working" theme={markTheme} />
-        </MessageAvatarBlock>
-      }
     >
       <TurnActivityPanel rows={progressRows} state={turnState} turnId={turnId} />
     </MessageRow>

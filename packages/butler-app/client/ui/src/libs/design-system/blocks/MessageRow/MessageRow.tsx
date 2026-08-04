@@ -101,3 +101,42 @@ export function MessageFooter({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
+export function MessageStatusRow({
+  children,
+  dataTestClass,
+}: {
+  children: ReactNode;
+  dataTestClass?: string;
+}) {
+  return (
+    <div className={styles.statusRow} data-test-class={dataTestClass}>
+      {children}
+    </div>
+  );
+}
+
+export function MessageStatusLabel({
+  children,
+  dataTestClass,
+  mark,
+  title,
+}: {
+  children: ReactNode;
+  dataTestClass?: string;
+  mark: ReactNode;
+  title?: string;
+}) {
+  return (
+    <div
+      className={styles.statusLabel}
+      data-test-class={dataTestClass}
+      title={title}
+    >
+      <span aria-hidden="true" className={styles.statusMark}>
+        {mark}
+      </span>
+      <div className={styles.statusContent}>{children}</div>
+    </div>
+  );
+}

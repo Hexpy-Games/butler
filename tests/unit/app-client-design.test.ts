@@ -1575,7 +1575,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("function ContextUsagePopover");
   expect(renderer).toContain("Context window:");
   expect(virtualMessageRow).toContain("MessageAvatar");
-  expect(renderer).toContain("latestAssistantMessageId");
+  expect(renderer).not.toContain("latestAssistantMessageId");
   expect(renderer).toContain("ChartContainer");
   expect(renderer).toContain("BarChart");
   expect(renderer).toContain("isAnimationActive={false}");
@@ -2268,8 +2268,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
     ),
   ).toContain("export const MessageItem = memo");
   expect(renderer).toContain("showTurnActivity =");
-  expect(renderer).toContain("assistant-mark-active");
-  expect(renderer).toContain("assistant-mark-static");
+  expect(renderer).toContain("assistant-status-mark-active");
+  expect(renderer).toContain("assistant-status-mark-complete");
+  expect(renderer).toContain("assistant-terminal-status-row");
   expect(renderer).toContain("<ButlerThinkingMark");
   expect(renderer).toContain("<ButlerMarkIcon");
   expect(renderer).toContain("resolveButlerMarkTheme");
@@ -2643,8 +2644,10 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("page.screenshot");
   expect(smoke).toContain("conversation-body-width-matches-composer");
   expect(smoke).toContain("user-bubble-content-sized");
+  expect(smoke).toContain("assistant-message-full-width");
   expect(smoke).toContain("assistant-footer-copy-duration-time");
   expect(smoke).toContain("assistant-footer-semantic-time");
+  expect(smoke).toContain("assistant-status-bottom-row");
   expect(smoke).toContain("composer-ready-status-absent");
   expect(smoke).toContain("context-hover-popover-visible");
   expect(smoke).toContain("context-popover-titlebar-safe");
