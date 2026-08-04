@@ -147,6 +147,24 @@ export function boundedTitle(text: string): string {
   return [...normalized].slice(0, 32).join("");
 }
 
+export function activeWorkActionTitle(
+  args: Record<string, unknown>,
+): string | undefined {
+  if (!Array.isArray(args.action_updates)) return undefined;
+  for (const value of args.action_updates) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const update = value as Record<string, unknown>;
+    if (update.status !== "active") continue;
+    const actionKey = publicText(update.action_key);
+    if (!actionKey) continue;
+    return publicWorkActionDisplay(
+      { actionKey, description: "" },
+      actionKey,
+    ) || undefined;
+  }
+  return undefined;
+}
+
 function firstPlanAction(args: Record<string, unknown>): string | undefined {
   if (!Array.isArray(args.actions)) return undefined;
   for (const value of args.actions) {

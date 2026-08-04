@@ -402,6 +402,10 @@ test("ordinary tools across model rounds inherit the accepted checkpoint activit
     next_stage: "execution",
     public_summary: "프로필 연결 정책과 표현 경로를 한 작업으로 수정합니다.",
     next_step: "관련 구현을 확인하고 수정한 뒤 검증합니다.",
+    action_updates: [{
+      action_key: "프로필 연결 정책과 표현 경로 수정",
+      status: "active",
+    }],
   };
   projection.observeToolBatch({
     text: "",
@@ -441,7 +445,7 @@ test("ordinary tools across model rounds inherit the accepted checkpoint activit
 
   expect(updates).toEqual([expect.objectContaining({
     activityId: checkpoint.activityId,
-    title: "작업 진행 확인",
+    title: "프로필 연결 정책과 표현 경로 수정",
     summary: checkpointArgs.public_summary,
   })]);
   expect(operationBindings.every(
@@ -449,7 +453,7 @@ test("ordinary tools across model rounds inherit the accepted checkpoint activit
   )).toBe(true);
 });
 
-test("one model-authored execution activity owns narrower deterministic operation labels", async () => {
+test("the active model-authored action owns prose summaries and deterministic operation labels", async () => {
   const updates: Array<{ activityId?: string; title: string; summary: string }> = [];
   const projection = createGuidedActivityProjection({
     turnId: "turn-overarching-execution-activity",
@@ -461,12 +465,33 @@ test("one model-authored execution activity owns narrower deterministic operatio
       },
     },
   });
+  const actionTitle = "검색 인덱스와 턴 판정 개선";
+  const reviewArgs = {
+    subject: "plan",
+    verdict: "accept",
+    summary: "검색 인덱스와 턴 판정을 함께 고치는 실행 계획을 승인합니다.",
+    next_stage: "execution",
+    action_updates: [{ action_key: actionTitle, status: "active" }],
+  };
+  projection.observeToolBatch({
+    text: "계획의 범위와 검증 기준을 확인했습니다.",
+    toolCalls: [{ name: "record_work_review", args: reviewArgs }],
+  });
+  const review = await projection.observeTool({
+    name: "record_work_review",
+    effectiveToolName: "record_work_review",
+    args: reviewArgs,
+  });
+  await projection.publishAccepted(review);
+
   const first = {
     name: "read_file",
     args: { path: "src/games/word-chain/game-handler.ts" },
   };
+  const fullSummary =
+    "냥, 답변 경로부터 확인하고 검색 인덱스와 턴 판정을 함께 수정한 뒤 전체 검증까지 진행하겠다냐.";
   projection.observeToolBatch({
-    text: "검색 인덱스와 턴 판정 개선",
+    text: fullSummary,
     toolCalls: [first],
   });
   const firstBinding = await projection.observeTool({
@@ -487,11 +512,19 @@ test("one model-authored execution activity owns narrower deterministic operatio
     effectiveToolName: edit.name,
   });
 
-  expect(updates).toEqual([expect.objectContaining({
-    title: "검색 인덱스와 턴 판정 개선",
-    summary: "검색 인덱스와 턴 판정 개선",
-  })]);
+  expect(updates).toEqual([
+    expect.objectContaining({
+      title: "계획 검토",
+      summary: reviewArgs.summary,
+    }),
+    expect.objectContaining({
+      title: actionTitle,
+      summary: fullSummary,
+    }),
+  ]);
   expect(editBinding.activityId).toBe(firstBinding.activityId);
+  expect(updates[1]?.title).not.toContain("냥, 답변 경로부터");
+  expect(updates[1]?.summary).toBe(fullSummary);
   expect(publicToolTitle(edit.name, edit.args)).toBe("수정: game-handler.ts");
 });
 
@@ -522,6 +555,32 @@ test("unanchored empty ordinary rounds reuse one fallback activity across tool m
 
   expect(updates).toHaveLength(1);
   expect(new Set(bindings.map((binding) => binding.activityId)).size).toBe(1);
+});
+
+test("unanchored assistant prose remains a full summary and never becomes the activity title", async () => {
+  const updates: Array<{ title: string; summary: string }> = [];
+  const projection = createGuidedActivityProjection({
+    turnId: "turn-unanchored-prose-summary",
+    managedInitially: true,
+    progress: {
+      stateChanged() {},
+      phaseActivityChanged(update) {
+        updates.push(update);
+      },
+    },
+  });
+  const summary = "냥, 우선 실제 구현 경로와 현재 상태를 충분히 확인한 뒤 필요한 변경과 검증을 이어가겠다냐.";
+  const call = {
+    name: "read_file",
+    args: { path: "src/games/word-chain/game-handler.ts" },
+  };
+  projection.observeToolBatch({ text: summary, toolCalls: [call] });
+  await projection.observeTool({ ...call, effectiveToolName: call.name });
+
+  expect(updates).toEqual([expect.objectContaining({
+    title: "읽기: game-handler.ts",
+    summary,
+  })]);
 });
 
 test("complete safe model activity text survives event, App, and UI projection", async () => {

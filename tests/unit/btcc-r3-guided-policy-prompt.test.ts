@@ -184,10 +184,10 @@ test("R3 guided fallback uses session or project Work without exposing tracking 
     "not the report itself, a draft of the final answer, or copied final-answer wording",
   );
   expect(instructions).toContain(
-    "encompass the whole current Plan action or execution outcome",
+    "active Plan action_key is the model-authored execution activity title",
   );
   expect(instructions).toContain(
-    "do not replace the activity with narrower labels",
+    "Assistant text is the full activity summary, never the title source",
   );
   expect(instructions).not.toContain("all its tool calls in order");
   expect(instructions).not.toContain("put them in one response in an allowed order");
