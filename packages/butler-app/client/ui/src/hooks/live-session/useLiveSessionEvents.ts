@@ -112,10 +112,6 @@ export function useLiveSessionEvents(): void {
     };
 
     connect();
-    if (useButlerStore.getState().sessionView?.active_turn) {
-      reconciliation.requestRefresh();
-    }
-    reconciliation.startActiveTurnPolling();
     return () => {
       cancelled = true;
       unsubscribe?.();
