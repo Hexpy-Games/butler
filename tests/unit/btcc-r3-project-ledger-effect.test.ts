@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -23,8 +24,13 @@ import {
   guidedProjectLedgerEffect,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-project-ledger-effect.ts";
+import { createGuidedPersistentEffectResolver } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-persistent-effect-resolution.ts";
+import type { GuidedPersistentEffectContext } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-execution-boundary.ts";
 import {
   ACTIVE_PROJECT_LEDGER_REFERENCE_SCHEMA,
+  ActiveProjectLedgerResolver,
   type ActiveProjectLedgerReference,
 } from
   "../../packages/butler-agent/src/integrations/project-ledger/active-project-ledger-reference.ts";
@@ -307,6 +313,114 @@ describe("R3 guided Project Ledger effect", () => {
       status: "done",
       specExemption: true,
     });
+  });
+
+  test("normalizes Sandy auto Git evidence before guided Work completion", async () => {
+    const fixture = await projectLedgerFixture();
+    const workspacePath = gitWorkspaceFixture(fixture.root);
+    fixture.core.createWork(fixture.projectRoot, {
+      project: fixture.projectRoot,
+      id: "W-SANDY-AUTO-EVIDENCE",
+      title: "Sandy automatic commit evidence",
+      status: "in_progress",
+      acceptance: "The guided completion records canonical Git evidence",
+      "spec-exemption": true,
+      "requires-commit-evidence": true,
+    });
+
+    const effect = createGuidedProjectLedgerEffectAdapter({
+      name: "project_ledger_work_complete",
+      args: {
+        id: "W-SANDY-AUTO-EVIDENCE",
+        validation: "All Sandy validation passed",
+        review: "The Sandy result satisfies the request",
+        report: "Sandy was deployed successfully",
+        code_commit: "auto",
+        code_commits: JSON.stringify([{
+          hash: "aeed0e857b88aa46e02cc9e4bf2676b745fc0b31",
+          branch: "main",
+          remote: "origin/main",
+          message: "fix: rotate logs and keep raw response history",
+        }]),
+      },
+      butlerData: fixture.butlerData,
+      projectRoot: fixture.projectRoot,
+      projectRef: "fixture",
+      workspacePath,
+      resolveActiveProjectReference: exactAppBinding(fixture.projectRoot),
+    });
+
+    const normalizedCommits = JSON.parse(
+      String(effect.normalizedInput.codeCommits),
+    );
+    expect(normalizedCommits).toEqual([expect.objectContaining({
+      repo: "workspace",
+      hash: expect.stringMatching(/^[0-9a-f]{12}$/u),
+      message: "Initialize Sandy workspace",
+      branch: "main",
+    })]);
+    expect(effect.normalizedInput).not.toHaveProperty("code_commit");
+    expect(await effect.adapter.dispatch(effectDispatch("sandy-auto-evidence")))
+      .toMatchObject({ status: "applied" });
+
+    const completed = fixture.core.resolveRecord(fixture.projectRoot, {
+      kind: "work",
+      id: "W-SANDY-AUTO-EVIDENCE",
+    });
+    expect(fixture.core.readRecordData(completed.filePath)).toMatchObject({
+      status: "done",
+      codeCommits: JSON.stringify(normalizedCommits),
+    });
+  });
+
+  test("keeps Butler operational when guided auto evidence cannot find Git", async () => {
+    const fixture = await projectLedgerFixture();
+    const priorExecutable = process.env.BUTLER_GIT_EXECUTABLE;
+    process.env.BUTLER_GIT_EXECUTABLE = join(fixture.root, "missing-git");
+    const reference = exactAppBinding(fixture.projectRoot)();
+    const projectLedgerResolver = {
+      clear() {},
+      resolve() {
+        return reference;
+      },
+    } as unknown as ActiveProjectLedgerResolver;
+    const resolveEffect = createGuidedPersistentEffectResolver({
+      butlerHome: fixture.root,
+      butlerData: fixture.butlerData,
+      appMessageDbPath: join(fixture.root, "app.sqlite"),
+      workspacePath: fixture.root,
+      projectId: "fixture",
+      trackingMode: "ledger",
+      projectLedgerResolver,
+      effectJournal: { find: () => null },
+      originalRequest: "Complete Sandy work",
+    });
+    try {
+      const result = await resolveEffect({
+        name: "project_ledger_work_complete",
+        args: {
+          id: "W-SANDY-AUTO-EVIDENCE",
+          validation: "passed",
+          review: "accepted",
+          report: "completed",
+          code_commit: "auto",
+        },
+        rawArguments: "{}",
+      }, async () => ({}), {} as GuidedPersistentEffectContext);
+      expect(result).toEqual({
+        error: {
+          code: "git_not_installed",
+          message: expect.stringContaining("Butler can continue without Git"),
+          recoverable: true,
+        },
+      });
+    } finally {
+      if (priorExecutable === undefined) {
+        delete process.env.BUTLER_GIT_EXECUTABLE;
+      } else {
+        process.env.BUTLER_GIT_EXECUTABLE = priorExecutable;
+      }
+    }
   });
 
   test("does not initialize an empty Ledger for update or completion calls", async () => {
@@ -719,6 +833,29 @@ async function projectLedgerFixture() {
   writeFileSync(join(projectRoot, "ledger.jsonl"), "");
   const core = await loadProjectLedgerCore();
   return { root, butlerData, projectRoot, core };
+}
+
+function gitWorkspaceFixture(root: string): string {
+  const workspacePath = join(root, "workspace");
+  mkdirSync(workspacePath, { recursive: true });
+  writeFileSync(join(workspacePath, "README.md"), "# Sandy workspace\n");
+  for (const args of [
+    ["init", "-b", "main"],
+    ["config", "user.name", "Butler Test"],
+    ["config", "user.email", "butler-test@example.invalid"],
+    ["add", "README.md"],
+    ["commit", "-m", "Initialize Sandy workspace"],
+  ]) {
+    const result = spawnSync("git", args, {
+      cwd: workspacePath,
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (result.status !== 0) {
+      throw new Error(result.stderr || `git ${args.join(" ")} failed`);
+    }
+  }
+  return workspacePath;
 }
 
 function ledgerEvents(projectRoot: string): string[] {

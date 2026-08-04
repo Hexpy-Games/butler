@@ -5,6 +5,10 @@ import type { ActiveProjectLedgerResolver } from
   "../../../integrations/project-ledger/active-project-ledger-reference.ts";
 import { ensureActiveProjectLedger } from
   "../../../integrations/project-ledger/ensure-active-project-ledger.ts";
+import {
+  GIT_INSTALL_URL,
+  GitEvidenceCollectionError,
+} from "../../tools/project-ledger/git-commit-evidence.ts";
 import type { ButlerToolCall } from "../../tools/butler-tools.ts";
 import type {
   GuidedPersistentEffectContext,
@@ -113,32 +117,48 @@ export function createGuidedPersistentEffectResolver(input: {
     };
     const projectReference = resolveActiveProjectReference();
     const projectRoot = projectReference.ledger_root;
-    const effect = createGuidedProjectLedgerEffectAdapter({
-      name: call.name,
-      args: call.args,
-      butlerData: input.butlerData,
-      projectRoot,
-      projectRef: input.projectId,
-      resolveActiveProjectReference,
-      ...(call.name === "project_ledger_create"
-        ? {
-            initializeForCreate() {
-              const initialized = ensureActiveProjectLedger({
-                resolver: input.projectLedgerResolver,
-                butlerHome: input.butlerHome,
-                butlerData: input.butlerData,
-                lookup: ledgerLookup,
-                reference: projectReference,
-              });
-              if (initialized.ledger_root !== projectRoot) {
-                throw new Error(
-                  "Project Ledger identity changed before the reviewed effect was applied",
-                );
-              }
-            },
-          }
-        : {}),
-    });
+    let effect: ReturnType<typeof createGuidedProjectLedgerEffectAdapter>;
+    try {
+      effect = createGuidedProjectLedgerEffectAdapter({
+        name: call.name,
+        args: call.args,
+        butlerData: input.butlerData,
+        projectRoot,
+        projectRef: input.projectId,
+        workspacePath: input.workspacePath,
+        resolveActiveProjectReference,
+        ...(call.name === "project_ledger_create"
+          ? {
+              initializeForCreate() {
+                const initialized = ensureActiveProjectLedger({
+                  resolver: input.projectLedgerResolver,
+                  butlerHome: input.butlerHome,
+                  butlerData: input.butlerData,
+                  lookup: ledgerLookup,
+                  reference: projectReference,
+                });
+                if (initialized.ledger_root !== projectRoot) {
+                  throw new Error(
+                    "Project Ledger identity changed before the reviewed effect was applied",
+                  );
+                }
+              },
+            }
+          : {}),
+      });
+    } catch (error) {
+      if (!(error instanceof GitEvidenceCollectionError)) throw error;
+      const gitMissing = error.code === "git_not_installed";
+      return {
+        error: {
+          code: error.code,
+          message: gitMissing
+            ? `Git is not installed. Butler can continue without Git; install it from ${GIT_INSTALL_URL} to attach commit evidence.`
+            : error.message,
+          recoverable: true,
+        },
+      };
+    }
     return {
       target: effect.target,
       input: effect.normalizedInput,
