@@ -19,7 +19,11 @@ export function ComposerAdjunctPanels({
   taskRows: ProgressRow[];
   taskTurnState?: string;
 }) {
-  if (queuedMessages.length === 0 && !showWorkers && taskRows.length === 0)
+  if (!composerHasAdjunct(
+    queuedMessages.length,
+    showWorkers ? 1 : 0,
+    taskRows.length,
+  ))
     return null;
 
   return (
@@ -35,4 +39,12 @@ export function ComposerAdjunctPanels({
       {showWorkers ? <WorkerComposerPanel /> : null}
     </Stack>
   );
+}
+
+export function composerHasAdjunct(
+  queuedCount: number,
+  workerCount: number,
+  taskCount: number,
+): boolean {
+  return queuedCount > 0 || workerCount > 0 || taskCount > 0;
 }

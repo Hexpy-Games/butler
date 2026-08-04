@@ -1,5 +1,6 @@
 import { Paperclip } from "../../components/Icons";
 import { IconButton } from "../../components/IconButton";
+import { Notice } from "../Notice";
 import {
   ComposerCard,
   ComposerCardTextarea,
@@ -12,7 +13,12 @@ import {
 
 export function ComposerCardFixture() {
   return (
-    <ComposerCard expanded={false} large onSubmit={(event) => event.preventDefault()}>
+    <ComposerCard
+      expanded={false}
+      large
+      notice={<Notice message="Optional capability guidance" tone="warning" />}
+      onSubmit={(event) => event.preventDefault()}
+    >
       <ComposerCardExpandedBody>
         <ComposerCardTextarea defaultValue="Draft message with enough text to show the Butler glass composer." rows={1} />
       </ComposerCardExpandedBody>

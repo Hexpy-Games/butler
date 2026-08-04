@@ -27,6 +27,15 @@
   max-width: var(--conversation-content-width, 760px);
 }
 
+.notice {
+  margin-bottom: var(--space-sm);
+  pointer-events: auto;
+}
+
+.notice:empty {
+  display: none;
+}
+
 .floating.large {
   bottom: 34px;
 }

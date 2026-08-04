@@ -20,7 +20,10 @@ import {
   PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
   PROJECT_LEDGER_MUTATION_TOOL_NAMES,
 } from "../../packages/butler-agent/src/agent/tools/project-ledger/mutation-tools.ts";
-import { projectLedgerNativeToolDefinitions } from "../../packages/butler-agent/src/agent/tools/project-ledger/native.ts";
+import {
+  createProjectLedgerNativeToolHandler,
+  projectLedgerNativeToolDefinitions,
+} from "../../packages/butler-agent/src/agent/tools/project-ledger/native.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import {
@@ -840,6 +843,49 @@ test("Project Ledger completion schema makes automatic Git evidence the canonica
   expect(String(properties?.code_commit?.description)).toContain("never pass a SHA");
   expect(String(properties?.code_commits?.description)).toContain('"repo", "hash", and "message"');
   expect(definition?.description).toContain('code_commit:"auto"');
+});
+
+test("Project Ledger auto evidence degrades without blocking Butler when Git is missing", async () => {
+  const originalPath = process.env.PATH;
+  const originalGitExecutable = process.env.BUTLER_GIT_EXECUTABLE;
+  process.env.PATH = "";
+  process.env.BUTLER_GIT_EXECUTABLE = join(tempDir, "missing-git-executable");
+  try {
+    const execute = createProjectLedgerNativeToolHandler({
+      butlerHome: tempDir,
+      butlerData: tempDir,
+      workspacePath: tempDir,
+    }, "project_ledger_work_complete");
+    const result = await execute({
+      args: {
+        id: "W-NO-GIT",
+        validation: "validated",
+        review: "reviewed",
+        report: "reported",
+        code_commit: "auto",
+      },
+    }) as Record<string, any>;
+
+    expect(result).toMatchObject({
+      ok: false,
+      recoverable: true,
+      butler_operational: true,
+      git_features_available: false,
+      error: {
+        code: "git_not_installed",
+        install_url: "https://git-scm.com/downloads",
+      },
+    });
+    expect(result.error.native_next).toBeUndefined();
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalGitExecutable === undefined) {
+      delete process.env.BUTLER_GIT_EXECUTABLE;
+    } else {
+      process.env.BUTLER_GIT_EXECUTABLE = originalGitExecutable;
+    }
+  }
 });
 
 test("work-tracking runtime ownership list matches handler keys", () => {

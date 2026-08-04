@@ -5,7 +5,10 @@ import type {
 } from "../../infrastructure/core/records.ts";
 import type { DeliveryLimitationMetadata } from "../../infrastructure/transport/app-delivery-projection.ts";
 import type { ProgressSummaryInput } from "../../domain/progress-summary/progress-row-normalizer.ts";
-import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
+import {
+  resolveGitWorkspaceSummary,
+  sessionHintForRow,
+} from "../../domain/sessions/index.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
@@ -173,11 +176,7 @@ export function createSessionContextHost(
           safe_status: "No project workspace",
         };
       }
-      return {
-        available: false,
-        workspace_mode: "folder",
-        safe_status: "Project workspace",
-      };
+      return resolveGitWorkspaceSummary(project.workspace_path);
     },
   };
 }

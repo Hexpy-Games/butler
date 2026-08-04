@@ -1,5 +1,3 @@
-import { spawnSync } from "node:child_process";
-import { basename } from "node:path";
 import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../types.ts";
 import {
   ProjectLedgerProjectScopeError,
@@ -18,6 +16,11 @@ import { projectLedgerNativeNextHints } from "./recovery-hints.ts";
 import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts";
 import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
 import { normalizeProjectLedgerAcceptanceInput } from "./acceptance-input.ts";
+import {
+  collectGitCommitEvidence,
+  GIT_INSTALL_URL,
+  GitEvidenceCollectionError,
+} from "./git-commit-evidence.ts";
 
 type ToolCall = { args: Record<string, unknown> };
 type ProjectLedgerExecutorInput = {
@@ -133,7 +136,7 @@ const toolSpecs = [
   { name: "project_ledger_create", description: "Create one Ledger record. Search with project_ledger_list first. task needs work_id; attempt needs task_id; work/task needs acceptance.", required: ["kind", "id", "title"], properties: recordFields, mutates: true },
   { name: "project_ledger_update", description: "Update one exact Ledger record by kind and id.", required: ["kind", "id"], properties: recordFields, mutates: true },
   { name: "project_ledger_work_update", description: "Update or transition one Work.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
-  { name: "project_ledger_work_complete", description: "Complete Work with validation, review, and report evidence. Use code_commit:\"auto\" for required Git evidence; code_commits accepts only canonical JSON evidence.", required: ["id", "validation", "review", "report"], properties: workLifecycleCompleteFields, mutates: true },
+  { name: "project_ledger_work_complete", description: "Complete Work with validation, review, and report. For required Git evidence, use code_commit:\"auto\"; code_commits accepts canonical JSON. Missing Git is recoverable and does not block Butler.", required: ["id", "validation", "review", "report"], properties: workLifecycleCompleteFields, mutates: true },
   { name: "project_ledger_task_update", description: "Update or transition one Task.", required: ["id"], properties: lifecycleUpdateFields, mutates: true },
   { name: "project_ledger_task_complete", description: "Complete a Task with validation, review, and report evidence.", required: ["id", "validation", "review", "report"], properties: lifecycleCompleteFields, mutates: true },
   { name: "project_ledger_attempt_start", description: "Start an Attempt under a Task.", required: ["task_id"], properties: recordFields, mutates: true },
@@ -257,21 +260,7 @@ function runProjectLedgerNativeTool(
       normalizeProjectLedgerAcceptanceInput(args),
     );
   } catch (error) {
-    return {
-      ok: false,
-      recoverable: true,
-      error: {
-        code: "git_evidence_failed",
-        message: error instanceof Error
-          ? error.message
-          : "Unable to collect Git commit evidence from the active workspace.",
-        native_next: [{
-          tool: "project_ledger_work_complete",
-          args: { id: stringArg(args, "id"), code_commit: "auto" },
-          reason: "Restore a valid Git workspace and retry automatic commit evidence collection.",
-        }],
-      },
-    };
+    return gitEvidenceFailureResult(error, stringArg(args, "id"));
   }
   let projectPath: string;
   try {
@@ -329,6 +318,38 @@ function runProjectLedgerNativeTool(
   return result;
 }
 
+function gitEvidenceFailureResult(
+  error: unknown,
+  workId: string,
+): Record<string, unknown> {
+  const gitError = error instanceof GitEvidenceCollectionError ? error : null;
+  const gitMissing = gitError?.code === "git_not_installed";
+  return {
+    ok: false,
+    recoverable: true,
+    butler_operational: true,
+    git_features_available: false,
+    error: {
+      code: gitError?.code ?? "git_evidence_failed",
+      message: gitMissing
+        ? "Git is not installed. Butler can continue, but Git commit evidence is unavailable."
+        : error instanceof Error
+        ? error.message
+        : "Unable to collect Git commit evidence from the active workspace.",
+      ...(gitMissing
+        ? { install_url: GIT_INSTALL_URL }
+        : {
+            native_next: [{
+              tool: "project_ledger_work_complete",
+              args: { id: workId, code_commit: "auto" },
+              reason:
+                "Restore a valid Git workspace and retry automatic commit evidence collection.",
+            }],
+          }),
+    },
+  };
+}
+
 function normalizeProjectLedgerCommitEvidence(
   input: ProjectLedgerExecutorInput,
   toolName: string,
@@ -344,7 +365,7 @@ function normalizeProjectLedgerCommitEvidence(
       input.butlerHome;
     const normalized: Record<string, unknown> = {
       ...args,
-      code_commits: JSON.stringify([gitCommitEvidence(workspacePath)]),
+      code_commits: JSON.stringify([collectGitCommitEvidence(workspacePath)]),
     };
     delete normalized.code_commit;
     return normalized;
@@ -353,27 +374,6 @@ function normalizeProjectLedgerCommitEvidence(
   const normalized: Record<string, unknown> = { ...args, code_commits: codeCommits };
   delete normalized.code_commit;
   return normalized;
-}
-
-function gitCommitEvidence(workspacePath: string): Record<string, string> {
-  const topLevel = gitText(workspacePath, ["rev-parse", "--show-toplevel"]);
-  return {
-    repo: basename(topLevel),
-    hash: gitText(topLevel, ["rev-parse", "--short=12", "HEAD"]),
-    message: gitText(topLevel, ["log", "-1", "--format=%s"]),
-    branch: gitText(topLevel, ["branch", "--show-current"]) || "detached",
-    committedAt: gitText(topLevel, ["log", "-1", "--format=%cI"]),
-  };
-}
-
-function gitText(cwd: string, args: string[]): string {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8", timeout: 5_000 });
-  if (result.status !== 0) {
-    throw new Error(
-      `Unable to collect Git commit evidence: ${result.stderr.trim() || result.error?.message || args.join(" ")}`,
-    );
-  }
-  return result.stdout.trim();
 }
 
 function hasCanonicalCommitEvidenceArray(value: string): boolean {
