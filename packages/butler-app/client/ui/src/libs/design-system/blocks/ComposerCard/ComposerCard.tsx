@@ -15,6 +15,7 @@ import styles from "./ComposerCard.module.css";
 export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   large?: boolean;
   floating?: boolean;
+  dropActive?: boolean;
   adjunct?: ReactNode;
   notice?: ReactNode;
   children: ReactNode;
@@ -25,6 +26,7 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
 export function ComposerCard({
   large = false,
   floating = false,
+  dropActive = false,
   adjunct,
   notice,
   children,
@@ -47,6 +49,7 @@ export function ComposerCard({
       <form
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
+        data-drop-active={dropActive ? "true" : undefined}
         data-expanded={expanded}
         data-test-class="composer-card"
         {...props}

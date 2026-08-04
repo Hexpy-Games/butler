@@ -2001,9 +2001,9 @@ test("archived projects and sessions can be listed, restored, and permanently de
   }
 });
 
-test("scratch project creation makes a collision-free folder backed project without leaking paths", async () => {
+test("scratch project creation makes a named collision-free folder backed project without leaking paths", async () => {
   const workspaceRoot = join(tempDir, "butler-workspace");
-  mkdirSync(join(workspaceRoot, "New project"), { recursive: true });
+  mkdirSync(join(workspaceRoot, "Alpha"), { recursive: true });
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     projectWorkspaceRoot: workspaceRoot,
@@ -2012,12 +2012,13 @@ test("scratch project creation makes a collision-free folder backed project with
   try {
     const created = await postJson(`${server.url}projects`, {
       source: "scratch",
+      display_name: "Alpha",
     });
-    expect(created.data.project.display_name).toBe("New project 2");
-    expect(created.data.project.workspace_label).toBe("New project 2");
-    expect(created.data.project.safe_path_label).toBe("New project 2");
+    expect(created.data.project.display_name).toBe("Alpha");
+    expect(created.data.project.workspace_label).toBe("Alpha 2");
+    expect(created.data.project.safe_path_label).toBe("Alpha 2");
     expect(created.data.project.active_session_count).toBe(0);
-    expect(statSync(join(workspaceRoot, "New project 2")).isDirectory()).toBe(
+    expect(statSync(join(workspaceRoot, "Alpha 2")).isDirectory()).toBe(
       true,
     );
     expect(JSON.stringify(created)).not.toContain(tempDir);
@@ -2028,7 +2029,7 @@ test("scratch project creation makes a collision-free folder backed project with
       (item: { id: string }) => item.id === created.data.project.id,
     );
     expect(project).toMatchObject({
-      display_name: "New project 2",
+      display_name: "Alpha",
       active_session_count: 0,
     });
     expect(project.sessions).toEqual([]);
@@ -4641,6 +4642,7 @@ test("settings default project folder updates from signed desktop selection and 
     );
     const project = await postJson(`${server.url}projects`, {
       source: "scratch",
+      display_name: "New project",
     });
     expect(project.data.project.workspace_label).toBe("New project");
     expect(existsSync(join(selectedDefault, "New project"))).toBe(true);

@@ -22,6 +22,8 @@
 }
 
 .chips .item {
+  container-name: attachment-chip;
+  container-type: inline-size;
   flex: 0 1 calc((100% - (var(--space-xs) * 4)) / 5);
   max-width: calc((100% - (var(--space-xs) * 4)) / 5);
   min-height: 22px;
@@ -35,6 +37,24 @@
   display: inline-grid;
   place-items: center;
   color: var(--text-tertiary);
+}
+
+.thumbnail {
+  display: inline-grid;
+  width: var(--space-6);
+  height: var(--space-6);
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+}
+
+.thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .name {
@@ -53,6 +73,12 @@
   color: var(--text-tertiary);
   font-size: inherit;
   line-height: inherit;
+}
+
+@container attachment-chip (width <= 192px) {
+  .meta {
+    display: none;
+  }
 }
 
 @media (width <= 760px) {

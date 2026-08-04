@@ -1,7 +1,8 @@
 import { Collapse, Expand, MessageSquarePlus } from "@/butler-ds";
-import { ButtonContainer, IconButton } from "@/butler-ds";
+import { Button, ButtonContainer, IconButton } from "@/butler-ds";
 import { SidebarSection } from "@/components/layout/SidebarSection.tsx";
 import { SidebarChatItem } from "@/components/layout/SidebarChatItem.tsx";
+import { useSidebarSessionPaging } from "@/components/layout/useSidebarSessionPaging.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
 
@@ -11,9 +12,11 @@ export function SidebarChatsSection() {
     (state) => state.setSidebarChatsCollapsed,
   );
   const navigation = useButlerStore((state) => state.navigation);
+  const activeChatId = useButlerStore((state) => state.activeChatId);
   const openNewChat = useButlerStore((state) => state.openNewChat);
   const sidebarCopy = appCopy.sidebar;
   const chats = navigation.chats ?? [];
+  const paging = useSidebarSessionPaging(chats, activeChatId);
 
   return (
     <SidebarSection
@@ -42,9 +45,20 @@ export function SidebarChatsSection() {
         </ButtonContainer>
       }
     >
-      {chats.map((chat) => (
+      {paging.visibleSessions.map((chat) => (
         <SidebarChatItem chat={chat} key={chat.id} />
       ))}
+      {paging.remainingCount > 0 ? (
+        <Button
+          data-test-class="sidebar-load-more"
+          onClick={paging.showMore}
+          size="sm"
+          stretch
+          text={`${appCopy.common.more} (${paging.remainingCount})`}
+          type="button"
+          variant="ghost"
+        />
+      ) : null}
     </SidebarSection>
   );
 }

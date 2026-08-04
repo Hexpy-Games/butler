@@ -12,6 +12,7 @@ import { useComposerState } from "./hooks/useComposerState";
 import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
 import { useComposerPresentation } from "./hooks/useComposerPresentation";
+import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
 import { GitDependencyNotice } from "./GitDependencyNotice";
@@ -31,9 +32,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
   const submit = useComposerStore((store) => store.submit);
-  const focusDraftFromComposerChrome = useComposerStore(
-    (store) => store.focusDraftFromComposerChrome,
-  );
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -44,6 +42,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     session.settings,
   );
   const files = useFileAttachments(session.activeChatId);
+  const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
 
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
@@ -127,6 +126,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
 
   return (
     <ComposerCard
+      {...fileDrop}
       large={large}
       expanded={presentation.expanded}
       floating
@@ -144,7 +144,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
         ) : null
       }
       containerRef={wrapRef}
-      onPointerDown={focusDraftFromComposerChrome}
+      onPointerDown={handlers.focusDraftFromComposerChrome}
       onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}

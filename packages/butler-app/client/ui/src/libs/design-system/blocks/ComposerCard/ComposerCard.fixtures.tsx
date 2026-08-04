@@ -14,6 +14,7 @@ import {
 export function ComposerCardFixture() {
   return (
     <ComposerCard
+      dropActive
       expanded={false}
       large
       notice={<Notice message="Optional capability guidance" tone="warning" />}
