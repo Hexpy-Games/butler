@@ -17,9 +17,9 @@ import { createEvidenceCapabilityReceipt } from "../../output/evidence/ledger.ts
 import type { EvidenceCapabilityReceipt } from "../../output/evidence/types.ts";
 import { normalizeProjectLedgerAcceptanceInput } from "./acceptance-input.ts";
 import {
-  collectGitCommitEvidence,
   GIT_INSTALL_URL,
   GitEvidenceCollectionError,
+  normalizeProjectLedgerCommitEvidenceInput,
 } from "./git-commit-evidence.ts";
 
 type ToolCall = { args: Record<string, unknown> };
@@ -355,39 +355,12 @@ function normalizeProjectLedgerCommitEvidence(
   toolName: string,
   args: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (toolName !== "project_ledger_work_complete") return args;
-  const codeCommit = stringArg(args, "code_commit");
-  const codeCommits = stringArg(args, "code_commits");
-  if (!codeCommit && !codeCommits) return args;
-
-  if (codeCommit === "auto" || !hasCanonicalCommitEvidenceArray(codeCommits)) {
-    const workspacePath = input.workspacePath || stringArg(args, "project_path") ||
-      input.butlerHome;
-    const normalized: Record<string, unknown> = {
-      ...args,
-      code_commits: JSON.stringify([collectGitCommitEvidence(workspacePath)]),
-    };
-    delete normalized.code_commit;
-    return normalized;
-  }
-
-  const normalized: Record<string, unknown> = { ...args, code_commits: codeCommits };
-  delete normalized.code_commit;
-  return normalized;
-}
-
-function hasCanonicalCommitEvidenceArray(value: string): boolean {
-  if (!value) return false;
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => {
-      const record = recordValue(item);
-      return hasRecordText(record.repo) && hasRecordText(record.hash) &&
-        hasRecordText(record.message);
-    });
-  } catch {
-    return false;
-  }
+  return normalizeProjectLedgerCommitEvidenceInput({
+    toolName,
+    args,
+    workspacePath: input.workspacePath || stringArg(args, "project_path") ||
+      input.butlerHome,
+  });
 }
 
 function withCanonicalRecordEvidence(result: Record<string, unknown>): Record<string, unknown> {

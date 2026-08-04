@@ -26,6 +26,61 @@ export function collectGitCommitEvidence(
   };
 }
 
+export function normalizeProjectLedgerCommitEvidenceInput(input: {
+  toolName: string;
+  args: Record<string, unknown>;
+  workspacePath?: string;
+}): Record<string, unknown> {
+  if (input.toolName !== "project_ledger_work_complete") return input.args;
+  const codeCommit = stringValue(input.args.code_commit);
+  const codeCommits = stringValue(input.args.code_commits);
+  if (!codeCommit && !codeCommits) return input.args;
+
+  const mustCollect = codeCommit === "auto" ||
+    !hasCanonicalCommitEvidenceArray(codeCommits);
+  if (mustCollect && !input.workspacePath?.trim()) {
+    throw new GitEvidenceCollectionError(
+      "git_evidence_failed",
+      "The active project workspace is required to collect Git commit evidence.",
+    );
+  }
+  const normalized: Record<string, unknown> = {
+    ...input.args,
+    code_commits: mustCollect
+      ? JSON.stringify([collectGitCommitEvidence(input.workspacePath!)])
+      : codeCommits,
+  };
+  delete normalized.code_commit;
+  return normalized;
+}
+
+function hasCanonicalCommitEvidenceArray(value: string): boolean {
+  if (!value) return false;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.length > 0 && parsed.every((item) => {
+      const record = recordValue(item);
+      return hasText(record.repo) && hasText(record.hash) && hasText(record.message);
+    });
+  } catch {
+    return false;
+  }
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function hasText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function gitText(cwd: string, args: string[]): string {
   const executable = process.env.BUTLER_GIT_EXECUTABLE?.trim() || "git";
   const result = spawnSync(executable, args, {
