@@ -36,7 +36,7 @@
 }
 
 .surface[data-radius="composer"] {
-  --tinted-glass-radius: var(--radius-composer);
+  --tinted-glass-radius: var(--adaptive-composer-radius);
 }
 
 .surface[data-padding="none"] {

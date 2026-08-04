@@ -4,8 +4,7 @@ import {
   ButtonContainer,
   Dialog,
   DialogContent,
-  DialogFooter,
-  DialogHeader,
+  DialogForm,
   DialogTitle,
   Field,
   FieldLabel,
@@ -76,30 +75,19 @@ export function ProjectCreateDialog({
         else close();
       }}
     >
-      <DialogContent data-test-class="modal-card" showCloseButton={!pending}>
-        <form
-          className="modal-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>{appCopy.sidebar.projectCreateTitle}</DialogTitle>
-          </DialogHeader>
-          <Field>
-            <FieldLabel htmlFor={inputId}>
-              {appCopy.sidebar.projectName}
-            </FieldLabel>
-            <Input
-              id={inputId}
-              autoFocus
-              value={value}
-              disabled={pending || submitting}
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </Field>
-          <DialogFooter>
+      <DialogContent
+        aria-describedby={undefined}
+        data-test-class="modal-card"
+        glassRadius="composer"
+        showCloseButton={!pending}
+      >
+        <DialogTitle className="sr-only">
+          {appCopy.sidebar.projectCreateTitle}
+        </DialogTitle>
+        <DialogForm
+          title={appCopy.sidebar.projectCreateTitle}
+          onSubmit={() => void submit()}
+          footer={
             <ButtonContainer size="default" justify="end">
               <Button
                 type="button"
@@ -113,8 +101,21 @@ export function ProjectCreateDialog({
                 {appCopy.common.create}
               </Button>
             </ButtonContainer>
-          </DialogFooter>
-        </form>
+          }
+        >
+          <Field>
+            <FieldLabel htmlFor={inputId}>
+              {appCopy.sidebar.projectName}
+            </FieldLabel>
+            <Input
+              id={inputId}
+              autoFocus
+              value={value}
+              disabled={pending || submitting}
+              onChange={(event) => setValue(event.target.value)}
+            />
+          </Field>
+        </DialogForm>
       </DialogContent>
     </Dialog>
   );

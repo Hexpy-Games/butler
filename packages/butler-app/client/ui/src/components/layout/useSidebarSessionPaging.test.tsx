@@ -3,91 +3,77 @@
 import { afterEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
+import { appCopy } from "@/app/copy.ts";
+import { NavRow } from "@/butler-ds";
+import { SidebarSessionLoadMore } from "./SidebarSessionLoadMore";
 import { useSidebarSessionPaging } from "./useSidebarSessionPaging";
+
 interface Item {
   id: string;
   label: string;
 }
 
 afterEach(() => {
-  delete (globalThis as { window?: unknown }).window;
-  delete (globalThis as { document?: unknown }).document;
-  delete (globalThis as { navigator?: unknown }).navigator;
-  delete (globalThis as { HTMLElement?: unknown }).HTMLElement;
-  delete (globalThis as { Node?: unknown }).Node;
-  delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
-    .IS_REACT_ACT_ENVIRONMENT;
+  for (const key of [
+    "window",
+    "document",
+    "navigator",
+    "HTMLElement",
+    "Node",
+    "IS_REACT_ACT_ENVIRONMENT",
+  ]) delete (globalThis as Record<string, unknown>)[key];
 });
-test("reveals five sessions at a time and keeps paging independent per instance", async () => {
-  const dom = installDom();
-  const container = dom.window.document.querySelector("#root");
-  if (!(container instanceof dom.window.HTMLElement)) {
-    throw new Error("Missing test root.");
-  }
-  const root = createRoot(container);
-  const chats = items(12);
-  const project = items(6);
-  await act(async () => {
-    root.render(
-      <div>
-        <PagingHarness items={chats} label="chats" />
-        <PagingHarness items={project} label="project" />
-      </div>,
-    );
-  });
 
+test("reveals five sessions at a time and keeps paging independent per instance", async () => {
+  const { container, root } = await render(
+    <div>
+      <PagingHarness items={items(12)} label="chats" />
+      <PagingHarness items={items(6)} label="project" />
+    </div>,
+  );
   expect(labels(container, "chats")).toHaveLength(5);
   expect(labels(container, "project")).toHaveLength(5);
-  expect(button(container, "chats").textContent).toContain("7");
+  const chatsMore = button(container, "chats");
+  expect(chatsMore.textContent).toContain("7");
   expect(button(container, "project").textContent).toContain("1");
+  expect(chatsMore.querySelector('[data-slot="nav-row-label"]')?.textContent)
+    .toBe(`${appCopy.common.more} (7)`);
+  expect(chatsMore.getAttribute("role")).toBe("button");
+  expect(chatsMore.className).toBe(
+    container.querySelector('[data-test-class="chats-session-row"]')?.className ?? "",
+  );
+  expect(chatsMore.querySelector('[data-slot="nav-row-label"]')?.className).toBe(
+    container.querySelector(
+      '[data-test-class="chats-session-row"] [data-slot="nav-row-label"]',
+    )?.className ?? "",
+  );
 
-  await act(async () => button(container, "chats").click());
+  await act(async () => chatsMore.click());
   expect(labels(container, "chats")).toHaveLength(10);
   expect(labels(container, "project")).toHaveLength(5);
   expect(button(container, "chats").textContent).toContain("2");
-
   await act(async () => button(container, "chats").click());
   expect(labels(container, "chats")).toHaveLength(12);
   expect(container.querySelector('[data-test="more-chats"]')).toBeNull();
   await act(async () => root.unmount());
 });
+
 test("keeps an already visible active session visible after navigation refresh", async () => {
-  const dom = installDom();
-  const container = dom.window.document.querySelector("#root");
-  if (!(container instanceof dom.window.HTMLElement)) {
-    throw new Error("Missing test root.");
-  }
-  const root = createRoot(container);
   const first = items(6);
-
-  await act(async () => {
-    root.render(
-      <PagingHarness activeId="session-1" items={first} label="chats" />,
-    );
-  });
+  const { container, root } = await render(
+    <PagingHarness activeId="session-1" items={first} label="chats" />,
+  );
   expect(labels(container, "chats")).toContain("Session 1");
-
-  await act(async () => {
+  const refreshed = [
+    ...items(9).map((item) => ({ ...item, id: `new-${item.id}` })),
+    ...first,
+  ];
+  await act(async () =>
     root.render(
-      <PagingHarness
-        activeId="session-1"
-        items={[
-          { id: "new-0", label: "New 0" },
-          { id: "new-1", label: "New 1" },
-          { id: "new-2", label: "New 2" },
-          { id: "new-3", label: "New 3" },
-          { id: "new-4", label: "New 4" },
-          { id: "new-5", label: "New 5" },
-          { id: "new-6", label: "New 6" },
-          { id: "new-7", label: "New 7" },
-          { id: "new-8", label: "New 8" },
-          ...first,
-        ]}
-        label="chats"
-      />,
-    );
-  });
+      <PagingHarness activeId="session-1" items={refreshed} label="chats" />,
+    ),
+  );
   expect(labels(container, "chats")).toContain("Session 1");
   expect(labels(container, "chats")).toHaveLength(11);
   await act(async () => button(container, "chats").click());
@@ -110,13 +96,21 @@ function PagingHarness({
     <section data-test={label}>
       <div data-test={`${label}-items`}>
         {paging.visibleSessions.map((item) => (
-          <span key={item.id}>{item.label}</span>
+          <NavRow
+            key={item.id}
+            dataTestClass={`${label}-session-row`}
+            label={item.label}
+            onClick={() => undefined}
+          />
         ))}
       </div>
       {paging.remainingCount > 0 ? (
-        <button data-test={`more-${label}`} onClick={paging.showMore} type="button">
-          More {paging.remainingCount}
-        </button>
+        <div data-test={`more-${label}`}>
+          <SidebarSessionLoadMore
+            onClick={paging.showMore}
+            remainingCount={paging.remainingCount}
+          />
+        </div>
       ) : null}
     </section>
   );
@@ -124,16 +118,18 @@ function PagingHarness({
 
 function labels(container: Element, label: string) {
   return Array.from(
-    container.querySelectorAll(`[data-test="${label}-items"] span`),
+    container.querySelectorAll(
+      `[data-test="${label}-items"] [data-slot="nav-row-label"]`,
+    ),
   ).map((element) => element.textContent ?? "");
 }
 
-function button(container: Element, label: string): HTMLButtonElement {
-  const element = container.querySelector(`[data-test="more-${label}"]`);
-  if (!(element instanceof HTMLElement)) {
-    throw new Error(`Missing more button for ${label}.`);
-  }
-  return element as HTMLButtonElement;
+function button(container: Element, label: string): HTMLElement {
+  const row = container
+    .querySelector(`[data-test="more-${label}"]`)
+    ?.querySelector('[data-test-class="sidebar-load-more"]');
+  if (!(row instanceof HTMLElement)) throw new Error(`Missing more row: ${label}`);
+  return row;
 }
 
 function items(count: number): Item[] {
@@ -143,10 +139,12 @@ function items(count: number): Item[] {
   }));
 }
 
-function installDom() {
-  const dom = new JSDOM('<div id="root"></div>', {
-    url: "http://localhost",
-  });
+async function render(
+  children: React.ReactNode,
+): Promise<{ container: HTMLElement; root: Root }> {
+  const dom = new JSDOM('<div id="root"></div>', { url: "http://localhost" });
+  const container = dom.window.document.querySelector("#root");
+  if (!(container instanceof dom.window.HTMLElement)) throw new Error("Missing root");
   Object.assign(globalThis, {
     window: dom.window,
     document: dom.window.document,
@@ -155,5 +153,7 @@ function installDom() {
     Node: dom.window.Node,
     IS_REACT_ACT_ENVIRONMENT: true,
   });
-  return dom;
+  const root = createRoot(container);
+  await act(async () => root.render(children));
+  return { container, root };
 }

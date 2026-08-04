@@ -1,7 +1,8 @@
 import { Collapse, Expand, MessageSquarePlus } from "@/butler-ds";
-import { Button, ButtonContainer, IconButton } from "@/butler-ds";
+import { ButtonContainer, IconButton } from "@/butler-ds";
 import { SidebarSection } from "@/components/layout/SidebarSection.tsx";
 import { SidebarChatItem } from "@/components/layout/SidebarChatItem.tsx";
+import { SidebarSessionLoadMore } from "@/components/layout/SidebarSessionLoadMore.tsx";
 import { useSidebarSessionPaging } from "@/components/layout/useSidebarSessionPaging.ts";
 import { appCopy } from "@/app/copy.ts";
 import { useButlerStore } from "@/app/store.ts";
@@ -49,14 +50,9 @@ export function SidebarChatsSection() {
         <SidebarChatItem chat={chat} key={chat.id} />
       ))}
       {paging.remainingCount > 0 ? (
-        <Button
-          data-test-class="sidebar-load-more"
+        <SidebarSessionLoadMore
           onClick={paging.showMore}
-          size="sm"
-          stretch
-          text={`${appCopy.common.more} (${paging.remainingCount})`}
-          type="button"
-          variant="ghost"
+          remainingCount={paging.remainingCount}
         />
       ) : null}
     </SidebarSection>
