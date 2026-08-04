@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium, type Page } from "playwright";
+import { chromium, type Locator, type Page } from "playwright";
 import { createTestAppServer as createAppServer } from "../../packages/butler-agent/src/test-support/app-server.ts";
 import {
   readFirstChatOnboardingState,
@@ -54,6 +54,19 @@ async function expectLocatorCount(
 ): Promise<void> {
   const actual = await page.locator(selector).count();
   assert(actual === count, `${message}: expected ${count}, got ${actual}`);
+}
+
+async function expectInputValue(
+  locator: Locator,
+  expected: string,
+  message: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (await locator.inputValue() === expected) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+  }
+  const actual = await locator.inputValue();
+  assert(actual === expected, `${message}: expected ${expected}, got ${actual}`);
 }
 
 async function patchSettings(settings: Record<string, unknown>): Promise<void> {
@@ -3659,6 +3672,56 @@ try {
     .locator(testClass("new-chat-empty-state"))
     .waitFor({ state: "visible" });
   const composerInput = page.locator(`${testClass("composer-card")} textarea`);
+  await composerInput.fill("synthetic draft for new chat");
+  const showSidebarForDraftCheck = page.getByRole("button", {
+    name: "Show sidebar",
+  });
+  if (await showSidebarForDraftCheck.isVisible().catch(() => false)) {
+    await showSidebarForDraftCheck.click();
+  }
+  const draftProjectSession = page
+    .locator(testClass("project-session-row"))
+    .first();
+  await draftProjectSession.click();
+  await composerInput.fill("synthetic draft for project session");
+  await page
+    .getByRole("button", { name: appCopy.sidebar.newChat, exact: true })
+    .first()
+    .click();
+  await expectInputValue(
+    composerInput,
+    "synthetic draft for new chat",
+    "new-chat draft should be isolated from the project session",
+  );
+  await draftProjectSession.click();
+  await expectInputValue(
+    composerInput,
+    "synthetic draft for project session",
+    "project-session draft should restore after navigation",
+  );
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await composerInput.waitFor({ state: "visible" });
+  await expectInputValue(
+    composerInput,
+    "synthetic draft for project session",
+    "project-session draft should survive renderer reload",
+  );
+  const showSidebarAfterDraftReload = page.getByRole("button", {
+    name: "Show sidebar",
+  });
+  if (await showSidebarAfterDraftReload.isVisible().catch(() => false)) {
+    await showSidebarAfterDraftReload.click();
+  }
+  await page
+    .getByRole("button", { name: appCopy.sidebar.newChat, exact: true })
+    .first()
+    .click();
+  await expectInputValue(
+    composerInput,
+    "synthetic draft for new chat",
+    "new-chat draft should survive another session reload",
+  );
+  await composerInput.fill("");
   const draftComposerBox = await page
     .locator(testClass("composer-card"))
     .boundingBox();
@@ -4426,6 +4489,8 @@ try {
         "right-toggle-hidden-when-empty",
         "right-toggle-hidden-on-draft-new-chat",
         "composer-card-click-focuses-textarea",
+        "composer-draft-session-isolation",
+        "composer-draft-renderer-reload-recovery",
         "composer-focus-survives-summary-poll",
         "cmd-enter-blocks-during-composition",
         "cmd-enter-send-optimistic",

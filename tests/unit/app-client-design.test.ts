@@ -692,6 +692,13 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("writeCachedAppUiState:");
   expect(preload).toContain("butler.app-ui-state.v1");
   expect(preload).toContain("globalThis.localStorage");
+  expect(preload).toContain("readCachedComposerDraft:");
+  expect(preload).toContain("writeCachedComposerDraft:");
+  expect(preload).toContain("butler:composer-draft-read");
+  expect(preload).toContain("butler:composer-draft-write");
+  expect(electronMain).toContain("readComposerDraftFile");
+  expect(electronMain).toContain("writeComposerDraftFile");
+  expect(electronMain).toContain('"composer-drafts"');
   expect(preload).toContain("uploadMessageFile:");
   expect(preload).toContain("FormData");
   expect(preload).toContain('"/message-files"');
