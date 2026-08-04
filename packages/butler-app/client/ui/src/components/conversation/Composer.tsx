@@ -3,6 +3,7 @@ import { ComposerAdjunctPanels } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
 import { useComposerControls } from "./hooks/useComposerControls";
+import { useComposerDraftSession } from "./hooks/useComposerDraftSession";
 import { useFileAttachments } from "./hooks/useFileAttachments";
 import { useComposerHandlers } from "./hooks/useComposerHandlers";
 import { useComposerQueue } from "./hooks/useComposerQueue";
@@ -13,15 +14,14 @@ import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDo
 import { useComposerPresentation } from "./hooks/useComposerPresentation";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
-
 interface ComposerProps {
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
   large: boolean;
 }
-
 export function Composer({ large, onOpenContext, onReserveChange }: ComposerProps) {
   const session = useComposerSession();
+  useComposerDraftSession(session.activeChatId);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);

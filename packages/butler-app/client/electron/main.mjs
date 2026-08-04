@@ -69,6 +69,10 @@ import { createAgentServiceControl } from "./service-control.mjs";
 import { createFirstRunSetupBridge } from "./setup-bridge.mjs";
 import { createLocalPagePreviewHost } from "./local-page-preview-host.mjs";
 import {
+  readComposerDraftFile,
+  writeComposerDraftFile,
+} from "./composer-draft-cache.mjs";
+import {
   MENU_BAR_HELPER_ARG,
   argsForNavigationRequest,
   helperProcessOwnsTray,
@@ -113,6 +117,11 @@ const macAppIconPath = resolve(__dirname, "assets/butler.icns");
 const macAppDockIconPath = resolve(__dirname, "assets/butler-mac.png");
 const appRepositoryUrl = "https://github.com/Hexpy-Games/butler";
 const appProtocolVersion = "butler.app.v1";
+const composerDraftDirectory = join(
+  butlerDataRoot,
+  "app",
+  "composer-drafts",
+);
 const appServerProbeTimeoutMs = 2000;
 const nativeServiceGatewayReadyPollAttempts = 120;
 const nativeServiceGatewayReadyPollDelayMs = 250;
@@ -2113,6 +2122,12 @@ function currentBundledAgentVersion() {
 }
 
 ipcMain.handle("butler:get-app-info", () => appInfoView());
+
+ipcMain.handle("butler:composer-draft-read", (_event, input = {}) =>
+  readComposerDraftFile(composerDraftDirectory, input.sessionId));
+
+ipcMain.handle("butler:composer-draft-write", (_event, input = {}) =>
+  writeComposerDraftFile(composerDraftDirectory, input.snapshot));
 
 ipcMain.handle("butler:set-developer-mode", async (_event, input) => {
   return await setDeveloperMode(input?.enabled === true);

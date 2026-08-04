@@ -18,10 +18,19 @@ import type {
 } from "@/app/types.ts";
 import type { KeyboardEventLike } from "./hooks/composerEventTypes";
 import type { ComposerAttachment } from "./hooks/useFileAttachments";
+import { writeCachedComposerDraft } from "@/app/composerDraftCache.ts";
 
 type AttachmentSetter = Dispatch<SetStateAction<ComposerAttachment[]>>;
 
 interface ComposerStore {
+  draftRevision: number;
+  draftSessionId: string;
+  activateDraftSession: (sessionId: string, text: string) => number;
+  restoreDraftSession: (input: {
+    revision: number;
+    sessionId: string;
+    text: string;
+  }) => boolean;
   engaged: boolean;
   setEngaged: (engaged: boolean) => void;
   text: string;
@@ -79,10 +88,29 @@ const noopSubmit = (event: FormEvent<HTMLFormElement> | KeyboardEventLike) => {
 const noopKeyDown = (_event: ReactKeyboardEvent<HTMLTextAreaElement>) => {};
 
 export const useComposerStore = create<ComposerStore>((set, get) => ({
+  draftRevision: 0,
+  draftSessionId: "draft:chat",
+  activateDraftSession: (draftSessionId, text) => {
+    const draftRevision = get().draftRevision + 1;
+    set({ draftRevision, draftSessionId, text });
+    return draftRevision;
+  },
+  restoreDraftSession: ({ revision, sessionId, text }) => {
+    const state = get();
+    if (state.draftRevision !== revision || state.draftSessionId !== sessionId) {
+      return false;
+    }
+    set({ text });
+    return true;
+  },
   engaged: false,
   setEngaged: (engaged) => set({ engaged }),
   text: "",
-  setText: (text) => set({ text }),
+  setText: (text) => {
+    const state = get();
+    set({ draftRevision: state.draftRevision + 1, text });
+    writeCachedComposerDraft(state.draftSessionId, text);
+  },
   setIsComposing: noop,
   large: false,
   textAreaRef: null,
