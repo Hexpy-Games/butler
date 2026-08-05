@@ -1,32 +1,63 @@
 import { ModelProviderRequestError } from "../../../integrations/providers/provider-errors.ts";
 import type { ModelRouteFailureDisposition } from "./contracts.ts";
 
+/**
+ * Provider codes that represent a permanent model/capacity choice. These
+ * consume the current candidate once and advance without same-model retry.
+ * Keep this list explicit: a new provider code must not silently become a
+ * fallback signal.
+ */
+const IMMEDIATE_ADVANCE_CODES = new Set([
+  "provider_quota_exhausted",
+  "provider_model_not_found",
+  "provider_model_retired",
+  "provider_model_unavailable",
+  "provider_unsupported_model",
+]);
+
+/** Provider codes whose transport can be retried before route advance. */
+const RETRY_CODES = new Set([
+  "provider_empty_response",
+  "provider_network_error",
+  "provider_protocol_error",
+  "provider_rate_limited",
+  "provider_round_timeout",
+]);
+
+/** Provider codes that are unsafe to route around. */
+const SURFACE_CODES = new Set([
+  "admission_invariant_violation",
+  "provider_auth_error",
+  "provider_context_limit_exceeded",
+  "provider_invalid_request",
+  "provider_permission_error",
+  "provider_safety_error",
+]);
+
+/** HTTP responses that identify a request/configuration contract failure. */
+const SURFACE_STATUS_CODES = new Set([400, 401, 403, 405, 406, 409, 415, 422]);
+
 export function classifyModelRouteFailure(
   error: unknown,
 ): ModelRouteFailureDisposition {
   if (!(error instanceof ModelProviderRequestError)) return "surface";
-  if (error.code === "provider_auth_error" ||
-      error.code === "admission_invariant_violation" ||
-      error.code === "provider_context_limit_exceeded" ||
-      error.code === "provider_invalid_request" ||
-      error.code === "provider_permission_error" ||
-      error.code === "provider_safety_error") {
-    return "surface";
-  }
-  if (error.code === "provider_protocol_error") return "retry";
-  if (error.statusCode === 400 || error.statusCode === 409 || error.statusCode === 422) {
-    return "surface";
-  }
-  if (error.statusCode === 402 || error.statusCode === 404 || error.statusCode === 410) {
-    return "advance";
-  }
-  if (error.statusCode === 429) {
+  if (SURFACE_CODES.has(error.code)) return "surface";
+  if (IMMEDIATE_ADVANCE_CODES.has(error.code)) return "advance";
+
+  const status = error.statusCode;
+  if (status !== undefined && SURFACE_STATUS_CODES.has(status)) return "surface";
+  if (status === 402 || status === 404 || status === 410) return "advance";
+  if (status === 408) return "retry";
+  if (status === 429 || error.code === "provider_rate_limited") {
     const cause = error.causeMessage?.toLocaleLowerCase("en-US") ?? "";
     return /(?:insufficient[_ -]?quota|credit|billing|payment)/u.test(cause)
       ? "advance"
       : "retry";
   }
-  if ((error.statusCode ?? 0) >= 500) return "retry";
-  if (error.retryable) return "retry";
-  return "advance";
+  if (status !== undefined && status >= 500 && status <= 599) return "retry";
+  if (RETRY_CODES.has(error.code)) return "retry";
+
+  // Provider errors are an allow-list, not a fallback opt-in. Unknown codes,
+  // statuses, and retryable flags must surface until explicitly classified.
+  return "surface";
 }
