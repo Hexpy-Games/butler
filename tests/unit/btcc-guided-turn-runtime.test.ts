@@ -14,6 +14,8 @@ import type { BtccAgentLoop as GuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
+import { buildModelRoute } from
+  "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 
 test("Guided Turn answers directly through only durable admission and delivery states", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-direct-"));
@@ -202,6 +204,464 @@ test("Guided Turn delivers an explicit operational failure when the model produc
       });
   } finally {
     stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn preserves an admitted Turn when route durability fails before dispatch", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-route-durability-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-route-durability",
+    storageProfile: "ephemeral",
+  });
+  const turns: TurnStateRepository = {
+    findTurn: (turnId) => stores.turns.findTurn(turnId),
+    activateCommittedSuccessor: (turnId) => stores.turns.activateCommittedSuccessor(turnId),
+    acquireStateExecutionClaim: (turn) => stores.turns.acquireStateExecutionClaim(turn),
+    commitTransition: (input) => stores.turns.commitTransition(input),
+    stopTurn: (turnId) => stores.turns.stopTurn(turnId),
+    recordModelRouteEvent: async () => {
+      throw new Error("database is locked");
+    },
+  };
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns,
+    messages: stores.messages,
+    agent: {
+      async run({ recordModelRouteEvent }) {
+        await recordModelRouteEvent?.({
+          type: "model.attempt.started",
+          roundId: "durability-round",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+        });
+        return { route: "direct", content: "must not dispatch" };
+      },
+    },
+  });
+  const command = runCommand("guided-route-durability-turn");
+  try {
+    await expect(runtime.runTurn(command)).rejects.toMatchObject({
+      name: "ModelRouteDurabilityError",
+      code: "model_route_durability_failure",
+      phase: "attempt_event_write",
+    });
+    expect((await stores.turns.findTurn(command.turnId))?.semanticState).toBe("admitted");
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ active: number }, []>(`
+        SELECT COUNT(*) AS active FROM btcc_checkpoints WHERE is_active = 1
+      `).get()?.active).toBe(1);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_model_route_events
+        WHERE turn_id = 'guided-route-durability-turn'
+      `).get()?.count).toBe(0);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn retries SQLite route-journal contention before dispatch", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-route-contention-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-route-contention",
+    storageProfile: "ephemeral",
+  });
+  try {
+    let journalCalls = 0;
+    const turns = overrideModelRouteEvent(stores.turns, async (input) => {
+      journalCalls += 1;
+      if (journalCalls <= 2) throw sqliteBusyError();
+      return stores.turns.recordModelRouteEvent(input);
+    });
+    let providerCalls = 0;
+    const runtime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns,
+      messages: stores.messages,
+      agent: {
+        async run({ recordModelRouteEvent }) {
+          await recordModelRouteEvent?.({
+            type: "model.attempt.started",
+            roundId: "contention-round",
+            candidateIndex: 0,
+            transportAttempt: 1,
+            modelRef: "openai/gpt-5.6-sol",
+          });
+          providerCalls += 1;
+          return { route: "direct", content: "after contention" };
+        },
+      },
+    });
+    const command = runCommand("guided-route-contention-turn");
+    expect(await runtime.runTurn(command)).toMatchObject({
+      kind: "delivered",
+      content: "after contention",
+    });
+    expect(journalCalls).toBe(3);
+    expect(providerCalls).toBe(1);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_model_route_events WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(1);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn retries transient acceptance contention without duplicating the accepted row", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-acceptance-contention-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-acceptance-contention",
+    storageProfile: "ephemeral",
+  });
+  let acceptanceCalls = 0;
+  const turns = overrideModelRoundAcceptance(stores.turns, async (input) => {
+    acceptanceCalls += 1;
+    if (acceptanceCalls === 1) throw sqliteBusyError();
+    return stores.turns.recordModelRoundAcceptance(input);
+  });
+  let providerCalls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns,
+    messages: stores.messages,
+    agent: {
+      async run({ recordModelRouteEvent, recordModelRoundAcceptance }) {
+        await recordModelRouteEvent?.({
+          type: "model.attempt.started",
+          roundId: "acceptance-contention-round",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+        });
+        providerCalls += 1;
+        await recordModelRoundAcceptance?.({
+          roundId: "acceptance-contention-round",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+          result: { text: "accepted once", toolCalls: [] },
+        });
+        return { route: "direct", content: "accepted once" };
+      },
+    },
+  });
+  const command = runCommand("guided-acceptance-contention-turn");
+  try {
+    expect(await runtime.runTurn(command)).toMatchObject({
+      kind: "delivered",
+      content: "accepted once",
+    });
+    expect(acceptanceCalls).toBe(2);
+    expect(providerCalls).toBe(1);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_model_round_acceptances WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_model_route_events WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(2);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn exhausts bounded contention retries with the original cause", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-route-contention-exhausted-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-route-contention-exhausted",
+    storageProfile: "ephemeral",
+  });
+  const cause = sqliteBusyError();
+  let journalCalls = 0;
+  const turns = overrideModelRouteEvent(stores.turns, async () => {
+    journalCalls += 1;
+    throw cause;
+  });
+  let providerCalls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns,
+    messages: stores.messages,
+    agent: {
+      async run({ recordModelRouteEvent }) {
+        await recordModelRouteEvent?.({
+          type: "model.attempt.started",
+          roundId: "contention-exhausted-round",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+        });
+        providerCalls += 1;
+        return { route: "direct", content: "unreachable" };
+      },
+    },
+  });
+  const command = runCommand("guided-route-contention-exhausted-turn");
+  try {
+    const failure = await runtime.runTurn(command).catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      name: "ModelRouteDurabilityError",
+      code: "model_route_durability_failure",
+      phase: "attempt_event_write",
+    });
+    expect((failure as Error).cause).toBe(cause);
+    expect(journalCalls).toBe(3);
+    expect(providerCalls).toBe(0);
+    expect((await stores.turns.findTurn(command.turnId))?.semanticState).toBe("admitted");
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn does not retry non-contention route integrity failures", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-route-integrity-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "guided-route-integrity",
+    storageProfile: "ephemeral",
+  });
+  const cause = new Error("BTCC model route event lost exact Turn claim");
+  let journalCalls = 0;
+  const turns = overrideModelRouteEvent(stores.turns, async () => {
+    journalCalls += 1;
+    throw cause;
+  });
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns,
+    messages: stores.messages,
+    agent: {
+      async run({ recordModelRouteEvent }) {
+        await recordModelRouteEvent?.({
+          type: "model.attempt.started",
+          roundId: "integrity-round",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+        });
+        return { route: "direct", content: "unreachable" };
+      },
+    },
+  });
+  const command = runCommand("guided-route-integrity-turn");
+  try {
+    const failure = await runtime.runTurn(command).catch((error: unknown) => error);
+    expect(failure).toMatchObject({
+      name: "ModelRouteDurabilityError",
+      code: "model_route_durability_failure",
+      phase: "attempt_event_write",
+    });
+    expect((failure as Error).cause).toBe(cause);
+    expect(journalCalls).toBe(1);
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn preserves an admitted Turn for acceptance and history faults before dispatch", async () => {
+  for (const phase of ["response_acceptance_read", "attempt_history_read"] as const) {
+    const root = mkdtempSync(join(tmpdir(), `btcc-guided-${phase}-`));
+    const dbPath = join(root, "btcc.sqlite");
+    const stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: `guided-${phase}`,
+      storageProfile: "ephemeral",
+    });
+    const turns: TurnStateRepository = {
+      findTurn: (turnId) => stores.turns.findTurn(turnId),
+      activateCommittedSuccessor: (turnId) => stores.turns.activateCommittedSuccessor(turnId),
+      acquireStateExecutionClaim: (turn) => stores.turns.acquireStateExecutionClaim(turn),
+      commitTransition: (input) => stores.turns.commitTransition(input),
+      stopTurn: (turnId) => stores.turns.stopTurn(turnId),
+      ...(phase === "response_acceptance_read"
+        ? {
+            loadModelRoundAcceptance: async () => {
+              throw new Error("checkpoint read failed");
+            },
+          }
+        : {
+            loadModelRouteAttemptHistory: async () => {
+              throw new Error("route history read failed");
+            },
+          }),
+    };
+    const runtime = createGuidedTurnRuntime({
+      admission: stores.admission,
+      turns,
+      messages: stores.messages,
+      agent: {
+        async run(input) {
+          if (phase === "response_acceptance_read") {
+            await input.loadModelRoundAcceptance?.({
+              roundId: "durability-round",
+              candidateIndex: 0,
+              modelRef: "openai/gpt-5.6-sol",
+            });
+          } else {
+            await input.loadModelRouteAttemptHistory?.({
+              roundId: "durability-round",
+              candidateIndex: 0,
+              modelRef: "openai/gpt-5.6-sol",
+            });
+          }
+          return { route: "direct", content: "must not dispatch" };
+        },
+      },
+    });
+    const command = runCommand(`guided-${phase}-turn`);
+    try {
+      await expect(runtime.runTurn(command)).rejects.toMatchObject({
+        name: "ModelRouteDurabilityError",
+        code: "model_route_durability_failure",
+        phase,
+      });
+      expect((await stores.turns.findTurn(command.turnId))?.semanticState).toBe("admitted");
+      const db = new Database(dbPath, { readonly: true });
+      try {
+        expect(db.query<{ count: number }, []>(`
+          SELECT COUNT(*) AS count FROM btcc_model_route_events
+          WHERE turn_id = '${command.turnId}'
+        `).get()?.count).toBe(0);
+      } finally {
+        db.close();
+      }
+    } finally {
+      stores.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("Guided Turn reclaims a route-durability interruption and dispatches exactly once", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-route-recovery-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const command = runCommand("guided-route-recovery-turn");
+  command.modelSelection.modelRoute = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.6-sol",
+    backupModelRefs: ["openai/gpt-5.6-luna"],
+    reasoningEffort: "low",
+    retryCeiling: 1,
+    catalogGeneration: "route-recovery",
+  });
+  const firstStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-route-recovery-first",
+    storageProfile: "ephemeral",
+  });
+  const firstTurns: TurnStateRepository = {
+    findTurn: (turnId) => firstStores.turns.findTurn(turnId),
+    activateCommittedSuccessor: (turnId) => firstStores.turns.activateCommittedSuccessor(turnId),
+    acquireStateExecutionClaim: (turn) => firstStores.turns.acquireStateExecutionClaim(turn),
+    commitTransition: (input) => firstStores.turns.commitTransition(input),
+    stopTurn: (turnId) => firstStores.turns.stopTurn(turnId),
+    recordModelRouteEvent: async () => {
+      throw new Error("route journal unavailable");
+    },
+  };
+  const firstRuntime = createGuidedTurnRuntime({
+    admission: firstStores.admission,
+    turns: firstTurns,
+    messages: firstStores.messages,
+    agent: {
+      async run({ recordModelRouteEvent }) {
+        await recordModelRouteEvent?.({
+          type: "model.attempt.started",
+          roundId: "btcc-model-round-0",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+        });
+        throw new Error("unreachable");
+      },
+    },
+  });
+  await expect(firstRuntime.runTurn(command)).rejects.toMatchObject({
+    name: "ModelRouteDurabilityError",
+    phase: "attempt_event_write",
+  });
+  expect((await firstStores.turns.findTurn(command.turnId))?.semanticState).toBe("admitted");
+  firstStores.close();
+
+  const secondStores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-route-recovery-second",
+    storageProfile: "ephemeral",
+  });
+  let providerCalls = 0;
+  const secondRuntime = createGuidedTurnRuntime({
+    admission: secondStores.admission,
+    turns: secondStores.turns,
+    messages: secondStores.messages,
+    agent: {
+      async run({ recordModelRouteEvent, recordModelRoundAcceptance }) {
+        await recordModelRouteEvent?.({
+          type: "model.attempt.started",
+          roundId: "btcc-model-round-0",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+        });
+        providerCalls += 1;
+        await recordModelRoundAcceptance?.({
+          roundId: "btcc-model-round-0",
+          candidateIndex: 0,
+          transportAttempt: 1,
+          modelRef: "openai/gpt-5.6-sol",
+          result: { text: "recovered answer", toolCalls: [] },
+        });
+        return { route: "direct", content: "recovered answer" };
+      },
+    },
+  });
+  try {
+    await expect(secondRuntime.runTurn(command)).resolves.toMatchObject({
+      kind: "delivered",
+      content: "recovered answer",
+    });
+    expect(providerCalls).toBe(1);
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_model_round_acceptances
+        WHERE turn_id = 'guided-route-recovery-turn'
+      `).get()?.count).toBe(1);
+      expect(db.query<{ count: number }, []>(`
+        SELECT COUNT(*) AS count FROM btcc_model_route_events
+        WHERE turn_id = 'guided-route-recovery-turn'
+      `).get()?.count).toBe(2);
+    } finally {
+      db.close();
+    }
+  } finally {
+    secondStores.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -476,4 +936,46 @@ function overrideTransitionCommit(
     commitTransition,
     stopTurn: (turnId) => turns.stopTurn(turnId),
   };
+}
+
+function overrideModelRouteEvent(
+  turns: TurnStateRepository,
+  recordModelRouteEvent: NonNullable<TurnStateRepository["recordModelRouteEvent"]>,
+): TurnStateRepository {
+  return {
+    findTurn: (turnId) => turns.findTurn(turnId),
+    activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
+    acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
+    commitTransition: (input) => turns.commitTransition(input),
+    stopTurn: (turnId) => turns.stopTurn(turnId),
+    recordModelRouteEvent,
+  };
+}
+
+function overrideModelRoundAcceptance(
+  turns: TurnStateRepository,
+  recordModelRoundAcceptance: NonNullable<TurnStateRepository["recordModelRoundAcceptance"]>,
+): TurnStateRepository {
+  return {
+    findTurn: (turnId) => turns.findTurn(turnId),
+    activateCommittedSuccessor: (turnId) => turns.activateCommittedSuccessor(turnId),
+    acquireStateExecutionClaim: (turn) => turns.acquireStateExecutionClaim(turn),
+    commitTransition: (input) => turns.commitTransition(input),
+    stopTurn: (turnId) => turns.stopTurn(turnId),
+    ...(turns.recordModelRouteEvent
+      ? { recordModelRouteEvent: turns.recordModelRouteEvent.bind(turns) }
+      : {}),
+    ...(turns.loadModelRoundAcceptance
+      ? { loadModelRoundAcceptance: turns.loadModelRoundAcceptance.bind(turns) }
+      : {}),
+    recordModelRoundAcceptance,
+  };
+}
+
+function sqliteBusyError(): Error & { code: string; errno: number } {
+  return Object.assign(new Error("database is locked"), {
+    name: "SQLiteError",
+    code: "SQLITE_BUSY",
+    errno: 5,
+  });
 }

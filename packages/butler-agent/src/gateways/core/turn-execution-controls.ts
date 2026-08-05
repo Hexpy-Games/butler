@@ -29,6 +29,10 @@ export interface TurnControlResolution {
   source: TurnExecutionControlSource;
   sessionControlRevision: number;
   catalogGeneration: string;
+  model_fallback?: {
+    enabled: boolean;
+    models: ModelRef[];
+  };
 }
 
 export interface TurnExecutionControlsV1 {
@@ -44,6 +48,10 @@ export interface TurnExecutionControlsV1 {
   catalog_generation: string;
   resolved_at: string;
   integrity_hash: string;
+  model_fallback?: {
+    enabled: boolean;
+    models: ModelRef[];
+  };
 }
 
 type UnsignedTurnExecutionControls = Omit<
@@ -69,6 +77,10 @@ export function createTurnExecutionControls(input: {
     session_control_revision: input.resolution.sessionControlRevision,
     catalog_generation: input.resolution.catalogGeneration,
     resolved_at: input.resolvedAt ?? new Date().toISOString(),
+    model_fallback: {
+      enabled: input.resolution.model_fallback?.enabled === true,
+      models: [...(input.resolution.model_fallback?.models ?? [])],
+    },
   };
   return {
     ...unsigned,
@@ -122,7 +134,16 @@ function isTurnExecutionControls(
     nonEmptyString(input.catalog_generation) &&
     nonEmptyString(input.resolved_at) &&
     nonEmptyString(input.integrity_hash)
+    && (input.model_fallback === undefined || isModelFallback(input.model_fallback))
   );
+}
+
+function isModelFallback(value: unknown): value is { enabled: boolean; models: ModelRef[] } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as { enabled?: unknown; models?: unknown };
+  return typeof input.enabled === "boolean" &&
+    Array.isArray(input.models) &&
+    input.models.every((model) => isModelRef(model));
 }
 
 function nonEmptyString(value: unknown): value is string {

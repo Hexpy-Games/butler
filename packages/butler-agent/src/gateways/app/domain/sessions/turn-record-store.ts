@@ -39,9 +39,10 @@ export class AppTurnRecordStore {
         `
       INSERT INTO turns (
         id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
-        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
+        retryable, cancellable, attempt, execution_controls_json, execution_model_json,
+        created_at, updated_at
       )
-      VALUES (?, ?, NULL, ?, ?, NULL, 0, 0, 1, ?, ?, ?)
+      VALUES (?, ?, NULL, ?, ?, NULL, 0, 0, 1, ?, NULL, ?, ?)
     `,
       )
       .run(
@@ -150,7 +151,8 @@ export class AppTurnRecordStore {
         .query<TurnRow, [string]>(
           `
       SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
-        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
+        retryable, cancellable, attempt, execution_controls_json, execution_model_json,
+        created_at, updated_at
       FROM turns
       WHERE id = ?
     `,

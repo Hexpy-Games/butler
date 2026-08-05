@@ -98,6 +98,7 @@ export interface TurnRow {
   cancellable: number;
   attempt: number;
   execution_controls_json?: string | null;
+  execution_model_json?: string | null;
   created_at: string;
   updated_at: string;
 }

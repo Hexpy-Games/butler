@@ -1,54 +1,57 @@
-import type { ProviderModelMetadata } from "../model-catalog.ts";
+import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts";
 
-const QWEN_SOURCE = "https://docs.qwencloud.com/developer-guides/getting-started/text-generation-models";
+export const QWEN_SOURCE = "https://www.alibabacloud.com/help/en/model-studio/models";
+
+const QWEN_REASONING: ReasoningEffort[] = ["none", "low", "medium", "high", "xhigh"];
+
+function qwenModel(input: {
+  modelId: string;
+  displayName: string;
+  status: ProviderModelMetadata["status"];
+  defaultReasoningEffort: ProviderModelMetadata["default_reasoning_effort"];
+  runtimeSupported?: boolean;
+}): ProviderModelMetadata {
+  return {
+    provider_id: "qwen",
+    provider_label: "Qwen Cloud",
+    model_id: input.modelId,
+    model_ref: `qwen/${input.modelId}`,
+    display_name: input.displayName,
+    status: input.status,
+    context_window_tokens: 1_048_576,
+    default_reasoning_effort: input.defaultReasoningEffort,
+    reasoning_efforts: QWEN_REASONING,
+    token_estimator: "character_estimate",
+    source_url: QWEN_SOURCE,
+    runtime_supported: input.runtimeSupported ?? true,
+    hosted_api_shape: "openai_chat_completions",
+  };
+}
 
 export const QWEN_MODELS: readonly ProviderModelMetadata[] = [
-  {
-    provider_id: "qwen",
-    provider_label: "Qwen Cloud",
-    model_id: "qwen3.7-max",
-    model_ref: "qwen/qwen3.7-max",
-    display_name: "Qwen3.7 Max",
+  qwenModel({
+    modelId: "qwen3.7-max",
+    displayName: "Qwen3.7 Max",
     status: "latest",
-    context_window_tokens: 1_048_576,
-    max_output_tokens: 64_000,
-    default_reasoning_effort: "high",
-    reasoning_efforts: ["none", "low", "medium", "high", "xhigh"],
-    reasoning_budget_tokens: { low: 8_000, medium: 32_000, high: 128_000, xhigh: 256_000 },
-    token_estimator: "character_estimate",
-    source_url: QWEN_SOURCE,
-    runtime_supported: true,
-  },
-  {
-    provider_id: "qwen",
-    provider_label: "Qwen Cloud",
-    model_id: "qwen3.6-plus",
-    model_ref: "qwen/qwen3.6-plus",
-    display_name: "Qwen3.6 Plus",
+    defaultReasoningEffort: "high",
+  }),
+  qwenModel({
+    modelId: "qwen3.7-plus",
+    displayName: "Qwen3.7 Plus",
     status: "recommended",
-    context_window_tokens: 1_048_576,
-    max_output_tokens: 64_000,
-    default_reasoning_effort: "medium",
-    reasoning_efforts: ["none", "low", "medium", "high"],
-    reasoning_budget_tokens: { low: 4_000, medium: 16_000, high: 80_000 },
-    token_estimator: "character_estimate",
-    source_url: QWEN_SOURCE,
-    runtime_supported: true,
-  },
-  {
-    provider_id: "qwen",
-    provider_label: "Qwen Cloud",
-    model_id: "qwen3.6-flash",
-    model_ref: "qwen/qwen3.6-flash",
-    display_name: "Qwen3.6 Flash",
+    defaultReasoningEffort: "medium",
+  }),
+  qwenModel({
+    modelId: "qwen3.6-flash",
+    displayName: "Qwen3.6 Flash",
     status: "available",
-    context_window_tokens: 1_048_576,
-    max_output_tokens: 64_000,
-    default_reasoning_effort: "medium",
-    reasoning_efforts: ["none", "low", "medium", "high"],
-    reasoning_budget_tokens: { low: 4_000, medium: 16_000, high: 80_000 },
-    token_estimator: "character_estimate",
-    source_url: QWEN_SOURCE,
-    runtime_supported: true,
-  },
+    defaultReasoningEffort: "medium",
+  }),
+  qwenModel({
+    modelId: "qwen3.6-plus",
+    displayName: "Qwen3.6 Plus (retired)",
+    status: "deprecated",
+    defaultReasoningEffort: "medium",
+    runtimeSupported: false,
+  }),
 ];

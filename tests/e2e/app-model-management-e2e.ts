@@ -17,12 +17,13 @@ const testClass = (name: string) => `[data-test-class~="${name}"]`;
 
 const hostedProviders = [
   { label: "OpenAI", model: "GPT-5.6 Sol" },
-  { label: "Anthropic", model: "Claude Opus 4.7" },
+  { label: "Anthropic", model: "Claude Opus 5" },
   { label: "Google", model: "Gemini 3.1 Pro Preview" },
-  { label: "xAI / Grok", model: "Grok 4.3" },
+  { label: "xAI / Grok", model: "Grok 4.5" },
   { label: "Qwen Cloud", model: "Qwen3.7 Max" },
   { label: "Moonshot / Kimi", model: "Kimi K2.6" },
-  { label: "Z.AI / GLM", model: "GLM-5.2" },
+  { label: "Z.AI Coding Plan", model: "GLM-5.2" },
+  { label: "Z.AI API", model: "GLM-5.2" },
   { label: "OpenCode Go", model: "GLM-5.2" },
 ] as const;
 

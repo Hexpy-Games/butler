@@ -139,9 +139,10 @@ export async function createOpenAIResponseOnce(
 
   if (!response.ok) {
     const raw = await response.text();
+    let parsed: Record<string, any> = {};
     let detail = raw;
     try {
-      const parsed = JSON.parse(raw);
+      parsed = JSON.parse(raw);
       detail = parsed?.error?.message || raw;
     } catch {}
     throw providerHttpError({
@@ -149,9 +150,11 @@ export async function createOpenAIResponseOnce(
       api: "responses",
       statusCode: response.status,
       detail,
+      providerError: parsed,
       endpoint,
       model,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
 

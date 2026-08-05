@@ -33,6 +33,16 @@ export interface WebSearchSettingsUpdate {
   planning_default_depth?: WebSearchDefaultDepth;
 }
 
+export interface ModelFallbackSettingsView {
+  enabled: boolean;
+  models: string[];
+}
+
+export interface ModelFallbackSettingsUpdate {
+  enabled?: boolean;
+  models?: string[];
+}
+
 export interface SettingsView {
   bridge_mode: "local" | "external";
   gateway_profile: "electron";
@@ -76,6 +86,7 @@ export interface SettingsView {
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
   web_search: WebSearchSettingsView;
+  model_fallback: ModelFallbackSettingsView;
   profile_label: string;
 }
 
@@ -117,6 +128,7 @@ export interface UpdateSettingsRequest {
   desktop_notifications?: Partial<DesktopNotificationSettingsView>;
   desktop_tray_enabled?: boolean;
   web_search?: WebSearchSettingsUpdate;
+  model_fallback?: ModelFallbackSettingsUpdate;
   default_project_folder_selection_token?: string;
 }
 

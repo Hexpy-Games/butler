@@ -160,6 +160,42 @@ test("renderer activity contract rejects the repeated legacy label and accepts a
   ).failures).toContain("renderer_activity_title_too_long:0:33");
 });
 
+test("provider model expectation uses the canonical durable provider/model ref", () => {
+  const step: ElectronScenarioStep = {
+    id: "canonical-provider-model",
+    prompt: "backup 모델을 확인해 주세요.",
+    expect: { providerReportedModel: "openai/gpt-5.6-luna" },
+  };
+  const run = { workspaceRoot: "/isolated/workspace" } as Parameters<
+    typeof checkScenarioExpectations
+  >[0];
+
+  expect(checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    [],
+    [],
+    "openai/gpt-5.6-luna",
+  )).toEqual({ passed: true, failures: [] });
+  expect(checkScenarioExpectations(
+    run,
+    step,
+    "delivered",
+    "완료",
+    null,
+    new Map(),
+    [],
+    [],
+    "gpt-5.6-luna",
+  ).failures).toContain(
+    "provider_reported_model:gpt-5.6-luna:expected:openai/gpt-5.6-luna",
+  );
+});
+
 function timelineBlocks(stages: readonly string[], turnId: string): string {
   return `
     <button

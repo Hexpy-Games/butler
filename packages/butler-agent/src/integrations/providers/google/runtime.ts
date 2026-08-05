@@ -15,6 +15,7 @@ import {
   safeEndpointLabel,
 } from "../provider-errors.ts";
 import type { FunctionToolDefinition, PromptOptions } from "../runtime-contracts.ts";
+import type { ReasoningEffort } from "../model-catalog.ts";
 import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import {
@@ -27,14 +28,22 @@ export async function createGeminiContent(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
-  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
+  providerRoundPolicyOrRetryAttempts?: Partial<ProviderRoundPolicy> | number,
+  retryAttempts?: number,
 ): Promise<Record<string, any>> {
+  const providerRoundPolicy = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? undefined
+    : providerRoundPolicyOrRetryAttempts;
+  const retryOverride = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? providerRoundPolicyOrRetryAttempts
+    : retryAttempts;
   return await runGuardedProviderRound({
     signal,
     policy: providerRoundPolicy,
     operation: async (guardedSignal) => await withModelApiRetry(
       async () => await createGeminiContentOnce(config, body, guardedSignal, budgetContext),
       guardedSignal,
+      retryOverride,
     ),
     timeoutError: (timeoutKind) => providerRoundTimeoutError({
       provider: "google",
@@ -110,9 +119,11 @@ async function createGeminiContentOnce(
       api: "generate_content",
       statusCode: response.status,
       detail: parsed?.error?.message || raw || `status ${response.status}`,
+      providerError: parsed,
       endpoint,
       model: config.modelId,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
   return parsed;
@@ -150,6 +161,25 @@ export function geminiTools(tools: FunctionToolDefinition[]): Array<Record<strin
   }];
 }
 
+/** Gemini 3.x exposes thinking through generationConfig.thinkingConfig. */
+export function geminiReasoningParams(
+  reasoningEffort?: ReasoningEffort,
+): Record<string, unknown> {
+  if (!reasoningEffort) return {};
+  const thinkingLevel = reasoningEffort === "none"
+    ? "MINIMAL"
+    : reasoningEffort === "low"
+      ? "LOW"
+      : reasoningEffort === "medium"
+        ? "MEDIUM"
+        : "HIGH";
+  return {
+    generationConfig: {
+      thinkingConfig: { thinkingLevel },
+    },
+  };
+}
+
 export async function runGeminiPromptText(
   config: HostedRuntimeConfig,
   options: PromptOptions,
@@ -165,8 +195,9 @@ export async function runGeminiPromptText(
       ...(options.instructions?.trim()
         ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
         : {}),
+      ...geminiReasoningParams(options.reasoningEffort),
       contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
-    }, options.signal, context),
+    }, options.signal, context, options.providerRetryAttempts),
     usage: geminiUsageSample,
   });
   const text = geminiText(response);

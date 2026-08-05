@@ -1,4 +1,5 @@
 import type { ProviderModelMetadata, ReasoningEffort } from "../model-catalog.ts";
+import { AUTO_CODEX_LATEST } from "./models.ts";
 
 export const OPENAI_SOURCE = "https://developers.openai.com/api/docs/models/compare";
 
@@ -12,6 +13,10 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     provider_label: "OpenAI",
     model_id: "gpt-5.6-sol",
     model_ref: "openai/gpt-5.6-sol",
+    // `auto:codex-latest` is a declared dynamic Codex carrier, not a
+    // user-entered unknown model. Keep it tied to the catalog's current
+    // Codex entry while preserving strict handling for all other missing refs.
+    aliases: [AUTO_CODEX_LATEST, `openai/${AUTO_CODEX_LATEST}`],
     display_name: "GPT-5.6 Sol",
     status: "latest",
     context_window_tokens: 1_050_000,
@@ -57,6 +62,10 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     provider_label: "OpenAI",
     model_id: "gpt-5.5",
     model_ref: "openai/gpt-5.5",
+    // The Codex subscription carrier historically persisted this alias. Keep
+    // it explicit so old settings remain identifiable without selecting a
+    // newer OpenAI model by accident.
+    aliases: ["gpt-5.5", "gpt-5.5-codex", "openai/gpt-5.5-codex"],
     display_name: "GPT-5.5",
     status: "available",
     context_window_tokens: 1_050_000,

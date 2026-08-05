@@ -2508,8 +2508,8 @@ test("session creation does not block runtime admission on model title generatio
     `${JSON.stringify({
       system: {
         runtime: "codex-api",
-        defaultModel: "openai/gpt-5.5-codex",
-        butlerModel: "openai/gpt-5.5-codex",
+        defaultModel: "openai/gpt-5.5",
+        butlerModel: "openai/gpt-5.5",
       },
     })}\n`,
     "utf8",
@@ -2571,8 +2571,8 @@ test("native butler-main default provider generates app transport session titles
     `${JSON.stringify({
       system: {
         runtime: "codex-api",
-        defaultModel: "openai/gpt-5.5-codex",
-        butlerModel: "openai/gpt-5.5-codex",
+        defaultModel: "openai/gpt-5.5",
+        butlerModel: "openai/gpt-5.5",
       },
     })}\n`,
     "utf8",
@@ -3342,6 +3342,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "qwen",
       "kimi",
       "zai",
+      "zai-api",
       "opencode-go",
     ]) {
       expect(providerIds).toContain(providerId);
@@ -3354,6 +3355,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "qwen",
       "kimi",
       "zai",
+      "zai-api",
       "opencode-go",
     ]) {
       const provider = catalog.data.providers.find(
@@ -3364,13 +3366,14 @@ test("settings, command palette, and project actions are route-backed and privac
     const modelRefs = catalog.data.models.map(
       (model: { model_ref: string }) => model.model_ref,
     );
-    expect(modelRefs).toContain("xai/grok-4.3");
+    expect(modelRefs).toContain("xai/grok-4.5");
     expect(modelRefs).toContain("openai/gpt-5.6-sol");
     expect(modelRefs).toContain("openai/gpt-5.6-terra");
     expect(modelRefs).toContain("openai/gpt-5.6-luna");
     expect(modelRefs).toContain("qwen/qwen3.7-max");
     expect(modelRefs).toContain("kimi/kimi-k2.6");
     expect(modelRefs).toContain("zai/glm-5.2");
+    expect(modelRefs).toContain("zai-api/glm-5.2");
     expect(modelRefs).toContain("opencode-go/kimi-k2.7-code");
     expect(modelRefs).toContain("opencode-go/minimax-m3");
     expect(
@@ -3378,6 +3381,19 @@ test("settings, command palette, and project actions are route-backed and privac
         (model: { model_ref: string }) => model.model_ref === "zai/glm-5.2",
       ),
     ).toMatchObject({
+      provider_label: "Z.AI Coding Plan",
+      provider_family_id: "zai",
+      context_window_tokens: 1_000_000,
+      max_output_tokens: 128_000,
+      runtime_supported: true,
+    });
+    expect(
+      catalog.data.models.find(
+        (model: { model_ref: string }) => model.model_ref === "zai-api/glm-5.2",
+      ),
+    ).toMatchObject({
+      provider_label: "Z.AI API",
+      provider_family_id: "zai",
       context_window_tokens: 1_000_000,
       max_output_tokens: 128_000,
       runtime_supported: true,
@@ -3635,7 +3651,7 @@ test("settings, command palette, and project actions are route-backed and privac
           id: "anthropic-runtime-work",
           label: "Anthropic runtime work",
           condition: "Provider wired through native runtime",
-          model: "anthropic/claude-opus-4-7",
+          model: "anthropic/claude-opus-5",
           reasoning_effort: "high",
           enabled: true,
         },
@@ -3652,7 +3668,7 @@ test("settings, command palette, and project actions are route-backed and privac
       expect.objectContaining({
         id: "anthropic-runtime-work",
         label: "Anthropic runtime work",
-        model: "anthropic/claude-opus-4-7",
+        model: "anthropic/claude-opus-5",
         reasoning_effort: "high",
         enabled: true,
       }),
@@ -3697,6 +3713,167 @@ test("settings, command palette, and project actions are route-backed and privac
       {},
     );
     expect(archived.data.project.archived).toBe(true);
+  } finally {
+    server.stop();
+  }
+});
+
+test("Backup models settings sanitize through the canonical config and survive restart", async () => {
+  const dbPath = join(tempDir, "backup-models.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+
+  async function registerHostedModel(
+    providerId: string,
+    modelId: string,
+  ): Promise<void> {
+    const credential = await postJson(
+      `${server.url}model-catalog/provider-credentials`,
+      {
+        provider_id: providerId,
+        auth_type: "api_key",
+        label: `${providerId} fallback credential`,
+        api_key: `${providerId}-${modelId}-secret`,
+      },
+    );
+    await postJson(`${server.url}model-catalog/registered-models`, {
+      provider_id: providerId,
+      model_id: modelId,
+      auth_type: "api_key",
+      credential_id: credential.data.credential.id,
+    });
+  }
+
+  try {
+    await registerHostedModel("zai", "glm-5.2");
+    await registerHostedModel("zai-api", "glm-5.2");
+    await registerHostedModel("zai-api", "glm-5.1");
+    await registerHostedModel("zai-api", "glm-5");
+    await registerHostedModel("openai", "gpt-5.5");
+    await registerHostedModel("openai", "gpt-5.6-sol");
+    await registerHostedModel("anthropic", "claude-opus-5");
+
+    await patchJson(`${server.url}settings`, { model: "zai/glm-5.2" });
+    const configPath = join(tempDir, "butler.config.json");
+    const seededConfig = JSON.parse(readFileSync(configPath, "utf8"));
+    seededConfig.user = {
+      modelFallback: {
+        enabled: true,
+        models: [
+          "zai-api/glm-5.2",
+          "zai-api/glm-5.1",
+          "zai-api/not-registered",
+        ],
+      },
+    };
+    writeFileSync(
+      configPath,
+      JSON.stringify(seededConfig),
+      "utf8",
+    );
+    const beforeIdleRead = statSync(configPath).mtimeMs;
+    const idleProjection = await getJson(`${server.url}settings`);
+    expect(idleProjection.data.model_fallback).toEqual({
+      enabled: true,
+      models: ["zai-api/glm-5.1"],
+    });
+    expect(statSync(configPath).mtimeMs).toBe(beforeIdleRead);
+
+    const updated = await patchJson(`${server.url}settings`, {
+      model_fallback: {
+        enabled: true,
+        models: [
+          "zai-api/glm-5.2",
+          "zai-api/glm-5.1",
+          "zai-api/glm-5",
+          "openai/gpt-5.5",
+          "openai/gpt-5.6-sol",
+          "anthropic/claude-opus-5",
+          "zai-api/not-registered",
+          "zai/glm-4.7",
+        ],
+      },
+    });
+    expect(updated.data.model_fallback).toEqual({
+      enabled: true,
+      models: [
+        "zai-api/glm-5.1",
+        "zai-api/glm-5",
+        "openai/gpt-5.5",
+        "openai/gpt-5.6-sol",
+        "anthropic/claude-opus-5",
+      ],
+    });
+    const persisted = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(persisted.user.modelFallback).toEqual(updated.data.model_fallback);
+    expect(
+      readdirSync(tempDir).filter((name) => name.endsWith(".tmp")),
+    ).toEqual([]);
+
+    const db = new Database(dbPath);
+    const settingsRow = db
+      .query<{ value_json: string }, [string]>(
+        "SELECT value_json FROM app_settings WHERE key = ?",
+      )
+      .get("settings");
+    expect(settingsRow).toBeDefined();
+    expect(JSON.parse(settingsRow!.value_json)).not.toHaveProperty(
+      "model_fallback",
+    );
+    db.close();
+
+    server.stop();
+    const restarted = createAppServer({
+      dbPath,
+      butlerData: tempDir,
+      port: 0,
+    });
+    try {
+      const afterRestart = await getJson(`${restarted.url}settings`);
+      expect(afterRestart.data.model_fallback).toEqual(
+        updated.data.model_fallback,
+      );
+
+      const primaryOnly = await patchJson(`${restarted.url}settings`, {
+        model: "zai-api/glm-5.1",
+      });
+      expect(primaryOnly.data.model).toBe("zai-api/glm-5.1");
+      expect(primaryOnly.data.model_fallback).toEqual({
+        enabled: true,
+        models: [
+          "zai-api/glm-5",
+          "openai/gpt-5.5",
+          "openai/gpt-5.6-sol",
+          "anthropic/claude-opus-5",
+        ],
+      });
+
+      const simultaneous = await patchJson(`${restarted.url}settings`, {
+        model: "zai/glm-5.2",
+        model_fallback: {
+          enabled: true,
+          models: ["zai-api/glm-5.2", "zai-api/glm-5.1"],
+        },
+      });
+      expect(simultaneous.data.model).toBe("zai/glm-5.2");
+      expect(simultaneous.data.model_fallback).toEqual({
+        enabled: true,
+        models: ["zai-api/glm-5.1"],
+      });
+
+      const disabled = await patchJson(`${restarted.url}settings`, {
+        model_fallback: { enabled: false },
+      });
+      expect(disabled.data.model_fallback).toEqual({
+        enabled: false,
+        models: ["zai-api/glm-5.1"],
+      });
+    } finally {
+      restarted.stop();
+    }
   } finally {
     server.stop();
   }
@@ -3959,7 +4136,7 @@ test("hosted model registration uses masked credentials without pre-release migr
     expect(JSON.stringify(registered)).not.toContain("sk-hosted-secret-z");
 
     const settings = await patchJson(`${server.url}settings`, {
-      model: "anthropic/claude-opus-4-7",
+      model: "anthropic/claude-opus-5",
       reasoning_effort: "high",
     });
     expect(settings.data.model).toBe("openai/gpt-5.5");
@@ -3971,6 +4148,11 @@ test("hosted model registration uses masked credentials without pre-release migr
     );
     expect(zaiProvider?.default_api_base_url)
       .toBe("https://api.z.ai/api/coding/paas/v4");
+    const zaiApiProvider = catalog.data.providers.find(
+      (provider: { provider_id: string }) => provider.provider_id === "zai-api",
+    );
+    expect(zaiApiProvider?.default_api_base_url)
+      .toBe("https://api.z.ai/api/paas/v4");
     const openCodeGoProvider = catalog.data.providers.find(
       (provider: { provider_id: string }) => provider.provider_id === "opencode-go",
     );
@@ -4035,6 +4217,38 @@ test("hosted model registration persists editable provider API base URLs", async
     ).toMatchObject({
       api_base_url: "https://api.z.ai/api/coding/paas/v4",
     });
+
+    const generalCredential = await postJson(
+      `${server.url}model-catalog/provider-credentials`,
+      {
+        provider_id: "zai-api",
+        auth_type: "api_key",
+        label: "Z.AI API",
+        api_key: "zai-api-secret",
+      },
+    );
+    const generalRegistered = await postJson(
+      `${server.url}model-catalog/registered-models`,
+      {
+        provider_id: "zai-api",
+        model_id: "glm-5.2",
+        auth_type: "api_key",
+        credential_id: generalCredential.data.credential.id,
+        api_base_url: "https://api.z.ai/api/paas/v4/",
+      },
+    );
+    expect(generalRegistered.data.model).toMatchObject({
+      provider_id: "zai-api",
+      model_ref: "zai-api/glm-5.2",
+      api_base_url: "https://api.z.ai/api/paas/v4",
+      credential_id: generalCredential.data.credential.id,
+    });
+    expect(generalCredential.data.credential.id)
+      .not.toBe(credential.data.credential.id);
+    const updatedCatalog = await getJson(`${server.url}model-catalog`);
+    expect(updatedCatalog.data.registered_models.map(
+      (model: { model_ref: string }) => model.model_ref,
+    )).toEqual(["zai/glm-5.2", "zai-api/glm-5.2"]);
   } finally {
     server.stop();
   }
@@ -4144,6 +4358,10 @@ test("hosted model registration exposes provider auth capability gates", async (
     ).toEqual(["api_key"]);
     expect(
       providers.find((provider) => provider.provider_id === "zai")
+        ?.auth_methods,
+    ).toEqual(["api_key"]);
+    expect(
+      providers.find((provider) => provider.provider_id === "zai-api")
         ?.auth_methods,
     ).toEqual(["api_key"]);
     expect(

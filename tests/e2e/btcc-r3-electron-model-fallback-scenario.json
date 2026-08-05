@@ -1,0 +1,51 @@
+{
+  "schema": "butler.btcc-r3-electron-scenario.v1",
+  "id": "model-fallback-local-provider",
+  "model": "openai/gpt-5.6-sol",
+  "reasoningEffort": "low",
+  "accessMode": "full_access",
+  "modelFallback": {
+    "enabled": true,
+    "models": ["openai/gpt-5.6-luna"]
+  },
+  "providerFixture": {
+    "retryAttempts": 1,
+    "responses": [
+      {
+        "requestKind": "agent",
+        "requestModel": "gpt-5.6-sol",
+        "status": 503,
+        "errorCode": "fixture_primary_overload"
+      },
+      {
+        "requestKind": "agent",
+        "requestModel": "gpt-5.6-luna",
+        "responseModel": "gpt-5.6-luna",
+        "delayMs": 1000,
+        "text": "BTCC_R3_LOCAL_BACKUP_MODEL_SUCCESS"
+      }
+    ],
+    "defaultResponse": {
+      "responseModel": "gpt-5.6-sol",
+      "text": "BTCC R3 fallback fixture"
+    }
+  },
+  "session": {
+    "id": "model-fallback-local-provider",
+    "title": "BTCC R3 local model fallback"
+  },
+  "steps": [
+    {
+      "id": "primary-fails-backup-succeeds",
+      "prompt": "짧게 답해 주세요. 로컬 결정적 provider fixture의 backup 모델 성공 표식 `BTCC_R3_LOCAL_BACKUP_MODEL_SUCCESS`를 그대로 포함해 주세요.",
+      "restartAfter": true,
+      "expect": {
+        "terminalState": "delivered",
+        "finalIncludes": ["BTCC_R3_LOCAL_BACKUP_MODEL_SUCCESS"],
+        "providerAgentModels": ["gpt-5.6-sol", "gpt-5.6-luna"],
+        "providerReportedModel": "openai/gpt-5.6-luna",
+        "progressIncludes": ["gpt-5.6-luna"]
+      }
+    }
+  ]
+}

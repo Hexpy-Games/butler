@@ -17,13 +17,14 @@ import {
 } from "./provider-round-guard.ts";
 import {
   HostedChatStreamProtocolError,
+  HostedChatStreamProviderError,
   isHostedChatSseResponse,
   readHostedChatSseResponse,
 } from "./hosted-chat-stream.ts";
 
 
 
-export type HostedOpenAICompatibleProviderId = "xai" | "qwen" | "kimi" | "zai";
+export type HostedOpenAICompatibleProviderId = "xai" | "qwen" | "kimi" | "zai" | "zai-api";
 
 
 
@@ -57,13 +58,14 @@ export function promptTextForHosted(options: Pick<PromptOptions, "prompt" | "att
 export function isHostedOpenAICompatibleProvider(
   providerId: HostedModelProviderId,
 ): providerId is HostedOpenAICompatibleProviderId {
-  return providerId === "xai" || providerId === "qwen" || providerId === "kimi" || providerId === "zai";
+  return providerId === "xai" || providerId === "qwen" || providerId === "kimi" || providerId === "zai" || providerId === "zai-api";
 }
 
 
 
 export function hostedProviderBaseUrlEnvKey(providerId: HostedModelProviderId): string {
   if (providerId === "opencode-go") return "BUTLER_OPENCODE_GO_BASE_URL";
+  if (providerId === "zai-api") return "BUTLER_ZAI_API_BASE_URL";
   return `BUTLER_${providerId.toUpperCase()}_BASE_URL`;
 }
 
@@ -86,6 +88,11 @@ export function hostedProviderApiBase(config: HostedRuntimeConfig): string {
 export function hostedChatCompletionsUrl(config: HostedRuntimeConfig): string {
   const base = hostedProviderApiBase(config);
   return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
+}
+
+export function hostedResponsesUrl(config: HostedRuntimeConfig): string {
+  const base = hostedProviderApiBase(config);
+  return base.endsWith("/responses") ? base : `${base}/responses`;
 }
 
 
@@ -122,7 +129,11 @@ export function openCodeGoApiShape(config: HostedRuntimeConfig): HostedProviderA
   if (config.providerId !== "opencode-go") {
     throw new Error(`OpenCode Go API shape requested for unsupported provider: ${config.providerId}`);
   }
-  if (config.apiShape === "openai_chat_completions" || config.apiShape === "anthropic_messages") {
+  if (
+    config.apiShape === "openai_chat_completions" ||
+    config.apiShape === "openai_responses" ||
+    config.apiShape === "anthropic_messages"
+  ) {
     return config.apiShape;
   }
   throw new Error(`OpenCode Go model is missing a supported API shape: ${config.modelRef}`);
@@ -163,8 +174,25 @@ export function hostedChatReasoningParams(
   config: HostedRuntimeConfig,
   reasoningEffort?: ReasoningEffort,
 ): Record<string, unknown> {
-  if (config.providerId !== "zai" || !reasoningEffort || reasoningEffort === "none") return {};
-  return { reasoning_effort: reasoningEffort };
+  if (!reasoningEffort) return {};
+  if (config.providerId === "zai" || config.providerId === "zai-api") {
+    return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
+  }
+  if (config.providerId === "xai") {
+    // xAI's legacy Chat Completions carrier accepts this field; the preferred
+    // Responses carrier uses the nested `reasoning` form in its own adapter.
+    return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
+  }
+  if (config.providerId === "qwen") {
+    return { enable_thinking: reasoningEffort !== "none" };
+  }
+  if (config.providerId === "kimi") {
+    if (config.modelId === "kimi-k3") {
+      return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
+    }
+    return { thinking: { type: reasoningEffort === "none" ? "disabled" : "enabled" } };
+  }
+  return {};
 }
 
 
@@ -256,10 +284,18 @@ async function createHostedChatCompletionOnce(
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(hostedChatCompletionsUrl(config));
   const requestBody: Record<string, unknown> = {
-    temperature: 0,
+    // Kimi's reasoning models reject an explicit sampling temperature; Qwen
+    // requires its thinking controls without unsupported sampling overrides.
+    ...(config.providerId === "kimi" || config.providerId === "qwen"
+      ? {}
+      : { temperature: 0 }),
     model: config.modelId,
-    ...(budgetContext?.attribution?.requestedOutputTokens && body.max_tokens === undefined
-      ? { max_tokens: budgetContext.attribution.requestedOutputTokens }
+    ...(budgetContext?.attribution?.requestedOutputTokens &&
+      body.max_tokens === undefined && body.max_completion_tokens === undefined
+      ? {
+          [config.providerId === "kimi" ? "max_completion_tokens" : "max_tokens"]:
+            budgetContext.attribution.requestedOutputTokens,
+        }
       : {}),
     ...body,
   };
@@ -299,6 +335,19 @@ async function createHostedChatCompletionOnce(
       return await readHostedChatSseResponse(response, recordProgress);
     } catch (error) {
       if (signal?.aborted) throw error;
+      if (error instanceof HostedChatStreamProviderError) {
+        throw providerHttpError({
+          provider: hostedProviderErrorLabel(config),
+          api: "chat_completions",
+          statusCode: error.statusCode ?? 400,
+          detail: undefined,
+          providerError: error.providerError,
+          endpoint,
+          model: config.modelId,
+          admission: admittedRequest,
+          headers: response.headers,
+        });
+      }
       if (error instanceof HostedChatStreamProtocolError) {
         throw new ModelProviderRequestError({
           code: "provider_protocol_error",
@@ -331,6 +380,7 @@ async function createHostedChatCompletionOnce(
       api: "chat_completions",
       statusCode: response.status,
       detail: parsed?.error?.message || raw || `status ${response.status}`,
+      providerError: parsed,
       endpoint,
       model: config.modelId,
       admission: admittedRequest,

@@ -267,6 +267,72 @@ test("bundled Agent supervisor starts, health-checks, restarts, and stops", asyn
   }
 });
 
+test("bundled Agent supervisor shares one startup operation across concurrent ensureReady calls", async () => {
+  const tempDir = mkdtempSync(join(tmpdir(), "butler-app-supervisor-single-flight-"));
+  try {
+    const spawned: FakeChildProcess[] = [];
+    let resolved = 0;
+    let healthChecks = 0;
+    let releasePreflight: (() => void) | undefined;
+    const preflight = new Promise<void>((resolve) => {
+      releasePreflight = resolve;
+    });
+    const supervisor = createBundledAgentSupervisor({
+      butlerData: join(tempDir, "data"),
+      resolveGateway: () => {
+        resolved += 1;
+        return {
+          command: "/runtime/bun",
+          args: ["gateway"],
+          env: {},
+          commitActivation: () => undefined,
+        };
+      },
+      spawnProcess: () => {
+        const child = new FakeChildProcess(9050 + spawned.length, []);
+        spawned.push(child);
+        return child;
+      },
+      healthCheck: async () => {
+        healthChecks += 1;
+        if (healthChecks === 1) {
+          await preflight;
+          return false;
+        }
+        return true;
+      },
+      readinessCheck: () => true,
+      isPortAvailable: () => true,
+      findAvailablePort: (startPort) => startPort,
+      updatePort: () => undefined,
+      getPort: () => 18765,
+      getServerUrl: () => "http://127.0.0.1:18765/",
+      getRendererOrigin: () => "http://127.0.0.1:18765",
+      sleepMs: async () => undefined,
+      startupAttempts: 1,
+    });
+
+    const first = supervisor.ensureReady();
+    await Promise.resolve();
+    const second = supervisor.ensureReady();
+
+    expect(resolved).toBe(1);
+    expect(spawned).toHaveLength(0);
+    releasePreflight?.();
+    await Promise.all([first, second]);
+
+    expect(resolved).toBe(1);
+    expect(spawned).toHaveLength(1);
+    expect(supervisor.diagnostics()).toMatchObject({
+      phase: "running",
+      pid: 9050,
+    });
+    await supervisor.stop({ wait: true });
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("bundled Agent supervisor does not overclaim unverified tree containment", async () => {
   const root = mkdtempSync(join(tmpdir(), "butler-supervisor-unverified-"));
   try {

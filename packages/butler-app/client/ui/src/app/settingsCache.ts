@@ -77,6 +77,19 @@ export function settingsWithDefaults(
 ): SettingsView {
   const record = isRecord(input) ? input : {};
   const webSearch = isRecord(record.web_search) ? record.web_search : {};
+  const modelFallback = isRecord(record.model_fallback)
+    ? {
+        enabled:
+          typeof record.model_fallback.enabled === "boolean"
+            ? record.model_fallback.enabled
+            : EMPTY_SETTINGS.model_fallback.enabled,
+        models: Array.isArray(record.model_fallback.models)
+          ? record.model_fallback.models.filter(
+              (model): model is string => typeof model === "string",
+            )
+          : EMPTY_SETTINGS.model_fallback.models,
+      }
+    : EMPTY_SETTINGS.model_fallback;
   const colors = normalizeThemeColors(record.main_screen_theme_custom_colors);
   return {
     ...EMPTY_SETTINGS,
@@ -97,6 +110,7 @@ export function settingsWithDefaults(
       ...DEFAULT_WEB_SEARCH_SETTINGS,
       ...(webSearch as Partial<SettingsView["web_search"]>),
     },
+    model_fallback: modelFallback,
   };
 }
 

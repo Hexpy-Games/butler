@@ -54,8 +54,8 @@ export function ButlerPrimaryModelSelect({
           nextModel?.context_window_tokens ?? draft.context_window_tokens;
         const nextContextLimit =
           draft.context_window_tokens >= activeModelContextMax
-            ? nextModelMax
-            : Math.min(draft.context_window_tokens, nextModelMax);
+            ? nextModelMax ?? activeModelContextMax
+            : Math.min(draft.context_window_tokens, nextModelMax ?? activeModelContextMax);
         void onUpdate({
           model: value,
           reasoning_effort:

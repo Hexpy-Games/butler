@@ -1,6 +1,7 @@
 import type { StopPersistenceOutcome } from "./turn/index.ts";
 import type { RuntimeTurnEventInput } from "../events/turn-events.ts";
 import type { ToolProgressSummary } from "../tools/tool-support.ts";
+import type { ModelRouteState } from "./model-route/index.ts";
 
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 
@@ -11,6 +12,7 @@ export type AdmittedModelSelection = {
   controls: Readonly<Record<string, string | number | boolean>>;
   controlsHash: string;
   contextWindowTokens?: number;
+  modelRoute?: ModelRouteState;
 };
 
 export type ButlerContextInput = {
@@ -294,6 +296,7 @@ export interface BtccTurnProgressObserver {
     turnId: string;
     turnRevision: number;
     programId: string;
+    modelRef?: string;
     tasks: WorkProgressTask[];
   }): void | Promise<void>;
   phaseActivityChanged?(update: {
@@ -306,6 +309,7 @@ export interface BtccTurnProgressObserver {
     summary: string;
     rationale?: string;
     nextStep?: string;
+    modelRef?: string;
   }): void | Promise<void>;
   operationChanged?(update: {
     turnId: string;
@@ -325,6 +329,7 @@ export interface BtccTurnProgressObserver {
     turnId: string;
     requestId: string;
     status: "started" | "completed" | "failed" | "cancelled";
+    modelRef?: string;
   }): void | Promise<void>;
   operationalNoticeChanged?(update: {
     turnId: string;

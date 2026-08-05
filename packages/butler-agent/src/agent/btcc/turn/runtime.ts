@@ -22,6 +22,8 @@ import type {
 import { stopTurn } from "./stop-turn.ts";
 import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "../agent-loop/index.ts";
+import { isModelRouteDurabilityError } from "../model-route/index.ts";
+import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
 
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
@@ -115,8 +117,14 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
           turn,
           signal: permit.signal,
           progress,
+          ...createModelRouteRuntimeHooks({
+            turn,
+            claim,
+            turns: this.dependencies.turns,
+          }),
         });
-      } catch (_error) {
+      } catch (error) {
+        if (isModelRouteDurabilityError(error)) throw error;
         permit.assertActive();
         result = {
           route: "assisted",

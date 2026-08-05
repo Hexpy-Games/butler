@@ -237,6 +237,7 @@ export interface AppCopy {
     panels: {
       butlerModel: string;
       workerModelRules: string;
+      backupModels: string;
       serverBridge: string;
       updates: string;
       mcpServers: string;
@@ -247,6 +248,20 @@ export interface AppCopy {
       systemEvents: string;
       archives: string;
       about: string;
+    };
+    backupModels: {
+      title: string;
+      description: string;
+      enabled: string;
+      enabledDescription: string;
+      add: string;
+      addTitle: string;
+      searchPlaceholder: string;
+      searchClearLabel: string;
+      allProviders: string;
+      empty: string;
+      noCandidates: string;
+      limitReached: string;
     };
     fields: {
       language: string;
@@ -893,6 +908,7 @@ const koKrCopy: AppCopy = {
     panels: {
       butlerModel: "모델 설정",
       workerModelRules: "작업자 모델 규칙",
+      backupModels: "예비 모델",
       serverBridge: "서버 / 브리지",
       updates: "업데이트",
       mcpServers: "MCP 서버",
@@ -903,6 +919,22 @@ const koKrCopy: AppCopy = {
       systemEvents: "시스템 이벤트",
       archives: "아카이브",
       about: "앱 정보",
+    },
+    backupModels: {
+      title: "예비 모델",
+      description:
+        "현재 모델이 일시적으로 응답하지 않을 때 같은 작업을 이어갈 모델을 순서대로 선택합니다.",
+      enabled: "예비 모델 사용",
+      enabledDescription:
+        "켜면 새 작업부터 등록한 순서대로 예비 모델을 사용할 수 있습니다.",
+      add: "예비 모델 추가",
+      addTitle: "예비 모델 선택",
+      searchPlaceholder: "모델 또는 제공자 검색",
+      searchClearLabel: "검색 지우기",
+      allProviders: "모든 제공자",
+      empty: "등록된 예비 모델이 없습니다.",
+      noCandidates: "추가할 수 있는 모델이 없습니다.",
+      limitReached: "예비 모델은 최대 5개까지 등록할 수 있습니다.",
     },
     fields: {
       language: "언어",
@@ -1624,6 +1656,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     panels: {
       butlerModel: "Model settings",
       workerModelRules: "Worker model rules",
+      backupModels: "Backup models",
       serverBridge: "Server / Bridge",
       updates: "Updates",
       mcpServers: "MCP servers",
@@ -1634,6 +1667,22 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
       systemEvents: "System events",
       archives: "Archives",
       about: "About",
+    },
+    backupModels: {
+      title: "Backup models",
+      description:
+        "Choose ordered models that can continue the same task when the current model is temporarily unavailable.",
+      enabled: "Use backup models",
+      enabledDescription:
+        "When enabled, new tasks can advance through the registered models in order.",
+      add: "Add backup model",
+      addTitle: "Choose a backup model",
+      searchPlaceholder: "Search models or providers",
+      searchClearLabel: "Clear search",
+      allProviders: "All providers",
+      empty: "No backup models are registered.",
+      noCandidates: "No models are available to add.",
+      limitReached: "You can register up to 5 backup models.",
     },
     fields: {
       language: "Language",

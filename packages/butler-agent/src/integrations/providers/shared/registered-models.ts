@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import {
   listModelMetadata,
   defaultHostedProviderApiBaseUrl,
+  findModelMetadata,
   type ModelProviderId,
   type ProviderAuthMethod,
   type ProviderModelMetadata,
@@ -116,6 +117,7 @@ function hostedProviderId(value: unknown): HostedModelProviderId | null {
     value === "qwen" ||
     value === "kimi" ||
     value === "zai" ||
+    value === "zai-api" ||
     value === "opencode-go"
   ) return value;
   return null;
@@ -262,10 +264,11 @@ function providerLabel(providerId: HostedModelProviderId): string {
 function modelForRegistration(providerId: HostedModelProviderId, modelIdOrRef: string): ProviderModelMetadata | null {
   const value = modelIdOrRef.trim();
   if (!value) return null;
-  return listModelMetadata().find((model) =>
-    model.provider_id === providerId &&
-    (model.model_id === value || model.model_ref === value),
-  ) ?? null;
+  const requested = value.includes("/") ? value : `${providerId}/${value}`;
+  const model = findModelMetadata(requested, listModelMetadata());
+  return model?.provider_id === providerId && model.runtime_supported
+    ? model
+    : null;
 }
 
 function normalizeRegisteredModel(value: unknown): RegisteredHostedModelConfig | null {

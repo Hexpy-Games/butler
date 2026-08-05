@@ -16,14 +16,22 @@ export async function createLocalChatCompletion(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptUsageAttribution; roundIndex: number },
-  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
+  providerRoundPolicyOrRetryAttempts?: Partial<ProviderRoundPolicy> | number,
+  retryAttempts?: number,
 ): Promise<Record<string, any>> {
+  const providerRoundPolicy = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? undefined
+    : providerRoundPolicyOrRetryAttempts;
+  const retryOverride = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? providerRoundPolicyOrRetryAttempts
+    : retryAttempts;
   return await runGuardedProviderRound({
     signal,
     policy: providerRoundPolicy,
     operation: async (guardedSignal) => await withModelApiRetry(
       async () => await createLocalChatCompletionOnce(config, body, guardedSignal, budgetContext),
       guardedSignal,
+      retryOverride,
     ),
     timeoutError: (timeoutKind) => providerRoundTimeoutError({
       provider: "local",
@@ -98,9 +106,11 @@ async function createLocalChatCompletionOnce(
       api: "chat_completions",
       statusCode: response.status,
       detail,
+      providerError: parsed,
       endpoint,
       model,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
   return parsed;
