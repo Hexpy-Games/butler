@@ -2234,11 +2234,20 @@ async function runAppUpdateQuit(quitAndInstall) {
         );
         writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
       }
-      await stopServerProcess({
+      const stopResult = await stopServerProcess({
         reason: "app_update",
         activeWorkSnapshot: snapshot,
+        requireSettledDrain: true,
       });
+      if (stopResult?.update_ready !== true) {
+        return stopResult ?? {
+          update_ready: false,
+          drain: null,
+          raw_text_included: false,
+        };
+      }
       finalQuitAllowed = true;
+      return stopResult;
     },
     quitAndInstall,
   });
@@ -2592,8 +2601,10 @@ process.once("SIGTERM", () => {
 async function stopServerProcess({
   reason = "app_shutdown",
   activeWorkSnapshot = null,
+  requireSettledDrain = false,
 } = {}) {
   let checkpointResult = "not_needed";
+  let drainResult = null;
   if (usesAppForegroundLifecycle && foregroundInstance) {
     if (
       activeWorkSnapshot &&
@@ -2605,13 +2616,27 @@ async function stopServerProcess({
         "draining",
       );
       writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
-      const drain = await drainAppForegroundActiveWork({
-        snapshot: activeWorkSnapshot,
-        cancelTurn: cancelForegroundTurn,
-        cancelWorker: cancelForegroundWorker,
-        readSnapshot: readForegroundActiveWorkSnapshot,
-      });
-      checkpointResult = drain.status;
+      try {
+        drainResult = await drainAppForegroundActiveWork({
+          snapshot: activeWorkSnapshot,
+          cancelTurn: cancelForegroundTurn,
+          cancelWorker: cancelForegroundWorker,
+          readSnapshot: readForegroundActiveWorkSnapshot,
+        });
+      } catch (error) {
+        if (!requireSettledDrain) throw error;
+        return restoreForegroundAfterUpdateDrainFailure({
+          status: "drain_failed",
+          cancellation_requests: 0,
+          cancellation_failures: 1,
+          settled: false,
+          raw_text_included: false,
+        });
+      }
+      checkpointResult = drainResult.status;
+      if (requireSettledDrain && !foregroundDrainReadyForUpdate(drainResult)) {
+        return restoreForegroundAfterUpdateDrainFailure(drainResult);
+      }
     }
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
@@ -2637,6 +2662,32 @@ async function stopServerProcess({
     });
   }
   foregroundQuitSnapshot = null;
+  if (requireSettledDrain) {
+    return {
+      update_ready: true,
+      drain: drainResult,
+      raw_text_included: false,
+    };
+  }
+}
+
+function foregroundDrainReadyForUpdate(drain) {
+  return drain?.settled === true &&
+    Number(drain?.cancellation_failures ?? 0) === 0 &&
+    ["not_needed", "settled"].includes(drain?.status);
+}
+
+function restoreForegroundAfterUpdateDrainFailure(drain) {
+  if (foregroundInstance?.state === "draining") {
+    foregroundInstance = transitionAppForeground(foregroundInstance, "ready");
+    writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
+  }
+  foregroundQuitSnapshot = null;
+  return {
+    update_ready: false,
+    drain,
+    raw_text_included: false,
+  };
 }
 
 async function cancelForegroundTurn(turnId) {

@@ -55,6 +55,7 @@ jobs:
           WINDOWS_COMMUNITY_ACKNOWLEDGEMENT: ${{ inputs.acknowledgement }}
           WINDOWS_COMMUNITY_CERTIFICATE_PFX: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PFX }}
           WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD }}
+          WINDOWS_COMMUNITY_CERTIFICATE_SHA256: ${{ vars.WINDOWS_COMMUNITY_CERTIFICATE_SHA256 }}
         run: |
           $tag = $env:WINDOWS_RELEASE_TAG.Trim()
           if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
@@ -75,6 +76,10 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD)) {
             throw 'WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD is required'
           }
+          $expectedCertificateSha256 = $env:WINDOWS_COMMUNITY_CERTIFICATE_SHA256.Trim().ToUpperInvariant()
+          if ($expectedCertificateSha256 -notmatch '^[A-F0-9]{64}$') {
+            throw 'WINDOWS_COMMUNITY_CERTIFICATE_SHA256 must be a 64-hex repository variable'
+          }
           $certificatePath = Join-Path $env:RUNNER_TEMP 'butler-windows-community-signing.pfx'
           try {
             [IO.File]::WriteAllBytes(
@@ -87,6 +92,9 @@ jobs:
             )
             if (-not $certificate.HasPrivateKey) {
               throw 'community signing certificate must include a private key'
+            }
+            if ($certificate.Thumbprint -notmatch '^[A-Fa-f0-9]{40}$') {
+              throw 'community signing certificate thumbprint is invalid'
             }
             if ($certificate.Issuer -ne $certificate.Subject) {
               throw 'community signing certificate must be self-signed'
@@ -102,6 +110,17 @@ jobs:
             ).Count -gt 0
             if (-not $hasCodeSigningEku) {
               throw 'community signing certificate must include the code-signing EKU'
+            }
+            $sha256 = [Security.Cryptography.SHA256]::Create()
+            try {
+              $certificateSha256 = [BitConverter]::ToString(
+                $sha256.ComputeHash($certificate.RawData)
+              ).Replace('-', '').ToUpperInvariant()
+            } finally {
+              $sha256.Dispose()
+            }
+            if ($certificateSha256 -ne $expectedCertificateSha256) {
+              throw 'community signing certificate does not match WINDOWS_COMMUNITY_CERTIFICATE_SHA256'
             }
             if ($certificate.NotAfter -le (Get-Date)) {
               throw 'community signing certificate is expired'

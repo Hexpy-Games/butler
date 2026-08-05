@@ -152,6 +152,10 @@ test("Windows community distribution is manual, exact-tag based, and explicitly 
   expect(communityWorkflow).not.toContain("community-setup.exe");
   expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_PFX");
   expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD");
+  expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
+  expect(communityWorkflow).toContain("vars.WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
+  expect(communityWorkflow).toContain("^[A-F0-9]{64}$");
+  expect(communityWorkflow).toContain("certificateSha256 -ne $expectedCertificateSha256");
   expect(communityWorkflow).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING");
   expect(communityWorkflow).toContain("X509Certificate2");
   expect(communityWorkflow).toContain("must be self-signed");

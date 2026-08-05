@@ -12,7 +12,15 @@ export async function quitAndInstallAppUpdate({
       raw_text_included: false,
     };
   }
-  await stopForUpdate(snapshot);
+  const stopResult = await stopForUpdate(snapshot);
+  if (stopResult?.update_ready !== true) {
+    return {
+      status: "drain_failed",
+      update_started: false,
+      drain: stopResult?.drain ?? null,
+      raw_text_included: false,
+    };
+  }
   quitAndInstall();
   return {
     status: "update_started",

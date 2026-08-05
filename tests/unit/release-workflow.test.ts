@@ -265,6 +265,9 @@ test(
     expect(windows).toContain("Settings");
     expect(windows).toContain("in-app updates");
     expect(windows).toContain("GitHub Releases channel");
+    expect(windows).toContain("WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
+    expect(windows).toContain("bridge release");
+    expect(windows).toContain("reinstall");
     expect(windows).not.toContain("does not publish a Squirrel updater feed");
     expect(windows).not.toContain("download each new");
     expect(windows).toContain("SmartScreen");
