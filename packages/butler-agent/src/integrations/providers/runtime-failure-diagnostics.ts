@@ -91,6 +91,9 @@ export function diagnosticDetails(error: unknown): Record<string, unknown> {
       model: diagnostic.model,
       retryable: diagnostic.retryable,
       cause: diagnostic.cause,
+      provider_error_code: diagnostic.providerErrorCode,
+      provider_error_type: diagnostic.providerErrorType,
+      provider_error_details: diagnostic.providerErrorDetails,
     }).filter(([, value]) => value !== undefined && value !== ""),
   );
 }

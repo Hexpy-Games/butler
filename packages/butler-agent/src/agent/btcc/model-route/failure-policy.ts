@@ -46,14 +46,11 @@ export function classifyModelRouteFailure(
 
   const status = error.statusCode;
   if (status !== undefined && SURFACE_STATUS_CODES.has(status)) return "surface";
-  if (status === 402 || status === 404 || status === 410) return "advance";
+  // Payment-required, not-found, and gone statuses are ambiguous without a
+  // provider-declared model/quota code. A wrong endpoint or base URL must not
+  // silently advance the route and hide configuration errors.
   if (status === 408) return "retry";
-  if (status === 429 || error.code === "provider_rate_limited") {
-    const cause = error.causeMessage?.toLocaleLowerCase("en-US") ?? "";
-    return /(?:insufficient[_ -]?quota|credit|billing|payment)/u.test(cause)
-      ? "advance"
-      : "retry";
-  }
+  if (status === 429 || error.code === "provider_rate_limited") return "retry";
   if (status !== undefined && status >= 500 && status <= 599) return "retry";
   if (RETRY_CODES.has(error.code)) return "retry";
 

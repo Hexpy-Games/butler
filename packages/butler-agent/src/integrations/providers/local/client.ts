@@ -106,9 +106,11 @@ async function createLocalChatCompletionOnce(
       api: "chat_completions",
       statusCode: response.status,
       detail,
+      providerError: parsed,
       endpoint,
       model,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
   return parsed;

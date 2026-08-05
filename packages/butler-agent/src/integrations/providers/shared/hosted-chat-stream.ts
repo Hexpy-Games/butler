@@ -23,6 +23,22 @@ export class HostedChatStreamProtocolError extends Error {
   }
 }
 
+/** A provider can send a structured failure after accepting an SSE stream. */
+export class HostedChatStreamProviderError extends Error {
+  readonly statusCode?: number;
+
+  constructor(readonly providerError: unknown) {
+    super("Hosted Chat Completions returned a structured provider error");
+    this.name = "HostedChatStreamProviderError";
+    const record = isRecord(providerError) ? providerError : {};
+    this.statusCode = typeof record.status === "number"
+      ? record.status
+      : typeof record.code === "number"
+        ? record.code
+        : undefined;
+  }
+}
+
 export function isHostedChatSseResponse(response: Response): boolean {
   return response.headers.get("content-type")?.toLowerCase()
     .includes("text/event-stream") ?? false;
@@ -129,6 +145,14 @@ function accumulateProviderEvent(
   state: HostedChatAccumulator,
   event: Record<string, any>,
 ): void {
+  const providerError = isRecord(event.error)
+    ? event.error
+    : isRecord(event.response?.error)
+      ? event.response.error
+      : event.type === "error"
+        ? event
+        : undefined;
+  if (providerError) throw new HostedChatStreamProviderError(providerError);
   if (typeof event.id === "string") state.id = event.id;
   if (typeof event.model === "string") state.model = event.model;
   if (isRecord(event.usage)) state.usage = event.usage;
