@@ -135,7 +135,13 @@ export async function runBtccR3ElectronHarness(
       );
     } else {
       for (const step of scenario.steps) {
-        const observation = await runScenarioStep(run, launch, step, prior);
+        const observation = await runScenarioStep(
+          run,
+          launch,
+          step,
+          prior,
+          providerProxy,
+        );
         observations.push(observation);
         prior.set(step.id, observation);
         if (step.restartAfter === true) {
@@ -159,6 +165,22 @@ export async function runBtccR3ElectronHarness(
                 observation.finalText,
               ),
           };
+          const providerAgentModelsAfterRestart = providerProxy.observations()
+            .filter((request) => request.requestKind === "agent")
+            .map((request) => request.requestedModel)
+            .filter((model): model is string => Boolean(model));
+          observation.restart.providerAgentModels = providerAgentModelsAfterRestart;
+          if (
+            providerAgentModelsAfterRestart.length !== observation.providerAgentModels.length ||
+            providerAgentModelsAfterRestart.some(
+              (model, index) => model !== observation.providerAgentModels[index],
+            )
+          ) {
+            observation.expectations.failures.push(
+              `provider_agent_models_changed_after_restart:${providerAgentModelsAfterRestart.join(",")}`,
+            );
+            observation.expectations.passed = false;
+          }
           const screenshot = join(
             run.runRoot,
             "screenshots",

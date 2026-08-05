@@ -124,6 +124,9 @@ export function checkScenarioExpectations(
   work: GuidedWorkObservation | null,
   prior: ReadonlyMap<string, StepObservation>,
   rendererActivities: readonly RendererVisibleActivity[] = [],
+  progressMessages: readonly string[] = [],
+  providerReportedModel: string | null = null,
+  providerAgentModels: readonly string[] = [],
 ): { passed: boolean; failures: string[] } {
   const failures: string[] = [];
   const expectedTerminal = step.expect?.terminalState ?? "delivered";
@@ -132,6 +135,28 @@ export function checkScenarioExpectations(
   }
   for (const expected of step.expect?.finalIncludes ?? []) {
     if (!finalText.includes(expected)) failures.push(`final_missing:${expected}`);
+  }
+  for (const expected of step.expect?.progressIncludes ?? []) {
+    if (!progressMessages.some((message) => message.includes(expected))) {
+      failures.push(`progress_missing:${expected}`);
+    }
+  }
+  if (
+    step.expect?.providerReportedModel &&
+    providerReportedModel !== step.expect.providerReportedModel
+  ) {
+    failures.push(
+      `provider_reported_model:${providerReportedModel ?? "none"}:expected:${step.expect.providerReportedModel}`,
+    );
+  }
+  if (step.expect?.providerAgentModels) {
+    const expected = step.expect.providerAgentModels;
+    if (providerAgentModels.length !== expected.length ||
+        providerAgentModels.some((model, index) => model !== expected[index])) {
+      failures.push(
+        `provider_agent_models:${providerAgentModels.join(",")}:expected:${expected.join(",")}`,
+      );
+    }
   }
   const expectedRendererStages = step.expect?.rendererActivityStagesInclude;
   if (expectedRendererStages) {

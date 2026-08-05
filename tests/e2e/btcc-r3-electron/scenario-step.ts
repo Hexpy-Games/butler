@@ -22,6 +22,7 @@ import {
 } from "./scenario-preflight.ts";
 import { checkScenarioExpectations } from "./scenario-expectations.ts";
 import { readGuidedWorkObservation } from "./work-evidence.ts";
+import type { ProviderObservationProxy } from "./provider-observation-proxy.ts";
 
 const DEFAULT_STEP_TIMEOUT_MS = 10 * 60_000;
 const TERMINAL_STATES = new Set(["cancelled", "delivered", "failed"]);
@@ -173,6 +174,7 @@ export async function runScenarioStep(
   launch: ProductLaunch,
   step: ElectronScenarioStep,
   prior: ReadonlyMap<string, StepObservation>,
+  providerProxy?: ProviderObservationProxy,
 ): Promise<StepObservation> {
   const before = await bridgeCall<AppSessionView>(launch.page, "getSessionView", {
     sessionId: run.sessionId,
@@ -203,6 +205,20 @@ export async function runScenarioStep(
     terminal.turnId,
   );
   const work = readGuidedWorkObservation(run, terminal.turnId);
+  const providerRequests = providerProxy?.observations() ?? [];
+  const providerAgentModels = providerRequests
+    .filter((request) => request.requestKind === "agent")
+    .map((request) => request.requestedModel)
+    .filter((model): model is string => Boolean(model));
+  const providerReportedModel =
+    terminal.view.latest_turn?.execution_model?.provider_reported_model_ref ??
+    terminal.view.latest_turn?.execution_model?.model_ref ??
+    providerRequests
+      .filter((request) => request.requestKind === "agent")
+      .map((request) => request.providerReportedModel)
+      .filter((model): model is string => Boolean(model))
+      .at(-1) ??
+    null;
   const screenshotDir = join(run.runRoot, "screenshots");
   mkdirSync(screenshotDir, { recursive: true });
   const finalScreenshot = join(
@@ -218,10 +234,7 @@ export async function runScenarioStep(
     finalText,
     rendererFinalText: renderedFinal,
     rendererActivities,
-    providerReportedModel:
-      terminal.view.latest_turn?.execution_model?.model_ref ??
-      terminal.view.latest_turn?.execution_controls?.model_ref ??
-      null,
+    providerReportedModel,
     progressMessages: terminal.progressMessages,
     work,
     timing: {
@@ -239,10 +252,14 @@ export async function runScenarioStep(
       work,
       prior,
       rendererActivities,
+      terminal.progressMessages,
+      providerReportedModel,
+      providerAgentModels,
     ),
     reload: { tested: false, finalMatched: null },
     restart: { tested: false, finalMatched: null },
     screenshots: [finalScreenshot],
+    providerAgentModels,
   };
   if (step.reloadAfter !== false) {
     await launch.page.reload();

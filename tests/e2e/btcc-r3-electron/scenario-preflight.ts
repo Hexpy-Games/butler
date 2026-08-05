@@ -95,6 +95,56 @@ export function validateElectronScenario(value: unknown): ElectronScenario {
       "Scenario projectDisplayName requires a non-empty project session.",
     );
   }
+  if (scenario.modelFallback !== undefined) {
+    assert(
+      typeof scenario.modelFallback.enabled === "boolean" &&
+        Array.isArray(scenario.modelFallback.models),
+      "Scenario modelFallback must contain enabled and models.",
+    );
+    for (const model of scenario.modelFallback.models) {
+      assert(
+        typeof model === "string" && model.includes("/"),
+        `Scenario fallback model must be provider-qualified: ${String(model)}`,
+      );
+    }
+  }
+  if (scenario.providerFixture !== undefined) {
+    assert(
+      Array.isArray(scenario.providerFixture.responses),
+      "Scenario providerFixture responses must be an array.",
+    );
+    if (scenario.providerFixture.retryAttempts !== undefined) {
+      assert(
+        Number.isSafeInteger(scenario.providerFixture.retryAttempts) &&
+          scenario.providerFixture.retryAttempts > 0 &&
+          scenario.providerFixture.retryAttempts <= 5,
+        "Scenario providerFixture retryAttempts must be between 1 and 5.",
+      );
+    }
+    for (const response of [
+      ...scenario.providerFixture.responses,
+      ...(scenario.providerFixture.defaultResponse
+        ? [scenario.providerFixture.defaultResponse]
+        : []),
+    ]) {
+      assert(
+        response && typeof response === "object",
+        "Scenario providerFixture response must be an object.",
+      );
+      if (response.requestModel !== undefined) {
+        assert(
+          typeof response.requestModel === "string" && response.requestModel.trim(),
+          "Scenario providerFixture requestModel must be non-empty.",
+        );
+      }
+      if (response.status !== undefined) {
+        assert(
+          Number.isSafeInteger(response.status) && response.status >= 100 && response.status <= 599,
+          "Scenario providerFixture status must be an HTTP status.",
+        );
+      }
+    }
+  }
   for (const step of scenario.steps) {
     assert(step && typeof step === "object", "Scenario step must be an object.");
     assert(typeof step.id === "string" && step.id.trim(), "Scenario step id is required.");
