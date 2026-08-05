@@ -1,3 +1,43 @@
+const foregroundDrainStates = new Set([
+  "ready",
+  "degraded",
+  "update_pending",
+]);
+
+export function planAppForegroundUpdateStop({
+  usesAppForegroundLifecycle = false,
+  foregroundState = null,
+  activeWorkSnapshot = null,
+  restoreState = null,
+} = {}) {
+  const requiresDrain = activeWorkSnapshot?.classification !== "no_active_work";
+  if (!requiresDrain) {
+    return {
+      allowed: true,
+      requiresDrain: false,
+      restoreState: null,
+      reason: "no_active_work",
+    };
+  }
+  if (
+    !usesAppForegroundLifecycle ||
+    !foregroundDrainStates.has(foregroundState)
+  ) {
+    return {
+      allowed: false,
+      requiresDrain: true,
+      restoreState: null,
+      reason: "foreground_drain_unavailable",
+    };
+  }
+  return {
+    allowed: true,
+    requiresDrain: true,
+    restoreState: restoreState ?? foregroundState,
+    reason: null,
+  };
+}
+
 export async function quitAndInstallAppUpdate({
   readActiveWork,
   confirmQuit,

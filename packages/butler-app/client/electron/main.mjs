@@ -32,7 +32,10 @@ import {
 } from "./app-agent-supervisor.mjs";
 import { createAppForegroundDoctorView } from "./app-foreground-doctor.mjs";
 import { drainAppForegroundActiveWork } from "./app-foreground-drain.mjs";
-import { quitAndInstallAppUpdate } from "./app-foreground-update.mjs";
+import {
+  planAppForegroundUpdateStop,
+  quitAndInstallAppUpdate,
+} from "./app-foreground-update.mjs";
 import { reconcileAgentServiceOnAppLaunch } from "./app-agent-launch-reconciler.mjs";
 import { createAppAgentNativeServiceBridge } from "./app-agent-native-service-bridge.mjs";
 import { createAppAgentServiceAdapter } from "./app-agent-service-adapter.mjs";
@@ -2227,6 +2230,7 @@ async function runAppUpdateQuit(quitAndInstall) {
         showMessageBox: (options) => dialog.showMessageBox(options),
       }),
     stopForUpdate: async (snapshot) => {
+      const updateRestoreState = foregroundInstance?.state ?? null;
       if (foregroundInstance?.state === "ready") {
         foregroundInstance = transitionAppForeground(
           foregroundInstance,
@@ -2238,6 +2242,7 @@ async function runAppUpdateQuit(quitAndInstall) {
         reason: "app_update",
         activeWorkSnapshot: snapshot,
         requireSettledDrain: true,
+        updateRestoreState,
       });
       if (stopResult?.update_ready !== true) {
         return stopResult ?? {
@@ -2602,13 +2607,36 @@ async function stopServerProcess({
   reason = "app_shutdown",
   activeWorkSnapshot = null,
   requireSettledDrain = false,
+  updateRestoreState = null,
 } = {}) {
   let checkpointResult = "not_needed";
   let drainResult = null;
+  const updatePlan = requireSettledDrain
+    ? planAppForegroundUpdateStop({
+      usesAppForegroundLifecycle,
+      foregroundState: foregroundInstance?.state ?? null,
+      activeWorkSnapshot,
+      restoreState: updateRestoreState,
+    })
+    : null;
+  if (requireSettledDrain && !updatePlan.allowed) {
+    return restoreForegroundAfterUpdateDrainFailure({
+      status: "drain_unavailable",
+      cancellation_requests: 0,
+      cancellation_failures: 0,
+      settled: false,
+      raw_text_included: false,
+    }, updatePlan.restoreState);
+  }
+  const shouldDrain = requireSettledDrain
+    ? updatePlan.requiresDrain
+    : Boolean(
+      activeWorkSnapshot &&
+      activeWorkSnapshot.classification !== "no_active_work"
+    );
   if (usesAppForegroundLifecycle && foregroundInstance) {
     if (
-      activeWorkSnapshot &&
-      activeWorkSnapshot.classification !== "no_active_work" &&
+      shouldDrain &&
       ["ready", "degraded", "update_pending"].includes(foregroundInstance.state)
     ) {
       foregroundInstance = transitionAppForeground(
@@ -2631,11 +2659,14 @@ async function stopServerProcess({
           cancellation_failures: 1,
           settled: false,
           raw_text_included: false,
-        });
+        }, updatePlan?.restoreState);
       }
       checkpointResult = drainResult.status;
       if (requireSettledDrain && !foregroundDrainReadyForUpdate(drainResult)) {
-        return restoreForegroundAfterUpdateDrainFailure(drainResult);
+        return restoreForegroundAfterUpdateDrainFailure(
+          drainResult,
+          updatePlan?.restoreState,
+        );
       }
     }
     foregroundInstance = transitionAppForeground(foregroundInstance, "stopping");
@@ -2677,9 +2708,9 @@ function foregroundDrainReadyForUpdate(drain) {
     ["not_needed", "settled"].includes(drain?.status);
 }
 
-function restoreForegroundAfterUpdateDrainFailure(drain) {
-  if (foregroundInstance?.state === "draining") {
-    foregroundInstance = transitionAppForeground(foregroundInstance, "ready");
+function restoreForegroundAfterUpdateDrainFailure(drain, restoreState = null) {
+  if (foregroundInstance?.state === "draining" && restoreState) {
+    foregroundInstance = transitionAppForeground(foregroundInstance, restoreState);
     writeAppForegroundInstance(butlerDataRoot, foregroundInstance);
   }
   foregroundQuitSnapshot = null;

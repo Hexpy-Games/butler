@@ -1,3 +1,17 @@
+export type AppForegroundUpdateStopPlan = {
+  allowed: boolean;
+  requiresDrain: boolean;
+  restoreState: string | null;
+  reason: string | null;
+};
+
+export function planAppForegroundUpdateStop(input?: {
+  usesAppForegroundLifecycle?: boolean;
+  foregroundState?: string | null;
+  activeWorkSnapshot?: { classification?: string } | null;
+  restoreState?: string | null;
+}): AppForegroundUpdateStopPlan;
+
 export type AppForegroundUpdateStopResult =
   | {
       update_ready: true;
