@@ -125,6 +125,19 @@ export function sanitizeSettingsUpdate(
     const webSearch = sanitizeWebSearchSettingsUpdate(input.web_search);
     if (Object.keys(webSearch).length > 0) output.web_search = webSearch;
   }
+  if (input.model_fallback && typeof input.model_fallback === "object") {
+    const modelFallback: NonNullable<UpdateSettingsRequest["model_fallback"]> =
+      {};
+    if (typeof input.model_fallback.enabled === "boolean") {
+      modelFallback.enabled = input.model_fallback.enabled;
+    }
+    if (Array.isArray(input.model_fallback.models)) {
+      modelFallback.models = input.model_fallback.models.filter(
+        (model): model is string => typeof model === "string",
+      );
+    }
+    output.model_fallback = modelFallback;
+  }
   return output;
 }
 

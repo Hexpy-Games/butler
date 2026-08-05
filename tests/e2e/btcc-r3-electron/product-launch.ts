@@ -48,6 +48,31 @@ export interface ProductLaunch {
   startedAtMs: number;
 }
 
+export interface ProductLaunchFailureDiagnostics {
+  electronOutput: string[];
+  executorOutput: string[];
+}
+
+export function productLaunchFailureDiagnostics(
+  error: unknown,
+): ProductLaunchFailureDiagnostics {
+  if (!error || typeof error !== "object") {
+    return { electronOutput: [], executorOutput: [] };
+  }
+  const candidate = error as {
+    electronOutput?: unknown;
+    executorOutput?: unknown;
+  };
+  return {
+    electronOutput: Array.isArray(candidate.electronOutput)
+      ? candidate.electronOutput.map(String)
+      : [],
+    executorOutput: Array.isArray(candidate.executorOutput)
+      ? candidate.executorOutput.map(String)
+      : [],
+  };
+}
+
 function listenerPids(port: number): number[] {
   if (process.platform === "win32") return [];
   const result = spawnSync("lsof", [`-tiTCP:${port}`, "-sTCP:LISTEN"], {
@@ -179,9 +204,17 @@ export function productLaunchEnvironment(
     BUTLER_APP_SERVER_PORT: String(run.serverPort),
     BUTLER_BUN: process.execPath,
     BUTLER_CODEX_BASE_URL: providerEndpoint,
+    ...(run.providerFixtureEnabled
+      ? {
+        OPENAI_BASE_URL: providerEndpoint.replace(/\/responses$/u, ""),
+      }
+      : {}),
     BUTLER_DATA: run.dataRoot,
     BUTLER_HOME: run.repoRoot,
     BUTLER_PROJECT_WORKSPACE: run.projectWorkspaceRoot,
+    ...(run.modelApiRetryAttempts !== undefined
+      ? { BUTLER_MODEL_API_RETRY_ATTEMPTS: String(run.modelApiRetryAttempts) }
+      : {}),
     ...(run.agentOwnership === "electron"
       ? {
         BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir,
@@ -257,7 +290,12 @@ export async function launchProduct(
     await stopOwnedPortListeners(run.serverPort).catch(() => undefined);
     await stopOwnedPortListeners(run.debugPort).catch(() => undefined);
     if (executor) await stopNativeExecutor(run, executor.child);
-    throw error;
+    const failure = error instanceof Error ? error : new Error(String(error));
+    Object.assign(failure, {
+      electronOutput: [...output],
+      executorOutput: [...(executor?.output ?? [])],
+    });
+    throw failure;
   }
 }
 

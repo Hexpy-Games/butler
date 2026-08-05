@@ -2771,7 +2771,8 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(modelManagementE2e).toContain("xAI / Grok");
   expect(modelManagementE2e).toContain("Qwen Cloud");
   expect(modelManagementE2e).toContain("Moonshot / Kimi");
-  expect(modelManagementE2e).toContain("Z.AI / GLM");
+  expect(modelManagementE2e).toContain("Z.AI Coding Plan");
+  expect(modelManagementE2e).toContain("Z.AI API");
   expect(electronMain).toContain("findAvailablePort");
   expect(electronMain).toContain("syncPreloadServerEnvironment");
   expect(electronMain).toContain("createBundledAgentSupervisor");

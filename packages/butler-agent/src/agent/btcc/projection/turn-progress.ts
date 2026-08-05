@@ -58,6 +58,9 @@ export function projectTurnProgressToEvents(
             workstreamId: task.workId,
             semanticBlockId: `work-ledger-${update.programId}`,
             turnRevision: update.turnRevision,
+            ...(update.modelRef
+              ? { model: update.modelRef, modelRef: update.modelRef }
+              : {}),
             detailRows: [{
               id: "work",
               kind: "work",
@@ -99,6 +102,7 @@ export function projectTurnProgressToEvents(
           ...(update.displayStage !== undefined
             ? { activityStage: update.displayStage }
             : {}),
+          ...(update.modelRef ? { model: update.modelRef } : {}),
         },
       });
     },
@@ -127,6 +131,20 @@ export function projectTurnProgressToEvents(
       });
     },
     async modelRoundWaitingChanged(update) {
+      if (update.status === "started" && update.modelRef) {
+        try {
+          await publish({
+            kind: "turn.iteration.started",
+            payload: {
+              model: update.modelRef,
+              modelRef: update.modelRef,
+              requestId: update.requestId,
+            },
+          });
+        } catch {
+          // Public model identity is observational; it cannot veto dispatch.
+        }
+      }
       await publish({
         kind: modelRoundWaitingEventKind(update.status),
         payload: {
@@ -135,6 +153,7 @@ export function projectTurnProgressToEvents(
           toolCallId: update.requestId,
           activityKind: "message",
           bridgePhase: "model_round_waiting",
+          ...(update.modelRef ? { model: update.modelRef, modelRef: update.modelRef } : {}),
         },
       });
     },

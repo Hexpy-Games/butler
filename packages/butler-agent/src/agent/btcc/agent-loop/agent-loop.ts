@@ -54,20 +54,24 @@ export async function runBtccAgentLoop(
     const roundIndex = (input.usageAttribution?.roundIndex ?? 0) + modelRoundIndex;
     modelRoundIndex += 1;
     const requestId = `btcc-model-round-${roundIndex}`;
+    const resolveModelRef = () => input.resolveModelRef?.() ?? input.model ?? "";
     const publishWaiting = async (
       status: "started" | "completed" | "failed" | "cancelled",
     ): Promise<void> => {
       if (!input.turnId) return;
+      const modelRef = resolveModelRef();
       await publishModelRoundWaiting(input.progress, {
         turnId: input.turnId,
         requestId,
         status,
+        ...(modelRef ? { modelRef } : {}),
       });
     };
     await publishWaiting("started");
     try {
       const response = await input.modelRound.runRound({
-        model: input.model ?? "",
+        roundId: requestId,
+        model: resolveModelRef(),
         messages: [...messages],
         instructions: request.instructions,
         tools: request.tools,

@@ -14,6 +14,7 @@ import {
   createGeminiContent,
   geminiText,
   geminiTools,
+  geminiReasoningParams,
   geminiUsageSample,
 } from "./runtime.ts";
 import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
@@ -33,6 +34,7 @@ export async function runGeminiModelRound(
       ...(request.instructions?.trim()
         ? { systemInstruction: { parts: [{ text: request.instructions.trim() }] } }
         : {}),
+      ...geminiReasoningParams(request.reasoningEffort),
       contents: geminiModelRoundMessages(request),
       ...(request.tools.length > 0
         ? { tools: geminiTools(request.tools.map(modelRoundTool)) }
@@ -40,7 +42,7 @@ export async function runGeminiModelRound(
       ...(request.toolChoice === "required"
         ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
         : {}),
-    }, request.signal, context),
+    }, request.signal, context, request.providerRetryAttempts),
     usage: geminiUsageSample,
   });
   const parts = response.candidates?.[0]?.content?.parts;
@@ -60,6 +62,15 @@ export async function runGeminiModelRound(
     }];
   });
   const usageSample = geminiUsageSample(response);
+  const reportedModel = typeof response.modelVersion === "string"
+    ? response.modelVersion.trim()
+    : typeof response.model === "string"
+      ? response.model.trim()
+      : "";
+  const providerIdentity = reportedModel
+    ? { provider: config.providerId, configuredModel: config.modelRef, reportedModel }
+    : undefined;
+  if (providerIdentity) request.onProviderResponseIdentity?.(providerIdentity);
   return {
     ...(text ? { text } : {}),
     toolCalls,
@@ -70,6 +81,7 @@ export async function runGeminiModelRound(
       providerData: responseParts,
     },
     usage: usageSample ? usageReport(config.modelRef, usageSample) : null,
+    ...(providerIdentity ? { providerIdentity } : {}),
     raw: response,
   };
 }

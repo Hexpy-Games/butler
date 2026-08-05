@@ -16,6 +16,7 @@ import {
   type TurnAccessMode,
 } from "../../../gateways/core/turn-execution-controls.ts";
 import { resolveModelMetadata } from "../../../integrations/providers/model-catalog.ts";
+import { modelApiRetryAttempts } from "../../../integrations/providers/shared/environment.ts";
 import {
   snapshotContextDocuments,
   type BtccContextDocumentWriter,
@@ -38,6 +39,7 @@ import {
   requestIdentityForRequest,
 } from "./prepare-turn-request.ts";
 import { includeRecentContext } from "./recent-conversation-context.ts";
+import { buildModelRoute } from "../model-route/index.ts";
 
 export type BtccTurnPreparationDependencies = {
   bindingStore: Pick<SessionBindingStore, "getBySessionId">;
@@ -268,6 +270,15 @@ function admitModel(
     controls: admittedControls,
     controlsHash: controls?.integrity_hash ?? digest(admittedControls),
     contextWindowTokens: admittedContextWindow(binding, modelRef),
+    modelRoute: buildModelRoute({
+      primaryModelRef: modelRef,
+      backupModelRefs: controls?.model_fallback?.enabled
+        ? controls.model_fallback.models
+        : [],
+      reasoningEffort,
+      catalogGeneration: controls?.catalog_generation,
+      retryCeiling: modelApiRetryAttempts(),
+    }),
   };
 }
 
@@ -276,7 +287,7 @@ function admittedContextWindow(binding: StoredSessionBinding, modelRef: string):
   if (typeof configured === "number" && Number.isFinite(configured) && configured > 0) {
     return Math.trunc(configured);
   }
-  return resolveModelMetadata(modelRef).context_window_tokens;
+  return resolveModelMetadata(modelRef).context_window_tokens ?? 200_000;
 }
 
 function accessMode(value: unknown): TurnAccessMode {

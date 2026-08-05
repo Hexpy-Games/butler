@@ -1,4 +1,8 @@
 import type {
+  ModelRouteAttemptHistory,
+  ModelRouteEventResult,
+} from "../model-route/index.ts";
+import type {
   ModelRoundMessage,
   ModelRoundPort,
   ModelRoundResult,
@@ -28,6 +32,38 @@ export interface BtccAgentLoop {
     turn: TurnRecord;
     signal: AbortSignal;
     progress?: BtccTurnProgressObserver;
+    onProviderResponseIdentity?: (identity: {
+      provider: string;
+      configuredModel: string;
+      reportedModel: string;
+    }) => void;
+    recordModelRouteEvent?: (input: {
+      type: string;
+      roundId: string;
+      candidateIndex: number;
+      transportAttempt?: number;
+      modelRef: string;
+      errorCode?: string;
+      failureDisposition?: import("../model-route/index.ts").ModelRouteFailureDisposition;
+      route?: import("../model-route/index.ts").ModelRouteState;
+    }) => Promise<ModelRouteEventResult | void>;
+    loadModelRouteAttemptHistory?: (input: {
+      roundId: string;
+      candidateIndex: number;
+      modelRef: string;
+    }) => Promise<ModelRouteAttemptHistory>;
+    loadModelRoundAcceptance?: (input: {
+      roundId: string;
+      candidateIndex: number;
+      modelRef: string;
+    }) => Promise<import("../ports/model-round.ts").ModelRoundResult | undefined>;
+    recordModelRoundAcceptance?: (input: {
+      roundId: string;
+      candidateIndex: number;
+      transportAttempt: number;
+      modelRef: string;
+      result: import("../ports/model-round.ts").ModelRoundResult;
+    }) => Promise<void>;
   }): Promise<BtccAgentLoopResult>;
 }
 
@@ -71,6 +107,7 @@ export interface BtccAgentLoopInput {
   prompt: string;
   turnId?: string;
   model?: string;
+  resolveModelRef?: () => string;
   instructions?: string;
   reasoningEffort?: ReasoningEffort;
   cacheScope?: string;

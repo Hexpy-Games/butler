@@ -117,7 +117,7 @@ export function useFirstRunAddedModelDefault({
         language,
         model: targetModel.model_ref,
         reasoning_effort: targetModel.default_reasoning_effort,
-        context_window_tokens: targetModel.context_window_tokens,
+        context_window_tokens: targetModel.context_window_tokens ?? baseSettings.context_window_tokens,
         worker_model_rules: selectedModelWorkerRules(baseSettings, targetModel),
       };
       try {

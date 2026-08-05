@@ -20,6 +20,7 @@ import {
   bridgeCall,
   ensureSession,
   launchProduct,
+  productLaunchFailureDiagnostics,
   openSession,
   stopProduct,
   type ProductLaunch,
@@ -91,6 +92,7 @@ export async function runBtccR3ElectronHarness(
   try {
     providerProxy = await startProviderObservationProxy({
       upstreamBaseUrl: process.env.BUTLER_CODEX_BASE_URL,
+      fixture: scenario.providerFixture,
     });
     launch = await launchProduct(run, providerProxy.endpoint);
     launches.push({
@@ -135,7 +137,13 @@ export async function runBtccR3ElectronHarness(
       );
     } else {
       for (const step of scenario.steps) {
-        const observation = await runScenarioStep(run, launch, step, prior);
+        const observation = await runScenarioStep(
+          run,
+          launch,
+          step,
+          prior,
+          providerProxy,
+        );
         observations.push(observation);
         prior.set(step.id, observation);
         if (step.restartAfter === true) {
@@ -159,6 +167,22 @@ export async function runBtccR3ElectronHarness(
                 observation.finalText,
               ),
           };
+          const providerAgentModelsAfterRestart = providerProxy.observations()
+            .filter((request) => request.requestKind === "agent")
+            .map((request) => request.requestedModel)
+            .filter((model): model is string => Boolean(model));
+          observation.restart.providerAgentModels = providerAgentModelsAfterRestart;
+          if (
+            providerAgentModelsAfterRestart.length !== observation.providerAgentModels.length ||
+            providerAgentModelsAfterRestart.some(
+              (model, index) => model !== observation.providerAgentModels[index],
+            )
+          ) {
+            observation.expectations.failures.push(
+              `provider_agent_models_changed_after_restart:${providerAgentModelsAfterRestart.join(",")}`,
+            );
+            observation.expectations.passed = false;
+          }
           const screenshot = join(
             run.runRoot,
             "screenshots",
@@ -174,6 +198,15 @@ export async function runBtccR3ElectronHarness(
     runError = error;
     electronOutput = launch?.output;
     executorOutput = launch?.executorOutput;
+    if (!electronOutput || !executorOutput) {
+      const diagnostics = productLaunchFailureDiagnostics(error);
+      electronOutput ??= diagnostics.electronOutput.length > 0
+        ? diagnostics.electronOutput
+        : undefined;
+      executorOutput ??= diagnostics.executorOutput.length > 0
+        ? diagnostics.executorOutput
+        : undefined;
+    }
   }
 
   let cleanupError: unknown;

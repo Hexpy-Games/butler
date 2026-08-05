@@ -51,6 +51,19 @@ test("public progress rows replace first visible preparation with semantic work"
   ]);
 });
 
+test("public progress rows retain the active model iteration identity", () => {
+  const row: ProgressSummaryRow = {
+    id: "model-iteration",
+    kind: "turn",
+    state: "thinking",
+    safe_label: "openai/gpt-5.6-luna",
+    bridge_phase: "model_round_waiting",
+    created_at: CREATED_AT,
+  };
+
+  expect(publicProgressRowsForTurn([row], "thinking")).toEqual([row]);
+});
+
 test("public progress rows drop first visible preparation block after terminal delivery", () => {
   const rows: ProgressSummaryRow[] = [
     {

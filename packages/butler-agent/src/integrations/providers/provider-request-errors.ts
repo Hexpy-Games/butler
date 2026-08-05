@@ -18,6 +18,21 @@ export interface RuntimeFailureDiagnostic {
   retryAt?: string;
   providerRequestId?: string;
   rateLimit?: ProviderRateLimitDiagnostic;
+  providerErrorCode?: string;
+  providerErrorType?: string;
+  providerErrorDetails?: unknown;
+}
+
+/**
+ * The stable, provider-declared portion of an HTTP error envelope.  Provider
+ * adapters may use different envelope names, but route policy must only make
+ * a fallback decision from these explicit fields, never from status alone.
+ */
+export interface ProviderStructuredError {
+  code?: string;
+  type?: string;
+  message?: string;
+  details?: unknown;
 }
 
 export type ProviderRateLimitDiagnostic = {
@@ -44,6 +59,9 @@ export class ModelProviderRequestError extends Error {
   readonly retryAt?: string;
   readonly providerRequestId?: string;
   readonly rateLimit?: ProviderRateLimitDiagnostic;
+  readonly providerErrorCode?: string;
+  readonly providerErrorType?: string;
+  readonly providerErrorDetails?: unknown;
 
   constructor(input: RuntimeFailureDiagnostic) {
     super(input.message);
@@ -64,6 +82,9 @@ export class ModelProviderRequestError extends Error {
     this.retryAt = input.retryAt;
     this.providerRequestId = input.providerRequestId;
     this.rateLimit = input.rateLimit;
+    this.providerErrorCode = safeProviderErrorIdentifier(input.providerErrorCode);
+    this.providerErrorType = safeProviderErrorIdentifier(input.providerErrorType);
+    this.providerErrorDetails = sanitizeProviderErrorValue(input.providerErrorDetails);
   }
 
   diagnostic(): RuntimeFailureDiagnostic {
@@ -85,6 +106,9 @@ export class ModelProviderRequestError extends Error {
       retryAt: this.retryAt,
       providerRequestId: this.providerRequestId,
       rateLimit: this.rateLimit,
+      providerErrorCode: this.providerErrorCode,
+      providerErrorType: this.providerErrorType,
+      providerErrorDetails: this.providerErrorDetails,
     };
   }
 }
@@ -123,34 +147,51 @@ export function providerHttpError(input: {
   api: string;
   statusCode: number;
   detail?: string;
+  providerError?: unknown;
   endpoint?: string;
   model?: string;
   admission?: ModelRequestAdmissionReceipt;
   headers?: Pick<Headers, "get">;
 }): ModelProviderRequestError {
   const status = input.statusCode;
-  const detail = safeErrorText(input.detail);
+  const structured = extractProviderStructuredError(input.providerError);
+  const detail = safeErrorText(input.detail ?? structured?.message);
+  const normalizedProviderCode = normalizeProviderErrorCode(
+    input.provider,
+    structured,
+  );
   const contextLimitExceeded = isContextLimitDetail(detail);
-  const code = contextLimitExceeded
-    ? input.admission
-      ? "admission_invariant_violation"
-      : "provider_context_limit_exceeded"
-    : status === 401 || status === 403
-      ? "provider_auth_error"
-      : status === 429
-        ? "provider_rate_limited"
-        : "provider_api_error";
+  const code = normalizedProviderCode
+    ?? (contextLimitExceeded
+      ? input.admission
+        ? "admission_invariant_violation"
+        : "provider_context_limit_exceeded"
+      : status === 401 || status === 403
+        ? "provider_auth_error"
+        : status === 429
+          ? "provider_rate_limited"
+          : "provider_api_error");
   const label = providerLabel(input.provider);
   const message =
-    code === "admission_invariant_violation"
-      ? `${label} rejected a request that passed local context admission. The turn must be rebuilt from canonical state.`
-      : code === "provider_context_limit_exceeded"
-        ? `${label} context limit was exceeded. Compact or reduce the session context, then retry.`
-        : code === "provider_auth_error"
-          ? `${label} authentication failed with HTTP ${status}. Check the configured provider credentials.`
-          : code === "provider_rate_limited"
-            ? `${label} API rate limit hit with HTTP ${status}. Retry after provider readiness.`
-            : `${label} API request failed with HTTP ${status}.`;
+    code === "provider_quota_exhausted"
+      ? `${label} reported that the configured quota, credit, or billing limit is exhausted.`
+      : code === "provider_model_not_found"
+        ? `${label} reported that the configured model was not found.`
+        : code === "provider_model_retired"
+          ? `${label} reported that the configured model is retired.`
+          : code === "provider_model_unavailable"
+            ? `${label} reported that the configured model is unavailable.`
+            : code === "provider_unsupported_model"
+              ? `${label} reported that the configured model is unsupported.`
+              : code === "admission_invariant_violation"
+                ? `${label} rejected a request that passed local context admission. The turn must be rebuilt from canonical state.`
+                : code === "provider_context_limit_exceeded"
+                  ? `${label} context limit was exceeded. Compact or reduce the session context, then retry.`
+                  : code === "provider_auth_error"
+                    ? `${label} authentication failed with HTTP ${status}. Check the configured provider credentials.`
+                    : code === "provider_rate_limited"
+                      ? `${label} API rate limit hit with HTTP ${status}. Retry after provider readiness.`
+                      : `${label} API request failed with HTTP ${status}.`;
   return new ModelProviderRequestError({
     code,
     message,
@@ -160,6 +201,7 @@ export function providerHttpError(input: {
     endpoint: input.endpoint,
     model: input.model,
     retryable:
+      !normalizedProviderCode &&
       code !== "admission_invariant_violation" &&
       (contextLimitExceeded || status === 429 || status >= 500),
     cause: detail,
@@ -170,7 +212,191 @@ export function providerHttpError(input: {
     retryAt: providerRetryAt(input.headers),
     providerRequestId: providerRequestId(input.headers),
     rateLimit: providerRateLimit(input.headers),
+    providerErrorCode: structured?.code,
+    providerErrorType: structured?.type,
+    providerErrorDetails: structured?.details,
   });
+}
+
+/**
+ * Extracts the common error envelope used by OpenAI-compatible, Anthropic,
+ * Gemini, and Codex responses.  Returning undefined for an unstructured body
+ * is intentional: a status-only response is not evidence of a model or quota
+ * failure.
+ */
+export function extractProviderStructuredError(
+  value: unknown,
+): ProviderStructuredError | undefined {
+  const root = asRecord(value);
+  if (!root) return undefined;
+  const candidates: unknown[] = [
+    root.error,
+    asRecord(root.response)?.error,
+    root,
+  ];
+  for (const candidate of candidates) {
+    const record = asRecord(candidate);
+    if (!record) continue;
+    const code = safeProviderErrorIdentifier(
+      firstString(record.code, record.error_code, record.errorCode),
+    );
+    const type = safeProviderErrorIdentifier(
+      firstString(record.type, record.error_type, record.errorType, record.status),
+    );
+    const message = safeErrorText(
+      firstString(record.message, record.error_message, record.errorMessage, record.detail),
+    );
+    const details = sanitizeProviderErrorValue(
+      record.details ?? record.error_details ?? record.metadata,
+    );
+    if (code || type || message || details !== undefined) {
+      return { code, type, message, details };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Converts only explicit provider-declared model/quota signals into the
+ * canonical route-policy codes.  In particular, generic `404`, `410`, and
+ * `402` responses remain `provider_api_error` and therefore surface.
+ */
+export function normalizeProviderErrorCode(
+  _provider: string,
+  structured: ProviderStructuredError | undefined,
+): string | undefined {
+  if (!structured) return undefined;
+  const code = normalizeProviderSignal(structured.code);
+  const type = normalizeProviderSignal(structured.type);
+  const detailsText = structured.details === undefined
+    ? ""
+    : providerErrorValueText(structured.details);
+  const identity = [code, type, detailsText].filter(Boolean).join(" ");
+  const message = structured.message ?? "";
+
+  if (matchesProviderSignal(identity, [
+    "model_retired",
+    "model_deprecated",
+    "model_decommissioned",
+    "model_disabled",
+    "model_retired_error",
+  ]) || /\bmodel(?:\s+(?:id|name))?\b[^.\n]{0,100}\b(?:retired|deprecated|decommissioned|disabled)\b/iu.test(message)) {
+    return "provider_model_retired";
+  }
+  if (matchesProviderSignal(identity, [
+    "unsupported_model",
+    "unsupported_model_error",
+    "model_not_supported",
+    "model_unsupported",
+  ]) || /\bmodel(?:\s+(?:id|name))?\b[^.\n]{0,100}\b(?:unsupported|not supported)\b/iu.test(message)) {
+    return "provider_unsupported_model";
+  }
+  if (matchesProviderSignal(identity, [
+    "model_unavailable",
+    "model_unavailable_error",
+  ]) || /\bmodel(?:\s+(?:id|name))?\b[^.\n]{0,100}\b(?:unavailable|not available)\b/iu.test(message)) {
+    return "provider_model_unavailable";
+  }
+  if (matchesProviderSignal(identity, [
+    "model_not_found",
+    "model_not_found_error",
+    "model_missing",
+    "unknown_model",
+    "invalid_model",
+  ]) || (hasModelReference(message) && /\b(?:not found|does not exist|unknown|missing)\b/iu.test(message))) {
+    return "provider_model_not_found";
+  }
+  if (matchesProviderSignal(identity, [
+    "insufficient_quota",
+    "quota_exceeded",
+    "quota_exhausted",
+    "quota_depleted",
+    "billing_hard_limit_reached",
+    "billing_limit_exceeded",
+    "credit_exhausted",
+    "credits_exhausted",
+    "insufficient_credits",
+    "payment_required",
+    "resource_exhausted",
+  ]) || /(?:insufficient|exceeded|exhausted|depleted|hard limit)[^.\n]{0,80}(?:quota|credit|billing|balance)\b/iu.test(message) || /\b(?:quota|credit balance|billing hard limit|payment required)\b/iu.test(message)) {
+    return "provider_quota_exhausted";
+  }
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+}
+
+function safeProviderErrorIdentifier(value: unknown): string | undefined {
+  const text = safeErrorText(value);
+  return text ? text.slice(0, 160) : undefined;
+}
+
+function sanitizeProviderErrorValue(value: unknown, depth = 0): unknown {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string") return safeErrorText(value);
+  if (depth >= 3) return "[truncated]";
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 24)
+      .map((item) => sanitizeProviderErrorValue(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(record).slice(0, 24)) {
+    const safeKey = key.replace(/[^a-zA-Z0-9_.:@/-]/gu, "_").slice(0, 120);
+    const safeValue = /(?:api[_-]?key|access[_-]?token|token|secret|password|authorization|credential)/iu.test(key)
+      ? "[redacted]"
+      : sanitizeProviderErrorValue(item, depth + 1);
+    if (safeValue !== undefined) result[safeKey] = safeValue;
+  }
+  return result;
+}
+
+function normalizeProviderSignal(value: string | undefined): string {
+  return value
+    ?.toLocaleLowerCase("en-US")
+    .replace(/([a-z])([A-Z])/gu, "$1_$2")
+    .replace(/[^a-z0-9]+/gu, "_")
+    .replace(/^_+|_+$/gu, "") ?? "";
+}
+
+function matchesProviderSignal(identity: string, signals: string[]): boolean {
+  const tokens = new Set(
+    identity
+      .split(/\s+/u)
+      .map((value) => normalizeProviderSignal(value))
+      .filter(Boolean),
+  );
+  return signals.some((signal) => tokens.has(normalizeProviderSignal(signal)));
+}
+
+function providerErrorValueText(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function hasModelReference(message: string): boolean {
+  return /\bmodels?\/[a-z0-9][a-z0-9._:-]*\b/iu.test(message) ||
+    /\bmodel(?:\s+(?:id|name))?\s*(?:is|=|:)?\s*["']?[a-z0-9]+(?:[-_./:][a-z0-9]+)+\b/iu.test(message);
 }
 
 function providerRequestId(headers?: Pick<Headers, "get">): string | undefined {

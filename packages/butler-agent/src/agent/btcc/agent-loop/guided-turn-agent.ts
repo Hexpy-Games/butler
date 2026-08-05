@@ -50,6 +50,11 @@ import { createGuidedActivityProjection } from
   "../projection/index.ts";
 import { createGuidedPersistentEffectResolver } from
   "./guided-persistent-effect-resolution.ts";
+import {
+  createModelRoutePort,
+  currentModelRouteCandidate,
+  type ModelRouteEvent,
+} from "../model-route/index.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -63,7 +68,16 @@ export function createProductionGuidedTurnAgent(input: {
 }): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
-    async run({ turn, signal, progress }): Promise<BtccAgentLoopResult> {
+    async run({
+      turn,
+      signal,
+      progress,
+      recordModelRouteEvent,
+      loadModelRouteAttemptHistory,
+      loadModelRoundAcceptance,
+      recordModelRoundAcceptance,
+      onProviderResponseIdentity,
+    }): Promise<BtccAgentLoopResult> {
       const policy = guidedPolicy(turn);
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
@@ -147,9 +161,11 @@ export function createProductionGuidedTurnAgent(input: {
         progress,
         managedInitially: initialWorkBound,
       });
+      let activeModelRef = selectedModelRef(turn);
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
+        resolveModelRef: () => activeModelRef,
         progress,
         activity,
         workScope,
@@ -161,7 +177,64 @@ export function createProductionGuidedTurnAgent(input: {
         toolJournal: input.toolJournal,
         executeButlerTool: execute,
       });
-      const modelRound = input.modelRound ?? createProviderModelRoundPort();
+      const baseModelRound = input.modelRound ?? createProviderModelRoundPort();
+      const routedCandidate = turn.modelRoute
+        ? currentModelRouteCandidate(turn.modelRoute)
+        : undefined;
+      const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
+        turn.modelSelection.reasoningEffort;
+      let pendingFallbackProjection: { roundId: string; modelRef: string } | undefined;
+      const onRouteEvent = async (event: ModelRouteEvent) => {
+        const persisted = await recordModelRouteEvent?.(event);
+        if (
+          event.type === "model.attempt.started" &&
+          pendingFallbackProjection?.roundId === event.roundId &&
+          pendingFallbackProjection.modelRef === event.modelRef
+        ) {
+          pendingFallbackProjection = undefined;
+          try {
+            await progress?.modelRoundWaitingChanged?.({
+              turnId: turn.turnId,
+              requestId: event.roundId,
+              status: "started",
+              modelRef: event.modelRef,
+            });
+          } catch {
+            // Public model identity cannot veto the provider dispatch.
+          }
+        }
+        if (event.type === "model.fallback.selected") {
+          activeModelRef = event.modelRef;
+          pendingFallbackProjection = {
+            roundId: event.roundId,
+            modelRef: event.modelRef,
+          };
+          try {
+            await progress?.phaseActivityChanged?.({
+              turnId: turn.turnId,
+              semanticState: turn.semanticState,
+              activityId: `${turn.turnId}:model-fallback:${event.roundId}:${event.candidateIndex}`,
+              title: "대체 모델 경로 선택",
+              summary: `${event.modelRef} 모델로 계속 진행합니다.`,
+              modelRef: event.modelRef,
+            });
+          } catch {
+            // Public fallback notice cannot veto the next provider dispatch.
+          }
+        }
+        return persisted;
+      };
+      const modelRound = turn.modelRoute
+        ? createModelRoutePort({
+            base: baseModelRound,
+            turnId: turn.turnId,
+            route: turn.modelRoute,
+            onRouteEvent,
+            loadAttemptHistory: loadModelRouteAttemptHistory,
+            loadAcceptedResponse: loadModelRoundAcceptance,
+            recordAcceptedResponse: recordModelRoundAcceptance,
+          })
+        : baseModelRound;
       const responseLanguage = renderGuidedResponseLanguage(
         turn,
         input.contextDocuments,
@@ -183,19 +256,22 @@ export function createProductionGuidedTurnAgent(input: {
           responseLanguage,
         ),
         progress,
-        model: selectedModelRef(turn),
-        reasoningEffort: turn.modelSelection.reasoningEffort,
+        model: activeModelRef,
+        resolveModelRef: () => activeModelRef,
+        reasoningEffort: selectedReasoningEffort,
         usageAttribution: {
           turnId: turn.turnId,
           phase: "guided",
-          reasoningEffort: turn.modelSelection.reasoningEffort,
+          reasoningEffort: selectedReasoningEffort,
         },
         cacheScope: `btcc-guided:${turn.sessionId}`,
         signal,
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
+        onProviderResponseIdentity,
         tools: visibleTools,
-        maxIterations: Number.POSITIVE_INFINITY,
+        // Guided turns are bounded just like every other BTCC model loop.
+        maxIterations: 60,
         modelRound,
         onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
           text,

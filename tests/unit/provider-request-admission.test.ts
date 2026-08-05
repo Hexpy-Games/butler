@@ -218,8 +218,8 @@ test("every provider client blocks an oversized serialized request before fetch"
   const characterEstimatedOversized = "abcd ".repeat(900_000);
   const hostedConfig: HostedRuntimeConfig = {
     providerId: "xai",
-    modelId: "grok-4.3",
-    modelRef: "xai/grok-4.3",
+    modelId: "grok-4.5",
+    modelRef: "xai/grok-4.5",
     authType: "api_key",
     apiKey: "test",
   };
@@ -232,8 +232,8 @@ test("every provider client blocks an oversized serialized request before fetch"
   };
   const googleConfig: HostedRuntimeConfig = {
     providerId: "google",
-    modelId: "gemini-3.1-pro",
-    modelRef: "google/gemini-3.1-pro",
+    modelId: "gemini-3.1-pro-preview",
+    modelRef: "google/gemini-3.1-pro-preview",
     authType: "api_key",
     apiKey: "test",
   };
@@ -328,9 +328,9 @@ test("provider overflow after successful admission is a safe invariant violation
 test("serialized model-token estimates do not under-report provider usage fixtures", () => {
   const fixtures = [
     { providerId: "openai" as const, modelRef: "openai/gpt-5.5", reportedInputTokens: 19_245 },
-    { providerId: "anthropic" as const, modelRef: "anthropic/claude-opus-4-7", reportedInputTokens: 18_991 },
-    { providerId: "google" as const, modelRef: "google/gemini-3.1-pro", reportedInputTokens: 18_740 },
-    { providerId: "xai" as const, modelRef: "xai/grok-4.3", reportedInputTokens: 18_600 },
+    { providerId: "anthropic" as const, modelRef: "anthropic/claude-opus-5", reportedInputTokens: 18_991 },
+    { providerId: "google" as const, modelRef: "google/gemini-3.1-pro-preview", reportedInputTokens: 18_740 },
+    { providerId: "xai" as const, modelRef: "xai/grok-4.5", reportedInputTokens: 18_600 },
   ];
   const payload = "한글과 ASCII가 섞인 모델 입력입니다. ".repeat(6000);
 

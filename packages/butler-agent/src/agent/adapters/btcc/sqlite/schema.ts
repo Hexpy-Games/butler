@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   original_message TEXT NOT NULL,
   admission_snapshot_ref TEXT NOT NULL,
   model_selection_json TEXT NOT NULL,
+  route_state_json TEXT,
   context_json TEXT NOT NULL,
   progress_destination_json TEXT,
   semantic_state TEXT NOT NULL CHECK (
@@ -133,6 +134,39 @@ CREATE TABLE IF NOT EXISTS btcc_turns (
   final_disposition TEXT CHECK (
     final_disposition IS NULL OR final_disposition IN ('completed', 'cancelled')
   )
+);
+
+CREATE TABLE IF NOT EXISTS btcc_model_route_events (
+  event_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  route_digest TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  round_id TEXT NOT NULL,
+  candidate_index INTEGER NOT NULL,
+  transport_attempt INTEGER,
+  model_ref TEXT NOT NULL,
+  error_code TEXT,
+  failure_disposition TEXT CHECK (
+    failure_disposition IS NULL OR failure_disposition IN ('retry', 'advance', 'surface')
+  ),
+  created_at TEXT NOT NULL,
+  UNIQUE(turn_id, event_type, round_id, candidate_index, transport_attempt, model_ref)
+);
+
+CREATE TABLE IF NOT EXISTS btcc_model_round_acceptances (
+  acceptance_id TEXT PRIMARY KEY,
+  turn_id TEXT NOT NULL,
+  round_id TEXT NOT NULL,
+  route_digest TEXT NOT NULL,
+  candidate_index INTEGER NOT NULL,
+  checkpoint_id TEXT NOT NULL,
+  checkpoint_revision INTEGER NOT NULL,
+  model_ref TEXT NOT NULL,
+  transport_attempt INTEGER NOT NULL,
+  normalized_response_json TEXT NOT NULL,
+  provider_identity_json TEXT,
+  created_at TEXT NOT NULL,
+  UNIQUE(turn_id, round_id, route_digest, candidate_index, model_ref)
 );
 
 ${BTCC_TERMINAL_SETTLEMENT_WAKE_SCHEMA}

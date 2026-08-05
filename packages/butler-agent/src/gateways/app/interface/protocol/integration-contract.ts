@@ -122,12 +122,13 @@ export type ProviderAuthMethod = "api_key" | "codex_oauth";
 export interface AppModelSummary {
   provider_id: string;
   provider_label: string;
+  provider_family_id?: string;
   model_id: string;
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
-  context_window_tokens: number;
-  max_output_tokens: number;
+  context_window_tokens?: number;
+  max_output_tokens?: number;
   default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   reasoning_efforts: Array<"none" | "low" | "medium" | "high" | "xhigh" | "max">;
   reasoning_budget_tokens?: Partial<
@@ -136,7 +137,11 @@ export interface AppModelSummary {
   token_estimator: string;
   source_url: string;
   runtime_supported: boolean;
-  hosted_api_shape?: "openai_chat_completions" | "anthropic_messages";
+  hosted_api_shape?:
+    | "openai_chat_completions"
+    | "openai_responses"
+    | "anthropic_messages"
+    | "gemini_generate_content";
   api_base_url?: string;
   api_type?: "openai_compatible";
   platform?: "llama_cpp" | "ollama" | "lm_studio" | "custom";
@@ -144,6 +149,7 @@ export interface AppModelSummary {
   source?: "discovered" | "manual";
   local_reasoning_budget_ratio?: number;
   registered?: boolean;
+  enabled?: boolean;
   auth_type?: ProviderAuthMethod;
   credential_id?: string;
   credential_label?: string;

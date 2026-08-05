@@ -48,12 +48,24 @@ export function successEvidence(input: {
   run: PreparedRun;
 }): Record<string, unknown> {
   const { launches, observations, options, providerRequests, run } = input;
+  const normalizeModel = (value: string): string => {
+    const trimmed = value.trim();
+    return trimmed.includes("/")
+      ? trimmed.slice(trimmed.indexOf("/") + 1)
+      : trimmed;
+  };
   const allPassed = observations.every((item) =>
     item.expectations.passed &&
     item.reload.finalMatched !== false &&
     item.restart.finalMatched !== false &&
-    item.providerReportedModel === run.model,
+    item.providerReportedModel !== null &&
+    item.providerAgentModels.length > 0 &&
+    normalizeModel(item.providerReportedModel) ===
+      normalizeModel(item.providerAgentModels.at(-1)!),
   );
+  const providerPath = run.providerFixtureEnabled
+    ? "deterministic_provider_fixture"
+    : "real_provider";
   return {
     schema: BTCC_R3_ELECTRON_EVIDENCE_SCHEMA,
     kind: options.smoke ? "launch_smoke" : "scenario_run",
@@ -70,7 +82,7 @@ export function successEvidence(input: {
         "electron_preload_bridge",
         "app_gateway",
         "native_btcc_runtime",
-        "real_provider",
+        providerPath,
         "renderer_visible_final",
         "renderer_visible_ordered_stage_activities",
         "app_database_work_lifecycle",

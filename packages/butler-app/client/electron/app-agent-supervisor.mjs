@@ -127,6 +127,17 @@ export function createBundledAgentSupervisor({
   let readyGateway = null;
 
   async function ensureReady() {
+    if (startupPromise) return startupPromise;
+    const operation = ensureReadyOnce();
+    startupPromise = operation;
+    try {
+      await operation;
+    } finally {
+      if (startupPromise === operation) startupPromise = null;
+    }
+  }
+
+  async function ensureReadyOnce() {
     localAuth = localAuth ?? prepareAppLocalAuth({ butlerData });
     if (explicitServerUrl) {
       await waitForExplicitServerReady();
@@ -136,7 +147,6 @@ export function createBundledAgentSupervisor({
       phase = "running";
       return;
     }
-    if (startupPromise) return startupPromise;
     let gateway;
     try {
       gateway = readyGateway ?? resolveGateway();
@@ -162,12 +172,7 @@ export function createBundledAgentSupervisor({
     if (!(await isPortAvailable(getPort()))) {
       updatePort(await findAvailablePort(getPort() + 1));
     }
-    startupPromise = start(gateway);
-    try {
-      await startupPromise;
-    } finally {
-      startupPromise = null;
-    }
+    await start(gateway);
   }
 
   async function waitForExplicitServerReady() {

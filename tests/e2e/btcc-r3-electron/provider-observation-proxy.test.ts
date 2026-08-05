@@ -61,7 +61,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
   const requestBody = Buffer.from(JSON.stringify({
     model: "gpt-test",
     input: "한글 request body",
-    prompt_cache_key: "benchmark:main",
+    prompt_cache_key: "benchmark:btcc-agent-loop",
   }));
   let capturedBody: Buffer = Buffer.alloc(0);
   let capturedAuthorization = "";
@@ -138,6 +138,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     expect(proxy.observations()).toEqual([{
       ordinal: 1,
       requestKind: "agent",
+      requestedModel: "gpt-test",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
       firstContentBearingDeltaAtMs: 200,
@@ -150,11 +151,108 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       hasReasoningContent: true,
       streamedTextChars: 5,
       finalTextChars: 0,
+      providerReportedModel: null,
     }]);
   } finally {
     releaseUpstream?.();
     await proxy.close();
     await upstream.close();
+  }
+});
+
+test("deterministic provider fixture fails the primary once and reports the backup model", async () => {
+  const proxy = await startProviderObservationProxy({
+    fixture: {
+      retryAttempts: 1,
+      responses: [
+        {
+          requestKind: "agent",
+          requestModel: "primary-model",
+          status: 503,
+          errorCode: "fixture_primary_overload",
+        },
+        {
+          requestKind: "agent",
+          requestModel: "backup-model",
+          responseModel: "backup-model",
+          text: "deterministic backup success",
+        },
+      ],
+      defaultResponse: {
+        requestKind: "title",
+        responseModel: "title-model",
+        text: "fixture title",
+      },
+    },
+  });
+  try {
+    const primary = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        model: "primary-model",
+        input: "primary",
+        tools: [],
+      }),
+    });
+    expect(primary.status).toBe(503);
+    await primary.text();
+    const backup = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        model: "backup-model",
+        input: "backup",
+        tools: [],
+      }),
+    });
+    expect(backup.status).toBe(200);
+    expect(await backup.text()).toContain("deterministic backup success");
+    expect(proxy.observations().map((observation) => ({
+      kind: observation.requestKind,
+      model: observation.requestedModel,
+      reported: observation.providerReportedModel,
+      termination: observation.termination,
+    }))).toEqual([
+      {
+        kind: "agent",
+        model: "primary-model",
+        reported: null,
+        termination: "failed",
+      },
+      {
+        kind: "agent",
+        model: "backup-model",
+        reported: "backup-model",
+        termination: "completed",
+      },
+    ]);
+  } finally {
+    await proxy.close();
+  }
+});
+
+test("deterministic provider fixture can hold a response open for progress observation", async () => {
+  const proxy = await startProviderObservationProxy({
+    fixture: {
+      responses: [{
+        requestKind: "agent",
+        requestModel: "backup-model",
+        responseModel: "backup-model",
+        delayMs: 20,
+        text: "delayed backup",
+      }],
+    },
+  });
+  try {
+    const startedAt = Date.now();
+    const response = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: JSON.stringify({ model: "backup-model", input: "backup", tools: [] }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("delayed backup");
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(10);
+  } finally {
+    await proxy.close();
   }
 });
 
@@ -312,7 +410,7 @@ test("non-streaming provider failures keep safe failed terminal evidence", async
     await waitFor(() => proxy.observations()[0]?.termination !== null);
     const providerRequests = proxy.observations();
     expect(providerRequests[0]).toMatchObject({
-      requestKind: "agent",
+      requestKind: "auxiliary",
       firstContentBearingDeltaAtMs: null,
       completedAtMs: null,
       termination: "failed",

@@ -10,6 +10,10 @@ import {
 import { request as httpsRequest } from "node:https";
 import { type AddressInfo, type Socket } from "node:net";
 import { pipeline, Transform } from "node:stream";
+import type {
+  ElectronProviderFixture,
+  ElectronProviderFixtureResponse,
+} from "./contracts.ts";
 
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 const CODEX_RESPONSES_PATH = "/codex/responses";
@@ -26,7 +30,11 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
-export type ProviderRequestKind = "agent" | "tool_provider" | "title";
+export type ProviderRequestKind =
+  | "agent"
+  | "auxiliary"
+  | "tool_provider"
+  | "title";
 export type ProviderRequestTermination =
   | "cancelled"
   | "completed"
@@ -35,6 +43,7 @@ export type ProviderRequestTermination =
 export interface ProviderRequestObservation {
   ordinal: number;
   requestKind: ProviderRequestKind;
+  requestedModel: string | null;
   requestStartedAtMs: number;
   serializedRequestBytes: number;
   firstContentBearingDeltaAtMs: number | null;
@@ -47,6 +56,7 @@ export interface ProviderRequestObservation {
   hasReasoningContent: boolean;
   streamedTextChars: number;
   finalTextChars: number;
+  providerReportedModel: string | null;
 }
 
 interface MutableProviderRequestObservation extends ProviderRequestObservation {}
@@ -60,6 +70,7 @@ export interface ProviderObservationProxy {
 export interface ProviderObservationProxyOptions {
   upstreamBaseUrl?: string;
   now?: () => number;
+  fixture?: ElectronProviderFixture;
 }
 
 interface ContentObservation {
@@ -92,9 +103,27 @@ function providerRequestKind(body: Buffer): ProviderRequestKind {
       const type = (candidate as Record<string, unknown>).type;
       return type === "web_search" || type === "web_search_preview";
     })) return "tool_provider";
-    return "agent";
+    if (Array.isArray(parsed.tools)) return "agent";
+    if (typeof parsed.prompt_cache_key === "string" &&
+      parsed.prompt_cache_key.split(":").at(-1) === "btcc-agent-loop") {
+      return "agent";
+    }
+    return "auxiliary";
   } catch {
-    return "agent";
+    return "auxiliary";
+  }
+}
+
+function requestedModel(body: Buffer): string | null {
+  try {
+    const parsed = JSON.parse(body.toString("utf8")) as {
+      model?: unknown;
+    };
+    return typeof parsed.model === "string" && parsed.model.trim()
+      ? parsed.model.trim()
+      : null;
+  } catch {
+    return null;
   }
 }
 
@@ -104,6 +133,7 @@ function safeObservation(
   return {
     ordinal: observation.ordinal,
     requestKind: observation.requestKind,
+    requestedModel: observation.requestedModel,
     requestStartedAtMs: observation.requestStartedAtMs,
     serializedRequestBytes: observation.serializedRequestBytes,
     firstContentBearingDeltaAtMs:
@@ -117,6 +147,7 @@ function safeObservation(
     hasReasoningContent: observation.hasReasoningContent,
     streamedTextChars: observation.streamedTextChars,
     finalTextChars: observation.finalTextChars,
+    providerReportedModel: observation.providerReportedModel,
   };
 }
 
@@ -395,6 +426,16 @@ class SseObservationTransform extends Transform {
       this.#providerFailed = true;
     }
     const content = contentObservation(event);
+    if (
+      event.type === "response.completed" &&
+      event.response &&
+      typeof event.response === "object" &&
+      typeof (event.response as Record<string, unknown>).model === "string"
+    ) {
+      this.observation.providerReportedModel = String(
+        (event.response as Record<string, unknown>).model,
+      );
+    }
     this.observation.hasTextContent ||= content.text;
     this.observation.hasToolArgumentContent ||= content.toolArguments;
     this.observation.hasReasoningContent ||= content.reasoning;
@@ -444,10 +485,111 @@ function sendProxyFailure(response: ServerResponse): void {
   response.end("Provider observation proxy could not reach the upstream provider.");
 }
 
+function modelMatches(expected: string | undefined, actual: string | null): boolean {
+  if (!expected) return true;
+  if (!actual) return false;
+  const normalize = (value: string): string => {
+    const trimmed = value.trim();
+    return trimmed.includes("/") ? trimmed.slice(trimmed.indexOf("/") + 1) : trimmed;
+  };
+  return normalize(expected) === normalize(actual);
+}
+
+function fixtureResponseMatches(
+  candidate: ElectronProviderFixtureResponse,
+  requestKind: ProviderRequestKind,
+  requestModel: string | null,
+): boolean {
+  return (candidate.requestKind === undefined || candidate.requestKind === requestKind) &&
+    modelMatches(candidate.requestModel, requestModel);
+}
+
+function selectFixtureResponse(input: {
+  fixture: ElectronProviderFixture;
+  requestKind: ProviderRequestKind;
+  requestModel: string | null;
+  used: Set<number>;
+}): ElectronProviderFixtureResponse | null {
+  const index = input.fixture.responses.findIndex((candidate, candidateIndex) =>
+    !input.used.has(candidateIndex) &&
+    fixtureResponseMatches(candidate, input.requestKind, input.requestModel),
+  );
+  if (index >= 0) {
+    input.used.add(index);
+    return input.fixture.responses[index] ?? null;
+  }
+  return input.fixture.defaultResponse && fixtureResponseMatches(
+    input.fixture.defaultResponse,
+    input.requestKind,
+    input.requestModel,
+  )
+    ? input.fixture.defaultResponse
+    : null;
+}
+
+async function serveFixtureResponse(input: {
+  response: ServerResponse;
+  observation: MutableProviderRequestObservation;
+  fixtureResponse: ElectronProviderFixtureResponse;
+  now: () => number;
+}): Promise<void> {
+  const status = input.fixtureResponse.status ?? 200;
+  const responseModel = input.fixtureResponse.responseModel ??
+    input.observation.requestedModel ?? "fixture-model";
+  const delayMs = typeof input.fixtureResponse.delayMs === "number" &&
+    Number.isFinite(input.fixtureResponse.delayMs)
+    ? Math.min(5_000, Math.max(0, Math.floor(input.fixtureResponse.delayMs)))
+    : 0;
+  if (delayMs > 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    if (input.response.destroyed) {
+      terminateObservation(input.observation, "cancelled", input.now);
+      return;
+    }
+  }
+  input.observation.status = status;
+  if (status < 200 || status >= 300) {
+    input.response.writeHead(status, {
+      "content-type": "application/json; charset=utf-8",
+    });
+    input.response.end(JSON.stringify({
+      error: {
+        code: input.fixtureResponse.errorCode ?? "provider_fixture_failure",
+        message: "deterministic provider fixture failure",
+      },
+    }));
+    terminateObservation(input.observation, "failed", input.now);
+    return;
+  }
+  input.observation.providerReportedModel = responseModel;
+  const text = input.fixtureResponse.text ?? "fixture response";
+  const output = {
+    type: "message",
+    role: "assistant",
+    content: [{ type: "output_text", text }],
+  };
+  input.observation.hasTextContent = text.length > 0;
+  input.observation.streamedTextChars = characterCount(text);
+  input.observation.finalTextChars = characterCount(text);
+  input.observation.firstContentBearingDeltaAtMs = input.now();
+  input.response.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+  });
+  input.response.end(JSON.stringify({
+    id: `fixture-response-${input.observation.ordinal}`,
+    model: responseModel,
+    output: [output],
+    usage: { input_tokens: 1, total_tokens: 1 },
+  }));
+  terminateObservation(input.observation, "completed", input.now);
+}
+
 async function forwardRequest(input: {
   request: IncomingMessage;
   response: ServerResponse;
-  upstream: URL;
+  upstream: URL | null;
+  fixture?: ElectronProviderFixture;
+  usedFixtureResponses: Set<number>;
   observation: MutableProviderRequestObservation;
   now: () => number;
   activeUpstreamRequests: Set<ClientRequest>;
@@ -467,9 +609,36 @@ async function forwardRequest(input: {
   const body = await readRequestBody(request);
   observation.serializedRequestBytes = body.byteLength;
   observation.requestKind = providerRequestKind(body);
+  observation.requestedModel = requestedModel(body);
   if (isClosing() || response.destroyed) {
     terminateObservation(observation, "cancelled", now);
     response.destroy();
+    return;
+  }
+
+  if (input.fixture) {
+    const fixtureResponse = selectFixtureResponse({
+      fixture: input.fixture,
+      requestKind: observation.requestKind,
+      requestModel: observation.requestedModel,
+      used: input.usedFixtureResponses,
+    });
+    if (!fixtureResponse) {
+      sendProxyFailure(response);
+      terminateObservation(observation, "failed", now);
+      return;
+    }
+    await serveFixtureResponse({
+      response,
+      observation,
+      fixtureResponse,
+      now,
+    });
+    return;
+  }
+  if (!upstream) {
+    sendProxyFailure(response);
+    terminateObservation(observation, "failed", now);
     return;
   }
 
@@ -589,9 +758,10 @@ async function closeServer(
 export async function startProviderObservationProxy(
   options: ProviderObservationProxyOptions = {},
 ): Promise<ProviderObservationProxy> {
-  const upstream = codexResponsesUrl(options.upstreamBaseUrl);
+  const upstream = options.fixture ? null : codexResponsesUrl(options.upstreamBaseUrl);
   const now = options.now ?? Date.now;
   const observed: MutableProviderRequestObservation[] = [];
+  const usedFixtureResponses = new Set<number>();
   const activeInboundRequests = new Set<IncomingMessage>();
   const activeDownstreamResponses = new Set<ServerResponse>();
   const activeUpstreamRequests = new Set<ClientRequest>();
@@ -619,7 +789,8 @@ export async function startProviderObservationProxy(
     }
     const observation: MutableProviderRequestObservation = {
       ordinal: nextOrdinal,
-      requestKind: "agent",
+      requestKind: "auxiliary",
+      requestedModel: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,
       firstContentBearingDeltaAtMs: null,
@@ -632,6 +803,7 @@ export async function startProviderObservationProxy(
       hasReasoningContent: false,
       streamedTextChars: 0,
       finalTextChars: 0,
+      providerReportedModel: null,
     };
     nextOrdinal += 1;
     observed.push(observation);
@@ -647,6 +819,8 @@ export async function startProviderObservationProxy(
       request,
       response,
       upstream,
+      fixture: options.fixture,
+      usedFixtureResponses,
       observation,
       now,
       activeUpstreamRequests,

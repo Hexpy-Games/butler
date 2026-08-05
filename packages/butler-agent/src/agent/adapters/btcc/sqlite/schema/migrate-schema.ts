@@ -11,14 +11,45 @@ export function migrateBtccSchema(db: Database): void {
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
+    ensureTurnRouteState(db);
+    ensureModelRoundAcceptanceCheckpoint(db);
+    ensureModelRouteFailureDisposition(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
 }
 
+function ensureModelRouteFailureDisposition(db: Database): void {
+  if (!tableExists(db, "btcc_model_route_events")) return;
+  ensureColumn(db, "btcc_model_route_events", "failure_disposition", "TEXT");
+}
+
 function ensureTurnProgressDestination(db: Database): void {
   if (!tableExists(db, "btcc_turns")) return;
   ensureColumn(db, "btcc_turns", "progress_destination_json", "TEXT");
+}
+
+function ensureTurnRouteState(db: Database): void {
+  if (!tableExists(db, "btcc_turns")) return;
+  ensureColumn(db, "btcc_turns", "route_state_json", "TEXT");
+}
+
+function ensureModelRoundAcceptanceCheckpoint(db: Database): void {
+  if (!tableExists(db, "btcc_model_round_acceptances")) return;
+  // Acceptance rows created before checkpoint binding are intentionally made
+  // non-replayable (empty/zero link) rather than guessed onto a new claim.
+  ensureColumn(
+    db,
+    "btcc_model_round_acceptances",
+    "checkpoint_id",
+    "TEXT NOT NULL DEFAULT ''",
+  );
+  ensureColumn(
+    db,
+    "btcc_model_round_acceptances",
+    "checkpoint_revision",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
 }
 
 function migrateGuidedWorkSixStageConstraints(db: Database): void {

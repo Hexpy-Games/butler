@@ -168,8 +168,8 @@ The runtime follows a simple product discipline:
 ## Models
 
 Butler supports hosted and local model providers: OpenAI/GPT, Anthropic/Claude,
-Google/Gemini, xAI/Grok, Alibaba/Qwen, Moonshot/Kimi, Z.AI/GLM, Codex
-subscription auth, and local OpenAI-compatible models.
+Google/Gemini, xAI/Grok, Alibaba/Qwen, Moonshot/Kimi, Z.AI Coding Plan,
+Z.AI API, Codex subscription auth, and local OpenAI-compatible models.
 
 See [`.env.example`](.env.example) for configuration options.
 

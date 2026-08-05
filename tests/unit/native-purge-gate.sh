@@ -156,11 +156,15 @@ fi
 
 legacy_mux="$(printf '%b' '\164\155\165\170')"
 legacy_product="butler-${legacy_word}"
+# Match hidden legacy paths as path-like tokens. A provider's official source
+# URL (for example, platform.claude.com) is not a legacy hidden artifact and
+# must not be rejected merely because its hostname contains the product word.
+legacy_dot_path="([/[:space:]\"'()]|^)\\.${legacy_word}([/[:space:]\"'()]|$)"
 if rg -n \
   -e "$legacy_mux" \
   -e "${legacy_mux}Session" \
   -e "$legacy_product" \
-  -e "\\.${legacy_word}" \
+  -e "$legacy_dot_path" \
   --glob '!node_modules/**' --glob '!data/**' \
   --glob '!.project-ledger/plans/plan-autonomous-planned-dispatch.md' \
   --glob '!.project-ledger/specs/autonomous-planned-dispatch.md' \

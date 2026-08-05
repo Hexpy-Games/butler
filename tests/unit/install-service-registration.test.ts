@@ -684,7 +684,9 @@ test("interactive installer provider chooser lists hosted providers and local la
       test "$5" = "xAI / Grok"
       test "$6" = "Qwen Cloud"
       test "$7" = "Moonshot / Kimi"
-      test "$8" = "Local OpenAI-compatible model"
+      test "$8" = "Z.AI Coding Plan"
+      test "$9" = "Z.AI API"
+      test "$10" = "Local OpenAI-compatible model"
       printf '%s\\n' "Local OpenAI-compatible model"
     }
     select_install_provider_choice
@@ -694,6 +696,27 @@ test("interactive installer provider chooser lists hosted providers and local la
   expect(result.stdout.trim()).toBe("local");
   expect(result.stderr).toContain("Local model is the last option.");
   expect(result.stderr).not.toContain("default choice");
+});
+
+test("installer keeps Z.AI Coding Plan and general API provider choices independent", () => {
+  const result = runInstallerFunction(`
+    set -euo pipefail
+    source ./install.sh --language en
+    export BUTLER_ZAI_CODING_PLAN_API_KEY=coding-secret
+    export BUTLER_ZAI_API_KEY=general-secret
+    BUTLER_MODEL_PROVIDER=zai install_provider_choice_from_env
+    BUTLER_MODEL_PROVIDER=zai-api install_provider_choice_from_env
+    echo "$(hosted_provider_env_api_key zai)"
+    echo "$(hosted_provider_env_api_key zai-api)"
+  `);
+
+  expect(result.status).toBe(0);
+  expect(result.stdout.trim().split("\n")).toEqual([
+    "zai",
+    "zai-api",
+    "coding-secret",
+    "general-secret",
+  ]);
 });
 
 test("interactive installer model chooser does not expose internal codex runtime label", () => {
@@ -810,7 +833,7 @@ test("interactive installer provider chooser can register Anthropic API key", ()
     CFG="$tmp/butler.config.json" CREDS="$tmp/auth/model-provider-credentials.json" "$BUTLER_BUN" -e "
       const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
       const creds = JSON.parse(await Bun.file(process.env.CREDS).text());
-      if (cfg.system.defaultModel !== 'anthropic/claude-opus-4-7') throw new Error('Anthropic catalog default was not selected');
+      if (cfg.system.defaultModel !== 'anthropic/claude-fable-5') throw new Error('Anthropic catalog default was not selected');
       const cred = creds.credentials?.find((item) => item.provider_id === 'anthropic');
       if (!cred || cred.secret !== 'sk-ant-preview') throw new Error('Anthropic credential was not stored');
     "
