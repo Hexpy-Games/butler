@@ -68,6 +68,7 @@ import { SurfacePanelFixture } from "./blocks/SurfacePanel/SurfacePanel.fixtures
 import { MetricCardFixture } from "./blocks/MetricCard/MetricCard.fixtures";
 import { MetricGridFixture } from "./blocks/MetricGrid/MetricGrid.fixtures";
 import { CardListFixture } from "./blocks/CardList/CardList.fixtures";
+import { SortableCardListFixture } from "./blocks/SortableCardList/SortableCardList.fixtures";
 import { ListRowFixture } from "./blocks/ListRow/ListRow.fixtures";
 import { ResourceSummaryFixture } from "./blocks/ResourceSummary/ResourceSummary.fixtures";
 import { ResourceTileFixture } from "./blocks/ResourceTile/ResourceTile.fixtures";
@@ -967,6 +968,12 @@ export const designSystemBlocks: DesignSystemBlockMeta[] = [
     path: "blocks/CardList",
     tags: ["card", "list", "settings"],
     fixture: CardListFixture,
+  },
+  {
+    name: "SortableCardList",
+    path: "blocks/SortableCardList",
+    tags: ["card", "list", "sortable", "drag", "keyboard"],
+    fixture: SortableCardListFixture,
   },
   {
     name: "ListRow",
