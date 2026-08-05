@@ -216,7 +216,7 @@ test("Guided fallback projects the cursor model into public iteration and fallba
   }
 });
 
-test("primary-only route bypasses fallback durability hooks", async () => {
+test("primary-only route uses the durable routed path", async () => {
   const fixture = createFixture("guided-primary-only-route");
   try {
     let routeEvents = 0;
@@ -249,9 +249,9 @@ test("primary-only route bypasses fallback durability hooks", async () => {
       },
     });
 
-    expect(routeEvents).toBe(0);
-    expect(acceptedResponses).toBe(0);
-    expect(attemptHistoryLoads).toBe(0);
+    expect(routeEvents).toBe(1);
+    expect(acceptedResponses).toBe(1);
+    expect(attemptHistoryLoads).toBe(1);
   } finally {
     fixture.close();
   }

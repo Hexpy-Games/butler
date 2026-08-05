@@ -212,12 +212,6 @@ export async function runScenarioStep(
     .filter((model): model is string => Boolean(model));
   const providerReportedModel =
     terminal.view.latest_turn?.execution_model?.provider_reported_model_ref ??
-    terminal.view.latest_turn?.execution_model?.model_ref ??
-    providerRequests
-      .filter((request) => request.requestKind === "agent")
-      .map((request) => request.providerReportedModel)
-      .filter((model): model is string => Boolean(model))
-      .at(-1) ??
     null;
   const screenshotDir = join(run.runRoot, "screenshots");
   mkdirSync(screenshotDir, { recursive: true });

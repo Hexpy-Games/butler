@@ -122,6 +122,12 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
             claim,
             turns: this.dependencies.turns,
           }),
+          onProviderResponseIdentity: (identity) => {
+            this.dependencies.turns.recordProviderResponseIdentity?.({
+              turnId: turn.turnId,
+              ...identity,
+            });
+          },
         });
       } catch (error) {
         if (isModelRouteDurabilityError(error)) throw error;

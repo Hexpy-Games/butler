@@ -166,8 +166,8 @@ export interface AppTurnView {
     reasoning_effort?: string;
   };
   execution_model?: {
-    model_ref?: string;
-    provider_id?: string;
+    requested_model_ref?: string;
+    adapter_effective_model_ref?: string;
     provider_reported_model_ref?: string;
   };
   progress?: {

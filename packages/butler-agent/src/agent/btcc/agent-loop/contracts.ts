@@ -32,6 +32,11 @@ export interface BtccAgentLoop {
     turn: TurnRecord;
     signal: AbortSignal;
     progress?: BtccTurnProgressObserver;
+    onProviderResponseIdentity?: (identity: {
+      provider: string;
+      configuredModel: string;
+      reportedModel: string;
+    }) => void;
     recordModelRouteEvent?: (input: {
       type: string;
       roundId: string;
@@ -39,6 +44,7 @@ export interface BtccAgentLoop {
       transportAttempt?: number;
       modelRef: string;
       errorCode?: string;
+      failureDisposition?: import("../model-route/index.ts").ModelRouteFailureDisposition;
       route?: import("../model-route/index.ts").ModelRouteState;
     }) => Promise<ModelRouteEventResult | void>;
     loadModelRouteAttemptHistory?: (input: {

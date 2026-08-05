@@ -13,9 +13,15 @@ export function migrateBtccSchema(db: Database): void {
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
     ensureModelRoundAcceptanceCheckpoint(db);
+    ensureModelRouteFailureDisposition(db);
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureModelRouteFailureDisposition(db: Database): void {
+  if (!tableExists(db, "btcc_model_route_events")) return;
+  ensureColumn(db, "btcc_model_route_events", "failure_disposition", "TEXT");
 }
 
 function ensureTurnProgressDestination(db: Database): void {

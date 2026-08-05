@@ -76,6 +76,7 @@ export function createProductionGuidedTurnAgent(input: {
       loadModelRouteAttemptHistory,
       loadModelRoundAcceptance,
       recordModelRoundAcceptance,
+      onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
       const policy = guidedPolicy(turn);
       const workScope = workScopeForTurn(turn, policy.trackingMode);
@@ -223,7 +224,7 @@ export function createProductionGuidedTurnAgent(input: {
         }
         return persisted;
       };
-      const modelRound = turn.modelRoute && turn.modelRoute.candidates.length > 1
+      const modelRound = turn.modelRoute
         ? createModelRoutePort({
             base: baseModelRound,
             turnId: turn.turnId,
@@ -267,8 +268,10 @@ export function createProductionGuidedTurnAgent(input: {
         signal,
         butlerData: input.butlerData,
         attachments: providerImageAttachments(turn),
+        onProviderResponseIdentity,
         tools: visibleTools,
-        maxIterations: Number.POSITIVE_INFINITY,
+        // Guided turns are bounded just like every other BTCC model loop.
+        maxIterations: 60,
         modelRound,
         onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
           text,

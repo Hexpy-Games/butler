@@ -74,8 +74,9 @@ export class SqliteModelRouteEventJournal {
           this.db.query(`
             INSERT OR IGNORE INTO btcc_model_route_events (
               event_id, turn_id, route_digest, event_type, round_id,
-              candidate_index, transport_attempt, model_ref, error_code, created_at
-            ) VALUES (?, ?, ?, 'model.attempt.abandoned_after_restart', ?, ?, ?, ?, NULL, ?)
+              candidate_index, transport_attempt, model_ref, error_code,
+              failure_disposition, created_at
+            ) VALUES (?, ?, ?, 'model.attempt.abandoned_after_restart', ?, ?, ?, ?, NULL, NULL, ?)
           `).run(
             `${eventId}:abandoned_after_restart`,
             input.turnId,
@@ -92,8 +93,9 @@ export class SqliteModelRouteEventJournal {
       this.db.query(`
         INSERT OR IGNORE INTO btcc_model_route_events (
           event_id, turn_id, route_digest, event_type, round_id,
-          candidate_index, transport_attempt, model_ref, error_code, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          candidate_index, transport_attempt, model_ref, error_code,
+          failure_disposition, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         eventId,
         input.turnId,
@@ -104,6 +106,7 @@ export class SqliteModelRouteEventJournal {
         input.event.transportAttempt ?? null,
         input.event.modelRef,
         input.event.errorCode ?? null,
+        input.event.failureDisposition ?? null,
         new Date().toISOString(),
       );
       if (input.route) {
@@ -123,8 +126,10 @@ export class SqliteModelRouteEventJournal {
     const rows = this.db.query<{
       event_type: string;
       transport_attempt: number | null;
+      error_code: string | null;
+      failure_disposition: string | null;
     }, [string, string, string, number, string]>(`
-      SELECT event_type, transport_attempt
+      SELECT event_type, transport_attempt, error_code, failure_disposition
       FROM btcc_model_route_events
       WHERE turn_id = ? AND route_digest = ? AND round_id = ?
         AND candidate_index = ? AND model_ref = ?
@@ -139,16 +144,32 @@ export class SqliteModelRouteEventJournal {
     );
     const started: number[] = [];
     const failed: number[] = [];
+    const failedDetails: NonNullable<ModelRouteAttemptHistory["failedDetails"]>[number][] = [];
     const succeeded: number[] = [];
     const abandoned: number[] = [];
     for (const row of rows) {
       if (row.transport_attempt === null) continue;
       if (row.event_type === "model.attempt.started") started.push(row.transport_attempt);
-      if (row.event_type === "model.attempt.failed") failed.push(row.transport_attempt);
+      if (row.event_type === "model.attempt.failed") {
+        failed.push(row.transport_attempt);
+        if (isFailureDisposition(row.failure_disposition)) {
+          failedDetails.push({
+            transportAttempt: row.transport_attempt,
+            errorCode: row.error_code ?? "provider_unknown_error",
+            disposition: row.failure_disposition,
+          });
+        }
+      }
       if (row.event_type === "model.attempt.succeeded") succeeded.push(row.transport_attempt);
       if (row.event_type === "model.attempt.abandoned_after_restart") abandoned.push(row.transport_attempt);
     }
-    return { started, failed, succeeded, abandoned };
+    return {
+      started,
+      failed,
+      ...(failedDetails.length > 0 ? { failedDetails } : {}),
+      succeeded,
+      abandoned,
+    };
   }
 
   private assertTurnClaim(input: SqliteModelRouteEventInput): void {
@@ -178,4 +199,10 @@ export class SqliteModelRouteEventJournal {
       throw new Error("BTCC model route event lost exact Turn claim");
     }
   }
+}
+
+function isFailureDisposition(
+  value: string | null,
+): value is NonNullable<ModelRouteAttemptHistory["failedDetails"]>[number]["disposition"] {
+  return value === "retry" || value === "advance" || value === "surface";
 }

@@ -15,6 +15,7 @@ export type SqliteModelRouteEventInput = {
     transportAttempt?: number;
     modelRef: string;
     errorCode?: string;
+    failureDisposition?: import("../../../btcc/model-route/index.ts").ModelRouteFailureDisposition;
   };
   route?: ModelRouteState;
 };

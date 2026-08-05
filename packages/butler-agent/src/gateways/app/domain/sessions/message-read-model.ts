@@ -54,6 +54,7 @@ export interface TurnReadModelRow {
   cancellable: number;
   attempt: number;
   execution_controls_json?: string | null;
+  execution_model_json?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -103,6 +104,7 @@ export function turnFromRow(row: TurnReadModelRow): TurnRecord {
   const executionControls = executionControlsFromJson(
     row.execution_controls_json,
   );
+  const executionModel = executionModelFromJson(row.execution_model_json);
   return {
     id: row.id,
     chat_id: row.chat_id,
@@ -117,7 +119,34 @@ export function turnFromRow(row: TurnReadModelRow): TurnRecord {
     updated_at: row.updated_at,
     cursor: row.rowid,
     execution_controls: executionControls,
+    execution_model: executionModel,
   };
+}
+
+function executionModelFromJson(
+  value: string | null | undefined,
+): TurnRecord["execution_model"] {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as {
+      requested_model_ref?: unknown;
+      adapter_effective_model_ref?: unknown;
+      provider_reported_model_ref?: unknown;
+    };
+    if (
+      typeof parsed.requested_model_ref !== "string" ||
+      typeof parsed.adapter_effective_model_ref !== "string"
+    ) return undefined;
+    return {
+      requested_model_ref: parsed.requested_model_ref,
+      adapter_effective_model_ref: parsed.adapter_effective_model_ref,
+      ...(typeof parsed.provider_reported_model_ref === "string"
+        ? { provider_reported_model_ref: parsed.provider_reported_model_ref }
+        : {}),
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 export function executionControlsFromJson(

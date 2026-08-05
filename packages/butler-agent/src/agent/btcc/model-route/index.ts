@@ -1,6 +1,8 @@
 export {
   MODEL_ROUTE_DEFAULT_RETRY_ATTEMPTS,
   MODEL_ROUTE_MAX_CANDIDATES,
+  MODEL_ROUTE_MAX_DISPATCHES,
+  MODEL_ROUTE_MAX_TURN_DISPATCHES,
   MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
   MODEL_ROUTE_SCHEMA,
   type ModelRouteAcceptance,
@@ -10,8 +12,11 @@ export {
   type ModelRouteEventHandler,
   type ModelRouteEventResult,
   type ModelRouteFailureDisposition,
+  type ModelRouteFailureRecord,
   type ModelRouteState,
   ModelRouteDurabilityError,
+  ModelRouteDispatchLimitError,
+  ModelRouteRecoveredFailureError,
   type ModelRouteDurabilityPhase,
   isModelRouteDurabilityError,
 } from "./contracts.ts";

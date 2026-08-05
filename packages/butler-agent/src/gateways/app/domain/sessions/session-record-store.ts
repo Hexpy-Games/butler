@@ -196,7 +196,8 @@ export class AppSessionRecordStore {
       .query<TurnRow, [string, number]>(
         `
       SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
-        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
+        retryable, cancellable, attempt, execution_controls_json, execution_model_json,
+        created_at, updated_at
       FROM turns
       WHERE chat_id = ? AND rowid > ?
       ORDER BY rowid ASC
@@ -213,7 +214,8 @@ export class AppSessionRecordStore {
       .query<TurnRow, [string]>(
         `
       SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
-        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
+        retryable, cancellable, attempt, execution_controls_json, execution_model_json,
+        created_at, updated_at
       FROM turns
       WHERE chat_id = ?
       ORDER BY rowid DESC
