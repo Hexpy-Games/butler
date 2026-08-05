@@ -47,6 +47,7 @@ export const Clock3 = createIcon("Clock03Icon");
 export const Command = createIcon("CommandIcon");
 export const Copy = createIcon("Copy01Icon");
 export const Database = createIcon("DatabaseIcon");
+export const DragHandle = createIcon("Drag01Icon");
 export const Eye = createIcon("ViewIcon");
 export const Expand = createIcon("ExpandIcon");
 export const FileText = createIcon("File02Icon");

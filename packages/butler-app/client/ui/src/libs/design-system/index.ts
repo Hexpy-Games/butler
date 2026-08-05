@@ -53,6 +53,7 @@ export * from "./blocks/SurfacePanel";
 export * from "./blocks/MetricCard";
 export * from "./blocks/MetricGrid";
 export * from "./blocks/CardList";
+export * from "./blocks/SortableCardList";
 export * from "./blocks/ListRow";
 export * from "./blocks/ResourceSummary";
 export * from "./blocks/ResourceTile";
