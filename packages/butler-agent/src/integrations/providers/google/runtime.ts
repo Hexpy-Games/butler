@@ -15,6 +15,7 @@ import {
   safeEndpointLabel,
 } from "../provider-errors.ts";
 import type { FunctionToolDefinition, PromptOptions } from "../runtime-contracts.ts";
+import type { ReasoningEffort } from "../model-catalog.ts";
 import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import {
@@ -150,6 +151,25 @@ export function geminiTools(tools: FunctionToolDefinition[]): Array<Record<strin
   }];
 }
 
+/** Gemini 3.x exposes thinking through generationConfig.thinkingConfig. */
+export function geminiReasoningParams(
+  reasoningEffort?: ReasoningEffort,
+): Record<string, unknown> {
+  if (!reasoningEffort) return {};
+  const thinkingLevel = reasoningEffort === "none"
+    ? "MINIMAL"
+    : reasoningEffort === "low"
+      ? "LOW"
+      : reasoningEffort === "medium"
+        ? "MEDIUM"
+        : "HIGH";
+  return {
+    generationConfig: {
+      thinkingConfig: { thinkingLevel },
+    },
+  };
+}
+
 export async function runGeminiPromptText(
   config: HostedRuntimeConfig,
   options: PromptOptions,
@@ -165,6 +185,7 @@ export async function runGeminiPromptText(
       ...(options.instructions?.trim()
         ? { systemInstruction: { parts: [{ text: options.instructions.trim() }] } }
         : {}),
+      ...geminiReasoningParams(options.reasoningEffort),
       contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
     }, options.signal, context),
     usage: geminiUsageSample,

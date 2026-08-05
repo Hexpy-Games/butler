@@ -19,6 +19,7 @@ import {
   safeEndpointLabel,
 } from "../provider-errors.ts";
 import type { FunctionToolDefinition, PromptOptions } from "../runtime-contracts.ts";
+import type { ReasoningEffort } from "../model-catalog.ts";
 import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
 import { admitSerializedProviderRequest } from "../shared/request-context-admission.ts";
 import {
@@ -144,6 +145,40 @@ export function anthropicTools(tools: FunctionToolDefinition[]): Array<Record<st
   }));
 }
 
+/**
+ * Claude 5 uses adaptive thinking and the nested effort contract. Butler's
+ * internal `none` value means "use the provider default" here; it is never
+ * serialized as an invalid Anthropic effort string. Haiku 4.5 retains the
+ * older explicit extended-thinking form.
+ */
+export function anthropicReasoningParams(
+  config: HostedRuntimeConfig,
+  reasoningEffort?: ReasoningEffort,
+): Record<string, unknown> {
+  if (!reasoningEffort) return {};
+  const isClaude5 = /^claude-(?:fable|opus|sonnet)-5$/u.test(config.modelId);
+  if (isClaude5) {
+    return {
+      thinking: { type: "adaptive" },
+      ...(reasoningEffort === "none"
+        ? {}
+        : { output_config: { effort: reasoningEffort } }),
+    };
+  }
+  if (config.modelId === "claude-haiku-4-5") {
+    if (reasoningEffort === "none") return { thinking: { type: "disabled" } };
+    const budgetTokens = {
+      low: 1_024,
+      medium: 4_096,
+      high: 8_192,
+      xhigh: 16_384,
+      max: 32_768,
+    }[reasoningEffort] ?? 1_024;
+    return { thinking: { type: "enabled", budget_tokens: budgetTokens } };
+  }
+  return {};
+}
+
 export async function runAnthropicPromptText(
   config: HostedRuntimeConfig,
   options: PromptOptions,
@@ -157,6 +192,7 @@ export async function runAnthropicPromptText(
     model: config.modelRef,
     run: async (context) => await createAnthropicMessage(config, {
       ...(options.instructions?.trim() ? { system: options.instructions.trim() } : {}),
+      ...anthropicReasoningParams(config, options.reasoningEffort),
       messages: [{ role: "user", content: promptTextForHosted(options) }],
     }, options.signal, context),
     usage: anthropicUsageSample,

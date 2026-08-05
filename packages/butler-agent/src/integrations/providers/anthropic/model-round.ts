@@ -1,5 +1,4 @@
 import type {
-  ModelRoundMessage,
   ModelRoundRequest,
   ModelRoundResult,
 } from "../../../agent/btcc/ports/model-round.ts";
@@ -14,6 +13,7 @@ import {
   anthropicText,
   anthropicTools,
   anthropicUsageSample,
+  anthropicReasoningParams,
   createAnthropicMessage,
 } from "./runtime.ts";
 import type { HostedRuntimeConfig } from "../shared/model-routing.ts";
@@ -31,6 +31,7 @@ export async function runAnthropicModelRound(
     model: config.modelRef,
     run: async (context) => await createAnthropicMessage(config, {
       ...(request.instructions?.trim() ? { system: request.instructions.trim() } : {}),
+      ...anthropicReasoningParams(config, request.reasoningEffort),
       messages: anthropicModelRoundMessages(request),
       ...(request.tools.length > 0
         ? { tools: anthropicTools(request.tools.map(modelRoundTool)) }
@@ -56,6 +57,11 @@ export async function runAnthropicModelRound(
     }];
   });
   const usageSample = anthropicUsageSample(response);
+  const reportedModel = typeof response.model === "string" ? response.model.trim() : "";
+  const providerIdentity = reportedModel
+    ? { provider: config.providerId, configuredModel: config.modelRef, reportedModel }
+    : undefined;
+  if (providerIdentity) request.onProviderResponseIdentity?.(providerIdentity);
   return {
     ...(text ? { text } : {}),
     toolCalls,
@@ -66,6 +72,7 @@ export async function runAnthropicModelRound(
       providerData: content,
     },
     usage: usageSample ? usageReport(config.modelRef, usageSample) : null,
+    ...(providerIdentity ? { providerIdentity } : {}),
     raw: response,
   };
 }

@@ -264,6 +264,7 @@ function modelForRegistration(providerId: HostedModelProviderId, modelIdOrRef: s
   if (!value) return null;
   return listModelMetadata().find((model) =>
     model.provider_id === providerId &&
+    model.runtime_supported &&
     (model.model_id === value || model.model_ref === value),
   ) ?? null;
 }

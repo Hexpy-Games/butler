@@ -12,7 +12,7 @@ import type {
   WorkerModelRule,
 } from "../../interface/protocol/app-protocol.ts";
 
-const DEFAULT_CONTEXT_WINDOW_TOKENS = 258_000;
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 258_000;
 
 export function rewriteSettingsModelRefs(
   input: Partial<SettingsView>,
@@ -52,7 +52,7 @@ export function contextWindowTokensForSessionModel(
   const configuredForSelectedModel = settings.model === metadata.model_ref;
   return clampContextWindowTokens(
     configuredForSelectedModel ? settings.context_window_tokens : undefined,
-    metadata.context_window_tokens,
+    metadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
   );
 }
 

@@ -1820,8 +1820,8 @@ export function modelDisplayName(model?: AppModelSummary | null): string {
   return model?.display_name ?? model?.model_id ?? "Model";
 }
 
-export function tokenWindowLabel(tokens: number): string {
-  if (!Number.isFinite(tokens)) return "context unknown";
+export function tokenWindowLabel(tokens?: number): string {
+  if (typeof tokens !== "number" || !Number.isFinite(tokens)) return "context unknown";
   if (tokens >= 1_000_000)
     return `${Number((tokens / 1_000_000).toFixed(2))}M API context`;
   return `${Math.round(tokens / 1000)}k API context`;

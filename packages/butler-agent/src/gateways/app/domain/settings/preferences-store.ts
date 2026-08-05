@@ -26,6 +26,7 @@ import {
 } from "./settings-preferences.ts";
 import {
   clampContextWindowTokens,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
   normalizeWorkerModelRules,
 } from "./settings-models.ts";
 import {
@@ -81,7 +82,7 @@ export class AppPreferencesStore {
     const storedReasoning = stored.reasoning_effort ?? DEFAULT_REASONING_EFFORT;
     const contextWindowTokens = clampContextWindowTokens(
       stored.context_window_tokens,
-      modelMetadata.context_window_tokens,
+      modelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
     );
     const customColors = normalizedMainScreenThemeColorsOrDefault(
       stored.main_screen_theme_custom_colors,
@@ -219,8 +220,8 @@ export class AppPreferencesStore {
       "context_window_tokens" in input
         ? candidate.context_window_tokens
         : current.context_window_tokens >=
-            currentModelMetadata.context_window_tokens
-          ? modelMetadata.context_window_tokens
+            (currentModelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS)
+          ? (modelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS)
           : candidate.context_window_tokens;
     const next: SettingsView = {
       ...candidate,
@@ -235,7 +236,7 @@ export class AppPreferencesStore {
         : candidate.effective_consolidation_model,
       context_window_tokens: clampContextWindowTokens(
         contextWindowTokens,
-        modelMetadata.context_window_tokens,
+        modelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
       ),
     };
     if (sanitized.web_search) {

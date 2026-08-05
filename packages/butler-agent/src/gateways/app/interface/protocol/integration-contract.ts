@@ -126,8 +126,8 @@ export interface AppModelSummary {
   model_ref: string;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
-  context_window_tokens: number;
-  max_output_tokens: number;
+  context_window_tokens?: number;
+  max_output_tokens?: number;
   default_reasoning_effort: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   reasoning_efforts: Array<"none" | "low" | "medium" | "high" | "xhigh" | "max">;
   reasoning_budget_tokens?: Partial<
@@ -136,7 +136,11 @@ export interface AppModelSummary {
   token_estimator: string;
   source_url: string;
   runtime_supported: boolean;
-  hosted_api_shape?: "openai_chat_completions" | "anthropic_messages";
+  hosted_api_shape?:
+    | "openai_chat_completions"
+    | "openai_responses"
+    | "anthropic_messages"
+    | "gemini_generate_content";
   api_base_url?: string;
   api_type?: "openai_compatible";
   platform?: "llama_cpp" | "ollama" | "lm_studio" | "custom";
