@@ -187,12 +187,6 @@ export interface TurnStateRepository {
     modelRef: string;
     result: import("../ports/model-round.ts").ModelRoundResult;
   }): Promise<void>;
-  recordProviderResponseIdentity?(input: {
-    turnId: string;
-    provider: string;
-    configuredModel: string;
-    reportedModel: string;
-  }): void;
   stopTurn(turnId: string): Promise<StopPersistenceOutcome>;
 }
 

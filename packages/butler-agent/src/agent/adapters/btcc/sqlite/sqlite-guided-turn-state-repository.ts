@@ -148,73 +148,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     return this.modelRoute.recordModelRoundAcceptance(input);
   }
 
-  recordProviderResponseIdentity(input: {
-    turnId: string;
-    provider: string;
-    configuredModel: string;
-    reportedModel: string;
-  }): void {
-    if (!tableExists(this.db, "turns") ||
-        !columnExists(this.db, "turns", "execution_model_json")) return;
-    let requested: { execution_controls_json: string | null } | null;
-    try {
-      requested = this.db.query<{
-        execution_controls_json: string | null;
-      }, [string]>(`
-        SELECT execution_controls_json
-        FROM turns
-        WHERE id = ?
-      `).get(input.turnId) ?? null;
-    } catch {
-      return;
-    }
-    if (!requested) return;
-    let requestedModelRef: string | undefined;
-    try {
-      const controls = requested.execution_controls_json
-        ? JSON.parse(requested.execution_controls_json) as { model_ref?: unknown }
-        : null;
-      requestedModelRef = typeof controls?.model_ref === "string"
-        ? controls.model_ref
-        : undefined;
-    } catch {
-      requestedModelRef = undefined;
-    }
-    if (!requestedModelRef) return;
-    const providerReportedModel = input.reportedModel.includes("/")
-      ? input.reportedModel
-      : `${input.provider}/${input.reportedModel}`;
-    try {
-      this.db.query(`
-        UPDATE turns
-        SET execution_model_json = ?, updated_at = ?
-        WHERE id = ?
-      `).run(
-        JSON.stringify({
-          requested_model_ref: requestedModelRef,
-          adapter_effective_model_ref: input.configuredModel,
-          provider_reported_model_ref: providerReportedModel,
-        }),
-        new Date().toISOString(),
-        input.turnId,
-      );
-    } catch {
-      // App projection is corroborative to BTCC execution; never veto a turn.
-    }
-  }
-
   async stopTurn(turnId: string): Promise<StopPersistenceOutcome> {
     return this.stops.stop(turnId);
   }
-}
-
-function tableExists(db: Database, table: string): boolean {
-  return Boolean(db.query<{ name: string }, [string]>(`
-    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?
-  `).get(table));
-}
-
-function columnExists(db: Database, table: string, column: string): boolean {
-  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all()
-    .some((candidate) => candidate.name === column);
 }
