@@ -163,6 +163,54 @@ describe("immutable turn execution controls", () => {
     }
   });
 
+  test("atomically projects an identityless local acceptance and preserves it after restart", async () => {
+    const fixture = createExecutionModelProjectionFixture();
+    const runtime = createTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      agent: {
+        async run({ recordModelRoundAcceptance }) {
+          await recordModelRoundAcceptance?.({
+            roundId: "local-projection-round",
+            candidateIndex: 1,
+            transportAttempt: 1,
+            modelRef: "local/gemma-local",
+            result: {
+              text: "local accepted answer",
+              toolCalls: [],
+            },
+          });
+          return { route: "direct" as const, content: "local accepted answer" };
+        },
+      },
+    });
+    try {
+      await runtime.runTurn(fixture.command);
+      expect(readAcceptanceCount(fixture.dbPath, fixture.turnId)).toBe(1);
+      expect(readExecutionModel(fixture.dbPath, fixture.turnId)).toEqual({
+        requested_model_ref: "openai/gpt-5.6-sol",
+        adapter_effective_model_ref: "local/gemma-local",
+      });
+    } finally {
+      fixture.stores.close();
+    }
+    const restartedStores = openBtccSqliteStores({
+      dbPath: fixture.dbPath,
+      ownerId: `execution-model-local-restart-${crypto.randomUUID()}`,
+      storageProfile: "ephemeral",
+    });
+    try {
+      expect(readExecutionModel(fixture.dbPath, fixture.turnId)).toEqual({
+        requested_model_ref: "openai/gpt-5.6-sol",
+        adapter_effective_model_ref: "local/gemma-local",
+      });
+    } finally {
+      restartedStores.close();
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   test("rolls back accepted response and App projection when projection fails", async () => {
     const fixture = createExecutionModelProjectionFixture({ failProjection: true });
     const runtime = createTurnRuntime({
@@ -179,7 +227,6 @@ describe("immutable turn execution controls", () => {
             result: {
               text: "must roll back",
               toolCalls: [],
-              providerIdentity,
             },
           });
           return { route: "direct" as const, content: "unreachable" };

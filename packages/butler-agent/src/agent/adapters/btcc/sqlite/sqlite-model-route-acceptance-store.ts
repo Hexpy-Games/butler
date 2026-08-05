@@ -98,7 +98,7 @@ export class SqliteModelRouteAcceptanceStore {
     modelRef: string;
     providerIdentity: ModelRoundResult["providerIdentity"];
   }): void {
-    if (!input.providerIdentity || !tableExists(this.db, "turns") ||
+    if (!tableExists(this.db, "turns") ||
         !columnExists(this.db, "turns", "execution_controls_json") ||
         !columnExists(this.db, "turns", "execution_model_json")) return;
     const requested = this.db.query<{
@@ -116,9 +116,11 @@ export class SqliteModelRouteAcceptanceStore {
       return;
     }
     if (typeof controls.model_ref !== "string") return;
-    const providerReportedModel = input.providerIdentity.reportedModel.includes("/")
-      ? input.providerIdentity.reportedModel
-      : `${input.providerIdentity.provider}/${input.providerIdentity.reportedModel}`;
+    const providerReportedModel = input.providerIdentity
+      ? input.providerIdentity.reportedModel.includes("/")
+        ? input.providerIdentity.reportedModel
+        : `${input.providerIdentity.provider}/${input.providerIdentity.reportedModel}`
+      : undefined;
     this.db.query(`
       UPDATE turns
       SET execution_model_json = ?, updated_at = ?
@@ -127,7 +129,9 @@ export class SqliteModelRouteAcceptanceStore {
       JSON.stringify({
         requested_model_ref: controls.model_ref,
         adapter_effective_model_ref: input.modelRef,
-        provider_reported_model_ref: providerReportedModel,
+        ...(providerReportedModel
+          ? { provider_reported_model_ref: providerReportedModel }
+          : {}),
       }),
       new Date().toISOString(),
       input.turnId,

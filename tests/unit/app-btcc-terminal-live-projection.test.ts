@@ -94,6 +94,102 @@ test("cancelled turn event directly closes a non-terminal App turn", () => {
   harness.close();
 });
 
+test("repairs the App execution model from an identityless accepted route", () => {
+  const harness = createHarness();
+  seedBtccTerminalSchema(harness.db);
+  seedAcceptedModelRoundSchema(harness.db);
+  seedAppTurn(harness.db, harness.chatId, "identityless-repair-turn");
+  seedExecutionControls(harness.db, "identityless-repair-turn");
+  insertAcceptedModelRound(harness.db, {
+    turnId: "identityless-repair-turn",
+    roundId: "identityless-round",
+    candidateIndex: 0,
+    modelRef: "local/gemma-local",
+    transportAttempt: 1,
+    providerIdentity: null,
+    createdAt: "2026-08-06T00:00:00.000Z",
+  });
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  writeTranscript(harness, [finalResultEvent({
+    actionId: "identityless-repair-event",
+    turnId: "identityless-repair-turn",
+    text: "Local answer",
+    generatedSessionTitle: "Local title",
+  })]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(readExecutionModel(harness.db, "identityless-repair-turn")).toEqual({
+    requested_model_ref: "openai/gpt-5.6-sol",
+    adapter_effective_model_ref: "local/gemma-local",
+  });
+  harness.close();
+});
+
+test("chooses the latest same-timestamp backup and preserves its accepted identity", () => {
+  const harness = createHarness();
+  seedBtccTerminalSchema(harness.db);
+  seedAcceptedModelRoundSchema(harness.db);
+  seedAppTurn(harness.db, harness.chatId, "same-timestamp-repair-turn");
+  seedExecutionControls(harness.db, "same-timestamp-repair-turn");
+  const createdAt = "2026-08-06T00:00:00.000Z";
+  insertAcceptedModelRound(harness.db, {
+    turnId: "same-timestamp-repair-turn",
+    roundId: "same-timestamp-round",
+    candidateIndex: 0,
+    modelRef: "openai/gpt-5.6-sol",
+    transportAttempt: 1,
+    providerIdentity: {
+      provider: "openai",
+      configuredModel: "openai/gpt-5.6-sol",
+      reportedModel: "gpt-5.6-primary-served",
+    },
+    createdAt,
+  });
+  insertAcceptedModelRound(harness.db, {
+    turnId: "same-timestamp-repair-turn",
+    roundId: "same-timestamp-round",
+    candidateIndex: 1,
+    modelRef: "local/gemma-backup",
+    transportAttempt: 1,
+    providerIdentity: {
+      provider: "local",
+      configuredModel: "local/gemma-backup",
+      reportedModel: "gemma-backup-served",
+    },
+    createdAt,
+  });
+  const state = projectionState(harness.db);
+  const projection = harness.createProjectionStore(state.options);
+  writeTranscript(harness, [finalResultEvent({
+    actionId: "same-timestamp-repair-event",
+    turnId: "same-timestamp-repair-turn",
+    text: "Backup answer",
+    generatedSessionTitle: "Backup title",
+  })]);
+
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(readExecutionModel(harness.db, "same-timestamp-repair-turn")).toEqual({
+    requested_model_ref: "openai/gpt-5.6-sol",
+    adapter_effective_model_ref: "local/gemma-backup",
+    provider_reported_model_ref: "local/gemma-backup-served",
+  });
+
+  appendTranscript(harness, finalResultEvent({
+    actionId: "same-timestamp-late-repair-event",
+    turnId: "same-timestamp-repair-turn",
+    text: "Backup answer",
+    generatedSessionTitle: "Rejected title",
+  }));
+  expect(projection.syncNextBatch()).toBe(false);
+  expect(readExecutionModel(harness.db, "same-timestamp-repair-turn")).toEqual({
+    requested_model_ref: "openai/gpt-5.6-sol",
+    adapter_effective_model_ref: "local/gemma-backup",
+    provider_reported_model_ref: "local/gemma-backup-served",
+  });
+  harness.close();
+});
+
 function projectionState(db: Database) {
   let assistant: MessageRow | null = null;
   let assistantWrites = 0;
@@ -206,6 +302,65 @@ function seedAppTurn(db: Database, chatId: string, turnId: string): void {
   `).run(turnId, chatId, now, now);
 }
 
+function seedExecutionControls(db: Database, turnId: string): void {
+  db.query(
+    "UPDATE turns SET execution_controls_json = ? WHERE id = ?",
+  ).run(JSON.stringify({ model_ref: "openai/gpt-5.6-sol" }), turnId);
+}
+
+function seedAcceptedModelRoundSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE btcc_model_round_acceptances (
+      acceptance_id TEXT PRIMARY KEY,
+      turn_id TEXT NOT NULL,
+      round_id TEXT NOT NULL,
+      route_digest TEXT NOT NULL,
+      candidate_index INTEGER NOT NULL,
+      checkpoint_id TEXT NOT NULL,
+      checkpoint_revision INTEGER NOT NULL,
+      model_ref TEXT NOT NULL,
+      transport_attempt INTEGER NOT NULL,
+      normalized_response_json TEXT NOT NULL,
+      provider_identity_json TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+}
+
+function insertAcceptedModelRound(
+  db: Database,
+  input: {
+    turnId: string;
+    roundId: string;
+    candidateIndex: number;
+    modelRef: string;
+    transportAttempt: number;
+    providerIdentity: {
+      provider: string;
+      configuredModel: string;
+      reportedModel: string;
+    } | null;
+    createdAt: string;
+  },
+): void {
+  db.query(`
+    INSERT INTO btcc_model_round_acceptances (
+      acceptance_id, turn_id, round_id, route_digest, candidate_index,
+      checkpoint_id, checkpoint_revision, model_ref, transport_attempt,
+      normalized_response_json, provider_identity_json, created_at
+    ) VALUES (?, ?, ?, 'test-route', ?, 'test-checkpoint', 1, ?, ?, '{}', ?, ?)
+  `).run(
+    `${input.turnId}:${input.roundId}:${input.candidateIndex}`,
+    input.turnId,
+    input.roundId,
+    input.candidateIndex,
+    input.modelRef,
+    input.transportAttempt,
+    input.providerIdentity ? JSON.stringify(input.providerIdentity) : null,
+    input.createdAt,
+  );
+}
+
 function seedCanonicalDelivery(
   db: Database,
   turnId: string,
@@ -302,4 +457,13 @@ function projectedReceipt(db: Database, actionId: string): boolean {
     SELECT action_id FROM app_transport_projection_receipts
     WHERE action_id = ?
   `).get(actionId));
+}
+
+function readExecutionModel(db: Database, turnId: string): Record<string, string> | null {
+  const row = db.query<{ execution_model_json: string | null }, [string]>(`
+    SELECT execution_model_json FROM turns WHERE id = ?
+  `).get(turnId);
+  return row?.execution_model_json
+    ? JSON.parse(row.execution_model_json) as Record<string, string>
+    : null;
 }
