@@ -93,7 +93,7 @@ function positiveInteger(value: unknown): number | null {
 function strictModelCapacity(input: AdmitSerializedProviderRequestInput): {
   modelRef: string;
   contextWindowTokens: number;
-  maxOutputTokens: number;
+  maxOutputTokens: number | null;
 } {
   const parsed = parseModelRef(input.modelRef);
   const capacityModelId = input.providerId === "openai" && parsed.modelId.endsWith("-codex")
@@ -105,15 +105,18 @@ function strictModelCapacity(input: AdmitSerializedProviderRequestInput): {
     (metadataMatches ? positiveInteger(metadata.context_window_tokens) : null);
   const maxOutputTokens = positiveInteger(input.maxOutputTokens) ??
     (metadataMatches ? positiveInteger(metadata.max_output_tokens) : null);
-  if (!contextWindowTokens || !maxOutputTokens) {
+  if (!contextWindowTokens && input.providerId !== "opencode-go") {
     throw new ModelRequestAdmissionError({
       code: "model_request_metadata_unknown",
       message: `No exact context capacity is registered for ${input.providerId}/${parsed.modelId}.`,
     });
   }
+  // Aggregator `/models` records intentionally do not become guessed catalog
+  // limits. Until that record is available, admission still serializes and
+  // hashes the request but leaves capacity enforcement to the provider.
   return {
     modelRef: `${input.providerId}/${parsed.modelId}`,
-    contextWindowTokens,
+    contextWindowTokens: contextWindowTokens ?? Number.MAX_SAFE_INTEGER,
     maxOutputTokens,
   };
 }
@@ -126,7 +129,8 @@ export function admitSerializedProviderRequest(
   input: AdmitSerializedProviderRequestInput,
 ): ModelRequestAdmissionReceipt {
   const capacity = strictModelCapacity(input);
-  const requestedOutputTokens = positiveInteger(input.requestedOutputTokens) ?? capacity.maxOutputTokens;
+  const requestedOutputTokens = positiveInteger(input.requestedOutputTokens) ??
+    (capacity.maxOutputTokens ?? 0);
   const providerEnvelopeTokens = Math.max(0, Math.trunc(input.providerEnvelopeTokens ?? 0));
   const configuredInputCapacity = positiveInteger(input.maxInputTokens);
   const contextInputCapacity = capacity.contextWindowTokens - requestedOutputTokens;
@@ -163,7 +167,10 @@ export function admitSerializedProviderRequest(
     admission: compiledInputTokens <= inputCapacityTokens ? "admitted" : "reduce",
   };
 
-  if (requestedOutputTokens > capacity.maxOutputTokens || requestedOutputTokens >= capacity.contextWindowTokens) {
+  if (
+    (capacity.maxOutputTokens !== null && requestedOutputTokens > capacity.maxOutputTokens) ||
+    (capacity.maxOutputTokens !== null && requestedOutputTokens >= capacity.contextWindowTokens)
+  ) {
     plan.admission = "cannot_fit_required";
     throw new ModelRequestAdmissionError({
       code: "model_request_output_capacity_exceeded",

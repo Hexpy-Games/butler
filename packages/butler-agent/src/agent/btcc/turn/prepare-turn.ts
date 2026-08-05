@@ -276,7 +276,7 @@ function admittedContextWindow(binding: StoredSessionBinding, modelRef: string):
   if (typeof configured === "number" && Number.isFinite(configured) && configured > 0) {
     return Math.trunc(configured);
   }
-  return resolveModelMetadata(modelRef).context_window_tokens;
+  return resolveModelMetadata(modelRef).context_window_tokens ?? 200_000;
 }
 
 function accessMode(value: unknown): TurnAccessMode {

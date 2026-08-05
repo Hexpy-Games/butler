@@ -18,7 +18,17 @@ export type ModelProviderId =
   | "local";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
 export type ProviderAuthMethod = "api_key" | "codex_oauth";
-export type HostedProviderApiShape = "openai_chat_completions" | "anthropic_messages";
+/**
+ * The wire carrier is part of the model contract.  A provider may expose
+ * more than one carrier (OpenCode Go is the current example), so callers
+ * must resolve the shape from the admitted model instead of guessing from
+ * the provider id.
+ */
+export type HostedProviderApiShape =
+  | "openai_chat_completions"
+  | "openai_responses"
+  | "anthropic_messages"
+  | "gemini_generate_content";
 export type StructuredDecisionTransport = "json_schema" | "function_tool";
 const FUNCTION_TOOL_DECISION_PROVIDERS = new Set<string>([
   "anthropic",
@@ -44,8 +54,10 @@ export interface ProviderModelMetadata {
   model_ref: `${ModelProviderId}/${string}`;
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
-  context_window_tokens: number;
-  max_output_tokens: number;
+  /** Provider-published capacities. Some aggregator catalogs intentionally
+   * omit these until their `/models` record proves them. */
+  context_window_tokens?: number;
+  max_output_tokens?: number;
   default_reasoning_effort: ReasoningEffort;
   reasoning_efforts: ReasoningEffort[];
   reasoning_budget_tokens?: Partial<Record<ReasoningEffort, number>>;
@@ -154,6 +166,37 @@ export function defaultHostedProviderApiBaseUrl(
   return undefined;
 }
 
+/**
+ * Returns the documented default endpoint for a hosted model carrier.  The
+ * base URL remains separately configurable in Settings; this helper is used
+ * by contract tests and diagnostics so a provider cannot silently switch
+ * between its general and Coding Plan endpoints.
+ */
+export function defaultHostedProviderApiEndpoint(
+  providerId: ModelProviderId,
+  apiShape?: HostedProviderApiShape,
+): string | undefined {
+  const base = defaultHostedProviderApiBaseUrl(providerId);
+  if (providerId === "anthropic") return "https://api.anthropic.com/v1/messages";
+  if (providerId === "google") {
+    return "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent";
+  }
+  if (providerId === "xai") return "https://api.x.ai/v1/responses";
+  if (providerId === "kimi") return "https://api.moonshot.ai/v1/chat/completions";
+  if (providerId === "qwen") {
+    return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
+  }
+  if (providerId === "zai") return "https://api.z.ai/api/coding/paas/v4/chat/completions";
+  if (providerId === "opencode-go") {
+    const shape = apiShape ?? "openai_chat_completions";
+    if (shape === "openai_responses") return "https://opencode.ai/zen/go/v1/responses";
+    if (shape === "anthropic_messages") return "https://opencode.ai/zen/go/v1/messages";
+    return "https://opencode.ai/zen/go/v1/chat/completions";
+  }
+  if (base) return `${base}/responses`;
+  return undefined;
+}
+
 function configuredLocalModelMetadata(): ProviderModelMetadata[] {
   try {
     return readLocalModelConfigs().map(localModelConfigToMetadata);
@@ -233,6 +276,10 @@ export function modelCatalogGeneration(
     .map((model) => ({
       model_ref: model.model_ref,
       runtime_supported: model.runtime_supported,
+      hosted_api_shape: model.hosted_api_shape,
+      context_window_tokens: model.context_window_tokens,
+      max_output_tokens: model.max_output_tokens,
+      source_url: model.source_url,
       reasoning_efforts: [...model.reasoning_efforts].sort(),
       default_reasoning_effort: model.default_reasoning_effort,
     }))

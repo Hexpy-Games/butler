@@ -88,6 +88,11 @@ export function hostedChatCompletionsUrl(config: HostedRuntimeConfig): string {
   return base.endsWith("/chat/completions") ? base : `${base}/chat/completions`;
 }
 
+export function hostedResponsesUrl(config: HostedRuntimeConfig): string {
+  const base = hostedProviderApiBase(config);
+  return base.endsWith("/responses") ? base : `${base}/responses`;
+}
+
 
 
 export function anthropicMessagesUrl(config: HostedRuntimeConfig): string {
@@ -122,7 +127,11 @@ export function openCodeGoApiShape(config: HostedRuntimeConfig): HostedProviderA
   if (config.providerId !== "opencode-go") {
     throw new Error(`OpenCode Go API shape requested for unsupported provider: ${config.providerId}`);
   }
-  if (config.apiShape === "openai_chat_completions" || config.apiShape === "anthropic_messages") {
+  if (
+    config.apiShape === "openai_chat_completions" ||
+    config.apiShape === "openai_responses" ||
+    config.apiShape === "anthropic_messages"
+  ) {
     return config.apiShape;
   }
   throw new Error(`OpenCode Go model is missing a supported API shape: ${config.modelRef}`);
@@ -163,8 +172,25 @@ export function hostedChatReasoningParams(
   config: HostedRuntimeConfig,
   reasoningEffort?: ReasoningEffort,
 ): Record<string, unknown> {
-  if (config.providerId !== "zai" || !reasoningEffort || reasoningEffort === "none") return {};
-  return { reasoning_effort: reasoningEffort };
+  if (!reasoningEffort) return {};
+  if (config.providerId === "zai") {
+    return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
+  }
+  if (config.providerId === "xai") {
+    // xAI's legacy Chat Completions carrier accepts this field; the preferred
+    // Responses carrier uses the nested `reasoning` form in its own adapter.
+    return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
+  }
+  if (config.providerId === "qwen") {
+    return { enable_thinking: reasoningEffort !== "none" };
+  }
+  if (config.providerId === "kimi") {
+    if (config.modelId === "kimi-k3") {
+      return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
+    }
+    return { thinking: { type: reasoningEffort === "none" ? "disabled" : "enabled" } };
+  }
+  return {};
 }
 
 
@@ -256,10 +282,18 @@ async function createHostedChatCompletionOnce(
 ): Promise<Record<string, any>> {
   const endpoint = safeEndpointLabel(hostedChatCompletionsUrl(config));
   const requestBody: Record<string, unknown> = {
-    temperature: 0,
+    // Kimi's reasoning models reject an explicit sampling temperature; Qwen
+    // requires its thinking controls without unsupported sampling overrides.
+    ...(config.providerId === "kimi" || config.providerId === "qwen"
+      ? {}
+      : { temperature: 0 }),
     model: config.modelId,
-    ...(budgetContext?.attribution?.requestedOutputTokens && body.max_tokens === undefined
-      ? { max_tokens: budgetContext.attribution.requestedOutputTokens }
+    ...(budgetContext?.attribution?.requestedOutputTokens &&
+      body.max_tokens === undefined && body.max_completion_tokens === undefined
+      ? {
+          [config.providerId === "kimi" ? "max_completion_tokens" : "max_tokens"]:
+            budgetContext.attribution.requestedOutputTokens,
+        }
       : {}),
     ...body,
   };

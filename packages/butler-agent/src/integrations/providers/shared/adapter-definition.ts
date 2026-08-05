@@ -34,6 +34,12 @@ export function defineProviderAdapter(input: {
       if (parsed.providerId !== input.providerId) {
         throw new Error(`provider_model_mismatch:${input.providerId}:${modelRef}`);
       }
+      const metadata = input.catalog.find((model) =>
+        model.model_ref === parsed.canonicalRef || model.model_id === parsed.modelId,
+      );
+      if (!metadata || !metadata.runtime_supported) {
+        throw new Error(`provider_model_unavailable:${parsed.canonicalRef}`);
+      }
       const supportsStructuredOutputs = input.structuredDecisionTransport !== null;
       return {
         supportsStreaming: false,
