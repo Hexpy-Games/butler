@@ -1,4 +1,7 @@
-import { APP_PROTOCOL_VERSION, type AppEventEnvelope } from "../../interface/protocol/app-protocol.ts";
+import {
+  APP_PROTOCOL_VERSION,
+  type AppEventEnvelope,
+} from "../../interface/protocol/app-protocol.ts";
 import {
   isActiveSessionTurnState,
   maxMessageCursor,
@@ -24,9 +27,11 @@ import type {
 export class AppSessionViewStore {
   constructor(
     private readonly getSession: (sessionId: string) => SessionSummary,
-    private readonly listTurns: (sessionId: string) => TurnRecord[],
+    private readonly latestTurn: (sessionId: string) => TurnRecord | null,
     private readonly listMessages: (sessionId: string) => MessageRecord[],
-    private readonly sessionViewMessages: (sessionId: string) => MessageRecord[],
+    private readonly sessionViewMessages: (
+      sessionId: string,
+    ) => MessageRecord[],
     private readonly sessionViewTurn: (
       turn: TurnRecord,
       options?: { suppressProgressRows?: boolean },
@@ -59,8 +64,7 @@ export class AppSessionViewStore {
 
   getSessionSummary(sessionId: string): SessionSummaryView {
     const session = this.getSession(sessionId);
-    const turns = this.listTurns(sessionId);
-    const latestTurn = turns.at(-1);
+    const latestTurn = this.latestTurn(sessionId);
     const messages = this.listMessages(sessionId);
     const latestProgress = latestTurn
       ? this.sessionViewTurn(latestTurn).progress
@@ -81,7 +85,9 @@ export class AppSessionViewStore {
       latest_progress: latestProgress,
       turn_state: latestTurn?.state ?? "idle",
       branch_info: this.branchInfoForSession(sessionId),
-      artifacts: messages.flatMap((message) => message.artifacts ?? []).slice(-20),
+      artifacts: messages
+        .flatMap((message) => message.artifacts ?? [])
+        .slice(-20),
       skills_used: this.loadedSkillNamesForSession(sessionId, latestTurn?.id),
       context_details: this.getContextDetails(sessionId),
       safe_errors: this.safeErrors(messages),
@@ -105,17 +111,16 @@ export class AppSessionViewStore {
 
   getSessionView(sessionId: string): SessionView {
     const session = this.getSession(sessionId);
-    const turns = this.listTurns(sessionId);
-    const latestTurn = turns.at(-1);
+    const latestTurn = this.latestTurn(sessionId);
     const messages = this.sessionViewMessages(sessionId);
     const latestMessage = messages.at(-1);
     const latestTurnHasOutOfBandReport = Boolean(
       latestTurn &&
-        !latestTurn.user_message_id &&
-        latestTurn.state === "delivered" &&
-        latestMessage?.role === "assistant" &&
-        !latestMessage.turn_id &&
-        latestMessage.created_at >= latestTurn.created_at,
+      !latestTurn.user_message_id &&
+      latestTurn.state === "delivered" &&
+      latestMessage?.role === "assistant" &&
+      !latestMessage.turn_id &&
+      latestMessage.created_at >= latestTurn.created_at,
     );
     const latestTurnView = latestTurn
       ? this.sessionViewTurn(latestTurn, {

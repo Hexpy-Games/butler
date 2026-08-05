@@ -52,6 +52,30 @@ On macOS, drag `Butler.app` from the DMG into Applications. On every supported
 desktop platform, the Agent and tray run only while Butler is open; quitting
 Butler shuts the complete App-owned Agent process tree down.
 
+### Windows: Microsoft Store and GitHub Releases in parallel
+
+The Microsoft Store is Butler's primary Windows distribution path. During Store
+onboarding and review, the GitHub Releases Windows x64 installer remains
+available in parallel. Download the canonical
+`butler-app-<version>-win32-x64-setup.exe` and its matching `.sha256` sidecar
+from the release assets, then run the Setup executable. Installation, first run,
+runtime, uninstall, and subsequent in-app updates use the existing Windows
+Squirrel package. GitHub-installed Butler users can open Settings to check for
+and apply updates from the GitHub Releases channel; Microsoft Store installs
+remain Store-managed.
+
+The community signing key is pinned by the repository's public
+`WINDOWS_COMMUNITY_CERTIFICATE_SHA256` variable. Rotate the PFX secret only
+with an explicit pin update and a bridge release signed by the old key, or ask
+users to reinstall; replacing the secret alone must fail before publication.
+
+An ordinary SmartScreen warning can be continued with **More info** and then
+**Run anyway**. This community build is not signed by a public-trust publisher,
+so a warning is expected. Smart App Control enforcement is different: it can
+block the app with no override (there is no user override). On such machines,
+do not disable Smart App Control; use the Microsoft Store, a future
+SignPath-signed release, or a machine whose policy permits the app instead.
+
 Use the standalone Agent only when you want the headless runtime without the
 desktop app.
 

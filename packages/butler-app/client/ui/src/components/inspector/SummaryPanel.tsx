@@ -1,12 +1,10 @@
 import type { ReactElement } from "react";
 import {
   ActivityFeed,
-  Button,
   CheckCircle2,
   Circle,
   CircleAlert,
   CircleX,
-  FileText,
   InspectorPanel,
   KeyValueRow,
   LoaderCircle,
@@ -20,11 +18,9 @@ import { inspectorInset } from "./inspectorLayout.ts";
 export function SummaryPanel({
   status,
   summary,
-  onExportTranscript,
 }: {
   status: StatusPill;
   summary?: SessionSummaryView | null;
-  onExportTranscript: () => void;
 }) {
   const progressRows = summaryProgressRows(
     summary?.latest_progress?.safe_progress_rows ?? [],
@@ -44,15 +40,10 @@ export function SummaryPanel({
         }))}
       />
       <InspectorPanel title="Branch details">
+        <KeyValueRow label="Gateway" value={status.label} />
         <KeyValueRow
-          label="Gateway"
-          value={status.label}
-        />
-        <KeyValueRow
-          label="Branch"
-          value={summary?.branch_info?.branch_name ??
-            summary?.branch_info?.safe_status ??
-            "Unavailable"}
+          label="Git branch"
+          value={branchValue(summary?.branch_info)}
         />
         <KeyValueRow
           label="Context"
@@ -66,30 +57,41 @@ export function SummaryPanel({
           <EmptyPanelLine label="No app-visible skills" />
         )}
       </InspectorPanel>
-      <InspectorPanel title="Export">
-        <Button
-          type="button"
-          onClick={onExportTranscript}
-          variant="outline"
-          stretch
-          iconStart={<FileText size={16} />}
-          text="Export app-visible transcript"
-        />
-      </InspectorPanel>
     </>
   );
 }
 
+function branchValue(
+  branch: SessionSummaryView["branch_info"] | undefined,
+): string {
+  if (!branch) return "Unavailable";
+  if (branch.workspace_mode === "git") {
+    return branch.branch_name?.trim() || "Detached HEAD";
+  }
+  if (branch.workspace_mode === "folder") return "Not a Git workspace";
+  if (branch.workspace_mode === "none") return "No project workspace";
+  if (branch.safe_error_code === "git_not_installed") {
+    return "Git is not installed";
+  }
+  return "Unavailable";
+}
+
 function progressStateTone(state?: string): string {
-  if (state === "delivered" || state === "complete") return "complete";
+  if (state && ["delivered", "complete", "completed"].includes(state)) {
+    return "complete";
+  }
   if (state === "failed") return "failed";
-  if (state === "cancelled") return "cancelled";
+  if (state && ["cancelled", "stopped"].includes(state)) return "cancelled";
   if (
     state &&
     [
       "accepted",
+      "active",
       "thinking",
+      "running",
       "streaming",
+      "reviewing",
+      "correction_required",
       "waiting_for_tool",
       "retrying",
     ].includes(state)

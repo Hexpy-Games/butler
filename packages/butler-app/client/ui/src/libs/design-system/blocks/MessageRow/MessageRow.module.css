@@ -11,12 +11,12 @@
 }
 
 .assistant {
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   padding-bottom: 26px;
 }
 
 .activity {
-  gap: 12px;
+  gap: 0;
   padding-bottom: 18px;
 }
 
@@ -101,4 +101,46 @@
 .footer button:hover {
   background: var(--selection);
   color: var(--text-primary);
+}
+
+.statusRow {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+.statusLabel {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+}
+
+.statusMark {
+  display: inline-grid;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+}
+
+.statusMark > *,
+.statusMark svg,
+.statusMark canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.statusContent {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.statusContent > * {
+  margin: 0;
 }

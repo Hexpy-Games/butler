@@ -87,6 +87,7 @@ export interface AppCopy {
     projectDashboard: string;
     newProjectChat: string;
     projectMenu: string;
+    projectCreateTitle: string;
     projectRenameTitle: string;
     projectName: string;
     pin: string;
@@ -111,6 +112,10 @@ export interface AppCopy {
     modelLoading: string;
     modelUnavailable: string;
     modelError: string;
+    gitMissingTitle: string;
+    gitMissingMessage: string;
+    gitInstallAction: string;
+    gitMissingDismiss: string;
     reasoning: string;
     reasoningEffort: string;
     send: string;
@@ -200,6 +205,7 @@ export interface AppCopy {
     more: string;
     refresh: string;
     save: string;
+    create: string;
     cancel: string;
     delete: string;
     copy: string;
@@ -735,6 +741,7 @@ const koKrCopy: AppCopy = {
     projectDashboard: "프로젝트 대시보드",
     newProjectChat: "새 프로젝트 대화",
     projectMenu: "프로젝트 메뉴",
+    projectCreateTitle: "새 프로젝트 만들기",
     projectRenameTitle: "프로젝트 이름 바꾸기",
     projectName: "프로젝트 이름",
     pin: "고정",
@@ -760,6 +767,11 @@ const koKrCopy: AppCopy = {
     modelLoading: "모델 확인 중",
     modelUnavailable: "선택한 모델 사용 불가",
     modelError: "모델 상태 오류",
+    gitMissingTitle: "Git이 설치되어 있지 않습니다",
+    gitMissingMessage:
+      "Butler는 계속 사용할 수 있지만 브랜치, 커밋, Ledger 커밋 증거 기능은 사용할 수 없습니다.",
+    gitInstallAction: "Git 설치 안내",
+    gitMissingDismiss: "Git 안내 닫기",
     reasoning: "추론",
     reasoningEffort: "추론 강도",
     send: "전송",
@@ -849,6 +861,7 @@ const koKrCopy: AppCopy = {
     more: "더보기",
     refresh: "새로고침",
     save: "저장",
+    create: "만들기",
     cancel: "취소",
     delete: "삭제",
     copy: "복사",
@@ -1459,6 +1472,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     projectDashboard: "Project dashboard",
     newProjectChat: "New project chat",
     projectMenu: "Project menu",
+    projectCreateTitle: "Create a project",
     projectRenameTitle: "Rename project",
     projectName: "Project name",
     pin: "Pin",
@@ -1484,6 +1498,11 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     modelLoading: "Checking model",
     modelUnavailable: "Selected model unavailable",
     modelError: "Model state error",
+    gitMissingTitle: "Git is not installed",
+    gitMissingMessage:
+      "Butler remains usable, but branch, commit, and Ledger commit-evidence features are unavailable.",
+    gitInstallAction: "Install Git",
+    gitMissingDismiss: "Dismiss Git notice",
     reasoning: "Reasoning",
     reasoningEffort: "Reasoning effort",
     send: "Send",
@@ -1573,6 +1592,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     more: "More",
     refresh: "Refresh",
     save: "Save",
+    create: "Create",
     cancel: "Cancel",
     delete: "Delete",
     copy: "Copy",

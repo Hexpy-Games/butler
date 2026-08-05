@@ -11,6 +11,10 @@ const distributionWorkflow = readFileSync(
   join(root, ".github", "workflows", "windows-distribution.yml"),
   "utf8",
 );
+const communityWorkflow = readFileSync(
+  join(root, ".github", "workflows", "windows-community-distribution.yml"),
+  "utf8",
+);
 const entrypoint = readFileSync(
   join(
     root,
@@ -123,6 +127,74 @@ test("Windows distribution is a separate manually dispatched action", () => {
   expect(distributionWorkflow).not.toContain("pull_request:");
   expect(distributionWorkflow).not.toContain("-Mode ProductE2E");
   expect(distributionWorkflow).not.toContain("-Mode Lifecycle");
+});
+
+test("Windows community distribution is manual, exact-tag based, and explicitly acknowledged", () => {
+  expect(communityWorkflow).toContain("workflow_dispatch:");
+  expect(communityWorkflow).toContain("tag:");
+  expect(communityWorkflow).toContain("acknowledgement:");
+  expect(communityWorkflow).toContain(
+    "I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION",
+  );
+  expect(communityWorkflow).toContain("contents: write");
+  expect(communityWorkflow).toContain("runs-on: windows-latest");
+  expect(communityWorkflow).toContain("ref: ${{ inputs.tag }}");
+  expect(communityWorkflow).toContain("fetch-depth: 0");
+  expect(communityWorkflow).toContain("refs/tags/$tag^{commit}");
+  expect(communityWorkflow).toContain("gh release view");
+  expect(communityWorkflow).toContain(
+    "./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup",
+  );
+  expect(communityWorkflow).toContain(
+    "packages/butler-app/scripts/windows/windows-release-package-smoke.ts",
+  );
+  expect(communityWorkflow).not.toContain("run-windows-ci.ps1 -Mode Package");
+  expect(communityWorkflow).not.toContain("community-setup.exe");
+  expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_PFX");
+  expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD");
+  expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
+  expect(communityWorkflow).toContain("vars.WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
+  expect(communityWorkflow).toContain("^[A-F0-9]{64}$");
+  expect(communityWorkflow).toContain("certificateSha256 -ne $expectedCertificateSha256");
+  expect(communityWorkflow).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING");
+  expect(communityWorkflow).toContain("X509Certificate2");
+  expect(communityWorkflow).toContain("must be self-signed");
+  expect(communityWorkflow).toContain("X509EnhancedKeyUsageExtension");
+  expect(communityWorkflow).toContain("EnhancedKeyUsages");
+  expect(communityWorkflow).toContain("1.3.6.1.5.5.7.3.3");
+  expect(communityWorkflow).toContain("certutil.exe -f -addstore");
+  expect(communityWorkflow).toContain("Expected 8 Windows release files");
+  expect(communityWorkflow).toContain("butler-app-*-win32-x64-setup.exe");
+  expect(communityWorkflow).toContain("windows-app-release-manifest.json");
+  expect(communityWorkflow).toContain("windows-app-update-manifest.json");
+  expect(communityWorkflow).toContain("Get-FileHash");
+  expect(communityWorkflow).toContain("SHA256");
+  expect(communityWorkflow).toContain("gh release upload");
+  expect(communityWorkflow.match(/gh release upload/gu)).toHaveLength(1);
+  expect(communityWorkflow).toContain("--clobber");
+  expect(communityWorkflow).not.toContain("pull_request:");
+  expect(communityWorkflow).not.toContain("push:");
+  expect(communityWorkflow).not.toContain("schedule:");
+
+  const publishStep = communityWorkflow.slice(
+    communityWorkflow.indexOf("Publish community Windows release assets"),
+  );
+  for (const asset of [
+    "butler-app-*-win32-x64-setup.exe",
+    "butler-app-*-win32-x64-setup.exe.sha256",
+    ".nupkg",
+    ".nupkg.sha256",
+    "RELEASES",
+    "RELEASES.sha256",
+    "windows-app-release-manifest.json",
+    "windows-app-update-manifest.json",
+  ]) {
+    expect(publishStep).toContain(asset);
+  }
+  expect(publishStep).toContain("$files.Count -ne 8");
+  expect(publishStep).toContain(
+    "gh release upload $env:WINDOWS_RELEASE_TAG @files --clobber",
+  );
 });
 
 test("packaged desktop lifecycle remains physical-interactive only", () => {

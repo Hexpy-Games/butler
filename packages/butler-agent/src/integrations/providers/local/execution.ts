@@ -21,14 +21,22 @@ export async function runLocalPromptText(options: PromptOptions): Promise<string
   return await runLocalPromptTextWithConfig(
     config,
     options,
-    createProviderRequestAttributor({ attribution: options.usageAttribution }),
+    createProviderRequestAttributor({
+      attribution: options.usageAttribution,
+      butlerData: options.butlerData,
+      cacheScope: options.cacheScope,
+    }),
   );
 }
 
 export async function runLocalPromptTextWithConfig(
   config: LocalModelConfig,
   options: PromptOptions,
-  requests = createProviderRequestAttributor({ attribution: options.usageAttribution }),
+  requests = createProviderRequestAttributor({
+    attribution: options.usageAttribution,
+    butlerData: options.butlerData,
+    cacheScope: options.cacheScope,
+  }),
 ): Promise<string> {
   const messages: LocalChatMessage[] = [];
   if (options.instructions?.trim()) {

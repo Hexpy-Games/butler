@@ -10,7 +10,7 @@ export function safeToolInputLabel(
 ): string {
   if (kind === "dispatch") return safeTextValue(args.objective ?? args.title ?? args.summary, "background task");
   if (kind === "edited" || kind === "read") return safePathishValue(args.path ?? args.file_path ?? args.file ?? args.target, name);
-  if (kind === "ran_command") return safeCommandIntentLabel(args);
+  if (kind === "ran_command") return safeCommandActionLabel(args);
   if (kind === "searched") return safeTextValue(args.query ?? args.pattern ?? args.q ?? args.keyword, "");
   return safeTextValue(args.summary ?? args.name ?? args.query ?? args.path, name);
 }
@@ -61,16 +61,33 @@ export function safePathishValue(value: unknown, fallback: string): string {
   return parts.join(" ");
 }
 
-function safeCommandIntentLabel(args: Record<string, unknown>): string {
-  return safeCommandPurposeSummary(args);
+export function safeCommandActionLabel(args: Record<string, unknown>): string {
+  return safeCommandActionIdentity(args);
 }
 
-export function safeCommandPurposeSummary(args: Record<string, unknown>): string {
-  return safeCommandPurposeIdentity(args).slice(0, 140);
+export function safeFileActionLabel(
+  name: "edit_file" | "write_file" | "read_file",
+  args: Record<string, unknown>,
+): string {
+  const path = safePathishValue(
+    args.path ?? args.file_path ?? args.file ?? args.target,
+    "",
+  );
+  const fileName = basename(path) || path;
+  if (!fileName) return "";
+  const action = name === "edit_file"
+    ? "수정"
+    : name === "write_file"
+      ? "작성"
+      : "읽기";
+  return `${action}: ${fileName}`;
 }
 
-export function safeCommandPurposeIdentity(args: Record<string, unknown>): string {
-  return sanitizePublicText(args.summary, "").trim();
+export function safeCommandActionIdentity(args: Record<string, unknown>): string {
+  const raw = typeof args.summary === "string" ? args.summary.trim() : "";
+  if (!raw || /[\r\n]/u.test(raw) || [...raw].length > 32) return "";
+  const label = sanitizePublicText(raw, "").trim();
+  return [...label].length <= 32 ? label : "";
 }
 
 function safeCommandIntentDetails(
@@ -81,7 +98,7 @@ function safeCommandIntentDetails(
     id: `${name}-intent`,
     kind: "command_intent",
     safe_label: "Command",
-    safe_value: safeCommandIntentLabel(args),
+    safe_value: safeCommandActionLabel(args),
     state: "running",
   }];
   if (Array.isArray(args.output_paths) && args.output_paths.length > 0) {

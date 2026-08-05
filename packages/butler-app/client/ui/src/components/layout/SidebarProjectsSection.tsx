@@ -13,8 +13,8 @@ export function SidebarProjectsSection() {
   const collapse = useSidebarProjectCollapse();
   const navigation = useButlerStore((state) => state.navigation);
   const creatingProject = useButlerStore((state) => state.creatingProject);
-  const createScratchProject = useButlerStore(
-    (state) => state.createScratchProject,
+  const setProjectCreateDialogOpen = useButlerStore(
+    (state) => state.setProjectCreateDialogOpen,
   );
   const createProjectFromExistingFolder = useButlerStore(
     (state) => state.createProjectFromExistingFolder,
@@ -38,7 +38,7 @@ export function SidebarProjectsSection() {
           projectMenuOpen={projectMenuOpen}
           projectsCollapsed={collapse.projectsCollapsed}
           onCreateScratch={() =>
-            runProjectCreator(createScratchProject)
+            runProjectCreator(() => setProjectCreateDialogOpen(true))
           }
           onMenuOpenChange={setProjectMenuOpen}
           onToggleCollapse={() => collapse.handleProjectsSectionToggle(projects)}

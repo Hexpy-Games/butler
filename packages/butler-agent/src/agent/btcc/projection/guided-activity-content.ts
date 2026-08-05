@@ -2,8 +2,9 @@ import type { WorkStage } from "../work/index.ts";
 import { sanitizePublicText } from "../../events/turn-events.ts";
 import { isDurableWorkTool } from "../work/index.ts";
 import {
-  safeCommandPurposeSummary,
-  safeCommandPurposeIdentity,
+  safeCommandActionLabel,
+  safeCommandActionIdentity,
+  safeFileActionLabel,
 } from "../../output/progress/arguments.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
 import { publicWorkActionDisplay } from "./work-action-display.ts";
@@ -19,8 +20,11 @@ export function publicToolTitle(
 ): string {
   if (name === "web_search") return "웹 검색";
   if (name === "web_read") return "웹 문서 읽기";
-  if (name === "read_file" || name === "grep_files") return "작업공간 확인";
-  if (name === "write_file" || name === "edit_file") return "작업공간 변경";
+  if (name === "read_file") return safeFileActionLabel(name, args) || "파일 읽기";
+  if (name === "grep_files") return "작업공간 검색";
+  if (name === "write_file" || name === "edit_file") {
+    return safeFileActionLabel(name, args) || "파일 변경";
+  }
   if (name === "inspect_workspace_page") return "작업 화면 확인";
   if (name === "tool_search") return "사용 가능한 도구 찾기";
   if (name === "tool_describe") return "도구 사용법 확인";
@@ -31,7 +35,7 @@ export function publicToolTitle(
       : publicToolTitle(normalized.name, normalized.args);
   }
   if (name === "run_command") {
-    return "명령 실행";
+    return safeCommandActionLabel(args) || "명령 실행";
   }
   if (name.startsWith("project_ledger")) {
     return isProjectLedgerMutation(name) ? "프로젝트 기록 변경" : "프로젝트 기록 확인";
@@ -86,13 +90,14 @@ export function activityContent(
   const titles = calls.map((call) => publicToolTitle(call.name, call.args));
   const toolSummary = ordinaryToolSummary(calls, titles);
   const title = ordinaryActivityTitle(calls, titles);
-  const commandSummary = commandPurposeSummary(calls);
-  const summary = commandSummary || publicText(assistantText) || toolSummary ||
+  const commandLabel = commandActionLabel(calls);
+  const authoredSummary = publicText(assistantText);
+  const summary = authoredSummary || commandLabel || toolSummary ||
     "도구 작업을 진행하고 있습니다";
   return {
     displayStage: "execution",
     title,
-    summary: commandSummary
+    summary: commandLabel && !authoredSummary
       ? summary
       : distinctSummary(title, summary, toolSummary),
   };
@@ -123,7 +128,7 @@ export function ordinaryGroupSignature(calls: GuidedActivityToolCall[]): string 
 
 export function ordinaryGroupKey(call: GuidedActivityToolCall): string {
   return call.name === "run_command"
-    ? `run_command:${safeCommandPurposeIdentity(call.args)}`
+    ? `run_command:${safeCommandActionIdentity(call.args)}`
     : call.name;
 }
 
@@ -140,6 +145,24 @@ export function distinctSummary(
 export function boundedTitle(text: string): string {
   const normalized = text.trim().replace(/\s+/gu, " ");
   return [...normalized].slice(0, 32).join("");
+}
+
+export function activeWorkActionTitle(
+  args: Record<string, unknown>,
+): string | undefined {
+  if (!Array.isArray(args.action_updates)) return undefined;
+  for (const value of args.action_updates) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const update = value as Record<string, unknown>;
+    if (update.status !== "active") continue;
+    const actionKey = publicText(update.action_key);
+    if (!actionKey) continue;
+    return publicWorkActionDisplay(
+      { actionKey, description: "" },
+      actionKey,
+    ) || undefined;
+  }
+  return undefined;
 }
 
 function firstPlanAction(args: Record<string, unknown>): string | undefined {
@@ -200,8 +223,6 @@ export function toolActivitySummary(name: string, title: string): string {
   if (name === "tool_describe") return "선택한 도구의 사용 방법을 확인하고 있습니다.";
   if (title === "프로젝트 기록 변경") return "프로젝트 기록을 변경하고 있습니다.";
   if (title === "프로젝트 기록 확인") return "프로젝트 기록을 확인하고 있습니다.";
-  if (title === "작업공간 변경") return "작업공간의 파일을 변경하고 있습니다.";
-  if (title === "작업공간 확인") return "작업공간의 내용을 확인하고 있습니다.";
   return `${title} 작업을 진행하고 있습니다.`;
 }
 
@@ -232,7 +253,7 @@ function ordinaryToolSummary(
 ): string {
   const names = new Set(calls.map((call) => call.name));
   if (names.size === 1 && calls[0]?.name === "run_command") {
-    return commandPurposeSummary(calls) ?? "작업 공간에서 필요한 명령을 실행하고 있습니다.";
+    return commandActionLabel(calls) ?? "작업 공간에서 필요한 명령을 실행하고 있습니다.";
   }
   if (names.size === 1 && calls[0]) {
     return toolActivitySummary(calls[0].name, titles[0] || "도구 작업");
@@ -243,13 +264,13 @@ function ordinaryToolSummary(
     : "필요한 도구로 작업을 진행하고 있습니다.";
 }
 
-function commandPurposeSummary(
+function commandActionLabel(
   calls: GuidedActivityToolCall[],
 ): string | undefined {
   if (calls.length === 0 || calls.some((call) => call.name !== "run_command")) {
     return undefined;
   }
-  return safeCommandPurposeSummary(calls[0]!.args);
+  return safeCommandActionLabel(calls[0]!.args);
 }
 
 function normalizeText(text: string): string {

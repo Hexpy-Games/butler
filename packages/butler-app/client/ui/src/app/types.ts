@@ -1204,8 +1204,11 @@ export interface SessionSummaryView {
   turn_state?: string;
   latest_progress?: TurnProgressSnapshot;
   branch_info?: {
+    available?: boolean;
+    workspace_mode?: "git" | "folder" | "none" | "unknown";
     branch_name?: string;
     safe_status?: string;
+    safe_error_code?: string;
   };
   context_details?: ContextDetailsView;
   artifacts?: SessionArtifactSummary[];

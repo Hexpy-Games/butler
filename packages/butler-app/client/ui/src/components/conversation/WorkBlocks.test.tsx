@@ -17,7 +17,7 @@ afterEach(() => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("work activity shows only the latest block until view all expands", async () => {
+test("completed work activity stays header-only until its disclosure opens", async () => {
   const dom = new JSDOM("<div id=\"root\"></div>", {
     url: "http://localhost",
   });
@@ -46,20 +46,23 @@ test("work activity shows only the latest block until view all expands", async (
   });
 
   expect(container.textContent).not.toContain("이전 활동");
-  expect(container.textContent).toContain("가장 최신 활동");
+  expect(container.querySelectorAll('[data-test-class~="turn-work-block"]')).toHaveLength(0);
   const toggle = container.querySelector(
-    '[data-test-class="toggle-turn-activity-history"]',
+    '[data-test-class="toggle-turn-activity-disclosure"]',
   );
   if (!(toggle instanceof dom.window.HTMLButtonElement)) {
     throw new Error("Missing activity history toggle.");
   }
-  expect(toggle.textContent).toContain("전체 보기 (2)");
+  expect(toggle.textContent).toContain("활동 · 가장 최신 활동 · 2개 기록");
+  expect(container.textContent).not.toContain("전체 보기");
 
   await act(async () => toggle.click());
 
   expect(container.textContent).toContain("이전 활동");
   expect(container.textContent).toContain("가장 최신 활동");
-  expect(toggle.textContent).toContain("접기");
+  expect(container.querySelector(
+    '[data-test-class="collapse-turn-activity-history"]',
+  )?.textContent).toContain("접기");
   await act(async () => root.unmount());
 });
 
@@ -89,7 +92,7 @@ test("completed work keeps its turn identity for lazy operation output", async (
             id: "operation-row",
             kind: "used_tool",
             state: "completed",
-            safe_label: "private command",
+            safe_label: "실행: git commit",
             safe_tool_name: "run_command",
             tool_call_id: "request-1",
             tool_result_id: "result-1",
@@ -101,8 +104,14 @@ test("completed work keeps its turn identity for lazy operation output", async (
     );
   });
 
-  expect(container.textContent).toContain("실행: 계획한 작업을 처리 중");
-  expect(container.textContent).not.toContain("private command");
+  const disclosure = container.querySelector(
+    '[data-test-class="toggle-turn-activity-disclosure"]',
+  );
+  if (!(disclosure instanceof dom.window.HTMLButtonElement)) {
+    throw new Error("Missing completed activity disclosure.");
+  }
+  await act(async () => disclosure.click());
+  expect(container.textContent).toContain("실행: git commit");
   const toolButton = container.querySelector(
     '[data-test-class~="turn-work-tool-row"] button',
   );

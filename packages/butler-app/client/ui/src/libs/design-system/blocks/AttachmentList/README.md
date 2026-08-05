@@ -15,6 +15,10 @@ It separates file display from upload and URL generation logic.
 ## How to use this component
 Map domain file records into `AttachmentListItem` objects.
 
+Image records may provide a safe, existing URL through `thumbnail`. The list
+keeps the thumbnail (or icon), name, remove action, and optional size metadata
+in that priority order; the size metadata hides first in narrow containers.
+
 ## Who can use this component
 Any product container that owns attachment data.
 

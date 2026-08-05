@@ -21,9 +21,14 @@ export async function executeGuidedReadOnlyCommand(input: {
 }): Promise<Record<string, unknown>> {
   const stateEffect = input.args.state_effect ?? "read_only";
   if (stateEffect !== "read_only" && stateEffect !== "validation") {
+    const remoteObservation = stateEffect === "remote_observation";
     return commandBoundaryError(
-      "command_mutation_requires_typed_effect",
-      "R3 run_command accepts only a read-only observation or validation. Use a typed persistent-effect tool for writes, Project Ledger changes, Git changes, remote calls, or deployment.",
+      remoteObservation
+        ? "command_remote_observation_requires_typed_effect"
+        : "command_mutation_requires_typed_effect",
+      remoteObservation
+        ? "Remote observation requires full access, an accepted Plan Review, and the audited persistent-effect boundary."
+        : "R3 run_command accepts only a read-only observation or validation. Use a typed persistent-effect tool for writes, Project Ledger changes, Git changes, remote calls, or deployment.",
     );
   }
   try {

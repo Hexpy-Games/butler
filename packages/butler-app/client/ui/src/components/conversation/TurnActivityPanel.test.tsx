@@ -113,7 +113,8 @@ test("turn activity panel shows only the latest model-authored phase intent", ()
   expect(html).toContain("현재 · 계획 · 2개 기록");
   expect(html).not.toContain("사용자의 원래 목표를 보존하기 위해 필요합니다.");
   expect(html).toContain("다음: 계획 후보를 검토합니다.");
-  expect(html).toContain("전체 보기 (2)");
+  expect(html).not.toContain("전체 보기");
+  expect(html).toContain('data-test-class="toggle-turn-activity-disclosure"');
 });
 
 test("turn activity panel keeps the handoff under the canonical successor phase", () => {
@@ -234,9 +235,32 @@ test("turn activity panel renders acknowledged receipt only as pending status", 
   const html = renderPanel([acknowledgedRow()], "accepted");
 
   expect(html).toContain("turn-activity-pending");
+  expect(html).toContain("assistant-status-label");
+  expect(html).toContain("assistant-status-mark-active");
   expect(html).toContain("Request received. Preparing the work.");
   expect(html).not.toContain("turn-decision-row");
   expect(html).not.toContain("turn-work-block");
+});
+
+test("decision-only activity keeps the Butler status as the bottom-most row", () => {
+  const html = renderPanel([{
+    id: "decision-only",
+    kind: "decision",
+    state: "running",
+    safe_label: "요청을 분석했습니다.",
+    public_decision_role: "opening",
+    public_decision_summary: "요청을 분석했습니다.",
+    public_decision_rationale: "정확한 답변을 준비합니다.",
+    public_decision_next_step: "응답을 생성합니다.",
+    public_decision_source: "model-authored",
+  }]);
+
+  expect(html).toContain("turn-decision-row");
+  expect(html).toContain("turn-current-status-slot");
+  expect(html).toContain("응답 생성 중");
+  expect(html.indexOf("turn-current-status-slot")).toBeGreaterThan(
+    html.indexOf("turn-decision-row"),
+  );
 });
 
 test("turn activity panel keeps decision text out of tool controls", () => {

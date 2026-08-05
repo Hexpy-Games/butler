@@ -1,11 +1,9 @@
-import { MessageAvatarBlock } from "../MessageAvatarBlock";
 import { MessageFooter, MessageRow } from "./MessageRow";
 
 export function MessageRowFixture() {
   return (
     <MessageRow
       role="assistant"
-      avatar={<MessageAvatarBlock role="assistant">B</MessageAvatarBlock>}
       dataTestClass="message assistant"
     >
       <p>Butler response rendered in the reusable message presenter.</p>

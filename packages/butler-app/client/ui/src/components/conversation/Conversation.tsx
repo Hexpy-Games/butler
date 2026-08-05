@@ -82,7 +82,6 @@ export function Conversation() {
           turnProgress={turnProgress}
           bottomReserve={composerReserve}
           isSending={isActiveChatSending}
-          markTheme={markTheme}
         />
       ) : showEmptyState ? (
         <ConversationScroll masked={false} scrollable={false}>

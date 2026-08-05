@@ -692,6 +692,13 @@ test("electron shell injects a minimal preload-only app API contract", () => {
   expect(preload).toContain("writeCachedAppUiState:");
   expect(preload).toContain("butler.app-ui-state.v1");
   expect(preload).toContain("globalThis.localStorage");
+  expect(preload).toContain("readCachedComposerDraft:");
+  expect(preload).toContain("writeCachedComposerDraft:");
+  expect(preload).toContain("butler:composer-draft-read");
+  expect(preload).toContain("butler:composer-draft-write");
+  expect(electronMain).toContain("readComposerDraftFile");
+  expect(electronMain).toContain("writeComposerDraftFile");
+  expect(electronMain).toContain('"composer-drafts"');
   expect(preload).toContain("uploadMessageFile:");
   expect(preload).toContain("FormData");
   expect(preload).toContain('"/message-files"');
@@ -1168,7 +1175,9 @@ test("navigation UI is backed by app-server data rather than sidebar fixtures", 
   expect(renderer).toContain("const projects = navigation.projects ?? []");
   expect(renderer).toContain("const chats = navigation.chats ?? []");
   expect(renderer).toContain("projects.map((project) =>");
-  expect(renderer).toContain("chats.map((chat) =>");
+  expect(renderer).toContain("paging.visibleSessions.map((chat) =>");
+  expect(renderer).toContain("useSidebarSessionPaging");
+  expect(renderer).toContain("SIDEBAR_SESSION_PAGE_SIZE = 5");
   expect(renderer).toContain("function SidebarProjectGroup");
   expect(renderer).toContain("project.sessions ?? []");
   expect(renderer).toContain("function selectProjectFolder");
@@ -1575,7 +1584,7 @@ test("conversation UI renders user bubbles and assistant documents with runtime-
   expect(renderer).toContain("function ContextUsagePopover");
   expect(renderer).toContain("Context window:");
   expect(virtualMessageRow).toContain("MessageAvatar");
-  expect(renderer).toContain("latestAssistantMessageId");
+  expect(renderer).not.toContain("latestAssistantMessageId");
   expect(renderer).toContain("ChartContainer");
   expect(renderer).toContain("BarChart");
   expect(renderer).toContain("isAnimationActive={false}");
@@ -2215,7 +2224,7 @@ test("settings, command palette, automations, right panel, and worker UI are app
   );
   expect(renderer).toContain("function Inspector");
   expect(renderer).toContain("/session-view?session_id=");
-  expect(renderer).toContain("transcript-export?session_id=");
+  expect(renderer).not.toContain("transcript-export?session_id=");
   expect(renderer).toContain("function WorkerComposerPanel");
   expect(renderer).toContain("function TurnActivityPanel");
   expect(renderer).toContain("function CollapsedTurnActivity");
@@ -2268,8 +2277,9 @@ test("settings, command palette, automations, right panel, and worker UI are app
     ),
   ).toContain("export const MessageItem = memo");
   expect(renderer).toContain("showTurnActivity =");
-  expect(renderer).toContain("assistant-mark-active");
-  expect(renderer).toContain("assistant-mark-static");
+  expect(renderer).toContain("assistant-status-mark-active");
+  expect(renderer).toContain("assistant-status-mark-complete");
+  expect(renderer).toContain("assistant-terminal-status-row");
   expect(renderer).toContain("<ButlerThinkingMark");
   expect(renderer).toContain("<ButlerMarkIcon");
   expect(renderer).toContain("resolveButlerMarkTheme");
@@ -2643,8 +2653,10 @@ test("layout smoke captures real browser screenshots instead of placeholder imag
   expect(smoke).toContain("page.screenshot");
   expect(smoke).toContain("conversation-body-width-matches-composer");
   expect(smoke).toContain("user-bubble-content-sized");
+  expect(smoke).toContain("assistant-message-full-width");
   expect(smoke).toContain("assistant-footer-copy-duration-time");
   expect(smoke).toContain("assistant-footer-semantic-time");
+  expect(smoke).toContain("assistant-status-bottom-row");
   expect(smoke).toContain("composer-ready-status-absent");
   expect(smoke).toContain("context-hover-popover-visible");
   expect(smoke).toContain("context-popover-titlebar-safe");
@@ -3728,6 +3740,10 @@ describe("app-client design system foundation", () => {
     expect(tintedGlassStyles).toContain(
       "backdrop-filter: var(--tinted-glass-filter)",
     );
+    expect(tokens).toContain("--adaptive-composer-radius: 30px;");
+    expect(tintedGlassStyles).toContain(
+      "--tinted-glass-radius: var(--adaptive-composer-radius)",
+    );
     expect(tintedGlassFixture).toContain("backgroundText");
     expect(tintedGlassFixture).toContain("pictureMarks");
     for (const floatingSurface of [
@@ -3886,11 +3902,25 @@ describe("app-client design system foundation", () => {
     );
     expect(disclosureRowStyles).toContain(".noIcon");
     expect(disclosureRowStyles).toContain(".open:not(.plain)");
-    expect(
-      read(
-        "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
-      ),
-    ).toContain("workCopy.viewAllLabel(blocks.length)");
+    const workBlocks = read(
+      "packages/butler-app/client/ui/src/components/conversation/WorkBlocks.tsx",
+    );
+    expect(workBlocks).toContain('data-test-class="toggle-turn-activity-disclosure"');
+    expect(workBlocks).toContain('data-test-class="collapse-turn-activity-history"');
+    expect(workBlocks).toContain("iconEnd={expanded ? <ChevronDown");
+    expect(workBlocks).toContain('variant="inline"');
+    expect(workBlocks).not.toContain("paddingInlineStart");
+    expect(workBlocks).not.toContain("workCopy.viewAllLabel(blocks.length)");
+    const turnActivityTimeline = read(
+      "packages/butler-app/client/ui/src/components/conversation/TurnActivityTimeline.tsx",
+    );
+    expect(turnActivityTimeline).toContain("iconEnd={expanded ? <ChevronDown");
+    expect(turnActivityTimeline).toContain('variant="inline"');
+    expect(turnActivityTimeline).not.toContain("paddingInlineStart");
+    expect(buttonStyles).toContain(".button.variantInline");
+    expect(buttonStyles).toContain(".button.variantInline:hover:not(:disabled)");
+    expect(buttonStyles).toContain('.button.variantInline[data-has-icon-text="true"]');
+    expect(buttonStyles).toContain("text-decoration: underline");
     const workActivityStyles = read(
       "packages/butler-app/client/ui/src/libs/design-system/blocks/WorkActivityBlock/WorkActivityBlock.module.css",
     );

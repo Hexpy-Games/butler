@@ -27,7 +27,10 @@ import {
   hostedProviderErrorLabel,
   promptTextForHosted,
 } from "./hosted-chat-client.ts";
-import { providerEmptyResponseError, safeEndpointLabel } from "../provider-errors.ts";
+import {
+  providerEmptyResponseError,
+  safeEndpointLabel,
+} from "../provider-errors.ts";
 import { recordPromptCacheMetric } from "../openai/runtime.ts";
 
 export async function runHostedOpenAICompatiblePromptText(
@@ -45,15 +48,21 @@ export async function runHostedOpenAICompatiblePromptText(
     attribution: options.usageAttribution,
     roundIndex,
   });
-  const response = await createHostedChatCompletion(config, {
-    messages,
-    stream: true,
-    ...hostedChatReasoningParams(config, options.reasoningEffort),
-    ...(responseFormat ? { response_format: responseFormat } : {}),
-  }, options.signal, {
-    attribution: options.usageAttribution,
-    roundIndex,
-  }, options.providerRetryAttempts);
+  const response = await createHostedChatCompletion(
+    config,
+    {
+      messages,
+      stream: true,
+      ...hostedChatReasoningParams(config, options.reasoningEffort),
+      ...(responseFormat ? { response_format: responseFormat } : {}),
+    },
+    options.signal,
+    {
+      attribution: options.usageAttribution,
+      roundIndex,
+    },
+    options.providerRetryAttempts,
+  );
   recordHostedOpenAICompatibleUsage({ config, options, response, roundIndex });
   const text = hostedChatText(firstHostedChatMessage(response));
   if (!text) {
@@ -77,18 +86,24 @@ export async function runHostedOpenAICompatibleModelRound(
     attribution: request.usageAttribution,
     roundIndex,
   });
-  const response = await createHostedChatCompletion(config, {
-    messages: hostedModelRoundMessages(request),
-    ...(request.tools.length > 0
-      ? { tools: hostedChatTools(request.tools.map(modelRoundTool)) }
-      : {}),
-    tool_choice: request.toolChoice ?? "auto",
-    stream: true,
-    ...hostedChatReasoningParams(config, request.reasoningEffort),
-  }, request.signal, {
-    attribution: request.usageAttribution,
-    roundIndex,
-  }, request.providerRetryAttempts);
+  const response = await createHostedChatCompletion(
+    config,
+    {
+      messages: hostedModelRoundMessages(request),
+      ...(request.tools.length > 0
+        ? { tools: hostedChatTools(request.tools.map(modelRoundTool)) }
+        : {}),
+      tool_choice: request.toolChoice ?? "auto",
+      stream: true,
+      ...hostedChatReasoningParams(config, request.reasoningEffort),
+    },
+    request.signal,
+    {
+      attribution: request.usageAttribution,
+      roundIndex,
+    },
+    request.providerRetryAttempts,
+  );
   recordHostedOpenAICompatibleUsage({
     config,
     options: request,
@@ -98,9 +113,10 @@ export async function runHostedOpenAICompatibleModelRound(
   const assistant = firstHostedChatMessage(response);
   const text = hostedChatText(assistant);
   const toolCalls = extractHostedChatToolCalls(assistant).map((call) => {
-    const rawArguments = typeof call.function.arguments === "string"
-      ? call.function.arguments
-      : JSON.stringify(call.function.arguments ?? {});
+    const rawArguments =
+      typeof call.function.arguments === "string"
+        ? call.function.arguments
+        : JSON.stringify(call.function.arguments ?? {});
     return {
       id: call.id,
       name: call.function.name,
@@ -108,7 +124,8 @@ export async function runHostedOpenAICompatibleModelRound(
       rawArguments,
     };
   });
-  const reportedModel = typeof response.model === "string" ? response.model.trim() : "";
+  const reportedModel =
+    typeof response.model === "string" ? response.model.trim() : "";
   const providerIdentity = reportedModel
     ? {
         provider: config.providerId,
@@ -141,18 +158,26 @@ export async function runHostedOpenAICompatibleModelRound(
   };
 }
 
-function modelRoundTool(tool: ModelRoundRequest["tools"][number]): FunctionToolDefinition {
+function modelRoundTool(
+  tool: ModelRoundRequest["tools"][number],
+): FunctionToolDefinition {
   return {
     type: "function",
     name: tool.name,
     description: tool.description,
     parameters: tool.parameters,
-    ...(tool.concurrencySafe === undefined ? {} : { concurrencySafe: tool.concurrencySafe }),
+    ...(tool.concurrencySafe === undefined
+      ? {}
+      : { concurrencySafe: tool.concurrencySafe }),
   };
 }
 
-function hostedModelRoundMessages(request: ModelRoundRequest): HostedChatMessage[] {
-  const firstUser = request.messages.findIndex((message) => message.role === "user");
+function hostedModelRoundMessages(
+  request: ModelRoundRequest,
+): HostedChatMessage[] {
+  const firstUser = request.messages.findIndex(
+    (message) => message.role === "user",
+  );
   const messages = request.messages.map((message, index): HostedChatMessage => {
     if (message.role === "assistant") {
       return {
@@ -183,30 +208,34 @@ function hostedModelRoundMessages(request: ModelRoundRequest): HostedChatMessage
     if (message.role === "system") {
       return { role: "system", content: message.content };
     }
-    const content = index === firstUser
-      ? promptTextForHosted({ prompt: message.content, attachments: [...(request.attachments ?? [])] })
-      : message.content;
+    const content =
+      index === firstUser
+        ? promptTextForHosted({
+            prompt: message.content,
+            attachments: [...(request.attachments ?? [])],
+          })
+        : message.content;
     return { role: "user", content };
   });
   if (request.instructions?.trim()) {
-    return [{ role: "system", content: request.instructions.trim() }, ...messages];
+    return [
+      { role: "system", content: request.instructions.trim() },
+      ...messages,
+    ];
   }
   return messages;
 }
 
 export function recordHostedOpenAICompatibleUsage(input: {
   config: HostedRuntimeConfig;
-  options: Pick<PromptOptions, "usageAttribution" | "cacheScope" | "butlerData" | "reasoningEffort">;
+  options: Pick<
+    PromptOptions,
+    "usageAttribution" | "cacheScope" | "butlerData" | "reasoningEffort"
+  >;
   response: Record<string, any>;
   roundIndex: number;
 }): void {
   const usageResponse = input.response as unknown as OpenAIResponse;
-  afterAttributedModelResponse({
-    attribution: input.options.usageAttribution,
-    model: input.config.modelRef,
-    response: usageResponse,
-    roundIndex: input.roundIndex,
-  });
   recordPromptCacheMetric(usageResponse, {
     model: input.config.modelRef,
     scope: input.options.cacheScope ?? "session-turn",
@@ -217,5 +246,11 @@ export function recordHostedOpenAICompatibleUsage(input: {
       reasoningEffort: input.options.reasoningEffort,
       roundIndex: input.roundIndex,
     },
+  });
+  afterAttributedModelResponse({
+    attribution: input.options.usageAttribution,
+    model: input.config.modelRef,
+    response: usageResponse,
+    roundIndex: input.roundIndex,
   });
 }

@@ -1,6 +1,9 @@
 import { Folder, FolderOpen, CollapsibleNavGroup } from "@/butler-ds";
 import { SidebarProjectActions } from "@/components/layout/SidebarProjectActions.tsx";
 import { SidebarProjectSessionItem } from "@/components/layout/SidebarProjectSessionItem.tsx";
+import { SidebarSessionLoadMore } from "@/components/layout/SidebarSessionLoadMore.tsx";
+import { useSidebarSessionPaging } from "@/components/layout/useSidebarSessionPaging.ts";
+import { useButlerStore } from "@/app/store.ts";
 import type { ProjectSummary } from "@/app/types.ts";
 
 interface SidebarProjectGroupProps {
@@ -17,6 +20,8 @@ export function SidebarProjectGroup({
   onToggleCollapse,
 }: SidebarProjectGroupProps) {
   const sessions = project.sessions ?? [];
+  const activeChatId = useButlerStore((state) => state.activeChatId);
+  const paging = useSidebarSessionPaging(sessions, activeChatId);
   const effectiveCollapsed = collapsed || projectRowCollapsed;
 
   return (
@@ -29,12 +34,18 @@ export function SidebarProjectGroup({
       dataTestClass="project-group-row"
       contentDataTestClass="project-session-list"
     >
-      {sessions.map((session) => (
+      {paging.visibleSessions.map((session) => (
         <SidebarProjectSessionItem
           key={session.id}
           session={session}
         />
       ))}
+      {paging.remainingCount > 0 ? (
+        <SidebarSessionLoadMore
+          onClick={paging.showMore}
+          remainingCount={paging.remainingCount}
+        />
+      ) : null}
     </CollapsibleNavGroup>
   );
 }

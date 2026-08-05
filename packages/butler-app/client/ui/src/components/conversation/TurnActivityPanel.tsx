@@ -27,6 +27,10 @@ export function TurnActivityPanel({
     semanticState,
     workBlocks,
   } = projectTurnActivity(rows);
+  const showDecision = decisions.length > 0 &&
+    !publicActivity &&
+    !modelRoundWait &&
+    !operation;
   if (
     decisions.length === 0 &&
     workBlocks.length === 0 &&
@@ -54,22 +58,14 @@ export function TurnActivityPanel({
         />
       ) : workBlocks.length > 0 ? (
         <CollapsedTurnActivity blocks={workBlocks} live turnId={turnId} />
-      ) : publicActivity || modelRoundWait || operation ? (
-        <CurrentTurnStatus
-          modelRoundWait={modelRoundWait}
-          operation={operation}
-          publicActivity={publicActivity}
-        />
-      ) : decisions.length > 0 ? (
+      ) : showDecision ? (
         <TurnDecisionRow decision={decisions.at(-1)!} />
       ) : null}
-      {workBlocks.length > 0 || phaseActivities.length > 0 ? (
-        <CurrentTurnStatus
-          modelRoundWait={modelRoundWait}
-          operation={operation}
-          publicActivity={publicActivity}
-        />
-      ) : null}
+      <CurrentTurnStatus
+        modelRoundWait={modelRoundWait}
+        operation={operation}
+        publicActivity={publicActivity}
+      />
     </Stack>
   );
 }

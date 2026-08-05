@@ -1,0 +1,259 @@
+name: Butler Windows Community Distribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing semantic GitHub release tag to receive the community Windows assets
+        required: true
+        type: string
+      acknowledgement:
+        description: Type I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION to confirm non-public-trust distribution
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-community-distribution-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  distribute:
+    name: Build and publish community Windows package
+    runs-on: windows-latest
+    steps:
+      - name: Check out exact release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+
+      - name: Validate community release request and signing inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+          WINDOWS_COMMUNITY_ACKNOWLEDGEMENT: ${{ inputs.acknowledgement }}
+          WINDOWS_COMMUNITY_CERTIFICATE_PFX: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PFX }}
+          WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD }}
+          WINDOWS_COMMUNITY_CERTIFICATE_SHA256: ${{ vars.WINDOWS_COMMUNITY_CERTIFICATE_SHA256 }}
+        run: |
+          $tag = $env:WINDOWS_RELEASE_TAG.Trim()
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw 'tag must be a semantic version beginning with v'
+          }
+          if ($env:WINDOWS_COMMUNITY_ACKNOWLEDGEMENT -cne 'I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION') {
+            throw 'acknowledgement must exactly equal I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION'
+          }
+          gh release view $tag | Out-Null
+          $tagCommit = (& git rev-parse --verify "refs/tags/$tag^{commit}" 2>$null | Out-String).Trim()
+          $checkedOutCommit = (& git rev-parse --verify HEAD 2>$null | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($tagCommit) -or $tagCommit -ne $checkedOutCommit) {
+            throw "The checked out commit does not exactly match release tag $tag"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_COMMUNITY_CERTIFICATE_PFX)) {
+            throw 'WINDOWS_COMMUNITY_CERTIFICATE_PFX is required'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD)) {
+            throw 'WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD is required'
+          }
+          $expectedCertificateSha256 = $env:WINDOWS_COMMUNITY_CERTIFICATE_SHA256.Trim().ToUpperInvariant()
+          if ($expectedCertificateSha256 -notmatch '^[A-F0-9]{64}$') {
+            throw 'WINDOWS_COMMUNITY_CERTIFICATE_SHA256 must be a 64-hex repository variable'
+          }
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'butler-windows-community-signing.pfx'
+          try {
+            [IO.File]::WriteAllBytes(
+              $certificatePath,
+              [Convert]::FromBase64String($env:WINDOWS_COMMUNITY_CERTIFICATE_PFX)
+            )
+            $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+              $certificatePath,
+              $env:WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD
+            )
+            if (-not $certificate.HasPrivateKey) {
+              throw 'community signing certificate must include a private key'
+            }
+            if ($certificate.Thumbprint -notmatch '^[A-Fa-f0-9]{40}$') {
+              throw 'community signing certificate thumbprint is invalid'
+            }
+            if ($certificate.Issuer -ne $certificate.Subject) {
+              throw 'community signing certificate must be self-signed'
+            }
+            $enhancedKeyUsage = $certificate.Extensions |
+              Where-Object {
+                $_ -is [Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]
+              } |
+              Select-Object -First 1
+            $hasCodeSigningEku = $null -ne $enhancedKeyUsage -and @(
+              $enhancedKeyUsage.EnhancedKeyUsages |
+                Where-Object { $_.Value -eq '1.3.6.1.5.5.7.3.3' }
+            ).Count -gt 0
+            if (-not $hasCodeSigningEku) {
+              throw 'community signing certificate must include the code-signing EKU'
+            }
+            $sha256 = [Security.Cryptography.SHA256]::Create()
+            try {
+              $certificateSha256 = [BitConverter]::ToString(
+                $sha256.ComputeHash($certificate.RawData)
+              ).Replace('-', '').ToUpperInvariant()
+            } finally {
+              $sha256.Dispose()
+            }
+            if ($certificateSha256 -ne $expectedCertificateSha256) {
+              throw 'community signing certificate does not match WINDOWS_COMMUNITY_CERTIFICATE_SHA256'
+            }
+            if ($certificate.NotAfter -le (Get-Date)) {
+              throw 'community signing certificate is expired'
+            }
+          } catch {
+            throw 'WINDOWS_COMMUNITY_CERTIFICATE_PFX/PASSWORD could not be parsed as a usable code-signing certificate'
+          } finally {
+            Remove-Item -LiteralPath $certificatePath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Install package dependencies
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup
+
+      - name: Prepare stable community signing and runtime inputs
+        env:
+          WINDOWS_COMMUNITY_CERTIFICATE_PFX: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PFX }}
+          WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD }}
+        run: |
+          $certificatePath = Join-Path $env:RUNNER_TEMP 'butler-windows-community-signing.pfx'
+          [IO.File]::WriteAllBytes(
+            $certificatePath,
+            [Convert]::FromBase64String($env:WINDOWS_COMMUNITY_CERTIFICATE_PFX)
+          )
+          $certificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            $certificatePath,
+            $env:WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD
+          )
+          if (-not $certificate.HasPrivateKey) {
+            throw 'community signing certificate must include a private key'
+          }
+          $certificateCerPath = Join-Path $env:RUNNER_TEMP 'butler-windows-community-signing.cer'
+          Export-Certificate -Cert $certificate -FilePath $certificateCerPath -Force | Out-Null
+          foreach ($storeName in @('Root', 'TrustedPublisher')) {
+            & certutil.exe -f -addstore $storeName $certificateCerPath | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Windows community certificate trust setup failed for $storeName" }
+          }
+          $processHost = Join-Path $env:RUNNER_TEMP 'butler-process-host.exe'
+          bun run packages/butler-agent/scripts/windows/build-process-host.ts $processHost
+          if ($LASTEXITCODE -ne 0) { throw 'Windows process host build failed' }
+          "BUTLER_WINDOWS_SIGN_CERTIFICATE_FILE=$certificatePath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_WINDOWS_SIGN_CERTIFICATE_SHA1=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_APP_MANAGED_BUN_WIN32_X64=$((Get-Command bun.exe).Source)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "BUTLER_APP_WINDOWS_PROCESS_HOST=$processHost" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build and verify community Windows package
+        env:
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+          BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: "1"
+          BUTLER_WINDOWS_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD }}
+          BUTLER_WINDOWS_STANDARD_USER: "0"
+          BUTLER_WINDOWS_CI_ELEVATED_TOKEN: "1"
+        run: |
+          npm.cmd --prefix packages/butler-app/client/ui run build
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          $artifactBaseUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:WINDOWS_RELEASE_TAG"
+          bun run packages/butler-app/scripts/windows/windows-release-package-smoke.ts --out $output --artifact-base-url $artifactBaseUrl
+
+      - name: Prepare deterministic Windows release assets
+        env:
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          $initialFiles = @(Get-ChildItem -LiteralPath $output -File)
+          if ($initialFiles.Count -ne 8) {
+            throw "Expected 8 Windows release files, got $($initialFiles.Count)"
+          }
+          $setupFiles = @($initialFiles | Where-Object {
+            $_.Name -match '^butler-app-[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?-win32-x64-setup\.exe$'
+          })
+          if ($setupFiles.Count -ne 1) { throw "Expected one canonical Windows Setup executable, got $($setupFiles.Count)" }
+          $setupVersion = [regex]::Match(
+            $setupFiles[0].Name,
+            '^butler-app-(?<version>[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)-win32-x64-setup\.exe$'
+          ).Groups['version'].Value
+          $expectedVersion = $env:WINDOWS_RELEASE_TAG.Substring(1)
+          if ($setupVersion -ne $expectedVersion) {
+            throw "Setup version $setupVersion does not match release tag $env:WINDOWS_RELEASE_TAG"
+          }
+          $nupkgFiles = @($initialFiles | Where-Object { $_.Name -like '*.nupkg' })
+          if ($nupkgFiles.Count -ne 1) { throw "Expected one Squirrel nupkg, got $($nupkgFiles.Count)" }
+          $releaseIndex = @($initialFiles | Where-Object { $_.Name -ceq 'RELEASES' })
+          if ($releaseIndex.Count -ne 1) { throw "Expected one Squirrel RELEASES index, got $($releaseIndex.Count)" }
+          foreach ($asset in @($setupFiles[0], $nupkgFiles[0], $releaseIndex[0])) {
+            $checksumPath = "$($asset.FullName).sha256"
+            if (-not (Test-Path -LiteralPath $checksumPath -PathType Leaf)) {
+              throw "Windows release checksum is missing: $checksumPath"
+            }
+            $actualHash = (Get-FileHash -LiteralPath $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            $expectedHash = ([IO.File]::ReadAllText($checksumPath).Trim() -split '\s+')[0].ToLowerInvariant()
+            if ($actualHash -ne $expectedHash) { throw "Windows release checksum mismatch: $($asset.Name)" }
+          }
+          Move-Item -LiteralPath (Join-Path $output 'app-release-manifest.json') -Destination (Join-Path $output 'windows-app-release-manifest.json')
+          Move-Item -LiteralPath (Join-Path $output 'app-update-manifest.json') -Destination (Join-Path $output 'windows-app-update-manifest.json')
+          $files = @(Get-ChildItem -LiteralPath $output -File | Select-Object -ExpandProperty FullName)
+          if ($files.Count -ne 8) { throw "Expected 8 Windows release files after manifest rename, got $($files.Count)" }
+
+      - name: Publish community Windows release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          $setupPattern = 'butler-app-*-win32-x64-setup.exe'
+          $setupChecksumPattern = 'butler-app-*-win32-x64-setup.exe.sha256'
+          $nupkgPattern = '*.nupkg'
+          $nupkgChecksumPattern = '*.nupkg.sha256'
+          $releaseIndexPattern = 'RELEASES'
+          $releaseIndexChecksumPattern = 'RELEASES.sha256'
+          $setup = @(Get-ChildItem -LiteralPath $output -File -Filter $setupPattern)
+          $setupChecksum = @(Get-ChildItem -LiteralPath $output -File -Filter $setupChecksumPattern)
+          $nupkg = @(Get-ChildItem -LiteralPath $output -File -Filter $nupkgPattern)
+          $nupkgChecksum = @(Get-ChildItem -LiteralPath $output -File -Filter $nupkgChecksumPattern)
+          $releaseIndex = @(Get-ChildItem -LiteralPath $output -File -Filter $releaseIndexPattern)
+          $releaseIndexChecksum = @(Get-ChildItem -LiteralPath $output -File -Filter $releaseIndexChecksumPattern)
+          $manifestNames = @('windows-app-release-manifest.json', 'windows-app-update-manifest.json')
+          if (
+            $setup.Count -ne 1 -or $setupChecksum.Count -ne 1 -or
+            $nupkg.Count -ne 1 -or $nupkgChecksum.Count -ne 1 -or
+            $releaseIndex.Count -ne 1 -or $releaseIndexChecksum.Count -ne 1
+          ) {
+            throw 'Windows release assets are missing their canonical Setup, nupkg, or RELEASES file'
+          }
+          $files = @(
+            $setup[0].FullName,
+            $setupChecksum[0].FullName,
+            $nupkg[0].FullName,
+            $nupkgChecksum[0].FullName,
+            $releaseIndex[0].FullName,
+            $releaseIndexChecksum[0].FullName,
+            (Join-Path $output $manifestNames[0]),
+            (Join-Path $output $manifestNames[1])
+          )
+          if ($files.Count -ne 8 -or @($files | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -ne 0) {
+            throw "Expected exactly 8 deterministic Windows release files, got $($files.Count)"
+          }
+          gh release upload $env:WINDOWS_RELEASE_TAG @files --clobber

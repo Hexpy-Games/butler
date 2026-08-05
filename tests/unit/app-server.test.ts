@@ -1799,6 +1799,60 @@ test("session summaries do not require host git for project workspace metadata",
   }
 });
 
+test("missing Git is a non-blocking session capability with a safe transport status", async () => {
+  const workspaceRoot = join(tempDir, "missing-git-workspace");
+  const originalPath = process.env.PATH;
+  const originalGitExecutable = process.env.BUTLER_GIT_EXECUTABLE;
+  process.env.PATH = "";
+  process.env.BUTLER_GIT_EXECUTABLE = join(tempDir, "missing-git-executable");
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    projectWorkspaceRoot: workspaceRoot,
+    port: 0,
+    responder(input) {
+      return { texts: [`reply: ${input.text}`] };
+    },
+  });
+  try {
+    const project = await postJson(`${server.url}projects`, {
+      source: "scratch",
+      display_name: "Optional Git project",
+    });
+    const projectId = project.data.project.id as string;
+    const session = await postJson(`${server.url}sessions`, {
+      kind: "project",
+      project_id: projectId,
+      title: "Git optional",
+    });
+    const sessionId = session.data.session.id as string;
+
+    const view = await getJson(
+      `${server.url}session-view?session_id=${encodeURIComponent(sessionId)}`,
+    );
+    expect(view.data.branch).toEqual({
+      available: false,
+      workspace_mode: "unknown",
+      safe_status: "Git is not installed",
+      safe_error_code: "git_not_installed",
+    });
+
+    const delivered = await postJson(`${server.url}messages`, {
+      chat_id: sessionId,
+      text: "continue without git",
+    });
+    expect(delivered.data.turn.id).toBeTruthy();
+  } finally {
+    server.stop();
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalGitExecutable === undefined) {
+      delete process.env.BUTLER_GIT_EXECUTABLE;
+    } else {
+      process.env.BUTLER_GIT_EXECUTABLE = originalGitExecutable;
+    }
+  }
+});
+
 test("chat sessions can be renamed and archived through session routes", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
@@ -1947,9 +2001,9 @@ test("archived projects and sessions can be listed, restored, and permanently de
   }
 });
 
-test("scratch project creation makes a collision-free folder backed project without leaking paths", async () => {
+test("scratch project creation makes a named collision-free folder backed project without leaking paths", async () => {
   const workspaceRoot = join(tempDir, "butler-workspace");
-  mkdirSync(join(workspaceRoot, "New project"), { recursive: true });
+  mkdirSync(join(workspaceRoot, "Alpha"), { recursive: true });
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
     projectWorkspaceRoot: workspaceRoot,
@@ -1958,12 +2012,13 @@ test("scratch project creation makes a collision-free folder backed project with
   try {
     const created = await postJson(`${server.url}projects`, {
       source: "scratch",
+      display_name: "Alpha",
     });
-    expect(created.data.project.display_name).toBe("New project 2");
-    expect(created.data.project.workspace_label).toBe("New project 2");
-    expect(created.data.project.safe_path_label).toBe("New project 2");
+    expect(created.data.project.display_name).toBe("Alpha");
+    expect(created.data.project.workspace_label).toBe("Alpha 2");
+    expect(created.data.project.safe_path_label).toBe("Alpha 2");
     expect(created.data.project.active_session_count).toBe(0);
-    expect(statSync(join(workspaceRoot, "New project 2")).isDirectory()).toBe(
+    expect(statSync(join(workspaceRoot, "Alpha 2")).isDirectory()).toBe(
       true,
     );
     expect(JSON.stringify(created)).not.toContain(tempDir);
@@ -1974,7 +2029,7 @@ test("scratch project creation makes a collision-free folder backed project with
       (item: { id: string }) => item.id === created.data.project.id,
     );
     expect(project).toMatchObject({
-      display_name: "New project 2",
+      display_name: "Alpha",
       active_session_count: 0,
     });
     expect(project.sessions).toEqual([]);
@@ -4587,6 +4642,7 @@ test("settings default project folder updates from signed desktop selection and 
     );
     const project = await postJson(`${server.url}projects`, {
       source: "scratch",
+      display_name: "New project",
     });
     expect(project.data.project.workspace_label).toBe("New project");
     expect(existsSync(join(selectedDefault, "New project"))).toBe(true);
@@ -4687,12 +4743,26 @@ test("context details reflect latest provider prompt usage telemetry", async () 
     const before = await getJson(
       `${server.url}context-details?session_id=general`,
     );
+    const beforeOccupied = before.data.categories
+      .filter((category: { source_kind: string }) =>
+        !category.source_kind.endsWith("_reserve"),
+      )
+      .reduce(
+        (sum: number, category: { used_tokens: number }) =>
+          sum + category.used_tokens,
+        0,
+      );
+    expect(before.data.used_tokens).toBe(beforeOccupied);
+    expect(before.data.categories.some(
+      (category: { source_kind: string; used_tokens: number }) =>
+        category.source_kind.endsWith("_reserve") && category.used_tokens > 0,
+    )).toBe(true);
 
     appendPromptCacheMetric(
       {
         ts: Date.now(),
         model: "openai/gpt-5.4",
-        scope: "session-turn",
+        scope: "btcc-guided:butler/app-general",
         turnId,
         phase: "tool_loop",
         promptTokens: 64_000,
@@ -4710,8 +4780,19 @@ test("context details reflect latest provider prompt usage telemetry", async () 
     );
 
     expect(before.data.used_tokens).toBeLessThan(64_000);
-    expect(after.data.used_tokens).toBeGreaterThanOrEqual(64_000);
+    expect(after.data.used_tokens).toBe(64_000);
+    expect(after.data.ratio).toBe(64_000 / after.data.budget_tokens);
     expect(after.data.token_count_source).toBe("provider_prompt_usage");
+    const afterOccupied = after.data.categories
+      .filter((category: { source_kind: string }) =>
+        !category.source_kind.endsWith("_reserve"),
+      )
+      .reduce(
+        (sum: number, category: { used_tokens: number }) =>
+          sum + category.used_tokens,
+        0,
+      );
+    expect(afterOccupied).toBe(after.data.used_tokens);
     expect(working.used_tokens).toBeGreaterThan(before.data.used_tokens);
     expect(JSON.stringify(after)).not.toContain("small visible request");
   } finally {
@@ -4740,7 +4821,7 @@ test("context details fall back to latest context monitor runtime telemetry", as
     appendRuntimeTurnContextMetric({
       butlerData: tempDir,
       sessionId: "butler/app-general",
-      model: "openai/gpt-5.4",
+      model: "openai/gpt-5.5",
       totalPromptChars: 300_000,
       promptContextChars: 280_000,
       recentConversationChars: 20_000,
@@ -4756,6 +4837,53 @@ test("context details fall back to latest context monitor runtime telemetry", as
     expect(after.data.used_tokens).toBeGreaterThanOrEqual(60_000);
     expect(after.data.token_count_source).toBe("context_monitor");
     expect(JSON.stringify(after)).not.toContain("small visible request");
+  } finally {
+    server.stop();
+  }
+});
+
+test("session projections and context details select the latest Turn beyond the 200-row feed", async () => {
+  const server = createAppServer({
+    dbPath: join(tempDir, "app.sqlite"),
+    butlerData: tempDir,
+    port: 0,
+  });
+  try {
+    const internalStore = server.store as unknown as {
+      insertTurn(chatId: string, state: string, label: string): { id: string };
+      updateTurnState(
+        turnId: string,
+        state: string,
+        options: { safeStatusLabel: string; cancellable?: boolean },
+      ): void;
+    };
+    let latestTurnId = "";
+    for (let index = 0; index < 201; index += 1) {
+      const turn = internalStore.insertTurn("general", "accepted", "Accepted");
+      internalStore.updateTurnState(turn.id, "delivered", {
+        safeStatusLabel: "Delivered",
+        cancellable: false,
+      });
+      latestTurnId = turn.id;
+    }
+    appendPromptCacheMetric({
+      ts: Date.now(),
+      model: "openai/gpt-5.5",
+      scope: "btcc-guided:butler/app-general",
+      turnId: latestTurnId,
+      promptTokens: 64_000,
+      cachedTokens: 8_000,
+      totalTokens: 65_500,
+    }, { butlerData: tempDir });
+
+    const view = await getJson(`${server.url}session-view?session_id=general`);
+    const summary = await getJson(`${server.url}session-summary?session_id=general`);
+    const context = await getJson(`${server.url}context-details?session_id=general`);
+
+    expect(view.data.latest_turn.id).toBe(latestTurnId);
+    expect(summary.data.turn_state).toBe("delivered");
+    expect(context.data.used_tokens).toBe(64_000);
+    expect(context.data.token_count_source).toBe("provider_prompt_usage");
   } finally {
     server.stop();
   }

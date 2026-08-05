@@ -1,4 +1,8 @@
-import type { CreateProjectRequest, CreateSessionRequest, UpdateSessionRequest } from "./navigation-contract.ts";
+import type {
+  CreateProjectRequest,
+  CreateSessionRequest,
+  UpdateSessionRequest,
+} from "./navigation-contract.ts";
 
 export function isCreateSessionRequest(
   value: unknown,
@@ -7,10 +11,7 @@ export function isCreateSessionRequest(
   const input = value as Partial<CreateSessionRequest>;
   if (input.kind !== "chat" && input.kind !== "project") return false;
   if ("title" in input && typeof input.title !== "string") return false;
-  if (
-    "initial_message" in input &&
-    typeof input.initial_message !== "string"
-  )
+  if ("initial_message" in input && typeof input.initial_message !== "string")
     return false;
   if ("project_id" in input && typeof input.project_id !== "string")
     return false;
@@ -38,7 +39,37 @@ export function isUpdateSessionRequest(
 export function isCreateProjectRequest(
   value: unknown,
 ): value is CreateProjectRequest {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
   const input = value as Partial<CreateProjectRequest>;
-  return input.source === "scratch" || input.source === "existing_folder";
+  if (input.source !== "scratch" && input.source !== "existing_folder") {
+    return false;
+  }
+  if (
+    input.source === "scratch" &&
+    (typeof input.display_name !== "string" ||
+      input.display_name.trim().length === 0)
+  ) {
+    return false;
+  }
+  if (
+    input.display_name !== undefined &&
+    typeof input.display_name !== "string"
+  ) {
+    return false;
+  }
+  if (
+    input.folder_selection_token !== undefined &&
+    typeof input.folder_selection_token !== "string"
+  ) {
+    return false;
+  }
+  if (
+    input.idempotency_key !== undefined &&
+    typeof input.idempotency_key !== "string"
+  ) {
+    return false;
+  }
+  return true;
 }

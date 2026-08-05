@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   Button,
+  ChevronDown,
+  ChevronRight,
   ListChecks,
   RollingSwap,
   Stack,
@@ -11,8 +13,6 @@ import type { PhaseActivity } from "@/app/conversation-progress";
 import { phaseLabel } from "./phaseLabel";
 import { appCopy } from "@/app/copy.ts";
 import { workActivityToolsFromRows } from "./toolchainUtils";
-
-const metaStyle = { color: "var(--text-secondary)" } as const;
 
 export function TurnActivityTimeline({
   activities,
@@ -30,6 +30,7 @@ export function TurnActivityTimeline({
   const latest = activities.at(-1);
   if (!latest) return null;
   const currentPhase = phaseLabel(currentState ?? latest.phase);
+  const headerLabel = `${live ? "현재" : "활동"} · ${currentPhase} · ${activities.length}개 기록`;
 
   return (
     <section
@@ -38,9 +39,17 @@ export function TurnActivityTimeline({
       data-turn-id={turnId}
     >
       <Stack gap="xs" aria-live={live ? "polite" : undefined}>
-        <Typo.Caption as="p" style={metaStyle}>
-          {live ? "현재" : "활동"} · {currentPhase} · {activities.length}개 기록
-        </Typo.Caption>
+        <Stack cross="start">
+          <Button
+            aria-expanded={expanded}
+            data-test-class="toggle-turn-activity-disclosure"
+            iconEnd={expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            onClick={() => setExpanded((value) => !value)}
+            text={headerLabel}
+            type="button"
+            variant="inline"
+          />
+        </Stack>
         <Stack gap="sm">
           {expanded ? (
             <Stack as="ol" gap="sm" style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -54,24 +63,19 @@ export function TurnActivityTimeline({
                 </li>
               ))}
             </Stack>
-          ) : (
+          ) : live ? (
             <RollingSwap itemKey={latest.id} motion={live}>
               <ActivityBlock activity={latest} turnId={turnId} />
             </RollingSwap>
-          )}
-          {activities.length > 1 ? (
+          ) : null}
+          {expanded ? (
             <Stack as="footer" cross="start">
               <Button
-                aria-expanded={expanded}
-                data-test-class="toggle-turn-activity-history"
+                data-test-class="collapse-turn-activity-history"
                 iconStart={<ListChecks size={14} />}
-                onClick={() => setExpanded((value) => !value)}
+                onClick={() => setExpanded(false)}
                 size="xs"
-                text={
-                  expanded
-                    ? workCopy.collapseLabel
-                    : workCopy.viewAllLabel(activities.length)
-                }
+                text={workCopy.collapseLabel}
                 type="button"
                 variant="borderless"
               />

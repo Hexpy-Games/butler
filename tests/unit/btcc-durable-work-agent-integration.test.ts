@@ -649,14 +649,11 @@ test("a rejected stage transition is not projected as accepted progress", async 
     expect(activities.map((activity) => activity.displayStage)).toEqual([
       "conception",
       "planning",
-      "planning",
     ]);
-    expect(activities.at(-1)).toMatchObject({
-      title: "부분 결과 안내",
-      summary: "전이 오류와 무관하게 확인 가능한 답변을 전달합니다.",
-    });
     expect(activities.some((activity) =>
       activity.summary.includes("REJECTED STAGE"))).toBe(false);
+    expect(activities.some((activity) =>
+      activity.summary.includes("전이 오류와 무관하게"))).toBe(false);
     expect(checklists).toEqual([["planned"]]);
     expect(await stores.durableWork.boundWorkForTurn(
       "rejected-stage-projection-turn",
@@ -839,12 +836,18 @@ test("R3 projects the existing Plan, tool, Review, and final events without anot
       "review",
       "execution",
       "review",
-      "review",
     ]);
-    expect(activities.at(-1)).toMatchObject({
-      title: "부분 결과 안내",
-      summary: "source.txt의 실제 내용은 observed result입니다.",
+    expect(activities[3]).toMatchObject({
+      title: "읽기: source.txt",
+      summary: "계획에 따라 실제 파일 내용을 확인합니다.",
     });
+    expect(activities.at(-1)).toMatchObject({
+      title: "결과 검토",
+      summary: "The requested source was read and is ready to report.",
+    });
+    expect(activities.some(({ summary }) =>
+      summary === "source.txt의 실제 내용은 observed result입니다."))
+      .toBe(false);
     const operationActivityIds = new Set(operations.map(({ activityId }) => activityId));
     expect([...operationActivityIds]).toEqual(
       activities.slice(1, 5).map(({ activityId }) => activityId),

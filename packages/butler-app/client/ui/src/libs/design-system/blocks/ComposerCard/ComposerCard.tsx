@@ -15,7 +15,9 @@ import styles from "./ComposerCard.module.css";
 export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
   large?: boolean;
   floating?: boolean;
+  dropActive?: boolean;
   adjunct?: ReactNode;
+  notice?: ReactNode;
   children: ReactNode;
   containerRef?: Ref<HTMLDivElement>;
   expanded?: boolean;
@@ -24,7 +26,9 @@ export interface ComposerCardProps extends FormHTMLAttributes<HTMLFormElement> {
 export function ComposerCard({
   large = false,
   floating = false,
+  dropActive = false,
   adjunct,
+  notice,
   children,
   className,
   containerRef,
@@ -37,9 +41,15 @@ export function ComposerCard({
       data-test-class={`composer-wrap${large ? " large" : ""}`}
       ref={containerRef}
     >
+      {notice ? (
+        <div className={styles.notice} data-test-class="composer-notice-slot">
+          {notice}
+        </div>
+      ) : null}
       <form
         className={cn(tintedGlassSurfaceClassName, styles.card, className)}
         data-radius="composer"
+        data-drop-active={dropActive ? "true" : undefined}
         data-expanded={expanded}
         data-test-class="composer-card"
         {...props}

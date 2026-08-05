@@ -20,7 +20,10 @@ import {
   PROJECT_LEDGER_LIFECYCLE_TOOL_NAMES,
   PROJECT_LEDGER_MUTATION_TOOL_NAMES,
 } from "../../packages/butler-agent/src/agent/tools/project-ledger/mutation-tools.ts";
-import { projectLedgerNativeToolDefinitions } from "../../packages/butler-agent/src/agent/tools/project-ledger/native.ts";
+import {
+  createProjectLedgerNativeToolHandler,
+  projectLedgerNativeToolDefinitions,
+} from "../../packages/butler-agent/src/agent/tools/project-ledger/native.ts";
 import { TodoListStore } from "../../packages/butler-agent/src/agent/work/todo-list.ts";
 import { WorkStreamStore } from "../../packages/butler-agent/src/agent/work/work-stream.ts";
 import {
@@ -825,6 +828,66 @@ test("Butler tool registry exposes stable native tool contracts", () => {
   expect(String(personaPresetProperty?.description)).toContain("persona_preset id");
 });
 
+test("Project Ledger completion schema makes automatic Git evidence the canonical model path", () => {
+  const definition = projectLedgerNativeToolDefinitions.find((tool) =>
+    tool.name === "project_ledger_work_complete",
+  );
+  const properties = definition?.parameters.properties as
+    | Record<string, Record<string, unknown>>
+    | undefined;
+
+  expect(properties?.code_commit).toMatchObject({
+    type: "string",
+    enum: ["auto"],
+  });
+  expect(String(properties?.code_commit?.description)).toContain("never pass a SHA");
+  expect(String(properties?.code_commits?.description)).toContain('"repo", "hash", and "message"');
+  expect(definition?.description).toContain('code_commit:"auto"');
+});
+
+test("Project Ledger auto evidence degrades without blocking Butler when Git is missing", async () => {
+  const originalPath = process.env.PATH;
+  const originalGitExecutable = process.env.BUTLER_GIT_EXECUTABLE;
+  process.env.PATH = "";
+  process.env.BUTLER_GIT_EXECUTABLE = join(tempDir, "missing-git-executable");
+  try {
+    const execute = createProjectLedgerNativeToolHandler({
+      butlerHome: tempDir,
+      butlerData: tempDir,
+      workspacePath: tempDir,
+    }, "project_ledger_work_complete");
+    const result = await execute({
+      args: {
+        id: "W-NO-GIT",
+        validation: "validated",
+        review: "reviewed",
+        report: "reported",
+        code_commit: "auto",
+      },
+    }) as Record<string, any>;
+
+    expect(result).toMatchObject({
+      ok: false,
+      recoverable: true,
+      butler_operational: true,
+      git_features_available: false,
+      error: {
+        code: "git_not_installed",
+        install_url: "https://git-scm.com/downloads",
+      },
+    });
+    expect(result.error.native_next).toBeUndefined();
+  } finally {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    if (originalGitExecutable === undefined) {
+      delete process.env.BUTLER_GIT_EXECUTABLE;
+    } else {
+      process.env.BUTLER_GIT_EXECUTABLE = originalGitExecutable;
+    }
+  }
+});
+
 test("work-tracking runtime ownership list matches handler keys", () => {
   const handlers = createWorkTrackingToolHandlers({
     butlerData: tempDir,
@@ -1599,7 +1662,7 @@ test("run_command schema exposes bounded platform-neutral command execution", ()
   });
   expect(properties?.state_effect).toMatchObject({
     type: "string",
-    enum: ["read_only", "mutation", "validation"],
+    enum: ["read_only", "mutation", "validation", "remote_observation"],
   });
 });
 
@@ -4173,6 +4236,17 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
     JSON.stringify({ name: "ledger-demo", private: true }),
     "utf8",
   );
+  expect(spawnSync("git", ["init"], { cwd: projectPath }).status).toBe(0);
+  expect(spawnSync("git", ["add", "package.json"], { cwd: projectPath }).status).toBe(0);
+  expect(spawnSync("git", [
+    "-c",
+    "user.name=Butler Test",
+    "-c",
+    "user.email=butler-test@example.invalid",
+    "commit",
+    "-m",
+    "Initialize ledger demo",
+  ], { cwd: projectPath }).status).toBe(0);
   runProjectLedger(["init", "--id", "ledger-demo", "--name", "Ledger Demo"], projectPath);
   runProjectLedger([
     "work",
@@ -4317,6 +4391,45 @@ test("Project Ledger tools wrap the portable CLI without Butler runtime coupling
   }) as Record<string, any>;
   expect(completedWork.ok).toBe(true);
   expect(completedWork.data.status).toBe("done");
+
+  runProjectLedger([
+    "work",
+    "create",
+    "--id",
+    "W-AUTO-COMMIT",
+    "--title",
+    "Automatic commit evidence",
+    "--status",
+    "in_progress",
+    "--spec-exemption",
+    "--acceptance-exemption",
+    "--requires-commit-evidence",
+  ], projectPath);
+  const autoCommitWork = await execute({
+    name: "project_ledger_work_complete",
+    args: {
+      project_path: projectPath,
+      id: "W-AUTO-COMMIT",
+      validation: "automatic evidence validation",
+      review: "automatic evidence review",
+      report: "Automatic evidence report.",
+      code_commit: "15149b333e7162d9b3448f172079c481afedde9b",
+      code_commits: "15149b333e7162d9b3448f172079c481afedde9b",
+    },
+    rawArguments: "{}",
+  }) as Record<string, any>;
+  expect(autoCommitWork.ok).toBe(true);
+  expect(autoCommitWork.data.status).toBe("done");
+  const automaticCommits = JSON.parse(autoCommitWork.data.codeCommits);
+  expect(automaticCommits).toEqual([
+    expect.objectContaining({
+      repo: "ledger-project",
+      hash: expect.stringMatching(/^[0-9a-f]{12}$/u),
+      message: "Initialize ledger demo",
+    }),
+  ]);
+  expect(autoCommitWork.data.codeCommits).not.toContain("15149b333e7162d9b3448f172079c481afedde9b");
+
   const nativeShownWork = await execute({
     name: "project_ledger_show",
     args: {

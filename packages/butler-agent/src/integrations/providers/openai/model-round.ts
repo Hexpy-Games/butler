@@ -4,13 +4,32 @@ import type {
   ModelRoundResult,
 } from "../../../agent/btcc/ports/model-round.ts";
 import { agentLoopImageDataUrl } from "../../../agent/tools/tool-result-media.ts";
-import { afterAttributedModelResponse, beforeAttributedModelRequest, extractResponseText, getFunctionCalls, modelFacingFunctionTools, openAIInputWithAttachments, parseToolArguments } from "../shared/runtime-support.ts";
-import { buildReasoningConfig, resolveOpenAIModel, resolveOpenAIPromptCacheConfig } from "./config.ts";
-import { createOpenAIResponse, functionCallContinuationItems, toCodexStatelessInput } from "./responses.ts";
+import {
+  afterAttributedModelResponse,
+  beforeAttributedModelRequest,
+  extractResponseText,
+  getFunctionCalls,
+  modelFacingFunctionTools,
+  openAIInputWithAttachments,
+  parseToolArguments,
+} from "../shared/runtime-support.ts";
+import {
+  buildReasoningConfig,
+  resolveOpenAIModel,
+  resolveOpenAIPromptCacheConfig,
+} from "./config.ts";
+import {
+  createOpenAIResponse,
+  functionCallContinuationItems,
+  toCodexStatelessInput,
+} from "./responses.ts";
 import { logPromptCacheStats, recordPromptCacheMetric } from "./usage.ts";
 import { resolveDynamicOpenAIModel } from "./models.ts";
 import type { OpenAIAuthOverride } from "../runtime-contracts.ts";
-import { extractPromptCacheStats, usageReportFromStats } from "../shared/runtime-support.ts";
+import {
+  extractPromptCacheStats,
+  usageReportFromStats,
+} from "../shared/runtime-support.ts";
 
 interface OpenAIContinuation {
   provider: "openai";
@@ -27,10 +46,15 @@ export async function runOpenAIModelRound(
   authOverride?: OpenAIAuthOverride,
   modelOverride?: string,
 ): Promise<ModelRoundResult> {
-  const resolution = resolveOpenAIModel(modelOverride ?? request.model, request.reasoningEffort);
+  const resolution = resolveOpenAIModel(
+    modelOverride ?? request.model,
+    request.reasoningEffort,
+  );
   const model = await resolveDynamicOpenAIModel(resolution.model);
   const reasoning = buildReasoningConfig(resolution);
-  const promptCache = resolveOpenAIPromptCacheConfig(request.cacheScope ?? "btcc-agent-loop");
+  const promptCache = resolveOpenAIPromptCacheConfig(
+    request.cacheScope ?? "btcc-agent-loop",
+  );
   const previous = isOpenAIContinuation(request.continuation)
     ? request.continuation
     : null;
@@ -41,7 +65,11 @@ export async function runOpenAIModelRound(
   );
   const initialStatelessInput = toCodexStatelessInput(initialInput);
   const continuationMessages = previous
-    ? newOpenAIContinuationMessages(request.messages, previous.sent, request.butlerData)
+    ? newOpenAIContinuationMessages(
+        request.messages,
+        previous.sent,
+        request.butlerData,
+      )
     : null;
   const requestItems = continuationMessages?.items ?? initialInput;
   const statelessRequestInput = previous
@@ -53,32 +81,52 @@ export async function runOpenAIModelRound(
     roundIndex,
   });
 
-  const response = await createOpenAIResponse({
+  const response = await createOpenAIResponse(
+    {
+      model,
+      store: true,
+      ...promptCache,
+      instructions: request.instructions,
+      ...(request.tools.length > 0
+        ? {
+            tools: modelFacingFunctionTools(request.tools),
+          }
+        : {}),
+      tool_choice: request.toolChoice ?? "auto",
+      reasoning,
+      ...(previous
+        ? {
+            previous_response_id: previous.responseId,
+            input: requestItems,
+            __butler_codex_stateless_input: statelessRequestInput,
+          }
+        : {
+            input: requestItems,
+            __butler_codex_stateless_input: initialStatelessInput,
+          }),
+    },
+    request.signal,
+    authOverride,
+    request.onProviderStreamEvent,
+    {
+      attribution: request.usageAttribution,
+      roundIndex,
+    },
+    undefined,
+    request.providerRetryAttempts,
+  );
+
+  recordPromptCacheMetric(response, {
     model,
-    store: true,
-    ...promptCache,
-    instructions: request.instructions,
-    ...(request.tools.length > 0
-      ? {
-          tools: modelFacingFunctionTools(request.tools),
-        }
-      : {}),
-    tool_choice: request.toolChoice ?? "auto",
-    reasoning,
-    ...(previous
-      ? {
-          previous_response_id: previous.responseId,
-          input: requestItems,
-          __butler_codex_stateless_input: statelessRequestInput,
-        }
-      : {
-          input: requestItems,
-          __butler_codex_stateless_input: initialStatelessInput,
-        }),
-  }, request.signal, authOverride, request.onProviderStreamEvent, {
-    attribution: request.usageAttribution,
-    roundIndex,
-  }, undefined, request.providerRetryAttempts);
+    scope: request.cacheScope ?? "btcc-agent-loop",
+    promptCache,
+    butlerData: request.butlerData,
+    usageAttribution: {
+      ...request.usageAttribution,
+      reasoningEffort: resolution.reasoningEffort,
+      roundIndex,
+    },
+  });
 
   const responseStats = extractPromptCacheStats(response);
   const responseUsage = responseStats
@@ -98,19 +146,19 @@ export async function runOpenAIModelRound(
   }));
   const text = extractResponseText(response);
   const responseRecord = response as unknown as Record<string, unknown>;
-  const reportedModel = typeof responseRecord.model === "string"
-    ? String(responseRecord.model).trim()
-    : "";
+  const reportedModel =
+    typeof responseRecord.model === "string"
+      ? String(responseRecord.model).trim()
+      : "";
   const providerIdentity = reportedModel
     ? { provider: "openai", configuredModel: request.model, reportedModel }
     : undefined;
   if (providerIdentity) request.onProviderResponseIdentity?.(providerIdentity);
 
   const functionCalls = functionCallContinuationItems(response);
-  const statelessInput = [
-    ...statelessRequestInput,
-    ...functionCalls,
-  ].map(retainTextOnlyAfterSuccessfulImageReplay);
+  const statelessInput = [...statelessRequestInput, ...functionCalls].map(
+    retainTextOnlyAfterSuccessfulImageReplay,
+  );
   const nextContinuation: OpenAIContinuation = {
     provider: "openai",
     responseId: response.id,
@@ -120,17 +168,6 @@ export async function runOpenAIModelRound(
   if (continuationMessages) {
     nextContinuation.sent = continuationMessages.sent;
   }
-  recordPromptCacheMetric(response, {
-    model,
-    scope: request.cacheScope ?? "btcc-agent-loop",
-    promptCache,
-    butlerData: request.butlerData,
-    usageAttribution: {
-      ...request.usageAttribution,
-      reasoningEffort: resolution.reasoningEffort,
-      roundIndex,
-    },
-  });
   logPromptCacheStats(response, () => {}, promptCache);
 
   return {
@@ -152,9 +189,9 @@ export async function runOpenAIModelRound(
 function isOpenAIContinuation(value: unknown): value is OpenAIContinuation {
   return Boolean(
     value &&
-      typeof value === "object" &&
-      (value as Record<string, unknown>).provider === "openai" &&
-      typeof (value as Record<string, unknown>).responseId === "string",
+    typeof value === "object" &&
+    (value as Record<string, unknown>).provider === "openai" &&
+    typeof (value as Record<string, unknown>).responseId === "string",
   );
 }
 
@@ -203,9 +240,10 @@ function openAIToolMessageItems(
       ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
       : [];
   });
-  const output = images.length > 0
-    ? [{ type: "input_text", text: message.content }, ...images]
-    : message.content;
+  const output =
+    images.length > 0
+      ? [{ type: "input_text", text: message.content }, ...images]
+      : message.content;
   const statelessItem = {
     type: "function_call_output",
     call_id: message.toolCallId,
@@ -223,9 +261,15 @@ function openAIToolMessageItems(
 function retainTextOnlyAfterSuccessfulImageReplay(
   item: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (item.type !== "function_call_output" || !Array.isArray(item.output)) return item;
-  const output = item.output.filter((part) =>
-    !(part && typeof part === "object" && (part as Record<string, unknown>).type === "input_image"),
+  if (item.type !== "function_call_output" || !Array.isArray(item.output))
+    return item;
+  const output = item.output.filter(
+    (part) =>
+      !(
+        part &&
+        typeof part === "object" &&
+        (part as Record<string, unknown>).type === "input_image"
+      ),
   );
   return output.length === item.output.length ? item : { ...item, output };
 }

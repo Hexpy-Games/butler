@@ -25,7 +25,11 @@ export async function runLocalModelRound(
   config: LocalModelConfig,
   request: ModelRoundRequest,
 ): Promise<ModelRoundResult> {
-  const requests = createProviderRequestAttributor({ attribution: request.usageAttribution });
+  const requests = createProviderRequestAttributor({
+    attribution: request.usageAttribution,
+    butlerData: request.butlerData,
+    cacheScope: request.cacheScope,
+  });
   const response = await requests.request({
     model: config.model_ref,
     run: async (context) => await createLocalChatCompletion(config, {
