@@ -88,8 +88,12 @@ export class ModelRouteDurabilityError extends Error {
 
   constructor(
     readonly phase: ModelRouteDurabilityPhase,
+    cause?: unknown,
   ) {
-    super(`BTCC model route durability failed during ${phase}`);
+    super(
+      `BTCC model route durability failed during ${phase}`,
+      cause === undefined ? undefined : { cause },
+    );
     this.name = "ModelRouteDurabilityError";
   }
 }

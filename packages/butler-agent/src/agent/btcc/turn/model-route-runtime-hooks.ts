@@ -2,7 +2,9 @@ import type { BtccAgentLoop } from "../agent-loop/index.ts";
 import {
   ModelRouteDurabilityError,
 } from "../model-route/index.ts";
+import type { ModelRouteDurabilityPhase } from "../model-route/index.ts";
 import type { ModelRoundResult } from "../ports/model-round.ts";
+import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 import type {
   StateExecutionClaim,
   TurnRecord,
@@ -17,6 +19,8 @@ type RouteRuntimeHooks = Pick<AgentRunInput,
   | "recordModelRoundAcceptance"
 >;
 
+const MAX_DURABILITY_ATTEMPTS = 3;
+
 export function createModelRouteRuntimeHooks(input: {
   turn: TurnRecord;
   claim: StateExecutionClaim;
@@ -27,31 +31,25 @@ export function createModelRouteRuntimeHooks(input: {
   const routeDigest = input.turn.modelRoute?.routeDigest ?? "unknown";
 
   return {
-    recordModelRouteEvent: async (event) => {
-      try {
-        return await input.turns.recordModelRouteEvent?.({
-          event,
-          route: event.route,
-          turnId: input.turn.turnId,
-          expectedRevision: input.turn.revision,
-          executionFence: input.turn.executionFence,
-          claimId: input.claim.claimId,
-        });
-      } catch {
-        throw new ModelRouteDurabilityError("attempt_event_write");
-      }
-    },
-    loadModelRouteAttemptHistory: async (attempt) => {
-      try {
-        return await input.turns.loadModelRouteAttemptHistory?.({
-          turnId: input.turn.turnId,
-          routeDigest,
-          ...attempt,
-        }) ?? { started: [], failed: [], succeeded: [], abandoned: [] };
-      } catch {
-        throw new ModelRouteDurabilityError("attempt_history_read");
-      }
-    },
+    recordModelRouteEvent: (event) => withDurabilityRetry(
+      "attempt_event_write",
+      () => input.turns.recordModelRouteEvent?.({
+        event,
+        route: event.route,
+        turnId: input.turn.turnId,
+        expectedRevision: input.turn.revision,
+        executionFence: input.turn.executionFence,
+        claimId: input.claim.claimId,
+      }),
+    ),
+    loadModelRouteAttemptHistory: (attempt) => withDurabilityRetry(
+      "attempt_history_read",
+      async () => await input.turns.loadModelRouteAttemptHistory?.({
+        turnId: input.turn.turnId,
+        routeDigest,
+        ...attempt,
+      }) ?? { started: [], failed: [], succeeded: [], abandoned: [] },
+    ),
     ...(routeAcceptanceReader
       ? { loadModelRoundAcceptance: loadAcceptance(routeAcceptanceReader, input, routeDigest) }
       : {}),
@@ -66,15 +64,16 @@ function loadAcceptance(
   input: { turn: TurnRecord; claim: StateExecutionClaim },
   routeDigest: string,
 ): NonNullable<RouteRuntimeHooks["loadModelRoundAcceptance"]> {
-  return (acceptance) => reader({
-    turnId: input.turn.turnId,
-    routeDigest,
-    checkpointId: input.claim.checkpointId,
-    checkpointRevision: input.claim.checkpointRevision,
-    ...acceptance,
-  }).catch(() => {
-    throw new ModelRouteDurabilityError("response_acceptance_read");
-  });
+  return (acceptance) => withDurabilityRetry(
+    "response_acceptance_read",
+    () => reader({
+      turnId: input.turn.turnId,
+      routeDigest,
+      checkpointId: input.claim.checkpointId,
+      checkpointRevision: input.claim.checkpointRevision,
+      ...acceptance,
+    }),
+  );
 }
 
 function recordAcceptance(
@@ -89,19 +88,36 @@ function recordAcceptance(
     modelRef: string;
     result: ModelRoundResult;
   }) => {
-    try {
-      await writer({
-        ...acceptance,
-        turnId: input.turn.turnId,
-        expectedRevision: input.turn.revision,
-        executionFence: input.turn.executionFence,
-        claimId: input.claim.claimId,
-        checkpointId: input.claim.checkpointId,
-        checkpointRevision: input.claim.checkpointRevision,
-        routeDigest,
-      });
-    } catch {
-      throw new ModelRouteDurabilityError("response_acceptance_write");
-    }
+    return withDurabilityRetry("response_acceptance_write", () => writer({
+      ...acceptance,
+      turnId: input.turn.turnId,
+      expectedRevision: input.turn.revision,
+      executionFence: input.turn.executionFence,
+      claimId: input.claim.claimId,
+      checkpointId: input.claim.checkpointId,
+      checkpointRevision: input.claim.checkpointRevision,
+      routeDigest,
+    }));
   };
+}
+
+async function withDurabilityRetry<T>(
+  phase: ModelRouteDurabilityPhase,
+  operation: () => Promise<T> | T,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_DURABILITY_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isSqliteContention(error) || attempt === MAX_DURABILITY_ATTEMPTS) {
+        throw new ModelRouteDurabilityError(phase, error);
+      }
+      // Let an already-active writer release its turn before the next bounded
+      // attempt; this is deliberately a microtask handoff, not timer polling.
+      await Promise.resolve();
+    }
+  }
+  throw new ModelRouteDurabilityError(phase, lastError);
 }
