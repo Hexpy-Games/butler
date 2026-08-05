@@ -23,7 +23,7 @@ import {
 
 
 
-export type HostedOpenAICompatibleProviderId = "xai" | "qwen" | "kimi" | "zai";
+export type HostedOpenAICompatibleProviderId = "xai" | "qwen" | "kimi" | "zai" | "zai-api";
 
 
 
@@ -57,13 +57,14 @@ export function promptTextForHosted(options: Pick<PromptOptions, "prompt" | "att
 export function isHostedOpenAICompatibleProvider(
   providerId: HostedModelProviderId,
 ): providerId is HostedOpenAICompatibleProviderId {
-  return providerId === "xai" || providerId === "qwen" || providerId === "kimi" || providerId === "zai";
+  return providerId === "xai" || providerId === "qwen" || providerId === "kimi" || providerId === "zai" || providerId === "zai-api";
 }
 
 
 
 export function hostedProviderBaseUrlEnvKey(providerId: HostedModelProviderId): string {
   if (providerId === "opencode-go") return "BUTLER_OPENCODE_GO_BASE_URL";
+  if (providerId === "zai-api") return "BUTLER_ZAI_API_BASE_URL";
   return `BUTLER_${providerId.toUpperCase()}_BASE_URL`;
 }
 
@@ -173,7 +174,7 @@ export function hostedChatReasoningParams(
   reasoningEffort?: ReasoningEffort,
 ): Record<string, unknown> {
   if (!reasoningEffort) return {};
-  if (config.providerId === "zai") {
+  if (config.providerId === "zai" || config.providerId === "zai-api") {
     return reasoningEffort === "none" ? {} : { reasoning_effort: reasoningEffort };
   }
   if (config.providerId === "xai") {

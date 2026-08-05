@@ -14,6 +14,7 @@ export type ModelProviderId =
   | "qwen"
   | "kimi"
   | "zai"
+  | "zai-api"
   | "opencode-go"
   | "local";
 export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -37,6 +38,7 @@ const FUNCTION_TOOL_DECISION_PROVIDERS = new Set<string>([
   "qwen",
   "kimi",
   "zai",
+  "zai-api",
   "opencode-go",
 ]);
 export type TokenEstimatorKind =
@@ -50,6 +52,11 @@ export type TokenEstimatorKind =
 export interface ProviderModelMetadata {
   provider_id: ModelProviderId;
   provider_label: string;
+  /**
+   * Billing/auth surfaces may have distinct provider ids while sharing one
+   * model family for Backup-model duplicate sanitization.
+   */
+  provider_family_id?: string;
   model_id: string;
   model_ref: `${ModelProviderId}/${string}`;
   display_name: string;
@@ -162,6 +169,7 @@ export function defaultHostedProviderApiBaseUrl(
   if (providerId === "qwen") return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
   if (providerId === "kimi") return "https://api.moonshot.ai/v1";
   if (providerId === "zai") return "https://api.z.ai/api/coding/paas/v4";
+  if (providerId === "zai-api") return "https://api.z.ai/api/paas/v4";
   if (providerId === "opencode-go") return "https://opencode.ai/zen/go/v1";
   return undefined;
 }
@@ -187,6 +195,7 @@ export function defaultHostedProviderApiEndpoint(
     return "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions";
   }
   if (providerId === "zai") return "https://api.z.ai/api/coding/paas/v4/chat/completions";
+  if (providerId === "zai-api") return "https://api.z.ai/api/paas/v4/chat/completions";
   if (providerId === "opencode-go") {
     const shape = apiShape ?? "openai_chat_completions";
     if (shape === "openai_responses") return "https://opencode.ai/zen/go/v1/responses";
@@ -275,6 +284,7 @@ export function modelCatalogGeneration(
   const stableModels = registeredModels
     .map((model) => ({
       model_ref: model.model_ref,
+      provider_family_id: model.provider_family_id,
       runtime_supported: model.runtime_supported,
       hosted_api_shape: model.hosted_api_shape,
       context_window_tokens: model.context_window_tokens,
@@ -287,6 +297,23 @@ export function modelCatalogGeneration(
   return createHash("sha256")
     .update(JSON.stringify(stableModels))
     .digest("hex");
+}
+
+/**
+ * Returns the provider family used for model identity and duplicate checks.
+ * Provider ids remain canonical for routing/credentials; family ids only
+ * collapse equivalent billing surfaces such as Z.AI Coding Plan/API.
+ */
+export function modelProviderFamilyId(
+  model: Pick<ProviderModelMetadata, "provider_id" | "provider_family_id">,
+): string {
+  return model.provider_family_id?.trim() || model.provider_id;
+}
+
+export function modelIdentityKey(
+  model: Pick<ProviderModelMetadata, "provider_id" | "provider_family_id" | "model_id">,
+): string {
+  return `${modelProviderFamilyId(model)}:${model.model_id}`;
 }
 
 export function resolveRegisteredRuntimeModelMetadata(

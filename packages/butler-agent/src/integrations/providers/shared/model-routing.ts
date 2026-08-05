@@ -68,6 +68,7 @@ export function hostedProviderId(value: string): HostedModelProviderId | null {
     value === "qwen" ||
     value === "kimi" ||
     value === "zai" ||
+    value === "zai-api" ||
     value === "opencode-go"
   ) return value;
   return null;

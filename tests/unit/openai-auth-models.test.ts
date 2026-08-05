@@ -85,6 +85,7 @@ beforeEach(() => {
   delete process.env.BUTLER_ANTHROPIC_BASE_URL;
   delete process.env.BUTLER_GOOGLE_BASE_URL;
   delete process.env.BUTLER_ZAI_BASE_URL;
+  delete process.env.BUTLER_ZAI_API_BASE_URL;
   delete process.env.BUTLER_OPENCODE_GO_BASE_URL;
 });
 

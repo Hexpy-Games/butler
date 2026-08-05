@@ -75,6 +75,7 @@ function isHostedProviderId(
     value === "qwen" ||
     value === "kimi" ||
     value === "zai" ||
+    value === "zai-api" ||
     value === "opencode-go"
   );
 }

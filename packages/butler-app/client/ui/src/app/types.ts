@@ -47,6 +47,7 @@ export interface WorkerModelRule {
 export interface AppModelSummary {
   provider_id: string;
   provider_label: string;
+  provider_family_id?: string;
   model_id: string;
   model_ref: string;
   display_name: string;

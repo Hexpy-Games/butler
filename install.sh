@@ -1425,6 +1425,8 @@ install_provider_choice_from_env() {
     xai|grok|xai/*) echo "xai" ;;
     qwen|qwen-cloud|qwen/*) echo "qwen" ;;
     kimi|moonshot|moonshot-kimi|kimi/*) echo "kimi" ;;
+    zai|z.ai|zai-coding|zai-coding-plan|zai/*) echo "zai" ;;
+    zai-api|z.ai-api|zai-platform|zai-api/*) echo "zai-api" ;;
     openai|hosted|api|api-key|openai/*) echo "openai" ;;
     "")
       case "$(resolve_openai_auth_choice "${BUTLER_OPENAI_AUTH_METHOD:-}")" in
@@ -1454,6 +1456,8 @@ install_provider_choice_from_label() {
     "xAI / Grok") echo "xai" ;;
     "Qwen Cloud") echo "qwen" ;;
     "Moonshot / Kimi") echo "kimi" ;;
+    "Z.AI Coding Plan") echo "zai" ;;
+    "Z.AI API") echo "zai-api" ;;
     "Open AI (Codex subscription)"|"Open AI (Codex 구독)") echo "codex-subscription" ;;
     "Local OpenAI-compatible model"|"로컬 OpenAI 호환 모델") echo "local" ;;
     *) echo "openai" ;;
@@ -1475,6 +1479,8 @@ select_install_provider_choice() {
         "xAI / Grok" \
         "Qwen Cloud" \
         "Moonshot / Kimi" \
+        "Z.AI Coding Plan" \
+        "Z.AI API" \
         "로컬 OpenAI 호환 모델"
     )"
   else
@@ -1491,6 +1497,8 @@ select_install_provider_choice() {
         "xAI / Grok" \
         "Qwen Cloud" \
         "Moonshot / Kimi" \
+        "Z.AI Coding Plan" \
+        "Z.AI API" \
         "Local OpenAI-compatible model"
     )"
   fi
@@ -1541,6 +1549,8 @@ hosted_provider_env_api_key() {
     xai) printf '%s\n' "${BUTLER_XAI_API_KEY:-${XAI_API_KEY:-}}" ;;
     qwen) printf '%s\n' "${BUTLER_QWEN_API_KEY:-${QWEN_API_KEY:-}}" ;;
     kimi) printf '%s\n' "${BUTLER_KIMI_API_KEY:-${KIMI_API_KEY:-${MOONSHOT_API_KEY:-}}}" ;;
+    zai) printf '%s\n' "${BUTLER_ZAI_CODING_PLAN_API_KEY:-${ZAI_CODING_PLAN_API_KEY:-}}" ;;
+    zai-api) printf '%s\n' "${BUTLER_ZAI_API_KEY:-${ZAI_API_KEY:-}}" ;;
     *) printf '\n' ;;
   esac
 }

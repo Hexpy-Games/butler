@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPromptText } from "../../packages/butler-agent/src/integrations/providers/provider.ts";
 import { registerHostedModelConfig } from "../../packages/butler-agent/src/integrations/providers/shared/registered-models.ts";
+import { hostedProviderBaseUrlEnvKey } from "../../packages/butler-agent/src/integrations/providers/shared/hosted-chat-client.ts";
 
 let butlerData = "";
 let originalFetch: typeof fetch;
@@ -20,6 +21,7 @@ beforeEach(() => {
   delete process.env.BUTLER_KIMI_BASE_URL;
   delete process.env.BUTLER_QWEN_BASE_URL;
   delete process.env.BUTLER_ZAI_BASE_URL;
+  delete process.env.BUTLER_ZAI_API_BASE_URL;
   delete process.env.BUTLER_OPENCODE_GO_BASE_URL;
 });
 
@@ -146,4 +148,49 @@ test("xAI and OpenCode Go Responses models use their explicit Responses endpoint
   ]);
   expect(calls[0]?.body).toMatchObject({ reasoning: { effort: "high" } });
   expect(calls[1]?.body).toMatchObject({ reasoning: { effort: "medium" } });
+});
+
+test("Z.AI Coding Plan and general API keep independent credentials and endpoints", async () => {
+  register("zai", "glm-5.2");
+  register("zai-api", "glm-5.2");
+  const calls: Array<{ url: string; authorization: string; body: Record<string, unknown> }> = [];
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    calls.push({
+      url: String(input),
+      authorization: String(new Headers(init?.headers).get("authorization")),
+      body: JSON.parse(String(init?.body ?? "{}")),
+    });
+    return new Response(JSON.stringify({ choices: [{ message: { content: "zai" } }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({ model: "zai/glm-5.2", prompt: "coding" })).resolves.toBe("zai");
+  await expect(runPromptText({ model: "zai-api/glm-5.2", prompt: "platform" })).resolves.toBe("zai");
+
+  expect(calls.map((call) => call.url)).toEqual([
+    "https://api.z.ai/api/coding/paas/v4/chat/completions",
+    "https://api.z.ai/api/paas/v4/chat/completions",
+  ]);
+  expect(calls.map((call) => call.authorization)).toEqual([
+    "Bearer zai-contract-secret",
+    "Bearer zai-api-contract-secret",
+  ]);
+  expect(calls.map((call) => call.body.model)).toEqual(["glm-5.2", "glm-5.2"]);
+});
+
+test("Z.AI endpoint environment keys remain distinct", () => {
+  expect(hostedProviderBaseUrlEnvKey("zai")).toBe("BUTLER_ZAI_BASE_URL");
+  expect(hostedProviderBaseUrlEnvKey("zai-api")).toBe("BUTLER_ZAI_API_BASE_URL");
+});
+
+test("Z.AI API honors only its own explicit base URL", async () => {
+  register("zai-api", "glm-5.2");
+  process.env.BUTLER_ZAI_API_BASE_URL = "https://zai-api.example.test/v1";
+  let seenUrl = "";
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+    seenUrl = String(input);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "custom" } }] }), { status: 200 });
+  }) as unknown as typeof fetch;
+
+  await expect(runPromptText({ model: "zai-api/glm-5.2", prompt: "custom" })).resolves.toBe("custom");
+  expect(seenUrl).toBe("https://zai-api.example.test/v1/chat/completions");
 });

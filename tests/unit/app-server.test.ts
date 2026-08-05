@@ -3342,6 +3342,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "qwen",
       "kimi",
       "zai",
+      "zai-api",
       "opencode-go",
     ]) {
       expect(providerIds).toContain(providerId);
@@ -3354,6 +3355,7 @@ test("settings, command palette, and project actions are route-backed and privac
       "qwen",
       "kimi",
       "zai",
+      "zai-api",
       "opencode-go",
     ]) {
       const provider = catalog.data.providers.find(
@@ -3371,6 +3373,7 @@ test("settings, command palette, and project actions are route-backed and privac
     expect(modelRefs).toContain("qwen/qwen3.7-max");
     expect(modelRefs).toContain("kimi/kimi-k2.6");
     expect(modelRefs).toContain("zai/glm-5.2");
+    expect(modelRefs).toContain("zai-api/glm-5.2");
     expect(modelRefs).toContain("opencode-go/kimi-k2.7-code");
     expect(modelRefs).toContain("opencode-go/minimax-m3");
     expect(
@@ -3378,6 +3381,19 @@ test("settings, command palette, and project actions are route-backed and privac
         (model: { model_ref: string }) => model.model_ref === "zai/glm-5.2",
       ),
     ).toMatchObject({
+      provider_label: "Z.AI Coding Plan",
+      provider_family_id: "zai",
+      context_window_tokens: 1_000_000,
+      max_output_tokens: 128_000,
+      runtime_supported: true,
+    });
+    expect(
+      catalog.data.models.find(
+        (model: { model_ref: string }) => model.model_ref === "zai-api/glm-5.2",
+      ),
+    ).toMatchObject({
+      provider_label: "Z.AI API",
+      provider_family_id: "zai",
       context_window_tokens: 1_000_000,
       max_output_tokens: 128_000,
       runtime_supported: true,
@@ -3971,6 +3987,11 @@ test("hosted model registration uses masked credentials without pre-release migr
     );
     expect(zaiProvider?.default_api_base_url)
       .toBe("https://api.z.ai/api/coding/paas/v4");
+    const zaiApiProvider = catalog.data.providers.find(
+      (provider: { provider_id: string }) => provider.provider_id === "zai-api",
+    );
+    expect(zaiApiProvider?.default_api_base_url)
+      .toBe("https://api.z.ai/api/paas/v4");
     const openCodeGoProvider = catalog.data.providers.find(
       (provider: { provider_id: string }) => provider.provider_id === "opencode-go",
     );
@@ -4035,6 +4056,38 @@ test("hosted model registration persists editable provider API base URLs", async
     ).toMatchObject({
       api_base_url: "https://api.z.ai/api/coding/paas/v4",
     });
+
+    const generalCredential = await postJson(
+      `${server.url}model-catalog/provider-credentials`,
+      {
+        provider_id: "zai-api",
+        auth_type: "api_key",
+        label: "Z.AI API",
+        api_key: "zai-api-secret",
+      },
+    );
+    const generalRegistered = await postJson(
+      `${server.url}model-catalog/registered-models`,
+      {
+        provider_id: "zai-api",
+        model_id: "glm-5.2",
+        auth_type: "api_key",
+        credential_id: generalCredential.data.credential.id,
+        api_base_url: "https://api.z.ai/api/paas/v4/",
+      },
+    );
+    expect(generalRegistered.data.model).toMatchObject({
+      provider_id: "zai-api",
+      model_ref: "zai-api/glm-5.2",
+      api_base_url: "https://api.z.ai/api/paas/v4",
+      credential_id: generalCredential.data.credential.id,
+    });
+    expect(generalCredential.data.credential.id)
+      .not.toBe(credential.data.credential.id);
+    const updatedCatalog = await getJson(`${server.url}model-catalog`);
+    expect(updatedCatalog.data.registered_models.map(
+      (model: { model_ref: string }) => model.model_ref,
+    )).toEqual(["zai/glm-5.2", "zai-api/glm-5.2"]);
   } finally {
     server.stop();
   }
@@ -4144,6 +4197,10 @@ test("hosted model registration exposes provider auth capability gates", async (
     ).toEqual(["api_key"]);
     expect(
       providers.find((provider) => provider.provider_id === "zai")
+        ?.auth_methods,
+    ).toEqual(["api_key"]);
+    expect(
+      providers.find((provider) => provider.provider_id === "zai-api")
         ?.auth_methods,
     ).toEqual(["api_key"]);
     expect(
