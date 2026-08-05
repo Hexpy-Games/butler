@@ -258,12 +258,15 @@ test(
     expect(windows).toContain("primary");
     expect(windows).toContain("GitHub Releases");
     expect(windows).toContain(
-      "butler-app-<version>-win32-x64-community-setup.exe",
+      "butler-app-<version>-win32-x64-setup.exe",
     );
     expect(windows).toContain(".sha256");
     expect(windows).toContain("runtime");
-    expect(windows).toContain("does not publish a Squirrel updater feed");
-    expect(windows).toContain("download each new");
+    expect(windows).toContain("Settings");
+    expect(windows).toContain("in-app updates");
+    expect(windows).toContain("GitHub Releases channel");
+    expect(windows).not.toContain("does not publish a Squirrel updater feed");
+    expect(windows).not.toContain("download each new");
     expect(windows).toContain("SmartScreen");
     expect(windows).toContain("More info");
     expect(windows).toContain("Run anyway");
