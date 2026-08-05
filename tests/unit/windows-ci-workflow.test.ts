@@ -60,6 +60,19 @@ const interactiveController = readFileSync(
   ),
   "utf8",
 );
+const electronPackage = JSON.parse(readFileSync(
+  join(root, "packages", "butler-app", "client", "electron", "package.json"),
+  "utf8",
+)) as {
+  devDependencies?: { electron?: string };
+};
+const electronLock = JSON.parse(readFileSync(
+  join(root, "packages", "butler-app", "client", "electron", "package-lock.json"),
+  "utf8",
+)) as {
+  packages?: Record<string, { version?: string; devDependencies?: { electron?: string } }>;
+};
+const bunLock = readFileSync(join(root, "bun.lock"), "utf8");
 
 test("Windows pull-request CI only builds and verifies the package", () => {
   expect(workflow).toContain("pull_request:");
@@ -97,6 +110,14 @@ test("Windows pull-request CI only builds and verifies the package", () => {
   expect(entrypoint).toContain(
     "Hosted Windows CI owns package construction only",
   );
+});
+
+test("Windows setup locks Electron to the audit-fixed release", () => {
+  expect(electronPackage.devDependencies?.electron).toBe("41.10.4");
+  expect(electronLock.packages?.[""].devDependencies?.electron).toBe("41.10.4");
+  expect(electronLock.packages?.["node_modules/electron"].version).toBe("41.10.4");
+  expect(bunLock).toContain('"electron": "41.10.4"');
+  expect(bunLock).not.toContain('"electron": "41.2.0"');
 });
 
 test("Windows CI proves package structure and checksums without distribution", () => {
