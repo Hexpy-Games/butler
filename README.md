@@ -56,12 +56,13 @@ Butler shuts the complete App-owned Agent process tree down.
 
 The Microsoft Store is Butler's primary Windows distribution path. During Store
 onboarding and review, the GitHub Releases Windows x64 installer remains
-available in parallel. Download
-`butler-app-<version>-win32-x64-community-setup.exe` and its matching `.sha256`
-sidecar from the release assets, then run the Setup executable. Installation,
-first run, runtime, and uninstall use the existing Windows Squirrel package.
-The community path does not publish a Squirrel updater feed; download each new
-version from its GitHub Release (or use the Microsoft Store) when updating.
+available in parallel. Download the canonical
+`butler-app-<version>-win32-x64-setup.exe` and its matching `.sha256` sidecar
+from the release assets, then run the Setup executable. Installation, first run,
+runtime, uninstall, and subsequent in-app updates use the existing Windows
+Squirrel package. GitHub-installed Butler users can open Settings to check for
+and apply updates from the GitHub Releases channel; Microsoft Store installs
+remain Store-managed.
 
 An ordinary SmartScreen warning can be continued with **More info** and then
 **Run anyway**. This community build is not signed by a public-trust publisher,

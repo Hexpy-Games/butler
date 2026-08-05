@@ -146,21 +146,28 @@ test("Windows community distribution is manual, exact-tag based, and explicitly 
     "./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup",
   );
   expect(communityWorkflow).toContain(
-    "./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Package",
+    "packages/butler-app/scripts/windows/windows-release-package-smoke.ts",
   );
+  expect(communityWorkflow).not.toContain("run-windows-ci.ps1 -Mode Package");
+  expect(communityWorkflow).not.toContain("community-setup.exe");
+  expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_PFX");
+  expect(communityWorkflow).toContain("WINDOWS_COMMUNITY_CERTIFICATE_PASSWORD");
+  expect(communityWorkflow).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING");
+  expect(communityWorkflow).toContain("X509Certificate2");
+  expect(communityWorkflow).toContain("must be self-signed");
+  expect(communityWorkflow).toContain("X509EnhancedKeyUsageExtension");
+  expect(communityWorkflow).toContain("EnhancedKeyUsages");
+  expect(communityWorkflow).toContain("1.3.6.1.5.5.7.3.3");
+  expect(communityWorkflow).toContain("certutil.exe -f -addstore");
   expect(communityWorkflow).toContain("Expected 8 Windows release files");
-  expect(communityWorkflow).toContain(
-    "butler-app-$($matches.version)-win32-x64-community-setup.exe",
-  );
-  expect(communityWorkflow).toContain("win32-x64-setup\\.exe");
+  expect(communityWorkflow).toContain("butler-app-*-win32-x64-setup.exe");
+  expect(communityWorkflow).toContain("windows-app-release-manifest.json");
+  expect(communityWorkflow).toContain("windows-app-update-manifest.json");
   expect(communityWorkflow).toContain("Get-FileHash");
   expect(communityWorkflow).toContain("SHA256");
   expect(communityWorkflow).toContain("gh release upload");
   expect(communityWorkflow.match(/gh release upload/gu)).toHaveLength(1);
   expect(communityWorkflow).toContain("--clobber");
-  expect(communityWorkflow).not.toContain("WINDOWS_CERTIFICATE_PFX");
-  expect(communityWorkflow).not.toContain("WINDOWS_CERTIFICATE_PASSWORD");
-  expect(communityWorkflow).not.toMatch(/secrets\./u);
   expect(communityWorkflow).not.toContain("pull_request:");
   expect(communityWorkflow).not.toContain("push:");
   expect(communityWorkflow).not.toContain("schedule:");
@@ -168,12 +175,22 @@ test("Windows community distribution is manual, exact-tag based, and explicitly 
   const publishStep = communityWorkflow.slice(
     communityWorkflow.indexOf("Publish community Windows release assets"),
   );
-  expect(publishStep).toContain("community-setup.exe");
-  expect(publishStep).toContain(".sha256");
-  expect(publishStep).not.toContain("app-release-manifest.json");
-  expect(publishStep).not.toContain("app-update-manifest.json");
-  expect(publishStep).not.toContain("RELEASES");
-  expect(publishStep).not.toContain(".nupkg");
+  for (const asset of [
+    "butler-app-*-win32-x64-setup.exe",
+    "butler-app-*-win32-x64-setup.exe.sha256",
+    ".nupkg",
+    ".nupkg.sha256",
+    "RELEASES",
+    "RELEASES.sha256",
+    "windows-app-release-manifest.json",
+    "windows-app-update-manifest.json",
+  ]) {
+    expect(publishStep).toContain(asset);
+  }
+  expect(publishStep).toContain("$files.Count -ne 8");
+  expect(publishStep).toContain(
+    "gh release upload $env:WINDOWS_RELEASE_TAG @files --clobber",
+  );
 });
 
 test("packaged desktop lifecycle remains physical-interactive only", () => {

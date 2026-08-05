@@ -8,6 +8,8 @@ export const WINDOWS_APP_USER_MODEL_ID =
   `com.squirrel.${WINDOWS_SQUIRREL_PACKAGE_ID}.Butler`;
 export const WINDOWS_APP_PROTOCOL = "butler";
 export const WINDOWS_SQUIRREL_FIRST_RUN_UPDATE_DELAY_MS = 10_000;
+export const WINDOWS_SQUIRREL_UPDATE_MANIFEST_URL =
+  "https://github.com/Hexpy-Games/butler/releases/latest/download/windows-app-update-manifest.json";
 
 const squirrelLifecycleEvents = new Set([
   "--squirrel-install",
@@ -262,6 +264,44 @@ export function resolveWindowsUpdateFeedUrl({
   return url.toString().replace(/\/$/u, "");
 }
 
+/**
+ * Resolve the App update manifest only for an installed Squirrel package.
+ *
+ * Windows Store packages also run packaged Electron code, so app.isPackaged
+ * alone is intentionally insufficient to select the GitHub channel. The
+ * versioned Squirrel layout is the narrow ownership signal available to the
+ * desktop shell without introducing a second update UI or a polling loop.
+ */
+export function resolveWindowsSquirrelUpdateManifestUrl({
+  platform = process.platform,
+  isPackaged = false,
+  execPath = process.execPath,
+  env = process.env,
+} = {}) {
+  const explicit = firstNonEmptyEnvValue(env, [
+    "BUTLER_APP_UPDATE_MANIFEST",
+    "BUTLER_UPDATE_MANIFEST",
+  ]);
+  if (explicit) return explicit;
+  if (platform !== "win32" || !isPackaged || typeof execPath !== "string") {
+    return null;
+  }
+  const normalizedPath = win32.normalize(execPath);
+  if (!win32.isAbsolute(normalizedPath)) return null;
+  const appFolder = win32.dirname(normalizedPath);
+  const appVersionFolder = win32.basename(appFolder);
+  const squirrelRoot = win32.basename(win32.dirname(appFolder));
+  const executableName = win32.basename(normalizedPath);
+  if (
+    executableName.toLocaleLowerCase("en-US") !== WINDOWS_SQUIRREL_EXE_NAME.toLocaleLowerCase("en-US") ||
+    squirrelRoot.toLocaleLowerCase("en-US") !== WINDOWS_SQUIRREL_PACKAGE_ID.toLocaleLowerCase("en-US") ||
+    !/^app-[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/iu.test(appVersionFolder)
+  ) {
+    return null;
+  }
+  return WINDOWS_SQUIRREL_UPDATE_MANIFEST_URL;
+}
+
 export function shouldDelayWindowsFirstUpdateCheck({
   platform = process.platform,
   argv = process.argv,
@@ -283,10 +323,22 @@ export function verifyWindowsInstallerPublisher({
     "$paths = ConvertFrom-Json $env:BUTLER_WINDOWS_INSTALLER_SIGNATURE_PATHS",
     "$result = foreach ($path in $paths) {",
     "  $signature = Get-AuthenticodeSignature -LiteralPath ([string]$path)",
-    "  [pscustomobject]@{ status = [string]$signature.Status; thumbprint = [string]$signature.SignerCertificate.Thumbprint; subject = [string]$signature.SignerCertificate.Subject }",
+    "  $certificate = $signature.SignerCertificate",
+    "  $thumbprint = if ($certificate) { [string]$certificate.Thumbprint } else { $null }",
+    "  $subject = if ($certificate) { [string]$certificate.Subject } else { $null }",
+    "  $chainStatus = @()",
+    "  if ($certificate) {",
+    "    $chain = [Security.Cryptography.X509Certificates.X509Chain]::new()",
+    "    $chain.ChainPolicy.RevocationMode = [Security.Cryptography.X509Certificates.X509RevocationMode]::NoCheck",
+    "    $chain.ChainPolicy.VerificationFlags = [Security.Cryptography.X509Certificates.X509VerificationFlags]::NoFlag",
+    "    [void]$chain.Build($certificate)",
+    "    $chainStatus = @($chain.ChainStatus | ForEach-Object { [string]$_.Status })",
+    "  }",
+    "  [pscustomobject]@{ status = [string]$signature.Status; thumbprint = $thumbprint; subject = $subject; chainStatus = @($chainStatus) }",
     "}",
     "ConvertTo-Json -Compress -InputObject @($result)",
   ].join("; ");
+  const childEnvironment = sanitizeWindowsInstallerSignatureEnvironment(env);
   const result = runPowerShell(env.BUTLER_POWERSHELL || "powershell.exe", [
     "-NoLogo",
     "-NoProfile",
@@ -297,7 +349,7 @@ export function verifyWindowsInstallerPublisher({
     script,
   ], {
     encoding: "utf8",
-    env: windowsPowerShellEnvironment(env, {
+    env: windowsPowerShellEnvironment(childEnvironment, {
       BUTLER_WINDOWS_INSTALLER_SIGNATURE_PATHS: JSON.stringify([
         currentExecutable,
         candidateInstaller,
@@ -320,27 +372,73 @@ export function verifyWindowsInstallerPublisher({
     throw windowsSquirrelError("windows_installer_signature_result_invalid");
   }
   const normalized = signatures.map((signature) => ({
-    status: String(signature?.status ?? ""),
-    thumbprint: String(signature?.thumbprint ?? "").toLocaleUpperCase("en-US"),
+    status: String(signature?.status ?? "").trim(),
+    thumbprint: String(signature?.thumbprint ?? "").trim().toLocaleUpperCase("en-US"),
     subject: String(signature?.subject ?? "").normalize("NFKC").trim(),
+    chainStatus: Array.isArray(signature?.chainStatus)
+      ? signature.chainStatus.map((value) => String(value ?? "").trim())
+      : null,
   }));
   if (normalized.some((signature) =>
-    signature.status !== "Valid" ||
+    !["Valid", "UnknownError"].includes(signature.status) ||
     !/^[A-F0-9]{40}$/u.test(signature.thumbprint) ||
-    !signature.subject,
+    !signature.subject ||
+    !Array.isArray(signature.chainStatus),
   )) {
     throw windowsSquirrelError("windows_installer_signature_invalid");
   }
   if (normalized[0].subject !== normalized[1].subject) {
     throw windowsSquirrelError("windows_installer_publisher_mismatch");
   }
-  return {
-    status: "Valid",
-    signerThumbprint: normalized[0].thumbprint,
-    signerSubject: normalized[0].subject,
-    publisherConsistent: true,
-    rawTextIncluded: false,
-  };
+  if (normalized.every((signature) => signature.status === "Valid")) {
+    return {
+      status: "Valid",
+      signerThumbprint: normalized[0].thumbprint,
+      signerSubject: normalized[0].subject,
+      publisherConsistent: true,
+      acceptanceMode: "public-trust",
+      rawTextIncluded: false,
+    };
+  }
+  if (normalized.every((signature) => signature.status === "UnknownError")) {
+    if (normalized.some((signature) =>
+      signature.chainStatus.length !== 1 || signature.chainStatus[0] !== "UntrustedRoot",
+    )) {
+      throw windowsSquirrelError("windows_installer_signature_invalid");
+    }
+    if (normalized[0].thumbprint !== normalized[1].thumbprint) {
+      throw windowsSquirrelError("windows_installer_certificate_mismatch");
+    }
+    return {
+      status: "UnknownError",
+      signerThumbprint: normalized[0].thumbprint,
+      signerSubject: normalized[0].subject,
+      publisherConsistent: true,
+      acceptanceMode: "community",
+      rawTextIncluded: false,
+    };
+  }
+  throw windowsSquirrelError("windows_installer_signature_invalid");
+}
+
+function firstNonEmptyEnvValue(env, keys) {
+  for (const key of keys) {
+    const value = typeof env?.[key] === "string" ? env[key].trim() : "";
+    if (value) return value;
+  }
+  return null;
+}
+
+function sanitizeWindowsInstallerSignatureEnvironment(env) {
+  const sanitized = { ...env };
+  for (const key of Object.keys(sanitized)) {
+    if (
+      /(?:WINDOWS_COMMUNITY_CERTIFICATE_(?:PFX|PASSWORD)|BUTLER_WINDOWS_SIGN_CERTIFICATE_(?:FILE|PASSWORD|SHA1)|WINDOWS_CERTIFICATE_(?:PFX|PASSWORD))$/iu.test(key)
+    ) {
+      delete sanitized[key];
+    }
+  }
+  return sanitized;
 }
 
 function unhandledSquirrelLaunch({ firstRun }) {
