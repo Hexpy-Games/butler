@@ -86,6 +86,31 @@ describe("App foreground lifecycle", () => {
       .toThrow("invalid App foreground transition");
   });
 
+  test("restores degraded and pending states after a failed drain", () => {
+    const launch = createAppForegroundLaunch({
+      appVersion: "1.2.3",
+      bundledAgentVersion: "1.2.3",
+      port: 18765,
+      generateGeneration: () => "generation-restore",
+      generateNonce: () => "n".repeat(32),
+    });
+    const starting = transitionAppForeground(launch.record, "starting");
+    const ready = transitionAppForeground(starting, "ready");
+    const degraded = transitionAppForeground(ready, "degraded");
+    const drainingFromDegraded = transitionAppForeground(degraded, "draining");
+    expect(transitionAppForeground(drainingFromDegraded, "degraded").state)
+      .toBe("degraded");
+
+    const pending = transitionAppForeground(ready, "update_pending");
+    expect(transitionAppForeground(pending, "stopping").state)
+      .toBe("stopping");
+    const drainingFromPending = transitionAppForeground(pending, "draining");
+    expect(transitionAppForeground(drainingFromPending, "update_pending").state)
+      .toBe("update_pending");
+    expect(transitionAppForeground(drainingFromPending, "ready").state)
+      .toBe("ready");
+  });
+
   test("persists private instance and redacted exit records atomically", () => {
     const root = mkdtempSync(join(tmpdir(), "butler-afal-"));
     roots.push(root);

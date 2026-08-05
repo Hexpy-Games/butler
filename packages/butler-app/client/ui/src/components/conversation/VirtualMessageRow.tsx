@@ -16,8 +16,6 @@ interface VirtualMessageRowProps {
   message: MessageRecord;
   virtualRow: VirtualItem;
   topOffset: number;
-  isLatestAssistant: boolean;
-  markTheme: "dark" | "light";
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   onCopyContextMenuText: (message: MessageRecord) => void;
   children: ReactNode;
@@ -27,8 +25,6 @@ export function VirtualMessageRow({
   message,
   virtualRow,
   topOffset,
-  isLatestAssistant,
-  markTheme,
   rowVirtualizer,
   onCopyContextMenuText,
   children,
@@ -48,8 +44,6 @@ export function VirtualMessageRow({
             <MessageAvatar
               role={message.role}
               isCompactionEvent={isCompactionEvent}
-              isLatestAssistant={isLatestAssistant}
-              markTheme={markTheme}
             />
           }
           dataTestClass={messageTestClassName(message, isCompactionEvent)}

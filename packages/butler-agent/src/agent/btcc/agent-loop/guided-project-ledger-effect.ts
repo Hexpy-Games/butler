@@ -11,6 +11,8 @@ import {
   guidedProjectLedgerEffect,
   type GuidedProjectLedgerEffect,
 } from "./guided-project-ledger-effect-input.ts";
+import { normalizeProjectLedgerCommitEvidenceInput } from
+  "../../tools/project-ledger/git-commit-evidence.ts";
 import {
   classifyLegacyProjectLedgerEffect,
   normalizeLegacyProjectLedgerUpdates,
@@ -50,6 +52,7 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
   butlerData: string;
   projectRoot: string;
   projectRef: string;
+  workspacePath?: string;
   resolveActiveProjectReference(): ActiveProjectLedgerReference;
   initializeForCreate?: () => void | Promise<void>;
 }): {
@@ -57,8 +60,13 @@ export function createGuidedProjectLedgerEffectAdapter(input: {
   normalizedInput: Record<string, unknown>;
   adapter: EffectAdapter<Record<string, unknown>, Record<string, unknown>>;
 } {
-  assertAdmittedProject(input.args, input.projectRef);
-  const effect = guidedProjectLedgerEffect(input.name, input.args);
+  const args = normalizeProjectLedgerCommitEvidenceInput({
+    toolName: input.name,
+    args: input.args,
+    workspacePath: input.workspacePath,
+  });
+  assertAdmittedProject(args, input.projectRef);
+  const effect = guidedProjectLedgerEffect(input.name, args);
   return {
     target: effect.target,
     normalizedInput: effect.normalizedInput,

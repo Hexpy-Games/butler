@@ -1,11 +1,11 @@
 import type { ProviderModelMetadata } from "../../../../integrations/providers/model-catalog.ts";
-import type {
-  ChatRow,
-  ProjectRow,
-} from "../../infrastructure/core/records.ts";
+import type { ChatRow, ProjectRow } from "../../infrastructure/core/records.ts";
 import type { DeliveryLimitationMetadata } from "../../infrastructure/transport/app-delivery-projection.ts";
 import type { ProgressSummaryInput } from "../../domain/progress-summary/progress-row-normalizer.ts";
-import { sessionHintForRow } from "../../domain/sessions/session-read-model.ts";
+import {
+  resolveGitWorkspaceSummary,
+  sessionHintForRow,
+} from "../../domain/sessions/index.ts";
 import type {
   MessageRecord,
   ProgressSummaryRow,
@@ -15,8 +15,7 @@ import type {
   SessionViewTurn,
   TurnRecord,
 } from "../../interface/protocol/app-protocol.ts";
-import type { TerminalTurnProjection } from
-  "../../infrastructure/retention/terminal-turn-retention.ts";
+import type { TerminalTurnProjection } from "../../infrastructure/retention/terminal-turn-retention.ts";
 import type { AppStoreKernel } from "../kernel/app-store-kernel.ts";
 import type { TurnControlResolution } from "../../../core/turn-execution-controls.ts";
 
@@ -43,9 +42,9 @@ export interface AppStoreKernelSessionContextHost {
     options?: { suppressProgressRows?: boolean },
   ): SessionViewTurn;
   sessionViewMessages(sessionId: string): MessageRecord[];
-  deliveryMetadataForTurnRecord(
-    turn: TurnRecord,
-  ): DeliveryLimitationMetadata;
+  latestTurn(sessionId: string): TurnRecord | null;
+  countTurns(sessionId: string): number;
+  deliveryMetadataForTurnRecord(turn: TurnRecord): DeliveryLimitationMetadata;
   latestEventCursor(): number;
   appendProgressSummaryEvent(
     sessionId: string,
@@ -106,6 +105,12 @@ export function createSessionContextHost(
     sessionViewMessages(sessionId) {
       return kernel.sessionMessageProjection.sessionViewMessages(sessionId);
     },
+    latestTurn(sessionId) {
+      return kernel.sessionRecords.latestTurn(sessionId);
+    },
+    countTurns(sessionId) {
+      return kernel.sessionRecords.countTurns(sessionId);
+    },
     deliveryMetadataForTurnRecord(turn) {
       return kernel.sessionMessageProjection.deliveryMetadataForTurnRecord(
         turn,
@@ -128,12 +133,16 @@ export function createSessionContextHost(
       return kernel.terminalTurnRetention.read(turnId);
     },
     explicitDeliveryMetadataForTurn(turnId) {
-      return kernel.events.deliveryMetadataForTurn(turnId) ??
-        kernel.terminalTurnRetention.read(turnId)?.deliveryMetadata ?? null;
+      return (
+        kernel.events.deliveryMetadataForTurn(turnId) ??
+        kernel.terminalTurnRetention.read(turnId)?.deliveryMetadata ??
+        null
+      );
     },
     hasPublicContinuationProgressSinceLatestQueue(turnId) {
-      return kernel.turnProgress
-        .hasPublicContinuationProgressSinceLatestQueue(turnId);
+      return kernel.turnProgress.hasPublicContinuationProgressSinceLatestQueue(
+        turnId,
+      );
     },
     internalContinuationProgressEventIds(turnId) {
       return kernel.turnProgress.internalContinuationProgressEventIds(turnId);
@@ -173,11 +182,7 @@ export function createSessionContextHost(
           safe_status: "No project workspace",
         };
       }
-      return {
-        available: false,
-        workspace_mode: "folder",
-        safe_status: "Project workspace",
-      };
+      return resolveGitWorkspaceSummary(project.workspace_path);
     },
   };
 }

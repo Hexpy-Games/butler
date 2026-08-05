@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
-import { ComposerAdjunctPanels } from "./ComposerAdjunctPanels";
+import { ComposerAdjunctPanels, composerHasAdjunct } from "./ComposerAdjunctPanels";
 import { ComposerInputSurface } from "./ComposerInputSurface";
 import { useComposerStore } from "./composerStore";
 import { useComposerControls } from "./hooks/useComposerControls";
+import { useComposerDraftSession } from "./hooks/useComposerDraftSession";
 import { useFileAttachments } from "./hooks/useFileAttachments";
 import { useComposerHandlers } from "./hooks/useComposerHandlers";
 import { useComposerQueue } from "./hooks/useComposerQueue";
@@ -11,17 +12,19 @@ import { useComposerState } from "./hooks/useComposerState";
 import { useComposerStoreBridge } from "./hooks/useComposerStoreBridge";
 import { usePendingProjectDocumentAttachment } from "./hooks/usePendingProjectDocumentAttachment";
 import { useComposerPresentation } from "./hooks/useComposerPresentation";
+import { useComposerFileDrop } from "./hooks/useComposerFileDrop";
 import { useReserveHeight } from "./hooks/useReserveHeight";
 import { ComposerCard } from "@/butler-ds";
+import { GitDependencyNotice } from "./GitDependencyNotice";
 
 interface ComposerProps {
   onReserveChange: (height: number) => void;
   onOpenContext: () => void;
   large: boolean;
 }
-
 export function Composer({ large, onOpenContext, onReserveChange }: ComposerProps) {
   const session = useComposerSession();
+  useComposerDraftSession(session.activeChatId);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [accessMenuOpen, setAccessMenuOpen] = useState(false);
   const [contextPopoverOpen, setContextPopoverOpen] = useState(false);
@@ -29,9 +32,6 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
   const text = useComposerStore((store) => store.text);
   const setText = useComposerStore((store) => store.setText);
   const submit = useComposerStore((store) => store.submit);
-  const focusDraftFromComposerChrome = useComposerStore(
-    (store) => store.focusDraftFromComposerChrome,
-  );
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -42,6 +42,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     session.settings,
   );
   const files = useFileAttachments(session.activeChatId);
+  const fileDrop = useComposerFileDrop((nextFiles) => void files.addFiles(nextFiles));
 
   usePendingProjectDocumentAttachment({
     activeChatId: session.activeChatId,
@@ -116,10 +117,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
     state,
     textAreaRef,
   });
-  const showAdjunct =
-    queue.sessionQueue.length > 0 ||
-    state.workers.length > 0 ||
-    state.taskRows.length > 0;
+  const showAdjunct = composerHasAdjunct(queue.sessionQueue.length, state.workers.length, state.taskRows.length);
   const presentation = useComposerPresentation({
     activeChatId: session.activeChatId,
     containerRef: wrapRef,
@@ -128,9 +126,11 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
 
   return (
     <ComposerCard
+      {...fileDrop}
       large={large}
       expanded={presentation.expanded}
       floating
+      notice={<GitDependencyNotice />}
       adjunct={
         showAdjunct ? (
           <ComposerAdjunctPanels
@@ -144,7 +144,7 @@ export function Composer({ large, onOpenContext, onReserveChange }: ComposerProp
         ) : null
       }
       containerRef={wrapRef}
-      onPointerDown={focusDraftFromComposerChrome}
+      onPointerDown={handlers.focusDraftFromComposerChrome}
       onPointerDownCapture={presentation.onPointerDownCapture}
       onFocusCapture={presentation.onFocusCapture}
       onBlurCapture={presentation.onBlurCapture}

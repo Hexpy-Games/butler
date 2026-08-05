@@ -7,13 +7,15 @@ import type { ProgressRow } from "@/app/types.ts";
 import { CurrentTurnStatus } from "./CurrentTurnStatus";
 
 test("current status reserves one clipped line with the public operation title", () => {
-  const publicLabel = "실행: 로그를 확인 중";
+  const publicLabel = "실행: git commit";
   const html = renderToStaticMarkup(
     <CurrentTurnStatus operation={progressRow(publicLabel)} />,
   );
 
   expect(html).toContain('data-test-class="turn-current-status-slot"');
   expect(html).toContain('data-test-class="turn-current-status-content"');
+  expect(html).toContain('data-test-class="assistant-status-label"');
+  expect(html).toContain('data-test-class="assistant-status-mark-active"');
   expect(html).toContain(`title="${publicLabel}"`);
   expect(html).toContain(publicLabel);
 });

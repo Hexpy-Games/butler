@@ -1,6 +1,8 @@
 import { memo, useState } from "react";
 import {
   Button,
+  ChevronDown,
+  ChevronRight,
   ListChecks,
   RollingSwap,
   Stack,
@@ -27,42 +29,47 @@ function CollapsedTurnActivityComponent({
   const workCopy = appCopy.conversation.work;
   const latest = blocks.at(-1);
   if (!latest) return null;
+  const headerLabel = `${live ? "현재" : "활동"} · ${latest.label} · ${blocks.length}개 기록`;
   return (
     <section
       data-test-class="turn-activity-collapsed turn-work-collapsed"
       aria-label={workCopy.historyRegionLabel}
     >
       <Stack gap="md" aria-live="polite">
-        {expanded ? blocks.map((block) => (
-          <ActivityBlock block={block} key={block.id} turnId={turnId} />
-        )) : (
-          <RollingSwap itemKey={latest.id} motion={live}>
-            <ActivityBlock block={latest} turnId={turnId} />
-          </RollingSwap>
-        )}
-        {blocks.length > 1 ? (
-          <Stack as="footer" cross="start">
-            <Button
-              aria-expanded={expanded}
-              aria-label={
-                expanded
-                  ? workCopy.collapseHistoryLabel(latest.label, blocks.length)
-                  : workCopy.expandHistoryLabel(latest.label, blocks.length)
-              }
-              data-test-class="toggle-turn-activity-history"
-              iconStart={<ListChecks size={14} />}
-              onClick={() => setExpanded((value) => !value)}
-              size="xs"
-              text={
-                expanded
-                  ? workCopy.collapseLabel
-                  : workCopy.viewAllLabel(blocks.length)
-              }
-              type="button"
-              variant="borderless"
-            />
-          </Stack>
-        ) : null}
+        <Stack cross="start">
+          <Button
+            aria-expanded={expanded}
+            data-test-class="toggle-turn-activity-disclosure"
+            iconEnd={expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            onClick={() => setExpanded((value) => !value)}
+            text={headerLabel}
+            type="button"
+            variant="inline"
+          />
+        </Stack>
+        <Stack gap="md">
+          {expanded ? blocks.map((block) => (
+            <ActivityBlock block={block} key={block.id} turnId={turnId} />
+          )) : live ? (
+            <RollingSwap itemKey={latest.id} motion={live}>
+              <ActivityBlock block={latest} turnId={turnId} />
+            </RollingSwap>
+          ) : null}
+          {expanded ? (
+            <Stack as="footer" cross="start">
+              <Button
+                aria-label={workCopy.collapseHistoryLabel(latest.label, blocks.length)}
+                data-test-class="collapse-turn-activity-history"
+                iconStart={<ListChecks size={14} />}
+                onClick={() => setExpanded(false)}
+                size="xs"
+                text={workCopy.collapseLabel}
+                type="button"
+                variant="borderless"
+              />
+            </Stack>
+          ) : null}
+        </Stack>
       </Stack>
     </section>
   );

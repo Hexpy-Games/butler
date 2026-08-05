@@ -25,6 +25,13 @@ export function ComposerAttachments() {
         meta: formatFileSize(attachment.file.size_bytes),
         href: messageFileUrl(attachment.file),
         icon: attachmentIcon(attachment),
+        thumbnail:
+          attachment.kind === "image"
+            ? {
+                alt: attachment.file.safe_name,
+                src: messageFileUrl(attachment.file),
+              }
+            : undefined,
       }))}
       emptyLabel={appCopy.composer.attachedFiles}
       onRemove={removeAttachment}

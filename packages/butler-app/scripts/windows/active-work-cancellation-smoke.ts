@@ -57,6 +57,7 @@ const cancelledUpdate = await quitAndInstallAppUpdate({
   confirmQuit: async () => false,
   stopForUpdate: async () => {
     cancelledUpdateCalls.push("stop");
+    return { update_ready: true };
   },
   quitAndInstall: () => {
     cancelledUpdateCalls.push("install");
@@ -74,6 +75,7 @@ const acceptedUpdate = await quitAndInstallAppUpdate({
   },
   stopForUpdate: async () => {
     updateCalls.push("drain-stop");
+    return { update_ready: true };
   },
   quitAndInstall: () => {
     updateCalls.push("quit-install");

@@ -154,7 +154,11 @@ export async function runGeminiPromptText(
   config: HostedRuntimeConfig,
   options: PromptOptions,
 ): Promise<string> {
-  const requests = createProviderRequestAttributor({ attribution: options.usageAttribution });
+  const requests = createProviderRequestAttributor({
+    attribution: options.usageAttribution,
+    butlerData: options.butlerData,
+    cacheScope: options.cacheScope,
+  });
   const response = await requests.request({
     model: config.modelRef,
     run: async (context) => await createGeminiContent(config, {

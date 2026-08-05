@@ -3,7 +3,7 @@ import type { ButlerToolDefinition, ToolCapabilityMetadata } from "../../types.t
 export const runCommandToolDefinition = {
   type: "function",
   name: "run_command",
-  description: "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. Required summary is a concise model-authored public purpose for display only; it never authorizes execution. Set validation_suite for validation receipts. Generated artifacts go under $BUTLER_ARTIFACTS_DIR unless intentional workspace paths are listed in output_paths. Prefer cross-platform executables with explicit arguments and JSON-safe command text.",
+  description: "Run a non-interactive command in the active workspace through Butler's platform-neutral command executor. Required summary is the model-authored compact action label shown to the user, not a purpose sentence: read the requested command and write labels such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'. It never authorizes execution. Set validation_suite for validation receipts. Generated artifacts go under $BUTLER_ARTIFACTS_DIR unless intentional workspace paths are listed in output_paths. Prefer cross-platform executables with explicit arguments and JSON-safe command text.",
   parameters: {
     type: "object",
     additionalProperties: false,
@@ -15,8 +15,9 @@ export const runCommandToolDefinition = {
       summary: {
         type: "string",
         minLength: 1,
-        pattern: "\\S",
-        description: "Required concise purpose for public display. Presentation only; it cannot authorize or alter the command or result.",
+        maxLength: 32,
+        pattern: "^[^\\r\\n]*\\S[^\\r\\n]*$",
+        description: "Required one-line model-authored action label based on the actual command, at most 32 characters. Use compact labels such as '실행: git commit', '커밋 후 푸시', or '검증: bun test'; do not write a purpose sentence or include arguments, paths, messages, URLs, or secrets. Presentation only; it cannot authorize or alter the command or result.",
       },
       cwd: {
         type: "string",
@@ -43,8 +44,8 @@ export const runCommandToolDefinition = {
       },
       state_effect: {
         type: "string",
-        enum: ["read_only", "mutation", "validation"],
-        description: "Effect: mutation requires admitted full access and accepted Plan Review; validation uses validation_suite.",
+        enum: ["read_only", "mutation", "validation", "remote_observation"],
+        description: "Effect: mutation and remote_observation require full access plus accepted Plan Review; remote_observation is an audited network effect for remote status/log reads. validation uses validation_suite.",
       },
       output_mode: {
         type: "string",

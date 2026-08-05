@@ -2,14 +2,13 @@ import { randomUUID } from "node:crypto";
 import type { BtccTurnProgressObserver } from "../contracts.ts";
 import type { WorkStage } from "../work/index.ts";
 import {
+  activeWorkActionTitle,
   activityContent,
   activityKind,
   boundedTitle,
   conceptionSummary,
   distinctSummary,
   type GuidedActivityToolCall as ToolCall,
-  ordinaryGroupKey,
-  ordinaryGroupSignature,
   publicText,
 } from "./guided-activity-content.ts";
 import { normalizeGuidedToolCall } from "../../tools/tool-support.ts";
@@ -23,10 +22,12 @@ export type GuidedActivityBinding = {
 type ActivityGroup = GuidedActivityBinding & {
   title: string;
   summary: string;
-  summaryAuthored: boolean;
   rationale?: string;
   nextStep?: string;
   precedingGroups?: ActivityGroup[];
+  followingGroups?: ActivityGroup[];
+  startsExecution?: boolean;
+  nextExecutionTitle?: string;
   published: boolean;
 };
 
@@ -41,12 +42,6 @@ export interface GuidedActivityProjection {
   observeTool(input: ToolCall & { effectiveToolName: string }): Promise<GuidedActivityBinding>;
   markManaged(binding?: GuidedActivityBinding): Promise<void>;
   publishAccepted(binding: GuidedActivityBinding): Promise<void>;
-  publishFinal(text: string, options: {
-    managed: boolean;
-    completed?: boolean;
-    completionValidated?: boolean;
-    currentStage?: WorkStage;
-  }): Promise<void>;
 }
 
 /**
@@ -62,7 +57,9 @@ export function createGuidedActivityProjection(input: {
   let pendingTools: PendingTool[] = [];
   let managed = input.managedInitially === true;
   const groupsById = new Map<string, ActivityGroup>();
-  let lastEmptyOrdinaryGroups = new Map<string, ActivityGroup>();
+  let currentActivity: ActivityGroup | undefined;
+  let fallbackOrdinaryActivity: ActivityGroup | undefined;
+  let pendingExecutionTitle: string | undefined;
 
   return {
     observeToolBatch(batch) {
@@ -82,12 +79,24 @@ export function createGuidedActivityProjection(input: {
       const pending = pendingTools.find((candidate) =>
         !candidate.claimed && candidate.name === presentationCall.name,
       ) ?? pendingTools.find((candidate) => !candidate.claimed);
-      const group = pending?.group ?? activityGroup({
+      const kind = activityKind(presentationCall.name);
+      let group = pending?.group;
+      if (!group && kind === "ordinary") {
+        group = currentActivity ?? fallbackOrdinaryActivity;
+        if (!group) {
+          group = activityGroup({
+            text: "",
+            calls: [{ name: presentationCall.name, args: presentationCall.args }],
+          });
+          fallbackOrdinaryActivity = group;
+        }
+      }
+      group ??= activityGroup({
         text: "",
         calls: [{ name: presentationCall.name, args: presentationCall.args }],
       });
       if (pending) pending.claimed = true;
-      if (activityKind(presentationCall.name) !== "ordinary") managed = true;
+      if (kind !== "ordinary") managed = true;
       if (managed && !group.deferredUntilAccepted) await publishGroup(input, group);
       return bindingFromGroup(group);
     },
@@ -101,26 +110,18 @@ export function createGuidedActivityProjection(input: {
     async publishAccepted(binding) {
       managed = true;
       const group = groupsById.get(binding.activityId);
-      if (group) await publishGroup(input, group);
-    },
-
-    async publishFinal(text, options) {
-      if (!options.managed && !managed) return;
-      const summary = publicText(text);
-      if (!summary) return;
-      const completed = options.completed === true &&
-        options.completionValidated === true;
-      await publishGroup(input, {
-        activityId: activityId(input.turnId),
-        displayStage: completed
-          ? "reporting"
-          : openFinalStage(options.currentStage),
-        deferredUntilAccepted: false,
-        title: completed ? "결과 보고" : "부분 결과 안내",
-        summary,
-        summaryAuthored: true,
-        published: false,
-      });
+      if (group) {
+        if (group.deferredUntilAccepted) {
+          if (group.startsExecution) {
+            pendingExecutionTitle = group.nextExecutionTitle;
+            currentActivity = undefined;
+          } else {
+            currentActivity = group.followingGroups?.at(-1) ?? group;
+          }
+          fallbackOrdinaryActivity = undefined;
+        }
+        await publishGroup(input, group);
+      }
     },
   };
 
@@ -139,81 +140,75 @@ export function createGuidedActivityProjection(input: {
     const ordinaryCalls = normalizedCalls.filter(
       (candidate) => activityKind(candidate.name) === "ordinary",
     );
-    const emptyOrdinaryBatch = !publicText(batch.text) &&
-      ordinaryCalls.length === normalizedCalls.length;
-    const ordinaryGroups = ordinaryGroupBuckets(ordinaryCalls);
-    const resolvedGroups = new Map<string, ActivityGroup>();
-    for (const [key, calls] of ordinaryGroups) {
-      const reusable = emptyOrdinaryBatch
-        ? lastEmptyOrdinaryGroups.get(key)
-        : undefined;
-      resolvedGroups.set(
-        key,
-        reusable ?? activityGroup({ text: batch.text, calls }),
-      );
+    let ordinaryGroup: ActivityGroup | undefined;
+    if (ordinaryCalls.length > 0) {
+      if (pendingExecutionTitle) {
+        ordinaryGroup = activityGroup({
+          text: batch.text,
+          calls: ordinaryCalls,
+          title: pendingExecutionTitle,
+        });
+        pendingExecutionTitle = undefined;
+        currentActivity = ordinaryGroup;
+        fallbackOrdinaryActivity = undefined;
+      } else {
+        ordinaryGroup = currentActivity ?? fallbackOrdinaryActivity;
+        if (!ordinaryGroup) {
+          ordinaryGroup = activityGroup({ text: batch.text, calls: ordinaryCalls });
+          fallbackOrdinaryActivity = ordinaryGroup;
+        }
+      }
     }
-    lastEmptyOrdinaryGroups = emptyOrdinaryBatch ? resolvedGroups : new Map();
     for (const call of normalizedCalls) {
       const kind = activityKind(call.name);
       const group = kind === "ordinary"
-        ? resolvedGroups.get(ordinaryCallGroupKey(call, ordinaryCalls)) ??
-          activityGroup({ text: batch.text, calls: [call] })
+        ? ordinaryGroup ?? activityGroup({ text: batch.text, calls: [call] })
         : activityGroup({ text: batch.text, calls: [call] });
       tools.push({ name: call.name, claimed: false, group });
     }
     return tools;
   }
 
-  function ordinaryGroupBuckets(
-    calls: ToolCall[],
-  ): Map<string, ToolCall[]> {
-    const groups = new Map<string, ToolCall[]>();
-    const nonCommandCalls = calls.filter((call) => call.name !== "run_command");
-    if (nonCommandCalls.length > 0) {
-      groups.set(
-        `ordinary:${ordinaryGroupSignature(nonCommandCalls)}`,
-        nonCommandCalls,
-      );
-    }
-    for (const call of calls) {
-      if (call.name !== "run_command") continue;
-      const key = ordinaryGroupKey(call);
-      const grouped = groups.get(key) ?? [];
-      grouped.push(call);
-      groups.set(key, grouped);
-    }
-    return groups;
-  }
-
-  function ordinaryCallGroupKey(
-    call: ToolCall,
-    ordinaryCalls: ToolCall[],
-  ): string {
-    if (call.name === "run_command") return ordinaryGroupKey(call);
-    return `ordinary:${ordinaryGroupSignature(
-      ordinaryCalls.filter((candidate) => candidate.name !== "run_command"),
-    )}`;
-  }
-
   function activityGroup(groupInput: {
     text: string;
     calls: ToolCall[];
+    title?: string;
   }): ActivityGroup {
     const first = groupInput.calls[0];
     const content = activityContent(first, groupInput.calls, groupInput.text);
+    const activeActionTitle = first &&
+        (first.name === "record_work_review" ||
+          first.name === "record_work_checkpoint")
+      ? activeWorkActionTitle(first.args)
+      : undefined;
     const commandActivity = first?.name === "run_command" &&
       groupInput.calls.every((call) => call.name === "run_command");
     const group: ActivityGroup = {
       activityId: activityId(input.turnId),
       displayStage: content.displayStage,
       deferredUntilAccepted: first ? activityKind(first.name) !== "ordinary" : false,
-      title: boundedTitle(content.title),
+      title: boundedTitle(
+        groupInput.title ||
+          (first?.name === "record_work_checkpoint" && activeActionTitle) ||
+          content.title,
+      ),
       summary: commandActivity
         ? content.summary
         : distinctSummary(content.title, content.summary),
-      summaryAuthored: commandActivity || Boolean(publicText(groupInput.text)),
       ...(content.rationale ? { rationale: content.rationale } : {}),
       ...(content.nextStep ? { nextStep: content.nextStep } : {}),
+      ...(first?.name === "record_work_review" &&
+          first.args.subject === "plan" &&
+          first.args.verdict === "accept" &&
+          (first.args.next_stage === undefined ||
+            first.args.next_stage === "execution")
+        ? {
+            startsExecution: true,
+            ...(activeActionTitle
+              ? { nextExecutionTitle: activeActionTitle }
+              : {}),
+          }
+        : {}),
       published: false,
     };
     if (first?.name === "replace_work_plan") {
@@ -223,20 +218,34 @@ export function createGuidedActivityProjection(input: {
         deferredUntilAccepted: group.deferredUntilAccepted,
         title: "요청 의도 확인",
         summary: conceptionSummary(content.summary),
-        summaryAuthored: false,
         nextStep: "요청에 맞는 작업 순서와 검증 기준을 정합니다.",
         published: false,
       };
       group.precedingGroups = [conception];
       groupsById.set(conception.activityId, conception);
     }
+    if (
+      first?.name === "record_work_review" &&
+      first.args.subject === "completion" &&
+      first.args.next_stage === "reporting"
+    ) {
+      const reportingDirection = publicText(groupInput.text);
+      if (reportingDirection) {
+        const reporting: ActivityGroup = {
+          activityId: activityId(input.turnId),
+          displayStage: "reporting",
+          deferredUntilAccepted: group.deferredUntilAccepted,
+          title: "결과 보고",
+          summary: distinctSummary("결과 보고", reportingDirection),
+          published: false,
+        };
+        group.followingGroups = [reporting];
+        groupsById.set(reporting.activityId, reporting);
+      }
+    }
     groupsById.set(group.activityId, group);
     return group;
   }
-}
-
-function openFinalStage(stage: WorkStage | undefined): WorkStage {
-  return stage ?? "execution";
 }
 
 async function publishGroup(
@@ -262,6 +271,9 @@ async function publishGroup(
     });
   } catch {
     // Activity projection cannot veto the model/tool Turn.
+  }
+  for (const following of group.followingGroups ?? []) {
+    await publishGroup(input, following);
   }
 }
 

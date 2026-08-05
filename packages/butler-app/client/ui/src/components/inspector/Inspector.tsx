@@ -26,7 +26,6 @@ export function Inspector({ id }: InspectorProps = {}) {
   const setRightTab = useButlerStore((state) => state.setRightTab);
   const setView = useButlerStore((state) => state.setView);
   const controlWorker = useButlerStore((state) => state.controlWorker);
-  const exportTranscript = useButlerStore((state) => state.exportTranscript);
   const isOpen = useButlerStore(selectEffectiveRightOpen);
 
   const tabs: Array<[string, string, ReactElement]> = [
@@ -49,7 +48,6 @@ export function Inspector({ id }: InspectorProps = {}) {
         <SummaryPanel
           status={status}
           summary={summary}
-          onExportTranscript={exportTranscript}
         />
       )}
       {activeTab === "context" && (

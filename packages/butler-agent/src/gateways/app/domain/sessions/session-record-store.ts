@@ -6,12 +6,12 @@ import type {
   SessionSummaryRow,
   TurnRow,
 } from "../../infrastructure/core/records.ts";
-import type { MessageFileRow, AppMessageFileStore } from "../message-files/message-file-store.ts";
+import type {
+  MessageFileRow,
+  AppMessageFileStore,
+} from "../message-files/message-file-store.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
-import {
-  safeLocalSessionId,
-  sessionFromRow,
-} from "./session-read-model.ts";
+import { safeLocalSessionId, sessionFromRow } from "./session-read-model.ts";
 import { turnFromRow } from "./message-read-model.ts";
 import { publicTurnRecord } from "../../infrastructure/transport/btcc-public-projection.ts";
 import type {
@@ -205,6 +205,35 @@ export class AppSessionRecordStore {
       )
       .all(chatId, cursor);
     return rows.map((row) => publicTurnRecord(turnFromRow(row)));
+  }
+
+  latestTurn(chatId: string): TurnRecord | null {
+    this.ensureChat(chatId);
+    const row = this.db
+      .query<TurnRow, [string]>(
+        `
+      SELECT rowid, id, chat_id, user_message_id, state, safe_status_label, safe_error_code,
+        retryable, cancellable, attempt, execution_controls_json, created_at, updated_at
+      FROM turns
+      WHERE chat_id = ?
+      ORDER BY rowid DESC
+      LIMIT 1
+    `,
+      )
+      .get(chatId);
+    return row ? publicTurnRecord(turnFromRow(row)) : null;
+  }
+
+  countTurns(chatId: string): number {
+    this.ensureChat(chatId);
+    return (
+      this.db
+        .query<
+          { count: number },
+          [string]
+        >("SELECT COUNT(*) AS count FROM turns WHERE chat_id = ?")
+        .get(chatId)?.count ?? 0
+    );
   }
 
   getChatRow(chatId: string): ChatRow | null {

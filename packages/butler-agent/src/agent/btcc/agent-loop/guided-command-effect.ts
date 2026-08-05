@@ -14,11 +14,15 @@ import {
 } from "./guided-read-only-command.ts";
 
 export const GUIDED_COMMAND_EFFECT_CAPABILITY = "run_command";
+export const GUIDED_REMOTE_OBSERVATION_EFFECT_CAPABILITY =
+  "run_command_remote_observation";
+
+type GuidedCommandPersistentStateEffect = "mutation" | "remote_observation";
 
 export type GuidedCommandEffectInput = {
   command: string;
   cwd: string;
-  state_effect: "mutation";
+  state_effect: GuidedCommandPersistentStateEffect;
   timeout_ms?: number;
   max_output_tokens?: number;
   output_paths?: string[];
@@ -26,7 +30,7 @@ export type GuidedCommandEffectInput = {
 };
 
 export type GuidedCommandEffectResult = Record<string, unknown> & {
-  effect: "command_mutation";
+  effect: "command_mutation" | "remote_observation";
   command_outcome_observed: true;
 };
 
@@ -47,12 +51,8 @@ export async function prepareGuidedCommandEffect(input: {
   const workspaceRoot = canonicalCommandRoot(input.workspacePath);
   const canonicalCwd = canonicalCommandRoot(resolvedCwd);
   const cwd = relative(workspaceRoot, canonicalCwd).split(sep).join("/") || ".";
-  const normalizedInput = normalizeCommandEffectInput({
-    ...input.args,
-    cwd,
-    state_effect: "mutation",
-  });
-  const target = commandEffectTarget(cwd);
+  const normalizedInput = normalizeCommandEffectInput({ ...input.args, cwd });
+  const target = commandEffectTarget(cwd, normalizedInput.state_effect);
   return {
     target,
     input: normalizedInput,
@@ -64,6 +64,7 @@ export async function prepareGuidedCommandEffect(input: {
       canonicalCwd,
       originalRequest: input.originalRequest,
       target,
+      stateEffect: normalizedInput.state_effect,
     }),
   };
 }
@@ -76,9 +77,12 @@ function createGuidedCommandEffectAdapter(input: {
   canonicalCwd: string;
   originalRequest: string;
   target: string;
+  stateEffect: GuidedCommandPersistentStateEffect;
 }): EffectAdapter<GuidedCommandEffectInput, GuidedCommandEffectResult> {
   return {
-    capability: GUIDED_COMMAND_EFFECT_CAPABILITY,
+    capability: input.stateEffect === "remote_observation"
+      ? GUIDED_REMOTE_OBSERVATION_EFFECT_CAPABILITY
+      : GUIDED_COMMAND_EFFECT_CAPABILITY,
     reviewedPlanBinding: "accepted_plan",
     normalizeTarget(target) {
       const normalized = requiredString(target, "target");
@@ -135,7 +139,9 @@ function createGuidedCommandEffectAdapter(input: {
         status: "applied",
         result: {
           ...outcome,
-          effect: "command_mutation",
+          effect: input.stateEffect === "remote_observation"
+            ? "remote_observation"
+            : "command_mutation",
           command_outcome_observed: true,
         },
       };
@@ -145,7 +151,9 @@ function createGuidedCommandEffectAdapter(input: {
       return {
         status: "uncertain",
         error: {
-          code: "command_effect_reconciliation_required",
+          code: input.stateEffect === "remote_observation"
+            ? "remote_observation_reconciliation_required"
+            : "command_effect_reconciliation_required",
           message: "The command may have run. Inspect the workspace or external target and report the uncertainty; do not repeat it blindly.",
         },
       };
@@ -158,16 +166,19 @@ function normalizeCommandEffectInput(value: unknown): GuidedCommandEffectInput {
     throw new Error("run_command effect input must be an object");
   }
   const record = value as Record<string, unknown>;
-  if (record.state_effect !== "mutation") {
-    throw new Error("run_command effect requires state_effect mutation");
+  if (record.state_effect !== "mutation" &&
+      record.state_effect !== "remote_observation") {
+    throw new Error(
+      "run_command persistent effect requires state_effect mutation or remote_observation",
+    );
   }
   if (optionalTrimmedString(record.validation_suite, "validation_suite")) {
-    throw new Error("A mutation command cannot also be a validation suite");
+    throw new Error("A persistent command cannot also be a validation suite");
   }
   const normalized: GuidedCommandEffectInput = {
     command: requiredString(record.command, "command"),
     cwd: requiredString(record.cwd, "cwd"),
-    state_effect: "mutation",
+    state_effect: record.state_effect,
   };
   if (record.timeout_ms !== undefined) {
     normalized.timeout_ms = positiveInteger(record.timeout_ms, "timeout_ms");
@@ -195,8 +206,13 @@ function normalizeCommandEffectInput(value: unknown): GuidedCommandEffectInput {
   return normalized;
 }
 
-function commandEffectTarget(cwd: string): string {
-  return `workspace-command:${cwd}`;
+function commandEffectTarget(
+  cwd: string,
+  stateEffect: GuidedCommandPersistentStateEffect,
+): string {
+  return stateEffect === "remote_observation"
+    ? `remote-observation-command:${cwd}`
+    : `workspace-command:${cwd}`;
 }
 
 function requiredString(value: unknown, label: string): string {

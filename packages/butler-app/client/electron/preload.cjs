@@ -413,6 +413,10 @@ const butlerApp = Object.freeze({
   writeCachedMessages: ({ chatId = "general", snapshot } = {}) => writeMessageCache(chatId, snapshot),
   readCachedAppUiState: () => readAppUiStateCache(),
   writeCachedAppUiState: ({ snapshot } = {}) => writeAppUiStateCache(snapshot),
+  readCachedComposerDraft: ({ sessionId } = {}) =>
+    ipcRenderer.invoke("butler:composer-draft-read", { sessionId }),
+  writeCachedComposerDraft: ({ snapshot } = {}) =>
+    ipcRenderer.invoke("butler:composer-draft-write", { snapshot }),
   subscribeLiveEvents,
   listTurns: ({ chatId = "general", cursor = 0 } = {}) => {
     const params = new URLSearchParams({

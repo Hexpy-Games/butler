@@ -13,7 +13,9 @@ import {
 import { contextWindowTokensForSessionModel } from "../settings/settings-models.ts";
 import {
   contextCategory,
+  isReservedContextCategory,
   latestLivePromptUsage,
+  reconcileOccupiedCategoryTokens,
 } from "./context-details-read-model.ts";
 import { sessionHintForRow } from "./session-read-model.ts";
 import type { ProjectRow } from "../../infrastructure/core/records.ts";
@@ -39,9 +41,14 @@ export class AppContextDetailsStore {
     private readonly registeredModelMetadata: () => ProviderModelMetadata[],
     private readonly getSettings: () => SettingsView,
     private readonly getPersonalization: () => PersonalizationView,
-    private readonly sessionViewMessages: (sessionId: string) => MessageRecord[],
-    private readonly listTurns: (sessionId: string) => TurnRecord[],
-    private readonly getProjectForSession: (sessionId: string) => ProjectRow | null,
+    private readonly sessionViewMessages: (
+      sessionId: string,
+    ) => MessageRecord[],
+    private readonly latestTurn: (sessionId: string) => TurnRecord | null,
+    private readonly countTurns: (sessionId: string) => number,
+    private readonly getProjectForSession: (
+      sessionId: string,
+    ) => ProjectRow | null,
     private readonly chatKindForSession: (sessionId: string) => string,
     private readonly listArtifacts: (
       sessionId: string,
@@ -66,8 +73,7 @@ export class AppContextDetailsStore {
     const personalization = this.getPersonalization();
     const runtimeSessionId = sessionHintForRow(sessionId);
     const messages = this.sessionViewMessages(sessionId);
-    const turns = this.listTurns(sessionId);
-    const latestTurn = turns.at(-1);
+    const latestTurn = this.latestTurn(sessionId);
     const project = this.getProjectForSession(sessionId);
     const latestUserMessage = [...messages]
       .reverse()
@@ -76,6 +82,8 @@ export class AppContextDetailsStore {
       butlerData: this.butlerData,
       runtimeSessionId,
       turnId: latestTurn?.id,
+      latestTurnStartedAt: latestTurn?.created_at,
+      currentModelRef: metadata.model_ref,
     });
     const staticContextTokens = estimateContextTokensForModel(
       "Butler runtime contract, role policy, transport contract, and safety rules.",
@@ -97,7 +105,7 @@ export class AppContextDetailsStore {
         runtimeSessionId,
         projectId: project?.id ?? null,
         sessionKind: this.chatKindForSession(sessionId),
-        turnCount: turns.length,
+        turnCount: this.countTurns(sessionId),
       }),
       metadata.model_ref,
     ).tokens;
@@ -140,10 +148,9 @@ export class AppContextDetailsStore {
     const measuredWorkingContextTokens = livePromptUsage
       ? Math.max(0, livePromptUsage.promptTokens - knownPromptTokens)
       : 0;
-    const workingContextTokens = Math.max(
-      recentConversationTokens,
-      measuredWorkingContextTokens,
-    );
+    const workingContextTokens = livePromptUsage
+      ? measuredWorkingContextTokens
+      : recentConversationTokens;
     const workingBudget = evaluateWorkingContextBudget({
       modelRef: metadata.model_ref,
       staticContextTokens,
@@ -158,7 +165,7 @@ export class AppContextDetailsStore {
         contextWindowTokens: budgetConfig.contextWindowTokens,
       },
     });
-    const categories = [
+    let categories = [
       contextCategory(
         "static",
         "Static Context",
@@ -240,7 +247,18 @@ export class AppContextDetailsStore {
         "Reserved so auto-compaction can run before hard pressure.",
       ),
     ];
-    const used = categories.reduce((sum, item) => sum + item.used_tokens, 0);
+    if (livePromptUsage) {
+      categories = reconcileOccupiedCategoryTokens(
+        categories,
+        livePromptUsage.promptTokens,
+      );
+    }
+    const occupiedCategories = categories.filter(
+      (category) => !isReservedContextCategory(category),
+    );
+    const used = livePromptUsage
+      ? livePromptUsage.promptTokens
+      : occupiedCategories.reduce((sum, item) => sum + item.used_tokens, 0);
     return {
       session_id: sessionId,
       model_ref: metadata.model_ref,

@@ -1,7 +1,5 @@
-const SAFE_TEXT_MAX = 240;
-
 export function isPublicTextSafe(value: unknown): boolean {
-  return sanitizePublicText(value, "") === String(value ?? "").trim().slice(0, SAFE_TEXT_MAX);
+  return sanitizePublicText(value, "") === String(value ?? "").trim();
 }
 
 export function sanitizePublicText(value: unknown, fallback = "Working"): string {
@@ -17,7 +15,7 @@ export function sanitizePublicText(value: unknown, fallback = "Working"): string
     .trim();
   if (!normalized) return fallback;
   if (looksPrivateOrInternal(normalized)) return fallback;
-  return normalized.slice(0, SAFE_TEXT_MAX);
+  return normalized;
 }
 
 function looksPrivateOrInternal(value: string): boolean {

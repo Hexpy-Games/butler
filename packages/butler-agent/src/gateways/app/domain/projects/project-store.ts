@@ -8,7 +8,11 @@ import {
 } from "../sessions/session-read-model.ts";
 import type { ProjectRow } from "../../infrastructure/core/records.ts";
 import { AppStoreOperationError } from "../../infrastructure/core/app-store-errors.ts";
-import type { AppProjectFolderStore } from "../projects/project-folder-store.ts";
+import {
+  validateScratchProjectName,
+  type ScratchProjectFolder,
+  type AppProjectFolderStore,
+} from "../projects/project-folder-store.ts";
 import type {
   CreateProjectRequest,
   CreateProjectResult,
@@ -63,17 +67,35 @@ export class AppProjectStore {
   }
 
   createProject(input: CreateProjectRequest): CreateProjectResult {
-    const workspacePath = this.workspacePathForCreate(input);
-    const existing = this.getProjectRowByWorkspacePath(workspacePath);
-    if (existing) return { project: projectFromRow(existing) };
+    const displayName =
+      input.source === "scratch"
+        ? validateScratchProjectName(input.display_name)
+        : undefined;
+    let scratchFolder: ScratchProjectFolder | undefined;
+    const workspacePath =
+      input.source === "scratch"
+        ? (scratchFolder = this.folders.createScratchProjectFolder(
+            displayName!,
+          )).path
+        : this.workspacePathForCreate(input);
+    let project: CreateProjectResult["project"] | undefined;
+    try {
+      const existing = this.getProjectRowByWorkspacePath(workspacePath);
+      if (existing) {
+        if (scratchFolder) {
+          this.folders.removeScratchProjectFolder(scratchFolder);
+        }
+        return { project: projectFromRow(existing) };
+      }
 
-    const now = new Date().toISOString();
-    const workspaceLabel = safeWorkspaceLabel(workspacePath);
-    const displayName = safeDisplayName(input.display_name, workspaceLabel);
-    const projectId = this.nextProjectId(displayName);
-    this.db
-      .query(
-        `
+      const now = new Date().toISOString();
+      const workspaceLabel = safeWorkspaceLabel(workspacePath);
+      const projectDisplayName =
+        displayName ?? safeDisplayName(input.display_name, workspaceLabel);
+      const projectId = this.nextProjectId(projectDisplayName);
+      this.db
+        .query(
+          `
       INSERT INTO projects (
         id, display_name, status, workspace_path, workspace_label, safe_path_label,
         ledger_project_id,
@@ -81,22 +103,28 @@ export class AppProjectStore {
       )
       VALUES (?, ?, 'active', ?, ?, ?, ?, 0, 0, NULL, ?, ?)
     `,
-      )
-      .run(
-        projectId,
-        displayName,
-        workspacePath,
-        workspaceLabel,
-        workspaceLabel,
-        projectId,
-        now,
-        now,
-      );
-    const row = this.getProjectRow(projectId);
-    if (!row) throw new Error(`Failed to create project: ${projectId}`);
-    const project = projectFromRow(row);
+        )
+        .run(
+          projectId,
+          projectDisplayName,
+          workspacePath,
+          workspaceLabel,
+          workspaceLabel,
+          projectId,
+          now,
+          now,
+        );
+      const row = this.getProjectRow(projectId);
+      if (!row) throw new Error(`Failed to create project: ${projectId}`);
+      project = projectFromRow(row);
+    } catch (error) {
+      if (scratchFolder) {
+        this.folders.removeScratchProjectFolder(scratchFolder);
+      }
+      throw error;
+    }
     this.appendEvent("project.created", { project });
-    return { project };
+    return { project: project! };
   }
 
   updateProject(
@@ -199,13 +227,13 @@ export class AppProjectStore {
   }
 
   getProjectRowByWorkspacePath(workspacePath: string): ProjectRow | null {
-    return this.projectRow(workspacePath, "WHERE workspace_path = ? AND archived = 0");
+    return this.projectRow(
+      workspacePath,
+      "WHERE workspace_path = ? AND archived = 0",
+    );
   }
 
   private workspacePathForCreate(input: CreateProjectRequest): string {
-    if (input.source === "scratch") {
-      return this.folders.createScratchProjectFolder();
-    }
     if (!input.folder_selection_token?.trim()) {
       throw new AppStoreOperationError(
         400,

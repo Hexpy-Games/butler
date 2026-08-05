@@ -13,6 +13,10 @@ export interface AttachmentListItem {
   meta?: string;
   href?: string;
   icon?: ReactNode;
+  thumbnail?: {
+    src: string;
+    alt?: string;
+  };
 }
 
 export interface AttachmentListProps {
@@ -46,13 +50,22 @@ export function AttachmentList({
     >
       {items.map((item) => (
         <div className={styles.item} data-slot="attachment-item" key={item.id}>
-          <span
-            className={styles.icon}
-            data-slot="attachment-icon"
-            aria-hidden="true"
-          >
-            {item.icon ?? <FileText size={14} />}
-          </span>
+          {item.thumbnail ? (
+            <span className={styles.thumbnail} data-slot="attachment-thumbnail">
+              <img
+                alt={item.thumbnail.alt ?? item.name}
+                src={item.thumbnail.src}
+              />
+            </span>
+          ) : (
+            <span
+              className={styles.icon}
+              data-slot="attachment-icon"
+              aria-hidden="true"
+            >
+              {item.icon ?? <FileText size={14} />}
+            </span>
+          )}
           {item.href ? (
             <Tooltip label={item.name}>
               <a
@@ -72,11 +85,6 @@ export function AttachmentList({
               </span>
             </Tooltip>
           )}
-          {item.meta ? (
-            <Typo.Caption className={styles.meta} data-slot="attachment-meta">
-              {item.meta}
-            </Typo.Caption>
-          ) : null}
           {onRemove ? (
             <Button
               aria-label={`Remove ${item.name}`}
@@ -87,6 +95,11 @@ export function AttachmentList({
             >
               <X size={13} />
             </Button>
+          ) : null}
+          {item.meta ? (
+            <Typo.Caption className={styles.meta} data-slot="attachment-meta">
+              {item.meta}
+            </Typo.Caption>
           ) : null}
         </div>
       ))}

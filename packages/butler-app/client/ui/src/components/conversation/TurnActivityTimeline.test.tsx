@@ -16,7 +16,7 @@ afterEach(() => {
     .IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("turn activity keeps one latest item until view all expands in place", async () => {
+test("live activity keeps one latest item until its header expands all records", async () => {
   const dom = new JSDOM("<div id=\"root\"></div>", {
     url: "http://localhost",
   });
@@ -68,7 +68,7 @@ test("turn activity keeps one latest item until view all expands in place", asyn
   expect(container.textContent).not.toContain("이전 목표를 확인했습니다.");
   expect(container.textContent).toContain("구현 순서를 정했습니다.");
   const toggle = container.querySelector(
-    '[data-test-class="toggle-turn-activity-history"]',
+    '[data-test-class="toggle-turn-activity-disclosure"]',
   );
   if (!(toggle instanceof dom.window.HTMLButtonElement)) {
     throw new Error("Missing activity history toggle.");
@@ -77,12 +77,98 @@ test("turn activity keeps one latest item until view all expands in place", asyn
 
   expect(container.textContent).toContain("이전 목표를 확인했습니다.");
   expect(container.textContent).toContain("구현 순서를 정했습니다.");
-  expect(toggle.textContent).toContain("접기");
+  expect(toggle.textContent).toContain("현재 · 계획 · 2개 기록");
+  expect(container.textContent).not.toContain("전체 보기");
+  expect(container.querySelector(
+    '[data-test-class="collapse-turn-activity-history"]',
+  )?.textContent).toContain("접기");
   const blocks = container.querySelectorAll('[data-test-class~="turn-work-block"]');
   expect(blocks[0]?.getAttribute("data-work-stage")).toBe("conception_deliberation");
   expect(blocks[1]?.getAttribute("data-work-stage")).toBe("planning");
   expect(blocks[0]?.getAttribute("data-connected")).toBe("true");
   expect(blocks[1]?.hasAttribute("data-connected")).toBe(false);
+  await act(async () => root.unmount());
+});
+
+test("completed activity renders only its header until opened and closes from the footer", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", {
+    url: "http://localhost",
+  });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = dom.window.document.querySelector("#root")!;
+  const root = createRoot(container);
+
+  await act(async () => root.render(
+    <TurnActivityTimeline
+      activities={[
+        activity("review", "실행 결과를 검토했습니다."),
+        activity("validation", "전체 완료 조건을 검토했습니다."),
+      ]}
+      currentState="validation"
+      turnId="turn-completed"
+    />,
+  ));
+
+  const header = container.querySelector(
+    '[data-test-class="toggle-turn-activity-disclosure"]',
+  );
+  if (!(header instanceof dom.window.HTMLButtonElement)) {
+    throw new Error("Missing activity disclosure header.");
+  }
+  expect(header.textContent).toContain("활동 · 완료 검토 · 2개 기록");
+  expect(header.getAttribute("aria-expanded")).toBe("false");
+  const collapsedChevron = header.querySelector(
+    '[data-slot="button-icon"][data-position="end"] svg',
+  )?.innerHTML;
+  expect(collapsedChevron).toBeTruthy();
+  expect(container.querySelectorAll('[data-test-class~="turn-work-block"]')).toHaveLength(0);
+  expect(container.textContent).not.toContain("전체 보기");
+  expect(container.textContent).not.toContain("접기");
+
+  await act(async () => header.click());
+  expect(header.getAttribute("aria-expanded")).toBe("true");
+  const expandedChevron = header.querySelector(
+    '[data-slot="button-icon"][data-position="end"] svg',
+  )?.innerHTML;
+  expect(expandedChevron).toBeTruthy();
+  expect(expandedChevron).not.toBe(collapsedChevron);
+  expect(container.querySelectorAll('[data-test-class~="turn-work-block"]')).toHaveLength(2);
+  expect(container.textContent).toContain("작업 리뷰");
+  expect(container.textContent).toContain("완료 검토");
+  const collapse = container.querySelector(
+    '[data-test-class="collapse-turn-activity-history"]',
+  );
+  if (!(collapse instanceof dom.window.HTMLButtonElement)) {
+    throw new Error("Missing bottom collapse action.");
+  }
+  expect(collapse.textContent).toContain("접기");
+  expect(container.textContent).not.toContain("전체 보기");
+
+  await act(async () => header.click());
+  expect(header.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelectorAll('[data-test-class~="turn-work-block"]')).toHaveLength(0);
+  await act(async () => header.click());
+  expect(header.getAttribute("aria-expanded")).toBe("true");
+
+  const reopenedCollapse = container.querySelector(
+    '[data-test-class="collapse-turn-activity-history"]',
+  );
+  if (!(reopenedCollapse instanceof dom.window.HTMLButtonElement)) {
+    throw new Error("Missing reopened bottom collapse action.");
+  }
+  await act(async () => reopenedCollapse.click());
+  expect(header.getAttribute("aria-expanded")).toBe("false");
+  expect(container.querySelectorAll('[data-test-class~="turn-work-block"]')).toHaveLength(0);
+  expect(container.querySelector(
+    '[data-test-class="collapse-turn-activity-history"]',
+  )).toBeNull();
   await act(async () => root.unmount());
 });
 
@@ -152,7 +238,7 @@ test("review and completion validation render as distinct user-visible phases", 
   expect(container.textContent).toContain("현재 · 완료 검토 · 2개 기록");
   expect(container.textContent).toContain("완료 검토");
   const toggle = container.querySelector(
-    '[data-test-class="toggle-turn-activity-history"]',
+    '[data-test-class="toggle-turn-activity-disclosure"]',
   );
   if (!(toggle instanceof dom.window.HTMLButtonElement)) {
     throw new Error("Missing activity history toggle.");
@@ -181,7 +267,10 @@ test("legacy activity does not repeat a title as its content", async () => {
   const root = createRoot(container);
 
   await act(async () => root.render(
-    <TurnActivityTimeline activities={[activity("planning", "계획을 확정했습니다.")]} />,
+    <TurnActivityTimeline
+      activities={[activity("planning", "계획을 확정했습니다.")]}
+      live
+    />,
   ));
 
   expect(container.textContent).toContain("계획을 확정했습니다.");

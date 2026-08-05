@@ -244,6 +244,42 @@ test("README directs default installs to Butler App and advanced installs to Age
   expect(development).toContain("bun install");
 });
 
+test(
+  "README documents parallel Windows Store and community GitHub installation",
+  () => {
+    const readme = readRepoFile("README.md");
+    const windowsStart = readme.indexOf("### Windows");
+    const nextSection = readme.indexOf("## Advanced: Butler Agent");
+    expect(windowsStart).toBeGreaterThan(-1);
+    expect(nextSection).toBeGreaterThan(windowsStart);
+
+    const windows = readme.slice(windowsStart, nextSection);
+    expect(windows).toContain("Microsoft Store");
+    expect(windows).toContain("primary");
+    expect(windows).toContain("GitHub Releases");
+    expect(windows).toContain(
+      "butler-app-<version>-win32-x64-setup.exe",
+    );
+    expect(windows).toContain(".sha256");
+    expect(windows).toContain("runtime");
+    expect(windows).toContain("Settings");
+    expect(windows).toContain("in-app updates");
+    expect(windows).toContain("GitHub Releases channel");
+    expect(windows).toContain("WINDOWS_COMMUNITY_CERTIFICATE_SHA256");
+    expect(windows).toContain("bridge release");
+    expect(windows).toContain("reinstall");
+    expect(windows).not.toContain("does not publish a Squirrel updater feed");
+    expect(windows).not.toContain("download each new");
+    expect(windows).toContain("SmartScreen");
+    expect(windows).toContain("More info");
+    expect(windows).toContain("Run anyway");
+    expect(windows).toContain("Smart App Control");
+    expect(windows).toContain("no override");
+    expect(windows).toContain("SignPath");
+    expect(windows).toContain("do not disable");
+  },
+);
+
 test("manual first-run test environment launches isolated Electron state", () => {
   const packageJson = JSON.parse(readRepoFile("package.json")) as {
     scripts?: Record<string, string>;

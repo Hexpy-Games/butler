@@ -48,8 +48,6 @@ import { runGuidedAgentLoopWithOperationalReport } from
   "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from
   "../projection/index.ts";
-import { isDurableWorkCompletionValidationCurrent } from
-  "./durable-work-context.ts";
 import { createGuidedPersistentEffectResolver } from
   "./guided-persistent-effect-resolution.ts";
 
@@ -187,6 +185,11 @@ export function createProductionGuidedTurnAgent(input: {
         progress,
         model: selectedModelRef(turn),
         reasoningEffort: turn.modelSelection.reasoningEffort,
+        usageAttribution: {
+          turnId: turn.turnId,
+          phase: "guided",
+          reasoningEffort: turn.modelSelection.reasoningEffort,
+        },
         cacheScope: `btcc-guided:${turn.sessionId}`,
         signal,
         butlerData: input.butlerData,
@@ -228,14 +231,6 @@ export function createProductionGuidedTurnAgent(input: {
         },
       });
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      await activity.publishFinal(text, {
-        managed: Boolean(finalWork),
-        completed: finalWork?.status === "completed",
-        completionValidated: finalWork
-          ? isDurableWorkCompletionValidationCurrent(finalWork)
-          : false,
-        currentStage: finalWork?.currentStage,
-      });
       return {
         content: text,
         route: routeForUsedTools(

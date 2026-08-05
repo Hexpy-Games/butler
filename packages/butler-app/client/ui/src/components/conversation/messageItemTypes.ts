@@ -6,8 +6,6 @@ export interface MessageItemProps {
   message: MessageRecord;
   virtualRow: VirtualItem;
   topOffset: number;
-  isLatestAssistant: boolean;
-  markTheme: "dark" | "light";
   copied: boolean;
   footerMeta: AssistantFooterMeta | null;
   onCopyAssistantMessage: (message: MessageRecord) => void;
