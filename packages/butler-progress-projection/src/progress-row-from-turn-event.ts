@@ -180,11 +180,17 @@ export function progressRowFromSharedTurnEvent(
     event.kind === "turn.started" ||
     event.kind === "turn.iteration.started"
   ) {
+    const modelRef = optionalText(payload.modelRef ?? payload.model);
     return {
       ...base,
       kind: "turn",
-      safe_label: event.kind === "turn.accepted" ? "Accepted" : "Working on request",
+      safe_label: event.kind === "turn.accepted"
+        ? "Accepted"
+        : modelRef ?? "Working on request",
       state: event.kind === "turn.accepted" ? "accepted" : "thinking",
+      ...(event.kind === "turn.iteration.started"
+        ? { bridge_phase: "model_round_waiting" }
+        : {}),
     };
   }
   if (event.kind === "message.final.started") {

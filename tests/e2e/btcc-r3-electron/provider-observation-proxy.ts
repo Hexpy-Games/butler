@@ -30,7 +30,11 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
-export type ProviderRequestKind = "agent" | "tool_provider" | "title";
+export type ProviderRequestKind =
+  | "agent"
+  | "auxiliary"
+  | "tool_provider"
+  | "title";
 export type ProviderRequestTermination =
   | "cancelled"
   | "completed"
@@ -99,9 +103,14 @@ function providerRequestKind(body: Buffer): ProviderRequestKind {
       const type = (candidate as Record<string, unknown>).type;
       return type === "web_search" || type === "web_search_preview";
     })) return "tool_provider";
-    return "agent";
+    if (Array.isArray(parsed.tools)) return "agent";
+    if (typeof parsed.prompt_cache_key === "string" &&
+      parsed.prompt_cache_key.split(":").at(-1) === "btcc-agent-loop") {
+      return "agent";
+    }
+    return "auxiliary";
   } catch {
-    return "agent";
+    return "auxiliary";
   }
 }
 
@@ -509,7 +518,13 @@ function selectFixtureResponse(input: {
     input.used.add(index);
     return input.fixture.responses[index] ?? null;
   }
-  return input.fixture.defaultResponse ?? null;
+  return input.fixture.defaultResponse && fixtureResponseMatches(
+    input.fixture.defaultResponse,
+    input.requestKind,
+    input.requestModel,
+  )
+    ? input.fixture.defaultResponse
+    : null;
 }
 
 async function serveFixtureResponse(input: {
@@ -521,6 +536,17 @@ async function serveFixtureResponse(input: {
   const status = input.fixtureResponse.status ?? 200;
   const responseModel = input.fixtureResponse.responseModel ??
     input.observation.requestedModel ?? "fixture-model";
+  const delayMs = typeof input.fixtureResponse.delayMs === "number" &&
+    Number.isFinite(input.fixtureResponse.delayMs)
+    ? Math.min(5_000, Math.max(0, Math.floor(input.fixtureResponse.delayMs)))
+    : 0;
+  if (delayMs > 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    if (input.response.destroyed) {
+      terminateObservation(input.observation, "cancelled", input.now);
+      return;
+    }
+  }
   input.observation.status = status;
   if (status < 200 || status >= 300) {
     input.response.writeHead(status, {
@@ -763,7 +789,7 @@ export async function startProviderObservationProxy(
     }
     const observation: MutableProviderRequestObservation = {
       ordinal: nextOrdinal,
-      requestKind: "agent",
+      requestKind: "auxiliary",
       requestedModel: null,
       requestStartedAtMs: now(),
       serializedRequestBytes: 0,

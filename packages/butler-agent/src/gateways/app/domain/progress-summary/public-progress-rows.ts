@@ -115,7 +115,7 @@ function isCanonicalBtccWorkTaskRow(row: ProgressSummaryRow): boolean {
 
 function isFirstVisibleProgressRow(row: ProgressSummaryRow): boolean {
   return (
-    (row.kind === "message" || row.kind === "work_block") &&
+    (row.kind === "message" || row.kind === "turn" || row.kind === "work_block") &&
     Boolean(
       row.work_block_id?.startsWith(
         `${FIRST_VISIBLE_PROGRESS_WORK_BLOCK_PREFIX}-`,
@@ -131,7 +131,11 @@ function isSessionSummaryProgressRow(
   if (row.kind === "work_block") {
     return !hasSemanticWorkBlock || !isFirstVisibleProgressRow(row);
   }
-  if (row.kind === "turn" || row.kind === "thinking") return false;
+  if (row.kind === "turn") {
+    return row.bridge_phase === "model_round_waiting" &&
+      !isFirstVisibleProgressRow(row);
+  }
+  if (row.kind === "thinking") return false;
   if (row.kind === "message" || row.kind === "system") {
     return !STATUS_ONLY_PROGRESS_LABELS.has(
       row.safe_label.trim().toLowerCase(),
