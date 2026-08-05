@@ -59,6 +59,19 @@ test("retired and missing persisted refs stay identifiable instead of falling ba
   ).toBe("openai/not-registered");
 });
 
+test("the declared auto Codex alias resolves to the current catalog target", () => {
+  const metadata = resolveRuntimeModelMetadata("openai/auto:codex-latest");
+  expect(metadata).toMatchObject({
+    model_ref: "openai/gpt-5.6-sol",
+    runtime_supported: true,
+    status: "latest",
+    context_window_tokens: 1_050_000,
+  });
+  expect(resolveModelMetadata("auto:codex-latest").model_ref).toBe(
+    "openai/gpt-5.6-sol",
+  );
+});
+
 test("only catalog-declared aliases resolve and ambiguous raw ids stay unavailable", () => {
   expect(resolveModelMetadata("openai/gpt-5.5-codex").model_ref).toBe(
     "openai/gpt-5.5",
