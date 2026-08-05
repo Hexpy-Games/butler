@@ -37,7 +37,7 @@ export async function runAnthropicModelRound(
         ? { tools: anthropicTools(request.tools.map(modelRoundTool)) }
         : {}),
       ...(request.toolChoice === "required" ? { tool_choice: { type: "any" } } : {}),
-    }, request.signal, context),
+    }, request.signal, context, request.providerRetryAttempts),
     usage: anthropicUsageSample,
   });
   const content = Array.isArray(response.content) ? response.content : [];

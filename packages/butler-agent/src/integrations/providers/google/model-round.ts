@@ -42,7 +42,7 @@ export async function runGeminiModelRound(
       ...(request.toolChoice === "required"
         ? { toolConfig: { functionCallingConfig: { mode: "ANY" } } }
         : {}),
-    }, request.signal, context),
+    }, request.signal, context, request.providerRetryAttempts),
     usage: geminiUsageSample,
   });
   const parts = response.candidates?.[0]?.content?.parts;
