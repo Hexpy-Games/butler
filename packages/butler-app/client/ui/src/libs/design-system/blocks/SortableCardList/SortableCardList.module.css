@@ -29,6 +29,10 @@
     transform 120ms ease;
 }
 
+.dropIndicator {
+  margin-block: calc(var(--space-1) * -1);
+}
+
 .card {
   display: grid;
   min-width: 0;

@@ -17,6 +17,22 @@ const items: SortableCardListItem[] = [
   { id: "two", label: "Two", title: "Two", meta: "Provider B" },
 ];
 
+function createPointerEvent(
+  dom: JSDOM,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  coordinates: { x: number; y: number },
+) {
+  const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperties(event, {
+    button: { configurable: true, value: 0 },
+    clientX: { configurable: true, value: coordinates.x },
+    clientY: { configurable: true, value: coordinates.y },
+    isPrimary: { configurable: true, value: true },
+    pointerId: { configurable: true, value: 1 },
+  });
+  return event;
+}
+
 afterEach(() => {
   delete (globalThis as { window?: unknown }).window;
   delete (globalThis as { document?: unknown }).document;
@@ -25,6 +41,7 @@ afterEach(() => {
   delete (globalThis as { Node?: unknown }).Node;
   delete (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame;
   delete (globalThis as { cancelAnimationFrame?: unknown }).cancelAnimationFrame;
+  delete (globalThis as { getComputedStyle?: unknown }).getComputedStyle;
   delete (globalThis as { IS_REACT_ACT_ENVIRONMENT?: unknown })
     .IS_REACT_ACT_ENVIRONMENT;
 });
@@ -143,10 +160,84 @@ test("keyboard sensor moves a card and commits the ordered callback", async () =
   await act(async () => root.unmount());
 });
 
+test("pointer sensor exposes a drop indicator and commits the ordered callback", async () => {
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "http://localhost" });
+  Object.assign(globalThis, {
+    window: dom.window,
+    document: dom.window.document,
+    navigator: dom.window.navigator,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    IS_REACT_ACT_ENVIRONMENT: true,
+    getComputedStyle: dom.window.getComputedStyle.bind(dom.window),
+    requestAnimationFrame: (callback: FrameRequestCallback) => setTimeout(callback, 0),
+    cancelAnimationFrame: (id: number) => clearTimeout(id),
+  });
+  Object.defineProperty(dom.window.HTMLElement.prototype, "getBoundingClientRect", {
+    configurable: true,
+    value() {
+      const id = this.getAttribute("data-sortable-id");
+      const index = id === "two" ? 1 : 0;
+      return {
+        top: index * 100,
+        bottom: index * 100 + 80,
+        left: 0,
+        right: 320,
+        width: 320,
+        height: 80,
+        x: 0,
+        y: index * 100,
+        toJSON: () => ({}),
+      };
+    },
+  });
+  const reordered: string[][] = [];
+  const root = createRoot(dom.window.document.querySelector("#root")!);
+  function Harness() {
+    const [ordered, setOrdered] = useState(items);
+    return (
+      <SortableCardList
+        items={ordered}
+        onReorder={(nextItems) => {
+          reordered.push(nextItems.map((item) => item.id));
+          setOrdered(nextItems);
+        }}
+      />
+    );
+  }
+
+  await act(async () => root.render(<Harness />));
+  const handle = dom.window.document.querySelector<HTMLButtonElement>('[aria-label="Reorder One"]');
+  if (!handle) throw new Error("Missing pointer drag handle");
+
+  await act(async () => {
+    handle.dispatchEvent(createPointerEvent(dom, "pointerdown", { x: 40, y: 40 }));
+    dom.window.document.dispatchEvent(createPointerEvent(dom, "pointermove", { x: 40, y: 140 }));
+    dom.window.document.dispatchEvent(createPointerEvent(dom, "pointermove", { x: 40, y: 150 }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+
+  const indicator = dom.window.document.querySelector('[data-drop-indicator="true"]');
+  expect(indicator).not.toBeNull();
+  expect(indicator?.getAttribute("aria-hidden")).toBe("true");
+  expect(indicator?.parentElement?.getAttribute("data-sortable-id")).toBe("two");
+
+  await act(async () => {
+    dom.window.document.dispatchEvent(createPointerEvent(dom, "pointerup", { x: 40, y: 150 }));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
+  expect(reordered).toEqual([["two", "one"]]);
+  expect(dom.window.document.querySelector('[data-drop-indicator="true"]')).toBeNull();
+  await act(async () => root.unmount());
+});
+
 test("DS owns keyboard sensor and reduced-motion behavior", () => {
   const source = readFileSync(new URL("./SortableCardList.tsx", import.meta.url), "utf8");
+  const itemSource = readFileSync(new URL("./SortableCardItem.tsx", import.meta.url), "utf8");
   const styles = readFileSync(new URL("./SortableCardList.module.css", import.meta.url), "utf8");
   expect(source).toContain("KeyboardSensor");
   expect(source).toContain("sortableKeyboardCoordinates");
+  expect(itemSource).toContain("data-drop-indicator");
+  expect(itemSource).toContain("Separator");
   expect(styles).toContain("prefers-reduced-motion: reduce");
 });
