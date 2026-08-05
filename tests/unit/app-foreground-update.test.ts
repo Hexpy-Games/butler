@@ -1,9 +1,57 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { quitAndInstallAppUpdate } from "../../packages/butler-app/client/electron/app-foreground-update.mjs";
+import {
+  planAppForegroundUpdateStop,
+  quitAndInstallAppUpdate,
+} from "../../packages/butler-app/client/electron/app-foreground-update.mjs";
 
 const root = resolve(import.meta.dir, "../..");
+
+test("strict update planning requires a drain for every non-empty classification", () => {
+  expect(planAppForegroundUpdateStop({
+    usesAppForegroundLifecycle: false,
+    activeWorkSnapshot: { classification: "no_active_work" },
+  })).toEqual({
+    allowed: true,
+    requiresDrain: false,
+    restoreState: null,
+    reason: "no_active_work",
+  });
+
+  for (const foregroundState of ["starting", "recovering", "failed"]) {
+    expect(planAppForegroundUpdateStop({
+      usesAppForegroundLifecycle: true,
+      foregroundState,
+      activeWorkSnapshot: { classification: "active_work_detected" },
+    })).toMatchObject({
+      allowed: false,
+      requiresDrain: true,
+      reason: "foreground_drain_unavailable",
+    });
+  }
+  expect(planAppForegroundUpdateStop({
+    usesAppForegroundLifecycle: true,
+    foregroundState: "ready",
+    activeWorkSnapshot: { classification: "active_work_unknown" },
+  })).toMatchObject({ allowed: true, requiresDrain: true, restoreState: "ready" });
+  expect(planAppForegroundUpdateStop({
+    usesAppForegroundLifecycle: true,
+    foregroundState: "degraded",
+    activeWorkSnapshot: { classification: "active_work_detected" },
+  })).toMatchObject({ allowed: true, requiresDrain: true, restoreState: "degraded" });
+  expect(planAppForegroundUpdateStop({
+    usesAppForegroundLifecycle: true,
+    foregroundState: "update_pending",
+    restoreState: "ready",
+    activeWorkSnapshot: { classification: "active_work_detected" },
+  })).toMatchObject({ allowed: true, requiresDrain: true, restoreState: "ready" });
+  expect(planAppForegroundUpdateStop({
+    usesAppForegroundLifecycle: true,
+    foregroundState: "ready",
+    activeWorkSnapshot: { classification: "unexpected_classification" },
+  })).toMatchObject({ allowed: true, requiresDrain: true });
+});
 
 test("update quit waits for active-work drain before invoking the updater", async () => {
   const calls: string[] = [];
@@ -136,6 +184,7 @@ test("Electron updater IPC is exposed only through the preload bridge and uses t
   );
   expect(main).toContain('ipcMain.handle("butler:quit-and-install-update"');
   expect(main).toContain("quitAndInstallAppUpdate({");
+  expect(main).toContain("planAppForegroundUpdateStop");
   expect(main).toContain("requireSettledDrain: true");
   expect(main).toContain("foregroundDrainReadyForUpdate");
   expect(main).toContain("restoreForegroundAfterUpdateDrainFailure");
