@@ -2,17 +2,72 @@ import {
   DEFAULT_MODEL_REF,
   defaultWorkerModelRules,
   listModelMetadata,
+  modelIdentityKey,
   resolveRegisteredRuntimeModelMetadata,
   type ProviderModelMetadata,
 } from "../../../../integrations/providers/model-catalog.ts";
 import { PROFILE_EXTRACTOR_MODEL_DEFAULT } from "../../../../personalization/profiling.ts";
 import type {
+  ModelFallbackSettingsUpdate,
+  ModelFallbackSettingsView,
   SessionControlState,
   SettingsView,
   WorkerModelRule,
 } from "../../interface/protocol/app-protocol.ts";
 
 export const DEFAULT_CONTEXT_WINDOW_TOKENS = 258_000;
+export const MAX_MODEL_FALLBACK_MODELS = 5;
+export const DEFAULT_MODEL_FALLBACK_SETTINGS: ModelFallbackSettingsView = {
+  enabled: false,
+  models: [],
+};
+
+export function normalizeModelFallbackSettings(
+  input: ModelFallbackSettingsUpdate | ModelFallbackSettingsView | undefined,
+  primaryModelRef: string,
+  registeredModels: ProviderModelMetadata[] = [],
+): ModelFallbackSettingsView {
+  const enabled = input?.enabled === true;
+  const primary = allKnownModels(registeredModels).find(
+    (model) => model.model_ref === primaryModelRef,
+  );
+  const seenIdentities = new Set<string>();
+  if (primary) seenIdentities.add(modelIdentityKey(primary));
+
+  const selectableByRef = new Map<string, ProviderModelMetadata>(
+    registeredModels
+      .filter(
+        (model) =>
+          model.runtime_supported === true &&
+          model.registered !== false &&
+          model.enabled !== false,
+      )
+      .map((model) => [model.model_ref, model] as const),
+  );
+  const models: string[] = [];
+  const requestedModels = Array.isArray(input?.models) ? input.models : [];
+  for (const requested of requestedModels) {
+    if (typeof requested !== "string") continue;
+    const model = selectableByRef.get(requested.trim());
+    if (!model) continue;
+    const identity = modelIdentityKey(model);
+    if (seenIdentities.has(identity)) continue;
+    seenIdentities.add(identity);
+    models.push(model.model_ref);
+    if (models.length >= MAX_MODEL_FALLBACK_MODELS) break;
+  }
+  return { enabled, models };
+}
+
+function allKnownModels(
+  registeredModels: ProviderModelMetadata[],
+): ProviderModelMetadata[] {
+  const byRef = new Map<string, ProviderModelMetadata>();
+  for (const model of listModelMetadata(registeredModels)) {
+    byRef.set(model.model_ref, model);
+  }
+  return [...byRef.values()];
+}
 
 export function rewriteSettingsModelRefs(
   input: Partial<SettingsView>,

@@ -1,5 +1,10 @@
 import type { McpSecretInput, McpServerUpsertRequest } from "./integration-contract.ts";
-import type { UpdateSettingsRequest, WebSearchSettingsUpdate, WorkerModelRule } from "./settings-contract.ts";
+import type {
+  ModelFallbackSettingsUpdate,
+  UpdateSettingsRequest,
+  WebSearchSettingsUpdate,
+  WorkerModelRule,
+} from "./settings-contract.ts";
 
 const UPDATE_SETTINGS_KEYS = new Set([
   "server_url",
@@ -24,6 +29,7 @@ const UPDATE_SETTINGS_KEYS = new Set([
   "desktop_notifications",
   "desktop_tray_enabled",
   "web_search",
+  "model_fallback",
   "default_project_folder_selection_token",
 ]);
 
@@ -130,6 +136,29 @@ export function isUpdateSettingsRequest(
     return false;
   if ("web_search" in input && !isWebSearchSettingsUpdate(input.web_search))
     return false;
+  if (
+    "model_fallback" in input &&
+    !isModelFallbackSettingsUpdate(input.model_fallback)
+  )
+    return false;
+  return true;
+}
+
+function isModelFallbackSettingsUpdate(
+  value: unknown,
+): value is ModelFallbackSettingsUpdate {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Record<string, unknown>;
+  if (!Object.keys(input).every((key) => ["enabled", "models"].includes(key)))
+    return false;
+  if ("enabled" in input && typeof input.enabled !== "boolean") return false;
+  if (
+    "models" in input &&
+    (!Array.isArray(input.models) ||
+      !input.models.every((model) => typeof model === "string"))
+  ) {
+    return false;
+  }
   return true;
 }
 

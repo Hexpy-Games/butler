@@ -3718,6 +3718,167 @@ test("settings, command palette, and project actions are route-backed and privac
   }
 });
 
+test("Backup models settings sanitize through the canonical config and survive restart", async () => {
+  const dbPath = join(tempDir, "backup-models.sqlite");
+  const server = createAppServer({
+    dbPath,
+    butlerData: tempDir,
+    port: 0,
+  });
+
+  async function registerHostedModel(
+    providerId: string,
+    modelId: string,
+  ): Promise<void> {
+    const credential = await postJson(
+      `${server.url}model-catalog/provider-credentials`,
+      {
+        provider_id: providerId,
+        auth_type: "api_key",
+        label: `${providerId} fallback credential`,
+        api_key: `${providerId}-${modelId}-secret`,
+      },
+    );
+    await postJson(`${server.url}model-catalog/registered-models`, {
+      provider_id: providerId,
+      model_id: modelId,
+      auth_type: "api_key",
+      credential_id: credential.data.credential.id,
+    });
+  }
+
+  try {
+    await registerHostedModel("zai", "glm-5.2");
+    await registerHostedModel("zai-api", "glm-5.2");
+    await registerHostedModel("zai-api", "glm-5.1");
+    await registerHostedModel("zai-api", "glm-5");
+    await registerHostedModel("openai", "gpt-5.5");
+    await registerHostedModel("openai", "gpt-5.6-sol");
+    await registerHostedModel("anthropic", "claude-opus-5");
+
+    await patchJson(`${server.url}settings`, { model: "zai/glm-5.2" });
+    const configPath = join(tempDir, "butler.config.json");
+    const seededConfig = JSON.parse(readFileSync(configPath, "utf8"));
+    seededConfig.user = {
+      modelFallback: {
+        enabled: true,
+        models: [
+          "zai-api/glm-5.2",
+          "zai-api/glm-5.1",
+          "zai-api/not-registered",
+        ],
+      },
+    };
+    writeFileSync(
+      configPath,
+      JSON.stringify(seededConfig),
+      "utf8",
+    );
+    const beforeIdleRead = statSync(configPath).mtimeMs;
+    const idleProjection = await getJson(`${server.url}settings`);
+    expect(idleProjection.data.model_fallback).toEqual({
+      enabled: true,
+      models: ["zai-api/glm-5.1"],
+    });
+    expect(statSync(configPath).mtimeMs).toBe(beforeIdleRead);
+
+    const updated = await patchJson(`${server.url}settings`, {
+      model_fallback: {
+        enabled: true,
+        models: [
+          "zai-api/glm-5.2",
+          "zai-api/glm-5.1",
+          "zai-api/glm-5",
+          "openai/gpt-5.5",
+          "openai/gpt-5.6-sol",
+          "anthropic/claude-opus-5",
+          "zai-api/not-registered",
+          "zai/glm-4.7",
+        ],
+      },
+    });
+    expect(updated.data.model_fallback).toEqual({
+      enabled: true,
+      models: [
+        "zai-api/glm-5.1",
+        "zai-api/glm-5",
+        "openai/gpt-5.5",
+        "openai/gpt-5.6-sol",
+        "anthropic/claude-opus-5",
+      ],
+    });
+    const persisted = JSON.parse(readFileSync(configPath, "utf8"));
+    expect(persisted.user.modelFallback).toEqual(updated.data.model_fallback);
+    expect(
+      readdirSync(tempDir).filter((name) => name.endsWith(".tmp")),
+    ).toEqual([]);
+
+    const db = new Database(dbPath);
+    const settingsRow = db
+      .query<{ value_json: string }, [string]>(
+        "SELECT value_json FROM app_settings WHERE key = ?",
+      )
+      .get("settings");
+    expect(settingsRow).toBeDefined();
+    expect(JSON.parse(settingsRow!.value_json)).not.toHaveProperty(
+      "model_fallback",
+    );
+    db.close();
+
+    server.stop();
+    const restarted = createAppServer({
+      dbPath,
+      butlerData: tempDir,
+      port: 0,
+    });
+    try {
+      const afterRestart = await getJson(`${restarted.url}settings`);
+      expect(afterRestart.data.model_fallback).toEqual(
+        updated.data.model_fallback,
+      );
+
+      const primaryOnly = await patchJson(`${restarted.url}settings`, {
+        model: "zai-api/glm-5.1",
+      });
+      expect(primaryOnly.data.model).toBe("zai-api/glm-5.1");
+      expect(primaryOnly.data.model_fallback).toEqual({
+        enabled: true,
+        models: [
+          "zai-api/glm-5",
+          "openai/gpt-5.5",
+          "openai/gpt-5.6-sol",
+          "anthropic/claude-opus-5",
+        ],
+      });
+
+      const simultaneous = await patchJson(`${restarted.url}settings`, {
+        model: "zai/glm-5.2",
+        model_fallback: {
+          enabled: true,
+          models: ["zai-api/glm-5.2", "zai-api/glm-5.1"],
+        },
+      });
+      expect(simultaneous.data.model).toBe("zai/glm-5.2");
+      expect(simultaneous.data.model_fallback).toEqual({
+        enabled: true,
+        models: ["zai-api/glm-5.1"],
+      });
+
+      const disabled = await patchJson(`${restarted.url}settings`, {
+        model_fallback: { enabled: false },
+      });
+      expect(disabled.data.model_fallback).toEqual({
+        enabled: false,
+        models: ["zai-api/glm-5.1"],
+      });
+    } finally {
+      restarted.stop();
+    }
+  } finally {
+    server.stop();
+  }
+});
+
 test("settings accepts GPT-5.6 max reasoning effort", async () => {
   const server = createAppServer({
     dbPath: join(tempDir, "app.sqlite"),
