@@ -15,6 +15,8 @@ import {
 } from "../../packages/butler-agent/src/gateways/app/infrastructure/core/schema.ts";
 import { AppTurnRecordStore } from "../../packages/butler-agent/src/gateways/app/domain/sessions/turn-record-store.ts";
 import { NativeInboundQueue } from "../../packages/butler-agent/src/gateways/core/inbound-queue.ts";
+import { openBtccSqliteStores } from
+  "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 
 const resolution: TurnControlResolution = {
   controls: {
@@ -81,6 +83,46 @@ describe("immutable turn execution controls", () => {
 
     expect(envelope.executionControls).toEqual(controls);
     expect(envelope.executionControls).not.toBe(controls);
+  });
+
+  test("projects the accepted provider identity into the durable App turn", () => {
+    const root = mkdtempSync(join(tmpdir(), "butler-execution-model-"));
+    const dbPath = join(root, "app.sqlite");
+    const appDb = new Database(dbPath);
+    migrateAppStoreSchema(appDb);
+    seedAppStoreDefaults(appDb);
+    const appTurns = new AppTurnRecordStore(appDb, () => false);
+    const turn = appTurns.insertTurn("general", "thinking", "Working", resolution);
+    appDb.close();
+
+    const stores = openBtccSqliteStores({
+      dbPath,
+      ownerId: "execution-model-test",
+      storageProfile: "ephemeral",
+    });
+    try {
+      stores.turns.recordProviderResponseIdentity?.({
+        turnId: turn.id,
+        provider: "openai",
+        configuredModel: "openai/gpt-5.6-luna",
+        reportedModel: "gpt-5.6-luna-2026-08-01",
+      });
+      const projectedDb = new Database(dbPath, { readonly: true });
+      const projected = projectedDb.query<{
+        execution_model_json: string | null;
+      }, [string]>(
+        "SELECT execution_model_json FROM turns WHERE id = ?",
+      ).get(turn.id);
+      projectedDb.close();
+      expect(JSON.parse(projected!.execution_model_json!)).toEqual({
+        requested_model_ref: "openai/gpt-5.6-sol",
+        adapter_effective_model_ref: "openai/gpt-5.6-luna",
+        provider_reported_model_ref: "openai/gpt-5.6-luna-2026-08-01",
+      });
+    } finally {
+      stores.close();
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test("round-trips the snapshot through the durable inbound queue", () => {

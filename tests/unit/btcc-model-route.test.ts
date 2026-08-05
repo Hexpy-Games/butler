@@ -8,6 +8,8 @@ import {
   buildModelRoute,
   classifyModelRouteFailure,
   createModelRoutePort,
+  MODEL_ROUTE_MAX_DISPATCHES,
+  MODEL_ROUTE_MAX_TURN_DISPATCHES,
 } from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
@@ -121,6 +123,204 @@ test("model route surfaces auth and admission failures without fallback", async 
     .rejects.toMatchObject({ code: "provider_auth_error" });
   expect(calls).toBe(1);
   expect(classifyModelRouteFailure(new Error("local invariant"))).toBe("surface");
+});
+
+test("persisted surface failure is recovered without redispatch or fallback", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.5",
+    backupModelRefs: ["zai/glm-5.2"],
+    reasoningEffort: "medium",
+    retryCeiling: 3,
+  });
+  const persisted: Array<{ type: string; failureDisposition?: string }> = [];
+  const first = createModelRoutePort({
+    base: {
+      async runRound() {
+        throw new ModelProviderRequestError({
+          code: "provider_auth_error",
+          message: "auth failed",
+          provider: "openai",
+          retryable: false,
+        });
+      },
+    },
+    turnId: "turn-route-crash-surface",
+    route,
+    onRouteEvent: (event) => {
+      persisted.push(event);
+      if (event.type === "model.attempt.failed") {
+        throw new Error("simulated crash after failure journal");
+      }
+    },
+  });
+  await expect(first.runRound({
+    roundId: "crash-surface-round",
+    model: "openai/gpt-5.5",
+    messages: [],
+    tools: [],
+  })).rejects.toThrow("simulated crash after failure journal");
+  expect(persisted.at(-1)).toMatchObject({
+    type: "model.attempt.failed",
+    failureDisposition: "surface",
+  });
+
+  let redispatches = 0;
+  const recovered = createModelRoutePort({
+    base: {
+      async runRound() {
+        redispatches += 1;
+        return { text: "must not dispatch", toolCalls: [] };
+      },
+    },
+    turnId: "turn-route-crash-surface",
+    route,
+    loadAttemptHistory: async () => ({
+      started: [1],
+      failed: [1],
+      failedDetails: [{
+        transportAttempt: 1,
+        errorCode: "provider_auth_error",
+        disposition: "surface" as const,
+      }],
+      succeeded: [],
+      abandoned: [],
+    }),
+  });
+  await expect(recovered.runRound({
+    roundId: "crash-surface-round",
+    model: "openai/gpt-5.5",
+    messages: [],
+    tools: [],
+  })).rejects.toMatchObject({
+    code: "model_route_recovered_failure",
+    failureCode: "provider_auth_error",
+    disposition: "surface",
+  });
+  expect(redispatches).toBe(0);
+});
+
+test("persisted advance and retry dispositions preserve restart policy", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.5",
+    backupModelRefs: ["zai/glm-5.2"],
+    reasoningEffort: "medium",
+    retryCeiling: 3,
+  });
+  const advanceRequests: string[] = [];
+  const advanceEvents: string[] = [];
+  const advance = createModelRoutePort({
+    base: {
+      async runRound(request) {
+        advanceRequests.push(String(request.model));
+        return { text: "backup", toolCalls: [] };
+      },
+    },
+    turnId: "turn-route-crash-advance",
+    route,
+    loadAttemptHistory: async ({ modelRef }) => modelRef === "openai/gpt-5.5"
+      ? {
+          started: [1],
+          failed: [1],
+          failedDetails: [{
+            transportAttempt: 1,
+            errorCode: "provider_quota_exhausted",
+            disposition: "advance" as const,
+          }],
+          succeeded: [],
+          abandoned: [],
+        }
+      : { started: [], failed: [], succeeded: [], abandoned: [] },
+    onRouteEvent: (event) => {
+      advanceEvents.push(`${event.type}:${event.modelRef}`);
+    },
+  });
+  await expect(advance.runRound({
+    roundId: "crash-advance-round",
+    model: "openai/gpt-5.5",
+    messages: [],
+    tools: [],
+  })).resolves.toMatchObject({ text: "backup" });
+  expect(advanceRequests).toEqual(["zai/glm-5.2"]);
+  expect(advanceEvents).toEqual([
+    "model.fallback.selected:zai/glm-5.2",
+    "model.attempt.started:zai/glm-5.2",
+    "model.attempt.succeeded:zai/glm-5.2",
+  ]);
+
+  const retryAttempts: number[] = [];
+  const retry = createModelRoutePort({
+    base: {
+      async runRound(request) {
+        retryAttempts.push(Number(request.providerRetryAttempts));
+        return { text: "retry recovered", toolCalls: [] };
+      },
+    },
+    turnId: "turn-route-crash-retry",
+    route,
+    loadAttemptHistory: async () => ({
+      started: [1],
+      failed: [1],
+      failedDetails: [{
+        transportAttempt: 1,
+        errorCode: "provider_rate_limited",
+        disposition: "retry" as const,
+      }],
+      succeeded: [],
+      abandoned: [],
+    }),
+  });
+  await expect(retry.runRound({
+    roundId: "crash-retry-round",
+    model: "openai/gpt-5.5",
+    messages: [],
+    tools: [],
+  })).resolves.toMatchObject({ text: "retry recovered" });
+  expect(retryAttempts).toEqual([1]);
+});
+
+test("route and turn dispatch bounds are explicit", async () => {
+  expect(MODEL_ROUTE_MAX_DISPATCHES).toBe(30);
+  expect(MODEL_ROUTE_MAX_TURN_DISPATCHES).toBe(330);
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.5",
+    backupModelRefs: [
+      "zai/glm-5.2",
+      "openai/gpt-5.4",
+      "anthropic/claude-3-7-sonnet",
+      "google/gemini-2.5-pro",
+      "local/model",
+    ],
+    reasoningEffort: "medium",
+    retryCeiling: 5,
+  });
+  expect(route.candidates).toHaveLength(6);
+  let calls = 0;
+  const routed = createModelRoutePort({
+    base: {
+      async runRound() {
+        calls += 1;
+        return { text: "bounded", toolCalls: [] };
+      },
+    },
+    turnId: "turn-route-bound",
+    route,
+  });
+  for (let index = 0; index < MODEL_ROUTE_MAX_TURN_DISPATCHES; index += 1) {
+    await routed.runRound({
+      roundId: `bound-round-${index}`,
+      model: "openai/gpt-5.5",
+      messages: [],
+      tools: [],
+    });
+  }
+  expect(calls).toBe(MODEL_ROUTE_MAX_TURN_DISPATCHES);
+  await expect(routed.runRound({
+    roundId: "bound-round-overflow",
+    model: "openai/gpt-5.5",
+    messages: [],
+    tools: [],
+  })).rejects.toMatchObject({ code: "model_route_dispatch_limit_exceeded" });
+  expect(calls).toBe(MODEL_ROUTE_MAX_TURN_DISPATCHES);
 });
 
 test("accepted-response persistence failure does not become a provider failure", async () => {

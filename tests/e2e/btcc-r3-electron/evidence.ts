@@ -63,6 +63,9 @@ export function successEvidence(input: {
     normalizeModel(item.providerReportedModel) ===
       normalizeModel(item.providerAgentModels.at(-1)!),
   );
+  const providerPath = run.providerFixtureEnabled
+    ? "deterministic_provider_fixture"
+    : "real_provider";
   return {
     schema: BTCC_R3_ELECTRON_EVIDENCE_SCHEMA,
     kind: options.smoke ? "launch_smoke" : "scenario_run",
@@ -79,7 +82,7 @@ export function successEvidence(input: {
         "electron_preload_bridge",
         "app_gateway",
         "native_btcc_runtime",
-        "real_provider",
+        providerPath,
         "renderer_visible_final",
         "renderer_visible_ordered_stage_activities",
         "app_database_work_lifecycle",

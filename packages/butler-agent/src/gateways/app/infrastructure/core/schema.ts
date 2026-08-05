@@ -103,6 +103,7 @@ export function migrateAppStoreSchema(
       cancellable INTEGER NOT NULL DEFAULT 0,
       attempt INTEGER NOT NULL DEFAULT 1,
       execution_controls_json TEXT,
+      execution_model_json TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -277,6 +278,7 @@ export function migrateAppStoreSchema(
   ensureColumn(db, "messages", "retryable", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "projects", "ledger_project_id", "TEXT");
   ensureColumn(db, "turns", "execution_controls_json", "TEXT");
+  ensureColumn(db, "turns", "execution_model_json", "TEXT");
   ensureColumn(db, "events", "turn_id", "TEXT");
   ensureColumn(
     db,

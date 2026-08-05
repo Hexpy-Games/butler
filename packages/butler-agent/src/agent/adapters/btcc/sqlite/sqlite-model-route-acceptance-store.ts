@@ -72,8 +72,9 @@ export class SqliteModelRouteAcceptanceStore {
       this.db.query(`
         INSERT OR IGNORE INTO btcc_model_route_events (
           event_id, turn_id, route_digest, event_type, round_id,
-          candidate_index, transport_attempt, model_ref, error_code, created_at
-        ) VALUES (?, ?, ?, 'model.attempt.succeeded', ?, ?, ?, ?, NULL, ?)
+          candidate_index, transport_attempt, model_ref, error_code,
+          failure_disposition, created_at
+        ) VALUES (?, ?, ?, 'model.attempt.succeeded', ?, ?, ?, ?, NULL, NULL, ?)
       `).run(
         eventId,
         input.turnId,

@@ -146,6 +146,9 @@ CREATE TABLE IF NOT EXISTS btcc_model_route_events (
   transport_attempt INTEGER,
   model_ref TEXT NOT NULL,
   error_code TEXT,
+  failure_disposition TEXT CHECK (
+    failure_disposition IS NULL OR failure_disposition IN ('retry', 'advance', 'surface')
+  ),
   created_at TEXT NOT NULL,
   UNIQUE(turn_id, event_type, round_id, candidate_index, transport_attempt, model_ref)
 );

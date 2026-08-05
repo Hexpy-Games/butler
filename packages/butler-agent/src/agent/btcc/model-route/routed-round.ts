@@ -17,6 +17,13 @@ import type {
   ModelRouteEventHandler,
   ModelRouteState,
 } from "./contracts.ts";
+import {
+  MODEL_ROUTE_MAX_TURN_DISPATCHES,
+  MODEL_ROUTE_MAX_CANDIDATES,
+  MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
+  ModelRouteDispatchLimitError,
+  ModelRouteRecoveredFailureError,
+} from "./contracts.ts";
 
 export function createModelRoutePort(input: {
   base: ModelRoundPort;
@@ -43,6 +50,7 @@ export function createModelRoutePort(input: {
 }): ModelRoundPort {
   let route = input.route;
   let generatedRoundSequence = 0;
+  let dispatchCount = 0;
   return {
     async runRound(request: ModelRoundRequest): Promise<ModelRoundResult> {
       const roundId = request.roundId ??
@@ -52,6 +60,7 @@ export function createModelRoutePort(input: {
       let loadedAttemptKey: string | undefined;
       let attemptHistory: ModelRouteAttemptHistory = emptyAttemptHistory();
       let lastProviderError: unknown;
+      const turnDispatchBudget = modelRouteTurnDispatchBudget(route);
       while (true) {
         const candidate = currentModelRouteCandidate(route);
         if (!candidate) throw new Error("model_route_exhausted");
@@ -91,6 +100,24 @@ export function createModelRoutePort(input: {
             terminalAttempts.add(startedAttempt);
           }
           transportAttempt = maxAttempt(attemptHistory) + 1;
+          const latestFailure = latestFailureAtCurrentAttempt(attemptHistory);
+          if (latestFailure?.disposition === "surface") {
+            throw recoveredFailure(latestFailure);
+          }
+          if (latestFailure?.disposition === "advance") {
+            const next = advanceModelRoute(route, attemptKey);
+            route = await selectFallback(
+              input,
+              route,
+              attemptKey,
+              roundId,
+              next,
+              recoveredFailure(latestFailure),
+            );
+            continuation = undefined;
+            loadedAttemptKey = undefined;
+            continue;
+          }
           if (transportAttempt > route.retryCeiling) {
             route = await selectFallback(
               input,
@@ -150,6 +177,10 @@ export function createModelRoutePort(input: {
 
         let result: ModelRoundResult;
         try {
+          if (dispatchCount >= turnDispatchBudget) {
+            throw new ModelRouteDispatchLimitError(turnDispatchBudget);
+          }
+          dispatchCount += 1;
           result = await input.base.runRound({
             ...request,
             model: candidate.modelRef,
@@ -166,22 +197,30 @@ export function createModelRoutePort(input: {
             continuation,
           });
         } catch (error) {
+          const disposition = classifyModelRouteFailure(error);
+          const errorCode = error instanceof ModelProviderRequestError
+            ? error.code
+            : error instanceof ModelRouteDispatchLimitError
+              ? error.code
+              : "provider_unknown_error";
           await input.onRouteEvent?.({
             type: "model.attempt.failed",
             roundId,
             candidateIndex: route.activeCursor,
             transportAttempt,
             modelRef: candidate.modelRef,
-            errorCode: error instanceof ModelProviderRequestError
-              ? error.code
-              : "provider_unknown_error",
+            errorCode,
+            failureDisposition: disposition,
           });
-          const disposition = classifyModelRouteFailure(error);
           if (disposition === "surface") throw error;
           lastProviderError = error;
           attemptHistory = {
             ...attemptHistory,
             failed: [...attemptHistory.failed, transportAttempt],
+            failedDetails: [
+              ...(attemptHistory.failedDetails ?? []),
+              { transportAttempt, errorCode, disposition },
+            ],
           };
           if (disposition === "retry" && transportAttempt < route.retryCeiling) {
             transportAttempt += 1;
@@ -250,11 +289,47 @@ function emptyAttemptHistory(): ModelRouteAttemptHistory {
   return { started: [], failed: [], succeeded: [], abandoned: [] };
 }
 
+function latestFailureAtCurrentAttempt(
+  history: ModelRouteAttemptHistory,
+): NonNullable<ModelRouteAttemptHistory["failedDetails"]>[number] | undefined {
+  const details = [...(history.failedDetails ?? [])]
+    .filter((detail) => history.failed.includes(detail.transportAttempt))
+    .sort((a, b) => a.transportAttempt - b.transportAttempt);
+  const latest = details.at(-1);
+  if (!latest || latest.transportAttempt !== maxAttempt(history)) return undefined;
+  return latest;
+}
+
+function recoveredFailure(
+  detail: NonNullable<ModelRouteAttemptHistory["failedDetails"]>[number],
+): ModelRouteRecoveredFailureError {
+  return new ModelRouteRecoveredFailureError(
+    detail.errorCode,
+    detail.disposition,
+  );
+}
+
+function modelRouteTurnDispatchBudget(route: ModelRouteState): number {
+  const retryCeiling = Math.min(
+    MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
+    Math.max(1, Math.trunc(route.retryCeiling)),
+  );
+  const candidateCount = Math.min(
+    MODEL_ROUTE_MAX_CANDIDATES,
+    Math.max(0, route.candidates.length),
+  );
+  return Math.min(
+    MODEL_ROUTE_MAX_TURN_DISPATCHES,
+    retryCeiling * (60 + candidateCount),
+  );
+}
+
 function maxAttempt(history: ModelRouteAttemptHistory): number {
   return Math.max(
     0,
     ...history.started,
     ...history.failed,
+    ...(history.failedDetails ?? []).map((detail) => detail.transportAttempt),
     ...history.succeeded,
     ...history.abandoned,
   );

@@ -5,6 +5,12 @@ export const MODEL_ROUTE_SCHEMA = "butler.model-route.v1" as const;
 export const MODEL_ROUTE_MAX_CANDIDATES = 6;
 export const MODEL_ROUTE_MAX_RETRY_ATTEMPTS = 5;
 export const MODEL_ROUTE_DEFAULT_RETRY_ATTEMPTS = 3;
+/** A route can physically dispatch at most every candidate's retry ceiling. */
+export const MODEL_ROUTE_MAX_DISPATCHES =
+  MODEL_ROUTE_MAX_CANDIDATES * MODEL_ROUTE_MAX_RETRY_ATTEMPTS;
+/** Turn-level physical bound: R * (MAX_TOOL_ROUNDS + candidateCount). */
+export const MODEL_ROUTE_MAX_TURN_DISPATCHES =
+  MODEL_ROUTE_MAX_RETRY_ATTEMPTS * (60 + MODEL_ROUTE_MAX_CANDIDATES);
 
 export type ModelRouteCandidate = {
   modelRef: string;
@@ -23,9 +29,17 @@ export type ModelRouteState = {
 
 export type ModelRouteFailureDisposition = "retry" | "advance" | "surface";
 
+export type ModelRouteFailureRecord = {
+  transportAttempt: number;
+  errorCode: string;
+  disposition: ModelRouteFailureDisposition;
+};
+
 export type ModelRouteAttemptHistory = {
   started: readonly number[];
   failed: readonly number[];
+  /** Failure details are optional for compatibility with pre-disposition journals. */
+  failedDetails?: readonly ModelRouteFailureRecord[];
   succeeded: readonly number[];
   abandoned: readonly number[];
 };
@@ -42,6 +56,7 @@ export type ModelRouteEvent = {
   transportAttempt?: number;
   modelRef: string;
   errorCode?: string;
+  failureDisposition?: ModelRouteFailureDisposition;
   route?: ModelRouteState;
 };
 
@@ -76,6 +91,29 @@ export class ModelRouteDurabilityError extends Error {
   ) {
     super(`BTCC model route durability failed during ${phase}`);
     this.name = "ModelRouteDurabilityError";
+  }
+}
+
+/** Safe recovery signal emitted when a persisted provider failure is terminal. */
+export class ModelRouteRecoveredFailureError extends Error {
+  readonly code = "model_route_recovered_failure" as const;
+
+  constructor(
+    readonly failureCode: string,
+    readonly disposition: ModelRouteFailureDisposition,
+  ) {
+    super(`BTCC model route recovered ${failureCode} (${disposition})`);
+    this.name = "ModelRouteRecoveredFailureError";
+  }
+}
+
+/** Deterministic guard against a malformed route causing unbounded dispatch. */
+export class ModelRouteDispatchLimitError extends Error {
+  readonly code = "model_route_dispatch_limit_exceeded" as const;
+
+  constructor(readonly maxDispatches: number) {
+    super(`BTCC model route dispatch limit exceeded (${maxDispatches})`);
+    this.name = "ModelRouteDispatchLimitError";
   }
 }
 
