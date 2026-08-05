@@ -85,7 +85,53 @@ export class SqliteModelRouteAcceptanceStore {
         input.modelRef,
         new Date().toISOString(),
       );
+      this.projectAcceptedExecutionModel({
+        turnId: input.turnId,
+        modelRef: input.modelRef,
+        providerIdentity: normalized.providerIdentity,
+      });
     })();
+  }
+
+  private projectAcceptedExecutionModel(input: {
+    turnId: string;
+    modelRef: string;
+    providerIdentity: ModelRoundResult["providerIdentity"];
+  }): void {
+    if (!input.providerIdentity || !tableExists(this.db, "turns") ||
+        !columnExists(this.db, "turns", "execution_controls_json") ||
+        !columnExists(this.db, "turns", "execution_model_json")) return;
+    const requested = this.db.query<{
+      execution_controls_json: string | null;
+    }, [string]>(`
+      SELECT execution_controls_json
+      FROM turns
+      WHERE id = ?
+    `).get(input.turnId);
+    if (!requested?.execution_controls_json) return;
+    let controls: { model_ref?: unknown };
+    try {
+      controls = JSON.parse(requested.execution_controls_json) as { model_ref?: unknown };
+    } catch {
+      return;
+    }
+    if (typeof controls.model_ref !== "string") return;
+    const providerReportedModel = input.providerIdentity.reportedModel.includes("/")
+      ? input.providerIdentity.reportedModel
+      : `${input.providerIdentity.provider}/${input.providerIdentity.reportedModel}`;
+    this.db.query(`
+      UPDATE turns
+      SET execution_model_json = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      JSON.stringify({
+        requested_model_ref: controls.model_ref,
+        adapter_effective_model_ref: input.modelRef,
+        provider_reported_model_ref: providerReportedModel,
+      }),
+      new Date().toISOString(),
+      input.turnId,
+    );
   }
 
   private assertRouteClaim(input: SqliteModelRoundAcceptanceInput): void {
@@ -149,4 +195,15 @@ export class SqliteModelRouteAcceptanceStore {
       throw new Error("BTCC model response acceptance is not bound to the active checkpoint");
     }
   }
+}
+
+function tableExists(db: Database, table: string): boolean {
+  return Boolean(db.query<{ name: string }, [string]>(`
+    SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?
+  `).get(table));
+}
+
+function columnExists(db: Database, table: string, column: string): boolean {
+  return db.query<{ name: string }, []>(`PRAGMA table_info(${table})`).all()
+    .some((candidate) => candidate.name === column);
 }
