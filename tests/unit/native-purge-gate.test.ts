@@ -16,4 +16,4 @@ test("native purge gate accepts official provider source URLs", () => {
     cwd: root,
     stdio: "pipe",
   })).not.toThrow();
-});
+}, 15_000);

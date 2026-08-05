@@ -49,6 +49,9 @@ test("version tag release workflow publishes Butler Agent artifact with packaged
   expect(agentSmoke).toContain(
     "./packages/butler-agent/resources/app-client/dist/assets/",
   );
+  expect(agentSmoke).toContain('"--check",\n      "payload"');
+  expect(agentSmoke).toContain("doctorPayload?.data?.checks");
+  expect(agentSmoke).not.toContain('"--check", "dependencies"');
   expect(workflow).toContain(
     "dist/release/agent/butler-agent-*-all.tar.gz",
   );
@@ -117,9 +120,16 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("--artifact-base-url");
   expect(verifyIndex).toBeGreaterThan(packageIndex);
   expect(workflow).toContain("bun run release:app:smoke -- --out dist/release/app");
+  expect(workflow).toContain("BUTLER_APP_RELEASE_SMOKE_MODE: production");
   expect(workflow).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: \"1\"");
   expect(workflow).toContain("BUTLER_APP_SIGN_IDENTITY");
   expect(workflow).toContain("BUTLER_APP_NOTARY_KEYCHAIN_PROFILE");
+  expect(workflow).toContain(
+    "BUTLER_APP_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}",
+  );
+  expect(workflow).toContain(
+    "BUTLER_APP_NOTARY_KEYCHAIN_PROFILE: butler-notary",
+  );
   expect(workflow).not.toContain('grep -F "Butler-linux-x64/Butler"');
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.dmg");
   expect(workflow).toContain("dist/release/app/butler-app-*-darwin-arm64.zip");
@@ -130,6 +140,19 @@ test("version tag release workflow publishes signed app artifacts", () => {
   expect(workflow).toContain("Expected 6 app release files");
   expect(publishIndex).toBeGreaterThan(verifyIndex);
   expect(workflow).toContain('gh release upload "$tag" "${files[@]}" --clobber');
+
+  const appSmoke = readRepoFile("deploy/app/smoke.ts");
+  expect(appSmoke).toContain("darwin-arm64\\.dmg");
+  expect(appSmoke).toContain("darwin-arm64\\.zip");
+  expect(appSmoke).not.toContain("darwin-arm64\\.pkg");
+  expect(appSmoke).toContain("Mac App DMG must contain exactly one Butler.app");
+  expect(appSmoke).toContain("must not include the retired systemd user service unit");
+  expect(appSmoke).toContain("BUTLER_APP_RELEASE_SMOKE_MODE");
+  expect(appSmoke).toContain("BUTLER_APP_REQUIRE_PRODUCTION_SIGNING");
+  expect(appSmoke).toContain("Mac App DMG container");
+  expect(appSmoke).toContain('["stapler", "validate", path]');
+  expect(appSmoke).toContain("Mac App ZIP Butler.app");
+  expect(appSmoke).toContain("ad-hoc");
 });
 
 test("version tag release workflow publishes no Linux app service installer packages", () => {
@@ -227,6 +250,7 @@ test("README directs default installs to Butler App and advanced installs to Age
 
   expect(quickStart).toContain("GitHub Release");
   expect(quickStart).toContain(`butler-app-${currentVersion}-darwin-arm64.dmg`);
+  expect(quickStart).toContain(`butler-app-${currentVersion}-win32-x64-setup.exe`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-x64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-linux-arm64.deb`);
   expect(quickStart).toContain(`butler-app-${currentVersion}-archlinux-x64.pkg.tar.zst`);
@@ -406,9 +430,11 @@ test("current release notes describe the GitHub release changelog", () => {
 
   expect(notes).toContain(`# Butler ${currentReleaseTag}`);
   expect(notes).toContain("## Change Log");
-  expect(notes).toContain("active app turns observable");
-  expect(notes).toContain("transcript projection incremental");
-  expect(notes).toContain("final-result App transport events");
-  expect(notes).toContain("(#46)");
+  expect(notes).toContain("event-driven SSE activity and context updates");
+  expect(notes).toContain("bounded memory and artifact snapshots");
+  expect(notes).not.toContain("transcript projection incremental");
+  expect(notes).not.toContain("final-result App transport events");
+  expect(notes).not.toContain("(#46)");
+  expect(readRepoFile(".github/releases/v0.0.18.md")).toContain("(#46)");
   expect(notes).not.toContain("## Validation");
 });
