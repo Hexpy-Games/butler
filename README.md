@@ -64,6 +64,11 @@ Squirrel package. GitHub-installed Butler users can open Settings to check for
 and apply updates from the GitHub Releases channel; Microsoft Store installs
 remain Store-managed.
 
+The community signing key is pinned by the repository's public
+`WINDOWS_COMMUNITY_CERTIFICATE_SHA256` variable. Rotate the PFX secret only
+with an explicit pin update and a bridge release signed by the old key, or ask
+users to reinstall; replacing the secret alone must fail before publication.
+
 An ordinary SmartScreen warning can be continued with **More info** and then
 **Run anyway**. This community build is not signed by a public-trust publisher,
 so a warning is expected. Smart App Control enforcement is different: it can
