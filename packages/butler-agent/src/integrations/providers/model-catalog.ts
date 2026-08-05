@@ -59,6 +59,14 @@ export interface ProviderModelMetadata {
   provider_family_id?: string;
   model_id: string;
   model_ref: `${ModelProviderId}/${string}`;
+  /**
+   * Stable identifiers that the provider catalog explicitly maps to this
+   * model.  A model id is intentionally not treated as an alias implicitly:
+   * the same id is common across multiple provider carriers (for example
+   * Z.AI Coding Plan/API), so an unqualified lookup must never pick a model
+   * merely because it happens to be first in the catalog.
+   */
+  aliases?: readonly string[];
   display_name: string;
   status: "latest" | "recommended" | "available" | "deprecated";
   /** Provider-published capacities. Some aggregator catalogs intentionally
@@ -153,6 +161,7 @@ function openAITextEncoding(): Tiktoken {
 export function listModelMetadata(extraModels: ProviderModelMetadata[] = []): ProviderModelMetadata[] {
   return [...MODELS, ...extraModels].map((model) => ({
     ...model,
+    ...(model.aliases ? { aliases: [...model.aliases] } : {}),
     reasoning_efforts: [...model.reasoning_efforts],
   }));
 }
@@ -220,6 +229,7 @@ function lookupModelMetadata(extraModels: ProviderModelMetadata[] = []): Provide
   for (const model of [...MODELS, ...configuredLocalModelMetadata(), ...extraModels]) {
     byRef.set(model.model_ref, {
       ...model,
+      ...(model.aliases ? { aliases: [...model.aliases] } : {}),
       reasoning_efforts: [...model.reasoning_efforts],
     });
   }
@@ -227,14 +237,63 @@ function lookupModelMetadata(extraModels: ProviderModelMetadata[] = []): Provide
 }
 
 function matchesParsedModelRef(
-  model: Pick<ProviderModelMetadata, "model_ref" | "provider_id" | "model_id">,
+  model: Pick<ProviderModelMetadata, "model_ref" | "provider_id" | "aliases">,
   parsed: ParsedModelRef,
 ): boolean {
   if (model.model_ref === parsed.canonicalRef) return true;
-  if (parsed.source === "namespaced") {
-    return model.provider_id === parsed.providerId && model.model_id === parsed.modelId;
+  const aliases = model.aliases ?? [];
+  if (aliases.includes(parsed.input) || aliases.includes(parsed.canonicalRef)) {
+    return true;
   }
-  return model.model_id === parsed.modelId;
+  if (parsed.source === "namespaced") {
+    return model.provider_id === parsed.providerId && aliases.includes(parsed.modelId);
+  }
+  return false;
+}
+
+/**
+ * Find one exact catalog entry or one explicitly declared alias.  Returning
+ * undefined for an ambiguous alias is deliberate: callers must surface the
+ * unavailable configuration rather than silently selecting a provider.
+ */
+export function findModelMetadata(
+  modelRef: string | null | undefined,
+  models: readonly ProviderModelMetadata[] = listModelMetadata(),
+): ProviderModelMetadata | undefined {
+  const parsed = parseModelRef(modelRef?.trim() || "");
+  if (!parsed.input) return undefined;
+  const exact = models.filter((model) => model.model_ref === parsed.canonicalRef);
+  if (exact.length === 1) return exact[0];
+  if (exact.length > 1) return undefined;
+  const aliases = models.filter((model) => matchesParsedModelRef(model, parsed));
+  return aliases.length === 1 ? aliases[0] : undefined;
+}
+
+function cloneModelMetadata(model: ProviderModelMetadata): ProviderModelMetadata {
+  return {
+    ...model,
+    ...(model.aliases ? { aliases: [...model.aliases] } : {}),
+    reasoning_efforts: [...model.reasoning_efforts],
+  };
+}
+
+function unavailableModelMetadata(
+  parsed: ParsedModelRef,
+  reason: "missing" | "retired" = "missing",
+): ProviderModelMetadata {
+  return {
+    provider_id: parsed.providerId as ModelProviderId,
+    provider_label: "Unavailable model",
+    model_id: parsed.modelId,
+    model_ref: parsed.canonicalRef as `${ModelProviderId}/${string}`,
+    display_name: `${parsed.canonicalRef} (${reason})`,
+    status: "deprecated",
+    default_reasoning_effort: "medium",
+    reasoning_efforts: ["none", "low", "medium", "high", "xhigh", "max"],
+    token_estimator: "character_estimate",
+    source_url: "about:blank",
+    runtime_supported: false,
+  };
 }
 
 export function modelCatalogView(
@@ -272,6 +331,7 @@ export function modelCatalogView(
     registered_models: registeredModels.map((model) => ({
       ...model,
       registered: true,
+      ...(model.aliases ? { aliases: [...model.aliases] } : {}),
       reasoning_efforts: [...model.reasoning_efforts],
     })),
     provider_credentials: providerCredentials.map((credential) => ({ ...credential })),
@@ -285,6 +345,7 @@ export function modelCatalogGeneration(
   const stableModels = registeredModels
     .map((model) => ({
       model_ref: model.model_ref,
+      aliases: model.aliases ? [...model.aliases].sort() : undefined,
       provider_family_id: model.provider_family_id,
       runtime_supported: model.runtime_supported,
       hosted_api_shape: model.hosted_api_shape,
@@ -323,12 +384,11 @@ export function resolveRegisteredRuntimeModelMetadata(
 ): ProviderModelMetadata {
   const selectable = registeredModels.filter((model) => model.runtime_supported);
   if (selectable.length === 0) return resolveRuntimeModelMetadata(modelRef);
-  const parsed = parseModelRef(modelRef?.trim() || selectable[0]!.model_ref);
-  const exact = selectable.find((model) => matchesParsedModelRef(model, parsed));
-  const fallback = exact ??
-    selectable.find((model) => model.provider_id === parsed.providerId) ??
-    selectable[0]!;
-  return { ...fallback, reasoning_efforts: [...fallback.reasoning_efforts] };
+  const requested = modelRef?.trim();
+  if (!requested) return cloneModelMetadata(selectable[0]!);
+  const exact = findModelMetadata(requested, selectable);
+  if (exact) return cloneModelMetadata(exact);
+  return resolveRuntimeModelMetadata(requested);
 }
 
 export function resolveModelMetadata(
@@ -337,11 +397,11 @@ export function resolveModelMetadata(
 ): ProviderModelMetadata {
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
   const models = lookupModelMetadata(extraModels);
-  const exact = models.find((model) => matchesParsedModelRef(model, parsed));
-  if (exact) return { ...exact, reasoning_efforts: [...exact.reasoning_efforts] };
-  const providerDefault = models.find((model) => model.provider_id === parsed.providerId && model.status === "latest");
-  if (providerDefault) return { ...providerDefault, reasoning_efforts: [...providerDefault.reasoning_efforts] };
-  return { ...MODELS[0]!, reasoning_efforts: [...MODELS[0]!.reasoning_efforts] };
+  const exact = findModelMetadata(parsed.input, models);
+  if (exact) {
+    return cloneModelMetadata(exact);
+  }
+  return unavailableModelMetadata(parsed);
 }
 
 export function modelSupportsJsonSchemaResponseFormat(modelRef?: string | null): boolean {
@@ -364,16 +424,11 @@ export function resolveRuntimeModelMetadata(
 ): ProviderModelMetadata {
   const parsed = parseModelRef(modelRef?.trim() || DEFAULT_MODEL_REF);
   const models = lookupModelMetadata(extraModels);
-  const exact = models.find((model) =>
-    model.runtime_supported && matchesParsedModelRef(model, parsed),
-  );
-  if (exact) return { ...exact, reasoning_efforts: [...exact.reasoning_efforts] };
-  const providerDefault = models.find((model) =>
-    model.runtime_supported && model.provider_id === parsed.providerId && model.status === "latest",
-  );
-  if (providerDefault) return { ...providerDefault, reasoning_efforts: [...providerDefault.reasoning_efforts] };
-  const defaultModel = MODELS.find((model) => model.model_ref === DEFAULT_MODEL_REF && model.runtime_supported) ?? MODELS[0]!;
-  return { ...defaultModel, reasoning_efforts: [...defaultModel.reasoning_efforts] };
+  const exact = findModelMetadata(parsed.input, models);
+  if (exact) {
+    return cloneModelMetadata(exact);
+  }
+  return unavailableModelMetadata(parsed);
 }
 
 export function estimateTokensForModel(

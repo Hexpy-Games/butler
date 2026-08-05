@@ -1,6 +1,7 @@
 import {
   DEFAULT_MODEL_REF,
   defaultWorkerModelRules,
+  findModelMetadata,
   listModelMetadata,
   modelIdentityKey,
   resolveRegisteredRuntimeModelMetadata,
@@ -28,9 +29,7 @@ export function normalizeModelFallbackSettings(
   registeredModels: ProviderModelMetadata[] = [],
 ): ModelFallbackSettingsView {
   const enabled = input?.enabled === true;
-  const primary = allKnownModels(registeredModels).find(
-    (model) => model.model_ref === primaryModelRef,
-  );
+  const primary = findModelMetadata(primaryModelRef, allKnownModels(registeredModels));
   const seenIdentities = new Set<string>();
   if (primary) seenIdentities.add(modelIdentityKey(primary));
 
@@ -48,7 +47,8 @@ export function normalizeModelFallbackSettings(
   const requestedModels = Array.isArray(input?.models) ? input.models : [];
   for (const requested of requestedModels) {
     if (typeof requested !== "string") continue;
-    const model = selectableByRef.get(requested.trim());
+    const normalizedRef = normalizeKnownModelRef(requested, registeredModels);
+    const model = normalizedRef ? selectableByRef.get(normalizedRef) : undefined;
     if (!model) continue;
     const identity = modelIdentityKey(model);
     if (seenIdentities.has(identity)) continue;
@@ -118,9 +118,10 @@ export function normalizeKnownModelRef(
   const value = input.trim();
   if (!value) return undefined;
   const models = extraModels.length > 0 ? extraModels : listModelMetadata();
-  const match = models
-    .filter((model) => model.runtime_supported)
-    .find((model) => model.model_ref === value || model.model_id === value);
+  const match = findModelMetadata(value, models);
+  if (!match || !match.runtime_supported || match.registered === false || match.enabled === false) {
+    return undefined;
+  }
   return match?.model_ref;
 }
 
