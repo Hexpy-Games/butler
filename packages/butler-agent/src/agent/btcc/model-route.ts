@@ -298,6 +298,14 @@ export function createModelRoutePort(input: {
             ...request,
             model: candidate.modelRef,
             reasoningEffort: candidate.reasoningEffort,
+            ...(request.usageAttribution
+              ? {
+                  usageAttribution: {
+                    ...request.usageAttribution,
+                    reasoningEffort: candidate.reasoningEffort,
+                  },
+                }
+              : {}),
             providerRetryAttempts: 1,
             continuation,
           });
