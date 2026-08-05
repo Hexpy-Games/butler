@@ -43,7 +43,7 @@
         "terminalState": "delivered",
         "finalIncludes": ["BTCC_R3_LOCAL_BACKUP_MODEL_SUCCESS"],
         "providerAgentModels": ["gpt-5.6-sol", "gpt-5.6-luna"],
-        "providerReportedModel": "gpt-5.6-luna",
+        "providerReportedModel": "openai/gpt-5.6-luna",
         "progressIncludes": ["gpt-5.6-luna"]
       }
     }
