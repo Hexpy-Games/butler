@@ -28,14 +28,22 @@ export async function createGeminiContent(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
-  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
+  providerRoundPolicyOrRetryAttempts?: Partial<ProviderRoundPolicy> | number,
+  retryAttempts?: number,
 ): Promise<Record<string, any>> {
+  const providerRoundPolicy = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? undefined
+    : providerRoundPolicyOrRetryAttempts;
+  const retryOverride = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? providerRoundPolicyOrRetryAttempts
+    : retryAttempts;
   return await runGuardedProviderRound({
     signal,
     policy: providerRoundPolicy,
     operation: async (guardedSignal) => await withModelApiRetry(
       async () => await createGeminiContentOnce(config, body, guardedSignal, budgetContext),
       guardedSignal,
+      retryOverride,
     ),
     timeoutError: (timeoutKind) => providerRoundTimeoutError({
       provider: "google",
@@ -187,7 +195,7 @@ export async function runGeminiPromptText(
         : {}),
       ...geminiReasoningParams(options.reasoningEffort),
       contents: [{ role: "user", parts: [{ text: promptTextForHosted(options) }] }],
-    }, options.signal, context),
+    }, options.signal, context, options.providerRetryAttempts),
     usage: geminiUsageSample,
   });
   const text = geminiText(response);

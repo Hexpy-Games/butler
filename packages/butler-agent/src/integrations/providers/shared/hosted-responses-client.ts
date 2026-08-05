@@ -185,24 +185,7 @@ export async function runHostedResponsesModelRound(
 ): Promise<ModelRoundResult> {
   const roundIndex = request.usageAttribution?.roundIndex ?? 0;
   beforeAttributedModelRequest({ attribution: request.usageAttribution, roundIndex });
-  const input = request.messages
-    .filter((message) => message.role !== "system")
-    .map((message) => {
-      if (message.role === "tool") {
-        return {
-          type: "function_call_output",
-          call_id: message.toolCallId,
-          output: message.content,
-        };
-      }
-      if (message.role === "assistant") {
-        return {
-          role: "assistant",
-          content: [{ type: "output_text", text: message.content }],
-        };
-      }
-      return { role: "user", content: message.content };
-    });
+  const input = hostedResponsesModelRoundInput(request);
   const response = await createHostedResponse(
     config,
     {
@@ -250,4 +233,69 @@ export async function runHostedResponsesModelRound(
     ...(providerIdentity ? { providerIdentity } : {}),
     raw: response,
   };
+}
+
+/**
+ * Responses carriers are stateless here: every round replays the BTCC-owned
+ * message history. Provider output items are therefore part of the next
+ * request, not just a normalized assistant text projection. In particular,
+ * Responses APIs require a function_call item before its function_call_output
+ * item; dropping that protocol item makes a tool continuation invalid.
+ */
+function hostedResponsesModelRoundInput(
+  request: ModelRoundRequest,
+): Array<Record<string, unknown>> {
+  return request.messages.flatMap((message): Array<Record<string, unknown>> => {
+    if (message.role === "system") return [];
+    if (message.role === "tool") {
+      return [{
+        type: "function_call_output",
+        call_id: message.toolCallId,
+        output: message.content,
+      }];
+    }
+    if (message.role === "assistant") {
+      return responsesAssistantItems(message);
+    }
+    return [{ role: "user", content: message.content }];
+  });
+}
+
+function responsesAssistantItems(
+  message: ModelRoundRequest["messages"][number],
+): Array<Record<string, unknown>> {
+  const providerItems = providerResponseItems(message.providerData);
+  const providerCallIds = new Set(
+    providerItems
+      .filter((item) => item.type === "function_call" && typeof item.call_id === "string")
+      .map((item) => item.call_id as string),
+  );
+  const calls = (message.toolCalls ?? [])
+    .filter((call) => !providerCallIds.has(call.id))
+    .map((call) => ({
+      type: "function_call",
+      call_id: call.id,
+      name: call.name,
+      arguments: call.rawArguments,
+    }));
+  if (providerItems.length > 0 || calls.length > 0) {
+    return [
+      ...providerItems,
+      ...calls,
+    ];
+  }
+  return message.content
+    ? [{
+        role: "assistant",
+        content: [{ type: "output_text", text: message.content }],
+      }]
+    : [];
+}
+
+function providerResponseItems(value: unknown): Array<Record<string, unknown>> {
+  const values = Array.isArray(value) ? value : [value];
+  return values.flatMap((item): Array<Record<string, unknown>> => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    return [item as Record<string, unknown>];
+  });
 }

@@ -73,7 +73,14 @@ function attributedLocalCompletion(
 ): Promise<Record<string, any>> {
   return requests.request({
     model: config.model_ref,
-    run: async (context) => await createLocalChatCompletion(config, body, options.signal, context),
+    run: async (context) => await createLocalChatCompletion(
+      config,
+      body,
+      options.signal,
+      context,
+      undefined,
+      options.providerRetryAttempts,
+    ),
     usage: openAICompatibleUsageSample,
   });
 }

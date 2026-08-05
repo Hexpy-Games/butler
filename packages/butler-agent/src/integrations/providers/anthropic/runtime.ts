@@ -32,14 +32,22 @@ export async function createAnthropicMessage(
   body: Record<string, unknown>,
   signal?: AbortSignal,
   budgetContext?: { attribution?: PromptOptions["usageAttribution"]; roundIndex: number },
-  providerRoundPolicy?: Partial<ProviderRoundPolicy>,
+  providerRoundPolicyOrRetryAttempts?: Partial<ProviderRoundPolicy> | number,
+  retryAttempts?: number,
 ): Promise<Record<string, any>> {
+  const providerRoundPolicy = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? undefined
+    : providerRoundPolicyOrRetryAttempts;
+  const retryOverride = typeof providerRoundPolicyOrRetryAttempts === "number"
+    ? providerRoundPolicyOrRetryAttempts
+    : retryAttempts;
   return await runGuardedProviderRound({
     signal,
     policy: providerRoundPolicy,
     operation: async (guardedSignal) => await withModelApiRetry(
       async () => await createAnthropicMessageOnce(config, body, guardedSignal, budgetContext),
       guardedSignal,
+      retryOverride,
     ),
     timeoutError: (timeoutKind) => providerRoundTimeoutError({
       provider: hostedProviderErrorLabel(config),
@@ -194,7 +202,7 @@ export async function runAnthropicPromptText(
       ...(options.instructions?.trim() ? { system: options.instructions.trim() } : {}),
       ...anthropicReasoningParams(config, options.reasoningEffort),
       messages: [{ role: "user", content: promptTextForHosted(options) }],
-    }, options.signal, context),
+    }, options.signal, context, options.providerRetryAttempts),
     usage: anthropicUsageSample,
   });
   const text = anthropicText(response);
