@@ -143,6 +143,14 @@ export function validateElectronScenario(value: unknown): ElectronScenario {
           "Scenario providerFixture status must be an HTTP status.",
         );
       }
+      if (response.delayMs !== undefined) {
+        assert(
+          Number.isSafeInteger(response.delayMs) &&
+            response.delayMs >= 0 &&
+            response.delayMs <= 5_000,
+          "Scenario providerFixture delayMs must be between 0 and 5000.",
+        );
+      }
     }
   }
   for (const step of scenario.steps) {

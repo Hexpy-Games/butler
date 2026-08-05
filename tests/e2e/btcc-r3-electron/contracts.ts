@@ -16,11 +16,16 @@ export type ElectronWorkStage =
   | "validation";
 export type TerminalState = "cancelled" | "delivered" | "failed";
 
-export type ProviderFixtureRequestKind = "agent" | "tool_provider" | "title";
+export type ProviderFixtureRequestKind =
+  | "agent"
+  | "auxiliary"
+  | "tool_provider"
+  | "title";
 
 export interface ElectronProviderFixtureResponse {
   requestKind?: ProviderFixtureRequestKind;
   requestModel?: string;
+  delayMs?: number;
   status?: number;
   errorCode?: string;
   responseModel?: string;

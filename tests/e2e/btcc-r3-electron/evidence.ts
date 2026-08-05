@@ -48,11 +48,20 @@ export function successEvidence(input: {
   run: PreparedRun;
 }): Record<string, unknown> {
   const { launches, observations, options, providerRequests, run } = input;
+  const normalizeModel = (value: string): string => {
+    const trimmed = value.trim();
+    return trimmed.includes("/")
+      ? trimmed.slice(trimmed.indexOf("/") + 1)
+      : trimmed;
+  };
   const allPassed = observations.every((item) =>
     item.expectations.passed &&
     item.reload.finalMatched !== false &&
     item.restart.finalMatched !== false &&
-    item.providerReportedModel === run.model,
+    item.providerReportedModel !== null &&
+    item.providerAgentModels.length > 0 &&
+    normalizeModel(item.providerReportedModel) ===
+      normalizeModel(item.providerAgentModels.at(-1)!),
   );
   return {
     schema: BTCC_R3_ELECTRON_EVIDENCE_SCHEMA,

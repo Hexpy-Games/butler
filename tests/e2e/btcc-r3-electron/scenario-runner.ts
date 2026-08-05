@@ -20,6 +20,7 @@ import {
   bridgeCall,
   ensureSession,
   launchProduct,
+  productLaunchFailureDiagnostics,
   openSession,
   stopProduct,
   type ProductLaunch,
@@ -91,6 +92,7 @@ export async function runBtccR3ElectronHarness(
   try {
     providerProxy = await startProviderObservationProxy({
       upstreamBaseUrl: process.env.BUTLER_CODEX_BASE_URL,
+      fixture: scenario.providerFixture,
     });
     launch = await launchProduct(run, providerProxy.endpoint);
     launches.push({
@@ -196,6 +198,15 @@ export async function runBtccR3ElectronHarness(
     runError = error;
     electronOutput = launch?.output;
     executorOutput = launch?.executorOutput;
+    if (!electronOutput || !executorOutput) {
+      const diagnostics = productLaunchFailureDiagnostics(error);
+      electronOutput ??= diagnostics.electronOutput.length > 0
+        ? diagnostics.electronOutput
+        : undefined;
+      executorOutput ??= diagnostics.executorOutput.length > 0
+        ? diagnostics.executorOutput
+        : undefined;
+    }
   }
 
   let cleanupError: unknown;

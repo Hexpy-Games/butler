@@ -158,6 +158,12 @@ test("model-round waiting projects the admitted cursor model into iteration evid
       modelRef: "zai/glm-5.2",
     },
   });
+  expect(progressRowFromSharedTurnEvent(events[0]!)).toMatchObject({
+    kind: "turn",
+    safe_label: "zai/glm-5.2",
+    state: "thinking",
+    bridge_phase: "model_round_waiting",
+  });
 });
 
 test("run_command operation projects the model-authored action label without parsing command text", async () => {

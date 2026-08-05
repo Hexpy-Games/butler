@@ -21,11 +21,11 @@
         "requestKind": "agent",
         "requestModel": "gpt-5.6-luna",
         "responseModel": "gpt-5.6-luna",
+        "delayMs": 1000,
         "text": "BTCC_R3_LOCAL_BACKUP_MODEL_SUCCESS"
       }
     ],
     "defaultResponse": {
-      "requestKind": "title",
       "responseModel": "gpt-5.6-sol",
       "text": "BTCC R3 fallback fixture"
     }

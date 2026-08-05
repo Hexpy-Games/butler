@@ -1057,7 +1057,9 @@ test("Electron bundled-Agent setup does not attach to a pre-existing gateway", (
   expect(ensureReady).toContain('recordError("gateway_unavailable"');
   expect(ensureReady).toContain("if (!gateway.commitActivation)");
   expect(ensureReady).toContain("updatePort(await findAvailablePort(getPort() + 1))");
-  expect(ensureReady).toContain("startupPromise = start(gateway);");
+  expect(ensureReady).toContain("const operation = ensureReadyOnce();");
+  expect(ensureReady).toContain("startupPromise = operation;");
+  expect(ensureReady).toContain("await start(gateway);");
   expect(main).toContain("function ensureAppManagedAgentRuntimePointer");
   expect(main).toContain("appManagedGateway.commitActivation?.()");
   const ensureServerStart = main.indexOf("async function ensureServer()");

@@ -48,6 +48,31 @@ export interface ProductLaunch {
   startedAtMs: number;
 }
 
+export interface ProductLaunchFailureDiagnostics {
+  electronOutput: string[];
+  executorOutput: string[];
+}
+
+export function productLaunchFailureDiagnostics(
+  error: unknown,
+): ProductLaunchFailureDiagnostics {
+  if (!error || typeof error !== "object") {
+    return { electronOutput: [], executorOutput: [] };
+  }
+  const candidate = error as {
+    electronOutput?: unknown;
+    executorOutput?: unknown;
+  };
+  return {
+    electronOutput: Array.isArray(candidate.electronOutput)
+      ? candidate.electronOutput.map(String)
+      : [],
+    executorOutput: Array.isArray(candidate.executorOutput)
+      ? candidate.executorOutput.map(String)
+      : [],
+  };
+}
+
 function listenerPids(port: number): number[] {
   if (process.platform === "win32") return [];
   const result = spawnSync("lsof", [`-tiTCP:${port}`, "-sTCP:LISTEN"], {
@@ -265,7 +290,12 @@ export async function launchProduct(
     await stopOwnedPortListeners(run.serverPort).catch(() => undefined);
     await stopOwnedPortListeners(run.debugPort).catch(() => undefined);
     if (executor) await stopNativeExecutor(run, executor.child);
-    throw error;
+    const failure = error instanceof Error ? error : new Error(String(error));
+    Object.assign(failure, {
+      electronOutput: [...output],
+      executorOutput: [...(executor?.output ?? [])],
+    });
+    throw failure;
   }
 }
 

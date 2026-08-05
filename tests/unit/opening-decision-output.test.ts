@@ -168,7 +168,7 @@ test("optional session title generation does not retry provider failures", async
 
 test("native bootstrap provider resolves capabilities from the effective turn model", () => {
   const openAiDefault = createNativeButlerDefaultProvider({
-    system: { defaultModel: "openai/gpt-5.5-codex" },
+    system: { defaultModel: "openai/gpt-5.5" },
   });
   const glmDefault = createNativeButlerDefaultProvider({
     system: { defaultModel: "zai/glm-5.2" },
@@ -178,14 +178,14 @@ test("native bootstrap provider resolves capabilities from the effective turn mo
     supportsStructuredOutputs: true,
     structuredDecisionTransport: "function_tool",
   });
-  expect(glmDefault.capabilitiesFor?.("openai/gpt-5.5-codex")).toMatchObject({
+  expect(glmDefault.capabilitiesFor?.("openai/gpt-5.5")).toMatchObject({
     supportsStructuredOutputs: true,
     structuredDecisionTransport: "json_schema",
   });
   expect(openAiDefault.forModel?.("zai/glm-5.2").capabilities).toMatchObject({
     structuredDecisionTransport: "function_tool",
   });
-  expect(glmDefault.forModel?.("openai/gpt-5.5-codex").capabilities).toMatchObject({
+  expect(glmDefault.forModel?.("openai/gpt-5.5").capabilities).toMatchObject({
     structuredDecisionTransport: "json_schema",
   });
 });
