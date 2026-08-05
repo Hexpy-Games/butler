@@ -284,7 +284,14 @@ test("admitted model route is persisted and survives a fresh SQLite repository",
     turns: stores.turns,
     messages: stores.messages,
     agent: {
-      async run({ recordModelRouteEvent }) {
+      async run({ loadModelRoundAcceptance, recordModelRouteEvent }) {
+        // The acceptance probe runs before the first journal event/provider
+        // dispatch. A freshly acquired claim must still own its checkpoint.
+        await expect(loadModelRoundAcceptance?.({
+          roundId: "route-persist-round",
+          candidateIndex: 0,
+          modelRef: "openai/gpt-5.5",
+        })).resolves.toBeUndefined();
         await recordModelRouteEvent?.({
           type: "model.attempt.started",
           roundId: "route-persist-round",

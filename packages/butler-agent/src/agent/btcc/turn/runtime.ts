@@ -22,6 +22,8 @@ import type {
 import { stopTurn } from "./stop-turn.ts";
 import { isSqliteContention } from "../../../foundation/sqlite-contention.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "../agent-loop/index.ts";
+import { isModelRouteDurabilityError } from "../model-route/index.ts";
+import { createModelRouteRuntimeHooks } from "./model-route-runtime-hooks.ts";
 
 export type TurnRuntimeDependencies = {
   admission: TurnAdmissionRepository;
@@ -110,72 +112,19 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         permit,
       );
       let result: BtccAgentLoopResult;
-      const routeAcceptanceReader = this.dependencies.turns.loadModelRoundAcceptance?.bind(
-        this.dependencies.turns,
-      );
-      const routeAcceptanceWriter = this.dependencies.turns.recordModelRoundAcceptance?.bind(
-        this.dependencies.turns,
-      );
       try {
         result = await this.dependencies.agent.run({
           turn,
           signal: permit.signal,
           progress,
-          recordModelRouteEvent: async (event) => {
-            return await this.dependencies.turns.recordModelRouteEvent?.({
-              event,
-              route: event.route,
-              turnId: turn.turnId,
-              expectedRevision: turn.revision,
-              executionFence: turn.executionFence,
-              claimId: claim.claimId,
-            });
-          },
-          loadModelRouteAttemptHistory: async (attempt) =>
-            await this.dependencies.turns.loadModelRouteAttemptHistory?.({
-              turnId: turn.turnId,
-              routeDigest: turn.modelRoute?.routeDigest ?? "unknown",
-              ...attempt,
-            }) ?? { started: [], failed: [], succeeded: [], abandoned: [] },
-          ...(routeAcceptanceReader
-            ? {
-                loadModelRoundAcceptance: async (acceptance: {
-                  roundId: string;
-                  candidateIndex: number;
-                  modelRef: string;
-                }) => await routeAcceptanceReader({
-                  turnId: turn.turnId,
-                  routeDigest: turn.modelRoute?.routeDigest ?? "unknown",
-                  checkpointId: claim.checkpointId,
-                  checkpointRevision: claim.checkpointRevision,
-                  ...acceptance,
-                }),
-              }
-            : {}),
-          ...(routeAcceptanceWriter
-            ? {
-                recordModelRoundAcceptance: async (acceptance: {
-                  roundId: string;
-                  candidateIndex: number;
-                  transportAttempt: number;
-                  modelRef: string;
-                  result: import("../ports/model-round.ts").ModelRoundResult;
-                }) => {
-                  await routeAcceptanceWriter({
-                    ...acceptance,
-                    turnId: turn.turnId,
-                    expectedRevision: turn.revision,
-                    executionFence: turn.executionFence,
-                    claimId: claim.claimId,
-                    checkpointId: claim.checkpointId,
-                    checkpointRevision: claim.checkpointRevision,
-                    routeDigest: turn.modelRoute?.routeDigest ?? "unknown",
-                  });
-                },
-              }
-            : {}),
+          ...createModelRouteRuntimeHooks({
+            turn,
+            claim,
+            turns: this.dependencies.turns,
+          }),
         });
-      } catch (_error) {
+      } catch (error) {
+        if (isModelRouteDurabilityError(error)) throw error;
         permit.assertActive();
         result = {
           route: "assisted",
