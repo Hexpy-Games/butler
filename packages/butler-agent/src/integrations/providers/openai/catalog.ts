@@ -57,6 +57,10 @@ export const OPENAI_MODELS: readonly ProviderModelMetadata[] = [
     provider_label: "OpenAI",
     model_id: "gpt-5.5",
     model_ref: "openai/gpt-5.5",
+    // The Codex subscription carrier historically persisted this alias. Keep
+    // it explicit so old settings remain identifiable without selecting a
+    // newer OpenAI model by accident.
+    aliases: ["gpt-5.5", "gpt-5.5-codex", "openai/gpt-5.5-codex"],
     display_name: "GPT-5.5",
     status: "available",
     context_window_tokens: 1_050_000,
