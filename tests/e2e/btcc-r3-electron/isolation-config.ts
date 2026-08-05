@@ -49,10 +49,78 @@ export function productAgentOwnership(repoRoot: string): AgentOwnership {
 }
 
 function writeJson(path: string, value: unknown): void {
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, {
     encoding: "utf8",
     mode: 0o600,
+  });
+}
+
+const FIXTURE_PROVIDER_CREDENTIAL_ID = "btcc-r3-fixture-provider";
+const FIXTURE_PROVIDER_SECRET = "fixture-local-provider-key";
+
+function fixtureModelRefs(
+  run: Pick<PreparedRun, "model">,
+  modelFallback?: ElectronScenario["modelFallback"],
+): string[] {
+  return [run.model, ...(modelFallback?.models ?? [])];
+}
+
+function ensureFixtureProviderModels(
+  config: Record<string, unknown>,
+  modelRefs: readonly string[],
+): void {
+  const models = isRecord(config.models) ? config.models : {};
+  const registered = Array.isArray(models.registered) ? models.registered : [];
+  const fixtureRefs = new Set(modelRefs);
+  const normalizedRegistered = registered.map((candidate) => {
+    if (!isRecord(candidate) || typeof candidate.model_ref !== "string" ||
+        !fixtureRefs.has(candidate.model_ref)) return candidate;
+    return {
+      ...candidate,
+      auth_type: "api_key",
+      credential_id: FIXTURE_PROVIDER_CREDENTIAL_ID,
+    };
+  });
+  const existingRefs = new Set(
+    normalizedRegistered.flatMap((candidate) =>
+      isRecord(candidate) && typeof candidate.model_ref === "string"
+        ? [candidate.model_ref]
+        : [],
+    ),
+  );
+  const additions = modelRefs.flatMap((modelRef) => {
+    if (existingRefs.has(modelRef)) return [];
+    const separator = modelRef.indexOf("/");
+    if (separator <= 0 || separator === modelRef.length - 1) return [];
+    const providerId = modelRef.slice(0, separator);
+    const modelId = modelRef.slice(separator + 1);
+    return [{
+      provider_id: providerId,
+      model_id: modelId,
+      model_ref: modelRef,
+      display_name: modelId,
+      auth_type: "api_key",
+      credential_id: FIXTURE_PROVIDER_CREDENTIAL_ID,
+    }];
+  });
+  config.models = {
+    ...models,
+    registered: [...normalizedRegistered, ...additions],
+  };
+}
+
+function writeFixtureProviderCredential(dataRoot: string): void {
+  writeJson(join(dataRoot, "auth", "model-provider-credentials.json"), {
+    credentials: [{
+      id: FIXTURE_PROVIDER_CREDENTIAL_ID,
+      provider_id: "openai",
+      auth_type: "api_key",
+      label: "BTCC R3 deterministic fixture",
+      secret: FIXTURE_PROVIDER_SECRET,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    }],
   });
 }
 
@@ -165,8 +233,13 @@ function assertRelevantCredentialAvailable(
 function prepareConfig(
   sourceConfig: Record<string, unknown>,
   run: Pick<PreparedRun, "dataRoot" | "model" | "reasoningEffort" | "repoRoot" | "runId" | "workspaceRoot">,
+  modelFallback?: ElectronScenario["modelFallback"],
+  providerFixture?: ElectronScenario["providerFixture"],
 ): void {
   const config = structuredClone(sourceConfig);
+  if (providerFixture) {
+    ensureFixtureProviderModels(config, fixtureModelRefs(run, modelFallback));
+  }
   const system = isRecord(config.system) ? config.system : {};
   config.system = {
     ...system,
@@ -179,6 +252,15 @@ function prepareConfig(
     openaiPromptCacheKeyPrefix: `btcc-r3-e2e-${run.runId}`,
     openaiReasoningEffort: run.reasoningEffort,
   };
+  if (modelFallback) {
+    config.user = {
+      ...(isRecord(config.user) ? config.user : {}),
+      modelFallback: {
+        enabled: modelFallback.enabled,
+        models: [...modelFallback.models],
+      },
+    };
+  }
   config.projects = [];
   config.project = {
     ...(isRecord(config.project) ? config.project : {}),
@@ -309,7 +391,12 @@ export async function prepareElectronRun(
     sourceAppSettings.model ||
     String(sourceSystem.butlerModel ?? sourceSystem.defaultModel ?? "").trim();
   assert(model.includes("/"), "A provider-qualified model is required.");
-  assertRelevantCredentialAvailable(sourceData, model, sourceConfig);
+  if (!scenario.providerFixture) {
+    assertRelevantCredentialAvailable(sourceData, model, sourceConfig);
+    for (const fallbackModel of scenario.modelFallback?.models ?? []) {
+      assertRelevantCredentialAvailable(sourceData, fallbackModel, sourceConfig);
+    }
+  }
   const reasoningEffort = (options.reasoningEffort ?? scenario.reasoningEffort ??
     sourceAppSettings.reasoningEffort ??
     sourceSystem.openaiReasoningEffort ?? "low") as ReasoningEffort;
@@ -337,6 +424,8 @@ export async function prepareElectronRun(
     evidencePath,
     interruptedExecutorReplacementUsed: false,
     model,
+    modelApiRetryAttempts: scenario.providerFixture?.retryAttempts,
+    providerFixtureEnabled: Boolean(scenario.providerFixture),
     projectDisplayName: sessionKind === "project"
       ? scenario.session?.projectDisplayName?.trim() ||
         `BTCC R3 E2E ${scenario.id}`
@@ -359,9 +448,13 @@ export async function prepareElectronRun(
   mkdirSync(dataRoot, { recursive: true, mode: 0o700 });
   mkdirSync(electronProfile, { recursive: true, mode: 0o700 });
   if (sessionKind === "chat") mkdirSync(workspaceRoot, { recursive: true });
-  prepareConfig(sourceConfig, run);
-  copyCredentialIfPresent(sourceData, dataRoot, "model-provider-credentials.json");
-  copyCredentialIfPresent(sourceData, dataRoot, "openai-codex.json");
+  prepareConfig(sourceConfig, run, scenario.modelFallback, scenario.providerFixture);
+  if (scenario.providerFixture) {
+    writeFixtureProviderCredential(dataRoot);
+  } else {
+    copyCredentialIfPresent(sourceData, dataRoot, "model-provider-credentials.json");
+    copyCredentialIfPresent(sourceData, dataRoot, "openai-codex.json");
+  }
   copyUserContextIfPresent(sourceData, dataRoot, join("personas", "active.md"));
   copyUserContextIfPresent(
     sourceData,

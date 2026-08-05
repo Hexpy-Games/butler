@@ -54,6 +54,14 @@ export async function startNativeExecutor(
       BUTLER_CODEX_BASE_URL: providerEndpoint,
       BUTLER_DATA: run.dataRoot,
       BUTLER_HOME: run.repoRoot,
+      ...(run.providerFixtureEnabled
+        ? {
+          OPENAI_BASE_URL: providerEndpoint.replace(/\/responses$/u, ""),
+          ...(run.modelApiRetryAttempts !== undefined
+            ? { BUTLER_MODEL_API_RETRY_ATTEMPTS: String(run.modelApiRetryAttempts) }
+            : {}),
+        }
+        : {}),
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

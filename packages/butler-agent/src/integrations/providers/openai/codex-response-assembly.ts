@@ -12,6 +12,9 @@ export function codexSseResponseFromAccumulator(
     id: typeof accumulator.completed?.id === "string"
       ? accumulator.completed.id
       : `codex-${Date.now()}`,
+    ...(typeof accumulator.completed?.model === "string"
+      ? { model: accumulator.completed.model }
+      : {}),
     output: accumulator.output,
     output_text: hasCompletedText(accumulator.output)
       ? undefined

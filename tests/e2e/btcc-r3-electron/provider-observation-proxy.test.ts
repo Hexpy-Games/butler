@@ -138,6 +138,7 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
     expect(proxy.observations()).toEqual([{
       ordinal: 1,
       requestKind: "agent",
+      requestedModel: "gpt-test",
       requestStartedAtMs: 100,
       serializedRequestBytes: requestBody.byteLength,
       firstContentBearingDeltaAtMs: 200,
@@ -150,11 +151,74 @@ test("provider observation proxy forwards bytes and streams the first SSE delta 
       hasReasoningContent: true,
       streamedTextChars: 5,
       finalTextChars: 0,
+      providerReportedModel: null,
     }]);
   } finally {
     releaseUpstream?.();
     await proxy.close();
     await upstream.close();
+  }
+});
+
+test("deterministic provider fixture fails the primary once and reports the backup model", async () => {
+  const proxy = await startProviderObservationProxy({
+    fixture: {
+      retryAttempts: 1,
+      responses: [
+        {
+          requestKind: "agent",
+          requestModel: "primary-model",
+          status: 503,
+          errorCode: "fixture_primary_overload",
+        },
+        {
+          requestKind: "agent",
+          requestModel: "backup-model",
+          responseModel: "backup-model",
+          text: "deterministic backup success",
+        },
+      ],
+      defaultResponse: {
+        requestKind: "title",
+        responseModel: "title-model",
+        text: "fixture title",
+      },
+    },
+  });
+  try {
+    const primary = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: JSON.stringify({ model: "primary-model", input: "primary" }),
+    });
+    expect(primary.status).toBe(503);
+    await primary.text();
+    const backup = await fetch(proxy.endpoint, {
+      method: "POST",
+      body: JSON.stringify({ model: "backup-model", input: "backup" }),
+    });
+    expect(backup.status).toBe(200);
+    expect(await backup.text()).toContain("deterministic backup success");
+    expect(proxy.observations().map((observation) => ({
+      kind: observation.requestKind,
+      model: observation.requestedModel,
+      reported: observation.providerReportedModel,
+      termination: observation.termination,
+    }))).toEqual([
+      {
+        kind: "agent",
+        model: "primary-model",
+        reported: null,
+        termination: "failed",
+      },
+      {
+        kind: "agent",
+        model: "backup-model",
+        reported: "backup-model",
+        termination: "completed",
+      },
+    ]);
+  } finally {
+    await proxy.close();
   }
 });
 

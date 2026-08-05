@@ -15,6 +15,7 @@ import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import { prepareBundledAgentResource } from "../../packages/butler-app/scripts/release/package-app-release.ts";
+import { evaluateCdpWithTimeout } from "./cdp-timeout.ts";
 
 const root = process.cwd();
 const uiRoot = resolve(root, "packages", "butler-app", "client", "ui", "dist");
@@ -343,16 +344,7 @@ async function evaluateRenderer<T>(client: CdpClient, expression: string): Promi
   let lastError = "";
   while (Date.now() - startedAt < 30_000) {
     try {
-      const result = await client.send<{
-        result?: { value?: T };
-        exceptionDetails?: unknown;
-      }>("Runtime.evaluate", {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-      });
-      assert(!result.exceptionDetails, `renderer evaluation failed: ${JSON.stringify(result.exceptionDetails)}`);
-      return result.result?.value as T;
+      return await evaluateCdpWithTimeout<T>(client, expression);
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
       if (!lastError.includes("Execution context was destroyed")) throw error;

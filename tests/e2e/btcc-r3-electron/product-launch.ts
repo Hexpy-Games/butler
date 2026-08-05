@@ -179,9 +179,17 @@ export function productLaunchEnvironment(
     BUTLER_APP_SERVER_PORT: String(run.serverPort),
     BUTLER_BUN: process.execPath,
     BUTLER_CODEX_BASE_URL: providerEndpoint,
+    ...(run.providerFixtureEnabled
+      ? {
+        OPENAI_BASE_URL: providerEndpoint.replace(/\/responses$/u, ""),
+      }
+      : {}),
     BUTLER_DATA: run.dataRoot,
     BUTLER_HOME: run.repoRoot,
     BUTLER_PROJECT_WORKSPACE: run.projectWorkspaceRoot,
+    ...(run.modelApiRetryAttempts !== undefined
+      ? { BUTLER_MODEL_API_RETRY_ATTEMPTS: String(run.modelApiRetryAttempts) }
+      : {}),
     ...(run.agentOwnership === "electron"
       ? {
         BUTLER_APP_BUNDLED_AGENT_DIR: bundledAgentResourceDir,

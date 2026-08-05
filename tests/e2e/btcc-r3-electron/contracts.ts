@@ -16,6 +16,23 @@ export type ElectronWorkStage =
   | "validation";
 export type TerminalState = "cancelled" | "delivered" | "failed";
 
+export type ProviderFixtureRequestKind = "agent" | "tool_provider" | "title";
+
+export interface ElectronProviderFixtureResponse {
+  requestKind?: ProviderFixtureRequestKind;
+  requestModel?: string;
+  status?: number;
+  errorCode?: string;
+  responseModel?: string;
+  text?: string;
+}
+
+export interface ElectronProviderFixture {
+  retryAttempts?: number;
+  responses: ElectronProviderFixtureResponse[];
+  defaultResponse?: ElectronProviderFixtureResponse;
+}
+
 export interface ElectronFixtureFile {
   path: string;
   text: string;
@@ -50,6 +67,9 @@ export interface ElectronScenarioStep {
   stopAfterAcknowledgement?: boolean;
   expect?: {
     finalIncludes?: string[];
+    providerAgentModels?: string[];
+    providerReportedModel?: string;
+    progressIncludes?: string[];
     rendererActivityStagesInclude?: ElectronWorkStage[];
     files?: ElectronExpectedFile[];
     terminalState?: TerminalState;
@@ -63,6 +83,11 @@ export interface ElectronScenario {
   model?: string;
   reasoningEffort?: ReasoningEffort;
   accessMode?: AccessMode;
+  modelFallback?: {
+    enabled: boolean;
+    models: string[];
+  };
+  providerFixture?: ElectronProviderFixture;
   session?: {
     id?: string;
     kind?: ElectronSessionKind;
@@ -103,6 +128,8 @@ export interface PreparedRun {
   evidencePath: string;
   interruptedExecutorReplacementUsed: boolean;
   model: string;
+  modelApiRetryAttempts?: number;
+  providerFixtureEnabled?: boolean;
   projectDisplayName: string | null;
   projectId: string | null;
   projectWorkspaceRoot: string;
@@ -136,6 +163,7 @@ export interface AppTurnView {
   execution_model?: {
     model_ref?: string;
     provider_id?: string;
+    provider_reported_model_ref?: string;
   };
   progress?: {
     safe_progress_rows?: Array<{ safe_label?: string }>;
@@ -184,6 +212,7 @@ export interface StepObservation {
   rendererFinalText: string;
   rendererActivities: RendererVisibleActivity[];
   providerReportedModel: string | null;
+  providerAgentModels: string[];
   progressMessages: string[];
   work: GuidedWorkObservation | null;
   timing: {
@@ -204,6 +233,7 @@ export interface StepObservation {
   restart: {
     tested: boolean;
     finalMatched: boolean | null;
+    providerAgentModels?: string[];
   };
   screenshots: string[];
 }
