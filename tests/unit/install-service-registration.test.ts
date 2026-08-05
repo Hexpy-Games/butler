@@ -810,7 +810,7 @@ test("interactive installer provider chooser can register Anthropic API key", ()
     CFG="$tmp/butler.config.json" CREDS="$tmp/auth/model-provider-credentials.json" "$BUTLER_BUN" -e "
       const cfg = JSON.parse(await Bun.file(process.env.CFG).text());
       const creds = JSON.parse(await Bun.file(process.env.CREDS).text());
-      if (cfg.system.defaultModel !== 'anthropic/claude-opus-4-7') throw new Error('Anthropic catalog default was not selected');
+      if (cfg.system.defaultModel !== 'anthropic/claude-fable-5') throw new Error('Anthropic catalog default was not selected');
       const cred = creds.credentials?.find((item) => item.provider_id === 'anthropic');
       if (!cred || cred.secret !== 'sk-ant-preview') throw new Error('Anthropic credential was not stored');
     "

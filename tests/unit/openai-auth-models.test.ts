@@ -349,10 +349,10 @@ test("registered OpenAI hosted prompt forwards response format", async () => {
   expect(seenBody.text).toEqual({ format: responseFormat });
 });
 
-test("registered xAI model uses stored credential through OpenAI-compatible adapter", async () => {
+test("registered xAI model uses stored credential through its Responses adapter", async () => {
   registerHostedModelConfig({
     providerId: "xai",
-    modelId: "grok-4.3",
+    modelId: "grok-4.5",
     authType: "api_key",
     apiKey: "xai-secret-key",
     credentialLabel: "xAI test key",
@@ -366,30 +366,37 @@ test("registered xAI model uses stored credential through OpenAI-compatible adap
     seenAuthorization = String(new Headers(init?.headers).get("authorization"));
     seenBody = JSON.parse(String(init?.body || "{}"));
     return new Response(JSON.stringify({
-      choices: [{ message: { role: "assistant", content: "hello from grok" } }],
+      id: "resp_xai_registered",
+      model: "grok-4.5",
+      output: [{
+        type: "message",
+        content: [{ type: "output_text", text: "hello from grok" }],
+      }],
     }), { status: 200 });
   }) as unknown as typeof fetch;
 
   await expect(runPromptText({
-    model: "xai/grok-4.3",
+    model: "xai/grok-4.5",
     prompt: "hi",
   })).resolves.toBe("hello from grok");
-  expect(seenUrl).toBe("https://api.x.ai/v1/chat/completions");
+  expect(seenUrl).toBe("https://api.x.ai/v1/responses");
   expect(seenAuthorization).toBe("Bearer xai-secret-key");
-  expect(seenBody.model).toBe("grok-4.3");
-  expect(seenBody.messages).toContainEqual({ role: "user", content: "hi" });
+  expect(seenBody.model).toBe("grok-4.5");
+  expect(seenBody.input).toBe("hi");
 });
 
-test("registered OpenAI-compatible hosted model executes tool calls", async () => {
+test("registered hosted chat model executes tool calls", async () => {
   registerHostedModelConfig({
-    providerId: "xai",
-    modelId: "grok-4.3",
+    providerId: "qwen",
+    modelId: "qwen3.7-max",
     authType: "api_key",
-    apiKey: "xai-secret-key",
+    apiKey: "qwen-secret-key",
   }, tempDir);
 
   const bodies: Record<string, any>[] = [];
-  globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+  let seenUrl = "";
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    seenUrl = String(input);
     const body = JSON.parse(String(init?.body || "{}"));
     bodies.push(body);
     if (bodies.length === 1) {
@@ -416,7 +423,7 @@ test("registered OpenAI-compatible hosted model executes tool calls", async () =
   }) as unknown as typeof fetch;
 
   const text = await runFunctionToolPromptText({
-    model: "xai/grok-4.3",
+    model: "qwen/qwen3.7-max",
     prompt: "search",
     tools: [{
       type: "function",
@@ -439,6 +446,8 @@ test("registered OpenAI-compatible hosted model executes tool calls", async () =
   });
 
   expect(text).toBe("tool result used");
+  expect(seenUrl).toBe("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions");
+  expect(bodies[0]!.model).toBe("qwen3.7-max");
   expect(bodies).toHaveLength(2);
   expect(bodies[1]!.messages).toContainEqual(
     expect.objectContaining({
@@ -815,7 +824,7 @@ test("registered Z.AI preserves every completed tool result exactly", async () =
 test("registered Anthropic and Gemini models use provider-native API keys", async () => {
   registerHostedModelConfig({
     providerId: "anthropic",
-    modelId: "claude-sonnet-4-6",
+    modelId: "claude-sonnet-5",
     authType: "api_key",
     apiKey: "anthropic-secret",
   }, tempDir);
@@ -843,7 +852,7 @@ test("registered Anthropic and Gemini models use provider-native API keys", asyn
   }) as unknown as typeof fetch;
 
   await expect(runPromptText({
-    model: "anthropic/claude-sonnet-4-6",
+    model: "anthropic/claude-sonnet-5",
     prompt: "hi",
   })).resolves.toBe("claude ok");
   await expect(runPromptText({
@@ -853,7 +862,7 @@ test("registered Anthropic and Gemini models use provider-native API keys", asyn
 
   expect(calls[0]!.url).toBe("https://api.anthropic.com/v1/messages");
   expect(calls[0]!.headers.get("x-api-key")).toBe("anthropic-secret");
-  expect(calls[0]!.body.model).toBe("claude-sonnet-4-6");
+  expect(calls[0]!.body.model).toBe("claude-sonnet-5");
   expect(calls[1]!.url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent");
   expect(calls[1]!.headers.get("x-goog-api-key")).toBe("gemini-secret");
 });

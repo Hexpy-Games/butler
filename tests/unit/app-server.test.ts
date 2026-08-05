@@ -2508,8 +2508,8 @@ test("session creation does not block runtime admission on model title generatio
     `${JSON.stringify({
       system: {
         runtime: "codex-api",
-        defaultModel: "openai/gpt-5.5-codex",
-        butlerModel: "openai/gpt-5.5-codex",
+        defaultModel: "openai/gpt-5.5",
+        butlerModel: "openai/gpt-5.5",
       },
     })}\n`,
     "utf8",
@@ -2571,8 +2571,8 @@ test("native butler-main default provider generates app transport session titles
     `${JSON.stringify({
       system: {
         runtime: "codex-api",
-        defaultModel: "openai/gpt-5.5-codex",
-        butlerModel: "openai/gpt-5.5-codex",
+        defaultModel: "openai/gpt-5.5",
+        butlerModel: "openai/gpt-5.5",
       },
     })}\n`,
     "utf8",
@@ -3364,7 +3364,7 @@ test("settings, command palette, and project actions are route-backed and privac
     const modelRefs = catalog.data.models.map(
       (model: { model_ref: string }) => model.model_ref,
     );
-    expect(modelRefs).toContain("xai/grok-4.3");
+    expect(modelRefs).toContain("xai/grok-4.5");
     expect(modelRefs).toContain("openai/gpt-5.6-sol");
     expect(modelRefs).toContain("openai/gpt-5.6-terra");
     expect(modelRefs).toContain("openai/gpt-5.6-luna");
@@ -3635,7 +3635,7 @@ test("settings, command palette, and project actions are route-backed and privac
           id: "anthropic-runtime-work",
           label: "Anthropic runtime work",
           condition: "Provider wired through native runtime",
-          model: "anthropic/claude-opus-4-7",
+          model: "anthropic/claude-opus-5",
           reasoning_effort: "high",
           enabled: true,
         },
@@ -3652,7 +3652,7 @@ test("settings, command palette, and project actions are route-backed and privac
       expect.objectContaining({
         id: "anthropic-runtime-work",
         label: "Anthropic runtime work",
-        model: "anthropic/claude-opus-4-7",
+        model: "anthropic/claude-opus-5",
         reasoning_effort: "high",
         enabled: true,
       }),
@@ -3959,7 +3959,7 @@ test("hosted model registration uses masked credentials without pre-release migr
     expect(JSON.stringify(registered)).not.toContain("sk-hosted-secret-z");
 
     const settings = await patchJson(`${server.url}settings`, {
-      model: "anthropic/claude-opus-4-7",
+      model: "anthropic/claude-opus-5",
       reasoning_effort: "high",
     });
     expect(settings.data.model).toBe("openai/gpt-5.5");
