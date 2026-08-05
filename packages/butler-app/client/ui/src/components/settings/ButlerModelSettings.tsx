@@ -18,6 +18,7 @@ import { ratioToPercent } from "./settingsUtils";
 import { useLocalReasoningBudget } from "./hooks/useLocalReasoningBudget";
 import { ButlerPrimaryModelSelect } from "./ButlerPrimaryModelSelect";
 import { ButlerConsolidationSettings } from "./ButlerConsolidationSettings";
+import { BackupModelsSettings } from "./BackupModelsSettings";
 import type {
   ReasoningEffort,
   SettingsView as SettingsData,
@@ -36,6 +37,9 @@ export function ButlerModelSettings() {
 
   const settingsCopy = appCopy.settings;
   const models = runtimeModels(modelCatalog);
+  const registeredModels = (modelCatalog.registered_models ?? []).filter(
+    (model) => model.registered === true && model.runtime_supported === true,
+  );
   const settingsFields = settingsCopy.fields;
   const settingsDescriptions = settingsCopy.descriptions;
 
@@ -65,6 +69,12 @@ export function ButlerModelSettings() {
         activeModelContextMax={activeModelContextMax}
         draft={draft}
         onManage={openModelManagement}
+        onUpdate={updateSettings}
+      />
+      <BackupModelsSettings
+        models={registeredModels}
+        draft={draft}
+        saving={saving}
         onUpdate={updateSettings}
       />
       <SettingsSelect

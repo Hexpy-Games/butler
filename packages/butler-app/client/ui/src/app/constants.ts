@@ -60,6 +60,10 @@ export const EMPTY_SETTINGS: SettingsView = {
   },
   desktop_tray_enabled: true,
   web_search: DEFAULT_WEB_SEARCH_SETTINGS,
+  model_fallback: {
+    enabled: false,
+    models: [],
+  },
   profile_label: "Local Butler",
 };
 

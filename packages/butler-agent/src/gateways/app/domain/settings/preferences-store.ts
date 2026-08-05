@@ -27,6 +27,8 @@ import {
 import {
   clampContextWindowTokens,
   DEFAULT_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_MODEL_FALLBACK_SETTINGS,
+  normalizeModelFallbackSettings,
   normalizeWorkerModelRules,
 } from "./settings-models.ts";
 import {
@@ -83,6 +85,11 @@ export class AppPreferencesStore {
     const contextWindowTokens = clampContextWindowTokens(
       stored.context_window_tokens,
       modelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
+    );
+    const modelFallback = normalizeModelFallbackSettings(
+      configUserSettings.modelFallback ?? DEFAULT_MODEL_FALLBACK_SETTINGS,
+      modelMetadata.model_ref,
+      registeredModels,
     );
     const customColors = normalizedMainScreenThemeColorsOrDefault(
       stored.main_screen_theme_custom_colors,
@@ -148,6 +155,7 @@ export class AppPreferencesStore {
         },
         this.butlerData,
       ),
+      model_fallback: modelFallback,
       profile_label: "Local Butler",
     };
   }
@@ -168,7 +176,19 @@ export class AppPreferencesStore {
         sanitized.consolidation_reasoning_effort,
       );
     }
+    const hasModelFallbackPatch = Object.prototype.hasOwnProperty.call(
+      input,
+      "model_fallback",
+    );
+    const modelFallbackPatch = sanitized.model_fallback;
+    const {
+      model_fallback: _ignoredModelFallback,
+      ...sanitizedSettings
+    } = sanitized;
     const current = this.getSettings();
+    const hasPrimaryModelUpdate = typeof sanitized.model === "string";
+    const shouldPersistModelFallback =
+      hasModelFallbackPatch || hasPrimaryModelUpdate;
     if (webSearchApiKey) {
       writeWebSearchProviderApiKey(
         this.butlerData,
@@ -189,7 +209,8 @@ export class AppPreferencesStore {
     }
     const candidate: SettingsView = {
       ...current,
-      ...sanitized,
+      ...sanitizedSettings,
+      model_fallback: current.model_fallback,
       desktop_notifications: sanitized.desktop_notifications
         ? normalizeDesktopNotificationSettings({
             ...current.desktop_notifications,
@@ -238,6 +259,18 @@ export class AppPreferencesStore {
         contextWindowTokens,
         modelMetadata.context_window_tokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS,
       ),
+      model_fallback: shouldPersistModelFallback
+        ? normalizeModelFallbackSettings(
+            {
+              enabled:
+                modelFallbackPatch?.enabled ?? current.model_fallback.enabled,
+              models:
+                modelFallbackPatch?.models ?? current.model_fallback.models,
+            },
+            modelMetadata.model_ref,
+            registeredModels,
+          )
+        : current.model_fallback,
     };
     if (sanitized.web_search) {
       writeConfigWebSearchSettings(this.butlerData, next.web_search);
@@ -250,10 +283,17 @@ export class AppPreferencesStore {
         configUserPatch.responseLanguage = next.language;
       }
     }
+    if (shouldPersistModelFallback) {
+      configUserPatch.modelFallback = next.model_fallback;
+    }
     if (Object.keys(configUserPatch).length > 0) {
       writeConfigUserSettings(this.butlerData, configUserPatch);
     }
-    this.persistence.write("settings", next);
+    const {
+      model_fallback: _modelFallbackProjection,
+      ...settingsProjection
+    } = next;
+    this.persistence.write("settings", settingsProjection);
     this.appendEvent("settings.updated", {
       settings: {
         bridge_mode: next.bridge_mode,
@@ -276,6 +316,7 @@ export class AppPreferencesStore {
         desktop_notifications: next.desktop_notifications,
         desktop_tray_enabled: next.desktop_tray_enabled,
         web_search: next.web_search,
+        model_fallback: next.model_fallback,
         default_project_workspace_label: next.default_project_workspace_label,
       },
     });

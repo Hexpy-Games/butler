@@ -149,6 +149,7 @@ export interface AppModelSummary {
   source?: "discovered" | "manual";
   local_reasoning_budget_ratio?: number;
   registered?: boolean;
+  enabled?: boolean;
   auth_type?: ProviderAuthMethod;
   credential_id?: string;
   credential_label?: string;

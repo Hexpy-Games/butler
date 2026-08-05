@@ -72,6 +72,7 @@ export interface AppModelSummary {
   source?: "discovered" | "manual";
   local_reasoning_budget_ratio?: number;
   registered?: boolean;
+  enabled?: boolean;
   auth_type?: ProviderAuthMethod;
   credential_id?: string;
   credential_label?: string;
@@ -505,7 +506,13 @@ export interface SettingsView {
   desktop_notifications: DesktopNotificationSettingsView;
   desktop_tray_enabled: boolean;
   web_search: WebSearchSettingsView;
+  model_fallback: ModelFallbackSettingsView;
   profile_label: string;
+}
+
+export interface ModelFallbackSettingsView {
+  enabled: boolean;
+  models: string[];
 }
 
 export interface DesktopNotificationSettingsView {
