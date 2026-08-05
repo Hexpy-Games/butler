@@ -197,6 +197,11 @@ jobs:
             --artifact-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
 
       - name: Verify packaged app artifacts
+        env:
+          BUTLER_APP_RELEASE_SMOKE_MODE: production
+          BUTLER_APP_REQUIRE_PRODUCTION_SIGNING: "1"
+          BUTLER_APP_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          BUTLER_APP_NOTARY_KEYCHAIN_PROFILE: butler-notary
         run: bun run release:app:smoke -- --out dist/release/app
 
       - name: Publish app GitHub Release files
