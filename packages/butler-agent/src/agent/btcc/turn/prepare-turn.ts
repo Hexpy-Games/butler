@@ -39,7 +39,7 @@ import {
   requestIdentityForRequest,
 } from "./prepare-turn-request.ts";
 import { includeRecentContext } from "./recent-conversation-context.ts";
-import { buildModelRoute } from "../model-route.ts";
+import { buildModelRoute } from "../model-route/index.ts";
 
 export type BtccTurnPreparationDependencies = {
   bindingStore: Pick<SessionBindingStore, "getBySessionId">;

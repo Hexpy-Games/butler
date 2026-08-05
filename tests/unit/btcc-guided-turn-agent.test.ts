@@ -58,7 +58,7 @@ import { upsertMcpServer } from
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { buildModelRoute } from
-  "../../packages/butler-agent/src/agent/btcc/model-route.ts";
+  "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult

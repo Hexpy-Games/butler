@@ -8,7 +8,7 @@ import {
   buildModelRoute,
   classifyModelRouteFailure,
   createModelRoutePort,
-} from "../../packages/butler-agent/src/agent/btcc/model-route.ts";
+} from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import { openBtccSqliteStores } from "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";

@@ -1,7 +1,7 @@
 import type {
   ModelRouteAttemptHistory,
   ModelRouteEventResult,
-} from "../model-route.ts";
+} from "../model-route/index.ts";
 import type {
   ModelRoundMessage,
   ModelRoundPort,
@@ -39,7 +39,7 @@ export interface BtccAgentLoop {
       transportAttempt?: number;
       modelRef: string;
       errorCode?: string;
-      route?: import("../model-route.ts").ModelRouteState;
+      route?: import("../model-route/index.ts").ModelRouteState;
     }) => Promise<ModelRouteEventResult | void>;
     loadModelRouteAttemptHistory?: (input: {
       roundId: string;

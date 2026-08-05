@@ -8,7 +8,7 @@ import type {
   ModelRouteAttemptHistory,
   ModelRouteEventResult,
   ModelRouteState,
-} from "../model-route.ts";
+} from "../model-route/index.ts";
 import type { ContentRef } from "../identity/index.ts";
 
 export type TurnSemanticState =
