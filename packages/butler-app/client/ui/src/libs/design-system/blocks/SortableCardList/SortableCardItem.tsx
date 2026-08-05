@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Card } from "../../components/Card";
 import { IconButton } from "../../components/IconButton";
 import { DragHandle, X } from "../../components/Icons";
+import { Separator } from "../../components/Separator";
 import { Stack } from "../../components/Stack";
 import { Typo } from "../../components/Typo";
 import { cn } from "../../lib/utils";
@@ -35,6 +36,7 @@ export function SortableCardItem({
   const sortable = useSortable({ id: item.id, disabled: disabled || overlay });
   const transform = CSS.Transform.toString(sortable.transform);
   const label = item.label ?? (typeof item.title === "string" ? item.title : "card");
+  const showDropIndicator = !overlay && sortable.isOver && !sortable.isDragging;
 
   return (
     <div
@@ -45,7 +47,18 @@ export function SortableCardItem({
         transition: sortable.transition || undefined,
       }}
       data-sortable-id={item.id}
+      data-drop-target={showDropIndicator ? "true" : undefined}
     >
+      {showDropIndicator && (
+        <Separator
+          className={styles.dropIndicator}
+          data-drop-indicator="true"
+          decorative
+          aria-hidden="true"
+          space="xs"
+          tone="accent"
+        />
+      )}
       <Card className={styles.card} padding="sm">
         {!overlay && (
           <IconButton
