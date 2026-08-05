@@ -2632,7 +2632,7 @@ async function stopServerProcess({
     ? updatePlan.requiresDrain
     : Boolean(
       activeWorkSnapshot &&
-      activeWorkSnapshot.classification !== "no_active_work"
+      activeWorkSnapshot.classification !== "no_active_work",
     );
   if (usesAppForegroundLifecycle && foregroundInstance) {
     if (
