@@ -45,6 +45,7 @@ export interface ModelRoundTool {
 }
 
 export interface ModelRoundRequest {
+  roundId?: string;
   model: ModelRef | string;
   messages: readonly ModelRoundMessage[];
   instructions?: string;

@@ -141,6 +141,9 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
       source.content,
       snapshotRef,
       stableJson(command.modelSelection),
+      command.modelSelection.modelRoute
+        ? stableJson(command.modelSelection.modelRoute)
+        : null,
       contextJson,
       command.progressDestination ? stableJson(command.progressDestination) : null,
       stoppedBeforeAdmission ? "cancelled" : "admitted",
@@ -153,20 +156,20 @@ export class SqliteTurnAdmissionRepository implements TurnAdmissionRepository {
         INSERT INTO btcc_turns (
           turn_id, session_id, inbox_id, trigger_key, original_message_id,
           original_message, admission_snapshot_ref, model_selection_json,
-          context_json, progress_destination_json, semantic_state,
+          route_state_json, context_json, progress_destination_json, semantic_state,
           active_checkpoint_id, execution_fence,
           final_disposition, continuation_snapshot_json, revision
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 0)
       `).run(...commonValues);
     } else {
       this.db.query(`
         INSERT INTO btcc_turns (
           turn_id, session_id, inbox_id, trigger_key, original_message_id,
           original_message, admission_snapshot_ref, model_selection_json,
-          context_json, progress_destination_json, semantic_state,
+          route_state_json, context_json, progress_destination_json, semantic_state,
           active_checkpoint_id, execution_fence,
           final_disposition, revision
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
       `).run(...commonValues);
     }
     if (stoppedBeforeAdmission) return;

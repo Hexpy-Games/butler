@@ -7,6 +7,16 @@ import type {
   TurnRecord,
   TurnStateRepository,
 } from "../../../btcc/turn/index.ts";
+import type {
+  ModelRouteAttemptHistory,
+  ModelRouteEventResult,
+  ModelRouteState,
+} from "../../../btcc/model-route.ts";
+import type {
+  ModelRoundMessage,
+  ModelRoundResult,
+  ModelRoundToolCall,
+} from "../../../btcc/ports/model-round.ts";
 import {
   assertGuidedTurnSemanticState,
   type GuidedTurnSemanticState,
@@ -26,6 +36,7 @@ type TurnRow = {
   original_message_id: string;
   original_message: string;
   model_selection_json: string;
+  route_state_json: string | null;
   context_json: string;
   progress_destination_json: string | null;
   semantic_state: string;
@@ -80,6 +91,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     const row = this.db.query<TurnRow, [string]>(`
       SELECT turn_id, session_id, inbox_id, trigger_key, original_message_id,
         original_message, model_selection_json, context_json,
+        route_state_json,
         progress_destination_json, semantic_state,
         active_checkpoint_id, route, final_payload_json, delivery_outbox_id,
         canonical_assistant_message_id, revision, execution_fence,
@@ -104,6 +116,7 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
       originalMessage: row.original_message,
       ...(wakeIdentity ? { wakeIdentity } : {}),
       modelSelection: JSON.parse(row.model_selection_json),
+      ...(row.route_state_json ? { modelRoute: JSON.parse(row.route_state_json) } : {}),
       context: JSON.parse(row.context_json),
       ...(row.progress_destination_json
         ? { progressDestination: hydrateProgressDestination(row.progress_destination_json) }
@@ -147,6 +160,349 @@ export class SqliteGuidedTurnStateRepository implements TurnStateRepository {
     input: Parameters<TurnStateRepository["commitTransition"]>[0],
   ): Promise<void> {
     this.transitions.commit(input);
+  }
+
+  async persistModelRoute(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    route: ModelRouteState;
+  }): Promise<void> {
+    await this.recordModelRouteEvent({
+      turnId: input.turnId,
+      expectedRevision: input.expectedRevision,
+      executionFence: input.executionFence,
+      claimId: input.claimId,
+      route: input.route,
+      event: {
+        type: "model.route.updated",
+        roundId: "route-state",
+        candidateIndex: input.route.activeCursor,
+        modelRef: input.route.candidates[input.route.activeCursor]?.modelRef ?? "unknown",
+      },
+    });
+  }
+
+  async recordModelRouteEvent(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    event: {
+      type: string;
+      roundId: string;
+      candidateIndex: number;
+      transportAttempt?: number;
+      modelRef: string;
+      errorCode?: string;
+    };
+    route?: ModelRouteState;
+  }): Promise<ModelRouteEventResult> {
+    return this.db.transaction((): ModelRouteEventResult => {
+      const claim = this.db.query<{
+        turn_id: string;
+        turn_revision: number;
+        execution_fence: number;
+        status: string;
+      }, [string]>(`
+        SELECT turn_id, turn_revision, execution_fence, status
+        FROM btcc_state_claims WHERE claim_id = ?
+      `).get(input.claimId);
+      const current = this.db.query<{
+        revision: number;
+        execution_fence: number;
+        semantic_state: string;
+      }, [string]>(`
+        SELECT revision, execution_fence, semantic_state
+        FROM btcc_turns WHERE turn_id = ?
+      `).get(input.turnId);
+      if (!claim || !current || claim.turn_id !== input.turnId ||
+          claim.turn_revision !== input.expectedRevision ||
+          claim.execution_fence !== input.executionFence || claim.status !== "active" ||
+          current.revision !== input.expectedRevision ||
+          current.execution_fence !== input.executionFence ||
+          current.semantic_state === "delivered" || current.semantic_state === "cancelled") {
+        throw new Error("BTCC model route event lost exact Turn claim");
+      }
+      const routeJson = this.db.query<{ route_state_json: string | null }, [string]>(
+        "SELECT route_state_json FROM btcc_turns WHERE turn_id = ?",
+      ).get(input.turnId)?.route_state_json;
+      const routeDigest = input.route?.routeDigest ??
+        (routeJson ? JSON.parse(routeJson).routeDigest : "unknown");
+      const eventId = `${input.turnId}:${input.event.type}:${input.event.roundId}:${input.event.candidateIndex}:${input.event.transportAttempt ?? 0}:${input.event.modelRef}`;
+      if (input.event.type === "model.attempt.started") {
+        const existing = this.db.query<{ event_type: string }, [string]>(`
+          SELECT event_type FROM btcc_model_route_events WHERE event_id = ?
+        `).get(eventId);
+        if (existing) {
+          const terminal = this.db.query<{ event_type: string }, [string, string, number, number, string]>(`
+            SELECT event_type FROM btcc_model_route_events
+            WHERE turn_id = ? AND round_id = ? AND candidate_index = ?
+              AND transport_attempt = ? AND model_ref = ?
+              AND event_type IN (
+                'model.attempt.failed',
+                'model.attempt.succeeded',
+                'model.attempt.abandoned_after_restart'
+              )
+            ORDER BY created_at DESC LIMIT 1
+          `).get(
+            input.turnId,
+            input.event.roundId,
+            input.event.candidateIndex,
+            input.event.transportAttempt ?? 0,
+            input.event.modelRef,
+          );
+          if (terminal?.event_type === "model.attempt.abandoned_after_restart") {
+            return { status: "abandoned_after_restart" };
+          }
+          if (terminal) return { status: "already_terminal" };
+          this.db.query(`
+            INSERT OR IGNORE INTO btcc_model_route_events (
+              event_id, turn_id, route_digest, event_type, round_id,
+              candidate_index, transport_attempt, model_ref, error_code, created_at
+            ) VALUES (?, ?, ?, 'model.attempt.abandoned_after_restart', ?, ?, ?, ?, NULL, ?)
+          `).run(
+            `${eventId}:abandoned_after_restart`,
+            input.turnId,
+            routeDigest,
+            input.event.roundId,
+            input.event.candidateIndex,
+            input.event.transportAttempt ?? null,
+            input.event.modelRef,
+            new Date().toISOString(),
+          );
+          return { status: "abandoned_after_restart" };
+        }
+      }
+      this.db.query(`
+        INSERT OR IGNORE INTO btcc_model_route_events (
+          event_id, turn_id, route_digest, event_type, round_id,
+          candidate_index, transport_attempt, model_ref, error_code, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        eventId,
+        input.turnId,
+        routeDigest,
+        input.event.type,
+        input.event.roundId,
+        input.event.candidateIndex,
+        input.event.transportAttempt ?? null,
+        input.event.modelRef,
+        input.event.errorCode ?? null,
+        new Date().toISOString(),
+      );
+      if (input.route) {
+        const updated = this.db.query(`
+          UPDATE btcc_turns SET route_state_json = ?
+          WHERE turn_id = ? AND revision = ? AND execution_fence = ?
+        `).run(JSON.stringify(input.route), input.turnId, input.expectedRevision, input.executionFence);
+        if (updated.changes !== 1) throw new Error("BTCC model route persistence lost Turn CAS");
+      }
+      return { status: "recorded" };
+    })();
+  }
+
+  async loadModelRouteAttemptHistory(input: {
+    turnId: string;
+    roundId: string;
+    routeDigest: string;
+    candidateIndex: number;
+    modelRef: string;
+  }): Promise<ModelRouteAttemptHistory> {
+    const rows = this.db.query<{
+      event_type: string;
+      transport_attempt: number | null;
+    }, [string, string, string, number, string]>(`
+      SELECT event_type, transport_attempt
+      FROM btcc_model_route_events
+      WHERE turn_id = ? AND route_digest = ? AND round_id = ?
+        AND candidate_index = ? AND model_ref = ?
+        AND transport_attempt IS NOT NULL
+      ORDER BY transport_attempt ASC, created_at ASC
+    `).all(
+      input.turnId,
+      input.routeDigest,
+      input.roundId,
+      input.candidateIndex,
+      input.modelRef,
+    );
+    const history: {
+      started: number[];
+      failed: number[];
+      succeeded: number[];
+      abandoned: number[];
+    } = { started: [], failed: [], succeeded: [], abandoned: [] };
+    for (const row of rows) {
+      if (row.transport_attempt === null) continue;
+      if (row.event_type === "model.attempt.started") history.started.push(row.transport_attempt);
+      if (row.event_type === "model.attempt.failed") history.failed.push(row.transport_attempt);
+      if (row.event_type === "model.attempt.succeeded") history.succeeded.push(row.transport_attempt);
+      if (row.event_type === "model.attempt.abandoned_after_restart") history.abandoned.push(row.transport_attempt);
+    }
+    return history;
+  }
+
+  async loadModelRoundAcceptance(input: {
+    turnId: string;
+    roundId: string;
+    routeDigest: string;
+    candidateIndex: number;
+    modelRef: string;
+    checkpointId: string;
+    checkpointRevision: number;
+  }): Promise<ModelRoundResult | undefined> {
+    this.assertActiveCheckpoint(input);
+    const row = this.db.query<{
+      normalized_response_json: string;
+      provider_identity_json: string | null;
+    }, [string, string, string, number, string, string, number]>(`
+      SELECT normalized_response_json, provider_identity_json
+      FROM btcc_model_round_acceptances
+      WHERE turn_id = ? AND round_id = ? AND route_digest = ?
+        AND candidate_index = ? AND model_ref = ?
+        AND checkpoint_id = ? AND checkpoint_revision = ?
+    `).get(
+      input.turnId,
+      input.roundId,
+      input.routeDigest,
+      input.candidateIndex,
+      input.modelRef,
+      input.checkpointId,
+      input.checkpointRevision,
+    );
+    if (!row) return undefined;
+    return hydrateAcceptedModelRound(
+      row.normalized_response_json,
+      row.provider_identity_json,
+    );
+  }
+
+  async recordModelRoundAcceptance(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    checkpointId: string;
+    checkpointRevision: number;
+    roundId: string;
+    routeDigest: string;
+    candidateIndex: number;
+    transportAttempt: number;
+    modelRef: string;
+    result: ModelRoundResult;
+  }): Promise<void> {
+    this.db.transaction(() => {
+      this.assertRouteClaim(input);
+      this.assertActiveCheckpoint(input);
+      const normalized = normalizeAcceptedModelRound(input.result);
+      const acceptanceId = `${input.turnId}:${input.roundId}:${input.routeDigest}:${input.candidateIndex}:${input.modelRef}`;
+      this.db.query(`
+        INSERT OR IGNORE INTO btcc_model_round_acceptances (
+          acceptance_id, turn_id, round_id, route_digest, candidate_index,
+          checkpoint_id, checkpoint_revision, model_ref, transport_attempt,
+          normalized_response_json,
+          provider_identity_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        acceptanceId,
+        input.turnId,
+        input.roundId,
+        input.routeDigest,
+        input.candidateIndex,
+        input.checkpointId,
+        input.checkpointRevision,
+        input.modelRef,
+        input.transportAttempt,
+        JSON.stringify(normalized),
+        input.result.providerIdentity ? JSON.stringify(input.result.providerIdentity) : null,
+        new Date().toISOString(),
+      );
+      const eventId = `${input.turnId}:model.attempt.succeeded:${input.roundId}:${input.candidateIndex}:${input.transportAttempt}:${input.modelRef}`;
+      this.db.query(`
+        INSERT OR IGNORE INTO btcc_model_route_events (
+          event_id, turn_id, route_digest, event_type, round_id,
+          candidate_index, transport_attempt, model_ref, error_code, created_at
+        ) VALUES (?, ?, ?, 'model.attempt.succeeded', ?, ?, ?, ?, NULL, ?)
+      `).run(
+        eventId,
+        input.turnId,
+        input.routeDigest,
+        input.roundId,
+        input.candidateIndex,
+        input.transportAttempt,
+        input.modelRef,
+        new Date().toISOString(),
+      );
+    })();
+  }
+
+  private assertRouteClaim(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    checkpointId: string;
+    checkpointRevision: number;
+  }): void {
+    const claim = this.db.query<{
+      turn_id: string;
+      turn_revision: number;
+      execution_fence: number;
+      checkpoint_id: string;
+      checkpoint_revision: number;
+      status: string;
+    }, [string]>(`
+      SELECT turn_id, turn_revision, execution_fence, checkpoint_id,
+        checkpoint_revision, status
+      FROM btcc_state_claims WHERE claim_id = ?
+    `).get(input.claimId);
+    const current = this.db.query<{
+      revision: number;
+      execution_fence: number;
+      active_checkpoint_id: string | null;
+      semantic_state: string;
+    }, [string]>(`
+      SELECT revision, execution_fence, active_checkpoint_id, semantic_state
+      FROM btcc_turns WHERE turn_id = ?
+    `).get(input.turnId);
+    if (!claim || !current || claim.turn_id !== input.turnId ||
+        claim.turn_revision !== input.expectedRevision ||
+        claim.execution_fence !== input.executionFence || claim.status !== "active" ||
+        claim.checkpoint_id !== input.checkpointId ||
+        claim.checkpoint_revision !== input.checkpointRevision ||
+        current.revision !== input.expectedRevision || current.execution_fence !== input.executionFence ||
+        current.active_checkpoint_id !== input.checkpointId ||
+        current.semantic_state === "delivered" || current.semantic_state === "cancelled") {
+      throw new Error("BTCC model response acceptance lost exact Turn claim");
+    }
+  }
+
+  private assertActiveCheckpoint(input: {
+    turnId: string;
+    checkpointId: string;
+    checkpointRevision: number;
+  }): void {
+    const row = this.db.query<{
+      active_checkpoint_id: string | null;
+      checkpoint_id: string | null;
+      checkpoint_revision: number | null;
+      is_active: number | null;
+    }, [string, number, string]>(`
+      SELECT turn.active_checkpoint_id, checkpoint.checkpoint_id,
+        checkpoint.checkpoint_revision, checkpoint.is_active
+      FROM btcc_turns AS turn
+      LEFT JOIN btcc_checkpoints AS checkpoint
+        ON checkpoint.checkpoint_id = ?
+        AND checkpoint.turn_id = turn.turn_id
+        AND checkpoint.checkpoint_revision = ?
+      WHERE turn.turn_id = ?
+    `).get(input.checkpointId, input.checkpointRevision, input.turnId);
+    if (!row || row.active_checkpoint_id !== input.checkpointId ||
+        row.checkpoint_id !== input.checkpointId ||
+        row.checkpoint_revision !== input.checkpointRevision || row.is_active !== 1) {
+      throw new Error("BTCC model response acceptance is not bound to the active checkpoint");
+    }
   }
 
   async stopTurn(turnId: string): Promise<StopPersistenceOutcome> {
@@ -259,6 +615,146 @@ function hydrateProgressDestination(
     },
     replyToMessageId: destination.replyToMessageId,
   };
+}
+
+/**
+ * Acceptance replay is deliberately limited to the normalized response
+ * contract. Raw provider payloads are not durable response state and must not
+ * cross a restart boundary; the normalized continuation and provider-owned
+ * message data needed to resume the admitted round are retained explicitly.
+ */
+function normalizeAcceptedModelRound(result: ModelRoundResult): ModelRoundResult {
+  const normalized: ModelRoundResult = {
+    toolCalls: result.toolCalls.map(normalizeToolCall),
+  };
+  if (typeof result.text === "string") normalized.text = result.text;
+  if (result.textToolCallNames) {
+    normalized.textToolCallNames = result.textToolCallNames.map((name) => {
+      if (typeof name !== "string") throw new Error("BTCC accepted response has invalid text tool name");
+      return name;
+    });
+  }
+  if (result.assistantMessage) {
+    normalized.assistantMessage = normalizeAssistantMessage(result.assistantMessage);
+  }
+  const continuation = safeJsonClone(result.continuation);
+  if (continuation !== undefined) normalized.continuation = continuation;
+  if (result.usage === null) {
+    normalized.usage = null;
+  } else if (result.usage) {
+    normalized.usage = {
+      model: result.usage.model,
+      promptTokens: result.usage.promptTokens,
+      cachedTokens: result.usage.cachedTokens,
+      totalTokens: result.usage.totalTokens,
+      outputTokens: result.usage.outputTokens,
+    };
+  }
+  if (result.providerIdentity) {
+    normalized.providerIdentity = normalizeProviderIdentity(result.providerIdentity);
+  }
+  return normalized;
+}
+
+function hydrateAcceptedModelRound(
+  value: string,
+  providerIdentityJson: string | null,
+): ModelRoundResult {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("BTCC accepted response is not valid JSON");
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.toolCalls)) {
+    throw new Error("BTCC accepted response has invalid normalized shape");
+  }
+  const result = normalizeAcceptedModelRound(parsed as unknown as ModelRoundResult);
+  if (providerIdentityJson) {
+    let identity: unknown;
+    try {
+      identity = JSON.parse(providerIdentityJson);
+    } catch {
+      throw new Error("BTCC accepted response provider identity is not valid JSON");
+    }
+    result.providerIdentity = normalizeProviderIdentity(identity);
+  }
+  return result;
+}
+
+function normalizeToolCall(call: ModelRoundToolCall): ModelRoundToolCall {
+  if (!isRecord(call) || typeof call.id !== "string" ||
+      typeof call.name !== "string" || typeof call.rawArguments !== "string" ||
+      !isRecord(call.arguments)) {
+    throw new Error("BTCC accepted response has invalid tool call");
+  }
+  return {
+    id: call.id,
+    name: call.name,
+    arguments: cloneJsonRecord(call.arguments),
+    rawArguments: call.rawArguments,
+    ...(call.origin === "native" || call.origin === "text"
+      ? { origin: call.origin }
+      : {}),
+  };
+}
+
+function normalizeAssistantMessage(message: ModelRoundMessage): ModelRoundMessage {
+  if (!isRecord(message) ||
+      (message.role !== "system" && message.role !== "user" &&
+        message.role !== "assistant" && message.role !== "tool") ||
+      typeof message.content !== "string") {
+    throw new Error("BTCC accepted response has invalid assistant message");
+  }
+  const normalized: ModelRoundMessage = {
+    role: message.role,
+    content: message.content,
+    ...(typeof message.toolCallId === "string" ? { toolCallId: message.toolCallId } : {}),
+    ...(typeof message.name === "string" ? { name: message.name } : {}),
+    ...(message.toolCalls ? { toolCalls: message.toolCalls.map(normalizeToolCall) } : {}),
+  };
+  const providerData = safeJsonClone(message.providerData);
+  if (providerData !== undefined) normalized.providerData = providerData;
+  const imageAttachments = safeJsonClone(message.imageAttachments);
+  if (Array.isArray(imageAttachments)) {
+    normalized.imageAttachments = imageAttachments as ModelRoundMessage["imageAttachments"];
+  }
+  return normalized;
+}
+
+function normalizeProviderIdentity(identity: unknown): NonNullable<ModelRoundResult["providerIdentity"]> {
+  if (!isRecord(identity) || typeof identity.provider !== "string" ||
+      typeof identity.configuredModel !== "string" ||
+      typeof identity.reportedModel !== "string") {
+    throw new Error("BTCC accepted response has invalid provider identity");
+  }
+  return {
+    provider: identity.provider,
+    configuredModel: identity.configuredModel,
+    reportedModel: identity.reportedModel,
+  };
+}
+
+function cloneJsonRecord(value: Record<string, unknown>): Record<string, unknown> {
+  const cloned = safeJsonClone(value);
+  if (!isRecord(cloned)) {
+    throw new Error("BTCC accepted response tool arguments are not JSON serializable");
+  }
+  return cloned;
+}
+
+function safeJsonClone(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  try {
+    const encoded = JSON.stringify(value);
+    return encoded === undefined ? undefined : JSON.parse(encoded);
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function hydrateFinalPayload(

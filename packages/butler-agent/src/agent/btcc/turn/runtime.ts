@@ -110,11 +110,70 @@ class DefaultTurnRuntime implements BtccTurnRuntime {
         permit,
       );
       let result: BtccAgentLoopResult;
+      const routeAcceptanceReader = this.dependencies.turns.loadModelRoundAcceptance?.bind(
+        this.dependencies.turns,
+      );
+      const routeAcceptanceWriter = this.dependencies.turns.recordModelRoundAcceptance?.bind(
+        this.dependencies.turns,
+      );
       try {
         result = await this.dependencies.agent.run({
           turn,
           signal: permit.signal,
           progress,
+          recordModelRouteEvent: async (event) => {
+            return await this.dependencies.turns.recordModelRouteEvent?.({
+              event,
+              route: event.route,
+              turnId: turn.turnId,
+              expectedRevision: turn.revision,
+              executionFence: turn.executionFence,
+              claimId: claim.claimId,
+            });
+          },
+          loadModelRouteAttemptHistory: async (attempt) =>
+            await this.dependencies.turns.loadModelRouteAttemptHistory?.({
+              turnId: turn.turnId,
+              routeDigest: turn.modelRoute?.routeDigest ?? "unknown",
+              ...attempt,
+            }) ?? { started: [], failed: [], succeeded: [], abandoned: [] },
+          ...(routeAcceptanceReader
+            ? {
+                loadModelRoundAcceptance: async (acceptance: {
+                  roundId: string;
+                  candidateIndex: number;
+                  modelRef: string;
+                }) => await routeAcceptanceReader({
+                  turnId: turn.turnId,
+                  routeDigest: turn.modelRoute?.routeDigest ?? "unknown",
+                  checkpointId: claim.checkpointId,
+                  checkpointRevision: claim.checkpointRevision,
+                  ...acceptance,
+                }),
+              }
+            : {}),
+          ...(routeAcceptanceWriter
+            ? {
+                recordModelRoundAcceptance: async (acceptance: {
+                  roundId: string;
+                  candidateIndex: number;
+                  transportAttempt: number;
+                  modelRef: string;
+                  result: import("../ports/model-round.ts").ModelRoundResult;
+                }) => {
+                  await routeAcceptanceWriter({
+                    ...acceptance,
+                    turnId: turn.turnId,
+                    expectedRevision: turn.revision,
+                    executionFence: turn.executionFence,
+                    claimId: claim.claimId,
+                    checkpointId: claim.checkpointId,
+                    checkpointRevision: claim.checkpointRevision,
+                    routeDigest: turn.modelRoute?.routeDigest ?? "unknown",
+                  });
+                },
+              }
+            : {}),
         });
       } catch (_error) {
         permit.assertActive();

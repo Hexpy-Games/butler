@@ -124,6 +124,42 @@ test("model-round waiting is visible before every provider request and ends on r
   });
 });
 
+test("model-round waiting projects the admitted cursor model into iteration evidence", async () => {
+  const events: SharedTurnEvent[] = [];
+  const progress = projectTurnProgressToEvents(async (event) => {
+    events.push({
+      id: `event-${events.length + 1}`,
+      turnSequence: events.length + 1,
+      kind: event.kind,
+      visibility: event.visibility,
+      payload: event.payload,
+    });
+  });
+
+  await progress.modelRoundWaitingChanged?.({
+    turnId: "turn-model-cursor",
+    requestId: "btcc-model-round-7",
+    status: "started",
+    modelRef: "zai/glm-5.2",
+  });
+
+  expect(events[0]).toMatchObject({
+    kind: "turn.iteration.started",
+    payload: {
+      model: "zai/glm-5.2",
+      modelRef: "zai/glm-5.2",
+      requestId: "btcc-model-round-7",
+    },
+  });
+  expect(events[1]).toMatchObject({
+    kind: "tool.started",
+    payload: {
+      model: "zai/glm-5.2",
+      modelRef: "zai/glm-5.2",
+    },
+  });
+});
+
 test("run_command operation projects the model-authored action label without parsing command text", async () => {
   const events: SharedTurnEvent[] = [];
   const progress = projectTurnProgressToEvents(async (event) => {

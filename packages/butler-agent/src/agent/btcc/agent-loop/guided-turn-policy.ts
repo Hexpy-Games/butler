@@ -25,6 +25,7 @@ import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { workspacePagePreviewAvailabilityOverride } from
   "../../tools/workspace-page-preview/index.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
+import { currentModelRouteCandidate } from "../model-route.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",
@@ -228,6 +229,8 @@ export function guidedNativeToolDefinitions(): ButlerToolDefinition[] {
 }
 
 export function selectedModelRef(turn: TurnRecord): string {
+  const routed = turn.modelRoute && currentModelRouteCandidate(turn.modelRoute)?.modelRef;
+  if (routed) return routed;
   return turn.modelSelection.model.includes("/")
     ? turn.modelSelection.model
     : `${turn.modelSelection.provider}/${turn.modelSelection.model}`;

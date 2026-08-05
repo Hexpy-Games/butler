@@ -52,6 +52,7 @@ import { denyUnauthorizedTool } from "./guided-unauthorized-tool.ts";
 export type GuidedToolCallExecutionInput = {
   turn: TurnRecord;
   signal: AbortSignal;
+  resolveModelRef?: () => string;
   progress?: BtccTurnProgressObserver;
   activity?: GuidedActivityProjection;
   workScope: WorkTurnScope;
@@ -199,6 +200,7 @@ export function createGuidedToolCallExecutor(
           input.turn.turnId,
           input.turn.revision,
           input.durableWork,
+          input.resolveModelRef?.(),
         );
       }
       await publishOperation(input.progress, {
@@ -279,6 +281,7 @@ export function createGuidedToolCallExecutor(
           input.turn.turnId,
           input.turn.revision,
           input.durableWork,
+          input.resolveModelRef?.(),
         );
       }
       await publishOperation(input.progress, {
