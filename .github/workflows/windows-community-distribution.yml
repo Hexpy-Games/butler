@@ -1,0 +1,166 @@
+name: Butler Windows Community Distribution
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing semantic GitHub release tag to receive the community Windows assets
+        required: true
+        type: string
+      acknowledgement:
+        description: Type I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION to confirm non-public-trust distribution
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-community-distribution-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  distribute:
+    name: Build and publish community Windows package
+    runs-on: windows-latest
+    steps:
+      - name: Check out exact release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/butler-app/client/electron/package-lock.json
+            packages/butler-app/client/ui/package-lock.json
+
+      - name: Validate community release request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+          WINDOWS_COMMUNITY_ACKNOWLEDGEMENT: ${{ inputs.acknowledgement }}
+        run: |
+          $tag = $env:WINDOWS_RELEASE_TAG.Trim()
+          if ($tag -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw 'tag must be a semantic version beginning with v'
+          }
+          if ($env:WINDOWS_COMMUNITY_ACKNOWLEDGEMENT -cne 'I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION') {
+            throw 'acknowledgement must exactly equal I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION'
+          }
+          gh release view $tag | Out-Null
+          $tagCommit = (& git rev-parse --verify "refs/tags/$tag^{commit}" 2>$null | Out-String).Trim()
+          $checkedOutCommit = (& git rev-parse --verify HEAD 2>$null | Out-String).Trim()
+          if ([string]::IsNullOrWhiteSpace($tagCommit) -or $tagCommit -ne $checkedOutCommit) {
+            throw "The checked out commit does not exactly match release tag $tag"
+          }
+
+      - name: Install package dependencies
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup
+
+      - name: Build and verify community Windows package
+        run: ./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Package
+
+      - name: Prepare deterministic community assets
+        env:
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          if (-not (Test-Path -LiteralPath $output -PathType Container)) {
+            throw "Windows package output is missing: $output"
+          }
+          $files = @(Get-ChildItem -LiteralPath $output -File)
+          if ($files.Count -ne 8) {
+            throw "Expected 8 Windows release files, got $($files.Count)"
+          }
+
+          $setupFiles = @(
+            $files | Where-Object {
+              $_.Name -match '^butler-app-(?<version>[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)-win32-x64-setup\.exe$'
+            }
+          )
+          if ($setupFiles.Count -ne 1) {
+            throw "Expected exactly one Windows Setup executable, got $($setupFiles.Count)"
+          }
+          $setup = $setupFiles[0]
+          if ($setup.Name -notmatch '^butler-app-(?<version>[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?)-win32-x64-setup\.exe$') {
+            throw "Windows Setup executable has an unexpected name: $($setup.Name)"
+          }
+          $version = $matches.version
+          $expectedVersion = $env:WINDOWS_RELEASE_TAG.Substring(1)
+          if ($version -ne $expectedVersion) {
+            throw "Setup version $version does not match release tag $env:WINDOWS_RELEASE_TAG"
+          }
+          $oldChecksumPath = "$($setup.FullName).sha256"
+          if (-not (Test-Path -LiteralPath $oldChecksumPath -PathType Leaf)) {
+            throw "Windows Setup checksum is missing: $oldChecksumPath"
+          }
+
+          $communityName = "butler-app-$($matches.version)-win32-x64-community-setup.exe"
+          $communitySetupPath = Join-Path $output $communityName
+          if (Test-Path -LiteralPath $communitySetupPath) {
+            throw "Community Setup path already exists: $communitySetupPath"
+          }
+          Move-Item -LiteralPath $setup.FullName -Destination $communitySetupPath
+          Remove-Item -LiteralPath $oldChecksumPath -Force
+
+          $communityChecksumPath = "$communitySetupPath.sha256"
+          $communityHash = (Get-FileHash -LiteralPath $communitySetupPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          [IO.File]::WriteAllText(
+            $communityChecksumPath,
+            "$communityHash  $communityName`n",
+            [Text.UTF8Encoding]::new($false)
+          )
+          $checksumTokens = [IO.File]::ReadAllText($communityChecksumPath).Trim() -split '\s+'
+          if (
+            $checksumTokens.Count -lt 2 -or
+            $checksumTokens[0].ToLowerInvariant() -ne $communityHash -or
+            $checksumTokens[1] -ne $communityName
+          ) {
+            throw 'Community Setup SHA-256 sidecar verification failed'
+          }
+          $finalFiles = @(Get-ChildItem -LiteralPath $output -File)
+          if ($finalFiles.Count -ne 8) {
+            throw "Expected 8 files after community rename, got $($finalFiles.Count)"
+          }
+
+      - name: Publish community Windows release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WINDOWS_RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $output = Join-Path $HOME '.butler-release-validation\win32-x64'
+          $communitySetupPattern = 'butler-app-*-win32-x64-community-setup.exe'
+          $communitySetups = @(
+            Get-ChildItem -LiteralPath $output -File -Filter $communitySetupPattern
+          )
+          if ($communitySetups.Count -ne 1) {
+            throw "Expected exactly one community Setup executable, got $($communitySetups.Count)"
+          }
+          $communitySetup = $communitySetups[0]
+          $communityChecksums = @(
+            Get-ChildItem -LiteralPath $output -File | Where-Object {
+              $_.FullName -eq "$($communitySetup.FullName).sha256"
+            }
+          )
+          if ($communityChecksums.Count -ne 1) {
+            throw "Expected exactly one community Setup checksum, got $($communityChecksums.Count)"
+          }
+          $communityAssets = @($communitySetup.FullName, $communityChecksums[0].FullName)
+          if ($communityAssets.Count -ne 2) {
+            throw "Expected exactly two community assets, got $($communityAssets.Count)"
+          }
+          gh release upload $env:WINDOWS_RELEASE_TAG @communityAssets --clobber
