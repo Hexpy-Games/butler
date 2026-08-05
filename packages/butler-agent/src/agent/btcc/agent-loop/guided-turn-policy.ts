@@ -25,7 +25,7 @@ import { guidedToolDefinition } from "./guided-tool-definition.ts";
 import { workspacePagePreviewAvailabilityOverride } from
   "../../tools/workspace-page-preview/index.ts";
 import { safeCommandActionLabel } from "../../output/progress/arguments.ts";
-import { currentModelRouteCandidate } from "../model-route.ts";
+import { currentModelRouteCandidate } from "../model-route/index.ts";
 
 const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "list_tool_capabilities",

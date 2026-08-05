@@ -54,7 +54,7 @@ import {
   createModelRoutePort,
   currentModelRouteCandidate,
   type ModelRouteEvent,
-} from "../model-route.ts";
+} from "../model-route/index.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
