@@ -4,6 +4,11 @@ import type {
   BtccProgressDestination,
   FreshBtccTurnCommand,
 } from "../contracts.ts";
+import type {
+  ModelRouteAttemptHistory,
+  ModelRouteEventResult,
+  ModelRouteState,
+} from "../model-route.ts";
 import type { ContentRef } from "../identity/index.ts";
 
 export type TurnSemanticState =
@@ -41,6 +46,7 @@ export type TurnRecord = {
     resultScopeRef?: string;
   };
   modelSelection: AdmittedModelSelection;
+  modelRoute?: ModelRouteState;
   context: ButlerContextInput;
   progressDestination?: BtccProgressDestination;
   semanticState: TurnSemanticState;
@@ -127,6 +133,58 @@ export interface TurnStateRepository {
     turn: TurnRecord;
     claim: StateExecutionClaim;
     transition: AcceptedTurnTransition;
+  }): Promise<void>;
+  persistModelRoute?(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    route: ModelRouteState;
+  }): Promise<void>;
+  recordModelRouteEvent?(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    event: {
+      type: string;
+      roundId: string;
+      candidateIndex: number;
+      transportAttempt?: number;
+      modelRef: string;
+      errorCode?: string;
+    };
+    route?: ModelRouteState;
+  }): Promise<ModelRouteEventResult | void>;
+  loadModelRouteAttemptHistory?(input: {
+    turnId: string;
+    roundId: string;
+    routeDigest: string;
+    candidateIndex: number;
+    modelRef: string;
+  }): Promise<ModelRouteAttemptHistory>;
+  loadModelRoundAcceptance?(input: {
+    turnId: string;
+    roundId: string;
+    routeDigest: string;
+    candidateIndex: number;
+    modelRef: string;
+    checkpointId: string;
+    checkpointRevision: number;
+  }): Promise<import("../ports/model-round.ts").ModelRoundResult | undefined>;
+  recordModelRoundAcceptance?(input: {
+    turnId: string;
+    expectedRevision: number;
+    executionFence: number;
+    claimId: string;
+    checkpointId: string;
+    checkpointRevision: number;
+    roundId: string;
+    routeDigest: string;
+    candidateIndex: number;
+    transportAttempt: number;
+    modelRef: string;
+    result: import("../ports/model-round.ts").ModelRoundResult;
   }): Promise<void>;
   stopTurn(turnId: string): Promise<StopPersistenceOutcome>;
 }

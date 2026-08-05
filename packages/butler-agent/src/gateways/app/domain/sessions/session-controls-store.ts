@@ -150,6 +150,10 @@ export class AppSessionControlsStore {
         ...controls,
         model: controls.model as ModelRef,
       },
+      model_fallback: {
+        enabled: this.getSettings().model_fallback.enabled,
+        models: [...this.getSettings().model_fallback.models] as ModelRef[],
+      },
       source: messageOverride
         ? "message_override"
         : this.hasExplicit(sessionId)

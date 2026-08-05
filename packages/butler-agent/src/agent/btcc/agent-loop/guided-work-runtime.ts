@@ -124,6 +124,7 @@ export async function publishWorkProgress(
   turnId: string,
   turnRevision: number,
   service: DurableWorkService,
+  modelRef?: string,
 ): Promise<void> {
   if (!progress?.workProgressChanged) return;
   const work = await safeBoundWork(service, turnId);
@@ -158,6 +159,7 @@ export async function publishWorkProgress(
       turnId,
       turnRevision,
       programId: work.workId,
+      ...(modelRef ? { modelRef } : {}),
       tasks,
     });
   } catch {

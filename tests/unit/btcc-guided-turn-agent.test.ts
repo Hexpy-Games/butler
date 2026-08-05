@@ -57,6 +57,8 @@ import { upsertMcpServer } from
   "../../packages/butler-agent/src/interfaces/mcp-client/registry.ts";
 import { ModelProviderRequestError } from
   "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+import { buildModelRoute } from
+  "../../packages/butler-agent/src/agent/btcc/model-route.ts";
 
 type ScriptedModelRoundStep =
   | ModelRoundResult
@@ -143,6 +145,113 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
       role: "user",
       content: expect.stringContaining("요청을 처리해 주세요"),
     });
+  } finally {
+    fixture.close();
+  }
+});
+
+test("Guided fallback projects the cursor model into public iteration and fallback evidence", async () => {
+  const fixture = createFixture("guided-model-route-projection");
+  try {
+    const requests: string[] = [];
+    const iterationModels: string[] = [];
+    const fallbackModels: string[] = [];
+    const agent = fixture.agent({
+      async runRound(request) {
+        requests.push(String(request.model));
+        if (request.model === "openai/gpt-5.5") {
+          throw new ModelProviderRequestError({
+            code: "provider_rate_limited",
+            message: "rate limited",
+            provider: "openai",
+            retryable: true,
+          });
+        }
+        if (requests.filter((model) => model === "zai/glm-5.2").length === 1) {
+          return {
+            toolCalls: [toolCall("capabilities-1", "list_tool_capabilities", {})],
+          };
+        }
+        return { text: "backup answer", toolCalls: [] };
+      },
+    });
+    const turn = turnRecord(fixture.root, {
+      turnId: "guided-model-route-projection",
+    });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.5",
+      backupModelRefs: ["zai/glm-5.2"],
+      reasoningEffort: "medium",
+      retryCeiling: 1,
+    });
+    await agent.run({
+      turn,
+      signal: new AbortController().signal,
+      progress: {
+        stateChanged() {},
+        modelRoundWaitingChanged(update) {
+          if (update.status === "started" && update.modelRef) {
+            iterationModels.push(update.modelRef);
+          }
+        },
+        phaseActivityChanged(update) {
+          if (update.modelRef) fallbackModels.push(update.modelRef);
+        },
+      },
+    });
+
+    expect(requests).toEqual([
+      "openai/gpt-5.5",
+      "zai/glm-5.2",
+      "zai/glm-5.2",
+    ]);
+    expect(iterationModels).toEqual([
+      "openai/gpt-5.5",
+      "zai/glm-5.2",
+      "zai/glm-5.2",
+    ]);
+    expect(fallbackModels).toEqual(["zai/glm-5.2"]);
+  } finally {
+    fixture.close();
+  }
+});
+
+test("primary-only route bypasses fallback durability hooks", async () => {
+  const fixture = createFixture("guided-primary-only-route");
+  try {
+    let routeEvents = 0;
+    let acceptedResponses = 0;
+    let attemptHistoryLoads = 0;
+    const agent = fixture.agent({
+      async runRound() {
+        return { text: "primary answer", toolCalls: [] };
+      },
+    });
+    const turn = turnRecord(fixture.root, { turnId: "guided-primary-only-route" });
+    turn.modelRoute = buildModelRoute({
+      primaryModelRef: "openai/gpt-5.5",
+      reasoningEffort: "medium",
+      retryCeiling: 3,
+    });
+    await agent.run({
+      turn,
+      signal: new AbortController().signal,
+      recordModelRouteEvent: async () => {
+        routeEvents += 1;
+      },
+      loadModelRouteAttemptHistory: async () => {
+        attemptHistoryLoads += 1;
+        return { started: [], failed: [], succeeded: [], abandoned: [] };
+      },
+      loadModelRoundAcceptance: async () => undefined,
+      recordModelRoundAcceptance: async () => {
+        acceptedResponses += 1;
+      },
+    });
+
+    expect(routeEvents).toBe(0);
+    expect(acceptedResponses).toBe(0);
+    expect(attemptHistoryLoads).toBe(0);
   } finally {
     fixture.close();
   }

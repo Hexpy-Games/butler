@@ -67,6 +67,7 @@ export async function publishModelRoundWaiting(
     turnId: string;
     requestId: string;
     status: "started" | "completed" | "failed" | "cancelled";
+    modelRef?: string;
   },
 ): Promise<void> {
   if (!progress?.modelRoundWaitingChanged) return;
