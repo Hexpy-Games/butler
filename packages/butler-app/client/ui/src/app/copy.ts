@@ -115,6 +115,7 @@ export interface AppCopy {
     gitMissingTitle: string;
     gitMissingMessage: string;
     gitInstallAction: string;
+    gitMissingDismiss: string;
     reasoning: string;
     reasoningEffort: string;
     send: string;
@@ -770,6 +771,7 @@ const koKrCopy: AppCopy = {
     gitMissingMessage:
       "Butler는 계속 사용할 수 있지만 브랜치, 커밋, Ledger 커밋 증거 기능은 사용할 수 없습니다.",
     gitInstallAction: "Git 설치 안내",
+    gitMissingDismiss: "Git 안내 닫기",
     reasoning: "추론",
     reasoningEffort: "추론 강도",
     send: "전송",
@@ -1500,6 +1502,7 @@ const enUsCopyOverrides: DeepCopyOverride<AppCopy> = {
     gitMissingMessage:
       "Butler remains usable, but branch, commit, and Ledger commit-evidence features are unavailable.",
     gitInstallAction: "Install Git",
+    gitMissingDismiss: "Dismiss Git notice",
     reasoning: "Reasoning",
     reasoningEffort: "Reasoning effort",
     send: "Send",
