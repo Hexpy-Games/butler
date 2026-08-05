@@ -116,6 +116,7 @@ function hostedProviderId(value: unknown): HostedModelProviderId | null {
     value === "qwen" ||
     value === "kimi" ||
     value === "zai" ||
+    value === "zai-api" ||
     value === "opencode-go"
   ) return value;
   return null;

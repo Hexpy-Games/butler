@@ -15,6 +15,7 @@ import { QWEN_PROVIDER_ADAPTER } from "./qwen/adapter.ts";
 import type { ProviderAdapterDefinition } from "./shared/adapter-definition.ts";
 import { XAI_PROVIDER_ADAPTER } from "./xai/adapter.ts";
 import { ZAI_PROVIDER_ADAPTER } from "./zai/adapter.ts";
+import { ZAI_API_PROVIDER_ADAPTER } from "./zai-api/adapter.ts";
 
 const PROVIDER_ADAPTERS: ReadonlyMap<ModelProviderId, ProviderAdapterDefinition> = new Map([
   ["openai", OPENAI_PROVIDER_ADAPTER],
@@ -24,6 +25,7 @@ const PROVIDER_ADAPTERS: ReadonlyMap<ModelProviderId, ProviderAdapterDefinition>
   ["qwen", QWEN_PROVIDER_ADAPTER],
   ["kimi", KIMI_PROVIDER_ADAPTER],
   ["zai", ZAI_PROVIDER_ADAPTER],
+  ["zai-api", ZAI_API_PROVIDER_ADAPTER],
   ["opencode-go", OPENCODE_GO_PROVIDER_ADAPTER],
   ["local", LOCAL_PROVIDER_ADAPTER],
 ]);

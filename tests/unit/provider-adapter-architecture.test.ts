@@ -25,6 +25,9 @@ test("provider registry resolves one adapter that owns catalog capabilities and 
   expect(providerCapabilitiesForModel("zai/glm-5.2").structuredDecisionTransport).toBe(
     "function_tool",
   );
+  expect(providerCapabilitiesForModel("zai-api/glm-5.2").structuredDecisionTransport).toBe(
+    "function_tool",
+  );
 });
 test("provider directories own adapter catalog and runtime entrypoints", () => {
   for (const adapter of getRegisteredProviderAdapterDefinitions()) {

@@ -8,6 +8,8 @@ import {
   resolveModelMetadata,
   type ModelProviderId,
   type ProviderModelMetadata,
+  modelIdentityKey,
+  modelProviderFamilyId,
 } from "../../packages/butler-agent/src/integrations/providers/model-catalog.ts";
 import { ANTHROPIC_MODELS } from "../../packages/butler-agent/src/integrations/providers/anthropic/catalog.ts";
 import { GOOGLE_MODELS } from "../../packages/butler-agent/src/integrations/providers/google/catalog.ts";
@@ -17,6 +19,7 @@ import { OPENAI_MODELS } from "../../packages/butler-agent/src/integrations/prov
 import { QWEN_MODELS } from "../../packages/butler-agent/src/integrations/providers/qwen/catalog.ts";
 import { XAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/xai/catalog.ts";
 import { ZAI_MODELS } from "../../packages/butler-agent/src/integrations/providers/zai/catalog.ts";
+import { ZAI_API_MODELS } from "../../packages/butler-agent/src/integrations/providers/zai-api/catalog.ts";
 import {
   providerCapabilitiesForModel,
   resolveProviderAdapterDefinition,
@@ -33,6 +36,7 @@ const providerModules: Array<{
   { providerId: "qwen", models: QWEN_MODELS },
   { providerId: "kimi", models: KIMI_MODELS },
   { providerId: "zai", models: ZAI_MODELS },
+  { providerId: "zai-api", models: ZAI_API_MODELS },
   { providerId: "opencode-go", models: OPENCODE_GO_MODELS },
 ];
 
@@ -59,10 +63,18 @@ test("model catalog generation is stable across timestamps and input order", () 
 
 test("namespaced hosted model metadata resolves duplicate model ids by provider", () => {
   const zaiGlm = resolveModelMetadata("zai/glm-5.2");
+  const zaiApiGlm = resolveModelMetadata("zai-api/glm-5.2");
   const openCodeGoGlm = resolveModelMetadata("opencode-go/glm-5.2");
 
   expect(zaiGlm.provider_id).toBe("zai");
   expect(zaiGlm.hosted_api_shape).toBe("openai_chat_completions");
+  expect(zaiGlm.provider_label).toBe("Z.AI Coding Plan");
+  expect(zaiApiGlm.provider_id).toBe("zai-api");
+  expect(zaiApiGlm.provider_label).toBe("Z.AI API");
+  expect(zaiApiGlm.hosted_api_shape).toBe("openai_chat_completions");
+  expect(modelProviderFamilyId(zaiGlm)).toBe("zai");
+  expect(modelProviderFamilyId(zaiApiGlm)).toBe("zai");
+  expect(modelIdentityKey(zaiGlm)).toBe(modelIdentityKey(zaiApiGlm));
   expect(openCodeGoGlm.provider_id).toBe("opencode-go");
   expect(openCodeGoGlm.hosted_api_shape).toBe("openai_chat_completions");
 });
@@ -120,6 +132,7 @@ test("frozen hosted provider matrix exposes only current runtime-supported refs"
     ["kimi", ["kimi-k3", "kimi-k2.7-code", "kimi-k2.6"]],
     ["qwen", ["qwen3.7-max", "qwen3.7-plus", "qwen3.6-flash"]],
     ["zai", ["glm-5.2", "glm-5.1", "glm-5"]],
+    ["zai-api", ["glm-5.2", "glm-5.1", "glm-5"]],
     ["opencode-go", [
       "grok-4.5", "glm-5.2", "glm-5.1", "kimi-k3", "kimi-k2.7-code", "kimi-k2.6",
       "deepseek-v4-pro", "deepseek-v4-flash", "mimo-v2.5", "mimo-v2.5-pro", "hy3",
@@ -149,6 +162,9 @@ test("provider matrix keeps carrier endpoints explicit", () => {
   );
   expect(defaultHostedProviderApiEndpoint("zai")).toBe(
     "https://api.z.ai/api/coding/paas/v4/chat/completions",
+  );
+  expect(defaultHostedProviderApiEndpoint("zai-api")).toBe(
+    "https://api.z.ai/api/paas/v4/chat/completions",
   );
   expect(defaultHostedProviderApiEndpoint("opencode-go", "openai_responses")).toBe(
     "https://opencode.ai/zen/go/v1/responses",

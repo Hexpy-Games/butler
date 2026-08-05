@@ -122,6 +122,7 @@ export type ProviderAuthMethod = "api_key" | "codex_oauth";
 export interface AppModelSummary {
   provider_id: string;
   provider_label: string;
+  provider_family_id?: string;
   model_id: string;
   model_ref: string;
   display_name: string;
