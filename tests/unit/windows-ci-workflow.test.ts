@@ -11,6 +11,10 @@ const distributionWorkflow = readFileSync(
   join(root, ".github", "workflows", "windows-distribution.yml"),
   "utf8",
 );
+const communityWorkflow = readFileSync(
+  join(root, ".github", "workflows", "windows-community-distribution.yml"),
+  "utf8",
+);
 const entrypoint = readFileSync(
   join(
     root,
@@ -123,6 +127,53 @@ test("Windows distribution is a separate manually dispatched action", () => {
   expect(distributionWorkflow).not.toContain("pull_request:");
   expect(distributionWorkflow).not.toContain("-Mode ProductE2E");
   expect(distributionWorkflow).not.toContain("-Mode Lifecycle");
+});
+
+test("Windows community distribution is manual, exact-tag based, and explicitly acknowledged", () => {
+  expect(communityWorkflow).toContain("workflow_dispatch:");
+  expect(communityWorkflow).toContain("tag:");
+  expect(communityWorkflow).toContain("acknowledgement:");
+  expect(communityWorkflow).toContain(
+    "I_ACKNOWLEDGE_WINDOWS_COMMUNITY_DISTRIBUTION",
+  );
+  expect(communityWorkflow).toContain("contents: write");
+  expect(communityWorkflow).toContain("runs-on: windows-latest");
+  expect(communityWorkflow).toContain("ref: ${{ inputs.tag }}");
+  expect(communityWorkflow).toContain("fetch-depth: 0");
+  expect(communityWorkflow).toContain("refs/tags/$tag^{commit}");
+  expect(communityWorkflow).toContain("gh release view");
+  expect(communityWorkflow).toContain(
+    "./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Setup",
+  );
+  expect(communityWorkflow).toContain(
+    "./packages/butler-app/scripts/windows/run-windows-ci.ps1 -Mode Package",
+  );
+  expect(communityWorkflow).toContain("Expected 8 Windows release files");
+  expect(communityWorkflow).toContain(
+    "butler-app-$($matches.version)-win32-x64-community-setup.exe",
+  );
+  expect(communityWorkflow).toContain("win32-x64-setup\\.exe");
+  expect(communityWorkflow).toContain("Get-FileHash");
+  expect(communityWorkflow).toContain("SHA256");
+  expect(communityWorkflow).toContain("gh release upload");
+  expect(communityWorkflow.match(/gh release upload/gu)).toHaveLength(1);
+  expect(communityWorkflow).toContain("--clobber");
+  expect(communityWorkflow).not.toContain("WINDOWS_CERTIFICATE_PFX");
+  expect(communityWorkflow).not.toContain("WINDOWS_CERTIFICATE_PASSWORD");
+  expect(communityWorkflow).not.toMatch(/secrets\./u);
+  expect(communityWorkflow).not.toContain("pull_request:");
+  expect(communityWorkflow).not.toContain("push:");
+  expect(communityWorkflow).not.toContain("schedule:");
+
+  const publishStep = communityWorkflow.slice(
+    communityWorkflow.indexOf("Publish community Windows release assets"),
+  );
+  expect(publishStep).toContain("community-setup.exe");
+  expect(publishStep).toContain(".sha256");
+  expect(publishStep).not.toContain("app-release-manifest.json");
+  expect(publishStep).not.toContain("app-update-manifest.json");
+  expect(publishStep).not.toContain("RELEASES");
+  expect(publishStep).not.toContain(".nupkg");
 });
 
 test("packaged desktop lifecycle remains physical-interactive only", () => {
