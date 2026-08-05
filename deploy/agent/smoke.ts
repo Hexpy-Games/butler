@@ -162,9 +162,22 @@ function runInstallSmoke(input: {
       throw new Error("Agent status smoke returned an unexpected command envelope");
     }
 
-    const doctor = runSmokeCommand("doctor", installedCli, ["doctor", "--json", "--check", "dependencies"], env);
+    const doctor = runSmokeCommand("doctor", installedCli, [
+      "doctor",
+      "--json",
+      "--check",
+      "payload",
+    ], env);
     const doctorPayload = JSON.parse(doctor.stdout);
-    if (!Array.isArray(doctorPayload.checks)) {
+    const doctorChecks = doctorPayload?.data?.checks;
+    if (
+      doctorPayload?.ok !== true ||
+      doctorPayload?.command !== "butler doctor" ||
+      !Array.isArray(doctorChecks) ||
+      doctorChecks.length !== 1 ||
+      doctorChecks[0]?.id !== "payload" ||
+      doctorChecks[0]?.status !== "pass"
+    ) {
       throw new Error("Agent doctor smoke returned an unexpected payload");
     }
 
