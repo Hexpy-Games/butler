@@ -11,6 +11,9 @@ export {
   type ModelRouteEventResult,
   type ModelRouteFailureDisposition,
   type ModelRouteState,
+  ModelRouteDurabilityError,
+  type ModelRouteDurabilityPhase,
+  isModelRouteDurabilityError,
 } from "./contracts.ts";
 export {
   advanceModelRoute,

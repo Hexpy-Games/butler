@@ -56,3 +56,31 @@ export type ModelRouteAcceptance = {
   modelRef: string;
   result: ModelRoundResult;
 };
+
+export type ModelRouteDurabilityPhase =
+  | "attempt_history_read"
+  | "attempt_event_write"
+  | "response_acceptance_read"
+  | "response_acceptance_write";
+
+/**
+ * A route journal/checkpoint failure is an execution-integrity failure, not a
+ * provider failure. It must escape the operational response fallback so the
+ * queue can preserve the admitted Turn for ownership recovery.
+ */
+export class ModelRouteDurabilityError extends Error {
+  readonly code = "model_route_durability_failure" as const;
+
+  constructor(
+    readonly phase: ModelRouteDurabilityPhase,
+  ) {
+    super(`BTCC model route durability failed during ${phase}`);
+    this.name = "ModelRouteDurabilityError";
+  }
+}
+
+export function isModelRouteDurabilityError(
+  error: unknown,
+): error is ModelRouteDurabilityError {
+  return error instanceof ModelRouteDurabilityError;
+}
