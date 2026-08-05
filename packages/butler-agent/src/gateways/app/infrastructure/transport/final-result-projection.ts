@@ -169,17 +169,22 @@ function projectExecutionModelFromAcceptedResponse(
     execution_controls_json: string | null;
     model_ref: string | null;
     provider_identity_json: string | null;
+    acceptance_rowid: number;
   }, [string]>(`
     SELECT turns.execution_controls_json, accepted.model_ref,
-      accepted.provider_identity_json
+      accepted.provider_identity_json, accepted.rowid AS acceptance_rowid
     FROM turns
     LEFT JOIN btcc_model_round_acceptances AS accepted
       ON accepted.turn_id = turns.id
     WHERE turns.id = ?
-    ORDER BY accepted.created_at DESC
+    ORDER BY accepted.created_at DESC,
+      accepted.rowid DESC,
+      accepted.round_id DESC,
+      accepted.candidate_index DESC,
+      accepted.transport_attempt DESC
     LIMIT 1
   `).get(turnId);
-  if (!row?.model_ref || !row.execution_controls_json || !row.provider_identity_json) return;
+  if (!row?.model_ref || !row.execution_controls_json) return;
   let controls: { model_ref?: unknown };
   let identity: {
     provider?: unknown;
@@ -187,21 +192,29 @@ function projectExecutionModelFromAcceptedResponse(
   };
   try {
     controls = JSON.parse(row.execution_controls_json) as { model_ref?: unknown };
-    identity = JSON.parse(row.provider_identity_json) as {
-      provider?: unknown;
-      reportedModel?: unknown;
-    };
   } catch {
     return;
   }
-  if (
-    typeof controls.model_ref !== "string" ||
-    typeof identity.provider !== "string" ||
-    typeof identity.reportedModel !== "string"
-  ) return;
-  const providerReportedModel = identity.reportedModel.includes("/")
-    ? identity.reportedModel
-    : `${identity.provider}/${identity.reportedModel}`;
+  if (typeof controls.model_ref !== "string") return;
+
+  let providerReportedModel: string | undefined;
+  if (row.provider_identity_json) {
+    try {
+      identity = JSON.parse(row.provider_identity_json) as {
+        provider?: unknown;
+        reportedModel?: unknown;
+      };
+    } catch {
+      return;
+    }
+    if (
+      typeof identity.provider !== "string" ||
+      typeof identity.reportedModel !== "string"
+    ) return;
+    providerReportedModel = identity.reportedModel.includes("/")
+      ? identity.reportedModel
+      : `${identity.provider}/${identity.reportedModel}`;
+  }
   db.query(`
     UPDATE turns
     SET execution_model_json = ?, updated_at = ?
@@ -210,7 +223,9 @@ function projectExecutionModelFromAcceptedResponse(
     JSON.stringify({
       requested_model_ref: controls.model_ref,
       adapter_effective_model_ref: row.model_ref,
-      provider_reported_model_ref: providerReportedModel,
+      ...(providerReportedModel
+        ? { provider_reported_model_ref: providerReportedModel }
+        : {}),
     }),
     new Date().toISOString(),
     turnId,
