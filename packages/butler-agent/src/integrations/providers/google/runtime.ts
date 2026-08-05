@@ -119,9 +119,11 @@ async function createGeminiContentOnce(
       api: "generate_content",
       statusCode: response.status,
       detail: parsed?.error?.message || raw || `status ${response.status}`,
+      providerError: parsed,
       endpoint,
       model: config.modelId,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
   return parsed;

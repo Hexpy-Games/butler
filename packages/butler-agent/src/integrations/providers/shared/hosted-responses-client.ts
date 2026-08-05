@@ -117,9 +117,10 @@ async function createHostedResponseOnce(
   }
   if (!response.ok) {
     const raw = await response.text();
+    let parsed: Record<string, any> = {};
     let detail = raw;
     try {
-      const parsed = JSON.parse(raw);
+      parsed = JSON.parse(raw);
       detail = parsed?.error?.message || raw;
     } catch {}
     throw providerHttpError({
@@ -127,9 +128,11 @@ async function createHostedResponseOnce(
       api: "responses",
       statusCode: response.status,
       detail,
+      providerError: parsed,
       endpoint,
       model: config.modelId,
       admission: admittedRequest,
+      headers: response.headers,
     });
   }
   return (await response.json()) as OpenAIResponse;

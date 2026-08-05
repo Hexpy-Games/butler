@@ -17,6 +17,7 @@ import {
 } from "./provider-round-guard.ts";
 import {
   HostedChatStreamProtocolError,
+  HostedChatStreamProviderError,
   isHostedChatSseResponse,
   readHostedChatSseResponse,
 } from "./hosted-chat-stream.ts";
@@ -334,6 +335,19 @@ async function createHostedChatCompletionOnce(
       return await readHostedChatSseResponse(response, recordProgress);
     } catch (error) {
       if (signal?.aborted) throw error;
+      if (error instanceof HostedChatStreamProviderError) {
+        throw providerHttpError({
+          provider: hostedProviderErrorLabel(config),
+          api: "chat_completions",
+          statusCode: error.statusCode ?? 400,
+          detail: undefined,
+          providerError: error.providerError,
+          endpoint,
+          model: config.modelId,
+          admission: admittedRequest,
+          headers: response.headers,
+        });
+      }
       if (error instanceof HostedChatStreamProtocolError) {
         throw new ModelProviderRequestError({
           code: "provider_protocol_error",
@@ -366,6 +380,7 @@ async function createHostedChatCompletionOnce(
       api: "chat_completions",
       statusCode: response.status,
       detail: parsed?.error?.message || raw || `status ${response.status}`,
+      providerError: parsed,
       endpoint,
       model: config.modelId,
       admission: admittedRequest,

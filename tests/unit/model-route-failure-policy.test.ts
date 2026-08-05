@@ -33,9 +33,9 @@ test("classifies provider HTTP failures with an explicit safe allow-list", () =>
     { label: "conflict", statusCode: 409, expected: "surface" },
     { label: "unsupported media type", statusCode: 415, expected: "surface" },
     { label: "unprocessable entity", statusCode: 422, expected: "surface" },
-    { label: "payment required", statusCode: 402, expected: "advance" },
-    { label: "not found", statusCode: 404, expected: "advance" },
-    { label: "gone", statusCode: 410, expected: "advance" },
+    { label: "payment required without provider evidence", statusCode: 402, expected: "surface" },
+    { label: "not found without provider evidence", statusCode: 404, expected: "surface" },
+    { label: "gone without provider evidence", statusCode: 410, expected: "surface" },
     { label: "request timeout", statusCode: 408, expected: "retry" },
     { label: "rate limit", statusCode: 429, expected: "retry" },
     { label: "server error", statusCode: 500, expected: "retry" },
@@ -78,12 +78,20 @@ test("advances permanently unavailable model and quota signals", () => {
   expect(
     classifyModelRouteFailure(
       providerFailure({
+        code: "provider_quota_exhausted",
+        statusCode: 429,
+      }),
+    ),
+  ).toBe("advance");
+  expect(
+    classifyModelRouteFailure(
+      providerFailure({
         code: "provider_api_error",
         statusCode: 429,
         cause: "insufficient quota for this account",
       }),
     ),
-  ).toBe("advance");
+  ).toBe("retry");
 });
 
 test("retries explicitly classified transport and rate-limit failures", () => {
