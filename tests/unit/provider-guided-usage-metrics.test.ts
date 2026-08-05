@@ -149,8 +149,8 @@ function openAiAuth(): OpenAIAuthOverride {
 function googleConfig(): HostedRuntimeConfig {
   return {
     providerId: "google",
-    modelId: "gemini-3.1-pro",
-    modelRef: "google/gemini-3.1-pro",
+    modelId: "gemini-3.1-pro-preview",
+    modelRef: "google/gemini-3.1-pro-preview",
     authType: "api_key",
     apiKey: "test",
   };
