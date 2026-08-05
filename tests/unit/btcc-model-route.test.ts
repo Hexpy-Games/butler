@@ -25,13 +25,23 @@ test("model route advances once after bounded provider exhaustion and preserves 
     "openai/gpt-5.5",
     "zai/glm-5.2",
   ]);
-  const requests: Array<{ model: string; retries?: number }> = [];
+  const requests: Array<{
+    model: string;
+    retries?: number;
+    reasoning?: string;
+    attributedReasoning?: string;
+  }> = [];
   const events: string[] = [];
   let calls = 0;
   const base: ModelRoundPort = {
     async runRound(request) {
       calls += 1;
-      requests.push({ model: String(request.model), retries: request.providerRetryAttempts });
+      requests.push({
+        model: String(request.model),
+        retries: request.providerRetryAttempts,
+        reasoning: request.reasoningEffort,
+        attributedReasoning: request.usageAttribution?.reasoningEffort,
+      });
       if (calls <= 4) {
         throw new ModelProviderRequestError({
           code: "provider_rate_limited",
@@ -56,15 +66,19 @@ test("model route advances once after bounded provider exhaustion and preserves 
     model: "openai/gpt-5.5",
     messages: [],
     tools: [],
+    usageAttribution: {
+      turnId: "turn-route-1",
+      reasoningEffort: "medium",
+    },
   });
 
   expect(result.text).toBe("backup answer");
   expect(requests).toEqual([
-    { model: "openai/gpt-5.5", retries: 1 },
-    { model: "openai/gpt-5.5", retries: 1 },
-    { model: "openai/gpt-5.5", retries: 1 },
-    { model: "openai/gpt-5.5", retries: 1 },
-    { model: "zai/glm-5.2", retries: 1 },
+    { model: "openai/gpt-5.5", retries: 1, reasoning: "xhigh", attributedReasoning: "xhigh" },
+    { model: "openai/gpt-5.5", retries: 1, reasoning: "xhigh", attributedReasoning: "xhigh" },
+    { model: "openai/gpt-5.5", retries: 1, reasoning: "xhigh", attributedReasoning: "xhigh" },
+    { model: "openai/gpt-5.5", retries: 1, reasoning: "xhigh", attributedReasoning: "xhigh" },
+    { model: "zai/glm-5.2", retries: 1, reasoning: "xhigh", attributedReasoning: "xhigh" },
   ]);
   expect(events).toEqual([
     "model.attempt.started",
