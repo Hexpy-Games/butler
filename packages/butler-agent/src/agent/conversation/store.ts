@@ -17,6 +17,7 @@ import type {
   ConversationPart,
   ConversationProjectionEvent,
   ConversationSession,
+  ConversationSessionOverview,
   ConversationSummary,
   ConversationSummaryInput,
   ConversationTurn,
@@ -36,6 +37,7 @@ import {
 } from "./store/message-records.ts";
 import { ConversationProjectionRecords } from "./store/projection-records.ts";
 import { ConversationSessionTurnRecords } from "./store/session-turn-records.ts";
+import { ConversationSessionRecords } from "./store/session-records.ts";
 import { ConversationSummaryPromptRecords } from "./store/summary-prompt-records.ts";
 
 export { conversationMessagesSourceHash };
@@ -49,6 +51,7 @@ export class AgentConversationStore {
   private readonly messages: ConversationMessageRecords;
   private readonly projections: ConversationProjectionRecords;
   private readonly sessionsAndTurns: ConversationSessionTurnRecords;
+  private readonly sessions: ConversationSessionRecords;
   private readonly summariesAndPrompts: ConversationSummaryPromptRecords;
 
   constructor(input: { butlerData: string; dbPath?: string; idFactory?: ConversationIdFactory }) {
@@ -62,6 +65,7 @@ export class AgentConversationStore {
     configureConversationDatabase(dependencies);
     this.messages = new ConversationMessageRecords(dependencies);
     this.sessionsAndTurns = new ConversationSessionTurnRecords(dependencies, this.messages);
+    this.sessions = new ConversationSessionRecords(dependencies);
     this.summariesAndPrompts = new ConversationSummaryPromptRecords(
       dependencies,
       this.messages,
@@ -98,18 +102,26 @@ export class AgentConversationStore {
     gateway: string,
     externalSessionId: string,
   ): ConversationSession | null {
-    return this.sessionsAndTurns.getSessionByGatewayBinding(gateway, externalSessionId);
+    return this.sessions.getSessionByGatewayBinding(gateway, externalSessionId);
   }
 
   getSession(sessionId: string): ConversationSession | null {
-    return this.sessionsAndTurns.getSession(sessionId);
+    return this.sessions.getSession(sessionId);
+  }
+
+  listSessions(input: {
+    projectId?: string | null;
+    includeArchived?: boolean;
+    limit?: number;
+  } = {}): ConversationSessionOverview[] {
+    return this.sessions.listSessions(input);
   }
 
   getGatewayBindingForConversation(
     sessionId: string,
     gateway: string,
   ): ConversationBinding | null {
-    return this.sessionsAndTurns.getGatewayBindingForConversation(sessionId, gateway);
+    return this.sessions.getGatewayBindingForConversation(sessionId, gateway);
   }
 
   appendUserMessage(input: Omit<AppendMessageInput, "role">): ConversationMessageWithParts {
