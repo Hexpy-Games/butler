@@ -3,8 +3,6 @@ import { CONVERSATION_STORE_SCHEMA_VERSION } from "../schema.ts";
 import { isoNow } from "../store-internals.ts";
 import type {
   BeginTurnInput,
-  ConversationBinding,
-  ConversationSession,
   ConversationTurn,
   FinalizeTurnInput,
   TurnOutcomeCapsule,
@@ -113,40 +111,6 @@ export class ConversationSessionTurnRecords {
   writeTurnOutcome(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {
     const tx = this.dependencies.db.transaction(() => this.writeTurnOutcomeInTransaction(input));
     return tx() as TurnOutcomeCapsule;
-  }
-
-  getSessionByGatewayBinding(
-    gateway: string,
-    externalSessionId: string,
-  ): ConversationSession | null {
-    return this.dependencies.db.query<ConversationSession, [string, string]>(`
-      SELECT s.*
-      FROM conversation_sessions s
-      JOIN conversation_bindings b ON b.conversation_session_id = s.id
-      WHERE b.gateway = ? AND b.external_session_id = ?
-      LIMIT 1
-    `).get(gateway, externalSessionId) ?? null;
-  }
-
-  getSession(sessionId: string): ConversationSession | null {
-    return this.dependencies.db.query<ConversationSession, [string]>(`
-      SELECT *
-      FROM conversation_sessions
-      WHERE id = ?
-      LIMIT 1
-    `).get(sessionId) ?? null;
-  }
-
-  getGatewayBindingForConversation(
-    sessionId: string,
-    gateway: string,
-  ): ConversationBinding | null {
-    return this.dependencies.db.query<ConversationBinding, [string, string]>(`
-      SELECT gateway, external_session_id, conversation_session_id, created_at
-      FROM conversation_bindings
-      WHERE conversation_session_id = ? AND gateway = ?
-      LIMIT 1
-    `).get(sessionId, gateway) ?? null;
   }
 
   private writeTurnOutcomeInTransaction(input: TurnOutcomeCapsuleInput): TurnOutcomeCapsule {

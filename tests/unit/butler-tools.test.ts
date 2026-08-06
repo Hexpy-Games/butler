@@ -49,7 +49,10 @@ const startupOnlyToolNames: string[] = [
   "tool_call",
   "update_todo_list",
   "list_todo_list",
+  "recall_memory",
   "read_conversation_context",
+  "list_conversation_sessions",
+  "read_conversation_session",
 ];
 const projectLedgerToolNames: string[] = [
   "project_ledger_index",
@@ -106,7 +109,10 @@ const projectLifecycleWorkspaceToolNames: string[] = [
   "tool_call",
   "update_todo_list",
   "list_todo_list",
+  "recall_memory",
   "read_conversation_context",
+  "list_conversation_sessions",
+  "read_conversation_session",
 ];
 const removedWeatherToolNames = [
   "get_weather_with_knowhow",
@@ -768,6 +774,8 @@ test("Butler tool registry exposes stable native tool contracts", () => {
     "summarize_user_profile",
     "update_onboarding_profile",
     "read_conversation_context",
+    "list_conversation_sessions",
+    "read_conversation_session",
     "update_explicit_memory",
     "list_skills",
   ]);
@@ -1035,7 +1043,9 @@ test("project sessions expose bounded project tools without workspace escalation
   expect(names).not.toContain("call_mcp_tool");
   expect(names).not.toContain("create_planned_task");
   expect(names).not.toContain("create_work_orchestration");
-  expect(toolContractJsonChars(tools)).toBeLessThan(12_000);
+  // Direct Conception recall plus canonical session list/read are intentionally
+  // part of the default surface; keep the expanded contract bounded.
+  expect(toolContractJsonChars(tools)).toBeLessThan(16_000);
 });
 
 test("project sessions keep Project Ledger lifecycle tools hidden for status-only wording", () => {
@@ -1108,7 +1118,8 @@ test("Korean Project Ledger registration prompts require explicit workspace poli
   expect(names).not.toContain("web_read");
   expect(names).not.toContain("create_automation");
   expect(names).not.toContain("call_mcp_tool");
-  expect(toolContractJsonChars(tools)).toBeLessThan(25_500);
+  // The workspace surface carries the same default memory-reference contract.
+  expect(toolContractJsonChars(tools)).toBeLessThan(31_000);
 });
 
 test("Korean Project Ledger registration text alone does not escalate project sessions to workspace", () => {
@@ -5261,8 +5272,7 @@ test("recall_memory tool applies model-provided retrieval strategy evidence", as
   expect(recall.results[0]?.text).toContain("Butler project memory");
 });
 
-test("recall_memory tool runs retrieval planner when model omits recall policy", async () => {
-  const plannerCalls: string[] = [];
+test("recall_memory tool stays in the owning model phase when recall policy is omitted", async () => {
   const embedQueries: string[] = [];
   const execute = createButlerToolExecutor({
     butlerHome: tempDir,
@@ -5270,25 +5280,6 @@ test("recall_memory tool runs retrieval planner when model omits recall policy",
     projectId: "butler",
     sessionId: "butler/main",
     workerModel: "openai/test-memory-planner",
-    memoryRetrievalPlanner: async (input) => {
-      plannerCalls.push(input.request);
-      return {
-        usedPlanner: true,
-        attempts: 1,
-        diagnostics: ["planner_succeeded_attempt_1"],
-        plan: {
-          self_sufficient: false,
-          missing_referents: ["target"],
-          strategies: ["search_vector_episode"],
-          generated_queries: [{
-            strategy: "search_vector_episode",
-            query: "semantic composer approval episode",
-          }],
-          evidence_required: ["vector_episode_hit"],
-          max_latency_ms: 500,
-        },
-      };
-    },
     memoryVectorBackend: {
       async embed(query: string) {
         embedQueries.push(query);
@@ -5316,13 +5307,12 @@ test("recall_memory tool runs retrieval planner when model omits recall policy",
     diagnostics: string[];
   };
 
-  expect(plannerCalls).toEqual(["그거 뭐였지?"]);
-  expect(embedQueries).toContain("semantic composer approval episode");
+  expect(embedQueries).toContain("그거 뭐였지?");
   expect(recall.ok).toBe(true);
   expect(recall.results).toEqual([expect.objectContaining({ source: "vector" })]);
-  expect(recall.diagnostics).toContain("ranking_policy=planned");
-  expect(recall.diagnostics).toContain("retrieval_planner=used");
-  expect(recall.diagnostics).toContain("retrieval_planner_planner_succeeded_attempt_1");
+  expect(recall.diagnostics).not.toContain("retrieval_planner=used");
+  expect(recall.diagnostics.some((entry) => entry.startsWith("retrieval_planner_")))
+    .toBe(false);
 });
 
 test("recall_memory tool ignores model vector opt-out for associative recall", async () => {

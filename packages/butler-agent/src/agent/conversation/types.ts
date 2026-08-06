@@ -16,6 +16,10 @@ export interface ConversationSession {
   schema_version: number;
 }
 
+export interface ConversationSessionOverview extends ConversationSession {
+  message_count: number;
+}
+
 export interface ConversationBinding {
   gateway: string;
   external_session_id: string;

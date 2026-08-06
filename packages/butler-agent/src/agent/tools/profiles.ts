@@ -26,6 +26,9 @@ const STARTUP_TOOL_NAMES = [
   "get_context_monitor",
   "read_tool_evidence_artifact",
   "read_conversation_context",
+  "list_conversation_sessions",
+  "read_conversation_session",
+  "recall_memory",
   "update_todo_list",
   "list_todo_list",
 ] as const;
@@ -66,7 +69,13 @@ const WORKSPACE_TOOL_NAMES = [
 
 const PUBLIC_WEB_TOOL_NAMES = ["web_search", "web_read"] as const;
 
-const MEMORY_READ_TOOL_NAMES = ["recall_memory", "query_memory", "read_conversation_context"] as const;
+const MEMORY_READ_TOOL_NAMES = [
+  "recall_memory",
+  "query_memory",
+  "read_conversation_context",
+  "list_conversation_sessions",
+  "read_conversation_session",
+] as const;
 
 const MEMORY_WRITE_TOOL_NAMES = [
   "update_explicit_memory",
@@ -135,6 +144,8 @@ const WORKER_DEFAULT_TOOL_NAMES = [
   "get_context_monitor",
   "get_usage_monitor",
   "read_conversation_context",
+  "list_conversation_sessions",
+  "read_conversation_session",
   "recall_memory",
   "query_memory",
   "update_todo_list",
