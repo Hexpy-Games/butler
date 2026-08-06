@@ -18,8 +18,8 @@ import type {
   ModelRouteState,
 } from "./contracts.ts";
 import {
-  MODEL_ROUTE_MAX_TURN_DISPATCHES,
   MODEL_ROUTE_MAX_CANDIDATES,
+  MODEL_ROUTE_MAX_DISPATCHES,
   MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
   ModelRouteDispatchLimitError,
   ModelRouteRecoveredFailureError,
@@ -50,17 +50,17 @@ export function createModelRoutePort(input: {
 }): ModelRoundPort {
   let route = input.route;
   let generatedRoundSequence = 0;
-  let dispatchCount = 0;
   return {
     async runRound(request: ModelRoundRequest): Promise<ModelRoundResult> {
       const roundId = request.roundId ??
         `${input.turnId}:round:${generatedRoundSequence++}`;
+      let dispatchCount = 0;
       let transportAttempt = 1;
       let continuation = request.continuation;
       let loadedAttemptKey: string | undefined;
       let attemptHistory: ModelRouteAttemptHistory = emptyAttemptHistory();
       let lastProviderError: unknown;
-      const turnDispatchBudget = modelRouteTurnDispatchBudget(route);
+      const dispatchBudget = modelRouteDispatchBudget(route);
       while (true) {
         const candidate = currentModelRouteCandidate(route);
         if (!candidate) throw new Error("model_route_exhausted");
@@ -177,8 +177,8 @@ export function createModelRoutePort(input: {
 
         let result: ModelRoundResult;
         try {
-          if (dispatchCount >= turnDispatchBudget) {
-            throw new ModelRouteDispatchLimitError(turnDispatchBudget);
+          if (dispatchCount >= dispatchBudget) {
+            throw new ModelRouteDispatchLimitError(dispatchBudget);
           }
           dispatchCount += 1;
           result = await input.base.runRound({
@@ -309,7 +309,7 @@ function recoveredFailure(
   );
 }
 
-function modelRouteTurnDispatchBudget(route: ModelRouteState): number {
+function modelRouteDispatchBudget(route: ModelRouteState): number {
   const retryCeiling = Math.min(
     MODEL_ROUTE_MAX_RETRY_ATTEMPTS,
     Math.max(1, Math.trunc(route.retryCeiling)),
@@ -318,10 +318,7 @@ function modelRouteTurnDispatchBudget(route: ModelRouteState): number {
     MODEL_ROUTE_MAX_CANDIDATES,
     Math.max(0, route.candidates.length),
   );
-  return Math.min(
-    MODEL_ROUTE_MAX_TURN_DISPATCHES,
-    retryCeiling * (60 + candidateCount),
-  );
+  return Math.min(MODEL_ROUTE_MAX_DISPATCHES, retryCeiling * candidateCount);
 }
 
 function maxAttempt(history: ModelRouteAttemptHistory): number {

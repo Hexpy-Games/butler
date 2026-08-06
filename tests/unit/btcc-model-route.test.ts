@@ -9,7 +9,6 @@ import {
   classifyModelRouteFailure,
   createModelRoutePort,
   MODEL_ROUTE_MAX_DISPATCHES,
-  MODEL_ROUTE_MAX_TURN_DISPATCHES,
 } from "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
 import { ModelProviderRequestError } from "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
 import { createTurnRuntime } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
@@ -278,9 +277,8 @@ test("persisted advance and retry dispositions preserve restart policy", async (
   expect(retryAttempts).toEqual([1]);
 });
 
-test("route and turn dispatch bounds are explicit", async () => {
+test("route dispatch bound is per runRound and does not cap a continuing turn", async () => {
   expect(MODEL_ROUTE_MAX_DISPATCHES).toBe(30);
-  expect(MODEL_ROUTE_MAX_TURN_DISPATCHES).toBe(330);
   const route = buildModelRoute({
     primaryModelRef: "openai/gpt-5.5",
     backupModelRefs: [
@@ -305,7 +303,8 @@ test("route and turn dispatch bounds are explicit", async () => {
     turnId: "turn-route-bound",
     route,
   });
-  for (let index = 0; index < MODEL_ROUTE_MAX_TURN_DISPATCHES; index += 1) {
+  const runRoundCount = MODEL_ROUTE_MAX_DISPATCHES * 11 + 1;
+  for (let index = 0; index < runRoundCount; index += 1) {
     await routed.runRound({
       roundId: `bound-round-${index}`,
       model: "openai/gpt-5.5",
@@ -313,14 +312,91 @@ test("route and turn dispatch bounds are explicit", async () => {
       tools: [],
     });
   }
-  expect(calls).toBe(MODEL_ROUTE_MAX_TURN_DISPATCHES);
+  expect(calls).toBe(runRoundCount);
+});
+
+test("one runRound bounds retry and fallback dispatches to the route maximum", async () => {
+  const route = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.5",
+    backupModelRefs: [
+      "zai/glm-5.2",
+      "openai/gpt-5.4",
+      "anthropic/claude-3-7-sonnet",
+      "google/gemini-2.5-pro",
+      "local/model",
+    ],
+    reasoningEffort: "medium",
+    retryCeiling: 5,
+  });
+  let calls = 0;
+  let fallbackCount = 0;
+  const routed = createModelRoutePort({
+    base: {
+      async runRound() {
+        calls += 1;
+        throw new ModelProviderRequestError({
+          code: "provider_rate_limited",
+          message: "rate limited",
+          provider: "openai",
+          retryable: true,
+        });
+      },
+    },
+    turnId: "turn-route-dispatch-bound",
+    route,
+    onRouteEvent: (event) => {
+      if (event.type === "model.fallback.selected") fallbackCount += 1;
+    },
+  });
+
+  await expect(routed.runRound({
+    roundId: "bound-round-fallbacks",
+    model: "openai/gpt-5.5",
+    messages: [],
+    tools: [],
+  })).rejects.toMatchObject({ code: "provider_rate_limited" });
+  expect(calls).toBe(MODEL_ROUTE_MAX_DISPATCHES);
+  expect(fallbackCount).toBe(route.candidates.length - 1);
+});
+
+test("one runRound guard rejects malformed retry dispatches at the route maximum", async () => {
+  const builtRoute = buildModelRoute({
+    primaryModelRef: "openai/gpt-5.5",
+    backupModelRefs: [
+      "zai/glm-5.2",
+      "openai/gpt-5.4",
+      "anthropic/claude-3-7-sonnet",
+      "google/gemini-2.5-pro",
+      "local/model",
+    ],
+    reasoningEffort: "medium",
+    retryCeiling: 5,
+  });
+  const route = { ...builtRoute, retryCeiling: 99 };
+  let calls = 0;
+  const routed = createModelRoutePort({
+    base: {
+      async runRound() {
+        calls += 1;
+        throw new ModelProviderRequestError({
+          code: "provider_rate_limited",
+          message: "rate limited",
+          provider: "openai",
+          retryable: true,
+        });
+      },
+    },
+    turnId: "turn-route-dispatch-bound",
+    route,
+  });
+
   await expect(routed.runRound({
     roundId: "bound-round-overflow",
     model: "openai/gpt-5.5",
     messages: [],
     tools: [],
   })).rejects.toMatchObject({ code: "model_route_dispatch_limit_exceeded" });
-  expect(calls).toBe(MODEL_ROUTE_MAX_TURN_DISPATCHES);
+  expect(calls).toBe(MODEL_ROUTE_MAX_DISPATCHES);
 });
 
 test("accepted-response persistence failure does not become a provider failure", async () => {
