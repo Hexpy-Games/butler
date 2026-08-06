@@ -116,14 +116,9 @@ export function beforeAttributedModelRequest(input: {
   attribution?: PromptUsageAttribution;
   roundIndex: number;
 }): void {
-  const budget =
-    input.attribution?.getBudgetState?.() ?? input.attribution?.budgetState;
-  if (
-    budget &&
-    (budget.status === "exhausted" || budget.requestCount >= budget.maxRequests)
-  ) {
-    throw promptUsageModelCallBudgetExhaustedError();
-  }
+  // Usage budgets are observational. They must not terminate a Turn or tool
+  // loop: BTCC rolls execution windows forward in the same Turn, while the
+  // provider route owns physical retry/dispatch bounds for each model round.
   input.attribution?.beforeModelRequest?.({
     roundIndex: input.roundIndex,
     phase: input.attribution.phase,
@@ -146,6 +141,11 @@ export function beforeAttributedAdmittedModelRequest(input: {
   });
 }
 
+/**
+ * Historical diagnostic retained for callers that classify old persisted
+ * failures. Current provider requests never throw this from usage accounting;
+ * an exhausted budget is telemetry, not a Turn or tool-loop stop condition.
+ */
 export function promptUsageModelCallBudgetExhaustedError(): Error & {
   code: string;
 } {

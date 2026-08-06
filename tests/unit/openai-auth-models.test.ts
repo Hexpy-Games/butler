@@ -3792,7 +3792,7 @@ test("Codex typed tool batches hand off before a continuation response request",
   expect(seenBodies).toHaveLength(1);
 });
 
-test("OpenAI function tool prompt reserves budget for final synthesis instead of exceeding request budget", async () => {
+test("OpenAI function tool prompt keeps one Turn across exhausted usage and reaches final synthesis", async () => {
   const token = fakeJwt({
     "https://api.openai.com/auth": {
       chatgpt_account_id: "chatgpt-account",
@@ -3811,30 +3811,20 @@ test("OpenAI function tool prompt reserves budget for final synthesis instead of
   const seenBodies: Array<Record<string, any>> = [];
   let fetchCalls = 0;
   let requestCount = 0;
+  let boundaryCalls = 0;
   globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const body = JSON.parse(String(init?.body || "{}"));
     seenBodies.push(body);
     fetchCalls += 1;
-    if (fetchCalls === 32) {
+    if (fetchCalls === 34) {
       return codexSseResponse({
-        id: "resp_32",
+        id: "resp_34",
         item: {
           type: "message",
-          content: [{ type: "output_text", text: "done at budget" }],
+          content: [{ type: "output_text", text: "final synthesis after same-Turn continuation" }],
         },
-        inputTokens: 32,
+        inputTokens: 34,
         totalTokens: 55,
-      });
-    }
-    if (fetchCalls > 32) {
-      return codexSseResponse({
-        id: `resp_${fetchCalls}`,
-        item: {
-          type: "message",
-          content: [{ type: "output_text", text: "should not exceed budget" }],
-        },
-        inputTokens: fetchCalls,
-        totalTokens: fetchCalls,
       });
     }
     return codexSseResponse({
@@ -3853,7 +3843,7 @@ test("OpenAI function tool prompt reserves budget for final synthesis instead of
   const result = await runFunctionToolPromptText({
     model: "gpt-5.5-codex",
     prompt: "loop",
-    maxToolRounds: 40,
+    maxToolRounds: 1,
     cacheScope: "session-turn",
     butlerData: tempDir,
     tools: [{
@@ -3879,27 +3869,40 @@ test("OpenAI function tool prompt reserves budget for final synthesis instead of
         maxRequests: 32,
       }),
     },
+    onExecutionWindowBoundary: ({ windowIndex }) => {
+      boundaryCalls += 1;
+      return windowIndex < 32
+        ? `Continue the same Turn after execution window ${windowIndex}.`
+        : undefined;
+    },
     executeTool: async () => ({ ok: true }),
   });
 
-  expect(result).toBe("done at budget");
-  expect(fetchCalls).toBe(32);
-  expect(requestCount).toBe(32);
-  expect(seenBodies).toHaveLength(32);
-  expect(seenBodies.slice(0, 31).every((body) => Array.isArray(body.tools))).toBe(true);
-  expect(seenBodies[31]!.tools).toBeUndefined();
-  expect(seenBodies[31]!.instructions).toContain("Do not call any more tools");
+  expect(result).toBe("final synthesis after same-Turn continuation");
+  expect(fetchCalls).toBe(34);
+  expect(requestCount).toBe(34);
+  expect(boundaryCalls).toBe(33);
+  expect(seenBodies).toHaveLength(34);
+  expect(seenBodies.slice(0, 33).every((body) => Array.isArray(body.tools))).toBe(true);
+  expect(seenBodies[32]!.tools).toEqual(expect.any(Array));
+  expect(seenBodies[33]!.tools).toBeUndefined();
+  expect(seenBodies[33]!.instructions).toContain("Do not call any more tools");
   const events = readPromptCacheMetrics({ butlerData: tempDir })
     .filter((event) => event.turnId === "turn-high-model-calls");
-  expect(events).toHaveLength(32);
+  expect(events).toHaveLength(34);
   expect(events.at(29)?.budgetState).toMatchObject({
     status: "warning",
     requestCount: 30,
     maxRequests: 32,
   });
-  expect(events.at(-1)?.budgetState).toMatchObject({
+  expect(events.at(31)?.budgetState).toMatchObject({
     status: "exhausted",
     requestCount: 32,
+    maxRequests: 32,
+  });
+  expect(events.at(-1)?.budgetState).toMatchObject({
+    status: "exhausted",
+    requestCount: 34,
     maxRequests: 32,
   });
 });
