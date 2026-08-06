@@ -2,6 +2,7 @@ import type { DurableWorkService } from "../work/index.ts";
 import type {
   BtccAgentLoopInput,
 } from "./contracts.ts";
+import type { DurableWorkContext, DurableWorkView } from "../work/index.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
@@ -65,6 +66,8 @@ export function createProductionGuidedTurnAgent(input: {
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
+  /** Test seam for exercising more than one internal execution window. */
+  executionWindowSize?: number;
 }): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
@@ -270,9 +273,24 @@ export function createProductionGuidedTurnAgent(input: {
         attachments: providerImageAttachments(turn),
         onProviderResponseIdentity,
         tools: visibleTools,
-        // Guided turns are bounded just like every other BTCC model loop.
-        maxIterations: 60,
+        // This is an internal execution-window size. The same Turn remains
+        // active across windows until the model reaches a final answer.
+        maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
+        onExecutionWindowBoundary: async ({ windowIndex }) => {
+          if (signal.aborted) throwGuidedAbort(signal);
+          const refreshedContext = policy.trackingMode === "none"
+            ? null
+            : await safeLoadWorkContext(input.durableWork, workScope);
+          const refreshedBoundWork = policy.trackingMode === "none"
+            ? null
+            : await safeBoundWork(input.durableWork, turn.turnId);
+          return renderExecutionWindowObservation({
+            windowIndex,
+            context: refreshedContext,
+            boundWork: refreshedBoundWork,
+          });
+        },
         onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
           text,
           toolCalls: calls.map((call) => ({
@@ -317,4 +335,42 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
+}
+
+function renderExecutionWindowObservation(input: {
+  windowIndex: number;
+  context: DurableWorkContext | null;
+  boundWork: DurableWorkView | null;
+}): string {
+  const work = input.context?.work ?? input.boundWork;
+  const lines = [
+    `Execution checkpoint ${input.windowIndex + 1}: use the existing conversation and evidence already collected for the original request.`,
+  ];
+  if (!work) {
+    lines.push(
+      "No durable Work checkpoint is available. Preserve the prior messages and evaluate the next useful step from the evidence already present.",
+    );
+    return lines.join("\n");
+  }
+  lines.push(`Durable Work status: ${work.status}.`);
+  if (work.currentStage) lines.push(`Current stage: ${work.currentStage}.`);
+  if (work.latestCheckpoint?.publicSummary) {
+    lines.push(`Latest checkpoint: ${singleLine(work.latestCheckpoint.publicSummary, 600)}`);
+  }
+  if (work.latestCheckpoint?.nextStep) {
+    lines.push(`Recorded next step: ${singleLine(work.latestCheckpoint.nextStep, 400)}`);
+  }
+  lines.push(
+    "Use this checkpoint with the existing tool results and produce the final answer only when the requested outcome is supported.",
+  );
+  return lines.join("\n");
+}
+
+function singleLine(value: string, limit: number): string {
+  return value.replace(/\s+/gu, " ").trim().slice(0, limit);
+}
+
+function throwGuidedAbort(signal: AbortSignal): never {
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Guided Turn was aborted");
 }

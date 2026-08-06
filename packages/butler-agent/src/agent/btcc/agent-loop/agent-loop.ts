@@ -44,6 +44,8 @@ export async function runBtccAgentLoop(
   let continuation: unknown;
   let emptyResponseRecoveryUsed = false;
   let modelRoundIndex = 0;
+  let windowIndex = 0;
+  let iteration = 0;
 
   const runModelRound = async (request: {
     tools: readonly BtccAgentLoopInput["tools"][number][];
@@ -115,10 +117,10 @@ export async function runBtccAgentLoop(
     return { text, calls };
   };
 
-  const synthesizeFinalResponseForLoop = () => synthesizeFinalResponse({
+  const synthesizeFinalResponseForLoop = (iterationBase: number) => synthesizeFinalResponse({
     synthesis: input.finalSynthesis,
     messages,
-    maxIterations,
+    maxIterations: iterationBase,
     runModelRound,
     appendAssistantResponse,
     emit: (event) => emit(events, input.onEvent, event),
@@ -147,18 +149,23 @@ export async function runBtccAgentLoop(
     }))?.trim() || null;
   };
 
-  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    emit(events, input.onEvent, { type: "model_call", iteration });
+  while (true) {
+    const windowEndIteration = iteration + maxIterations;
+    while (iteration < windowEndIteration) {
+      throwIfAborted(input.signal);
+      const currentIteration = iteration;
+      iteration += 1;
+      emit(events, input.onEvent, { type: "model_call", iteration: currentIteration });
     const tools = input.resolveTools?.() ?? input.tools;
     const response = await runModelRound({
       tools,
       instructions: input.instructions,
       toolChoice: input.resolveToolChoice?.() ?? input.toolChoice,
-      iteration,
+      iteration: currentIteration,
     });
     emit(events, input.onEvent, {
       type: "model_response",
-      iteration,
+      iteration: currentIteration,
       text: response.text,
     });
 
@@ -175,7 +182,7 @@ export async function runBtccAgentLoop(
         names: textToolCallNames,
         toolCalls: calls,
         text,
-        iteration,
+        iteration: currentIteration,
       });
       if (disposition.status === "fail") {
         if (disposition.error instanceof Error) throw disposition.error;
@@ -196,7 +203,7 @@ export async function runBtccAgentLoop(
         (!text && input.finalSynthesis.triggerAfterToolEmpty)
       );
       if (shouldSynthesize) {
-        const synthesized = await synthesizeFinalResponseForLoop();
+        const synthesized = await synthesizeFinalResponseForLoop(iteration);
         if (synthesized) {
           return { finalText: synthesized, messages, events, stoppedByLimit: false };
         }
@@ -211,7 +218,7 @@ export async function runBtccAgentLoop(
         ? null
         : emptyResponseRecoveryObservation({
             recoveryUsed: emptyResponseRecoveryUsed,
-            hasNextModelRound: iteration + 1 < maxIterations,
+            hasNextModelRound: iteration < windowEndIteration,
           });
       if (recoveryObservation) {
         emptyResponseRecoveryUsed = true;
@@ -220,7 +227,10 @@ export async function runBtccAgentLoop(
       }
       if (!text) return { finalText: "", messages, events, stoppedByLimit: false };
       if (input.reviewFinalCandidate) {
-        const review = await input.reviewFinalCandidate({ text, iteration });
+        const review = await input.reviewFinalCandidate({
+          text,
+          iteration: currentIteration,
+        });
         if (review.status === "continue") {
           const observation = review.observation.trim();
           if (!observation) throw new Error("btcc_agent_loop_final_candidate_observation_missing");
@@ -241,7 +251,7 @@ export async function runBtccAgentLoop(
     await input.onAssistantTextBeforeTools?.({
       text,
       toolCalls: preparedCalls.map((prepared) => prepared.call),
-      iteration,
+      iteration: currentIteration,
     });
     const canRunBatchConcurrently = preparedCalls.length > 1 && preparedCalls.every((prepared) =>
       prepared.validationError === null && prepared.tool?.concurrencySafe === true,
@@ -249,7 +259,11 @@ export async function runBtccAgentLoop(
 
     if (canRunBatchConcurrently) {
       for (const prepared of preparedCalls) {
-        emit(events, input.onEvent, { type: "tool_call", iteration, toolCall: prepared.call });
+        emit(events, input.onEvent, {
+          type: "tool_call",
+          iteration: currentIteration,
+          toolCall: prepared.call,
+        });
       }
       const results = await Promise.all(preparedCalls.map((prepared) =>
         executePreparedBtccToolCall(input, prepared, input.signal),
@@ -259,7 +273,7 @@ export async function runBtccAgentLoop(
         const candidate = await recordToolResult({
           call: preparedCalls[index]!.call,
           result: results[index]!,
-          iteration,
+          iteration: currentIteration,
           evaluateStop: finalText === null,
         });
         if (finalText === null && candidate) finalText = candidate;
@@ -272,12 +286,16 @@ export async function runBtccAgentLoop(
     }
 
     for (const prepared of preparedCalls) {
-      emit(events, input.onEvent, { type: "tool_call", iteration, toolCall: prepared.call });
+      emit(events, input.onEvent, {
+        type: "tool_call",
+        iteration: currentIteration,
+        toolCall: prepared.call,
+      });
       const result = await executePreparedBtccToolCall(input, prepared, input.signal);
       const finalText = await recordToolResult({
         call: prepared.call,
         result,
-        iteration,
+        iteration: currentIteration,
       });
       if (finalText) {
         messages.push({ role: "assistant", content: finalText });
@@ -285,8 +303,27 @@ export async function runBtccAgentLoop(
       }
     }
   }
-
-  emit(events, input.onEvent, { type: "loop_limit", iteration: maxIterations });
+    emit(events, input.onEvent, {
+      type: "execution_window_boundary",
+      iteration,
+      windowIndex,
+    });
+    throwIfAborted(input.signal);
+    const boundaryObservation = await input.onExecutionWindowBoundary?.({
+      windowIndex,
+      iteration,
+      messages,
+      toolResults,
+    });
+    if (boundaryObservation !== undefined) {
+      const observation = boundaryObservation.trim();
+      if (!observation) throw new Error("btcc_execution_window_observation_missing");
+      messages.push({ role: "user", content: observation });
+      windowIndex += 1;
+      continue;
+    }
+    break;
+  }
   const synthesizedText = (await input.onLoopLimit?.({
     messages,
     toolResults,
@@ -297,7 +334,7 @@ export async function runBtccAgentLoop(
     return { finalText: synthesizedText, messages, events, stoppedByLimit: true };
   }
   const finalSynthesisText = toolResults.length > 0
-    ? await synthesizeFinalResponseForLoop()
+    ? await synthesizeFinalResponseForLoop(iteration)
     : null;
   if (finalSynthesisText) {
     return { finalText: finalSynthesisText, messages, events, stoppedByLimit: true };
@@ -308,16 +345,11 @@ export async function runBtccAgentLoop(
 }
 
 function resolveMaxIterations(input: BtccAgentLoopInput): number {
-  const requested = Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
-  const budget = input.usageAttribution?.getBudgetState?.() ?? input.usageAttribution?.budgetState;
-  if (!budget || !Number.isFinite(budget.requestCount) || !Number.isFinite(budget.maxRequests)) {
-    return requested;
-  }
-  const remaining = Math.max(0, Math.trunc(budget.maxRequests - budget.requestCount));
-  const reservedForFinalSynthesis = input.finalSynthesis ? 1 : 0;
-  if (reservedForFinalSynthesis > 0 && remaining <= reservedForFinalSynthesis) return 1;
-  return Math.max(
-    1,
-    Math.min(requested, remaining - reservedForFinalSynthesis),
-  );
+  return Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("BTCC agent loop was aborted");
 }

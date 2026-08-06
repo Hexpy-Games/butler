@@ -64,6 +64,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
       attachments: [],
       tools: [],
       maxIterations: 1,
+      onExecutionWindowBoundary: undefined,
       providerRetryAttempts: 0,
       executeTool: rejectOperationalToolCall,
       onAssistantTextBeforeTools: undefined,
