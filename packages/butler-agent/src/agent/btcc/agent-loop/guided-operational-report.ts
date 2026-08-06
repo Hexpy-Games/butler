@@ -4,7 +4,6 @@ import { ModelProviderRequestError } from
   "../../../integrations/providers/provider-errors.ts";
 import {
   guidedOperationalFallback,
-  guidedOperationalReportPrompt,
   type OperationalFacts,
 } from "./guided-operational-facts.ts";
 
@@ -26,7 +25,8 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
       ...input.options,
       signal: input.parentSignal,
     });
-    if (result.finalText.trim()) return result.finalText;
+    const candidate = result.finalText.trim();
+    if (candidate) return candidate;
   } catch (error) {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
     if (!allowsOperationalReport(error)) throw error;
@@ -48,40 +48,11 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
   }
   const fallback = guidedOperationalFallback(facts);
-  try {
-    throwIfAborted(input.parentSignal);
-    const result = await runBtccAgentLoop({
-      ...input.options,
-      prompt: guidedOperationalReportPrompt(facts),
-      instructions: [
-        input.options.instructions,
-        "Write one concise, natural user-facing status answer using only the supplied facts.",
-        "Preserve the active persona, user language, and preferred form of address.",
-        "Do not expose internal Work records, stages, tools, journals, effects, ids, counts, schemas, or raw errors.",
-        "Clearly say what is known, what remains, and whether the saved work can continue. Do not call tools.",
-      ].filter(Boolean).join("\n\n"),
-      signal: input.parentSignal,
-      attachments: [],
-      tools: [],
-      maxIterations: 1,
-      onExecutionWindowBoundary: undefined,
-      providerRetryAttempts: 0,
-      executeTool: rejectOperationalToolCall,
-      onAssistantTextBeforeTools: undefined,
-    });
-    if (result.finalText.trim()) return result.finalText;
-  } catch {
-    if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
-  }
   return fallback;
 }
 
 function allowsOperationalReport(error: unknown): boolean {
-  return error instanceof ModelProviderRequestError;
-}
-
-async function rejectOperationalToolCall(): Promise<never> {
-  throw new Error("Operational final report cannot call tools");
+  return error instanceof ModelProviderRequestError && error.retryable;
 }
 
 function throwIfAborted(signal: AbortSignal): void {

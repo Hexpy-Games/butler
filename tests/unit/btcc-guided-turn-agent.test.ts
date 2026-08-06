@@ -150,6 +150,97 @@ test("real Guided Turn enters the BTCC agent-loop through the one-round port", a
   }
 });
 
+test("production Guided Turn rereads Work across execution windows in one agent run", async () => {
+  const fixture = createFixture("guided-production-window-continuation");
+  try {
+    const requests: ModelRoundRequest[] = [];
+    let modelCalls = 0;
+    let loadContextCalls = 0;
+    let boundWorkCalls = 0;
+    const durableWork = fixture.stores.durableWork;
+    const trackedDurableWork = {
+      ...durableWork,
+      async loadContext(scope: Parameters<typeof durableWork.loadContext>[0]) {
+        loadContextCalls += 1;
+        return durableWork.loadContext(scope);
+      },
+      async boundWorkForTurn(turnId: string) {
+        boundWorkCalls += 1;
+        return durableWork.boundWorkForTurn(turnId);
+      },
+    };
+    const modelRound: ModelRoundPort = {
+      async runRound(request) {
+        requests.push(request);
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return toolResponse([toolCall("window-plan", "replace_work_plan", {
+            start_new: true,
+            objective: "Preserve evidence across the execution windows.",
+            actions: [{
+              action_key: "preserve-evidence",
+              description: "Keep the collected evidence available for the final answer.",
+            }],
+            checks: ["The final answer uses the collected evidence."],
+          })]);
+        }
+        if (modelCalls === 2) {
+          return toolResponse([toolCall("window-checkpoint", "record_work_checkpoint", {
+            action_updates: [{
+              action_key: "preserve-evidence",
+              status: "active",
+            }],
+            public_summary: "The collected evidence remains available.",
+            next_step: "Use the evidence in the final answer.",
+          })]);
+        }
+        return { text: "확인된 근거를 바탕으로 답변을 완료했습니다.", toolCalls: [] };
+      },
+    };
+    const agent = createProductionGuidedTurnAgent({
+      butlerHome: fixture.root,
+      butlerData: fixture.root,
+      appMessageDbPath: fixture.dbPath,
+      contextDocuments: fixture.stores.contextDocuments,
+      toolJournal: fixture.stores.guidedToolJournal,
+      effectJournal: fixture.stores.guidedEffectJournal,
+      durableWork: trackedDurableWork,
+      modelRound,
+      executionWindowSize: 1,
+    });
+    const turnId = "guided-production-window-turn";
+    const runtime = createGuidedTurnRuntime({
+      admission: fixture.stores.admission,
+      turns: fixture.stores.turns,
+      messages: fixture.stores.messages,
+      committedSuccessorReadiness: fixture.stores.committedSuccessorReadiness,
+      agent,
+    });
+    const result = await runtime.runTurn(localRunCommand(fixture.root, turnId));
+    expect(result).toMatchObject({
+      kind: "delivered",
+      content: "확인된 근거를 바탕으로 답변을 완료했습니다.",
+    });
+    expect(modelCalls).toBe(3);
+    expect(loadContextCalls).toBeGreaterThanOrEqual(3);
+    expect(boundWorkCalls).toBeGreaterThanOrEqual(3);
+    expect(requests).toHaveLength(3);
+    expect(requests[0]?.messages.filter((message) => message.role === "user"))
+      .toHaveLength(1);
+    expect(requests[1]?.messages.filter((message) => message.role === "user"))
+      .toHaveLength(2);
+    expect(requests[2]?.messages.filter((message) => message.role === "user"))
+      .toHaveLength(3);
+    expect(requests[1]?.messages.at(-1)?.content).toContain("Execution checkpoint 1");
+    expect(requests[1]?.messages.at(-1)?.content).toContain("Durable Work status");
+    expect(requests[2]?.messages.at(-1)?.content).toContain("Execution checkpoint 2");
+    expect(requests[2]?.messages.at(-1)?.content)
+      .toContain("The collected evidence remains available.");
+  } finally {
+    fixture.close();
+  }
+});
+
 test("Guided fallback projects the cursor model into public iteration and fallback evidence", async () => {
   const fixture = createFixture("guided-model-route-projection");
   try {
@@ -2640,34 +2731,24 @@ test("Guided agent turns provider failure into one fact-based final report", asy
     writeFileSync(join(fixture.root, "settings.json"), '{"enabled":true}\n');
     let calls = 0;
     const fallbackAgent = fixture.agent(scriptedModelRound([
-      toolResponse([
-        toolCall("read-1", "read_file", { path: "settings.json" }),
-      ], "설정 파일을 확인하겠습니다."),
+      (request) => {
+        calls += 1;
+        return toolResponse([
+          toolCall("read-1", "read_file", { path: "settings.json" }),
+        ], "설정 파일을 확인하겠습니다.");
+      },
       () => {
         calls += 1;
         throw knownProviderFailure("provider disconnected after usable text");
       },
-      (request) => {
-        calls += 1;
-        expect(request.tools).toEqual([]);
-        expect(request.messages[0]?.content).not.toContain("Tool read_file");
-        expect(request.messages[0]?.content).not.toContain('enabled\\":true');
-        expect(request.messages[0]?.content).toContain(
-          "No user-safe completion summary was recorded",
-        );
-        expect(messagesWithToolResults(request)).toHaveLength(0);
-        return {
-          text: "설정 확인 도중 연결이 끊겼습니다. 완료되지 않은 내용은 완료로 처리하지 않았습니다.",
-          toolCalls: [],
-        };
-      },
     ]));
-    expect(await fallbackAgent.run({
+    const outcome = await fallbackAgent.run({
       turn: turnRecord(fixture.root),
       signal: new AbortController().signal,
-    })).toEqual({
+    });
+    expect(outcome).toEqual({
       route: "assisted",
-      content: "설정 확인 도중 연결이 끊겼습니다. 완료되지 않은 내용은 완료로 처리하지 않았습니다.",
+      content: "작업을 진행했지만 답변 생성을 마치지 못했습니다.\n완료되지 않은 작업을 완료로 처리하지 않았습니다.",
     });
     expect(calls).toBe(2);
 
@@ -2903,7 +2984,7 @@ test("Guided operational fallback follows configured response language", () => {
   expect(fallback).not.toContain("답변 생성을");
 });
 
-test("Guided operational fallback is captured before the final report model call", async () => {
+test("Guided operational fallback is captured without a second report model call", async () => {
   const toolCall = {
     callId: "guided-fallback-precomputed-call",
     toolName: "read_file",
@@ -2918,12 +2999,6 @@ test("Guided operational fallback is captured before the final report model call
     () => {
       calls += 1;
       throw knownProviderFailure("main provider failure");
-    },
-    () => {
-      calls += 1;
-      toolCall.status = "completed";
-      toolCall.result = { marker: "mutated-during-report-model" };
-      throw new Error("final report provider failure");
     },
   ]);
 
@@ -2944,30 +3019,57 @@ test("Guided operational fallback is captured before the final report model call
     }),
   });
 
-  expect(calls).toBe(2);
+  expect(calls).toBe(1);
   expect(answer).toContain("답변 생성을 마치지 못했습니다");
   expect(answer).not.toContain("Tool read_file");
   expect(answer).not.toContain("captured-before-report-model");
-  expect(answer).not.toContain("mutated-during-report-model");
 });
 
-test("Guided operational report keeps the normal persona instructions", async () => {
-  const seenInstructions: Array<string | undefined> = [];
+test("Guided operational fallback never exposes a model budget or retry request", async () => {
+  let calls = 0;
   const modelRound = scriptedModelRound([
-    (request) => {
-      seenInstructions.push(request.instructions);
+    () => {
+      calls += 1;
       throw knownProviderFailure("main provider failure");
     },
-    (request) => {
-      seenInstructions.push(request.instructions);
-      return { text: "연결이 끊겼지만 진행 내용은 저장했냥.", toolCalls: [] };
+  ]);
+
+  const answer = await runGuidedAgentLoopWithOperationalReport({
+    options: {
+      prompt: "결과를 알려 주세요.",
+      tools: [],
+      modelRound,
+      maxIterations: 1,
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    originalRequest: "결과를 알려 주세요.",
+    loadFacts: async () => ({
+      work: null,
+      toolCalls: [],
+      effects: [],
+    }),
+  });
+
+  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(answer).not.toContain("available tool budget");
+  expect(answer).not.toContain("another turn");
+  expect(answer).not.toMatch(/retry|다시 요청/iu);
+  expect(calls).toBe(1);
+});
+
+test("Guided operational fallback is deterministic instead of a persona model call", async () => {
+  let calls = 0;
+  const modelRound = scriptedModelRound([
+    () => {
+      calls += 1;
+      throw knownProviderFailure("main provider failure");
     },
   ]);
 
   const answer = await runGuidedAgentLoopWithOperationalReport({
     options: {
       prompt: "작업을 완료해 줘.",
-      instructions: "Active Persona Reminder: 모든 사용자 답변은 냥으로 끝낸다.",
       tools: [],
       modelRound,
       maxIterations: 1,
@@ -2978,13 +3080,11 @@ test("Guided operational report keeps the normal persona instructions", async ()
     loadFacts: async () => ({ work: null, toolCalls: [], effects: [] }),
   });
 
-  expect(answer).toBe("연결이 끊겼지만 진행 내용은 저장했냥.");
-  expect(seenInstructions).toHaveLength(2);
-  expect(seenInstructions[1]).toContain("모든 사용자 답변은 냥으로 끝낸다.");
-  expect(seenInstructions[1]).toContain("Do not expose internal Work");
+  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(calls).toBe(1);
 });
 
-test("Guided empty main response still receives one fact-based report request", async () => {
+test("Guided empty main response returns a deterministic fact-based fallback", async () => {
   let calls = 0;
   let factLoads = 0;
 
@@ -2992,10 +3092,6 @@ test("Guided empty main response still receives one fact-based report request", 
     () => {
       calls += 1;
       return { text: "   ", toolCalls: [] };
-    },
-    () => {
-      calls += 1;
-      return { text: "확인된 작업은 없으며 다시 요청할 수 있습니다.", toolCalls: [] };
     },
   ]);
 
@@ -3015,8 +3111,9 @@ test("Guided empty main response still receives one fact-based report request", 
     },
   });
 
-  expect(answer).toBe("확인된 작업은 없으며 다시 요청할 수 있습니다.");
-  expect(calls).toBe(2);
+  expect(answer).toContain("답변 생성을 마치지 못했습니다");
+  expect(answer).not.toMatch(/다시 요청|retry|continue/iu);
+  expect(calls).toBe(1);
   expect(factLoads).toBe(1);
 });
 
@@ -3046,6 +3143,41 @@ test("Guided unexpected local failure does not start an operational report reque
       return { work: null, toolCalls: [], effects: [] };
     },
   })).rejects.toThrow("local prompt assembly invariant failed");
+
+  expect(calls).toBe(1);
+  expect(factLoads).toBe(0);
+});
+
+test("Guided permanent provider failure does not start an operational report request", async () => {
+  let calls = 0;
+  let factLoads = 0;
+  const permanent = new ModelProviderRequestError({
+    code: "provider_auth_error",
+    message: "provider credentials rejected",
+    provider: "test-provider",
+    retryable: false,
+  });
+
+  await expect(runGuidedAgentLoopWithOperationalReport({
+    options: {
+      prompt: "영구적인 제공자 오류를 전달해 주세요.",
+      tools: [],
+      modelRound: scriptedModelRound([
+        () => {
+          calls += 1;
+          throw permanent;
+        },
+      ]),
+      maxIterations: 1,
+      executeTool: async () => undefined,
+    },
+    parentSignal: new AbortController().signal,
+    originalRequest: "영구적인 제공자 오류를 전달해 주세요.",
+    loadFacts: async () => {
+      factLoads += 1;
+      return { work: null, toolCalls: [], effects: [] };
+    },
+  })).rejects.toBe(permanent);
 
   expect(calls).toBe(1);
   expect(factLoads).toBe(0);
