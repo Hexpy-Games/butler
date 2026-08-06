@@ -21,8 +21,11 @@ import { synthesizeFinalResponse } from "./final-response-synthesis.ts";
 import { publishModelRoundWaiting } from "./guided-tool-progress.ts";
 import { renderPartialLimitResponse } from "./partial-limit-response.ts";
 import { toolResultToMessage } from "./tool-result-message.ts";
-
-const DEFAULT_MAX_ITERATIONS = 8;
+import {
+  emitExecutionWindowBoundary,
+  resolveExecutionWindowSize,
+  throwIfExecutionWindowAborted,
+} from "./execution-window.ts";
 
 function emit(
   events: BtccAgentLoopEvent[],
@@ -38,7 +41,7 @@ export async function runBtccAgentLoop(
 ): Promise<BtccAgentLoopOutput> {
   const messages: BtccAgentLoopMessage[] = [{ role: "user", content: input.prompt }];
   const events: BtccAgentLoopEvent[] = [];
-  const maxIterations = resolveMaxIterations(input);
+  const maxIterations = resolveExecutionWindowSize(input);
   const toolResults: BtccAgentLoopToolResult[] = [];
   const modelPreviewContext = createToolResultModelPreviewContext();
   let continuation: unknown;
@@ -152,7 +155,7 @@ export async function runBtccAgentLoop(
   while (true) {
     const windowEndIteration = iteration + maxIterations;
     while (iteration < windowEndIteration) {
-      throwIfAborted(input.signal);
+      throwIfExecutionWindowAborted(input.signal);
       const currentIteration = iteration;
       iteration += 1;
       emit(events, input.onEvent, { type: "model_call", iteration: currentIteration });
@@ -224,6 +227,9 @@ export async function runBtccAgentLoop(
         emptyResponseRecoveryUsed = true;
         messages.push({ role: "user", content: recoveryObservation });
         continue;
+      }
+      if (!text && input.onExecutionWindowBoundary) {
+        break;
       }
       if (!text) return { finalText: "", messages, events, stoppedByLimit: false };
       if (input.reviewFinalCandidate) {
@@ -303,22 +309,18 @@ export async function runBtccAgentLoop(
       }
     }
   }
-    emit(events, input.onEvent, {
-      type: "execution_window_boundary",
-      iteration,
-      windowIndex,
-    });
-    throwIfAborted(input.signal);
-    const boundaryObservation = await input.onExecutionWindowBoundary?.({
+    const boundaryObservation = await emitExecutionWindowBoundary({
+      events,
+      onEvent: input.onEvent,
+      callback: input.onExecutionWindowBoundary,
+      signal: input.signal,
       windowIndex,
       iteration,
       messages,
       toolResults,
     });
     if (boundaryObservation !== undefined) {
-      const observation = boundaryObservation.trim();
-      if (!observation) throw new Error("btcc_execution_window_observation_missing");
-      messages.push({ role: "user", content: observation });
+      messages.push({ role: "user", content: boundaryObservation });
       windowIndex += 1;
       continue;
     }
@@ -342,14 +344,4 @@ export async function runBtccAgentLoop(
   const finalText = renderPartialLimitResponse(toolResults);
   messages.push({ role: "assistant", content: finalText });
   return { finalText, messages, events, stoppedByLimit: true };
-}
-
-function resolveMaxIterations(input: BtccAgentLoopInput): number {
-  return Math.max(1, input.maxIterations ?? DEFAULT_MAX_ITERATIONS);
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (!signal?.aborted) return;
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("BTCC agent loop was aborted");
 }

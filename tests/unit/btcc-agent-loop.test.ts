@@ -946,6 +946,63 @@ test("BTCC continues through multiple execution windows in the same loop", async
     .toHaveLength(3);
 });
 
+test("BTCC carries an empty window response into the next execution window", async () => {
+  const { port, requests } = scriptedModelRound([
+    response(),
+    response({ text: "completed after the empty window" }),
+  ]);
+  const boundaries: number[] = [];
+
+  const result = await runBtccAgentLoop({
+    prompt: "recover from an empty window",
+    model: "test/model",
+    tools: [echoTool],
+    maxIterations: 1,
+    modelRound: port,
+    executeTool: async () => ({ ok: true }),
+    onExecutionWindowBoundary: ({ windowIndex }) => {
+      boundaries.push(windowIndex);
+      return "Execution checkpoint: preserve the existing evidence.";
+    },
+  });
+
+  expect(result.finalText).toBe("completed after the empty window");
+  expect(result.stoppedByLimit).toBe(false);
+  expect(requests).toHaveLength(2);
+  expect(boundaries).toEqual([0]);
+  expect(requests[1]?.messages.at(-1)).toMatchObject({
+    role: "user",
+    content: "Execution checkpoint: preserve the existing evidence.",
+  });
+});
+
+test("BTCC continues after an empty response in a later execution window", async () => {
+  const { port } = scriptedModelRound([
+    response(),
+    response({ toolCalls: [call("empty-window-tool", "echo", { message: "evidence" })] }),
+    response(),
+    response({ text: "completed after persistent empty responses" }),
+  ]);
+  let boundaries = 0;
+
+  const result = await runBtccAgentLoop({
+    prompt: "preserve the same Turn through empty responses",
+    model: "test/model",
+    tools: [echoTool],
+    maxIterations: 2,
+    modelRound: port,
+    executeTool: async () => ({ ok: true }),
+    onExecutionWindowBoundary: () => {
+      boundaries += 1;
+      return "Execution checkpoint: preserve the existing evidence.";
+    },
+  });
+
+  expect(result.finalText).toBe("completed after persistent empty responses");
+  expect(result.stoppedByLimit).toBe(false);
+  expect(boundaries).toBe(2);
+});
+
 test("BTCC treats a two-iteration window as non-terminal", async () => {
   let modelCalls = 0;
   let boundaries = 0;
