@@ -138,7 +138,7 @@ export interface BtccAgentLoopInput {
     iteration: number;
     messages: readonly BtccAgentLoopMessage[];
     toolResults: readonly BtccAgentLoopToolResult[];
-  }) => Promise<string> | string;
+  }) => Promise<string | undefined> | string | undefined;
   maxIterations?: number;
   onAssistantTextBeforeTools?: (input: {
     text: string;

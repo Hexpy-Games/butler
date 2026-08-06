@@ -95,6 +95,12 @@ export async function runLegacyFunctionToolPromptText(
     resolveToolChoice: () => requiredToolRepairNames ? "required" : options.toolChoice ?? "auto",
     modelRound,
     maxIterations: options.maxToolRounds,
+    onExecutionWindowBoundary: options.onExecutionWindowBoundary
+      ? ({ windowIndex, iteration }) => options.onExecutionWindowBoundary!({
+          windowIndex,
+          iteration,
+        })
+      : undefined,
     onAssistantTextBeforeTools: async ({ text, toolCalls }) => {
       if (localModel && toolCalls.every((call) => call.origin !== "text")) {
         requiredToolRepairNames = null;
