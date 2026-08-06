@@ -50,6 +50,8 @@ const NON_FULL_ACCESS_TOOL_NAMES = new Set([
   "get_usage_monitor",
   "get_memory_health",
   "read_conversation_context",
+  "list_conversation_sessions",
+  "read_conversation_session",
   "recall_memory",
   "query_memory",
   "list_automations",
@@ -110,6 +112,7 @@ export function authorizedToolDefinitions(
   const requiredProfiles = new Set([
     ...policy.requiredNativeToolProfiles,
     "public-web",
+    "memory-read",
     ...(policy.accessMode === "full_access" ? ["workspace"] : []),
     ...(policy.projectId || turn.context.projectRef ? ["project"] : []),
   ]);
@@ -206,6 +209,9 @@ export function visibleToolDefinitions(
     "web_read",
     "read_file",
     "grep_files",
+    "recall_memory",
+    "list_conversation_sessions",
+    "read_conversation_session",
     ...DURABLE_WORK_TOOL_DEFINITIONS.map((tool) => tool.name),
     "project_ledger_status",
     ...(projectLedgerWork

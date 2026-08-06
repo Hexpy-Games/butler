@@ -34,6 +34,8 @@ const expectedNamesByBoundary = {
     "query_memory",
     "summarize_user_profile",
     "read_conversation_context",
+    "list_conversation_sessions",
+    "read_conversation_session",
     "list_skills",
   ],
   turn_local: [
