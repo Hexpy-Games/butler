@@ -12,10 +12,25 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { BtccAgentLoop as GuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import { runBtccAgentLoop } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import type { ModelRoundPort } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+
+const executionWindowEchoTool = {
+  name: "echo",
+  description: "Echo a message.",
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: { message: { type: "string" } },
+    required: ["message"],
+  },
+};
 
 test("Guided Turn answers directly through only durable admission and delivery states", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-direct-"));
@@ -70,6 +85,90 @@ test("Guided Turn answers directly through only durable admission and delivery s
         "admitted",
         "delivery_committed",
       ]);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided execution windows stay in one Turn and commit one canonical answer", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-same-turn-window-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-same-turn-window",
+    storageProfile: "ephemeral",
+  });
+  const turnIds: string[] = [];
+  let agentRuns = 0;
+  let modelCalls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    agent: {
+      async run({ turn }) {
+        agentRuns += 1;
+        turnIds.push(turn.turnId);
+        const modelRound: ModelRoundPort = {
+          async runRound() {
+            modelCalls += 1;
+            return modelCalls === 1
+              ? {
+                  toolCalls: [{
+                    id: "same-turn-window-tool",
+                    name: "echo",
+                    arguments: { message: "checkpoint" },
+                    rawArguments: '{"message":"checkpoint"}',
+                  }],
+                }
+              : { text: "완료된 단일 최종 답변입니다.", toolCalls: [] };
+          },
+        };
+        const loop = await runBtccAgentLoop({
+          prompt: turn.originalMessage,
+          turnId: turn.turnId,
+          tools: [executionWindowEchoTool],
+          maxIterations: 1,
+          modelRound,
+          executeTool: async (call) => ({
+            message: call.arguments.message,
+          }),
+          onExecutionWindowBoundary: () =>
+            "Execution checkpoint: use the existing evidence and finish the original request.",
+        });
+        return { route: "direct", content: loop.finalText };
+      },
+    },
+  });
+  const command = runCommand("guided-same-turn-window");
+  try {
+    const result = await runtime.runTurn(command);
+    expect(result).toMatchObject({
+      kind: "delivered",
+      turnId: command.turnId,
+      content: "완료된 단일 최종 답변입니다.",
+    });
+    expect(agentRuns).toBe(1);
+    expect(modelCalls).toBe(2);
+    expect(turnIds).toEqual([command.turnId]);
+    expect((await stores.turns.findTurn(command.turnId))?.semanticState)
+      .toBe("delivered");
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_messages
+        WHERE turn_id = ? AND role = 'assistant'
+      `).get(command.turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_turns WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_canonical_deliveries WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(1);
     } finally {
       db.close();
     }
