@@ -37,6 +37,8 @@ import { queryMemoryToolDefinition, queryMemoryToolMetadata } from "./memory/que
 import { summarizeUserProfileToolDefinition, summarizeUserProfileToolMetadata } from "./memory/summarize_user_profile/index.ts";
 import { updateOnboardingProfileToolDefinition, updateOnboardingProfileToolMetadata } from "./memory/update_onboarding_profile/index.ts";
 import { readConversationContextToolDefinition, readConversationContextToolMetadata } from "./memory/read_conversation_context/index.ts";
+import { listConversationSessionsToolDefinition, listConversationSessionsToolMetadata } from "./memory/list_conversation_sessions/index.ts";
+import { readConversationSessionToolDefinition, readConversationSessionToolMetadata } from "./memory/read_conversation_session/index.ts";
 import { updateExplicitMemoryToolDefinition, updateExplicitMemoryToolMetadata } from "./memory/update_explicit_memory/index.ts";
 import { listSkillsToolDefinition, listSkillsToolMetadata } from "./skills/list_skills/index.ts";
 import {
@@ -87,6 +89,8 @@ export const CORE_BUTLER_TOOLS = [
   summarizeUserProfileToolDefinition,
   updateOnboardingProfileToolDefinition,
   readConversationContextToolDefinition,
+  listConversationSessionsToolDefinition,
+  readConversationSessionToolDefinition,
   updateExplicitMemoryToolDefinition,
   listSkillsToolDefinition,
 ] satisfies ButlerToolDefinition[];
@@ -136,6 +140,8 @@ export const TOOL_CAPABILITY_METADATA: Record<string, ToolCapabilityMetadata> = 
   [summarizeUserProfileToolDefinition.name]: summarizeUserProfileToolMetadata,
   [updateOnboardingProfileToolDefinition.name]: updateOnboardingProfileToolMetadata,
   [readConversationContextToolDefinition.name]: readConversationContextToolMetadata,
+  [listConversationSessionsToolDefinition.name]: listConversationSessionsToolMetadata,
+  [readConversationSessionToolDefinition.name]: readConversationSessionToolMetadata,
   [updateExplicitMemoryToolDefinition.name]: updateExplicitMemoryToolMetadata,
   [listSkillsToolDefinition.name]: listSkillsToolMetadata,
 };

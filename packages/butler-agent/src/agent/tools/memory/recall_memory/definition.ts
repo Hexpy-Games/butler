@@ -22,14 +22,14 @@ export const recallMemoryToolDefinition = {
       },
       vector_queries: {
         type: "array",
-        description: "Optional planner-expanded semantic episode queries.",
+        description: "Optional current-phase model-expanded semantic episode queries.",
         items: {
           type: "string",
         },
       },
       generated_queries: {
         type: "array",
-        description: "Optional structured retrieval-plan queries. `search_vector_episode` queries are used as vector episode queries.",
+        description: "Optional selected-model semantic expansions. `search_vector_episode` queries are used as vector episode queries.",
         items: {
           type: "object",
           additionalProperties: false,
@@ -58,7 +58,7 @@ export const recallMemoryToolDefinition = {
       },
       strategies: {
         type: "array",
-        description: "Optional model-selected retrieval strategies for this recall. Use this to make ranking follow the planned evidence path instead of the fallback scorer.",
+        description: "Optional current-phase model-selected retrieval strategies for this recall. Use this to make ranking follow the requested evidence path instead of the fallback scorer.",
         items: {
           type: "string",
           enum: [

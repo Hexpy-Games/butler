@@ -7,10 +7,6 @@ import {
 } from "../../integrations/search/planning.ts";
 import { readPageConfigured } from "../../integrations/search/page-reader.ts";
 import { AutomationStore } from "../../operations/service/automation-store.ts";
-import {
-  type RetrievalPlanningInput,
-  type RetrievalPlanningResult,
-} from "../cognition/memory/retrieval-planning.ts";
 import type { VectorEpisodeBackend } from "../cognition/memory/recall/vector.ts";
 import type { BtccAgentLoopToolDefinition } from "../btcc/agent-loop/index.ts";
 import type { PublicWorkObligationKind } from "./tool-support.ts";
@@ -150,7 +146,6 @@ export function createButlerToolExecutor(input: {
   searchPlannerOriginalRequest?: string;
   workerModel?: string;
   searchPlannerModel?: string;
-  memoryRetrievalPlanner?: (input: RetrievalPlanningInput) => Promise<RetrievalPlanningResult>;
   memoryVectorBackend?: VectorEpisodeBackend;
   memoryVectorTimeoutMs?: number;
   webSearchProvider?: WebSearchProvider;
@@ -254,11 +249,6 @@ export function createButlerToolExecutor(input: {
       appMessageDbPath: input.appMessageDbPath,
       sessionId: input.sessionId,
       projectId: input.projectId,
-      turnContext: input.turnContext,
-      searchPlannerOriginalRequest: input.searchPlannerOriginalRequest,
-      workerModel: input.workerModel,
-      searchPlannerModel: input.searchPlannerModel,
-      memoryRetrievalPlanner: input.memoryRetrievalPlanner,
       memoryVectorBackend: input.memoryVectorBackend,
       memoryVectorTimeoutMs: input.memoryVectorTimeoutMs,
     }),

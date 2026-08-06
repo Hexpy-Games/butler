@@ -140,7 +140,10 @@ test("initial surface selection uses structured controller state without prompt 
     "tool_call",
     "update_todo_list",
     "list_todo_list",
+    "recall_memory",
     "read_conversation_context",
+    "list_conversation_sessions",
+    "read_conversation_session",
   ]);
 });
 

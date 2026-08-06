@@ -7,6 +7,7 @@ import {
   authorizedToolDefinitions,
   guidedNativeToolDefinitions,
   guidedPolicy,
+  visibleToolDefinitions,
 } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/guided-turn-policy.ts";
 import {
@@ -258,6 +259,35 @@ test("R3 continuation guidance repairs legacy Work labels and refreshes downstre
   expect(instructions).toContain("reopening an earlier action after partial closeout");
   expect(instructions).toContain("when their results must now be refreshed");
   expect(instructions).toContain("dependent later actions and their statuses in the same update");
+});
+
+test("R3 Conception guidance actively selects associative recall and exposes cross-session tools", () => {
+  const turn = turnRecord({
+    projectRef: "butler",
+    accessMode: "read_only",
+    executionPolicy: executionPolicy("ledger"),
+  });
+  const instructions = guidedInstructions(guidedPolicy(turn));
+  const definitions = authorizedToolDefinitions(turn, {});
+  const authorized = definitions.map((tool) => tool.name);
+  const visible = visibleToolDefinitions(definitions, guidedPolicy(turn))
+    .map((tool) => tool.name);
+
+  expect(instructions).toContain("Conception");
+  expect(instructions).toContain("recall_memory");
+  expect(instructions).toContain("durable user preferences");
+  expect(instructions).toContain("Hot Cache");
+  expect(instructions).toContain("materially improve personalization or goal fidelity");
+  expect(instructions).toContain("list_conversation_sessions");
+  expect(instructions).toContain("read_conversation_session");
+  expect(instructions).toContain("current context is genuinely sufficient");
+  expect(instructions).not.toContain("keyword classifier");
+  expect(authorized).toContain("recall_memory");
+  expect(authorized).toContain("list_conversation_sessions");
+  expect(authorized).toContain("read_conversation_session");
+  expect(visible).toContain("recall_memory");
+  expect(visible).toContain("list_conversation_sessions");
+  expect(visible).toContain("read_conversation_session");
 });
 
 test("R3 guided prompt reports disabled Work without inventing a Work context", () => {
