@@ -1,6 +1,6 @@
 {
   "name": "butler-electron-client",
-  "version": "0.0.19",
+  "version": "0.0.20",
   "private": true,
   "type": "module",
   "productName": "Butler",

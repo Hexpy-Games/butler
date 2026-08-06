@@ -25,6 +25,7 @@ export function guidedOperationalReportPrompt(input: OperationalFacts): string {
     "Clearly separate what completed, what remains, and any limitation.",
     "Do not mention Work records, internal stages, tools, journals, effects, ids, counts, schemas, or raw errors.",
     "Do not claim that an unlisted action happened. Do not call tools.",
+    "Do not ask or suggest that the user retry, continue, start a new Turn, or send another message.",
     "",
     `Original request: ${input.originalRequest}`,
     ...operationalReportFactLines(input),

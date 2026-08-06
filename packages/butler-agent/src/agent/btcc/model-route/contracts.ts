@@ -5,12 +5,9 @@ export const MODEL_ROUTE_SCHEMA = "butler.model-route.v1" as const;
 export const MODEL_ROUTE_MAX_CANDIDATES = 6;
 export const MODEL_ROUTE_MAX_RETRY_ATTEMPTS = 5;
 export const MODEL_ROUTE_DEFAULT_RETRY_ATTEMPTS = 3;
-/** A route can physically dispatch at most every candidate's retry ceiling. */
+/** A single runRound can physically dispatch at most every candidate's retry ceiling. */
 export const MODEL_ROUTE_MAX_DISPATCHES =
   MODEL_ROUTE_MAX_CANDIDATES * MODEL_ROUTE_MAX_RETRY_ATTEMPTS;
-/** Turn-level physical bound: R * (MAX_TOOL_ROUNDS + candidateCount). */
-export const MODEL_ROUTE_MAX_TURN_DISPATCHES =
-  MODEL_ROUTE_MAX_RETRY_ATTEMPTS * (60 + MODEL_ROUTE_MAX_CANDIDATES);
 
 export type ModelRouteCandidate = {
   modelRef: string;
@@ -111,12 +108,12 @@ export class ModelRouteRecoveredFailureError extends Error {
   }
 }
 
-/** Deterministic guard against a malformed route causing unbounded dispatch. */
+/** Deterministic guard against a malformed runRound causing unbounded dispatch. */
 export class ModelRouteDispatchLimitError extends Error {
   readonly code = "model_route_dispatch_limit_exceeded" as const;
 
   constructor(readonly maxDispatches: number) {
-    super(`BTCC model route dispatch limit exceeded (${maxDispatches})`);
+    super(`BTCC model route runRound dispatch limit exceeded (${maxDispatches})`);
     this.name = "ModelRouteDispatchLimitError";
   }
 }

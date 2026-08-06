@@ -12,10 +12,27 @@ import {
 } from "../../packages/butler-agent/src/agent/btcc/turn/index.ts";
 import type { BtccAgentLoop as GuidedTurnAgent } from
   "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import { runBtccAgentLoop } from
+  "../../packages/butler-agent/src/agent/btcc/agent-loop/index.ts";
+import type { ModelRoundPort } from
+  "../../packages/butler-agent/src/agent/btcc/ports/model-round.ts";
 import { openBtccSqliteStores } from
   "../../packages/butler-agent/src/agent/adapters/btcc/sqlite/index.ts";
 import { buildModelRoute } from
   "../../packages/butler-agent/src/agent/btcc/model-route/index.ts";
+import { ModelProviderRequestError } from
+  "../../packages/butler-agent/src/integrations/providers/provider-errors.ts";
+
+const executionWindowEchoTool = {
+  name: "echo",
+  description: "Echo a message.",
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: { message: { type: "string" } },
+    required: ["message"],
+  },
+};
 
 test("Guided Turn answers directly through only durable admission and delivery states", async () => {
   const root = mkdtempSync(join(tmpdir(), "btcc-guided-direct-"));
@@ -70,6 +87,90 @@ test("Guided Turn answers directly through only durable admission and delivery s
         "admitted",
         "delivery_committed",
       ]);
+    } finally {
+      db.close();
+    }
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided execution windows stay in one Turn and commit one canonical answer", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-same-turn-window-"));
+  const dbPath = join(root, "btcc.sqlite");
+  const stores = openBtccSqliteStores({
+    dbPath,
+    ownerId: "guided-same-turn-window",
+    storageProfile: "ephemeral",
+  });
+  const turnIds: string[] = [];
+  let agentRuns = 0;
+  let modelCalls = 0;
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    agent: {
+      async run({ turn }) {
+        agentRuns += 1;
+        turnIds.push(turn.turnId);
+        const modelRound: ModelRoundPort = {
+          async runRound() {
+            modelCalls += 1;
+            return modelCalls === 1
+              ? {
+                  toolCalls: [{
+                    id: "same-turn-window-tool",
+                    name: "echo",
+                    arguments: { message: "checkpoint" },
+                    rawArguments: '{"message":"checkpoint"}',
+                  }],
+                }
+              : { text: "완료된 단일 최종 답변입니다.", toolCalls: [] };
+          },
+        };
+        const loop = await runBtccAgentLoop({
+          prompt: turn.originalMessage,
+          turnId: turn.turnId,
+          tools: [executionWindowEchoTool],
+          maxIterations: 1,
+          modelRound,
+          executeTool: async (call) => ({
+            message: call.arguments.message,
+          }),
+          onExecutionWindowBoundary: () =>
+            "Execution checkpoint: use the existing evidence and finish the original request.",
+        });
+        return { route: "direct", content: loop.finalText };
+      },
+    },
+  });
+  const command = runCommand("guided-same-turn-window");
+  try {
+    const result = await runtime.runTurn(command);
+    expect(result).toMatchObject({
+      kind: "delivered",
+      turnId: command.turnId,
+      content: "완료된 단일 최종 답변입니다.",
+    });
+    expect(agentRuns).toBe(1);
+    expect(modelCalls).toBe(2);
+    expect(turnIds).toEqual([command.turnId]);
+    expect((await stores.turns.findTurn(command.turnId))?.semanticState)
+      .toBe("delivered");
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_messages
+        WHERE turn_id = ? AND role = 'assistant'
+      `).get(command.turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_turns WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(1);
+      expect(db.query<{ count: number }, [string]>(`
+        SELECT COUNT(*) AS count FROM btcc_canonical_deliveries WHERE turn_id = ?
+      `).get(command.turnId)?.count).toBe(1);
     } finally {
       db.close();
     }
@@ -192,7 +293,12 @@ test("Guided Turn delivers an explicit operational failure when the model produc
     messages: stores.messages,
     agent: {
       async run() {
-        throw new Error("provider disconnected before final answer");
+        throw new ModelProviderRequestError({
+          code: "provider_network_error",
+          message: "provider disconnected before final answer",
+          provider: "test-provider",
+          retryable: true,
+        });
       },
     },
   });
@@ -200,8 +306,43 @@ test("Guided Turn delivers an explicit operational failure when the model produc
     expect(await runtime.runTurn(runCommand("guided-provider-failure-turn")))
       .toMatchObject({
         kind: "delivered",
-        content: "요청을 처리하는 중 일시적인 문제가 발생했습니다. 작업은 안전하게 중단되었으며, 다시 요청해 주시면 이어서 처리하겠습니다.",
+        content: "모델 연결이 일시적으로 중단되어 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.",
       });
+  } finally {
+    stores.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Guided Turn reports a permanent provider failure without a retry request", async () => {
+  const root = mkdtempSync(join(tmpdir(), "btcc-guided-provider-permanent-"));
+  const stores = openBtccSqliteStores({
+    dbPath: join(root, "btcc.sqlite"),
+    ownerId: "guided-provider-permanent",
+    storageProfile: "ephemeral",
+  });
+  const runtime = createGuidedTurnRuntime({
+    admission: stores.admission,
+    turns: stores.turns,
+    messages: stores.messages,
+    agent: {
+      async run() {
+        throw new ModelProviderRequestError({
+          code: "provider_auth_error",
+          message: "provider credentials rejected",
+          provider: "test-provider",
+          retryable: false,
+        });
+      },
+    },
+  });
+  try {
+    const result = await runtime.runTurn(runCommand("guided-provider-permanent-turn"));
+    expect(result).toMatchObject({
+      kind: "delivered",
+      content: "모델 제공자 설정 또는 요청이 승인되지 않아 이 Turn의 답변을 완료하지 못했습니다. 저장된 작업과 확인된 결과는 변경하지 않았습니다.",
+    });
+    expect(JSON.stringify(result)).not.toMatch(/다시 요청|이어|retry|continue/iu);
   } finally {
     stores.close();
     rmSync(root, { recursive: true, force: true });

@@ -1,7 +1,5 @@
 import type { DurableWorkService } from "../work/index.ts";
-import type {
-  BtccAgentLoopInput,
-} from "./contracts.ts";
+import type { BtccAgentLoopInput } from "./contracts.ts";
 import type { ModelRoundPort } from "../ports/model-round.ts";
 import { createGuidedEffectService } from "../effects/index.ts";
 import type { BtccAgentLoop, BtccAgentLoopResult } from "./contracts.ts";
@@ -55,6 +53,7 @@ import {
   currentModelRouteCandidate,
   type ModelRouteEvent,
 } from "../model-route/index.ts";
+import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -65,6 +64,8 @@ export function createProductionGuidedTurnAgent(input: {
   effectJournal: SqliteGuidedEffectJournal;
   durableWork: DurableWorkService;
   modelRound?: ModelRoundPort;
+  /** Test seam for exercising more than one internal execution window. */
+  executionWindowSize?: number;
 }): BtccAgentLoop {
   const projectLedgerResolver = new ActiveProjectLedgerResolver();
   return {
@@ -270,9 +271,24 @@ export function createProductionGuidedTurnAgent(input: {
         attachments: providerImageAttachments(turn),
         onProviderResponseIdentity,
         tools: visibleTools,
-        // Guided turns are bounded just like every other BTCC model loop.
-        maxIterations: 60,
+        // This is an internal execution-window size. The same Turn remains
+        // active across windows until the model reaches a final answer.
+        maxIterations: Math.max(1, input.executionWindowSize ?? 60),
         modelRound,
+        onExecutionWindowBoundary: async ({ windowIndex }) => {
+          if (signal.aborted) throwGuidedAbort(signal);
+          const refreshedContext = policy.trackingMode === "none"
+            ? null
+            : await safeLoadWorkContext(input.durableWork, workScope);
+          const refreshedBoundWork = policy.trackingMode === "none"
+            ? null
+            : await safeBoundWork(input.durableWork, turn.turnId);
+          return renderExecutionWindowObservation({
+            windowIndex,
+            context: refreshedContext,
+            boundWork: refreshedBoundWork,
+          });
+        },
         onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
           text,
           toolCalls: calls.map((call) => ({
@@ -317,4 +333,9 @@ export function createProductionGuidedTurnAgent(input: {
       };
     },
   };
+}
+
+function throwGuidedAbort(signal: AbortSignal): never {
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Guided Turn was aborted");
 }
