@@ -6,6 +6,10 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   SANDY_CANONICAL_DB_PATH,
+  SANDY_CAPTURE_TURN_IDS,
+  SANDY_MONITORING_TURN_IDS,
+  SANDY_SESSION_ID,
+  SANDY_SOURCE_WORK_ID,
   sha256,
   stableJson,
   type SandyCorrectionInput,
@@ -13,18 +17,28 @@ import {
 } from "./sandy-correction-contracts.ts";
 import { readDatabaseIdentity, sameStableDatabaseIdentity } from "./sandy-correction-identity.ts";
 import { backupSandyDatabase } from "./sandy-correction-backup.ts";
+import { readSandyCorrection } from "./sandy-correction-snapshot.ts";
 
 export type SandyOwnerStopManifest = {
   version: "sandy-owner-stop-manifest.v1";
   dbPath: string;
   generatedAt: string;
   dbSha256: string;
+  /** Raw DB file content identity; dbSha256 is the semantic identity. */
+  dbFileSha256?: string;
+  dbFileSize?: number;
   wal: { exists: boolean; size: number; mtimeMs: number; sha256: string | null };
   shm: { exists: boolean; size: number; mtimeMs: number; sha256: string | null };
   ownerPids: number[];
   nonce: string;
   backupBundleIdentity: string;
   sqliteSnapshotSha256: string;
+  /** Semantic source evidence captured before the owner-stop backup. */
+  sourceSnapshotSha256?: string;
+  sourceBindingDigest?: string;
+  sourceResultDigest?: string;
+  selectedToolJournalCount?: number;
+  selectedToolJournalDigest?: string;
   manifestSha256: string;
 };
 
@@ -44,8 +58,9 @@ export function prepareSandyOwnerStop(input: SandyPrepareLiveInput): SandyOwnerS
     throw new Error("prepare-live refused while a known Butler owner process is running");
   }
   const before = readDatabaseIdentity(input.dbPath);
+  const beforeDb = fileState(input.dbPath);
   const beforeWAL = fileState(`${input.dbPath}-wal`);
-  const beforeSHM = fileState(`${input.dbPath}-shm`);
+  const beforeSemantic = readSandyOwnerSemanticSnapshot(input.dbPath);
   const nonce = randomBytes(16).toString("hex");
   const backup = backupSandyDatabase({
     dbPath: input.dbPath,
@@ -55,10 +70,13 @@ export function prepareSandyOwnerStop(input: SandyPrepareLiveInput): SandyOwnerS
   });
   const ownersAfter = knownButlerOwners();
   const after = readDatabaseIdentity(input.dbPath);
+  const afterDb = fileState(input.dbPath);
   const afterWAL = fileState(`${input.dbPath}-wal`);
   const afterSHM = fileState(`${input.dbPath}-shm`);
+  const afterSemantic = readSandyOwnerSemanticSnapshot(input.dbPath);
   if (ownersAfter.length > 0 || !sameStableDatabaseIdentity(before, after) ||
-    !sameFileState(beforeWAL, afterWAL) || !sameFileState(beforeSHM, afterSHM)) {
+    !sameFileState(beforeDb, afterDb) || !sameFileState(beforeWAL, afterWAL) ||
+    !sameSemanticSnapshot(beforeSemantic, afterSemantic)) {
     throw new Error("prepare-live database or owner state changed while creating the backup manifest");
   }
   const manifestBase: Omit<SandyOwnerStopManifest, "manifestSha256"> = {
@@ -66,12 +84,19 @@ export function prepareSandyOwnerStop(input: SandyPrepareLiveInput): SandyOwnerS
     dbPath: resolve(SANDY_CANONICAL_DB_PATH),
     generatedAt: new Date().toISOString(),
     dbSha256: after.sha256,
+    dbFileSha256: afterDb.sha256 ?? "",
+    dbFileSize: afterDb.size,
     wal: afterWAL,
     shm: afterSHM,
     ownerPids: [],
     nonce,
     backupBundleIdentity: backup.bundleIdentity,
     sqliteSnapshotSha256: backup.sqliteSnapshotSha256,
+    sourceSnapshotSha256: afterSemantic.beforeSnapshotSha256,
+    sourceBindingDigest: afterSemantic.bindingDigest,
+    sourceResultDigest: afterSemantic.resultDigest,
+    selectedToolJournalCount: afterSemantic.selectedToolJournalCount,
+    selectedToolJournalDigest: afterSemantic.selectedToolJournalDigest,
   };
   const manifest = { ...manifestBase, manifestSha256: sha256(stableJson(manifestBase)) };
   mkdirSync(resolve(input.manifestPath, ".."), { recursive: true });
@@ -107,9 +132,28 @@ export function verifySandyOwnerStop(
     if (isProcessAlive(pid)) throw new Error(`owner-stop manifest PID is still alive: ${pid}`);
   }
   const currentWAL = fileState(`${input.dbPath}-wal`);
-  const currentSHM = fileState(`${input.dbPath}-shm`);
-  if (!sameFileState(manifest.wal, currentWAL) || !sameFileState(manifest.shm, currentSHM)) {
-    throw new Error("owner-stop manifest WAL/SHM state is stale");
+  const currentDb = fileState(input.dbPath);
+  if (manifest.dbFileSha256 === undefined || manifest.dbFileSize === undefined ||
+    !sameFileState({ exists: true, size: manifest.dbFileSize, mtimeMs: 0, sha256: manifest.dbFileSha256 }, currentDb)) {
+    throw new Error("owner-stop manifest database file state is stale");
+  }
+  if (!sameFileState(manifest.wal, currentWAL)) {
+    throw new Error("owner-stop manifest WAL state is stale");
+  }
+  if (!manifest.sourceSnapshotSha256 || !manifest.sourceBindingDigest ||
+    !manifest.sourceResultDigest || manifest.selectedToolJournalCount === undefined ||
+    !manifest.selectedToolJournalDigest) {
+    throw new Error("owner-stop manifest is missing semantic source snapshot evidence");
+  }
+  const currentSemantic = readSandyOwnerSemanticSnapshot(input.dbPath);
+  if (!sameSemanticSnapshot({
+    beforeSnapshotSha256: manifest.sourceSnapshotSha256,
+    bindingDigest: manifest.sourceBindingDigest,
+    resultDigest: manifest.sourceResultDigest,
+    selectedToolJournalCount: manifest.selectedToolJournalCount,
+    selectedToolJournalDigest: manifest.selectedToolJournalDigest,
+  }, currentSemantic)) {
+    throw new Error("owner-stop manifest semantic source snapshot is stale");
   }
   return manifest.manifestSha256;
 }
@@ -219,5 +263,40 @@ function sameFileState(
   right: SandyOwnerStopManifest["wal"],
 ): boolean {
   return left.exists === right.exists && left.size === right.size &&
-    left.mtimeMs === right.mtimeMs && left.sha256 === right.sha256;
+    left.sha256 === right.sha256;
+}
+
+type SandyOwnerSemanticSnapshot = {
+  beforeSnapshotSha256: string;
+  bindingDigest: string;
+  resultDigest: string;
+  selectedToolJournalCount: number;
+  selectedToolJournalDigest: string;
+};
+
+function readSandyOwnerSemanticSnapshot(dbPath: string): SandyOwnerSemanticSnapshot {
+  const read = readSandyCorrection({
+    dbPath,
+    sessionId: SANDY_SESSION_ID,
+    sourceWorkId: SANDY_SOURCE_WORK_ID,
+    monitoringTurnIds: SANDY_MONITORING_TURN_IDS,
+    captureTurnIds: SANDY_CAPTURE_TURN_IDS,
+  });
+  return {
+    beforeSnapshotSha256: read.beforeSnapshotSha256,
+    bindingDigest: read.bindingDigest,
+    resultDigest: read.resultDigest,
+    selectedToolJournalCount: read.selectedToolJournalCount,
+    selectedToolJournalDigest: read.selectedToolJournalDigest,
+  };
+}
+
+function sameSemanticSnapshot(
+  left: SandyOwnerSemanticSnapshot,
+  right: SandyOwnerSemanticSnapshot,
+): boolean {
+  return left.beforeSnapshotSha256 === right.beforeSnapshotSha256 &&
+    left.bindingDigest === right.bindingDigest && left.resultDigest === right.resultDigest &&
+    left.selectedToolJournalCount === right.selectedToolJournalCount &&
+    left.selectedToolJournalDigest === right.selectedToolJournalDigest;
 }
