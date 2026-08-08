@@ -42,7 +42,7 @@ import {
 } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from
   "./guided-tool-call-execution.ts";
-import { guidedOperationalFallback, runGuidedAgentLoopWithOperationalReport } from
+import { runGuidedAgentLoopWithOperationalReport } from
   "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from
   "../projection/index.ts";
@@ -55,6 +55,12 @@ import {
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
 import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
 import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
+import { createGuidedOperationalProgressCapture } from
+  "./guided-operational-progress.ts";
+import {
+  guidedOperationalFallbackAfterInternalId,
+  loadGuidedOperationalFacts,
+} from "./guided-operational-facts.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -80,6 +86,8 @@ export function createProductionGuidedTurnAgent(input: {
       recordModelRoundAcceptance,
       onProviderResponseIdentity,
     }): Promise<BtccAgentLoopResult> {
+      const progressCapture = createGuidedOperationalProgressCapture(progress);
+      const observedProgress = progressCapture.observer;
       const policy = guidedPolicy(turn);
       const workScope = workScopeForTurn(turn, policy.trackingMode);
       let initialWork = policy.trackingMode === "none"
@@ -157,17 +165,20 @@ export function createProductionGuidedTurnAgent(input: {
           }),
         }),
       });
+      let progressSourceRevision = 0;
+      const nextSourceRevision = () => ++progressSourceRevision;
       const activity = createGuidedActivityProjection({
         turnId: turn.turnId,
-        progress,
+        progress: observedProgress,
         managedInitially: initialWorkBound,
+        nextSourceRevision,
       });
       let activeModelRef = selectedModelRef(turn);
       const toolCalls = createGuidedToolCallExecutor({
         turn,
         signal,
         resolveModelRef: () => activeModelRef,
-        progress,
+        progress: observedProgress,
         activity,
         workScope,
         authorizedNames,
@@ -186,7 +197,8 @@ export function createProductionGuidedTurnAgent(input: {
       const onRouteEvent = createGuidedRouteEventHandler({
         turnId: turn.turnId,
         semanticState: turn.semanticState,
-        progress,
+        progress: observedProgress,
+        nextSourceRevision,
         setActiveModelRef: (modelRef) => {
           activeModelRef = modelRef;
         },
@@ -229,7 +241,7 @@ export function createProductionGuidedTurnAgent(input: {
           renderGuidedPersonaInstructions(turn, input.contextDocuments),
           responseLanguage,
         ),
-        progress,
+        progress: observedProgress,
         model: activeModelRef,
         resolveModelRef: () => activeModelRef,
         reasoningEffort: selectedReasoningEffort,
@@ -262,59 +274,49 @@ export function createProductionGuidedTurnAgent(input: {
             boundWork: refreshedBoundWork,
           });
         },
-        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) => activity.observeToolBatch({
-          text,
-          toolCalls: calls.map((call) => ({
+        onAssistantTextBeforeTools: ({ text, toolCalls: calls }) =>
+          activity.observeToolBatch({
+            text,
+            toolCalls: calls.map((call) => ({ name: call.name, args: call.arguments })),
+          }),
+        reviewFinalCandidate: closeout.reviewFinalCandidate,
+        executeTool: async (call) => {
+          return toolCalls.executeTool({
             name: call.name,
             args: call.arguments,
-          })),
-        }),
-        reviewFinalCandidate: closeout.reviewFinalCandidate,
-        executeTool: async (call) => await toolCalls.executeTool({
-          name: call.name,
-          args: call.arguments,
-          rawArguments: call.rawArguments,
-          providerCallId: call.id,
-          signal: call.signal,
-        }),
+            rawArguments: call.rawArguments,
+            providerCallId: call.id,
+            signal: call.signal,
+          });
+        },
       };
       const text = await runGuidedAgentLoopWithOperationalReport({
         options: loopOptions,
         parentSignal: signal,
         originalRequest: turn.originalMessage,
-        async loadFacts() {
-          const currentWork = await safeLoadWorkContext(input.durableWork, workScope) ??
-            await safeBoundWork(input.durableWork, turn.turnId) ?? initialWork;
-          const workId = currentWork && "work" in currentWork
-            ? currentWork.work.workId
-            : currentWork?.workId;
-          return {
-            work: currentWork,
-            toolCalls: input.toolJournal.list(turn.turnId),
-            effects: workId ? input.effectJournal.listForWork(workId) : [],
-            responseLanguage,
-          };
-        },
+        loadFacts: () => loadGuidedOperationalFacts({
+          turnId: turn.turnId,
+          readBoundWork: () => safeBoundWork(input.durableWork, turn.turnId),
+          listToolCalls: () => input.toolJournal.list(turn.turnId),
+          listEffectsForWork: (workId) => input.effectJournal.listForWork(workId),
+          readProgress: () => progressCapture.facts(),
+          responseLanguage,
+        }),
       });
       await closeout.recordMissingDiagnostic();
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
-      const finalContext = !finalWork && policy.trackingMode !== "none"
-        ? await safeLoadWorkContext(input.durableWork, workScope)
-        : null;
-      const internalWorkIds = [
-        initialWork?.work.workId,
-        finalWork?.workId,
-        finalContext?.work.workId,
-      ].filter((workId): workId is string => Boolean(workId));
-      const leakedInternalWorkId = internalWorkIds.some((workId) =>
-        text.includes(workId));
-      const content = leakedInternalWorkId
-        ? guidedOperationalFallback({
+      const internalWorkIds = [initialWork?.work.workId, finalWork?.workId]
+        .filter((workId): workId is string => Boolean(workId));
+      const content = internalWorkIds.some((workId) => text.includes(workId))
+        ? await guidedOperationalFallbackAfterInternalId({
             originalRequest: turn.originalMessage,
+            turnId: turn.turnId,
             responseLanguage,
-            work: null,
-            toolCalls: [],
-            effects: [],
+            finalWork,
+            internalWorkIds,
+            listToolCalls: () => input.toolJournal.list(turn.turnId),
+            listEffectsForWork: (workId) => input.effectJournal.listForWork(workId),
+            readProgress: () => progressCapture.facts(),
           })
         : text;
       return {
@@ -330,6 +332,7 @@ export function createProductionGuidedTurnAgent(input: {
 }
 
 function throwGuidedAbort(signal: AbortSignal): never {
-  if (signal.reason instanceof Error) throw signal.reason;
-  throw new Error("Guided Turn was aborted");
+  throw signal.reason instanceof Error
+    ? signal.reason
+    : new Error("Guided Turn was aborted");
 }

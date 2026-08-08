@@ -143,7 +143,7 @@ function phaseActivityRows(rows: ProgressRow[]): PhaseActivity[] {
     if (isPhaseActivityRow(row)) {
       const activity: PhaseActivity = {
         id: row.id,
-        phase: row.activity_stage ?? row.semantic_block_id,
+        phase: row.activity_stage,
         title: row.work_decision_title ??
           compactLegacyDisplayTitle(row.work_decision_summary),
         summary: row.work_decision_summary,
@@ -206,10 +206,8 @@ function currentSemanticState(
       (row.kind === "message" &&
         row.bridge_phase !== "btcc_operation" &&
         row.bridge_phase !== "model_round_waiting" &&
-        Boolean(row.semantic_block_id))) &&
-    Boolean(row.activity_stage || row.semantic_block_id));
+        Boolean(row.semantic_block_id))));
   if (latestModelActivity?.activity_stage) return latestModelActivity.activity_stage;
-  if (latestModelActivity?.semantic_block_id) return latestModelActivity.semantic_block_id;
   return activities.at(-1)?.phase;
 }
 

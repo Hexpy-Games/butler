@@ -295,6 +295,9 @@ export interface BtccTurnProgressObserver {
   workProgressChanged?(update: {
     turnId: string;
     turnRevision: number;
+    /** Origin of the Work snapshot represented by this progress update. */
+    originTurnId?: string;
+    sourceRevision?: number;
     programId: string;
     modelRef?: string;
     tasks: WorkProgressTask[];
@@ -303,6 +306,9 @@ export interface BtccTurnProgressObserver {
     turnId: string;
     semanticState: string;
     activityId: string;
+    /** Origin of the authored activity when it is tied to durable Work. */
+    originTurnId?: string;
+    sourceRevision?: number;
     displayStage?: "conception" | "planning" | "execution" | "review" |
       "validation" | "reporting";
     title: string;

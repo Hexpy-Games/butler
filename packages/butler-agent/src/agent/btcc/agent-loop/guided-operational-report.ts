@@ -9,7 +9,6 @@ import {
 
 export {
   guidedOperationalFallback,
-  guidedOperationalReportPrompt,
   type OperationalFacts,
 } from "./guided-operational-facts.ts";
 
@@ -26,7 +25,7 @@ export async function runGuidedAgentLoopWithOperationalReport(input: {
       signal: input.parentSignal,
     });
     const candidate = result.finalText.trim();
-    if (candidate) return candidate;
+    if (candidate && !result.stoppedByLimit) return candidate;
   } catch (error) {
     if (input.parentSignal.aborted) throwIfAborted(input.parentSignal);
     if (!allowsOperationalReport(error)) throw error;
