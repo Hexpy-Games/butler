@@ -1,6 +1,6 @@
-# BTCC R3 Sandy Turn-Work correction (redacted rehearsal report)
+# BTCC R3 Sandy Turn-Work correction (redacted report)
 
-Status: implementation and completed v2 copied-database rehearsal only. The live Sandy database was not mutated or stopped.
+Status: live Sandy correction applied and verified after an authorized owner stop, with the completed v2 copied-database rehearsal retained below. No further live mutation is authorized by this report.
 Any pre-v2 rehearsal is superseded by the canonical Plan/checkpoint and owner-manifest gates; its hashes must not be used for a live apply.
 
 ## Audited target and evidence
@@ -48,6 +48,29 @@ Unrelated semantic rows were unchanged across correction and migration: 40 non-t
 
 Rollback rehearsal restored `/tmp/butler-sandy-v2.R13GaE/rollback.sqlite` from the independent snapshot: `integrity_check=ok`, works=41, bindings=52, results=3107, source Work `open`, audits=0.
 
+## Authorized live apply and verification
+
+The correction path phases are recorded by commits `4fb268b5`, `46c528ff`, and `83a37f45` (the final SHM-volatility gate fix). The owners were stopped safely with `butler stop` and exact LaunchAgent bootout; the bounded owner check reported `owners=0` before the live preparation.
+
+The first live `prepare-live` attempt at 23:01 failed closed because the SQLite backup changed only the volatile SHM state. It produced no manifest and performed no apply; this was an expected safety rejection, not a data incident. After the SHM gate fix, a fresh preparation succeeded at `/Users/yeonwoo/.butler/backups/btcc-sandy-twri-20260808-2314` with manifest `dedab5affd9cca9f2ab13b43d42f42b5ddea7b4b9e7441a8729565b61ea0dec5`, byte-for-byte bundle identity `39dbf6b8bdeee70eda0795d2ee1b9cbcba63e47f69da1960a95f956f6ee10da0`, independent SQLite snapshot `79b8f0810f9592b4d1f716833f46f158eba618e44f13bd936f2efbe4b92d0733`, and `owners=0`.
+
+The post-prepare dry run observed the same audited source evidence:
+
+```text
+database identity: 0e326fd046d910726670a0dee7b9377a91cd654c57e81b9004027250b8e8de24
+before snapshot:   2520da2c3d6f6a911ce41f01260fa9e8b7766861fab3854055d571f4390744ff
+binding digest:    51089e37652fa9d21a0c3de87bfbcaec28b44685cc4555d8f54b1de5a2628117
+result digest:     f23a43d71bf67c60c9fb5d98be33c82910869b44c18d34b9a51c1da79fdb8a11
+selected journal:  317 rows, b8440700aa9505fb06231143a781a8d47b46a221fbfcdfde94c931a47de4988d
+observed:          bindings=4 results=309 monitoring=128 capture=181 head=source
+```
+
+The live apply returned `applied` with request fingerprint `c05c5916c8f1c82ebba0cda10bb0c209deec49c2e531c057395412ab74ad0316` and an audit receipt with the same request suffix. Its after snapshot is `8acbd53f8d716a75a52765e5f8dadb6bdacd9b345b0806de039c87adbb0fc094`; the apply backup bundle identity is `fe2d985e33d03bb56b21241a0af25ebb643675bd7c5f150386a63a00191db7aa`, and the independent snapshot remains `79b8f0810f9592b4d1f716833f46f158eba618e44f13bd936f2efbe4b92d0733`. The postconditions are exact: two current bindings and 128 monitoring results remain on the source Work, two current bindings and 181 capture results belong to the reconstructed capture Work, all result sequences are contiguous, and the session head points to capture.
+
+The exact request replay returned `already_applied` with the same audit and after-snapshot before restart. After the native six-service runtime and the auth-proxy, cloudflared, dev-vite, and dev-electron LaunchAgents were bootstrapped again, the replay returned the same `already_applied` result with zero additional writes. App health on port 18765 and CDP on port 19226 were green.
+
+The canonical product reader reopened the live database and reconstructed the same durable views: monitoring Work `completed`, validation checkpoint revision 10, all four actions `done`, completed disposition/result sequence 128; capture Work `open`, execution checkpoint, first action `done`, hardening action `active`, result sequence 181. `PRAGMA integrity_check` returned `ok`; exact bindings/results/sequences and one immutable correction audit receipt were verified. Raw tool-journal rows and the transcript were retained without deletion or duplication, and the verified backup/recovery paths remain available.
+
 ## Product correction path
 
 `operations/correction` exposes one audited operation. `correction sandy` is dry-run by default and locks the exact Sandy session, source Work, four Turns, source objective/scope, Plan revision/actions/checks, result counts (65/63/63/118), selected raw journal count (317), and source session head. Apply requires an explicit operator ID, reason, backup directory, and a generated owner-stop manifest for the canonical live path; `ownerStopped` alone is rejected. `correction sandy prepare-live` refuses known Butler owners, verifies semantic source snapshot/digests plus database and WAL content/size stability, creates both a byte-for-byte family bundle and independent SQLite backup, hashes all artifacts, writes a hash-authenticated expiring manifest, and prints only redacted hashes/timestamp metadata. The existing SHM copy/hash is retained as auxiliary recovery metadata: SQLite may rewrite it during a read or backup, so SHM bytes/size/mtime are never semantic freshness authority.
@@ -58,4 +81,4 @@ Apply performs one `BEGIN IMMEDIATE` transaction that re-reads and verifies the 
 
 Before any live apply, stop all Butler owners safely. Copy the database plus existing `-wal`/`-shm` files byte-for-byte and hash every copied file. Also create an independently openable SQLite snapshot with `VACUUM INTO`; run `PRAGMA integrity_check` and reopen it. Store both bundle/file hashes and the independent snapshot hash in the audit receipt. If any semantic identity, source digest, database/WAL content/size, or integrity check differs, do not apply; an SHM-only rewrite is expected volatile state and is not a rejection reason. To recover, stop owners, restore the verified database/WAL/SHM bundle as a unit, reopen and verify `integrity_check`, then restart and reverify Work/binding/result counts and the canonical session head. The trigger-abort rehearsal proved that an interrupted transaction leaves semantic rows and audit count unchanged; the independent snapshot is the recovery source.
 
-No live apply, owner shutdown, or production restart was performed for this report.
+The live apply, owner restart, canonical product-reader verification, and integrity check are complete as documented above. No additional live mutation is performed by this report.
