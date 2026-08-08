@@ -1,6 +1,6 @@
 # BTCC R3 turn/work relationship integrity — whole-goal evidence
 
-Status: Task5 validation report. The Sandy correction is a separate audited operation documented in [the redacted correction report](btcc-r3-sandy-correction-draft.md). No Sandy session or Work was used by the Task5 smoke. No commit is created by this Task5 turn.
+Status: Whole-goal completed. The Sandy correction is a separate audited operation documented in [the redacted correction report](btcc-r3-sandy-correction-draft.md). No Sandy session or Work was used by the Task5 smoke. The implementation and evidence phase is committed as `8763b8e0` (`fix(btcc): validate turn work integrity end to end`).
 
 ## Authority and runtime trace
 
@@ -83,18 +83,11 @@ The audited Sandy correction is complete and separately reported in [btcc-r3-san
 
 ## Phase commits and working tree
 
-The validated pre-existing phases are `de0a3c6e` (explicit relations), `391ca480` (atomic disposition), `87b55cfa` (operational fallback isolation), `4fb268b5`/`46c528ff`/`83a37f45` (audited Sandy correction and SHM-safe ingress), and `351cc230` (live correction report). The complete current uncommitted tree is listed below; the replay/executor/tests and final Task5 report are the Task5 entries, while the four Sandy files are Task4 integration-debt/report updates carried in this worker turn:
+The validated phases are `de0a3c6e` (explicit relations), `391ca480` (atomic disposition), `87b55cfa` (operational fallback isolation), `4fb268b5`/`46c528ff`/`83a37f45` (audited Sandy correction and SHM-safe ingress), `351cc230` (live correction report), and `8763b8e0` (`fix(btcc): validate turn work integrity end to end`). The source tree is clean after that implementation/evidence commit; the final report closeout is the only follow-up documentation commit.
 
 ```text
-packages/butler-agent/src/agent/btcc/agent-loop/guided-recorded-tool-replay.ts
-packages/butler-agent/src/agent/btcc/agent-loop/guided-tool-call-execution.ts
-tests/unit/btcc-guided-turn-agent.test.ts
-tests/unit/btcc-r3-validation-context.test.ts
-docs/reports/btcc-r3-turn-work-relationship-integrity.md
-docs/reports/btcc-r3-sandy-correction-draft.md
-packages/butler-agent/src/operations/correction/sandy-correction-contracts.ts
-tests/unit/native-purge-gate.sh
-tests/unit/sandy-correction.test.ts
+8763b8e0 includes the replay/executor/tests, Task5 report, and the four
+Task4 integration-debt/report updates listed in the prior working-tree audit.
 ```
 
 ## Validation gates
@@ -116,4 +109,4 @@ Any external-service variance is reported above rather than treated as determini
 
 ## Remaining scope and safety
 
-No new mandatory lifecycle phase, projection authorization, heuristic Work binding, or fallback model round was introduced. The live GLM smoke used a new read-only chat and did not touch Sandy. Only isolated smoke-session records were written; no Sandy session/correction data was mutated and no service was shut down by Task5. Repository-wide check, typecheck, lint, shape, diff, and UI build gates are green; the parent retains final whole-goal acceptance and independent review authority.
+No new mandatory lifecycle phase, projection authorization, heuristic Work binding, or fallback model round was introduced. The live GLM smoke used isolated read-only chats and did not touch Sandy. Only isolated smoke-session records were written; no Sandy session/correction data was mutated and no service was shut down by Task5. Repository-wide check, typecheck, lint, shape, diff, UI build, architecture, deterministic, and actual-model gates are green. Sol review is PASS with no P0/P1/P2 findings; whole-goal acceptance is complete.
