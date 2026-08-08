@@ -12,6 +12,11 @@ export function readDatabaseIdentity(path: string, db?: Database): SandyDatabase
   const stat = statSync(canonicalPath);
   const ownedDb = db ?? new Database(canonicalPath, { readonly: true });
   try {
+    // The shared-memory file is SQLite's volatile WAL coordination cache. It
+    // may be created, rewritten, or have its mtime touched by a read-only
+    // open/backup without changing durable database semantics. Keep it in the
+    // returned file inventory for recovery metadata, but exclude it from the
+    // semantic database identity used by freshness gates.
     const identityWithoutHash = {
       canonicalPath,
       size: stat.size,
@@ -22,10 +27,10 @@ export function readDatabaseIdentity(path: string, db?: Database): SandyDatabase
       userVersion: Number(pragmaValue(ownedDb, "user_version")),
       journalMode: String(pragmaValue(ownedDb, "journal_mode")),
       wal: readFileIdentity(`${canonicalPath}-wal`),
-      shm: readFileIdentity(`${canonicalPath}-shm`),
     };
     return {
       ...identityWithoutHash,
+      shm: readFileIdentity(`${canonicalPath}-shm`),
       sha256: sha256(stableJson(identityWithoutHash)),
     };
   } finally {
@@ -56,8 +61,7 @@ export function sameStableDatabaseIdentity(
   return left.canonicalPath === right.canonicalPath && left.size === right.size &&
     left.pageCount === right.pageCount && left.pageSize === right.pageSize &&
     left.schemaVersion === right.schemaVersion && left.userVersion === right.userVersion &&
-    left.journalMode === right.journalMode && sameFileFamily(left.wal, right.wal) &&
-    sameFileFamily(left.shm, right.shm);
+    left.journalMode === right.journalMode && sameFileFamily(left.wal, right.wal);
 }
 
 function sameFileFamily(left: SandyFileIdentity, right: SandyFileIdentity): boolean {

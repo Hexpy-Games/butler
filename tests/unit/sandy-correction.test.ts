@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { readDatabaseIdentity, sameStableDatabaseIdentity } from "../../packages/butler-agent/src/operations/correction/sandy-correction-identity.ts";
 import {
   executeSandyCorrectionCli,
   parseSandyCorrectionCli,
@@ -389,6 +390,31 @@ describe("Sandy correction product path", () => {
     });
     expect(JSON.stringify(safe)).not.toContain("butler-client.sqlite");
     expect(JSON.stringify(safe)).not.toContain("secret-nonce");
+  });
+
+  test("WAL freshness accepts SHM-only volatility but rejects database or WAL mutation", () => {
+    const root = mkdtempSync(join(tmpdir(), "sandy-wal-"));
+    roots.push(root);
+    const dbPath = join(root, "wal.sqlite");
+    const db = new Database(dbPath);
+    db.exec("PRAGMA journal_mode=WAL; CREATE TABLE sample (value TEXT); INSERT INTO sample VALUES ('stable');");
+    const before = readDatabaseIdentity(dbPath);
+    expect(before.wal.exists).toBe(true);
+    expect(before.shm.exists).toBe(true);
+
+    const shmOnly = {
+      ...before,
+      shm: { ...before.shm, size: before.shm.size + 1, sha256: "rewritten-shm" },
+    };
+    expect(sameStableDatabaseIdentity(before, shmOnly)).toBe(true);
+    expect(shmOnly.sha256).toBe(before.sha256);
+
+    expect(sameStableDatabaseIdentity(before, { ...before, size: before.size + 1 })).toBe(false);
+    expect(sameStableDatabaseIdentity(before, {
+      ...before,
+      wal: { ...before.wal, size: before.wal.size + 1, sha256: "mutated-wal" },
+    })).toBe(false);
+    db.close();
   });
 
   test("rejects a replay when the audited after-state or operator semantics drift", () => {
