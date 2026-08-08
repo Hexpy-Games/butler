@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -73,6 +74,48 @@ describe("Sandy correction product path", () => {
       "--operator-id", "test-operator", "--reason", "Copied database rehearsal",
     ]);
     expect(executeSandyCorrectionCli(parsedApply).status).toBe("applied");
+  });
+
+  test("production bin routes correction sandy to the operator implementation", () => {
+    const fixture = createFixture();
+    const observed = readSandyCorrection({ dbPath: fixture.dbPath, sessionId, sourceWorkId, monitoringTurnIds, captureTurnIds });
+    const result = spawnSync("node", [
+      join(process.cwd(), "bin", "butler.js"),
+      "correction", "sandy",
+      "--db", fixture.dbPath,
+      "--expected-status", "open",
+      "--expected-bindings", String(observed.sourceBindingCount),
+      "--expected-results", String(observed.sourceResultCount),
+      "--expected-binding-digest", observed.bindingDigest,
+      "--expected-result-digest", observed.resultDigest,
+      "--expected-db-sha256", observed.identity.sha256,
+      "--expected-snapshot-sha256", observed.beforeSnapshotSha256,
+      "--json", "--data", fixture.root,
+    ], { cwd: process.cwd(), encoding: "utf8" });
+    expect(result.status).toBe(0);
+    expect(result.stderr).not.toContain("unknown_command");
+    const envelope = JSON.parse(result.stdout) as { ok: boolean; data?: { status?: string } };
+    expect(envelope.ok).toBe(true);
+    expect(envelope.data?.status).toBe("dry_run");
+  });
+
+  test("production prepare-live ingress refuses a noncanonical fixture without writing a manifest", () => {
+    const fixture = createFixture();
+    const manifestPath = join(fixture.root, "owner-stop.json");
+    const result = spawnSync("node", [
+      join(process.cwd(), "bin", "butler.js"),
+      "correction", "sandy", "prepare-live",
+      "--db", fixture.dbPath,
+      "--backup-dir", join(fixture.root, "backups"),
+      "--manifest", manifestPath,
+      "--json", "--data", fixture.root,
+    ], { cwd: process.cwd(), encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).not.toContain("unknown_command");
+    const envelope = JSON.parse(result.stdout) as { ok: boolean; error?: { message?: string } };
+    expect(envelope.ok).toBe(false);
+    expect(envelope.error?.message).toContain("canonical Sandy database path");
+    expect(existsSync(manifestPath)).toBe(false);
   });
 
   test("rejects wrong database identity/count without mutation", () => {
