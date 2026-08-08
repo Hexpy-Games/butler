@@ -51,9 +51,10 @@ import { createGuidedPersistentEffectResolver } from
 import {
   createModelRoutePort,
   currentModelRouteCandidate,
-  type ModelRouteEvent,
 } from "../model-route/index.ts";
 import { renderExecutionWindowObservation } from "./execution-window-observation.ts";
+import { createGuidedTurnCloseout } from "./guided-turn-closeout.ts";
+import { createGuidedRouteEventHandler } from "./guided-turn-route-events.ts";
 
 export function createProductionGuidedTurnAgent(input: {
   butlerHome: string;
@@ -182,47 +183,15 @@ export function createProductionGuidedTurnAgent(input: {
         : undefined;
       const selectedReasoningEffort = routedCandidate?.reasoningEffort ??
         turn.modelSelection.reasoningEffort;
-      let pendingFallbackProjection: { roundId: string; modelRef: string } | undefined;
-      const onRouteEvent = async (event: ModelRouteEvent) => {
-        const persisted = await recordModelRouteEvent?.(event);
-        if (
-          event.type === "model.attempt.started" &&
-          pendingFallbackProjection?.roundId === event.roundId &&
-          pendingFallbackProjection.modelRef === event.modelRef
-        ) {
-          pendingFallbackProjection = undefined;
-          try {
-            await progress?.modelRoundWaitingChanged?.({
-              turnId: turn.turnId,
-              requestId: event.roundId,
-              status: "started",
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public model identity cannot veto the provider dispatch.
-          }
-        }
-        if (event.type === "model.fallback.selected") {
-          activeModelRef = event.modelRef;
-          pendingFallbackProjection = {
-            roundId: event.roundId,
-            modelRef: event.modelRef,
-          };
-          try {
-            await progress?.phaseActivityChanged?.({
-              turnId: turn.turnId,
-              semanticState: turn.semanticState,
-              activityId: `${turn.turnId}:model-fallback:${event.roundId}:${event.candidateIndex}`,
-              title: "대체 모델 경로 선택",
-              summary: `${event.modelRef} 모델로 계속 진행합니다.`,
-              modelRef: event.modelRef,
-            });
-          } catch {
-            // Public fallback notice cannot veto the next provider dispatch.
-          }
-        }
-        return persisted;
-      };
+      const onRouteEvent = createGuidedRouteEventHandler({
+        turnId: turn.turnId,
+        semanticState: turn.semanticState,
+        progress,
+        setActiveModelRef: (modelRef) => {
+          activeModelRef = modelRef;
+        },
+        recordModelRouteEvent,
+      });
       const modelRound = turn.modelRoute
         ? createModelRoutePort({
             base: baseModelRound,
@@ -238,6 +207,12 @@ export function createProductionGuidedTurnAgent(input: {
         turn,
         input.contextDocuments,
       );
+      const closeout = createGuidedTurnCloseout({
+        durableWork: input.durableWork,
+        workScope,
+        turnId: turn.turnId,
+        trackingMode: policy.trackingMode,
+      });
       const loopOptions: BtccAgentLoopInput = {
         prompt: renderGuidedPrompt(turn, {
           ...input,
@@ -294,6 +269,7 @@ export function createProductionGuidedTurnAgent(input: {
             args: call.arguments,
           })),
         }),
+        reviewFinalCandidate: closeout.reviewFinalCandidate,
         executeTool: async (call) => await toolCalls.executeTool({
           name: call.name,
           args: call.arguments,
@@ -320,6 +296,7 @@ export function createProductionGuidedTurnAgent(input: {
           };
         },
       });
+      await closeout.recordMissingDiagnostic();
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
       const finalContext = !finalWork && policy.trackingMode !== "none"
         ? await safeLoadWorkContext(input.durableWork, workScope)

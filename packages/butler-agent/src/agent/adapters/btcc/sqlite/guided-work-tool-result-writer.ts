@@ -16,6 +16,7 @@ const WORK_CONTROL_TOOL_NAMES = new Set([
   "replace_work_plan",
   "record_work_checkpoint",
   "record_work_review",
+  "record_work_disposition",
 ]);
 
 export class GuidedWorkToolResultWriter {

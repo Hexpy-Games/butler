@@ -20,6 +20,7 @@ test("R3 Work exposes explicit relation tools and compact optional control tools
     "replace_work_plan",
     "record_work_checkpoint",
     "record_work_review",
+    "record_work_disposition",
   ]);
   expect(DURABLE_WORK_TOOL_DEFINITIONS[2]?.description)
     .toContain("multi-source or multi-step research");
@@ -54,6 +55,10 @@ test("R3 Work exposes explicit relation tools and compact optional control tools
     .toContain("Disclosed non-critical limits may still be accepted");
   expect(DURABLE_WORK_TOOL_DEFINITIONS[4]?.description)
     .toContain("a material requested outcome remains unfinished");
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[5]?.name)
+    .toBe("record_work_disposition");
+  expect(DURABLE_WORK_TOOL_DEFINITIONS[5]?.description)
+    .toContain("does not require Plan, Review, or stage sequence records");
   const encoded = JSON.stringify(DURABLE_WORK_TOOL_DEFINITIONS);
   expect(encoded).not.toContain("revision_id");
   expect(encoded).not.toContain("result_id");
@@ -152,9 +157,6 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
       actions: [{ action_key: "research", status: "pending" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
-        "current_plan_review_required",
-        "current_result_review_required",
-        "completion_validation_required",
         "unresolved_actions",
       ],
       latest_plan_review: null,
@@ -255,6 +257,60 @@ test("R3 Work tool maps semantic model input and returns validation as ordinary 
   });
 });
 
+test("record_work_disposition decodes terminal updates and runtime evidence IDs", async () => {
+  let received: Record<string, unknown> | undefined;
+  const view = workView();
+  const service = fakeService({
+    recordDisposition: async (input) => {
+      received = input as unknown as Record<string, unknown>;
+      return { ...view, status: "completed" };
+    },
+  });
+  const result = await executeDurableWorkTool({
+    service,
+    scope: { turnId: "turn-1", sessionId: "session-1" },
+    mutationCallId: "disposition-tool-call",
+    name: "record_work_disposition",
+    args: {
+      work_id: "work-1",
+      disposition: "completed",
+      summary: "완료했습니다.",
+      action_updates: [{
+        action_key: "research",
+        status: "done",
+        note: "근거를 확인했습니다.",
+      }],
+      evidence_refs: ["read-1"],
+      followups: ["없음"],
+    },
+    priorToolCallIds: ["read-1"],
+  });
+  expect(result).toMatchObject({ ok: true, work: { status: "completed" } });
+  expect(received).toMatchObject({
+    workId: "work-1",
+    disposition: "completed",
+    summary: "완료했습니다.",
+    evidenceRefs: ["read-1"],
+    backfillToolCallIds: ["read-1"],
+  });
+  const rejected = await executeDurableWorkTool({
+    service,
+    scope: { turnId: "turn-1", sessionId: "session-1" },
+    mutationCallId: "bad-disposition-tool-call",
+    name: "record_work_disposition",
+    args: {
+      work_id: "work-1",
+      disposition: "invalid",
+      summary: "완료",
+      action_updates: [{ action_key: "research", status: "active" }],
+    },
+  });
+  expect(rejected).toMatchObject({
+    ok: false,
+    error: { code: "work_update_rejected" },
+  });
+});
+
 test("R3 Work tool results do not repeat anchored Plan detail", async () => {
   const view = workView();
   view.objective = "REPEATED_STABLE_OBJECTIVE";
@@ -302,9 +358,6 @@ test("R3 Work tool results do not repeat anchored Plan detail", async () => {
       actions: [{ action_key: "research", status: "active" }],
       unresolved_action_keys: ["research"],
       completion_blockers: [
-        "current_plan_review_required",
-        "current_result_review_required",
-        "completion_validation_required",
         "unresolved_actions",
       ],
       latest_plan_review: null,
@@ -577,6 +630,8 @@ function fakeService(
     replacePlan: async () => workView(),
     recordCheckpoint: async () => workView(),
     recordReview: async () => workView(),
+    recordDisposition: async () => workView(),
+    recordCloseoutMissing: async () => {},
     attachToolResult: async () => workView(),
     boundWorkForTurn: async () => null,
     ...overrides,

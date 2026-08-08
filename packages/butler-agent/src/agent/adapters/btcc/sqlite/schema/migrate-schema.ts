@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import {
   BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA,
+  BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA,
   BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA,
 } from "./guided-work-schema.ts";
 
@@ -11,6 +12,7 @@ export function migrateBtccSchema(db: Database): void {
     ensureLegacyWorkImportProvenance(db);
     ensureGuidedToolJournalOrder(db);
     ensureGuidedWorkResultOrder(db);
+    ensureGuidedWorkDispositionSchema(db);
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
@@ -19,6 +21,27 @@ export function migrateBtccSchema(db: Database): void {
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+function ensureGuidedWorkDispositionSchema(db: Database): void {
+  if (!tableExists(db, "btcc_guided_works")) return;
+  // The disposition records are additive.  Re-running this DDL is safe for
+  // both a fresh database and a copied pre-disposition database.
+  db.exec(BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA);
+  if (tableExists(db, "btcc_guided_work_disposition_revisions")) {
+    ensureColumn(
+      db,
+      "btcc_guided_work_disposition_revisions",
+      "result_sequence",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    ensureColumn(
+      db,
+      "btcc_guided_work_disposition_revisions",
+      "material_fingerprint",
+      "TEXT NOT NULL DEFAULT ''",
+    );
+  }
 }
 
 /**

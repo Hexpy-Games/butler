@@ -52,6 +52,50 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_review_revisions (
 );
 `;
 
+export const BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA = `
+CREATE TABLE IF NOT EXISTS btcc_guided_work_disposition_revisions (
+  disposition_revision_id TEXT PRIMARY KEY,
+  work_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  result_sequence INTEGER NOT NULL DEFAULT 0,
+  material_fingerprint TEXT NOT NULL DEFAULT '',
+  disposition TEXT NOT NULL CHECK (disposition IN ('completed', 'open', 'blocked')),
+  summary TEXT NOT NULL,
+  action_updates_json TEXT NOT NULL,
+  remaining_actions_json TEXT NOT NULL,
+  next_condition TEXT,
+  evidence_refs_json TEXT NOT NULL,
+  evidence_snapshot_json TEXT NOT NULL,
+  followups_json TEXT NOT NULL,
+  origin_turn_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(work_id, revision)
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_dispositions_work
+ON btcc_guided_work_disposition_revisions(work_id, revision);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_disposition_commands (
+  mutation_call_id TEXT PRIMARY KEY,
+  request_sha256 TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  disposition_revision_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS btcc_guided_work_closeout_diagnostics (
+  diagnostic_id TEXT PRIMARY KEY,
+  diagnostic_key TEXT NOT NULL UNIQUE,
+  code TEXT NOT NULL CHECK (code = 'closeout_missing'),
+  turn_id TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_closeout_diagnostics_turn
+ON btcc_guided_work_closeout_diagnostics(turn_id, work_id);
+`;
+
 export const BTCC_GUIDED_WORK_SCHEMA = `
 CREATE TABLE IF NOT EXISTS btcc_guided_works (
   work_id TEXT PRIMARY KEY,
@@ -128,6 +172,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_results (
 
 ${BTCC_GUIDED_WORK_CHECKPOINT_TABLE_SCHEMA}
 ${BTCC_GUIDED_WORK_REVIEW_TABLE_SCHEMA}
+${BTCC_GUIDED_WORK_DISPOSITION_TABLE_SCHEMA}
 
 CREATE TABLE IF NOT EXISTS btcc_guided_work_mutations (
   mutation_call_id TEXT PRIMARY KEY,
