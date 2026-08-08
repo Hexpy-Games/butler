@@ -52,7 +52,7 @@ Rollback rehearsal restored `/tmp/butler-sandy-v2.R13GaE/rollback.sqlite` from t
 
 The correction path phases are recorded by commits `4fb268b5`, `46c528ff`, and `83a37f45` (the final SHM-volatility gate fix). The owners were stopped safely with `butler stop` and exact LaunchAgent bootout; the bounded owner check reported `owners=0` before the live preparation.
 
-The first live `prepare-live` attempt at 23:01 failed closed because the SQLite backup changed only the volatile SHM state. It produced no manifest and performed no apply; this was an expected safety rejection, not a data incident. After the SHM gate fix, a fresh preparation succeeded at `/Users/yeonwoo/.butler/backups/btcc-sandy-twri-20260808-2314` with manifest `dedab5affd9cca9f2ab13b43d42f42b5ddea7b4b9e7441a8729565b61ea0dec5`, byte-for-byte bundle identity `39dbf6b8bdeee70eda0795d2ee1b9cbcba63e47f69da1960a95f956f6ee10da0`, independent SQLite snapshot `79b8f0810f9592b4d1f716833f46f158eba618e44f13bd936f2efbe4b92d0733`, and `owners=0`.
+The first live `prepare-live` attempt at 23:01 failed closed because the SQLite backup changed only the volatile SHM state. It produced no manifest and performed no apply; this was an expected safety rejection, not a data incident. After the SHM gate fix, a fresh preparation succeeded under the Butler data-home backup root (`<butler-data>/backups/btcc-sandy-twri-20260808-2314`) with manifest `dedab5affd9cca9f2ab13b43d42f42b5ddea7b4b9e7441a8729565b61ea0dec5`, byte-for-byte bundle identity `39dbf6b8bdeee70eda0795d2ee1b9cbcba63e47f69da1960a95f956f6ee10da0`, independent SQLite snapshot `79b8f0810f9592b4d1f716833f46f158eba618e44f13bd936f2efbe4b92d0733`, and `owners=0`.
 
 The post-prepare dry run observed the same audited source evidence:
 

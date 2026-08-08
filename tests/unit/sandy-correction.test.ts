@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { readDatabaseIdentity, sameStableDatabaseIdentity } from "../../packages/butler-agent/src/operations/correction/sandy-correction-identity.ts";
 import {
   executeSandyCorrectionCli,
@@ -31,6 +31,7 @@ const sessionId = SANDY_SESSION_ID;
 const sourceWorkId = SANDY_SOURCE_WORK_ID;
 const monitoringTurnIds = SANDY_MONITORING_TURN_IDS;
 const captureTurnIds = SANDY_CAPTURE_TURN_IDS;
+const canonicalDbPath = join(homedir(), ".butler", "app-server", "butler-client.sqlite");
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
@@ -341,7 +342,7 @@ describe("Sandy correction product path", () => {
 
   test("does not treat ownerStopped alone as authorization for canonical live apply", () => {
     expect(() => verifySandyOwnerStop({
-      dbPath: "/Users/yeonwoo/.butler/app-server/butler-client.sqlite",
+      dbPath: canonicalDbPath,
       sessionId,
       sourceWorkId,
       monitoringTurnIds,
@@ -353,7 +354,7 @@ describe("Sandy correction product path", () => {
       apply: true,
       ownerStopped: true,
     }, {
-      canonicalPath: "/Users/yeonwoo/.butler/app-server/butler-client.sqlite",
+      canonicalPath: canonicalDbPath,
       size: 1,
       mtimeMs: 1,
       pageCount: 1,
@@ -370,7 +371,7 @@ describe("Sandy correction product path", () => {
   test("redacts prepare-live output to hashes and timestamps only", () => {
     const safe = redactSandyOwnerStopManifest({
       version: "sandy-owner-stop-manifest.v1",
-      dbPath: "/Users/yeonwoo/.butler/app-server/butler-client.sqlite",
+      dbPath: canonicalDbPath,
       generatedAt: "2026-08-08T00:00:00.000Z",
       dbSha256: "db-hash",
       wal: { exists: true, size: 10, mtimeMs: 2, sha256: "wal-hash" },
