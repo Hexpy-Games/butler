@@ -4,6 +4,8 @@ import { afterEach, expect, mock, test } from "bun:test";
 import { JSDOM } from "jsdom";
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
+import type { NavigationView, SessionSummary } from "@/app/types.ts";
+import { activeChatFromNavigation } from "@/app/utils.ts";
 import {
   FakeClock,
   flushMicrotasks,
@@ -20,6 +22,59 @@ let unsubscribeCalls = 0;
 const refreshedSessions: string[] = [];
 const appliedRefreshes: string[] = [];
 const appliedEvents: unknown[] = [];
+let navigationRefreshCalls = 0;
+let navigationRefreshResolver: (() => void) | undefined;
+const navigationRefreshSnapshots: NavigationView[] = [];
+const navigationSession = (input: {
+  id: string;
+  projectId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  archived?: boolean;
+  pinned?: boolean;
+}): SessionSummary => ({
+  id: input.id,
+  kind: "project" as const,
+  project_id: input.projectId,
+  title: input.title,
+  created_at: input.createdAt,
+  updated_at: input.updatedAt,
+  last_activity_at: input.updatedAt,
+  pinned: input.pinned ?? false,
+  archived: input.archived ?? false,
+});
+const initialNavigation = (): NavigationView => ({
+  chats: [],
+  projects: [
+    {
+      id: "project-one",
+      display_name: "Project One",
+      last_activity_at: "2026-08-08T00:00:00.000Z",
+      pinned: false,
+      archived: false,
+      sessions: [
+        navigationSession({
+          id: "session-live-events",
+          projectId: "project-one",
+          title: "Prompt fallback",
+          createdAt: "2026-08-07T00:00:00.000Z",
+          updatedAt: "2026-08-08T00:00:00.000Z",
+        }),
+      ],
+    },
+    {
+      id: "project-two",
+      display_name: "Project Two",
+      last_activity_at: "2026-08-08T00:00:00.000Z",
+      pinned: false,
+      archived: false,
+      sessions: [],
+    },
+  ],
+  automations_summary: { total_count: 0, enabled_count: 0 },
+  settings_summary: { profile_label: "Test" },
+});
 let applyFailuresRemaining = 0;
 let holdRefresh = false;
 const refreshResolvers: Array<() => void> = [];
@@ -28,6 +83,7 @@ let latestContext = "";
 let latestSkills: string[] = [];
 const storeState = {
   activeChatId: "session-live-events",
+  navigation: initialNavigation(),
   sessionView: {
     session_id: "session-live-events",
     active_turn: null as Record<string, unknown> | null,
@@ -46,6 +102,24 @@ const storeState = {
       throw new Error("projection failed");
     }
     appliedEvents.push(...events);
+  },
+  setNavigation(navigation: ReturnType<typeof initialNavigation>) {
+    this.navigation = navigation;
+  },
+  noteNavigationEvent() {
+    // The production store fences bootstrap/navigation responses here.
+  },
+  async refreshNavigation(options?: { isCurrent?: () => boolean }) {
+    navigationRefreshCalls += 1;
+    if (navigationRefreshResolver) {
+      await new Promise<void>((resolve) => {
+        navigationRefreshResolver = resolve;
+      });
+    }
+    if (options?.isCurrent?.() === false) return false;
+    const snapshot = navigationRefreshSnapshots.shift();
+    if (snapshot) this.navigation = snapshot;
+    return true;
   },
   async refreshSessionView(
     sessionId: string,
@@ -116,6 +190,11 @@ afterEach(async () => {
   refreshSnapshots.splice(0);
   latestContext = "";
   latestSkills = [];
+  storeState.activeChatId = "session-live-events";
+  storeState.navigation = initialNavigation();
+  navigationRefreshCalls = 0;
+  navigationRefreshResolver = undefined;
+  navigationRefreshSnapshots.splice(0);
   holdRefresh = false;
   refreshResolvers.splice(0).forEach((resolve) => resolve());
   appliedEvents.splice(0);
@@ -162,6 +241,272 @@ test("transport errors reconnect without repeatedly refreshing the session view"
   await fakeClock?.advanceBy(1);
   expect(refreshedSessions).toHaveLength(2);
   expect(appliedEvents).toEqual([]);
+});
+
+test("session created and updated events reconcile the visible project session without reload", async () => {
+  await renderHarness();
+  deliverEvent(0, {
+    id: 43,
+    type: "session.created",
+    created_at: new Date().toISOString(),
+    payload: {
+      session: navigationSession({
+        id: "session-new",
+        projectId: "project-one",
+        title: "새 세션",
+        createdAt: "2026-08-08T00:01:00.000Z",
+        updatedAt: "2026-08-08T00:01:00.000Z",
+      }),
+      private_prompt: "must not enter navigation",
+    },
+  });
+  deliverEvent(0, {
+    id: 45,
+    type: "session.updated",
+    created_at: new Date().toISOString(),
+    payload: {
+      session: navigationSession({
+        id: "session-live-events",
+        projectId: "project-one",
+        title: "활성 세션 최신 제목",
+        createdAt: "2026-08-07T00:00:00.000Z",
+        updatedAt: "2026-08-08T00:03:00.000Z",
+      }),
+    },
+  });
+  deliverEvent(0, {
+    id: 44,
+    type: "session.updated",
+    created_at: new Date().toISOString(),
+    payload: {
+      session: navigationSession({
+        id: "session-new",
+        projectId: "project-one",
+        title: "브라우저 부분 캡처 및 화면 필터링 구현",
+        createdAt: "2026-08-08T00:01:00.000Z",
+        updatedAt: "2026-08-08T00:02:00.000Z",
+      }),
+    },
+  });
+  await flushMicrotasks();
+
+  const sessions = storeState.navigation.projects[0]?.sessions ?? [];
+  expect(sessions.find((session) => session.id === "session-new")?.title)
+    .toBe("브라우저 부분 캡처 및 화면 필터링 구현");
+  expect(sessions.filter((session) => session.id === "session-new")).toHaveLength(1);
+  expect(JSON.stringify(storeState.navigation)).not.toContain("private_prompt");
+  expect(activeChatFromNavigation(storeState.navigation, "session-live-events").title)
+    .toBe("활성 세션 최신 제목");
+});
+
+test("an empty navigation converges from an owning project event through one bounded refresh", async () => {
+  const canonical = initialNavigation();
+  canonical.projects = [{
+    id: "project-three",
+    display_name: "Project Three",
+    last_activity_at: "2026-08-08T00:00:00.000Z",
+    pinned: false,
+    archived: false,
+    sessions: [navigationSession({
+      id: "session-startup",
+      projectId: "project-three",
+      title: "생성 제목",
+      createdAt: "2026-08-08T00:01:00.000Z",
+      updatedAt: "2026-08-08T00:02:00.000Z",
+    })],
+  }];
+  storeState.navigation = { ...initialNavigation(), projects: [] };
+  navigationRefreshSnapshots.push(canonical);
+  await renderHarness();
+  deliverEvent(0, {
+    id: 43,
+    type: "session.created",
+    created_at: new Date().toISOString(),
+    payload: {
+      session: navigationSession({
+        id: "session-startup",
+        projectId: "project-three",
+        title: "Prompt fallback",
+        createdAt: "2026-08-08T00:01:00.000Z",
+        updatedAt: "2026-08-08T00:02:00.000Z",
+      }),
+    },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(1);
+  expect(subscriptions).toHaveLength(1);
+  expect(storeState.navigation.projects[0]?.sessions?.[0]?.title).toBe("생성 제목");
+});
+
+test("an absent session.updated delegates unarchive visibility to one canonical refresh", async () => {
+  const canonical = initialNavigation();
+  canonical.projects[0]!.sessions = [navigationSession({
+    id: "session-unarchive",
+    projectId: "project-one",
+    title: "최신 복원 제목",
+    createdAt: "2026-08-08T00:01:00.000Z",
+    updatedAt: "2026-08-08T00:05:00.000Z",
+  })];
+  navigationRefreshSnapshots.push(canonical);
+  await renderHarness();
+  deliverEvent(0, {
+    id: 43,
+    type: "session.updated",
+    created_at: new Date().toISOString(),
+    payload: {
+      session: navigationSession({
+        id: "session-unarchive",
+        projectId: "project-one",
+        title: "오래된 복원",
+        createdAt: "2026-08-08T00:01:00.000Z",
+        updatedAt: "2026-08-08T00:04:00.000Z",
+      }),
+    },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(1);
+  expect(storeState.navigation.projects[0]?.sessions?.map((session) => session.id))
+    .toEqual(["session-unarchive"]);
+  expect(storeState.navigation.projects[0]?.sessions?.[0]?.title)
+    .toBe("최신 복원 제목");
+});
+
+test("reconnect and reconcile-required events refresh canonical navigation through one stream", async () => {
+  await renderHarness();
+  subscriptions[0]?.onError(new Error("temporary disconnect"));
+  await fakeClock?.advanceBy(1_000);
+  await flushMicrotasks();
+  expect(subscriptions).toHaveLength(2);
+  expect(navigationRefreshCalls).toBe(1);
+
+  subscriptions[1]?.onEvent({
+    id: 43,
+    type: "stream.reconcile_required",
+    created_at: new Date().toISOString(),
+    payload: {},
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(2);
+  expect(subscriptions).toHaveLength(2);
+});
+
+test("active session switches keep the app-wide navigation stream singular", async () => {
+  await renderHarness();
+  storeState.activeChatId = "session-other";
+  await act(async () => renderedRoot?.render(React.createElement(Harness)));
+  expect(subscriptions).toHaveLength(1);
+  expect(unsubscribeCalls).toBe(0);
+});
+
+test("active session switches do not fence navigation refresh but fence session-view refresh", async () => {
+  const canonical = initialNavigation();
+  canonical.projects[0]!.sessions = [navigationSession({
+    id: "session-unarchive",
+    projectId: "project-one",
+    title: "네비게이션 최신 제목",
+    createdAt: "2026-08-08T00:01:00.000Z",
+    updatedAt: "2026-08-08T00:05:00.000Z",
+  })];
+  navigationRefreshSnapshots.push(canonical);
+  holdRefresh = true;
+  await renderHarness();
+  deliverEvent(0, {
+    id: 43,
+    type: "message.updated",
+    created_at: new Date().toISOString(),
+    payload: { message: { chat_id: "session-live-events" } },
+  });
+  await flushMicrotasks();
+  expect(refreshedSessions).toEqual(["session-live-events"]);
+
+  // Make the navigation refresh wait so the active-session switch happens
+  // while that app-wide request is in flight.
+  navigationRefreshResolver = () => undefined;
+  deliverEvent(0, {
+    id: 44,
+    type: "session.updated",
+    created_at: new Date().toISOString(),
+    payload: {
+      session: navigationSession({
+        id: "session-unarchive",
+        projectId: "project-one",
+        title: "오래된 복원",
+        createdAt: "2026-08-08T00:01:00.000Z",
+        updatedAt: "2026-08-08T00:04:00.000Z",
+      }),
+    },
+  });
+  await flushMicrotasks();
+  expect(navigationRefreshCalls).toBe(1);
+  expect(storeState.navigation.projects[0]?.sessions?.some(
+    (session) => session.id === "session-unarchive",
+  )).toBe(false);
+
+  storeState.activeChatId = "session-other";
+  await act(async () => renderedRoot?.render(React.createElement(Harness)));
+  holdRefresh = false;
+  refreshResolvers.shift()?.();
+  navigationRefreshResolver?.();
+  navigationRefreshResolver = undefined;
+  await flushMicrotasks();
+
+  expect(storeState.navigation.projects[0]?.sessions?.[0]?.title)
+    .toBe("네비게이션 최신 제목");
+  expect(appliedRefreshes).toEqual([]);
+});
+
+test("navigation event reconciliation ignores unrelated, stale, archived, and deleted sessions", async () => {
+  await renderHarness();
+  const unrelated = navigationSession({
+    id: "session-other-project",
+    projectId: "project-two",
+    title: "다른 프로젝트",
+    createdAt: "2026-08-08T00:03:00.000Z",
+    updatedAt: "2026-08-08T00:03:00.000Z",
+  });
+  deliverEvent(0, {
+    type: "session.created",
+    payload: { session: unrelated },
+  });
+  deliverEvent(0, {
+    type: "session.updated",
+    payload: {
+      session: navigationSession({
+        id: unrelated.id,
+        projectId: "project-two",
+        title: "오래된 제목",
+        createdAt: unrelated.created_at!,
+        updatedAt: "2026-08-08T00:02:00.000Z",
+      }),
+    },
+  });
+  deliverEvent(0, {
+    type: "session.updated",
+    payload: {
+      session: navigationSession({
+        id: "session-hidden",
+        projectId: "project-one",
+        title: "보관된 세션",
+        createdAt: "2026-08-08T00:04:00.000Z",
+        updatedAt: "2026-08-08T00:04:00.000Z",
+        archived: true,
+      }),
+    },
+  });
+  deliverEvent(0, {
+    type: "session.permanently_deleted",
+    payload: { session: { id: "session-live-events" } },
+  });
+  await flushMicrotasks();
+
+  expect(storeState.navigation.projects[1]?.sessions?.map((session) => session.id))
+    .toEqual(["session-other-project"]);
+  expect(storeState.navigation.projects[0]?.sessions?.some(
+    (session) => session.id === "session-hidden",
+  )).toBe(false);
+  expect(storeState.navigation.projects[0]?.sessions?.some(
+    (session) => session.id === "session-live-events",
+  )).toBe(false);
 });
 
 test("projection failures reconnect from the last successfully applied cursor", async () => {

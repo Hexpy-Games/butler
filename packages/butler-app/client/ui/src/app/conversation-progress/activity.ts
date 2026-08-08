@@ -2,6 +2,7 @@ import { projectSharedWorkBlocks } from "../../../../../../butler-progress-proje
 import type { ProgressRow, WorkBlockView } from "../types.ts";
 import { visibleProgressRows } from "./progress-rows.ts";
 import { compactLegacyDisplayTitle } from "./compact-display-title.ts";
+import { fallbackOrdinaryActivity } from "./ordinary-activity-fallback.ts";
 
 export type PhaseActivity = {
   id: string;
@@ -35,19 +36,25 @@ export interface TurnActivityProjection {
   operation?: ProgressRow;
 }
 
-export function projectTurnActivity(rows: ProgressRow[]): TurnActivityProjection {
+export function projectTurnActivity(
+  rows: ProgressRow[],
+  turnId?: string,
+): TurnActivityProjection {
   const visibleRows = orderedProgressRows(visibleProgressRows(rows));
   const readModels = projectActivityReadModels(visibleRows);
   const activityRows = visibleRows.filter((row) => row.kind !== "todo");
   const phaseActivities = phaseActivityRows(activityRows);
+  const projectedActivities = phaseActivities.length > 0
+    ? phaseActivities
+    : fallbackOrdinaryActivity(activityRows, turnId);
   return {
     visibleRows,
     readModels,
     decisions: readModels.filter(isDecisionReadModel),
     workBlocks: projectWorkBlocks(activityRows),
-    phaseActivities,
-    publicActivity: latestPublicActivity(activityRows, phaseActivities.length > 0),
-    semanticState: currentSemanticState(activityRows, phaseActivities),
+    phaseActivities: projectedActivities,
+    publicActivity: latestPublicActivity(activityRows, projectedActivities.length > 0),
+    semanticState: currentSemanticState(activityRows, projectedActivities),
     modelRoundWait: currentModelRoundWait(activityRows),
     operation: currentOperationActivity(activityRows),
   };

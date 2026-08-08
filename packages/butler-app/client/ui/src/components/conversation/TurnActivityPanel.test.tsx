@@ -49,6 +49,37 @@ test("turn activity panel replaces an opening decision with the latest work", ()
   expect(html).not.toContain("Request received. Preparing the work.");
 });
 
+test("turn activity panel keeps an unbound ordinary tool turn visible as 작업 중", () => {
+  const html = renderPanel([
+    {
+      id: "orphan-operation-started",
+      kind: "ran_command",
+      state: "completed",
+      safe_label: "Bun 실행 완료",
+      safe_tool_name: "Bun",
+      safe_input_label: "bun test activity",
+      tool_call_id: "tool-ordinary-1",
+      bridge_phase: "btcc_operation",
+      semantic_block_id: "turn-unbound-ordinary",
+    },
+    {
+      id: "orphan-operation-result",
+      kind: "used_tool",
+      state: "completed",
+      safe_label: "결과 확인",
+      safe_tool_name: "Bun",
+      safe_input_label: "activity test output",
+      tool_call_id: "tool-ordinary-1",
+      bridge_phase: "btcc_operation",
+      semantic_block_id: "turn-unbound-ordinary",
+    },
+  ], "running", "turn-unbound-ordinary");
+
+  expect(html).toContain("현재 · 작업 중");
+  expect(html).toContain("Bun 실행 완료");
+  expect(html).not.toContain("data-work-stage");
+});
+
 test("turn activity panel keeps the latest phase activity visible after Opening", () => {
   const html = renderPanel([
     {
@@ -324,8 +355,10 @@ test("turn activity panel leaves the canonical Work and Task list to the compose
   expect(html).not.toContain("Exercise the real SSE reducer");
 });
 
-function renderPanel(rows: ProgressRow[], state = "running"): string {
-  return renderToStaticMarkup(<TurnActivityPanel rows={rows} state={state} />);
+function renderPanel(rows: ProgressRow[], state = "running", turnId?: string): string {
+  return renderToStaticMarkup(
+    <TurnActivityPanel rows={rows} state={state} turnId={turnId} />,
+  );
 }
 
 function acknowledgedRow(): ProgressRow {

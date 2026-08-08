@@ -16,11 +16,13 @@ export function useProjectDashboard({
 }) {
   const view = useButlerStore((state) => state.view);
   const navigation = useButlerStore((state) => state.navigation);
-  const project =
-    projectProp ??
-    (view.kind === "project-dashboard"
-      ? (navigation.projects ?? []).find((item) => item.id === view.projectId)
-      : undefined);
+  const projectIdFromView = view.kind === "project-dashboard"
+    ? view.projectId
+    : projectProp?.id;
+  const navigationProject = projectIdFromView
+    ? (navigation.projects ?? []).find((item) => item.id === projectIdFromView)
+    : undefined;
+  const project = navigationProject ?? projectProp;
   const projectId = project?.id;
   const dashboardActivation =
     view.kind === "project-dashboard" && view.projectId === projectId
@@ -59,6 +61,8 @@ export function useProjectDashboard({
   return {
     dashboard,
     project,
-    sessions: dashboard?.project.sessions ?? project?.sessions ?? [],
+    sessions: navigationProject
+      ? navigationProject.sessions ?? []
+      : dashboard?.project.sessions ?? project?.sessions ?? [],
   };
 }

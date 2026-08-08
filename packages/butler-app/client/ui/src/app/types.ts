@@ -641,6 +641,8 @@ export interface SessionSummary {
   kind: ChatKind;
   title: string;
   project_id?: string;
+  created_at?: string;
+  updated_at?: string;
   project?: {
     id: string;
     display_name: string;
@@ -649,6 +651,10 @@ export interface SessionSummary {
   active_turn_state?: string;
   pinned: boolean;
   archived: boolean;
+  last_message_preview?: string;
+  safe_status_label?: string;
+  unread_count?: number;
+  automation_target_count?: number;
 }
 
 export interface CreateSessionResult {
@@ -786,6 +792,7 @@ export interface ProgressDetailRow {
 
 export interface ProgressRow {
   id: string;
+  turn_id?: string;
   kind?: string;
   state: string;
   safe_label: string;
@@ -1247,6 +1254,7 @@ export interface TimelineEvent {
     chat_id?: string;
     role?: MessageRecord["role"];
     session_id?: string;
+    session?: unknown;
     turn_id?: string;
     state?: string;
     safe_status_label?: string;

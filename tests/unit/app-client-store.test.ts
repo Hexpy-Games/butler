@@ -16,6 +16,7 @@ import {
   freezeConversationActivity as freezeMessageWorkBlocks,
   freezeMessageActivity as freezeMessageWorkBlocksForRecord,
 } from "../../packages/butler-app/client/ui/src/app/conversation-progress/index.ts";
+import { applyLiveNavigationEvent } from "../../packages/butler-app/client/ui/src/hooks/live-session/liveNavigationProjection.ts";
 import {
   editablePersonaText,
   personalizationDraftHasChanges,
@@ -29,6 +30,7 @@ import type {
   SessionSummaryView,
   SessionView,
   TurnProgressSnapshot,
+  NavigationView,
 } from "../../packages/butler-app/client/ui/src/app/types.ts";
 
 const originalFetch = globalThis.fetch;
@@ -45,6 +47,7 @@ afterEach(() => {
   useButlerStore.setState({
     activeChatId: "draft:chat",
     navigation: EMPTY_NAVIGATION,
+    navigationGeneration: 0,
     messages: [],
     messageLoadPending: false,
     optimisticSessionStart: null,
@@ -138,6 +141,131 @@ test("completed assistant messages retain their own phase activity history", () 
   expect(frozen.turn_activity_rows?.map((row) => row.id)).toEqual([
     "planning-a",
   ]);
+});
+
+test("late bootstrap navigation cannot regress a newer live navigation event", () => {
+  const requestGeneration = useButlerStore.getState().navigationGeneration;
+  useButlerStore.getState().noteNavigationEvent();
+  const liveNavigation: NavigationView = {
+    ...EMPTY_NAVIGATION,
+    projects: [{
+      id: "project-live",
+      display_name: "Live project",
+      last_activity_at: "2026-08-08T00:00:00.000Z",
+      pinned: false,
+      archived: false,
+      sessions: [],
+    }],
+  };
+  useButlerStore.getState().setNavigation(
+    liveNavigation,
+    { preserveOptimisticSession: false },
+  );
+  const staleBootstrap: NavigationView = {
+    ...EMPTY_NAVIGATION,
+    projects: [{
+      id: "project-stale",
+      display_name: "Stale project",
+      last_activity_at: "2026-08-07T00:00:00.000Z",
+      pinned: false,
+      archived: false,
+      sessions: [],
+    }],
+  };
+  useButlerStore.getState().setNavigation(
+    staleBootstrap,
+    { requestGeneration },
+  );
+  expect(useButlerStore.getState().navigation.projects.map((project) => project.id))
+    .toEqual(["project-live"]);
+});
+
+test("live archive/delete navigation stays removed while an optimistic send is active", () => {
+  const session = {
+    id: "session-archived",
+    kind: "project" as const,
+    title: "보관 대상",
+    project_id: "project-live",
+    created_at: "2026-08-07T00:00:00.000Z",
+    updated_at: "2026-08-08T00:00:00.000Z",
+    last_activity_at: "2026-08-08T00:00:00.000Z",
+    pinned: false,
+    archived: false,
+  };
+  const navigation: NavigationView = {
+    ...EMPTY_NAVIGATION,
+    projects: [{
+      id: "project-live",
+      display_name: "Live project",
+      last_activity_at: "2026-08-08T00:00:00.000Z",
+      pinned: false,
+      archived: false,
+      sessions: [session],
+    }],
+  };
+  useButlerStore.setState({
+    activeChatId: session.id,
+    navigation,
+    isSending: true,
+  });
+  useButlerStore.getState().noteNavigationEvent();
+  useButlerStore.getState().setNavigation({
+    ...navigation,
+    projects: [{ ...navigation.projects[0]!, sessions: [] }],
+  }, { preserveOptimisticSession: false });
+  expect(useButlerStore.getState().navigation.projects[0]?.sessions).toEqual([]);
+});
+
+test("live project session merge keeps an optimistic project row in the authoritative navigation", () => {
+  const optimistic = {
+    id: "optimistic-project-session",
+    kind: "project" as const,
+    title: "새 세션 준비 중",
+    project_id: "project-live",
+    created_at: "2026-08-08T00:00:00.000Z",
+    updated_at: "2026-08-08T00:00:00.000Z",
+    last_activity_at: "2026-08-08T00:00:00.000Z",
+    pinned: false,
+    archived: false,
+  };
+  const navigation: NavigationView = {
+    ...EMPTY_NAVIGATION,
+    projects: [{
+      id: "project-live",
+      display_name: "Live project",
+      last_activity_at: "2026-08-08T00:00:00.000Z",
+      pinned: false,
+      archived: false,
+      sessions: [optimistic],
+    }],
+  };
+  useButlerStore.setState({
+    activeChatId: optimistic.id,
+    navigation,
+    isSending: true,
+  });
+  const nextNavigation = applyLiveNavigationEvent(navigation, {
+    type: "session.created",
+    payload: {
+      session: {
+        id: "session-live-created",
+        kind: "project",
+        title: "생성 제목",
+        project_id: "project-live",
+        created_at: "2026-08-08T00:01:00.000Z",
+        updated_at: "2026-08-08T00:02:00.000Z",
+        last_activity_at: "2026-08-08T00:02:00.000Z",
+        pinned: false,
+        archived: false,
+      },
+    },
+  });
+  const state = useButlerStore.getState();
+  state.noteNavigationEvent();
+  state.setNavigation(nextNavigation, { preserveOptimisticSession: false });
+  expect(useButlerStore.getState().navigation.projects[0]?.sessions?.map(
+    (session) => session.id,
+  )).toEqual(["session-live-created", optimistic.id]);
 });
 
 test("terminal freeze retains R3 activity when optional detail is omitted", () => {
