@@ -3503,6 +3503,244 @@ test("unbound capture fallback never inherits an unrelated candidate Work", asyn
   }
 });
 
+test("whole-goal sequence preserves explicit relation across restart and exhaustion", async () => {
+  const fixture = createFixture("guided-whole-goal-sequence");
+  let currentStores = fixture.stores;
+  const createAgent = (modelRound: ModelRoundPort) => createProductionGuidedTurnAgent({
+    butlerHome: fixture.root,
+    butlerData: fixture.root,
+    appMessageDbPath: fixture.dbPath,
+    contextDocuments: currentStores.contextDocuments,
+    toolJournal: currentStores.guidedToolJournal,
+    effectJournal: currentStores.guidedEffectJournal,
+    durableWork: currentStores.durableWork,
+    modelRound,
+  });
+  const createRuntime = (turnId: string, modelRound: ModelRoundPort) =>
+    createGuidedTurnRuntime({
+      admission: currentStores.admission,
+      turns: currentStores.turns,
+      messages: currentStores.messages,
+      committedSuccessorReadiness: currentStores.committedSuccessorReadiness,
+      agent: createAgent(modelRound),
+    }).runTurn(localRunCommand(fixture.root, turnId));
+  const restart = () => {
+    currentStores.close();
+    currentStores = openBtccSqliteStores({
+      dbPath: fixture.dbPath,
+      ownerId: "guided-whole-goal-sequence",
+      storageProfile: "ephemeral",
+    });
+  };
+
+  try {
+    let monitoringWorkId = "";
+    let monitoringCalls = 0;
+    const monitoringResult = await createRuntime(
+      "whole-goal-monitoring-start",
+      {
+        async runRound(request) {
+          monitoringCalls += 1;
+          if (monitoringCalls === 1) {
+            return toolResponse([toolCall("monitor-start", "start_work", {
+              objective: "안전한 모니터링 기준선을 확인합니다",
+            })]);
+          }
+          if (monitoringCalls === 2) {
+            const output = toolMessageOutput(
+              messagesWithToolResults(request).at(-1),
+            ) as { work?: { work_id?: string } };
+            monitoringWorkId = output.work?.work_id ?? "";
+            return toolResponse([toolCall("monitor-plan", "replace_work_plan", {
+              objective: "안전한 모니터링 기준선을 확인합니다",
+              actions: [{
+                action_key: "monitor-baseline",
+                description: "안전한 기준선을 확인합니다",
+                dependency_keys: [],
+              }],
+              checks: ["기준선 근거를 확인합니다"],
+            })]);
+          }
+          if (monitoringCalls === 3) {
+            return toolResponse([toolCall("monitor-checkpoint", "record_work_checkpoint", {
+              next_stage: "execution",
+              action_updates: [{ action_key: "monitor-baseline", status: "active" }],
+              public_summary: "기준선 확인을 진행합니다.",
+              next_step: "기준선 확인을 마칩니다.",
+            })]);
+          }
+          if (monitoringCalls === 4) {
+            return toolResponse([toolCall("monitor-open", "record_work_disposition", {
+              work_id: monitoringWorkId,
+              disposition: "open",
+              summary: "기준선 확인을 계속합니다.",
+              remaining_actions: ["기준선 확인을 마칩니다"],
+            })]);
+          }
+          return { text: "모니터링 기준선을 계속 확인합니다.", toolCalls: [] };
+        },
+      },
+    );
+    expect(monitoringResult).toMatchObject({
+      kind: "delivered",
+      content: "모니터링 기준선을 계속 확인합니다.",
+    });
+    expect(monitoringWorkId).toMatch(/^guided-work-/);
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-monitoring-start",
+    )).toMatchObject({
+      workId: monitoringWorkId,
+      status: "open",
+      latestDisposition: { disposition: "open" },
+    });
+
+    restart();
+    let monitoringContinuationCalls = 0;
+    const completedMonitoring = await createRuntime(
+      "whole-goal-monitoring-complete",
+      {
+        async runRound(_request) {
+          monitoringContinuationCalls += 1;
+          if (monitoringContinuationCalls === 1) {
+            return toolResponse([toolCall("monitor-continue", "continue_work", {
+              work_id: monitoringWorkId,
+            })]);
+          }
+          if (monitoringContinuationCalls === 2) {
+            return toolResponse([toolCall("monitor-complete", "record_work_disposition", {
+              work_id: monitoringWorkId,
+              disposition: "completed",
+              summary: "기준선 확인을 완료했습니다.",
+              action_updates: [{
+                action_key: "monitor-baseline",
+                status: "done",
+                note: "기준선 근거를 확인했습니다.",
+              }],
+            })]);
+          }
+          return { text: "모니터링 기준선 확인을 마쳤습니다.", toolCalls: [] };
+        },
+      },
+    );
+    expect(completedMonitoring).toMatchObject({
+      kind: "delivered",
+      content: "모니터링 기준선 확인을 마쳤습니다.",
+    });
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-monitoring-complete",
+    )).toMatchObject({
+      workId: monitoringWorkId,
+      status: "completed",
+      latestDisposition: {
+        disposition: "completed",
+        originTurnId: "whole-goal-monitoring-complete",
+      },
+    });
+
+    writeFileSync(join(fixture.root, "capture-evidence.txt"), "capture evidence");
+    restart();
+    let captureWorkId = "";
+    let captureCalls = 0;
+    const exhaustedCapture = await createRuntime(
+      "whole-goal-capture-start",
+      {
+        async runRound(_request) {
+          captureCalls += 1;
+          if (captureCalls === 1) {
+            return toolResponse([toolCall("capture-read", "read_file", {
+              path: "capture-evidence.txt",
+            })]);
+          }
+          if (captureCalls === 2) {
+            return toolResponse([toolCall("capture-start", "start_work", {
+              objective: "캡처 하드닝 근거를 정리합니다",
+            })]);
+          }
+          throw knownProviderFailure("capture provider exhausted after Work selection");
+        },
+      },
+    );
+    expect(exhaustedCapture.kind).toBe("delivered");
+    if (exhaustedCapture.kind === "delivered") {
+      expect(exhaustedCapture.content).not.toContain("안전한 모니터링 기준선");
+      expect(exhaustedCapture.content).not.toContain(monitoringWorkId);
+      expect(exhaustedCapture.content).toContain("현재 요청을 처리했지만 답변 생성을 마치지 못했습니다.");
+    }
+    captureWorkId = (await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-capture-start",
+    ))?.workId ?? "";
+    expect(captureWorkId).toMatch(/^guided-work-/);
+    expect(captureWorkId).not.toBe(monitoringWorkId);
+
+    restart();
+    let captureContinuationCalls = 0;
+    const captureFollowup = await createRuntime(
+      "whole-goal-capture-followup",
+      {
+        async runRound(_request) {
+          captureContinuationCalls += 1;
+          if (captureContinuationCalls === 1) {
+            return toolResponse([toolCall("capture-continue", "continue_work", {
+              work_id: captureWorkId,
+            })]);
+          }
+          if (captureContinuationCalls === 2) {
+            return toolResponse([toolCall("capture-plan", "replace_work_plan", {
+              objective: "캡처 하드닝 근거를 정리합니다",
+              actions: [{
+                action_key: "capture-hardening",
+                description: "캡처 하드닝 근거를 정리합니다",
+                dependency_keys: [],
+              }],
+              checks: ["현재 변경 근거를 확인합니다"],
+            })]);
+          }
+          if (captureContinuationCalls === 3) {
+            return toolResponse([toolCall("capture-checkpoint", "record_work_checkpoint", {
+              next_stage: "execution",
+              action_updates: [{ action_key: "capture-hardening", status: "active" }],
+              public_summary: "캡처 하드닝 근거를 정리하는 중입니다.",
+              next_step: "현재 변경 근거를 확인합니다.",
+            })]);
+          }
+          if (captureContinuationCalls === 4) {
+            return toolResponse([toolCall("capture-open", "record_work_disposition", {
+              work_id: captureWorkId,
+              disposition: "open",
+              summary: "캡처 하드닝 근거를 계속 정리합니다.",
+              remaining_actions: ["현재 변경 근거를 확인합니다"],
+            })]);
+          }
+          return { text: "캡처 하드닝 근거를 계속 정리합니다.", toolCalls: [] };
+        },
+      },
+    );
+    expect(captureFollowup).toMatchObject({
+      kind: "delivered",
+      content: "캡처 하드닝 근거를 계속 정리합니다.",
+    });
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-capture-followup",
+    )).toMatchObject({
+      workId: captureWorkId,
+      status: "open",
+      latestDisposition: {
+        disposition: "open",
+        originTurnId: "whole-goal-capture-followup",
+      },
+    });
+    expect(await currentStores.durableWork.boundWorkForTurn(
+      "whole-goal-monitoring-complete",
+    )).toMatchObject({
+      workId: monitoringWorkId,
+      status: "completed",
+    });
+  } finally {
+    currentStores.close();
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("continue_work does not republish an old Plan into fallback progress", async () => {
   const fixture = createFixture("guided-fallback-continue-old-plan");
   try {
@@ -4050,8 +4288,8 @@ test("Work-derived fallback facts fail closed for internal names and paths", () 
       planRevisionId: "plan-safety",
       stage: "execution",
       actionProgress: [],
-      publicSummary: "Worker가 guided-work-safety-id를 /Users/yeonwoo/Project Files에서 확인했습니다.",
-      nextStep: "C:\\Users\\yeonwoo\\Project Files\\next.md를 확인합니다.",
+      publicSummary: "Worker가 guided-work-safety-id를 /Users/test-user/Project Files에서 확인했습니다.",
+      nextStep: "C:\\Users\\test-user\\Project Files\\next.md를 확인합니다.",
       referencedResultRefs: [],
       originTurnId: turnId,
       createdAt: "2026-08-01T00:00:00.000Z",
@@ -4086,7 +4324,7 @@ test("Work-derived fallback facts fail closed for internal names and paths", () 
   });
   expect(fallback).not.toContain("Worker");
   expect(fallback).not.toContain("guided-work-safety-id");
-  expect(fallback).not.toContain("/Users/yeonwoo");
+  expect(fallback).not.toContain("/Users/test-user");
   expect(fallback).not.toContain("Project Files");
   expect(fallback).not.toContain("docs/read me.md");
 });

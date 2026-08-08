@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 export const SANDY_CORRECTION_VERSION = 2;
 export const SANDY_RECIPE_VERSION = "sandy-turn-work-recipe-2026-08-08.v2";
-export const SANDY_CANONICAL_DB_PATH = "/Users/yeonwoo/.butler/app-server/butler-client.sqlite";
+export const SANDY_CANONICAL_DB_PATH = join(homedir(), ".butler", "app-server", "butler-client.sqlite");
 export const SANDY_SESSION_ID = "butler/app-project-bdc1ab45-3cff-401f-9b2e-98a991aa234d";
 export const SANDY_SOURCE_WORK_ID = "guided-work-9e114e913e87156179c750e745add710efaf2f636a28a2216615d5dbf5446145";
 export const SANDY_MONITORING_TURN_IDS = [
