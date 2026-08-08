@@ -98,8 +98,13 @@ import { finishVisibleCancellation } from "./cancellation/finish-visible-cancell
 type ProjectAction = "rename" | "pin" | "archive" | "delete";
 type SessionAction = "rename" | "archive";
 
-interface SessionViewRefreshOptions {
+export interface SessionViewRefreshOptions {
   isCurrent?: () => boolean;
+}
+
+export interface NavigationSetOptions {
+  preserveOptimisticSession?: boolean;
+  requestGeneration?: number;
 }
 
 interface ButlerStore {
@@ -117,6 +122,7 @@ interface ButlerStore {
   settingsReturnView: AppView;
   activeChatId: string;
   navigation: NavigationView;
+  navigationGeneration: number;
   messages: MessageRecord[];
   sessionView: SessionView | null;
   messageLoadPending: boolean;
@@ -157,7 +163,11 @@ interface ButlerStore {
   openSettings: (section?: SettingsSectionId | string) => void;
   closeSettings: () => void;
   setActiveChatId: (activeChatId: string) => void;
-  setNavigation: (navigation: NavigationView) => void;
+  noteNavigationEvent: () => void;
+  setNavigation: (
+    navigation: NavigationView,
+    options?: NavigationSetOptions,
+  ) => void;
   setMessages: (messages: Updater<MessageRecord[]>) => void;
   setMessageListView: (view: MessageListView) => void;
   setSessionView: (view: SessionView) => void;
@@ -186,7 +196,7 @@ interface ButlerStore {
   ) => void;
   clearPendingProjectDocumentAttachment: () => void;
   openProjectDashboard: (projectId: string) => void;
-  refreshNavigation: () => Promise<void>;
+  refreshNavigation: (options?: SessionViewRefreshOptions) => Promise<boolean>;
   refreshSessionView: (
     chatId?: string,
     options?: SessionViewRefreshOptions,
@@ -662,6 +672,7 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
   settingsReturnView: { kind: "session" },
   activeChatId: "draft:chat",
   navigation: EMPTY_NAVIGATION,
+  navigationGeneration: 0,
   messages: [],
   sessionView: null,
   messageLoadPending: false,
@@ -775,17 +786,26 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
     })),
   setActiveChatId: (activeChatId) =>
     set({ activeChatId, selectedArtifactId: null, selectedArtifact: null }),
-  setNavigation: (navigation) =>
+  noteNavigationEvent: () =>
+    set((state) => ({ navigationGeneration: state.navigationGeneration + 1 })),
+  setNavigation: (navigation, options) =>
     set((state) => {
-      const nextNavigation = navigationWithOptimisticSession(
-        navigation,
-        state.optimisticSessionStart,
-      );
+      if (
+        options?.requestGeneration !== undefined &&
+        options.requestGeneration !== state.navigationGeneration
+      ) return state;
+      const nextNavigation = options?.preserveOptimisticSession === false
+        ? navigation
+        : navigationWithOptimisticSession(
+          navigation,
+          state.optimisticSessionStart,
+        );
       const activeLocalSession = findSessionSummary(
         state.navigation,
         state.activeChatId,
       );
       const displayedNavigation =
+        options?.preserveOptimisticSession !== false &&
         state.isSending &&
         activeLocalSession &&
         !findSessionSummary(nextNavigation, state.activeChatId)
@@ -971,12 +991,16 @@ export const useButlerStore = create<ButlerStore>((set, get) => ({
       selectedArtifact: null,
     }),
 
-  refreshNavigation: async () => {
+  refreshNavigation: async (options) => {
+    const requestGeneration = get().navigationGeneration;
     try {
       const data = await api<NavigationView>("/navigation");
-      get().setNavigation(data);
+      if (options?.isCurrent && !options.isCurrent()) return false;
+      get().setNavigation(data, { requestGeneration });
+      return true;
     } catch {
       // Navigation refresh is opportunistic; message delivery should remain visible.
+      return false;
     }
   },
 
