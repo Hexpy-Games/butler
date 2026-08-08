@@ -249,7 +249,7 @@ function insertTurn(db: Database, turnId: string, sessionId: string): WorkTurnSc
       original_message, admission_snapshot_ref, model_selection_json,
       context_json, semantic_state, revision, execution_fence
     ) VALUES (?, ?, ?, ?, ?, '결과를 만들고 검증해 주세요.', 'snapshot', '{}', '{}',
-      'admitted', 1, 1)
+      'admitted', 1, 0)
   `).run(turnId, sessionId, `inbox-${turnId}`, `trigger-${turnId}`, `message-${turnId}`);
   return { turnId, sessionId };
 }

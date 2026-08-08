@@ -2,6 +2,7 @@ export { createDurableWorkService } from "./work.ts";
 export {
   DURABLE_WORK_TOOL_NAMES,
   isDurableWorkTool,
+  isWorkRelationshipTool,
 } from "./tool-names.ts";
 export type { DurableWorkToolName } from "./tool-names.ts";
 export type {
@@ -11,6 +12,8 @@ export type {
 } from "./legacy-work-source.ts";
 export type {
   AttachToolResultInput,
+  ContinueWorkCommand,
+  ContinueWorkInput,
   DurableWorkActionProgress,
   DurableWorkActionStatus,
   DurableWorkActionUpdate,
@@ -32,6 +35,8 @@ export type {
   RecordWorkReviewInput,
   ReplaceWorkPlanCommand,
   ReplaceWorkPlanInput,
+  StartWorkCommand,
+  StartWorkInput,
   WorkStage,
   WorkTurnScope,
 } from "./contracts.ts";

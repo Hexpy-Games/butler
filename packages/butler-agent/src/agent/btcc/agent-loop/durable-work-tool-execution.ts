@@ -20,6 +20,8 @@ type WorkToolInput = {
   mutationCallId: string;
   name: DurableWorkToolName;
   args: Record<string, unknown>;
+  /** Completed ordinary calls from this Turn, supplied by the runtime only. */
+  priorToolCallIds?: readonly string[];
 };
 
 export async function executeDurableWorkTool(
@@ -28,9 +30,13 @@ export async function executeDurableWorkTool(
   try {
     const view = input.name === "replace_work_plan"
       ? await input.service.replacePlan(decodePlan(input))
-      : input.name === "record_work_checkpoint"
-        ? await input.service.recordCheckpoint(decodeCheckpoint(input))
-        : await input.service.recordReview(decodeReview(input));
+      : input.name === "start_work"
+        ? await input.service.startWork(decodeStartWork(input))
+        : input.name === "continue_work"
+          ? await input.service.continueWork(decodeContinueWork(input))
+          : input.name === "record_work_checkpoint"
+            ? await input.service.recordCheckpoint(decodeCheckpoint(input))
+            : await input.service.recordReview(decodeReview(input));
     return { ok: true, work: workToolView(view) };
   } catch (error) {
     const current = await input.service.loadContext(input.scope).catch(() => null);
@@ -56,6 +62,24 @@ export async function executeDurableWorkTool(
       ...(current ? { work: workToolView(current.work) } : {}),
     };
   }
+}
+
+function decodeStartWork(input: WorkToolInput) {
+  return {
+    ...input.scope,
+    mutationCallId: input.mutationCallId,
+    objective: stringValue(input.args.objective, "objective"),
+    ...backfillInput(input),
+  };
+}
+
+function decodeContinueWork(input: WorkToolInput) {
+  return {
+    ...input.scope,
+    mutationCallId: input.mutationCallId,
+    workId: stringValue(input.args.work_id, "work_id"),
+    ...backfillInput(input),
+  };
 }
 
 function decodePlan(input: WorkToolInput) {
@@ -84,7 +108,15 @@ function decodePlan(input: WorkToolInput) {
     governingRefs: optionalStringArray(input.args.governing_refs, "governing_refs"),
     actions,
     checks: optionalStringArray(input.args.checks, "checks"),
+    ...backfillInput(input),
   };
+}
+
+function backfillInput(input: WorkToolInput):
+  { backfillToolCallIds?: string[] } {
+  return input.priorToolCallIds && input.priorToolCallIds.length > 0
+    ? { backfillToolCallIds: [...input.priorToolCallIds] }
+    : {};
 }
 
 function decodeCheckpoint(input: WorkToolInput) {

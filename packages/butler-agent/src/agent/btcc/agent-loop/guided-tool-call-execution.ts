@@ -19,10 +19,11 @@ import {
   priorToolFailure,
   uncertainPriorMutation,
 } from "./guided-turn-policy.ts";
-import { isDurableWorkTool } from "../work/index.ts";
 import {
-  backfillTurnToolResults,
-  bindPresentedWorkForToolDispatch,
+  isDurableWorkTool,
+  isWorkRelationshipTool,
+} from "../work/index.ts";
+import {
   publishWorkProgress,
   safeAttachToolResult,
 } from "./guided-work-runtime.ts";
@@ -56,7 +57,6 @@ export type GuidedToolCallExecutionInput = {
   progress?: BtccTurnProgressObserver;
   activity?: GuidedActivityProjection;
   workScope: WorkTurnScope;
-  presentedWorkId?: string;
   authorizedNames: ReadonlySet<string>;
   visibleNames: ReadonlySet<string>;
   describedToolIds: Set<string>;
@@ -179,6 +179,24 @@ export function createGuidedToolCallExecutor(
     if (recorded?.status === "completed") {
       if (!isDurableWorkTool(call.name)) {
         await safeAttachToolResult(input, input.workScope, recorded.callId);
+      } else if (
+        (call.name === "replace_work_plan" || isWorkRelationshipTool(call.name)) &&
+        toolResultSucceeded(recorded.result)
+      ) {
+        // A replay may observe a durable relation command whose journal row was
+        // committed before the original backfill completed. Re-run the same
+        // idempotent relation transaction so restart/replay can repair that
+        // receipt without creating another relation authority.
+        const repaired = await executeFreshTool(
+          input,
+          call,
+          callId,
+          toolSignal,
+          priorTurnResultCallIds(input),
+        );
+        if (!toolResultSucceeded(repaired)) {
+          throw new Error("Durable Work relation replay could not repair prior results");
+        }
       }
       rememberDescribedTools(
         call.name,
@@ -246,16 +264,6 @@ export function createGuidedToolCallExecutor(
         arguments: presentationArgs,
       });
     }
-    if (
-      !isDurableWorkTool(call.name) && input.presentedWorkId &&
-      await bindPresentedWorkForToolDispatch(
-        input,
-        input.workScope,
-        input.presentedWorkId,
-      )
-    ) {
-      await activityProjection.markManaged(activity);
-    }
     await publishOperation(input.progress, {
       turnId: input.turn.turnId,
       activityId: activity.activityId,
@@ -266,12 +274,18 @@ export function createGuidedToolCallExecutor(
     });
 
     try {
-      const result = await executeFreshTool(input, call, callId, toolSignal);
+      const result = await executeFreshTool(
+        input,
+        call,
+        callId,
+        toolSignal,
+        isWorkRelationOrPlan(call.name)
+          ? priorTurnResultCallIds(input)
+          : undefined,
+      );
       rememberDescribedTools(call.name, result, input.describedToolIds);
       input.toolJournal.finish({ callId, status: "completed", result });
-      if (call.name === "replace_work_plan" && toolResultSucceeded(result)) {
-        await backfillTurnToolResults(input, input.workScope);
-      } else if (!isDurableWorkTool(call.name)) {
+      if (!isDurableWorkTool(call.name)) {
         await safeAttachToolResult(input, input.workScope, callId);
       }
       if (isDurableWorkTool(call.name) && toolResultSucceeded(result)) {
@@ -315,16 +329,30 @@ async function executeFreshTool(
   call: Parameters<ButlerToolExecutor>[0],
   callId: string,
   toolSignal: AbortSignal,
+  priorToolCallIds?: readonly string[],
 ): Promise<unknown> {
   return executeGuidedFreshTool({
     durableWork: input.durableWork,
-    toolJournal: input.toolJournal,
     workScope: input.workScope,
     call,
     callId,
     toolSignal,
+    priorToolCallIds,
     executeButlerTool: input.executeButlerTool,
   });
+}
+
+function isWorkRelationOrPlan(toolName: string): boolean {
+  return toolName === "replace_work_plan" || isWorkRelationshipTool(toolName);
+}
+
+function priorTurnResultCallIds(
+  input: GuidedToolCallExecutionInput,
+): string[] {
+  return input.toolJournal.list(input.turn.turnId)
+    .filter((record) =>
+      record.status === "completed" && !isDurableWorkTool(record.toolName))
+    .map((record) => record.callId);
 }
 
 function throwIfToolAborted(signal: AbortSignal): void {

@@ -170,7 +170,7 @@ function insertTurn(
       original_message, admission_snapshot_ref, model_selection_json,
       context_json, semantic_state,
       revision, execution_fence
-    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', 'admitted', 1, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, 'snapshot', '{}', '{}', 'admitted', 1, 0)
   `).run(
     turnId,
     sessionId,

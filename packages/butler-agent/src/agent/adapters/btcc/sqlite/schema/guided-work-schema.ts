@@ -93,6 +93,14 @@ ON btcc_guided_turn_work_bindings(turn_id) WHERE is_current = 1;
 CREATE INDEX IF NOT EXISTS idx_btcc_guided_turn_work_history
 ON btcc_guided_turn_work_bindings(work_id, turn_id, revision);
 
+CREATE TABLE IF NOT EXISTS btcc_guided_work_relation_commands (
+  mutation_call_id TEXT PRIMARY KEY,
+  operation TEXT NOT NULL CHECK (operation IN ('start_work', 'continue_work')),
+  request_sha256 TEXT NOT NULL,
+  work_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS btcc_guided_work_plan_revisions (
   plan_revision_id TEXT PRIMARY KEY,
   work_id TEXT NOT NULL,
@@ -112,6 +120,8 @@ CREATE TABLE IF NOT EXISTS btcc_guided_work_results (
   sequence INTEGER NOT NULL,
   tool_call_id TEXT NOT NULL UNIQUE,
   origin_turn_id TEXT NOT NULL,
+  source_turn_rowid INTEGER,
+  source_turn_sequence INTEGER,
   attached_at TEXT NOT NULL,
   UNIQUE(work_id, sequence)
 );

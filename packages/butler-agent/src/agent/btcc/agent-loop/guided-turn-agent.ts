@@ -42,7 +42,7 @@ import {
 } from "./guided-work-runtime.ts";
 import { createGuidedToolCallExecutor } from
   "./guided-tool-call-execution.ts";
-import { runGuidedAgentLoopWithOperationalReport } from
+import { guidedOperationalFallback, runGuidedAgentLoopWithOperationalReport } from
   "./guided-operational-report.ts";
 import { createGuidedActivityProjection } from
   "../projection/index.ts";
@@ -97,7 +97,6 @@ export function createProductionGuidedTurnAgent(input: {
           initialWork = await safeLoadWorkContext(input.durableWork, workScope);
         }
       }
-      const presentedWorkId = initialWork?.work.workId;
       const authorizedTools = authorizedToolDefinitions(turn);
       const authorizedNames = new Set(authorizedTools.map((tool) => tool.name));
       const visibleTools = visibleToolDefinitions(authorizedTools, policy);
@@ -170,7 +169,6 @@ export function createProductionGuidedTurnAgent(input: {
         progress,
         activity,
         workScope,
-        presentedWorkId,
         authorizedNames,
         visibleNames,
         describedToolIds,
@@ -323,8 +321,27 @@ export function createProductionGuidedTurnAgent(input: {
         },
       });
       const finalWork = await safeBoundWork(input.durableWork, turn.turnId);
+      const finalContext = !finalWork && policy.trackingMode !== "none"
+        ? await safeLoadWorkContext(input.durableWork, workScope)
+        : null;
+      const internalWorkIds = [
+        initialWork?.work.workId,
+        finalWork?.workId,
+        finalContext?.work.workId,
+      ].filter((workId): workId is string => Boolean(workId));
+      const leakedInternalWorkId = internalWorkIds.some((workId) =>
+        text.includes(workId));
+      const content = leakedInternalWorkId
+        ? guidedOperationalFallback({
+            originalRequest: turn.originalMessage,
+            responseLanguage,
+            work: null,
+            toolCalls: [],
+            effects: [],
+          })
+        : text;
       return {
-        content: text,
+        content,
         route: routeForUsedTools(
           toolCalls.usedTools,
           Boolean(finalWork) ||

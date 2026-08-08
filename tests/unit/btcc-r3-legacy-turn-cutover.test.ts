@@ -373,7 +373,11 @@ test("an imported Work reconciles its exact R2 effect target before any R3 dispa
       }],
     });
     if (imported?.work.currentStage === "execution") {
-      await stores.durableWork.bindOpenWork(scope, imported.work.workId);
+      await stores.durableWork.continueWork({
+        ...scope,
+        mutationCallId: "continue-imported-effect-work",
+        workId: imported.work.workId,
+      });
       await stores.durableWork.recordCheckpoint({
         ...scope,
         mutationCallId: "review-imported-effect-plan",

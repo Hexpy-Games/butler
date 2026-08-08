@@ -224,6 +224,7 @@ CREATE TABLE IF NOT EXISTS btcc_guided_tool_calls (
   tool_name TEXT NOT NULL,
   raw_arguments TEXT NOT NULL,
   arguments_json TEXT NOT NULL,
+  turn_sequence INTEGER,
   status TEXT NOT NULL,
   result_json TEXT,
   result_sha256 TEXT,

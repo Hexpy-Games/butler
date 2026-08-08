@@ -3,9 +3,11 @@ import type {
   DurableWorkService,
   DurableWorkStore,
   DurableWorkView,
+  ContinueWorkInput,
   RecordWorkCheckpointInput,
   RecordWorkReviewInput,
   ReplaceWorkPlanInput,
+  StartWorkInput,
   WorkTurnScope,
 } from "./contracts.ts";
 import {
@@ -28,18 +30,28 @@ export function createDurableWorkService(
       validateScope(scope);
       return store.importOpenLegacyWork(scope);
     },
-    bindOpenWork(scope, expectedWorkId) {
-      validateScope(scope);
-      if (expectedWorkId !== undefined) {
-        requiredText(expectedWorkId, "expectedWorkId");
-      }
-      return store.bindOpenWork(scope, expectedWorkId);
+    startWork(input) {
+      validateStartWork(input);
+      const { backfillToolCallIds: _backfillToolCallIds, ...identityInput } = input;
+      return store.startWork({
+        ...input,
+        requestSha256: workRequestFingerprint("start_work", identityInput),
+      });
+    },
+    continueWork(input) {
+      validateContinueWork(input);
+      const { backfillToolCallIds: _backfillToolCallIds, ...identityInput } = input;
+      return store.continueWork({
+        ...input,
+        requestSha256: workRequestFingerprint("continue_work", identityInput),
+      });
     },
     async replacePlan(input) {
       validateReplacePlan(input);
       const startNew = input.startNew ?? false;
       const context = startNew ? null : await store.loadContext(input);
-      if (context) {
+      const openingPlan = !context?.work.currentPlan;
+      if (context && !openingPlan) {
         assertWorkStageTransition(context.work.currentStage, "planning");
       } else {
         assertWorkStageTransition(undefined, "conception");
@@ -71,6 +83,7 @@ export function createDurableWorkService(
           input.actions,
           context?.work.actionProgress ?? [],
         ),
+        openingPlan,
       });
     },
     async recordCheckpoint(input) {
@@ -168,6 +181,16 @@ export function createDurableWorkService(
       return store.boundWorkForTurn(turnId);
     },
   };
+}
+
+function validateStartWork(input: StartWorkInput): void {
+  validateMutation(input);
+  requiredText(input.objective, "objective");
+}
+
+function validateContinueWork(input: ContinueWorkInput): void {
+  validateMutation(input);
+  requiredText(input.workId, "workId");
 }
 
 function validateReplacePlan(input: ReplaceWorkPlanInput): void {

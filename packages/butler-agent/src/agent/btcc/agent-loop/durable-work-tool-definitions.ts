@@ -1,13 +1,56 @@
 import type { FunctionToolDefinition } from
   "../../../integrations/providers/runtime-contracts.ts";
 
+const START_WORK: FunctionToolDefinition = {
+  type: "function",
+  name: "start_work",
+  description: [
+    "Explicitly start unrelated durable Work and bind this Turn to it.",
+    "Use this before dependent tools or Plan changes when the current request is new Work.",
+    "Ordinary tools never select Work automatically.",
+  ].join(" "),
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      objective: {
+        type: "string",
+        minLength: 1,
+        description: "The concise stable user-visible outcome for the new Work.",
+      },
+    },
+    required: ["objective"],
+  },
+};
+
+const CONTINUE_WORK: FunctionToolDefinition = {
+  type: "function",
+  name: "continue_work",
+  description: [
+    "Explicitly bind this Turn to the exact current open Work shown in context.",
+    "Use only when the current request continues that Work; ordinary tools never select it.",
+  ].join(" "),
+  parameters: {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      work_id: {
+        type: "string",
+        minLength: 1,
+        description: "The exact candidate Work id returned in the current Work context.",
+      },
+    },
+    required: ["work_id"],
+  },
+};
+
 const REPLACE_WORK_PLAN: FunctionToolDefinition = {
   type: "function",
   name: "replace_work_plan",
   description: [
-    "Open durable Work for a substantial request, or replace the current Work plan.",
-    "Use start_new only when the new request supersedes the current open Work.",
-    "Choose start_new before updating or executing the current Work; once this Turn continues it, keep the same Work.",
+    "Open or revise the Plan for the Work explicitly selected by start_work or continue_work.",
+    "Use start_new only as a compatibility translation when older callers cannot use start_work.",
+    "Ordinary tools never select Work; choose start_work or continue_work before this Plan operation.",
     "Keep objective as the overall multi-Turn user outcome; put the current milestone in actions and checkpoints.",
     "Do not use this for simple conversation, stable knowledge, or a single-step read-only lookup.",
     "Use it for multi-source or multi-step research with a synthesized deliverable, even when source tools are read-only.",
@@ -207,6 +250,8 @@ const RECORD_WORK_REVIEW: FunctionToolDefinition = {
 
 export const DURABLE_WORK_TOOL_DEFINITIONS: readonly FunctionToolDefinition[] =
   Object.freeze([
+    START_WORK,
+    CONTINUE_WORK,
     REPLACE_WORK_PLAN,
     RECORD_WORK_CHECKPOINT,
     RECORD_WORK_REVIEW,

@@ -37,7 +37,10 @@ export class GuidedWorkLegacyWriter {
     scope: WorkTurnScope,
     candidate: LegacyWorkImportCandidate,
   ): LegacyOpenWorkImportResult | null {
-    this.reader.turn(scope);
+    // Legacy continuity may be retried on a stopped Turn, but it must not
+    // create/replay Work rows or effect blockers after the execution fence
+    // changes.  Reads remain available through the normal view reader.
+    this.reader.relationTurn(scope);
     if (candidate.origin.session_id !== scope.sessionId) {
       throw new Error("Legacy Work origin belongs to another Session");
     }
@@ -150,6 +153,7 @@ export class GuidedWorkLegacyWriter {
     scope: WorkTurnScope,
     sourceProgramId: string,
   ): LegacyOpenWorkImportResult | null {
+    this.reader.relationTurn(scope);
     const importId = legacyImportId(sourceProgramId, scope);
     const row = this.db.query<LegacyImportRow, [string]>(`
       SELECT legacy_program_id, session_id, scope_kind, scope_ref, work_id

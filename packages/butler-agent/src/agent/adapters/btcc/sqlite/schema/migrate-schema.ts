@@ -9,6 +9,8 @@ type ColumnRow = { name: string };
 export function migrateBtccSchema(db: Database): void {
   db.transaction(() => {
     ensureLegacyWorkImportProvenance(db);
+    ensureGuidedToolJournalOrder(db);
+    ensureGuidedWorkResultOrder(db);
     ensureGuidedWorkProgressColumns(db);
     ensureTurnProgressDestination(db);
     ensureTurnRouteState(db);
@@ -17,6 +19,84 @@ export function migrateBtccSchema(db: Database): void {
     migrateGuidedWorkSixStageConstraints(db);
     restoreStableWorkObjectives(db);
   }).immediate();
+}
+
+/**
+ * Keep Work result projections in the same order as the authoritative
+ * Turn-local journal.  The Work-local sequence remains the append/revision
+ * boundary used by checkpoints and reviews; these source fields let views
+ * recover execution order when concurrent completion attaches out of order.
+ * Legacy rows are backfilled from their origin Turn and journal call when the
+ * evidence exists, and otherwise remain on the deterministic Work sequence
+ * fallback in the reader.
+ */
+function ensureGuidedWorkResultOrder(db: Database): void {
+  const table = "btcc_guided_work_results";
+  if (!tableExists(db, table)) return;
+  ensureColumn(db, table, "source_turn_rowid", "INTEGER");
+  ensureColumn(db, table, "source_turn_sequence", "INTEGER");
+  if (tableExists(db, "btcc_turns")) {
+    db.exec(`
+      UPDATE ${table}
+      SET source_turn_rowid = (
+        SELECT turns.rowid FROM btcc_turns turns
+        WHERE turns.turn_id = ${table}.origin_turn_id
+      )
+      WHERE source_turn_rowid IS NULL
+    `);
+  }
+  if (tableExists(db, "btcc_guided_tool_calls")) {
+    db.exec(`
+      UPDATE ${table}
+      SET source_turn_sequence = (
+        SELECT calls.turn_sequence FROM btcc_guided_tool_calls calls
+        WHERE calls.call_id = ${table}.tool_call_id
+      )
+      WHERE source_turn_sequence IS NULL
+    `);
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_btcc_guided_work_results_source_order
+    ON ${table}(work_id, source_turn_rowid, source_turn_sequence, sequence)
+  `);
+}
+
+/**
+ * Preserve the original insertion order of Turn-local tool calls when older
+ * rows predate the explicit sequence column. SQLite rowid is only used here
+ * to deterministically seed legacy rows; all new writes receive a monotonic
+ * per-Turn sequence from SqliteGuidedToolJournal.start.
+ */
+function ensureGuidedToolJournalOrder(db: Database): void {
+  const table = "btcc_guided_tool_calls";
+  if (!tableExists(db, table)) return;
+  ensureColumn(db, table, "turn_sequence", "INTEGER");
+  const rows = db.query<{
+    rowid: number;
+    turn_id: string;
+    turn_sequence: number | null;
+  }, []>(`
+    SELECT rowid, turn_id, turn_sequence
+    FROM ${table}
+    ORDER BY turn_id, rowid
+  `).all();
+  const nextByTurn = new Map<string, number>();
+  for (const row of rows) {
+    const current = nextByTurn.get(row.turn_id) ?? 0;
+    if (row.turn_sequence !== null) {
+      nextByTurn.set(row.turn_id, Math.max(current, row.turn_sequence));
+      continue;
+    }
+    const next = current + 1;
+    db.query(`
+      UPDATE ${table} SET turn_sequence = ? WHERE rowid = ?
+    `).run(next, row.rowid);
+    nextByTurn.set(row.turn_id, next);
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_btcc_guided_tool_calls_turn_sequence
+    ON ${table}(turn_id, turn_sequence)
+  `);
 }
 
 function ensureModelRouteFailureDisposition(db: Database): void {

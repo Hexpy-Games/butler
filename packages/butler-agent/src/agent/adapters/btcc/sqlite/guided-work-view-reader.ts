@@ -16,6 +16,7 @@ import type {
   GuidedWorkPlanRow,
   GuidedWorkResultRow,
   GuidedWorkReviewRow,
+  GuidedWorkRelationTurn,
   GuidedWorkRow,
   GuidedWorkTurn,
 } from "./guided-work-records.ts";
@@ -33,14 +34,30 @@ type GuidedWorkContextResultRow = Pick<
 export class GuidedWorkViewReader {
   constructor(private readonly db: Database) {}
 
-  turn(scope: WorkTurnScope): GuidedWorkTurn {
-    const turn = this.db.query<GuidedWorkTurn, [string]>(`
-      SELECT turn_id, session_id, original_message_id, original_message
+  turn(scope: WorkTurnScope): GuidedWorkRelationTurn {
+    const turn = this.db.query<GuidedWorkRelationTurn, [string]>(`
+      SELECT turn_id, session_id, original_message_id, original_message,
+        semantic_state, execution_fence
       FROM btcc_turns WHERE turn_id = ?
     `).get(scope.turnId);
     if (!turn) throw new Error(`Durable Work Turn is not admitted: ${scope.turnId}`);
     if (turn.session_id !== scope.sessionId) {
       throw new Error(`Durable Work Turn Session does not match: ${scope.turnId}`);
+    }
+    return turn;
+  }
+
+  /**
+   * Read a Turn immediately before creating or changing the sole Work
+   * relation.  A cancelled Turn or a Turn whose execution fence moved is no
+   * longer allowed to produce relation rows.
+   */
+  relationTurn(scope: WorkTurnScope): GuidedWorkRelationTurn {
+    const turn = this.turn(scope);
+    if (turn.semantic_state !== "admitted" || turn.execution_fence !== 0) {
+      throw new Error(
+        `Durable Work Turn is stopped or fenced (cancelled or execution fence changed): ${scope.turnId}`,
+      );
     }
     return turn;
   }
@@ -226,8 +243,9 @@ export class GuidedWorkViewReader {
       WHERE work_id = ? AND revision < ? ORDER BY revision DESC LIMIT 1
     `).get(workId, checkpoint.revision)?.result_sequence ?? 0;
     const refs = this.db.query<{ result_ref: string }, [string, number, number]>(`
-      SELECT result_ref FROM btcc_guided_work_results
-      WHERE work_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence
+      SELECT result_ref FROM btcc_guided_work_results result
+      WHERE work_id = ? AND sequence > ? AND sequence <= ?
+      ORDER BY ${WORK_RESULT_ORDER}
     `).all(workId, prior, checkpoint.result_sequence).map((row) => row.result_ref);
     return {
       checkpointRevisionId: checkpoint.checkpoint_revision_id,
@@ -253,8 +271,9 @@ export class GuidedWorkViewReader {
     const boundResultRefs = review.bound_result_sequence === null
       ? []
       : this.db.query<{ result_ref: string }, [string, number]>(`
-          SELECT result_ref FROM btcc_guided_work_results
-          WHERE work_id = ? AND sequence <= ? ORDER BY sequence
+          SELECT result_ref FROM btcc_guided_work_results result
+          WHERE work_id = ? AND sequence <= ?
+          ORDER BY ${WORK_RESULT_ORDER}
         `).all(workId, review.bound_result_sequence).map((row) => row.result_ref);
     return {
       reviewRevisionId: review.review_revision_id,
@@ -290,23 +309,41 @@ export class GuidedWorkViewReader {
     return this.db.query<GuidedWorkResultRow, [string]>(`
       SELECT result.result_ref, result.sequence, result.tool_call_id,
         call.tool_name, call.status, NULL AS result_json, call.result_sha256,
-        call.error_code, result.origin_turn_id, result.attached_at
+        call.error_code, result.origin_turn_id, result.source_turn_rowid,
+        result.source_turn_sequence, result.attached_at
       FROM btcc_guided_work_results result
       JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
-      WHERE result.work_id = ? ORDER BY result.sequence
+      WHERE result.work_id = ? ORDER BY ${WORK_RESULT_ORDER}
     `).all(workId);
   }
 
   private contextResults(workId: string): GuidedWorkContextResultRow[] {
-    return this.db.query<GuidedWorkContextResultRow, [string, number]>(`
+    const rows = this.db.query<GuidedWorkContextResultRow, [string]>(`
       SELECT call.tool_name, call.status, call.result_json, call.error_code
       FROM btcc_guided_work_results result
       JOIN btcc_guided_tool_calls call ON call.call_id = result.tool_call_id
       WHERE result.work_id = ?
-      ORDER BY result.sequence DESC LIMIT ?
-    `).all(workId, MAX_CONTEXT_RESULT_FACTS).reverse();
+      ORDER BY ${WORK_RESULT_ORDER}
+    `).all(workId);
+    return rows.slice(-MAX_CONTEXT_RESULT_FACTS);
   }
 }
+
+/**
+ * Turn-local journal order is authoritative for Work result presentation.
+ * `sequence` remains the Work-local append boundary, while the source fields
+ * make concurrent completion/replay deterministic.  Legacy rows without
+ * source evidence fall back to their existing Work sequence after rows with
+ * authoritative source order.
+ */
+const WORK_RESULT_ORDER = `
+  CASE WHEN result.source_turn_rowid IS NULL THEN 1 ELSE 0 END,
+  result.source_turn_rowid,
+  CASE WHEN result.source_turn_sequence IS NULL THEN 1 ELSE 0 END,
+  result.source_turn_sequence,
+  result.sequence,
+  result.rowid
+`;
 
 function hydratePlan(row: GuidedWorkPlanRow): DurableWorkPlan {
   return {
